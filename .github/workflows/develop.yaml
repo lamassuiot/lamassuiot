@@ -10,6 +10,7 @@ jobs:
   lamassu_ca_unit_testing:
     name: CA Unit Testing
     # runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -33,6 +34,7 @@ jobs:
   lamassu_dms_enroller_unit_testing:
     name: DMS Enroller Unit Testing
     # runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -55,6 +57,7 @@ jobs:
   lamassu_device_manager_unit_testing:
     name: Device Manager Unit Testing
     # runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
