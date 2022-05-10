@@ -4,12 +4,65 @@ on:
   push:
     branches:
       - develop
+  workflow_call:
 
 jobs:
-  lamassu_ca_unit_testing:
+  # lamassu_ca_unit_testing:
+  #   name: CA Unit Testing
+  #   runs-on: self-hosted
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v2
+  #       with:
+  #         fetch-depth: 0
+
+  #     - name: Set up Go
+  #       uses: actions/setup-go@v2
+  #       with:
+  #         go-version: 1.16 
+
+  #     - name: Run Go Unit Tests
+  #       run: go test ./pkg/ca/server/api/service/
+
+  # lamassu_dms_enroller_unit_testing:
+  #   name: DMS Enroller Unit Testing
+  #   runs-on: self-hosted
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v2
+  #       with:
+  #         fetch-depth: 0
+
+  #     - name: Set up Go
+  #       uses: actions/setup-go@v2
+  #       with:
+  #         go-version: 1.16 
+
+  #     - name: Run Go Unit Tests
+  #       run: go test ./pkg/dms-enroller/server/api/service/
+
+  # lamassu_device_manager_unit_testing:
+  #   name: Device Manager Unit Testing
+  #   runs-on: self-hosted
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v2
+  #       with:
+  #         fetch-depth: 0
+
+  #     - name: Set up Go
+  #       uses: actions/setup-go@v2
+  #       with:
+  #         go-version: 1.16 
+
+  #     - name: Run Go Unit Tests
+  #       run: go test ./pkg/device-manager/server/api/service/
+    
+  test:
+    name: Test
     runs-on: self-hosted
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
+      - name: Test1
+        run: echo "a"
+      - name: Test2
+        run: echo "b" > myfile.txt

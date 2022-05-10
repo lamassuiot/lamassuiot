@@ -121,12 +121,12 @@ func (s *enrollerService) CreateDMSForm(ctx context.Context, subject dto.Subject
 				Bytes: privkey_bytes,
 			},
 		))
-		privkey_pem = utils.EcodeB64(privkey_pem)
-		csr, err := s.CreateDMS(ctx, utils.EcodeB64(string(csrEncoded)), dmsName)
+		privkey_pemByte := utils.EncodeB64([]byte(privkey_pem))
+		csr, err := s.CreateDMS(ctx, string(utils.EncodeB64(csrEncoded)), dmsName)
 		if err != nil {
 			return "", dto.DMS{}, err
 		} else {
-			return privkey_pem, csr, nil
+			return string(privkey_pemByte), csr, nil
 		}
 	} else if PrivateKeyMetadata.KeyType == "ec" {
 		var priv *ecdsa.PrivateKey
@@ -158,19 +158,19 @@ func (s *enrollerService) CreateDMSForm(ctx context.Context, subject dto.Subject
 				Bytes: privkey_bytesm,
 			},
 		))
-		privkey_pem = utils.EcodeB64(privkey_pem)
+		privkey_pemByte := utils.EncodeB64([]byte(privkey_pem))
 		csrBytes, err := generateCSR(ctx, PrivateKeyMetadata.KeyType, PrivateKeyMetadata.KeyBits, priv, subj)
 		if err != nil {
 			level.Debug(s.logger).Log("err", err)
 			return "", dto.DMS{}, err
 		}
 		csrEncoded := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrBytes})
-		csr, err := s.CreateDMS(ctx, utils.EcodeB64(string(csrEncoded)), dmsName)
+		csr, err := s.CreateDMS(ctx, string(utils.EncodeB64(csrEncoded)), dmsName)
 		if err != nil {
 			level.Debug(s.logger).Log("err", err)
 			return "", dto.DMS{}, err
 		} else {
-			return privkey_pem, csr, nil
+			return string(privkey_pemByte), csr, nil
 		}
 	} else {
 		return "", dto.DMS{}, errors.New("Invalid key format")
@@ -238,7 +238,7 @@ func (s *enrollerService) UpdateDMSStatus(ctx context.Context, DMSstatus string,
 			certificate := pem.Block{Type: "CERTIFICATE", Bytes: cb}
 			cert := pem.EncodeToMemory(&certificate)
 
-			d.CerificateBase64 = utils.EcodeB64(string(cert))
+			d.CerificateBase64 = string(utils.EncodeB64(cert))
 
 		} else {
 			return dto.DMS{}, err

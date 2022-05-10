@@ -216,7 +216,7 @@ func (db *MockDB) SelectAllDevices(ctx context.Context, queryParameters dto.Quer
 	}
 
 }
-func (db *MockDB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string) ([]dto.Device, error) {
+func (db *MockDB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, queryParameters dto.QueryParameters) ([]dto.Device, error) {
 
 	var devList []dto.Device
 	var d dto.Device

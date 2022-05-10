@@ -14,6 +14,8 @@ import (
 
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/transport/http"
+	lamassuca "github.com/lamassuiot/lamassuiot/pkg/ca/client"
+	caDTO "github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
 )
 
 type contextKey string
@@ -48,14 +50,14 @@ func HTTPToContext() http.RequestFunc {
 	}
 }
 
-func NewParser(enroll bool, mutualTLSClientCAFile string, ctx context.Context) endpoint.Middleware {
+func NewParser(enroll bool, mutualTLSClientCAFile string, lamassuCaClient lamassuca.LamassuCaClient, ctx context.Context) endpoint.Middleware {
 	return func(next endpoint.Endpoint) endpoint.Endpoint {
 		return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 			XForCert, _ := ctx.Value(XForwardedCertifcate).(*x509.Certificate)
 			peerCert, _ := ctx.Value(PeerCertificatesContextKey).(*x509.Certificate)
 			if XForCert != nil {
 				_ = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: XForCert.Raw})
-				_, err = VerifyPeerCertificate(ctx, XForCert, enroll, nil)
+				_, err = VerifyPeerCertificate(ctx, XForCert, enroll, lamassuCaClient, nil)
 				if err != nil {
 					return nil, err
 				}
@@ -70,7 +72,7 @@ func NewParser(enroll bool, mutualTLSClientCAFile string, ctx context.Context) e
 				if err != nil {
 					return nil, err
 				}
-				_, err = VerifyPeerCertificate(ctx, peerCert, enroll, crt)
+				_, err = VerifyPeerCertificate(ctx, peerCert, enroll, lamassuCaClient, crt)
 				if err != nil {
 					return nil, err
 				}
@@ -78,12 +80,11 @@ func NewParser(enroll bool, mutualTLSClientCAFile string, ctx context.Context) e
 			} else {
 				return nil, ErrPeerCertificatesContextMissing
 			}
-
 		}
 	}
 }
 
-func VerifyPeerCertificate(ctx context.Context, cert *x509.Certificate, enroll bool, certCA *x509.Certificate) (string, error) {
+func VerifyPeerCertificate(ctx context.Context, cert *x509.Certificate, enroll bool, lamassuCaClient lamassuca.LamassuCaClient, certCA *x509.Certificate) (string, error) {
 	if certCA != nil {
 		clientCAs := x509.NewCertPool()
 		clientCAs.AddCert(certCA)
@@ -98,9 +99,26 @@ func VerifyPeerCertificate(ctx context.Context, cert *x509.Certificate, enroll b
 		}
 		return "", err
 	}
-	CAsCertificates, certs, err := GetCertsCAType(ctx, enroll)
-	if err != nil {
-		return "", err
+	var certs []caDTO.Cert
+	if !enroll {
+		caType, err := caDTO.ParseCAType("pki")
+		certs, err = lamassuCaClient.GetCAs(ctx, caType)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		caType, err := caDTO.ParseCAType("dmsenroller")
+		certs, err = lamassuCaClient.GetCAs(ctx, caType)
+		if err != nil {
+			return "", err
+		}
+	}
+	CAsCertificates := []*x509.Certificate{}
+	for _, v := range certs {
+		data, _ := base64.StdEncoding.DecodeString(v.CertContent.CerificateBase64)
+		block, _ := pem.Decode([]byte(data))
+		certificate, _ := x509.ParseCertificate(block.Bytes)
+		CAsCertificates = append(CAsCertificates, certificate)
 	}
 	clientCAs := x509.NewCertPool()
 	for _, certificate := range CAsCertificates {

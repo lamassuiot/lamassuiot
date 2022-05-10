@@ -23,22 +23,8 @@ type DB struct {
 	logger log.Logger
 }
 
-func NewDB(driverName string, dataSourceName string, logger log.Logger) (store.DB, error) {
-	db, err := sql.Open(driverName, dataSourceName)
-	if err != nil {
-		return nil, err
-	}
-	err = checkDBAlive(db)
-	for err != nil {
-		level.Warn(logger).Log("msg", "Trying to connect to DB", "err", err)
-		time.Sleep(5 * time.Second)
-		err = checkDBAlive(db)
-	}
-
-	return &DB{
-		DB:     db,
-		logger: logger,
-	}, nil
+func NewDB(db *sql.DB, logger log.Logger) store.DB {
+	return &DB{DB: db, logger: logger}
 }
 
 func checkDBAlive(db *sql.DB) error {

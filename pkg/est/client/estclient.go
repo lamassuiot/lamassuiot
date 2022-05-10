@@ -21,7 +21,7 @@ import (
 	"github.com/go-kit/log"
 
 	"github.com/globalsign/pemfile"
-	"github.com/lamassuiot/lamassuiot/pkg/est/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/utils"
 	"go.mozilla.org/pkcs7"
 )
 
@@ -128,12 +128,12 @@ func (c *LamassuEstClientConfig) CACerts(ctx context.Context) ([]*x509.Certifica
 		return nil, err
 	}
 
-	decoded, err := utils.Base64Decode(body)
+	decoded, err := utils.DecodeB64(string(body))
 	if err != nil {
 		return nil, errInvalidBase64
 	}
 
-	p7, err := pkcs7.Parse(decoded)
+	p7, err := pkcs7.Parse([]byte(decoded))
 	if err != nil {
 		return nil, errInvalidPKCS7
 	}
@@ -142,7 +142,7 @@ func (c *LamassuEstClientConfig) CACerts(ctx context.Context) ([]*x509.Certifica
 }
 
 func (c *LamassuEstClientConfig) Enroll(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, *x509.Certificate, error) {
-	reqBody := ioutil.NopCloser(bytes.NewBuffer(utils.Base64Encode(csr.Raw)))
+	reqBody := ioutil.NopCloser(bytes.NewBuffer(utils.EncodeB64(csr.Raw)))
 	var resp *http.Response
 	var body []byte
 
@@ -164,12 +164,12 @@ func (c *LamassuEstClientConfig) Enroll(ctx context.Context, aps string, csr *x5
 		return nil, nil, err
 	}
 
-	decoded, err := utils.Base64Decode(body)
+	decoded, err := utils.DecodeB64(string(body))
 	if err != nil {
 		return nil, nil, errInvalidBase64
 	}
 
-	certs, err := utils.DecodePKCS7CertsOnly(decoded)
+	certs, err := DecodePKCS7CertsOnly([]byte(decoded))
 	if err != nil {
 		return nil, nil, errInvalidPKCS7
 	}
@@ -178,7 +178,7 @@ func (c *LamassuEstClientConfig) Enroll(ctx context.Context, aps string, csr *x5
 }
 
 func (c *LamassuEstClientConfig) Reenroll(ctx context.Context, csr *x509.CertificateRequest /*, crt *x509.Certificate*/) (*x509.Certificate, *x509.Certificate, error) {
-	reqBody := ioutil.NopCloser(bytes.NewBuffer(utils.Base64Encode(csr.Raw)))
+	reqBody := ioutil.NopCloser(bytes.NewBuffer(utils.EncodeB64(csr.Raw)))
 	var resp *http.Response
 	var body []byte
 
@@ -200,12 +200,12 @@ func (c *LamassuEstClientConfig) Reenroll(ctx context.Context, csr *x509.Certifi
 		return nil, nil, err
 	}
 
-	decoded, err := utils.Base64Decode(body)
+	decoded, err := utils.DecodeB64(string(body))
 	if err != nil {
 		return nil, nil, errInvalidBase64
 	}
 
-	certs, err := utils.DecodePKCS7CertsOnly(decoded)
+	certs, err := DecodePKCS7CertsOnly([]byte(decoded))
 	if err != nil {
 		return nil, nil, errInvalidPKCS7
 	}
@@ -214,7 +214,7 @@ func (c *LamassuEstClientConfig) Reenroll(ctx context.Context, csr *x509.Certifi
 }
 
 func (c *LamassuEstClientConfig) ServerKeyGen(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, []byte, *x509.Certificate, error) {
-	reqBody := ioutil.NopCloser(bytes.NewBuffer(utils.Base64Encode(csr.Raw)))
+	reqBody := ioutil.NopCloser(bytes.NewBuffer(utils.EncodeB64(csr.Raw)))
 	var resp *http.Response
 	var body []byte
 	req, err := c.Client.NewRequest(http.MethodPost, "/serverkeygen", c.EstServerAddress, aps, "application/pkcs10", "base64", "multipart/mixed", reqBody)
@@ -226,12 +226,12 @@ func (c *LamassuEstClientConfig) ServerKeyGen(ctx context.Context, aps string, c
 		return nil, nil, nil, err
 	}
 
-	decoded, err := utils.Base64Decode(body)
+	decoded, err := utils.DecodeB64(string(body))
 	if err != nil {
 		return nil, nil, nil, errInvalidBase64
 	}
 
-	resp.Body = ioutil.NopCloser(bytes.NewBuffer(decoded))
+	resp.Body = ioutil.NopCloser(bytes.NewBuffer([]byte(decoded)))
 	if err := checkResponseError(resp); err != nil {
 		return nil, nil, nil, err
 	}
@@ -349,7 +349,7 @@ func ProcessAllParts(mpr *multipart.Reader) ([]*x509.Certificate, []byte, error)
 
 		switch {
 		case strings.HasPrefix(mediaType, "application/pkcs8"):
-			key, err = utils.ReadAllBase64Response(part)
+			key, err = ReadAllBase64Response(part)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -359,13 +359,13 @@ func ProcessAllParts(mpr *multipart.Reader) ([]*x509.Certificate, []byte, error)
 
 			switch t {
 			case "server-generated-key":
-				key, err = utils.ReadAllBase64Response(part)
+				key, err = ReadAllBase64Response(part)
 				if err != nil {
 					return nil, nil, err
 				}
 
 			case "certs-only":
-				cert, err = utils.ReadCertResponse(part)
+				cert, err = ReadCertResponse(part)
 				if err != nil {
 					return nil, nil, err
 				}

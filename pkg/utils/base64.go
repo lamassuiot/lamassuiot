@@ -15,12 +15,12 @@ func DecodeB64(message string) (string, error) {
 	return string(base64Text), err
 }
 
-func EcodeB64(message string) string {
-	base64Text := base64.StdEncoding.Strict().EncodeToString([]byte(message))
-	return base64Text
-}
+// func EncodeB64(message string) string {
+// 	base64Text := base64.StdEncoding.Strict().EncodeToString([]byte(message))
+// 	return base64Text
+// }
 
-func EcodeB64WithBreakLines(src []byte) []byte {
+func EncodeB64(src []byte) []byte {
 	enc := make([]byte, base64.StdEncoding.EncodedLen(len(src)))
 	base64.StdEncoding.Encode(enc, src)
 	return breakLines(enc, base64LineLength)

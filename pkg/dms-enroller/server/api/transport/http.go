@@ -296,7 +296,7 @@ func encodeGetCRTResponse(ctx context.Context, w http.ResponseWriter, response i
 	b := pem.Block{Type: "CERTIFICATE", Bytes: cb}
 	body := pem.EncodeToMemory(&b)
 
-	body = []byte(utils.EcodeB64(string(body)))
+	body = utils.EncodeB64(body)
 
 	w.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
 	w.Header().Set("Content-Transfer-Encoding", "base64")

@@ -14,6 +14,7 @@ import (
 	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
+	lamassuca "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	"github.com/lamassuiot/lamassuiot/pkg/est/server/api/endpoint"
 	esterror "github.com/lamassuiot/lamassuiot/pkg/est/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/est/server/api/mtls"
@@ -64,7 +65,7 @@ func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
 		return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
 	}
 }
-func MakeHTTPHandler(service service.Service, logger log.Logger, otTracer stdopentracing.Tracer) http.Handler {
+func MakeHTTPHandler(service service.Service, lamassuCaClient *lamassuca.LamassuCaClient, logger log.Logger, otTracer stdopentracing.Tracer) http.Handler {
 	router := mux.NewRouter()
 	endpoints := endpoint.MakeServerEndpoints(service, otTracer)
 
@@ -148,12 +149,12 @@ func DecodeEnrollRequest(ctx context.Context, r *http.Request) (request interfac
 		return nil, err
 	}
 
-	decodedCsr, err := utils.Base64Decode(data)
+	decodedCsr, err := utils.DecodeB64(string(data))
 	if err != nil {
 		return nil, ErrInvalidBase64()
 	}
 
-	csr, err := x509.ParseCertificateRequest(decodedCsr)
+	csr, err := x509.ParseCertificateRequest([]byte(decodedCsr))
 	if err != nil {
 		return nil, ErrMalformedCert()
 	}
@@ -206,11 +207,11 @@ func DecodeReenrollRequest(ctx context.Context, r *http.Request) (request interf
 		return nil, err
 	}
 
-	decodedCsr, err := utils.Base64Decode(data)
+	decodedCsr, err := utils.DecodeB64(string(data))
 	if err != nil {
 		return nil, ErrInvalidBase64()
 	}
-	csr, err := x509.ParseCertificateRequest(decodedCsr)
+	csr, err := x509.ParseCertificateRequest([]byte(decodedCsr))
 	if err != nil {
 		return nil, ErrMalformedCert()
 	}
@@ -270,11 +271,11 @@ func DecodeServerkeygenRequest(ctx context.Context, r *http.Request) (request in
 		return nil, err
 	}
 
-	decodedCsr, err := utils.Base64Decode(data)
+	decodedCsr, err := utils.DecodeB64(string(data))
 	if err != nil {
 		return nil, ErrInvalidBase64()
 	}
-	csr, err := x509.ParseCertificateRequest(decodedCsr)
+	csr, err := x509.ParseCertificateRequest([]byte(decodedCsr))
 	if err != nil {
 		return nil, ErrMalformedCert()
 	}
@@ -343,9 +344,9 @@ func EncodeServerkeygenResponse(ctx context.Context, w http.ResponseWriter, resp
 		return p7err
 
 	}
-	data, contentType, err := utils.EncodeMultiPart(
+	data, contentType, err := EncodeMultiPart(
 		"estServerKeyGenBoundary",
-		[]utils.MultipartPart{
+		[]MultipartPart{
 			{ContentType: keyContentType, Data: key},
 			{ContentType: "application/pkcs7-mime; smime-type=certs-only", Data: certs},
 		},
@@ -353,7 +354,7 @@ func EncodeServerkeygenResponse(ctx context.Context, w http.ResponseWriter, resp
 	if err != nil {
 		return err
 	}
-	body := utils.Base64Encode(data.Bytes())
+	body := utils.EncodeB64(data.Bytes())
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Content-Transfer-Encoding", "base64")
 	w.WriteHeader(http.StatusOK)
@@ -379,7 +380,7 @@ func EncodeResponse(ctx context.Context, w http.ResponseWriter, response interfa
 		EncodeError(ctx, err, w)
 		return nil
 	}
-	body = utils.Base64Encode(body)
+	body = utils.EncodeB64(body)
 
 	w.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
 	w.Header().Set("Content-Transfer-Encoding", "base64")
@@ -407,7 +408,7 @@ func EncodeGetCaCertsResponse(ctx context.Context, w http.ResponseWriter, respon
 		return nil
 	}
 
-	body = utils.Base64Encode(body)
+	body = utils.EncodeB64(body)
 
 	w.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
 	w.Header().Set("Content-Transfer-Encoding", "base64")

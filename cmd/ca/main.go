@@ -29,7 +29,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/models/ca/store"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/models/ca/store/db"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/secrets/vault"
-	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	"github.com/opentracing/opentracing-go"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -177,38 +177,16 @@ func main() {
 	}()
 
 	go func() {
-		if strings.ToLower(cfg.Protocol) == "https" {
-			if cfg.MutualTLSEnabled {
-				mTlsCertPool, err := utils.CreateCAPool(cfg.MutualTLSClientCA)
-				if err != nil {
-					level.Error(logger).Log("err", err, "msg", "Could not create mTls Cert Pool")
-					os.Exit(1)
-				}
-				tlsConfig := &tls.Config{
-					ClientCAs:  mTlsCertPool,
-					ClientAuth: tls.RequireAndVerifyClientCert,
-				}
-				tlsConfig.BuildNameToCertificate()
-
-				http := &http.Server{
-					Addr:      ":" + cfg.Port,
-					TLSConfig: tlsConfig,
-				}
-
-				level.Info(logger).Log("transport", "Mutual TLS", "address", ":"+cfg.Port, "msg", "listening")
-				errs <- http.ListenAndServeTLS(cfg.CertFile, cfg.KeyFile)
-
-			} else {
-				level.Info(logger).Log("transport", "HTTPS", "address", ":"+cfg.Port, "msg", "listening")
-				errs <- http.ListenAndServeTLS(":"+cfg.Port, cfg.CertFile, cfg.KeyFile, nil)
-			}
-		} else if strings.ToLower(cfg.Protocol) == "http" {
-			level.Info(logger).Log("transport", "HTTP", "address", ":"+cfg.Port, "msg", "listening")
-			errs <- http.ListenAndServe(":"+cfg.Port, nil)
-		} else {
-			level.Error(logger).Log("err", "msg", "Unknown protocol")
-			os.Exit(1)
+		serverCfg := serverUtils.ServerConfiguration{
+			Port:              cfg.Port,
+			Protocol:          cfg.Protocol,
+			CertFile:          cfg.CertFile,
+			KeyFile:           cfg.KeyFile,
+			MutualTLSEnabled:  cfg.MutualTLSEnabled,
+			MutualTLSClientCA: cfg.MutualTLSClientCA,
 		}
+
+		serverCfg.RunServer(logger, errs)
 	}()
 
 	level.Info(logger).Log("exit", <-errs)

@@ -9,6 +9,7 @@ import (
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/go-kit/log"
 	"github.com/gorilla/mux"
+	lamassuca "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/configs"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/estserver/mtls"
 	estEndpoint "github.com/lamassuiot/lamassuiot/pkg/est/server/api/endpoint"
@@ -32,10 +33,10 @@ func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
 	}
 }
 
-func MakeHTTPHandler(service estService.Service, logger log.Logger, cfg configs.Config, otTracer stdopentracing.Tracer, ctx context.Context) http.Handler {
+func MakeHTTPHandler(service estService.Service, lamassuCaClient *lamassuca.LamassuCaClient, logger log.Logger, cfg configs.Config, otTracer stdopentracing.Tracer, ctx context.Context) http.Handler {
 	router := mux.NewRouter()
 	endpoints := estEndpoint.MakeServerEndpoints(service, otTracer)
-
+	CaClient := *lamassuCaClient
 	options := []httptransport.ServerOption{
 		httptransport.ServerBefore(HTTPToContext(logger)),
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
@@ -56,7 +57,7 @@ func MakeHTTPHandler(service estService.Service, logger log.Logger, cfg configs.
 	))
 
 	router.Methods("POST").Path("/.well-known/est/{aps}/simpleenroll").Handler(httptransport.NewServer(
-		mtls.NewParser(true, cfg.MutualTLSClientCA, ctx)(endpoints.EnrollerEndpoint),
+		mtls.NewParser(true, cfg.MutualTLSClientCA, CaClient, ctx)(endpoints.EnrollerEndpoint),
 		esttransport.DecodeEnrollRequest,
 		esttransport.EncodeResponse,
 		append(
@@ -67,7 +68,7 @@ func MakeHTTPHandler(service estService.Service, logger log.Logger, cfg configs.
 	))
 
 	router.Methods("POST").Path("/.well-known/est/simplereenroll").Handler(httptransport.NewServer(
-		mtls.NewParser(false, cfg.MutualTLSClientCA, ctx)(endpoints.ReenrollerEndpoint),
+		mtls.NewParser(false, cfg.MutualTLSClientCA, CaClient, ctx)(endpoints.ReenrollerEndpoint),
 		esttransport.DecodeReenrollRequest,
 		esttransport.EncodeResponse,
 		append(
@@ -77,7 +78,7 @@ func MakeHTTPHandler(service estService.Service, logger log.Logger, cfg configs.
 		)...,
 	))
 	router.Methods("POST").Path("/.well-known/est/{aps}/serverkeygen").Handler(httptransport.NewServer(
-		endpoints.ServerKeyGenEndpoint,
+		mtls.NewParser(true, cfg.MutualTLSClientCA, CaClient, ctx)(endpoints.ServerKeyGenEndpoint),
 		esttransport.DecodeServerkeygenRequest,
 		esttransport.EncodeServerkeygenResponse,
 		append(

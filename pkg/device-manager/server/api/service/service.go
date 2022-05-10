@@ -139,7 +139,7 @@ func (s *devicesService) GetDevices(ctx context.Context, queryParameters dto.Que
 
 func (s *devicesService) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters dto.QueryParameters) ([]dto.Device, error) {
 	caType, err := caDTO.ParseCAType("pki")
-	devices, err := s.devicesDb.SelectAllDevicesByDmsId(ctx, dmsId)
+	devices, err := s.devicesDb.SelectAllDevicesByDmsId(ctx, dmsId, queryParameters)
 	if err != nil {
 		return []dto.Device{}, err
 	}

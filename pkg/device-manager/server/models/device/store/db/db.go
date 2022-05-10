@@ -221,13 +221,15 @@ func (db *DB) SetKeyAndSubject(ctx context.Context, keyMetadate dto.PrivateKeyMe
 	return nil
 
 }
-func (db *DB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string) ([]dto.Device, error) {
+func (db *DB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, queryParameters dto.QueryParameters) ([]dto.Device, error) {
 	db.logger = ctx.Value(utils.LamassuLoggerContextKey).(log.Logger)
 	parentSpan := opentracing.SpanFromContext(ctx)
 
 	sqlStatement := `
 	SELECT * FROM devices where dms_id = $1
 	`
+	sqlStatement = applyFilter(sqlStatement, queryParameters)
+
 	span := opentracing.StartSpan("lamassu-device-manager: Select All Devices by DMS ID from database", opentracing.ChildOf(parentSpan.Context()))
 	rows, err := db.Query(sqlStatement, dms_id)
 	span.Finish()

@@ -1,11 +1,13 @@
+ARG BASE_IMAGE=scratch
+
 FROM golang:1.16
 WORKDIR /app
 COPY . .
 WORKDIR /app
 ENV GOSUMDB=off
-RUN CGO_ENABLED=0 go build -mod=vendor -o ca cmd/main.go
+RUN CGO_ENABLED=0 go build -mod=vendor -o ca cmd/ca/main.go
 
-FROM alpine:3.14
+FROM $BASE_IMAGE
 COPY --from=0 /app/ca /
 COPY ./db/migrations /app/db/migrations
 CMD ["/ca"]

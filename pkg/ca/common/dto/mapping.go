@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"fmt"
 )
 
 type Cert struct {
@@ -140,21 +141,22 @@ func (c CAType) String() string {
 	return "pki"
 }
 
-type KeyType int
+type KeyType string
 
 const (
-	RSA KeyType = iota
-	EC
+	RSA KeyType = "RSA"
+	EC  KeyType = "EC"
 )
 
 func ParseKeyType(s string) (KeyType, error) {
+	fmt.Println(s)
 	switch s {
 	case "RSA":
 		return RSA, nil
 	case "ECDSA":
 		return EC, nil
 	}
-	return -1, errors.New("KeyType parsing error")
+	return "RSA", errors.New("KeyType parsing error")
 }
 
 func (c KeyType) String() string {

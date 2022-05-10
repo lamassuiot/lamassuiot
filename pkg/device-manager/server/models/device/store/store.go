@@ -10,7 +10,7 @@ type DB interface {
 	InsertDevice(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) error
 	SelectDeviceById(ctx context.Context, id string) (dto.Device, error)
 	SelectAllDevices(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.Device, int, error)
-	SelectAllDevicesByDmsId(ctx context.Context, dms_id string) ([]dto.Device, error)
+	SelectAllDevicesByDmsId(ctx context.Context, dms_id string, queryParameters dto.QueryParameters) ([]dto.Device, error)
 	UpdateDeviceStatusByID(ctx context.Context, id string, newStatus string) error
 	UpdateDeviceCertificateSerialNumberByID(ctx context.Context, id string, serialNumber string) error
 	DeleteDevice(ctx context.Context, id string) error

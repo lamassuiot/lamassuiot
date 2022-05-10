@@ -10,20 +10,17 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
-	migrate "github.com/golang-migrate/migrate/v4"
-	migratePostgres "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/hashicorp/consul/api"
 	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
+	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/transport"
-	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/cloud-providers/store"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/cloud-providers/store/db"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/config"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
@@ -52,8 +49,12 @@ func main() {
 	defer tracerCloser.Close()
 	opentracing.SetGlobalTracer(tracer)
 
-	cloudProxyDb := initializeDB(cfg.PostgresDB, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresHostname, cfg.PostgresPort, cfg.PostgresMigrationsFilePath, logger)
+	cloudProxyRawDB, err := serverUtils.InitializeDBConnection(cfg.PostgresDB, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresHostname, cfg.PostgresPort, true, cfg.PostgresMigrationsFilePath, logger)
+	if err != nil {
+		os.Exit(1)
+	}
 
+	cloudProxyDB := db.NewDB(cloudProxyRawDB, logger)
 	consulClient := initializeConsulClient(cfg.ConsulProtocol, cfg.ConsulHost, cfg.ConsulPort, cfg.ConsulCA, logger)
 
 	lamassuCaClient, err := lamassucaclient.NewLamassuCAClient(clientUtils.ClientConfiguration{
@@ -71,7 +72,7 @@ func main() {
 
 	var s service.Service
 	{
-		s = service.NewCloudPorxyService(consulClient, cloudProxyDb, lamassuCaClient, logger)
+		s = service.NewCloudPorxyService(consulClient, cloudProxyDB, lamassuCaClient, logger)
 		s = service.LoggingMiddleware(logger)(s)
 	}
 
@@ -83,6 +84,7 @@ func main() {
 		c := make(chan os.Signal)
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 		errs <- fmt.Errorf("%s", <-c)
+
 	}()
 
 	go func() {
@@ -145,47 +147,6 @@ func initializeJaeger(logger log.Logger) (opentracing.Tracer, io.Closer) {
 	level.Info(logger).Log("msg", "Jaeger tracer started")
 
 	return tracer, closer
-}
-
-func initializeDB(database string, user string, password string, hostname string, port string, migrationsFilePath string, logger log.Logger) store.DB {
-	devicesConnStr := "dbname=" + database + " user=" + user + " password=" + password + " host=" + hostname + " port=" + port + " sslmode=disable"
-	cloudProxyStore, err := db.NewDB("postgres", devicesConnStr, logger)
-	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not start connection with database. Will sleep for 5 seconds and exit the program")
-		time.Sleep(5 * time.Second)
-		os.Exit(1)
-	}
-
-	level.Info(logger).Log("msg", "Connection established with Devices database")
-
-	level.Info(logger).Log("msg", "Checking if DB migration is required")
-
-	cloudProxyDb := cloudProxyStore.(*db.DB)
-	driver, err := migratePostgres.WithInstance(cloudProxyDb.DB, &migratePostgres.Config{})
-	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not create postgres migration driver")
-		os.Exit(1)
-	}
-
-	m, err := migrate.NewWithDatabaseInstance(
-		"file://"+migrationsFilePath,
-		"postgres", driver)
-	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not create db migration instance ")
-		os.Exit(1)
-	}
-
-	mLogger := utils.NewGoKitLogToGoLogAdapter(logger)
-
-	m.Log = mLogger
-
-	m.Up()
-	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not perform db migration")
-		os.Exit(1)
-	}
-
-	return cloudProxyStore
 }
 
 func initializeConsulClient(consulProtocol string, consulHost string, consulPort string, consulCA string, logger log.Logger) *api.Client {
