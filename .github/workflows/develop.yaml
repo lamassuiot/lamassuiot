@@ -62,7 +62,28 @@ jobs:
     name: Test
     runs-on: self-hosted
     steps:
+      - name: Clean slef-hosted runner working directory 
+        shell: bash
+        run: |
+         cd $RUNNER_WORKSPACE
+         cd ..
+         rm -r *
       - name: Test1
         run: echo "a"
       - name: Test2
         run: echo "b" > myfile.txt
+
+  test2:
+    name: Test2
+    runs-on: self-hosted
+    steps:
+      - name: Clean slef-hosted runner working directory 
+        shell: bash
+        run: |
+         cd $RUNNER_WORKSPACE
+         cd ..
+         rm -r *
+      - name: Test1
+        run: echo "a"
+      - name: Test2
+        run: echo "b2" > myfile2.txt
