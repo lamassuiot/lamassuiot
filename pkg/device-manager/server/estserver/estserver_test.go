@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/go-kit/kit/log"
 
@@ -212,7 +215,6 @@ func TestEnroll(t *testing.T) {
 	csr1, _ := StringToCSR(csr1Str)
 
 	//errorDeviceById
-
 	csr2Str := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJQ25EQ0NBWVFDQVFBd1Z6RUxNQWtHQTFVRUJoTUNSVk14Q2pBSUJnTlZCQWdNQVVFeENqQUlCZ05WQkFjTQpBVUV4Q2pBSUJnTlZCQW9NQVVFeENqQUlCZ05WQkFzTUFVRXhHREFXQmdOVkJBTU1EMlZ5Y205eVJHVjJhV05sClFubEpaRENDQVNJd0RRWUpLb1pJaHZjTkFRRUJCUUFEZ2dFUEFEQ0NBUW9DZ2dFQkFOVzV3Rm5YT25vb29SbGUKb09mcHNwZmVWRmJhZ3R5NzNaNnhSQ0R6ZXMxYVByUURPTjZ6OHhydGdjZDRKa0REMDFnbWNYLzArakUvdnkybwpKT015cGlJbGluVVQyMFhoM0ZxazV1OG5IeXIxSTI1L04rTGdQdmx6eHIyVjlaOGQ3Y0VkcjhzVXBqa3ptRDhICmo0QjVLN1pXTHd6NktGRW5aY3J2SWtzZHVJeEkxMDMvS2JGdjRWTi9WTndPeEpaVFFkMFRYdVU2RE0rRDcwWU4KZUxWcVovc0krdXluM3o5bXlhZ1FIS1ZkblgwSDltQ3ZOdVBQelNUTkxvaG1GNkRLSHhhV1d4NHQ3TzNMTnU3dQpCMmF2b2JmdnNBS1ljWER3SjgyTXNIMGkvRDZtaVBvUE1sL1lvZFM4d3VkZ2xMWUhobWc0VmlvdzJmQ0E0RmVkCnJ5Z1o3N0VDQXdFQUFhQUFNQTBHQ1NxR1NJYjNEUUVCQ3dVQUE0SUJBUUFzMFJqTS9qclJGem5FU3ljRXlsSjgKWlNZTjE1ODNJNzFUeXFXQWE2RkEwK1htYVlDSTgyWHVSL0owNjY1N2ZjTEhicG1hTExCYnJzRDN4MkJUa29VSgpQQzdDV25kVmUvOXllYkZRaFdkOWdwcVA2UHBOZW1TN3ZmZ0pOaXVXb3hXS2tJOWNzZEh5emNWV0hsRGhzZllJClp5NHM4dGwxNkJkTDVHRnlBbkdOdFhubEZlYkdYOVZCays1YlU2WkhlaVd5ejJ5OXcwM1Y1RnFZeEhRV1VaQzkKcTBHRWFHYTBUaGtWbVU4S2VTYUs4MXBjYWZTeW5HeVpPbkI4VzFmbEwzVEJBNGxJQ3VBTVJkcUo5UEsyTlZIegp6aUVOWUJYMDRVWGNPUzJDVHcwekVTanpIR1JUaUplYy9aS2swcVM0TGljNlRxN2RFb3Vtclh2Kzd3MHZJZ3RVCi0tLS0tRU5EIENFUlRJRklDQVRFIFJFUVVFU1QtLS0tLQoK"
 	csr2, _ := StringToCSR(csr2Str)
 
@@ -241,10 +243,9 @@ func TestEnroll(t *testing.T) {
 		csr  *x509.CertificateRequest
 		ret  error
 	}{
-		{"Error Insert Log", csr3, errors.New("Could not insert log")},
 		{"Correct", csr1, nil},
+		{"Error Insert Log", csr3, errors.New("Could not insert log")},
 		{"Error finding device", csr2, errors.New("Could not find device by Id")},
-
 		{"Error Insert Device Cert History", csr1, errors.New("Testing DB connection failed")},
 		{"Error Update Status By Id", csr4, errors.New("error")},
 		{"Error Update Device Certificate Serial Number By ID", csr5, errors.New("error")},
@@ -275,12 +276,28 @@ func TestEnroll(t *testing.T) {
 				ctx = context.WithValue(ctx, "DBInsertLog", false)
 			}
 
-			_, _, err := srv.Enroll(ctx, tc.csr, "", nil)
+			snInt := new(big.Int)
+			snInt, _ = snInt.SetString("15898402459309774930443891423546184692", 10)
+			template := x509.Certificate{
+				SerialNumber: snInt,
+				Subject: pkix.Name{
+					Organization: []string{"Acme Co"},
+				},
+				NotBefore: time.Now(),
+				NotAfter:  time.Now().Add(time.Hour * 24 * 180),
+
+				KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+				ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+				BasicConstraintsValid: true,
+			}
+
+			// derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey(priv), priv)
+
+			_, _, err := srv.Enroll(ctx, tc.csr, "Lamassu", &template)
 			if err != nil {
 				if tc.ret.Error() != err.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
 				}
-
 			}
 		})
 	}
@@ -551,7 +568,7 @@ func testGetDeviceCert() dto.DeviceCert {
 	}
 	log := dto.DeviceCert{
 		DeviceId:     "1",
-		SerialNumber: "",
+		SerialNumber: "0b-f5-eb-c2-7d-6a-6b-d8-67-04-ae-ae-d9-58-13-f4",
 		CAName:       "",
 		Status:       "",
 		CRT:          "",

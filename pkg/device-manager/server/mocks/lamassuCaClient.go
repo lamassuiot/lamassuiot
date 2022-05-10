@@ -86,26 +86,30 @@ func (c *LamassuCaClientConfig) GetIssuedCerts(ctx context.Context, caType caDTO
 }
 
 func (c *LamassuCaClientConfig) GetCert(ctx context.Context, caType caDTO.CAType, caName string, SerialNumber string) (caDTO.Cert, error) {
-	failDB := ctx.Value("GetCertFail").(bool)
+	if ctx.Value("GetCertFail") != nil {
+		failDB := ctx.Value("GetCertFail").(bool)
 
-	if ctx.Value("DateFormatError") != nil {
-		failDF := ctx.Value("DateFormatError").(bool)
-		if failDF {
-			return caDTO.Cert{}, errors.New("Error getting certificate")
+		if ctx.Value("DateFormatError") != nil {
+			failDF := ctx.Value("DateFormatError").(bool)
+			if failDF {
+				return caDTO.Cert{}, errors.New("Error getting certificate")
+			} else {
+				c := testCert()
+				c.ValidFrom = ""
+				c.ValidTo = ""
+				return c, nil
+			}
 		} else {
-			c := testCert()
-			c.ValidFrom = ""
-			c.ValidTo = ""
-			return c, nil
+			if failDB {
+				return caDTO.Cert{}, errors.New("Error getting certificate")
+			} else {
+				return testCert(), nil
+			}
 		}
 	} else {
-		if failDB {
-			return caDTO.Cert{}, errors.New("Error getting certificate")
-		} else {
-			return testCert(), nil
-		}
-	}
+		return testCert(), nil
 
+	}
 }
 
 func testCert() caDTO.Cert {

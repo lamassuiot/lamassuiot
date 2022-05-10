@@ -11,22 +11,18 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
 	"github.com/go-openapi/runtime/middleware"
 
-	migrate "github.com/golang-migrate/migrate/v4"
-	migratePostgres "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/transport"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/config"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/docs"
-	"github.com/lamassuiot/lamassuiot/pkg/ca/server/models/ca/store"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/models/ca/store/db"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/secrets/vault"
 	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
@@ -90,13 +86,11 @@ func main() {
 		os.Exit(1)
 	}
 	level.Info(logger).Log("msg", "Connection established with secret engine")
-	casDb := initializeDB(cfg.PostgresCaDB, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresHostname, cfg.PostgresPort, cfg.PostgresMigrationsFilePath, logger)
+	casRawDb, err := serverUtils.InitializeDBConnection(cfg.PostgresCaDB, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresHostname, cfg.PostgresPort, false, "", logger)
 	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not start connection with Devices database. Will sleep for 5 seconds and exit the program")
-		time.Sleep(5 * time.Second)
 		os.Exit(1)
 	}
-	level.Info(logger).Log("msg", "Connection established with Devices database")
+	caDBInstance := db.NewDB(casRawDb, logger)
 	fieldKeys := []string{"method", "error"}
 
 	amq_cfg := new(tls.Config)
@@ -125,7 +119,7 @@ func main() {
 
 	var s service.Service
 	{
-		s = service.NewCAService(logger, secretsVault, casDb)
+		s = service.NewCAService(logger, secretsVault, caDBInstance)
 		s = service.NewAmqpMiddleware(amqpChannel, logger)(s)
 		s = service.LoggingMiddleware(logger)(s)
 		s = service.NewInstrumentingMiddleware(
@@ -210,39 +204,4 @@ func accessControl(h http.Handler) http.Handler {
 
 		h.ServeHTTP(w, r)
 	})
-}
-
-func initializeDB(database string, user string, password string, hostname string, port string, migrationsFilePath string, logger log.Logger) store.DB {
-	casConnStr := "dbname=" + database + " user=" + user + " password=" + password + " host=" + hostname + " port=" + port + " sslmode=disable"
-	casStore, err := db.NewDB("postgres", casConnStr, logger)
-	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not start connection with database. Will sleep for 5 seconds and exit the program")
-		time.Sleep(5 * time.Second)
-		os.Exit(1)
-	}
-
-	level.Info(logger).Log("msg", "Connection established with Devices database")
-
-	level.Info(logger).Log("msg", "Checking if DB migration is required")
-
-	devicesDb := casStore.(*db.DB)
-	driver, err := migratePostgres.WithInstance(devicesDb.DB, &migratePostgres.Config{})
-	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not create postgres migration driver")
-		os.Exit(1)
-	}
-	m, err := migrate.NewWithDatabaseInstance(
-		"file://"+migrationsFilePath,
-		"postgres", driver)
-	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not create db migration instance ")
-		os.Exit(1)
-	}
-
-	m.Up()
-	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not perform db migration")
-		os.Exit(1)
-	}
-	return casStore
 }

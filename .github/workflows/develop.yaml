@@ -7,83 +7,69 @@ on:
   workflow_call:
 
 jobs:
-  # lamassu_ca_unit_testing:
-  #   name: CA Unit Testing
-  #   runs-on: self-hosted
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v2
-  #       with:
-  #         fetch-depth: 0
-
-  #     - name: Set up Go
-  #       uses: actions/setup-go@v2
-  #       with:
-  #         go-version: 1.16 
-
-  #     - name: Run Go Unit Tests
-  #       run: go test ./pkg/ca/server/api/service/
-
-  # lamassu_dms_enroller_unit_testing:
-  #   name: DMS Enroller Unit Testing
-  #   runs-on: self-hosted
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v2
-  #       with:
-  #         fetch-depth: 0
-
-  #     - name: Set up Go
-  #       uses: actions/setup-go@v2
-  #       with:
-  #         go-version: 1.16 
-
-  #     - name: Run Go Unit Tests
-  #       run: go test ./pkg/dms-enroller/server/api/service/
-
-  # lamassu_device_manager_unit_testing:
-  #   name: Device Manager Unit Testing
-  #   runs-on: self-hosted
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v2
-  #       with:
-  #         fetch-depth: 0
-
-  #     - name: Set up Go
-  #       uses: actions/setup-go@v2
-  #       with:
-  #         go-version: 1.16 
-
-  #     - name: Run Go Unit Tests
-  #       run: go test ./pkg/device-manager/server/api/service/
-    
-  test:
-    name: Test
-    runs-on: self-hosted
+  lamassu_ca_unit_testing:
+    name: CA Unit Testing
+    # runs-on: self-hosted
     steps:
-      - name: Clean slef-hosted runner working directory 
-        shell: bash
-        run: |
-         cd $RUNNER_WORKSPACE
-         cd ..
-         rm -r *
-      - name: Test1
-        run: echo "a"
-      - name: Test2
-        run: echo "b" > myfile.txt
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
 
-  test2:
-    name: Test2
-    runs-on: self-hosted
-    steps:
-      - name: Clean slef-hosted runner working directory 
-        shell: bash
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16 
+      
+      - name: Set up gotestfmt
+        run: go install github.com/haveyoudebuggedit/gotestfmt/v2/cmd/gotestfmt@latest
+
+      - name: Run Go Unit Tests
         run: |
-         cd $RUNNER_WORKSPACE
-         cd ..
-         rm -r *
-      - name: Test1
-        run: echo "a"
-      - name: Test2
-        run: echo "b2" > myfile2.txt
+          set -eo pipefail
+          go test -json -v ./pkg/ca/server/api/service/ | gotestfmt
+
+
+  lamassu_dms_enroller_unit_testing:
+    name: DMS Enroller Unit Testing
+    # runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16 
+      
+      - name: Set up gotestfmt
+        run: go install github.com/haveyoudebuggedit/gotestfmt/v2/cmd/gotestfmt@latest
+
+      - name: Run Go Unit Tests
+        run: |
+          set -eo pipefail
+          go test -json -v ./pkg/dms-enroller/server/api/service/ | gotestfmt
+
+  lamassu_device_manager_unit_testing:
+    name: Device Manager Unit Testing
+    # runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16 
+      
+      - name: Set up gotestfmt
+        run: go install github.com/haveyoudebuggedit/gotestfmt/v2/cmd/gotestfmt@latest
+
+      - name: Run Go Unit Tests
+        run: |
+          set -eo pipefail
+          go test -json -v ./pkg/device-manager/server/api/service/ | gotestfmt

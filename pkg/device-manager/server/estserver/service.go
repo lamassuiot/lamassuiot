@@ -84,11 +84,12 @@ func (s *EstService) CACerts(ctx context.Context, aps string) ([]*x509.Certifica
 	return x509Certificates, nil
 }
 
-func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string, cert *x509.Certificate) (*x509.Certificate, *x509.Certificate, error) {
+func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string, clientCertificate *x509.Certificate) (*x509.Certificate, *x509.Certificate, error) {
 	var PrivateKeyMetadataWithStregth dto.PrivateKeyMetadataWithStregth
 	var dmsDB dmsStore.DB
 	deviceId := csr.Subject.CommonName
-	sn := s.verifyUtils.InsertNth(s.verifyUtils.ToHexInt(cert.SerialNumber), 2)
+	sn := s.verifyUtils.InsertNth(s.verifyUtils.ToHexInt(clientCertificate.SerialNumber), 2)
+	fmt.Println(sn)
 	dmsId, err := s.dmsDb.SelectBySerialNumber(ctx, sn)
 	if err != nil {
 		return nil, nil, err

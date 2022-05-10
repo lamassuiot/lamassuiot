@@ -10,23 +10,21 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
 	"github.com/go-openapi/runtime/middleware"
+	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/api/transport"
-	"github.com/lamassuiot/lamassuiot/pkg/utils"
-	"github.com/opentracing/opentracing-go"
-
-	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/config"
-	dmsdb "github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/models/dms/store/db"
-	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
-
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/docs"
+	dmsDB "github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/models/dms/store/db"
+	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
+	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
+	"github.com/opentracing/opentracing-go"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
@@ -59,14 +57,12 @@ func main() {
 		level.Debug(logger).Log("msg", "Starting Lamassu-DMS-Enroller in debug mode...")
 	}
 
-	dmsConnStr := "dbname=" + cfg.PostgresDB + " user=" + cfg.PostgresUser + " password=" + cfg.PostgresPassword + " host=" + cfg.PostgresHostname + " port=" + cfg.PostgresPort + " sslmode=disable"
-	dmsDb, err := dmsdb.NewDB("postgres", dmsConnStr, logger)
+	dmsRawDB, err := serverUtils.InitializeDBConnection(cfg.PostgresDB, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresHostname, cfg.PostgresPort, false, "", logger)
 	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not start connection with DMS Enroller database. Will sleep for 5 seconds and exit the program")
-		time.Sleep(5 * time.Second)
 		os.Exit(1)
 	}
-	level.Info(logger).Log("msg", "Connection established with DMS Enroller database")
+
+	dmsDBInstance := dmsDB.NewDB(dmsRawDB, logger)
 
 	jcfg, err := jaegercfg.FromEnv()
 	if err != nil {
@@ -107,7 +103,7 @@ func main() {
 
 	var s service.Service
 	{
-		s = service.NewEnrollerService(dmsDb, &lamassuCaClient, logger)
+		s = service.NewEnrollerService(dmsDBInstance, &lamassuCaClient, logger)
 		s = service.LoggingMiddleware(logger)(s)
 		s = service.NewInstrumentingMiddleware(
 			kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{

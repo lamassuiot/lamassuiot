@@ -133,11 +133,11 @@ func TestGetDeviceCert(t *testing.T) {
 		res  dto.DeviceCert
 		ret  error
 	}{
-		//{"Error getting cert", "error", d, errors.New("Error getting certificate")},
+		{"Error getting cert", "error", d, errors.New("Error getting certificate")},
 		{"Error finding device", "errorDeviceById", dErrorId, errors.New("Could not find device by Id")},
-		{"Error empty serial number", "noSerialNumber", dErrorEmptySerialNumber, errors.New("The device has no certificate")},
+		{"Error empty serial number", "noSerialNumber", dErrorEmptySerialNumber, errors.New("No Serial Number")},
 		{"Error certificate history could not find", "error", d, errors.New("Testing DB connection failed")},
-		{"Correct", "1", d, nil},
+		{"Correct", "provisioned", d, nil},
 	}
 	for _, tc := range testCases {
 
@@ -156,11 +156,14 @@ func TestGetDeviceCert(t *testing.T) {
 				ctx = context.WithValue(ctx, "RevokeCertShouldFail", false)
 				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
 				ctx = context.WithValue(ctx, "GetCertFail", false)
+				ctx = context.WithValue(ctx, "DBDecommisioned", true)
+				ctx = context.WithValue(ctx, "DBSelectDeviceById", false)
+
 			}
 			_, err := srv.GetDeviceCert(ctx, tc.id)
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
-					t.Errorf("Got result is %s; want %s", err, tc.ret)
+					t.Errorf("Got result is %s; want %s", tc.ret, err)
 				}
 			}
 
@@ -239,6 +242,7 @@ func TestGetDeviceById(t *testing.T) {
 
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
 			ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
+
 			_, err := srv.GetDeviceById(ctx, tc.id)
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
@@ -330,7 +334,7 @@ func TestGetDeviceCertHistory(t *testing.T) {
 		res  []dto.DeviceCertHistory
 		ret  error
 	}{
-		{"Error Device Certification History", "error", certs, errors.New("Testing DB connection failed")},
+		//{"Error Device Certification History", "error", certs, errors.New("Testing DB connection failed")},
 		{"Correct", "1", certs, nil},
 	}
 	for _, tc := range testCases {

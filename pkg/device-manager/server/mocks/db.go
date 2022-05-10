@@ -171,6 +171,9 @@ func (db *MockDB) SelectDeviceById(ctx context.Context, id string) (dto.Device, 
 			/*} else if id == "errorLog" {
 			return dev, errors.New("Could not insert log")
 			*/
+		} else if id == "error" {
+			return dev, errors.New("Error getting certificate")
+
 		} else if id == "noSerialNumber" {
 			dev := testDeviceNoSerialNumber()
 			return dev, ErrSerialNumber

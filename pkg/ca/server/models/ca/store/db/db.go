@@ -14,18 +14,8 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/models/ca/store"
 )
 
-func NewDB(driverName string, dataSourceName string, logger log.Logger) (store.DB, error) {
-	db, err := sql.Open(driverName, dataSourceName)
-	if err != nil {
-		return nil, err
-	}
-	err = checkDBAlive(db)
-	for err != nil {
-		level.Warn(logger).Log("msg", "Trying to connect to Device DB")
-		err = checkDBAlive(db)
-	}
-
-	return &DB{db, logger}, nil
+func NewDB(db *sql.DB, logger log.Logger) store.DB {
+	return &DB{db, logger}
 }
 
 type DB struct {

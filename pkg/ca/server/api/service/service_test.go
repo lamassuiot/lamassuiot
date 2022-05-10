@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"crypto/x509"
 	"encoding/base64"
@@ -183,8 +182,7 @@ func TestImportCA(t *testing.T) {
 				Key:     rsaKey,
 			}
 
-			a, err := srv.ImportCA(ctx, caType, tc.caName, tc.cert, keyM, 1000)
-			fmt.Printf("a: %v\n", a)
+			_, err = srv.ImportCA(ctx, caType, tc.caName, tc.cert, keyM, 1000)
 
 			if tc.ret != nil {
 
@@ -251,11 +249,11 @@ func TestGetIssuedCerts(t *testing.T) {
 	}
 	newCA, _ := srv.CreateCA(ctx, caType, "testDCMock", keyMetadata, certReq.Subject, certReq.CaTTL, certReq.EnrollerTTL)
 
-	data, _ := base64.StdEncoding.DecodeString("LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJQ2pqQ0NBWFlDQVFBd1NURUxNQWtHQTFVRUJoTUNSVk14Q2pBSUJnTlZCQWdNQVVFeENqQUlCZ05WQkFjTQpBVUV4Q2pBSUJnTlZCQW9NQVVFeENqQUlCZ05WQkFzTUFVRXhDakFJQmdOVkJBTU1BVUV3Z2dFaU1BMEdDU3FHClNJYjNEUUVCQVFVQUE0SUJEd0F3Z2dFS0FvSUJBUURDaFUxRFROckI0a2JTaVpjQjBMaHhUQ2dPYXlQUUU0VzkKT2N1MFBpczBybUliZnM2T2pERk5qcUY5dlhOcFlUSGhtL3FaTVZTWEZYZjM4VDBJS3NmU2lCYm5aa0pYWWc0NgptY2tLY1VkQ0VsUy8wK3RYaDh6Slo3QXNsV0Z2eXFLek5nUVJCcnhJQ0RVOTdVWXJ6eWk3ajVOSUJ2OHJvRld4CjVJOUNXUEpEQ00vRUFHMHVldjZQNVQzN2dKUzlFcnZXeERmWDVJL3hxRnZEQnpsV0VqbytFZ1piM3daSEt5d3QKMUVaVHBET1NKY29VeXZnWmFwUFF6U2JDZVdUL3ZlRW8rem5pUlk5SThFRlJhNm9DWDNCbVc4Snh2V2FSOVd3YQpnVUZ4cFM5OHdJN0JwSVJUeFgwdk9oMXZlUlBjWmRsVmFMZlJQb1BuV1BkdHAwckFDdXB6QWdNQkFBR2dBREFOCkJna3Foa2lHOXcwQkFRc0ZBQU9DQVFFQUllbTV5YnpVR1VvSk9yUjc1bW5COGZNUmVBWi9NalRVamYwem0xQjQKeGo4U1FMYTI2djU2ZkxOYkZ6NTlaaDlJa0J2U1AyNWNRTm5JU1lZT3RxejZLakJzcEVVQnNKaFVKcTNRNXpybgo3WVVoZnN2NWIzN0h2Y3h6akpvWW05NlZiU2FwQk5RWStGbjJ3R3NhZ1Zucktoalk0REdMM0lKQmlicmJvcEg2ClJwaFJRMWwyeXcwbUEybG9jK0hEZ1VwVTR4bXRpangvbHZmdHkzYVdwelBmV3pOWFRVYkEwNTFGY3hEQWh0SlkKbEd5WUxKSk1XQ08rL3NlUkxLSWFrZTFNeFR5Nzd0WVJ3MUNkVkJWWWFIbU8xM2k3ek8zYWVxdzloaGNHcWhyUQpXSWlYQ2lRdm9GN25oSmRvOEdmbkV5L1hKWk54LzQzbFVxUFcrekNhaWlsa2h3PT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUgUkVRVUVTVC0tLS0t")
+	/*data, _ := base64.StdEncoding.DecodeString("LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJQ2pqQ0NBWFlDQVFBd1NURUxNQWtHQTFVRUJoTUNSVk14Q2pBSUJnTlZCQWdNQVVFeENqQUlCZ05WQkFjTQpBVUV4Q2pBSUJnTlZCQW9NQVVFeENqQUlCZ05WQkFzTUFVRXhDakFJQmdOVkJBTU1BVUV3Z2dFaU1BMEdDU3FHClNJYjNEUUVCQVFVQUE0SUJEd0F3Z2dFS0FvSUJBUURDaFUxRFROckI0a2JTaVpjQjBMaHhUQ2dPYXlQUUU0VzkKT2N1MFBpczBybUliZnM2T2pERk5qcUY5dlhOcFlUSGhtL3FaTVZTWEZYZjM4VDBJS3NmU2lCYm5aa0pYWWc0NgptY2tLY1VkQ0VsUy8wK3RYaDh6Slo3QXNsV0Z2eXFLek5nUVJCcnhJQ0RVOTdVWXJ6eWk3ajVOSUJ2OHJvRld4CjVJOUNXUEpEQ00vRUFHMHVldjZQNVQzN2dKUzlFcnZXeERmWDVJL3hxRnZEQnpsV0VqbytFZ1piM3daSEt5d3QKMUVaVHBET1NKY29VeXZnWmFwUFF6U2JDZVdUL3ZlRW8rem5pUlk5SThFRlJhNm9DWDNCbVc4Snh2V2FSOVd3YQpnVUZ4cFM5OHdJN0JwSVJUeFgwdk9oMXZlUlBjWmRsVmFMZlJQb1BuV1BkdHAwckFDdXB6QWdNQkFBR2dBREFOCkJna3Foa2lHOXcwQkFRc0ZBQU9DQVFFQUllbTV5YnpVR1VvSk9yUjc1bW5COGZNUmVBWi9NalRVamYwem0xQjQKeGo4U1FMYTI2djU2ZkxOYkZ6NTlaaDlJa0J2U1AyNWNRTm5JU1lZT3RxejZLakJzcEVVQnNKaFVKcTNRNXpybgo3WVVoZnN2NWIzN0h2Y3h6akpvWW05NlZiU2FwQk5RWStGbjJ3R3NhZ1Zucktoalk0REdMM0lKQmlicmJvcEg2ClJwaFJRMWwyeXcwbUEybG9jK0hEZ1VwVTR4bXRpangvbHZmdHkzYVdwelBmV3pOWFRVYkEwNTFGY3hEQWh0SlkKbEd5WUxKSk1XQ08rL3NlUkxLSWFrZTFNeFR5Nzd0WVJ3MUNkVkJWWWFIbU8xM2k3ek8zYWVxdzloaGNHcWhyUQpXSWlYQ2lRdm9GN25oSmRvOEdmbkV5L1hKWk54LzQzbFVxUFcrekNhaWlsa2h3PT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUgUkVRVUVTVC0tLS0t")
 	block, _ := pem.Decode([]byte(data))
-	csr, _ := x509.ParseCertificateRequest(block.Bytes)
+	csr, _ := x509.ParseCertificateRequest(block.Bytes)*/
 
-	srv.SignCertificate(ctx, caType, newCA.Name, *csr, false)
+	//srv.SignCertificate(ctx, caType, newCA.Name, *csr, false)
 
 	var caList []dto.Cert
 	caList = append(caList, newCA)
@@ -426,8 +424,7 @@ func TestDeleteCert(t *testing.T) {
 func setup(t *testing.T) (Service, context.Context) {
 	t.Helper()
 
-	buf := &bytes.Buffer{}
-	logger := log.NewJSONLogger(buf)
+	logger := log.NewNopLogger()
 
 	ctx := context.Background()
 	spanId, ctx := opentracing.StartSpanFromContext(ctx, "test")

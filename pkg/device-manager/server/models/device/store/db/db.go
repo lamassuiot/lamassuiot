@@ -25,17 +25,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func NewDB(driverName string, dataSourceName string, logger log.Logger) (store.DB, error) {
-	db, err := sql.Open(driverName, dataSourceName)
-	if err != nil {
-		return nil, err
-	}
-	err = checkDBAlive(db)
-	for err != nil {
-		level.Warn(logger).Log("msg", "Trying to connect to Device DB")
-		err = checkDBAlive(db)
-	}
-
+func NewDB(db *sql.DB, logger log.Logger) (store.DB, error) {
 	return &DB{db, logger}, nil
 }
 

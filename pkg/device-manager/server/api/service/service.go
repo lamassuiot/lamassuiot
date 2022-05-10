@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
-	"errors"
 	"sync"
 	"time"
 
@@ -313,9 +312,6 @@ func (s *devicesService) GetDeviceCertHistory(ctx context.Context, id string) ([
 func (s *devicesService) GetDeviceCert(ctx context.Context, id string) (dto.DeviceCert, error) {
 	caType, err := caDTO.ParseCAType("pki")
 	dev, err := s.devicesDb.SelectDeviceById(ctx, id)
-	if dev.CurrentCertificate.SerialNumber == "" {
-		return dto.DeviceCert{}, errors.New("The device has no certificate")
-	}
 
 	if err != nil {
 		return dto.DeviceCert{}, err

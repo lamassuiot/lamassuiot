@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/x509"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/secrets"
 
+	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/vault/api"
 	"github.com/hashicorp/vault/builtin/logical/pki"
 	"github.com/hashicorp/vault/http"
@@ -35,7 +37,14 @@ var (
 func NewVaultSecretsMock(t *testing.T) (*api.Client, error) {
 	t.Helper()
 
+	appLogger := hclog.New(&hclog.LoggerOptions{
+		Name: "my-app",
+		// Level:  hclog.LevelFromString("DEBUG"),
+		Output: io.Discard,
+	})
+
 	coreConfig := &vault.CoreConfig{
+		Logger: appLogger,
 		LogicalBackends: map[string]logical.Factory{
 			"pki": pki.Factory,
 		},
