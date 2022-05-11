@@ -455,7 +455,7 @@ func (vs *VaultSecrets) GetCert(ctx context.Context, caType dto.CAType, caName s
 	if len(serialNumber) <= 0 {
 		return dto.Cert{}, errors.New("empty serial number")
 	}
-	span := opentracing.StartSpan("lamassu-ca-api: vault-api DELETE /v1/"+vs.pkiPath+caType.ToVaultPath()+caName+"/cert/"+serialNumber, opentracing.ChildOf(parentSpan.Context()))
+	span := opentracing.StartSpan("lamassu-ca-api: vault-api GET /v1/"+vs.pkiPath+caType.ToVaultPath()+caName+"/cert/"+serialNumber, opentracing.ChildOf(parentSpan.Context()))
 	certResponse, err := vs.client.Logical().Read(vs.pkiPath + caType.ToVaultPath() + caName + "/cert/" + serialNumber)
 	span.Finish()
 

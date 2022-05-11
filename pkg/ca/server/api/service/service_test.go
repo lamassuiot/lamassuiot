@@ -385,8 +385,6 @@ func TestDeleteCert(t *testing.T) {
 		KeyBits: certReq.KeyMetadata.KeyBits,
 	}
 	newCA, err := srv.CreateCA(ctx, caType, "testDCMockc", keyMetadata, certReq.Subject, certReq.CaTTL, certReq.EnrollerTTL)
-	newCAI, err := srv.CreateCA(ctx, caType, "testDCMockIn", keyMetadata, certReq.Subject, certReq.CaTTL, certReq.EnrollerTTL)
-	err = srv.DeleteCert(ctx, caType, "testDCMockIn", newCAI.SerialNumber)
 
 	data, _ := base64.StdEncoding.DecodeString("LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJQ2pqQ0NBWFlDQVFBd1NURUxNQWtHQTFVRUJoTUNSVk14Q2pBSUJnTlZCQWdNQVVFeENqQUlCZ05WQkFjTQpBVUV4Q2pBSUJnTlZCQW9NQVVFeENqQUlCZ05WQkFzTUFVRXhDakFJQmdOVkJBTU1BVUV3Z2dFaU1BMEdDU3FHClNJYjNEUUVCQVFVQUE0SUJEd0F3Z2dFS0FvSUJBUURDaFUxRFROckI0a2JTaVpjQjBMaHhUQ2dPYXlQUUU0VzkKT2N1MFBpczBybUliZnM2T2pERk5qcUY5dlhOcFlUSGhtL3FaTVZTWEZYZjM4VDBJS3NmU2lCYm5aa0pYWWc0NgptY2tLY1VkQ0VsUy8wK3RYaDh6Slo3QXNsV0Z2eXFLek5nUVJCcnhJQ0RVOTdVWXJ6eWk3ajVOSUJ2OHJvRld4CjVJOUNXUEpEQ00vRUFHMHVldjZQNVQzN2dKUzlFcnZXeERmWDVJL3hxRnZEQnpsV0VqbytFZ1piM3daSEt5d3QKMUVaVHBET1NKY29VeXZnWmFwUFF6U2JDZVdUL3ZlRW8rem5pUlk5SThFRlJhNm9DWDNCbVc4Snh2V2FSOVd3YQpnVUZ4cFM5OHdJN0JwSVJUeFgwdk9oMXZlUlBjWmRsVmFMZlJQb1BuV1BkdHAwckFDdXB6QWdNQkFBR2dBREFOCkJna3Foa2lHOXcwQkFRc0ZBQU9DQVFFQUllbTV5YnpVR1VvSk9yUjc1bW5COGZNUmVBWi9NalRVamYwem0xQjQKeGo4U1FMYTI2djU2ZkxOYkZ6NTlaaDlJa0J2U1AyNWNRTm5JU1lZT3RxejZLakJzcEVVQnNKaFVKcTNRNXpybgo3WVVoZnN2NWIzN0h2Y3h6akpvWW05NlZiU2FwQk5RWStGbjJ3R3NhZ1Zucktoalk0REdMM0lKQmlicmJvcEg2ClJwaFJRMWwyeXcwbUEybG9jK0hEZ1VwVTR4bXRpangvbHZmdHkzYVdwelBmV3pOWFRVYkEwNTFGY3hEQWh0SlkKbEd5WUxKSk1XQ08rL3NlUkxLSWFrZTFNeFR5Nzd0WVJ3MUNkVkJWWWFIbU8xM2k3ek8zYWVxdzloaGNHcWhyUQpXSWlYQ2lRdm9GN25oSmRvOEdmbkV5L1hKWk54LzQzbFVxUFcrekNhaWlsa2h3PT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUgUkVRVUVTVC0tLS0t")
 	block, _ := pem.Decode([]byte(data))
@@ -397,18 +395,29 @@ func TestDeleteCert(t *testing.T) {
 	block2, _ := pem.Decode([]byte(data2))
 	crt, _ := x509.ParseCertificate(block2.Bytes)
 
+	data3, _ := base64.StdEncoding.DecodeString("LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJQ2pqQ0NBWFlDQVFBd1NURUxNQWtHQTFVRUJoTUNSVk14Q2pBSUJnTlZCQWdNQVVFeENqQUlCZ05WQkFjTQpBVUV4Q2pBSUJnTlZCQW9NQVVFeENqQUlCZ05WQkFzTUFVRXhDakFJQmdOVkJBTU1BVUV3Z2dFaU1BMEdDU3FHClNJYjNEUUVCQVFVQUE0SUJEd0F3Z2dFS0FvSUJBUURDaFUxRFROckI0a2JTaVpjQjBMaHhUQ2dPYXlQUUU0VzkKT2N1MFBpczBybUliZnM2T2pERk5qcUY5dlhOcFlUSGhtL3FaTVZTWEZYZjM4VDBJS3NmU2lCYm5aa0pYWWc0NgptY2tLY1VkQ0VsUy8wK3RYaDh6Slo3QXNsV0Z2eXFLek5nUVJCcnhJQ0RVOTdVWXJ6eWk3ajVOSUJ2OHJvRld4CjVJOUNXUEpEQ00vRUFHMHVldjZQNVQzN2dKUzlFcnZXeERmWDVJL3hxRnZEQnpsV0VqbytFZ1piM3daSEt5d3QKMUVaVHBET1NKY29VeXZnWmFwUFF6U2JDZVdUL3ZlRW8rem5pUlk5SThFRlJhNm9DWDNCbVc4Snh2V2FSOVd3YQpnVUZ4cFM5OHdJN0JwSVJUeFgwdk9oMXZlUlBjWmRsVmFMZlJQb1BuV1BkdHAwckFDdXB6QWdNQkFBR2dBREFOCkJna3Foa2lHOXcwQkFRc0ZBQU9DQVFFQUllbTV5YnpVR1VvSk9yUjc1bW5COGZNUmVBWi9NalRVamYwem0xQjQKeGo4U1FMYTI2djU2ZkxOYkZ6NTlaaDlJa0J2U1AyNWNRTm5JU1lZT3RxejZLakJzcEVVQnNKaFVKcTNRNXpybgo3WVVoZnN2NWIzN0h2Y3h6akpvWW05NlZiU2FwQk5RWStGbjJ3R3NhZ1Zucktoalk0REdMM0lKQmlicmJvcEg2ClJwaFJRMWwyeXcwbUEybG9jK0hEZ1VwVTR4bXRpangvbHZmdHkzYVdwelBmV3pOWFRVYkEwNTFGY3hEQWh0SlkKbEd5WUxKSk1XQ08rL3NlUkxLSWFrZTFNeFR5Nzd0WVJ3MUNkVkJWWWFIbU8xM2k3ek8zYWVxdzloaGNHcWhyUQpXSWlYQ2lRdm9GN25oSmRvOEdmbkV5L1hKWk54LzQzbFVxUFcrekNhaWlsa2h3PT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUgUkVRVUVTVC0tLS0t")
+	block3, _ := pem.Decode([]byte(data3))
+	csr3, _ := x509.ParseCertificateRequest(block3.Bytes)
+
+	b, err := srv.SignCertificate(ctx, caType, newCA.Name, *csr3, false)
+	data4, _ := base64.StdEncoding.DecodeString(b.Crt)
+	block4, _ := pem.Decode([]byte(data4))
+	crt2, _ := x509.ParseCertificate(block4.Bytes)
+
+	srv.DeleteCert(ctx, caType, newCA.Name, utils.InsertNth(utils.ToHexInt(crt2.SerialNumber), 2))
+
 	testCases := []struct {
 		name string
-		cert dto.Cert
+		cert *x509.Certificate
 		ret  error
 	}{
-		{"Delete deleted CA", newCAI, errors.New("could not revoke cert from CA")},
-		{"Delete certificate", newCA, nil},
+		{"Delete deleted CA", crt2, errors.New("the certificate is already revoked")},
+		{"Delete certificate", crt, nil},
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
-			num := utils.InsertNth(utils.ToHexInt(crt.SerialNumber), 2)
-			err = srv.DeleteCert(ctx, caType, tc.cert.Name, num)
+			num := utils.InsertNth(utils.ToHexInt(tc.cert.SerialNumber), 2)
+			err = srv.DeleteCert(ctx, caType, newCA.Name, num)
 			if err != nil {
 				if tc.ret != err {
 					if err.Error() != tc.ret.Error() {
@@ -462,7 +471,7 @@ func setup(t *testing.T) (Service, context.Context) {
 }
 
 func testCA(caName string) dto.Cert {
-	serialNumber := "23-33-5b-19-c8-ed-8b-2a-92-5c-7b-57-fc-47-45-e7-12-03-91-23"
+	serialNumber := "54-91-80-de-65-98-1b-7f-7a-a4-08-4b-99-ae-8c-d8-8a-69-6b-8e"
 
 	keyMetadata := dto.PrivateKeyMetadataWithStregth{
 		KeyType: "rsa",

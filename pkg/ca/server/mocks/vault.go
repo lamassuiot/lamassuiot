@@ -173,7 +173,7 @@ func (vm *VaultSecretsMock) DeleteCA(ctx context.Context, caType dto.CAType, caN
 }
 
 func (vm *VaultSecretsMock) DeleteCert(ctx context.Context, caType dto.CAType, caName string, serialNumber string) error {
-	err := vm.secrets.DeleteCA(ctx, caType, caName)
+	err := vm.secrets.DeleteCert(ctx, caType, caName, serialNumber)
 	if err != nil {
 		return err
 	}

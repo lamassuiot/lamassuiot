@@ -429,7 +429,6 @@ func TestGetDmsLastIssuedCert(t *testing.T) {
 
 func TestRevokeDeviceCert(t *testing.T) {
 	srv, ctx := setup(t)
-
 	d := testDevice()
 
 	srv.PostDevice(ctx, d.Alias, d.Id, d.DmsId, "", nil, "", "")
@@ -449,7 +448,7 @@ func TestRevokeDeviceCert(t *testing.T) {
 		{"Error updating certificate history", "errorUpdateDeviceCertHistory", errors.New("error")},
 		{"Error updating certificate history serial number", "errorUpdateDeviceCertificateSerialNumberByID", errors.New("error")},
 		{"Error updating device status", "errorUpdateStatus", errors.New("error")},
-		{"Error certificate history could not find", "error", errors.New("Testing DB connection failed")},
+		{"Error certificate history could not find", "error", errors.New("Error getting certificate")},
 
 		{"Correct", "1", nil},
 	}
