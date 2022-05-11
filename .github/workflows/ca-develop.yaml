@@ -1,4 +1,4 @@
-name: Develop Workflow
+name: CA - develop workflow
 
 on:
   push:

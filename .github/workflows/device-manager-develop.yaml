@@ -1,4 +1,4 @@
-name: Develop Workflow
+name: Device Manager - develop workflow
 
 on:
   push:
