@@ -62,43 +62,49 @@ jobs:
       - name: Build CA DEV docker image
         uses: docker/build-push-action@v2
         with:
-          file: ci/ca.dockerfile 
-          tags: 
-            - lamassuiot/lamassu-ca-dev:${{ github.sha }}
-            - lamassuiot/lamassu-ca-dev:latest
+          file: ci/ca.dockerfile
+          build-args: |
+            BASE_IMAGE=alpine:3.14
+          tags: |
+            lamassuiot/lamassu-ca-dev:${{ github.sha }}
+            lamassuiot/lamassu-ca-dev:latest
           push: true
 
       - name: Build Device Manager DEV docker image
         uses: docker/build-push-action@v2
         with:
           file: ci/device-manager.dockerfile 
-          tags: 
-            - lamassuiot/lamassu-device-manager-dev:${{ github.sha }}
-            - lamassuiot/lamassu-device-manager-dev:latest
+          build-args: |
+            BASE_IMAGE=alpine:3.14
+          tags: |
+            lamassuiot/lamassu-device-manager-dev:${{ github.sha }}
+            lamassuiot/lamassu-device-manager-dev:latest
           push: true
 
       - name: Build DMS Enroller DEV docker image
         uses: docker/build-push-action@v2
         with:
-          file: ci/dms-enroller.dockerfile 
-          tags: 
-            - lamassuiot/lamassu-dms-enroller-dev:${{ github.sha }}
-            - lamassuiot/lamassu-dms-enroller-dev:latest
+          file: ci/dms-enroller.dockerfile
+          build-args: |
+            BASE_IMAGE=alpine:3.14
+          tags: |
+            lamassuiot/lamassu-dms-enroller-dev:${{ github.sha }}
+            lamassuiot/lamassu-dms-enroller-dev:latest
           push: true
 
       - name: Build Cloud Proxy DEV docker image
         uses: docker/build-push-action@v2
         with:
           file: ci/cloud-proxy.dockerfile 
-          build-args: 
-            - BASE_IMAGE: alpine:3.14
-          tags: 
-            - lamassuiot/lamassu-cloud-proxy-dev:${{ github.sha }}
-            - lamassuiot/lamassu-cloud-proxy-dev:latest
+          build-args: |
+            BASE_IMAGE=alpine:3.14
+          tags: |
+            lamassuiot/lamassu-cloud-proxy-dev:${{ github.sha }}
+            lamassuiot/lamassu-cloud-proxy-dev:latest
           push: true
 
   deploy_to_release_env:
-      name: Deploy to release Server
+      name: Deploy to DEV Server
       needs:
       - build_docker_resources
       # runs-on: self-hosted
