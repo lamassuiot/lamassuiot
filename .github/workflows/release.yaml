@@ -8,41 +8,15 @@ on:
 jobs:
   unit_testing_ca:
     name: Unit Testing CA
-    # runs-on: self-hosted
-    runs-on: ubuntu-latest
-    steps:        
-      - name: Checkout
-        uses: actions/checkout@v2
-      
-      - name: Run CA unit tests
-        uses: ./.github/workflows/ca-develop.yaml
+    uses: ./.github/workflows/ca-develop.yaml
 
   unit_testing_dms_enroller:
     name: Unit Testing DMS Enroller
-    # runs-on: self-hosted
-    runs-on: ubuntu-latest
-    steps:        
-      - name: Checkout
-        uses: actions/checkout@v2
-      
-      - name: Run DMS Enroller unit tests
-        uses: ./.github/workflows/dms-enroller-develop.yaml
+    uses: ./.github/workflows/dms-enroller-develop.yaml
 
   unit_testing_device_manager:
     name: Unit Testing Device Manager
-    # runs-on: self-hosted
-    runs-on: ubuntu-latest
-    steps:        
-      - name: Checkout
-        uses: actions/checkout@v2
-      
-      - name: Run Device Manager unit tests
-        uses: ./.github/workflows/device-manager-develop.yaml
-
-      - name: Set up Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.16 
+    uses: ./.github/workflows/device-manager-develop.yaml
 
   build_ca_dev_docker_image:
       name: CA - Release DEV docker images
