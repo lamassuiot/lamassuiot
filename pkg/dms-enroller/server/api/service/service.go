@@ -128,7 +128,7 @@ func (s *enrollerService) CreateDMSForm(ctx context.Context, subject dto.Subject
 		} else {
 			return string(privkey_pemByte), csr, nil
 		}
-	} else if PrivateKeyMetadata.KeyType == "ec" {
+	} else if PrivateKeyMetadata.KeyType == "EC" {
 		var priv *ecdsa.PrivateKey
 		var err error
 		switch PrivateKeyMetadata.KeyBits {

@@ -9,5 +9,5 @@ RUN CGO_ENABLED=0 go build -mod=vendor -o cloud-proxy cmd/cloud-proxy/main.go
 
 FROM $BASE_IMAGE
 COPY --from=0 /app/cloud-proxy /
-COPY ./db/migrations /app/db/migrations
+COPY ./db/migrations/cloud-proxy /app/db/migrations
 CMD ["/cloud-proxy"]

@@ -37,8 +37,14 @@ type DmsDB struct {
 
 func (db *DmsDB) SelectBySerialNumber(ctx context.Context, SerialNumber string) (string, error) {
 
-	return "1", nil
+	return "810fbd45-55a6-4dd7-8466-c3d3eb854357", nil
 }
 func (db *DmsDB) SelectByDMSIDAuthorizedCAs(ctx context.Context, dmsid string) ([]dms.AuthorizedCAs, error) {
-	return nil, nil
+	authCA := dms.AuthorizedCAs{
+		DmsId:  "810fbd45-55a6-4dd7-8466-c3d3eb854357",
+		CaName: "IkerCA",
+	}
+	var list []dms.AuthorizedCAs
+	list = append(list, authCA)
+	return list, nil
 }

@@ -302,8 +302,6 @@ func TestGetDeviceLogs(t *testing.T) {
 		{"Correct", "1", logs, nil},
 	}
 	for _, tc := range testCases {
-		/*order := dto.OrderOptions{Order: "asc", Field: "id"}
-		pag := dto.PaginationOptions{Page: 0, Offset: 100}*/
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
 
 			out, err := srv.GetDeviceLogs(ctx, tc.id)
@@ -334,7 +332,7 @@ func TestGetDeviceCertHistory(t *testing.T) {
 		res  []dto.DeviceCertHistory
 		ret  error
 	}{
-		//{"Error Device Certification History", "error", certs, errors.New("Testing DB connection failed")},
+		{"Error Device Certification History", "error", certs, errors.New("Testing DB connection failed")},
 		{"Correct", "1", certs, nil},
 	}
 	for _, tc := range testCases {
@@ -359,9 +357,7 @@ func TestGetDeviceCertHistory(t *testing.T) {
 
 func TestGetDmsCertHistoryThirtyDays(t *testing.T) {
 	srv, ctx := setup(t)
-
 	certs := testDMSCertsHistory()
-	//var CAEmptys dto.Devices
 
 	testCases := []struct {
 		name string
@@ -401,7 +397,6 @@ func TestGetDmsCertHistoryThirtyDays(t *testing.T) {
 
 func TestGetDmsLastIssuedCert(t *testing.T) {
 	srv, ctx := setup(t)
-
 	certs := testDmsLastIssuedCert()
 
 	testCases := []struct {

@@ -21,6 +21,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/hashicorp/consul/api v1.10.1
 	github.com/hashicorp/go-cleanhttp v0.5.2
+	github.com/hashicorp/go-hclog v0.16.2
 	github.com/hashicorp/vault v1.7.3
 	github.com/hashicorp/vault/api v1.1.1
 	github.com/hashicorp/vault/sdk v0.2.1

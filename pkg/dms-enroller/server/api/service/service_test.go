@@ -93,7 +93,7 @@ func TestUpdateDMSStatus(t *testing.T) {
 				ctx = context.WithValue(ctx, "DBCsrBase64", false)
 			}
 			//TODO: test with CA list
-			_, err := srv.UpdateDMSStatus(ctx, tc.DMSstatus, tc.id, nil)
+			_, err := srv.UpdateDMSStatus(ctx, tc.DMSstatus, tc.id, []string{"IkerCA"})
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
@@ -190,14 +190,15 @@ func TestCreateDMSForm(t *testing.T) {
 		KeyType: "RSA",
 		KeyBits: 4096,
 	}
-	ECkeyUnsupported := dto.PrivateKeyMetadata{
-		KeyType: "EC",
-		KeyBits: 4096,
-	}
 	ECkey224 := dto.PrivateKeyMetadata{
 		KeyType: "EC",
 		KeyBits: 224,
 	}
+	ECkeyUnsupported := dto.PrivateKeyMetadata{
+		KeyType: "EC",
+		KeyBits: 4096,
+	}
+
 	ECkey256 := dto.PrivateKeyMetadata{
 		KeyType: "EC",
 		KeyBits: 256,
@@ -223,10 +224,10 @@ func TestCreateDMSForm(t *testing.T) {
 		ret     error
 	}{
 		{"RSA Key", subject, RSAkey, "a", "A", nil},
-		{"EC Key Error", subject, ECkey224, "a", "A", errors.New("illegal base64 data at input byte 0")},
-		{"EC Key Error", subject, ECkey256, "a", "A", errors.New("illegal base64 data at input byte 0")},
-		{"EC Key Error", subject, ECkey384, "a", "A", errors.New("illegal base64 data at input byte 0")},
-		{"EC Key Error", subject, ECkey521, "a", "A", errors.New("illegal base64 data at input byte 0")},
+		{"EC Key Error", subject, ECkey224, "a", "A", errors.New("x509: requested SignatureAlgorithm does not match private key type")},
+		{"EC Key Error", subject, ECkey256, "a", "A", errors.New("x509: requested SignatureAlgorithm does not match private key type")},
+		{"EC Key Error", subject, ECkey384, "a", "A", errors.New("x509: requested SignatureAlgorithm does not match private key type")},
+		{"EC Key Error", subject, ECkey521, "a", "A", errors.New("x509: requested SignatureAlgorithm does not match private key type")},
 		{"EC Key Unsupported", subject, ECkeyUnsupported, "a", "A", errors.New("Unsupported key length")},
 		{"Undeclared Key", subject, Undeclaredkey, "a", "A", errors.New("Invalid key format")},
 		{"CreateDMS", subject, RSAkey, "a", "A", errors.New("Invalid key format")},

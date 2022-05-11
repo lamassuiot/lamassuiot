@@ -4,16 +4,15 @@ import (
 	"bytes"
 	"context"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"math/big"
 	"net/http"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/go-kit/kit/log"
 
@@ -278,7 +277,7 @@ func TestEnroll(t *testing.T) {
 
 			snInt := new(big.Int)
 			snInt, _ = snInt.SetString("15898402459309774930443891423546184692", 10)
-			template := x509.Certificate{
+			/*template := x509.Certificate{
 				SerialNumber: snInt,
 				Subject: pkix.Name{
 					Organization: []string{"Acme Co"},
@@ -289,11 +288,14 @@ func TestEnroll(t *testing.T) {
 				KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
 				ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 				BasicConstraintsValid: true,
-			}
+			}*/
 
 			// derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey(priv), priv)
+			certContent, err := ioutil.ReadFile("/home/ikerlan/lamassu/lamassuiot/nogit/dms.crt")
+			cpb, _ := pem.Decode(certContent)
+			dmsCrt, err := x509.ParseCertificate(cpb.Bytes)
 
-			_, _, err := srv.Enroll(ctx, tc.csr, "Lamassu", &template)
+			_, _, err = srv.Enroll(ctx, tc.csr, "IkerCA", dmsCrt)
 			if err != nil {
 				if tc.ret.Error() != err.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
@@ -345,7 +347,7 @@ func TestServerKeyGen(t *testing.T) {
 		{"Error Insert Device Cert History", csr1, errors.New("Testing DB connection failed")},
 		{"Error Update Status By Id", csr4, errors.New("error")},
 		{"Error Update Device Certificate Serial Number By ID", csr5, errors.New("error")},
-		{"Error Decommisioned Device", csr6, errors.New("Cant issue a certificate for a decommisioned device")},
+		{"Error Decommisioned Device", csr6, errors.New("cant issue a certificate for a decommisioned device")},
 		{"Error Provisioned Device", csr7, errors.New("The device (provisioned) already has a valid certificate")},
 		{"Error Sign Certificate RequestFail", csr1, errors.New("validation error: Error revoking certificate")},
 	}
@@ -371,7 +373,14 @@ func TestServerKeyGen(t *testing.T) {
 				ctx = context.WithValue(ctx, "SignCertificateRequestFail", false)
 				ctx = context.WithValue(ctx, "DBInsertLog", false)
 			}
-			_, _, _, err := srv.ServerKeyGen(ctx, tc.csr, "", nil)
+			snInt := new(big.Int)
+			snInt, _ = snInt.SetString("15898402459309774930443891423546184692", 10)
+
+			certContent, _ := ioutil.ReadFile("/home/ikerlan/lamassu/lamassuiot/nogit/dms.crt")
+			cpb, _ := pem.Decode(certContent)
+			dmsCrt, _ := x509.ParseCertificate(cpb.Bytes)
+
+			_, _, _, err := srv.ServerKeyGen(ctx, tc.csr, "IkerCA", dmsCrt)
 			if err != nil {
 				if tc.ret.Error() != err.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)

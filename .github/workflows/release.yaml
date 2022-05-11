@@ -1,34 +1,58 @@
-name: Staging Workflow
+name: release Workflow
 
 on:
   push:
     branches:
-      - staging
+      - release
 
 jobs:
-  deploy_staging:
-    name: Deploy / Staging
-    runs-on: self-hosted
-    environment: staging
-    steps:
-      - name: Clean slef-hosted runner working directory 
-        shell: bash
-        run: |
-         cd $RUNNER_WORKSPACE
-         cd ..
-         rm -r *
-        
+  unit_testing_ca:
+    name: Unit Testing CA
+    # runs-on: self-hosted
+    runs-on: ubuntu-latest
+    steps:        
       - name: Checkout
         uses: actions/checkout@v2
       
-      - name: Run unit tests
-        uses: ./.github/workflows/my-action
+      - name: Run CA unit tests
+        uses: ./.github/workflows/ca-develop.yaml
+
+  unit_testing_dms_enroller:
+    name: Unit Testing DMS Enroller
+    # runs-on: self-hosted
+    runs-on: ubuntu-latest
+    steps:        
+      - name: Checkout
+        uses: actions/checkout@v2
+      
+      - name: Run DMS Enroller unit tests
+        uses: ./.github/workflows/dms-enroller-develop.yaml
+
+  unit_testing_device_manager:
+    name: Unit Testing Device Manager
+    # runs-on: self-hosted
+    runs-on: ubuntu-latest
+    steps:        
+      - name: Checkout
+        uses: actions/checkout@v2
+      
+      - name: Run Device Manager unit tests
+        uses: ./.github/workflows/device-manager-develop.yaml
 
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
           go-version: 1.16 
 
+  build_docker_resources:
+      name: Release DEV docker images
+      needs:
+      - unit_testing_ca
+      - unit_testing_dms_enroller
+      - unit_testing_device_manager
+      # runs-on: self-hosted
+      runs-on: ubuntu-latest
+      steps:        
       - name: Login to DockerHub
         uses: docker/login-action@v1 
         with:
@@ -72,7 +96,15 @@ jobs:
             - lamassuiot/lamassu-cloud-proxy-dev:${{ github.sha }}
             - lamassuiot/lamassu-cloud-proxy-dev:latest
           push: true
-      
+
+  deploy_to_release_env:
+      name: Deploy to release Server
+      needs:
+      - build_docker_resources
+      # runs-on: self-hosted
+      runs-on: ubuntu-latest
+      environment: release
+      steps:              
       - name: Clean previous deployment
         run: |
           docker stop $(docker ps -a -q)

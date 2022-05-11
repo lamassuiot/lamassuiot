@@ -9,5 +9,5 @@ RUN CGO_ENABLED=0 go build -mod=vendor -o ca cmd/ca/main.go
 
 FROM $BASE_IMAGE
 COPY --from=0 /app/ca /
-COPY ./db/migrations /app/db/migrations
+COPY ./db/migrations/ca /app/db/migrations
 CMD ["/ca"]

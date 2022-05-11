@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
@@ -40,7 +43,6 @@ func TestSignCertificate(t *testing.T) {
 	data, _ := base64.StdEncoding.DecodeString(input)
 	block, _ := pem.Decode([]byte(data))
 	csr, _ := x509.ParseCertificateRequest(block.Bytes)
-	fmt.Sprintf(string(csr.RawSubject))
 
 	inputError := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJQ3B6Q0NBWThDQVFBd1lqRUxNQWtHQTFVRUJoTUNSVk14RVRBUEJnTlZCQWdNQ0VkcGNIVjZhMjloTVJFdwpEd1lEVlFRSERBaEJjbkpoYzJGMFpURU1NQW9HQTFVRUNnd0RTVXRNTVF3d0NnWURWUVFMREFOYVVFUXhFVEFQCkJnTlZCQU1NQ0dWeWNtOXlURzluTUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FROEFNSUlCQ2dLQ0FRRUEKMnZEckt0Y04yMTdjL09LSjhoYldyZmN4Y0ovWXE5NEdJZm8zOXozSERLK3hRaW1MQU42RnBFclNZS2lYKy96TApURzQzOUFaOXlCUko5cVlRZkFtaGlpcDdVbXdSeVA0QUpkN0hJTHVwUnZkOXNFVVhYM1BtUkc3UUVWQk9PbjhmClJmSFlFSDBYQnl0UEpPQkZpSGFOWUpGOG40RmJHWklPWWt2QVYvUWFVUEpONTBDc0xDYmJLTjRHRUk2c01CbEcKZkFNMHFFeGNJZ01lWFJKVHRDajZFOGU2cDNqRWFBTVJWTktFdFFUS2hYeWNQQjhLQnp5NmJEZVZCeUVQVHBaVQo0ZC9HYVBRdDVtVGc0T0Q4WXMyQjlocFlDZWtPYkZld29lL013dTVLNjZOZTNqZkdKbUFycGc5OGczcjVBNVBDCnphTWkxWjlnQlBrdzdiL2tEd0xKUHdJREFRQUJvQUF3RFFZSktvWklodmNOQVFFTEJRQURnZ0VCQUtydUI0Sy8KY1IzOFN4S3BvL0w3WlpTQjJITTF0Mm4rdGhCUXAzZ0xVVnN4d2NWc3IvNGdRUjVCMzNOTml4TXBPbE51YitINgpaZiszaGpRVXpnc0RFa3c0aGgxSjZJdEdiQ0F6clVET2ZTbkNXMmRBZElWNWFkUk1lQTVSTWtIcmRrTFk0cm5vCnZEelRZTUlLYzJHMG9Qd2JnTnBNQm8zUmR0a0xCOG9mLy82dVptbkFXU1BOdkVZamJydkF3ZHgzOERWS1NPbUwKK3dKYXBEY0YxTlpBeWVkTlZVUUdiME9yeVovdXQzcXJ1VVM0QVg1bmVLRUg4eFFhUVNFOVM1UVJrT2tnZGlQNQpCNTdEMEc2emR4MkVOcmtkeXpyZUQ3cjc1R2ltWnRFaWxRUDBWd1o0SkhJbnRmb21oSzFuSXplM1U5ZnZ4ZmVjCkhZMzlWUXJyZU9RRjdKYz0KLS0tLS1FTkQgQ0VSVElGSUNBVEUgUkVRVUVTVC0tLS0t"
 	dataError, _ := base64.StdEncoding.DecodeString(inputError)
@@ -54,12 +56,14 @@ func TestSignCertificate(t *testing.T) {
 	}{
 
 		{"Incorrect", csrError, errors.New("TEST: Could not obtain list of Vault mounts")},
-		//{"Correct", csr, nil},
+		{"Correct", csr, nil},
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
 			if tc.name == "Incorrect" {
 				ctx = context.WithValue(ctx, "DBIncorrect", true)
+			} else {
+				ctx = context.WithValue(ctx, "DBIncorrect", false)
 			}
 			_, err := srv.SignCertificate(ctx, caType, newCA.Name, *tc.in, false)
 
@@ -211,7 +215,6 @@ func TestGetCert(t *testing.T) {
 		KeyBits: certReq.KeyMetadata.KeyBits,
 	}
 	newCert, _ := srv.CreateCA(ctx, caType, caName, keyMetadata, certReq.Subject, certReq.CaTTL, certEmptySN.EnrollerTTL)
-	fmt.Printf("newCert: %v\n", newCert)
 
 	testCases := []struct {
 		name string
@@ -427,8 +430,7 @@ func setup(t *testing.T) (Service, context.Context) {
 	logger := log.NewNopLogger()
 
 	ctx := context.Background()
-	spanId, ctx := opentracing.StartSpanFromContext(ctx, "test")
-	fmt.Printf("spanId: %v\n", spanId)
+	_, ctx = opentracing.StartSpanFromContext(ctx, "test")
 	ctx = context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
 
 	level.Info(logger).Log("msg", "Jaeger tracer started")
@@ -453,7 +455,9 @@ func setup(t *testing.T) (Service, context.Context) {
 		t.Fatal("Unable to create Vault in-memory service")
 	}
 
-	srv := NewCAService(logger, vaultSecret, nil)
+	casDb, _ := mocks.NewCasDBMock(t)
+
+	srv := NewCAService(logger, vaultSecret, casDb)
 	return srv, ctx
 }
 
@@ -500,4 +504,57 @@ func testCAImport() secrets.CAImport {
 		PEMBundle: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUY2RENDQTlDZ0F3SUJBZ0lVQlVGWEFEa3NVaWY2d0xpOHVCejNvZzBMeDNFd0RRWUpLb1pJaHZjTkFRRUwKQlFBd1ZURVBNQTBHQTFVRUJoTUdjM1J5YVc1bk1ROHdEUVlEVlFRSUV3WnpkSEpwYm1jeER6QU5CZ05WQkFjVApCbk4wY21sdVp6RVBNQTBHQTFVRUNoTUdjM1J5YVc1bk1ROHdEUVlEVlFRREV3WnpkSEpwYm1jd0hoY05Nakl3Ck1USXdNVFF4T0RNeFdoY05Nakl3TkRFek1qSXhPRFUzV2pCVk1ROHdEUVlEVlFRR0V3WnpkSEpwYm1jeER6QU4KQmdOVkJBZ1RCbk4wY21sdVp6RVBNQTBHQTFVRUJ4TUdjM1J5YVc1bk1ROHdEUVlEVlFRS0V3WnpkSEpwYm1jeApEekFOQmdOVkJBTVRCbk4wY21sdVp6Q0NBaUl3RFFZSktvWklodmNOQVFFQkJRQURnZ0lQQURDQ0Fnb0NnZ0lCCkFMTE1lWS82K0RuZTYrajlJQzMyZERWeXluajl0bFU4Q1RNUVZnNnhpMXp1N24zOUd0TEE1eXFvMnpMYUt4bkcKY3lQQVRyQldHeHBGOHBBYXQrMGo5QWRuSGREV09SOW1ab0J1bWpOWjVFRElXSFoyTWhmQWtUcnZGVkRjMUgxKwo4Qnp0TnpiYjdVNUJUblFCTUJqY2prUUNhUlNaTzAwanpRQjhoQVFWcVNQZTRESVFwVWdET2hTVTduOUo5NXk3CktmZHpFN2NHSCtwR2RtZTVXZytYSHBOM2Vra1A0bHZLWlgxSHV6cXQvb1VtckM5QzVzNERnSjhjQ0VYM0NrK1kKSUsxM3VQZ3d4cFZuY0JHTU1rUTBnc3AzckxJQ21rbTZPMXVRRmpwd1RWMm94UUNVbkltUUF4V1pxRjlvY0sxegpRNkdZcTdUWnVvaGxQT1M1bmNHRHArMlY1OTR6bTh5cUtEVHJWTVFPY095YTlnZS8zaHg3N08rN05pYkhDclFlCmt3U2diR04zZFIxaVV0TDZvdFlSemYwYVV2bjBWSDRUUWFOVTR1c3BadDlwMFl2OTRzcnRjbHdGMk5PWHFqT3UKdlRrVFpObjRaTDJWYkRoWDdkcHp3Z1FKNmd4aERiblV5aWxTaUtqOVZ5bEdFdWY1YUxyckEySFc3NFFVQWlZcgpqb0xkOE9mVWR1YkxkS3RRZXB5UXpyVzk3WTZnOXZWOE82M0o1TWc4cnhBNGJ0K3NId3JKbmFPVGhhV3A3dWFXClhrVFNYWk55QUJ6cmYwOU5USkNMOXh6TFh3cWUwd05tZXR6bitacE8vR2N6c3AybDdMaFBCQlVyL3EvZk0yRUUKZ1Q3WUNubGtnZ0lGcVFpOFVkdUlyUkJiOWorRW45aVExemNRbWJDN3V5eGpBZ01CQUFHamdhOHdnYXd3RGdZRApWUjBQQVFIL0JBUURBZ0VHTUE4R0ExVWRFd0VCL3dRRk1BTUJBZjh3SFFZRFZSME9CQllFRkZxc3hZd0hqSUVMCjR1TlZCV3JZb2dCcXJRR1VNQjhHQTFVZEl3UVlNQmFBRkZxc3hZd0hqSUVMNHVOVkJXcllvZ0JxclFHVU1EWUcKQ0NzR0FRVUZCd0VCQkNvd0tEQW1CZ2dyQmdFRkJRY3dBWVlhYUhSMGNEb3ZMMlJsZGk1c1lXMWhjM04xTG1sdgpPamt3T1Rnd0VRWURWUjBSQkFvd0NJSUdjM1J5YVc1bk1BMEdDU3FHU0liM0RRRUJDd1VBQTRJQ0FRQkptUTBMCmtaWTB5ajhTZXhnbEVyQTBpQW4vdlNyZVVIZE44anp5bGhzbDJ6WklIb0lQZ2ZjbnNrcktFQTZpdDlhUTJvNTEKMHA4YlhPOGtjb0xhMS93R1dSdm13TVBObHBmUDZRbjF1QkxGMnVHMkdyUEoyNGFUbUVOalRaaUxMRElxR3VUcwpPa1UvMU84eS9DdFJBWmlVR0RFM1RPRGN1eWlBNXAzYVVwc1VBZzA0cFdCWkFIN1p5cTdxMXNjYXdQczNpUFpaCkNVVmFRL3Z0Wmt6ckMzRFlJeDFFUmNHLzJLK3dTT0lIZTdYUlVZNi9jNkdjUXRwS2J2T2ZqR3QvcS9xWUJzSkUKRXRBS1hYbHJRSWJHYmVZdm9ZcWVwTUROV3VHQjBRZi8zcnVHZk93YU4vYUtZbW1icEtON0RYN3dDcVNTYkd2SApHdE5mNlZQVnJMSm8zZjFsSVg1bnBXRGQzNFF5TVpSNUNnbHdES2tKaGNmT0J3c1RBRTRMcEVRU0ZPTEx6QUI4CnNTTzg4b1BBTlR0UGhyMi9URk9DTlZIQVRJckNML3B6RUxmWDJmL2llSURtaXZ2WTB6UlJtZUVQbSt0bXhadnEKR21ZVlg0VVRDWTVQazVyUHRJZE1qNk5wcFNVaVo1WjkrTjBPUlBWSjhhdmV1UGVCcTdsUmVUNnlNUTFkREU4MwovRTZ4MThLMHR0dThMUVdVcXFHazZlVEVaMHdLMjhxMW03TmxuMDBCb1FGU2FNWnBKUXlEakp3dVVwQXhtTm0yCkdDZnI4azRBQ01VaUFaSG56M2RnY3RGTXJ2aVVIQ1QrMWxSOVJTenZ0Nk1IdjhuUVArM0YybzkzUUpMQnd0VXcKZTRKdGFFYWxadlV0LzFKZzVkd0Q4aytvcFQxRTZiQ3liOE8xZHc9PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0t",
 		TTL:       1000,
 	}
+}
+
+func _generateCSR(ctx context.Context, keyType string, priv interface{}, commonName string, country string, state string, locality string, org string, orgUnit string) ([]byte, error) {
+	var signingAlgorithm x509.SignatureAlgorithm
+	if keyType == "EC" {
+		signingAlgorithm = x509.ECDSAWithSHA256
+	} else {
+		signingAlgorithm = x509.SHA256WithRSA
+
+	}
+	//emailAddress := csrForm.EmailAddress
+	subj := pkix.Name{
+		CommonName:         commonName,
+		Country:            []string{country},
+		Province:           []string{state},
+		Locality:           []string{locality},
+		Organization:       []string{org},
+		OrganizationalUnit: []string{orgUnit},
+	}
+	rawSubj := subj.ToRDNSequence()
+	/*rawSubj = append(rawSubj, []pkix.AttributeTypeAndValue{
+		{Type: oidEmailAddress, Value: emailAddress},
+	})*/
+	asn1Subj, _ := asn1.Marshal(rawSubj)
+	template := x509.CertificateRequest{
+		RawSubject: asn1Subj,
+		//EmailAddresses:     []string{emailAddress},
+		SignatureAlgorithm: signingAlgorithm,
+	}
+	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &template, priv)
+	return csrBytes, err
+}
+func getKeyStrength(keyType string, keyBits int) string {
+	var keyStrength string = "unknown"
+	switch keyType {
+	case "RSA":
+		if keyBits < 2048 {
+			keyStrength = "low"
+		} else if keyBits >= 2048 && keyBits < 3072 {
+			keyStrength = "medium"
+		} else {
+			keyStrength = "high"
+		}
+	case "EC":
+		if keyBits < 224 {
+			keyStrength = "low"
+		} else if keyBits >= 224 && keyBits < 256 {
+			keyStrength = "medium"
+		} else {
+			keyStrength = "high"
+		}
+	}
+	return keyStrength
 }

@@ -63,7 +63,7 @@ func (db *MockDB) SelectAllAuthorizedCAs(ctx context.Context) ([]dms.AuthorizedC
 }
 
 func (db *MockDB) SelectBySerialNumber(ctx context.Context, SerialNumber string) (string, error) {
-	return "", nil
+	return "810fbd45-55a6-4dd7-8466-c3d3eb854357", nil
 }
 func (db *MockDB) SelectAll(ctx context.Context) ([]dto.DMS, error) {
 	dmsArray := []dto.DMS{}

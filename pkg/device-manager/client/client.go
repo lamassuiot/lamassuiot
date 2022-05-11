@@ -142,10 +142,19 @@ func (c *LamassuDevManagerClientConfig) GetDeviceById(ctx context.Context, devic
 	return device, nil
 }
 func (c *LamassuDevManagerClientConfig) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters dto.QueryParameters) ([]dto.Device, error) {
+	var newParams string
 	req, err := c.client.NewRequest("GET", "v1/devices/dms/"+dmsId, nil)
 	if err != nil {
 		return []dto.Device{}, err
 	}
+	if queryParameters.Filter != "" {
+		newParams = fmt.Sprintf("filter={%s}&", queryParameters.Filter)
+	} else if queryParameters.Order.Order != "" {
+		newParams = fmt.Sprintf(newParams+"s={%s,%s}&", queryParameters.Order.Order, queryParameters.Order.Field)
+	}
+
+	newParams = fmt.Sprintf(newParams+"page={%d,%d}", queryParameters.Pagination.Page, queryParameters.Pagination.Offset)
+	req.URL.RawQuery = newParams
 	respBody, _, err := c.client.Do(req)
 	if err != nil {
 		return []dto.Device{}, err
@@ -244,10 +253,18 @@ func (c *LamassuDevManagerClientConfig) GetDeviceCertHistory(ctx context.Context
 	return certHistory, nil
 }
 func (c *LamassuDevManagerClientConfig) GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.DMSCertHistory, error) {
+	var newParams string
 	req, err := c.client.NewRequest("GET", "v1/devices/dms-cert-history/thirty-days", nil)
 	if err != nil {
 		return []dto.DMSCertHistory{}, err
 	}
+	if queryParameters.Filter != "" {
+		newParams = fmt.Sprintf("filter={%s}&", queryParameters.Filter)
+	} else if queryParameters.Order.Order != "" {
+		newParams = fmt.Sprintf(newParams+"s={%s,%s}&", queryParameters.Order.Order, queryParameters.Order.Field)
+	}
+	newParams = fmt.Sprintf(newParams+"page={%d,%d}", queryParameters.Pagination.Page, queryParameters.Pagination.Offset)
+	req.URL.RawQuery = newParams
 	respBody, _, err := c.client.Do(req)
 	if err != nil {
 		return []dto.DMSCertHistory{}, err
@@ -264,10 +281,18 @@ func (c *LamassuDevManagerClientConfig) GetDmsCertHistoryThirtyDays(ctx context.
 	return dmsCertHistory, nil
 }
 func (c *LamassuDevManagerClientConfig) GetDmsLastIssuedCert(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.DMSLastIssued, error) {
+	var newParams string
 	req, err := c.client.NewRequest("GET", "v1/devices/dms-cert-history/last-issued", nil)
 	if err != nil {
 		return []dto.DMSLastIssued{}, err
 	}
+	if queryParameters.Filter != "" {
+		newParams = fmt.Sprintf("filter={%s}&", queryParameters.Filter)
+	} else if queryParameters.Order.Order != "" {
+		newParams = fmt.Sprintf(newParams+"s={%s,%s}&", queryParameters.Order.Order, queryParameters.Order.Field)
+	}
+	newParams = fmt.Sprintf(newParams+"page={%d,%d}", queryParameters.Pagination.Page, queryParameters.Pagination.Offset)
+	req.URL.RawQuery = newParams
 	respBody, _, err := c.client.Do(req)
 	if err != nil {
 		return []dto.DMSLastIssued{}, err
