@@ -44,8 +44,8 @@ jobs:
         with:
           go-version: 1.16 
 
-  build_docker_resources:
-      name: Release DEV docker images
+  build_ca_dev_docker_image:
+      name: CA - Release DEV docker images
       needs:
       - unit_testing_ca
       - unit_testing_dms_enroller
@@ -70,6 +70,21 @@ jobs:
             lamassuiot/lamassu-ca-dev:latest
           push: true
 
+  build_device_manager_dev_docker_image:
+      name: Device Manager - Release DEV docker images
+      needs:
+      - unit_testing_ca
+      - unit_testing_dms_enroller
+      - unit_testing_device_manager
+      # runs-on: self-hosted
+      runs-on: ubuntu-latest
+      steps:
+      - name: Login to DockerHub
+        uses: docker/login-action@v1 
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build Device Manager DEV docker image
         uses: docker/build-push-action@v2
         with:
@@ -81,6 +96,21 @@ jobs:
             lamassuiot/lamassu-device-manager-dev:latest
           push: true
 
+  build_dms_enroller_dev_docker_image:
+      name: DMS Enroller - Release DEV docker images
+      needs:
+      - unit_testing_ca
+      - unit_testing_dms_enroller
+      - unit_testing_device_manager
+      # runs-on: self-hosted
+      runs-on: ubuntu-latest
+      steps:
+      - name: Login to DockerHub
+        uses: docker/login-action@v1 
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Build DMS Enroller DEV docker image
         uses: docker/build-push-action@v2
         with:
@@ -91,6 +121,21 @@ jobs:
             lamassuiot/lamassu-dms-enroller-dev:${{ github.sha }}
             lamassuiot/lamassu-dms-enroller-dev:latest
           push: true
+
+  build_cloud_proxy_dev_docker_image:
+      name: Cloud Proxy - Release DEV docker images
+      needs:
+      - unit_testing_ca
+      - unit_testing_dms_enroller
+      - unit_testing_device_manager
+      # runs-on: self-hosted
+      runs-on: ubuntu-latest
+      steps:
+      - name: Login to DockerHub
+        uses: docker/login-action@v1 
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build Cloud Proxy DEV docker image
         uses: docker/build-push-action@v2
@@ -106,7 +151,10 @@ jobs:
   deploy_to_release_env:
       name: Deploy to DEV Server
       needs:
-      - build_docker_resources
+      - build_ca_dev_docker_image
+      - build_cloud_proxy_dev_docker_image
+      - build_device_manager_dev_docker_image
+      - build_dms_enroller_dev_docker_image
       # runs-on: self-hosted
       runs-on: ubuntu-latest
       environment: release
