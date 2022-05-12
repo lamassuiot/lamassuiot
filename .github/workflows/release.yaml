@@ -199,7 +199,7 @@ jobs:
       name: Get EC2 IP
       working-directory: .github/infrastructure/tests/e2e
       run: |
-        apt-get install jq
+        sudo apt-get install -y jq
         ip=`cat t.json | jq -r .LamassuGHActionsE2EStack.EC2Instanceoutput`
         echo $ip
         echo "::set-output name=ip::$ip"
