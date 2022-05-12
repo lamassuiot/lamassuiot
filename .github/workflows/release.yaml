@@ -156,7 +156,7 @@ jobs:
       
       - name: Install dependencies
         working-directory: .github/infrastructure/tests/e2e
-        run: npm i
+        run: npm i &&  npm i -g cdk
 
       - name: CDK synth
         working-directory: .github/infrastructure/tests/e2e
