@@ -34,6 +34,11 @@ export class E2EStack extends cdk.Stack {
       'Allows SSH access from Internet'
     )
 
+    const rootVolume: ec2.BlockDevice = {
+      deviceName: '/dev/sda1', // Use the root device name from Step 1
+      volume: ec2.BlockDeviceVolume.ebs(50), // Override the volume size in Gibibytes (GiB)
+    };
+
     const instance = new ec2.Instance(this, 'EC2Instance', {
       vpc: defaultVPC,
       vpcSubnets: subnetSelection,
@@ -47,6 +52,9 @@ export class E2EStack extends cdk.Stack {
       ),
       keyName: "lamassu-githubactions",
       userData: userData,
+      blockDevices: [
+        rootVolume
+      ]
     });
 
     cdk.Tags.of(instance).add('Name', 'lamassuGHActionsE2ETest');
