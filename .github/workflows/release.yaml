@@ -155,11 +155,12 @@ jobs:
           node-version: 16.4.1
       
       - name: Install dependencies
-        run: npm i -g cdk
+        working-directory: .github/infrastructure/tests/e2e
+        run: npm i
 
       - name: CDK synth
         working-directory: .github/infrastructure/tests/e2e
-        run: ls && cdk synth
+        run: cdk synth
 
       - name: CDK deploy
         working-directory: .github/infrastructure/tests/e2e
