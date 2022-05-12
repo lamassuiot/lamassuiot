@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
-	"fmt"
 )
 
 type Cert struct {
@@ -149,7 +148,6 @@ const (
 )
 
 func ParseKeyType(s string) (KeyType, error) {
-	fmt.Println(s)
 	switch s {
 	case "RSA":
 		return RSA, nil

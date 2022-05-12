@@ -81,44 +81,7 @@ func (db *MockDB) InsertDevice(ctx context.Context, alias string, deviceID strin
 	if deviceID == "error" {
 		return errors.New("error")
 
-		/*dbT, mock, err := sqlmock.New()
-		if err != nil {
-			return err
-		}
-		defer dbT.Close()
-
-		sqlStatement := `
-		INSERT INTO device_information(id, alias, status, dms_id,country, state ,locality ,organization ,organization_unit, common_name, key_type, key_bits, key_stregnth, current_cert_serial_number, creation_ts)
-		VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-		RETURNING id;
-		`
-		n, err := strconv.ParseInt(d.Id, 10, 64)
-		mock.ExpectBegin()
-		mock.ExpectExec(sqlStatement).WithArgs(d.Id,
-			d.Alias,
-			dto.DevicePendingProvision,
-			d.DmsId,
-			d.Country,
-			d.State,
-			d.Locality,
-			d.Organization,
-			d.OrganizationUnit,
-			d.CommonName,
-			d.KeyType,
-			d.KeyBits,
-			d.KeyStrength,
-			"",
-			time.Now()).WillReturnResult(sqlmock.NewResult(n, 1))
-		mock.ExpectCommit()
-
-		if err != nil {
-			level.Error(db.logger).Log("err", err, "msg", "Could not insert device with ID "+d.Id+" in database")
-			return err
-		}*/
 	} else {
-		//level.Info(db.logger).Log("msg", "Device with ID "+d.Id+" inserted in database")
-
-		//dev := dto.Device{}
 		return nil
 	}
 }
@@ -133,10 +96,6 @@ func (db *MockDB) SelectDeviceById(ctx context.Context, id string) (dto.Device, 
 		} else {
 			if id == "errorDeviceById" {
 				return dev, ErrDeviceById
-
-				/*} else if id == "errorLog" {
-				return dev, errors.New("Could not insert log")
-				*/
 			} else if id == "noSerialNumber" {
 				dev := testDeviceNoSerialNumber()
 				return dev, ErrSerialNumber
@@ -167,10 +126,6 @@ func (db *MockDB) SelectDeviceById(ctx context.Context, id string) (dto.Device, 
 	} else {
 		if id == "errorDeviceById" {
 			return dev, ErrDeviceById
-
-			/*} else if id == "errorLog" {
-			return dev, errors.New("Could not insert log")
-			*/
 		} else if id == "error" {
 			return dev, errors.New("Error getting certificate")
 
@@ -220,7 +175,6 @@ func (db *MockDB) SelectAllDevices(ctx context.Context, queryParameters dto.Quer
 
 }
 func (db *MockDB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, queryParameters dto.QueryParameters) ([]dto.Device, error) {
-
 	var devList []dto.Device
 	var d dto.Device
 	d = testDevice()
@@ -291,14 +245,12 @@ func (db *MockDB) InsertLog(ctx context.Context, l dto.DeviceLog) error {
 	return nil
 }
 func (db *MockDB) SelectDeviceLogs(ctx context.Context, deviceId string) ([]dto.DeviceLog, error) {
-
 	var d []dto.DeviceLog
 	if deviceId == "errorGetDeviceLogs" {
 		return testDeviceLogs(), errors.New("err")
 	} else {
 		return d, nil
 	}
-
 }
 
 func (db *MockDB) InsertDeviceCertHistory(ctx context.Context, l dto.DeviceCertHistory) error {

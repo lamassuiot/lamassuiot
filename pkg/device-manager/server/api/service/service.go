@@ -232,7 +232,7 @@ func (s *devicesService) RevokeDeviceCert(ctx context.Context, id string, revoca
 	}
 
 	serialNumberToRevoke := currentCertHistory.SerialNumber
-	// revoke
+
 	err = s.lamassuCaClient.RevokeCert(ctx, caType, currentCertHistory.IsuuerName, serialNumberToRevoke)
 	if err != nil {
 		return err

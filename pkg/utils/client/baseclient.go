@@ -116,9 +116,9 @@ func (c *ClientConfig) Do(req *http.Request) (interface{}, *http.Response, error
 		return nil, nil, err
 	}
 	if resp.StatusCode != 200 {
-		bodyBytes, err := io.ReadAll(resp.Body)
+		/*bodyBytes, err := io.ReadAll(resp.Body)
 		fmt.Println(string(bodyBytes))
-		fmt.Println(err)
+		fmt.Println(err)*/
 		return nil, resp, errors.New("Response with status code: " + strconv.Itoa(resp.StatusCode) + "")
 	}
 	defer resp.Body.Close()
