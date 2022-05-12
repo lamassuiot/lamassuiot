@@ -216,8 +216,8 @@ jobs:
       with:
         host: ${{ needs.deploy_to_release_env.outputs.server-ip }}
         username: ${{ secrets.AWS_SSH_USERNAME }}
-        key : ${{ secrets.AWS_SSH_KEY }}
-        port: ${{ secrets.PORT }}
+        key: ${{ secrets.AWS_SSH_KEY }}
+        port: ${{ secrets.AWS_SSH_PORT }}
         script: whoami
         
   # ocsp_test:
