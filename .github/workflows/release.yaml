@@ -157,14 +157,14 @@ jobs:
       - name: Install dependencies
         run: npm i -g cdk
 
-      - name: Change context
-        run: cd .github/infrastructure/tests/e2e
-
       - name: CDK synth
+        working-directory: .github/infrastructure/tests/e2e
         run: ls && cdk synth
 
       - name: CDK deploy
+        working-directory: .github/infrastructure/tests/e2e
         run: cdk deploy --require-approval never --json --outputs-file cdk-outputs.json
 
       - name: Cat cdk output
+        working-directory: .github/infrastructure/tests/e2e
         run: cat cdk-outputs.json
