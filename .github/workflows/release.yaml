@@ -206,6 +206,7 @@ jobs:
   integration_test:
     name: Integration test
     runs-on: ubuntu-latest
+    environment: release
     needs:
     - deploy_to_release_env
     steps:
