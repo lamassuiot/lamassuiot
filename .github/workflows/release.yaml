@@ -201,7 +201,6 @@ jobs:
       run: |
         sudo apt-get install -y jq
         ip=`cat cdk-outputs.json | jq -r .LamassuGHActionsE2EStack.EC2Instanceoutput`
-        echo $ip
         echo "::set-output name=ip::$ip"
 
   integration_test:
@@ -212,23 +211,29 @@ jobs:
     steps:
     # - name: Git clone Lamassu Compose
     #   run: git clone https://github.com/lamassuiot/lamassu-compose -b develop
-    - name: Get IP
-      run: echo ${{ needs.deploy_to_release_env.outputs.server-ip }}
+    - name: executing remote ssh commands using password
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ needs.deploy_to_release_env.outputs.server-ip }}
+        username: ${{ secrets.AWS_SSH_USERNAME }}
+        key : ${{ secrets.AWS_SSH_KEY }}
+        port: ${{ secrets.PORT }}
+        script: whoami
+        
+  # ocsp_test:
+  #   name: OCSP test
+  #   runs-on: ubuntu-latest
+  #   needs:
+  #   - deploy_to_release_env
+  #   steps:
+  #   - name: Checkout
+  #     uses: actions/checkout@v2
 
-  ocsp_test:
-    name: OCSP test
-    runs-on: ubuntu-latest
-    needs:
-    - deploy_to_release_env
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-
-  est_test:
-    name: EST test
-    runs-on: ubuntu-latest
-    needs:
-    - deploy_to_release_env
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v2
+  # est_test:
+  #   name: EST test
+  #   runs-on: ubuntu-latest
+  #   needs:
+  #   - deploy_to_release_env
+  #   steps:
+  #   - name: Checkout
+  #     uses: actions/checkout@v2
