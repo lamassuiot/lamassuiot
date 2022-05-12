@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -344,7 +343,6 @@ func decodedecodeGetDmsCertHistoryThirtyDaysRequest(ctx context.Context, r *http
 }
 func decodedecodeGetDmsLastIssueCert(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	//var req endpoint.HealthRequest
-	fmt.Println(r.URL.RawQuery)
 	return decodeRequest(ctx, r)
 
 }

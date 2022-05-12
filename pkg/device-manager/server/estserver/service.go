@@ -229,8 +229,8 @@ func (s *EstService) Reenroll(ctx context.Context, cert *x509.Certificate, csr *
 		level.Debug(s.logger).Log("err", err, "msg", errMsg)
 		return nil, nil, err
 	}
-	fmt.Println(certExpirationTime.Date())
-	fmt.Println(time.Now().Add(time.Hour * 24 * time.Duration(s.minReenrollDays)))
+	/*fmt.Println(certExpirationTime.Date())
+	fmt.Println(time.Now().Add(time.Hour * 24 * time.Duration(s.minReenrollDays)))*/
 	if certExpirationTime.Before(time.Now().Add(time.Hour * 24 * time.Duration(s.minReenrollDays))) {
 
 	} else {

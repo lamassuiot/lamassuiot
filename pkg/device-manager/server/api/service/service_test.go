@@ -10,8 +10,6 @@ import (
 
 	"github.com/go-kit/kit/log"
 
-	//lamassucaclient "github.com/lamassuiot/lamassuiot/lamassu-ca/client"
-	//"github.com/lamassuiot/lamassuiot/pkg/device-manager/configs"
 	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/mocks"
@@ -94,7 +92,6 @@ func TestGetDevices(t *testing.T) {
 				if tc.ret.Error() != err.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
 				}
-
 			}
 		})
 	}
@@ -171,31 +168,6 @@ func TestGetDeviceCert(t *testing.T) {
 	}
 }
 
-/*func TestGetKeyStrength(t *testing.T) {
-	//srv, _ := setup(t)
-	type testCases struct {
-		keyType string
-		keyBits int
-		ret     string
-	}
-	cases := []testCases{
-		{"rsa", 2, "low"},
-		{"rsa", 3070, "medium"},
-		{"rsa", 10000, "high"},
-		{"ec", 2, "low"},
-		{"ec", 250, "medium"},
-		{"ec", 1000, "high"},
-	}
-	for _, tc := range cases {
-
-		out := GetKeyStrength(tc.keyType, tc.keyBits)
-		if tc.ret != out {
-			t.Errorf("Expected '%s', but got '%s'", tc.ret, out)
-		}
-
-	}
-}*/
-
 func TestGenerateCSR(t *testing.T) {
 	_, ctx := setup(t)
 	var p1 interface{}
@@ -249,7 +221,6 @@ func TestGetDeviceById(t *testing.T) {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
 				}
 			}
-
 		})
 	}
 }
@@ -316,7 +287,6 @@ func TestGetDeviceLogs(t *testing.T) {
 						t.Errorf("Got result is diferent from expected response")
 					}
 				}
-
 			}
 		})
 	}
@@ -350,7 +320,6 @@ func TestGetDeviceCertHistory(t *testing.T) {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
 				}
 			}
-
 		})
 	}
 }
@@ -388,9 +357,7 @@ func TestGetDmsCertHistoryThirtyDays(t *testing.T) {
 				if err.Error() != tc.ret.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
 				}
-
 			}
-
 		})
 	}
 }
@@ -449,7 +416,6 @@ func TestRevokeDeviceCert(t *testing.T) {
 		{"Error updating certificate history serial number", "errorUpdateDeviceCertificateSerialNumberByID", errors.New("error")},
 		{"Error updating device status", "errorUpdateStatus", errors.New("error")},
 		{"Error certificate history could not find", "error", errors.New("Error getting certificate")},
-
 		{"Correct", "1", nil},
 	}
 	for _, tc := range testCases {
@@ -500,7 +466,6 @@ func TestDeleteDevice(t *testing.T) {
 		{"Error updating certificate history serial number", "errorUpdateDeviceCertificateSerialNumberByID", errors.New("test")},
 		{"Error updating device status", "errorUpdateStatus", errors.New("error")},
 		{"Error certificate history could not find", "error", errors.New("test")},
-
 		{"Correct", "1", nil},
 	}
 	for _, tc := range testCases {

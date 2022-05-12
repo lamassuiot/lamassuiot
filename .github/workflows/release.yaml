@@ -158,20 +158,29 @@ jobs:
       # runs-on: self-hosted
       runs-on: ubuntu-latest
       environment: release
-      steps:              
-      - name: Clean previous deployment
-        run: |
-          docker stop $(docker ps -a -q)
-          docker rm $(docker ps -a -q)
-          docker system prune -a --volumes
-          rm -r DEPLOY_PATH/*
-      
-      - name: "test"
-        run: ehco ${{ secrets.DEPLOY_PATH }}
-
-      - name: Clone Lamassu Compose repo
-        uses: actions/checkout@v2
+      permissions:
+        id-token: write
+      steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
         with:
-          repository: https://github.com/lamassuiot/lamassu-compose
-          ref: develop
-          path: my-tools
+          role-to-assume: arn:aws:iam::345876576284:role/LamassuGHActions
+          role-session-name: ghactionsrolesession
+          aws-region: eu-west-1
+      
+      - name: Install dependencies
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16.4.1
+      
+      - name: Install dependencies
+        run: npm i -g cdk
+
+      - name: CDK synth
+        run: cdk synth
+
+      - name: CDK deploy
+        run: cdk deploy --require-approval never --json --outputs-file cdk-outputs.json
+
+      - name: Cat cdk output
+        run: cat cdk-outputs.json

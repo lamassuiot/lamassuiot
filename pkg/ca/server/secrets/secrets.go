@@ -13,6 +13,12 @@ type CAImport struct {
 	TTL       int    `json:"ttl"`
 }
 
+const (
+	StatusValid   = "V"
+	StatusRevoked = "R"
+	StatusExpired = "E"
+)
+
 // CAs represents a list of CAs with minimum information
 // swagger:model
 

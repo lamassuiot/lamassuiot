@@ -37,6 +37,14 @@ type VaultSecrets struct {
 	ocspUrl  string
 }
 
+const (
+	StatusValid = 'V'
+
+	StatusRevoked = 'R'
+
+	StatusExpired = 'E'
+)
+
 func NewVaultSecrets(address string, pkiPath string, roleID string, secretID string, CA string, unsealFile string, ocspUrl string, logger log.Logger) (*VaultSecrets, error) {
 
 	client, err := CreateVaultSdkClient(address, CA, logger)
