@@ -137,7 +137,7 @@ jobs:
       steps:
       - name: Checkout
         uses: actions/checkout@v2
-        
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
@@ -161,7 +161,7 @@ jobs:
         run: cd .github/infrastructure/tests/e2e
 
       - name: CDK synth
-        run: cdk synth
+        run: ls && cdk synth
 
       - name: CDK deploy
         run: cdk deploy --require-approval never --json --outputs-file cdk-outputs.json
