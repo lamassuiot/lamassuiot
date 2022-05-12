@@ -198,8 +198,14 @@ jobs:
     - id: get-server-ip
       name: cat cdk output
       working-directory: .github/infrastructure/tests/e2e
-      run: echo "::set-output name=ip::${{ fromJSON(${cat cdk-outputs.json}).LamassuGHActionsE2EStack.EC2Instanceoutput }}"
-
+      run: |
+        content=`cat  cdk-outputs.json`
+        # the following lines are only required for multi line json
+        content="${content//'%'/'%25'}"
+        content="${content//$'\n'/'%0A'}"
+        content="${content//$'\r'/'%0D'}"
+        # end of optional handling for multi line json
+        echo "::set-output name=ip::${{ fromJSON($content).LamassuGHActionsE2EStack.EC2Instanceoutput }}"
 
   integration_test:
     name: Integration test
