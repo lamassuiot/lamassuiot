@@ -210,16 +210,16 @@ jobs:
     needs:
     - deploy_to_release_env
     steps:
-    # - name: Git clone Lamassu Compose
-    #   run: git clone https://github.com/lamassuiot/lamassu-compose -b develop
-    - name: executing remote ssh commands using password
+    - name: Executing remote ssh commands using password
       uses: appleboy/ssh-action@master
       with:
         host: ${{ needs.deploy_to_release_env.outputs.server-ip }}
         username: ${{ secrets.AWS_SSH_USERNAME }}
         key: ${{ secrets.AWS_SSH_KEY }}
         port: ${{ secrets.AWS_SSH_PORT }}
-        script: whoami
+        script: |
+          sleep 60s
+          git clone https://github.com/lamassuiot/lamassu-compose -b develop
         
   # ocsp_test:
   #   name: OCSP test
