@@ -200,7 +200,7 @@ jobs:
       working-directory: .github/infrastructure/tests/e2e
       run: |
         sudo apt-get install -y jq
-        ip=`cat t.json | jq -r .LamassuGHActionsE2EStack.EC2Instanceoutput`
+        ip=`cat cdk-outputs.json | jq -r .LamassuGHActionsE2EStack.EC2Instanceoutput`
         echo $ip
         echo "::set-output name=ip::$ip"
 
