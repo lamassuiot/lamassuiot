@@ -293,7 +293,7 @@ jobs:
     - integration_test
     # - ocsp_test
     # - est_test
-    if: always() && (needs.integration_test.result == 'failure' || needs.est_test.result == 'failure' || needs.ocsp_test.result == 'failure')
+    if: always() || (needs.integration_test.result == 'failure' || needs.est_test.result == 'failure' || needs.ocsp_test.result == 'failure')
     steps:
     - name: Checkout
       uses: actions/checkout@v2
