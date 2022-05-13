@@ -252,6 +252,7 @@ jobs:
     environment: release
     needs:
     - deploy_to_dev_server
+    - create_dev_server_env
     steps:
     - name: Run integration tests
       uses: appleboy/ssh-action@master
@@ -289,6 +290,7 @@ jobs:
     - integration_test
     - ocsp_test
     - est_test
+    if: always() && (needs.integration_test.result == 'failure' || needs.est_test.result == 'failure' || needs.ocsp_test.result == 'failure')
     steps:
     - name: Checkout
       uses: actions/checkout@v2
