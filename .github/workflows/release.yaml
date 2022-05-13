@@ -206,7 +206,7 @@ jobs:
     needs:
     - deploy_to_release_env
     steps:
-    - run: sleep 60s
+#     - run: sleep 60s
     - name: Executing remote ssh commands
       uses: appleboy/ssh-action@master
       with:
