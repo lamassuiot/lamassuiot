@@ -233,16 +233,17 @@ jobs:
           export LAMASSU_CLOUD_PROXY_DOCKER_IMAGE=lamasuiot/lamassu-cloud-proxy-dev:latest
           export LAMASSU_OCSP_DOCKER_IMAGE=lamasuiot/lamassu-ocsp-dev:latest
 
-          envsubst < .env | tee .env
+          mv .env .env.tmp 
+          cat .env.tmp | envsubst > .env
 
           sudo tee -a /etc/hosts > /dev/null <<EOT
-          127.0.0.1  dev.lamassu.io 
-          127.0.0.1  vault.dev.lamassu.io 
-          127.0.0.1  auth.dev.lamassu.io 
-          127.0.0.1  tracing.dev.lamassu.io 
-          127.0.0.1  consul.dev.lamassu.io
+          127.0.0.1  ${DOMAIN}
+          127.0.0.1  vault.${DOMAIN}
+          127.0.0.1  auth.${DOMAIN}
+          127.0.0.1  tracing.${DOMAIN}
+          127.0.0.1  consul.${DOMAIN}
           EOT
-          
+
           bash install.sh
 
   ocsp_test:
