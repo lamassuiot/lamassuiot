@@ -6,144 +6,147 @@ on:
       - release
 
 jobs:
-  unit_testing_ca:
-    uses: ./.github/workflows/ca-develop.yaml
+  # unit_testing_ca:
+  #   name: CA Unit Testing
+  #   uses: ./.github/workflows/ca-develop.yaml
 
-  unit_testing_dms_enroller:
-    uses: ./.github/workflows/dms-enroller-develop.yaml
+  # unit_testing_dms_enroller:
+  #   name: DMS Enroller Unit Testing
+  #   uses: ./.github/workflows/dms-enroller-develop.yaml
 
-  unit_testing_device_manager:
-    uses: ./.github/workflows/device-manager-develop.yaml
+  # unit_testing_device_manager:
+  #   name: DeviceManager Unit Testing
+  #   uses: ./.github/workflows/device-manager-develop.yaml
 
-  build_ca_dev_docker_image:
-      name: CA - Release DEV docker images
-      needs:
-      - unit_testing_ca
-      - unit_testing_dms_enroller
-      - unit_testing_device_manager
-      # runs-on: self-hosted
-      runs-on: ubuntu-latest
-      steps:        
-      - name: Login to DockerHub
-        uses: docker/login-action@v1 
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+  # build_ca_dev_docker_image:
+  #     name: CA - Release DEV docker images
+  #     needs:
+  #     - unit_testing_ca
+  #     - unit_testing_dms_enroller
+  #     - unit_testing_device_manager
+  #     # runs-on: self-hosted
+  #     runs-on: ubuntu-latest
+  #     steps:        
+  #     - name: Login to DockerHub
+  #       uses: docker/login-action@v1 
+  #       with:
+  #         username: ${{ secrets.DOCKERHUB_USERNAME }}
+  #         password: ${{ secrets.DOCKERHUB_TOKEN }}
       
-      - name: Build CA DEV docker image
-        uses: docker/build-push-action@v2
-        with:
-          file: ci/ca.dockerfile
-          build-args: |
-            BASE_IMAGE=alpine:3.14
-          tags: |
-            lamassuiot/lamassu-ca-dev:${{ github.sha }}
-            lamassuiot/lamassu-ca-dev:latest
-          push: true
+  #     - name: Build CA DEV docker image
+  #       uses: docker/build-push-action@v2
+  #       with:
+  #         file: ci/ca.dockerfile
+  #         build-args: |
+  #           BASE_IMAGE=alpine:3.14
+  #         tags: |
+  #           lamassuiot/lamassu-ca-dev:${{ github.sha }}
+  #           lamassuiot/lamassu-ca-dev:latest
+  #         push: true
 
-  build_device_manager_dev_docker_image:
-      name: Device Manager - Release DEV docker images
-      needs:
-      - unit_testing_ca
-      - unit_testing_dms_enroller
-      - unit_testing_device_manager
-      # runs-on: self-hosted
-      runs-on: ubuntu-latest
-      steps:
-      - name: Login to DockerHub
-        uses: docker/login-action@v1 
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+  # build_device_manager_dev_docker_image:
+  #     name: Device Manager - Release DEV docker images
+  #     needs:
+  #     - unit_testing_ca
+  #     - unit_testing_dms_enroller
+  #     - unit_testing_device_manager
+  #     # runs-on: self-hosted
+  #     runs-on: ubuntu-latest
+  #     steps:
+  #     - name: Login to DockerHub
+  #       uses: docker/login-action@v1 
+  #       with:
+  #         username: ${{ secrets.DOCKERHUB_USERNAME }}
+  #         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build Device Manager DEV docker image
-        uses: docker/build-push-action@v2
-        with:
-          file: ci/device-manager.dockerfile 
-          build-args: |
-            BASE_IMAGE=alpine:3.14
-          tags: |
-            lamassuiot/lamassu-device-manager-dev:${{ github.sha }}
-            lamassuiot/lamassu-device-manager-dev:latest
-          push: true
+  #     - name: Build Device Manager DEV docker image
+  #       uses: docker/build-push-action@v2
+  #       with:
+  #         file: ci/device-manager.dockerfile 
+  #         build-args: |
+  #           BASE_IMAGE=alpine:3.14
+  #         tags: |
+  #           lamassuiot/lamassu-device-manager-dev:${{ github.sha }}
+  #           lamassuiot/lamassu-device-manager-dev:latest
+  #         push: true
 
-  build_dms_enroller_dev_docker_image:
-      name: DMS Enroller - Release DEV docker images
-      needs:
-      - unit_testing_ca
-      - unit_testing_dms_enroller
-      - unit_testing_device_manager
-      # runs-on: self-hosted
-      runs-on: ubuntu-latest
-      steps:
-      - name: Login to DockerHub
-        uses: docker/login-action@v1 
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+  # build_dms_enroller_dev_docker_image:
+  #     name: DMS Enroller - Release DEV docker images
+  #     needs:
+  #     - unit_testing_ca
+  #     - unit_testing_dms_enroller
+  #     - unit_testing_device_manager
+  #     # runs-on: self-hosted
+  #     runs-on: ubuntu-latest
+  #     steps:
+  #     - name: Login to DockerHub
+  #       uses: docker/login-action@v1 
+  #       with:
+  #         username: ${{ secrets.DOCKERHUB_USERNAME }}
+  #         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build DMS Enroller DEV docker image
-        uses: docker/build-push-action@v2
-        with:
-          file: ci/dms-enroller.dockerfile
-          build-args: |
-            BASE_IMAGE=alpine:3.14
-          tags: |
-            lamassuiot/lamassu-dms-enroller-dev:${{ github.sha }}
-            lamassuiot/lamassu-dms-enroller-dev:latest
-          push: true
+  #     - name: Build DMS Enroller DEV docker image
+  #       uses: docker/build-push-action@v2
+  #       with:
+  #         file: ci/dms-enroller.dockerfile
+  #         build-args: |
+  #           BASE_IMAGE=alpine:3.14
+  #         tags: |
+  #           lamassuiot/lamassu-dms-enroller-dev:${{ github.sha }}
+  #           lamassuiot/lamassu-dms-enroller-dev:latest
+  #         push: true
 
-  build_ocsp_dev_docker_image:
-      name: OCSP - Release DEV docker images
-      needs:
-      - unit_testing_ca
-      - unit_testing_dms_enroller
-      - unit_testing_device_manager
-      # runs-on: self-hosted
-      runs-on: ubuntu-latest
-      steps:
-      - name: Login to DockerHub
-        uses: docker/login-action@v1 
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+  # build_ocsp_dev_docker_image:
+  #     name: OCSP - Release DEV docker images
+  #     needs:
+  #     - unit_testing_ca
+  #     - unit_testing_dms_enroller
+  #     - unit_testing_device_manager
+  #     # runs-on: self-hosted
+  #     runs-on: ubuntu-latest
+  #     steps:
+  #     - name: Login to DockerHub
+  #       uses: docker/login-action@v1 
+  #       with:
+  #         username: ${{ secrets.DOCKERHUB_USERNAME }}
+  #         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build OCSP DEV docker image
-        uses: docker/build-push-action@v2
-        with:
-          file: ci/ocsp.dockerfile
-          build-args: |
-            BASE_IMAGE=alpine:3.14
-          tags: |
-            lamassuiot/lamassu-ocsp-dev:${{ github.sha }}
-            lamassuiot/lamassu-ocsp-dev:latest
-          push: true
+  #     - name: Build OCSP DEV docker image
+  #       uses: docker/build-push-action@v2
+  #       with:
+  #         file: ci/ocsp.dockerfile
+  #         build-args: |
+  #           BASE_IMAGE=alpine:3.14
+  #         tags: |
+  #           lamassuiot/lamassu-ocsp-dev:${{ github.sha }}
+  #           lamassuiot/lamassu-ocsp-dev:latest
+  #         push: true
 
-  build_cloud_proxy_dev_docker_image:
-      name: Cloud Proxy - Release DEV docker images
-      needs:
-      - unit_testing_ca
-      - unit_testing_dms_enroller
-      - unit_testing_device_manager
-      # runs-on: self-hosted
-      runs-on: ubuntu-latest
-      steps:
-      - name: Login to DockerHub
-        uses: docker/login-action@v1 
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+  # build_cloud_proxy_dev_docker_image:
+  #     name: Cloud Proxy - Release DEV docker images
+  #     needs:
+  #     - unit_testing_ca
+  #     - unit_testing_dms_enroller
+  #     - unit_testing_device_manager
+  #     # runs-on: self-hosted
+  #     runs-on: ubuntu-latest
+  #     steps:
+  #     - name: Login to DockerHub
+  #       uses: docker/login-action@v1 
+  #       with:
+  #         username: ${{ secrets.DOCKERHUB_USERNAME }}
+  #         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build Cloud Proxy DEV docker image
-        uses: docker/build-push-action@v2
-        with:
-          file: ci/cloud-proxy.dockerfile 
-          build-args: |
-            BASE_IMAGE=alpine:3.14
-          tags: |
-            lamassuiot/lamassu-cloud-proxy-dev:${{ github.sha }}
-            lamassuiot/lamassu-cloud-proxy-dev:latest
-          push: true
+  #     - name: Build Cloud Proxy DEV docker image
+  #       uses: docker/build-push-action@v2
+  #       with:
+  #         file: ci/cloud-proxy.dockerfile 
+  #         build-args: |
+  #           BASE_IMAGE=alpine:3.14
+  #         tags: |
+  #           lamassuiot/lamassu-cloud-proxy-dev:${{ github.sha }}
+  #           lamassuiot/lamassu-cloud-proxy-dev:latest
+  #         push: true
 
   create_dev_server_env:
     name: Create DEV Server
@@ -199,59 +202,59 @@ jobs:
         ip=`cat cdk-outputs.json | jq -r .LamassuGHActionsE2EStack.EC2Instanceoutput`
         echo "::set-output name=ip::$ip"
 
-  deploy_to_dev_server:
-    name: Deploy lamassu to DEV Server
-    runs-on: ubuntu-latest
-    environment: release
-    needs:
-    - create_dev_server_env
-    steps:
-    - run: sleep 60s
-    - name: Executing remote ssh commands
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ needs.create_dev_server_env.outputs.server-ip }}
-        username: ${{ secrets.AWS_SSH_USERNAME }}
-        key: ${{ secrets.AWS_SSH_KEY }}
-        port: ${{ secrets.AWS_SSH_PORT }}
-        script: |
-          sudo apt-get install -y jq
-          git clone https://github.com/lamassuiot/lamassu-compose -b develop && cd lamassu-compose
+  # deploy_to_dev_server:
+  #   name: Deploy lamassu to DEV Server
+  #   runs-on: ubuntu-latest
+  #   environment: release
+  #   needs:
+  #   - create_dev_server_env
+  #   steps:
+  #   - run: sleep 60s
+  #   - name: Executing remote ssh commands
+  #     uses: appleboy/ssh-action@master
+  #     with:
+  #       host: ${{ needs.create_dev_server_env.outputs.server-ip }}
+  #       username: ${{ secrets.AWS_SSH_USERNAME }}
+  #       key: ${{ secrets.AWS_SSH_KEY }}
+  #       port: ${{ secrets.AWS_SSH_PORT }}
+  #       script: |
+  #         sudo apt-get install -y jq
+  #         git clone https://github.com/lamassuiot/lamassu-compose -b develop && cd lamassu-compose
 
-          export DB_USER=admin
-          export DB_PASSWORD=admin
-          export DOMAIN=dev.lamassu.io
+  #         export DB_USER=admin
+  #         export DB_PASSWORD=admin
+  #         export DOMAIN=dev.lamassu.io
 
-          export LAMASSU_GATEWAY_DOCKER_IMAGE=lamassuiot/lamassu-gateway:latest
-          export LAMASSU_UI_DOCKER_IMAGE=lamassuiot/lamassu-ui:latest
-          export LAMASSU_DB_DOCKER_IMAGE=lamassuiot/lamassu-db:latest
-          export LAMASSU_AUTH_DOCKER_IMAGE=lamassuiot/lamassu-auth:latest
-          export LAMASSU_CA_DOCKER_IMAGE=lamassuiot/lamassu-ca-dev:latest
-          export LAMASSU_DMS_ENROLLER_DOCKER_IMAGE=lamassuiot/lamassu-dms-enroller-dev:latest
-          export LAMASSU_DEVICE_MANAGER_DOCKER_IMAGE=lamassuiot/lamassu-device-manager-dev:latest
-          export LAMASSU_RABBITMQ_DOCKER_IMAGE=lamassuiot/lamassu-rabbitmq:latest
-          export LAMASSU_CLOUD_PROXY_DOCKER_IMAGE=lamassuiot/lamassu-cloud-proxy-dev:latest
-          export LAMASSU_OCSP_DOCKER_IMAGE=lamassuiot/lamassu-ocsp-dev:latest
+  #         export LAMASSU_GATEWAY_DOCKER_IMAGE=lamassuiot/lamassu-gateway:latest
+  #         export LAMASSU_UI_DOCKER_IMAGE=lamassuiot/lamassu-ui:latest
+  #         export LAMASSU_DB_DOCKER_IMAGE=lamassuiot/lamassu-db:latest
+  #         export LAMASSU_AUTH_DOCKER_IMAGE=lamassuiot/lamassu-auth:latest
+  #         export LAMASSU_CA_DOCKER_IMAGE=lamassuiot/lamassu-ca-dev:latest
+  #         export LAMASSU_DMS_ENROLLER_DOCKER_IMAGE=lamassuiot/lamassu-dms-enroller-dev:latest
+  #         export LAMASSU_DEVICE_MANAGER_DOCKER_IMAGE=lamassuiot/lamassu-device-manager-dev:latest
+  #         export LAMASSU_RABBITMQ_DOCKER_IMAGE=lamassuiot/lamassu-rabbitmq:latest
+  #         export LAMASSU_CLOUD_PROXY_DOCKER_IMAGE=lamassuiot/lamassu-cloud-proxy-dev:latest
+  #         export LAMASSU_OCSP_DOCKER_IMAGE=lamassuiot/lamassu-ocsp-dev:latest
 
-          mv .env .env.tmp 
-          cat .env.tmp | envsubst > .env
+  #         mv .env .env.tmp 
+  #         cat .env.tmp | envsubst > .env
 
-          sudo tee -a /etc/hosts > /dev/null <<EOT
-          127.0.0.1  ${DOMAIN}
-          127.0.0.1  vault.${DOMAIN}
-          127.0.0.1  auth.${DOMAIN}
-          127.0.0.1  tracing.${DOMAIN}
-          127.0.0.1  consul.${DOMAIN}
-          EOT
+  #         sudo tee -a /etc/hosts > /dev/null <<EOT
+  #         127.0.0.1  ${DOMAIN}
+  #         127.0.0.1  vault.${DOMAIN}
+  #         127.0.0.1  auth.${DOMAIN}
+  #         127.0.0.1  tracing.${DOMAIN}
+  #         127.0.0.1  consul.${DOMAIN}
+  #         EOT
 
-          bash install.sh
+  #         bash install.sh
 
   integration_test:
     name: Integration test
     runs-on: ubuntu-latest
     environment: release
     needs:
-    - deploy_to_dev_server
+    # - deploy_to_dev_server
     - create_dev_server_env
     steps:
     - name: Run integration tests
@@ -264,23 +267,23 @@ jobs:
         script: |
           git clone https://github.com/lamassuiot/lamassuiot -b release
 
-  ocsp_test:
-    name: OCSP test
-    runs-on: ubuntu-latest
-    needs:
-    - deploy_to_dev_server
-    steps:
-    - name: Get IP
-      run: echo ${{ needs.create_dev_server_env.outputs.server-ip }}
+  # ocsp_test:
+  #   name: OCSP test
+  #   runs-on: ubuntu-latest
+  #   needs:
+  #   - deploy_to_dev_server
+  #   steps:
+  #   - name: Get IP
+  #     run: echo ${{ needs.create_dev_server_env.outputs.server-ip }}
 
-  est_test:
-    name: EST test
-    runs-on: ubuntu-latest
-    needs:
-    - deploy_to_dev_server
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v2
+  # est_test:
+  #   name: EST test
+  #   runs-on: ubuntu-latest
+  #   needs:
+  #   - deploy_to_dev_server
+  #   steps:
+  #   - name: Checkout
+  #     uses: actions/checkout@v2
   
   tear_down_test_infra:
     name: Tear down DEV server
@@ -288,8 +291,8 @@ jobs:
     environment: release
     needs:
     - integration_test
-    - ocsp_test
-    - est_test
+    # - ocsp_test
+    # - est_test
     if: always() && (needs.integration_test.result == 'failure' || needs.est_test.result == 'failure' || needs.ocsp_test.result == 'failure')
     steps:
     - name: Checkout
