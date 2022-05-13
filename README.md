@@ -1,12 +1,51 @@
-<a href="https://www.lamassu.io/">
-    <img src="assets/logo.png" alt="Lamassu logo" title="Lamassu" align="right" height="80" />
-</a>
-
 Lamassu IoT
 ===================
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-blue.svg)](http://www.mozilla.org/MPL/2.0/index.txt)
 
-<img src="assets/lamassu-app.png" alt="Lamassu App" title="Lamassu" />
+<img src="https://www.lamassu.io/lamassuiot-dev.github.io/assets/brand/lamassu-brand.png" alt="Lamassu App" title="Lamassu" />
+
+## Using the GO clients
+
+Lamassu provides easy to use GO clients for most of its APIs to help speeding up the development of aplications:
+
+```go
+package main
+
+import (
+  "net/url"
+  lamassuCAClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
+  caDTO "github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
+  "github.com/lamassuiot/lamassuiot/pkg/utils/client"
+)
+
+function main (){
+    lamassuGatewayURL := "dev.lamassu.io"
+    apiCAFile := "path/to/apigw.crt"
+    
+    caClient := lamassuCAClient.NewLamassuCAClient(client.ClientConfiguration{
+		URL: &url.URL{
+			Scheme: "https",
+			Host:   lamassuGatewayURL,
+			Path:   "/api/ca/",
+		},
+		AuthMethod: client.JWT,
+		AuthMethodConfig: &client.JWTConfig{
+			Username: "enroller",
+			Password: "enroller",
+			URL: &url.URL{
+				Scheme: "https",
+				Host:   "auth." + lamassuGatewayURL,
+			},
+			CACertificate: apiCAFile,
+		},
+		CACertificate: apiCAFile,
+	})
+    
+    ca, err = caClient.CreateCA(context.Background(), caDTO.Pki, caName, caDTO.PrivateKeyMetadata{KeyType: "rsa", KeyBits: 2048}, caDTO.Subject{CN: caName}, 365*time.Hour, 30*time.Hour)
+}
+
+
+```
 
 
 ## Running Unit tests
