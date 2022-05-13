@@ -216,7 +216,7 @@ jobs:
         port: ${{ secrets.AWS_SSH_PORT }}
         script: |
           sudo apt-get install -y jq
-          git clone https://github.com/lamassuiot/lamassu-compose -b develop
+          git clone https://github.com/lamassuiot/lamassu-compose -b develop && cd lamassu-compose
 
           export DB_USER=admin
           export DB_PASSWORD=admin
