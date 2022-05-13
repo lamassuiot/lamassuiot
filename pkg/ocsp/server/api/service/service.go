@@ -15,9 +15,9 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
-	"github.com/lamassuiot/lamassuiot/pkg/ca/server/secrets"
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/crypto/ocsp"
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/secrets/responder"
+	"github.com/lamassuiot/lamassuiot/pkg/utils"
 )
 
 type Service interface {
@@ -48,14 +48,14 @@ func NewService(respSecrets responder.Secrets, lamassuCAClient *client.LamassuCa
 	return responder, nil
 }
 
-func (o *OCSPResponder) verifyIssuer(req *ocsp.Request, ca x509.Certificate) error {
+func (o *OCSPResponder) verifyIssuer(req *ocsp.Request, ca *x509.Certificate) error {
 
 	h := req.HashAlgorithm.New()
 	h.Write(ca.RawSubject)
 	if bytes.Compare(h.Sum(nil), req.IssuerNameHash) != 0 {
 		return errors.New("Issuer name does not match")
-
 	}
+
 	h.Reset()
 	var publicKeyInfo struct {
 		Algorithm pkix.AlgorithmIdentifier
@@ -63,13 +63,13 @@ func (o *OCSPResponder) verifyIssuer(req *ocsp.Request, ca x509.Certificate) err
 	}
 	if _, err := asn1.Unmarshal(ca.RawSubjectPublicKeyInfo, &publicKeyInfo); err != nil {
 		return err
-
 	}
+
 	h.Write(publicKeyInfo.PublicKey.RightAlign())
 	if bytes.Compare(h.Sum(nil), req.IssuerKeyHash) != 0 {
 		return errors.New("Issuer key hash does not match")
-
 	}
+
 	return nil
 }
 
@@ -92,14 +92,19 @@ func (o *OCSPResponder) Verify(ctx context.Context, msg []byte) ([]byte, error) 
 		return nil, errors.New("Could not get CAs")
 	}
 	var issuerCA dto.Cert
+	issuerCA = dto.Cert{}
 	var x509Certificate *x509.Certificate
 	//make sure the request is valid
 	for _, ca := range cas {
 		data, _ := base64.StdEncoding.DecodeString(ca.CertContent.CerificateBase64)
 		block, _ := pem.Decode([]byte(data))
-		x509Certificate, _ := x509.ParseCertificate(block.Bytes)
+		x509Certificate, err = x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, errors.New("Issuing CA is not valid")
+		}
 
-		err = o.verifyIssuer(req, *x509Certificate)
+		fmt.Println()
+		err = o.verifyIssuer(req, x509Certificate)
 		if err != nil {
 			continue
 		} else {
@@ -107,14 +112,15 @@ func (o *OCSPResponder) Verify(ctx context.Context, msg []byte) ([]byte, error) 
 			break
 		}
 	}
-	if err != nil {
+	if issuerCA == (dto.Cert{}) {
 		return nil, err
 	}
-	if issuerCA.Status != secrets.StatusValid {
-		fmt.Println("Issuing CA is not valid")
+
+	if issuerCA.Status != "issued" {
+		return nil, errors.New("Issuing CA is not valid")
 	}
 
-	cert, err := o.lamassuCAClient.GetCert(context.Background(), dto.Pki, issuerCA.Name, req.SerialNumber.String())
+	cert, err := o.lamassuCAClient.GetCert(context.Background(), dto.Pki, issuerCA.Name, utils.InsertNth(utils.ToHexInt(req.SerialNumber), 2))
 	if err != nil {
 		return nil, errors.New("Could not get certificate")
 	}
@@ -122,11 +128,11 @@ func (o *OCSPResponder) Verify(ctx context.Context, msg []byte) ([]byte, error) 
 	if err != nil {
 		status = ocsp.Unknown
 	} else {
-		if cert.Status == secrets.StatusRevoked || cert.Status == secrets.StatusExpired {
+		if cert.Status == "" || cert.Status == dto.StatusRevoked {
 			status = ocsp.Revoked
 			tm := time.Unix(cert.RevocationTimestamp, 0)
 			revokedAt = tm
-		} else if cert.Status == secrets.StatusValid {
+		} else if cert.Status == dto.StatusValid {
 			status = ocsp.Good
 		}
 	}

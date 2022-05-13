@@ -13,9 +13,6 @@ type Config struct {
 	PostgresPort               string `required:"true" split_words:"true"`
 	PostgresMigrationsFilePath string `required:"true" split_words:"true"`
 
-	CACertFile   string `required:"true" split_words:"true"`
-	CAServerAddr string `required:"true" split_words:"true"`
-
 	LamassuCACertFile string `split_words:"true"`
 	LamassuCAAddress  string `split_words:"true"`
 

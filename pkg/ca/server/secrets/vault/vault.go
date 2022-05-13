@@ -37,14 +37,6 @@ type VaultSecrets struct {
 	ocspUrl  string
 }
 
-const (
-	StatusValid = 'V'
-
-	StatusRevoked = 'R'
-
-	StatusExpired = 'E'
-)
-
 func NewVaultSecrets(address string, pkiPath string, roleID string, secretID string, CA string, unsealFile string, ocspUrl string, logger log.Logger) (*VaultSecrets, error) {
 
 	client, err := CreateVaultSdkClient(address, CA, logger)
@@ -467,7 +459,7 @@ func (vs *VaultSecrets) GetCert(ctx context.Context, caType dto.CAType, caName s
 	certResponse, err := vs.client.Logical().Read(vs.pkiPath + caType.ToVaultPath() + caName + "/cert/" + serialNumber)
 	span.Finish()
 
-	if err != nil {
+	if err != nil || certResponse == nil {
 		level.Debug(logger).Log("err", err, "msg", "Could not read cert with serial number "+serialNumber+" from CA "+caName)
 		return dto.Cert{}, errors.New("could not read cert from CA")
 	}

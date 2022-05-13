@@ -8,6 +8,12 @@ import (
 	"errors"
 )
 
+const (
+	StatusValid   = "issued"
+	StatusRevoked = "revoked"
+	StatusExpired = "expired"
+)
+
 type Cert struct {
 	// The status of the CA
 	// required: true

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strconv"
 	"time"
 
 	lamassudevice "github.com/lamassuiot/lamassuiot/pkg/device-manager/client"
@@ -14,11 +15,11 @@ import (
 )
 
 func ManageDevices(scaleIndex int) error {
-	var f, _ = os.Create("./GetDevices_" + string(scaleIndex) + ".csv")
-	var f1, _ = os.Create("./GetDevicebyID_" + string(scaleIndex) + ".csv")
-	var f2, _ = os.Create("./GetDeviceLogs_" + string(scaleIndex) + ".csv")
-	var f3, _ = os.Create("./GetDeviceCertHistory_" + string(scaleIndex) + ".csv")
-	var f4, _ = os.Create("./GetDeviceCertbyID_" + string(scaleIndex) + ".csv")
+	var f, _ = os.Create("./GetDevices_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f1, _ = os.Create("./GetDevicebyID_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f2, _ = os.Create("./GetDeviceLogs_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f3, _ = os.Create("./GetDeviceCertHistory_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f4, _ = os.Create("./GetDeviceCertbyID_" + strconv.Itoa(scaleIndex) + ".csv")
 
 	devClient, err := client.LamassuDevClient()
 	if err != nil {

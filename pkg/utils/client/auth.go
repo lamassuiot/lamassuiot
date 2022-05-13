@@ -84,7 +84,6 @@ func (t jwtAuthRoundTripper) getJWT() (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	bodyBytes, err := io.ReadAll(response.Body)
 	if err != nil {
 		return "", err

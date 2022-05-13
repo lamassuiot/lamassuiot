@@ -17,10 +17,10 @@ import (
 )
 
 var dmsName = "industrial-environment-dms"
-var dmsCert = "/home/ikerlan/lamassu/lamassuiot/test/e2e/Industrial_Environment/dmsPer.crt"
-var dmsKey = "/home/ikerlan/lamassu/lamassuiot/test/e2e/Industrial_Environment/dmsPer.key"
-var deviceCert = "/home/ikerlan/lamassu/lamassuiot/test/e2e/Industrial_Environment/device.crt"
-var deviceKey = "/home/ikerlan/lamassu/lamassuiot/test/e2e/Industrial_Environment/device.key"
+var dmsCert = "/home/ikerlan/lamassu/lamassuiot/test/e2e/Industrial_environment/dmsPer.crt"
+var dmsKey = "/home/ikerlan/lamassu/lamassuiot/test/e2e/Industrial_environment/dmsPer.key"
+var deviceCert = "/home/ikerlan/lamassu/lamassuiot/test/e2e/Industrial_environment/device.crt"
+var deviceKey = "/home/ikerlan/lamassu/lamassuiot/test/e2e/Industrial_environment/device.key"
 
 func IndustrialEnvironment(caName string, deviceNumber int, reenroll int) (string, error) {
 	dmsClient, err := client.LamassuDmsClient()

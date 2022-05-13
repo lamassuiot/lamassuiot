@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strconv"
 	"time"
 
 	lamassuCAClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
@@ -14,12 +15,12 @@ import (
 	client "github.com/lamassuiot/lamassuiot/test/e2e/utils/clients"
 )
 
-var dmsCert = "/home/ikerlan/lamassu/lamassuiot/test/e2e/Industrial_Environment/dmsPer.crt"
-var dmsKey = "/home/ikerlan/lamassu/lamassuiot/test/e2e/Industrial_Environment/dmsPer.key"
+var dmsCert = "/home/ikerlan/lamassu/lamassuiot/test/e2e/industrial_environment/dmsPer.crt"
+var dmsKey = "/home/ikerlan/lamassu/lamassuiot/test/e2e/industrial_environment/dmsPer.key"
 
 func ManageCerts(caName string, scaleIndex int) error {
-	var f, _ = os.Create("./GetIssuedCerts_" + string(scaleIndex) + ".csv")
-	var f1, _ = os.Create("./GetCaCerts_" + string(scaleIndex) + ".csv")
+	var f, _ = os.Create("./GetIssuedCerts_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f1, _ = os.Create("./GetCaCerts_" + strconv.Itoa(scaleIndex) + ".csv")
 	caClient, err := client.LamassuCaClient()
 	if err != nil {
 		fmt.Println(err)

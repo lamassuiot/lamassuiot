@@ -138,7 +138,6 @@ func (c *LamassuEstClientConfig) CACerts(ctx context.Context) ([]*x509.Certifica
 		return nil, errInvalidPKCS7
 	}
 	return p7.Certificates, nil
-
 }
 
 func (c *LamassuEstClientConfig) Enroll(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, *x509.Certificate, error) {

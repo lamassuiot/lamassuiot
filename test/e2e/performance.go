@@ -1,9 +1,10 @@
-package e2e
+package main
 
 import (
 	"fmt"
+	"strconv"
 
-	industrial "github.com/lamassuiot/lamassuiot/test/e2e/industrial_Environment"
+	industrial "github.com/lamassuiot/lamassuiot/test/e2e/industrial-environment"
 	cas "github.com/lamassuiot/lamassuiot/test/e2e/manage-cas"
 	devices "github.com/lamassuiot/lamassuiot/test/e2e/manage-devices"
 	dmss "github.com/lamassuiot/lamassuiot/test/e2e/manage-dms"
@@ -28,14 +29,14 @@ func main() {
 }
 
 func scaleTest(scaleIndex int) {
-	fmt.Println("Scenario Manage CAs: 100 CAs")
+	fmt.Println("Scenario Manage CAs: " + strconv.Itoa(2*scaleIndex) + " CAs")
 	ca, err := cas.ManageCAs(2*scaleIndex, scaleIndex)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	fmt.Println("Scenario Industrial Environment: 10000 devices")
+	fmt.Println("Scenario Industrial Environment: " + strconv.Itoa(10000*scaleIndex) + " devices")
 	dmsId, err := industrial.IndustrialEnvironment(ca.Name, 10000*scaleIndex, 3)
 	if err != nil {
 		fmt.Println(err)
@@ -49,7 +50,7 @@ func scaleTest(scaleIndex int) {
 		return
 	}
 
-	fmt.Println("Scenario Manage DMSs: 100 DMSs")
+	fmt.Println("Scenario Manage DMSs: " + strconv.Itoa(2*scaleIndex) + " DMSs")
 	err = dmss.ManageDMSs(2*scaleIndex, dmsId, ca.Name, scaleIndex)
 	if err != nil {
 		fmt.Println(err)

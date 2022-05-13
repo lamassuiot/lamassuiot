@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/jakehl/goid"
@@ -16,11 +17,11 @@ import (
 )
 
 func ManageDMSs(dmsNumber int, dmsid string, caName string, scaleIndex int) error {
-	var f, _ = os.Create("./GetDMSs_" + string(scaleIndex) + ".csv")
-	var f1, _ = os.Create("./GetDMSbyID_" + string(scaleIndex) + ".csv")
-	var f2, _ = os.Create("./GetDmsCertHistory_" + string(scaleIndex) + ".csv")
-	var f3, _ = os.Create("./GetDmsLastIssuedCert_" + string(scaleIndex) + ".csv")
-	var f4, _ = os.Create("./GetDevicesbyDMS_" + string(scaleIndex) + ".csv")
+	var f, _ = os.Create("./GetDMSs_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f1, _ = os.Create("./GetDMSbyID_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f2, _ = os.Create("./GetDmsCertHistory_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f3, _ = os.Create("./GetDmsLastIssuedCert_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f4, _ = os.Create("./GetDevicesbyDMS_" + strconv.Itoa(scaleIndex) + ".csv")
 	dmsClient, err := client.LamassuDmsClient()
 	if err != nil {
 		fmt.Println(err)

@@ -31,7 +31,6 @@ func LamassuCaClient() (lamassuCAClient.LamassuCaClient, error) {
 		},
 		CACertificate: caCert,
 	})
-
 }
 
 func LamassuDmsClient() (lamassuDMSClient.LamassuEnrollerClient, error) {

@@ -32,10 +32,16 @@ func main() {
 	{
 		logger = log.NewJSONLogger(os.Stdout)
 		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-		logger = log.With(logger, "caller", log.DefaultCaller)
 		logger = level.NewFilter(logger, level.AllowInfo())
+		logger = log.With(logger, "caller", log.DefaultCaller)
 	}
+
 	cfg, err := configs.NewConfig("")
+	if err != nil {
+		level.Error(logger).Log("err", err, "msg", "Could not read environment configuration values")
+		os.Exit(1)
+	}
+	level.Info(logger).Log("msg", "Environment configuration values loaded")
 
 	lamassuCaClient, err := lamassucaclient.NewLamassuCAClient(clientUtils.ClientConfiguration{
 		URL: &url.URL{
@@ -54,7 +60,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	respSecrets := file.NewFile(*&cfg.Key, *&cfg.Cert, logger)
+	respSecrets := file.NewFile(cfg.OcspSignKey, cfg.OcspSignCert, logger)
 
 	jcfg, err := jaegercfg.FromEnv()
 	if err != nil {
@@ -96,7 +102,7 @@ func main() {
 		)(resp)
 	}
 
-	h := transport.MakeHTTPHandler(resp, log.With(logger, "component", "HTTP"), *&cfg.Strict, tracer)
+	h := transport.MakeHTTPHandler(resp, log.With(logger, "component", "HTTP"), cfg.Strict, tracer)
 	http.Handle("/metrics", promhttp.Handler())
 
 	errs := make(chan error)
@@ -108,13 +114,13 @@ func main() {
 
 	if *&cfg.SSL {
 		go func() {
-			level.Info(logger).Log("transport", "HTTPS", "address", *&cfg.Address+":"+*&cfg.Port, "msg", "listening")
-			errs <- http.ListenAndServeTLS(*&cfg.Address+":"+*&cfg.Port, *&cfg.Cert, *&cfg.Key, nil)
+			level.Info(logger).Log("transport", "HTTPS", "address", ":"+cfg.Port, "msg", "listening")
+			errs <- http.ListenAndServeTLS(":"+cfg.Port, cfg.CertFile, cfg.KeyFile, h)
 		}()
 	} else {
 		go func() {
-			level.Info(logger).Log("transport", "HTTP", "address", *&cfg.Address+":"+*&cfg.Port, "msg", "listening")
-			errs <- http.ListenAndServe(*&cfg.Address+":"+*&cfg.Port, h)
+			level.Info(logger).Log("transport", "HTTP", "address", ":"+cfg.Port, "msg", "listening")
+			errs <- http.ListenAndServe(":"+cfg.Port, h)
 		}()
 	}
 	level.Info(logger).Log("exit", <-errs)

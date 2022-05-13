@@ -7,15 +7,12 @@ on:
 
 jobs:
   unit_testing_ca:
-    name: Unit Testing CA
     uses: ./.github/workflows/ca-develop.yaml
 
   unit_testing_dms_enroller:
-    name: Unit Testing DMS Enroller
     uses: ./.github/workflows/dms-enroller-develop.yaml
 
   unit_testing_device_manager:
-    name: Unit Testing Device Manager
     uses: ./.github/workflows/device-manager-develop.yaml
 
   build_ca_dev_docker_image:
@@ -209,6 +206,7 @@ jobs:
     needs:
     - deploy_to_release_env
     steps:
+    - run: sleep 60s
     - name: Executing remote ssh commands
       uses: appleboy/ssh-action@master
       with:
@@ -217,9 +215,36 @@ jobs:
         key: ${{ secrets.AWS_SSH_KEY }}
         port: ${{ secrets.AWS_SSH_PORT }}
         script: |
-          sleep 60s
+          sudo apt-get install -y jq
           git clone https://github.com/lamassuiot/lamassu-compose -b develop
-        
+
+          export DB_USER=admin
+          export DB_PASSWORD=admin
+          export DOMAIN=dev.lamassu.io
+
+          export LAMASSU_GATEWAY_DOCKER_IMAGE=lamasuiot/lamassu-gateway:latest
+          export LAMASSU_UI_DOCKER_IMAGE=lamasuiot/lamassu-ui:latest
+          export LAMASSU_DB_DOCKER_IMAGE=lamasuiot/lamassu-db:latest
+          export LAMASSU_AUTH_DOCKER_IMAGE=lamasuiot/lamassu-auth:latest
+          export LAMASSU_CA_DOCKER_IMAGE=lamasuiot/lamassu-ca-dev:latest
+          export LAMASSU_DMS_ENROLLER_DOCKER_IMAGE=lamasuiot/lamassu-dms-enroller-dev:latest
+          export LAMASSU_DEVICE_MANAGER_DOCKER_IMAGE=lamasuiot/lamassu-device-manager-dev:latest
+          export LAMASSU_RABBITMQ_DOCKER_IMAGE=lamasuiot/lamassu-rabbitmq:latest
+          export LAMASSU_CLOUD_PROXY_DOCKER_IMAGE=lamasuiot/lamassu-cloud-proxy-dev:latest
+          export LAMASSU_OCSP_DOCKER_IMAGE=lamasuiot/lamassu-ocsp-dev:latest
+
+          envsubst < .env | tee .env
+
+          sudo tee -a /etc/hosts > /dev/null <<EOT
+          127.0.0.1  dev.lamassu.io 
+          127.0.0.1  vault.dev.lamassu.io 
+          127.0.0.1  auth.dev.lamassu.io 
+          127.0.0.1  tracing.dev.lamassu.io 
+          127.0.0.1  consul.dev.lamassu.io
+          EOT
+          
+          bash install.sh
+
   ocsp_test:
     name: OCSP test
     runs-on: ubuntu-latest

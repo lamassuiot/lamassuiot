@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/globalsign/pemfile"
@@ -19,11 +20,11 @@ import (
 	client "github.com/lamassuiot/lamassuiot/test/e2e/utils/clients"
 )
 
-var importcaCert = "/home/ikerlan/lamassu/lamassuiot/test/e2e/Manage_CAs/importca.crt"
-var importcaKey = "/home/ikerlan/lamassu/lamassuiot/test/e2e/Manage_CAs/importca.key"
+var importcaCert = "/home/ikerlan/lamassu/lamassuiot/test/e2e/manage-cas/importca.crt"
+var importcaKey = "/home/ikerlan/lamassu/lamassuiot/test/e2e/manage-cas/importca.key"
 
 func ManageCAs(caNumber int, scaleIndex int) (caDTO.Cert, error) {
-	var f, _ = os.Create("./GetCAs_" + string(scaleIndex) + ".csv")
+	var f, _ = os.Create("./GetCAs_" + strconv.Itoa(scaleIndex) + ".csv")
 
 	caClient, err := client.LamassuCaClient()
 	if err != nil {
