@@ -200,7 +200,7 @@ jobs:
         echo "::set-output name=ip::$ip"
 
   deploy_to_dev_server:
-    name: Integration test
+    name: Deploy lamassu to DEV Server
     runs-on: ubuntu-latest
     environment: release
     needs:
