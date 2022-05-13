@@ -222,16 +222,16 @@ jobs:
           export DB_PASSWORD=admin
           export DOMAIN=dev.lamassu.io
 
-          export LAMASSU_GATEWAY_DOCKER_IMAGE=lamasuiot/lamassu-gateway:latest
-          export LAMASSU_UI_DOCKER_IMAGE=lamasuiot/lamassu-ui:latest
-          export LAMASSU_DB_DOCKER_IMAGE=lamasuiot/lamassu-db:latest
-          export LAMASSU_AUTH_DOCKER_IMAGE=lamasuiot/lamassu-auth:latest
-          export LAMASSU_CA_DOCKER_IMAGE=lamasuiot/lamassu-ca-dev:latest
-          export LAMASSU_DMS_ENROLLER_DOCKER_IMAGE=lamasuiot/lamassu-dms-enroller-dev:latest
-          export LAMASSU_DEVICE_MANAGER_DOCKER_IMAGE=lamasuiot/lamassu-device-manager-dev:latest
-          export LAMASSU_RABBITMQ_DOCKER_IMAGE=lamasuiot/lamassu-rabbitmq:latest
-          export LAMASSU_CLOUD_PROXY_DOCKER_IMAGE=lamasuiot/lamassu-cloud-proxy-dev:latest
-          export LAMASSU_OCSP_DOCKER_IMAGE=lamasuiot/lamassu-ocsp-dev:latest
+          export LAMASSU_GATEWAY_DOCKER_IMAGE=lamassuiot/lamassu-gateway:latest
+          export LAMASSU_UI_DOCKER_IMAGE=lamassuiot/lamassu-ui:latest
+          export LAMASSU_DB_DOCKER_IMAGE=lamassuiot/lamassu-db:latest
+          export LAMASSU_AUTH_DOCKER_IMAGE=lamassuiot/lamassu-auth:latest
+          export LAMASSU_CA_DOCKER_IMAGE=lamassuiot/lamassu-ca-dev:latest
+          export LAMASSU_DMS_ENROLLER_DOCKER_IMAGE=lamassuiot/lamassu-dms-enroller-dev:latest
+          export LAMASSU_DEVICE_MANAGER_DOCKER_IMAGE=lamassuiot/lamassu-device-manager-dev:latest
+          export LAMASSU_RABBITMQ_DOCKER_IMAGE=lamassuiot/lamassu-rabbitmq:latest
+          export LAMASSU_CLOUD_PROXY_DOCKER_IMAGE=lamassuiot/lamassu-cloud-proxy-dev:latest
+          export LAMASSU_OCSP_DOCKER_IMAGE=lamassuiot/lamassu-ocsp-dev:latest
 
           mv .env .env.tmp 
           cat .env.tmp | envsubst > .env
