@@ -150,12 +150,12 @@ jobs:
 
   create_dev_server_env:
     name: Create DEV Server
-    needs:
-    - build_ca_dev_docker_image
-    - build_cloud_proxy_dev_docker_image
-    - build_device_manager_dev_docker_image
-    - build_dms_enroller_dev_docker_image
-    - build_ocsp_dev_docker_image
+    # needs:
+    # - build_ca_dev_docker_image
+    # - build_cloud_proxy_dev_docker_image
+    # - build_device_manager_dev_docker_image
+    # - build_dms_enroller_dev_docker_image
+    # - build_ocsp_dev_docker_image
     runs-on: ubuntu-latest
     environment: release
     permissions:
