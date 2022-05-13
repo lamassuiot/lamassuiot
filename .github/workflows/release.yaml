@@ -145,7 +145,7 @@ jobs:
             lamassuiot/lamassu-cloud-proxy-dev:latest
           push: true
 
-  create_to_release_env:
+  create_dev_server_env:
     name: Create DEV Server
     needs:
     - build_ca_dev_docker_image
@@ -204,13 +204,13 @@ jobs:
     runs-on: ubuntu-latest
     environment: release
     needs:
-    - create_to_release_env
+    - create_dev_server_env
     steps:
     - run: sleep 60s
     - name: Executing remote ssh commands
       uses: appleboy/ssh-action@master
       with:
-        host: ${{ needs.deploy_to_release_env.outputs.server-ip }}
+        host: ${{ needs.create_dev_server_env.outputs.server-ip }}
         username: ${{ secrets.AWS_SSH_USERNAME }}
         key: ${{ secrets.AWS_SSH_KEY }}
         port: ${{ secrets.AWS_SSH_PORT }}
@@ -256,7 +256,7 @@ jobs:
     - name: Run integration tests
       uses: appleboy/ssh-action@master
       with:
-        host: ${{ needs.deploy_to_release_env.outputs.server-ip }}
+        host: ${{ needs.create_dev_server_env.outputs.server-ip }}
         username: ${{ secrets.AWS_SSH_USERNAME }}
         key: ${{ secrets.AWS_SSH_KEY }}
         port: ${{ secrets.AWS_SSH_PORT }}
@@ -270,7 +270,7 @@ jobs:
     - deploy_to_dev_server
     steps:
     - name: Get IP
-      run: echo ${{ needs.deploy_to_release_env.outputs.server-ip }}
+      run: echo ${{ needs.create_dev_server_env.outputs.server-ip }}
 
   est_test:
     name: EST test
