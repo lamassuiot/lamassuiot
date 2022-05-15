@@ -149,12 +149,9 @@ func DecodeEnrollRequest(ctx context.Context, r *http.Request) (request interfac
 		return nil, err
 	}
 
-	decodedCsr, err := utils.DecodeB64(string(data))
-	if err != nil {
-		return nil, ErrInvalidBase64()
-	}
+	b, _ := pem.Decode(data)
 
-	csr, err := x509.ParseCertificateRequest([]byte(decodedCsr))
+	csr, err := x509.ParseCertificateRequest(b.Bytes)
 	if err != nil {
 		return nil, ErrMalformedCert()
 	}
