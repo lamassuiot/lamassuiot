@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/jakehl/goid"
 	devdto "github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
 	lamassuenroller "github.com/lamassuiot/lamassuiot/pkg/dms-enroller/client"
@@ -17,11 +19,17 @@ import (
 )
 
 func ManageDMSs(dmsNumber int, dmsid string, caName string, scaleIndex int, certPath string, domain string) error {
-	var f, _ = os.Create("./manage-dms/GetDMSs_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f1, _ = os.Create("./manage-dms/GetDMSbyID_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f2, _ = os.Create("./manage-dms/GetDmsCertHistory_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f3, _ = os.Create("./manage-dms/GetDmsLastIssuedCert_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f4, _ = os.Create("./manage-dms/GetDevicesbyDMS_" + strconv.Itoa(scaleIndex) + ".csv")
+	var logger log.Logger
+	logger = log.NewJSONLogger(os.Stdout)
+	logger = level.NewFilter(logger, level.AllowDebug())
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	logger = log.With(logger, "caller", log.DefaultCaller)
+
+	var f, _ = os.Create("./test/e2e/manage-dms/GetDMSs_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f1, _ = os.Create("./test/e2e/manage-dms/GetDMSbyID_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f2, _ = os.Create("./test/e2e/manage-dms/GetDmsCertHistory_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f3, _ = os.Create("./test/e2e/manage-dms/GetDmsLastIssuedCert_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f4, _ = os.Create("./test/e2e/manage-dms/GetDevicesbyDMS_" + strconv.Itoa(scaleIndex) + ".csv")
 	dmsClient, err := client.LamassuDmsClient(certPath, domain)
 	if err != nil {
 		fmt.Println(err)
@@ -32,18 +40,18 @@ func ManageDMSs(dmsNumber int, dmsid string, caName string, scaleIndex int, cert
 		dmsName := goid.NewV4UUID().String()
 		_, dms, err := dmsClient.CreateDMSForm(context.Background(), dmsDTO.Subject{CN: dmsName}, dmsDTO.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dmsName)
 		if err != nil {
-			fmt.Println(err)
+			level.Error(logger).Log("err", err)
 			return err
 		}
 
 		dms, err = dmsClient.UpdateDMSStatus(context.Background(), "APPROVED", dms.Id, []string{caName})
 		if err != nil {
-			fmt.Println(err)
+			level.Error(logger).Log("err", err)
 			return err
 		}
 		err = LatencyGetDMSs(dmsClient, f)
 		if err != nil {
-			fmt.Println(err)
+			level.Error(logger).Log("err", err)
 			return err
 		}
 
@@ -51,27 +59,27 @@ func ManageDMSs(dmsNumber int, dmsid string, caName string, scaleIndex int, cert
 
 	err = dmsClient.DeleteDMS(context.Background(), dms.Id)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return err
 	}
 	err = LatencyGetDMSbyID(dmsid, dmsClient, f1)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return err
 	}
 	err = LatencyGetDMSCertHistory(f2, certPath, domain)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return err
 	}
 	err = LatencyGetDMSLastIssuedCert(f3, certPath, domain)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return err
 	}
 	err = LatencyGetDevicesbyDMS(dmsid, f4, certPath, domain)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return err
 	}
 

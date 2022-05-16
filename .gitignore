@@ -5,3 +5,5 @@ nogit
 *__debug_bin
 *.csv
 *.der
+*.pem
+*.p7

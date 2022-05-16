@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	lamassudevice "github.com/lamassuiot/lamassuiot/pkg/device-manager/client"
 	devdto "github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
 	"github.com/lamassuiot/lamassuiot/test/e2e/utils"
@@ -15,15 +17,21 @@ import (
 )
 
 func ManageDevices(scaleIndex int, certPath string, domain string) error {
-	var f, _ = os.Create("./manage-devices/GetDevices_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f1, _ = os.Create("./manage-devices/GetDevicebyID_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f2, _ = os.Create("./manage-devices/GetDeviceLogs_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f3, _ = os.Create("./manage-devices/GetDeviceCertHistory_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f4, _ = os.Create("./manage-devices/GetDeviceCertbyID_" + strconv.Itoa(scaleIndex) + ".csv")
+	var logger log.Logger
+	logger = log.NewJSONLogger(os.Stdout)
+	logger = level.NewFilter(logger, level.AllowDebug())
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	logger = log.With(logger, "caller", log.DefaultCaller)
+
+	var f, _ = os.Create("./test/e2e/manage-devices/GetDevices_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f1, _ = os.Create("./test/e2e/manage-devices/GetDevicebyID_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f2, _ = os.Create("./test/e2e/manage-devices/GetDeviceLogs_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f3, _ = os.Create("./test/e2e/manage-devices/GetDeviceCertHistory_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f4, _ = os.Create("./test/e2e/manage-devices/GetDeviceCertbyID_" + strconv.Itoa(scaleIndex) + ".csv")
 
 	devClient, err := client.LamassuDevClient(certPath, domain)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return err
 	}
 
@@ -31,23 +39,23 @@ func ManageDevices(scaleIndex int, certPath string, domain string) error {
 
 	err = LatencyGetDevicebyID(devClient, devices[1].Id, f1)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return err
 	}
 	err = LatencyGetDeviceCertHistory(devClient, devices[1].Id, f3)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return err
 	}
 	err = LatencyGetDeviceLogs(devClient, devices[1].Id, f2)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return err
 	}
 
 	err = LatencyGetDeviceCert(devClient, devices[1].Id, f4)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return err
 	}
 	return nil

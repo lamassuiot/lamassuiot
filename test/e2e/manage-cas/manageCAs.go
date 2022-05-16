@@ -8,7 +8,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"fmt"
 	"io/ioutil"
 	"math"
 	"math/big"
@@ -17,6 +16,8 @@ import (
 	"time"
 
 	"github.com/globalsign/pemfile"
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
 	"github.com/jakehl/goid"
 	lamassuCAClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 
@@ -26,8 +27,15 @@ import (
 )
 
 func ManageCAs(caNumber int, scaleIndex int, certPath string, domain string) (caDTO.Cert, error) {
-	var f, _ = os.Create("./manage-cas/GetCAs_" + strconv.Itoa(scaleIndex) + ".csv")
-
+	var logger log.Logger
+	logger = log.NewJSONLogger(os.Stdout)
+	logger = level.NewFilter(logger, level.AllowDebug())
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	logger = log.With(logger, "caller", log.DefaultCaller)
+	var f, err = os.Create("./test/e2e/manage-cas/GetCAs_" + strconv.Itoa(scaleIndex) + ".csv")
+	if err != nil {
+		return caDTO.Cert{}, err
+	}
 	caClient, err := client.LamassuCaClient(certPath, domain)
 	if err != nil {
 		return caDTO.Cert{}, err
@@ -38,10 +46,10 @@ func ManageCAs(caNumber int, scaleIndex int, certPath string, domain string) (ca
 
 		_, err = caClient.CreateCA(context.Background(), caDTO.Pki, caName, caDTO.PrivateKeyMetadata{KeyType: "rsa", KeyBits: 2048}, caDTO.Subject{CN: caName}, 365*time.Hour, 30*time.Hour)
 		if err != nil {
-			fmt.Println(err)
+			level.Error(logger).Log("err", err)
 			return caDTO.Cert{}, err
 		}
-		createCa, err = LatencyGetCAs(caClient, f)
+		createCa, err = LatencyGetCAs(caClient, f, logger)
 		if err != nil {
 			return caDTO.Cert{}, err
 		}
@@ -53,36 +61,36 @@ func ManageCAs(caNumber int, scaleIndex int, certPath string, domain string) (ca
 	}
 	err = CreateCertKey()
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return caDTO.Cert{}, err
 	}
-	certContent, err := ioutil.ReadFile("./manage-cas/ca.crt")
+	certContent, err := ioutil.ReadFile("./test/e2e/manage-cas/ca.crt")
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return caDTO.Cert{}, err
 	}
 	cpb, _ := pem.Decode(certContent)
 
 	importcrt, err := x509.ParseCertificate(cpb.Bytes)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return caDTO.Cert{}, err
 	}
-	privateKey, err := pemfile.ReadPrivateKey("./manage-cas/ca.key")
+	privateKey, err := pemfile.ReadPrivateKey("./test/e2e/manage-cas/ca.key")
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return caDTO.Cert{}, err
 	}
 	ca, err := caClient.ImportCA(context.Background(), caDTO.Pki, importcrt.Subject.CommonName, *importcrt, caDTO.PrivateKey{KeyType: caDTO.RSA, Key: privateKey}, 30*time.Hour)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return caDTO.Cert{}, err
 	}
 
 	return ca, nil
 }
 
-func LatencyGetCAs(caClient lamassuCAClient.LamassuCaClient, f *os.File) ([]caDTO.Cert, error) {
+func LatencyGetCAs(caClient lamassuCAClient.LamassuCaClient, f *os.File, logger log.Logger) ([]caDTO.Cert, error) {
 	var max, min float64
 	max = 0
 	min = 12
@@ -91,7 +99,7 @@ func LatencyGetCAs(caClient lamassuCAClient.LamassuCaClient, f *os.File) ([]caDT
 		before := time.Now().UnixNano()
 		cas, err := caClient.GetCAs(context.Background(), caDTO.Pki)
 		if err != nil {
-			fmt.Println(err)
+			level.Error(logger).Log("err", err)
 			return []caDTO.Cert{}, err
 		}
 		after := time.Now().UnixNano()
@@ -103,7 +111,7 @@ func LatencyGetCAs(caClient lamassuCAClient.LamassuCaClient, f *os.File) ([]caDT
 	media := (max + min) / 2
 	err := utils.WriteDataFile(strconv.Itoa(len(createCa)), max, min, media, f)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return []caDTO.Cert{}, err
 	}
 
@@ -145,13 +153,13 @@ func CreateCertKey() error {
 		Bytes: caBytes,
 	})
 
-	ioutil.WriteFile("./manage-cas/ca.crt", caPEM.Bytes(), 0777)
+	ioutil.WriteFile("./test/e2e/manage-cas/ca.crt", caPEM.Bytes(), 0777)
 
 	caPrivKeyPEM := new(bytes.Buffer)
 	pem.Encode(caPrivKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(caPrivKey),
 	})
-	ioutil.WriteFile("./manage-cas/ca.key", caPrivKeyPEM.Bytes(), 0777)
+	ioutil.WriteFile("./test/e2e/manage-cas/ca.key", caPrivKeyPEM.Bytes(), 0777)
 	return nil
 }

@@ -6,7 +6,10 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io/ioutil"
+	"os"
 
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
 	dmsDTO "github.com/lamassuiot/lamassuiot/pkg/dms-enroller/common/dto"
@@ -17,37 +20,43 @@ import (
 )
 
 var dmsName = "industrial-environment-dms"
-var dmsCert = "./industrial-environment/dmsPer.crt"
-var dmsKey = "./industrial-environment/dmsPer.key"
-var deviceCert = "./industrial-environment/device.crt"
-var deviceKey = "./industrial-environment/device.key"
+var dmsCert = "./test/e2e/industrial-environment/dmsPer.crt"
+var dmsKey = "./test/e2e/industrial-environment/dmsPer.key"
+var deviceCert = "./test/e2e/industrial-environment/device.crt"
+var deviceKey = "./test/e2e/industrial-environment/device.key"
 
 func IndustrialEnvironment(caName string, deviceNumber int, reenroll int, certPath string, domain string) (string, error) {
+	var logger log.Logger
+	logger = log.NewJSONLogger(os.Stdout)
+	logger = level.NewFilter(logger, level.AllowDebug())
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	logger = log.With(logger, "caller", log.DefaultCaller)
+
 	dmsClient, err := client.LamassuDmsClient(certPath, domain)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return "", err
 	}
 	devClient, err := client.LamassuDevClient(certPath, domain)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return "", err
 	}
 	key, dms, err := dmsClient.CreateDMSForm(context.Background(), dmsDTO.Subject{CN: dmsName}, dmsDTO.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dmsName)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return "", err
 	}
 	Privkey, _ := base64.StdEncoding.DecodeString(key)
 	err = ioutil.WriteFile(dmsKey, Privkey, 0644)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return "", err
 	}
 
 	dms, err = dmsClient.UpdateDMSStatus(context.Background(), "APPROVED", dms.Id, []string{caName})
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return "", err
 	}
 	cert1, _ := base64.StdEncoding.DecodeString(dms.CerificateBase64)
@@ -56,13 +65,13 @@ func IndustrialEnvironment(caName string, deviceNumber int, reenroll int, certPa
 
 	dev, err := CreateDevices(devClient, deviceNumber, caName, dms.Id, reenroll)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return "", err
 	}
 
 	err = devClient.DeleteDevice(context.Background(), dev.Id)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return "", err
 	}
 	return dms.Id, nil
