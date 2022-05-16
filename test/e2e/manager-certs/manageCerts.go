@@ -15,18 +15,18 @@ import (
 	client "github.com/lamassuiot/lamassuiot/test/e2e/utils/clients"
 )
 
-var dmsCert = "/home/ikerlan/lamassu/lamassuiot/test/e2e/industrial_environment/dmsPer.crt"
-var dmsKey = "/home/ikerlan/lamassu/lamassuiot/test/e2e/industrial_environment/dmsPer.key"
+var dmsCert = "./industrial-environment/dmsPer.crt"
+var dmsKey = "./industrial-environment/dmsPer.key"
 
-func ManageCerts(caName string, scaleIndex int) error {
-	var f, _ = os.Create("./GetIssuedCerts_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f1, _ = os.Create("./GetCaCerts_" + strconv.Itoa(scaleIndex) + ".csv")
-	caClient, err := client.LamassuCaClient()
+func ManageCerts(caName string, scaleIndex int, certPath string, domain string) error {
+	var f, _ = os.Create("./manager-certs/GetIssuedCerts_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f1, _ = os.Create("./manager-certs/GetCaCerts_" + strconv.Itoa(scaleIndex) + ".csv")
+	caClient, err := client.LamassuCaClient(certPath, domain)
 	if err != nil {
 		fmt.Println(err)
 		return err
 	}
-	devClient, err := client.LamassuDevClient()
+	devClient, err := client.LamassuDevClient(certPath, domain)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -66,7 +66,7 @@ func LatencyGetCACerts(devClient lamassudevice.LamassuDevManagerClient, caName s
 		totalCerts = len(certs)
 	}
 	media := (max + min) / 2
-	err := utils.WriteDataFile(string(totalCerts), max, min, media, f)
+	err := utils.WriteDataFile(strconv.Itoa(totalCerts), max, min, media, f)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -94,7 +94,7 @@ func LatencyIssuedCerts(caClient lamassuCAClient.LamassuCaClient, caName string,
 		totalCerts = certs.TotalCerts
 	}
 	media := (max + min) / 2
-	err := utils.WriteDataFile(string(totalCerts), max, min, media, f)
+	err := utils.WriteDataFile(strconv.Itoa(totalCerts), max, min, media, f)
 	if err != nil {
 		fmt.Println(err)
 		return err

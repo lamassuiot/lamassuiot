@@ -9,10 +9,10 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/utils/client"
 )
 
-var lamassuGatewayURL = "dev-lamassu.zpd.ikerlan.es"
-var caCert = "/home/ikerlan/lamassu/lamassuiot/test/e2e/apigw.crt"
+/*var lamassuGatewayURL = "dev-lamassu.zpd.ikerlan.es"
+var caCert = "/home/ikerlan/lamassu/lamassuiot/test/e2e/apigw.crt"*/
 
-func LamassuCaClient() (lamassuCAClient.LamassuCaClient, error) {
+func LamassuCaClient(caCert string, lamassuGatewayURL string) (lamassuCAClient.LamassuCaClient, error) {
 	return lamassuCAClient.NewLamassuCAClient(client.ClientConfiguration{
 		URL: &url.URL{
 			Scheme: "https",
@@ -33,11 +33,11 @@ func LamassuCaClient() (lamassuCAClient.LamassuCaClient, error) {
 	})
 }
 
-func LamassuDmsClient() (lamassuDMSClient.LamassuEnrollerClient, error) {
+func LamassuDmsClient(certPath string, domain string) (lamassuDMSClient.LamassuEnrollerClient, error) {
 	return lamassuDMSClient.NewLamassuEnrollerClient(client.ClientConfiguration{
 		URL: &url.URL{
 			Scheme: "https",
-			Host:   lamassuGatewayURL,
+			Host:   domain,
 			Path:   "/api/dmsenroller/",
 		},
 		AuthMethod: client.JWT,
@@ -46,15 +46,15 @@ func LamassuDmsClient() (lamassuDMSClient.LamassuEnrollerClient, error) {
 			Password: "enroller",
 			URL: &url.URL{
 				Scheme: "https",
-				Host:   "auth." + lamassuGatewayURL,
+				Host:   "auth." + domain,
 			},
-			CACertificate: caCert,
+			CACertificate: certPath,
 		},
-		CACertificate: caCert,
+		CACertificate: certPath,
 	})
 }
 
-func LamassuDevClient() (lamassuDevClient.LamassuDevManagerClient, error) {
+func LamassuDevClient(caCert string, lamassuGatewayURL string) (lamassuDevClient.LamassuDevManagerClient, error) {
 	return lamassuDevClient.NewLamassuDevManagerClient(client.ClientConfiguration{
 		URL: &url.URL{
 			Scheme: "https",

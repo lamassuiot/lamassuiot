@@ -16,13 +16,13 @@ import (
 	client "github.com/lamassuiot/lamassuiot/test/e2e/utils/clients"
 )
 
-func ManageDMSs(dmsNumber int, dmsid string, caName string, scaleIndex int) error {
-	var f, _ = os.Create("./GetDMSs_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f1, _ = os.Create("./GetDMSbyID_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f2, _ = os.Create("./GetDmsCertHistory_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f3, _ = os.Create("./GetDmsLastIssuedCert_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f4, _ = os.Create("./GetDevicesbyDMS_" + strconv.Itoa(scaleIndex) + ".csv")
-	dmsClient, err := client.LamassuDmsClient()
+func ManageDMSs(dmsNumber int, dmsid string, caName string, scaleIndex int, certPath string, domain string) error {
+	var f, _ = os.Create("./manage-dms/GetDMSs_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f1, _ = os.Create("./manage-dms/GetDMSbyID_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f2, _ = os.Create("./manage-dms/GetDmsCertHistory_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f3, _ = os.Create("./manage-dms/GetDmsLastIssuedCert_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f4, _ = os.Create("./manage-dms/GetDevicesbyDMS_" + strconv.Itoa(scaleIndex) + ".csv")
+	dmsClient, err := client.LamassuDmsClient(certPath, domain)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -59,17 +59,17 @@ func ManageDMSs(dmsNumber int, dmsid string, caName string, scaleIndex int) erro
 		fmt.Println(err)
 		return err
 	}
-	err = LatencyGetDMSCertHistory(f2)
+	err = LatencyGetDMSCertHistory(f2, certPath, domain)
 	if err != nil {
 		fmt.Println(err)
 		return err
 	}
-	err = LatencyGetDMSLastIssuedCert(f3)
+	err = LatencyGetDMSLastIssuedCert(f3, certPath, domain)
 	if err != nil {
 		fmt.Println(err)
 		return err
 	}
-	err = LatencyGetDevicesbyDMS(dmsid, f4)
+	err = LatencyGetDevicesbyDMS(dmsid, f4, certPath, domain)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -97,7 +97,7 @@ func LatencyGetDMSs(dmsClient lamassuenroller.LamassuEnrollerClient, f *os.File)
 		totalDmss = len(dmss)
 	}
 	media := (max + min) / 2
-	err := utils.WriteDataFile(string(totalDmss), max, min, media, f)
+	err := utils.WriteDataFile(strconv.Itoa(totalDmss), max, min, media, f)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -131,8 +131,8 @@ func LatencyGetDMSbyID(dmsid string, dmsClient lamassuenroller.LamassuEnrollerCl
 	return nil
 }
 
-func LatencyGetDMSCertHistory(f *os.File) error {
-	devClient, err := client.LamassuDevClient()
+func LatencyGetDMSCertHistory(f *os.File, certPath string, domain string) error {
+	devClient, err := client.LamassuDevClient(certPath, domain)
 	var max, min float64
 	max = 0
 	min = 12
@@ -151,7 +151,7 @@ func LatencyGetDMSCertHistory(f *os.File) error {
 		totalhistory = len(history)
 	}
 	media := (max + min) / 2
-	err = utils.WriteDataFile(string(totalhistory), max, min, media, f)
+	err = utils.WriteDataFile(strconv.Itoa(totalhistory), max, min, media, f)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -159,8 +159,8 @@ func LatencyGetDMSCertHistory(f *os.File) error {
 	return nil
 }
 
-func LatencyGetDMSLastIssuedCert(f *os.File) error {
-	devClient, err := client.LamassuDevClient()
+func LatencyGetDMSLastIssuedCert(f *os.File, certPath string, domain string) error {
+	devClient, err := client.LamassuDevClient(certPath, domain)
 	var max, min float64
 	max = 0
 	min = 12
@@ -179,7 +179,7 @@ func LatencyGetDMSLastIssuedCert(f *os.File) error {
 		totalissuedcert = len(certs)
 	}
 	media := (max + min) / 2
-	err = utils.WriteDataFile(string(totalissuedcert), max, min, media, f)
+	err = utils.WriteDataFile(strconv.Itoa(totalissuedcert), max, min, media, f)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -187,8 +187,8 @@ func LatencyGetDMSLastIssuedCert(f *os.File) error {
 	return nil
 }
 
-func LatencyGetDevicesbyDMS(dmsid string, f *os.File) error {
-	devClient, err := client.LamassuDevClient()
+func LatencyGetDevicesbyDMS(dmsid string, f *os.File, certPath string, domain string) error {
+	devClient, err := client.LamassuDevClient(certPath, domain)
 	var max, min float64
 	max = 0
 	min = 12
@@ -207,7 +207,7 @@ func LatencyGetDevicesbyDMS(dmsid string, f *os.File) error {
 		totaldevices = len(devices)
 	}
 	media := (max + min) / 2
-	err = utils.WriteDataFile(string(totaldevices), max, min, media, f)
+	err = utils.WriteDataFile(strconv.Itoa(totaldevices), max, min, media, f)
 	if err != nil {
 		fmt.Println(err)
 		return err

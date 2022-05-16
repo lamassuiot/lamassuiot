@@ -17,14 +17,22 @@ import (
 )
 
 var dmsName = "industrial-environment-dms"
-var dmsCert = "/home/ikerlan/lamassu/lamassuiot/test/e2e/Industrial_environment/dmsPer.crt"
-var dmsKey = "/home/ikerlan/lamassu/lamassuiot/test/e2e/Industrial_environment/dmsPer.key"
-var deviceCert = "/home/ikerlan/lamassu/lamassuiot/test/e2e/Industrial_environment/device.crt"
-var deviceKey = "/home/ikerlan/lamassu/lamassuiot/test/e2e/Industrial_environment/device.key"
+var dmsCert = "./industrial-environment/dmsPer.crt"
+var dmsKey = "./industrial-environment/dmsPer.key"
+var deviceCert = "./industrial-environment/device.crt"
+var deviceKey = "./industrial-environment/device.key"
 
-func IndustrialEnvironment(caName string, deviceNumber int, reenroll int) (string, error) {
-	dmsClient, err := client.LamassuDmsClient()
-	devClient, err := client.LamassuDevClient()
+func IndustrialEnvironment(caName string, deviceNumber int, reenroll int, certPath string, domain string) (string, error) {
+	dmsClient, err := client.LamassuDmsClient(certPath, domain)
+	if err != nil {
+		fmt.Println(err)
+		return "", err
+	}
+	devClient, err := client.LamassuDevClient(certPath, domain)
+	if err != nil {
+		fmt.Println(err)
+		return "", err
+	}
 	key, dms, err := dmsClient.CreateDMSForm(context.Background(), dmsDTO.Subject{CN: dmsName}, dmsDTO.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dmsName)
 	if err != nil {
 		fmt.Println(err)
@@ -32,6 +40,10 @@ func IndustrialEnvironment(caName string, deviceNumber int, reenroll int) (strin
 	}
 	Privkey, _ := base64.StdEncoding.DecodeString(key)
 	err = ioutil.WriteFile(dmsKey, Privkey, 0644)
+	if err != nil {
+		fmt.Println(err)
+		return "", err
+	}
 
 	dms, err = dmsClient.UpdateDMSStatus(context.Background(), "APPROVED", dms.Id, []string{caName})
 	if err != nil {
@@ -90,6 +102,10 @@ func CreateDevices(devClient lamassudevice.LamassuDevManagerClient, deviceNumber
 			utils.InsertCert(deviceCert, reenrollCert.Cert.Raw)
 		}
 		err = devClient.RevokeDeviceCert(context.Background(), dev.Id, "")
+		if err != nil {
+			fmt.Println(err)
+			return dto.Device{}, err
+		}
 		serverKeyGen, err := devClient.ServerKeyGen(context.Background(), csr, caName, dmsCert, dmsKey, "/home/ikerlan/lamassu-compose-v2/tls-certificates/upstream/lamassu-device-manager/tls.crt", "dev-lamassu.zpd.ikerlan.es/api/devmanager")
 		if err != nil {
 			fmt.Println(err)

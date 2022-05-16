@@ -4,6 +4,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -12,9 +13,17 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/crypto/ocsp"
 )
 
+var ocspServer = flag.String("server", "", "OCSP Server")
+var issuerCA = flag.String("cacert", "", "Issuer CA certificate")
+var certificateToCheck = flag.String("devcert", "", "Device certificate")
+
 func main() {
-	// sendOCSPRequest("http://localhost:9098", ,)
-	caPEM, err := ioutil.ReadFile("ca.crt")
+	flag.Parse()
+	if *ocspServer == "" || *issuerCA == "" || *certificateToCheck == "" {
+		return
+	}
+
+	caPEM, err := ioutil.ReadFile(*issuerCA)
 	if err != nil {
 		fmt.Println("Could not load CA certificate")
 		os.Exit(1)
@@ -26,7 +35,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	devicePEM, err := ioutil.ReadFile("device.crt")
+	devicePEM, err := ioutil.ReadFile(*certificateToCheck)
 	if err != nil {
 		fmt.Println("Could not load Device certificate")
 		os.Exit(1)
@@ -47,8 +56,7 @@ func main() {
 	encodedRequest := base64.StdEncoding.EncodeToString(ocspRequestBytes)
 	fmt.Println(encodedRequest)
 
-	server := "http://localhost:9098"
-	reqURL := server + "/" + encodedRequest
+	reqURL := *ocspServer + "/" + encodedRequest
 
 	resp, err := http.Get(reqURL)
 
@@ -75,6 +83,5 @@ func main() {
 
 	fmt.Println(ocspResponse.Status == ocsp.Good)
 	fmt.Println(ocspResponse.Status == ocsp.Revoked)
-	fmt.Println(ocspResponse.RevocationReason)
 	fmt.Println(ocspResponse.RevokedAt)
 }

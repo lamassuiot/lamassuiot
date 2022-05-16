@@ -14,14 +14,14 @@ import (
 	client "github.com/lamassuiot/lamassuiot/test/e2e/utils/clients"
 )
 
-func ManageDevices(scaleIndex int) error {
-	var f, _ = os.Create("./GetDevices_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f1, _ = os.Create("./GetDevicebyID_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f2, _ = os.Create("./GetDeviceLogs_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f3, _ = os.Create("./GetDeviceCertHistory_" + strconv.Itoa(scaleIndex) + ".csv")
-	var f4, _ = os.Create("./GetDeviceCertbyID_" + strconv.Itoa(scaleIndex) + ".csv")
+func ManageDevices(scaleIndex int, certPath string, domain string) error {
+	var f, _ = os.Create("./manage-devices/GetDevices_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f1, _ = os.Create("./manage-devices/GetDevicebyID_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f2, _ = os.Create("./manage-devices/GetDeviceLogs_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f3, _ = os.Create("./manage-devices/GetDeviceCertHistory_" + strconv.Itoa(scaleIndex) + ".csv")
+	var f4, _ = os.Create("./manage-devices/GetDeviceCertbyID_" + strconv.Itoa(scaleIndex) + ".csv")
 
-	devClient, err := client.LamassuDevClient()
+	devClient, err := client.LamassuDevClient(certPath, domain)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -98,7 +98,7 @@ func LatencyGetDeviceCertHistory(devClient lamassudevice.LamassuDevManagerClient
 		totalHistory = len(history)
 	}
 	media := (max + min) / 2
-	err := utils.WriteDataFile(string(totalHistory), max, min, media, f)
+	err := utils.WriteDataFile(strconv.Itoa(totalHistory), max, min, media, f)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -126,7 +126,7 @@ func LatencyGetDeviceLogs(devClient lamassudevice.LamassuDevManagerClient, id st
 		totalLogs = len(logs)
 	}
 	media := (max + min) / 2
-	err := utils.WriteDataFile(string(totalLogs), max, min, media, f)
+	err := utils.WriteDataFile(strconv.Itoa(totalLogs), max, min, media, f)
 	if err != nil {
 		fmt.Println(err)
 		return err
@@ -182,7 +182,7 @@ func LatencyGetDevices(devClient lamassudevice.LamassuDevManagerClient, f *os.Fi
 		devices = devs
 	}
 	media := (max + min) / 2
-	err := utils.WriteDataFile(string(totalDevices), max, min, media, f)
+	err := utils.WriteDataFile(strconv.Itoa(totalDevices), max, min, media, f)
 	if err != nil {
 		fmt.Println(err)
 		return []devdto.Device{}, err
