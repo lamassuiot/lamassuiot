@@ -148,142 +148,142 @@ jobs:
             lamassuiot/lamassu-cloud-proxy-dev:latest
           push: true
 
-  # create_dev_server_env:
-  #   name: Create DEV Server
-  #   needs:
-  #   - build_ca_dev_docker_image
-  #   - build_cloud_proxy_dev_docker_image
-  #   - build_device_manager_dev_docker_image
-  #   - build_dms_enroller_dev_docker_image
-  #   - build_ocsp_dev_docker_image
-  #   runs-on: ubuntu-latest
-  #   environment: release
-  #   permissions:
-  #     id-token: write
-  #   outputs:
-  #     server-ip: ${{ steps.get-server-ip.outputs.ip }}
-  #   steps:
-  #   - name: Checkout
-  #     uses: actions/checkout@v2
+  create_dev_server_env:
+    name: Create DEV Server
+    needs:
+    - build_ca_dev_docker_image
+    - build_cloud_proxy_dev_docker_image
+    - build_device_manager_dev_docker_image
+    - build_dms_enroller_dev_docker_image
+    - build_ocsp_dev_docker_image
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    outputs:
+      server-ip: ${{ steps.get-server-ip.outputs.ip }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
 
-  #   - name: Configure AWS credentials
-  #     uses: aws-actions/configure-aws-credentials@v1
-  #     with:
-  #       # role-to-assume: arn:aws:iam::345876576284:role/LamassuGHActions
-  #       # role-session-name: ghactionsrolesession
-  #       # role-skip-session-tagging: true
-  #       # role-duration-seconds: 3600 #1hour
-  #       aws-region: eu-west-1
-  #       aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  #       aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        # role-to-assume: arn:aws:iam::345876576284:role/LamassuGHActions
+        # role-session-name: ghactionsrolesession
+        # role-skip-session-tagging: true
+        # role-duration-seconds: 3600 #1hour
+        aws-region: eu-west-1
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-  #   - name: Install node
-  #     uses: actions/setup-node@v3
-  #     with:
-  #       node-version: 16.4.1
+    - name: Install node
+      uses: actions/setup-node@v3
+      with:
+        node-version: 16.4.1
     
-  #   - name: Install dependencies
-  #     working-directory: .github/infrastructure/tests/e2e
-  #     run: npm i &&  npm i -g cdk
+    - name: Install dependencies
+      working-directory: .github/infrastructure/tests/e2e
+      run: npm i &&  npm i -g cdk
 
-  #   - name: CDK synth
-  #     working-directory: .github/infrastructure/tests/e2e
-  #     run: cdk synth
+    - name: CDK synth
+      working-directory: .github/infrastructure/tests/e2e
+      run: cdk synth
 
-  #   - name: CDK deploy
-  #     working-directory: .github/infrastructure/tests/e2e
-  #     run: cdk deploy --require-approval never --json --outputs-file cdk-outputs.json
+    - name: CDK deploy
+      working-directory: .github/infrastructure/tests/e2e
+      run: cdk deploy --require-approval never --json --outputs-file cdk-outputs.json
 
-  #   - id: get-server-ip
-  #     name: Get EC2 IP
-  #     working-directory: .github/infrastructure/tests/e2e
-  #     run: |
-  #       sudo apt-get install -y jq
-  #       ip=`cat cdk-outputs.json | jq -r .LamassuGHActionsE2EStack.EC2Instanceoutput`
-  #       echo "::set-output name=ip::$ip"
+    - id: get-server-ip
+      name: Get EC2 IP
+      working-directory: .github/infrastructure/tests/e2e
+      run: |
+        sudo apt-get install -y jq
+        ip=`cat cdk-outputs.json | jq -r .LamassuGHActionsE2EStack.EC2Instanceoutput`
+        echo "::set-output name=ip::$ip"
 
-  # deploy_to_dev_server:
-  #   name: Deploy lamassu to DEV Server
-  #   runs-on: ubuntu-latest
-  #   environment: release
-  #   needs:
-  #   - create_dev_server_env
-  #   steps:
-  #   - run: sleep 60s
-  #   - name: Executing remote ssh commands
-  #     uses: appleboy/ssh-action@master
-  #     with:
-  #       host: ${{ needs.create_dev_server_env.outputs.server-ip }}
-  #       username: ${{ secrets.AWS_SSH_USERNAME }}
-  #       key: ${{ secrets.AWS_SSH_KEY }}
-  #       port: ${{ secrets.AWS_SSH_PORT }}
-  #       script: |
-  #         sudo apt-get install -y jq
-  #         git clone https://github.com/lamassuiot/lamassu-compose -b develop && cd lamassu-compose
+  deploy_to_dev_server:
+    name: Deploy lamassu to DEV Server
+    runs-on: ubuntu-latest
+    environment: release
+    needs:
+    - create_dev_server_env
+    steps:
+    - run: sleep 60s
+    - name: Executing remote ssh commands
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ needs.create_dev_server_env.outputs.server-ip }}
+        username: ${{ secrets.AWS_SSH_USERNAME }}
+        key: ${{ secrets.AWS_SSH_KEY }}
+        port: ${{ secrets.AWS_SSH_PORT }}
+        script: |
+          sudo apt-get install -y jq
+          git clone https://github.com/lamassuiot/lamassu-compose -b develop && cd lamassu-compose
 
-  #         export DB_USER=admin
-  #         export DB_PASSWORD=admin
-  #         export DOMAIN=dev.lamassu.io
+          export DB_USER=admin
+          export DB_PASSWORD=admin
+          export DOMAIN=dev.lamassu.io
 
-  #         export LAMASSU_GATEWAY_DOCKER_IMAGE=lamassuiot/lamassu-gateway:latest
-  #         export LAMASSU_UI_DOCKER_IMAGE=lamassuiot/lamassu-ui:latest
-  #         export LAMASSU_DB_DOCKER_IMAGE=lamassuiot/lamassu-db:latest
-  #         export LAMASSU_AUTH_DOCKER_IMAGE=lamassuiot/lamassu-auth:latest
-  #         export LAMASSU_CA_DOCKER_IMAGE=lamassuiot/lamassu-ca-dev:latest
-  #         export LAMASSU_DMS_ENROLLER_DOCKER_IMAGE=lamassuiot/lamassu-dms-enroller-dev:latest
-  #         export LAMASSU_DEVICE_MANAGER_DOCKER_IMAGE=lamassuiot/lamassu-device-manager-dev:latest
-  #         export LAMASSU_RABBITMQ_DOCKER_IMAGE=lamassuiot/lamassu-rabbitmq:latest
-  #         export LAMASSU_CLOUD_PROXY_DOCKER_IMAGE=lamassuiot/lamassu-cloud-proxy-dev:latest
-  #         export LAMASSU_OCSP_DOCKER_IMAGE=lamassuiot/lamassu-ocsp-dev:latest
+          export LAMASSU_GATEWAY_DOCKER_IMAGE=lamassuiot/lamassu-gateway:latest
+          export LAMASSU_UI_DOCKER_IMAGE=lamassuiot/lamassu-ui:latest
+          export LAMASSU_DB_DOCKER_IMAGE=lamassuiot/lamassu-db:latest
+          export LAMASSU_AUTH_DOCKER_IMAGE=lamassuiot/lamassu-auth:latest
+          export LAMASSU_CA_DOCKER_IMAGE=lamassuiot/lamassu-ca-dev:latest
+          export LAMASSU_DMS_ENROLLER_DOCKER_IMAGE=lamassuiot/lamassu-dms-enroller-dev:latest
+          export LAMASSU_DEVICE_MANAGER_DOCKER_IMAGE=lamassuiot/lamassu-device-manager-dev:latest
+          export LAMASSU_RABBITMQ_DOCKER_IMAGE=lamassuiot/lamassu-rabbitmq:latest
+          export LAMASSU_CLOUD_PROXY_DOCKER_IMAGE=lamassuiot/lamassu-cloud-proxy-dev:latest
+          export LAMASSU_OCSP_DOCKER_IMAGE=lamassuiot/lamassu-ocsp-dev:latest
 
-  #         mv .env .env.tmp 
-  #         cat .env.tmp | envsubst > .env
+          mv .env .env.tmp 
+          cat .env.tmp | envsubst > .env
 
-  #         sudo tee -a /etc/hosts > /dev/null <<EOT
-  #         127.0.0.1  ${DOMAIN}
-  #         127.0.0.1  vault.${DOMAIN}
-  #         127.0.0.1  auth.${DOMAIN}
-  #         127.0.0.1  tracing.${DOMAIN}
-  #         127.0.0.1  consul.${DOMAIN}
-  #         EOT
+          sudo tee -a /etc/hosts > /dev/null <<EOT
+          127.0.0.1  ${DOMAIN}
+          127.0.0.1  vault.${DOMAIN}
+          127.0.0.1  auth.${DOMAIN}
+          127.0.0.1  tracing.${DOMAIN}
+          127.0.0.1  consul.${DOMAIN}
+          EOT
 
-  #         bash install.sh
+          bash install.sh
 
-  # integration_test:
-  #   name: Integration test
-  #   runs-on: ubuntu-latest
-  #   environment: release
-  #   needs:
-  #   - deploy_to_dev_server
-  #   - create_dev_server_env
-  #   steps:
-  #   - name: Run integration tests
-  #     uses: appleboy/ssh-action@master
-  #     with:
-  #       host: ${{ needs.create_dev_server_env.outputs.server-ip }}
-  #       username: ${{ secrets.AWS_SSH_USERNAME }}
-  #       key: ${{ secrets.AWS_SSH_KEY }}
-  #       port: ${{ secrets.AWS_SSH_PORT }}
-  #       script: |
-  #         git clone https://github.com/lamassuiot/lamassuiot -b release
+  integration_test:
+    name: Integration test
+    runs-on: ubuntu-latest
+    environment: release
+    needs:
+    - deploy_to_dev_server
+    - create_dev_server_env
+    steps:
+    - name: Run integration tests
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ needs.create_dev_server_env.outputs.server-ip }}
+        username: ${{ secrets.AWS_SSH_USERNAME }}
+        key: ${{ secrets.AWS_SSH_KEY }}
+        port: ${{ secrets.AWS_SSH_PORT }}
+        script: |
+          git clone https://github.com/lamassuiot/lamassuiot -b release
 
-  # ocsp_test:
-  #   name: OCSP test
-  #   runs-on: ubuntu-latest
-  #   needs:
-  #   - deploy_to_dev_server
-  #   steps:
-  #   - name: Get IP
-  #     run: echo ${{ needs.create_dev_server_env.outputs.server-ip }}
+  ocsp_test:
+    name: OCSP test
+    runs-on: ubuntu-latest
+    needs:
+    - deploy_to_dev_server
+    steps:
+    - name: Get IP
+      run: echo ${{ needs.create_dev_server_env.outputs.server-ip }}
 
-  # est_test:
-  #   name: EST test
-  #   runs-on: ubuntu-latest
-  #   needs:
-  #   - deploy_to_dev_server
-  #   steps:
-  #   - name: Checkout
-  #     uses: actions/checkout@v2
+  est_test:
+    name: EST test
+    runs-on: ubuntu-latest
+    needs:
+    - deploy_to_dev_server
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
   
   # tear_down_test_infra:
   #   name: Tear down DEV server
