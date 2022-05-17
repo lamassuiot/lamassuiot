@@ -40,7 +40,7 @@ func ManageCerts(caName string, scaleIndex int, certPath string, domain string) 
 		return err
 	}
 
-	err = LatencyGetCACerts(devClient, caName, f1)
+	err = LatencyGetCACerts(devClient, caName, f1, certPath, domain)
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return err
@@ -55,14 +55,14 @@ func ManageCerts(caName string, scaleIndex int, certPath string, domain string) 
 	return nil
 }
 
-func LatencyGetCACerts(devClient lamassudevice.LamassuDevManagerClient, caName string, f *os.File) error {
+func LatencyGetCACerts(devClient lamassudevice.LamassuDevManagerClient, caName string, f *os.File, certPath string, domain string) error {
 	var max, min float64
 	max = 0
 	min = 12
 	var totalCerts int
 	for k := 0; k < 10; k++ {
 		before := time.Now().UnixNano()
-		certs, err := devClient.CACerts(context.Background(), caName, dmsCert, dmsKey, "/home/ikerlan/lamassu-compose-v2/tls-certificates/upstream/lamassu-device-manager/tls.crt", "dev-lamassu.zpd.ikerlan.es/api/devmanager")
+		certs, err := devClient.CACerts(context.Background(), caName, dmsCert, dmsKey, certPath, domain+"/api/devmanager")
 		if err != nil {
 			fmt.Println(err)
 			return err

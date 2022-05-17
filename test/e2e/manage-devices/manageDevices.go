@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	lamassudevice "github.com/lamassuiot/lamassuiot/pkg/device-manager/client"
+	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
 	devdto "github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
 	"github.com/lamassuiot/lamassuiot/test/e2e/utils"
 	client "github.com/lamassuiot/lamassuiot/test/e2e/utils/clients"
@@ -176,9 +177,15 @@ func LatencyGetDevices(devClient lamassudevice.LamassuDevManagerClient, f *os.Fi
 	min = 12
 	var totalDevices int
 	var devices []devdto.Device
+	devices, _, err := devClient.GetDevices(context.Background(), devdto.QueryParameters{Filter: "", Order: devdto.OrderOptions{Order: "DESC", Field: "id"}, Pagination: devdto.PaginationOptions{Page: 1, Offset: 15}})
+	if err != nil {
+		fmt.Println(err)
+		return []devdto.Device{}, err
+	}
+	queryparams := RandomQueryParam(devices[0])
 	for k := 0; k < 10; k++ {
 		before := time.Now().UnixNano()
-		devs, total, err := devClient.GetDevices(context.Background(), devdto.QueryParameters{Filter: "", Order: devdto.OrderOptions{Order: "DESC", Field: "id"}, Pagination: devdto.PaginationOptions{Page: 1, Offset: 50}})
+		devs, total, err := devClient.GetDevices(context.Background(), queryparams)
 		if err != nil {
 			fmt.Println(err)
 			return []devdto.Device{}, err
@@ -191,7 +198,7 @@ func LatencyGetDevices(devClient lamassudevice.LamassuDevManagerClient, f *os.Fi
 		devices = devs
 	}
 	media := (max + min) / 2
-	err := utils.WriteDataFile(strconv.Itoa(totalDevices), max, min, media, f)
+	err = utils.WriteDataFile(strconv.Itoa(totalDevices), max, min, media, f)
 	if err != nil {
 		fmt.Println(err)
 		return []devdto.Device{}, err
@@ -199,13 +206,29 @@ func LatencyGetDevices(devClient lamassudevice.LamassuDevManagerClient, f *os.Fi
 
 	return devices, nil
 }
-func RandomQueryParam() devdto.QueryParameters {
+func RandomQueryParam(device dto.Device) devdto.QueryParameters {
 	orders := []string{"ASC", "DESC"}
 	randomIndex := rand.Intn(len(orders))
 	order := orders[randomIndex]
 	fields := []string{"id", "alias", "status", "creation_ts", "key_strength", "tags", "dms_id"}
 	randomIndex = rand.Intn(len(fields))
 	field := fields[randomIndex]
-
-	return devdto.QueryParameters{Filter: "", Order: devdto.OrderOptions{Order: order, Field: field}, Pagination: devdto.PaginationOptions{Page: 1, Offset: 50}}
+	var filt string
+	switch field {
+	case "id":
+		filt = device.Id
+	case "alias":
+		filt = device.Alias
+	case "status":
+		filt = device.Status
+	case "creation_ts":
+		filt = device.CreationTimestamp
+	case "key_strength":
+		filt = device.KeyMetadata.KeyStrength
+	case "tags":
+		filt = device.Tags[0]
+	case "dms_id":
+		filt = device.DmsId
+	}
+	return devdto.QueryParameters{Filter: "(" + field + "," + filt + ")", Order: devdto.OrderOptions{Order: order, Field: field}, Pagination: devdto.PaginationOptions{Page: 1, Offset: 50}}
 }

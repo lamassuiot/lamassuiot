@@ -63,7 +63,7 @@ func IndustrialEnvironment(caName string, deviceNumber int, reenroll int, certPa
 	block, _ := pem.Decode([]byte(cert1))
 	utils.InsertCert(dmsCert, block.Bytes)
 
-	dev, err := CreateDevices(devClient, deviceNumber, caName, dms.Id, reenroll)
+	dev, err := CreateDevices(devClient, deviceNumber, caName, dms.Id, reenroll, certPath, domain)
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return "", err
@@ -77,7 +77,7 @@ func IndustrialEnvironment(caName string, deviceNumber int, reenroll int, certPa
 	return dms.Id, nil
 }
 
-func CreateDevices(devClient lamassudevice.LamassuDevManagerClient, deviceNumber int, caName string, dmsId string, reenroll int) (dto.Device, error) {
+func CreateDevices(devClient lamassudevice.LamassuDevManagerClient, deviceNumber int, caName string, dmsId string, reenroll int, certPath string, domain string) (dto.Device, error) {
 	var dev dto.Device
 	for i := 0; i < deviceNumber; i++ {
 		dev, err := devClient.CreateDevice(context.Background(), "test-dev", goid.NewV4UUID().String(), dmsId, "descripcion", []string{}, "", "")
@@ -95,7 +95,7 @@ func CreateDevices(devClient lamassudevice.LamassuDevManagerClient, deviceNumber
 			fmt.Println(err)
 			return dto.Device{}, err
 		}
-		crt, err := devClient.Enroll(context.Background(), csr, caName, dmsCert, dmsKey, "/home/ikerlan/lamassu-compose-v2/tls-certificates/upstream/lamassu-device-manager/tls.crt", "dev-lamassu.zpd.ikerlan.es/api/devmanager")
+		crt, err := devClient.Enroll(context.Background(), csr, caName, dmsCert, dmsKey, certPath, domain+"/api/devmanager")
 		if err != nil {
 			fmt.Println(err)
 			return dto.Device{}, err
@@ -103,7 +103,7 @@ func CreateDevices(devClient lamassudevice.LamassuDevManagerClient, deviceNumber
 		utils.InsertCert(deviceCert, crt.Cert.Raw)
 		utils.InsertKey(deviceKey, Devicekey)
 		for j := 0; j < reenroll; j++ {
-			reenrollCert, err := devClient.Reenroll(context.Background(), csr, caName, deviceCert, deviceKey, "/home/ikerlan/lamassu-compose-v2/tls-certificates/upstream/lamassu-device-manager/tls.crt", "dev-lamassu.zpd.ikerlan.es/api/devmanager")
+			reenrollCert, err := devClient.Reenroll(context.Background(), csr, caName, deviceCert, deviceKey, certPath, domain+"/api/devmanager")
 			if err != nil {
 				fmt.Println(err)
 				return dto.Device{}, err
@@ -115,7 +115,7 @@ func CreateDevices(devClient lamassudevice.LamassuDevManagerClient, deviceNumber
 			fmt.Println(err)
 			return dto.Device{}, err
 		}
-		serverKeyGen, err := devClient.ServerKeyGen(context.Background(), csr, caName, dmsCert, dmsKey, "/home/ikerlan/lamassu-compose-v2/tls-certificates/upstream/lamassu-device-manager/tls.crt", "dev-lamassu.zpd.ikerlan.es/api/devmanager")
+		serverKeyGen, err := devClient.ServerKeyGen(context.Background(), csr, caName, dmsCert, dmsKey, certPath, domain+"/api/devmanager")
 		if err != nil {
 			fmt.Println(err)
 			return dto.Device{}, err
