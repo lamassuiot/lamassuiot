@@ -187,7 +187,7 @@ func main() {
 				}
 				tlsConfig := &tls.Config{
 					ClientCAs:  mTlsCertPool,
-					ClientAuth: tls.RequireAndVerifyClientCert,
+					ClientAuth: tls.RequireAnyClientCert,
 				}
 
 				tlsConfig.BuildNameToCertificate()
@@ -220,7 +220,6 @@ func main() {
 
 func accessControl(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
 		w.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")

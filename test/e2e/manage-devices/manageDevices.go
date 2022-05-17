@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"os"
 	"strconv"
 	"time"
@@ -197,4 +198,14 @@ func LatencyGetDevices(devClient lamassudevice.LamassuDevManagerClient, f *os.Fi
 	}
 
 	return devices, nil
+}
+func RandomQueryParam() devdto.QueryParameters {
+	orders := []string{"ASC", "DESC"}
+	randomIndex := rand.Intn(len(orders))
+	order := orders[randomIndex]
+	fields := []string{"id", "alias", "status", "creation_ts", "key_strength", "tags", "dms_id"}
+	randomIndex = rand.Intn(len(fields))
+	field := fields[randomIndex]
+
+	return devdto.QueryParameters{Filter: "", Order: devdto.OrderOptions{Order: order, Field: field}, Pagination: devdto.PaginationOptions{Page: 1, Offset: 50}}
 }

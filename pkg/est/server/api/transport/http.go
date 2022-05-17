@@ -3,7 +3,9 @@ package transport
 import (
 	"context"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -149,11 +151,15 @@ func DecodeEnrollRequest(ctx context.Context, r *http.Request) (request interfac
 		return nil, err
 	}
 
-	b, _ := pem.Decode(data)
-
-	csr, err := x509.ParseCertificateRequest(b.Bytes)
+	dec := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
+	n, err := base64.StdEncoding.Decode(dec, data)
 	if err != nil {
-		return nil, ErrMalformedCert()
+		return nil, err
+	}
+
+	csr, err := x509.ParseCertificateRequest(dec[:n])
+	if err != nil {
+		return nil, err
 	}
 
 	ClientCert := r.Header.Get("X-Forwarded-Client-Cert")
@@ -180,7 +186,7 @@ func DecodeEnrollRequest(ctx context.Context, r *http.Request) (request interfac
 
 	} else if len(r.TLS.PeerCertificates) != 0 {
 		cert := r.TLS.PeerCertificates[0]
-
+		fmt.Printf("cert.Subject.CommonName: %v\n", cert.Subject.CommonName)
 		req := endpoint.EnrollRequest{
 			Csr: csr,
 			Crt: cert,
@@ -204,11 +210,12 @@ func DecodeReenrollRequest(ctx context.Context, r *http.Request) (request interf
 		return nil, err
 	}
 
-	decodedCsr, err := utils.DecodeB64(string(data))
+	dec := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
+	n, err := base64.StdEncoding.Decode(dec, data)
 	if err != nil {
-		return nil, ErrInvalidBase64()
+		return nil, err
 	}
-	csr, err := x509.ParseCertificateRequest([]byte(decodedCsr))
+	csr, err := x509.ParseCertificateRequest(dec[:n])
 	if err != nil {
 		return nil, ErrMalformedCert()
 	}
@@ -268,11 +275,12 @@ func DecodeServerkeygenRequest(ctx context.Context, r *http.Request) (request in
 		return nil, err
 	}
 
-	decodedCsr, err := utils.DecodeB64(string(data))
+	dec := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
+	n, err := base64.StdEncoding.Decode(dec, data)
 	if err != nil {
-		return nil, ErrInvalidBase64()
+		return nil, err
 	}
-	csr, err := x509.ParseCertificateRequest([]byte(decodedCsr))
+	csr, err := x509.ParseCertificateRequest(dec[:n])
 	if err != nil {
 		return nil, ErrMalformedCert()
 	}

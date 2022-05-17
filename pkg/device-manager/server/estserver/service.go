@@ -109,7 +109,6 @@ func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, a
 		if err != nil {
 			return nil, nil, err
 		}
-
 	}
 	device, _ = s.devicesDb.SelectDeviceById(ctx, deviceId)
 	if device.Status == devicesModel.DeviceDecommisioned.String() {
@@ -142,13 +141,14 @@ func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, a
 	}
 	PrivateKeyMetadataWithStregth.KeyStrength = getKeyStrength(PrivateKeyMetadataWithStregth.KeyType, PrivateKeyMetadataWithStregth.KeyBits)
 	level.Debug(s.logger).Log("msg", PrivateKeyMetadataWithStregth)
+
 	subject := dto.Subject{
 		CN: csr.Subject.CommonName,
-		O:  csr.Subject.Organization[0],
-		OU: csr.Subject.OrganizationalUnit[0],
-		C:  csr.Subject.Country[0],
-		ST: csr.Subject.Province[0],
-		L:  csr.Subject.Locality[0],
+		O:  checkIfNull(csr.Subject.Organization),
+		OU: checkIfNull(csr.Subject.OrganizationalUnit),
+		C:  checkIfNull(csr.Subject.Country),
+		ST: checkIfNull(csr.Subject.Province),
+		L:  checkIfNull(csr.Subject.Locality),
 	}
 	err = s.devicesDb.SetKeyAndSubject(ctx, PrivateKeyMetadataWithStregth, subject, subject.CN)
 	if err != nil {
@@ -374,4 +374,12 @@ func (s *EstService) verifyCaName(ctx context.Context, caname string, dmsDB dmsS
 		}
 	}
 	return "", nil
+}
+
+func checkIfNull(field []string) string {
+	var result = ""
+	if field != nil {
+		result = field[0]
+	}
+	return result
 }
