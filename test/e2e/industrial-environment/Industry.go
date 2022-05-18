@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	"github.com/go-kit/log"
@@ -48,11 +47,9 @@ func IndustrialEnvironment(caName string, deviceNumber int, reenroll int, certPa
 		return "", err
 	}
 	Privkey, _ := base64.StdEncoding.DecodeString(key)
-	err = ioutil.WriteFile(dmsKey, Privkey, 0644)
-	if err != nil {
-		level.Error(logger).Log("err", err)
-		return "", err
-	}
+	f, _ := os.Create(dmsKey)
+	f.Write(Privkey)
+	f.Close()
 
 	dms, err = dmsClient.UpdateDMSStatus(context.Background(), "APPROVED", dms.Id, []string{caName})
 	if err != nil {

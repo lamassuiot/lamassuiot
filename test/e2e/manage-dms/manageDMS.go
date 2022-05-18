@@ -82,7 +82,11 @@ func ManageDMSs(dmsNumber int, dmsid string, caName string, scaleIndex int, cert
 		level.Error(logger).Log("err", err)
 		return err
 	}
-
+	f.Close()
+	f1.Close()
+	f2.Close()
+	f3.Close()
+	f4.Close()
 	return nil
 }
 

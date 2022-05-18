@@ -86,7 +86,7 @@ func ManageCAs(caNumber int, scaleIndex int, certPath string, domain string) (ca
 		level.Error(logger).Log("err", err)
 		return caDTO.Cert{}, err
 	}
-
+	f.Close()
 	return ca, nil
 }
 

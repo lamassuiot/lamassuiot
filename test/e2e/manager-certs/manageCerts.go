@@ -51,7 +51,8 @@ func ManageCerts(caName string, scaleIndex int, certPath string, domain string) 
 		level.Error(logger).Log("err", err)
 		return err
 	}
-
+	f.Close()
+	f1.Close()
 	return nil
 }
 

@@ -10,7 +10,6 @@ import (
 	"encoding/csv"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"os"
 )
 
@@ -90,13 +89,17 @@ func StringToCSR(s string) (*x509.CertificateRequest, error) {
 	return c, err
 }
 func InsertCert(path string, data []byte) {
+	f, _ := os.Create(path)
 	b := pem.Block{Type: "CERTIFICATE", Bytes: data}
 	certPEM := pem.EncodeToMemory(&b)
-	ioutil.WriteFile(path, certPEM, 0777)
+	f.Write(certPEM)
+	f.Close()
 }
 
 func InsertKey(path string, data []byte) {
+	f, _ := os.Create(path)
 	b := pem.Block{Type: "PRIVATE KEY", Bytes: data}
 	keyPEM := pem.EncodeToMemory(&b)
-	ioutil.WriteFile(path, keyPEM, 0777)
+	f.Write(keyPEM)
+	f.Close()
 }
