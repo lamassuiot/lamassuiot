@@ -321,13 +321,13 @@ func (c *LamassuDeviceManagerClientConfig) Enroll(ctx context.Context, csr *x509
 	if err != nil {
 		return dto.Enroll{}, err
 	}
-	crt, cacrt, err := estClient.Enroll(ctx, aps, csr)
+	crt, err := estClient.Enroll(ctx, aps, csr)
 	if err != nil {
 		return dto.Enroll{}, err
 	}
 	var enroll dto.Enroll
 	enroll.Cert = crt
-	enroll.CaCert = cacrt
+	//enroll.CaCert = cacrt
 	return enroll, nil
 }
 func (c *LamassuDeviceManagerClientConfig) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string, clientCert *x509.Certificate, clientKey []byte, serverCert *x509.CertPool, estServerAddr string) (dto.Enroll, error) {
@@ -335,13 +335,13 @@ func (c *LamassuDeviceManagerClientConfig) Reenroll(ctx context.Context, csr *x5
 	if err != nil {
 		return dto.Enroll{}, err
 	}
-	crt, cacrt, err := estClient.Reenroll(ctx, csr)
+	crt, err := estClient.Reenroll(ctx, csr)
 	if err != nil {
 		return dto.Enroll{}, err
 	}
 	var reenroll dto.Enroll
 	reenroll.Cert = crt
-	reenroll.CaCert = cacrt
+	//reenroll.CaCert = cacrt
 	return reenroll, nil
 }
 func (c *LamassuDeviceManagerClientConfig) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string, clientCert *x509.Certificate, clientKey []byte, serverCert *x509.CertPool, estServerAddr string) (dto.ServerKeyGen, error) {
@@ -349,13 +349,13 @@ func (c *LamassuDeviceManagerClientConfig) ServerKeyGen(ctx context.Context, csr
 	if err != nil {
 		return dto.ServerKeyGen{}, err
 	}
-	crt, key, cacrt, err := estClient.ServerKeyGen(ctx, aps, csr)
+	crt, key, err := estClient.ServerKeyGen(ctx, aps, csr)
 	if err != nil {
 		return dto.ServerKeyGen{}, err
 	}
 	var serverkeygen dto.ServerKeyGen
 	serverkeygen.Cert = crt
-	serverkeygen.CaCert = cacrt
+	//serverkeygen.CaCert = cacrt
 	serverkeygen.Key = key
 	return serverkeygen, nil
 }

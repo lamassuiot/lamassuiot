@@ -22,6 +22,7 @@ type Utils interface {
 	VerifyPeerCertificate(ctx context.Context, cert *x509.Certificate, enroll bool, certCA *x509.Certificate) (string, error)
 	GetCertsCAType(ctx context.Context, enroll bool) ([]*x509.Certificate, []caDTO.Cert, error)
 	GenerateCSR(csr *x509.CertificateRequest, key interface{}) (*x509.CertificateRequest, error)
+	CheckIfNull(field []string) string
 	InsertNth(s string, n int) string
 	ToHexInt(n *big.Int) string
 }
@@ -115,11 +116,11 @@ func (u *UtilsService) GetCertsCAType(ctx context.Context, enroll bool) ([]*x509
 func (u *UtilsService) GenerateCSR(csr *x509.CertificateRequest, key interface{}) (*x509.CertificateRequest, error) {
 
 	subj := pkix.Name{
-		Country:            []string{csr.Subject.Country[0]},
-		Province:           []string{csr.Subject.Province[0]},
-		Organization:       []string{csr.Subject.Organization[0]},
-		OrganizationalUnit: []string{csr.Subject.OrganizationalUnit[0]},
-		Locality:           []string{csr.Subject.Locality[0]},
+		Country:            []string{u.CheckIfNull(csr.Subject.Country)},
+		Province:           []string{u.CheckIfNull(csr.Subject.Country)},
+		Organization:       []string{u.CheckIfNull(csr.Subject.Country)},
+		OrganizationalUnit: []string{u.CheckIfNull(csr.Subject.Country)},
+		Locality:           []string{u.CheckIfNull(csr.Subject.Country)},
 		CommonName:         csr.Subject.CommonName,
 	}
 	rawSubject := subj.ToRDNSequence()
@@ -159,4 +160,12 @@ func (u *UtilsService) InsertNth(s string, n int) string {
 		}
 	}
 	return buffer.String()
+}
+
+func (u *UtilsService) CheckIfNull(field []string) string {
+	var result = ""
+	if field != nil {
+		result = field[0]
+	}
+	return result
 }

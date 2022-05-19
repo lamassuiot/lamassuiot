@@ -53,9 +53,9 @@ func NewEstService(lamassuCaClient *lamassuca.LamassuCaClient, verifyUtils *util
 type EstServiceI interface {
 	Health(ctx context.Context) bool
 	CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error)
-	Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string, cert *x509.Certificate) (*x509.Certificate, *x509.Certificate, error)
-	Reenroll(ctx context.Context, cert *x509.Certificate, csr *x509.CertificateRequest, aps string) (*x509.Certificate, *x509.Certificate, error)
-	ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string, cert *x509.Certificate) (*x509.Certificate, []byte, *x509.Certificate, error)
+	Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string, cert *x509.Certificate) (*x509.Certificate, error)
+	Reenroll(ctx context.Context, cert *x509.Certificate, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error)
+	ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string, cert *x509.Certificate) (*x509.Certificate, []byte, error)
 }
 
 func (s *EstService) Health(ctx context.Context) bool {
@@ -84,7 +84,7 @@ func (s *EstService) CACerts(ctx context.Context, aps string) ([]*x509.Certifica
 	return x509Certificates, nil
 }
 
-func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string, clientCertificate *x509.Certificate) (*x509.Certificate, *x509.Certificate, error) {
+func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string, clientCertificate *x509.Certificate) (*x509.Certificate, error) {
 	var PrivateKeyMetadataWithStregth dto.PrivateKeyMetadataWithStregth
 	var dmsDB dmsStore.DB
 	deviceId := csr.Subject.CommonName
@@ -92,7 +92,7 @@ func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, a
 	fmt.Println(sn)
 	dmsId, err := s.dmsDb.SelectBySerialNumber(ctx, sn)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	aps, err = s.verifyCaName(ctx, aps, dmsDB, dmsId)
 	if aps == "" {
@@ -101,31 +101,31 @@ func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, a
 			ResourceType: "CA Name",
 			ResourceId:   dmsId,
 		}
-		return &x509.Certificate{}, nil, &authError
+		return &x509.Certificate{}, &authError
 	}
 	device, err := s.devicesDb.SelectDeviceById(ctx, deviceId)
 	if err != nil {
 		err = s.devicesDb.InsertDevice(ctx, csr.Subject.CommonName, csr.Subject.CommonName, dmsId, "", []string{}, "Cg/CgSmartphoneChip", "#0068D1")
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 	device, _ = s.devicesDb.SelectDeviceById(ctx, deviceId)
 	if device.Status == devicesModel.DeviceDecommisioned.String() {
-		return nil, nil, errors.New("cant issue a certificate for a decommisioned device")
+		return nil, errors.New("cant issue a certificate for a decommisioned device")
 	}
 
 	if device.Status == devicesModel.DeviceProvisioned.String() {
-		return nil, nil, errors.New("The device (" + deviceId + ") already has a valid certificate")
+		return nil, errors.New("The device (" + deviceId + ") already has a valid certificate")
 	}
 	caType, err := caDTO.ParseCAType("pki")
-	dataCert, caCert, err := s.lamassuCaClient.SignCertificateRequest(ctx, caType, aps, csr, true)
+	dataCert, _, err := s.lamassuCaClient.SignCertificateRequest(ctx, caType, aps, csr, true)
 	if err != nil {
 		level.Debug(s.logger).Log("err", err, "msg", "Error in client request")
 		valError := esterror.ValidationError{
 			Msg: err.Error(),
 		}
-		return &x509.Certificate{}, nil, &valError
+		return nil, &valError
 	}
 	deviceId = dataCert.Subject.CommonName
 	level.Debug(s.logger).Log("msg", csr.PublicKeyAlgorithm.String())
@@ -144,15 +144,15 @@ func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, a
 
 	subject := dto.Subject{
 		CN: csr.Subject.CommonName,
-		O:  checkIfNull(csr.Subject.Organization),
-		OU: checkIfNull(csr.Subject.OrganizationalUnit),
-		C:  checkIfNull(csr.Subject.Country),
-		ST: checkIfNull(csr.Subject.Province),
-		L:  checkIfNull(csr.Subject.Locality),
+		O:  s.verifyUtils.CheckIfNull(csr.Subject.Organization),
+		OU: s.verifyUtils.CheckIfNull(csr.Subject.OrganizationalUnit),
+		C:  s.verifyUtils.CheckIfNull(csr.Subject.Country),
+		ST: s.verifyUtils.CheckIfNull(csr.Subject.Province),
+		L:  s.verifyUtils.CheckIfNull(csr.Subject.Locality),
 	}
 	err = s.devicesDb.SetKeyAndSubject(ctx, PrivateKeyMetadataWithStregth, subject, subject.CN)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	serialNumber := s.verifyUtils.InsertNth(s.verifyUtils.ToHexInt(dataCert.SerialNumber), 2)
 	log := dto.DeviceLog{
@@ -163,7 +163,7 @@ func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, a
 
 	err = s.devicesDb.InsertLog(ctx, log)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	certHistory := dto.DeviceCertHistory{
@@ -174,60 +174,60 @@ func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, a
 	}
 	err = s.devicesDb.InsertDeviceCertHistory(ctx, certHistory)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	err = s.devicesDb.UpdateDeviceStatusByID(ctx, deviceId, devicesModel.DeviceProvisioned.String())
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	err = s.devicesDb.UpdateDeviceCertificateSerialNumberByID(ctx, deviceId, serialNumber)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	level.Info(s.logger).Log("msg", "Certificate sent ENROLL method")
-	return dataCert, caCert, nil
+	return dataCert, nil
 }
 
-func (s *EstService) Reenroll(ctx context.Context, cert *x509.Certificate, csr *x509.CertificateRequest, aps string) (*x509.Certificate, *x509.Certificate, error) {
+func (s *EstService) Reenroll(ctx context.Context, cert *x509.Certificate, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	aps, err := s.verifyUtils.VerifyPeerCertificate(ctx, cert, false, nil)
 
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Compare Subject fields
 	if !reflect.DeepEqual(cert.Subject, csr.Subject) {
-		return nil, nil, err
+		return nil, err
 	}
 
 	deviceId := csr.Subject.CommonName
 	device, err := s.devicesDb.SelectDeviceById(ctx, deviceId)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if device.Status != devicesModel.DeviceProvisioned.String() {
 		err := "Cant reenroll a device with status: " + device.Status
-		return nil, nil, errors.New(err)
+		return nil, errors.New(err)
 	}
 	currentCertHistory, err := s.devicesDb.SelectDeviceCertHistoryBySerialNumber(ctx, device.CurrentCertificate.SerialNumber)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	caType, err := caDTO.ParseCAType("pki")
 	deviceCert, err := s.lamassuCaClient.GetCert(ctx, caType, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
 
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	certExpirationTime, err := time.Parse("2006-01-02 15:04:05 -0700 MST", deviceCert.ValidTo)
 	if err != nil {
 		errMsg := "Could not parse the device's cert expiration time"
 		level.Debug(s.logger).Log("err", err, "msg", errMsg)
-		return nil, nil, err
+		return nil, err
 	}
 	/*fmt.Println(certExpirationTime.Date())
 	fmt.Println(time.Now().Add(time.Hour * 24 * time.Duration(s.minReenrollDays)))*/
@@ -235,7 +235,7 @@ func (s *EstService) Reenroll(ctx context.Context, cert *x509.Certificate, csr *
 
 	} else {
 		msg := "Cant reenroll a provisioned device before " + strconv.Itoa(s.minReenrollDays) + " days of its expiration time"
-		return nil, nil, errors.New(msg)
+		return nil, errors.New(msg)
 	}
 
 	serialNumberToRevoke := currentCertHistory.SerialNumber
@@ -244,7 +244,7 @@ func (s *EstService) Reenroll(ctx context.Context, cert *x509.Certificate, csr *
 	if err != nil {
 		errMsg := "An error ocurred while revoking the current device's cert"
 		level.Error(s.logger).Log("err", err, "msg", errMsg)
-		return nil, nil, err
+		return nil, err
 	}
 	/*err = s.devicesDb.UpdateDeviceCertHistory(ctx, deviceId, device.CurrentCertificate.SerialNumber, dto.CertHistoryRevoked)
 	if err != nil {
@@ -253,21 +253,21 @@ func (s *EstService) Reenroll(ctx context.Context, cert *x509.Certificate, csr *
 
 	err = s.devicesDb.UpdateDeviceStatusByID(ctx, deviceId, devicesModel.DeviceCertRevoked.String())
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	err = s.devicesDb.UpdateDeviceCertificateSerialNumberByID(ctx, deviceId, "")
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	dataCert, caCert, err := s.lamassuCaClient.SignCertificateRequest(ctx, caType, aps, csr, true)
+	dataCert, _, err := s.lamassuCaClient.SignCertificateRequest(ctx, caType, aps, csr, true)
 	if err != nil {
 		level.Debug(s.logger).Log("err", err, "msg", "Error in client request")
 		valError := esterror.ValidationError{
 			Msg: err.Error(),
 		}
-		return &x509.Certificate{}, nil, &valError
+		return nil, &valError
 	}
 
 	deviceId = dataCert.Subject.CommonName
@@ -280,7 +280,7 @@ func (s *EstService) Reenroll(ctx context.Context, cert *x509.Certificate, csr *
 
 	err = s.devicesDb.InsertLog(ctx, log)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	certHistory := dto.DeviceCertHistory{
@@ -291,39 +291,39 @@ func (s *EstService) Reenroll(ctx context.Context, cert *x509.Certificate, csr *
 	}
 	err = s.devicesDb.InsertDeviceCertHistory(ctx, certHistory)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	err = s.devicesDb.UpdateDeviceStatusByID(ctx, deviceId, devicesModel.DeviceProvisioned.String())
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	err = s.devicesDb.UpdateDeviceCertificateSerialNumberByID(ctx, deviceId, serialNumber)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return dataCert, caCert, nil
+	return dataCert, nil
 }
-func (s *EstService) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string, cert *x509.Certificate) (*x509.Certificate, []byte, *x509.Certificate, error) {
+func (s *EstService) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string, cert *x509.Certificate) (*x509.Certificate, []byte, error) {
 	csrkey, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	privkey, err := x509.MarshalPKCS8PrivateKey(csrkey)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	csr, err = s.verifyUtils.GenerateCSR(csr, csrkey)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	crt, cacrt, err := s.Enroll(ctx, csr, aps, cert)
+	crt, err := s.Enroll(ctx, csr, aps, cert)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	return crt, privkey, cacrt, nil
+	return crt, privkey, nil
 }
 func getKeyStrength(keyType string, keyBits int) string {
 	var keyStrength string = "unknown"
@@ -374,12 +374,4 @@ func (s *EstService) verifyCaName(ctx context.Context, caname string, dmsDB dmsS
 		}
 	}
 	return "", nil
-}
-
-func checkIfNull(field []string) string {
-	var result = ""
-	if field != nil {
-		result = field[0]
-	}
-	return result
 }

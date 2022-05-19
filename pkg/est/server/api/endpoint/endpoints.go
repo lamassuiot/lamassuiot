@@ -82,8 +82,8 @@ func MakeEnrollEndpoint(s service.Service) endpoint.Endpoint {
 			}
 			return nil, &valError
 		}
-		crt, cacrt, err := s.Enroll(ctx, req.Csr, req.Aps, req.Crt)
-		return EnrollReenrollResponse{Cert: crt, CaCert: cacrt}, err
+		crt, err := s.Enroll(ctx, req.Csr, req.Aps, req.Crt)
+		return EnrollReenrollResponse{Cert: crt}, err
 	}
 }
 
@@ -97,8 +97,8 @@ func MakeReenrollEndpoint(s service.Service) endpoint.Endpoint {
 			}
 			return nil, &valError
 		}
-		crt, cacrt, err := s.Reenroll(ctx, req.Crt, req.Csr, "")
-		return EnrollReenrollResponse{Cert: crt, CaCert: cacrt}, err
+		crt, err := s.Reenroll(ctx, req.Crt, req.Csr, "")
+		return EnrollReenrollResponse{Cert: crt}, err
 	}
 }
 
@@ -112,8 +112,8 @@ func MakeServerKeyGenEndpoint(s service.Service) endpoint.Endpoint {
 			}
 			return nil, &valError
 		}
-		crt, key, cacrt, err := s.ServerKeyGen(ctx, req.Csr, req.Aps, req.Crt)
-		return ServerKeyGenResponse{Cert: crt, Key: key, CaCert: cacrt}, err
+		crt, key, err := s.ServerKeyGen(ctx, req.Csr, req.Aps, req.Crt)
+		return ServerKeyGenResponse{Cert: crt, Key: key}, err
 	}
 }
 

@@ -196,7 +196,7 @@ func TestReenroll(t *testing.T) {
 				ctx = context.WithValue(ctx, "DBDecommisioned", false)
 			}
 			ctx = context.WithValue(ctx, "DBShouldFail", false)
-			_, _, err := srv.Reenroll(ctx, tc.cert, tc.csr, tc.aps)
+			_, err := srv.Reenroll(ctx, tc.cert, tc.csr, tc.aps)
 			if err != nil {
 				if tc.ret.Error() != err.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
@@ -295,7 +295,7 @@ func TestEnroll(t *testing.T) {
 			cpb, _ := pem.Decode(certContent)
 			dmsCrt, err := x509.ParseCertificate(cpb.Bytes)
 
-			_, _, err = srv.Enroll(ctx, tc.csr, "IkerCA", dmsCrt)
+			_, err = srv.Enroll(ctx, tc.csr, "IkerCA", dmsCrt)
 			if err != nil {
 				if tc.ret.Error() != err.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
@@ -380,7 +380,7 @@ func TestServerKeyGen(t *testing.T) {
 			cpb, _ := pem.Decode(certContent)
 			dmsCrt, _ := x509.ParseCertificate(cpb.Bytes)
 
-			_, _, _, err := srv.ServerKeyGen(ctx, tc.csr, "IkerCA", dmsCrt)
+			_, _, err := srv.ServerKeyGen(ctx, tc.csr, "IkerCA", dmsCrt)
 			if err != nil {
 				if tc.ret.Error() != err.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)

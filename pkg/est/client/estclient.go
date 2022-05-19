@@ -35,9 +35,9 @@ type LamassuEstClientConfig struct {
 
 type LamassuEstClient interface {
 	CACerts(ctx context.Context) ([]*x509.Certificate, error)
-	Enroll(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, *x509.Certificate, error)
-	Reenroll(ctx context.Context, csr *x509.CertificateRequest /*, crt *x509.Certificate*/) (*x509.Certificate, *x509.Certificate, error)
-	ServerKeyGen(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, []byte, *x509.Certificate, error)
+	Enroll(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, error)
+	Reenroll(ctx context.Context, csr *x509.CertificateRequest /*, crt *x509.Certificate*/) (*x509.Certificate, error)
+	ServerKeyGen(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, []byte, error)
 }
 
 func NewLamassuEstClient(estServerAddress string, serverCertPool *x509.CertPool, clientCert *x509.Certificate, clientKey []byte, logger log.Logger) (LamassuEstClient, error) {
@@ -118,115 +118,109 @@ func (c *LamassuEstClientConfig) CACerts(ctx context.Context) ([]*x509.Certifica
 	return p7.Certificates, nil
 }
 
-func (c *LamassuEstClientConfig) Enroll(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, *x509.Certificate, error) {
+func (c *LamassuEstClientConfig) Enroll(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, error) {
 	reqBody := ioutil.NopCloser(bytes.NewBuffer(utils.EncodeB64(csr.Raw)))
 	var resp *http.Response
 	var body []byte
 
 	req, err := c.Client.NewRequest(http.MethodPost, "/simpleenroll", c.EstServerAddress, aps, "application/pkcs10", "base64", "application/pkcs7-mime", reqBody)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	resp, body, err = c.Client.Do(req)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if err := checkResponseError(resp); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if err := verifyResponseType(resp, "application/pkcs7-mime", "base64"); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	decoded, err := utils.DecodeB64(string(body))
 	if err != nil {
-		return nil, nil, errInvalidBase64
+		return nil, errInvalidBase64
 	}
 
 	certs, err := DecodePKCS7CertsOnly([]byte(decoded))
 	if err != nil {
-		return nil, nil, errInvalidPKCS7
+		return nil, errInvalidPKCS7
 	}
 
-	return certs[0], certs[1], nil
+	return certs[0], nil
 }
 
-func (c *LamassuEstClientConfig) Reenroll(ctx context.Context, csr *x509.CertificateRequest /*, crt *x509.Certificate*/) (*x509.Certificate, *x509.Certificate, error) {
+func (c *LamassuEstClientConfig) Reenroll(ctx context.Context, csr *x509.CertificateRequest /*, crt *x509.Certificate*/) (*x509.Certificate, error) {
 	reqBody := ioutil.NopCloser(bytes.NewBuffer(utils.EncodeB64(csr.Raw)))
 	var resp *http.Response
 	var body []byte
 
 	req, err := c.Client.NewRequest(http.MethodPost, "/simplereenroll", c.EstServerAddress, "", "application/pkcs10", "base64", "application/pkcs7-mime", reqBody)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	resp, body, err = c.Client.Do(req)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if err := checkResponseError(resp); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if err := verifyResponseType(resp, "application/pkcs7-mime", "base64"); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	decoded, err := utils.DecodeB64(string(body))
 	if err != nil {
-		return nil, nil, errInvalidBase64
+		return nil, errInvalidBase64
 	}
 
 	certs, err := DecodePKCS7CertsOnly([]byte(decoded))
 	if err != nil {
-		return nil, nil, errInvalidPKCS7
+		return nil, errInvalidPKCS7
 	}
 
-	return certs[0], certs[1], nil
+	return certs[0], nil
 }
 
-func (c *LamassuEstClientConfig) ServerKeyGen(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, []byte, *x509.Certificate, error) {
+func (c *LamassuEstClientConfig) ServerKeyGen(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, []byte, error) {
 	reqBody := ioutil.NopCloser(bytes.NewBuffer(utils.EncodeB64(csr.Raw)))
 	var resp *http.Response
-	var body []byte
 	req, err := c.Client.NewRequest(http.MethodPost, "/serverkeygen", c.EstServerAddress, aps, "application/pkcs10", "base64", "multipart/mixed", reqBody)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	resp, body, err = c.Client.Do(req)
+	resp, body, err := c.Client.Do(req)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-
-	decoded, err := utils.DecodeB64(string(body))
-	if err != nil {
-		return nil, nil, nil, errInvalidBase64
-	}
-
-	resp.Body = ioutil.NopCloser(bytes.NewBuffer([]byte(decoded)))
+	defer consumeAndClose(resp.Body)
+	resp.Body = ioutil.NopCloser(bytes.NewBuffer(body))
 	if err := checkResponseError(resp); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	mediaType, params, err := mime.ParseMediaType(resp.Header.Get("Content-Type"))
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	} else if !strings.HasPrefix(mediaType, "multipart/mixed") {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	mpr := multipart.NewReader(resp.Body, params["boundary"])
 
 	cert, key, err := ProcessAllParts(mpr)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-	return cert[0], key, cert[1], nil
+	return cert[0], key, nil
 
 }
 
@@ -300,7 +294,7 @@ func verifyResponseType(r *http.Response, t, e string) error {
 func ProcessAllParts(mpr *multipart.Reader) ([]*x509.Certificate, []byte, error) {
 	var cert []*x509.Certificate
 	var key []byte
-	var numParts = 3
+	var numParts = 2
 	for i := 1; ; i++ {
 		part, err := mpr.NextPart()
 		if err == io.EOF {
@@ -365,4 +359,9 @@ func ProcessAllParts(mpr *multipart.Reader) ([]*x509.Certificate, []byte, error)
 	}
 
 	return cert, key, nil
+}
+
+func consumeAndClose(rc io.ReadCloser) {
+	io.Copy(ioutil.Discard, rc)
+	rc.Close()
 }

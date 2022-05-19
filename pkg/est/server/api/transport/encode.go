@@ -14,11 +14,13 @@ package transport
 
 import (
 	"bytes"
+	"context"
 	"crypto/x509"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"mime/multipart"
+	"net/http"
 	"net/textproto"
 
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
@@ -161,4 +163,37 @@ func EncodeMultiPart(boundary string, parts []MultipartPart) (*bytes.Buffer, str
 	}
 
 	return buf, fmt.Sprintf("%s; %s=%s", "multipart/mixed", "boundary", boundary), nil
+}
+
+func WriteResponse(w http.ResponseWriter, contentType string, encode bool, obj interface{}) {
+	if contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+
+	var body []byte
+	var err error
+
+	switch t := obj.(type) {
+	case []*x509.Certificate:
+		body, err = encodePKCS7CertsOnly(t)
+
+	case *x509.Certificate:
+		body, err = encodePKCS7CertsOnly([]*x509.Certificate{t})
+
+	case []byte:
+		body, err = t, nil
+	}
+
+	if err != nil {
+		EncodeError(context.Background(), err, w)
+		return
+	}
+
+	if encode {
+		w.Header().Set("Content-Transfer-Encoding", "base64")
+		body = utils.EncodeB64(body)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(body)
 }

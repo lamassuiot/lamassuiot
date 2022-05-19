@@ -332,10 +332,10 @@ func EncodeServerkeygenResponse(ctx context.Context, w http.ResponseWriter, resp
 	Serverkeygenresponse := response.(endpoint.ServerKeyGenResponse)
 	key := Serverkeygenresponse.Key
 	cert := Serverkeygenresponse.Cert
-	cacert := Serverkeygenresponse.CaCert
-	var certs []*x509.Certificate
-	certs = append(certs, cert)
-	certs = append(certs, cacert)
+	//cacert := Serverkeygenresponse.CaCert
+	//var certs []*x509.Certificate
+	//certs = append(certs, cert)
+	//certs = append(certs, cacert)
 	var keyContentType string
 
 	_, p8err := x509.ParsePKCS8PrivateKey(key)
@@ -353,17 +353,13 @@ func EncodeServerkeygenResponse(ctx context.Context, w http.ResponseWriter, resp
 		"estServerKeyGenBoundary",
 		[]MultipartPart{
 			{ContentType: keyContentType, Data: key},
-			{ContentType: "application/pkcs7-mime; smime-type=certs-only", Data: certs},
+			{ContentType: "application/pkcs7-mime; smime-type=certs-only", Data: cert},
 		},
 	)
 	if err != nil {
 		return err
 	}
-	body := utils.EncodeB64(data.Bytes())
-	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Content-Transfer-Encoding", "base64")
-	w.WriteHeader(http.StatusOK)
-	w.Write(body)
+	WriteResponse(w, contentType, false, data.Bytes())
 	return nil
 }
 
@@ -376,11 +372,11 @@ func EncodeResponse(ctx context.Context, w http.ResponseWriter, response interfa
 	}
 	enrollResponse := response.(endpoint.EnrollReenrollResponse)
 	cert := enrollResponse.Cert
-	cacert := enrollResponse.CaCert
-	var cb []byte
-	cb = append(cb, cert.Raw...)
-	cb = append(cb, cacert.Raw...)
-	body, err := pkcs7.DegenerateCertificate(cb)
+	//cacert := enrollResponse.CaCert
+	//var cb []byte
+	//cb = append(cb, cert.Raw...)
+	//cb = append(cb, cacert.Raw...)
+	body, err := pkcs7.DegenerateCertificate(cert.Raw)
 	if err != nil {
 		EncodeError(ctx, err, w)
 		return nil
