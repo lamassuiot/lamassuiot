@@ -54,8 +54,8 @@ func LamassuDmsClient(certPath string, domain string) (lamassuDMSClient.LamassuE
 	})
 }
 
-func LamassuDevClient(caCert string, lamassuGatewayURL string) (lamassuDevClient.LamassuDevManagerClient, error) {
-	return lamassuDevClient.NewLamassuDevManagerClient(client.ClientConfiguration{
+func LamassuDevClient(caCert string, lamassuGatewayURL string) (lamassuDevClient.LamassuDeviceManagerClient, error) {
+	return lamassuDevClient.NewLamassuDeviceManagerClient(client.ClientConfiguration{
 		URL: &url.URL{
 			Scheme: "https",
 			Host:   lamassuGatewayURL,

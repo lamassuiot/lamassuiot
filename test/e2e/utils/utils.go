@@ -10,6 +10,7 @@ import (
 	"encoding/csv"
 	"encoding/pem"
 	"fmt"
+	"io/ioutil"
 	"os"
 )
 
@@ -102,4 +103,42 @@ func InsertKey(path string, data []byte) {
 	keyPEM := pem.EncodeToMemory(&b)
 	f.Write(keyPEM)
 	f.Close()
+}
+func InsertCsr(path string, data []byte) {
+	f, _ := os.Create(path)
+	b := pem.Block{Type: "CERTIFICATE REQUEST", Bytes: data}
+	certPEM := pem.EncodeToMemory(&b)
+	f.Write(certPEM)
+	f.Close()
+}
+
+func ReadCertPool(path string) (*x509.CertPool, error) {
+	caCert, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+	return caCertPool, nil
+}
+func ReadCert(path string) (*x509.Certificate, error) {
+	certContent, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	cpb, _ := pem.Decode(certContent)
+
+	crt, err := x509.ParseCertificate(cpb.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	return crt, nil
+}
+
+func ReadKey(path string) ([]byte, error) {
+	key, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return key, nil
 }
