@@ -20,7 +20,6 @@ import (
 
 	"github.com/go-kit/log"
 
-	"github.com/globalsign/pemfile"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
 	"go.mozilla.org/pkcs7"
 )
@@ -41,32 +40,10 @@ type LamassuEstClient interface {
 	ServerKeyGen(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, []byte, *x509.Certificate, error)
 }
 
-func NewLamassuEstClient(estServerAddress string, estServerCaCertFile string, estClientCertificateFile string, estClientKeyFile string, logger log.Logger) (LamassuEstClient, error) {
-	serverCertPool, err := utils.CreateCAPool(estServerCaCertFile)
-	if err != nil {
-		return nil, err
-	}
-
-	certContent, err := ioutil.ReadFile(estClientCertificateFile)
-	if err != nil {
-		return nil, err
-	}
-	cpb, _ := pem.Decode(certContent)
-
-	crt, err := x509.ParseCertificate(cpb.Bytes)
-	if err != nil {
-		return nil, err
-	}
-	key, err := ioutil.ReadFile(estClientKeyFile)
-	if err != nil {
-		return nil, err
-	}
-	privateKey, err := pemfile.ReadPrivateKey(estClientKeyFile)
-	if err != nil {
-		return nil, err
-	}
-
-	cert, err := tls.X509KeyPair(certContent, key)
+func NewLamassuEstClient(estServerAddress string, serverCertPool *x509.CertPool, clientCert *x509.Certificate, clientKey []byte, logger log.Logger) (LamassuEstClient, error) {
+	b := pem.Block{Type: "CERTIFICATE", Bytes: clientCert.Raw}
+	certPEM := pem.EncodeToMemory(&b)
+	cert, err := tls.X509KeyPair(certPEM, clientKey)
 	if err != nil {
 		return nil, err
 	}
@@ -90,11 +67,12 @@ func NewLamassuEstClient(estServerAddress string, estServerCaCertFile string, es
 		Client:                 NewBaseClient(u, httpClient),
 		EstServerAddress:       estServerAddress,
 		EstServerCaCertificate: serverCertPool,
-		EstClientCertificate:   crt,
-		EstClientKey:           privateKey,
+		EstClientCertificate:   clientCert,
+		EstClientKey:           clientKey,
 		logger:                 logger,
 	}, nil
 }
+
 func (c *LamassuEstClientConfig) CACerts(ctx context.Context) ([]*x509.Certificate, error) {
 	var resp *http.Response
 	var body []byte

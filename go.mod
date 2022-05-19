@@ -11,6 +11,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.1.0 // indirect
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/getkin/kin-openapi v0.88.0
+	github.com/globalsign/est v1.0.6 // indirect
 	github.com/globalsign/pemfile v1.0.0
 	github.com/go-kit/kit v0.12.0
 	github.com/go-kit/log v0.2.0
@@ -27,7 +28,7 @@ require (
 	github.com/hashicorp/vault/sdk v0.2.1
 	github.com/jakehl/goid v1.1.0
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/lamassuiot/lamassu-aws-connector v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassu-aws-connector v0.0.1
 	github.com/lib/pq v1.10.0
 	github.com/moby/sys/mount v0.3.2 // indirect
 	github.com/opentracing/opentracing-go v1.2.0
