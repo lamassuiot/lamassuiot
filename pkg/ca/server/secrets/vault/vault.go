@@ -147,9 +147,12 @@ func Login(client *api.Client, roleID string, secretID string) error {
 }
 
 func (vs *VaultSecrets) getLoggerFromContext(ctx context.Context) log.Logger {
-	logger := ctx.Value(utils.LamassuLoggerContextKey).(log.Logger)
-	if logger == nil {
+	var logger log.Logger
+	untypedLogger := ctx.Value(utils.LamassuLoggerContextKey)
+	if untypedLogger == nil {
 		logger = vs.logger
+	} else {
+		logger = untypedLogger.(log.Logger)
 	}
 	return logger
 }

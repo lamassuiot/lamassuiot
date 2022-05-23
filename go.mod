@@ -11,6 +11,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.1.0 // indirect
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
+	github.com/gavv/httpexpect/v2 v2.3.1
 	github.com/getkin/kin-openapi v0.88.0
 	github.com/globalsign/pemfile v1.0.0
 	github.com/go-kit/kit v0.12.0
