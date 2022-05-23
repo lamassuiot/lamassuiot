@@ -104,7 +104,7 @@ func NewVaultSecretsMock(t *testing.T) (*api.Client, error) {
 }
 
 //TODO:
-func (vm *VaultSecretsMock) CreateCA(ctx context.Context, caType dto.CAType, caName string, ca dto.Cert) (dto.Cert, error) {
+func (vm *VaultSecretsMock) CreateCA(ctx context.Context, caType dto.CAType, caName string, privateKeyMetadata dto.PrivateKeyMetadata, subject dto.Subject, caTTL int, enrollerTTL int) (dto.Cert, error) {
 	return dto.Cert{}, nil
 }
 
