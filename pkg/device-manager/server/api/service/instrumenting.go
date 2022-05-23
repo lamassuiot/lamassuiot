@@ -35,6 +35,15 @@ func (mw *instrumentingMiddleware) Health(ctx context.Context) bool {
 
 	return mw.next.Health(ctx)
 }
+func (mw instrumentingMiddleware) Stats(ctx context.Context) (stats dto.Stats, scanDate time.Time) {
+	defer func(begin time.Time) {
+		lvs := []string{"method", "Stats", "error", "false"}
+		mw.requestCount.With(lvs...).Add(1)
+		mw.requestLatency.With(lvs...).Observe(time.Since(begin).Seconds())
+	}(time.Now())
+
+	return mw.next.Stats(ctx)
+}
 
 func (mw *instrumentingMiddleware) PostDevice(ctx context.Context, alias string, deviceID string, DmsID string, description string, tags []string, iconName string, iconColor string) (deviceResp dto.Device, err error) {
 	defer func(begin time.Time) {

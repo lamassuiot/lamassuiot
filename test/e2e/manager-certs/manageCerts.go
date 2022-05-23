@@ -2,6 +2,7 @@ package certs
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"math"
 	"os"
@@ -17,8 +18,8 @@ import (
 	client "github.com/lamassuiot/lamassuiot/test/e2e/utils/clients"
 )
 
-var dmsCert = "./test/e2e/industrial-environment/dmsPer.crt"
-var dmsKey = "./test/e2e/industrial-environment/dmsPer.key"
+var dmsCertFile = "./test/e2e/industrial-environment/dmsPer.crt"
+var dmsKeyFile = "./test/e2e/industrial-environment/dmsPer.key"
 
 func ManageCerts(caName string, scaleIndex int, certPath string, domain string) error {
 	var logger log.Logger
@@ -40,7 +41,22 @@ func ManageCerts(caName string, scaleIndex int, certPath string, domain string) 
 		return err
 	}
 
-	err = LatencyGetCACerts(devClient, caName, f1, certPath, domain)
+	serverCert, err := utils.ReadCertPool(certPath)
+	if err != nil {
+		level.Error(logger).Log("err", err)
+		return err
+	}
+	dmsCert, err := utils.ReadCert(dmsCertFile)
+	if err != nil {
+		level.Error(logger).Log("err", err)
+		return err
+	}
+	dmsKey, err := utils.ReadKey(dmsKeyFile)
+	if err != nil {
+		level.Error(logger).Log("err", err)
+		return err
+	}
+	err = LatencyGetCACerts(devClient, caName, f1, domain, dmsCert, dmsKey, serverCert)
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return err
@@ -56,14 +72,14 @@ func ManageCerts(caName string, scaleIndex int, certPath string, domain string) 
 	return nil
 }
 
-func LatencyGetCACerts(devClient lamassudevice.LamassuDevManagerClient, caName string, f *os.File, certPath string, domain string) error {
+func LatencyGetCACerts(devClient lamassudevice.LamassuDeviceManagerClient, caName string, f *os.File, domain string, clientCert *x509.Certificate, clientKey []byte, serverCert *x509.CertPool) error {
 	var max, min float64
 	max = 0
 	min = 12
 	var totalCerts int
 	for k := 0; k < 10; k++ {
 		before := time.Now().UnixNano()
-		certs, err := devClient.CACerts(context.Background(), caName, dmsCert, dmsKey, certPath, domain+"/api/devmanager")
+		certs, err := devClient.CACerts(context.Background(), caName, clientCert, clientKey, serverCert, domain+"/api/devmanager")
 		if err != nil {
 			fmt.Println(err)
 			return err

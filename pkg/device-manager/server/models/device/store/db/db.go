@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -543,7 +542,6 @@ func contains(s []string, str string) bool {
 
 func applyFilter(sqlStatement string, queryParameters dto.QueryParameters) string {
 	fields := []string{"id", "alias", "description", "status", "dms_id", "key_strength", "tags", "creation_ts"} //Switch Case por fields en lugar de tipo de dato
-	fmt.Printf("fields: %v\n", fields)
 	bigOperator := " AND "
 	helper := queryParameters.Filter
 	if queryParameters.Filter != "" {

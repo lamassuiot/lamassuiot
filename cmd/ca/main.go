@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -34,12 +35,17 @@ import (
 	jaegerlog "github.com/uber/jaeger-client-go/log"
 )
 
+func traceId(ctx context.Context) {
+	fmt.Println(ctx)
+}
+
 func main() {
 
 	var logger log.Logger
 	logger = log.NewJSONLogger(os.Stdout)
 	logger = level.NewFilter(logger, level.AllowDebug())
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	logger = log.With(logger, "trace", traceId)
 	logger = log.With(logger, "caller", log.DefaultCaller)
 
 	/*********************************************************************/
@@ -53,10 +59,7 @@ func main() {
 
 	if strings.ToLower(cfg.DebugMode) == "debug" {
 		{
-			logger = log.NewJSONLogger(os.Stdout)
-			logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 			logger = level.NewFilter(logger, level.AllowDebug())
-			logger = log.With(logger, "caller", log.DefaultCaller)
 		}
 		level.Debug(logger).Log("msg", "Starting Lamassu-ca in debug mode...")
 	}

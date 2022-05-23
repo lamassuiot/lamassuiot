@@ -19,6 +19,7 @@ import (
 
 type Endpoints struct {
 	HealthEndpoint         endpoint.Endpoint
+	StatsEndpoint          endpoint.Endpoint
 	GetCAsEndpoint         endpoint.Endpoint
 	CreateCAEndpoint       endpoint.Endpoint
 	ImportCAEndpoint       endpoint.Endpoint
@@ -34,6 +35,12 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 	{
 		healthEndpoint = MakeHealthEndpoint(s)
 		healthEndpoint = opentracing.TraceServer(otTracer, "Health")(healthEndpoint)
+	}
+
+	var statsEndpoint endpoint.Endpoint
+	{
+		statsEndpoint = MakeStatsEndpoint(s)
+		statsEndpoint = opentracing.TraceServer(otTracer, "Stats")(statsEndpoint)
 	}
 
 	var getCAsEndpoint endpoint.Endpoint
@@ -85,6 +92,7 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 
 	return Endpoints{
 		HealthEndpoint:         healthEndpoint,
+		StatsEndpoint:          statsEndpoint,
 		GetCAsEndpoint:         getCAsEndpoint,
 		CreateCAEndpoint:       createCAEndpoint,
 		ImportCAEndpoint:       importCAEndpoint,
@@ -100,6 +108,13 @@ func MakeHealthEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		healthy := s.Health(ctx)
 		return HealthResponse{Healthy: healthy}, nil
+	}
+}
+
+func MakeStatsEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		stats := s.Stats(ctx)
+		return stats, nil
 	}
 }
 
@@ -290,6 +305,10 @@ func ValidateImportCARequest(request ImportCARequest) error {
 func ValidateSignCertificateRquest(request SignCertificateRquest) error {
 	validate := validator.New()
 	return validate.Struct(request)
+}
+
+type StatsRequest struct {
+	ForceRefesh bool
 }
 
 type GetCAsRequest struct {

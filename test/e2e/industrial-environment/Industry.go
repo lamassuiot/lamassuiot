@@ -2,6 +2,7 @@ package industrial
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
@@ -19,10 +20,10 @@ import (
 )
 
 var dmsName = "industrial-environment-dms"
-var dmsCert = "./test/e2e/industrial-environment/dmsPer.crt"
-var dmsKey = "./test/e2e/industrial-environment/dmsPer.key"
-var deviceCert = "./test/e2e/industrial-environment/device.crt"
-var deviceKey = "./test/e2e/industrial-environment/device.key"
+var dmsCertFile = "./test/e2e/industrial-environment/dmsPer.crt"
+var dmsKeyFile = "./test/e2e/industrial-environment/dmsPer.key"
+var deviceCertFile = "./test/e2e/industrial-environment/device.crt"
+var deviceKeyFile = "./test/e2e/industrial-environment/device.key"
 
 func IndustrialEnvironment(caName string, deviceNumber int, reenroll int, certPath string, domain string) (string, error) {
 	var logger log.Logger
@@ -47,7 +48,7 @@ func IndustrialEnvironment(caName string, deviceNumber int, reenroll int, certPa
 		return "", err
 	}
 	Privkey, _ := base64.StdEncoding.DecodeString(key)
-	f, _ := os.Create(dmsKey)
+	f, _ := os.Create(dmsKeyFile)
 	f.Write(Privkey)
 	f.Close()
 
@@ -58,9 +59,25 @@ func IndustrialEnvironment(caName string, deviceNumber int, reenroll int, certPa
 	}
 	cert1, _ := base64.StdEncoding.DecodeString(dms.CerificateBase64)
 	block, _ := pem.Decode([]byte(cert1))
-	utils.InsertCert(dmsCert, block.Bytes)
+	utils.InsertCert(dmsCertFile, block.Bytes)
 
-	dev, err := CreateDevices(devClient, deviceNumber, caName, dms.Id, reenroll, certPath, domain)
+	serverCert, err := utils.ReadCertPool(certPath)
+	if err != nil {
+		level.Error(logger).Log("err", err)
+		return "", err
+	}
+	dmsCert, err := utils.ReadCert(dmsCertFile)
+	if err != nil {
+		level.Error(logger).Log("err", err)
+		return "", err
+	}
+	dmsKey, err := utils.ReadKey(dmsKeyFile)
+	if err != nil {
+		level.Error(logger).Log("err", err)
+		return "", err
+	}
+
+	dev, err := CreateDevices(devClient, deviceNumber, caName, dms.Id, reenroll, domain, dmsCert, dmsKey, serverCert)
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return "", err
@@ -74,8 +91,9 @@ func IndustrialEnvironment(caName string, deviceNumber int, reenroll int, certPa
 	return dms.Id, nil
 }
 
-func CreateDevices(devClient lamassudevice.LamassuDevManagerClient, deviceNumber int, caName string, dmsId string, reenroll int, certPath string, domain string) (dto.Device, error) {
+func CreateDevices(devClient lamassudevice.LamassuDeviceManagerClient, deviceNumber int, caName string, dmsId string, reenroll int, domain string, clientCert *x509.Certificate, clientKey []byte, serverCert *x509.CertPool) (dto.Device, error) {
 	var dev dto.Device
+	var crt dto.Enroll
 	for i := 0; i < deviceNumber; i++ {
 		dev, err := devClient.CreateDevice(context.Background(), "test-dev", goid.NewV4UUID().String(), dmsId, "descripcion", []string{}, "", "")
 		if err != nil {
@@ -92,33 +110,38 @@ func CreateDevices(devClient lamassudevice.LamassuDevManagerClient, deviceNumber
 			fmt.Println(err)
 			return dto.Device{}, err
 		}
-		crt, err := devClient.Enroll(context.Background(), csr, caName, dmsCert, dmsKey, certPath, domain+"/api/devmanager")
+		crt, err = devClient.Enroll(context.Background(), csr, caName, clientCert, clientKey, serverCert, domain+"/api/devmanager")
 		if err != nil {
 			fmt.Println(err)
 			return dto.Device{}, err
 		}
-		utils.InsertCert(deviceCert, crt.Cert.Raw)
-		utils.InsertKey(deviceKey, Devicekey)
+		utils.InsertCert(deviceCertFile, crt.Cert.Raw)
+		utils.InsertKey(deviceKeyFile, Devicekey)
+		deviceKey, err := utils.ReadKey(deviceCertFile)
+		if err != nil {
+			fmt.Println(err)
+			return dto.Device{}, err
+		}
 		for j := 0; j < reenroll; j++ {
-			reenrollCert, err := devClient.Reenroll(context.Background(), csr, caName, deviceCert, deviceKey, certPath, domain+"/api/devmanager")
+			crt, err = devClient.Reenroll(context.Background(), csr, caName, crt.Cert, deviceKey, serverCert, domain+"/api/devmanager")
 			if err != nil {
 				fmt.Println(err)
 				return dto.Device{}, err
 			}
-			utils.InsertCert(deviceCert, reenrollCert.Cert.Raw)
+			utils.InsertCert(deviceCertFile, crt.Cert.Raw)
 		}
 		err = devClient.RevokeDeviceCert(context.Background(), dev.Id, "")
 		if err != nil {
 			fmt.Println(err)
 			return dto.Device{}, err
 		}
-		serverKeyGen, err := devClient.ServerKeyGen(context.Background(), csr, caName, dmsCert, dmsKey, certPath, domain+"/api/devmanager")
+		serverKeyGen, err := devClient.ServerKeyGen(context.Background(), csr, caName, clientCert, clientKey, serverCert, domain+"/api/devmanager")
 		if err != nil {
 			fmt.Println(err)
 			return dto.Device{}, err
 		}
-		utils.InsertCert(deviceCert, serverKeyGen.Cert.Raw)
-		utils.InsertKey(deviceKey, serverKeyGen.Key)
+		utils.InsertCert(deviceCertFile, serverKeyGen.Cert.Raw)
+		utils.InsertKey(deviceKeyFile, serverKeyGen.Key)
 	}
 
 	return dev, nil

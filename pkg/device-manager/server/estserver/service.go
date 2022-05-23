@@ -303,7 +303,7 @@ func (s *EstService) Reenroll(ctx context.Context, cert *x509.Certificate, csr *
 	if err != nil {
 		return nil, err
 	}
-
+	level.Info(s.logger).Log("msg", "Certificate sent REENROLL method")
 	return dataCert, nil
 }
 func (s *EstService) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string, cert *x509.Certificate) (*x509.Certificate, []byte, error) {

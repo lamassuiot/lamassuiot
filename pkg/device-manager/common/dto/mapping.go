@@ -2,6 +2,15 @@ package dto
 
 import "crypto/x509"
 
+type Stats struct {
+	PendingEnrollment int `json:"pending_enrollment"`
+	Provisioned       int `json:"provisioned"`
+	Decomissioned     int `json:"decommissioned"`
+	AboutToExpire     int `json:"provisioned_devices"`
+	Expired           int `json:"expired"`
+	Revoked           int `json:"revoked"`
+}
+
 type Device struct {
 	Id                    string                        `json:"id"`
 	Alias                 string                        `json:"alias"`

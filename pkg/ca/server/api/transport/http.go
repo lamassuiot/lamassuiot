@@ -81,6 +81,17 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		)...,
 	))
 
+	r.Methods("GET").Path("/stats").Handler(httptransport.NewServer(
+		e.StatsEndpoint,
+		decodeStatsRequest,
+		encodeResponse,
+		append(
+			options,
+			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Stats", logger)),
+			httptransport.ServerBefore(HTTPToContext(logger)),
+		)...,
+	))
+
 	// Get all CAs
 	r.Methods("GET").Path("/{caType}").Handler(httptransport.NewServer(
 		e.GetCAsEndpoint,
@@ -182,6 +193,11 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 
 func decodeHealthRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	var req endpoint.HealthRequest
+	return req, nil
+}
+
+func decodeStatsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	var req endpoint.StatsRequest
 	return req, nil
 }
 

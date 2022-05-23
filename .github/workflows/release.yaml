@@ -257,6 +257,7 @@ jobs:
           export PATH=\$PATH:/usr/local/go/bin
           EOT
 
+          git clone https://github.com/lamassuiot/lamassuiot -b release
           git clone https://github.com/lamassuiot/lamassu-compose -b develop && cd lamassu-compose
 
           export DB_USER=admin
@@ -287,25 +288,25 @@ jobs:
 
           bash install.sh
 
-  integration_test:
-    name: Integration test
-    runs-on: ubuntu-latest
-    environment: release
-    needs:
-    - deploy_to_dev_server
-    - create_dev_server_env
-    steps:
-    - name: Run integration tests
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ needs.create_dev_server_env.outputs.server-ip }}
-        username: ${{ secrets.AWS_SSH_USERNAME }}
-        key: ${{ secrets.AWS_SSH_KEY }}
-        port: ${{ secrets.AWS_SSH_PORT }}
-        script: |
-          git clone https://github.com/lamassuiot/lamassuiot -b release
-          cd lamassuiot
-          go run test/e2e/performance.go -domain=dev.lamassu.io -cert=../lamassu-compose/tls-certificates/downstream/tls.crt
+  # integration_test:
+  #   name: Integration test
+  #   runs-on: ubuntu-latest
+  #   environment: release
+  #   needs:
+  #   - deploy_to_dev_server
+  #   - create_dev_server_env
+  #   steps:
+  #   - name: Run integration tests
+  #     uses: appleboy/ssh-action@master
+  #     with:
+  #       host: ${{ needs.create_dev_server_env.outputs.server-ip }}
+  #       username: ${{ secrets.AWS_SSH_USERNAME }}
+  #       key: ${{ secrets.AWS_SSH_KEY }}
+  #       port: ${{ secrets.AWS_SSH_PORT }}
+  #       script: |
+  #         git clone https://github.com/lamassuiot/lamassuiot -b release
+  #         cd lamassuiot
+  #         go run test/e2e/performance.go -domain=dev.lamassu.io -cert=../lamassu-compose/tls-certificates/downstream/tls.crt
           
   ocsp_test:
     name: OCSP test
@@ -319,12 +320,23 @@ jobs:
   est_test:
     name: EST test
     runs-on: ubuntu-latest
+    environment: release
     needs:
+    - create_dev_server_env
     - deploy_to_dev_server
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-  
+    - name: Run EST tests with multiple clients (Curl, Globalsign, Lamassu EST Cli)
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ needs.create_dev_server_env.outputs.server-ip }}
+        username: ${{ secrets.AWS_SSH_USERNAME }}
+        key: ${{ secrets.AWS_SSH_KEY }}
+        port: ${{ secrets.AWS_SSH_PORT }}
+        script: |
+          cd lamassuiot
+          go install github.com/haveyoudebuggedit/gotestfmt/v2/cmd/gotestfmt@v2.3.1
+          go test -json -v ./test/est/est_test.go -args -domain=dev.lamassu.io -cert=../lamassu-compose/tls-certificates/downstream/tls.crt | gotestfmt
+
   # tear_down_test_infra:
   #   name: Tear down DEV server
   #   runs-on: ubuntu-latest

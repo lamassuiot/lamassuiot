@@ -38,6 +38,19 @@ func (mw loggingMiddleware) Health(ctx context.Context) (healthy bool) {
 	return mw.next.Health(ctx)
 }
 
+func (mw loggingMiddleware) Stats(ctx context.Context) (stats dto.Stats, scanDate time.Time) {
+	defer func(begin time.Time) {
+		mw.logger.Log(
+			"method", "Stats",
+			"took", time.Since(begin),
+			"stats", stats,
+			"scan_date", scanDate,
+			"trace_id", opentracing.SpanFromContext(ctx),
+		)
+	}(time.Now())
+	return mw.next.Stats(ctx)
+}
+
 func (mw loggingMiddleware) PostDevice(ctx context.Context, alias string, deviceID string, DmsID string, description string, tags []string, iconName string, iconColor string) (deviceResp dto.Device, err error) {
 	defer func(begin time.Time) {
 		mw.logger.Log(

@@ -149,13 +149,6 @@ func (vs *VaultSecrets) GetSecretProviderName(ctx context.Context) string {
 }
 
 func (vs *VaultSecrets) SignCertificate(ctx context.Context, caType dto.CAType, caName string, csr *x509.CertificateRequest, signVerbatim bool) (dto.SignResponse, error) {
-	if ctx.Value("DBIncorrect") != nil {
-		failDB := ctx.Value("DBIncorrect").(bool)
-
-		if failDB {
-			return dto.SignResponse{}, errors.New("TEST: Could not obtain list of Vault mounts")
-		}
-	}
 	csrBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr.Raw})
 	options := map[string]interface{}{
 		"csr":         string(csrBytes),
@@ -259,13 +252,6 @@ func (vs *VaultSecrets) GetCA(ctx context.Context, caType dto.CAType, caName str
 
 func (vs *VaultSecrets) GetCAs(ctx context.Context, caType dto.CAType) ([]dto.Cert, error) {
 	logger := ctx.Value(utils.LamassuLoggerContextKey).(log.Logger)
-	if ctx.Value("DBIncorrect") != nil {
-		failDB := ctx.Value("DBIncorrect").(bool)
-
-		if failDB {
-			return []dto.Cert{}, errors.New("TEST: Could not obtain list of Vault mounts")
-		}
-	}
 
 	parentSpan := opentracing.SpanFromContext(ctx)
 	span := opentracing.StartSpan("lamassu-ca-api: vault-api GET /v1/sys/mounts", opentracing.ChildOf(parentSpan.Context()))
@@ -511,13 +497,6 @@ func (vs *VaultSecrets) GetCert(ctx context.Context, caType dto.CAType, caName s
 
 func (vs *VaultSecrets) GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, serialnumbers []ca.IssuedCerts) ([]dto.Cert, error) {
 	logger := ctx.Value(utils.LamassuLoggerContextKey).(log.Logger)
-	if ctx.Value("DBIncorrect") != nil {
-		failDB := ctx.Value("DBIncorrect").(bool)
-
-		if failDB {
-			return []dto.Cert{}, errors.New("TEST: Could not obtain list of Vault mounts")
-		}
-	}
 
 	var certs []dto.Cert
 	certs = make([]dto.Cert, 0)
@@ -567,11 +546,11 @@ func (vs *VaultSecrets) GetIssuedCerts(ctx context.Context, caType dto.CAType, c
 				if caCert.SerialNumber == elem.SerialNumber {
 					continue
 				}
-				span := opentracing.StartSpan("lamassu-ca-api: vault-api GET /v1/"+vs.pkiPath+caType.ToVaultPath()+caName+"/cert"+elem.SerialNumber, opentracing.ChildOf(parentSpan.Context()))
+				span := opentracing.StartSpan("lamassu-ca-api: vault-api GET /v1/"+vs.pkiPath+caType.ToVaultPath()+caName+"/cert/"+elem.SerialNumber, opentracing.ChildOf(parentSpan.Context()))
 				certResponse, err := vs.client.Logical().Read(vs.pkiPath + caType.ToVaultPath() + caName + "/cert/" + elem.SerialNumber)
 				span.Finish()
 
-				if err != nil {
+				if err != nil || certResponse == nil {
 					level.Debug(logger).Log("err", err, "msg", "Could not read certificate "+elem.SerialNumber+" from CA "+caName)
 					continue
 				}

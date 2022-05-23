@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"time"
 )
 
 const (
@@ -13,6 +14,12 @@ const (
 	StatusRevoked = "revoked"
 	StatusExpired = "expired"
 )
+
+type Stats struct {
+	IssuedCerts int       `json:"issued_certs"`
+	CAs         int       `json:"cas"`
+	ScanDate    time.Time `json:"scan_date"`
+}
 
 type Cert struct {
 	// The status of the CA

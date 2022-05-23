@@ -47,7 +47,6 @@ func (mw *amqpMiddleware) GetSecretProviderName(ctx context.Context) (providerNa
 	defer func(begin time.Time) {
 
 	}(time.Now())
-
 	return mw.next.GetSecretProviderName(ctx)
 }
 
@@ -56,6 +55,13 @@ func (mw *amqpMiddleware) Health(ctx context.Context) bool {
 
 	}(time.Now())
 	return mw.next.Health(ctx)
+}
+
+func (mw *amqpMiddleware) Stats(ctx context.Context) dto.Stats {
+	defer func(begin time.Time) {
+
+	}(time.Now())
+	return mw.next.Stats(ctx)
 }
 
 func (mw *amqpMiddleware) GetCAs(ctx context.Context, caType dto.CAType) (CAs []dto.Cert, err error) {

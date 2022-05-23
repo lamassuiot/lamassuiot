@@ -14,6 +14,8 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/mocks"
 	devicesStore "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/device/store"
+	devicesDB "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/device/store/db"
+
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
 )
 
@@ -643,9 +645,10 @@ func setup(t *testing.T) (Service, context.Context) {
 	ctx = context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
 
 	devicesDb, _ := mocks.NewDevicedDBMock(t)
+	statsDB, _ := devicesDB.NewInMemoryDB()
 
 	lamassuCaClient, _ := mocks.NewLamassuCaClientMock(logger)
 
-	srv := NewDevicesService(devicesDb, &lamassuCaClient, logger)
+	srv := NewDevicesService(devicesDb, statsDB, &lamassuCaClient, logger)
 	return srv, ctx
 }

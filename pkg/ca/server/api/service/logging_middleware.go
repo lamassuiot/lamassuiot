@@ -40,6 +40,18 @@ func (mw loggingMiddleware) GetSecretProviderName(ctx context.Context) (provider
 	return mw.next.GetSecretProviderName(ctx)
 }
 
+func (mw loggingMiddleware) Stats(ctx context.Context) (stats dto.Stats) {
+	defer func(begin time.Time) {
+		mw.logger.Log(
+			"method", "Stats",
+			"took", time.Since(begin),
+			"stats", stats,
+			"trace_id", opentracing.SpanFromContext(ctx),
+		)
+	}(time.Now())
+	return mw.next.Stats(ctx)
+}
+
 func (mw loggingMiddleware) Health(ctx context.Context) (healthy bool) {
 	defer func(begin time.Time) {
 		mw.logger.Log(

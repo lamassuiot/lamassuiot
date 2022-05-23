@@ -179,7 +179,7 @@ func (s *enrollerService) CreateDMSForm(ctx context.Context, subject dto.Subject
 
 func generateCSR(ctx context.Context, keyType string, keyBits int, priv interface{}, subj pkix.Name) ([]byte, error) {
 	var signingAlgorithm x509.SignatureAlgorithm
-	if keyType == "ec" {
+	if keyType == "EC" {
 		signingAlgorithm = x509.ECDSAWithSHA512
 	} else {
 		signingAlgorithm = x509.SHA512WithRSA

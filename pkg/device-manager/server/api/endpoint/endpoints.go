@@ -2,6 +2,7 @@ package endpoint
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/tracing/opentracing"
@@ -12,6 +13,7 @@ import (
 
 type Endpoints struct {
 	HealthEndpoint              endpoint.Endpoint
+	StatsEndpoint               endpoint.Endpoint
 	PostDeviceEndpoint          endpoint.Endpoint
 	GetDevices                  endpoint.Endpoint
 	GetDeviceById               endpoint.Endpoint
@@ -31,6 +33,11 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 	{
 		healthEndpoint = MakeHealthEndpoint(s)
 		healthEndpoint = opentracing.TraceServer(otTracer, "Health")(healthEndpoint)
+	}
+	var statsEndpoint endpoint.Endpoint
+	{
+		statsEndpoint = MakeStatsEndpoint(s)
+		statsEndpoint = opentracing.TraceServer(otTracer, "Stats")(statsEndpoint)
 	}
 	var postDeviceEndpoint endpoint.Endpoint
 	{
@@ -95,6 +102,7 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 
 	return Endpoints{
 		HealthEndpoint:              healthEndpoint,
+		StatsEndpoint:               statsEndpoint,
 		PostDeviceEndpoint:          postDeviceEndpoint,
 		GetDevices:                  getDevicesEndpoint,
 		GetDeviceById:               getDevicesByIdEndpoint,
@@ -114,6 +122,13 @@ func MakeHealthEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		healthy := s.Health(ctx)
 		return HealthResponse{Healthy: healthy}, nil
+	}
+}
+
+func MakeStatsEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		stats, scanDate := s.Stats(ctx)
+		return StatsResponse{Stats: stats, ScanDate: scanDate}, nil
 	}
 }
 
@@ -226,25 +241,12 @@ type HealthResponse struct {
 	Err     error `json:"err,omitempty"`
 }
 
-/*func ValidateCreatrCARequest(request CreateDeviceRequest) error {
-	CreateCARequestStructLevelValidation := func(sl validator.StructLevel) {
-		req := sl.Current().Interface().(CreateDeviceRequest)
-		switch req.KeyMetadata.KeyType {
-		case "rsa":
-			if math.Mod(float64(req.KeyMetadata.KeyBits), 1024) != 0 || req.KeyMetadata.KeyBits < 2048 {
-				sl.ReportError(req.KeyMetadata.KeyBits, "bits", "Bits", "bits1024multipleAndGt2048", "")
-			}
-		case "ec":
-			if req.KeyMetadata.KeyBits != 224 && req.KeyMetadata.KeyBits != 256 && req.KeyMetadata.KeyBits != 384 {
-				sl.ReportError(req.KeyMetadata.KeyBits, "bits", "Bits", "bitsEcdsaMultiple", "")
-			}
-		}
-	}
+type StatsRequest struct{}
 
-	validate := validator.New()
-	validate.RegisterStructValidation(CreateCARequestStructLevelValidation, CreateDeviceRequest{})
-	return validate.Struct(request)
-}*/
+type StatsResponse struct {
+	Stats    dto.Stats `json:"stats"`
+	ScanDate time.Time `json:"scan_date"`
+}
 
 type PostDeviceResponse struct {
 	Device dto.Device `json:"device,omitempty"`

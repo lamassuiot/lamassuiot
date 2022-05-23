@@ -22,6 +22,7 @@ import (
 
 type Service interface {
 	Health(ctx context.Context) bool
+	Stats(ctx context.Context) (dto.Stats, time.Time)
 	PostDevice(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
 	UpdateDeviceById(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
 	GetDevices(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.Device, int, error)
@@ -43,13 +44,15 @@ type Service interface {
 type devicesService struct {
 	mtx             sync.RWMutex
 	devicesDb       devicesStore.DB
+	statsDB         devicesStore.StatsDB
 	logger          log.Logger
 	lamassuCaClient lamassucaclient.LamassuCaClient
 }
 
-func NewDevicesService(devicesDb devicesStore.DB, lamassuCa *lamassucaclient.LamassuCaClient, logger log.Logger) Service {
+func NewDevicesService(devicesDb devicesStore.DB, statsDB devicesStore.StatsDB, lamassuCa *lamassucaclient.LamassuCaClient, logger log.Logger) Service {
 
 	return &devicesService{
+		statsDB:         statsDB,
 		devicesDb:       devicesDb,
 		lamassuCaClient: *lamassuCa,
 		logger:          logger,
@@ -58,6 +61,47 @@ func NewDevicesService(devicesDb devicesStore.DB, lamassuCa *lamassucaclient.Lam
 
 func (s *devicesService) Health(ctx context.Context) bool {
 	return true
+}
+
+func (s *devicesService) Stats(ctx context.Context) (dto.Stats, time.Time) {
+	stats, scanDate, err := s.statsDB.GetStats(ctx)
+	if err == nil {
+		return stats, scanDate
+	}
+
+	stats = dto.Stats{}
+
+	page := 0
+	offset := 1000
+	_, totalDevices, err := s.devicesDb.SelectAllDevices(ctx, dto.QueryParameters{Pagination: dto.PaginationOptions{Page: page, Offset: offset}})
+	if err != nil {
+		return dto.Stats{}, time.Now()
+	}
+
+	for i := 0; i < totalDevices/offset; i++ {
+		devices, _, _ := s.devicesDb.SelectAllDevices(ctx, dto.QueryParameters{Pagination: dto.PaginationOptions{Page: page + i, Offset: offset}})
+		for _, device := range devices {
+			if device.Status == devicesModel.DevicePendingProvision.String() {
+				stats.PendingEnrollment = stats.PendingEnrollment + 1
+			} else if device.Status == devicesModel.DeviceCertExpired.String() {
+				stats.Expired = stats.Expired + 1
+			} else if device.Status == devicesModel.DeviceDecommisioned.String() {
+				stats.Decomissioned = stats.Decomissioned + 1
+			} else if device.Status == devicesModel.DeviceCertRevoked.String() {
+				stats.Revoked = stats.Revoked + 1
+			} else {
+				stats.Provisioned = stats.Provisioned + 1
+			}
+		}
+	}
+
+	err = s.statsDB.UpdateStats(ctx, stats)
+	if err != nil {
+		level.Debug(s.logger).Log("err", err, "msg", "Could not update stats DB")
+	}
+
+	stats, scanDate, _ = s.statsDB.GetStats(ctx)
+	return stats, scanDate
 }
 
 func (s *devicesService) PostDevice(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error) {

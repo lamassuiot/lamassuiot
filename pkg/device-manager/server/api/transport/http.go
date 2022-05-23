@@ -58,6 +58,16 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
+	r.Methods("GET").Path("/v1/stats").Handler(httptransport.NewServer(
+		e.StatsEndpoint,
+		decodeStatsRequest,
+		encodeResponse,
+		append(
+			options,
+			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Stats", logger)),
+			httptransport.ServerBefore(HTTPToContext(logger)),
+		)...,
+	))
 
 	r.Methods("POST").Path("/v1/devices").Handler(httptransport.NewServer(
 		e.PostDeviceEndpoint,
@@ -195,6 +205,11 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 }
 
 func decodeHealthRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	var req endpoint.HealthRequest
+	return req, nil
+}
+
+func decodeStatsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	var req endpoint.HealthRequest
 	return req, nil
 }

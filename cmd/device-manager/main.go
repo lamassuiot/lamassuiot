@@ -88,6 +88,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	statsDB, err := devicesDB.NewInMemoryDB()
 	devicesDBInstance, err := devicesDB.NewDB(devicesRawDB, logger)
 
 	dmsRawDB, err := serverUtils.InitializeDBConnection(cfg.PostgresDmsDB, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresHostname, cfg.PostgresPort, false, "", logger)
@@ -119,7 +120,7 @@ func main() {
 
 	var s service.Service
 	{
-		s = service.NewDevicesService(devicesDBInstance, &lamassuCaClient, logger)
+		s = service.NewDevicesService(devicesDBInstance, statsDB, &lamassuCaClient, logger)
 		s = service.LoggingMiddleware(logger)(s)
 		s = service.NewInstrumentingMiddleware(
 			kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{

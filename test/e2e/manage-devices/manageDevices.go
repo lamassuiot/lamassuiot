@@ -68,7 +68,7 @@ func ManageDevices(scaleIndex int, certPath string, domain string) error {
 	return nil
 }
 
-func LatencyGetDevicebyID(devClient lamassudevice.LamassuDevManagerClient, id string, f *os.File) error {
+func LatencyGetDevicebyID(devClient lamassudevice.LamassuDeviceManagerClient, id string, f *os.File) error {
 	var max, min float64
 	max = 0
 	min = 12
@@ -94,7 +94,7 @@ func LatencyGetDevicebyID(devClient lamassudevice.LamassuDevManagerClient, id st
 	return nil
 }
 
-func LatencyGetDeviceCertHistory(devClient lamassudevice.LamassuDevManagerClient, id string, f *os.File) error {
+func LatencyGetDeviceCertHistory(devClient lamassudevice.LamassuDeviceManagerClient, id string, f *os.File) error {
 	var max, min float64
 	max = 0
 	min = 12
@@ -122,7 +122,7 @@ func LatencyGetDeviceCertHistory(devClient lamassudevice.LamassuDevManagerClient
 	return nil
 }
 
-func LatencyGetDeviceLogs(devClient lamassudevice.LamassuDevManagerClient, id string, f *os.File) error {
+func LatencyGetDeviceLogs(devClient lamassudevice.LamassuDeviceManagerClient, id string, f *os.File) error {
 	var max, min float64
 	max = 0
 	min = 12
@@ -150,7 +150,7 @@ func LatencyGetDeviceLogs(devClient lamassudevice.LamassuDevManagerClient, id st
 	return nil
 }
 
-func LatencyGetDeviceCert(devClient lamassudevice.LamassuDevManagerClient, id string, f *os.File) error {
+func LatencyGetDeviceCert(devClient lamassudevice.LamassuDeviceManagerClient, id string, f *os.File) error {
 	var max, min float64
 	max = 0
 	min = 12
@@ -176,7 +176,7 @@ func LatencyGetDeviceCert(devClient lamassudevice.LamassuDevManagerClient, id st
 	return nil
 }
 
-func LatencyGetDevices(devClient lamassudevice.LamassuDevManagerClient, f *os.File) ([]devdto.Device, error) {
+func LatencyGetDevices(devClient lamassudevice.LamassuDeviceManagerClient, f *os.File) ([]devdto.Device, error) {
 	var max, min float64
 	max = 0
 	min = 12

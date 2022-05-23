@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"sync"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
@@ -17,6 +18,7 @@ import (
 type Service interface {
 	GetSecretProviderName(ctx context.Context) string
 	Health(ctx context.Context) bool
+	Stats(ctx context.Context) dto.Stats
 	GetCAs(ctx context.Context, caType dto.CAType) ([]dto.Cert, error)
 	CreateCA(ctx context.Context, caType dto.CAType, caName string, privateKeyMetadata dto.PrivateKeyMetadata, subject dto.Subject, caTTL int, enrollerTTL int) (dto.Cert, error)
 	ImportCA(ctx context.Context, caType dto.CAType, caName string, certificate x509.Certificate, privateKey dto.PrivateKey, enrollerTTL int) (dto.Cert, error)
@@ -49,6 +51,29 @@ func (s *caService) GetSecretProviderName(ctx context.Context) string {
 
 func (s *caService) Health(ctx context.Context) bool {
 	return true
+}
+
+func (s *caService) Stats(ctx context.Context) dto.Stats {
+	stats := dto.Stats{
+		IssuedCerts: 0,
+		CAs:         0,
+		ScanDate:    time.Now(),
+	}
+
+	cas, err := s.GetCAs(ctx, dto.Pki)
+	if err != nil {
+		return stats
+	}
+
+	for _, ca := range cas {
+		_, issuedCerts, err := s.GetIssuedCerts(ctx, dto.Pki, ca.Name, dto.QueryParameters{Pagination: dto.PaginationOptions{Page: 1, Offset: 10}})
+		if err == nil {
+			stats.CAs = stats.CAs + 1
+			stats.IssuedCerts = stats.IssuedCerts + issuedCerts
+		}
+	}
+
+	return stats
 }
 
 func (s *caService) GetCAs(ctx context.Context, caType dto.CAType) ([]dto.Cert, error) {
