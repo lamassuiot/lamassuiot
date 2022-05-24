@@ -234,7 +234,6 @@ jobs:
     needs:
     - create_dev_server_env
     steps:
-    - run: sleep 60s
     - name: Executing remote ssh commands
       uses: appleboy/ssh-action@master
       with:
@@ -243,6 +242,8 @@ jobs:
         key: ${{ secrets.AWS_SSH_KEY }}
         port: ${{ secrets.AWS_SSH_PORT }}
         script: |
+          while [ ! -f /tmp/finished-user-data ]; do sleep 2; done
+
           git clone https://github.com/vegasbrianc/prometheus.git
           docker swarm init
           cd prometheus
