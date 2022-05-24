@@ -257,6 +257,8 @@ jobs:
           export PATH=\$PATH:/usr/local/go/bin
           EOT
 
+          source /etc/profile.d/go.sh
+
           git clone https://github.com/lamassuiot/lamassuiot -b release
           git clone https://github.com/lamassuiot/lamassu-compose -b develop && cd lamassu-compose
 
