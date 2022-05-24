@@ -248,19 +248,15 @@ jobs:
           cd prometheus
           HOSTNAME=$(hostname) docker stack deploy -c docker-stack.yml prom
           cd ..
-
+          
           sudo apt-get install -y jq
           wget -q https://go.dev/dl/go1.16.15.linux-amd64.tar.gz 
           sudo tar -C /usr/local -xzf go1.16.15.linux-amd64.tar.gz
 
-          echo $PATH
-
           sudo tee -a /etc/profile.d/go.sh > /dev/null <<EOT
-          export PATH=\$PATH:/usr/local/go/bin
+          export PATH=$PATH:/usr/local/go/bin
           EOT
-
           source /etc/profile.d/go.sh
-          echo $PATH
 
           git clone https://github.com/lamassuiot/lamassuiot -b release
           git clone https://github.com/lamassuiot/lamassu-compose -b develop && cd lamassu-compose
