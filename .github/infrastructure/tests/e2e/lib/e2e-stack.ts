@@ -20,6 +20,7 @@ export class E2EStack extends cdk.Stack {
       "wget -q https://go.dev/dl/go1.16.15.linux-amd64.tar.gz",
       "sudo tar -C /usr/local -xzf go1.16.15.linux-amd64.tar.gz",
       `echo 'export PATH=$PATH:/usr/local/go/bin' | sudo tee -a /etc/profile.d/go.sh > /dev/null`,
+      `echo 'export PATH=$PATH:/home/ubuntu/go/bin' | sudo tee -a /etc/profile.d/go.sh > /dev/null`,
       "touch /tmp/finished-user-data",
     )
 
