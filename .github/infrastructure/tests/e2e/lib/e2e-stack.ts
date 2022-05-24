@@ -16,7 +16,10 @@ export class E2EStack extends cdk.Stack {
       'sudo usermod -aG docker ubuntu',
       "sudo curl -L \"https://github.com/docker/compose/releases/download/1.26.0/docker-compose-$(uname -s)-$(uname -m)\"  -o /usr/local/bin/docker-compose",
       "sudo mv /usr/local/bin/docker-compose /usr/bin/docker-compose",
-      "sudo chmod +x /usr/bin/docker-compose"
+      "sudo chmod +x /usr/bin/docker-compose",
+      "wget -q https://go.dev/dl/go1.16.15.linux-amd64.tar.gz",
+      "sudo tar -C /usr/local -xzf go1.16.15.linux-amd64.tar.gz",
+      "echo \"export PATH=$PATH:/usr/local/go/bin\" sudo tee -a ~/.bashrc > /dev/null",
     )
 
     const defaultVPC = ec2.Vpc.fromLookup(this, 'VPC', { isDefault: true });
