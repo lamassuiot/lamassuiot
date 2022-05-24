@@ -21,6 +21,7 @@ export class E2EStack extends cdk.Stack {
       "sudo tar -C /usr/local -xzf go1.16.15.linux-amd64.tar.gz",
       `echo 'export PATH=$PATH:/usr/local/go/bin' | sudo tee -a /etc/profile.d/go.sh > /dev/null`,
       `echo 'export PATH=$PATH:/home/ubuntu/go/bin' | sudo tee -a /etc/profile.d/go.sh > /dev/null`,
+      "sudo apt-get install build-essential -y",
       "touch /tmp/finished-user-data",
     )
 
