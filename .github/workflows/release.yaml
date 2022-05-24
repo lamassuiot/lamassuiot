@@ -234,7 +234,7 @@ jobs:
     needs:
     - create_dev_server_env
     steps:
-    - name: Executing remote ssh commands
+    - name: Wait for user data completion
       uses: appleboy/ssh-action@master
       with:
         host: ${{ needs.create_dev_server_env.outputs.server-ip }}
@@ -244,6 +244,14 @@ jobs:
         script: |
           while [ ! -f /tmp/finished-user-data ]; do sleep 2; done
 
+    - name: Executing remote ssh commands
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ needs.create_dev_server_env.outputs.server-ip }}
+        username: ${{ secrets.AWS_SSH_USERNAME }}
+        key: ${{ secrets.AWS_SSH_KEY }}
+        port: ${{ secrets.AWS_SSH_PORT }}
+        script: |
           git clone https://github.com/vegasbrianc/prometheus.git
           docker swarm init
           cd prometheus
