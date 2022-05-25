@@ -10,7 +10,6 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
-	"fmt"
 	"reflect"
 	"strconv"
 	"time"
@@ -89,16 +88,15 @@ func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, a
 	var dmsDB dmsStore.DB
 	deviceId := csr.Subject.CommonName
 	sn := s.verifyUtils.InsertNth(s.verifyUtils.ToHexInt(clientCertificate.SerialNumber), 2)
-	fmt.Println(sn)
 	dmsId, err := s.dmsDb.SelectBySerialNumber(ctx, sn)
 	if err != nil {
 		return nil, err
 	}
 	aps, err = s.verifyCaName(ctx, aps, dmsDB, dmsId)
 	if aps == "" {
-		level.Debug(s.logger).Log("err", err, "msg", "Error CA Name")
+		level.Debug(s.logger).Log("err", err, "msg", "Error DMS ID")
 		authError := esterror.UnAuthorized{
-			ResourceType: "CA Name",
+			ResourceType: "DMS ID",
 			ResourceId:   dmsId,
 		}
 		return &x509.Certificate{}, &authError

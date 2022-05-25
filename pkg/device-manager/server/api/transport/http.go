@@ -29,7 +29,7 @@ type errorer interface {
 func ErrMissingDevID() error {
 	return &devmanagererrors.GenericError{
 		Message:    "Device ID not specified",
-		StatusCode: 400,
+		StatusCode: 404,
 	}
 }
 func HTTPToContext(logger log.Logger) httptransport.RequestFunc {

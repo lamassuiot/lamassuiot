@@ -235,12 +235,11 @@ func (s *devicesService) GetDeviceById(ctx context.Context, deviceId string) (dt
 func (s *devicesService) DeleteDevice(ctx context.Context, id string) error {
 	_ = s.RevokeDeviceCert(ctx, id, "Revocation due to device removal")
 
-	/*
-		err := s.devicesDb.DeleteDevice(id)
-		if err != nil {
-			return err
-		}
-	*/
+	/*err := s.devicesDb.DeleteDevice(ctx, id)
+	if err != nil {
+		return err
+	}*/
+
 	err := s.devicesDb.UpdateDeviceStatusByID(ctx, id, devicesModel.DeviceDecommisioned.String())
 	if err != nil {
 		return err
