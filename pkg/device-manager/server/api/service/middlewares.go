@@ -166,7 +166,7 @@ func (mw loggingMiddleware) GetDeviceCert(ctx context.Context, id string) (cert 
 		mw.logger.Log(
 			"method", "GetDeviceCert",
 			"id", id,
-			"cert_CommonName", cert.Subject.CN,
+			"cert_CommonName", cert.Subject.CommonName,
 			"cert_SerialNumber", cert.SerialNumber,
 			"took", time.Since(begin),
 			"trace_id", opentracing.SpanFromContext(ctx),

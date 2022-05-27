@@ -71,12 +71,12 @@ func (c *lamassuCaClientConfig) CreateCA(ctx context.Context, caType dto.CAType,
 			KeyBits: privateKeyMetadata.KeyBits,
 		},
 		Subject: dto.Subject{
-			CN: subject.CN,
-			O:  subject.O,
-			OU: subject.OU,
-			C:  subject.C,
-			ST: subject.ST,
-			L:  subject.L,
+			CommonName:       subject.CommonName,
+			Organization:     subject.Organization,
+			OrganizationUnit: subject.OrganizationUnit,
+			Country:          subject.Country,
+			State:            subject.State,
+			Locality:         subject.Locality,
 		},
 	}
 

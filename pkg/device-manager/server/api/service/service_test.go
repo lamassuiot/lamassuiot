@@ -499,12 +499,12 @@ func TestDeleteDevice(t *testing.T) {
 
 func testDevice() dto.Device {
 	subject := dto.Subject{
-		C:  "ES",
-		ST: "Guipuzcoa",
-		L:  "Mondragon",
-		O:  "Ikerlan",
-		OU: "ZPD",
-		CN: "testDeviceMock",
+		Country:          "ES",
+		State:            "Gipuzkoa",
+		Locality:         "Arrasate",
+		Organization:     "Lamassu",
+		OrganizationUnit: "IoT",
+		CommonName:       "testDeviceMock",
 	}
 	key := dto.PrivateKeyMetadataWithStregth{
 		KeyType:     "RSA",
@@ -526,12 +526,12 @@ func testDevice() dto.Device {
 
 func testDeviceNoSerialNumber() dto.Device {
 	subject := dto.Subject{
-		C:  "ES",
-		ST: "Guipuzcoa",
-		L:  "Mondragon",
-		O:  "Ikerlan",
-		OU: "ZPD",
-		CN: "testDeviceMock",
+		Country:          "ES",
+		State:            "Gipuzkoa",
+		Locality:         "Arrasate",
+		Organization:     "Lamassu",
+		OrganizationUnit: "IoT",
+		CommonName:       "testDeviceMock",
 	}
 	key := dto.PrivateKeyMetadataWithStregth{
 		KeyType:     "RSA",
@@ -577,12 +577,12 @@ type Subject struct {
 func testGetDeviceCert() dto.DeviceCert {
 
 	subject := dto.Subject{
-		C:  "",
-		ST: "",
-		L:  "",
-		O:  "",
-		OU: "",
-		CN: "",
+		Country:          "",
+		State:            "",
+		Locality:         "",
+		Organization:     "",
+		OrganizationUnit: "",
+		CommonName:       "",
 	}
 	log := dto.DeviceCert{
 		DeviceId:     "1",

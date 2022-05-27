@@ -287,8 +287,8 @@ func ValidateCreatrCARequest(request CreateCARequest) error {
 			sl.ReportError(req.CaPayload.EnrollerTTL, "enrollerttl", "EnrollerTTL", "enrollerTtlGtCaTtl", "")
 		}
 
-		if req.CaPayload.Subject.CN != req.CaName {
-			sl.ReportError(req.CaPayload.Subject.CN, "commonName", "CommonName", "commonName and caName must be equal", "")
+		if req.CaPayload.Subject.CommonName != req.CaName {
+			sl.ReportError(req.CaPayload.Subject.CommonName, "commonName", "CommonName", "commonName and caName must be equal", "")
 		}
 	}
 

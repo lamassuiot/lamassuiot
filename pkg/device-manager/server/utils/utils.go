@@ -23,8 +23,6 @@ type Utils interface {
 	GetCertsCAType(ctx context.Context, enroll bool) ([]*x509.Certificate, []caDTO.Cert, error)
 	GenerateCSR(csr *x509.CertificateRequest, key interface{}) (*x509.CertificateRequest, error)
 	CheckIfNull(field []string) string
-	InsertNth(s string, n int) string
-	ToHexInt(n *big.Int) string
 }
 type UtilsService struct {
 	logger          log.Logger

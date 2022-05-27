@@ -118,7 +118,7 @@ func (db *DB) SelectAllDevices(ctx context.Context, queryParameters dto.QueryPar
 	devices := make([]dto.Device, 0)
 	for rows.Next() {
 		var dev dto.Device
-		err := rows.Scan(&dev.Id, &dev.Alias, &dev.Description, pq.Array(&dev.Tags), &dev.IconName, &dev.IconColor, &dev.Status, &dev.DmsId, &dev.Subject.C, &dev.Subject.ST, &dev.Subject.L, &dev.Subject.O, &dev.Subject.OU, &dev.Subject.CN, &dev.KeyMetadata.KeyStrength, &dev.KeyMetadata.KeyType, &dev.KeyMetadata.KeyBits, &dev.CreationTimestamp, &dev.ModificationTimestamp, &dev.CurrentCertificate.SerialNumber)
+		err := rows.Scan(&dev.Id, &dev.Alias, &dev.Description, pq.Array(&dev.Tags), &dev.IconName, &dev.IconColor, &dev.Status, &dev.DmsId, &dev.Subject.Country, &dev.Subject.State, &dev.Subject.Locality, &dev.Subject.Organization, &dev.Subject.OrganizationUnit, &dev.Subject.CommonName, &dev.KeyMetadata.KeyStrength, &dev.KeyMetadata.KeyType, &dev.KeyMetadata.KeyBits, &dev.CreationTimestamp, &dev.ModificationTimestamp, &dev.CurrentCertificate.SerialNumber)
 		if err != nil {
 			return []dto.Device{}, 0, err
 		}
@@ -138,7 +138,7 @@ func (db *DB) SelectDeviceById(ctx context.Context, id string) (dto.Device, erro
 	span := opentracing.StartSpan("lamassu-device-manager: Select Device by ID "+id+" from database", opentracing.ChildOf(parentSpan.Context()))
 	var dev dto.Device
 	err := db.QueryRow(sqlStatement, id).Scan(
-		&dev.Id, &dev.Alias, &dev.Description, pq.Array(&dev.Tags), &dev.IconName, &dev.IconColor, &dev.Status, &dev.DmsId, &dev.Subject.C, &dev.Subject.ST, &dev.Subject.L, &dev.Subject.O, &dev.Subject.OU, &dev.Subject.CN, &dev.KeyMetadata.KeyStrength, &dev.KeyMetadata.KeyType, &dev.KeyMetadata.KeyBits, &dev.CreationTimestamp, &dev.ModificationTimestamp, &dev.CurrentCertificate.SerialNumber,
+		&dev.Id, &dev.Alias, &dev.Description, pq.Array(&dev.Tags), &dev.IconName, &dev.IconColor, &dev.Status, &dev.DmsId, &dev.Subject.CommonName, &dev.Subject.State, &dev.Subject.Locality, &dev.Subject.Organization, &dev.Subject.OrganizationUnit, &dev.Subject.CommonName, &dev.KeyMetadata.KeyStrength, &dev.KeyMetadata.KeyType, &dev.KeyMetadata.KeyBits, &dev.CreationTimestamp, &dev.ModificationTimestamp, &dev.CurrentCertificate.SerialNumber,
 	)
 
 	span.Finish()
@@ -191,7 +191,7 @@ func (db *DB) SetKeyAndSubject(ctx context.Context, keyMetadate dto.PrivateKeyMe
 	WHERE id = $10;
 	`
 	span := opentracing.StartSpan("lamassu-device-manager: update Device with ID "+deviceId, opentracing.ChildOf(parentSpan.Context()))
-	res, err := db.Exec(sqlStatement, subject.C, subject.ST, subject.L, subject.O, subject.OU, subject.CN, keyMetadate.KeyStrength, keyMetadate.KeyType, keyMetadate.KeyBits, deviceId)
+	res, err := db.Exec(sqlStatement, subject.Country, subject.State, subject.Locality, subject.Organization, subject.OrganizationUnit, subject.CommonName, keyMetadate.KeyStrength, keyMetadate.KeyType, keyMetadate.KeyBits, deviceId)
 	span.Finish()
 	if err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not update Device with ID "+deviceId)
@@ -235,7 +235,7 @@ func (db *DB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, queryP
 	var devices []dto.Device
 	for rows.Next() {
 		var dev dto.Device
-		err := rows.Scan(&dev.Id, &dev.Alias, &dev.Description, pq.Array(&dev.Tags), &dev.IconName, &dev.IconColor, &dev.Status, &dev.DmsId, &dev.Subject.C, &dev.Subject.ST, &dev.Subject.L, &dev.Subject.O, &dev.Subject.OU, &dev.Subject.CN, &dev.KeyMetadata.KeyStrength, &dev.KeyMetadata.KeyType, &dev.KeyMetadata.KeyBits, &dev.CreationTimestamp, &dev.ModificationTimestamp, &dev.CurrentCertificate.SerialNumber)
+		err := rows.Scan(&dev.Id, &dev.Alias, &dev.Description, pq.Array(&dev.Tags), &dev.IconName, &dev.IconColor, &dev.Status, &dev.DmsId, &dev.Subject.Country, &dev.Subject.State, &dev.Subject.Locality, &dev.Subject.Organization, &dev.Subject.OrganizationUnit, &dev.Subject.CommonName, &dev.KeyMetadata.KeyStrength, &dev.KeyMetadata.KeyType, &dev.KeyMetadata.KeyBits, &dev.CreationTimestamp, &dev.ModificationTimestamp, &dev.CurrentCertificate.SerialNumber)
 		if err != nil {
 			return []dto.Device{}, err
 		}

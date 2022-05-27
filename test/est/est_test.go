@@ -66,6 +66,7 @@ func TestCaCertsLamassuEstClient(t *testing.T) {
 }
 
 func TestEnrollLamassuEstClient(t *testing.T) {
+	os.Mkdir("./certificates", 0755)
 	caName, _ = CreateCa(*domain, *certPath)
 	_ = CreateDMS(*domain, *certPath, caName)
 	serverCert, _ := utils.ReadCertPool(*certPath)
@@ -96,6 +97,7 @@ func TestEnrollLamassuEstClient(t *testing.T) {
 }
 
 func TestReenrollLamassuEstClient(t *testing.T) {
+	os.Mkdir("./certificates", 0755)
 	serverCert, _ := utils.ReadCertPool(*certPath)
 	deviceCert, _ := utils.ReadCert(deviceCertFile)
 	deviceKey, _ := utils.ReadKey(deviceKeyFile)
@@ -150,10 +152,10 @@ func TestServerKeyGenLamassuEstClient(t *testing.T) {
 		})
 	}
 }
-func TestGlobalsignEstClient(t *testing.T) {
-	os.Chmod("./globalsign.sh", 0755)
+func TestGlobalsignEstClient_CaCerts(t *testing.T) {
+	os.Chmod("./globalsign_cacerts.sh", 0755)
 	cmd := &exec.Cmd{
-		Path:   "./globalsign.sh",
+		Path:   "./globalsign_cacerts.sh",
 		Stdout: os.Stdout,
 		Stdin:  os.Stdin,
 	}
@@ -174,10 +176,148 @@ func TestGlobalsignEstClient(t *testing.T) {
 	}
 }
 
-func TestCurl(t *testing.T) {
-	os.Chmod("./curl.sh", 0755)
+func TestGlobalsignEstClient_Enroll(t *testing.T) {
+	os.Chmod("./globalsign_enroll.sh", 0755)
 	cmd := &exec.Cmd{
-		Path:   "./curl.sh",
+		Path:   "./globalsign_enroll.sh",
+		Stdout: os.Stdout,
+		Stdin:  os.Stdin,
+	}
+	testCases := []struct {
+		name string
+		err  error
+	}{
+		{"Global Sign Client", nil},
+	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
+			cmd.Start()
+			err := cmd.Wait()
+			if err != nil {
+				t.Fail()
+			}
+		})
+	}
+}
+func TestGlobalsignEstClient_Reenroll(t *testing.T) {
+	os.Chmod("./globalsign_reenroll.sh", 0755)
+	cmd := &exec.Cmd{
+		Path:   "./globalsign_reenroll.sh",
+		Stdout: os.Stdout,
+		Stdin:  os.Stdin,
+	}
+	testCases := []struct {
+		name string
+		err  error
+	}{
+		{"Global Sign Client", nil},
+	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
+			cmd.Start()
+			err := cmd.Wait()
+			if err != nil {
+				t.Fail()
+			}
+		})
+	}
+}
+func TestGlobalsignEstClient_ServerKeyGen(t *testing.T) {
+	os.Chmod("./globalsign_serverkeygen.sh", 0755)
+	cmd := &exec.Cmd{
+		Path:   "./globalsign_serverkeygen.sh",
+		Stdout: os.Stdout,
+		Stdin:  os.Stdin,
+	}
+	testCases := []struct {
+		name string
+		err  error
+	}{
+		{"Global Sign Client", nil},
+	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
+			cmd.Start()
+			err := cmd.Wait()
+			if err != nil {
+				t.Fail()
+			}
+		})
+	}
+}
+func TestCurl_CaCerts(t *testing.T) {
+	os.Chmod("./curl_cacerts.sh", 0755)
+	cmd := &exec.Cmd{
+		Path:   "./curl_cacerts.sh",
+		Stdout: os.Stdout,
+		Stdin:  os.Stdin,
+	}
+	testCases := []struct {
+		name string
+		err  error
+	}{
+		{"Curl", nil},
+	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
+			cmd.Start()
+			err := cmd.Wait()
+			if err != nil {
+				t.Fail()
+			}
+		})
+	}
+}
+func TestCurl_Enroll(t *testing.T) {
+	os.Chmod("./curl_enroll.sh", 0755)
+	cmd := &exec.Cmd{
+		Path:   "./curl_enroll.sh",
+		Stdout: os.Stdout,
+		Stdin:  os.Stdin,
+	}
+	testCases := []struct {
+		name string
+		err  error
+	}{
+		{"Curl", nil},
+	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
+			cmd.Start()
+			err := cmd.Wait()
+			if err != nil {
+				t.Fail()
+			}
+		})
+	}
+}
+func TestCurl_Reenroll(t *testing.T) {
+	os.Chmod("./curl_reenroll.sh", 0755)
+	cmd := &exec.Cmd{
+		Path:   "./curl_reenroll.sh",
+		Stdout: os.Stdout,
+		Stdin:  os.Stdin,
+	}
+	testCases := []struct {
+		name string
+		err  error
+	}{
+		{"Curl", nil},
+	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
+			cmd.Start()
+			err := cmd.Wait()
+			if err != nil {
+				t.Fail()
+			}
+		})
+	}
+}
+func TestCurl_ServerkeyGen(t *testing.T) {
+	os.Chmod("./curl_serverkeygen.sh", 0755)
+	cmd := &exec.Cmd{
+		Path:   "./curl_serverkeygen.sh",
 		Stdout: os.Stdout,
 		Stdin:  os.Stdin,
 	}
@@ -231,7 +371,7 @@ func CreateCa(domain string, certPath string) (string, error) {
 		return "", err
 	}
 	caName := goid.NewV4UUID().String()
-	ca, err := caClient.CreateCA(context.Background(), caDTO.Pki, caName, caDTO.PrivateKeyMetadata{KeyType: "rsa", KeyBits: 2048}, caDTO.Subject{CN: caName}, 365*time.Hour, 30*time.Hour)
+	ca, err := caClient.CreateCA(context.Background(), caDTO.Pki, caName, caDTO.PrivateKeyMetadata{KeyType: "rsa", KeyBits: 2048}, caDTO.Subject{CommonName: caName}, 365*time.Hour, 30*time.Hour)
 	if err != nil {
 		return "", err
 	}

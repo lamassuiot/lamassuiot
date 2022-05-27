@@ -58,32 +58,32 @@ type Subject struct {
 	// Common name of the CA certificate
 	// required: true
 	// example: Lamassu-Root-CA1-RSA4096
-	CN string `json:"common_name"`
+	CommonName string `json:"common_name"`
 
 	// Organization of the CA certificate
 	// required: true
 	// example: Lamassu IoT
-	O string `json:"organization"`
+	Organization string `json:"organization"`
 
 	// Organization Unit of the CA certificate
 	// required: true
 	// example: Lamassu IoT department 1
-	OU string `json:"organization_unit"`
+	OrganizationUnit string `json:"organization_unit"`
 
 	// Country Name of the CA certificate
 	// required: true
 	// example: ES
-	C string `json:"country"`
+	Country string `json:"country"`
 
 	// State of the CA certificate
 	// required: true
 	// example: Guipuzcoa
-	ST string `json:"state"`
+	State string `json:"state"`
 
 	// Locality of the CA certificate
 	// required: true
 	// example: Arrasate
-	L string `json:"locality"`
+	Locality string `json:"locality"`
 }
 type PrivateKeyMetadata struct {
 	// Algorithm used to create CA key

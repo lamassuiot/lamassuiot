@@ -568,12 +568,12 @@ func testCA() *x509.Certificate {
 
 func testGetDeviceCert() dto.DeviceCert {
 	subject := dto.Subject{
-		C:  "ES",
-		ST: "Gipuzkoa",
-		L:  "Locality",
-		O:  "Organization",
-		OU: "OrganizationalUnit",
-		CN: "testDeviceMock",
+		Country:          "ES",
+		State:            "Gipuzkoa",
+		Locality:         "Locality",
+		Organization:     "Organization",
+		OrganizationUnit: "OrganizationalUnit",
+		CommonName:       "testDeviceMock",
 	}
 	log := dto.DeviceCert{
 		DeviceId:     "1",
@@ -604,12 +604,12 @@ func testDevice(id string) dto.Device {
 	}
 
 	subject := dto.Subject{
-		C:  "ES",
-		ST: "Gipuzkoa",
-		L:  "Locality",
-		O:  "Organization",
-		OU: "OrganizationalUnit",
-		CN: "testDeviceMock",
+		Country:          "ES",
+		State:            "Gipuzkoa",
+		Locality:         "Locality",
+		Organization:     "Organization",
+		OrganizationUnit: "OrganizationalUnit",
+		CommonName:       "testDeviceMock",
 	}
 	device := dto.Device{
 		Id:                id,
@@ -632,12 +632,12 @@ func testDeviceNoSerialNumber() dto.Device {
 	}
 
 	subject := dto.Subject{
-		C:  "ES",
-		ST: "Gipuzkoa",
-		L:  "Locality",
-		O:  "Organization",
-		OU: "OrganizationalUnit",
-		CN: "testDeviceMock",
+		Country:          "ES",
+		State:            "Gipuzkoa",
+		Locality:         "Locality",
+		Organization:     "Organization",
+		OrganizationUnit: "OrganizationalUnit",
+		CommonName:       "testDeviceMock",
 	}
 	device := dto.Device{
 		Id:                "noSN",

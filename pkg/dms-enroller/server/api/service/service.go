@@ -322,12 +322,12 @@ func (s *enrollerService) GetDMSs(ctx context.Context) ([]dto.DMS, error) {
 	for _, item := range d {
 		lamassuCert, _ := s.lamassuCaClient.GetCert(ctx, caType, "Lamassu-DMS-Enroller", item.SerialNumber)
 		item.Subject = dto.Subject{
-			C:  lamassuCert.Subject.C,
-			ST: lamassuCert.Subject.ST,
-			L:  lamassuCert.Subject.L,
-			O:  lamassuCert.Subject.O,
-			OU: lamassuCert.Subject.OU,
-			CN: lamassuCert.Subject.CN,
+			C:  lamassuCert.Subject.Country,
+			ST: lamassuCert.Subject.State,
+			L:  lamassuCert.Subject.Locality,
+			O:  lamassuCert.Subject.Organization,
+			OU: lamassuCert.Subject.OrganizationUnit,
+			CN: lamassuCert.Subject.CommonName,
 		}
 		item.CerificateBase64 = lamassuCert.CertContent.CerificateBase64
 		//	item.EnrolledDevices, err = s.devicesDb.CountDevicesByDmsId(ctx, item.Id)
@@ -355,12 +355,12 @@ func (s *enrollerService) GetDMSbyID(ctx context.Context, id string) (dto.DMS, e
 	}
 	lamassuCert, _ := s.lamassuCaClient.GetCert(ctx, caType, "Lamassu-DMS-Enroller", d.SerialNumber)
 	d.Subject = dto.Subject{
-		C:  lamassuCert.Subject.C,
-		ST: lamassuCert.Subject.ST,
-		L:  lamassuCert.Subject.L,
-		O:  lamassuCert.Subject.O,
-		OU: lamassuCert.Subject.OU,
-		CN: lamassuCert.Subject.CN,
+		C:  lamassuCert.Subject.Country,
+		ST: lamassuCert.Subject.State,
+		L:  lamassuCert.Subject.Locality,
+		O:  lamassuCert.Subject.Organization,
+		OU: lamassuCert.Subject.OrganizationUnit,
+		CN: lamassuCert.Subject.CommonName,
 	}
 	d.CerificateBase64 = lamassuCert.CertContent.CerificateBase64
 	CAs, err := s.dmsDBStore.SelectByDMSIDAuthorizedCAs(ctx, d.Id)

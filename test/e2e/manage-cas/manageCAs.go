@@ -44,7 +44,7 @@ func ManageCAs(caNumber int, scaleIndex int, certPath string, domain string) (ca
 	for i := 0; i < caNumber; i++ {
 		caName := goid.NewV4UUID().String()
 
-		_, err = caClient.CreateCA(context.Background(), caDTO.Pki, caName, caDTO.PrivateKeyMetadata{KeyType: "rsa", KeyBits: 2048}, caDTO.Subject{CN: caName}, 365*time.Hour, 30*time.Hour)
+		_, err = caClient.CreateCA(context.Background(), caDTO.Pki, caName, caDTO.PrivateKeyMetadata{KeyType: "rsa", KeyBits: 2048}, caDTO.Subject{CommonName: caName}, 365*time.Hour, 30*time.Hour)
 		if err != nil {
 			level.Error(logger).Log("err", err)
 			return caDTO.Cert{}, err

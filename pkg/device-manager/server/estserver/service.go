@@ -24,6 +24,8 @@ import (
 	devicesStore "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/device/store"
 	dmsStore "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/dms/store"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/utils"
+	lamassuUtils "github.com/lamassuiot/lamassuiot/pkg/utils"
+
 	esterror "github.com/lamassuiot/lamassuiot/pkg/est/server/api/errors"
 	lamassuest "github.com/lamassuiot/lamassuiot/pkg/est/server/api/service"
 )
@@ -87,7 +89,7 @@ func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, a
 	var PrivateKeyMetadataWithStregth dto.PrivateKeyMetadataWithStregth
 	var dmsDB dmsStore.DB
 	deviceId := csr.Subject.CommonName
-	sn := s.verifyUtils.InsertNth(s.verifyUtils.ToHexInt(clientCertificate.SerialNumber), 2)
+	sn := lamassuUtils.InsertNth(lamassuUtils.ToHexInt(clientCertificate.SerialNumber), 2)
 	dmsId, err := s.dmsDb.SelectBySerialNumber(ctx, sn)
 	if err != nil {
 		return nil, err
@@ -141,18 +143,18 @@ func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, a
 	level.Debug(s.logger).Log("msg", PrivateKeyMetadataWithStregth)
 
 	subject := dto.Subject{
-		CN: csr.Subject.CommonName,
-		O:  s.verifyUtils.CheckIfNull(csr.Subject.Organization),
-		OU: s.verifyUtils.CheckIfNull(csr.Subject.OrganizationalUnit),
-		C:  s.verifyUtils.CheckIfNull(csr.Subject.Country),
-		ST: s.verifyUtils.CheckIfNull(csr.Subject.Province),
-		L:  s.verifyUtils.CheckIfNull(csr.Subject.Locality),
+		CommonName:       csr.Subject.CommonName,
+		Organization:     s.verifyUtils.CheckIfNull(csr.Subject.Organization),
+		OrganizationUnit: s.verifyUtils.CheckIfNull(csr.Subject.OrganizationalUnit),
+		Country:          s.verifyUtils.CheckIfNull(csr.Subject.Country),
+		State:            s.verifyUtils.CheckIfNull(csr.Subject.Province),
+		Locality:         s.verifyUtils.CheckIfNull(csr.Subject.Locality),
 	}
-	err = s.devicesDb.SetKeyAndSubject(ctx, PrivateKeyMetadataWithStregth, subject, subject.CN)
+	err = s.devicesDb.SetKeyAndSubject(ctx, PrivateKeyMetadataWithStregth, subject, subject.CommonName)
 	if err != nil {
 		return nil, err
 	}
-	serialNumber := s.verifyUtils.InsertNth(s.verifyUtils.ToHexInt(dataCert.SerialNumber), 2)
+	serialNumber := lamassuUtils.InsertNth(lamassuUtils.ToHexInt(dataCert.SerialNumber), 2)
 	log := dto.DeviceLog{
 		DeviceId:   deviceId,
 		LogType:    devicesModel.LogProvisioned.String(),
@@ -269,7 +271,7 @@ func (s *EstService) Reenroll(ctx context.Context, cert *x509.Certificate, csr *
 	}
 
 	deviceId = dataCert.Subject.CommonName
-	serialNumber := s.verifyUtils.InsertNth(s.verifyUtils.ToHexInt(dataCert.SerialNumber), 2)
+	serialNumber := lamassuUtils.InsertNth(lamassuUtils.ToHexInt(dataCert.SerialNumber), 2)
 	log := dto.DeviceLog{
 		DeviceId:   deviceId,
 		LogType:    devicesModel.LogProvisioned.String(),

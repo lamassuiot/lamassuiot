@@ -133,7 +133,7 @@ func CreateDMS(domain string, certPath string, caName string) (dmsDTO.DMS, error
 func CreateCa(domain string, certPath string) (string, error) {
 	caClient, err := client.LamassuCaClient(certPath, domain)
 	caName := goid.NewV4UUID().String()
-	ca, err := caClient.CreateCA(context.Background(), caDTO.Pki, caName, caDTO.PrivateKeyMetadata{KeyType: "rsa", KeyBits: 2048}, caDTO.Subject{CN: caName}, 365*time.Hour, 30*time.Hour)
+	ca, err := caClient.CreateCA(context.Background(), caDTO.Pki, caName, caDTO.PrivateKeyMetadata{KeyType: "rsa", KeyBits: 2048}, caDTO.Subject{CommonName: caName}, 365*time.Hour, 30*time.Hour)
 	if err != nil {
 		return "", err
 	}

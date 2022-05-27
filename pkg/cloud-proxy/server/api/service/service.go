@@ -334,7 +334,7 @@ func (s *cloudProxyService) HandleUpdateCertStatusEvent(ctx context.Context, caN
 		return err
 	}
 
-	deviceID := deviceCert.Subject.CN
+	deviceID := deviceCert.Subject.CommonName
 	activeCloudConnectors, err := s.GetCloudConnectors(ctx)
 	if err != nil {
 		level.Error(s.logger).Log("err", err, "msg", "could not get active cloud connector list")

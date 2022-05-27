@@ -119,12 +119,12 @@ func testCert() caDTO.Cert {
 	}
 
 	subject := caDTO.Subject{
-		CN: "CA",
-		OU: "ZPD",
-		O:  "IKL",
-		L:  "Arrasate",
-		ST: "Gipuzkoa",
-		C:  "ES",
+		CommonName:       "CA",
+		OrganizationUnit: "ZPD",
+		Organization:     "IKL",
+		Locality:         "Arrasate",
+		State:            "Gipuzkoa",
+		Country:          "ES",
 	}
 
 	certContent := caDTO.CertContent{

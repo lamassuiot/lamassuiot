@@ -144,7 +144,7 @@ func (mw loggingMiddleware) GetCert(ctx context.Context, caType dto.CAType, caNa
 			"method", "GetCert",
 			"ca_name", caName,
 			"serialNumber", serialNumber,
-			"cert_CommonName", cert.Subject.CN,
+			"cert_CommonName", cert.Subject.CommonName,
 			"took", time.Since(begin),
 			"trace_id", opentracing.SpanFromContext(ctx),
 			"err", err,

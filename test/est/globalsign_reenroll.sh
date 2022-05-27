@@ -3,11 +3,21 @@
 #Export .env variables
 export $(grep -v '^#' .env | xargs)
 
-#echo "1) Obtain the Root certificate"
-cd certificates
+#echo "1) Install GlobalSign Est Client"
+go install github.com/globalsign/est/cmd/estclient@latest
+
+
+#echo "2) Obtain the Root certificate"
+if [ -d "./certificates" ]
+then
+    cd certificates
+else
+    mkdir certificates && cd certificates
+fi
+
 openssl s_client -connect $DOMAIN:443 2>/dev/null </dev/null |  sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' > root-ca.pem
 
-#echo "2) Create CA"
+#echo "3) Create CA"
 export AUTH_ADDR=auth.$DOMAIN
 export TOKEN=$(curl -k --location --request POST "https://$AUTH_ADDR/auth/realms/lamassu/protocol/openid-connect/token" --header 'Content-Type: application/x-www-form-urlencoded' --data-urlencode 'grant_type=password' --data-urlencode 'client_id=frontend' --data-urlencode 'username=enroller' --data-urlencode 'password=enroller' | jq -r .access_token)
 
@@ -16,8 +26,7 @@ export CA_NAME=$(uuidgen)
 export CREATE_CA_RESP=$(curl -k -s --location --request POST "https://$CA_ADDR/v1/pki/$CA_NAME" --header "Authorization: Bearer ${TOKEN}" --header 'Content-Type: application/json' --data-raw "{\"ca_ttl\": 262800, \"enroller_ttl\": 175200, \"subject\":{ \"common_name\": \"$CA_NAME\",\"country\": \"ES\",\"locality\": \"Arrasate\",\"organization\": \"LKS Next, S. Coop\",\"state\": \"Gipuzkoa\"},\"key_metadata\":{\"bits\": 4096,\"type\": \"rsa\"}}")
 #echo $CREATE_CA_RESP
 
-#echo "3) Create DMS"
-
+#echo "4) Create DMS"
 export ENROLL_ADDR=$DOMAIN/api/dmsenroller
 export TOKEN=$(curl -k --location --request POST "https://$AUTH_ADDR/auth/realms/lamassu/protocol/openid-connect/token" --header 'Content-Type: application/x-www-form-urlencoded' --data-urlencode 'grant_type=password' --data-urlencode 'client_id=frontend' --data-urlencode 'username=enroller' --data-urlencode 'password=enroller' | jq -r .access_token)
 export DMS_NAME=$(uuidgen)
@@ -28,53 +37,12 @@ export DMS_ID=$(echo $DMS_REGISTER_RESPONSE | jq -r .dms.id)
 export DMS_ENROLL_RESPONSE=$(curl -k --location --request PUT "https://$ENROLL_ADDR/v1/$DMS_ID" --header "Authorization: Bearer $TOKEN" --header 'Content-Type: application/json' --data-raw "{\"status\": \"APPROVED\",\"authorized_cas\": [\"$CA_NAME\"] }")
 echo $DMS_ENROLL_RESPONSE | jq -r .crt | sed 's/\r/\n/g' | sed -Ez '$ s/\n+$//' | base64 -d > dms.crt
 
-#echo "4) Getting the CA certificates"
 
-curl https://$DOMAIN/api/devmanager/.well-known/est/cacerts -o cacerts.p7 --cacert root-ca.pem
-openssl base64 -d -in cacerts.p7 | openssl pkcs7 -inform DER -outform PEM -print_certs -out cacerts.pem 
-
-#echo "5) Enrolling with an existing private key"
-
-export DMS_CRT=./dms.crt
-export DMS_KEY=./dms.key
+#echo "6) Enrolling with an existing private key"
 export DEVICE_ID=$(uuidgen)
+openssl genrsa 4096 > key.pem
+estclient csr -key key.pem -cn $DEVICE_ID -out csr.pem
+estclient enroll -server $DOMAIN/api/devmanager -explicit root-ca.pem -csr csr.pem -aps $CA_NAME -key dms.key -certs dms.crt -out cert.pem
 
-openssl req -new -newkey rsa:2048 -nodes -keyout device.key -out device.csr -subj "/CN=$DEVICE_ID"
-sed '1d' device.csr > device2.csr
-mv  device2.csr device.csr
-sed '$d' device.csr > device2.csr
-mv  device2.csr device.csr
-curl https://$DOMAIN/api/devmanager/.well-known/est/$CA_NAME/simpleenroll --cert $DMS_CRT --key $DMS_KEY -s -o cert.p7 --cacert root-ca.pem  --data-binary @device.csr -H "Content-Type: application/pkcs10" 
-openssl base64 -d -in cert.p7 | openssl pkcs7 -inform DER -outform PEM -print_certs -out cert.pem 
-#echo "6) Reenrolling"
-
-export DEVICE_CRT=cert.pem
-export DEVICE_KEY=device.key
-
-curl https://$DOMAIN/api/devmanager/.well-known/est/simplereenroll --cert $DEVICE_CRT --key $DEVICE_KEY -s -o newcert.p7 --cacert root-ca.pem --data-binary @device.csr -H "Content-Type: application/pkcs10" 
-openssl base64 -d -in newcert.p7 | openssl pkcs7 -inform DER -outform PEM -print_certs -out newcert.pem 
-
-#echo "7) Enrolling with a server-generated private key"
-export DEVICE_ID=$(uuidgen)
-openssl req -new -newkey rsa:2048 -nodes -keyout device.key -out device.csr -subj "/CN=$DEVICE_ID"
-sed '1d' device.csr > device2.csr
-mv  device2.csr device.csr
-sed '$d' device.csr > device2.csr
-mv  device2.csr device.csr
-curl https://$DOMAIN/api/devmanager/.well-known/est/$CA_NAME/serverkeygen --cert $DMS_CRT --key $DMS_KEY -s -o cert.p7 --cacert root-ca.pem  --data-binary @device.csr -H "Content-Type: application/pkcs10"
-
-cat cert.p7 | sed -ne '/application\/pkcs7-mime/,/-estServerKeyGenBoundary/p' > crt.p7
-sed '$d' crt.p7 > crt2.p7
-mv crt2.p7 crt.p7
-sed '$d' crt.p7 > crt2.p7
-mv crt2.p7 crt.p7
-sed '1d' crt.p7 > crt2.p7
-mv crt2.p7 crt.p7
-sed '1d' crt.p7 > crt2.p7
-mv crt2.p7 crt.p7
-openssl base64 -d -in crt.p7 | openssl pkcs7 -inform DER -outform PEM -print_certs -out cert.pem
-
-#echo "8) Remove all certificates"
-
-cd ..
-rm -r certificates/
+#echo "7) Reenrolling"
+estclient reenroll -server $DOMAIN/api/devmanager -explicit root-ca.pem -key key.pem -certs cert.pem -out newcert.pem

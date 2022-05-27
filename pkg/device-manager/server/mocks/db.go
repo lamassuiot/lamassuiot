@@ -371,12 +371,12 @@ func (db *MockDB) SelectDmssLastIssuedCert(ctx context.Context, queryParameters 
 
 func testDevice() dto.Device {
 	subject := dto.Subject{
-		C:  "ES",
-		ST: "Guipuzcoa",
-		L:  "Mondragon",
-		O:  "Ikerlan",
-		OU: "ZPD",
-		CN: "testDeviceMock",
+		Country:          "ES",
+		State:            "Gipuzkoa",
+		Locality:         "Arrasate",
+		Organization:     "Lamassu",
+		OrganizationUnit: "IoT",
+		CommonName:       "testDeviceMock",
 	}
 	key := dto.PrivateKeyMetadataWithStregth{
 		KeyType:     "RSA",
@@ -398,12 +398,12 @@ func testDevice() dto.Device {
 }
 func testDeviceNoSerialNumber() dto.Device {
 	subject := dto.Subject{
-		C:  "ES",
-		ST: "Guipuzcoa",
-		L:  "Mondragon",
-		O:  "Ikerlan",
-		OU: "ZPD",
-		CN: "testDeviceMock",
+		Country:          "ES",
+		State:            "Gipuzkoa",
+		Locality:         "Arrasate",
+		Organization:     "Lamassu",
+		OrganizationUnit: "IoT",
+		CommonName:       "testDeviceMock",
 	}
 	key := dto.PrivateKeyMetadataWithStregth{
 		KeyType:     "RSA",

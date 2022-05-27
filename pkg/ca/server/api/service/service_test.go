@@ -476,12 +476,12 @@ func testCA(caName string) dto.Cert {
 	}
 
 	subject := dto.Subject{
-		C:  "ES",
-		ST: "Gipuzkoa",
-		L:  "Locality",
-		O:  "Organization",
-		OU: "OrganizationalUnit",
-		CN: "CommonName",
+		Country:          "ES",
+		State:            "Gipuzkoa",
+		Locality:         "Locality",
+		Organization:     "Organization",
+		OrganizationUnit: "OrganizationalUnit",
+		CommonName:       "CommonName",
 	}
 
 	certContent := dto.CertContent{
