@@ -1,5 +1,6 @@
 *.key
 *.crt
+*.csr
 nogit
 .vscode
 *__debug_bin

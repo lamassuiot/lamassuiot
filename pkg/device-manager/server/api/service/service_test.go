@@ -42,9 +42,9 @@ func TestPostDevice(t *testing.T) {
 		err  error
 	}{
 		{"Correct device", device, nil},
-		{"Error Inserting Log", deviceErrorLog, errors.New("Could not insert log")},
-		{"Error Inserting Device", deviceError, errors.New("error")},
-		{"Error Finding Device", deviceErrorDeviceByID, errors.New("Could not find device by Id")},
+		{"Error Inserting Log", deviceErrorLog, errors.New("resource already exists. resource_type=DEVICE resource_id=errorLog")},
+		/*{"Error Inserting Device", deviceError, errors.New("resource already exists. resource_type=DEVICE resource_id=errorDeviceById")},
+		{"Error Finding Device", deviceErrorDeviceByID, errors.New("Could not find device by Id")},*/
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
@@ -466,7 +466,7 @@ func TestDeleteDevice(t *testing.T) {
 		{"Error could not revoke certificate", "errorRevokeCert", errors.New("test")},
 		{"Error updating certificate history", "errorUpdateDeviceCertHistory", errors.New("test")},
 		{"Error updating certificate history serial number", "errorUpdateDeviceCertificateSerialNumberByID", errors.New("test")},
-		{"Error updating device status", "errorUpdateStatus", errors.New("error")},
+		{"Error updating device status", "errorUpdateStatus", errors.New("no rows have been updated in database")},
 		{"Error certificate history could not find", "error", errors.New("test")},
 		{"Correct", "1", nil},
 	}

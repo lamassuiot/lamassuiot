@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/log/level"
@@ -14,7 +15,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/models/dms"
 
 	//devicesStore "github.com/lamassuiot/lamassuiot/pkg/device-manager/models/device/store"
-
+	devmanagererrors "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
 	_ "github.com/lib/pq"
 )
 
@@ -40,6 +41,8 @@ type MockDB struct {
 	*sql.DB
 	logger log.Logger
 }
+
+var device = testDevice()
 
 func NewDevicedDBMock(t *testing.T) (*MockDB, error) {
 	t.Helper()
@@ -67,6 +70,17 @@ func checkDBAlive(db *sql.DB) error {
 	return err
 }
 
+func (db *MockDB) GetStats(ctx context.Context) (dto.Stats, time.Time) {
+	stat := dto.Stats{
+		PendingEnrollment: 1,
+		Provisioned:       0,
+		Decomissioned:     0,
+		AboutToExpire:     5,
+		Expired:           1,
+		Revoked:           2,
+	}
+	return stat, time.Now()
+}
 func (db *MockDB) SelectBySerialNumber(ctx context.Context, SerialNumber string) (string, error) {
 	return "810fbd45-55a6-4dd7-8466-c3d3eb854357", nil
 }
@@ -74,13 +88,22 @@ func (db *MockDB) SelectByDMSIDAuthorizedCAs(ctx context.Context, dmsid string) 
 	return nil, nil
 }
 func (db *MockDB) UpdateByID(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) error {
-	return nil
+	if deviceID == "error" {
+		err := errors.New("No rows have been updated in database")
+		return err
+
+	} else {
+		return nil
+	}
 }
 
 func (db *MockDB) InsertDevice(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) error {
-	if deviceID == "error" {
-		return errors.New("error")
-
+	if deviceID != device.Id {
+		duplicationErr := &devmanagererrors.DuplicateResourceError{
+			ResourceType: "DEVICE",
+			ResourceId:   deviceID,
+		}
+		return duplicationErr
 	} else {
 		return nil
 	}
@@ -113,13 +136,10 @@ func (db *MockDB) SelectDeviceById(ctx context.Context, id string) (dto.Device, 
 						dev.Status = devicesModel.DeviceProvisioned.String()
 					}
 				} else {
-
 					dev.Status = devicesModel.DeviceProvisioned.String()
 				}
 				return dev, nil
-
 			} else {
-
 				return dev, nil
 			}
 		}
@@ -160,11 +180,19 @@ func (db *MockDB) SelectDeviceById(ctx context.Context, id string) (dto.Device, 
 }
 
 func (db *MockDB) SelectAllDevices(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.Device, int, error) {
-	failDB := ctx.Value("DBShouldFail").(bool)
+	if ctx.Value("DBShouldFail") != nil {
+		failDB := ctx.Value("DBShouldFail").(bool)
 
-	if failDB {
-		var a []dto.Device
-		return a, 0, errors.New("Testing DB connection failed")
+		if failDB {
+			var a []dto.Device
+			return a, 0, errors.New("Testing DB connection failed")
+		} else {
+			var devList []dto.Device
+			var d dto.Device
+			d = testDevice()
+			devList = append(devList, d)
+			return devList, 0, nil
+		}
 	} else {
 		var devList []dto.Device
 		var d dto.Device
@@ -181,27 +209,15 @@ func (db *MockDB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, qu
 	devList = append(devList, d)
 
 	if dms_id == "error" {
-		var a []dto.Device
-		return a, ErrDeviceById
+		notFoundErr := &devmanagererrors.ResourceNotFoundError{
+			ResourceType: "DEVICE",
+			ResourceId:   dms_id,
+		}
+		return []dto.Device{}, notFoundErr
 	}
 	return devList, nil
 }
 
-/*func (db *MockDB) UpdateDeviceStatusByID(ctx context.Context, id string, newStatus string) error {
-	if ctx.Value("DBUpdateStatus") != nil {
-		failDBLog := ctx.Value("DBUpdateStatus").(bool)
-
-		if failDBLog {
-			return errors.New("Error Update Status")
-		}
-	} else {
-		if id == "errorUpdateStatus" {
-			return errors.New("error")
-		}
-		return nil
-	}
-	return nil
-}*/
 func (db *MockDB) UpdateDeviceCertificateSerialNumberByID(ctx context.Context, id string, serialNumber string) error {
 	if ctx.Value("DBUpdateDeviceCertificateSerialNumberByID") != nil {
 		failDBLog := ctx.Value("DBUpdateDeviceCertificateSerialNumberByID").(bool)
@@ -225,6 +241,9 @@ func (db *MockDB) UpdateDeviceCertHistory(ctx context.Context, deviceId string, 
 	return nil
 }
 func (db *MockDB) DeleteDevice(ctx context.Context, id string) error {
+	if id == "notExistingDeviceId" {
+		return errors.New("error")
+	}
 	return nil
 }
 
@@ -254,39 +273,55 @@ func (db *MockDB) SelectDeviceLogs(ctx context.Context, deviceId string) ([]dto.
 }
 
 func (db *MockDB) InsertDeviceCertHistory(ctx context.Context, l dto.DeviceCertHistory) error {
-	failDB := ctx.Value("DBInsertDeviceCertHistory").(bool)
+	if ctx.Value("DBInsertDeviceCertHistory") != nil {
+		failDB := ctx.Value("DBInsertDeviceCertHistory").(bool)
 
-	if failDB {
-		return errors.New("Testing DB connection failed")
+		if failDB {
+			return errors.New("Testing DB connection failed")
+		} else {
+			return nil
+		}
 	} else {
 		return nil
 	}
 }
 func (db *MockDB) SelectDeviceCertHistory(ctx context.Context, deviceId string) ([]dto.DeviceCertHistory, error) {
-	failDB := ctx.Value("DBSelectDeviceCertHistory").(bool)
+	if ctx.Value("DBSelectDeviceCertHistory") != nil {
+		failDB := ctx.Value("DBSelectDeviceCertHistory").(bool)
 
-	if failDB {
-		var a []dto.DeviceCertHistory
-		return a, errors.New("Testing DB connection failed")
+		if failDB {
+			var a []dto.DeviceCertHistory
+			return a, errors.New("Testing DB connection failed")
+		} else {
+			return testGetDeviceCertHistory(), nil
+		}
 	} else {
 		return testGetDeviceCertHistory(), nil
 	}
 }
 func (db *MockDB) SelectDeviceCertHistoryBySerialNumber(ctx context.Context, serialNumber string) (dto.DeviceCertHistory, error) {
-	failDB := ctx.Value("DBSelectDeviceCertHistoryBySerialNumberFail").(bool)
+	if ctx.Value("DBSelectDeviceCertHistoryBySerialNumberFail") != nil {
+		failDB := ctx.Value("DBSelectDeviceCertHistoryBySerialNumberFail").(bool)
 
-	if failDB {
-		return dto.DeviceCertHistory{}, errors.New("Testing DB connection failed")
+		if failDB {
+			return dto.DeviceCertHistory{}, errors.New("Testing DB connection failed")
+		} else {
+			return testGetDeviceCertHistory()[0], nil
+		}
 	} else {
 		return testGetDeviceCertHistory()[0], nil
 	}
 }
 func (db *MockDB) SelectDeviceCertHistoryLastThirtyDays(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.DeviceCertHistory, error) {
-	failDB := ctx.Value("DBSelectDeviceCertHistory").(bool)
+	if ctx.Value("DBSelectDeviceCertHistoryBySerialNumberFail") != nil {
+		failDB := ctx.Value("DBSelectDeviceCertHistory").(bool)
 
-	if failDB {
-		var a []dto.DeviceCertHistory
-		return a, errors.New("Testing DB connection failed")
+		if failDB {
+			var a []dto.DeviceCertHistory
+			return a, errors.New("Testing DB connection failed")
+		} else {
+			return testGetDeviceCertHistory(), nil
+		}
 	} else {
 		return testGetDeviceCertHistory(), nil
 	}
@@ -295,15 +330,39 @@ func (db *MockDB) SetKeyAndSubject(ctx context.Context, keyMetadate dto.PrivateK
 	return nil
 }
 func (db *MockDB) UpdateDeviceStatusByID(ctx context.Context, id string, newStatus string) error {
+	if ctx.Value("DBUpdateDeviceCertificateSerialNumberByID") != nil {
+		if ctx.Value("DBUpdateStatus") != nil {
+			failDBLog := ctx.Value("DBUpdateStatus").(bool)
+
+			if failDBLog {
+				return errors.New("Error Update Status")
+			}
+		} else {
+			if id == "errorUpdateStatus" {
+				return errors.New("no rows have been updated in database")
+			}
+			return nil
+		}
+	} else {
+		if id == "errorUpdateStatus" {
+			return errors.New("no rows have been updated in database")
+		}
+		return nil
+	}
 	return nil
 }
 
 func (db *MockDB) SelectDmssLastIssuedCert(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.DMSLastIssued, error) {
-	failDB := ctx.Value("DBSelectDmssLastIssuedCert").(bool)
+	if ctx.Value("DBSelectDmssLastIssuedCert") != nil {
+		failDB := ctx.Value("DBSelectDmssLastIssuedCert").(bool)
 
-	if failDB {
-		var a []dto.DMSLastIssued
-		return a, errors.New("Testing DB connection failed")
+		if failDB {
+			var a []dto.DMSLastIssued
+			return a, errors.New("Testing DB connection failed")
+		} else {
+
+			return testDmsLastIssuedCert(), nil
+		}
 	} else {
 
 		return testDmsLastIssuedCert(), nil
@@ -322,16 +381,17 @@ func testDevice() dto.Device {
 	key := dto.PrivateKeyMetadataWithStregth{
 		KeyType:     "RSA",
 		KeyBits:     3072,
-		KeyStrength: "",
+		KeyStrength: "low",
 	}
 	device := dto.Device{
-		Id:                "1",
-		Alias:             "testDeviceMock",
-		Status:            "CERT_REVOKED",
-		DmsId:             "1",
-		Subject:           subject,
-		KeyMetadata:       key,
-		CreationTimestamp: "2022-01-11T07:02:40.082286Z",
+		Id:                    "1",
+		Alias:                 "testDeviceMock",
+		Status:                "CERT_REVOKED",
+		DmsId:                 "1",
+		Subject:               subject,
+		KeyMetadata:           key,
+		CreationTimestamp:     "2022-01-11T07:02:40.082286Z",
+		ModificationTimestamp: "2022-01-11T07:02:40.082286Z",
 	}
 
 	return device
