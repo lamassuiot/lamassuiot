@@ -6,17 +6,17 @@ on:
       - release
 
 jobs:
-  # unit_testing_ca:
-  #   name: CA Unit Testing
-  #   uses: ./.github/workflows/ca-develop.yaml
+  unit_testing_ca:
+    name: CA Unit Testing
+    uses: ./.github/workflows/ca-develop.yaml
 
-  # unit_testing_dms_enroller:
-  #   name: DMS Enroller Unit Testing
-  #   uses: ./.github/workflows/dms-enroller-develop.yaml
+  unit_testing_dms_enroller:
+    name: DMS Enroller Unit Testing
+    uses: ./.github/workflows/dms-enroller-develop.yaml
 
-  # unit_testing_device_manager:
-  #   name: DeviceManager Unit Testing
-  #   uses: ./.github/workflows/device-manager-develop.yaml
+  unit_testing_device_manager:
+    name: DeviceManager Unit Testing
+    uses: ./.github/workflows/device-manager-develop.yaml
 
   build_ca_dev_docker_image:
       name: CA - Release DEV docker images
@@ -24,7 +24,6 @@ jobs:
       - unit_testing_ca
       - unit_testing_dms_enroller
       - unit_testing_device_manager
-      # runs-on: self-hosted
       runs-on: ubuntu-latest
       steps:        
       - name: Login to DockerHub
