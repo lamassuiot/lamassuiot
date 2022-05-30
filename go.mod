@@ -2,7 +2,7 @@ module github.com/lamassuiot/lamassuiot
 
 go 1.16
 
-replace github.com/lamassuiot/lamassu-aws-connector => /home/ikerlan/lamassu/lamassu-aws-2/aws-connector
+replace github.com/lamassuiot/lamassu-aws-connector => /home/lamassu/lamassu-aws-connector/aws-connector
 
 require (
 	cloud.google.com/go/kms v1.4.0 // indirect
@@ -11,6 +11,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.1.0 // indirect
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
+	github.com/gavv/httpexpect/v2 v2.3.1
 	github.com/getkin/kin-openapi v0.88.0
 	github.com/globalsign/pemfile v1.0.0
 	github.com/go-kit/kit v0.12.0
@@ -36,5 +37,6 @@ require (
 	github.com/streadway/amqp v1.0.0
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	go.mozilla.org/pkcs7 v0.0.0-20200128120323-432b2356ecb1
+	golang.org/x/tools v0.1.10 // indirect
 
 )

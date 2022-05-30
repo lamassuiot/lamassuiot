@@ -147,9 +147,12 @@ func Login(client *api.Client, roleID string, secretID string) error {
 }
 
 func (vs *VaultSecrets) getLoggerFromContext(ctx context.Context) log.Logger {
-	logger := ctx.Value(utils.LamassuLoggerContextKey).(log.Logger)
-	if logger == nil {
+	var logger log.Logger
+	untypedLogger := ctx.Value(utils.LamassuLoggerContextKey)
+	if untypedLogger == nil {
 		logger = vs.logger
+	} else {
+		logger = untypedLogger.(log.Logger)
 	}
 	return logger
 }
@@ -174,7 +177,11 @@ func (vs *VaultSecrets) SignCertificate(ctx context.Context, caType dto.CAType, 
 		data, err = vs.client.Logical().Write(vs.pkiPath+caType.ToVaultPath()+caName+"/sign/enroller", options)
 	}
 	if err != nil {
-		return dto.SignResponse{}, err
+		notFoundErr := &lamassuErrors.ResourceNotFoundError{
+			ResourceType: "Sign Certificate",
+			ResourceId:   caName,
+		}
+		return dto.SignResponse{}, notFoundErr
 	}
 	certData := data.Data["certificate"]
 	certPEMBlock, _ := pem.Decode([]byte(certData.(string)))
@@ -423,7 +430,11 @@ func (vs *VaultSecrets) GetCert(ctx context.Context, caType dto.CAType, caName s
 
 	if err != nil || certResponse == nil {
 		level.Debug(logger).Log("err", err, "msg", "Could not read cert with serial number "+serialNumber+" from CA "+caName)
-		return dto.Cert{}, errors.New("could not read cert from CA")
+		notFoundErr := &lamassuErrors.ResourceNotFoundError{
+			ResourceType: "Get Certificate",
+			ResourceId:   serialNumber,
+		}
+		return dto.Cert{}, notFoundErr
 	}
 	cert, err := DecodeCert([]byte(certResponse.Data["certificate"].(string)))
 	if err != nil {

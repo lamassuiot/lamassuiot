@@ -200,9 +200,10 @@ func MakeImportCAEndpoint(s service.Service) endpoint.Endpoint {
 				privKey.Key = rsaKey
 			} else {
 				err = &errors.GenericError{
-					Message:    "Invalid Key Format",
+					Message:    "Invalid Key bits",
 					StatusCode: 400,
 				}
+				return nil, err
 			}
 		}
 

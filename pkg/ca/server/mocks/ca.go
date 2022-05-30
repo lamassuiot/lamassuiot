@@ -21,6 +21,9 @@ type caDBMock struct {
 	logger log.Logger
 }
 
+var cert_SerialNumber string
+var ca_name string
+
 func NewCasDBMock(t *testing.T) (*caDBMock, error) {
 	t.Helper()
 	db, err := sql.Open("driverName", "dataSourceName")
@@ -41,10 +44,23 @@ func NewCasDBMock(t *testing.T) (*caDBMock, error) {
 }
 
 func (db *caDBMock) InsertCert(ctx context.Context, caName string, serialNumber string) error {
+	cert_SerialNumber = serialNumber
+	ca_name = caName
 	return nil
 
 }
 
 func (db *caDBMock) SelectCertsbyCA(ctx context.Context, caName string, queryParameters dto.QueryParameters) ([]ca.IssuedCerts, int, error) {
-	return []ca.IssuedCerts{}, 0, nil
+	var issuedCerts []ca.IssuedCerts
+	if caName == ca_name {
+		issuedCert := ca.IssuedCerts{
+			CaName:       caName,
+			SerialNumber: cert_SerialNumber,
+		}
+		issuedCerts = append(issuedCerts, issuedCert)
+		return issuedCerts, len(issuedCerts), nil
+	} else {
+		return []ca.IssuedCerts{}, 0, nil
+	}
+
 }
