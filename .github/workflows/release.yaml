@@ -24,6 +24,7 @@ jobs:
       - unit_testing_ca
       - unit_testing_dms_enroller
       - unit_testing_device_manager
+      # runs-on: self-hosted
       runs-on: ubuntu-latest
       steps:        
       - name: Login to DockerHub
@@ -42,7 +43,6 @@ jobs:
             lamassuiot/lamassu-ca-dev:${{ github.sha }}
             lamassuiot/lamassu-ca-dev:latest
           push: true
-
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
@@ -54,7 +54,6 @@ jobs:
         uses: github/codeql-action/upload-sarif@v1
         with:
           sarif_file: 'trivy-results.sarif'
-
 
   build_device_manager_dev_docker_image:
       name: Device Manager - Release DEV docker images
@@ -160,14 +159,39 @@ jobs:
             lamassuiot/lamassu-cloud-proxy-dev:latest
           push: true
 
-  deploy_to_release_env:
-    name: Deploy to DEV Server
+  build_lamassu_db_dev_docker_image:
+      name: DB - Release DEV docker images
+      needs:
+      - unit_testing_ca
+      - unit_testing_dms_enroller
+      - unit_testing_device_manager
+      # runs-on: self-hosted
+      runs-on: ubuntu-latest
+      steps:
+      - name: Login to DockerHub
+        uses: docker/login-action@v1 
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build DB DEV docker image
+        uses: docker/build-push-action@v2
+        with:
+          file: ci/lamassu-db.dockerfile 
+          tags: |
+            lamassuiot/lamassu-db-dev:${{ github.sha }}
+            lamassuiot/lamassu-db-dev:latest
+          push: true
+
+  create_dev_server_env:
+    name: Create DEV Server
     needs:
     - build_ca_dev_docker_image
     - build_cloud_proxy_dev_docker_image
     - build_device_manager_dev_docker_image
     - build_dms_enroller_dev_docker_image
     - build_ocsp_dev_docker_image
+    - build_lamassu_db_dev_docker_image
     runs-on: ubuntu-latest
     environment: release
     permissions:
