@@ -4,6 +4,8 @@ Lamassu IoT
 
 <img src="https://www.lamassu.io/assets/brand/lamassu-brand.png" alt="Lamassu App" title="Lamassu" />
 
+Lamassu is an IoT first PKI designed for industrial scenarios. This is the main code repository for Lamassu IoT where the product logic is being implemented. If you are looking for deployment instructions, please check the [docs](https://www.lamassu.io/docs/) or the project's [Docker Compose repository](https://github.com/lamassuiot/lamassu-compose).
+
 ## Using the GO clients
 
 Lamassu provides easy to use GO clients for most of its APIs to help speeding up the development of aplications:
