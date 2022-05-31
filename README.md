@@ -2,7 +2,7 @@ Lamassu IoT
 ===================
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-blue.svg)](http://www.mozilla.org/MPL/2.0/index.txt)
 
-<img src="https://www.lamassu.io/lamassuiot-dev.github.io/assets/brand/lamassu-brand.png" alt="Lamassu App" title="Lamassu" />
+<img src="https://www.lamassu.io/assets/brand/lamassu-brand.png" alt="Lamassu App" title="Lamassu" />
 
 ## Using the GO clients
 
