@@ -26,7 +26,7 @@ type Service interface {
 	GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, queryParameters dto.QueryParameters) ([]dto.Cert, int, error)
 	GetCert(ctx context.Context, caType dto.CAType, caName string, serialNumber string) (dto.Cert, error)
 	DeleteCert(ctx context.Context, caType dto.CAType, caName string, serialNumber string) error
-	SignCertificate(ctx context.Context, caType dto.CAType, signingCaName string, csr x509.CertificateRequest, signVerbatim bool) (dto.SignResponse, error)
+	SignCertificate(ctx context.Context, caType dto.CAType, signingCaName string, csr x509.CertificateRequest, signVerbatim bool, cn string) (dto.SignResponse, error)
 }
 
 type caService struct {
@@ -136,8 +136,8 @@ func (s *caService) DeleteCert(ctx context.Context, caType dto.CAType, caName st
 	return nil
 }
 
-func (s *caService) SignCertificate(ctx context.Context, caType dto.CAType, caName string, csr x509.CertificateRequest, signVerbatim bool) (dto.SignResponse, error) {
-	certs, err := s.secrets.SignCertificate(ctx, caType, caName, &csr, signVerbatim)
+func (s *caService) SignCertificate(ctx context.Context, caType dto.CAType, caName string, csr x509.CertificateRequest, signVerbatim bool, cn string) (dto.SignResponse, error) {
+	certs, err := s.secrets.SignCertificate(ctx, caType, caName, &csr, signVerbatim, cn)
 	if err != nil {
 		return dto.SignResponse{}, err
 	}

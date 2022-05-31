@@ -44,12 +44,11 @@ func TestOCSP(t *testing.T) {
 	dms, _ := CreateDMS(*domain, *certPath, caName)
 	dev, _ := CreateDevice(*domain, *certPath, dms.Id)
 	_, csr, _ := utils.GenrateRandKey(dev.Id)
-
 	respSecrets := file.NewFile(*ocspSignKey, *oscpSignCert, logger)
 
 	ocspSrv, _ := service.NewService(respSecrets, &caClient)
 
-	devCert, caCert, _ := caClient.SignCertificateRequest(context.Background(), caDTO.Pki, caName, csr, true)
+	devCert, caCert, _ := caClient.SignCertificateRequest(context.Background(), caDTO.Pki, caName, csr, true, csr.Subject.CommonName)
 	ocspRequestBytes, err := ocsp.CreateRequest(devCert, caCert, &ocsp.RequestOptions{})
 	if err != nil {
 		fmt.Println(err)
@@ -62,11 +61,9 @@ func TestOCSP(t *testing.T) {
 		err              error
 	}{
 		{"Correct", ocspRequestBytes, nil},
-		{"Empty Request", []byte{}, nil},
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
-
 			caCerts, err := ocspSrv.Verify(context.Background(), ocspRequestBytes)
 			if err != nil {
 				if err.Error() != tc.err.Error() {
@@ -80,10 +77,11 @@ func TestOCSP(t *testing.T) {
 		})
 	}
 }
-func TestCurl(t *testing.T) {
-	os.Chmod("./curl_ocsp.sh", 0755)
+
+func TestCurl_Get(t *testing.T) {
+	os.Chmod("./curl_Get.sh", 0755)
 	cmd := &exec.Cmd{
-		Path:   "./curl_ocsp.sh",
+		Path:   "./curl_Get.sh",
 		Stdout: os.Stdout,
 		Stdin:  os.Stdin,
 	}
@@ -91,7 +89,30 @@ func TestCurl(t *testing.T) {
 		name string
 		err  error
 	}{
-		{"Curl", nil},
+		{"Get", nil},
+	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
+			cmd.Start()
+			err := cmd.Wait()
+			if err != nil {
+				t.Fail()
+			}
+		})
+	}
+}
+func TestCurl_Post(t *testing.T) {
+	os.Chmod("./curl_Get.sh", 0755)
+	cmd := &exec.Cmd{
+		Path:   "./curl_Get.sh",
+		Stdout: os.Stdout,
+		Stdin:  os.Stdin,
+	}
+	testCases := []struct {
+		name string
+		err  error
+	}{
+		{"Post", nil},
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {

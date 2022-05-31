@@ -245,7 +245,7 @@ func MakeSignCertEndpoint(s service.Service) endpoint.Endpoint {
 
 		caType, _ := dto.ParseCAType(req.CaType)
 
-		certs, err := s.SignCertificate(ctx, caType, req.CaName, *csr, req.SignPayload.SignVerbatim)
+		certs, err := s.SignCertificate(ctx, caType, req.CaName, *csr, req.SignPayload.SignVerbatim, req.SignPayload.CommonName)
 		return certs, err
 	}
 }

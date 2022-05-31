@@ -19,7 +19,7 @@ type LamassuCaClient interface {
 	ImportCA(ctx context.Context, caType dto.CAType, caName string, certificate x509.Certificate, privateKey dto.PrivateKey, enrollerTTL time.Duration) (dto.Cert, error)
 	DeleteCA(ctx context.Context, caType dto.CAType, caName string) error
 
-	SignCertificateRequest(ctx context.Context, caType dto.CAType, caName string, csr *x509.CertificateRequest, signVerbatim bool) (*x509.Certificate, *x509.Certificate, error)
+	SignCertificateRequest(ctx context.Context, caType dto.CAType, caName string, csr *x509.CertificateRequest, signVerbatim bool, cn string) (*x509.Certificate, *x509.Certificate, error)
 	RevokeCert(ctx context.Context, caType dto.CAType, caName string, serialNumberToRevoke string) error
 	GetCert(ctx context.Context, caType dto.CAType, caName string, serialNumber string) (dto.Cert, error)
 	GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, queryParameters string) (dto.IssuedCertsResponse, error)
@@ -136,11 +136,12 @@ func (c *lamassuCaClientConfig) DeleteCA(ctx context.Context, caType dto.CAType,
 	return nil
 }
 
-func (c *lamassuCaClientConfig) SignCertificateRequest(ctx context.Context, caType dto.CAType, caName string, csr *x509.CertificateRequest, signVerbatim bool) (*x509.Certificate, *x509.Certificate, error) {
+func (c *lamassuCaClientConfig) SignCertificateRequest(ctx context.Context, caType dto.CAType, caName string, csr *x509.CertificateRequest, signVerbatim bool, cn string) (*x509.Certificate, *x509.Certificate, error) {
 	csrBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr.Raw})
 	base64CsrContent := base64.StdEncoding.EncodeToString(csrBytes)
 	body := &dto.SignPayload{
 		Csr:          base64CsrContent,
+		CommonName:   cn,
 		SignVerbatim: signVerbatim,
 	}
 	req, err := c.client.NewRequest("POST", "v1/"+caType.String()+"/"+caName+"/sign", body)

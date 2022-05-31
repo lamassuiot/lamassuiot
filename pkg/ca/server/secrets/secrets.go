@@ -35,5 +35,5 @@ type Secrets interface {
 	GetCert(ctx context.Context, caType dto.CAType, caName string, serialNumber string) (dto.Cert, error)
 	DeleteCert(ctx context.Context, caType dto.CAType, caName string, serialNumber string) error
 
-	SignCertificate(ctx context.Context, caType dto.CAType, CAcaName string, csr *x509.CertificateRequest, signVerbatim bool) (dto.SignResponse, error)
+	SignCertificate(ctx context.Context, caType dto.CAType, CAcaName string, csr *x509.CertificateRequest, signVerbatim bool, cn string) (dto.SignResponse, error)
 }

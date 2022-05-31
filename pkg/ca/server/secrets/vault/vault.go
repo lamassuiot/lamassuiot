@@ -161,11 +161,12 @@ func (vs *VaultSecrets) GetSecretProviderName(ctx context.Context) string {
 	return "Hashicorp_Vault"
 }
 
-func (vs *VaultSecrets) SignCertificate(ctx context.Context, caType dto.CAType, caName string, csr *x509.CertificateRequest, signVerbatim bool) (dto.SignResponse, error) {
+func (vs *VaultSecrets) SignCertificate(ctx context.Context, caType dto.CAType, caName string, csr *x509.CertificateRequest, signVerbatim bool, cn string) (dto.SignResponse, error) {
 	csrBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr.Raw})
 	options := map[string]interface{}{
 		"csr":         string(csrBytes),
-		"common_name": csr.Subject.CommonName,
+		"common_name": cn,
+		"alt_names":   cn,
 	}
 
 	var data *api.Secret

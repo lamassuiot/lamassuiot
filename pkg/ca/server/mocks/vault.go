@@ -226,8 +226,8 @@ func (vm *VaultSecretsMock) GetSecretProviderName(ctx context.Context) string {
 	return vm.secrets.GetSecretProviderName(ctx)
 }
 
-func (vm *VaultSecretsMock) SignCertificate(ctx context.Context, caType dto.CAType, caName string, csr *x509.CertificateRequest, signVerbatim bool) (string, error) {
-	cert, err := vm.secrets.SignCertificate(ctx, caType, caName, csr, signVerbatim)
+func (vm *VaultSecretsMock) SignCertificate(ctx context.Context, caType dto.CAType, caName string, csr *x509.CertificateRequest, signVerbatim bool, cn string) (string, error) {
+	cert, err := vm.secrets.SignCertificate(ctx, caType, caName, csr, signVerbatim, cn)
 	if err != nil {
 		return "", err
 	}

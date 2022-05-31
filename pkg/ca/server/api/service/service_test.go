@@ -65,7 +65,7 @@ func TestSignCertificate(t *testing.T) {
 			} else {
 				ctx = context.WithValue(ctx, "DBIncorrect", false)
 			}
-			_, err := srv.SignCertificate(ctx, caType, newCA.Name, *tc.in, false)
+			_, err := srv.SignCertificate(ctx, caType, newCA.Name, *tc.in, false, tc.in.Subject.CommonName)
 
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
@@ -252,7 +252,7 @@ func TestGetIssuedCerts(t *testing.T) {
 	block, _ := pem.Decode([]byte(data))
 	csr, _ := x509.ParseCertificateRequest(block.Bytes)
 
-	srv.SignCertificate(ctx, caType, newCA.Name, *csr, false)
+	srv.SignCertificate(ctx, caType, newCA.Name, *csr, false, csr.Subject.CommonName)
 
 	var caList []dto.Cert
 	caList = append(caList, newCA)
@@ -341,7 +341,7 @@ func TestDeleteCA(t *testing.T) {
 	block, _ := pem.Decode([]byte(data))
 	csr, _ := x509.ParseCertificateRequest(block.Bytes)
 
-	srv.SignCertificate(ctx, caType, "testDeleteCA", *csr, false)
+	srv.SignCertificate(ctx, caType, "testDeleteCA", *csr, false, csr.Subject.CommonName)
 
 	if err != nil {
 		t.Fatal("Could not insert CA in DB")
@@ -386,7 +386,7 @@ func TestDeleteCert(t *testing.T) {
 	block, _ := pem.Decode([]byte(data))
 	csr, _ := x509.ParseCertificateRequest(block.Bytes)
 
-	a, err := srv.SignCertificate(ctx, caType, newCA.Name, *csr, false)
+	a, err := srv.SignCertificate(ctx, caType, newCA.Name, *csr, false, csr.Subject.CommonName)
 	data2, _ := base64.StdEncoding.DecodeString(a.Crt)
 	block2, _ := pem.Decode([]byte(data2))
 	crt, _ := x509.ParseCertificate(block2.Bytes)
@@ -395,7 +395,7 @@ func TestDeleteCert(t *testing.T) {
 	block3, _ := pem.Decode([]byte(data3))
 	csr3, _ := x509.ParseCertificateRequest(block3.Bytes)
 
-	b, err := srv.SignCertificate(ctx, caType, newCA.Name, *csr3, false)
+	b, err := srv.SignCertificate(ctx, caType, newCA.Name, *csr3, false, csr.Subject.CommonName)
 	data4, _ := base64.StdEncoding.DecodeString(b.Crt)
 	block4, _ := pem.Decode([]byte(data4))
 	crt2, _ := x509.ParseCertificate(block4.Bytes)

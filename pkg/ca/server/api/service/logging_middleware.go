@@ -167,7 +167,7 @@ func (mw loggingMiddleware) DeleteCert(ctx context.Context, caType dto.CAType, c
 	return mw.next.DeleteCert(ctx, caType, caName, serialNumber)
 }
 
-func (mw loggingMiddleware) SignCertificate(ctx context.Context, caType dto.CAType, caName string, csr x509.CertificateRequest, signVerbatim bool) (certs dto.SignResponse, err error) {
+func (mw loggingMiddleware) SignCertificate(ctx context.Context, caType dto.CAType, caName string, csr x509.CertificateRequest, signVerbatim bool, cn string) (certs dto.SignResponse, err error) {
 	defer func(begin time.Time) {
 		mw.logger.Log(
 			"method", "SignCertificate",
@@ -179,5 +179,5 @@ func (mw loggingMiddleware) SignCertificate(ctx context.Context, caType dto.CATy
 			"err", err,
 		)
 	}(time.Now())
-	return mw.next.SignCertificate(ctx, caType, caName, csr, signVerbatim)
+	return mw.next.SignCertificate(ctx, caType, caName, csr, signVerbatim, cn)
 }

@@ -54,7 +54,7 @@ func (c *LamassuCaClientConfig) DeleteCA(ctx context.Context, caType dto.CAType,
 
 	return nil
 }
-func (c *LamassuCaClientConfig) SignCertificateRequest(ctx context.Context, caType caDTO.CAType, caName string, csr *x509.CertificateRequest, signVerbatim bool) (*x509.Certificate, *x509.Certificate, error) {
+func (c *LamassuCaClientConfig) SignCertificateRequest(ctx context.Context, caType caDTO.CAType, caName string, csr *x509.CertificateRequest, signVerbatim bool, cn string) (*x509.Certificate, *x509.Certificate, error) {
 	failDB := ctx.Value("SignCertificateRequestFail").(bool)
 
 	if failDB {

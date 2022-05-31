@@ -150,7 +150,6 @@ func (s *devicesService) UpdateDeviceById(ctx context.Context, alias string, dev
 }
 
 func (s *devicesService) GetDevices(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.Device, int, error) {
-	caType, err := caDTO.ParseCAType("pki")
 	devices, length, err := s.devicesDb.SelectAllDevices(ctx, queryParameters)
 	if err != nil {
 		return []dto.Device{}, 0, err
@@ -163,7 +162,7 @@ func (s *devicesService) GetDevices(ctx context.Context, queryParameters dto.Que
 				return []dto.Device{}, 0, err
 			}
 
-			cert, err := s.lamassuCaClient.GetCert(ctx, caType, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
+			cert, err := s.lamassuCaClient.GetCert(ctx, caDTO.Pki, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
 
 			if err != nil {
 				return []dto.Device{}, 0, err
@@ -181,7 +180,6 @@ func (s *devicesService) GetDevices(ctx context.Context, queryParameters dto.Que
 }
 
 func (s *devicesService) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters dto.QueryParameters) ([]dto.Device, error) {
-	caType, err := caDTO.ParseCAType("pki")
 	devices, err := s.devicesDb.SelectAllDevicesByDmsId(ctx, dmsId, queryParameters)
 	if err != nil {
 		return []dto.Device{}, err
@@ -195,7 +193,7 @@ func (s *devicesService) GetDevicesByDMS(ctx context.Context, dmsId string, quer
 				return []dto.Device{}, err
 			}
 
-			cert, err := s.lamassuCaClient.GetCert(ctx, caType, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
+			cert, err := s.lamassuCaClient.GetCert(ctx, caDTO.Pki, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
 
 			if err != nil {
 				return []dto.Device{}, err
@@ -213,14 +211,13 @@ func (s *devicesService) GetDevicesByDMS(ctx context.Context, dmsId string, quer
 	return dev, nil
 }
 func (s *devicesService) GetDeviceById(ctx context.Context, deviceId string) (dto.Device, error) {
-	caType, err := caDTO.ParseCAType("pki")
 	device, err := s.devicesDb.SelectDeviceById(ctx, deviceId)
 	if err != nil {
 		return dto.Device{}, err
 	}
 	currentCertHistory, err := s.devicesDb.SelectDeviceCertHistoryBySerialNumber(ctx, device.CurrentCertificate.SerialNumber)
 	if err == nil {
-		cert, err := s.lamassuCaClient.GetCert(ctx, caType, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
+		cert, err := s.lamassuCaClient.GetCert(ctx, caDTO.Pki, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
 
 		if err != nil {
 			return dto.Device{}, err
@@ -258,7 +255,6 @@ func (s *devicesService) DeleteDevice(ctx context.Context, id string) error {
 }
 
 func (s *devicesService) RevokeDeviceCert(ctx context.Context, id string, revocationReason string) error {
-	caType, err := caDTO.ParseCAType("pki")
 	dev, err := s.devicesDb.SelectDeviceById(ctx, id)
 	if dev.CurrentCertificate.SerialNumber == "" {
 		return err
@@ -276,7 +272,7 @@ func (s *devicesService) RevokeDeviceCert(ctx context.Context, id string, revoca
 
 	serialNumberToRevoke := currentCertHistory.SerialNumber
 
-	err = s.lamassuCaClient.RevokeCert(ctx, caType, currentCertHistory.IsuuerName, serialNumberToRevoke)
+	err = s.lamassuCaClient.RevokeCert(ctx, caDTO.Pki, currentCertHistory.IsuuerName, serialNumberToRevoke)
 	if err != nil {
 		return err
 	}
@@ -317,7 +313,6 @@ func (s *devicesService) GetDeviceLogs(ctx context.Context, id string) ([]dto.De
 }
 
 func (s *devicesService) GetDeviceCertHistory(ctx context.Context, id string) ([]dto.DeviceCertHistory, error) {
-	caType, err := caDTO.ParseCAType("pki")
 	history, err := s.devicesDb.SelectDeviceCertHistory(ctx, id)
 	var certHistory []dto.DeviceCertHistory
 	for _, element := range history {
@@ -325,7 +320,7 @@ func (s *devicesService) GetDeviceCertHistory(ctx context.Context, id string) ([
 		if err != nil {
 			return []dto.DeviceCertHistory{}, err
 		}
-		cert, err := s.lamassuCaClient.GetCert(ctx, caType, element.IsuuerName, element.SerialNumber)
+		cert, err := s.lamassuCaClient.GetCert(ctx, caDTO.Pki, element.IsuuerName, element.SerialNumber)
 		if err != nil {
 			return []dto.DeviceCertHistory{}, err
 		}
@@ -353,7 +348,6 @@ func (s *devicesService) GetDeviceCertHistory(ctx context.Context, id string) ([
 }
 
 func (s *devicesService) GetDeviceCert(ctx context.Context, id string) (dto.DeviceCert, error) {
-	caType, err := caDTO.ParseCAType("pki")
 	dev, err := s.devicesDb.SelectDeviceById(ctx, id)
 
 	if err != nil {
@@ -366,7 +360,7 @@ func (s *devicesService) GetDeviceCert(ctx context.Context, id string) (dto.Devi
 		return dto.DeviceCert{}, err
 	}
 
-	cert, err := s.lamassuCaClient.GetCert(ctx, caType, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
+	cert, err := s.lamassuCaClient.GetCert(ctx, caDTO.Pki, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
 
 	if err != nil {
 		return dto.DeviceCert{}, err

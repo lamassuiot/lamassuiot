@@ -119,7 +119,7 @@ func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, a
 		return nil, errors.New("The device (" + deviceId + ") already has a valid certificate")
 	}
 	caType, err := caDTO.ParseCAType("pki")
-	dataCert, _, err := s.lamassuCaClient.SignCertificateRequest(ctx, caType, aps, csr, true)
+	dataCert, _, err := s.lamassuCaClient.SignCertificateRequest(ctx, caType, aps, csr, true, csr.Subject.CommonName)
 	if err != nil {
 		level.Debug(s.logger).Log("err", err, "msg", "Error in client request")
 		valError := esterror.ValidationError{
@@ -261,7 +261,7 @@ func (s *EstService) Reenroll(ctx context.Context, cert *x509.Certificate, csr *
 		return nil, err
 	}
 
-	dataCert, _, err := s.lamassuCaClient.SignCertificateRequest(ctx, caType, aps, csr, true)
+	dataCert, _, err := s.lamassuCaClient.SignCertificateRequest(ctx, caType, aps, csr, true, csr.Subject.CommonName)
 	if err != nil {
 		level.Debug(s.logger).Log("err", err, "msg", "Error in client request")
 		valError := esterror.ValidationError{
