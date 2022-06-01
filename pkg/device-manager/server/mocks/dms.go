@@ -40,11 +40,12 @@ func (db *DmsDB) SelectBySerialNumber(ctx context.Context, SerialNumber string) 
 	return "810fbd45-55a6-4dd7-8466-c3d3eb854357", nil
 }
 func (db *DmsDB) SelectByDMSIDAuthorizedCAs(ctx context.Context, dmsid string) ([]dms.AuthorizedCAs, error) {
-	authCA := dms.AuthorizedCAs{
+	var cas []dms.AuthorizedCAs
+	ca := dms.AuthorizedCAs{
+		CaName: "Lamassu DMS Enroller",
 		DmsId:  "810fbd45-55a6-4dd7-8466-c3d3eb854357",
-		CaName: "IkerCA",
 	}
-	var list []dms.AuthorizedCAs
-	list = append(list, authCA)
-	return list, nil
+	cas = append(cas, ca)
+
+	return cas, nil
 }

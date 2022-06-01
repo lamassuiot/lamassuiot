@@ -2,7 +2,7 @@ package dto
 
 type PostDmsCreationFormRequest struct {
 	DmsName     string             `json:"name" validate:"required"`
-	Subject     Subject            `json:"subject"`
+	Subject     Subject            `json:"subject" validate:"required"`
 	KeyMetadata PrivateKeyMetadata `json:"key_metadata" validate:"required"`
 }
 
@@ -13,6 +13,6 @@ type PutChangeDmsStatusRequest struct {
 }
 
 type PostCSRRequest struct {
-	Csr     string `json:"csr" validate:"required"`
+	Csr     string `json:"csr" validate:"base64"`
 	DmsName string `json:"name" validate:"required"`
 }

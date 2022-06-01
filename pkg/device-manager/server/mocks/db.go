@@ -11,11 +11,9 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
-	devicesModel "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/device"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/models/dms"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 
-	//devicesStore "github.com/lamassuiot/lamassuiot/pkg/device-manager/models/device/store"
 	devmanagererrors "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
 	_ "github.com/lib/pq"
 )
@@ -37,13 +35,12 @@ var (
 	ErrDeviceById       = errors.New("Could not find device by Id")
 	ErrSerialNumber     = errors.New("No Serial Number")
 )
+var device = testDevice()
 
 type MockDB struct {
 	*sql.DB
 	logger log.Logger
 }
-
-var device = testDevice()
 
 func NewDevicedDBMock(t *testing.T) (*MockDB, error) {
 	t.Helper()
@@ -83,23 +80,31 @@ func (db *MockDB) GetStats(ctx context.Context) (dto.Stats, time.Time) {
 	return stat, time.Now()
 }
 func (db *MockDB) SelectBySerialNumber(ctx context.Context, SerialNumber string) (string, error) {
+
 	return "810fbd45-55a6-4dd7-8466-c3d3eb854357", nil
+
 }
 func (db *MockDB) SelectByDMSIDAuthorizedCAs(ctx context.Context, dmsid string) ([]dms.AuthorizedCAs, error) {
-	return nil, nil
+	var cas []dms.AuthorizedCAs
+	ca := dms.AuthorizedCAs{
+		CaName: "Lamassu DMS Enroller",
+		DmsId:  "810fbd45-55a6-4dd7-8466-c3d3eb854357",
+	}
+	cas = append(cas, ca)
+
+	return cas, nil
 }
 func (db *MockDB) UpdateByID(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) error {
 	if deviceID == "error" {
-		err := errors.New("No rows have been updated in database")
-		return err
-
+		return errors.New("No rows have been updated in database")
 	} else {
 		return nil
 	}
 }
 
 func (db *MockDB) InsertDevice(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) error {
-	if deviceID != device.Id {
+
+	if deviceID == device.Id {
 		duplicationErr := &devmanagererrors.DuplicateResourceError{
 			ResourceType: "DEVICE",
 			ResourceId:   deviceID,
@@ -112,72 +117,34 @@ func (db *MockDB) InsertDevice(ctx context.Context, alias string, deviceID strin
 
 func (db *MockDB) SelectDeviceById(ctx context.Context, id string) (dto.Device, error) {
 	dev := testDevice()
+	devNoSerialNumber := testDeviceNoSerialNumber()
+	dev.Id = "2"
 	if ctx.Value("DBSelectDeviceById") != nil {
 		failDBLog := ctx.Value("DBSelectDeviceById").(bool)
-
-		if failDBLog {
-			return dev, errors.New("Error finding device")
-		} else {
-			if id == "errorDeviceById" {
-				return dev, ErrDeviceById
-			} else if id == "noSerialNumber" {
-				dev := testDeviceNoSerialNumber()
-				return dev, ErrSerialNumber
-
-			} else if id == "decommisioned" {
-				dev.Status = devicesModel.DeviceDecommisioned.String()
-				return dev, nil
-			} else if id == "provisioned" || id == "DEVICE" {
-				if ctx.Value("DBDecommisioned") != nil {
-					failDB := ctx.Value("DBDecommisioned").(bool)
-
-					if failDB {
-						dev.Status = devicesModel.DeviceCertRevoked.String()
-					} else {
-						dev.Status = devicesModel.DeviceProvisioned.String()
-					}
-				} else {
-					dev.Status = devicesModel.DeviceProvisioned.String()
-				}
-				return dev, nil
-			} else {
-				return dev, nil
-			}
+		if id == "noSerialNumber" {
+			return devNoSerialNumber, nil
 		}
-	} else {
-		if id == "errorDeviceById" {
-			return dev, ErrDeviceById
-		} else if id == "error" {
-			return dev, errors.New("Error getting certificate")
-
-		} else if id == "noSerialNumber" {
-			dev := testDeviceNoSerialNumber()
-			return dev, ErrSerialNumber
-
-		} else if id == "decommisioned" {
-			dev.Status = devicesModel.DeviceDecommisioned.String()
-			return dev, nil
-		} else if id == "provisioned" || id == "DEVICE" {
-
-			if ctx.Value("DBDecommisioned") != nil {
-				failDB := ctx.Value("DBSelectDeviceById").(bool)
-
-				if failDB {
-					dev.Status = devicesModel.DeviceCertRevoked.String()
-				} else {
-					dev.Status = devicesModel.DeviceProvisioned.String()
-				}
-			} else {
-				dev.Status = devicesModel.DeviceProvisioned.String()
+		if failDBLog {
+			notFoundErr := &devmanagererrors.ResourceNotFoundError{
+				ResourceType: "DEVICE",
+				ResourceId:   id,
 			}
-			return dev, nil
-
-		} else {
-
-			return dev, nil
+			return dto.Device{}, notFoundErr
 		}
 	}
 
+	if id == "DEVICE" {
+		dev.Status = "DEVICE_PROVISIONED"
+		return dev, nil
+	} else if id != device.Id && id != dev.Id {
+		notFoundErr := &devmanagererrors.ResourceNotFoundError{
+			ResourceType: "DEVICE",
+			ResourceId:   id,
+		}
+		return dto.Device{}, notFoundErr
+	} else {
+		return dev, nil
+	}
 }
 
 func (db *MockDB) SelectAllDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error) {
@@ -190,8 +157,12 @@ func (db *MockDB) SelectAllDevices(ctx context.Context, queryParameters filters.
 		} else {
 			var devList []dto.Device
 			var d dto.Device
+			var noSerialNumber dto.Device
 			d = testDevice()
+			noSerialNumber = testDevice()
+			noSerialNumber.CurrentCertificate.SerialNumber = ""
 			devList = append(devList, d)
+			devList = append(devList, noSerialNumber)
 			return devList, 0, nil
 		}
 	} else {
@@ -201,13 +172,18 @@ func (db *MockDB) SelectAllDevices(ctx context.Context, queryParameters filters.
 		devList = append(devList, d)
 		return devList, 0, nil
 	}
-
 }
 func (db *MockDB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, queryParameters filters.QueryParameters) ([]dto.Device, error) {
 	var devList []dto.Device
 	var d dto.Device
+	var dNoSerialNumber dto.Device
 	d = testDevice()
+	dNoSerialNumber = testDevice()
+	dNoSerialNumber.Id = "dNoSerialNumber"
+	dNoSerialNumber.CurrentCertificate.SerialNumber = ""
+
 	devList = append(devList, d)
+	devList = append(devList, dNoSerialNumber)
 
 	if dms_id == "error" {
 		notFoundErr := &devmanagererrors.ResourceNotFoundError{
@@ -236,13 +212,13 @@ func (db *MockDB) UpdateDeviceCertificateSerialNumberByID(ctx context.Context, i
 }
 
 func (db *MockDB) UpdateDeviceCertHistory(ctx context.Context, deviceId string, serialNumber string, newStatus string) error {
-	if deviceId == "errorUpdateDeviceCertHistory" {
+	if deviceId != device.Id {
 		return errors.New("error")
 	}
 	return nil
 }
 func (db *MockDB) DeleteDevice(ctx context.Context, id string) error {
-	if id == "notExistingDeviceId" {
+	if id != device.Id {
 		return errors.New("error")
 	}
 	return nil
@@ -267,7 +243,15 @@ func (db *MockDB) InsertLog(ctx context.Context, l dto.DeviceLog) error {
 func (db *MockDB) SelectDeviceLogs(ctx context.Context, deviceId string) ([]dto.DeviceLog, error) {
 	var d []dto.DeviceLog
 	if deviceId == "errorGetDeviceLogs" {
-		return testDeviceLogs(), errors.New("err")
+		notFoundErr := &devmanagererrors.ResourceNotFoundError{
+			ResourceType: "DEVICE-LOGS",
+			ResourceId:   deviceId,
+		}
+		return []dto.DeviceLog{}, notFoundErr
+	} else if deviceId == "1" {
+		log := dto.DeviceLog{Id: "1", DeviceId: "1", LogType: "log_type", LogMessage: "", Timestamp: ""}
+		d = append(d, log)
+		return d, nil
 	} else {
 		return d, nil
 	}
@@ -287,31 +271,41 @@ func (db *MockDB) InsertDeviceCertHistory(ctx context.Context, l dto.DeviceCertH
 	}
 }
 func (db *MockDB) SelectDeviceCertHistory(ctx context.Context, deviceId string) ([]dto.DeviceCertHistory, error) {
-	if ctx.Value("DBSelectDeviceCertHistory") != nil {
-		failDB := ctx.Value("DBSelectDeviceCertHistory").(bool)
 
-		if failDB {
-			var a []dto.DeviceCertHistory
-			return a, errors.New("Testing DB connection failed")
-		} else {
-			return testGetDeviceCertHistory(), nil
+	certList := testGetDeviceCertHistory()
+	for _, element := range certList {
+		if element.DeviceId == deviceId {
+			var array []dto.DeviceCertHistory
+			array = append(array, element)
+			return array, nil
 		}
-	} else {
-		return testGetDeviceCertHistory(), nil
 	}
+	notFoundErr := &devmanagererrors.ResourceNotFoundError{
+		ResourceType: "DEVICE-CERT HISTORY",
+		ResourceId:   deviceId,
+	}
+	return []dto.DeviceCertHistory{}, notFoundErr
+
 }
 func (db *MockDB) SelectDeviceCertHistoryBySerialNumber(ctx context.Context, serialNumber string) (dto.DeviceCertHistory, error) {
+	notFoundErr := &devmanagererrors.ResourceNotFoundError{
+		ResourceType: "DEVICE-CERT HISTORY",
+		ResourceId:   serialNumber,
+	}
 	if ctx.Value("DBSelectDeviceCertHistoryBySerialNumberFail") != nil {
 		failDB := ctx.Value("DBSelectDeviceCertHistoryBySerialNumberFail").(bool)
-
 		if failDB {
-			return dto.DeviceCertHistory{}, errors.New("Testing DB connection failed")
-		} else {
-			return testGetDeviceCertHistory()[0], nil
+			return dto.DeviceCertHistory{}, notFoundErr
 		}
-	} else {
-		return testGetDeviceCertHistory()[0], nil
 	}
+	certList := testGetDeviceCertHistory()
+	for _, element := range certList {
+		if element.SerialNumber == serialNumber {
+			return element, nil
+		}
+	}
+	return dto.DeviceCertHistory{}, notFoundErr
+
 }
 func (db *MockDB) SelectDeviceCertHistoryLastThirtyDays(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DeviceCertHistory, error) {
 	if ctx.Value("DBSelectDeviceCertHistoryBySerialNumberFail") != nil {
@@ -331,22 +325,34 @@ func (db *MockDB) SetKeyAndSubject(ctx context.Context, keyMetadate dto.PrivateK
 	return nil
 }
 func (db *MockDB) UpdateDeviceStatusByID(ctx context.Context, id string, newStatus string) error {
-	if ctx.Value("DBUpdateDeviceCertificateSerialNumberByID") != nil {
+	if ctx.Value("DBUpdateStatus") != nil {
 		if ctx.Value("DBUpdateStatus") != nil {
 			failDBLog := ctx.Value("DBUpdateStatus").(bool)
 
 			if failDBLog {
-				return errors.New("Error Update Status")
+				notFoundErr := &devmanagererrors.ResourceNotFoundError{
+					ResourceType: "DEVICE",
+					ResourceId:   id,
+				}
+				return notFoundErr
 			}
 		} else {
 			if id == "errorUpdateStatus" {
-				return errors.New("no rows have been updated in database")
+				notFoundErr := &devmanagererrors.ResourceNotFoundError{
+					ResourceType: "DEVICE",
+					ResourceId:   id,
+				}
+				return notFoundErr
 			}
 			return nil
 		}
 	} else {
 		if id == "errorUpdateStatus" {
-			return errors.New("no rows have been updated in database")
+			notFoundErr := &devmanagererrors.ResourceNotFoundError{
+				ResourceType: "DEVICE",
+				ResourceId:   id,
+			}
+			return notFoundErr
 		}
 		return nil
 	}
@@ -394,7 +400,7 @@ func testDevice() dto.Device {
 		CreationTimestamp:     "2022-01-11T07:02:40.082286Z",
 		ModificationTimestamp: "2022-01-11T07:02:40.082286Z",
 	}
-
+	device.CurrentCertificate.SerialNumber = "1E-6A-EC-C2-05-64-EF-65-66-7F-5B-AE-7B-B4-15-25-19-E8-2C-87"
 	return device
 }
 func testDeviceNoSerialNumber() dto.Device {
@@ -455,7 +461,7 @@ func testGetDeviceCertHistory() []dto.DeviceCertHistory {
 	cert := dto.DeviceCertHistory{
 
 		DeviceId:          "1",
-		SerialNumber:      "",
+		SerialNumber:      "1E-6A-EC-C2-05-64-EF-65-66-7F-5B-AE-7B-B4-15-25-19-E8-2C-87",
 		IsuuerName:        "",
 		Status:            "",
 		CreationTimestamp: "",

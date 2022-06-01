@@ -88,6 +88,11 @@ func (s *caService) GetCAs(ctx context.Context, caType dto.CAType) ([]dto.Cert, 
 }
 
 func (s *caService) CreateCA(ctx context.Context, caType dto.CAType, caName string, privateKeyMetadata dto.PrivateKeyMetadata, subject dto.Subject, caTTL int, enrollerTTL int) (dto.Cert, error) {
+	if privateKeyMetadata.KeyType == "RSA" {
+		privateKeyMetadata.KeyType = "rsa"
+	} else if privateKeyMetadata.KeyType == "EC" {
+		privateKeyMetadata.KeyType = "ec"
+	}
 	createdCa, err := s.secrets.CreateCA(ctx, caType, caName, privateKeyMetadata, subject, caTTL, enrollerTTL)
 	if err != nil {
 		return dto.Cert{}, err
@@ -146,9 +151,6 @@ func (s *caService) SignCertificate(ctx context.Context, caType dto.CAType, caNa
 	block, _ := pem.Decode([]byte(data))
 	cert, _ := x509.ParseCertificate(block.Bytes)
 	serialnumber := utils.InsertNth(utils.ToHexInt(cert.SerialNumber), 2)
-	err = s.casDb.InsertCert(ctx, caName, serialnumber)
-	if err != nil {
-		return dto.SignResponse{}, err
-	}
+	_ = s.casDb.InsertCert(ctx, caName, serialnumber)
 	return certs, nil
 }

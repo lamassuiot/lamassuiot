@@ -8,7 +8,7 @@ type DMS struct {
 	Status                string                        `json:"status"`
 	CsrBase64             string                        `json:"csr,omitempty"`
 	CerificateBase64      string                        `json:"crt,omitempty"`
-	Subject               Subject                       `json:"subject"`
+	Subject               Subject                       `json:"subject,omitempty"`
 	AuthorizedCAs         []string                      `json:"authorized_cas,omitempty"`
 	CreationTimestamp     string                        `json:"creation_timestamp,omitempty"`
 	ModificationTimestamp string                        `json:"modification_timestamp,omitempty"`
@@ -24,10 +24,10 @@ type PrivateKeyMetadata struct {
 	KeyBits int    `json:"bits"`
 }
 type Subject struct {
-	CN string `json:"common_name"`
-	O  string `json:"organization"`
-	OU string `json:"organization_unit"`
-	C  string `json:"country"`
-	ST string `json:"state"`
-	L  string `json:"locality"`
+	CN string `json:"common_name" validate:"required"`
+	O  string `json:"organization,omitempty"`
+	OU string `json:"organization_unit,omitempty"`
+	C  string `json:"country,omitempty"`
+	ST string `json:"state,omitempty"`
+	L  string `json:"locality,omitempty"`
 }

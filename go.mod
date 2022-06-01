@@ -8,6 +8,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.6.0
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
+	github.com/gavv/httpexpect/v2 v2.3.1
 	github.com/getkin/kin-openapi v0.88.0
 	github.com/globalsign/pemfile v1.0.0
 	github.com/go-kit/kit v0.12.0
@@ -30,8 +31,26 @@ require (
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/prometheus/client_golang v1.11.0
 	github.com/streadway/amqp v1.0.0
+	github.com/stretchr/testify v1.7.0
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	go.mozilla.org/pkcs7 v0.0.0-20200128120323-432b2356ecb1
+)
+
+require (
+	github.com/ajg/form v1.5.1 // indirect
+	github.com/andybalholm/brotli v1.0.2 // indirect
+	github.com/gorilla/websocket v1.4.2 // indirect
+	github.com/imkira/go-interpol v1.0.0 // indirect
+	github.com/sergi/go-diff v1.0.0 // indirect
+	github.com/valyala/bytebufferpool v1.0.0 // indirect
+	github.com/valyala/fasthttp v1.27.0 // indirect
+	github.com/xeipuuv/gojsonpointer v0.0.0-20180127040702-4e3ac2762d5f // indirect
+	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
+	github.com/xeipuuv/gojsonschema v1.1.0 // indirect
+	github.com/yalp/jsonpath v0.0.0-20180802001716-5cc68e5049a0 // indirect
+	github.com/yudai/gojsondiff v1.0.0 // indirect
+	github.com/yudai/golcs v0.0.0-20170316035057-ecda9a501e82 // indirect
+	moul.io/http2curl v1.0.1-0.20190925090545-5cd742060b0e // indirect
 )
 
 require (
@@ -184,7 +203,6 @@ require (
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/softlayer/softlayer-go v0.0.0-20180806151055-260589d94c7d // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/stretchr/testify v1.7.0 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go v3.0.171+incompatible // indirect
 	github.com/tv42/httpunix v0.0.0-20191220191345-2ba4b9c3382c // indirect
 	github.com/uber/jaeger-lib v2.4.0+incompatible // indirect

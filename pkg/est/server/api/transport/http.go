@@ -33,7 +33,7 @@ type errorer interface {
 func ErrMissingAPS() error {
 	return &esterror.GenericError{
 		Message:    "APS name not specified",
-		StatusCode: 400,
+		StatusCode: 404,
 	}
 }
 func ErrNoClientCert() error {

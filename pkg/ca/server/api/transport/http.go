@@ -3,7 +3,6 @@ package transport
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -28,25 +27,18 @@ type errorer interface {
 	error() error
 }
 
-func ErrMissingCAName() error {
+func InvalidJsonFormat() error {
 	return &lamassuErrors.GenericError{
-		Message:    "CA name not specified",
+		Message:    "Invalid JSON format",
 		StatusCode: 400,
 	}
 }
-func ErrMissingCAType() error {
+func InvalidCaType() error {
 	return &lamassuErrors.GenericError{
-		Message:    "CA type not specified",
+		Message:    "Invalid CA Type",
 		StatusCode: 400,
 	}
 }
-func ErrMissingSerialNumber() error {
-	return &lamassuErrors.GenericError{
-		Message:    "serial number type not specified",
-		StatusCode: 400,
-	}
-}
-
 func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
 	return func(ctx context.Context, req *http.Request) context.Context {
 		// Try to join to a trace propagated in `req`.
@@ -213,10 +205,7 @@ func decodeStatsRequest(ctx context.Context, r *http.Request) (request interface
 
 func decodeGetCAsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	caTypeString, ok := vars["caType"]
-	if !ok {
-		return nil, ErrMissingCAType()
-	}
+	caTypeString, _ := vars["caType"]
 
 	return endpoint.GetCAsRequest{
 		CaType: caTypeString,
@@ -226,18 +215,12 @@ func decodeGetCAsRequest(ctx context.Context, r *http.Request) (request interfac
 
 func decodeGetIssuedCertsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	caName, ok := vars["caName"]
-	if !ok {
-		return nil, ErrMissingCAName()
-	}
-	caTypeString, ok := vars["caType"]
-	if !ok {
-		return nil, ErrMissingCAType()
-	}
+	caName, _ := vars["caName"]
+	caTypeString, _ := vars["caType"]
 
 	caType, err := dto.ParseCAType(caTypeString)
 	if err != nil {
-		return nil, err
+		return nil, InvalidCaType()
 	}
 	return endpoint.GetIssuedCertsRequest{
 		CaType:          caType,
@@ -249,15 +232,11 @@ func decodeGetIssuedCertsRequest(ctx context.Context, r *http.Request) (request 
 func decodeCreateCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
 	var createCaRequest endpoint.CreateCARequest
-	json.NewDecoder(r.Body).Decode(&createCaRequest.CaPayload)
+	err = json.NewDecoder(r.Body).Decode(&createCaRequest.CaPayload)
 	if err != nil {
-		return nil, errors.New("cannot decode JSON request")
+		return nil, InvalidJsonFormat()
 	}
-
-	caName, ok := vars["caName"]
-	if !ok {
-		return nil, ErrMissingCAName()
-	}
+	caName, _ := vars["caName"]
 
 	createCaRequest.CaName = caName
 	createCaRequest.CaType = "pki"
@@ -268,15 +247,11 @@ func decodeCreateCARequest(ctx context.Context, r *http.Request) (request interf
 func decodeImportCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
 	var importCaRequest endpoint.ImportCARequest
-	json.NewDecoder(r.Body).Decode(&importCaRequest.CaPayload)
+	err = json.NewDecoder(r.Body).Decode(&importCaRequest.CaPayload)
 	if err != nil {
-		return nil, errors.New("Cannot decode JSON request")
+		return nil, InvalidJsonFormat()
 	}
-
-	caName, ok := vars["caName"]
-	if !ok {
-		return nil, ErrMissingCAName()
-	}
+	caName, _ := vars["caName"]
 
 	importCaRequest.CaName = caName
 	importCaRequest.CaType = "pki"
@@ -286,10 +261,8 @@ func decodeImportCARequest(ctx context.Context, r *http.Request) (request interf
 
 func decodeDeleteCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	CA, ok := vars["caName"]
-	if !ok {
-		return nil, ErrMissingCAName()
-	}
+	CA, _ := vars["caName"]
+
 	return endpoint.DeleteCARequest{
 		CaType: dto.Pki,
 		CA:     CA,
@@ -298,23 +271,16 @@ func decodeDeleteCARequest(ctx context.Context, r *http.Request) (request interf
 
 func decodeGetCertRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	caName, ok := vars["caName"]
-	if !ok {
-		return nil, ErrMissingCAName()
-	}
-	caTypeString, ok := vars["caType"]
-	if !ok {
-		return nil, ErrMissingCAType()
-	}
+	caName, _ := vars["caName"]
+
+	caTypeString, _ := vars["caType"]
 
 	caType, err := dto.ParseCAType(caTypeString)
 	if err != nil {
-		return nil, err
+		return nil, InvalidCaType()
 	}
-	serialNumber, ok := vars["serialNumber"]
-	if !ok {
-		return nil, ErrMissingSerialNumber()
-	}
+	serialNumber, _ := vars["serialNumber"]
+
 	return endpoint.GetCertRequest{
 		CaType:       caType,
 		CaName:       caName,
@@ -324,20 +290,15 @@ func decodeGetCertRequest(ctx context.Context, r *http.Request) (request interfa
 
 func decodeSignCertificateRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	caName, ok := vars["caName"]
-	if !ok {
-		return nil, ErrMissingCAName()
-	}
-	caType, ok := vars["caType"]
-	if !ok {
-		return nil, ErrMissingCAType()
-	}
+	caName, _ := vars["caName"]
+
+	caType, _ := vars["caType"]
 
 	var signRequest endpoint.SignCertificateRquest
 
-	json.NewDecoder(r.Body).Decode(&signRequest.SignPayload)
+	err = json.NewDecoder(r.Body).Decode(&signRequest.SignPayload)
 	if err != nil {
-		return nil, errors.New("Cannot decode JSON request")
+		return nil, InvalidJsonFormat()
 	}
 
 	signRequest.CaName = caName
@@ -348,27 +309,17 @@ func decodeSignCertificateRequest(ctx context.Context, r *http.Request) (request
 
 func decodeDeleteCertRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	ca, ok := vars["caName"]
-	if !ok {
-		return nil, ErrMissingCAName()
-	}
-	caTypeString, ok := vars["caType"]
-	if !ok {
-		return nil, ErrMissingCAType()
-	}
+	ca, _ := vars["caName"]
+
+	caTypeString, _ := vars["caType"]
 
 	caType, err := dto.ParseCAType(caTypeString)
 	if err != nil {
-		return nil, err
+		return nil, InvalidCaType()
 	}
 
-	if !ok {
-		return nil, ErrMissingCAName()
-	}
-	serialNumber, ok := vars["serialNumber"]
-	if !ok {
-		return nil, ErrMissingSerialNumber()
-	}
+	serialNumber, _ := vars["serialNumber"]
+
 	return endpoint.DeleteCertRequest{
 		CaType:       caType,
 		CaName:       ca,
@@ -378,11 +329,6 @@ func decodeDeleteCertRequest(ctx context.Context, r *http.Request) (request inte
 
 func encodeResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if e, ok := response.(errorer); ok && e.error() != nil {
-		// Not a Go kit transport error, but a business-logic error.
-		// Provide those as HTTP errors.
-
-		// https://medium.com/@ozdemir.zynl/rest-api-error-handling-in-go-behavioral-type-assertion-509d93636afd
-		//
 		encodeError(ctx, e.error(), w)
 
 		return nil
@@ -395,7 +341,6 @@ func encodeError(ctx context.Context, err error, w http.ResponseWriter) {
 	if err == nil {
 		panic("encodeError with nil error")
 	}
-	// http.Error(w, err.Error(), codeFrom(err))
 	w.WriteHeader(codeFrom(err))
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 

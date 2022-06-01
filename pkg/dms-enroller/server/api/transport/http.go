@@ -4,8 +4,6 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
-	"errors"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -27,15 +25,9 @@ type errorer interface {
 	error() error
 }
 
-func ErrMissingDMSID() error {
+func InvalidJsonFormat() error {
 	return &dmsErrors.GenericError{
-		Message:    "DMS ID not specified",
-		StatusCode: 400,
-	}
-}
-func ErrMissingDMSName() error {
-	return &dmsErrors.GenericError{
-		Message:    "DMS name not specified",
+		Message:    "Invalid JSON format",
 		StatusCode: 400,
 	}
 }
@@ -154,8 +146,6 @@ type PostDmsCreationFormResponse struct {
 	Err     error   `json:"err,omitempty"`
 }
 
-func (r PostDmsResponse) error() error { return r.Err }
-
 type GetCRTResponse struct {
 	Data *x509.Certificate
 	Err  error
@@ -172,25 +162,16 @@ func decodeGetDMSsRequest(ctx context.Context, r *http.Request) (request interfa
 }
 func decodeGetDMSbyIDRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	id, ok := vars["id"]
-	if !ok {
-		return nil, ErrMissingDMSID()
-	}
-	if err != nil {
-		return nil, err
-	}
+	id, _ := vars["id"]
 	return endpoint.GetDmsIDRequest{ID: id}, nil
 }
 func decodePostCreateDMSFormRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	name, ok := vars["name"]
-	if !ok {
-		return nil, ErrMissingDMSName()
-	}
+	name, _ := vars["name"]
 	var dmsForm dto.PostDmsCreationFormRequest
-	json.NewDecoder(r.Body).Decode((&dmsForm))
+	err = json.NewDecoder(r.Body).Decode((&dmsForm))
 	if err != nil {
-		return nil, errors.New("Cannot decode JSON request")
+		return nil, InvalidJsonFormat()
 	}
 	dmsForm.DmsName = name
 	return dmsForm, nil
@@ -200,12 +181,11 @@ func decodePostCSRRequest(ctx context.Context, r *http.Request) (request interfa
 	vars := mux.Vars(r)
 
 	var csrRequest endpoint.PostDirectCsr
-	json.NewDecoder(r.Body).Decode((&csrRequest))
-
-	name, ok := vars["name"]
-	if !ok {
-		return nil, ErrMissingDMSName()
+	err = json.NewDecoder(r.Body).Decode((&csrRequest))
+	if err != nil {
+		return nil, InvalidJsonFormat()
 	}
+	name, _ := vars["name"]
 
 	req := dto.PostCSRRequest{
 		Csr:     csrRequest.CsrBase64Encoded,
@@ -216,16 +196,10 @@ func decodePostCSRRequest(ctx context.Context, r *http.Request) (request interfa
 
 func decodeputChangeDmsStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	id, ok := vars["id"]
-	if !ok {
-		return nil, ErrMissingDMSID()
-	}
-	if err != nil {
-		return nil, err
-	}
+	id, _ := vars["id"]
 	var Request dto.PutChangeDmsStatusRequest
 	if err := json.NewDecoder(r.Body).Decode(&Request); err != nil {
-		return nil, err
+		return nil, InvalidJsonFormat()
 	}
 	if Request.Status == "" {
 		return nil, ErrMissingDMSStatus()
@@ -238,71 +212,17 @@ func decodeputChangeDmsStatusRequest(ctx context.Context, r *http.Request) (requ
 
 func decodeDeleteCSRRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	id, ok := vars["id"]
-	if !ok {
-		return nil, ErrMissingDMSID()
-	}
-	if err != nil {
-		return nil, err
-	}
+	id, _ := vars["id"]
 	return endpoint.DeleteCSRRequest{ID: id}, nil
-}
-
-func decodeGetCRTRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	vars := mux.Vars(r)
-	id, ok := vars["id"]
-	if !ok {
-		return nil, ErrMissingDMSID()
-	}
-	if err != nil {
-		return nil, err
-	}
-	return endpoint.GetCRTRequest{ID: id}, nil
 }
 
 func encodeResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if e, ok := response.(errorer); ok && e.error() != nil {
-		// Not a Go kit transport error, but a business-logic error.
-		// Provide those as HTTP errors.
 		encodeError(ctx, e.error(), w)
 		return nil
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	return json.NewEncoder(w).Encode(response)
-}
-
-func encodeGetPendingCSRFileResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
-	resp := response.(endpoint.GetPendingCSRFileResponse)
-	if resp.Err != nil {
-		encodeError(ctx, resp.Err, w)
-		return nil
-	}
-	w.Header().Set("Content-Type", "application/pkcs10; charset=utf-8")
-	w.Write(resp.Data)
-	return nil
-}
-
-func encodeGetCRTResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
-	resp := response.(endpoint.GetCRTResponse)
-	if e, ok := response.(errorer); ok && e.error() != nil {
-		// Not a Go kit transport error, but a business-logic error.
-		// Provide those as HTTP errors.
-		encodeError(ctx, e.error(), w)
-		return nil
-	}
-	cert := resp.Data
-	var cb []byte
-	cb = append(cb, cert.Raw...)
-	b := pem.Block{Type: "CERTIFICATE", Bytes: cb}
-	body := pem.EncodeToMemory(&b)
-
-	body = utils.EncodeB64(body)
-
-	w.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
-	w.Header().Set("Content-Transfer-Encoding", "base64")
-	w.WriteHeader(http.StatusOK)
-	w.Write(body)
-	return nil
 }
 
 func encodeError(_ context.Context, err error, w http.ResponseWriter) {

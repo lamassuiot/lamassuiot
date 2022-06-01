@@ -172,8 +172,6 @@ type PostDmsResponse struct {
 	Err error   `json:"err,omitempty"`
 }
 
-func (r PostDmsResponse) error() error { return r.Err }
-
 type GetCRTResponse struct {
 	Data *x509.Certificate
 }
@@ -209,7 +207,7 @@ type GetPendingCSRFileResponse struct {
 }
 
 type PostDirectCsr struct {
-	CsrBase64Encoded string `json:"csr"`
+	CsrBase64Encoded string `json:"csr" validate:"base64"`
 }
 
 func ValidatetPutChangeDmsStatusRequest(request dto.PutChangeDmsStatusRequest) error {
@@ -233,9 +231,6 @@ type PutChangeCSRsResponse struct {
 	Dms dto.DMS
 	Err error
 }
-
-func (r PutChangeCSRsResponse) error() error { return r.Err }
-
 type DeleteCSRRequest struct {
 	ID string
 }
@@ -243,5 +238,3 @@ type DeleteCSRRequest struct {
 type DeleteCSRResponse struct {
 	Err error
 }
-
-func (r DeleteCSRResponse) error() error { return r.Err }

@@ -230,14 +230,15 @@ func (s *devicesService) GetDeviceById(ctx context.Context, deviceId string) (dt
 }
 
 func (s *devicesService) DeleteDevice(ctx context.Context, id string) error {
-	_ = s.RevokeDeviceCert(ctx, id, "Revocation due to device removal")
+	err := s.RevokeDeviceCert(ctx, id, "Revocation due to device removal")
 
-	/*err := s.devicesDb.DeleteDevice(ctx, id)
-	if err != nil {
-		return err
-	}*/
-
-	err := s.devicesDb.UpdateDeviceStatusByID(ctx, id, devicesModel.DeviceDecommisioned.String())
+	/*
+		err := s.devicesDb.DeleteDevice(id)
+		if err != nil {
+			return err
+		}
+	*/
+	err = s.devicesDb.UpdateDeviceStatusByID(ctx, id, devicesModel.DeviceDecommisioned.String())
 	if err != nil {
 		return err
 	}
@@ -257,10 +258,6 @@ func (s *devicesService) DeleteDevice(ctx context.Context, id string) error {
 func (s *devicesService) RevokeDeviceCert(ctx context.Context, id string, revocationReason string) error {
 	dev, err := s.devicesDb.SelectDeviceById(ctx, id)
 	if dev.CurrentCertificate.SerialNumber == "" {
-		return err
-	}
-
-	if err != nil {
 		return err
 	}
 
@@ -327,9 +324,6 @@ func (s *devicesService) GetDeviceCertHistory(ctx context.Context, id string) ([
 		if cert.RevocationTimestamp != 0 {
 			t := time.Unix(cert.RevocationTimestamp, 0)
 			element.RevocationTimestamp = t.Format("2006-01-02T15:04:05Z")
-		}
-		if err != nil {
-			return []dto.DeviceCertHistory{}, err
 		} else {
 
 			if (cert.Status != device.CertHistoryExpired.String()) && dev.CreationTimestamp == dev.ModificationTimestamp {
@@ -457,6 +451,7 @@ func _generateCSR(ctx context.Context, keyType string, priv interface{}, commonN
 	/*rawSubj = append(rawSubj, []pkix.AttributeTypeAndValue{
 		{Type: oidEmailAddress, Value: emailAddress},
 	})*/
+
 	asn1Subj, _ := asn1.Marshal(rawSubj)
 	template := x509.CertificateRequest{
 		RawSubject: asn1Subj,
@@ -466,7 +461,8 @@ func _generateCSR(ctx context.Context, keyType string, priv interface{}, commonN
 	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &template, priv)
 	return csrBytes, err
 }
-func getKeyStrength(keyType string, keyBits int) string {
+
+/*func getKeyStrength(keyType string, keyBits int) string {
 	var keyStrength string = "unknown"
 	switch keyType {
 	case "RSA":
@@ -487,4 +483,4 @@ func getKeyStrength(keyType string, keyBits int) string {
 		}
 	}
 	return keyStrength
-}
+}*/

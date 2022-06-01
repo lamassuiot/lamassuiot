@@ -10,20 +10,17 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
-	"errors"
 	"sync"
 
 	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
 	"github.com/jakehl/goid"
 	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	caDTO "github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
-	"github.com/lamassuiot/lamassuiot/pkg/utils"
-
-	//devicesStore "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/device/store"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/common/dto"
+	dmsErrors "github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/models/dms"
 	dmsstore "github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/models/dms/store"
+	"github.com/lamassuiot/lamassuiot/pkg/utils"
 )
 
 type Service interface {
@@ -59,17 +56,11 @@ func (s *enrollerService) Health(ctx context.Context) bool {
 func (s *enrollerService) CreateDMS(ctx context.Context, csrBase64Encoded string, dmsName string) (dto.DMS, error) {
 
 	//csrBase64Encoded
-	decodedCsr, err := utils.DecodeB64(csrBase64Encoded)
-	if err != nil {
-		return dto.DMS{}, err
-	}
+	decodedCsr, _ := utils.DecodeB64(csrBase64Encoded)
 
 	p, _ := pem.Decode([]byte(decodedCsr))
 
-	csr, err := x509.ParseCertificateRequest(p.Bytes)
-	if err != nil {
-		return dto.DMS{}, err
-	}
+	csr, _ := x509.ParseCertificateRequest(p.Bytes)
 
 	keyType, keyBits := getPublicKeyInfo(csr)
 
@@ -86,11 +77,7 @@ func (s *enrollerService) CreateDMS(ctx context.Context, csrBase64Encoded string
 		EnrolledDevices: 0,
 	}
 
-	dmsId, err := s.dmsDBStore.Insert(ctx, d)
-
-	if err != nil {
-		return dto.DMS{}, err
-	}
+	dmsId, _ := s.dmsDBStore.Insert(ctx, d)
 
 	return s.dmsDBStore.SelectByID(ctx, dmsId)
 }
@@ -107,11 +94,7 @@ func (s *enrollerService) CreateDMSForm(ctx context.Context, subject dto.Subject
 
 	if PrivateKeyMetadata.KeyType == "RSA" {
 		privKey, _ := rsa.GenerateKey(rand.Reader, PrivateKeyMetadata.KeyBits)
-		csrBytes, err := generateCSR(ctx, PrivateKeyMetadata.KeyType, PrivateKeyMetadata.KeyBits, privKey, subj)
-		if err != nil {
-			return "", dto.DMS{}, err
-		}
-
+		csrBytes, _ := generateCSR(ctx, PrivateKeyMetadata.KeyType, PrivateKeyMetadata.KeyBits, privKey, subj)
 		csrEncoded := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrBytes})
 
 		privkey_bytes := x509.MarshalPKCS1PrivateKey(privKey)
@@ -122,36 +105,21 @@ func (s *enrollerService) CreateDMSForm(ctx context.Context, subject dto.Subject
 			},
 		))
 		privkey_pemByte := utils.EncodeB64([]byte(privkey_pem))
-		csr, err := s.CreateDMS(ctx, string(utils.EncodeB64(csrEncoded)), dmsName)
-		if err != nil {
-			return "", dto.DMS{}, err
-		} else {
-			return string(privkey_pemByte), csr, nil
-		}
-	} else if PrivateKeyMetadata.KeyType == "EC" {
+		csr, _ := s.CreateDMS(ctx, string(utils.EncodeB64(csrEncoded)), dmsName)
+
+		return string(privkey_pemByte), csr, nil
+
+	} else {
 		var priv *ecdsa.PrivateKey
-		var err error
 		switch PrivateKeyMetadata.KeyBits {
 		case 224:
-			priv, err = ecdsa.GenerateKey(elliptic.P224(), rand.Reader)
+			priv, _ = ecdsa.GenerateKey(elliptic.P224(), rand.Reader)
 		case 256:
-			priv, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			priv, _ = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		case 384:
-			priv, err = ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
-		case 521:
-			priv, err = ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
-		default:
-			err = errors.New("Unsupported key length")
+			priv, _ = ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 		}
-		if err != nil {
-			level.Debug(s.logger).Log("err", err)
-			return "", dto.DMS{}, err
-		}
-		privkey_bytesm, err := x509.MarshalPKCS8PrivateKey(priv)
-		if err != nil {
-			level.Debug(s.logger).Log("err", err)
-			return "", dto.DMS{}, err
-		}
+		privkey_bytesm, _ := x509.MarshalPKCS8PrivateKey(priv)
 		privkey_pem := string(pem.EncodeToMemory(
 			&pem.Block{
 				Type:  "PRIVATE KEY",
@@ -159,21 +127,12 @@ func (s *enrollerService) CreateDMSForm(ctx context.Context, subject dto.Subject
 			},
 		))
 		privkey_pemByte := utils.EncodeB64([]byte(privkey_pem))
-		csrBytes, err := generateCSR(ctx, PrivateKeyMetadata.KeyType, PrivateKeyMetadata.KeyBits, priv, subj)
-		if err != nil {
-			level.Debug(s.logger).Log("err", err)
-			return "", dto.DMS{}, err
-		}
+		csrBytes, _ := generateCSR(ctx, PrivateKeyMetadata.KeyType, PrivateKeyMetadata.KeyBits, priv, subj)
 		csrEncoded := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrBytes})
-		csr, err := s.CreateDMS(ctx, string(utils.EncodeB64(csrEncoded)), dmsName)
-		if err != nil {
-			level.Debug(s.logger).Log("err", err)
-			return "", dto.DMS{}, err
-		} else {
-			return string(privkey_pemByte), csr, nil
-		}
-	} else {
-		return "", dto.DMS{}, errors.New("Invalid key format")
+		csr, _ := s.CreateDMS(ctx, string(utils.EncodeB64(csrEncoded)), dmsName)
+
+		return string(privkey_pemByte), csr, nil
+
 	}
 }
 
@@ -210,28 +169,15 @@ func (s *enrollerService) UpdateDMSStatus(ctx context.Context, DMSstatus string,
 	switch status := DMSstatus; status {
 	case dms.ApprovedStatus:
 		if prevDms.Status == dms.PendingStatus {
-			b, err := utils.DecodeB64(prevDms.CsrBase64)
-			if err != nil {
-				return dto.DMS{}, err
-			}
+			b, _ := utils.DecodeB64(prevDms.CsrBase64)
 			csrBytes, _ := pem.Decode([]byte(b))
-			csr, err := x509.ParseCertificateRequest(csrBytes.Bytes)
-			if err != nil {
-				return dto.DMS{}, err
-			}
-			crt, err := s.ApprobeCSR(ctx, id, csr)
-			if err != nil {
-				return dto.DMS{}, err
-			}
+			csr, _ := x509.ParseCertificateRequest(csrBytes.Bytes)
+			crt, _ := s.ApprobeCSR(ctx, id, csr)
 			err = s.dmsDBStore.InsertAuthorizedCAs(ctx, id, CAList)
 			if err != nil {
 				return dto.DMS{}, err
 			}
-			d, err = s.dmsDBStore.UpdateByID(ctx, id, dms.ApprovedStatus, utils.InsertNth(utils.ToHexInt(crt.SerialNumber), 2), "")
-			if err != nil {
-				s.dmsDBStore.DeleteAuthorizedCAs(ctx, id)
-				return dto.DMS{}, err
-			}
+			d, _ = s.dmsDBStore.UpdateByID(ctx, id, dms.ApprovedStatus, utils.InsertNth(utils.ToHexInt(crt.SerialNumber), 2), "")
 
 			var cb []byte
 			cb = append(cb, crt.Raw...)
@@ -241,36 +187,36 @@ func (s *enrollerService) UpdateDMSStatus(ctx context.Context, DMSstatus string,
 			d.CerificateBase64 = string(utils.EncodeB64(cert))
 
 		} else {
-			return dto.DMS{}, err
+			return dto.DMS{}, &dmsErrors.GenericError{
+				Message:    "The DMS Status is not PENDING_APPROVAL",
+				StatusCode: 412,
+			}
 		}
 	case dms.RevokedStatus:
 		if prevDms.Status == dms.ApprovedStatus {
-			d, err = s.dmsDBStore.UpdateByID(ctx, id, dms.RevokedStatus, prevDms.SerialNumber, "")
-			if err != nil {
-				return dto.DMS{}, err
-			}
-			err = s.RevokeCert(ctx, prevDms.SerialNumber)
-			if err != nil {
-				return dto.DMS{}, err
-			}
-			err = s.dmsDBStore.DeleteAuthorizedCAs(ctx, id)
-			if err != nil {
-				return dto.DMS{}, err
-			}
+			d, _ = s.dmsDBStore.UpdateByID(ctx, id, dms.RevokedStatus, prevDms.SerialNumber, "")
+			_ = s.RevokeCert(ctx, prevDms.SerialNumber)
+			_ = s.dmsDBStore.DeleteAuthorizedCAs(ctx, id)
 		} else {
-			return dto.DMS{}, err
+			return dto.DMS{}, &dmsErrors.GenericError{
+				Message:    "The DMS Status is not APPROVED",
+				StatusCode: 412,
+			}
 		}
 	case dms.DeniedStatus:
 		if prevDms.Status == dms.PendingStatus {
-			d, err = s.dmsDBStore.UpdateByID(ctx, id, dms.DeniedStatus, "", "")
-			if err != nil {
-				return dto.DMS{}, err
-			}
+			d, _ = s.dmsDBStore.UpdateByID(ctx, id, dms.DeniedStatus, "", "")
 		} else {
-			return dto.DMS{}, err
+			return dto.DMS{}, &dmsErrors.GenericError{
+				Message:    "The DMS Status is not PENDING_APPROVAL",
+				StatusCode: 412,
+			}
 		}
 	default:
-		return dto.DMS{}, err
+		return dto.DMS{}, &dmsErrors.GenericError{
+			Message:    "The Status is PENDING_APPROVAL",
+			StatusCode: 412,
+		}
 	}
 
 	return d, nil
@@ -285,7 +231,6 @@ func (s *enrollerService) RevokeCert(ctx context.Context, serialToRevoke string)
 
 func (s *enrollerService) ApprobeCSR(ctx context.Context, id string, csr *x509.CertificateRequest) (*x509.Certificate, error) {
 	caType, err := caDTO.ParseCAType("dmsenroller")
-	csr.Subject.CommonName = id
 	crt, _, err := s.lamassuCaClient.SignCertificateRequest(ctx, caType, "Lamassu-DMS-Enroller", csr, false, id)
 	if err != nil {
 		return &x509.Certificate{}, err
@@ -300,15 +245,14 @@ func (s *enrollerService) DeleteDMS(ctx context.Context, id string) error {
 		return err
 	}
 	if d.Status == dms.DeniedStatus || d.Status == dms.RevokedStatus {
-		err = s.dmsDBStore.Delete(ctx, id)
-		if err != nil {
-			return err
-		}
+		_ = s.dmsDBStore.Delete(ctx, id)
 		if d.Status == dms.RevokedStatus {
-			err = s.dmsDBStore.DeleteAuthorizedCAs(ctx, id)
-			if err != nil {
-				return err
-			}
+			_ = s.dmsDBStore.DeleteAuthorizedCAs(ctx, id)
+		}
+	} else {
+		return &dmsErrors.GenericError{
+			Message:    "The DMS Status is " + d.Status,
+			StatusCode: 412,
 		}
 	}
 	return err
@@ -332,15 +276,12 @@ func (s *enrollerService) GetDMSs(ctx context.Context) ([]dto.DMS, error) {
 		}
 		item.CerificateBase64 = lamassuCert.CertContent.CerificateBase64
 		//	item.EnrolledDevices, err = s.devicesDb.CountDevicesByDmsId(ctx, item.Id)
-
-		CAs, err := s.dmsDBStore.SelectByDMSIDAuthorizedCAs(ctx, item.Id)
-		if err != nil {
-			return []dto.DMS{}, err
+		if item.Status == "APPROVED" {
+			CAs, _ := s.dmsDBStore.SelectByDMSIDAuthorizedCAs(ctx, item.Id)
+			for _, ca := range CAs {
+				item.AuthorizedCAs = append(item.AuthorizedCAs, ca.CaName)
+			}
 		}
-		for _, ca := range CAs {
-			item.AuthorizedCAs = append(item.AuthorizedCAs, ca.CaName)
-		}
-
 		dmsList = append(dmsList, item)
 	}
 
@@ -364,23 +305,13 @@ func (s *enrollerService) GetDMSbyID(ctx context.Context, id string) (dto.DMS, e
 		CN: lamassuCert.Subject.CommonName,
 	}
 	d.CerificateBase64 = lamassuCert.CertContent.CerificateBase64
-	CAs, err := s.dmsDBStore.SelectByDMSIDAuthorizedCAs(ctx, d.Id)
-	if err != nil {
-		return dto.DMS{}, err
-	}
-	for _, ca := range CAs {
-		d.AuthorizedCAs = append(d.AuthorizedCAs, ca.CaName)
-	}
-	return d, nil
-}
-
-func containsRole(list []string, value string) bool {
-	for _, item := range list {
-		if item == value {
-			return true
+	if d.Status == "APPROVED" {
+		CAs, _ := s.dmsDBStore.SelectByDMSIDAuthorizedCAs(ctx, d.Id)
+		for _, ca := range CAs {
+			d.AuthorizedCAs = append(d.AuthorizedCAs, ca.CaName)
 		}
 	}
-	return false
+	return d, nil
 }
 
 func getPublicKeyInfo(cert *x509.CertificateRequest) (string, int) {
@@ -390,7 +321,7 @@ func getPublicKeyInfo(cert *x509.CertificateRequest) (string, int) {
 	case "RSA":
 		keyBits = cert.PublicKey.(*rsa.PublicKey).N.BitLen()
 		return "RSA", keyBits
-	case "EC":
+	case "ECDSA":
 		keyBits = cert.PublicKey.(*ecdsa.PublicKey).Params().BitSize
 		return "EC", keyBits
 	}
