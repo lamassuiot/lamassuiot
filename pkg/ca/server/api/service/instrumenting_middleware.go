@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 
 	"github.com/go-kit/kit/metrics"
 )
@@ -96,7 +97,7 @@ func (mw *instrumentingMiddleware) DeleteCA(ctx context.Context, caType dto.CATy
 	return mw.next.DeleteCA(ctx, caType, CA)
 }
 
-func (mw *instrumentingMiddleware) GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, queryParameters dto.QueryParameters) (certs []dto.Cert, length int, err error) {
+func (mw *instrumentingMiddleware) GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, queryParameters filters.QueryParameters) (certs []dto.Cert, length int, err error) {
 	defer func(begin time.Time) {
 		lvs := []string{"method", "GetIssuedCerts", "error", fmt.Sprint(err != nil)}
 		mw.requestCount.With(lvs...).Add(1)

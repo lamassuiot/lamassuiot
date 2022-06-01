@@ -5,14 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
-	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/endpoint"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters/types"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/tracing/opentracing"
@@ -59,6 +59,16 @@ func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
 		}
 		return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
 	}
+}
+
+func filtrableCAModelFields() map[string]types.Filter {
+	fieldFiltersMap := make(map[string]types.Filter)
+	fieldFiltersMap["status"] = &types.StringFilterField{}
+	fieldFiltersMap["serial_number"] = &types.StringFilterField{}
+	fieldFiltersMap["name"] = &types.StringFilterField{}
+	fieldFiltersMap["valid_from"] = &types.DatesFilterField{}
+	fieldFiltersMap["valid_to"] = &types.DatesFilterField{}
+	return fieldFiltersMap
 }
 
 func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentracing.Tracer) http.Handler {
@@ -232,7 +242,7 @@ func decodeGetIssuedCertsRequest(ctx context.Context, r *http.Request) (request 
 	return endpoint.GetIssuedCertsRequest{
 		CaType:          caType,
 		CA:              caName,
-		QueryParameters: filterQuery(r),
+		QueryParameters: filters.FilterQuery(r, filtrableCAModelFields()),
 	}, nil
 }
 
@@ -391,78 +401,6 @@ func encodeError(ctx context.Context, err error, w http.ResponseWriter) {
 
 	json.NewEncoder(w).Encode(errorWrapper{Error: err.Error()})
 
-}
-func filterQuery(r *http.Request) dto.QueryParameters {
-	f := ""
-	orderArray := ""
-	pageArray := ""
-	page := ""
-	offset := ""
-	field := ""
-	order := ""
-
-	helper := r.URL.RawQuery
-
-	if len(r.URL.RawQuery) > 0 {
-
-		f, helper = middle(helper, "filter={")
-
-		orderArray, helper = middle(helper, "s={")
-		if orderArray != "" {
-			s := strings.Split(orderArray, ",")
-			order = s[0]
-			field = s[1]
-		}
-
-		pageArray, helper = middle(helper, "page={")
-		if pageArray != "" {
-			s := strings.Split(pageArray, ",")
-			page = s[0]
-			offset = s[1]
-		}
-
-	}
-
-	pageInt, _ := strconv.Atoi(page)
-	offsetInt, _ := strconv.Atoi(offset)
-	pagination := dto.PaginationOptions{
-		Page:   pageInt,
-		Offset: offsetInt,
-	}
-	orderOpt := dto.OrderOptions{
-		Order: order,
-		Field: field,
-	}
-	query := dto.QueryParameters{
-		Order:      orderOpt,
-		Pagination: pagination,
-		Filter:     f,
-	}
-	return query
-}
-
-func middle(in string, field string) (string, string) {
-	result := ""
-	helper := in
-	if strings.Contains(in, field) {
-		helper = removeAmpersand(helper)
-		indexToCutFrom := strings.Index(helper, field)
-		helper = helper[indexToCutFrom:]
-		helper = strings.TrimPrefix(helper, field)
-		if len(helper) > 0 {
-			result = helper[:strings.IndexByte(helper, '}')]
-			helper = strings.Replace(removeAmpersand(in), field+result+"}", "", -1)
-			//helper = strings.TrimPrefix(in, field+helper+"}")
-		}
-	}
-	return result, helper
-
-}
-func removeAmpersand(helper string) string {
-	if strings.HasPrefix(helper, "&") {
-		helper = strings.TrimPrefix(helper, "&")
-	}
-	return helper
 }
 
 type errorWrapper struct {

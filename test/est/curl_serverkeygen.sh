@@ -39,19 +39,10 @@ export DMS_KEY=./dms.key
 #echo "7) Enrolling with a server-generated private key"
 export DEVICE_ID=$(uuidgen)
 openssl req -new -newkey rsa:2048 -nodes -keyout device.key -out device.csr -subj "/CN=$DEVICE_ID"
-sed '1d' device.csr > device2.csr
-mv  device2.csr device.csr
-sed '$d' device.csr > device2.csr
-mv  device2.csr device.csr
-curl https://$DOMAIN/api/devmanager/.well-known/est/$CA_NAME/serverkeygen --cert $DMS_CRT --key $DMS_KEY -s -o cert.p7 --cacert root-ca.pem  --data-binary @device.csr -H "Content-Type: application/pkcs10"
+sed '/CERTIFICATE/d' device.csr > device_enroll.csr
+curl https://$DOMAIN/api/devmanager/.well-known/est/$CA_NAME/serverkeygen --cert $DMS_CRT --key $DMS_KEY -s -o cert.p7 --cacert root-ca.pem  --data-binary @device_enroll.csr -H "Content-Type: application/pkcs10"
 
-cat cert.p7 | sed -ne '/application\/pkcs7-mime/,/-estServerKeyGenBoundary/p' > crt.p7
-sed '$d' crt.p7 > crt2.p7
-mv crt2.p7 crt.p7
-sed '$d' crt.p7 > crt2.p7
-mv crt2.p7 crt.p7
-sed '1d' crt.p7 > crt2.p7
-mv crt2.p7 crt.p7
-sed '1d' crt.p7 > crt2.p7
-mv crt2.p7 crt.p7
+cat cert.p7 | sed -ne '/application\/pkcs7-mime/,/-estServerKeyGenBoundary/p' |  sed '/-/d' > crt.p7
 openssl base64 -d -in crt.p7 | openssl pkcs7 -inform DER -outform PEM -print_certs -out cert.pem
+
+cat cert.p7 | sed -ne '/application\/pkcs8/,/-estServerKeyGenBoundary/p' |  sed '/-/d' > key.key

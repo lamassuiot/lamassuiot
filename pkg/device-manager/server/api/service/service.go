@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 
 	caDTO "github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
@@ -25,17 +26,17 @@ type Service interface {
 	Stats(ctx context.Context) (dto.Stats, time.Time)
 	PostDevice(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
 	UpdateDeviceById(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
-	GetDevices(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.Device, int, error)
+	GetDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error)
 	GetDeviceById(ctx context.Context, deviceId string) (dto.Device, error)
-	GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters dto.QueryParameters) ([]dto.Device, error)
+	GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) ([]dto.Device, error)
 	DeleteDevice(ctx context.Context, id string) error
 	RevokeDeviceCert(ctx context.Context, id string, revocationReason string) error
 
 	GetDeviceLogs(ctx context.Context, id string) ([]dto.DeviceLog, error)
 	GetDeviceCert(ctx context.Context, id string) (dto.DeviceCert, error)
 	GetDeviceCertHistory(ctx context.Context, id string) ([]dto.DeviceCertHistory, error)
-	GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.DMSCertHistory, error)
-	GetDmsLastIssuedCert(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.DMSLastIssued, error)
+	GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSCertHistory, error)
+	GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSLastIssued, error)
 
 	//getKeyStrength(keyType string, keyBits int) string
 	//_generateCSR(ctx context.Context, keyType string, priv interface{}, commonName string, country string, state string, locality string, org string, orgUnit string) ([]byte, error)
@@ -71,15 +72,14 @@ func (s *devicesService) Stats(ctx context.Context) (dto.Stats, time.Time) {
 
 	stats = dto.Stats{}
 
-	page := 0
-	offset := 1000
-	_, totalDevices, err := s.devicesDb.SelectAllDevices(ctx, dto.QueryParameters{Pagination: dto.PaginationOptions{Page: page, Offset: offset}})
+	limit := 1000
+	_, totalDevices, err := s.devicesDb.SelectAllDevices(ctx, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: limit, Offset: 0}})
 	if err != nil {
 		return dto.Stats{}, time.Now()
 	}
 
-	for i := 0; i < totalDevices/offset; i++ {
-		devices, _, _ := s.devicesDb.SelectAllDevices(ctx, dto.QueryParameters{Pagination: dto.PaginationOptions{Page: page + i, Offset: offset}})
+	for i := 0; i < totalDevices/limit; i++ {
+		devices, _, _ := s.devicesDb.SelectAllDevices(ctx, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: limit, Offset: i * limit}})
 		for _, device := range devices {
 			if device.Status == devicesModel.DevicePendingProvision.String() {
 				stats.PendingEnrollment = stats.PendingEnrollment + 1
@@ -149,7 +149,7 @@ func (s *devicesService) UpdateDeviceById(ctx context.Context, alias string, dev
 	return device, err
 }
 
-func (s *devicesService) GetDevices(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.Device, int, error) {
+func (s *devicesService) GetDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error) {
 	devices, length, err := s.devicesDb.SelectAllDevices(ctx, queryParameters)
 	if err != nil {
 		return []dto.Device{}, 0, err
@@ -179,7 +179,7 @@ func (s *devicesService) GetDevices(ctx context.Context, queryParameters dto.Que
 	return dev, length, nil
 }
 
-func (s *devicesService) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters dto.QueryParameters) ([]dto.Device, error) {
+func (s *devicesService) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) ([]dto.Device, error) {
 	devices, err := s.devicesDb.SelectAllDevicesByDmsId(ctx, dmsId, queryParameters)
 	if err != nil {
 		return []dto.Device{}, err
@@ -384,7 +384,7 @@ func (s *devicesService) GetDeviceCert(ctx context.Context, id string) (dto.Devi
 	}, nil
 }
 
-func (s *devicesService) GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.DMSCertHistory, error) {
+func (s *devicesService) GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSCertHistory, error) {
 	devices, _, err := s.devicesDb.SelectAllDevices(ctx, queryParameters)
 	if err != nil {
 		level.Debug(s.logger).Log("err", err, "msg", "Could not get devices from DB")
@@ -427,7 +427,7 @@ func (s *devicesService) GetDmsCertHistoryThirtyDays(ctx context.Context, queryP
 	return dmsCerts, nil
 }
 
-func (s *devicesService) GetDmsLastIssuedCert(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.DMSLastIssued, error) {
+func (s *devicesService) GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSLastIssued, error) {
 	lastIssued, err := s.devicesDb.SelectDmssLastIssuedCert(ctx, queryParameters)
 	if err != nil {
 		level.Debug(s.logger).Log("err", err, "msg", "Could not get devices from DB")

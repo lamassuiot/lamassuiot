@@ -11,6 +11,8 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
+	clientFilers "github.com/lamassuiot/lamassuiot/pkg/utils/client/filters"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 )
 
 type LamassuCaClient interface {
@@ -22,7 +24,7 @@ type LamassuCaClient interface {
 	SignCertificateRequest(ctx context.Context, caType dto.CAType, caName string, csr *x509.CertificateRequest, signVerbatim bool, cn string) (*x509.Certificate, *x509.Certificate, error)
 	RevokeCert(ctx context.Context, caType dto.CAType, caName string, serialNumberToRevoke string) error
 	GetCert(ctx context.Context, caType dto.CAType, caName string, serialNumber string) (dto.Cert, error)
-	GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, queryParameters string) (dto.IssuedCertsResponse, error)
+	GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, queryParameters filters.QueryParameters) (dto.IssuedCertsResponse, error)
 }
 
 type lamassuCaClientConfig struct {
@@ -209,15 +211,15 @@ func (c *lamassuCaClientConfig) GetCert(ctx context.Context, caType dto.CAType, 
 
 }
 
-func (c *lamassuCaClientConfig) GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, queryParameters string) (dto.IssuedCertsResponse, error) {
+func (c *lamassuCaClientConfig) GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, queryParameters filters.QueryParameters) (dto.IssuedCertsResponse, error) {
 	req, err := c.client.NewRequest("GET", "v1/"+caType.String()+"/"+caName+"/issued", nil)
 	if err != nil {
 		return dto.IssuedCertsResponse{}, err
 	}
-	if queryParameters != "" {
-		newParams := fmt.Sprintf("page=%s", queryParameters)
-		req.URL.RawQuery = newParams
-	}
+
+	newParams := clientFilers.GenerateHttpQueryParams(queryParameters)
+	req.URL.RawQuery = newParams
+
 	respBody, _, err := c.client.Do(req)
 	if err != nil {
 		return dto.IssuedCertsResponse{}, err

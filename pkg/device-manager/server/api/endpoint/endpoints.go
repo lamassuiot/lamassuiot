@@ -8,6 +8,7 @@ import (
 	"github.com/go-kit/kit/tracing/opentracing"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -149,7 +150,7 @@ func MakePostDeviceEndpoint(s service.Service) endpoint.Endpoint {
 
 func MakeGetDevicesEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(dto.QueryParameters)
+		req := request.(filters.QueryParameters)
 		devices, length, e := s.GetDevices(ctx, req)
 		return dto.GetDevicesResponse{TotalDevices: length, Devices: devices}, e
 	}
@@ -221,14 +222,14 @@ func MakeGetDeviceCertHistoryEndpoint(s service.Service) endpoint.Endpoint {
 }
 func MakeGetDmsCertHistoryThirtyDaysEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		var req dto.QueryParameters
+		var req filters.QueryParameters
 		history, e := s.GetDmsCertHistoryThirtyDays(ctx, req)
 		return history, e
 	}
 }
 func MakeGetDmsLastIssueCertEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(dto.QueryParameters)
+		req := request.(filters.QueryParameters)
 		history, e := s.GetDmsLastIssuedCert(ctx, req)
 		return history, e
 	}
@@ -261,7 +262,7 @@ type GetDevicesByIdRequest struct {
 
 type GetDevicesByDMSRequest struct {
 	Id              string
-	QueryParameters dto.QueryParameters
+	QueryParameters filters.QueryParameters
 }
 type DeleteDeviceRequest struct {
 	Id string

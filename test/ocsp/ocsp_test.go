@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/pem"
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"os/exec"
 	"testing"
@@ -17,9 +20,7 @@ import (
 	caDTO "github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
 	dmsDTO "github.com/lamassuiot/lamassuiot/pkg/dms-enroller/common/dto"
-	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/crypto/ocsp"
-	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/secrets/responder/file"
 	"github.com/lamassuiot/lamassuiot/test/e2e/utils"
 	client "github.com/lamassuiot/lamassuiot/test/e2e/utils/clients"
 )
@@ -31,7 +32,7 @@ var oscpSignCert = flag.String("ocspSignCert", "", "ocspCert")
 var dmsCertFile = "./dmsPer.crt"
 var dmsKeyFile = "./dmsPer.key"
 
-func TestOCSP(t *testing.T) {
+func TestOCSP_Get(t *testing.T) {
 	var logger log.Logger
 	{
 		logger = log.NewJSONLogger(os.Stdout)
@@ -44,9 +45,6 @@ func TestOCSP(t *testing.T) {
 	dms, _ := CreateDMS(*domain, *certPath, caName)
 	dev, _ := CreateDevice(*domain, *certPath, dms.Id)
 	_, csr, _ := utils.GenrateRandKey(dev.Id)
-	respSecrets := file.NewFile(*ocspSignKey, *oscpSignCert, logger)
-
-	ocspSrv, _ := service.NewService(respSecrets, &caClient)
 
 	devCert, caCert, _ := caClient.SignCertificateRequest(context.Background(), caDTO.Pki, caName, csr, true, csr.Subject.CommonName)
 	ocspRequestBytes, err := ocsp.CreateRequest(devCert, caCert, &ocsp.RequestOptions{})
@@ -64,13 +62,24 @@ func TestOCSP(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
-			caCerts, err := ocspSrv.Verify(context.Background(), ocspRequestBytes)
+			encodedRequest := base64.StdEncoding.EncodeToString(ocspRequestBytes)
+			reqURL := "https://" + *domain + "/api/ocsp/" + encodedRequest
+			resp, err := http.Get(reqURL)
 			if err != nil {
 				if err.Error() != tc.err.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.err)
 				}
 			} else {
-				if len(caCerts) == 0 {
+				if resp.StatusCode != http.StatusOK {
+					t.Errorf("Not receiving expected response")
+				}
+				body, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					os.Exit(1)
+				}
+				resp.Body.Close()
+				_, err = ocsp.ParseResponse(body, nil)
+				if err != nil {
 					t.Errorf("Not receiving expected response")
 				}
 			}
@@ -78,6 +87,59 @@ func TestOCSP(t *testing.T) {
 	}
 }
 
+func TestOCSP_Post(t *testing.T) {
+	var logger log.Logger
+	{
+		logger = log.NewJSONLogger(os.Stdout)
+		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+		logger = level.NewFilter(logger, level.AllowInfo())
+		logger = log.With(logger, "caller", log.DefaultCaller)
+	}
+	caClient, _ := client.LamassuCaClient(*certPath, *domain)
+	caName, _ := CreateCa(*domain, *certPath)
+	dms, _ := CreateDMS(*domain, *certPath, caName)
+	dev, _ := CreateDevice(*domain, *certPath, dms.Id)
+	_, csr, _ := utils.GenrateRandKey(dev.Id)
+
+	devCert, caCert, _ := caClient.SignCertificateRequest(context.Background(), caDTO.Pki, caName, csr, true, csr.Subject.CommonName)
+	ocspRequestBytes, err := ocsp.CreateRequest(devCert, caCert, &ocsp.RequestOptions{})
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	testCases := []struct {
+		name             string
+		ocspRequestBytes []byte
+		err              error
+	}{
+		{"Correct", ocspRequestBytes, nil},
+	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
+			reqURL := "https://" + *domain + "/api/ocsp/"
+			resp, err := http.Post(reqURL, "application/ocsp-request", bytes.NewReader(ocspRequestBytes))
+			if err != nil {
+				if err.Error() != tc.err.Error() {
+					t.Errorf("Got result is %s; want %s", err, tc.err)
+				}
+			} else {
+				if resp.StatusCode != http.StatusOK {
+					t.Errorf("Not receiving expected response")
+				}
+				body, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					os.Exit(1)
+				}
+				resp.Body.Close()
+				_, err = ocsp.ParseResponse(body, nil)
+				if err != nil {
+					t.Errorf("Not receiving expected response")
+				}
+			}
+		})
+	}
+}
 func TestCurl_Get(t *testing.T) {
 	os.Chmod("./curl_Get.sh", 0755)
 	cmd := &exec.Cmd{

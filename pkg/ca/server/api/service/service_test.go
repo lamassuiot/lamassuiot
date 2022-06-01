@@ -20,6 +20,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/secrets"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/secrets/vault"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 	"github.com/opentracing/opentracing-go"
 )
 
@@ -274,7 +275,7 @@ func TestGetIssuedCerts(t *testing.T) {
 			if tc.name == "Incorrect" {
 				ctx = context.WithValue(ctx, "DBIncorrect", true)
 			}
-			_, _, err := srv.GetIssuedCerts(ctx, caType, newCA.Name, dto.QueryParameters{})
+			_, _, err := srv.GetIssuedCerts(ctx, caType, newCA.Name, filters.QueryParameters{})
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)

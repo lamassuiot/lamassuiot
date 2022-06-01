@@ -9,7 +9,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"io/ioutil"
-	"math"
 	"math/big"
 	"os"
 	"strconv"
@@ -19,10 +18,8 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/jakehl/goid"
-	lamassuCAClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 
 	caDTO "github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
-	"github.com/lamassuiot/lamassuiot/test/e2e/utils"
 	client "github.com/lamassuiot/lamassuiot/test/e2e/utils/clients"
 )
 
@@ -49,7 +46,7 @@ func ManageCAs(caNumber int, scaleIndex int, certPath string, domain string) (ca
 			level.Error(logger).Log("err", err)
 			return caDTO.Cert{}, err
 		}
-		createCa, err = LatencyGetCAs(caClient, f, logger)
+		createCa, err = caClient.GetCAs(context.Background(), caDTO.Pki)
 		if err != nil {
 			return caDTO.Cert{}, err
 		}
@@ -88,34 +85,6 @@ func ManageCAs(caNumber int, scaleIndex int, certPath string, domain string) (ca
 	}
 	f.Close()
 	return ca, nil
-}
-
-func LatencyGetCAs(caClient lamassuCAClient.LamassuCaClient, f *os.File, logger log.Logger) ([]caDTO.Cert, error) {
-	var max, min float64
-	max = 0
-	min = 12
-	var createCa []caDTO.Cert
-	for k := 0; k < 10; k++ {
-		before := time.Now().UnixNano()
-		cas, err := caClient.GetCAs(context.Background(), caDTO.Pki)
-		if err != nil {
-			level.Error(logger).Log("err", err)
-			return []caDTO.Cert{}, err
-		}
-		after := time.Now().UnixNano()
-		latency := float64((after - before)) / 1000000000
-		max = math.Max(max, latency)
-		min = math.Min(min, latency)
-		createCa = cas
-	}
-	media := (max + min) / 2
-	err := utils.WriteDataFile(strconv.Itoa(len(createCa)), max, min, media, f)
-	if err != nil {
-		level.Error(logger).Log("err", err)
-		return []caDTO.Cert{}, err
-	}
-
-	return createCa, nil
 }
 func CreateCertKey() error {
 	serialnumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))

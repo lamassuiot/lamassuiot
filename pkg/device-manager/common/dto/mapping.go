@@ -1,6 +1,8 @@
 package dto
 
-import "crypto/x509"
+import (
+	"crypto/x509"
+)
 
 type Stats struct {
 	PendingEnrollment int `json:"pending_enrollment"`
@@ -84,22 +86,6 @@ type DeviceCert struct {
 	Subject      Subject `json:"subject"`
 	ValidFrom    string  `json:"valid_from"`
 	ValidTo      string  `json:"valid_to"`
-}
-
-type PaginationOptions struct {
-	Page   int `json:"page"`
-	Offset int `json:"offset"`
-}
-
-type OrderOptions struct {
-	Order string `json:"order"`
-	Field string `json:"field"`
-}
-
-type QueryParameters struct {
-	Filter     string            `json:"filter"`
-	Order      OrderOptions      `json:"order_options"`
-	Pagination PaginationOptions `json:"pagination_options"`
 }
 
 type Enroll struct {

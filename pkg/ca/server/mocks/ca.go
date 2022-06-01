@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/log/level"
-	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/models/ca"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 
 	//devicesStore "github.com/lamassuiot/lamassuiot/pkg/device-manager/models/device/store"
 
@@ -45,6 +45,6 @@ func (db *caDBMock) InsertCert(ctx context.Context, caName string, serialNumber 
 
 }
 
-func (db *caDBMock) SelectCertsbyCA(ctx context.Context, caName string, queryParameters dto.QueryParameters) ([]ca.IssuedCerts, int, error) {
+func (db *caDBMock) SelectCertsByCA(ctx context.Context, caName string, queryParameters filters.QueryParameters) ([]ca.IssuedCerts, int, error) {
 	return []ca.IssuedCerts{}, 0, nil
 }

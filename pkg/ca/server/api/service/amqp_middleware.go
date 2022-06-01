@@ -12,6 +12,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 	"github.com/opentracing/opentracing-go"
 	"github.com/streadway/amqp"
 )
@@ -135,7 +136,7 @@ func (mw *amqpMiddleware) DeleteCA(ctx context.Context, caType dto.CAType, CA st
 	return mw.next.DeleteCA(ctx, caType, CA)
 }
 
-func (mw *amqpMiddleware) GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, queryParameters dto.QueryParameters) (certs []dto.Cert, length int, err error) {
+func (mw *amqpMiddleware) GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, queryParameters filters.QueryParameters) (certs []dto.Cert, length int, err error) {
 	defer func(begin time.Time) {
 
 	}(time.Now())

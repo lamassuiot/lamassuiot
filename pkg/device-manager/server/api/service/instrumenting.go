@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 
 	"github.com/go-kit/kit/metrics"
 )
@@ -55,7 +56,7 @@ func (mw *instrumentingMiddleware) PostDevice(ctx context.Context, alias string,
 	return mw.next.PostDevice(ctx, alias, deviceID, DmsID, description, tags, iconName, iconColor)
 }
 
-func (mw *instrumentingMiddleware) GetDevices(ctx context.Context, queryParameters dto.QueryParameters) (device []dto.Device, length int, err error) {
+func (mw *instrumentingMiddleware) GetDevices(ctx context.Context, queryParameters filters.QueryParameters) (device []dto.Device, length int, err error) {
 	defer func(begin time.Time) {
 		lvs := []string{"method", "GetDevices", "error", fmt.Sprint(err != nil)}
 		mw.requestCount.With(lvs...).Add(1)
@@ -84,7 +85,7 @@ func (mw *instrumentingMiddleware) UpdateDeviceById(ctx context.Context, alias s
 	return mw.next.UpdateDeviceById(ctx, alias, deviceID, DmsID, description, tags, iconName, iconColor)
 }
 
-func (mw *instrumentingMiddleware) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters dto.QueryParameters) (devices []dto.Device, err error) {
+func (mw *instrumentingMiddleware) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) (devices []dto.Device, err error) {
 	defer func(begin time.Time) {
 		lvs := []string{"method", "GetDevicesByDMS", "error", fmt.Sprint(err != nil)}
 		mw.requestCount.With(lvs...).Add(1)
@@ -138,7 +139,7 @@ func (mw *instrumentingMiddleware) GetDeviceCertHistory(ctx context.Context, id 
 
 	return mw.next.GetDeviceCertHistory(ctx, id)
 }
-func (mw *instrumentingMiddleware) GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters dto.QueryParameters) (history []dto.DMSCertHistory, err error) {
+func (mw *instrumentingMiddleware) GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters filters.QueryParameters) (history []dto.DMSCertHistory, err error) {
 	defer func(begin time.Time) {
 		lvs := []string{"method", "GetDmsCertHistoryThirtyDays", "error", fmt.Sprint(err != nil)}
 		mw.requestCount.With(lvs...).Add(1)
@@ -147,7 +148,7 @@ func (mw *instrumentingMiddleware) GetDmsCertHistoryThirtyDays(ctx context.Conte
 
 	return mw.next.GetDmsCertHistoryThirtyDays(ctx, queryParameters)
 }
-func (mw *instrumentingMiddleware) GetDmsLastIssuedCert(ctx context.Context, queryParameters dto.QueryParameters) (dmsLastIssued []dto.DMSLastIssued, err error) {
+func (mw *instrumentingMiddleware) GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) (dmsLastIssued []dto.DMSLastIssued, err error) {
 	defer func(begin time.Time) {
 		lvs := []string{"method", "GetDmsLastIssuedCert", "error", fmt.Sprint(err != nil)}
 		mw.requestCount.With(lvs...).Add(1)

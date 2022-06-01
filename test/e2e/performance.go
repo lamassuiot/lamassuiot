@@ -23,30 +23,18 @@ func main() {
 
 	scaleIndex := 1
 	scaleTest(scaleIndex, *cacert, *domain)
-
-	scaleIndex = scaleIndex + 10
-	scaleTest(scaleIndex, *cacert, *domain)
-
-	scaleIndex = scaleIndex + 20
-	scaleTest(scaleIndex, *cacert, *domain)
-
-	scaleIndex = scaleIndex + 40
-	scaleTest(scaleIndex, *cacert, *domain)
-
-	scaleIndex = scaleIndex + 30
-	scaleTest(scaleIndex, *cacert, *domain)
 }
 
 func scaleTest(scaleIndex int, certPath string, domain string) {
-	fmt.Println("Scenario Manage CAs: " + strconv.Itoa(2*scaleIndex) + " CAs")
+	fmt.Println("Scenario Manage CAs: " + strconv.Itoa(scaleIndex) + " CAs")
 	ca, err := cas.ManageCAs(2*scaleIndex, scaleIndex, certPath, domain)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	fmt.Println("Scenario Industrial Environment: " + strconv.Itoa(10000*scaleIndex) + " devices")
-	dmsId, err := industrial.IndustrialEnvironment(ca.Name, 10000*scaleIndex, 3, certPath, domain)
+	fmt.Println("Scenario Industrial Environment: " + strconv.Itoa(scaleIndex) + " devices")
+	dmsId, err := industrial.IndustrialEnvironment(ca.Name, scaleIndex, 1, certPath, domain)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -59,7 +47,7 @@ func scaleTest(scaleIndex int, certPath string, domain string) {
 		return
 	}
 
-	fmt.Println("Scenario Manage DMSs: " + strconv.Itoa(2*scaleIndex) + " DMSs")
+	fmt.Println("Scenario Manage DMSs: " + strconv.Itoa(scaleIndex) + " DMSs")
 	err = dmss.ManageDMSs(2*scaleIndex, dmsId, ca.Name, scaleIndex, certPath, domain)
 	if err != nil {
 		fmt.Println(err)

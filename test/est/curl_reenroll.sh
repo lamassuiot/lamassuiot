@@ -40,16 +40,13 @@ export DMS_KEY=./dms.key
 export DEVICE_ID=$(uuidgen)
 
 openssl req -new -newkey rsa:2048 -nodes -keyout device.key -out device.csr -subj "/CN=$DEVICE_ID"
-sed '1d' device.csr > device2.csr
-mv  device2.csr device.csr
-sed '$d' device.csr > device2.csr
-mv  device2.csr device.csr
-curl https://$DOMAIN/api/devmanager/.well-known/est/$CA_NAME/simpleenroll --cert $DMS_CRT --key $DMS_KEY -s -o cert.p7 --cacert root-ca.pem  --data-binary @device.csr -H "Content-Type: application/pkcs10" 
+sed '/CERTIFICATE/d' device.csr > device_enroll.csr
+curl https://$DOMAIN/api/devmanager/.well-known/est/$CA_NAME/simpleenroll --cert $DMS_CRT --key $DMS_KEY -s -o cert.p7 --cacert root-ca.pem  --data-binary @device_enroll.csr -H "Content-Type: application/pkcs10" 
 openssl base64 -d -in cert.p7 | openssl pkcs7 -inform DER -outform PEM -print_certs -out cert.pem 
 #echo "6) Reenrolling"
 
 export DEVICE_CRT=cert.pem
 export DEVICE_KEY=device.key
 
-curl https://$DOMAIN/api/devmanager/.well-known/est/simplereenroll --cert $DEVICE_CRT --key $DEVICE_KEY -s -o newcert.p7 --cacert root-ca.pem --data-binary @device.csr -H "Content-Type: application/pkcs10" 
-openssl base64 -d -in newcert.p7 | openssl pkcs7 -inform DER -outform PEM -print_certs -out newcert.pem 
+curl https://$DOMAIN/api/devmanager/.well-known/est/simplereenroll --cert $DEVICE_CRT --key $DEVICE_KEY -s -o newcert.p7 --cacert root-ca.pem --data-binary @device_enroll.csr -H "Content-Type: application/pkcs10" 
+openssl base64 -d -in newcert.p7 | openssl pkcs7 -inform DER -outform PEM -print_certs -out $DEVICE_CRT 

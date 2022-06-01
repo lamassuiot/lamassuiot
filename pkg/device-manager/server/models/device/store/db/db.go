@@ -4,9 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"regexp"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -19,6 +16,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/device"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/device/store"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 	"github.com/opentracing/opentracing-go"
 
 	_ "github.com/lib/pq"
@@ -87,7 +85,7 @@ func (db *DB) InsertDevice(ctx context.Context, alias string, deviceID string, d
 	return nil
 }
 
-func (db *DB) SelectAllDevices(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.Device, int, error) {
+func (db *DB) SelectAllDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error) {
 	db.logger = ctx.Value(utils.LamassuLoggerContextKey).(log.Logger)
 	parentSpan := opentracing.SpanFromContext(ctx)
 	var length int
@@ -103,7 +101,7 @@ func (db *DB) SelectAllDevices(ctx context.Context, queryParameters dto.QueryPar
 	}
 	rows.Close()
 	sqlStatement := `SELECT * FROM devices  `
-	sqlStatement = applyFilter(sqlStatement, queryParameters)
+	sqlStatement = filters.ApplySQLFilter(sqlStatement, queryParameters)
 
 	span := opentracing.StartSpan("lamassu-device-manager: Select All Devices from database", opentracing.ChildOf(parentSpan.Context()))
 	rows, err = db.Query(sqlStatement)
@@ -210,14 +208,14 @@ func (db *DB) SetKeyAndSubject(ctx context.Context, keyMetadate dto.PrivateKeyMe
 	return nil
 
 }
-func (db *DB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, queryParameters dto.QueryParameters) ([]dto.Device, error) {
+func (db *DB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, queryParameters filters.QueryParameters) ([]dto.Device, error) {
 	db.logger = ctx.Value(utils.LamassuLoggerContextKey).(log.Logger)
 	parentSpan := opentracing.SpanFromContext(ctx)
 
 	sqlStatement := `
 	SELECT * FROM devices where dms_id = $1
 	`
-	sqlStatement = applyFilter(sqlStatement, queryParameters)
+	sqlStatement = filters.ApplySQLFilter(sqlStatement, queryParameters)
 
 	span := opentracing.StartSpan("lamassu-device-manager: Select All Devices by DMS ID from database", opentracing.ChildOf(parentSpan.Context()))
 	rows, err := db.Query(sqlStatement, dms_id)
@@ -472,7 +470,7 @@ func (db *DB) SelectDeviceCertHistoryBySerialNumber(ctx context.Context, serialN
 
 	return devCh, nil
 }
-func (db *DB) SelectDeviceCertHistoryLastThirtyDays(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.DeviceCertHistory, error) {
+func (db *DB) SelectDeviceCertHistoryLastThirtyDays(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DeviceCertHistory, error) {
 
 	db.logger = ctx.Value(utils.LamassuLoggerContextKey).(log.Logger)
 	parentSpan := opentracing.SpanFromContext(ctx)
@@ -480,7 +478,7 @@ func (db *DB) SelectDeviceCertHistoryLastThirtyDays(ctx context.Context, queryPa
 	sqlStatement := `
 	SELECT * FROM device_certificates_history WHERE creation_ts >= NOW() - INTERVAL '30 days'
 	`
-	sqlStatement = applyFilter(sqlStatement, queryParameters)
+	sqlStatement = filters.ApplySQLFilter(sqlStatement, queryParameters)
 	span := opentracing.StartSpan("lamassu-device-manager: Select Device Device Cert history Last Thirty Days from database", opentracing.ChildOf(parentSpan.Context()))
 	rows, err := db.Query(sqlStatement)
 	span.Finish()
@@ -502,13 +500,13 @@ func (db *DB) SelectDeviceCertHistoryLastThirtyDays(ctx context.Context, queryPa
 
 	return deviceCertHistory, nil
 }
-func (db *DB) SelectDmssLastIssuedCert(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.DMSLastIssued, error) {
+func (db *DB) SelectDmssLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSLastIssued, error) {
 	db.logger = ctx.Value(utils.LamassuLoggerContextKey).(log.Logger)
 	parentSpan := opentracing.SpanFromContext(ctx)
 	sqlStatement := `
 	SELECT * FROM last_issued_cert_by_dms
 	`
-	sqlStatement = applyFilter(sqlStatement, queryParameters)
+	sqlStatement = filters.ApplySQLFilter(sqlStatement, queryParameters)
 	span := opentracing.StartSpan("lamassu-device-manager: Select Last Issued Cert By DMS from database", opentracing.ChildOf(parentSpan.Context()))
 	rows, err := db.Query(sqlStatement)
 	span.Finish()
@@ -538,168 +536,4 @@ func contains(s []string, str string) bool {
 	}
 
 	return false
-}
-
-func applyFilter(sqlStatement string, queryParameters dto.QueryParameters) string {
-	fields := []string{"id", "alias", "description", "status", "dms_id", "key_strength", "tags", "creation_ts"} //Switch Case por fields en lugar de tipo de dato
-	bigOperator := " AND "
-	helper := queryParameters.Filter
-	if queryParameters.Filter != "" {
-		if !strings.Contains(sqlStatement, "WHERE") {
-			sqlStatement = sqlStatement + " WHERE 1=1 "
-		}
-		for len(helper) > 0 {
-
-			if !strings.HasPrefix(helper, ")") {
-				if strings.HasPrefix(helper, ",") {
-					helper = strings.TrimPrefix(helper, ",")
-				}
-				if strings.HasPrefix(helper, "and") {
-					helper = strings.TrimPrefix(helper, "and(")
-					bigOperator = " AND "
-				}
-				if strings.HasPrefix(helper, "or") {
-					helper = strings.TrimPrefix(helper, "or(")
-					bigOperator = " OR "
-				}
-
-				if strings.HasPrefix(helper, " ") {
-					helper = strings.TrimPrefix(helper, " ")
-				}
-				operator := helper[:strings.IndexByte(helper, '(')]
-				var rgx = regexp.MustCompile(`\((.*?)\)`)
-				arguments := rgx.FindStringSubmatch(helper)
-				split := strings.Split(arguments[1], ",")
-				field := split[0]
-				var data string
-				data = split[1]
-
-				if contains(fields, field) {
-					switch field {
-					/*	case "INTEGER COLUMN":
-						_, err := strconv.Atoi(data)
-						if err == nil {
-							switch operator {
-							case "eq":
-								sqlStatement = sqlStatement + bigOperator + field + "= '" + data + "' "
-							case "nq":
-								sqlStatement = sqlStatement + bigOperator + field + "<> '" + data + "' "
-							case "lt":
-								sqlStatement = sqlStatement + bigOperator + field + "< '" + data + "' "
-							case "le":
-								sqlStatement = sqlStatement + bigOperator + field + "<= '" + data + "' "
-							case "gt":
-								sqlStatement = sqlStatement + bigOperator + field + "> '" + data + "' "
-							case "ge":
-								sqlStatement = sqlStatement + bigOperator + field + ">= '" + data + "' "
-							default:
-							}
-						}
-					*/
-					case "creation_ts":
-
-						_, err := time.Parse("2006-01-02", data)
-						if err == nil {
-							switch operator {
-							case "eq":
-								sqlStatement = sqlStatement + bigOperator + field + "= '" + data + "' "
-							case "nq":
-								sqlStatement = sqlStatement + bigOperator + field + "<> '" + data + "' "
-							case "lt":
-								sqlStatement = sqlStatement + bigOperator + field + "< '" + data + "' "
-							case "le":
-								sqlStatement = sqlStatement + bigOperator + field + "<= '" + data + "' "
-							case "gt":
-								sqlStatement = sqlStatement + bigOperator + field + "> '" + data + "' "
-							case "ge":
-								sqlStatement = sqlStatement + bigOperator + field + ">= '" + data + "' "
-							default:
-								return sqlStatement
-							}
-						}
-
-					case "key_strength":
-						keyStrength := []string{"low", "medium", "high"}
-						if contains(keyStrength, data) {
-							switch operator {
-							case "eq":
-								sqlStatement = sqlStatement + bigOperator + field + "= '" + data + "' "
-							case "contains":
-								sqlStatement = sqlStatement + bigOperator + field + " LIKE  '%" + data + "%' "
-							default:
-								return sqlStatement
-							}
-
-						}
-
-					case "status":
-						status := []string{device.DevicePendingProvision.String(),
-							device.DeviceProvisioned.String(),
-							device.DeviceCertRevoked.String(),
-							device.DeviceCertExpired.String(),
-							device.DeviceDecommisioned.String()}
-
-						if contains(status, data) {
-							switch operator {
-							case "eq":
-								sqlStatement = sqlStatement + bigOperator + field + "= '" + data + "' "
-							case "contains":
-								sqlStatement = sqlStatement + bigOperator + field + " LIKE  '%" + data + "%' "
-							default:
-								return sqlStatement
-							}
-
-						}
-
-					case "tags":
-						if operator == "contains" {
-							sqlStatement = sqlStatement + bigOperator + field + " IN (" + data + ") "
-						} else {
-							return sqlStatement
-						}
-
-					default:
-						switch operator {
-						case "eq":
-							sqlStatement = sqlStatement + bigOperator + field + "= '" + data + "' "
-						case "contains":
-							sqlStatement = sqlStatement + bigOperator + field + " LIKE  '%" + data + "%' "
-						default:
-							return sqlStatement
-						}
-
-					}
-
-					toRemove := helper[:len(operator)+len(arguments[0])]
-					helper = strings.TrimPrefix(helper, toRemove)
-				}
-			} else {
-				if strings.HasPrefix(helper, ")") {
-					helper = strings.TrimPrefix(helper, ")")
-				}
-				if strings.HasPrefix(helper, " ") {
-					helper = strings.TrimPrefix(helper, " ")
-				}
-				if strings.HasPrefix(helper, ",") {
-					helper = strings.TrimPrefix(helper, ",")
-				}
-
-			}
-
-		}
-
-	}
-	if queryParameters.Order.Order != "" {
-		if strings.ToUpper(queryParameters.Order.Order) == "ASC" || strings.ToUpper(queryParameters.Order.Order) == "DESC" {
-			sqlStatement = sqlStatement + "ORDER BY " + queryParameters.Order.Field + " " + strings.ToUpper(queryParameters.Order.Order)
-		}
-	}
-	if queryParameters.Pagination.Page != 0 {
-		perPage := 100
-		if queryParameters.Pagination.Offset > 0 {
-			perPage = queryParameters.Pagination.Offset
-		}
-		sqlStatement = sqlStatement + " OFFSET " + strconv.Itoa(((queryParameters.Pagination.Page - 1) * perPage)) + " ROWS FETCH NEXT " + strconv.Itoa(perPage) + " ROWS ONLY"
-	}
-	return sqlStatement
 }

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 	"github.com/opentracing/opentracing-go"
 
 	"github.com/go-kit/kit/log"
@@ -66,7 +67,7 @@ func (mw loggingMiddleware) PostDevice(ctx context.Context, alias string, device
 	return mw.next.PostDevice(ctx, alias, deviceID, DmsID, description, tags, iconName, iconColor)
 }
 
-func (mw loggingMiddleware) GetDevices(ctx context.Context, queryParameters dto.QueryParameters) (deviceResp []dto.Device, length int, err error) {
+func (mw loggingMiddleware) GetDevices(ctx context.Context, queryParameters filters.QueryParameters) (deviceResp []dto.Device, length int, err error) {
 	defer func(begin time.Time) {
 		mw.logger.Log(
 			"method", "GetDevices",
@@ -106,7 +107,7 @@ func (mw loggingMiddleware) UpdateDeviceById(ctx context.Context, alias string, 
 	return mw.next.UpdateDeviceById(ctx, alias, deviceID, DmsID, description, tags, iconName, iconColor)
 }
 
-func (mw loggingMiddleware) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters dto.QueryParameters) (deviceResp []dto.Device, err error) {
+func (mw loggingMiddleware) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) (deviceResp []dto.Device, err error) {
 	defer func(begin time.Time) {
 		mw.logger.Log(
 			"method", "GetDevicesByDMS",
@@ -189,7 +190,7 @@ func (mw loggingMiddleware) GetDeviceCertHistory(ctx context.Context, id string)
 	}(time.Now())
 	return mw.next.GetDeviceCertHistory(ctx, id)
 }
-func (mw loggingMiddleware) GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters dto.QueryParameters) (certHisto []dto.DMSCertHistory, err error) {
+func (mw loggingMiddleware) GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters filters.QueryParameters) (certHisto []dto.DMSCertHistory, err error) {
 	defer func(begin time.Time) {
 		mw.logger.Log(
 			"method", "GetDmsCertHistoryThirtyDays",
@@ -201,7 +202,7 @@ func (mw loggingMiddleware) GetDmsCertHistoryThirtyDays(ctx context.Context, que
 	}(time.Now())
 	return mw.next.GetDmsCertHistoryThirtyDays(ctx, queryParameters)
 }
-func (mw loggingMiddleware) GetDmsLastIssuedCert(ctx context.Context, queryParameters dto.QueryParameters) (dmsLastIssued []dto.DMSLastIssued, err error) {
+func (mw loggingMiddleware) GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) (dmsLastIssued []dto.DMSLastIssued, err error) {
 	defer func(begin time.Time) {
 		mw.logger.Log(
 			"method", "GetDmsLastIssuedCert",

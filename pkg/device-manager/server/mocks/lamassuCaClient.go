@@ -11,6 +11,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
 	caDTO "github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 )
 
 type LamassuCaClientConfig struct {
@@ -80,7 +81,7 @@ func (c *LamassuCaClientConfig) RevokeCert(ctx context.Context, caType caDTO.CAT
 	}
 }
 
-func (c *LamassuCaClientConfig) GetIssuedCerts(ctx context.Context, caType caDTO.CAType, caName string, queryParameters string) (caDTO.IssuedCertsResponse, error) {
+func (c *LamassuCaClientConfig) GetIssuedCerts(ctx context.Context, caType caDTO.CAType, caName string, queryParameters filters.QueryParameters) (caDTO.IssuedCertsResponse, error) {
 
 	return caDTO.IssuedCertsResponse{}, nil
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/models/ca/store"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/secrets"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 )
 
 type Service interface {
@@ -23,7 +24,7 @@ type Service interface {
 	CreateCA(ctx context.Context, caType dto.CAType, caName string, privateKeyMetadata dto.PrivateKeyMetadata, subject dto.Subject, caTTL int, enrollerTTL int) (dto.Cert, error)
 	ImportCA(ctx context.Context, caType dto.CAType, caName string, certificate x509.Certificate, privateKey dto.PrivateKey, enrollerTTL int) (dto.Cert, error)
 	DeleteCA(ctx context.Context, caType dto.CAType, caName string) error
-	GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, queryParameters dto.QueryParameters) ([]dto.Cert, int, error)
+	GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, queryParameters filters.QueryParameters) ([]dto.Cert, int, error)
 	GetCert(ctx context.Context, caType dto.CAType, caName string, serialNumber string) (dto.Cert, error)
 	DeleteCert(ctx context.Context, caType dto.CAType, caName string, serialNumber string) error
 	SignCertificate(ctx context.Context, caType dto.CAType, signingCaName string, csr x509.CertificateRequest, signVerbatim bool, cn string) (dto.SignResponse, error)
@@ -66,7 +67,7 @@ func (s *caService) Stats(ctx context.Context) dto.Stats {
 	}
 
 	for _, ca := range cas {
-		_, issuedCerts, err := s.GetIssuedCerts(ctx, dto.Pki, ca.Name, dto.QueryParameters{Pagination: dto.PaginationOptions{Page: 1, Offset: 10}})
+		_, issuedCerts, err := s.GetIssuedCerts(ctx, dto.Pki, ca.Name, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: 10, Offset: 0}})
 		if err == nil {
 			stats.CAs = stats.CAs + 1
 			stats.IssuedCerts = stats.IssuedCerts + issuedCerts
@@ -109,8 +110,8 @@ func (s *caService) DeleteCA(ctx context.Context, caType dto.CAType, CA string) 
 	return nil
 }
 
-func (s *caService) GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, queryParameters dto.QueryParameters) ([]dto.Cert, int, error) {
-	serialnumbers, length, err := s.casDb.SelectCertsbyCA(ctx, caName, queryParameters)
+func (s *caService) GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, queryParameters filters.QueryParameters) ([]dto.Cert, int, error) {
+	serialnumbers, length, err := s.casDb.SelectCertsByCA(ctx, caName, queryParameters)
 	if err != nil {
 		return []dto.Cert{}, 0, err
 	}

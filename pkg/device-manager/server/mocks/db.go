@@ -13,6 +13,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
 	devicesModel "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/device"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/models/dms"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 
 	//devicesStore "github.com/lamassuiot/lamassuiot/pkg/device-manager/models/device/store"
 	devmanagererrors "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
@@ -179,7 +180,7 @@ func (db *MockDB) SelectDeviceById(ctx context.Context, id string) (dto.Device, 
 
 }
 
-func (db *MockDB) SelectAllDevices(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.Device, int, error) {
+func (db *MockDB) SelectAllDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error) {
 	if ctx.Value("DBShouldFail") != nil {
 		failDB := ctx.Value("DBShouldFail").(bool)
 
@@ -202,7 +203,7 @@ func (db *MockDB) SelectAllDevices(ctx context.Context, queryParameters dto.Quer
 	}
 
 }
-func (db *MockDB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, queryParameters dto.QueryParameters) ([]dto.Device, error) {
+func (db *MockDB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, queryParameters filters.QueryParameters) ([]dto.Device, error) {
 	var devList []dto.Device
 	var d dto.Device
 	d = testDevice()
@@ -312,7 +313,7 @@ func (db *MockDB) SelectDeviceCertHistoryBySerialNumber(ctx context.Context, ser
 		return testGetDeviceCertHistory()[0], nil
 	}
 }
-func (db *MockDB) SelectDeviceCertHistoryLastThirtyDays(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.DeviceCertHistory, error) {
+func (db *MockDB) SelectDeviceCertHistoryLastThirtyDays(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DeviceCertHistory, error) {
 	if ctx.Value("DBSelectDeviceCertHistoryBySerialNumberFail") != nil {
 		failDB := ctx.Value("DBSelectDeviceCertHistory").(bool)
 
@@ -352,7 +353,7 @@ func (db *MockDB) UpdateDeviceStatusByID(ctx context.Context, id string, newStat
 	return nil
 }
 
-func (db *MockDB) SelectDmssLastIssuedCert(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.DMSLastIssued, error) {
+func (db *MockDB) SelectDmssLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSLastIssued, error) {
 	if ctx.Value("DBSelectDmssLastIssuedCert") != nil {
 		failDB := ctx.Value("DBSelectDmssLastIssuedCert").(bool)
 

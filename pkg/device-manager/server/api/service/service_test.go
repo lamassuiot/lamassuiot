@@ -15,6 +15,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/mocks"
 	devicesStore "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/device/store"
 	devicesDB "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/device/store/db"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
 )
@@ -89,7 +90,7 @@ func TestGetDevices(t *testing.T) {
 			} else {
 				ctx = context.WithValue(ctx, "DBShouldFail", false)
 			}
-			_, _, err := srv.GetDevices(ctx, dto.QueryParameters{})
+			_, _, err := srv.GetDevices(ctx, filters.QueryParameters{})
 			if err != nil {
 				if tc.ret.Error() != err.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
@@ -249,7 +250,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
 
-			_, err := srv.GetDevicesByDMS(ctx, tc.dmsId, dto.QueryParameters{})
+			_, err := srv.GetDevicesByDMS(ctx, tc.dmsId, filters.QueryParameters{})
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
@@ -354,7 +355,7 @@ func TestGetDmsCertHistoryThirtyDays(t *testing.T) {
 				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistory", false)
 				ctx = context.WithValue(ctx, "DBShouldFail", false)
 			}
-			_, err := srv.GetDmsCertHistoryThirtyDays(ctx, dto.QueryParameters{})
+			_, err := srv.GetDmsCertHistoryThirtyDays(ctx, filters.QueryParameters{})
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
@@ -384,7 +385,7 @@ func TestGetDmsLastIssuedCert(t *testing.T) {
 			} else {
 				ctx = context.WithValue(ctx, "DBSelectDmssLastIssuedCert", false)
 			}
-			_, err := srv.GetDmsLastIssuedCert(ctx, dto.QueryParameters{})
+			_, err := srv.GetDmsLastIssuedCert(ctx, filters.QueryParameters{})
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)

@@ -11,6 +11,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/tracing/opentracing"
@@ -152,7 +153,7 @@ func MakeDeleteCAEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(DeleteCARequest)
 
-		issuedCerts, _, err := s.GetIssuedCerts(ctx, req.CaType, req.CA, dto.QueryParameters{})
+		issuedCerts, _, err := s.GetIssuedCerts(ctx, req.CaType, req.CA, filters.QueryParameters{})
 		if err != nil {
 			return nil, err
 		}
@@ -322,7 +323,7 @@ type CaRequest struct {
 type GetIssuedCertsRequest struct {
 	CaType          dto.CAType
 	CA              string
-	QueryParameters dto.QueryParameters
+	QueryParameters filters.QueryParameters
 }
 type DeleteCARequest struct {
 	CaType dto.CAType

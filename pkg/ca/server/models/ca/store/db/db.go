@@ -3,15 +3,13 @@ package db
 import (
 	"context"
 	"database/sql"
-	"strconv"
-	"strings"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
-	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
 	caerrors "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/models/ca"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/models/ca/store"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 )
 
 func NewDB(db *sql.DB, logger log.Logger) store.DB {
@@ -47,7 +45,7 @@ func (db *DB) InsertCert(ctx context.Context, caName string, serialNumber string
 	return nil
 
 }
-func (db *DB) SelectCertsbyCA(ctx context.Context, caName string, queryParameters dto.QueryParameters) ([]ca.IssuedCerts, int, error) {
+func (db *DB) SelectCertsByCA(ctx context.Context, caName string, queryParameters filters.QueryParameters) ([]ca.IssuedCerts, int, error) {
 	var length int
 	sqlStatement := `SELECT COUNT(*) as count FROM ca_issued_certs where ca_name = $1  `
 	rows, err := db.Query(sqlStatement, caName)
@@ -63,7 +61,7 @@ func (db *DB) SelectCertsbyCA(ctx context.Context, caName string, queryParameter
 	sqlStatement = `
 	SELECT * FROM ca_issued_certs where ca_name = $1
 	`
-	sqlStatement = applyFilter(sqlStatement, queryParameters)
+	sqlStatement = filters.ApplySQLFilter(sqlStatement, queryParameters)
 	rows, err = db.Query(sqlStatement, caName)
 	if err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Certs Serial Numbers from database")
@@ -95,23 +93,4 @@ func contains(s []string, str string) bool {
 	}
 
 	return false
-}
-
-func applyFilter(sqlStatement string, queryParameters dto.QueryParameters) string {
-
-	if queryParameters.Order.Order != "" {
-		if strings.ToUpper(queryParameters.Order.Order) == "ASC" || strings.ToUpper(queryParameters.Order.Order) == "DESC" {
-			sqlStatement = sqlStatement + "ORDER BY " + queryParameters.Order.Field + " " + strings.ToUpper(queryParameters.Order.Order)
-		}
-	}
-	if queryParameters.Pagination.Page != 0 {
-		perPage := 100
-		if queryParameters.Pagination.Offset > 0 {
-			perPage = queryParameters.Pagination.Offset
-		}
-		sqlStatement = sqlStatement + " OFFSET " + strconv.Itoa(((queryParameters.Pagination.Page - 1) * perPage)) + " ROWS FETCH NEXT " + strconv.Itoa(perPage) + " ROWS ONLY"
-	} else {
-
-	}
-	return sqlStatement
 }

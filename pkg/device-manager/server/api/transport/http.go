@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
-	"strings"
 
 	"github.com/gorilla/mux"
 
@@ -19,6 +17,8 @@ import (
 	devmanagererrors "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters/types"
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -38,6 +38,16 @@ func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
 		logger := log.With(logger, "span_id", stdopentracing.SpanFromContext(ctx))
 		return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
 	}
+}
+
+func filtrableDeviceModelFields() map[string]types.Filter {
+	fieldFiltersMap := make(map[string]types.Filter)
+	fieldFiltersMap["id"] = &types.StringFilterField{}
+	fieldFiltersMap["description"] = &types.StringFilterField{}
+	fieldFiltersMap["alias"] = &types.StringFilterField{}
+	fieldFiltersMap["status"] = &types.StringFilterField{}
+	fieldFiltersMap["dms_id"] = &types.StringFilterField{}
+	return fieldFiltersMap
 }
 
 func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentracing.Tracer) http.Handler {
@@ -216,63 +226,7 @@ func decodeStatsRequest(ctx context.Context, r *http.Request) (request interface
 
 func decodeRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 
-	return filterQuery(r), nil
-}
-
-func filterQuery(r *http.Request) dto.QueryParameters {
-	f := ""
-	orderArray := ""
-	pageArray := ""
-	page := ""
-	offset := ""
-	field := ""
-	order := ""
-
-	helper := r.URL.RawQuery
-
-	if len(r.URL.RawQuery) > 0 {
-
-		f, helper = middle(helper, "filter={")
-
-		orderArray, helper = middle(helper, "s={")
-		if orderArray != "" {
-			s := strings.Split(orderArray, ",")
-			order = s[0]
-			field = s[1]
-		}
-
-		pageArray, helper = middle(helper, "page={")
-		if pageArray != "" {
-			s := strings.Split(pageArray, ",")
-			page = s[0]
-			offset = s[1]
-		}
-
-	}
-
-	pageInt, _ := strconv.Atoi(page)
-	offsetInt, _ := strconv.Atoi(offset)
-	pagination := dto.PaginationOptions{
-		Page:   pageInt,
-		Offset: offsetInt,
-	}
-	orderOpt := dto.OrderOptions{
-		Order: order,
-		Field: field,
-	}
-	query := dto.QueryParameters{
-		Order:      orderOpt,
-		Pagination: pagination,
-		Filter:     f,
-	}
-	return query
-}
-
-func removeAmpersand(helper string) string {
-	if strings.HasPrefix(helper, "&") {
-		helper = strings.TrimPrefix(helper, "&")
-	}
-	return helper
+	return filters.FilterQuery(r, filtrableDeviceModelFields()), nil
 }
 
 func decodePostDeviceRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
@@ -308,7 +262,7 @@ func decodeGetDevicesByDMSRequest(ctx context.Context, r *http.Request) (request
 	if !ok {
 		return nil, ErrMissingDevID()
 	}
-	return endpoint.GetDevicesByDMSRequest{Id: id, QueryParameters: filterQuery(r)}, nil
+	return endpoint.GetDevicesByDMSRequest{Id: id, QueryParameters: filters.FilterQuery(r, filtrableDeviceModelFields())}, nil
 }
 
 func decodeDeleteDeviceRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
@@ -391,33 +345,4 @@ func codeFrom(err error) int {
 	default:
 		return http.StatusInternalServerError
 	}
-}
-
-func match(s string) string {
-	i := strings.Index(s, "{")
-	if i >= 0 {
-		j := strings.Index(s, "}")
-		if j >= 0 {
-			return s[i+1 : j]
-		}
-	}
-	return ""
-}
-
-func middle(in string, field string) (string, string) {
-	result := ""
-	helper := in
-	if strings.Contains(in, field) {
-		helper = removeAmpersand(helper)
-		indexToCutFrom := strings.Index(helper, field)
-		helper = helper[indexToCutFrom:]
-		helper = strings.TrimPrefix(helper, field)
-		if len(helper) > 0 {
-			result = helper[:strings.IndexByte(helper, '}')]
-			helper = strings.Replace(removeAmpersand(in), field+result+"}", "", -1)
-			//helper = strings.TrimPrefix(in, field+helper+"}")
-		}
-	}
-	return result, helper
-
 }
