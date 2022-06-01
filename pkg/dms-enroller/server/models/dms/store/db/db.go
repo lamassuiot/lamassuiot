@@ -71,7 +71,11 @@ func (db *DB) SelectAll(ctx context.Context) ([]dto.DMS, error) {
 	rows, err := db.Query(sqlStatement)
 	if err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain DMSs from database or the database is empty")
-		return []dto.DMS{}, err
+		notFoundErr := &dmserrors.ResourceNotFoundError{
+			ResourceType: "DMS",
+			ResourceId:   "Database is empty",
+		}
+		return []dto.DMS{}, notFoundErr
 	}
 	defer rows.Close()
 	dmss := make([]dto.DMS, 0)
@@ -148,7 +152,11 @@ func (db *DB) SelectBySerialNumber(ctx context.Context, SerialNumber string) (st
 	row, err := db.Query(sqlStatement, SerialNumber)
 	if err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain DMS")
-		return "", err
+		notFoundErr := &dmserrors.ResourceNotFoundError{
+			ResourceType: "DMS",
+			ResourceId:   SerialNumber,
+		}
+		return "", notFoundErr
 	}
 	span.Finish()
 	defer row.Close()
@@ -176,7 +184,11 @@ func (db *DB) UpdateByID(ctx context.Context, id string, status string, serialNu
 	span.Finish()
 	if err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not update DMS with ID "+id+" status to "+status)
-		return dto.DMS{}, err
+		notFoundErr := &dmserrors.ResourceNotFoundError{
+			ResourceType: "DMS",
+			ResourceId:   id,
+		}
+		return dto.DMS{}, notFoundErr
 	}
 	count, err := res.RowsAffected()
 	if err != nil {
@@ -203,7 +215,11 @@ func (db *DB) Delete(ctx context.Context, id string) error {
 	span.Finish()
 	if err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not delete DMS with ID "+id+" from database")
-		return err
+		notFoundErr := &dmserrors.ResourceNotFoundError{
+			ResourceType: "DMS",
+			ResourceId:   id,
+		}
+		return notFoundErr
 	}
 	count, err := res.RowsAffected()
 	if err != nil {

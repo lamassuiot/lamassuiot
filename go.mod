@@ -2,6 +2,10 @@ module github.com/lamassuiot/lamassuiot
 
 go 1.16
 
+<<<<<<< HEAD
+=======
+replace github.com/lamassuiot/lamassu-aws-connector => /home/lamassu/lamassu-aws-connector/aws-connector
+>>>>>>> 900abb54c210c4eceafdf17c462664099f7a1a3e
 
 require (
 	cloud.google.com/go/kms v1.4.0 // indirect
@@ -37,5 +41,6 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	go.mozilla.org/pkcs7 v0.0.0-20200128120323-432b2356ecb1
+	golang.org/x/tools v0.1.10 // indirect
 
 )

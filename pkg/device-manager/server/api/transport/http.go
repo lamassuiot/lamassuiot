@@ -26,6 +26,12 @@ type errorer interface {
 	error() error
 }
 
+func ErrMissingDevID() error {
+	return &devmanagererrors.GenericError{
+		Message:    "Device ID not specified",
+		StatusCode: 404,
+	}
+}
 func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
 	return func(ctx context.Context, req *http.Request) context.Context {
 		// Try to join to a trace propagated in `req`.

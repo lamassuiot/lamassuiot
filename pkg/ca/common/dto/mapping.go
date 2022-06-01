@@ -58,7 +58,7 @@ type Subject struct {
 	// Common name of the CA certificate
 	// required: true
 	// example: Lamassu-Root-CA1-RSA4096
-	CN string `json:"common_name"`
+	CN string `json:"common_name" validate:"required"`
 
 	// Organization of the CA certificate
 	// required: true
@@ -89,12 +89,12 @@ type PrivateKeyMetadata struct {
 	// Algorithm used to create CA key
 	// required: true
 	// example: RSA
-	KeyType string `json:"type"`
+	KeyType string `json:"type" validate:"oneof='RSA' 'EC'"`
 
 	// Length used to create CA key
 	// required: true
 	// example: 4096
-	KeyBits int `json:"bits"`
+	KeyBits int `json:"bits"  validate:"required"`
 }
 type PrivateKeyMetadataWithStregth struct {
 	// Algorithm used to create CA key

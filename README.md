@@ -2,7 +2,9 @@ Lamassu IoT
 ===================
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-blue.svg)](http://www.mozilla.org/MPL/2.0/index.txt)
 
-<img src="https://www.lamassu.io/lamassuiot-dev.github.io/assets/brand/lamassu-brand.png" alt="Lamassu App" title="Lamassu" />
+<img src="https://www.lamassu.io/assets/brand/lamassu-brand.png" alt="Lamassu App" title="Lamassu" />
+
+Lamassu is an IoT first PKI designed for industrial scenarios. This is the main code repository for Lamassu IoT where the product logic is being implemented. If you are looking for deployment instructions, please check the [docs](https://www.lamassu.io/docs/) or the project's [Docker Compose repository](https://github.com/lamassuiot/lamassu-compose).
 
 ## Using the GO clients
 

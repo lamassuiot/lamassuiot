@@ -15,7 +15,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/models/dms"
 
 	//devicesStore "github.com/lamassuiot/lamassuiot/pkg/device-manager/models/device/store"
-
+	devmanagererrors "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
 	_ "github.com/lib/pq"
 )
 
@@ -43,6 +43,8 @@ type MockDB struct {
 	logger log.Logger
 }
 
+var device = testDevice()
+
 func NewDevicedDBMock(t *testing.T) (*MockDB, error) {
 	t.Helper()
 	db, err := sql.Open("driverName", "dataSourceName")
@@ -69,6 +71,17 @@ func checkDBAlive(db *sql.DB) error {
 	return err
 }
 
+func (db *MockDB) GetStats(ctx context.Context) (dto.Stats, time.Time) {
+	stat := dto.Stats{
+		PendingEnrollment: 1,
+		Provisioned:       0,
+		Decomissioned:     0,
+		AboutToExpire:     5,
+		Expired:           1,
+		Revoked:           2,
+	}
+	return stat, time.Now()
+}
 func (db *MockDB) SelectBySerialNumber(ctx context.Context, SerialNumber string) (string, error) {
 
 	return "810fbd45-55a6-4dd7-8466-c3d3eb854357", nil
