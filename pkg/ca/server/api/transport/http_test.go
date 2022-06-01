@@ -98,8 +98,8 @@ func TestCAHandler(t *testing.T) {
 				block, _ := pem.Decode([]byte(data))
 				csr, _ := x509.ParseCertificateRequest(block.Bytes)
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
-				cert, _ := (*s).SignCertificate(ctx, dto.Pki, "test", *csr, true)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
+				cert, _ := (*s).SignCertificate(ctx, dto.Pki, "test", *csr, true, *&csr.Subject.CommonName)
 				data, _ = base64.StdEncoding.DecodeString(cert.Crt)
 				block, _ = pem.Decode([]byte(data))
 				x509Certificate, _ = x509.ParseCertificate(block.Bytes)
@@ -118,7 +118,7 @@ func TestCAHandler(t *testing.T) {
 			name: "GetCAs",
 			serviceInitialization: func(s *service.Service) {
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
 				obj := e.GET("/pki").
@@ -142,7 +142,7 @@ func TestCAHandler(t *testing.T) {
 			name: "CreateCA DuplicateCA",
 			serviceInitialization: func(s *service.Service) {
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
 				caTTL := 60 * 60 * 24
@@ -327,7 +327,7 @@ func TestCAHandler(t *testing.T) {
 			name: "CreateCA ExistCAName",
 			serviceInitialization: func(s *service.Service) {
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
 				caTTL := 60 * 60 * 24
@@ -343,7 +343,7 @@ func TestCAHandler(t *testing.T) {
 			name: "GetCert CertificateNotExist",
 			serviceInitialization: func(s *service.Service) {
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
 				_ = e.GET("/pki/test/cert/12-04-12").
@@ -356,7 +356,7 @@ func TestCAHandler(t *testing.T) {
 			name: "GetCert MissingSerialNumber",
 			serviceInitialization: func(s *service.Service) {
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
 				_ = e.GET("/pki/test/cert/").
@@ -369,7 +369,7 @@ func TestCAHandler(t *testing.T) {
 			name: "GetCert InvalidCaType",
 			serviceInitialization: func(s *service.Service) {
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
 				_ = e.GET("/lamassu/test/cert/12-06-05").
@@ -496,8 +496,8 @@ func TestCAHandler(t *testing.T) {
 				block, _ := pem.Decode([]byte(data))
 				csr, _ := x509.ParseCertificateRequest(block.Bytes)
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
-				cert, _ := (*s).SignCertificate(ctx, dto.Pki, "test", *csr, true)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
+				cert, _ := (*s).SignCertificate(ctx, dto.Pki, "test", *csr, true, csr.Subject.CommonName)
 				data, _ = base64.StdEncoding.DecodeString(cert.Crt)
 				block, _ = pem.Decode([]byte(data))
 				x509Certificate, _ = x509.ParseCertificate(block.Bytes)
@@ -516,8 +516,8 @@ func TestCAHandler(t *testing.T) {
 				block, _ := pem.Decode([]byte(data))
 				csr, _ := x509.ParseCertificateRequest(block.Bytes)
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
-				cert, _ := (*s).SignCertificate(ctx, dto.Pki, "test", *csr, true)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
+				cert, _ := (*s).SignCertificate(ctx, dto.Pki, "test", *csr, true, csr.Subject.CommonName)
 				data, _ = base64.StdEncoding.DecodeString(cert.Crt)
 				block, _ = pem.Decode([]byte(data))
 				x509Certificate, _ = x509.ParseCertificate(block.Bytes)
@@ -548,8 +548,8 @@ func TestCAHandler(t *testing.T) {
 				block, _ := pem.Decode([]byte(data))
 				csr, _ := x509.ParseCertificateRequest(block.Bytes)
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
-				cert, _ := (*s).SignCertificate(ctx, dto.Pki, "test", *csr, true)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
+				cert, _ := (*s).SignCertificate(ctx, dto.Pki, "test", *csr, true, csr.Subject.CommonName)
 				data, _ = base64.StdEncoding.DecodeString(cert.Crt)
 				block, _ = pem.Decode([]byte(data))
 				x509Certificate, _ = x509.ParseCertificate(block.Bytes)
@@ -569,8 +569,8 @@ func TestCAHandler(t *testing.T) {
 				block, _ := pem.Decode([]byte(data))
 				csr, _ := x509.ParseCertificateRequest(block.Bytes)
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
-				cert, _ := (*s).SignCertificate(ctx, dto.Pki, "test", *csr, true)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
+				cert, _ := (*s).SignCertificate(ctx, dto.Pki, "test", *csr, true, csr.Subject.CommonName)
 				data, _ = base64.StdEncoding.DecodeString(cert.Crt)
 				block, _ = pem.Decode([]byte(data))
 				x509Certificate, _ = x509.ParseCertificate(block.Bytes)
@@ -589,8 +589,8 @@ func TestCAHandler(t *testing.T) {
 				block, _ := pem.Decode([]byte(data))
 				csr, _ := x509.ParseCertificateRequest(block.Bytes)
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
-				cert, _ := (*s).SignCertificate(ctx, dto.Pki, "test", *csr, true)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
+				cert, _ := (*s).SignCertificate(ctx, dto.Pki, "test", *csr, true, csr.Subject.CommonName)
 				data, _ = base64.StdEncoding.DecodeString(cert.Crt)
 				block, _ = pem.Decode([]byte(data))
 				x509Certificate, _ = x509.ParseCertificate(block.Bytes)
@@ -611,8 +611,8 @@ func TestCAHandler(t *testing.T) {
 				block, _ := pem.Decode([]byte(data))
 				csr, _ := x509.ParseCertificateRequest(block.Bytes)
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
-				cert, _ := (*s).SignCertificate(ctx, dto.Pki, "test", *csr, true)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
+				cert, _ := (*s).SignCertificate(ctx, dto.Pki, "test", *csr, true, csr.Subject.CommonName)
 				data, _ = base64.StdEncoding.DecodeString(cert.Crt)
 				block, _ = pem.Decode([]byte(data))
 				x509Certificate, _ = x509.ParseCertificate(block.Bytes)
@@ -641,8 +641,8 @@ func TestCAHandler(t *testing.T) {
 				block, _ := pem.Decode([]byte(data))
 				csr, _ := x509.ParseCertificateRequest(block.Bytes)
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
-				(*s).SignCertificate(ctx, dto.Pki, "test", *csr, true)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
+				(*s).SignCertificate(ctx, dto.Pki, "test", *csr, true, csr.Subject.CommonName)
 
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
@@ -667,8 +667,8 @@ func TestCAHandler(t *testing.T) {
 				block, _ := pem.Decode([]byte(data))
 				csr, _ := x509.ParseCertificateRequest(block.Bytes)
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
-				(*s).SignCertificate(ctx, dto.Pki, "test", *csr, true)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
+				(*s).SignCertificate(ctx, dto.Pki, "test", *csr, true, csr.Subject.CommonName)
 
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
@@ -693,8 +693,8 @@ func TestCAHandler(t *testing.T) {
 				block, _ := pem.Decode([]byte(data))
 				csr, _ := x509.ParseCertificateRequest(block.Bytes)
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
-				(*s).SignCertificate(ctx, dto.Pki, "test", *csr, true)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
+				(*s).SignCertificate(ctx, dto.Pki, "test", *csr, true, csr.Subject.CommonName)
 
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
@@ -719,8 +719,8 @@ func TestCAHandler(t *testing.T) {
 				block, _ := pem.Decode([]byte(data))
 				csr, _ := x509.ParseCertificateRequest(block.Bytes)
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
-				(*s).SignCertificate(ctx, dto.Pki, "test", *csr, true)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
+				(*s).SignCertificate(ctx, dto.Pki, "test", *csr, true, csr.Subject.CommonName)
 
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
@@ -734,7 +734,7 @@ func TestCAHandler(t *testing.T) {
 			name: "SignCertificate",
 			serviceInitialization: func(s *service.Service) {
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
 				csrString := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJQ1l6Q0NBVXNDQVFBd0hqRUxNQWtHQTFVRUJoTUNSVk14RHpBTkJnTlZCQU1NQmtSbGRtbGpaVENDQVNJdwpEUVlKS29aSWh2Y05BUUVCQlFBRGdnRVBBRENDQVFvQ2dnRUJBTHZqZ1dEdWZtZ2kxY2VsVTk1N2RlYnpnSUZDCnBCN2xWTHNYQ2M2RFNoVW1sNmVDOHAxbllPMVJyNmkyNFlOQkRsRmtyZCt6YVJNTWs2NFlXYVgvK0VUTFQ2WmkKSkdIK242VUhyd01aSFliajh3M1UzRDQ5aG9WYjNRVWtrNm9VUExSV2NGQmd2UU5CTzNTRWx3RzdqWTg1dHFIUQpudlQxVkdYeW40dE9ac3Q1bHJZbWxmMGFjZmg4MlMzU3ZVVURKL24wY056Ynh2ME84MFhjUUFCbm16WlROWHVPCjVTc084clg4NnBwclhMcEFTKzZ0OWpqemNLZ296MnJpUHJXeXMzT2cvckpsM2dLWDdSNXBLUWUzMkFkNUJVblcKTkpvZ0kxMVFBcVdRSTB1YWpaSHFPbXl5Y0dGbi9FMC9BR240YlErOUVrblVRSzFMSHRkL0tVRXVNeWNDQXdFQQpBYUFBTUEwR0NTcUdTSWIzRFFFQkN3VUFBNElCQVFCam9aSzJPaHhIZ3FFVjBnVmFVUG1sUzBUbnl3RXYvcjMxCnk5R3lXOUZ3a3VVd3Rka3V2VHFVZE1TcUorUjIxZTNzTnhxRWtaamovKytVS09wdDFuTnZOb2kxakNsS0ZDZXgKc3M4ajdsdHhvL28yeld2aVVDcmE1cWNlV0NLajJyMWhnd2pKa0w5YjhrSTExWjdRVFhrRlhvVE9wTjFnYlZSVQo1MEdkeGkwNDNkTi9xdk1nMHkyUWxLV3ZFSE5MZTlTRVRqb3RJR3dyclYvLzlXNXlVTDRwY1ZhMGlML0ZsdUpXCnFXZExZVkl4MXZYOUM4alJ4RHAzZVZ4STR1UldYMkEycEV0ckcvYlpTbDZzc2JuU0lzZXJGaXZ2UEt5K0kyNzcKQ0RyNWwyT0hQTHNmWTJBNjl4aEExMXNLRU5RN2dHc1FLSjA5WG55NjF5ZlVRNitIYzQ2NAotLS0tLUVORCBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0="
@@ -751,7 +751,7 @@ func TestCAHandler(t *testing.T) {
 			name: "SignCertificate False",
 			serviceInitialization: func(s *service.Service) {
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
 				csrString := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJQ1l6Q0NBVXNDQVFBd0hqRUxNQWtHQTFVRUJoTUNSVk14RHpBTkJnTlZCQU1NQmtSbGRtbGpaVENDQVNJdwpEUVlKS29aSWh2Y05BUUVCQlFBRGdnRVBBRENDQVFvQ2dnRUJBTHZqZ1dEdWZtZ2kxY2VsVTk1N2RlYnpnSUZDCnBCN2xWTHNYQ2M2RFNoVW1sNmVDOHAxbllPMVJyNmkyNFlOQkRsRmtyZCt6YVJNTWs2NFlXYVgvK0VUTFQ2WmkKSkdIK242VUhyd01aSFliajh3M1UzRDQ5aG9WYjNRVWtrNm9VUExSV2NGQmd2UU5CTzNTRWx3RzdqWTg1dHFIUQpudlQxVkdYeW40dE9ac3Q1bHJZbWxmMGFjZmg4MlMzU3ZVVURKL24wY056Ynh2ME84MFhjUUFCbm16WlROWHVPCjVTc084clg4NnBwclhMcEFTKzZ0OWpqemNLZ296MnJpUHJXeXMzT2cvckpsM2dLWDdSNXBLUWUzMkFkNUJVblcKTkpvZ0kxMVFBcVdRSTB1YWpaSHFPbXl5Y0dGbi9FMC9BR240YlErOUVrblVRSzFMSHRkL0tVRXVNeWNDQXdFQQpBYUFBTUEwR0NTcUdTSWIzRFFFQkN3VUFBNElCQVFCam9aSzJPaHhIZ3FFVjBnVmFVUG1sUzBUbnl3RXYvcjMxCnk5R3lXOUZ3a3VVd3Rka3V2VHFVZE1TcUorUjIxZTNzTnhxRWtaamovKytVS09wdDFuTnZOb2kxakNsS0ZDZXgKc3M4ajdsdHhvL28yeld2aVVDcmE1cWNlV0NLajJyMWhnd2pKa0w5YjhrSTExWjdRVFhrRlhvVE9wTjFnYlZSVQo1MEdkeGkwNDNkTi9xdk1nMHkyUWxLV3ZFSE5MZTlTRVRqb3RJR3dyclYvLzlXNXlVTDRwY1ZhMGlML0ZsdUpXCnFXZExZVkl4MXZYOUM4alJ4RHAzZVZ4STR1UldYMkEycEV0ckcvYlpTbDZzc2JuU0lzZXJGaXZ2UEt5K0kyNzcKQ0RyNWwyT0hQTHNmWTJBNjl4aEExMXNLRU5RN2dHc1FLSjA5WG55NjF5ZlVRNitIYzQ2NAotLS0tLUVORCBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0="
@@ -768,7 +768,7 @@ func TestCAHandler(t *testing.T) {
 			name: "SignCertificate InvalidJSONFormat",
 			serviceInitialization: func(s *service.Service) {
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
 				csrString := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJQ1l6Q0NBVXNDQVFBd0hqRUxNQWtHQTFVRUJoTUNSVk14RHpBTkJnTlZCQU1NQmtSbGRtbGpaVENDQVNJdwpEUVlKS29aSWh2Y05BUUVCQlFBRGdnRVBBRENDQVFvQ2dnRUJBTHZqZ1dEdWZtZ2kxY2VsVTk1N2RlYnpnSUZDCnBCN2xWTHNYQ2M2RFNoVW1sNmVDOHAxbllPMVJyNmkyNFlOQkRsRmtyZCt6YVJNTWs2NFlXYVgvK0VUTFQ2WmkKSkdIK242VUhyd01aSFliajh3M1UzRDQ5aG9WYjNRVWtrNm9VUExSV2NGQmd2UU5CTzNTRWx3RzdqWTg1dHFIUQpudlQxVkdYeW40dE9ac3Q1bHJZbWxmMGFjZmg4MlMzU3ZVVURKL24wY056Ynh2ME84MFhjUUFCbm16WlROWHVPCjVTc084clg4NnBwclhMcEFTKzZ0OWpqemNLZ296MnJpUHJXeXMzT2cvckpsM2dLWDdSNXBLUWUzMkFkNUJVblcKTkpvZ0kxMVFBcVdRSTB1YWpaSHFPbXl5Y0dGbi9FMC9BR240YlErOUVrblVRSzFMSHRkL0tVRXVNeWNDQXdFQQpBYUFBTUEwR0NTcUdTSWIzRFFFQkN3VUFBNElCQVFCam9aSzJPaHhIZ3FFVjBnVmFVUG1sUzBUbnl3RXYvcjMxCnk5R3lXOUZ3a3VVd3Rka3V2VHFVZE1TcUorUjIxZTNzTnhxRWtaamovKytVS09wdDFuTnZOb2kxakNsS0ZDZXgKc3M4ajdsdHhvL28yeld2aVVDcmE1cWNlV0NLajJyMWhnd2pKa0w5YjhrSTExWjdRVFhrRlhvVE9wTjFnYlZSVQo1MEdkeGkwNDNkTi9xdk1nMHkyUWxLV3ZFSE5MZTlTRVRqb3RJR3dyclYvLzlXNXlVTDRwY1ZhMGlML0ZsdUpXCnFXZExZVkl4MXZYOUM4alJ4RHAzZVZ4STR1UldYMkEycEV0ckcvYlpTbDZzc2JuU0lzZXJGaXZ2UEt5K0kyNzcKQ0RyNWwyT0hQTHNmWTJBNjl4aEExMXNLRU5RN2dHc1FLSjA5WG55NjF5ZlVRNitIYzQ2NAotLS0tLUVORCBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0="
@@ -783,7 +783,7 @@ func TestCAHandler(t *testing.T) {
 			name: "SignCertificate InvalidBody",
 			serviceInitialization: func(s *service.Service) {
 				ctx := context.Background()
-				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CN: "test"}, 60*60*24, 60*60)
+				(*s).CreateCA(ctx, dto.Pki, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
 				csrString := "-----BEGIN CERTIFICATE REQUEST-----MIICYzCCAUsCAQAwHjELMAkGA1UEBhMCRVMxDzANBgNVBAMMBkRldmljZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALvjgWDufmgi1celU957debzgIFCpB7lVLsXCc6DShUml6eC8p1nYO1Rr6i24YNBDlFkrd+zaRMMk64YWaX/+ETLT6ZiJGH+n6UHrwMZHYbj8w3U3D49hoVb3QUkk6oUPLRWcFBgvQNBO3SElwG7jY85tqHQnvT1VGXyn4tOZst5lrYmlf0acfh82S3SvUUDJ/n0cNzbxv0O80XcQABnmzZTNXuO5SsO8rX86pprXLpAS+6t9jjzcKgoz2riPrWys3Og/rJl3gKX7R5pKQe32Ad5BUnWNJogI11QAqWQI0uajZHqOmyycGFn/E0/AGn4bQ+9EknUQK1LHtd/KUEuMycCAwEAAaAAMA0GCSqGSIb3DQEBCwUAA4IBAQBjoZK2OhxHgqEV0gVaUPmlS0TnywEv/r31y9GyW9FwkuUwtdkuvTqUdMSqJ+R21e3sNxqEkZjj/++UKOpt1nNvNoi1jClKFCexss8j7ltxo/o2zWviUCra5qceWCKj2r1hgwjJkL9b8kI11Z7QTXkFXoTOpN1gbVRU50Gdxi043dN/qvMg0y2QlKWvEHNLe9SETjotIGwrrV//9W5yUL4pcVa0iL/FluJWqWdLYVIx1vX9C8jRxDp3eVxI4uRWX2A2pEtrG/bZSl6ssbnSIserFivvPKy+I277CDr5l2OHPLsfY2A69xhA11sKENQ7gGsQKJ09Xny61yfUQ6+Hc464-----END CERTIFICATE REQUEST-----"

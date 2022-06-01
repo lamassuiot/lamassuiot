@@ -111,7 +111,7 @@ func TestStats(t *testing.T) {
 	block, _ := pem.Decode([]byte(data))
 	csr, _ := x509.ParseCertificateRequest(block.Bytes)
 
-	srv.SignCertificate(ctx, caType, newCA.Name, *csr, false)
+	srv.SignCertificate(ctx, caType, newCA.Name, *csr, false, csr.Subject.CommonName)
 
 	var caList []dto.Cert
 	caList = append(caList, newCA)

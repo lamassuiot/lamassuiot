@@ -969,7 +969,7 @@ func TestDeviceHandler(t *testing.T) {
 
 			tracer := opentracing.NoopTracer{}
 			lamassuCaClient, _ := mocks.NewLamassuCaClientMock(logger)
-			_, _ = lamassuCaClient.CreateCA(context.Background(), caDTO.Pki, "CA", caDTO.PrivateKeyMetadata{KeyType: "rsa", KeyBits: 2048}, caDTO.Subject{CN: "CA"}, 365*time.Hour, 30*time.Hour)
+			_, _ = lamassuCaClient.CreateCA(context.Background(), caDTO.Pki, "CA", caDTO.PrivateKeyMetadata{KeyType: "rsa", KeyBits: 2048}, caDTO.Subject{CommonName: "CA"}, 365*time.Hour, 30*time.Hour)
 			s := service.NewDevicesService(devicesDb, statsDB, &lamassuCaClient, logger)
 
 			verify := verify.NewUtils(&lamassuCaClient, logger)
