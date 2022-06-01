@@ -11,10 +11,8 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
-	devmanagererrors "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/models/dms"
 
-	//devicesStore "github.com/lamassuiot/lamassuiot/pkg/device-manager/models/device/store"
 	devmanagererrors "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
 	_ "github.com/lib/pq"
 )
@@ -42,8 +40,6 @@ type MockDB struct {
 	*sql.DB
 	logger log.Logger
 }
-
-var device = testDevice()
 
 func NewDevicedDBMock(t *testing.T) (*MockDB, error) {
 	t.Helper()
@@ -148,17 +144,6 @@ func (db *MockDB) SelectDeviceById(ctx context.Context, id string) (dto.Device, 
 	} else {
 		return dev, nil
 	}
-}
-func (db *MockDB) GetStats(ctx context.Context) (dto.Stats, time.Time) {
-	stat := dto.Stats{
-		PendingEnrollment: 1,
-		Provisioned:       0,
-		Decomissioned:     0,
-		AboutToExpire:     5,
-		Expired:           1,
-		Revoked:           2,
-	}
-	return stat, time.Now()
 }
 
 func (db *MockDB) SelectAllDevices(ctx context.Context, queryParameters dto.QueryParameters) ([]dto.Device, int, error) {
