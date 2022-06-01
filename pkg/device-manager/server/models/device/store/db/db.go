@@ -110,8 +110,12 @@ func (db *DB) SelectAllDevices(ctx context.Context, queryParameters dto.QueryPar
 
 	span.Finish()
 	if err != nil {
+		notFoundErr := &devmanagererrors.ResourceNotFoundError{
+			ResourceType: "DEVICE",
+			ResourceId:   "database",
+		}
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Devices from database")
-		return []dto.Device{}, 0, err
+		return []dto.Device{}, 0, notFoundErr
 	}
 	defer rows.Close()
 
@@ -255,19 +259,22 @@ func (db *DB) UpdateDeviceStatusByID(ctx context.Context, id string, newStatus s
 	`
 	span := opentracing.StartSpan("lamassu-device-manager: Update Device with ID "+id+" to "+newStatus+" status", opentracing.ChildOf(parentSpan.Context()))
 	res, err := db.Exec(sqlStatement, id, newStatus, time.Now())
+	notFoundErr := &devmanagererrors.ResourceNotFoundError{
+		ResourceType: "DEVICE",
+		ResourceId:   id,
+	}
 	span.Finish()
 	if err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not updated Device with ID "+id+" to "+newStatus+" status")
-		return err
+		return notFoundErr
 	}
 	count, err := res.RowsAffected()
 	if err != nil {
 		return err
 	}
 	if count <= 0 {
-		err = errors.New("no rows have been updated in database")
-		level.Debug(db.logger).Log("err", err)
-		return err
+		level.Debug(db.logger).Log("err", err, "msg", "No rows have been updated in database")
+		return notFoundErr
 	}
 	level.Debug(db.logger).Log("msg", "Updated device with ID "+id+" to "+newStatus+" status")
 	return nil
@@ -283,19 +290,23 @@ func (db *DB) UpdateDeviceCertificateSerialNumberByID(ctx context.Context, id st
 	`
 	span := opentracing.StartSpan("lamassu-device-manager: Update Devices Certificate  with ID "+id+" to "+serialNumber+" serial number", opentracing.ChildOf(parentSpan.Context()))
 	res, err := db.Exec(sqlStatement, id, serialNumber)
+	notFoundErr := &devmanagererrors.ResourceNotFoundError{
+		ResourceType: "DEVICE",
+		ResourceId:   id,
+	}
 	span.Finish()
 	if err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not updated Device with ID "+id+" to "+serialNumber+" serial number")
-		return err
+		return notFoundErr
 	}
 	count, err := res.RowsAffected()
 	if err != nil {
-		return err
+		return notFoundErr
 	}
 	if count <= 0 {
 		err = errors.New("no rows have been updated in database")
 		level.Debug(db.logger).Log("err", err)
-		return err
+		return notFoundErr
 	}
 	level.Debug(db.logger).Log("err", err, "msg", "Updated device with ID "+id+" to "+serialNumber+" serial number")
 	return nil
@@ -311,9 +322,13 @@ func (db *DB) DeleteDevice(ctx context.Context, id string) error {
 	span := opentracing.StartSpan("lamassu-device-manager: Delete device with ID "+id+" from database", opentracing.ChildOf(parentSpan.Context()))
 	res, err := db.Exec(sqlStatement, id)
 	span.Finish()
+	notFoundErr := &devmanagererrors.ResourceNotFoundError{
+		ResourceType: "DEVICE",
+		ResourceId:   id,
+	}
 	if err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not delete Device with ID "+id+" from database")
-		return err
+		return notFoundErr
 	}
 	count, err := res.RowsAffected()
 	if err != nil {
@@ -322,7 +337,7 @@ func (db *DB) DeleteDevice(ctx context.Context, id string) error {
 	if count <= 0 {
 		err = errors.New("no rows have been updated in database")
 		level.Debug(db.logger).Log("err", err)
-		return err
+		return notFoundErr
 	}
 	return nil
 }
@@ -347,7 +362,11 @@ func (db *DB) InsertLog(ctx context.Context, logDev dto.DeviceLog) error {
 	span.Finish()
 	if err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not insert Log Device for device with ID "+logDev.DeviceId+" in database")
-		return err
+		notFoundErr := &devmanagererrors.ResourceNotFoundError{
+			ResourceType: "DEVICE-LOGS",
+			ResourceId:   id,
+		}
+		return notFoundErr
 	}
 	level.Debug(db.logger).Log("msg", "Device Log with ID "+id+" inserted in database")
 	return nil

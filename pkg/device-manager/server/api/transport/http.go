@@ -3,8 +3,8 @@ package transport
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -26,12 +26,6 @@ type errorer interface {
 	error() error
 }
 
-func ErrMissingDevID() error {
-	return &devmanagererrors.GenericError{
-		Message:    "Device ID not specified",
-		StatusCode: 400,
-	}
-}
 func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
 	return func(ctx context.Context, req *http.Request) context.Context {
 		// Try to join to a trace propagated in `req`.
@@ -227,8 +221,7 @@ func filterQuery(r *http.Request) dto.QueryParameters {
 	offset := ""
 	field := ""
 	order := ""
-
-	helper := r.URL.RawQuery
+	helper, _ := url.QueryUnescape(r.URL.RawQuery)
 
 	if len(r.URL.RawQuery) > 0 {
 
@@ -277,79 +270,61 @@ func removeAmpersand(helper string) string {
 
 func decodePostDeviceRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	var createDeviceRequest dto.CreateDeviceRequest
-	json.NewDecoder(r.Body).Decode((&createDeviceRequest))
-	if err != nil {
-		return nil, errors.New("cannot decode JSON request")
+	if err := json.NewDecoder(r.Body).Decode(&createDeviceRequest); err != nil {
+		return nil, &devmanagererrors.GenericError{
+			StatusCode: 400,
+			Message:    "cannot decode JSON request",
+		}
 	}
 	return createDeviceRequest, nil
 }
 
 func decodeGetDeviceById(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	id, ok := vars["deviceId"]
-	if !ok {
-		return nil, ErrMissingDevID()
-	}
+	id, _ := vars["deviceId"]
 	return endpoint.GetDevicesByIdRequest{Id: id}, nil
 }
 
 func decodeUpdateDeviceById(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	var updateDeviceRequest dto.UpdateDevicesByIdRequest
-	json.NewDecoder(r.Body).Decode((&updateDeviceRequest))
-	if err != nil {
-		return nil, errors.New("cannot decode JSON request")
+	if err := json.NewDecoder(r.Body).Decode(&updateDeviceRequest); err != nil {
+		return nil, &devmanagererrors.GenericError{
+			StatusCode: 400,
+			Message:    "cannot decode JSON request",
+		}
 	}
 	return updateDeviceRequest, nil
 }
 
 func decodeGetDevicesByDMSRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	id, ok := vars["dmsId"]
-	if !ok {
-		return nil, ErrMissingDevID()
-	}
+	id, _ := vars["dmsId"]
 	return endpoint.GetDevicesByDMSRequest{Id: id, QueryParameters: filterQuery(r)}, nil
 }
 
 func decodeDeleteDeviceRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	id, ok := vars["deviceId"]
-	if !ok {
-		return nil, ErrMissingDevID()
-	}
+	id, _ := vars["deviceId"]
 	return endpoint.DeleteDeviceRequest{Id: id}, nil
 }
 func decodedecodeDeleteRevokeRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	id, ok := vars["deviceId"]
-	if !ok {
-		return nil, ErrMissingDevID()
-	}
+	id, _ := vars["deviceId"]
 	return endpoint.DeleteRevokeRequest{Id: id}, nil
 }
 func decodedecodeGetDeviceLogsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	id, ok := vars["deviceId"]
-	if !ok {
-		return nil, ErrMissingDevID()
-	}
-
+	id, _ := vars["deviceId"]
 	return endpoint.GetDeviceLogsRequest{Id: id}, nil
 }
 func decodedecodeGetDeviceCertRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	id, ok := vars["deviceId"]
-	if !ok {
-		return nil, ErrMissingDevID()
-	}
+	id, _ := vars["deviceId"]
 	return endpoint.GetDeviceCertRequest{Id: id}, nil
 }
 func decodedecodeGetDeviceCertHistoryRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	id, ok := vars["deviceId"]
-	if !ok {
-		return nil, ErrMissingDevID()
-	}
+	id, _ := vars["deviceId"]
 	return endpoint.GetDeviceCertHistoryRequest{Id: id}, nil
 }
 func decodedecodeGetDmsCertHistoryThirtyDaysRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
@@ -384,6 +359,8 @@ func codeFrom(err error) int {
 	switch e := err.(type) {
 	case *devmanagererrors.ValidationError:
 		return http.StatusBadRequest
+	case *devmanagererrors.DuplicateResourceError:
+		return http.StatusNotFound
 	case *devmanagererrors.ResourceNotFoundError:
 		return http.StatusNotFound
 	case *devmanagererrors.GenericError:
@@ -391,17 +368,6 @@ func codeFrom(err error) int {
 	default:
 		return http.StatusInternalServerError
 	}
-}
-
-func match(s string) string {
-	i := strings.Index(s, "{")
-	if i >= 0 {
-		j := strings.Index(s, "}")
-		if j >= 0 {
-			return s[i+1 : j]
-		}
-	}
-	return ""
 }
 
 func middle(in string, field string) (string, string) {

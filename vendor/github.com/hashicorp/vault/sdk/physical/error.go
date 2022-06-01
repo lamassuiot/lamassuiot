@@ -41,6 +41,7 @@ func NewErrorInjector(b Backend, errorPercent int, logger log.Logger) *ErrorInje
 	if errorPercent < 0 || errorPercent > 100 {
 		errorPercent = DefaultErrorPercent
 	}
+	logger.Info("creating error injector")
 
 	return &ErrorInjector{
 		backend:      b,

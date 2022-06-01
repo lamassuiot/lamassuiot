@@ -14,7 +14,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/mocks"
 	devicesStore "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/device/store"
-	devicesDB "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/device/store/db"
 
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
 )
@@ -29,12 +28,44 @@ func TestPostDevice(t *testing.T) {
 	srv, ctx := setup(t)
 
 	device := testDevice()
+
+	testCases := []struct {
+		name string
+		id   string
+		err  error
+	}{
+		{"Correct device", "2", nil},
+		{"Error Inserting Log", "2", errors.New("Could not insert log")},
+		{"Error Inserting Device", "1", errors.New("resource already exists. resource_type=DEVICE resource_id=1")},
+		{"Error Selecting Device", "2", errors.New("resource not found. resource_type=DEVICE resource_id=2")},
+	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
+
+			tags := []string{"tag1", "tag2"}
+			if tc.name == "Error Inserting Log" {
+				ctx = context.WithValue(ctx, "DBInsertLog", true)
+			} else {
+				ctx = context.WithValue(ctx, "DBInsertLog", false)
+			}
+			_, err := srv.PostDevice(ctx, device.Alias, tc.id, device.DmsId, "", tags, "", "")
+			if err != nil {
+				if err.Error() != tc.err.Error() {
+					t.Errorf("Got result is %s; want %s", err, tc.err)
+				}
+			}
+		})
+	}
+}
+
+func TestUpdateDeviceById(t *testing.T) {
+	srv, ctx := setup(t)
+
+	device := testDevice()
 	deviceError := testDevice()
 	deviceError.Id = "error"
 	deviceErrorLog := device
 	deviceErrorLog.Id = "errorLog"
-	deviceErrorDeviceByID := device
-	deviceErrorDeviceByID.Id = "errorDeviceById"
 
 	testCases := []struct {
 		name string
@@ -42,28 +73,25 @@ func TestPostDevice(t *testing.T) {
 		err  error
 	}{
 		{"Correct device", device, nil},
-		{"Error Inserting Log", deviceErrorLog, errors.New("Could not insert log")},
-		{"Error Inserting Device", deviceError, errors.New("error")},
-		{"Error Finding Device", deviceErrorDeviceByID, errors.New("Could not find device by Id")},
+		{"Error Inserting Log", deviceError, errors.New("No rows have been updated in database")},
+		{"Error Select Device By Id", device, errors.New("resource not found. resource_type=DEVICE resource_id=1")},
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
 
-			if tc.name == "Error Inserting Log" {
+			if tc.name == "Error Select Device By Id" {
+				ctx = context.WithValue(ctx, "DBSelectDeviceById", true)
+			} else if tc.name == "Error getting devices" {
 				ctx = context.WithValue(ctx, "DBInsertLog", true)
 			} else {
-				ctx = context.WithValue(ctx, "DBInsertLog", false)
+				ctx = context.WithValue(ctx, "DBSelectDeviceById", false)
 			}
 			tags := []string{"tag1", "tag2"}
 
-			out, err := srv.PostDevice(ctx, tc.in.Alias, tc.in.Id, tc.in.DmsId, "", tags, "", "")
+			_, err := srv.UpdateDeviceById(ctx, tc.in.Alias, tc.in.Id, tc.in.DmsId, "", tags, "", "")
 			if err != nil {
 				if err.Error() != tc.err.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.err)
-				}
-			} else {
-				if tc.in.Id != out.Id {
-					t.Errorf("Not receiving expected response")
 				}
 			}
 		})
@@ -76,8 +104,10 @@ func TestGetDevices(t *testing.T) {
 		name string
 		ret  error
 	}{
+		{"Error Get Cert", errors.New("Error getting certificate")},
 		{"Correct", nil},
 		{"Error getting devices", errors.New("Testing DB connection failed")},
+		{"Error Cert SerialNumber", errors.New("resource not found. resource_type=DEVICE-CERT HISTORY resource_id=1E-6A-EC-C2-05-64-EF-65-66-7F-5B-AE-7B-B4-15-25-19-E8-2C-87")},
 	}
 
 	for _, tc := range testCases {
@@ -86,8 +116,17 @@ func TestGetDevices(t *testing.T) {
 
 			if tc.name == "Error getting devices" {
 				ctx = context.WithValue(ctx, "DBShouldFail", true)
+			} else if tc.name == "Error Cert SerialNumber" {
+				ctx = context.WithValue(ctx, "DBShouldFail", false)
+				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", true)
+			} else if tc.name == "Error Get Cert" {
+				ctx = context.WithValue(ctx, "DBShouldFail", false)
+				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
+				ctx = context.WithValue(ctx, "DBGetCert", true)
 			} else {
 				ctx = context.WithValue(ctx, "DBShouldFail", false)
+				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
+				ctx = context.WithValue(ctx, "DBGetCert", false)
 			}
 			_, _, err := srv.GetDevices(ctx, dto.QueryParameters{})
 			if err != nil {
@@ -95,6 +134,40 @@ func TestGetDevices(t *testing.T) {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
 				}
 			}
+		})
+	}
+}
+
+func TestGetStats(t *testing.T) {
+	srv, ctx := setup(t)
+
+	testCases := []struct {
+		name string
+	}{
+		{"Correct"},
+		{"SelectAllDevicesError"},
+		{"Error Update Stats"},
+		{"Error Getting Stats"},
+	}
+
+	for _, tc := range testCases {
+
+		if tc.name == "SelectAllDevicesError" {
+			ctx = context.WithValue(ctx, "DBShouldFail", true)
+		} else if tc.name == "Error Update Stats" {
+			ctx = context.WithValue(ctx, "DBShouldFail", false)
+			ctx = context.WithValue(ctx, "DBUpdateStats", true)
+			ctx = context.WithValue(ctx, "DBGetStats", false)
+		} else if tc.name == "Error Getting Stats" {
+			ctx = context.WithValue(ctx, "DBGetStats", true)
+		} else {
+			ctx = context.WithValue(ctx, "DBShouldFail", false)
+			ctx = context.WithValue(ctx, "DBUpdateStats", false)
+			ctx = context.WithValue(ctx, "DBGetStats", false)
+		}
+		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
+
+			srv.Stats(ctx)
 		})
 	}
 }
@@ -114,47 +187,43 @@ func TestHealth(t *testing.T) {
 		if tc.ret != out {
 			t.Errorf("Expected '%s', but got '%s'", strconv.FormatBool(tc.ret), strconv.FormatBool(out))
 		}
-
 	}
 }
 
 func TestGetDeviceCert(t *testing.T) {
 	srv, ctx := setup(t)
-	d := testGetDeviceCert()
-	dErrorId := d
-	dErrorId.DeviceId = "errorDeviceById"
-	dErrorEmptySerialNumber := d
-	dErrorEmptySerialNumber.SerialNumber = ""
 
 	testCases := []struct {
 		name string
 		id   string
-		res  dto.DeviceCert
 		ret  error
 	}{
-		{"Error getting cert", "error", d, errors.New("Error getting certificate")},
-		{"Error finding device", "errorDeviceById", dErrorId, errors.New("Could not find device by Id")},
-		{"Error empty serial number", "noSerialNumber", dErrorEmptySerialNumber, errors.New("No Serial Number")},
-		{"Error certificate history could not find", "error", d, errors.New("Testing DB connection failed")},
-		{"Correct", "provisioned", d, nil},
+		{"Error getting cert", "2", errors.New("Error getting certificate")},
+
+		{"Error Select Device By Id", "error", errors.New("resource not found. resource_type=DEVICE resource_id=error")},
+		{"Error Select Device Cert By Serial Number", "error", errors.New("resource not found. resource_type=DEVICE resource_id=error")},
+		{"Correct", "1", nil},
 	}
 	for _, tc := range testCases {
 
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
-			if tc.name == "Error certificate history could not find" {
-				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", true)
-				ctx = context.WithValue(ctx, "DBShouldFail", false)
-				ctx = context.WithValue(ctx, "RevokeCertShouldFail", false)
-			} else if tc.name == "Error getting cert" {
+			if tc.name == "Error getting cert" {
+
+				ctx = context.WithValue(ctx, "DBGetCert", true)
 				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
 				ctx = context.WithValue(ctx, "DBShouldFail", false)
 				ctx = context.WithValue(ctx, "RevokeCertShouldFail", false)
-				ctx = context.WithValue(ctx, "GetCertFail", true)
+				ctx = context.WithValue(ctx, "DBSelectDeviceById", false)
+			} else if tc.name == "Error Select Device Cert By Serial Number" {
+				ctx = context.WithValue(ctx, "DBGetCert", false)
+				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", true)
+				ctx = context.WithValue(ctx, "DBShouldFail", false)
+				ctx = context.WithValue(ctx, "RevokeCertShouldFail", false)
+				ctx = context.WithValue(ctx, "DBSelectDeviceById", false)
 			} else {
 				ctx = context.WithValue(ctx, "DBShouldFail", false)
 				ctx = context.WithValue(ctx, "RevokeCertShouldFail", false)
 				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
-				ctx = context.WithValue(ctx, "GetCertFail", false)
 				ctx = context.WithValue(ctx, "DBDecommisioned", true)
 				ctx = context.WithValue(ctx, "DBSelectDeviceById", false)
 
@@ -162,7 +231,7 @@ func TestGetDeviceCert(t *testing.T) {
 			_, err := srv.GetDeviceCert(ctx, tc.id)
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
-					t.Errorf("Got result is %s; want %s", tc.ret, err)
+					t.Errorf("Got result is %s; want %s", err, tc.ret)
 				}
 			}
 
@@ -190,7 +259,7 @@ func TestGenerateCSR(t *testing.T) {
 			_, err := _generateCSR(ctx, tc.keyType, p1, "commonName", "country", "state", "locality", "org", "orgUnit")
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
-					t.Errorf("Got result is %s; want %s", err, tc.ret)
+					t.Errorf("Got result is %s; want %s", tc.ret, err)
 				}
 			}
 		})
@@ -199,28 +268,32 @@ func TestGenerateCSR(t *testing.T) {
 
 func TestGetDeviceById(t *testing.T) {
 	srv, ctx := setup(t)
-	d := testDevice()
-	tags := []string{"tag1", "tag2"}
-	srv.PostDevice(ctx, d.Alias, d.Id, d.DmsId, "", tags, "", "")
 
 	testCases := []struct {
 		name string
 		id   string
-		res  dto.Device
 		ret  error
 	}{
-		{"Incorrect", "errorDeviceById", d, errors.New("Could not find device by Id")},
-		{"Correct", "1", d, nil},
+		{"Incorrect", "errorDeviceById", errors.New("resource not found. resource_type=DEVICE resource_id=errorDeviceById")},
+		{"Error Get Certificate", "1", errors.New("Error getting certificate")},
+		{"Correct", "1", nil},
 	}
 	for _, tc := range testCases {
 
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
-			ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
+
+			if tc.name == "Error Get Certificate" {
+				ctx = context.WithValue(ctx, "DBGetCert", true)
+				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
+			} else {
+				ctx = context.WithValue(ctx, "DBGetCert", false)
+				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
+			}
 
 			_, err := srv.GetDeviceById(ctx, tc.id)
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
-					t.Errorf("Got result is %s; want %s", err, tc.ret)
+					t.Errorf("Got result is %s; want %s", tc.ret, err)
 				}
 			}
 		})
@@ -230,29 +303,32 @@ func TestGetDeviceById(t *testing.T) {
 func TestGetDevicesByDMS(t *testing.T) {
 	srv, ctx := setup(t)
 
-	d := testDevice()
-	var devList []dto.Device
-
-	dev, _ := srv.PostDevice(ctx, d.Alias, d.Id, d.DmsId, "", nil, "", "")
-	devList = append(devList, dev)
-
 	testCases := []struct {
 		name  string
 		dmsId string
-		res   []dto.Device
 		ret   error
 	}{
-		{"Incorrect", "error", devList, errors.New("Could not find device by Id")},
-		{"Correct", "1", devList, nil},
+		{"Incorrect", "error", errors.New("resource not found. resource_type=DEVICE resource_id=error")},
+		{"Error Get Certificate", "1", errors.New("Error getting certificate")},
+		{"Select Device Cert History By Serial Number", "1", errors.New("resource not found. resource_type=DEVICE-CERT HISTORY resource_id=1E-6A-EC-C2-05-64-EF-65-66-7F-5B-AE-7B-B4-15-25-19-E8-2C-87")},
+		{"Correct", "1", nil},
 	}
 	for _, tc := range testCases {
 
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
-
+			if tc.name == "Select Device Cert History By Serial Number" {
+				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", true)
+			} else if tc.name == "Error Get Certificate" {
+				ctx = context.WithValue(ctx, "DBGetCert", true)
+				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
+			} else {
+				ctx = context.WithValue(ctx, "DBGetCert", false)
+				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
+			}
 			_, err := srv.GetDevicesByDMS(ctx, tc.dmsId, dto.QueryParameters{})
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
-					t.Errorf("Got result is %s; want %s", err, tc.ret)
+					t.Errorf("Got result is %s; want %s", tc.ret, err)
 				}
 			}
 		})
@@ -262,32 +338,21 @@ func TestGetDevicesByDMS(t *testing.T) {
 func TestGetDeviceLogs(t *testing.T) {
 	srv, ctx := setup(t)
 
-	logs := testDeviceLogs()
-	var logArray []dto.DeviceLog
-
 	testCases := []struct {
 		name string
 		id   string
-		res  []dto.DeviceLog
 		ret  error
 	}{
-		{"Incorrect", "errorGetDeviceLogs", logArray, errors.New("err")},
-		{"Correct", "1", logs, nil},
+		{"Incorrect", "errorGetDeviceLogs", errors.New("resource not found. resource_type=DEVICE-LOGS resource_id=errorGetDeviceLogs")},
+		{"Correct", "1", nil},
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
 
-			out, err := srv.GetDeviceLogs(ctx, tc.id)
+			_, err := srv.GetDeviceLogs(ctx, tc.id)
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
-				}
-			}
-			if err == nil {
-				if len(out) > 0 && len(tc.res) > 0 {
-					if out[0] != tc.res[0] {
-						t.Errorf("Got result is diferent from expected response")
-					}
 				}
 			}
 		})
@@ -296,16 +361,16 @@ func TestGetDeviceLogs(t *testing.T) {
 
 func TestGetDeviceCertHistory(t *testing.T) {
 	srv, ctx := setup(t)
-	certs := testGetDeviceCertHistory()
 
 	testCases := []struct {
 		name string
 		id   string
-		res  []dto.DeviceCertHistory
 		ret  error
 	}{
-		{"Error Device Certification History", "error", certs, errors.New("Testing DB connection failed")},
-		{"Correct", "1", certs, nil},
+		{"Error Device Certification History", "error", errors.New("resource not found. resource_type=DEVICE-CERT HISTORY resource_id=error")},
+		{"Error Select Device By Id", "1", errors.New("resource not found. resource_type=DEVICE resource_id=1")},
+		{"Error Get Cert By Id", "1", errors.New("Error getting certificate")},
+		{"Correct", "1", nil},
 	}
 	for _, tc := range testCases {
 
@@ -313,7 +378,19 @@ func TestGetDeviceCertHistory(t *testing.T) {
 
 			if tc.name == "Error Device Certification History" {
 				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistory", true)
+				ctx = context.WithValue(ctx, "DBSelectDeviceById", false)
+				ctx = context.WithValue(ctx, "DBGetCert", false)
+			} else if tc.name == "Error Select Device By Id" {
+				ctx = context.WithValue(ctx, "DBSelectDeviceById", true)
+				ctx = context.WithValue(ctx, "DBGetCert", false)
+				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistory", false)
+			} else if tc.name == "Error Get Cert By Id" {
+				ctx = context.WithValue(ctx, "DBSelectDeviceById", false)
+				ctx = context.WithValue(ctx, "DBGetCert", true)
+				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistory", false)
 			} else {
+				ctx = context.WithValue(ctx, "DBSelectDeviceById", false)
+				ctx = context.WithValue(ctx, "DBGetCert", false)
 				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistory", false)
 			}
 			_, err := srv.GetDeviceCertHistory(ctx, tc.id)
@@ -328,17 +405,14 @@ func TestGetDeviceCertHistory(t *testing.T) {
 
 func TestGetDmsCertHistoryThirtyDays(t *testing.T) {
 	srv, ctx := setup(t)
-	certs := testDMSCertsHistory()
 
 	testCases := []struct {
 		name string
-		id   string
-		res  []dto.DMSCertHistory
 		ret  error
 	}{
-		{"Error Get Devices", "error", certs, errors.New("Testing DB connection failed")},
-		{"Error getting historial 30 days", "error", certs, errors.New("Testing DB connection failed")},
-		{"Correct", "1", certs, nil},
+		{"Error Get Devices", errors.New("Testing DB connection failed")},
+		{"Error getting historial 30 days", errors.New("Testing DB connection failed")},
+		{"Correct", nil},
 	}
 	for _, tc := range testCases {
 
@@ -366,15 +440,13 @@ func TestGetDmsCertHistoryThirtyDays(t *testing.T) {
 
 func TestGetDmsLastIssuedCert(t *testing.T) {
 	srv, ctx := setup(t)
-	certs := testDmsLastIssuedCert()
 
 	testCases := []struct {
 		name string
-		res  []dto.DMSLastIssued
 		ret  error
 	}{
-		{"Error last issued cert not found", certs, errors.New("Testing DB connection failed")},
-		{"Correct", certs, nil},
+		{"Error last issued cert not found", errors.New("Testing DB connection failed")},
+		{"Correct", nil},
 	}
 	for _, tc := range testCases {
 
@@ -389,54 +461,77 @@ func TestGetDmsLastIssuedCert(t *testing.T) {
 				if err.Error() != tc.ret.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
 				}
-
 			}
-
 		})
 	}
 }
 
 func TestRevokeDeviceCert(t *testing.T) {
 	srv, ctx := setup(t)
-	d := testDevice()
-
-	srv.PostDevice(ctx, d.Alias, d.Id, d.DmsId, "", nil, "", "")
-	dNoSerialNumber := testDeviceNoSerialNumber()
-
-	srv.PostDevice(ctx, dNoSerialNumber.Alias, dNoSerialNumber.Id, dNoSerialNumber.DmsId, "", nil, "", "")
-
 	testCases := []struct {
 		name string
 		id   string
 		ret  error
 	}{
-		{"Error finding device", "errorDeviceById", errors.New("Could not find device by Id")},
-		{"Error inserting log", "errorLog", errors.New("Could not insert log")},
+		{"Error finding device", "error", errors.New("resource not found. resource_type=DEVICE resource_id=error")},
+		{"Error inserting log", "1", errors.New("Could not insert log")},
 		{"Error empty serial number", "noSerialNumber", errors.New("No Serial Number")},
-		{"Error could not revoke certificate", "errorRevokeCert", errors.New("Error revoking certificate")},
-		{"Error updating certificate history", "errorUpdateDeviceCertHistory", errors.New("error")},
-		{"Error updating certificate history serial number", "errorUpdateDeviceCertificateSerialNumberByID", errors.New("error")},
-		{"Error updating device status", "errorUpdateStatus", errors.New("error")},
-		{"Error certificate history could not find", "error", errors.New("Error getting certificate")},
+		{"Error could not revoke certificate", "1", errors.New("Error revoking certificate")},
+		{"Error updating certificate history serial number", "1", errors.New("resource not found. resource_type=DEVICE-CERT HISTORY resource_id=1E-6A-EC-C2-05-64-EF-65-66-7F-5B-AE-7B-B4-15-25-19-E8-2C-87")},
+		{"Error updating device status", "1", errors.New("no rows have been updated in database")},
+		{"Resource not found", "error", errors.New("resource not found. resource_type=DEVICE resource_id=error")},
 		{"Correct", "1", nil},
+		{"Error Update Device Certificate Status By ID", "1", errors.New("Error Update Device Certificate Serial Number By ID")},
+		{"Error Update Device Status By ID", "1", errors.New("resource not found. resource_type=DEVICE resource_id=1")},
 	}
+
 	for _, tc := range testCases {
 
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
 			if tc.name == "Error certificate history could not find" {
 				ctx = context.WithValue(ctx, "DBShouldFail", false)
 				ctx = context.WithValue(ctx, "RevokeCertShouldFail", false)
-				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", true)
+				ctx = context.WithValue(ctx, "DBSelectDeviceById", true)
+				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
+
+			} else if tc.name == "Error inserting log" {
+				ctx = context.WithValue(ctx, "DBShouldFail", false)
+				ctx = context.WithValue(ctx, "RevokeCertShouldFail", false)
+				ctx = context.WithValue(ctx, "DBInsertLog", true)
+				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
 
 			} else if tc.name == "Error could not revoke certificate" {
 				ctx = context.WithValue(ctx, "DBShouldFail", false)
 				ctx = context.WithValue(ctx, "RevokeCertShouldFail", true)
 				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
+				ctx = context.WithValue(ctx, "DBInsertLog", false)
+			} else if tc.name == "Error updating certificate history serial number" {
+				ctx = context.WithValue(ctx, "DBShouldFail", false)
+				ctx = context.WithValue(ctx, "DBSelectDeviceById", false)
+				ctx = context.WithValue(ctx, "RevokeCertShouldFail", true)
+				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", true)
+			} else if tc.name == "Error Update Device Status By ID" {
+				ctx = context.WithValue(ctx, "DBShouldFail", false)
+				ctx = context.WithValue(ctx, "DBSelectDeviceById", false)
+				ctx = context.WithValue(ctx, "DBUpdateStatus", true)
+				ctx = context.WithValue(ctx, "RevokeCertShouldFail", false)
+				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
+				ctx = context.WithValue(ctx, "DBUpdateDeviceCertificateSerialNumberByID", true)
+			} else if tc.name == "Error Update Device Certificate Status By ID" {
+				ctx = context.WithValue(ctx, "DBShouldFail", false)
+				ctx = context.WithValue(ctx, "DBSelectDeviceById", false)
+				ctx = context.WithValue(ctx, "DBUpdateStatus", false)
+				ctx = context.WithValue(ctx, "RevokeCertShouldFail", false)
+				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
+				ctx = context.WithValue(ctx, "DBUpdateDeviceCertificateSerialNumberByID", true)
 			} else {
 				ctx = context.WithValue(ctx, "DBShouldFail", false)
+				ctx = context.WithValue(ctx, "DBUpdateDeviceCertificateSerialNumberByID", false)
+				ctx = context.WithValue(ctx, "DBSelectDeviceById", false)
 				ctx = context.WithValue(ctx, "RevokeCertShouldFail", false)
 				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
 			}
+
 			err := srv.RevokeDeviceCert(ctx, tc.id, "Manual revocation")
 
 			if err != nil {
@@ -451,10 +546,6 @@ func TestRevokeDeviceCert(t *testing.T) {
 func TestDeleteDevice(t *testing.T) {
 	srv, ctx := setup(t)
 
-	d := testDevice()
-
-	srv.PostDevice(ctx, d.Alias, d.Id, d.DmsId, "", nil, "", "")
-
 	testCases := []struct {
 		name string
 		id   string
@@ -466,7 +557,7 @@ func TestDeleteDevice(t *testing.T) {
 		{"Error could not revoke certificate", "errorRevokeCert", errors.New("test")},
 		{"Error updating certificate history", "errorUpdateDeviceCertHistory", errors.New("test")},
 		{"Error updating certificate history serial number", "errorUpdateDeviceCertificateSerialNumberByID", errors.New("test")},
-		{"Error updating device status", "errorUpdateStatus", errors.New("error")},
+		{"Error updating device status", "errorUpdateStatus", errors.New("resource not found. resource_type=DEVICE resource_id=errorUpdateStatus")},
 		{"Error certificate history could not find", "error", errors.New("test")},
 		{"Correct", "1", nil},
 	}
@@ -645,7 +736,7 @@ func setup(t *testing.T) (Service, context.Context) {
 	ctx = context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
 
 	devicesDb, _ := mocks.NewDevicedDBMock(t)
-	statsDB, _ := devicesDB.NewInMemoryDB()
+	statsDB, _ := mocks.NewInMemoryMockDB()
 
 	lamassuCaClient, _ := mocks.NewLamassuCaClientMock(logger)
 

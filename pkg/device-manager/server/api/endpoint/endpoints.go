@@ -6,7 +6,9 @@ import (
 
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/tracing/opentracing"
+	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
+	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
@@ -135,13 +137,13 @@ func MakeStatsEndpoint(s service.Service) endpoint.Endpoint {
 func MakePostDeviceEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(dto.CreateDeviceRequest)
-		/*err = ValidateCreatrCARequest(req)
+		err = ValidatePostDeviceRequest(req)
 		if err != nil {
-			valError := devmanagererrors.ValidationError{
+			valError := errors.ValidationError{
 				Msg: err.Error(),
 			}
 			return nil, &valError
-		}*/
+		}
 		device, e := s.PostDevice(ctx, req.Alias, req.DeviceID, req.DmsId, req.Description, req.Tags, req.IconName, req.IconColor)
 		return device, e
 	}
@@ -166,6 +168,13 @@ func MakeGetDeviceByIdEndpoint(s service.Service) endpoint.Endpoint {
 func MakeUpdateDeviceByIdEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(dto.UpdateDevicesByIdRequest)
+		err = ValidateUpdateDeviceById(req)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
 		device, e := s.UpdateDeviceById(ctx, req.Alias, req.DeviceID, req.DmsId, req.Description, req.Tags, req.IconName, req.IconColor)
 		return device, e
 	}
@@ -253,8 +262,6 @@ type PostDeviceResponse struct {
 	Err    error      `json:"err,omitempty"`
 }
 
-func (r PostDeviceResponse) error() error { return r.Err }
-
 type GetDevicesByIdRequest struct {
 	Id string
 }
@@ -286,4 +293,14 @@ type GetDeviceCertRequest struct {
 }
 type GetDeviceCertHistoryRequest struct {
 	Id string
+}
+
+func ValidatePostDeviceRequest(request dto.CreateDeviceRequest) error {
+	validate := validator.New()
+	return validate.Struct(request)
+}
+
+func ValidateUpdateDeviceById(request dto.UpdateDevicesByIdRequest) error {
+	validate := validator.New()
+	return validate.Struct(request)
 }

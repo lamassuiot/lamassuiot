@@ -17,8 +17,10 @@ import (
 	"github.com/go-kit/kit/log"
 
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
+	devmanagererrors "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/mocks"
 	verify "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/utils"
+	esterror "github.com/lamassuiot/lamassuiot/pkg/est/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
 )
 
@@ -39,7 +41,6 @@ func TestReenroll(t *testing.T) {
 	csr2Str := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJQ25EQ0NBWVFDQVFBd1Z6RUxNQWtHQTFVRUJoTUNSVk14Q2pBSUJnTlZCQWdNQVVFeENqQUlCZ05WQkFjTQpBVUV4Q2pBSUJnTlZCQW9NQVVFeENqQUlCZ05WQkFzTUFVRXhHREFXQmdOVkJBTU1EMlZ5Y205eVJHVjJhV05sClFubEpaRENDQVNJd0RRWUpLb1pJaHZjTkFRRUJCUUFEZ2dFUEFEQ0NBUW9DZ2dFQkFOVzV3Rm5YT25vb29SbGUKb09mcHNwZmVWRmJhZ3R5NzNaNnhSQ0R6ZXMxYVByUURPTjZ6OHhydGdjZDRKa0REMDFnbWNYLzArakUvdnkybwpKT015cGlJbGluVVQyMFhoM0ZxazV1OG5IeXIxSTI1L04rTGdQdmx6eHIyVjlaOGQ3Y0VkcjhzVXBqa3ptRDhICmo0QjVLN1pXTHd6NktGRW5aY3J2SWtzZHVJeEkxMDMvS2JGdjRWTi9WTndPeEpaVFFkMFRYdVU2RE0rRDcwWU4KZUxWcVovc0krdXluM3o5bXlhZ1FIS1ZkblgwSDltQ3ZOdVBQelNUTkxvaG1GNkRLSHhhV1d4NHQ3TzNMTnU3dQpCMmF2b2JmdnNBS1ljWER3SjgyTXNIMGkvRDZtaVBvUE1sL1lvZFM4d3VkZ2xMWUhobWc0VmlvdzJmQ0E0RmVkCnJ5Z1o3N0VDQXdFQUFhQUFNQTBHQ1NxR1NJYjNEUUVCQ3dVQUE0SUJBUUFzMFJqTS9qclJGem5FU3ljRXlsSjgKWlNZTjE1ODNJNzFUeXFXQWE2RkEwK1htYVlDSTgyWHVSL0owNjY1N2ZjTEhicG1hTExCYnJzRDN4MkJUa29VSgpQQzdDV25kVmUvOXllYkZRaFdkOWdwcVA2UHBOZW1TN3ZmZ0pOaXVXb3hXS2tJOWNzZEh5emNWV0hsRGhzZllJClp5NHM4dGwxNkJkTDVHRnlBbkdOdFhubEZlYkdYOVZCays1YlU2WkhlaVd5ejJ5OXcwM1Y1RnFZeEhRV1VaQzkKcTBHRWFHYTBUaGtWbVU4S2VTYUs4MXBjYWZTeW5HeVpPbkI4VzFmbEwzVEJBNGxJQ3VBTVJkcUo5UEsyTlZIegp6aUVOWUJYMDRVWGNPUzJDVHcwekVTanpIR1JUaUplYy9aS2swcVM0TGljNlRxN2RFb3Vtclh2Kzd3MHZJZ3RVCi0tLS0tRU5EIENFUlRJRklDQVRFIFJFUVVFU1QtLS0tLQoK"
 	csr2, _ := StringToCSR(csr2Str)
 
-	//provisioned
 	csr7Str := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJQ21EQ0NBWUFDQVFBd1V6RUxNQWtHQTFVRUJoTUNSVk14Q2pBSUJnTlZCQWdNQVVFeENqQUlCZ05WQkFjTQpBVUV4Q2pBSUJnTlZCQW9NQVVFeENqQUlCZ05WQkFzTUFVRXhGREFTQmdOVkJBTU1DM0J5YjNacGMybHZibVZrCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBc29yTG5tNmk5czlHMTVmVkROS1UKdFhzanJmWGZRb3hWazBYTDA2bFkrZkIvSzgwa3ZTbjhQWGRGQzdreTVTK0JyUEtZdHNlS0xOTjZyYkpFUkVuVQpab3lmWkdPbkwveU90TTB6anA2V21NNmxpSGhqeDE0NENscDNKNE4xTDJHc3cwS25wMG5Ea2JxTERlMjJRTjlZCnNCNEVaVHlJcTlQUFpzNTAzbVNGL1RsZ2dIc0NocFI1NEFKa1VNNjBDbGtybFprOHdmYyt2U3pTeE45QVlxSGIKTjIwVUpnV1prOXVnekdTZWQvMDdpL2FXanFNWXcwb1RrQTJQbkNERW1JOVplUHFjaGFZTG9HZW5OaHJJSkNlcgowN1VrVHZMVGljdkhXeVZHdEIxVDV1RUo4NFZXZHhSUDJhWEJISEtQVFVGNXRJVm9qT1N1Yml5MG1uSDVGd0p5CkR3SURBUUFCb0FBd0RRWUpLb1pJaHZjTkFRRUxCUUFEZ2dFQkFIWjZNUWJSRTNWZHN6U3J2VXhEbXAwZXBnTTYKaURUcjRoMi9KbklpS1prcnROYXRrbWFiaVJjM1Vkd0p0V3JxRWNHOW5GdkpYQW9TNUdpTjhxeTRkeHRQSVVURwpMUGlwREhmdU10bU5KZTkxdHRiWFVSV0VaRkNPL2RSdFpzSFZocUNBai9OTWxtdzVTU3BKMTIrYzFKTDR4bm1RClRzVEhqTk5YMytSMmJrVE5pUVNyY3JVUXNmK1dCY21OSHR2aW42aVJZd29KbDQ2cmFhM3ZqQUFxa3o2cldkRG4KN1A4YUV4aVBoSCtnbitDbWxUWGx4cDhSZGtPdmxWSFcxN2xoQzVXNGtGaHlBUFJXNWZkaGlvREp0SEl5ZUZLaQpYMkxzL25RZEwySTNtZmtPNWVqOUdMTU5DZnVtaU02Um1PL2FwMDRObzJUOGsyeTBINXg4azJ2ei9naz0KLS0tLS1FTkQgQ0VSVElGSUNBVEUgUkVRVUVTVC0tLS0tCgoK"
 	csr7, _ := StringToCSR(csr7Str)
 
@@ -51,22 +52,29 @@ func TestReenroll(t *testing.T) {
 		ret  error
 	}{
 		//{"Cert Date Conversion Error", cert1, csr1, "a", errors.New("parsing time \"\" as \"2006-01-02 15:04:05 -0700 MST\": cannot parse \"\" as \"2006\"")},
+		{"Unauthorized CA", cert1, csr1, "IkerCA", &esterror.UnAuthorized{
+			ResourceType: "CA Name",
+			ResourceId:   "810fbd45-55a6-4dd7-8466-c3d3eb854357",
+		}},
+		{"Correct", cert1, csr1, "Lamassu DMS Enroller", nil},
+		{"Error Decommisioned Device", cert1, csr1, "Lamassu DMS Enroller", errors.New("Cant reenroll a device with status: CERT_REVOKED")},
+		{"Error Insert Log", cert1, csr1, "Lamassu DMS Enroller", errors.New("Could not insert log")},
 
-		{"Error Decommisioned Device", cert1, csr1, "a", errors.New("Cant reenroll a device with status: CERT_REVOKED")},
-		{"Error Insert Log", cert1, csr1, "a", errors.New("Could not insert log")},
-		{"Correct", cert1, csr1, "a", errors.New("Cant reenroll ")},
-		{"Error Sign Certificate RequestFail", cert1, csr1, "a", errors.New("validation error: Error revoking certificate")},
-		{"Error Finding Device", cert1, csr1, "a", errors.New("Error finding device")},
-		{"Error Update Status By Id", cert1, csr1, "a", errors.New("Error Update Status")},
-		{"Error Update Device Certificate Serial Number By ID", cert1, csr1, "a", errors.New("Error Update Device Certificate Serial Number By ID")},
-		{"Peer Certificate", certError, csr1, "a", errors.New("x509: certificate signed by unknown authority")},
-		{"Expiration Date Error", cert1, csr1, "a", errors.New("Cant reenroll a provisioned device before 2 days of its expiration time")},
-		{"Subject Changed", cert1, csr2, "a", errors.New("different Subject fields")},
-		{"Error Insert Device Cert History", cert1, csr1, "a", errors.New("Testing DB connection failed")},
-		{"Error Provisioned Device", cert1, csr7, "a", errors.New("The device already has a valid certificate")},
-		{"Error Get Cert", cert1, csr1, "a", errors.New("Error getting certificate")},
-		{"Error Revoke Cert", cert1, csr1, "a", errors.New("Error revoking certificate")},
-		{"Error Select Device Cert History By SerialNumber", cert1, csr1, "a", errors.New("Testing DB connection failed")},
+		//{"Error Sign Certificate RequestFail", cert1, csr1, "Lamassu DMS Enroller", errors.New("validation error: Error revoking certificate")},
+		{"Error Finding Device", cert1, csr1, "Lamassu DMS Enroller", &devmanagererrors.ResourceNotFoundError{
+			ResourceType: "DEVICE",
+			ResourceId:   "DEVICE",
+		}},
+		{"Error Update Status By Id", cert1, csr1, "Lamassu DMS Enroller", errors.New("resource not found. resource_type=DEVICE resource_id=DEVICE")},
+		{"Error Update Device Certificate Serial Number By ID", cert1, csr1, "Lamassu DMS Enroller", errors.New("Error Update Device Certificate Serial Number By ID")},
+		{"Peer Certificate", certError, csr1, "Lamassu DMS Enroller", errors.New("x509: certificate signed by unknown authority")},
+		{"Expiration Date Error", cert1, csr1, "Lamassu DMS Enroller", errors.New("Cant reenroll a provisioned device before 2 days of its expiration time")},
+		{"Subject Changed", cert1, csr2, "Lamassu DMS Enroller", errors.New("different Subject fields")},
+		{"Error Insert Device Cert History", cert1, csr1, "Lamassu DMS Enroller", errors.New("Testing DB connection failed")},
+		{"Error Provisioned Device", cert1, csr7, "Lamassu DMS Enroller", errors.New("The device already has a valid certificate")},
+		{"Error Get Cert", cert1, csr1, "Lamassu DMS Enroller", errors.New("Error getting certificate")},
+		{"Error Revoke Cert", cert1, csr1, "Lamassu DMS Enroller", errors.New("Error revoking certificate")},
+		{"Error Select Device Cert History By SerialNumber", cert1, csr1, "a", errors.New("resource not found. resource_type=DEVICE-CERT HISTORY resource_id=1E-6A-EC-C2-05-64-EF-65-66-7F-5B-AE-7B-B4-15-25-19-E8-2C-87")},
 	}
 
 	for _, tc := range testCases {
@@ -240,17 +248,22 @@ func TestEnroll(t *testing.T) {
 	testCases := []struct {
 		name string
 		csr  *x509.CertificateRequest
+		aps  string
 		ret  error
 	}{
-		{"Correct", csr1, nil},
-		{"Error Insert Log", csr3, errors.New("Could not insert log")},
-		{"Error finding device", csr2, errors.New("Could not find device by Id")},
-		{"Error Insert Device Cert History", csr1, errors.New("Testing DB connection failed")},
-		{"Error Update Status By Id", csr4, errors.New("error")},
-		{"Error Update Device Certificate Serial Number By ID", csr5, errors.New("error")},
-		{"Error Decommisioned Device", csr6, errors.New("cant issue a certificate for a decommisioned device")},
-		{"Error Provisioned Device", csr7, errors.New("The device (provisioned) already has a valid certificate")},
-		{"Error Sign Certificate RequestFail", csr1, errors.New("validation error: Error revoking certificate")},
+		{"Unauthorized CA", csr1, "IkerCA", &esterror.UnAuthorized{
+			ResourceType: "CA Name",
+			ResourceId:   "810fbd45-55a6-4dd7-8466-c3d3eb854357",
+		}},
+		{"Correct", csr1, "Lamassu DMS Enroller", nil},
+		{"Error Insert Log", csr3, "Lamassu DMS Enroller", errors.New("Could not insert log")},
+		{"Error finding device", csr2, "Lamassu DMS Enroller", errors.New("Could not find device by Id")},
+		{"Error Insert Device Cert History", csr1, "Lamassu DMS Enroller", errors.New("Testing DB connection failed")},
+		{"Error Update Status By Id", csr4, "Lamassu DMS Enroller", errors.New("resource not found. resource_type=DEVICE resource_id=errorUpdateStatus")},
+		{"Error Update Device Certificate Serial Number By ID", csr5, "Lamassu DMS Enroller", errors.New("error")},
+		{"Error Decommisioned Device", csr6, "Lamassu DMS Enroller", errors.New("cant issue a certificate for a decommisioned device")},
+		{"Error Provisioned Device", csr7, "Lamassu DMS Enroller", errors.New("The device (provisioned) already has a valid certificate")},
+		{"Error Sign Certificate RequestFail", csr1, "Lamassu DMS Enroller", errors.New("validation error: Error revoking certificate")},
 	}
 
 	for _, tc := range testCases {
@@ -277,25 +290,14 @@ func TestEnroll(t *testing.T) {
 
 			snInt := new(big.Int)
 			snInt, _ = snInt.SetString("15898402459309774930443891423546184692", 10)
-			/*template := x509.Certificate{
-				SerialNumber: snInt,
-				Subject: pkix.Name{
-					Organization: []string{"Acme Co"},
-				},
-				NotBefore: time.Now(),
-				NotAfter:  time.Now().Add(time.Hour * 24 * 180),
-
-				KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-				ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-				BasicConstraintsValid: true,
-			}*/
 
 			// derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey(priv), priv)
 			certContent, err := ioutil.ReadFile("/home/ikerlan/lamassu/lamassuiot/nogit/dms.crt")
+
 			cpb, _ := pem.Decode(certContent)
 			dmsCrt, err := x509.ParseCertificate(cpb.Bytes)
 
-			_, err = srv.Enroll(ctx, tc.csr, "IkerCA", dmsCrt)
+			_, err = srv.Enroll(ctx, tc.csr, tc.aps, dmsCrt)
 			if err != nil {
 				if tc.ret.Error() != err.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
@@ -339,17 +341,22 @@ func TestServerKeyGen(t *testing.T) {
 	testCases := []struct {
 		name string
 		csr  *x509.CertificateRequest
+		aps  string
 		ret  error
 	}{
-		{"Correct", csr1, nil},
-		{"Error finding device", csr2, errors.New("Could not find device by Id")},
-		{"Error Insert Log", csr3, errors.New("Could not insert log")},
-		{"Error Insert Device Cert History", csr1, errors.New("Testing DB connection failed")},
-		{"Error Update Status By Id", csr4, errors.New("error")},
-		{"Error Update Device Certificate Serial Number By ID", csr5, errors.New("error")},
-		{"Error Decommisioned Device", csr6, errors.New("cant issue a certificate for a decommisioned device")},
-		{"Error Provisioned Device", csr7, errors.New("The device (provisioned) already has a valid certificate")},
-		{"Error Sign Certificate RequestFail", csr1, errors.New("validation error: Error revoking certificate")},
+		{"Unauthorized CA", csr1, "IkerCA", &esterror.UnAuthorized{
+			ResourceType: "CA Name",
+			ResourceId:   "810fbd45-55a6-4dd7-8466-c3d3eb854357",
+		}},
+		{"Correct", csr1, "Lamassu DMS Enroller", nil},
+		{"Error finding device", csr2, "Lamassu DMS Enroller", errors.New("Could not find device by Id")},
+		{"Error Insert Log", csr3, "Lamassu DMS Enroller", errors.New("Could not insert log")},
+		{"Error Insert Device Cert History", csr1, "Lamassu DMS Enroller", errors.New("Testing DB connection failed")},
+		{"Error Update Status By Id", csr4, "Lamassu DMS Enroller", errors.New("resource not found. resource_type=DEVICE resource_id=errorUpdateStatus")},
+		{"Error Update Device Certificate Serial Number By ID", csr5, "Lamassu DMS Enroller", errors.New("error")},
+		{"Error Decommisioned Device", csr6, "Lamassu DMS Enroller", errors.New("cant issue a certificate for a decommisioned device")},
+		{"Error Provisioned Device", csr7, "Lamassu DMS Enroller", errors.New("The device (provisioned) already has a valid certificate")},
+		{"Error Sign Certificate RequestFail", csr1, "Lamassu DMS Enroller", errors.New("validation error: Error revoking certificate")},
 	}
 
 	for _, tc := range testCases {
@@ -376,11 +383,12 @@ func TestServerKeyGen(t *testing.T) {
 			snInt := new(big.Int)
 			snInt, _ = snInt.SetString("15898402459309774930443891423546184692", 10)
 
-			certContent, _ := ioutil.ReadFile("/home/ikerlan/lamassu/lamassuiot/nogit/dms.crt")
+			certContent, err := ioutil.ReadFile("/home/ikerlan/lamassu/lamassuiot/nogit/dms.crt")
+
 			cpb, _ := pem.Decode(certContent)
 			dmsCrt, _ := x509.ParseCertificate(cpb.Bytes)
 
-			_, _, err := srv.ServerKeyGen(ctx, tc.csr, "IkerCA", dmsCrt)
+			_, _, err = srv.ServerKeyGen(ctx, tc.csr, tc.aps, dmsCrt)
 			if err != nil {
 				if tc.ret.Error() != err.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
