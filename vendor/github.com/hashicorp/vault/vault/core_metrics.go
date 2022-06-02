@@ -10,6 +10,7 @@ import (
 	"github.com/armon/go-metrics"
 	"github.com/hashicorp/vault/helper/metricsutil"
 	"github.com/hashicorp/vault/helper/namespace"
+	"github.com/hashicorp/vault/physical/raft"
 	"github.com/hashicorp/vault/sdk/helper/consts"
 	"github.com/hashicorp/vault/sdk/logical"
 )
@@ -18,12 +19,12 @@ func (c *Core) metricsLoop(stopCh chan struct{}) {
 	emitTimer := time.Tick(time.Second)
 
 	identityCountTimer := time.Tick(time.Minute * 10)
-	// Only emit on active node of cluster that is not a DR cecondary.
+	// Only emit on active node of cluster that is not a DR secondary.
 	if standby, _ := c.Standby(); standby || c.IsDRSecondary() {
 		identityCountTimer = nil
 	}
 
-	writeTimer := time.Tick(c.counters.syncInterval)
+	writeTimer := time.Tick(time.Second * 30)
 	// Do not process the writeTimer on DR Secondary nodes
 	if c.IsDRSecondary() {
 		writeTimer = nil
@@ -60,32 +61,58 @@ func (c *Core) metricsLoop(stopCh chan struct{}) {
 				c.metricSink.SetGaugeWithLabels([]string{"core", "active"}, 1, nil)
 			}
 
+			if perfStandby := c.PerfStandby(); perfStandby {
+				c.metricSink.SetGaugeWithLabels([]string{"core", "performance_standby"}, 1, nil)
+			} else {
+				c.metricSink.SetGaugeWithLabels([]string{"core", "performance_standby"}, 0, nil)
+			}
+
+			if c.ReplicationState().HasState(consts.ReplicationPerformancePrimary) {
+				c.metricSink.SetGaugeWithLabels([]string{"core", "replication", "performance", "primary"}, 1, nil)
+			} else {
+				c.metricSink.SetGaugeWithLabels([]string{"core", "replication", "performance", "primary"}, 0, nil)
+			}
+
+			if c.IsPerfSecondary() {
+				c.metricSink.SetGaugeWithLabels([]string{"core", "replication", "performance", "secondary"}, 1, nil)
+			} else {
+				c.metricSink.SetGaugeWithLabels([]string{"core", "replication", "performance", "secondary"}, 0, nil)
+			}
+
+			if c.ReplicationState().HasState(consts.ReplicationDRPrimary) {
+				c.metricSink.SetGaugeWithLabels([]string{"core", "replication", "dr", "primary"}, 1, nil)
+			} else {
+				c.metricSink.SetGaugeWithLabels([]string{"core", "replication", "dr", "primary"}, 0, nil)
+			}
+
+			if c.IsDRSecondary() {
+				c.metricSink.SetGaugeWithLabels([]string{"core", "replication", "dr", "secondary"}, 1, nil)
+			} else {
+				c.metricSink.SetGaugeWithLabels([]string{"core", "replication", "dr", "secondary"}, 0, nil)
+			}
+
+			// Capture the total number of in-flight requests
+			c.inFlightReqGaugeMetric()
+
 			// Refresh gauge metrics that are looped
 			c.cachedGaugeMetricsEmitter()
 
+			// If we're using a raft backend, emit boltdb metrics
+			if rb, ok := c.underlyingPhysical.(*raft.RaftBackend); ok {
+				rb.CollectMetrics(c.MetricSink())
+			}
 		case <-writeTimer:
 			if stopped := grabLockOrStop(c.stateLock.RLock, c.stateLock.RUnlock, stopCh); stopped {
 				// Go through the loop again, this time the stop channel case
 				// should trigger
 				continue
 			}
-			if c.perfStandby { // already have lock here, do not re-acquire
-				err := syncCounters(c)
+			// Ship barrier encryption counts if a perf standby or the active node
+			// on a performance secondary cluster
+			if c.perfStandby || c.ReplicationState().HasState(consts.ReplicationPerformanceSecondary) { // already have lock here, do not re-acquire
+				err := syncBarrierEncryptionCounter(c)
 				if err != nil {
-					c.logger.Error("writing syncing counters", "err", err)
-				}
-			} else {
-				// Perf standbys will have synced above, but active nodes on a secondary cluster still need to ship
-				// barrier encryption counts
-				if c.ReplicationState().HasState(consts.ReplicationPerformanceSecondary) {
-					err := syncBarrierEncryptionCounter(c)
-					if err != nil {
-						c.logger.Error("writing syncing encryption counts", "err", err)
-					}
-				}
-				err := c.saveCurrentRequestCounters(context.Background(), time.Now())
-				if err != nil {
-					c.logger.Error("writing request counters to barrier", "err", err)
+					c.logger.Error("writing syncing encryption counters", "err", err)
 				}
 			}
 			c.stateLock.RUnlock()
@@ -102,7 +129,6 @@ func (c *Core) metricsLoop(stopCh chan struct{}) {
 					metrics.SetGauge([]string{"identity", "num_entities"}, float32(entities.Entities.Total))
 				}
 			}()
-
 		case <-stopCh:
 			return
 		}
@@ -113,6 +139,11 @@ func (c *Core) metricsLoop(stopCh chan struct{}) {
 // TokenStore; there is one per method because an additional level of abstraction
 // seems confusing.
 func (c *Core) tokenGaugeCollector(ctx context.Context) ([]metricsutil.GaugeLabelValues, error) {
+	if c.IsDRSecondary() {
+		// there is no expiration manager on DR Secondaries
+		return []metricsutil.GaugeLabelValues{}, nil
+	}
+
 	// stateLock or authLock protects the tokenStore pointer
 	c.stateLock.RLock()
 	ts := c.tokenStore
@@ -124,6 +155,11 @@ func (c *Core) tokenGaugeCollector(ctx context.Context) ([]metricsutil.GaugeLabe
 }
 
 func (c *Core) tokenGaugePolicyCollector(ctx context.Context) ([]metricsutil.GaugeLabelValues, error) {
+	if c.IsDRSecondary() {
+		// there is no expiration manager on DR Secondaries
+		return []metricsutil.GaugeLabelValues{}, nil
+	}
+
 	c.stateLock.RLock()
 	ts := c.tokenStore
 	c.stateLock.RUnlock()
@@ -145,6 +181,11 @@ func (c *Core) leaseExpiryGaugeCollector(ctx context.Context) ([]metricsutil.Gau
 }
 
 func (c *Core) tokenGaugeMethodCollector(ctx context.Context) ([]metricsutil.GaugeLabelValues, error) {
+	if c.IsDRSecondary() {
+		// there is no expiration manager on DR Secondaries
+		return []metricsutil.GaugeLabelValues{}, nil
+	}
+
 	c.stateLock.RLock()
 	ts := c.tokenStore
 	c.stateLock.RUnlock()
@@ -155,6 +196,11 @@ func (c *Core) tokenGaugeMethodCollector(ctx context.Context) ([]metricsutil.Gau
 }
 
 func (c *Core) tokenGaugeTtlCollector(ctx context.Context) ([]metricsutil.GaugeLabelValues, error) {
+	if c.IsDRSecondary() {
+		// there is no expiration manager on DR Secondaries
+		return []metricsutil.GaugeLabelValues{}, nil
+	}
+
 	c.stateLock.RLock()
 	ts := c.tokenStore
 	c.stateLock.RUnlock()
@@ -173,7 +219,6 @@ func (c *Core) emitMetrics(stopCh chan struct{}) {
 	//
 	// Both active nodes and performance standby nodes call emitMetrics
 	// so we have to handle both.
-
 	metricsInit := []struct {
 		MetricName    []string
 		MetadataLabel []metrics.Label
@@ -290,7 +335,7 @@ func (c *Core) findKvMounts() []*kvMount {
 	}
 
 	for _, entry := range c.mounts.Entries {
-		if entry.Type == "kv" {
+		if entry.Type == "kv" || entry.Type == "generic" {
 			version, ok := entry.Options["version"]
 			if !ok {
 				version = "1"
@@ -491,4 +536,10 @@ func (c *Core) cachedGaugeMetricsEmitter() {
 	}
 
 	loopMetrics.Range(emit)
+}
+
+func (c *Core) inFlightReqGaugeMetric() {
+	totalInFlightReq := c.inFlightReqData.InFlightReqCount.Load()
+	// Adding a gauge metric to capture total number of inflight requests
+	c.metricSink.SetGaugeWithLabels([]string{"core", "in_flight_requests"}, float32(totalInFlightReq), nil)
 }

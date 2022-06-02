@@ -16,7 +16,7 @@ import (
 )
 
 type LamassuCaClient interface {
-	GetCAs(ctx context.Context, caType dto.CAType) ([]dto.Cert, error)
+	GetCAs(ctx context.Context, caType dto.CAType, queryparameters filters.QueryParameters) (dto.GetCasResponse, error)
 	CreateCA(ctx context.Context, caType dto.CAType, caName string, privateKeyMetadata dto.PrivateKeyMetadata, subject dto.Subject, caTTL time.Duration, enrollerTTL time.Duration) (dto.Cert, error)
 	ImportCA(ctx context.Context, caType dto.CAType, caName string, certificate x509.Certificate, privateKey dto.PrivateKey, enrollerTTL time.Duration) (dto.Cert, error)
 	DeleteCA(ctx context.Context, caType dto.CAType, caName string) error
@@ -42,26 +42,25 @@ func NewLamassuCAClient(config clientUtils.ClientConfiguration) (LamassuCaClient
 	}, nil
 }
 
-func (c *lamassuCaClientConfig) GetCAs(ctx context.Context, caType dto.CAType) ([]dto.Cert, error) {
+func (c *lamassuCaClientConfig) GetCAs(ctx context.Context, caType dto.CAType, queryparameters filters.QueryParameters) (dto.GetCasResponse, error) {
 	req, err := c.client.NewRequest("GET", "v1/"+caType.String(), nil)
 	if err != nil {
-		return make([]dto.Cert, 0), err
+		return dto.GetCasResponse{}, err
 	}
+
+	newParams := clientFilers.GenerateHttpQueryParams(queryparameters)
+	req.URL.RawQuery = newParams
+
 	respBody, _, err := c.client.Do(req)
 	if err != nil {
-		return make([]dto.Cert, 0), err
+		return dto.GetCasResponse{}, err
 	}
 
-	certsArrayInterface := respBody.([]interface{})
-	var certs []dto.Cert
-	for _, item := range certsArrayInterface {
-		var cert dto.Cert
-		jsonString, _ := json.Marshal(item)
-		json.Unmarshal(jsonString, &cert)
-		certs = append(certs, cert)
-	}
+	var cas dto.GetCasResponse
+	jsonString, _ := json.Marshal(respBody)
+	json.Unmarshal(jsonString, &cas)
 
-	return certs, nil
+	return cas, nil
 }
 
 func (c *lamassuCaClientConfig) CreateCA(ctx context.Context, caType dto.CAType, caName string, privateKeyMetadata dto.PrivateKeyMetadata, subject dto.Subject, caTTL time.Duration, enrollerTTL time.Duration) (dto.Cert, error) {

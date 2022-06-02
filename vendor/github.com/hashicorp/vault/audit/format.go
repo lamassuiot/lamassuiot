@@ -10,7 +10,6 @@ import (
 
 	squarejwt "gopkg.in/square/go-jose.v2/jwt"
 
-	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/helper/namespace"
 	"github.com/hashicorp/vault/sdk/helper/salt"
 	"github.com/hashicorp/vault/sdk/logical"
@@ -48,7 +47,7 @@ func (f *AuditFormatter) FormatRequest(ctx context.Context, w io.Writer, config 
 
 	salt, err := f.Salt(ctx)
 	if err != nil {
-		return errwrap.Wrapf("error fetching salt: {{err}}", err)
+		return fmt.Errorf("error fetching salt: %w", err)
 	}
 
 	// Set these to the input values at first
@@ -111,6 +110,7 @@ func (f *AuditFormatter) FormatRequest(ctx context.Context, w io.Writer, config 
 
 		Request: &AuditRequest{
 			ID:                  req.ID,
+			ClientID:            req.ClientID,
 			ClientToken:         req.ClientToken,
 			ClientTokenAccessor: req.ClientTokenAccessor,
 			Operation:           req.Operation,
@@ -123,6 +123,7 @@ func (f *AuditFormatter) FormatRequest(ctx context.Context, w io.Writer, config 
 			Data:                          req.Data,
 			PolicyOverride:                req.PolicyOverride,
 			RemoteAddr:                    getRemoteAddr(req),
+			RemotePort:                    getRemotePort(req),
 			ReplicationCluster:            req.ReplicationCluster,
 			Headers:                       req.Headers,
 			ClientCertificateSerialNumber: getClientCertificateSerialNumber(connState),
@@ -159,7 +160,7 @@ func (f *AuditFormatter) FormatResponse(ctx context.Context, w io.Writer, config
 
 	salt, err := f.Salt(ctx)
 	if err != nil {
-		return errwrap.Wrapf("error fetching salt: {{err}}", err)
+		return fmt.Errorf("error fetching salt: %w", err)
 	}
 
 	// Set these to the input values at first
@@ -285,6 +286,7 @@ func (f *AuditFormatter) FormatResponse(ctx context.Context, w io.Writer, config
 			Data:                          req.Data,
 			PolicyOverride:                req.PolicyOverride,
 			RemoteAddr:                    getRemoteAddr(req),
+			RemotePort:                    getRemotePort(req),
 			ClientCertificateSerialNumber: getClientCertificateSerialNumber(connState),
 			ReplicationCluster:            req.ReplicationCluster,
 			Headers:                       req.Headers,
@@ -337,6 +339,7 @@ type AuditResponseEntry struct {
 
 type AuditRequest struct {
 	ID                            string                 `json:"id,omitempty"`
+	ClientID                      string                 `json:"client_id,omitempty"`
 	ReplicationCluster            string                 `json:"replication_cluster,omitempty"`
 	Operation                     logical.Operation      `json:"operation,omitempty"`
 	MountType                     string                 `json:"mount_type,omitempty"`
@@ -347,6 +350,7 @@ type AuditRequest struct {
 	Data                          map[string]interface{} `json:"data,omitempty"`
 	PolicyOverride                bool                   `json:"policy_override,omitempty"`
 	RemoteAddr                    string                 `json:"remote_address,omitempty"`
+	RemotePort                    int                    `json:"remote_port,omitempty"`
 	WrapTTL                       int                    `json:"wrap_ttl,omitempty"`
 	Headers                       map[string][]string    `json:"headers,omitempty"`
 	ClientCertificateSerialNumber string                 `json:"client_certificate_serial_number,omitempty"`
@@ -405,6 +409,14 @@ func getRemoteAddr(req *logical.Request) string {
 		return req.Connection.RemoteAddr
 	}
 	return ""
+}
+
+// getRemotePort safely gets the remote port avoiding a nil pointer
+func getRemotePort(req *logical.Request) int {
+	if req != nil && req.Connection != nil {
+		return req.Connection.RemotePort
+	}
+	return 0
 }
 
 func getClientCertificateSerialNumber(connState *tls.ConnectionState) string {

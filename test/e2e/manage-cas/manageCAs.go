@@ -20,6 +20,7 @@ import (
 	"github.com/jakehl/goid"
 
 	caDTO "github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 	client "github.com/lamassuiot/lamassuiot/test/e2e/utils/clients"
 )
 
@@ -37,7 +38,7 @@ func ManageCAs(caNumber int, scaleIndex int, certPath string, domain string) (ca
 	if err != nil {
 		return caDTO.Cert{}, err
 	}
-	var createCa []caDTO.Cert
+	var createCa caDTO.GetCasResponse
 	for i := 0; i < caNumber; i++ {
 		caName := goid.NewV4UUID().String()
 
@@ -46,13 +47,13 @@ func ManageCAs(caNumber int, scaleIndex int, certPath string, domain string) (ca
 			level.Error(logger).Log("err", err)
 			return caDTO.Cert{}, err
 		}
-		createCa, err = caClient.GetCAs(context.Background(), caDTO.Pki)
+		createCa, err = caClient.GetCAs(context.Background(), caDTO.Pki, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: 50, Offset: 0}})
 		if err != nil {
 			return caDTO.Cert{}, err
 		}
 
 	}
-	err = caClient.DeleteCA(context.Background(), caDTO.Pki, createCa[caNumber-1].Name)
+	err = caClient.DeleteCA(context.Background(), caDTO.Pki, createCa.CAs[caNumber-1].Name)
 	if err != nil {
 		return caDTO.Cert{}, err
 	}

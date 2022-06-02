@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/sdk/framework"
 	"github.com/hashicorp/vault/sdk/helper/errutil"
 	"github.com/hashicorp/vault/sdk/logical"
@@ -21,13 +20,13 @@ func pathConfigCRL(b *backend) *framework.Path {
 	return &framework.Path{
 		Pattern: "config/crl",
 		Fields: map[string]*framework.FieldSchema{
-			"expiry": &framework.FieldSchema{
+			"expiry": {
 				Type: framework.TypeString,
 				Description: `The amount of time the generated CRL should be
 valid; defaults to 72 hours`,
 				Default: "72h",
 			},
-			"disable": &framework.FieldSchema{
+			"disable": {
 				Type:        framework.TypeBool,
 				Description: `If set to true, disables generating the CRL entirely.`,
 			},
@@ -113,11 +112,13 @@ func (b *backend) pathCRLWrite(ctx context.Context, req *logical.Request, d *fra
 	if oldDisable != config.Disable {
 		// It wasn't disabled but now it is, rotate
 		crlErr := buildCRL(ctx, b, req, true)
-		switch crlErr.(type) {
-		case errutil.UserError:
-			return logical.ErrorResponse(fmt.Sprintf("Error during CRL building: %s", crlErr)), nil
-		case errutil.InternalError:
-			return nil, errwrap.Wrapf("error encountered during CRL building: {{err}}", crlErr)
+		if crlErr != nil {
+			switch crlErr.(type) {
+			case errutil.UserError:
+				return logical.ErrorResponse(fmt.Sprintf("Error during CRL building: %s", crlErr)), nil
+			default:
+				return nil, fmt.Errorf("error encountered during CRL building: %w", crlErr)
+			}
 		}
 	}
 

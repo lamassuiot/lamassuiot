@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/sdk/framework"
 	"github.com/hashicorp/vault/sdk/helper/consts"
 	"github.com/hashicorp/vault/sdk/helper/errutil"
@@ -16,7 +15,7 @@ func pathRevoke(b *backend) *framework.Path {
 	return &framework.Path{
 		Pattern: `revoke`,
 		Fields: map[string]*framework.FieldSchema{
-			"serial_number": &framework.FieldSchema{
+			"serial_number": {
 				Type: framework.TypeString,
 				Description: `Certificate serial number, in colon- or
 hyphen-separated octal`,
@@ -24,7 +23,7 @@ hyphen-separated octal`,
 		},
 
 		Callbacks: map[logical.Operation]framework.OperationFunc{
-			logical.UpdateOperation: b.pathRevokeWrite,
+			logical.UpdateOperation: b.metricsWrap("revoke", noRole, b.pathRevokeWrite),
 		},
 
 		HelpSynopsis:    pathRevokeHelpSyn,
@@ -45,7 +44,7 @@ func pathRotateCRL(b *backend) *framework.Path {
 	}
 }
 
-func (b *backend) pathRevokeWrite(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
+func (b *backend) pathRevokeWrite(ctx context.Context, req *logical.Request, data *framework.FieldData, _ *roleEntry) (*logical.Response, error) {
 	serial := data.Get("serial_number").(string)
 	if len(serial) == 0 {
 		return logical.ErrorResponse("The serial number must be provided"), nil
@@ -70,18 +69,20 @@ func (b *backend) pathRotateCRLRead(ctx context.Context, req *logical.Request, d
 	defer b.revokeStorageLock.RUnlock()
 
 	crlErr := buildCRL(ctx, b, req, false)
-	switch crlErr.(type) {
-	case errutil.UserError:
-		return logical.ErrorResponse(fmt.Sprintf("Error during CRL building: %s", crlErr)), nil
-	case errutil.InternalError:
-		return nil, errwrap.Wrapf("error encountered during CRL building: {{err}}", crlErr)
-	default:
-		return &logical.Response{
-			Data: map[string]interface{}{
-				"success": true,
-			},
-		}, nil
+	if crlErr != nil {
+		switch crlErr.(type) {
+		case errutil.UserError:
+			return logical.ErrorResponse(fmt.Sprintf("Error during CRL building: %s", crlErr)), nil
+		default:
+			return nil, fmt.Errorf("error encountered during CRL building: %w", crlErr)
+		}
 	}
+
+	return &logical.Response{
+		Data: map[string]interface{}{
+			"success": true,
+		},
+	}, nil
 }
 
 const pathRevokeHelpSyn = `

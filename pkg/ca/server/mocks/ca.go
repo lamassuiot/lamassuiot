@@ -8,11 +8,14 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/log/level"
+	lamassuErrors "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/models/ca"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 
 	_ "github.com/lib/pq"
 )
+
+var caDB ca.Cas
 
 type caDBMock struct {
 	*sql.DB
@@ -61,4 +64,37 @@ func (db *caDBMock) SelectCertsByCA(ctx context.Context, caName string, queryPar
 		return []ca.IssuedCerts{}, 0, nil
 	}
 
+}
+func (db *caDBMock) InsertCa(ctx context.Context, caName string, caType string) error {
+	if caName == caDB.CaName {
+		duplicationErr := &lamassuErrors.DuplicateResourceError{
+			ResourceType: "Insert CA",
+			ResourceId:   caName,
+		}
+		return duplicationErr
+	} else {
+		caDB.CaName = caName
+		caDB.CaType = caType
+		return nil
+	}
+
+}
+func (db *caDBMock) SelectCas(ctx context.Context, caType string, queryParameters filters.QueryParameters) ([]ca.Cas, int, error) {
+	caArray := []ca.Cas{}
+	if caDB.CaName == "" {
+		notFoundErr := &lamassuErrors.ResourceNotFoundError{
+			ResourceType: "Select All CAs",
+			ResourceId:   "Database is empty",
+		}
+		return []ca.Cas{}, 0, notFoundErr
+	} else {
+		if queryParameters.Pagination.Offset != 0 {
+			return []ca.Cas{}, 0, nil
+		}
+		caArray = append(caArray, caDB)
+		return caArray, len(caArray), nil
+	}
+}
+func (db *caDBMock) DeleteCa(ctx context.Context, caName string) error {
+	return nil
 }
