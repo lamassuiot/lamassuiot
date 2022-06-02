@@ -115,6 +115,30 @@ func TestCAHandler(t *testing.T) {
 			},
 		},
 		{
+			name: "GetCAs DmsEnroller",
+			serviceInitialization: func(s *service.Service) {
+				ctx := context.Background()
+				(*s).CreateCA(ctx, dto.DmsEnroller, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
+			},
+			testRestEndpoint: func(e *httpexpect.Expect) {
+				obj := e.GET("/dmsenroller").
+					Expect().
+					Status(http.StatusOK).JSON()
+
+				obj.Object().Value("total_cas").Equal(1)
+				obj.Object().Value("cas").Array().Element(0).Object().ValueEqual("status", "issued")
+				obj.Object().Value("cas").Array().Element(0).Object().ContainsKey("name")
+				ca_name := obj.Object().Value("cas").Array().Element(0).Object().Value("name").String().Raw()
+				obj.Object().Value("cas").Array().Element(0).Object().ContainsKey("serial_number")
+				obj.Object().Value("cas").Array().Element(0).Object().ContainsKey("subject")
+				obj.Object().Value("cas").Array().Element(0).Object().Value("subject").Object().ValueEqual("common_name", ca_name)
+				obj.Object().Value("cas").Array().Element(0).Object().ContainsKey("key_metadata")
+				obj.Object().Value("cas").Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("bits")
+				obj.Object().Value("cas").Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("strength")
+				obj.Object().Value("cas").Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("type")
+			},
+		},
+		{
 			name: "GetCAs",
 			serviceInitialization: func(s *service.Service) {
 				ctx := context.Background()
