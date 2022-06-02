@@ -32,6 +32,9 @@ func NewLamassuCaClientMock(logger log.Logger) (lamassuca.LamassuCaClient, error
 func (c *LamassuCaClientConfig) GetCAs(ctx context.Context, caType caDTO.CAType, queryparameters filters.QueryParameters) (caDTO.GetCasResponse, error) {
 	var CAs caDTO.GetCasResponse
 	var newCA caDTO.Cert
+	if queryparameters.Pagination.Offset != 0 {
+		return caDTO.GetCasResponse{}, nil
+	}
 	if caType == caDTO.DmsEnroller {
 		newCA = CreateTestCA("", true)
 

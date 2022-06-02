@@ -9,9 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -685,16 +683,15 @@ func TestDeviceHandler(t *testing.T) {
 
 			testEstRestEndpoint: func(e *httpexpect.Expect) {
 
-				certContent, _ := ioutil.ReadFile("/home/ikerlan/lamassu/lamassuiot/nogit/dms.crt")
-				cpb, _ := pem.Decode(certContent)
-				dmsCrt, _ := x509.ParseCertificate(cpb.Bytes)
+				/*cert := "-----BEGIN%20CERTIFICATE-----%0AMIIFQzCCAysCFFqpO4cc1iGLIj1U1O11dIs9UVktMA0GCSqGSIb3DQEBCwUAMFwx%0ACzAJBgNVBAYTAkVTMREwDwYDVQQIDAhHaXB1emtvYTERMA8GA1UEBwwIQXJyYXNh%0AdGUxDDAKBgNVBAoMA0lLTDEMMAoGA1UECwwDWlBEMQswCQYDVQQDDAJDQTAeFw0y%0AMjAyMTYxMTUwMzdaFw0yMzAyMTExMTUwMzdaMGAxCzAJBgNVBAYTAkVTMREwDwYD%0AVQQIDAhHaXB1emtvYTERMA8GA1UEBwwIQXJyYXNhdGUxDDAKBgNVBAoMA0lLTDEM%0AMAoGA1UECwwDWlBEMQ8wDQYDVQQDDAZERVZJQ0UwggIiMA0GCSqGSIb3DQEBAQUA%0AA4ICDwAwggIKAoICAQC3lrywkgOu1H%2F6BnDc7NbTEaWSIVkdraRVtKIu2uz5np1O%0AwfBvtSR2N1hzYyZDleCmM4bg9%2F3rLztL7oUxqfjd1TRiTWXheJSBmxdZlhGewjww%0AbycmoGwkxAnlBWi7I0c7fNn6wZ%2Fo23H57%2BzqmpholfWyojU1oRIbSmo5DyKfA7P%2B%0A0VGvVRC5fC1qUzMA8RuDJQTcDeYN3dg6jjz2pkCRbWCCwoJflHRW6QnLQySsestH%0AOvZme1Xf3f3mPeTW0Yya2XWADNw60QueSslE0blrJfI710qWijp6zMJvF1nSC1gK%0AxJwOwzfxYsO%2FQV%2BJrD2zpIXg0JGEwzY8l8ZqZsFokwlDAC%2B9enI%2BgeRQIv6oB9Es%0Aug5c1fdLfR5tWvq1pVv6K7sIoUQ6p71zidXUBjheCnGjxyuyNXq3wKFnTzxAb7Cn%0Axrw84RPtCIMzYOc%2F4J4plBJjGEdh97vdJX5c42VWlQlS%2FvZFXCmpNHGUEBVgmn7T%0ABdHNn%2BhI2Z9s9xOYbD%2BDJh65KTGRUghOTv7ib2T2yzn%2Fa4nSUYZu1pioTtqwOvDH%0ASmhoaoXV%2Fgz2CqF7tVCRSDO1umWa8GbA4amoZXcdN5zk24HF2ItgxNUzE78xNLui%0A0JSHjNKrBnzqQAlpOCF%2BcGJ3SWmumnkBX2AiJYYANylJ2pQhgTEFjyTg1xe%2FbQID%0AAQABMA0GCSqGSIb3DQEBCwUAA4ICAQCS6%2Fggvtq7lIKwzf7B9%2FMP8ns7fAK4H%2BgF%0AiakxCc%2BiAQlPEEyQ0z3hpAepbzsluke8Y76zu3%2F%2BCuomSXf7sB1XyF3sGgSKr%2BKF%0Ava4gm%2Bct9y%2BiP4VfOzyElulPnQxzxoK%2BviPGNVsxCWu4jXnXyPfJDuFutjBAyTxh%0ARgfDpUIukhZYOHN%2F5%2FtOxmF1yhK693OABMpp0mOXi2xcpxEoTYdywIt1tonJ2Yqg%0Aznc%2F0PjMlfubEkBkMTShZ35GdvfU%2F54I5yGsB37iOMi%2BoWs%2FJxKCjP86DUNi%2FfOf%0A0TLYBGZwxPlF%2BOiGwaquAi15xZdQD4HPHzKxF7MeAJ7rmJHDOyRSvsBKtAyU776a%0AwLIgavyfS%2B4%2B0H6uXjfAZH1a1IqUYVDrIVz6cYyEA5lWFDuN0H0r7cIhi7QA5Z6r%0ABEqiBeAPEbheNWJObv0tfdxEZytWnODDcHUVtqOjTSMBHoGbhmpvMnNsQY7eyzaF%0AdgsALyRfK30yCWJ66YKs%2B3cSP6KDPt1ZViPWgI5i91BtAasK%2F7YuVdNe2aHnPDtn%0AxC8ydqts2isrrd3T8lu897IARqPJAVBonwEJ3xOkfVzlTEIwVxycUnoXKk%2FyO5Td%0ANPFHBEvypV%2BQou2wnpmj2xyGaGWu0AL4itwHihDDWDiyU%2FkTzhyET9kO%2Fzjgt03c%0AEOJ3xkZLvA%3D%3D%0A-----END%20CERTIFICATE-----"
+				dmsCert := "Hash=uftufy;Cert=\"" + cert + "\""*/
 
 				rsaKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 				csr, _ := GenerateCSR(rsaKey, "rsa", "CA")
 				testStruct := estEndpoint.EnrollRequest{
 					Csr: csr,
 					Aps: "caTest",
-					Crt: dmsCrt,
+					Crt: nil,
 				}
 				reqBodyBytes := new(bytes.Buffer)
 				json.NewEncoder(reqBodyBytes).Encode(testStruct)
@@ -831,16 +828,12 @@ func TestDeviceHandler(t *testing.T) {
 
 			testEstRestEndpoint: func(e *httpexpect.Expect) {
 
-				certContent, _ := ioutil.ReadFile("/home/ikerlan/lamassu/lamassuiot/nogit/dms.crt")
-				cpb, _ := pem.Decode(certContent)
-				dmsCrt, _ := x509.ParseCertificate(cpb.Bytes)
-
 				rsaKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 				csr, _ := GenerateCSR(rsaKey, "rsa", "CA")
 				testStruct := estEndpoint.EnrollRequest{
 					Csr: csr,
 					Aps: "caTest",
-					Crt: dmsCrt,
+					Crt: nil,
 				}
 				reqBodyBytes := new(bytes.Buffer)
 				json.NewEncoder(reqBodyBytes).Encode(testStruct)
@@ -883,16 +876,12 @@ func TestDeviceHandler(t *testing.T) {
 
 			testEstRestEndpoint: func(e *httpexpect.Expect) {
 
-				certContent, _ := ioutil.ReadFile("/home/ikerlan/lamassu/lamassuiot/nogit/dms.crt")
-				cpb, _ := pem.Decode(certContent)
-				dmsCrt, _ := x509.ParseCertificate(cpb.Bytes)
-
 				rsaKey, _ := rsa.GenerateKey(rand.Reader, 2048)
 				csr, _ := GenerateCSR(rsaKey, "rsa", "CA")
 				testStruct := estEndpoint.EnrollRequest{
 					Csr: csr,
 					Aps: "caTest",
-					Crt: dmsCrt,
+					Crt: nil,
 				}
 				reqBodyBytes := new(bytes.Buffer)
 				json.NewEncoder(reqBodyBytes).Encode(testStruct)
