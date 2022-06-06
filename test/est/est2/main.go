@@ -16,6 +16,8 @@ func main() {
 	servercrt := "server.crt"
 	dmscrt := "dms.crt"
 	dmskey := "dms.key"
+	devicecrt := "device.crt"
+	devicekey := "device.key"
 	devicecsr := "device.csr"
 	ca_name := "Test-CA"
 	caCert, err := ioutil.ReadFile(servercrt)
@@ -64,10 +66,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	cert, err := estClient.Enroll(context.Background(), ca_name, csr)
+	cert, key, err := estClient.ServerKeyGen(context.Background(), ca_name, csr)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	fmt.Printf("cas: %s\n", cert)
+	b := pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}
+	certPEM := pem.EncodeToMemory(&b)
+	ioutil.WriteFile(devicecrt, certPEM, 0777)
+
+	b = pem.Block{Type: "PRIVATE KEY", Bytes: key}
+	keyPEM := pem.EncodeToMemory(&b)
+	ioutil.WriteFile(devicekey, keyPEM, 0777)
 }

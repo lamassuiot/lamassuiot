@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/rand"
 	"os"
 	"strconv"
 	"time"
@@ -12,8 +11,9 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	lamassudevice "github.com/lamassuiot/lamassuiot/pkg/device-manager/client"
-	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
 	devdto "github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
+	filterTypes "github.com/lamassuiot/lamassuiot/pkg/utils/server/filters/types"
 	"github.com/lamassuiot/lamassuiot/test/e2e/utils"
 	client "github.com/lamassuiot/lamassuiot/test/e2e/utils/clients"
 )
@@ -39,23 +39,23 @@ func ManageDevices(scaleIndex int, certPath string, domain string) error {
 
 	devices, err := LatencyGetDevices(devClient, f)
 
-	err = LatencyGetDevicebyID(devClient, devices[1].Id, f1)
+	err = LatencyGetDevicebyID(devClient, devices[0].Id, f1)
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return err
 	}
-	err = LatencyGetDeviceCertHistory(devClient, devices[1].Id, f3)
+	err = LatencyGetDeviceCertHistory(devClient, devices[0].Id, f3)
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return err
 	}
-	err = LatencyGetDeviceLogs(devClient, devices[1].Id, f2)
+	err = LatencyGetDeviceLogs(devClient, devices[0].Id, f2)
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return err
 	}
 
-	err = LatencyGetDeviceCert(devClient, devices[1].Id, f4)
+	err = LatencyGetDeviceCert(devClient, devices[0].Id, f4)
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return err
@@ -175,19 +175,20 @@ func LatencyGetDeviceCert(devClient lamassudevice.LamassuDeviceManagerClient, id
 
 	return nil
 }
-
 func LatencyGetDevices(devClient lamassudevice.LamassuDeviceManagerClient, f *os.File) ([]devdto.Device, error) {
 	var max, min float64
 	max = 0
 	min = 12
 	var totalDevices int
 	var devices []devdto.Device
-	devices, _, err := devClient.GetDevices(context.Background(), devdto.QueryParameters{Filter: "", Order: devdto.OrderOptions{Order: "DESC", Field: "id"}, Pagination: devdto.PaginationOptions{Page: 1, Offset: 15}})
+
+	devices, _, err := devClient.GetDevices(context.Background(), filters.QueryParameters{Filters: []filterTypes.Filter{}, Sort: filters.SortOptions{SortMode: "DESC", SortField: "id"}, Pagination: filters.PaginationOptions{Limit: 10, Offset: 0}})
+
 	if err != nil {
 		fmt.Println(err)
 		return []devdto.Device{}, err
 	}
-	queryparams := RandomQueryParam(devices[0])
+
 	for k := 0; k < 10; k++ {
 		before := time.Now().UnixNano()
 		devs, total, err := devClient.GetDevices(context.Background(), queryparams)
@@ -210,30 +211,4 @@ func LatencyGetDevices(devClient lamassudevice.LamassuDeviceManagerClient, f *os
 	}
 
 	return devices, nil
-}
-func RandomQueryParam(device dto.Device) devdto.QueryParameters {
-	orders := []string{"ASC", "DESC"}
-	randomIndex := rand.Intn(len(orders))
-	order := orders[randomIndex]
-	fields := []string{"id", "alias", "status", "creation_ts", "key_strength", "tags", "dms_id"}
-	randomIndex = rand.Intn(len(fields))
-	field := fields[randomIndex]
-	var filt string
-	switch field {
-	case "id":
-		filt = device.Id
-	case "alias":
-		filt = device.Alias
-	case "status":
-		filt = device.Status
-	case "creation_ts":
-		filt = device.CreationTimestamp
-	case "key_strength":
-		filt = device.KeyMetadata.KeyStrength
-	case "tags":
-		filt = device.Tags[0]
-	case "dms_id":
-		filt = device.DmsId
-	}
-	return devdto.QueryParameters{Filter: "(" + field + "," + filt + ")", Order: devdto.OrderOptions{Order: order, Field: field}, Pagination: devdto.PaginationOptions{Page: 1, Offset: 50}}
 }
