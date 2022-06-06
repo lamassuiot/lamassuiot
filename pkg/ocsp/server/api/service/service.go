@@ -18,6 +18,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/crypto/ocsp"
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/secrets/responder"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 )
 
 type Service interface {
@@ -87,7 +88,7 @@ func (o *OCSPResponder) Verify(ctx context.Context, msg []byte) ([]byte, error) 
 		return nil, err
 	}
 
-	cas, err := o.lamassuCAClient.GetCAs(context.Background(), dto.Pki)
+	cas, err := o.lamassuCAClient.GetCAs(context.Background(), dto.Pki, filters.QueryParameters{})
 	if err != nil {
 		return nil, errors.New("Could not get CAs")
 	}
@@ -95,7 +96,7 @@ func (o *OCSPResponder) Verify(ctx context.Context, msg []byte) ([]byte, error) 
 	issuerCA = dto.Cert{}
 	var x509Certificate *x509.Certificate
 	//make sure the request is valid
-	for _, ca := range cas {
+	for _, ca := range cas.CAs {
 		data, _ := base64.StdEncoding.DecodeString(ca.CertContent.CerificateBase64)
 		block, _ := pem.Decode([]byte(data))
 		x509Certificate, err = x509.ParseCertificate(block.Bytes)

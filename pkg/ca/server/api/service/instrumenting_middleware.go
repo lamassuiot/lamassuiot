@@ -58,13 +58,13 @@ func (mw *instrumentingMiddleware) Stats(ctx context.Context) dto.Stats {
 	return mw.next.Stats(ctx)
 }
 
-func (mw *instrumentingMiddleware) GetCAs(ctx context.Context, caType dto.CAType) (CAs []dto.Cert, err error) {
+func (mw *instrumentingMiddleware) GetCAs(ctx context.Context, caType dto.CAType, queryparameters filters.QueryParameters) (CAs []dto.Cert, total int, err error) {
 	defer func(begin time.Time) {
 		lvs := []string{"method", "GetCAs", "error", fmt.Sprint(err != nil)}
 		mw.requestCount.With(lvs...).Add(1)
 		mw.requestLatency.With(lvs...).Observe(time.Since(begin).Seconds())
 	}(time.Now())
-	return mw.next.GetCAs(ctx, caType)
+	return mw.next.GetCAs(ctx, caType, queryparameters)
 }
 
 func (mw *instrumentingMiddleware) CreateCA(ctx context.Context, caType dto.CAType, caName string, privateKeyMetadata dto.PrivateKeyMetadata, subject dto.Subject, caTTL int, enrollerTTL int) (cretedCa dto.Cert, err error) {

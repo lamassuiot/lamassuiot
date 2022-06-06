@@ -125,8 +125,8 @@ func MakeGetCAsEndpoint(s service.Service) endpoint.Endpoint {
 
 		caType, _ := dto.ParseCAType(req.CaType)
 
-		cas, err := s.GetCAs(ctx, caType)
-		return cas, err
+		cas, totalcas, err := s.GetCAs(ctx, caType, req.QueryParameters)
+		return dto.GetCasResponse{TotalCas: totalcas, CAs: cas}, err
 	}
 }
 
@@ -314,7 +314,8 @@ type StatsRequest struct {
 }
 
 type GetCAsRequest struct {
-	CaType string
+	CaType          string
+	QueryParameters filters.QueryParameters
 }
 
 type CaRequest struct {

@@ -208,7 +208,8 @@ func decodeGetCAsRequest(ctx context.Context, r *http.Request) (request interfac
 	caTypeString, _ := vars["caType"]
 
 	return endpoint.GetCAsRequest{
-		CaType: caTypeString,
+		CaType:          caTypeString,
+		QueryParameters: filters.FilterQuery(r, filtrableCAModelFields()),
 	}, nil
 
 }
