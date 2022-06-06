@@ -1,7 +1,6 @@
 package filters
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -61,7 +60,6 @@ func FilterQuery(r *http.Request, fieldFiltersMap map[string]types.Filter) Query
 					fieldValue := strings.Trim(splitOperators[1], " ")
 					keys := maps.Keys(fieldFiltersMap)
 					keyExists := slices.Contains(keys, fieldName)
-					fmt.Println(fieldName)
 					if keyExists {
 						filter := fieldFiltersMap[fieldName]
 						switch castedFilter := filter.(type) {
@@ -122,6 +120,5 @@ func FilterQuery(r *http.Request, fieldFiltersMap map[string]types.Filter) Query
 			}
 		}
 	}
-	fmt.Println(queryParams)
 	return queryParams
 }

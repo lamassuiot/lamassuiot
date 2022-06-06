@@ -447,9 +447,9 @@ func testDeviceLogs() []dto.DeviceLog {
 func testDmsLastIssuedCert() []dto.DMSLastIssued {
 	var certList []dto.DMSLastIssued
 	cert := dto.DMSLastIssued{
-		DmsId:        "1",
-		Timestamp:    "",
-		SerialNumber: "",
+		DmsId:             "1",
+		CreationTimestamp: "",
+		SerialNumber:      "",
 	}
 	certList = append(certList, cert)
 	return certList

@@ -1,7 +1,6 @@
 package filters
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 )
@@ -30,6 +29,5 @@ func ApplySQLFilter(sqlStatement string, queryParameters QueryParameters) string
 	if queryParameters.Pagination.Offset > 0 {
 		sqlStatement = sqlStatement + " OFFSET " + strconv.Itoa(queryParameters.Pagination.Offset)
 	}
-	fmt.Println(sqlStatement)
 	return sqlStatement
 }

@@ -585,7 +585,7 @@ func TestDeviceHandler(t *testing.T) {
 
 				obj.Array().Length().Equal(1)
 				obj.Array().Element(0).Object().ContainsKey("dms_id")
-				obj.Array().Element(0).Object().ContainsKey("timestamp")
+				obj.Array().Element(0).Object().ContainsKey("creation_timestamp")
 				obj.Array().Element(0).Object().ContainsKey("serial_number")
 			},
 			testEstRestEndpoint: func(s *httpexpect.Expect) {

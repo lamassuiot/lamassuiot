@@ -13,8 +13,8 @@ import (
 	client "github.com/lamassuiot/lamassuiot/test/e2e/utils/clients"
 )
 
-var dmsCertFile = "./test/e2e/industrial-environment/dmsPer.crt"
-var dmsKeyFile = "./test/e2e/industrial-environment/dmsPer.key"
+var dmsCertFile = "./dmsPer.crt"
+var dmsKeyFile = "./dmsPer.key"
 
 func ManageCerts(caName string, scaleIndex int, certPath string, domain string) error {
 	var logger log.Logger
@@ -55,10 +55,12 @@ func ManageCerts(caName string, scaleIndex int, certPath string, domain string) 
 		return err
 	}
 
-	_, err = caClient.GetIssuedCerts(context.Background(), caDTO.Pki, caName, filters.QueryParameters{Filters: []filterTypes.Filter{}, Sort: filters.SortOptions{SortMode: "DESC", SortField: "id"}, Pagination: filters.PaginationOptions{Limit: 10, Offset: 0}})
+	_, err = caClient.GetIssuedCerts(context.Background(), caDTO.Pki, caName, filters.QueryParameters{Filters: []filterTypes.Filter{}, Sort: filters.SortOptions{}, Pagination: filters.PaginationOptions{Limit: 10, Offset: 0}})
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return err
 	}
+	os.Remove(dmsCertFile)
+	os.Remove(dmsKeyFile)
 	return nil
 }

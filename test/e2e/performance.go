@@ -27,7 +27,7 @@ func main() {
 
 func scaleTest(scaleIndex int, certPath string, domain string) {
 	fmt.Println("Scenario Manage CAs: " + strconv.Itoa(scaleIndex) + " CAs")
-	ca, err := cas.ManageCAs(2*scaleIndex, scaleIndex, certPath, domain)
+	ca, err := cas.ManageCAs(scaleIndex, scaleIndex, certPath, domain)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -48,7 +48,7 @@ func scaleTest(scaleIndex int, certPath string, domain string) {
 	}
 
 	fmt.Println("Scenario Manage DMSs: " + strconv.Itoa(scaleIndex) + " DMSs")
-	err = dmss.ManageDMSs(2*scaleIndex, dmsId, ca.Name, scaleIndex, certPath, domain)
+	err = dmss.ManageDMSs(scaleIndex, dmsId, ca.Name, scaleIndex, certPath, domain)
 	if err != nil {
 		fmt.Println(err)
 		return

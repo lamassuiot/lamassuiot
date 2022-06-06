@@ -44,11 +44,5 @@ func ManageDevices(scaleIndex int, certPath string, domain string) error {
 		level.Error(logger).Log("err", err)
 		return err
 	}
-
-	_, err = devClient.GetDeviceCert(context.Background(), devices[0].Id)
-	if err != nil {
-		level.Error(logger).Log("err", err)
-		return err
-	}
 	return nil
 }
