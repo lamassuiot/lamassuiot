@@ -18,7 +18,6 @@ func WriteFile(file *os.File, data [][]string) error {
 	writer := csv.NewWriter(file)
 	err := writer.WriteAll(data)
 	if err != nil {
-		fmt.Println(err)
 		return err
 	}
 	return nil

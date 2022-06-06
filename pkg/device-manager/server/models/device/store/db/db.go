@@ -538,7 +538,7 @@ func (db *DB) SelectDmssLastIssuedCert(ctx context.Context, queryParameters filt
 	var dmssLastIssued = []dto.DMSLastIssued{}
 	for rows.Next() {
 		var lastIssued dto.DMSLastIssued
-		err := rows.Scan(&lastIssued.DmsId, &lastIssued.Timestamp, &lastIssued.SerialNumber)
+		err := rows.Scan(&lastIssued.DmsId, &lastIssued.CreationTimestamp, &lastIssued.SerialNumber)
 		if err != nil {
 			return []dto.DMSLastIssued{}, err
 		}

@@ -63,9 +63,9 @@ type DMSCertHistory struct {
 }
 
 type DMSLastIssued struct {
-	DmsId        string `json:"dms_id"`
-	Timestamp    string `json:"timestamp"`
-	SerialNumber string `json:"serial_number"`
+	DmsId             string `json:"dms_id"`
+	CreationTimestamp string `json:"creation_timestamp"`
+	SerialNumber      string `json:"serial_number"`
 }
 
 type DeviceCertHistory struct {

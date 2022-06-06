@@ -11,7 +11,6 @@ import (
 	"io/ioutil"
 	"math/big"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/globalsign/pemfile"
@@ -30,10 +29,7 @@ func ManageCAs(caNumber int, scaleIndex int, certPath string, domain string) (ca
 	logger = level.NewFilter(logger, level.AllowDebug())
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	logger = log.With(logger, "caller", log.DefaultCaller)
-	var f, err = os.Create("./test/e2e/manage-cas/GetCAs_" + strconv.Itoa(scaleIndex) + ".csv")
-	if err != nil {
-		return caDTO.Cert{}, err
-	}
+
 	caClient, err := client.LamassuCaClient(certPath, domain)
 	if err != nil {
 		return caDTO.Cert{}, err
@@ -42,7 +38,7 @@ func ManageCAs(caNumber int, scaleIndex int, certPath string, domain string) (ca
 	for i := 0; i < caNumber; i++ {
 		caName := goid.NewV4UUID().String()
 
-		_, err = caClient.CreateCA(context.Background(), caDTO.Pki, caName, caDTO.PrivateKeyMetadata{KeyType: "rsa", KeyBits: 2048}, caDTO.Subject{CommonName: caName}, 365*time.Hour, 30*time.Hour)
+		_, err = caClient.CreateCA(context.Background(), caDTO.Pki, caName, caDTO.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 2048}, caDTO.Subject{CommonName: caName}, 365*time.Hour, 30*time.Hour)
 		if err != nil {
 			level.Error(logger).Log("err", err)
 			return caDTO.Cert{}, err
@@ -62,7 +58,7 @@ func ManageCAs(caNumber int, scaleIndex int, certPath string, domain string) (ca
 		level.Error(logger).Log("err", err)
 		return caDTO.Cert{}, err
 	}
-	certContent, err := ioutil.ReadFile("./test/e2e/manage-cas/ca.crt")
+	certContent, err := ioutil.ReadFile("./ca.crt")
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return caDTO.Cert{}, err
@@ -74,7 +70,7 @@ func ManageCAs(caNumber int, scaleIndex int, certPath string, domain string) (ca
 		level.Error(logger).Log("err", err)
 		return caDTO.Cert{}, err
 	}
-	privateKey, err := pemfile.ReadPrivateKey("./test/e2e/manage-cas/ca.key")
+	privateKey, err := pemfile.ReadPrivateKey("./ca.key")
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return caDTO.Cert{}, err
@@ -84,7 +80,8 @@ func ManageCAs(caNumber int, scaleIndex int, certPath string, domain string) (ca
 		level.Error(logger).Log("err", err)
 		return caDTO.Cert{}, err
 	}
-	f.Close()
+	os.Remove("./ca.crt")
+	os.Remove("./ca.key")
 	return ca, nil
 }
 func CreateCertKey() error {
@@ -123,13 +120,13 @@ func CreateCertKey() error {
 		Bytes: caBytes,
 	})
 
-	ioutil.WriteFile("./test/e2e/manage-cas/ca.crt", caPEM.Bytes(), 0777)
+	ioutil.WriteFile("./ca.crt", caPEM.Bytes(), 0777)
 
 	caPrivKeyPEM := new(bytes.Buffer)
 	pem.Encode(caPrivKeyPEM, &pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(caPrivKey),
 	})
-	ioutil.WriteFile("./test/e2e/manage-cas/ca.key", caPrivKeyPEM.Bytes(), 0777)
+	ioutil.WriteFile("./ca.key", caPrivKeyPEM.Bytes(), 0777)
 	return nil
 }
