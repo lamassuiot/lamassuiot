@@ -38,7 +38,7 @@ var deviceID = goid.NewV4UUID().String()
 
 func TestCaCertsLamassuEstClient(t *testing.T) {
 	os.Mkdir("./certificates", 0755)
-	caName, _ := CreateCa(*domain, *certPath)
+	caName, _ = CreateCa(*domain, *certPath)
 	_ = CreateDMS(*domain, *certPath, caName)
 	serverCert, _ := utils.ReadCertPool(*certPath)
 	dmsCert, _ := utils.ReadCert(dmsCertFile)
@@ -371,7 +371,7 @@ func CreateCa(domain string, certPath string) (string, error) {
 		return "", err
 	}
 	caName := goid.NewV4UUID().String()
-	ca, err := caClient.CreateCA(context.Background(), caDTO.Pki, caName, caDTO.PrivateKeyMetadata{KeyType: "rsa", KeyBits: 2048}, caDTO.Subject{CommonName: caName}, 365*time.Hour, 30*time.Hour)
+	ca, err := caClient.CreateCA(context.Background(), caDTO.Pki, caName, caDTO.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 2048}, caDTO.Subject{CommonName: caName}, 365*time.Hour, 30*time.Hour)
 	if err != nil {
 		return "", err
 	}

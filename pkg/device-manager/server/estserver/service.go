@@ -127,6 +127,9 @@ func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, a
 	}
 	caType, err := caDTO.ParseCAType("pki")
 	dataCert, _, err := s.lamassuCaClient.SignCertificateRequest(ctx, caType, aps, csr, true, csr.Subject.CommonName)
+	if err != nil {
+		return nil, err
+	}
 
 	deviceId = dataCert.Subject.CommonName
 	level.Debug(s.logger).Log("msg", csr.PublicKeyAlgorithm.String())
