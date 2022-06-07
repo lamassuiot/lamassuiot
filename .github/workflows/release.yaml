@@ -297,7 +297,9 @@ jobs:
           127.0.0.1  tracing.${DOMAIN}
           127.0.0.1  consul.${DOMAIN}
           EOT
+
           sed -i 's/30/'300000'/g' .env
+          
           bash install.sh
 
   integration_test:
