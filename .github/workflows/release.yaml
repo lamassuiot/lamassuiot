@@ -319,7 +319,7 @@ jobs:
         port: ${{ secrets.AWS_SSH_PORT }}
         script: |
           cd /home/ubuntu/lamassuiot
-          go run test/e2e/performance.go -domain=dev.lamassu.io -cert=/home/ubuntu/lamassu-compose/tls-certificates/downstream/tls.crt
+          go test -json -v test/e2e/performance_test.go -domain=dev.lamassu.io -cert=/home/ubuntu/lamassu-compose/tls-certificates/downstream/tls.crt | gotestfmt
           
   ocsp_test:
     name: OCSP test
