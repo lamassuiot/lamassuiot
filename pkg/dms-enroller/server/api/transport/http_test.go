@@ -77,7 +77,6 @@ func TestDMSHandler(t *testing.T) {
 				obj.Object().Value("dmss").Array().Element(0).Object().ContainsKey("name")
 				obj.Object().Value("dmss").Array().Element(0).Object().ContainsKey("key_metadata")
 				obj.Object().Value("dmss").Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("bits")
-				obj.Object().Value("dmss").Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("strength")
 				obj.Object().Value("dmss").Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("type")
 			},
 		},
