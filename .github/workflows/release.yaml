@@ -316,9 +316,8 @@ jobs:
         key: ${{ secrets.AWS_SSH_KEY }}
         port: ${{ secrets.AWS_SSH_PORT }}
         script: |
-          git clone https://github.com/lamassuiot/lamassuiot -b release
-          cd lamassuiot
-          go run test/e2e/performance.go -domain=dev.lamassu.io -cert=../lamassu-compose/tls-certificates/downstream/tls.crt
+          cd /home/ubuntu/lamassuiot
+          go run test/e2e/performance.go -domain=dev.lamassu.io -cert=/home/ubuntu/lamassu-compose/tls-certificates/downstream/tls.crt
           
   ocsp_test:
     name: OCSP test
@@ -338,6 +337,8 @@ jobs:
         script: |
           source /etc/profile.d/go.sh
           cd /home/ubuntu/lamassuiot
+          export DOMAIN=dev.lamassu.io
+          sed -i 's/dev\.lamassu\.io/'$DOMAIN'/g' ./test/ocsp/.env
           go install github.com/haveyoudebuggedit/gotestfmt/v2/cmd/gotestfmt@v2.3.1
           go test -json -v ./test/ocsp/ocsp_test.go -args -domain=dev.lamassu.io -cert=/home/ubuntu/lamassu-compose/tls-certificates/downstream/tls.crt -ocspSignKey=/home/ubuntu/lamassu-compose/tls-certificates/downstream/tls.key -ocspSignCert=/home/ubuntu/lamassu-compose/tls-certificates/downstream/tls.crt | gotestfmt
 
@@ -358,7 +359,9 @@ jobs:
         port: ${{ secrets.AWS_SSH_PORT }}
         script: |
           source /etc/profile.d/go.sh
-          cd lamassuiot
+          cd /home/ubuntu/lamassuiot
+          export DOMAIN=dev.lamassu.io
+          sed -i 's/dev\.lamassu\.io/'$DOMAIN'/g' ./test/est/.env
           go install github.com/haveyoudebuggedit/gotestfmt/v2/cmd/gotestfmt@v2.3.1
           go test -json -v ./test/est/est_test.go -args -domain=dev.lamassu.io -cert=/home/ubuntu/lamassu-compose/tls-certificates/downstream/tls.crt | gotestfmt
 
