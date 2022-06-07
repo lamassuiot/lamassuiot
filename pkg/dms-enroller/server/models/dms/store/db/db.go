@@ -12,6 +12,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/models/dms"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/models/dms/store"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 	"github.com/opentracing/opentracing-go"
 
 	"github.com/go-kit/kit/log"
@@ -60,13 +61,15 @@ func (db *DB) Insert(ctx context.Context, d dto.DMS) (string, error) {
 	return id, nil
 }
 
-func (db *DB) SelectAll(ctx context.Context) ([]dto.DMS, error) {
+func (db *DB) SelectAll(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMS, error) {
 	db.logger = ctx.Value(utils.LamassuLoggerContextKey).(log.Logger)
 	parentSpan := opentracing.SpanFromContext(ctx)
 	sqlStatement := `
 	SELECT * 
 	FROM dms_store;
 	`
+	sqlStatement = filters.ApplySQLFilter(sqlStatement, queryParameters)
+
 	span := opentracing.StartSpan("lamassu-dms-enroller: obtain DMSs from database", opentracing.ChildOf(parentSpan.Context()))
 	rows, err := db.Query(sqlStatement)
 	if err != nil {

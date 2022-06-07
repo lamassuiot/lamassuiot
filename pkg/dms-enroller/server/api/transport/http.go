@@ -12,6 +12,8 @@ import (
 	dmsErrors "github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
+	types "github.com/lamassuiot/lamassuiot/pkg/utils/server/filters/types"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/tracing/opentracing"
@@ -50,6 +52,15 @@ func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
 		return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
 	}
 }
+func filtrableDMSModelFields() map[string]types.Filter {
+	fieldFiltersMap := make(map[string]types.Filter)
+	fieldFiltersMap["id"] = &types.StringFilterField{}
+	fieldFiltersMap["name"] = &types.StringFilterField{}
+	fieldFiltersMap["serial_number"] = &types.StringFilterField{}
+	fieldFiltersMap["status"] = &types.StringFilterField{}
+	return fieldFiltersMap
+}
+
 func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentracing.Tracer) http.Handler {
 	r := mux.NewRouter()
 	e := endpoint.MakeServerEndpoints(s, otTracer)
@@ -157,8 +168,7 @@ func decodeHealthRequest(ctx context.Context, r *http.Request) (request interfac
 }
 
 func decodeGetDMSsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	var req endpoint.GetDmsRequest
-	return req, nil
+	return endpoint.GetDmsRequest{QueryParameters: filters.FilterQuery(r, filtrableDMSModelFields())}, nil
 }
 func decodeGetDMSbyIDRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)

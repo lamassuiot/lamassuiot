@@ -11,6 +11,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/common/dto"
 	dmsenrrors "github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/api/service"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -112,8 +113,8 @@ func MakeCreateDMSFormEndpoint(s service.Service) endpoint.Endpoint {
 
 func MakeGetDMSsEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		_ = request.(GetDmsRequest)
-		dmss, err := s.GetDMSs(ctx)
+		req := request.(GetDmsRequest)
+		dmss, err := s.GetDMSs(ctx, req.QueryParameters)
 		return dmss, err
 	}
 }
@@ -158,7 +159,9 @@ type HealthResponse struct {
 	Healthy bool  `json:"healthy,omitempty"`
 	Err     error `json:"err,omitempty"`
 }
-type GetDmsRequest struct{}
+type GetDmsRequest struct {
+	QueryParameters filters.QueryParameters
+}
 
 type GetDmsIDRequest struct {
 	ID string

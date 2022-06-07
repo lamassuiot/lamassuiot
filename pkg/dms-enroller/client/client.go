@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/common/dto"
 )
@@ -14,7 +15,7 @@ type LamassuEnrollerClient interface {
 	CreateDMSForm(ctx context.Context, subject dto.Subject, PrivateKeyMetadata dto.PrivateKeyMetadata, dmsName string) (string, dto.DMS, error)
 	UpdateDMSStatus(ctx context.Context, status string, id string, CAList []string) (dto.DMS, error)
 	DeleteDMS(ctx context.Context, id string) error
-	GetDMSs(ctx context.Context) ([]dto.DMS, error)
+	GetDMSs(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMS, error)
 	GetDMSbyID(ctx context.Context, id string) (dto.DMS, error)
 }
 
@@ -115,7 +116,7 @@ func (c *LamassuEnrollerClientConfig) GetDMSbyID(ctx context.Context, id string)
 	json.Unmarshal(jsonString, &dms)
 	return dms, nil
 }
-func (c *LamassuEnrollerClientConfig) GetDMSs(ctx context.Context) ([]dto.DMS, error) {
+func (c *LamassuEnrollerClientConfig) GetDMSs(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMS, error) {
 	req, err := c.client.NewRequest("GET", "v1/", nil)
 	if err != nil {
 		return []dto.DMS{}, err
