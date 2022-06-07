@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/hashicorp/errwrap"
 	"github.com/hashicorp/vault/sdk/framework"
 	"github.com/hashicorp/vault/sdk/helper/certutil"
 	"github.com/hashicorp/vault/sdk/helper/errutil"
@@ -15,9 +14,13 @@ import (
 func pathGenerateIntermediate(b *backend) *framework.Path {
 	ret := &framework.Path{
 		Pattern: "intermediate/generate/" + framework.GenericNameRegex("exported"),
-
-		Callbacks: map[logical.Operation]framework.OperationFunc{
-			logical.UpdateOperation: b.pathGenerateIntermediate,
+		Operations: map[logical.Operation]framework.OperationHandler{
+			logical.UpdateOperation: &framework.PathOperation{
+				Callback: b.pathGenerateIntermediate,
+				// Read more about why these flags are set in backend.go
+				ForwardPerformanceStandby:   true,
+				ForwardPerformanceSecondary: true,
+			},
 		},
 
 		HelpSynopsis:    pathGenerateIntermediateHelpSyn,
@@ -42,7 +45,7 @@ func pathSetSignedIntermediate(b *backend) *framework.Path {
 		Pattern: "intermediate/set-signed",
 
 		Fields: map[string]*framework.FieldSchema{
-			"certificate": &framework.FieldSchema{
+			"certificate": {
 				Type: framework.TypeString,
 				Description: `PEM-format certificate. This must be a CA
 certificate with a public key matching the
@@ -50,9 +53,13 @@ previously-generated key from the generation
 endpoint.`,
 			},
 		},
-
-		Callbacks: map[logical.Operation]framework.OperationFunc{
-			logical.UpdateOperation: b.pathSetSignedIntermediate,
+		Operations: map[logical.Operation]framework.OperationHandler{
+			logical.UpdateOperation: &framework.PathOperation{
+				Callback: b.pathSetSignedIntermediate,
+				// Read more about why these flags are set in backend.go
+				ForwardPerformanceStandby:   true,
+				ForwardPerformanceSecondary: true,
+			},
 		},
 
 		HelpSynopsis:    pathSetSignedIntermediateHelpSyn,
@@ -65,7 +72,7 @@ endpoint.`,
 func (b *backend) pathGenerateIntermediate(ctx context.Context, req *logical.Request, data *framework.FieldData) (*logical.Response, error) {
 	var err error
 
-	exported, format, role, errorResp := b.getGenerationParams(data)
+	exported, format, role, errorResp := b.getGenerationParams(ctx, data, req.MountPoint)
 	if errorResp != nil {
 		return errorResp, nil
 	}
@@ -76,7 +83,7 @@ func (b *backend) pathGenerateIntermediate(ctx context.Context, req *logical.Req
 		req:     req,
 		apiData: data,
 	}
-	parsedBundle, err := generateIntermediateCSR(b, input)
+	parsedBundle, err := generateIntermediateCSR(ctx, b, input, b.Backend.GetRandomReader())
 	if err != nil {
 		switch err.(type) {
 		case errutil.UserError:
@@ -88,7 +95,7 @@ func (b *backend) pathGenerateIntermediate(ctx context.Context, req *logical.Req
 
 	csrb, err := parsedBundle.ToCSRBundle()
 	if err != nil {
-		return nil, errwrap.Wrapf("error converting raw CSR bundle to CSR bundle: {{err}}", err)
+		return nil, fmt.Errorf("error converting raw CSR bundle to CSR bundle: %w", err)
 	}
 
 	resp = &logical.Response{
@@ -181,7 +188,7 @@ func (b *backend) pathSetSignedIntermediate(ctx context.Context, req *logical.Re
 		return logical.ErrorResponse("could not find an existing private key"), nil
 	}
 
-	parsedCB, err := cb.ToParsedCertBundle()
+	parsedCB, err := parseCABundle(ctx, b, req, cb)
 	if err != nil {
 		return nil, err
 	}
@@ -198,12 +205,12 @@ func (b *backend) pathSetSignedIntermediate(ctx context.Context, req *logical.Re
 	}
 
 	if err := inputBundle.Verify(); err != nil {
-		return nil, errwrap.Wrapf("verification of parsed bundle failed: {{err}}", err)
+		return nil, fmt.Errorf("verification of parsed bundle failed: %w", err)
 	}
 
 	cb, err = inputBundle.ToCertBundle()
 	if err != nil {
-		return nil, errwrap.Wrapf("error converting raw values into cert bundle: {{err}}", err)
+		return nil, fmt.Errorf("error converting raw values into cert bundle: %w", err)
 	}
 
 	entry, err = logical.StorageEntryJSON("config/ca_bundle", cb)

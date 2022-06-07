@@ -16,6 +16,7 @@ import (
 	"github.com/go-kit/kit/transport/http"
 	lamassuca "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	caDTO "github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 )
 
 type contextKey string
@@ -99,22 +100,31 @@ func VerifyPeerCertificate(ctx context.Context, cert *x509.Certificate, enroll b
 		}
 		return "", err
 	}
-	var certs []caDTO.Cert
+	var certs caDTO.GetCasResponse
 	if !enroll {
-		caType, err := caDTO.ParseCAType("pki")
-		certs, err = lamassuCaClient.GetCAs(ctx, caType)
-		if err != nil {
-			return "", err
+		caType, _ := caDTO.ParseCAType("pki")
+		limit := 50
+		i := 0
+		for {
+			cas, err := lamassuCaClient.GetCAs(ctx, caType, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: limit, Offset: i * limit}})
+			if err != nil {
+				return "", err
+			}
+			if len(cas.CAs) == 0 {
+				break
+			}
+			certs.CAs = append(certs.CAs, cas.CAs...)
+			i++
 		}
 	} else {
 		caType, err := caDTO.ParseCAType("dmsenroller")
-		certs, err = lamassuCaClient.GetCAs(ctx, caType)
+		certs, err = lamassuCaClient.GetCAs(ctx, caType, filters.QueryParameters{})
 		if err != nil {
 			return "", err
 		}
 	}
 	CAsCertificates := []*x509.Certificate{}
-	for _, v := range certs {
+	for _, v := range certs.CAs {
 		data, _ := base64.StdEncoding.DecodeString(v.CertContent.CerificateBase64)
 		block, _ := pem.Decode([]byte(data))
 		certificate, _ := x509.ParseCertificate(block.Bytes)
@@ -136,7 +146,7 @@ func VerifyPeerCertificate(ctx context.Context, cert *x509.Certificate, enroll b
 	CA := candidateCa[0][1]
 	b := pem.Block{Type: "CERTIFICATE", Bytes: CA.Raw}
 	var aps string
-	for _, v := range certs {
+	for _, v := range certs.CAs {
 		data, _ := base64.StdEncoding.DecodeString(v.CertContent.CerificateBase64)
 		block, _ := pem.Decode([]byte(data))
 		if bytes.Equal(block.Bytes, b.Bytes) {

@@ -95,9 +95,6 @@ func (c *ClientConfig) NewRequest(method string, path string, body interface{}) 
 			return nil, err
 		}
 	}
-	/*queryString := u.Query()
-	queryString.Set("page", queryParameters)
-	u.RawQuery = queryString.Encode()*/
 	req, err := http.NewRequest(method, u.String(), buf)
 	if err != nil {
 		return nil, err
@@ -116,15 +113,9 @@ func (c *ClientConfig) Do(req *http.Request) (interface{}, *http.Response, error
 		return nil, nil, err
 	}
 	if resp.StatusCode != 200 {
-		/*bodyBytes, err := io.ReadAll(resp.Body)
-		fmt.Println(string(bodyBytes))
-		fmt.Println(err)*/
 		return nil, resp, errors.New("Response with status code: " + strconv.Itoa(resp.StatusCode) + "")
 	}
 	defer resp.Body.Close()
-	// bodyBytes, err := io.ReadAll(resp.Body)
-	// fmt.Println(ByteCountDecimal(int64(len(bodyBytes))))
-	// resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 	err = json.NewDecoder(resp.Body).Decode(&v)
 	return v, resp, err
 }

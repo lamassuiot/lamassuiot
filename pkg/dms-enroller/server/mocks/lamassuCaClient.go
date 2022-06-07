@@ -37,11 +37,11 @@ func NewLamassuCaClientMock(logger log.Logger) (lamassuca.LamassuCaClient, error
 	}, nil
 }
 
-func (c *LamassuCaClientConfig) GetCAs(ctx context.Context, caType caDTO.CAType) ([]caDTO.Cert, error) {
+func (c *LamassuCaClientConfig) GetCAs(ctx context.Context, caType caDTO.CAType, queryparameters filters.QueryParameters) (caDTO.GetCasResponse, error) {
 
-	var CAs []caDTO.Cert
+	var CAs caDTO.GetCasResponse
 	newCA := testCert()
-	CAs = append(CAs, newCA)
+	CAs.CAs = append(CAs.CAs, newCA)
 	failDB := ctx.Value("DBShouldFail").(bool)
 
 	if failDB {

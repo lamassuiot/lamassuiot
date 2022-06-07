@@ -1,4 +1,4 @@
-// +build !openbsd
+//go:build !openbsd
 
 package hostutil
 
@@ -87,4 +87,18 @@ func CollectHostInfo(ctx context.Context) (*HostInfo, error) {
 	}
 
 	return info, retErr.ErrorOrNil()
+}
+
+func CollectHostMemory(ctx context.Context) (*VirtualMemoryStat, error) {
+	m, err := mem.VirtualMemoryWithContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &VirtualMemoryStat{
+		Total:       m.Total,
+		Available:   m.Available,
+		Used:        m.Used,
+		UsedPercent: m.UsedPercent,
+	}, nil
 }

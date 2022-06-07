@@ -8,7 +8,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -252,7 +251,7 @@ func TestEnroll(t *testing.T) {
 		ret  error
 	}{
 		{"Unauthorized CA", csr1, "IkerCA", &esterror.UnAuthorized{
-			ResourceType: "CA Name",
+			ResourceType: "DMS ID",
 			ResourceId:   "810fbd45-55a6-4dd7-8466-c3d3eb854357",
 		}},
 		{"Correct", csr1, "Lamassu DMS Enroller", nil},
@@ -290,12 +289,10 @@ func TestEnroll(t *testing.T) {
 
 			snInt := new(big.Int)
 			snInt, _ = snInt.SetString("15898402459309774930443891423546184692", 10)
-
-			// derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey(priv), priv)
-			certContent, err := ioutil.ReadFile("/home/ikerlan/lamassu/lamassuiot/nogit/dms.crt")
-
-			cpb, _ := pem.Decode(certContent)
-			dmsCrt, err := x509.ParseCertificate(cpb.Bytes)
+			certContent := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUU0akNDQXNxZ0F3SUJBZ0lVWWpGTUUrczhqZE9JTkF0Rkk1UHNMN0x5NDFVd0RRWUpLb1pJaHZjTkFRRUwKQlFBd05URVVNQklHQTFVRUNoTUxUR0Z0WVhOemRTQlFTMGt4SFRBYkJnTlZCQU1URkV4aGJXRnpjM1VnUkUxVApJRVZ1Y205c2JHVnlNQjRYRFRJeU1EVXdOVEV5TXpBME5Wb1hEVFF5TURRek1ERXlNekV4TlZvd1RURUpNQWNHCkExVUVCaE1BTVFrd0J3WURWUVFJRXdBeENUQUhCZ05WQkFjVEFERUpNQWNHQTFVRUNoTUFNUWt3QndZRFZRUUwKRXdBeEZEQVNCZ05WQkFNVEMwUmxabUYxYkhRdFJFMVRNSUlCb2pBTkJna3Foa2lHOXcwQkFRRUZBQU9DQVk4QQpNSUlCaWdLQ0FZRUEyMWpSU2VrVXNFM2s5TWdSbXV6YVQyNHpLeWZRMDA3QUpZQS82MktjQmtZdXlVWURNakdKCmhFQ3lBbGh2YWZjTVBiYUNwYTM3MmVlSDFpY3dQbzhqOHkxTENLMjFXM1loUDRNR0d2d2poWCtJLzQ4YkdkTTgKbFJEWXFsaDBYK2Y2TkZXd1kvTXdHQ1hBRU1nRE5kVWFNZkhjWXNYYko3OUtUeUwwbEw1NWNWWGs3ZGh6cGhDSApVTDFiZm4zVXM5aDdtcW5Na2ZrdFB1K1lGT0FkL2F5cytTQVBGMGNDOFU0SURwSE1hVjcyMlpHSkl2amhXRVBFClVZd3dmQmVXODdjZlZTb3AwdHpQejhkZW01KzA3UmVlbk1DanRRMGxZcmhLbi9KeVNTQVpoMm5Gb0ttdXZKc2oKQk9jL0hlaHVGME5yTHlHRFU5M01tNlY4Ny9PL3VYOG9Oc1BSZWM5UzRWTlFXUG9pVlViSTVwSGw4dVZzRG1tcgp2L2prQ3E1ZUJMZTVzMHRhbjdIbDNobjVXQU5RMk51azRVeTF0SlZENzl0Z1g4ODExbWp4eEo1b1dBQWxjVUNDCi9GMmthRmdSSllEQVdSbm9yZW4ybGdKcVdTU3VGL1liVXkybGZWMHZvV1AvVlV5RE1nS01HdGZjSFhiNG8yOWMKUFYxMXYvT3FOaXQvQWdNQkFBR2pVakJRTUE0R0ExVWREd0VCL3dRRUF3SURxREFkQmdOVkhRNEVGZ1FVSGhYMwpzSHFINHpnZnFmM1RLWnAvRDhxd2NJQXdId1lEVlIwakJCZ3dGb0FVRkhCL1pqcDBOVUk4YnVpN0FCMXZkNFZCCi9FZ3dEUVlKS29aSWh2Y05BUUVMQlFBRGdnSUJBRlpHcFpia3Rmbk1FR3NEYUo2ZWtRL2ZkekQ4aHBnTE5BS2EKSHc4aHMzS0F2Q3QrMUM3bzJyR2JKcXg3K1UvYzlJSjR6V1BEOEtZQS9id1lyZ2RLWXp5MUk3dDhjSmViZUdTNQpiYy9xMEgwRVdrbHphTEM5RUlrRlc3bnAyRHhmd3ZOb083cjllN1puMDc4WWd6b2xjV3MwbGFpT3FBbmtRcUkyClhnd3dudU9zQ28waFYwQ3pYUlJlTkt6bVdPVVNVVHNRRS9pMDNJL0pJdkRPZm9VNUo3TXFpNVNvajlmTllzSlEKVHlKbGhlQlZZZmRIeXNSTVFzVzV6K0NNbVRwTlUxRnF1VGVER2hMbjdEOWNaVDJuRk9jVGIvczBla2FHci9zeQpGSDlzeG8rWUNMczlXM3NNUnNLS3F0UW90aDlWdzA5TUVJWCtaTWUxVUxWbXM4RHh0ZEg2Y0ZhMkZNVzNYc1NoCnRxdlc1N3UxNUd0Yk5aTEFjOEZOaG8xLzZuck5NdVdJNW4ycVFVNTZDN09MR0UraXlZVzhCS3hOeWJMWUdReVYKcy9EQWN0S0FLVFlLaGcvKzIwb2lwZlhncVZkN0tBTldkN3hQVkZoeFJFM1Vsb1pFbWNISm83TXJrclBFbG9mbworNVBneitMVEtQZ1loa2JLaWxtNENRM2RGVXNQRW9jTWVXWk5hQmdDNk1CbmRrNkJOWFRoMDVuVXVMcWJlQ3BTCmlwMHF0aE5nNUgvS0VaQ0tucTk4dDkxaHV2UW0wRUFzY1hQZk1BSHJVRXgwK1NNUVZZMUhzTWF1K1BKUzZUUVoKU0ZvbkpGbTZuWVZEbjNnby9adTlWRmFJSkZrZXVLQnBTTzQzR3Y2c2M3cGxNSmZ1UFY0TFJpNTRFRWR6RmoxRQpiajFQMExMbQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0t"
+			data, _ := base64.StdEncoding.DecodeString(certContent)
+			block, _ := pem.Decode([]byte(data))
+			dmsCrt, err := x509.ParseCertificate(block.Bytes)
 
 			_, err = srv.Enroll(ctx, tc.csr, tc.aps, dmsCrt)
 			if err != nil {
@@ -345,7 +342,7 @@ func TestServerKeyGen(t *testing.T) {
 		ret  error
 	}{
 		{"Unauthorized CA", csr1, "IkerCA", &esterror.UnAuthorized{
-			ResourceType: "CA Name",
+			ResourceType: "DMS ID",
 			ResourceId:   "810fbd45-55a6-4dd7-8466-c3d3eb854357",
 		}},
 		{"Correct", csr1, "Lamassu DMS Enroller", nil},
@@ -383,10 +380,10 @@ func TestServerKeyGen(t *testing.T) {
 			snInt := new(big.Int)
 			snInt, _ = snInt.SetString("15898402459309774930443891423546184692", 10)
 
-			certContent, err := ioutil.ReadFile("/home/ikerlan/lamassu/lamassuiot/nogit/dms.crt")
-
-			cpb, _ := pem.Decode(certContent)
-			dmsCrt, _ := x509.ParseCertificate(cpb.Bytes)
+			certContent := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUU0akNDQXNxZ0F3SUJBZ0lVWWpGTUUrczhqZE9JTkF0Rkk1UHNMN0x5NDFVd0RRWUpLb1pJaHZjTkFRRUwKQlFBd05URVVNQklHQTFVRUNoTUxUR0Z0WVhOemRTQlFTMGt4SFRBYkJnTlZCQU1URkV4aGJXRnpjM1VnUkUxVApJRVZ1Y205c2JHVnlNQjRYRFRJeU1EVXdOVEV5TXpBME5Wb1hEVFF5TURRek1ERXlNekV4TlZvd1RURUpNQWNHCkExVUVCaE1BTVFrd0J3WURWUVFJRXdBeENUQUhCZ05WQkFjVEFERUpNQWNHQTFVRUNoTUFNUWt3QndZRFZRUUwKRXdBeEZEQVNCZ05WQkFNVEMwUmxabUYxYkhRdFJFMVRNSUlCb2pBTkJna3Foa2lHOXcwQkFRRUZBQU9DQVk4QQpNSUlCaWdLQ0FZRUEyMWpSU2VrVXNFM2s5TWdSbXV6YVQyNHpLeWZRMDA3QUpZQS82MktjQmtZdXlVWURNakdKCmhFQ3lBbGh2YWZjTVBiYUNwYTM3MmVlSDFpY3dQbzhqOHkxTENLMjFXM1loUDRNR0d2d2poWCtJLzQ4YkdkTTgKbFJEWXFsaDBYK2Y2TkZXd1kvTXdHQ1hBRU1nRE5kVWFNZkhjWXNYYko3OUtUeUwwbEw1NWNWWGs3ZGh6cGhDSApVTDFiZm4zVXM5aDdtcW5Na2ZrdFB1K1lGT0FkL2F5cytTQVBGMGNDOFU0SURwSE1hVjcyMlpHSkl2amhXRVBFClVZd3dmQmVXODdjZlZTb3AwdHpQejhkZW01KzA3UmVlbk1DanRRMGxZcmhLbi9KeVNTQVpoMm5Gb0ttdXZKc2oKQk9jL0hlaHVGME5yTHlHRFU5M01tNlY4Ny9PL3VYOG9Oc1BSZWM5UzRWTlFXUG9pVlViSTVwSGw4dVZzRG1tcgp2L2prQ3E1ZUJMZTVzMHRhbjdIbDNobjVXQU5RMk51azRVeTF0SlZENzl0Z1g4ODExbWp4eEo1b1dBQWxjVUNDCi9GMmthRmdSSllEQVdSbm9yZW4ybGdKcVdTU3VGL1liVXkybGZWMHZvV1AvVlV5RE1nS01HdGZjSFhiNG8yOWMKUFYxMXYvT3FOaXQvQWdNQkFBR2pVakJRTUE0R0ExVWREd0VCL3dRRUF3SURxREFkQmdOVkhRNEVGZ1FVSGhYMwpzSHFINHpnZnFmM1RLWnAvRDhxd2NJQXdId1lEVlIwakJCZ3dGb0FVRkhCL1pqcDBOVUk4YnVpN0FCMXZkNFZCCi9FZ3dEUVlKS29aSWh2Y05BUUVMQlFBRGdnSUJBRlpHcFpia3Rmbk1FR3NEYUo2ZWtRL2ZkekQ4aHBnTE5BS2EKSHc4aHMzS0F2Q3QrMUM3bzJyR2JKcXg3K1UvYzlJSjR6V1BEOEtZQS9id1lyZ2RLWXp5MUk3dDhjSmViZUdTNQpiYy9xMEgwRVdrbHphTEM5RUlrRlc3bnAyRHhmd3ZOb083cjllN1puMDc4WWd6b2xjV3MwbGFpT3FBbmtRcUkyClhnd3dudU9zQ28waFYwQ3pYUlJlTkt6bVdPVVNVVHNRRS9pMDNJL0pJdkRPZm9VNUo3TXFpNVNvajlmTllzSlEKVHlKbGhlQlZZZmRIeXNSTVFzVzV6K0NNbVRwTlUxRnF1VGVER2hMbjdEOWNaVDJuRk9jVGIvczBla2FHci9zeQpGSDlzeG8rWUNMczlXM3NNUnNLS3F0UW90aDlWdzA5TUVJWCtaTWUxVUxWbXM4RHh0ZEg2Y0ZhMkZNVzNYc1NoCnRxdlc1N3UxNUd0Yk5aTEFjOEZOaG8xLzZuck5NdVdJNW4ycVFVNTZDN09MR0UraXlZVzhCS3hOeWJMWUdReVYKcy9EQWN0S0FLVFlLaGcvKzIwb2lwZlhncVZkN0tBTldkN3hQVkZoeFJFM1Vsb1pFbWNISm83TXJrclBFbG9mbworNVBneitMVEtQZ1loa2JLaWxtNENRM2RGVXNQRW9jTWVXWk5hQmdDNk1CbmRrNkJOWFRoMDVuVXVMcWJlQ3BTCmlwMHF0aE5nNUgvS0VaQ0tucTk4dDkxaHV2UW0wRUFzY1hQZk1BSHJVRXgwK1NNUVZZMUhzTWF1K1BKUzZUUVoKU0ZvbkpGbTZuWVZEbjNnby9adTlWRmFJSkZrZXVLQnBTTzQzR3Y2c2M3cGxNSmZ1UFY0TFJpNTRFRWR6RmoxRQpiajFQMExMbQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0t"
+			data, _ := base64.StdEncoding.DecodeString(certContent)
+			block, _ := pem.Decode([]byte(data))
+			dmsCrt, err := x509.ParseCertificate(block.Bytes)
 
 			_, _, err = srv.ServerKeyGen(ctx, tc.csr, tc.aps, dmsCrt)
 			if err != nil {
@@ -429,7 +426,7 @@ func TestCACerts(t *testing.T) {
 		ret  error
 	}{
 		{"Empty request", "", nil, nil},
-		{"Error getting CAs", "", nil, errors.New("validation error: Error in client request")},
+		{"Error getting CAs", "", nil, errors.New("Error in client request")},
 	}
 
 	for _, tc := range testCases {
@@ -474,105 +471,7 @@ func testCA() *x509.Certificate {
 	CA := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUZtVENDQTRHZ0F3SUJBZ0lVSG1yc3dnVms3MlZtZjF1dWU3UVZKUm5vTEljd0RRWUpLb1pJaHZjTkFRRUwKQlFBd1hERUxNQWtHQTFVRUJoTUNSVk14RVRBUEJnTlZCQWdNQ0VkcGNIVjZhMjloTVJFd0R3WURWUVFIREFoQgpjbkpoYzJGMFpURU1NQW9HQTFVRUNnd0RTVXRNTVF3d0NnWURWUVFMREFOYVVFUXhDekFKQmdOVkJBTU1Ba05CCk1CNFhEVEl5TURJeE5qRXhORGd4TTFvWERUSXpNREl4TmpFeE5EZ3hNMW93WERFTE1Ba0dBMVVFQmhNQ1JWTXgKRVRBUEJnTlZCQWdNQ0VkcGNIVjZhMjloTVJFd0R3WURWUVFIREFoQmNuSmhjMkYwWlRFTU1Bb0dBMVVFQ2d3RApTVXRNTVF3d0NnWURWUVFMREFOYVVFUXhDekFKQmdOVkJBTU1Ba05CTUlJQ0lqQU5CZ2txaGtpRzl3MEJBUUVGCkFBT0NBZzhBTUlJQ0NnS0NBZ0VBbWhONFVIdnRUcTVyelhXN01ibzltNTRicXRoeVlvdlNOODZmWkxFN0FqS3gKSVVpU0JCSVFUZkwyWVdqdXB5NFFBR0ZhU085WXk1Q1MvOVV1MWZTYTkrcFJ1QmVBZ1hVSTVzcXhlZEN6WEtScgpPT0R3L1I0dGkydVJUUEpzZWJ2K3l3MUswd3Z0R00yTXlLYTMyNFRMZnQ5UE05Nlc5VWsrOHlYc1dYQlo2Z1g4CnQ5cHJydkFrWkNRUlhDbTZ5amg1RWRIb2QxRy82TU95Y0RMVVN6RGhwcVpHaFVjTnl0RUxiOHA2ZGllNTRPOVoKWlB3TDl2QmpWemNROHo0WDBiWi9RbFJUcWhIQXJxUUxHaG02TTlTdkxUM0hLU1NoL1BpU2JhODk1V3h0OGJNMAo0Um9zYy96aDN3eVVSZVV1SFdQZm9uQWFGWjAxNFJCQ1Bud3Zub0dVeW8xRDIreWxncnhqRkJOQndzbm0rU1NPClVnN09JU05XaDRHK1RYa2JrK1RSajEvV0RGV2lDcC8wdmlacS95ZE02WWJNRHp2eWl0NWhsUnBxNXpYTzVFZi8KYlZmbVk0RXd2Ukx2RkVkNE1SelI2SWQrRjB4UWd1MFFWWmYwZHdGVU12V2Q2dUZOa3NSbDl2Z3hiNmZyQVFHbgp1VkVvTnVBN1VUZ1NCOVA5aXFKY2tBMFhacjQyaEcwYUw2b0FPdUxYZHU0azFkcm5ZMzRwdFhPRGNuRjBBMWl2ClV6SFhCNm9UNlRhSk5hQUlRVm5ETWJhWkRjcldGdmpVam9TNU45L2crQlRmVW42dWV1U3MzaTk5cHlZWTJ2Z24KVDFyV2xHUng2azQ5V2tBajQ3OG1wdFd6K01VeFJJVkl5bFlCNmxlMGUvMHlLR3FuZWd1R3Z4N0JjanhqTVhFQwpBd0VBQWFOVE1GRXdIUVlEVlIwT0JCWUVGQjNTNkE5NTQzT21oaTNhVFpYQVM2VjRiRjlKTUI4R0ExVWRJd1FZCk1CYUFGQjNTNkE5NTQzT21oaTNhVFpYQVM2VjRiRjlKTUE4R0ExVWRFd0VCL3dRRk1BTUJBZjh3RFFZSktvWkkKaHZjTkFRRUxCUUFEZ2dJQkFGdHFRVEZUNGozcmUwanJrSjZBUDBrMk0raWhYall0MVk1c0ZvbWNaY2pFaWVKcApETDJDam04WEdnRWNHdkp6K01oSDY1T2hITHZIRU9tbjkvckcwWStsTzhhYmhTQ1pIZWVqYWRLNEFSSlhHSlQ3CkZPRVBDNjgrRVl5SG9wai8xUmRCSXhjMkN4WFFwOC9IYzA2bDVOUTBZS3ZmYW5vM0ZGSFZEN09YT2tQSTVNSWcKN1JDOWVNL2Z4NlVyaHNhVTNERzlMcVBxNEMzcFFmRnEvTHBublBnYjRsbmlRQVZ0ZXRoWWhNSHFDUHdMMVJvQQoxTmdUZmJrWjBQaDl6N2cySUF4MW9SOXo5dWk0WWRWOVpycjhQTDBPaG4zM3BPbFJrZDNUcWJiY3FWcHBEL282CmFYZlJVU2taQWhoMXg4MlpzN2U2b2x4ekNTc3p0KzhUOTRtU0I5OWRoSDJiVnh4RWpPb3cvSklwNnlMT2JnUGcKdjZaRzROMEVaU2JlSGRzZ2ovbTd6RHg5Tlk2WGkrTUpidGlZdkRrdWpnRjdPanpVZkF3TUFaRzdOR0YraDNMWgpKb2EzQUg0ZDQ2UjFRVXRLQTdmUEpVb0pTb0xTVDZSOW9PR3dacUEzK1p6dDd4VFNoZkc2VDY0OWYxZ2c3OFhoCmRtM3hRYjZERUQvYk1iY3hGZUlvUW0yTklBS3VyUkMrV0hCMXFpZWlEdnZNd21IdjZGNHlvVWpNWEsyQVdWZysKWEJmb01KejZTYWZaOFlBWEhyVWdCdG8rVi95WTNaZzErOWdva0ZIOUkySHRFK1dOeUZjdUc3NEFoWlNMUHdiVgpwaE1FQUhHeTZVZWZaWlVpRTJ4SHFZRElDbVlWUlBUNGdrWlNqTXFKRDZ6ZExWTUNLcG81RnFXbEdvZEQKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQ=="
 	CACert, _ := StringToCert(CA)
 	return CACert
-	/*
-		serialNumber := "23-33-5b-19-c8-ed-8b-2a-92-5c-7b-57-fc-47-45-e7-12-03-91-23"
-
-		keyMetadata := secrets.KeyInfo{
-			KeyType:     "rsa",
-			KeyBits:     4096,
-			KeyStrength: "",
-		}
-
-		subject := secrets.Subject{
-			C:  "ES",
-			ST: "Gipuzkoa",
-			L:  "Locality",
-			O:  "Organization",
-			OU: "OrganizationalUnit",
-			CN: "CommonName",
-		}
-
-		certContent := secrets.CertContent{
-			CerificateBase64: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUNURENDQWZPZ0F3SUJBZ0lVZnRXcTVObnpXZHUrSHk2S1RTMmpWazcybzRjd0NnWUlLb1pJemowRUF3SXcKY3pFTE1Ba0dBMVVFQmhNQ1JWTXhFVEFQQmdOVkJBZ1RDRWRwY0hWNmEyOWhNUkV3RHdZRFZRUUhFd2hCY25KaApjMkYwWlRFaE1BNEdBMVVFQ2hNSFV5NGdRMjl2Y0RBUEJnTlZCQW9UQ0V4TFV5Qk9aWGgwTVJzd0dRWURWUVFECkV4Sk1TMU1nVG1WNGRDQlNiMjkwSUVOQklETXdJQmNOTWpJd01USXdNVEV3TWpJMVdoZ1BNakExTWpBeE1UTXgKTVRBeU5UVmFNSE14Q3pBSkJnTlZCQVlUQWtWVE1SRXdEd1lEVlFRSUV3aEhhWEIxZW10dllURVJNQThHQTFVRQpCeE1JUVhKeVlYTmhkR1V4SVRBT0JnTlZCQW9UQjFNdUlFTnZiM0F3RHdZRFZRUUtFd2hNUzFNZ1RtVjRkREViCk1Ca0dBMVVFQXhNU1RFdFRJRTVsZUhRZ1VtOXZkQ0JEUVNBek1Ga3dFd1lIS29aSXpqMENBUVlJS29aSXpqMEQKQVFjRFFnQUU1aTFxZnlZU2xLaWt3SDhGZkhvQWxVWE44RlE3aE1OMERaTk8vVzdiSE44NVFpZ09ZeVQ1bWNYMgpXbDJtSTVEL0xQT1BKd0l4N1ZZcmxZU1BMTm5ndjZOak1HRXdEZ1lEVlIwUEFRSC9CQVFEQWdFR01BOEdBMVVkCkV3RUIvd1FGTUFNQkFmOHdIUVlEVlIwT0JCWUVGUGRURSs3a0k2MXFXSHFtUktZai9OaElIS01lTUI4R0ExVWQKSXdRWU1CYUFGUGRURSs3a0k2MXFXSHFtUktZai9OaElIS01lTUFvR0NDcUdTTTQ5QkFNQ0EwY0FNRVFDSUI2QQptZStjRzQ0MjBpNE5QZ1ZwWVRHN3hFN2lvbG0xOXhqRC9PcS9TeWt0QWlBaWRBK2JTanpvVHZxckRieDBqaHBiCmJpTnFycHZJY255TEY1MXQ5cHdBL1E9PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0t",
-			PublicKeyBase64:  "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUZrd0V3WUhLb1pJemowQ0FRWUlLb1pJemowREFRY0RRZ0FFNWkxcWZ5WVNsS2lrd0g4RmZIb0FsVVhOOEZRNwpoTU4wRFpOTy9XN2JITjg1UWlnT1l5VDVtY1gyV2wybUk1RC9MUE9QSndJeDdWWXJsWVNQTE5uZ3Z3PT0KLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0tCg==",
-		}
-
-		cert := secrets.Cert{
-			Status:       "issued",
-			SerialNumber: serialNumber,
-			Name:         caName,
-			KeyMetadata:  keyMetadata,
-			Subject:      subject,
-			CertContent:  certContent,
-			CaTTL:        2000,
-			EnrollerTTL:  1000,
-			ValidFrom:    "2022-01-31 15:00:08 +0000 UTC",
-			ValidTo:      "2022-04-18 23:00:37 +0000 UTC",
-		}
-		return cert*/
 }
-
-/*func NewVaultSecretsMock(t *testing.T) (*vaultApi.Client, error) {
-	t.Helper()
-
-	coreConfig := &vault.CoreConfig{
-		LogicalBackends: map[string]logical.Factory{
-			"pki": pki.Factory,
-		},
-	}
-
-	core, keyShares, rootToken := vault.TestCoreUnsealedWithConfig(t, coreConfig)
-	_ = keyShares
-
-	_, addr := httpa.TestServer(t, core)
-
-	conf := vaultApi.DefaultConfig()
-	conf.Address = strings.ReplaceAll(conf.Address, "https://127.0.0.1:8200", addr)
-
-	client, err := vaultApi.NewClient(conf)
-	if err != nil {
-		return nil, err
-	}
-	client.SetToken(rootToken)
-
-	//Mount CA PKI Backend
-	_, err = client.Logical().Write("sys/mounts/Lamassu-Root-CA1-RSA4096", map[string]interface{}{
-		"type": "pki",
-		"config": map[string]interface{}{
-			"max_lease_ttl": "262800h",
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	//Setup CA Role
-	_, err = client.Logical().Write("Lamassu-Root-CA1-RSA4096/roles/enroller", map[string]interface{}{
-		"allow_any_name": true,
-		"max_ttl":        "262800h",
-		"key_type":       "any",
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	//Setup CA internal root certificate
-	_, err = client.Logical().Write("Lamassu-Root-CA1-RSA4096/root/generate/internal", map[string]interface{}{
-		"common_name":  "LKS Next Root CA 1",
-		"key_type":     "rsa",
-		"key_bits":     "4096",
-		"organization": "LKS Next S. Coop",
-		"country":      "ES",
-		"ttl":          "262800h",
-		"province":     "Gipuzkoa",
-		"locality":     "Arrasate",
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return client, err
-}*/
 
 func testGetDeviceCert() dto.DeviceCert {
 	subject := dto.Subject{

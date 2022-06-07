@@ -25,6 +25,7 @@ import (
 	dmsStore "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/dms/store"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/utils"
 	lamassuUtils "github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 
 	esterror "github.com/lamassuiot/lamassuiot/pkg/est/server/api/errors"
 	lamassuest "github.com/lamassuiot/lamassuiot/pkg/est/server/api/service"
@@ -64,18 +65,24 @@ func (s *EstService) Health(ctx context.Context) bool {
 }
 
 func (s *EstService) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
-	caType, err := caDTO.ParseCAType("pki")
-	certs, err := s.lamassuCaClient.GetCAs(ctx, caType)
-	if err != nil {
-		level.Debug(s.logger).Log("err", err, "msg", "Error in client request")
-		valError := esterror.ValidationError{
-			Msg: err.Error(),
+	caType, _ := caDTO.ParseCAType("pki")
+	var certs caDTO.GetCasResponse
+	limit := 50
+	i := 0
+	for {
+		cas, err := s.lamassuCaClient.GetCAs(ctx, caType, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: limit, Offset: i * limit}})
+		if err != nil {
+			return nil, err
 		}
-		return nil, &valError
+		if len(cas.CAs) == 0 {
+			break
+		}
+		certs.CAs = append(certs.CAs, cas.CAs...)
+		i++
 	}
 
 	x509Certificates := []*x509.Certificate{}
-	for _, v := range certs {
+	for _, v := range certs.CAs {
 		data, _ := base64.StdEncoding.DecodeString(v.CertContent.CerificateBase64)
 		block, _ := pem.Decode([]byte(data))
 		cert, _ := x509.ParseCertificate(block.Bytes)
@@ -120,6 +127,9 @@ func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, a
 	}
 	caType, err := caDTO.ParseCAType("pki")
 	dataCert, _, err := s.lamassuCaClient.SignCertificateRequest(ctx, caType, aps, csr, true, csr.Subject.CommonName)
+	if err != nil {
+		return nil, err
+	}
 
 	deviceId = dataCert.Subject.CommonName
 	level.Debug(s.logger).Log("msg", csr.PublicKeyAlgorithm.String())

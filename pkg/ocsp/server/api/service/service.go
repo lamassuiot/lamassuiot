@@ -18,6 +18,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/crypto/ocsp"
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/secrets/responder"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 )
 
 type Service interface {
@@ -80,22 +81,30 @@ func (o *OCSPResponder) Health(ctx context.Context) bool {
 func (o *OCSPResponder) Verify(ctx context.Context, msg []byte) ([]byte, error) {
 	var status int
 	var revokedAt time.Time
-
+	var certs dto.GetCasResponse
+	limit := 50
+	i := 0
 	// parse the request
 	req, exts, err := ocsp.ParseRequest(msg)
 	if err != nil {
 		return nil, err
 	}
-
-	cas, err := o.lamassuCAClient.GetCAs(context.Background(), dto.Pki)
-	if err != nil {
-		return nil, errors.New("Could not get CAs")
+	for {
+		cas, err := o.lamassuCAClient.GetCAs(ctx, dto.Pki, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: limit, Offset: i * limit}})
+		if err != nil {
+			return nil, errors.New("Could not get CAs")
+		}
+		if len(cas.CAs) == 0 {
+			break
+		}
+		certs.CAs = append(certs.CAs, cas.CAs...)
+		i++
 	}
 	var issuerCA dto.Cert
 	issuerCA = dto.Cert{}
 	var x509Certificate *x509.Certificate
 	//make sure the request is valid
-	for _, ca := range cas {
+	for _, ca := range certs.CAs {
 		data, _ := base64.StdEncoding.DecodeString(ca.CertContent.CerificateBase64)
 		block, _ := pem.Decode([]byte(data))
 		x509Certificate, err = x509.ParseCertificate(block.Bytes)

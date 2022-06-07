@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -186,7 +185,6 @@ func DecodeEnrollRequest(ctx context.Context, r *http.Request) (request interfac
 
 	} else if len(r.TLS.PeerCertificates) != 0 {
 		cert := r.TLS.PeerCertificates[0]
-		fmt.Printf("cert.Subject.CommonName: %v\n", cert.Subject.CommonName)
 		req := endpoint.EnrollRequest{
 			Csr: csr,
 			Crt: cert,

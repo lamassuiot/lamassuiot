@@ -178,7 +178,7 @@ func TestGetCAs(t *testing.T) {
 			if tc.name == "Incorrect" {
 				ctx = context.WithValue(ctx, "DBIncorrect", true)
 			}
-			_, err := srv.GetCAs(ctx, caType)
+			_, _, err := srv.GetCAs(ctx, caType, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: 50, Offset: 0}})
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
@@ -308,7 +308,7 @@ func TestGetIssuedCerts(t *testing.T) {
 			if tc.name == "Incorrect" {
 				ctx = context.WithValue(ctx, "DBIncorrect", true)
 			}
-			_, _, err := srv.GetIssuedCerts(ctx, caType, newCA.Name, filters.QueryParameters{})
+			_, _, err := srv.GetIssuedCerts(ctx, caType, newCA.Name, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: 50, Offset: 0}})
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
@@ -504,7 +504,7 @@ func testCA(caName string) dto.Cert {
 	serialNumber := "54-91-80-de-65-98-1b-7f-7a-a4-08-4b-99-ae-8c-d8-8a-69-6b-8e"
 
 	keyMetadata := dto.PrivateKeyMetadataWithStregth{
-		KeyType: "rsa",
+		KeyType: "RSA",
 		KeyBits: 4096,
 		//KeyStrength: "",
 	}

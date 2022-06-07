@@ -17,6 +17,6 @@ type ImportCARequestPayload struct {
 
 type SignPayload struct {
 	Csr          string `json:"csr" validate:"base64"`
-	CommonName   string `json:"cn" validate:"required"`
+	CommonName   string `json:"cn"`
 	SignVerbatim bool   `json:"sign_verbatim"`
 }

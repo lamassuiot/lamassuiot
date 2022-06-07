@@ -65,7 +65,7 @@ func (mw loggingMiddleware) Health(ctx context.Context) (healthy bool) {
 	return mw.next.Health(ctx)
 }
 
-func (mw loggingMiddleware) GetCAs(ctx context.Context, caType dto.CAType) (CAs []dto.Cert, err error) {
+func (mw loggingMiddleware) GetCAs(ctx context.Context, caType dto.CAType, queryparameters filters.QueryParameters) (CAs []dto.Cert, total int, err error) {
 	defer func(begin time.Time) {
 		mw.logger.Log(
 			"method", "GetCAs",
@@ -76,7 +76,7 @@ func (mw loggingMiddleware) GetCAs(ctx context.Context, caType dto.CAType) (CAs 
 			"trace_id", opentracing.SpanFromContext(ctx),
 		)
 	}(time.Now())
-	return mw.next.GetCAs(ctx, caType)
+	return mw.next.GetCAs(ctx, caType, queryparameters)
 }
 
 func (mw loggingMiddleware) CreateCA(ctx context.Context, caType dto.CAType, caName string, privateKeyMetadata dto.PrivateKeyMetadata, subject dto.Subject, caTTL int, enrollerTTL int) (cretedCa dto.Cert, err error) {

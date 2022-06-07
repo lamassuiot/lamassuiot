@@ -89,7 +89,7 @@ func main() {
 		os.Exit(1)
 	}
 	level.Info(logger).Log("msg", "Connection established with secret engine")
-	casRawDb, err := serverUtils.InitializeDBConnection(cfg.PostgresCaDB, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresHostname, cfg.PostgresPort, false, "", logger)
+	casRawDb, err := serverUtils.InitializeDBConnection(cfg.PostgresCaDB, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresHostname, cfg.PostgresPort, true, cfg.PostgresMigrationsFilePath, logger)
 	if err != nil {
 		os.Exit(1)
 	}

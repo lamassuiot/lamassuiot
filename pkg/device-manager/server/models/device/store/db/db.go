@@ -320,11 +320,11 @@ func (db *DB) DeleteDevice(ctx context.Context, id string) error {
 	span := opentracing.StartSpan("lamassu-device-manager: Delete device with ID "+id+" from database", opentracing.ChildOf(parentSpan.Context()))
 	res, err := db.Exec(sqlStatement, id)
 	span.Finish()
-	notFoundErr := &devmanagererrors.ResourceNotFoundError{
-		ResourceType: "DEVICE",
-		ResourceId:   id,
-	}
 	if err != nil {
+		notFoundErr := &devmanagererrors.ResourceNotFoundError{
+			ResourceType: "DEVICE",
+			ResourceId:   id,
+		}
 		level.Debug(db.logger).Log("err", err, "msg", "Could not delete Device with ID "+id+" from database")
 		return notFoundErr
 	}
@@ -335,7 +335,7 @@ func (db *DB) DeleteDevice(ctx context.Context, id string) error {
 	if count <= 0 {
 		err = errors.New("no rows have been updated in database")
 		level.Debug(db.logger).Log("err", err)
-		return notFoundErr
+		return err
 	}
 	return nil
 }
@@ -538,7 +538,7 @@ func (db *DB) SelectDmssLastIssuedCert(ctx context.Context, queryParameters filt
 	var dmssLastIssued = []dto.DMSLastIssued{}
 	for rows.Next() {
 		var lastIssued dto.DMSLastIssued
-		err := rows.Scan(&lastIssued.DmsId, &lastIssued.Timestamp, &lastIssued.SerialNumber)
+		err := rows.Scan(&lastIssued.DmsId, &lastIssued.CreationTimestamp, &lastIssued.SerialNumber)
 		if err != nil {
 			return []dto.DMSLastIssued{}, err
 		}

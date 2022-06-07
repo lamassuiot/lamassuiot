@@ -72,7 +72,7 @@ func TestCAHandler(t *testing.T) {
 			testRestEndpoint: func(e *httpexpect.Expect) {
 				csrString := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJQ1l6Q0NBVXNDQVFBd0hqRUxNQWtHQTFVRUJoTUNSVk14RHpBTkJnTlZCQU1NQmtSbGRtbGpaVENDQVNJdwpEUVlKS29aSWh2Y05BUUVCQlFBRGdnRVBBRENDQVFvQ2dnRUJBTHZqZ1dEdWZtZ2kxY2VsVTk1N2RlYnpnSUZDCnBCN2xWTHNYQ2M2RFNoVW1sNmVDOHAxbllPMVJyNmkyNFlOQkRsRmtyZCt6YVJNTWs2NFlXYVgvK0VUTFQ2WmkKSkdIK242VUhyd01aSFliajh3M1UzRDQ5aG9WYjNRVWtrNm9VUExSV2NGQmd2UU5CTzNTRWx3RzdqWTg1dHFIUQpudlQxVkdYeW40dE9ac3Q1bHJZbWxmMGFjZmg4MlMzU3ZVVURKL24wY056Ynh2ME84MFhjUUFCbm16WlROWHVPCjVTc084clg4NnBwclhMcEFTKzZ0OWpqemNLZ296MnJpUHJXeXMzT2cvckpsM2dLWDdSNXBLUWUzMkFkNUJVblcKTkpvZ0kxMVFBcVdRSTB1YWpaSHFPbXl5Y0dGbi9FMC9BR240YlErOUVrblVRSzFMSHRkL0tVRXVNeWNDQXdFQQpBYUFBTUEwR0NTcUdTSWIzRFFFQkN3VUFBNElCQVFCam9aSzJPaHhIZ3FFVjBnVmFVUG1sUzBUbnl3RXYvcjMxCnk5R3lXOUZ3a3VVd3Rka3V2VHFVZE1TcUorUjIxZTNzTnhxRWtaamovKytVS09wdDFuTnZOb2kxakNsS0ZDZXgKc3M4ajdsdHhvL28yeld2aVVDcmE1cWNlV0NLajJyMWhnd2pKa0w5YjhrSTExWjdRVFhrRlhvVE9wTjFnYlZSVQo1MEdkeGkwNDNkTi9xdk1nMHkyUWxLV3ZFSE5MZTlTRVRqb3RJR3dyclYvLzlXNXlVTDRwY1ZhMGlML0ZsdUpXCnFXZExZVkl4MXZYOUM4alJ4RHAzZVZ4STR1UldYMkEycEV0ckcvYlpTbDZzc2JuU0lzZXJGaXZ2UEt5K0kyNzcKQ0RyNWwyT0hQTHNmWTJBNjl4aEExMXNLRU5RN2dHc1FLSjA5WG55NjF5ZlVRNitIYzQ2NAotLS0tLUVORCBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0="
 				req := fmt.Sprintf(`{"csr":"%s","sign_verbatim":true}`, csrString)
-				_ = e.POST("/pki/test/sign").WithBytes([]byte(req)).
+				_ = e.POST("/pki/123/sign").WithBytes([]byte(req)).
 					Expect().
 					Status(http.StatusNotFound)
 
@@ -115,6 +115,30 @@ func TestCAHandler(t *testing.T) {
 			},
 		},
 		{
+			name: "GetCAs DmsEnroller",
+			serviceInitialization: func(s *service.Service) {
+				ctx := context.Background()
+				(*s).CreateCA(ctx, dto.DmsEnroller, "test", dto.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dto.Subject{CommonName: "test"}, 60*60*24, 60*60)
+			},
+			testRestEndpoint: func(e *httpexpect.Expect) {
+				obj := e.GET("/dmsenroller").
+					Expect().
+					Status(http.StatusOK).JSON()
+
+				obj.Object().Value("total_cas").Equal(1)
+				obj.Object().Value("cas").Array().Element(0).Object().ValueEqual("status", "issued")
+				obj.Object().Value("cas").Array().Element(0).Object().ContainsKey("name")
+				ca_name := obj.Object().Value("cas").Array().Element(0).Object().Value("name").String().Raw()
+				obj.Object().Value("cas").Array().Element(0).Object().ContainsKey("serial_number")
+				obj.Object().Value("cas").Array().Element(0).Object().ContainsKey("subject")
+				obj.Object().Value("cas").Array().Element(0).Object().Value("subject").Object().ValueEqual("common_name", ca_name)
+				obj.Object().Value("cas").Array().Element(0).Object().ContainsKey("key_metadata")
+				obj.Object().Value("cas").Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("bits")
+				obj.Object().Value("cas").Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("strength")
+				obj.Object().Value("cas").Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("type")
+			},
+		},
+		{
 			name: "GetCAs",
 			serviceInitialization: func(s *service.Service) {
 				ctx := context.Background()
@@ -125,17 +149,17 @@ func TestCAHandler(t *testing.T) {
 					Expect().
 					Status(http.StatusOK).JSON()
 
-				obj.Array().Length().Equal(1)
-				obj.Array().Element(0).Object().ValueEqual("status", "issued")
-				obj.Array().Element(0).Object().ContainsKey("name")
-				ca_name := obj.Array().Element(0).Object().Value("name").String().Raw()
-				obj.Array().Element(0).Object().ContainsKey("serial_number")
-				obj.Array().Element(0).Object().ContainsKey("subject")
-				obj.Array().Element(0).Object().Value("subject").Object().ValueEqual("common_name", ca_name)
-				obj.Array().Element(0).Object().ContainsKey("key_metadata")
-				obj.Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("bits")
-				obj.Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("strength")
-				obj.Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("type")
+				obj.Object().Value("total_cas").Equal(1)
+				obj.Object().Value("cas").Array().Element(0).Object().ValueEqual("status", "issued")
+				obj.Object().Value("cas").Array().Element(0).Object().ContainsKey("name")
+				ca_name := obj.Object().Value("cas").Array().Element(0).Object().Value("name").String().Raw()
+				obj.Object().Value("cas").Array().Element(0).Object().ContainsKey("serial_number")
+				obj.Object().Value("cas").Array().Element(0).Object().ContainsKey("subject")
+				obj.Object().Value("cas").Array().Element(0).Object().Value("subject").Object().ValueEqual("common_name", ca_name)
+				obj.Object().Value("cas").Array().Element(0).Object().ContainsKey("key_metadata")
+				obj.Object().Value("cas").Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("bits")
+				obj.Object().Value("cas").Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("strength")
+				obj.Object().Value("cas").Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("type")
 			},
 		},
 		{

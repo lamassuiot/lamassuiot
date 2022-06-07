@@ -4,7 +4,12 @@
 export $(grep -v '^#' .env | xargs)
 
 #echo "1)Obtain the Root certificate used by the server:"
-
+if [ -d "./certificates" ]
+then
+    cd certificates
+else
+    mkdir certificates && cd certificates
+fi
 openssl s_client -connect $DOMAIN:443  2>/dev/null </dev/null |  sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' > root-ca.pem
 
 #echo "2) Create CA"
@@ -13,7 +18,8 @@ export TOKEN=$(curl -k --location --request POST "https://$AUTH_ADDR/auth/realms
 
 export CA_ADDR=$DOMAIN/api/ca
 export CA_NAME=$(uuidgen)
-export CREATE_CA_RESP=$(curl -k -s --location --request POST "https://$CA_ADDR/v1/pki/$CA_NAME" --header "Authorization: Bearer ${TOKEN}" --header 'Content-Type: application/json' --data-raw "{\"ca_ttl\": 262800, \"enroller_ttl\": 175200, \"subject\":{ \"common_name\": \"$CA_NAME\",\"country\": \"ES\",\"locality\": \"Arrasate\",\"organization\": \"LKS Next, S. Coop\",\"state\": \"Gipuzkoa\"},\"key_metadata\":{\"bits\": 4096,\"type\": \"rsa\"}}")
+export CREATE_CA_RESP=$(curl -k -s --location --request POST "https://$CA_ADDR/v1/pki/$CA_NAME" --header "Authorization: Bearer ${TOKEN}" --header 'Content-Type: application/json' --data-raw "{\"ca_ttl\": 262800, \"enroller_ttl\": 175200, \"subject\":{ \"common_name\": \"$CA_NAME\",\"country\": \"ES\",\"locality\": \"Arrasate\",\"organization\": \"LKS Next, S. Coop\",\"state\": \"Gipuzkoa\"},\"key_metadata\":{\"bits\": 4096,\"type\": \"RSA\"}}")
+
 echo $CREATE_CA_RESP | jq -r .certificate.pem_base64 | sed 's/\r/\n/g' | sed -Ez '$ s/\n+$//' | base64 -d > ca.crt
 
 #echo "3) Create DMS"
@@ -35,12 +41,8 @@ export DMS_KEY=./dms.key
 export DEVICE_ID=$(uuidgen)
 
 openssl req -new -newkey rsa:2048 -nodes -keyout device.key -out device.csr -subj "/CN=$DEVICE_ID"
-sed '1d' device.csr > device2.csr
-mv  device2.csr device.csr
-sed '$d' device.csr > device2.csr
-mv  device2.csr device.csr
-
-curl https://$DOMAIN/api/devmanager/.well-known/est/$CA_NAME/simpleenroll --cert $DMS_CRT --key $DMS_KEY -s -o cert.p7 --cacert root-ca.pem  --data-binary @device.csr -H "Content-Type: application/pkcs10" 
+sed '/CERTIFICATE/d' device.csr > device_enroll.csr
+curl https://$DOMAIN/api/devmanager/.well-known/est/$CA_NAME/simpleenroll --cert $DMS_CRT --key $DMS_KEY -s -o cert.p7 --cacert root-ca.pem  --data-binary @device_enroll.csr -H "Content-Type: application/pkcs10" 
 openssl base64 -d -in cert.p7 | openssl pkcs7 -inform DER -outform PEM -print_certs -out device.pem
 
 #echo "5) Obtain the available CA certs:"
@@ -52,5 +54,5 @@ OCSP_REQUEST=$(openssl ocsp -CAfile $CA_CERTIFICATE -issuer $CA_CERTIFICATE -cer
 
 #echo "6) SCheck the status of the certificate"
 
-curl -k --location --request GET "https://$DOMAIN/api/ocsp/$OCSP_REQUEST" > ocspresponse.der 
-#openssl ocsp -respin ocspresponse.der -VAfile root-ca.pem -resp_text
+curl -k --location --request GET "https://$DOMAIN/api/ocsp/$OCSP_REQUEST" > ocspresponse.der
+openssl ocsp -respin ocspresponse.der -VAfile root-ca.pem -resp_text > response.txt

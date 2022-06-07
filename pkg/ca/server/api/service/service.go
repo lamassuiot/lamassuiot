@@ -20,7 +20,7 @@ type Service interface {
 	GetSecretProviderName(ctx context.Context) string
 	Health(ctx context.Context) bool
 	Stats(ctx context.Context) dto.Stats
-	GetCAs(ctx context.Context, caType dto.CAType) ([]dto.Cert, error)
+	GetCAs(ctx context.Context, caType dto.CAType, queryparameters filters.QueryParameters) ([]dto.Cert, int, error)
 	CreateCA(ctx context.Context, caType dto.CAType, caName string, privateKeyMetadata dto.PrivateKeyMetadata, subject dto.Subject, caTTL int, enrollerTTL int) (dto.Cert, error)
 	ImportCA(ctx context.Context, caType dto.CAType, caName string, certificate x509.Certificate, privateKey dto.PrivateKey, enrollerTTL int) (dto.Cert, error)
 	DeleteCA(ctx context.Context, caType dto.CAType, caName string) error
@@ -60,12 +60,20 @@ func (s *caService) Stats(ctx context.Context) dto.Stats {
 		CAs:         0,
 		ScanDate:    time.Now(),
 	}
-
-	cas, err := s.GetCAs(ctx, dto.Pki)
-	if err != nil {
-		return stats
+	var cas []dto.Cert
+	limit := 50
+	i := 0
+	for {
+		certs, _, err := s.GetCAs(ctx, dto.Pki, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: limit, Offset: i * limit}})
+		if err != nil {
+			return stats
+		}
+		if len(certs) == 0 {
+			break
+		}
+		cas = append(cas, certs...)
+		i++
 	}
-
 	for _, ca := range cas {
 		_, issuedCerts, err := s.GetIssuedCerts(ctx, dto.Pki, ca.Name, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: 10, Offset: 0}})
 		if err == nil {
@@ -77,14 +85,25 @@ func (s *caService) Stats(ctx context.Context) dto.Stats {
 	return stats
 }
 
-func (s *caService) GetCAs(ctx context.Context, caType dto.CAType) ([]dto.Cert, error) {
-
-	CAs, err := s.secrets.GetCAs(ctx, caType)
-	if err != nil {
-		return []dto.Cert{}, err
+func (s *caService) GetCAs(ctx context.Context, caType dto.CAType, queryparameters filters.QueryParameters) ([]dto.Cert, int, error) {
+	if caType == dto.Pki {
+		casDB, totalcas, err := s.casDb.SelectCas(ctx, caType.String(), queryparameters)
+		if err != nil {
+			return []dto.Cert{}, 0, err
+		}
+		var CAs []dto.Cert
+		for _, v := range casDB {
+			ca, _ := s.secrets.GetCA(ctx, caType, v.CaName)
+			CAs = append(CAs, ca)
+		}
+		return CAs, totalcas, nil
+	} else {
+		CAs, err := s.secrets.GetCAs(ctx, caType)
+		if err != nil {
+			return []dto.Cert{}, 0, err
+		}
+		return CAs, len(CAs), nil
 	}
-
-	return CAs, nil
 }
 
 func (s *caService) CreateCA(ctx context.Context, caType dto.CAType, caName string, privateKeyMetadata dto.PrivateKeyMetadata, subject dto.Subject, caTTL int, enrollerTTL int) (dto.Cert, error) {
@@ -93,10 +112,12 @@ func (s *caService) CreateCA(ctx context.Context, caType dto.CAType, caName stri
 	} else if privateKeyMetadata.KeyType == "EC" {
 		privateKeyMetadata.KeyType = "ec"
 	}
+
 	createdCa, err := s.secrets.CreateCA(ctx, caType, caName, privateKeyMetadata, subject, caTTL, enrollerTTL)
 	if err != nil {
 		return dto.Cert{}, err
 	}
+	s.casDb.InsertCa(ctx, caName, caType.String())
 	return createdCa, err
 }
 func (s *caService) ImportCA(ctx context.Context, caType dto.CAType, caName string, certificate x509.Certificate, privateKey dto.PrivateKey, enrollerTTL int) (dto.Cert, error) {
@@ -104,6 +125,7 @@ func (s *caService) ImportCA(ctx context.Context, caType dto.CAType, caName stri
 	if err != nil {
 		return dto.Cert{}, err
 	}
+	s.casDb.InsertCa(ctx, caName, caType.String())
 	return ca, nil
 }
 
@@ -112,6 +134,7 @@ func (s *caService) DeleteCA(ctx context.Context, caType dto.CAType, CA string) 
 	if err != nil {
 		return err
 	}
+	s.casDb.DeleteCa(ctx, CA)
 	return nil
 }
 

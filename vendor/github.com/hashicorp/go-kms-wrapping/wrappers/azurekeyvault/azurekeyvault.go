@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -14,7 +15,7 @@ import (
 	"github.com/Azure/go-autorest/autorest/azure"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	"github.com/Azure/go-autorest/autorest/to"
-
+	"github.com/hashicorp/go-hclog"
 	wrapping "github.com/hashicorp/go-kms-wrapping"
 )
 
@@ -40,8 +41,12 @@ type Wrapper struct {
 
 	currentKeyID *atomic.Value
 
-	environment azure.Environment
-	client      *keyvault.BaseClient
+	environment    azure.Environment
+	resource       string
+	client         *keyvault.BaseClient
+	logger         hclog.Logger
+	keyNotRequired bool
+	baseURL        string
 }
 
 // Ensure that we are implementing Wrapper
@@ -53,7 +58,9 @@ func NewWrapper(opts *wrapping.WrapperOptions) *Wrapper {
 		opts = new(wrapping.WrapperOptions)
 	}
 	v := &Wrapper{
-		currentKeyID: new(atomic.Value),
+		currentKeyID:   new(atomic.Value),
+		logger:         opts.Logger,
+		keyNotRequired: opts.KeyNotRequired,
 	}
 	v.currentKeyID.Store("")
 	return v
@@ -64,35 +71,47 @@ func NewWrapper(opts *wrapping.WrapperOptions) *Wrapper {
 //
 // Order of precedence:
 // * Environment variable
-// * Value from Vault configuration file
+// * Passed in config map
 // * Managed Service Identity for instance
 func (v *Wrapper) SetConfig(config map[string]string) (map[string]string, error) {
 	if config == nil {
 		config = map[string]string{}
 	}
 
+	allowEnv := true
+	if val, ok := config["disallow_env_vars"]; ok {
+		disallowEnvVars, err := strconv.ParseBool(val)
+		if err != nil {
+			return nil, err
+		}
+		allowEnv = !disallowEnvVars
+	}
+
 	switch {
-	case os.Getenv("AZURE_TENANT_ID") != "":
+	case os.Getenv("AZURE_TENANT_ID") != "" && allowEnv:
 		v.tenantID = os.Getenv("AZURE_TENANT_ID")
 	case config["tenant_id"] != "":
 		v.tenantID = config["tenant_id"]
 	}
 
 	switch {
-	case os.Getenv("AZURE_CLIENT_ID") != "":
+	case os.Getenv("AZURE_CLIENT_ID") != "" && allowEnv:
 		v.clientID = os.Getenv("AZURE_CLIENT_ID")
 	case config["client_id"] != "":
 		v.clientID = config["client_id"]
 	}
 
 	switch {
-	case os.Getenv("AZURE_CLIENT_SECRET") != "":
+	case os.Getenv("AZURE_CLIENT_SECRET") != "" && allowEnv:
 		v.clientSecret = os.Getenv("AZURE_CLIENT_SECRET")
 	case config["client_secret"] != "":
 		v.clientSecret = config["client_secret"]
 	}
 
-	envName := os.Getenv("AZURE_ENVIRONMENT")
+	var envName string
+	if allowEnv {
+		envName = os.Getenv("AZURE_ENVIRONMENT")
+	}
 	if envName == "" {
 		envName = config["environment"]
 	}
@@ -106,10 +125,24 @@ func (v *Wrapper) SetConfig(config map[string]string) (map[string]string, error)
 		}
 	}
 
+	var azResource string
+	if allowEnv {
+		azResource = os.Getenv("AZURE_AD_RESOURCE")
+	}
+	if azResource == "" {
+		azResource = config["resource"]
+		if azResource == "" {
+			azResource = v.environment.KeyVaultDNSSuffix
+		}
+	}
+	v.environment.KeyVaultDNSSuffix = azResource
+	v.resource = "https://" + azResource + "/"
+	v.environment.KeyVaultEndpoint = v.resource
+
 	switch {
-	case os.Getenv(EnvAzureKeyVaultWrapperVaultName) != "":
+	case os.Getenv(EnvAzureKeyVaultWrapperVaultName) != "" && allowEnv:
 		v.vaultName = os.Getenv(EnvAzureKeyVaultWrapperVaultName)
-	case os.Getenv(EnvVaultAzureKeyVaultVaultName) != "":
+	case os.Getenv(EnvVaultAzureKeyVaultVaultName) != "" && allowEnv:
 		v.vaultName = os.Getenv(EnvVaultAzureKeyVaultVaultName)
 	case config["vault_name"] != "":
 		v.vaultName = config["vault_name"]
@@ -118,15 +151,20 @@ func (v *Wrapper) SetConfig(config map[string]string) (map[string]string, error)
 	}
 
 	switch {
-	case os.Getenv(EnvAzureKeyVaultWrapperKeyName) != "":
+	case os.Getenv(EnvAzureKeyVaultWrapperKeyName) != "" && allowEnv:
 		v.keyName = os.Getenv(EnvAzureKeyVaultWrapperKeyName)
-	case os.Getenv(EnvVaultAzureKeyVaultKeyName) != "":
+	case os.Getenv(EnvVaultAzureKeyVaultKeyName) != "" && allowEnv:
 		v.keyName = os.Getenv(EnvVaultAzureKeyVaultKeyName)
 	case config["key_name"] != "":
 		v.keyName = config["key_name"]
+	case v.keyNotRequired:
+		// key not required to set config
 	default:
 		return nil, errors.New("key name is required")
 	}
+
+	// Set the base URL
+	v.baseURL = v.buildBaseURL()
 
 	if v.client == nil {
 		client, err := v.getKeyVaultClient()
@@ -134,15 +172,17 @@ func (v *Wrapper) SetConfig(config map[string]string) (map[string]string, error)
 			return nil, fmt.Errorf("error initializing Azure Key Vault wrapper client: %w", err)
 		}
 
-		// Test the client connection using provided key ID
-		keyInfo, err := client.GetKey(context.Background(), v.buildBaseURL(), v.keyName, "")
-		if err != nil {
-			return nil, fmt.Errorf("error fetching Azure Key Vault wrapper key information: %w", err)
+		if !v.keyNotRequired {
+			// Test the client connection using provided key ID
+			keyInfo, err := client.GetKey(context.Background(), v.baseURL, v.keyName, "")
+			if err != nil {
+				return nil, fmt.Errorf("error fetching Azure Key Vault wrapper key information: %w", err)
+			}
+			if keyInfo.Key == nil {
+				return nil, errors.New("no key information returned")
+			}
+			v.currentKeyID.Store(ParseKeyVersion(to.String(keyInfo.Key.Kid)))
 		}
-		if keyInfo.Key == nil {
-			return nil, errors.New("no key information returned")
-		}
-		v.currentKeyID.Store(parseKeyVersion(to.String(keyInfo.Key.Kid)))
 
 		v.client = client
 	}
@@ -152,6 +192,7 @@ func (v *Wrapper) SetConfig(config map[string]string) (map[string]string, error)
 	wrapperInfo["environment"] = v.environment.Name
 	wrapperInfo["vault_name"] = v.vaultName
 	wrapperInfo["key_name"] = v.keyName
+	wrapperInfo["resource"] = v.resource
 
 	return wrapperInfo, nil
 }
@@ -197,7 +238,7 @@ func (v *Wrapper) Encrypt(ctx context.Context, plaintext, aad []byte) (blob *wra
 	// Encrypt the DEK using Key Vault
 	params := keyvault.KeyOperationsParameters{
 		Algorithm: keyvault.RSAOAEP256,
-		Value:     to.StringPtr(base64.URLEncoding.EncodeToString(env.Key)),
+		Value:     to.StringPtr(base64.URLEncoding.WithPadding(base64.NoPadding).EncodeToString(env.Key)),
 	}
 	// Wrap key with the latest version for the key name
 	resp, err := v.client.WrapKey(ctx, v.buildBaseURL(), v.keyName, "", params)
@@ -206,7 +247,7 @@ func (v *Wrapper) Encrypt(ctx context.Context, plaintext, aad []byte) (blob *wra
 	}
 
 	// Store the current key version
-	keyVersion := parseKeyVersion(to.String(resp.Kid))
+	keyVersion := ParseKeyVersion(to.String(resp.Kid))
 	v.currentKeyID.Store(keyVersion)
 
 	ret := &wrapping.EncryptedBlobInfo{
@@ -245,6 +286,25 @@ func (v *Wrapper) Decrypt(ctx context.Context, in *wrapping.EncryptedBlobInfo, a
 	if err != nil {
 		return nil, err
 	}
+
+	// XXX: Workaround: Azure Managed HSM KeyVault's REST API request parser
+	// changes the encrypted key to include an extra NULL byte at the end.
+	// This looks like the base64 of the symmetric AES wrapping key above is
+	// changed from ...= to ...A. You'll get the error (when running Vault
+	// init / unseal operation):
+	// > failed to unseal barrier: failed to check for keyring: failed to create cipher: crypto/aes: invalid key size 33
+	// until this is fixed.
+	//  -> 16-byte / 128-bit AES key gets two padding characters, resulting
+	//     in two null bytes.
+	//  -> 24-byte / 196-bit AES key gets no padding and no null bytes.
+	//  -> 32-byte / 256-bit AES key (default) gets one padding character,
+	//     resulting in one null bytes.
+	if len(keyBytes) == 18 && keyBytes[16] == 0 && keyBytes[17] == 0 {
+		keyBytes = keyBytes[:16]
+	} else if len(keyBytes) == 33 && keyBytes[32] == 0 {
+		keyBytes = keyBytes[:32]
+	}
+
 	envInfo := &wrapping.EnvelopeInfo{
 		Key:        keyBytes,
 		IV:         in.IV,
@@ -265,7 +325,7 @@ func (v *Wrapper) getKeyVaultClient() (*keyvault.BaseClient, error) {
 	case v.clientID != "" && v.clientSecret != "":
 		config := auth.NewClientCredentialsConfig(v.clientID, v.clientSecret, v.tenantID)
 		config.AADEndpoint = v.environment.ActiveDirectoryEndpoint
-		config.Resource = strings.TrimSuffix(v.environment.KeyVaultEndpoint, "/")
+		config.Resource = strings.TrimSuffix(v.resource, "/")
 		authorizer, err = config.Authorizer()
 		if err != nil {
 			return nil, err
@@ -273,7 +333,7 @@ func (v *Wrapper) getKeyVaultClient() (*keyvault.BaseClient, error) {
 	// By default use MSI
 	default:
 		config := auth.NewMSIConfig()
-		config.Resource = strings.TrimSuffix(v.environment.KeyVaultEndpoint, "/")
+		config.Resource = strings.TrimSuffix(v.resource, "/")
 		authorizer, err = config.Authorizer()
 		if err != nil {
 			return nil, err
@@ -285,9 +345,25 @@ func (v *Wrapper) getKeyVaultClient() (*keyvault.BaseClient, error) {
 	return &client, nil
 }
 
+// Client returns the AzureKeyVault client used by the wrapper.
+func (v *Wrapper) Client() *keyvault.BaseClient {
+	return v.client
+}
+
+// Logger returns the logger used by the wrapper.
+func (v *Wrapper) Logger() hclog.Logger {
+	return v.logger
+}
+
+// BaseURL returns the base URL for key management operation requests based
+// on the Azure Vault name and environment.
+func (v *Wrapper) BaseURL() string {
+	return v.baseURL
+}
+
 // Kid gets returned as a full URL, get the last bit which is just
 // the version
-func parseKeyVersion(kid string) string {
+func ParseKeyVersion(kid string) string {
 	keyVersionParts := strings.Split(kid, "/")
 	return keyVersionParts[len(keyVersionParts)-1]
 }

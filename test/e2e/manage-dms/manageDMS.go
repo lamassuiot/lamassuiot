@@ -2,7 +2,6 @@ package dmss
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/go-kit/log"
@@ -23,36 +22,37 @@ func ManageDMSs(dmsNumber int, dmsid string, caName string, scaleIndex int, cert
 
 	dmsClient, err := client.LamassuDmsClient(certPath, domain)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return err
 	}
 	devClient, err := client.LamassuDevClient(certPath, domain)
 	if err != nil {
-		fmt.Println(err)
+		level.Error(logger).Log("err", err)
 		return err
 	}
 	var dms dmsDTO.DMS
-	for i := 0; i < dmsNumber; i++ {
-		dmsName := goid.NewV4UUID().String()
-		_, dms, err := dmsClient.CreateDMSForm(context.Background(), dmsDTO.Subject{CN: dmsName}, dmsDTO.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dmsName)
-		if err != nil {
-			level.Error(logger).Log("err", err)
-			return err
-		}
-
-		dms, err = dmsClient.UpdateDMSStatus(context.Background(), "APPROVED", dms.Id, []string{caName})
-		if err != nil {
-			level.Error(logger).Log("err", err)
-			return err
-		}
-		_, err = dmsClient.GetDMSs(context.Background())
-		if err != nil {
-			level.Error(logger).Log("err", err)
-			return err
-		}
-
+	dmsName := goid.NewV4UUID().String()
+	_, dms, err = dmsClient.CreateDMSForm(context.Background(), dmsDTO.Subject{CN: dmsName}, dmsDTO.PrivateKeyMetadata{KeyType: "RSA", KeyBits: 4096}, dmsName)
+	if err != nil {
+		level.Error(logger).Log("err", err)
+		return err
 	}
 
+	dms, err = dmsClient.UpdateDMSStatus(context.Background(), "APPROVED", dms.Id, []string{caName})
+	if err != nil {
+		level.Error(logger).Log("err", err)
+		return err
+	}
+	_, err = dmsClient.GetDMSs(context.Background())
+	if err != nil {
+		level.Error(logger).Log("err", err)
+		return err
+	}
+	dms, err = dmsClient.UpdateDMSStatus(context.Background(), "REVOKED", dms.Id, nil)
+	if err != nil {
+		level.Error(logger).Log("err", err)
+		return err
+	}
 	err = dmsClient.DeleteDMS(context.Background(), dms.Id)
 	if err != nil {
 		level.Error(logger).Log("err", err)
@@ -68,12 +68,12 @@ func ManageDMSs(dmsNumber int, dmsid string, caName string, scaleIndex int, cert
 		level.Error(logger).Log("err", err)
 		return err
 	}
-	_, err = devClient.GetDmsLastIssuedCert(context.Background(), filters.QueryParameters{Filters: []filterTypes.Filter{}, Sort: filters.SortOptions{SortMode: "DESC", SortField: "id"}, Pagination: filters.PaginationOptions{Limit: 10, Offset: 0}})
+	_, err = devClient.GetDmsLastIssuedCert(context.Background(), filters.QueryParameters{Filters: []filterTypes.Filter{}, Sort: filters.SortOptions{SortMode: "DESC", SortField: "dms_id"}, Pagination: filters.PaginationOptions{Limit: 10, Offset: 0}})
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return err
 	}
-	_, err = devClient.GetDevicesByDMS(context.Background(), dmsid, filters.QueryParameters{Filters: []filterTypes.Filter{}, Sort: filters.SortOptions{SortMode: "DESC", SortField: "id"}, Pagination: filters.PaginationOptions{Limit: 10, Offset: 0}})
+	_, err = devClient.GetDevicesByDMS(context.Background(), dmsid, filters.QueryParameters{Filters: []filterTypes.Filter{}, Sort: filters.SortOptions{SortMode: "DESC", SortField: "dms_id"}, Pagination: filters.PaginationOptions{Limit: 10, Offset: 0}})
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return err

@@ -16,11 +16,12 @@ import (
 	"github.com/go-kit/log/level"
 	lamassuca "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	caDTO "github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 )
 
 type Utils interface {
 	VerifyPeerCertificate(ctx context.Context, cert *x509.Certificate, enroll bool, certCA *x509.Certificate) (string, error)
-	GetCertsCAType(ctx context.Context, enroll bool) ([]*x509.Certificate, []caDTO.Cert, error)
+	GetCertsCAType(ctx context.Context, enroll bool) ([]*x509.Certificate, caDTO.GetCasResponse, error)
 	GenerateCSR(csr *x509.CertificateRequest, key interface{}) (*x509.CertificateRequest, error)
 	CheckIfNull(field []string) string
 }
@@ -74,7 +75,7 @@ func (u *UtilsService) VerifyPeerCertificate(ctx context.Context, cert *x509.Cer
 	CA := candidateCa[0][1]
 	b := pem.Block{Type: "CERTIFICATE", Bytes: CA.Raw}
 	var aps string
-	for _, v := range certs {
+	for _, v := range certs.CAs {
 		data, _ := base64.StdEncoding.DecodeString(v.CertContent.CerificateBase64)
 		block, _ := pem.Decode([]byte(data))
 		if bytes.Equal(block.Bytes, b.Bytes) {
@@ -84,25 +85,34 @@ func (u *UtilsService) VerifyPeerCertificate(ctx context.Context, cert *x509.Cer
 	}
 	return aps, err
 }
-func (u *UtilsService) GetCertsCAType(ctx context.Context, enroll bool) ([]*x509.Certificate, []caDTO.Cert, error) {
-	var certs []caDTO.Cert
+func (u *UtilsService) GetCertsCAType(ctx context.Context, enroll bool) ([]*x509.Certificate, caDTO.GetCasResponse, error) {
+	var certs caDTO.GetCasResponse
 	if !enroll {
-		caType, err := caDTO.ParseCAType("pki")
-		certs, err = u.lamassuCaClient.GetCAs(ctx, caType)
-		if err != nil {
-			level.Error(u.logger).Log("err", err, "msg", "Error in client request")
-			return nil, certs, err
+		caType, _ := caDTO.ParseCAType("pki")
+		limit := 50
+		i := 0
+		for {
+			cas, err := u.lamassuCaClient.GetCAs(ctx, caType, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: limit, Offset: i * limit}})
+			if err != nil {
+				level.Error(u.logger).Log("err", err, "msg", "Error in client request")
+				return nil, certs, err
+			}
+			if len(cas.CAs) == 0 {
+				break
+			}
+			certs.CAs = append(certs.CAs, cas.CAs...)
+			i++
 		}
 	} else {
 		caType, err := caDTO.ParseCAType("dmsenroller")
-		certs, err = u.lamassuCaClient.GetCAs(ctx, caType)
+		certs, err = u.lamassuCaClient.GetCAs(ctx, caType, filters.QueryParameters{})
 		if err != nil {
 			level.Error(u.logger).Log("err", err, "msg", "Error in client request")
 			return nil, certs, err
 		}
 	}
 	CAsCertificates := []*x509.Certificate{}
-	for _, v := range certs {
+	for _, v := range certs.CAs {
 		data, _ := base64.StdEncoding.DecodeString(v.CertContent.CerificateBase64)
 		block, _ := pem.Decode([]byte(data))
 		certificate, _ := x509.ParseCertificate(block.Bytes)
