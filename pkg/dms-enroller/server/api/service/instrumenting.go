@@ -77,7 +77,7 @@ func (mw *instrumentingMiddleware) DeleteDMS(ctx context.Context, id string) (er
 	return mw.next.DeleteDMS(ctx, id)
 }
 
-func (mw *instrumentingMiddleware) GetDMSs(ctx context.Context, queryParameters filters.QueryParameters) (d []dto.DMS, err error) {
+func (mw *instrumentingMiddleware) GetDMSs(ctx context.Context, queryParameters filters.QueryParameters) (d []dto.DMS, total_dmss int, err error) {
 	defer func(begin time.Time) {
 		lvs := []string{"method", "GetDMSs", "error", fmt.Sprint(err != nil)}
 		mw.requestCount.With(lvs...).Add(1)

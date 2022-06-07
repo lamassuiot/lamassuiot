@@ -114,8 +114,8 @@ func MakeCreateDMSFormEndpoint(s service.Service) endpoint.Endpoint {
 func MakeGetDMSsEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(GetDmsRequest)
-		dmss, err := s.GetDMSs(ctx, req.QueryParameters)
-		return dmss, err
+		dmss, total_dmss, err := s.GetDMSs(ctx, req.QueryParameters)
+		return dto.GetDmsResponse{TotalDmss: total_dmss, Dmss: dmss}, err
 	}
 }
 func MakeGetDMSbyIDEndpoint(s service.Service) endpoint.Endpoint {

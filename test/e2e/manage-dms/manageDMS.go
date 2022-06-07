@@ -43,7 +43,7 @@ func ManageDMSs(dmsNumber int, dmsid string, caName string, scaleIndex int, cert
 		level.Error(logger).Log("err", err)
 		return err
 	}
-	_, err = dmsClient.GetDMSs(context.Background())
+	_, err = dmsClient.GetDMSs(context.Background(), filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: 50, Offset: 0}})
 	if err != nil {
 		level.Error(logger).Log("err", err)
 		return err

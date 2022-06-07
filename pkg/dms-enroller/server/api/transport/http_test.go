@@ -72,13 +72,13 @@ func TestDMSHandler(t *testing.T) {
 				obj := e.GET("/v1/").
 					Expect().
 					Status(http.StatusOK).JSON()
-
-				obj.Array().Length().Equal(1)
-				obj.Array().Element(0).Object().ValueEqual("status", "APPROVED")
-				obj.Array().Element(0).Object().ContainsKey("name")
-				obj.Array().Element(0).Object().ContainsKey("key_metadata")
-				obj.Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("bits")
-				obj.Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("type")
+				obj.Object().Value("total_dmss").Equal(1)
+				obj.Object().Value("dmss").Array().Element(0).Object().ValueEqual("status", "APPROVED")
+				obj.Object().Value("dmss").Array().Element(0).Object().ContainsKey("name")
+				obj.Object().Value("dmss").Array().Element(0).Object().ContainsKey("key_metadata")
+				obj.Object().Value("dmss").Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("bits")
+				obj.Object().Value("dmss").Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("strength")
+				obj.Object().Value("dmss").Array().Element(0).Object().Value("key_metadata").Object().ContainsKey("type")
 			},
 		},
 		{

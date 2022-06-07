@@ -61,24 +61,34 @@ func (db *DB) Insert(ctx context.Context, d dto.DMS) (string, error) {
 	return id, nil
 }
 
-func (db *DB) SelectAll(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMS, error) {
+func (db *DB) SelectAll(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMS, int, error) {
+	var length int
 	db.logger = ctx.Value(utils.LamassuLoggerContextKey).(log.Logger)
 	parentSpan := opentracing.SpanFromContext(ctx)
-	sqlStatement := `
-	SELECT * 
-	FROM dms_store;
+	sqlStatement := `SELECT COUNT(*) as count FROM dms_store  `
+	rows, err := db.Query(sqlStatement)
+	if err != nil {
+		return []dto.DMS{}, 0, err
+	}
+	rows.Next()
+	err = rows.Scan(&length)
+	if err != nil {
+		return []dto.DMS{}, 0, err
+	}
+	rows.Close()
+	sqlStatement = `
+	SELECT * FROM dms_store
 	`
 	sqlStatement = filters.ApplySQLFilter(sqlStatement, queryParameters)
-
 	span := opentracing.StartSpan("lamassu-dms-enroller: obtain DMSs from database", opentracing.ChildOf(parentSpan.Context()))
-	rows, err := db.Query(sqlStatement)
+	rows, err = db.Query(sqlStatement)
 	if err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain DMSs from database or the database is empty")
 		notFoundErr := &dmserrors.ResourceNotFoundError{
 			ResourceType: "DMS",
 			ResourceId:   "Database is empty",
 		}
-		return []dto.DMS{}, notFoundErr
+		return []dto.DMS{}, 0, notFoundErr
 	}
 	defer rows.Close()
 	dmss := make([]dto.DMS, 0)
@@ -87,35 +97,18 @@ func (db *DB) SelectAll(ctx context.Context, queryParameters filters.QueryParame
 		var d dto.DMS
 		err := rows.Scan(&d.Id, &d.Name, &d.SerialNumber, &d.KeyMetadata.KeyType, &d.KeyMetadata.KeyBits, &d.CsrBase64, &d.Status, &d.CreationTimestamp, &d.ModificationTimestamp)
 		if err != nil {
-			return []dto.DMS{}, err
+			return []dto.DMS{}, 0, err
 		}
 		d.KeyMetadata.KeyStrength = getKeyStrength(d.KeyMetadata.KeyType, d.KeyMetadata.KeyBits)
-
-		//Get Enrolled_Devices per dms_id
-		/*var length int
-		sqlStatement1 := `
-		SELECT COUNT(*) as count FROM device_information where dms_id = $1 and status <> 'PENDING_PROVISION'
-		`
-		//Count all devices which have status != PENDING_PROVISION
-		rows, err := db.Query(sqlStatement1, d.Id)
-		rows.Next()
-		err = rows.Scan(&length)
-
-
-		if err != nil {
-			level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Device "+d.Id+" from database")
-			d.EnrolledDevices = 0
-		}
-		d.EnrolledDevices = length*/
 		span.Finish()
 		dmss = append(dmss, d)
 	}
 	if err = rows.Err(); err != nil {
 		level.Debug(db.logger).Log("err", err)
-		return []dto.DMS{}, err
+		return []dto.DMS{}, 0, err
 	}
 	level.Debug(db.logger).Log("msg", strconv.Itoa(len(dmss))+" DMSs read from database")
-	return dmss, nil
+	return dmss, length, nil
 }
 
 func (db *DB) SelectByID(ctx context.Context, id string) (dto.DMS, error) {

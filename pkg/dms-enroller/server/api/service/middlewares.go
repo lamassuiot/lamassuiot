@@ -96,7 +96,7 @@ func (mw loggingMiddleware) DeleteDMS(ctx context.Context, id string) (err error
 	return mw.next.DeleteDMS(ctx, id)
 }
 
-func (mw loggingMiddleware) GetDMSs(ctx context.Context, queryParameters filters.QueryParameters) (d []dto.DMS, err error) {
+func (mw loggingMiddleware) GetDMSs(ctx context.Context, queryParameters filters.QueryParameters) (d []dto.DMS, total_dmss int, err error) {
 	defer func(begin time.Time) {
 		mw.logger.Log(
 			"method", "GetDMSs",
