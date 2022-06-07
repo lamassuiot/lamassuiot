@@ -297,7 +297,7 @@ jobs:
           127.0.0.1  tracing.${DOMAIN}
           127.0.0.1  consul.${DOMAIN}
           EOT
-
+          sed -i 's/dev\.lamassu\.io/'300000'/g' .env
           bash install.sh
 
   integration_test:
@@ -361,7 +361,7 @@ jobs:
           source /etc/profile.d/go.sh
           cd /home/ubuntu/lamassuiot
           export DOMAIN=dev.lamassu.io
-          sed -i 's/dev\.lamassu\.io/'$DOMAIN'/g' ./test/est/.env
+          sed -i 's/30/'$DOMAIN'/g' ./test/est/.env
           go install github.com/haveyoudebuggedit/gotestfmt/v2/cmd/gotestfmt@v2.3.1
           go test -json -v ./test/est/est_test.go -args -domain=dev.lamassu.io -cert=/home/ubuntu/lamassu-compose/tls-certificates/downstream/tls.crt | gotestfmt
 
