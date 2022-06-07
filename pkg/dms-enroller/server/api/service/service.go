@@ -21,6 +21,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/models/dms"
 	dmsstore "github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/models/dms/store"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 )
 
 type Service interface {
@@ -29,7 +30,7 @@ type Service interface {
 	CreateDMSForm(ctx context.Context, subject dto.Subject, PrivateKeyMetadata dto.PrivateKeyMetadata, dmsName string) (string, dto.DMS, error)
 	UpdateDMSStatus(ctx context.Context, status string, id string, CAList []string) (dto.DMS, error)
 	DeleteDMS(ctx context.Context, id string) error
-	GetDMSs(ctx context.Context) ([]dto.DMS, error)
+	GetDMSs(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMS, int, error)
 	GetDMSbyID(ctx context.Context, id string) (dto.DMS, error)
 }
 
@@ -257,11 +258,11 @@ func (s *enrollerService) DeleteDMS(ctx context.Context, id string) error {
 	}
 	return err
 }
-func (s *enrollerService) GetDMSs(ctx context.Context) ([]dto.DMS, error) {
+func (s *enrollerService) GetDMSs(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMS, int, error) {
 	caType, err := caDTO.ParseCAType("dmsenroller")
-	d, err := s.dmsDBStore.SelectAll(ctx)
+	d, totalDMS, err := s.dmsDBStore.SelectAll(ctx, queryParameters)
 	if err != nil {
-		return []dto.DMS{}, err
+		return []dto.DMS{}, 0, err
 	}
 	var dmsList []dto.DMS = make([]dto.DMS, 0)
 	for _, item := range d {
@@ -285,7 +286,7 @@ func (s *enrollerService) GetDMSs(ctx context.Context) ([]dto.DMS, error) {
 		dmsList = append(dmsList, item)
 	}
 
-	return dmsList, nil
+	return dmsList, totalDMS, nil
 }
 
 func (s *enrollerService) GetDMSbyID(ctx context.Context, id string) (dto.DMS, error) {

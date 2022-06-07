@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/common/dto"
 )
@@ -14,7 +15,7 @@ type LamassuEnrollerClient interface {
 	CreateDMSForm(ctx context.Context, subject dto.Subject, PrivateKeyMetadata dto.PrivateKeyMetadata, dmsName string) (string, dto.DMS, error)
 	UpdateDMSStatus(ctx context.Context, status string, id string, CAList []string) (dto.DMS, error)
 	DeleteDMS(ctx context.Context, id string) error
-	GetDMSs(ctx context.Context) ([]dto.DMS, error)
+	GetDMSs(ctx context.Context, queryParameters filters.QueryParameters) (dto.GetDmsResponse, error)
 	GetDMSbyID(ctx context.Context, id string) (dto.DMS, error)
 }
 
@@ -115,24 +116,18 @@ func (c *LamassuEnrollerClientConfig) GetDMSbyID(ctx context.Context, id string)
 	json.Unmarshal(jsonString, &dms)
 	return dms, nil
 }
-func (c *LamassuEnrollerClientConfig) GetDMSs(ctx context.Context) ([]dto.DMS, error) {
+func (c *LamassuEnrollerClientConfig) GetDMSs(ctx context.Context, queryParameters filters.QueryParameters) (dto.GetDmsResponse, error) {
 	req, err := c.client.NewRequest("GET", "v1/", nil)
 	if err != nil {
-		return []dto.DMS{}, err
+		return dto.GetDmsResponse{}, err
 	}
 	respBody, _, err := c.client.Do(req)
 	if err != nil {
-		return []dto.DMS{}, err
+		return dto.GetDmsResponse{}, err
 	}
-
-	dmssArrayInterface := respBody.([]interface{})
-	var dmss []dto.DMS
-	for _, item := range dmssArrayInterface {
-		dms := dto.DMS{}
-		jsonString, _ := json.Marshal(item)
-		json.Unmarshal(jsonString, &dms)
-		dmss = append(dmss, dms)
-	}
+	var dmss dto.GetDmsResponse
+	jsonString, _ := json.Marshal(respBody)
+	json.Unmarshal(jsonString, &dmss)
 
 	return dmss, nil
 }

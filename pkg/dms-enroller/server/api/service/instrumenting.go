@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/common/dto"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 
 	"github.com/go-kit/kit/metrics"
 )
@@ -76,14 +77,14 @@ func (mw *instrumentingMiddleware) DeleteDMS(ctx context.Context, id string) (er
 	return mw.next.DeleteDMS(ctx, id)
 }
 
-func (mw *instrumentingMiddleware) GetDMSs(ctx context.Context) (d []dto.DMS, err error) {
+func (mw *instrumentingMiddleware) GetDMSs(ctx context.Context, queryParameters filters.QueryParameters) (d []dto.DMS, total_dmss int, err error) {
 	defer func(begin time.Time) {
 		lvs := []string{"method", "GetDMSs", "error", fmt.Sprint(err != nil)}
 		mw.requestCount.With(lvs...).Add(1)
 		mw.requestLatency.With(lvs...).Observe(time.Since(begin).Seconds())
 	}(time.Now())
 
-	return mw.next.GetDMSs(ctx)
+	return mw.next.GetDMSs(ctx, queryParameters)
 }
 func (mw *instrumentingMiddleware) GetDMSbyID(ctx context.Context, id string) (d dto.DMS, err error) {
 	defer func(begin time.Time) {

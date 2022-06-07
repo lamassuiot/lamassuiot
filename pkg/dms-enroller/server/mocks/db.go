@@ -11,6 +11,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/common/dto"
 	dmserrors "github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-enroller/server/models/dms"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 )
 
 var dmsDB dto.DMS
@@ -83,17 +84,17 @@ func (db *MockDB) SelectBySerialNumber(ctx context.Context, SerialNumber string)
 		return dmsDB.Id, nil
 	}
 }
-func (db *MockDB) SelectAll(ctx context.Context) ([]dto.DMS, error) {
+func (db *MockDB) SelectAll(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMS, int, error) {
 	dmsArray := []dto.DMS{}
 	if dmsDB.Id == "" {
 		notFoundErr := &dmserrors.ResourceNotFoundError{
 			ResourceType: "Select All DMS",
 			ResourceId:   "Database is empty",
 		}
-		return []dto.DMS{}, notFoundErr
+		return []dto.DMS{}, 0, notFoundErr
 	} else {
 		dmsArray = append(dmsArray, dmsDB)
-		return dmsArray, nil
+		return dmsArray, len(dmsArray), nil
 	}
 
 }
