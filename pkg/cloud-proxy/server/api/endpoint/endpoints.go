@@ -3,7 +3,6 @@ package endpoint
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
@@ -134,7 +133,6 @@ func MakeUpdateCaStatusEndpoint(s service.Service) endpoint.Endpoint {
 func MakeEventHandlerEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		event := request.(cloudevents.Event)
-		fmt.Println(event)
 		switch event.Type() {
 		case "io.lamassu.ca.create":
 

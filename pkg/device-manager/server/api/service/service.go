@@ -163,13 +163,20 @@ func (s *devicesService) GetDevices(ctx context.Context, queryParameters filters
 			}
 
 			cert, err := s.lamassuCaClient.GetCert(ctx, caDTO.Pki, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
-
 			if err != nil {
 				return []dto.Device{}, 0, err
 			}
-			d.CurrentCertificate.Valid_to = cert.ValidTo
-			d.CurrentCertificate.Cert = cert.CertContent.CerificateBase64
-			dev = append(dev, d)
+			if cert.Status == "revoked" {
+				s.devicesDb.UpdateDeviceStatusByID(ctx, d.Id, devicesModel.DeviceCertRevoked.String())
+				s.devicesDb.UpdateDeviceCertificateSerialNumberByID(ctx, d.Id, "")
+				d, _ = s.devicesDb.SelectDeviceById(ctx, d.Id)
+				dev = append(dev, d)
+			} else {
+				d.CurrentCertificate.Valid_to = cert.ValidTo
+				d.CurrentCertificate.Cert = cert.CertContent.CerificateBase64
+				dev = append(dev, d)
+			}
+
 		} else {
 			dev = append(dev, d)
 		}
@@ -311,6 +318,9 @@ func (s *devicesService) GetDeviceLogs(ctx context.Context, id string) ([]dto.De
 
 func (s *devicesService) GetDeviceCertHistory(ctx context.Context, id string) ([]dto.DeviceCertHistory, error) {
 	history, err := s.devicesDb.SelectDeviceCertHistory(ctx, id)
+	if err != nil {
+		return []dto.DeviceCertHistory{}, err
+	}
 	var certHistory []dto.DeviceCertHistory
 	for _, element := range history {
 		dev, err := s.devicesDb.SelectDeviceById(ctx, id)
@@ -324,6 +334,7 @@ func (s *devicesService) GetDeviceCertHistory(ctx context.Context, id string) ([
 		if cert.RevocationTimestamp != 0 {
 			t := time.Unix(cert.RevocationTimestamp, 0)
 			element.RevocationTimestamp = t.Format("2006-01-02T15:04:05Z")
+			element.Status = cert.Status
 		} else {
 
 			if (cert.Status != device.CertHistoryExpired.String()) && dev.CreationTimestamp == dev.ModificationTimestamp {
@@ -334,9 +345,6 @@ func (s *devicesService) GetDeviceCertHistory(ctx context.Context, id string) ([
 		}
 		certHistory = append(certHistory, element)
 
-	}
-	if err != nil {
-		return []dto.DeviceCertHistory{}, err
 	}
 	return certHistory, nil
 }

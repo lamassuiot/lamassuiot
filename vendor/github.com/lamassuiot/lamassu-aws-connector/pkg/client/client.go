@@ -91,7 +91,7 @@ func (s *AwsConnectorClientConfig) UpdateCaStatus(ctx context.Context, caName st
 }
 func (s *AwsConnectorClientConfig) UpdateCertStatus(ctx context.Context, deviceID string, serialNumber string, status string, deviceCert string, caCert string) error {
 	level.Info(s.logger).Log("msg", "Update Cert Status to AWS")
-
+	level.Info(s.logger).Log("msg", status)
 	awsUpdateCertStatus := awsUpdateCertStatus{
 		DeviceID:     deviceID,
 		SerialNumber: serialNumber,

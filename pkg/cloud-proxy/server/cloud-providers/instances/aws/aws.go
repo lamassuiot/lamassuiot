@@ -127,8 +127,6 @@ func (s *AwsConnectorSettings) UpdateCertStatus(ctx context.Context, caName stri
 	if err != nil {
 		return err
 	}
-	level.Info(s.logger).Log("msg", deviceCert)
-	level.Info(s.logger).Log("msg", caCert)
 	err = awsClient.UpdateCertStatus(ctx, caName, certSerialNumber, status, deviceCert, caCert)
 	if err != nil {
 		return err
