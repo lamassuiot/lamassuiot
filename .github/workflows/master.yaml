@@ -61,8 +61,8 @@ jobs:
         build-args: |
           BASE_IMAGE=alpine:3.14
         tags: |
-          lamassuiot/lamassuice-manager:${{ needs.tag_generator.outputs.new-tag }}
-          lamassuiot/lamassuice-manager:latest
+          lamassuiot/lamassu-device-manager:${{ needs.tag_generator.outputs.new-tag }}
+          lamassuiot/lamassu-device-manager:latest
         push: true
 
   build_dms_enroller_docker_image:
