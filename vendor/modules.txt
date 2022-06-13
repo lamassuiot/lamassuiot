@@ -265,9 +265,13 @@ github.com/getkin/kin-openapi/openapi3
 # github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 ## explicit
 github.com/ghodss/yaml
+# github.com/globalsign/est v1.0.6
+## explicit; go 1.13
 # github.com/globalsign/pemfile v1.0.0
 ## explicit; go 1.13
 github.com/globalsign/pemfile
+# github.com/go-chi/chi v4.1.2+incompatible
+## explicit
 # github.com/go-kit/kit v0.12.0
 ## explicit; go 1.17
 github.com/go-kit/kit/endpoint
@@ -408,6 +412,8 @@ github.com/google/go-metrics-stackdriver/vault
 # github.com/google/go-querystring v1.1.0
 ## explicit; go 1.10
 github.com/google/go-querystring/query
+# github.com/google/go-tpm v0.3.2
+## explicit; go 1.12
 # github.com/google/gofuzz v1.2.0
 ## explicit; go 1.12
 github.com/google/gofuzz
