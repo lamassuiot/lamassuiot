@@ -46,6 +46,7 @@ func filtrableDeviceModelFields() map[string]types.Filter {
 	fieldFiltersMap["alias"] = &types.StringFilterField{}
 	fieldFiltersMap["status"] = &types.StringFilterField{}
 	fieldFiltersMap["dms_id"] = &types.StringFilterField{}
+	fieldFiltersMap["creation_ts"] = &types.DatesFilterField{}
 	return fieldFiltersMap
 }
 
