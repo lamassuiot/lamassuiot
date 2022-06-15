@@ -724,7 +724,11 @@ github.com/klauspost/compress/internal/snapref
 github.com/klauspost/compress/zlib
 github.com/klauspost/compress/zstd
 github.com/klauspost/compress/zstd/internal/xxhash
+<<<<<<< HEAD
 # github.com/lamassuiot/lamassu-aws-connector v0.0.1 => /home/lamassu/lamassu-aws-connector/aws-connector
+=======
+# github.com/lamassuiot/lamassu-aws-connector v0.0.1 => /home/ikerlan/lamassu/lamassu-aws-2/aws-connector
+>>>>>>> 9e583c620a95b39060e841641dabbd04e52a4555
 ## explicit; go 1.18
 github.com/lamassuiot/lamassu-aws-connector/pkg/client
 # github.com/leodido/go-urn v1.2.1
@@ -1508,4 +1512,4 @@ sigs.k8s.io/structured-merge-diff/v4/value
 # sigs.k8s.io/yaml v1.2.0
 ## explicit; go 1.12
 sigs.k8s.io/yaml
-# github.com/lamassuiot/lamassu-aws-connector => /home/lamassu/lamassu-aws-connector/aws-connector
+# github.com/lamassuiot/lamassu-aws-connector => /home/ikerlan/lamassu/lamassu-aws-2/aws-connector

@@ -369,43 +369,43 @@ jobs:
           go install github.com/haveyoudebuggedit/gotestfmt/v2/cmd/gotestfmt@v2.3.1
           go test -json -v ./test/est/est_test.go -args -domain=dev.lamassu.io -cert=/home/ubuntu/lamassu-compose/tls-certificates/downstream/tls.crt | gotestfmt
 
-  # tear_down_test_infra:
-  #   name: Tear down DEV server
-  #   runs-on: ubuntu-latest
-  #   environment: release
-  #   needs:
-  #   - integration_test
-  #   - ocsp_test
-  #   - est_test
-  #   if: always() || (needs.integration_test.result == 'failure' || needs.est_test.result == 'failure' || needs.ocsp_test.result == 'failure')
-  #   steps:
-  #   - name: Checkout
-  #     uses: actions/checkout@v2
+  tear_down_test_infra:
+    name: Tear down DEV server
+    runs-on: ubuntu-latest
+    environment: release
+    needs:
+    - integration_test
+    - ocsp_test
+    - est_test
+    if: always()
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
 
-  #   - name: Configure AWS credentials
-  #     uses: aws-actions/configure-aws-credentials@v1
-  #     with:
-  #       # role-to-assume: arn:aws:iam::345876576284:role/LamassuGHActions
-  #       # role-session-name: ghactionsrolesession
-  #       # role-skip-session-tagging: true
-  #       # role-duration-seconds: 3600 #1hour
-  #       aws-region: eu-west-1
-  #       aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  #       aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        # role-to-assume: arn:aws:iam::345876576284:role/LamassuGHActions
+        # role-session-name: ghactionsrolesession
+        # role-skip-session-tagging: true
+        # role-duration-seconds: 3600 #1hour
+        aws-region: eu-west-1
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-  #   - name: Install node
-  #     uses: actions/setup-node@v3
-  #     with:
-  #       node-version: 16.4.1
+    - name: Install node
+      uses: actions/setup-node@v3
+      with:
+        node-version: 16.4.1
     
-  #   - name: Install dependencies
-  #     working-directory: .github/infrastructure/tests/e2e
-  #     run: npm i &&  npm i -g cdk
+    - name: Install dependencies
+      working-directory: .github/infrastructure/tests/e2e
+      run: npm i &&  npm i -g cdk
 
-  #   - name: CDK synth
-  #     working-directory: .github/infrastructure/tests/e2e
-  #     run: cdk synth
+    - name: CDK synth
+      working-directory: .github/infrastructure/tests/e2e
+      run: cdk synth
 
-  #   - name: CDK Destroy
-  #     working-directory: .github/infrastructure/tests/e2e
-  #     run: cdk destroy -f
+    - name: CDK Destroy
+      working-directory: .github/infrastructure/tests/e2e
+      run: cdk destroy -f

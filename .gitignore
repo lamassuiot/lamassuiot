@@ -8,3 +8,5 @@ nogit
 *.der
 *.pem
 *.p7
+cover.out
+*.html

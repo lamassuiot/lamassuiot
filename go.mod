@@ -2,7 +2,7 @@ module github.com/lamassuiot/lamassuiot
 
 go 1.18
 
-replace github.com/lamassuiot/lamassu-aws-connector => /home/lamassu/lamassu-aws-connector/aws-connector
+replace github.com/lamassuiot/lamassu-aws-connector => /home/ikerlan/lamassu/lamassu-aws-2/aws-connector
 
 require (
 	github.com/cloudevents/sdk-go/v2 v2.6.0
