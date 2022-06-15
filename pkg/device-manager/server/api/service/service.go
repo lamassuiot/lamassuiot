@@ -28,11 +28,11 @@ type Service interface {
 	UpdateDeviceById(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
 	GetDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error)
 	GetDeviceById(ctx context.Context, deviceId string) (dto.Device, error)
-	GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) ([]dto.Device, error)
+	GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) ([]dto.Device, int, error)
 	DeleteDevice(ctx context.Context, id string) error
 	RevokeDeviceCert(ctx context.Context, id string, revocationReason string) error
 
-	GetDeviceLogs(ctx context.Context, id string) ([]dto.DeviceLog, error)
+	GetDeviceLogs(ctx context.Context, id string, queryParameters filters.QueryParameters) ([]dto.DeviceLog, int, error)
 	GetDeviceCert(ctx context.Context, id string) (dto.DeviceCert, error)
 	GetDeviceCertHistory(ctx context.Context, id string) ([]dto.DeviceCertHistory, error)
 	GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSCertHistory, error)
@@ -163,13 +163,20 @@ func (s *devicesService) GetDevices(ctx context.Context, queryParameters filters
 			}
 
 			cert, err := s.lamassuCaClient.GetCert(ctx, caDTO.Pki, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
-
 			if err != nil {
 				return []dto.Device{}, 0, err
 			}
-			d.CurrentCertificate.Valid_to = cert.ValidTo
-			d.CurrentCertificate.Cert = cert.CertContent.CerificateBase64
-			dev = append(dev, d)
+			if cert.Status == "revoked" {
+				s.devicesDb.UpdateDeviceStatusByID(ctx, d.Id, devicesModel.DeviceCertRevoked.String())
+				s.devicesDb.UpdateDeviceCertificateSerialNumberByID(ctx, d.Id, "")
+				d, _ = s.devicesDb.SelectDeviceById(ctx, d.Id)
+				dev = append(dev, d)
+			} else {
+				d.CurrentCertificate.Valid_to = cert.ValidTo
+				d.CurrentCertificate.Cert = cert.CertContent.CerificateBase64
+				dev = append(dev, d)
+			}
+
 		} else {
 			dev = append(dev, d)
 		}
@@ -179,10 +186,10 @@ func (s *devicesService) GetDevices(ctx context.Context, queryParameters filters
 	return dev, length, nil
 }
 
-func (s *devicesService) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) ([]dto.Device, error) {
-	devices, err := s.devicesDb.SelectAllDevicesByDmsId(ctx, dmsId, queryParameters)
+func (s *devicesService) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) ([]dto.Device, int, error) {
+	devices, total_devices, err := s.devicesDb.SelectAllDevicesByDmsId(ctx, dmsId, queryParameters)
 	if err != nil {
-		return []dto.Device{}, err
+		return []dto.Device{}, 0, err
 	}
 
 	var dev []dto.Device
@@ -190,13 +197,13 @@ func (s *devicesService) GetDevicesByDMS(ctx context.Context, dmsId string, quer
 		if d.CurrentCertificate.SerialNumber != "" {
 			currentCertHistory, err := s.devicesDb.SelectDeviceCertHistoryBySerialNumber(ctx, d.CurrentCertificate.SerialNumber)
 			if err != nil {
-				return []dto.Device{}, err
+				return []dto.Device{}, 0, err
 			}
 
 			cert, err := s.lamassuCaClient.GetCert(ctx, caDTO.Pki, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
 
 			if err != nil {
-				return []dto.Device{}, err
+				return []dto.Device{}, 0, err
 			}
 			d.CurrentCertificate.Valid_to = cert.ValidTo
 			d.CurrentCertificate.Cert = cert.CertContent.CerificateBase64
@@ -208,7 +215,7 @@ func (s *devicesService) GetDevicesByDMS(ctx context.Context, dmsId string, quer
 
 	}
 
-	return dev, nil
+	return dev, total_devices, nil
 }
 func (s *devicesService) GetDeviceById(ctx context.Context, deviceId string) (dto.Device, error) {
 	device, err := s.devicesDb.SelectDeviceById(ctx, deviceId)
@@ -301,16 +308,19 @@ func (s *devicesService) RevokeDeviceCert(ctx context.Context, id string, revoca
 	return nil
 }
 
-func (s *devicesService) GetDeviceLogs(ctx context.Context, id string) ([]dto.DeviceLog, error) {
-	logs, err := s.devicesDb.SelectDeviceLogs(ctx, id)
+func (s *devicesService) GetDeviceLogs(ctx context.Context, id string, queryParameters filters.QueryParameters) ([]dto.DeviceLog, int, error) {
+	logs, total_logs, err := s.devicesDb.SelectDeviceLogs(ctx, id, queryParameters)
 	if err != nil {
-		return []dto.DeviceLog{}, err
+		return []dto.DeviceLog{}, 0, err
 	}
-	return logs, nil
+	return logs, total_logs, nil
 }
 
 func (s *devicesService) GetDeviceCertHistory(ctx context.Context, id string) ([]dto.DeviceCertHistory, error) {
 	history, err := s.devicesDb.SelectDeviceCertHistory(ctx, id)
+	if err != nil {
+		return []dto.DeviceCertHistory{}, err
+	}
 	var certHistory []dto.DeviceCertHistory
 	for _, element := range history {
 		dev, err := s.devicesDb.SelectDeviceById(ctx, id)
@@ -324,6 +334,7 @@ func (s *devicesService) GetDeviceCertHistory(ctx context.Context, id string) ([
 		if cert.RevocationTimestamp != 0 {
 			t := time.Unix(cert.RevocationTimestamp, 0)
 			element.RevocationTimestamp = t.Format("2006-01-02T15:04:05Z")
+			element.Status = cert.Status
 		} else {
 
 			if (cert.Status != device.CertHistoryExpired.String()) && dev.CreationTimestamp == dev.ModificationTimestamp {
@@ -334,9 +345,6 @@ func (s *devicesService) GetDeviceCertHistory(ctx context.Context, id string) ([
 		}
 		certHistory = append(certHistory, element)
 
-	}
-	if err != nil {
-		return []dto.DeviceCertHistory{}, err
 	}
 	return certHistory, nil
 }
