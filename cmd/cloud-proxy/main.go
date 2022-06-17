@@ -64,8 +64,8 @@ func main() {
 		},
 		AuthMethod: clientUtils.MutualTLS,
 		AuthMethodConfig: &clientUtils.MutualTLSConfig{
-			ClientCert: cfg.CertFile,
-			ClientKey:  cfg.KeyFile,
+			ClientCert: cfg.LamassuCAClientCertFile,
+			ClientKey:  cfg.LamassuCAClientKeyFile,
 		},
 		CACertificate: cfg.LamassuCACertFile,
 	})
