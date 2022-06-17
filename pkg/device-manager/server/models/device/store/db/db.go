@@ -212,17 +212,28 @@ func (db *DB) SetKeyAndSubject(ctx context.Context, keyMetadate dto.PrivateKeyMe
 	return nil
 
 }
-func (db *DB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, queryParameters filters.QueryParameters) ([]dto.Device, error) {
+func (db *DB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, queryParameters filters.QueryParameters) ([]dto.Device, int, error) {
 	db.logger = ctx.Value(utils.LamassuLoggerContextKey).(log.Logger)
 	parentSpan := opentracing.SpanFromContext(ctx)
-
+	var length int
+	sqlStatement1 := `SELECT COUNT(*) as count FROM devices where dms_id = $1 `
+	rows, err := db.Query(sqlStatement1, dms_id)
+	if err != nil {
+		return []dto.Device{}, 0, err
+	}
+	rows.Next()
+	err = rows.Scan(&length)
+	if err != nil {
+		return []dto.Device{}, 0, err
+	}
+	rows.Close()
 	sqlStatement := `
 	SELECT * FROM devices where dms_id = $1
 	`
 	sqlStatement = filters.ApplySQLFilter(sqlStatement, queryParameters)
 
 	span := opentracing.StartSpan("lamassu-device-manager: Select All Devices by DMS ID from database", opentracing.ChildOf(parentSpan.Context()))
-	rows, err := db.Query(sqlStatement, dms_id)
+	rows, err = db.Query(sqlStatement, dms_id)
 	span.Finish()
 	if err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Devices from database")
@@ -230,7 +241,7 @@ func (db *DB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, queryP
 			ResourceType: "DEVICE",
 			ResourceId:   dms_id,
 		}
-		return []dto.Device{}, notFoundErr
+		return []dto.Device{}, 0, notFoundErr
 	}
 	defer rows.Close()
 
@@ -239,12 +250,12 @@ func (db *DB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, queryP
 		var dev dto.Device
 		err := rows.Scan(&dev.Id, &dev.Alias, &dev.Description, pq.Array(&dev.Tags), &dev.IconName, &dev.IconColor, &dev.Status, &dev.DmsId, &dev.Subject.Country, &dev.Subject.State, &dev.Subject.Locality, &dev.Subject.Organization, &dev.Subject.OrganizationUnit, &dev.Subject.CommonName, &dev.KeyMetadata.KeyStrength, &dev.KeyMetadata.KeyType, &dev.KeyMetadata.KeyBits, &dev.CreationTimestamp, &dev.ModificationTimestamp, &dev.CurrentCertificate.SerialNumber)
 		if err != nil {
-			return []dto.Device{}, err
+			return []dto.Device{}, 0, err
 		}
 		devices = append(devices, dev)
 	}
 
-	return devices, nil
+	return devices, length, nil
 }
 
 func (db *DB) UpdateDeviceStatusByID(ctx context.Context, id string, newStatus string) error {
@@ -344,8 +355,8 @@ func (db *DB) InsertLog(ctx context.Context, logDev dto.DeviceLog) error {
 	db.logger = ctx.Value(utils.LamassuLoggerContextKey).(log.Logger)
 	parentSpan := opentracing.SpanFromContext(ctx)
 	sqlStatement := `
-	INSERT INTO device_logs(id, creation_ts, device_uuid, log_type,log_message)
-	VALUES($1, $2, $3, $4, $5)
+	INSERT INTO device_logs(id, creation_ts, device_uuid, log_type,log_message, log_description)
+	VALUES($1, $2, $3, $4, $5, $6)
 	RETURNING id;
 	`
 	span := opentracing.StartSpan("lamassu-device-manager:  insert Log Device for device with ID "+logDev.DeviceId+" in database", opentracing.ChildOf(parentSpan.Context()))
@@ -356,6 +367,7 @@ func (db *DB) InsertLog(ctx context.Context, logDev dto.DeviceLog) error {
 		logDev.DeviceId,
 		logDev.LogType,
 		logDev.LogMessage,
+		logDev.LogDescription,
 	).Scan(&logDev.Id)
 	span.Finish()
 	if err != nil {
@@ -369,15 +381,27 @@ func (db *DB) InsertLog(ctx context.Context, logDev dto.DeviceLog) error {
 	level.Debug(db.logger).Log("msg", "Device Log with ID "+id+" inserted in database")
 	return nil
 }
-func (db *DB) SelectDeviceLogs(ctx context.Context, deviceId string) ([]dto.DeviceLog, error) {
+func (db *DB) SelectDeviceLogs(ctx context.Context, deviceId string, queryparameters filters.QueryParameters) ([]dto.DeviceLog, int, error) {
 	db.logger = ctx.Value(utils.LamassuLoggerContextKey).(log.Logger)
 	parentSpan := opentracing.SpanFromContext(ctx)
+	var length int
+	sqlStatement1 := `SELECT COUNT(*) as count FROM device_logs where device_uuid = $1 `
+	rows, err := db.Query(sqlStatement1, deviceId)
+	if err != nil {
+		return []dto.DeviceLog{}, 0, err
+	}
+	rows.Next()
+	err = rows.Scan(&length)
+	if err != nil {
+		return []dto.DeviceLog{}, 0, err
+	}
+	rows.Close()
 	sqlStatement := `
 	SELECT * FROM device_logs WHERE device_uuid = $1
 	`
-
+	sqlStatement = filters.ApplySQLFilter(sqlStatement, queryparameters)
 	span := opentracing.StartSpan("lamassu-device-manager: Select Devoces Logs from database", opentracing.ChildOf(parentSpan.Context()))
-	rows, err := db.Query(sqlStatement, deviceId)
+	rows, err = db.Query(sqlStatement, deviceId)
 	span.Finish()
 	if err != nil {
 		level.Error(db.logger).Log("err", err, "msg", "Could not obtain Devices Logs from database")
@@ -385,22 +409,22 @@ func (db *DB) SelectDeviceLogs(ctx context.Context, deviceId string) ([]dto.Devi
 			ResourceType: "DEVICE-LOGS",
 			ResourceId:   deviceId,
 		}
-		return []dto.DeviceLog{}, notFoundErr
+		return []dto.DeviceLog{}, 0, notFoundErr
 	}
 	defer rows.Close()
 
 	var deviceLogs []dto.DeviceLog
 	for rows.Next() {
 		var log dto.DeviceLog
-		err := rows.Scan(&log.Id, &log.Timestamp, &log.DeviceId, &log.LogType, &log.LogMessage)
+		err := rows.Scan(&log.Id, &log.Timestamp, &log.DeviceId, &log.LogType, &log.LogMessage, &log.LogDescription)
 		if err != nil {
-			return []dto.DeviceLog{}, err
+			return []dto.DeviceLog{}, 0, err
 		}
 		level.Debug(db.logger).Log("msg", "DeviceLog with ID "+log.Id+" read from database")
 		deviceLogs = append(deviceLogs, log)
 	}
 
-	return deviceLogs, err
+	return deviceLogs, length, err
 }
 
 func (db *DB) InsertDeviceCertHistory(ctx context.Context, certHistory dto.DeviceCertHistory) error {
@@ -519,19 +543,31 @@ func (db *DB) SelectDeviceCertHistoryLastThirtyDays(ctx context.Context, queryPa
 
 	return deviceCertHistory, nil
 }
-func (db *DB) SelectDmssLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSLastIssued, error) {
+func (db *DB) SelectDmssLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSLastIssued, int, error) {
 	db.logger = ctx.Value(utils.LamassuLoggerContextKey).(log.Logger)
 	parentSpan := opentracing.SpanFromContext(ctx)
+	var length int
+	sqlStatement1 := `SELECT COUNT(*) as count FROM last_issued_cert_by_dms `
+	rows, err := db.Query(sqlStatement1)
+	if err != nil {
+		return []dto.DMSLastIssued{}, 0, err
+	}
+	rows.Next()
+	err = rows.Scan(&length)
+	if err != nil {
+		return []dto.DMSLastIssued{}, 0, err
+	}
+	rows.Close()
 	sqlStatement := `
 	SELECT * FROM last_issued_cert_by_dms
 	`
 	sqlStatement = filters.ApplySQLFilter(sqlStatement, queryParameters)
 	span := opentracing.StartSpan("lamassu-device-manager: Select Last Issued Cert By DMS from database", opentracing.ChildOf(parentSpan.Context()))
-	rows, err := db.Query(sqlStatement)
+	rows, err = db.Query(sqlStatement)
 	span.Finish()
 	if err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Last Issued Cert By DMS from database")
-		return []dto.DMSLastIssued{}, err
+		return []dto.DMSLastIssued{}, 0, err
 	}
 	defer rows.Close()
 
@@ -540,12 +576,12 @@ func (db *DB) SelectDmssLastIssuedCert(ctx context.Context, queryParameters filt
 		var lastIssued dto.DMSLastIssued
 		err := rows.Scan(&lastIssued.DmsId, &lastIssued.CreationTimestamp, &lastIssued.SerialNumber)
 		if err != nil {
-			return []dto.DMSLastIssued{}, err
+			return []dto.DMSLastIssued{}, 0, err
 		}
 		dmssLastIssued = append(dmssLastIssued, lastIssued)
 	}
 
-	return dmssLastIssued, nil
+	return dmssLastIssued, length, nil
 }
 func contains(s []string, str string) bool {
 	for _, v := range s {

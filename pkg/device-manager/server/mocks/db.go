@@ -173,7 +173,7 @@ func (db *MockDB) SelectAllDevices(ctx context.Context, queryParameters filters.
 		return devList, 0, nil
 	}
 }
-func (db *MockDB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, queryParameters filters.QueryParameters) ([]dto.Device, error) {
+func (db *MockDB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, queryParameters filters.QueryParameters) ([]dto.Device, int, error) {
 	var devList []dto.Device
 	var d dto.Device
 	var dNoSerialNumber dto.Device
@@ -190,9 +190,9 @@ func (db *MockDB) SelectAllDevicesByDmsId(ctx context.Context, dms_id string, qu
 			ResourceType: "DEVICE",
 			ResourceId:   dms_id,
 		}
-		return []dto.Device{}, notFoundErr
+		return []dto.Device{}, 0, notFoundErr
 	}
-	return devList, nil
+	return devList, len(devList), nil
 }
 
 func (db *MockDB) UpdateDeviceCertificateSerialNumberByID(ctx context.Context, id string, serialNumber string) error {
@@ -240,20 +240,20 @@ func (db *MockDB) InsertLog(ctx context.Context, l dto.DeviceLog) error {
 	}
 	return nil
 }
-func (db *MockDB) SelectDeviceLogs(ctx context.Context, deviceId string) ([]dto.DeviceLog, error) {
+func (db *MockDB) SelectDeviceLogs(ctx context.Context, deviceId string, queryparameters filters.QueryParameters) ([]dto.DeviceLog, int, error) {
 	var d []dto.DeviceLog
 	if deviceId == "errorGetDeviceLogs" {
 		notFoundErr := &devmanagererrors.ResourceNotFoundError{
 			ResourceType: "DEVICE-LOGS",
 			ResourceId:   deviceId,
 		}
-		return []dto.DeviceLog{}, notFoundErr
+		return []dto.DeviceLog{}, 0, notFoundErr
 	} else if deviceId == "1" {
 		log := dto.DeviceLog{Id: "1", DeviceId: "1", LogType: "log_type", LogMessage: "", Timestamp: ""}
 		d = append(d, log)
-		return d, nil
+		return d, 0, nil
 	} else {
-		return d, nil
+		return d, 0, nil
 	}
 }
 
@@ -359,20 +359,20 @@ func (db *MockDB) UpdateDeviceStatusByID(ctx context.Context, id string, newStat
 	return nil
 }
 
-func (db *MockDB) SelectDmssLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSLastIssued, error) {
+func (db *MockDB) SelectDmssLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSLastIssued, int, error) {
 	if ctx.Value("DBSelectDmssLastIssuedCert") != nil {
 		failDB := ctx.Value("DBSelectDmssLastIssuedCert").(bool)
 
 		if failDB {
 			var a []dto.DMSLastIssued
-			return a, errors.New("Testing DB connection failed")
+			return a, 0, errors.New("Testing DB connection failed")
 		} else {
 
-			return testDmsLastIssuedCert(), nil
+			return testDmsLastIssuedCert(), 0, nil
 		}
 	} else {
 
-		return testDmsLastIssuedCert(), nil
+		return testDmsLastIssuedCert(), 0, nil
 	}
 }
 

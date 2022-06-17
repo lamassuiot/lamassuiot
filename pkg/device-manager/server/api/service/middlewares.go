@@ -107,7 +107,7 @@ func (mw loggingMiddleware) UpdateDeviceById(ctx context.Context, alias string, 
 	return mw.next.UpdateDeviceById(ctx, alias, deviceID, DmsID, description, tags, iconName, iconColor)
 }
 
-func (mw loggingMiddleware) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) (deviceResp []dto.Device, err error) {
+func (mw loggingMiddleware) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) (deviceResp []dto.Device, total_devices int, err error) {
 	defer func(begin time.Time) {
 		mw.logger.Log(
 			"method", "GetDevicesByDMS",
@@ -148,7 +148,7 @@ func (mw loggingMiddleware) RevokeDeviceCert(ctx context.Context, id string, rev
 	return mw.next.RevokeDeviceCert(ctx, id, revocationReason)
 }
 
-func (mw loggingMiddleware) GetDeviceLogs(ctx context.Context, id string) (logs []dto.DeviceLog, err error) {
+func (mw loggingMiddleware) GetDeviceLogs(ctx context.Context, id string, queryParameters filters.QueryParameters) (logs []dto.DeviceLog, total_logs int, err error) {
 	defer func(begin time.Time) {
 		mw.logger.Log(
 			"method", "GetDeviceLogs",
@@ -159,7 +159,7 @@ func (mw loggingMiddleware) GetDeviceLogs(ctx context.Context, id string) (logs 
 			"err", err,
 		)
 	}(time.Now())
-	return mw.next.GetDeviceLogs(ctx, id)
+	return mw.next.GetDeviceLogs(ctx, id, queryParameters)
 }
 
 func (mw loggingMiddleware) GetDeviceCert(ctx context.Context, id string) (cert dto.DeviceCert, err error) {
@@ -202,7 +202,7 @@ func (mw loggingMiddleware) GetDmsCertHistoryThirtyDays(ctx context.Context, que
 	}(time.Now())
 	return mw.next.GetDmsCertHistoryThirtyDays(ctx, queryParameters)
 }
-func (mw loggingMiddleware) GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) (dmsLastIssued []dto.DMSLastIssued, err error) {
+func (mw loggingMiddleware) GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) (dmsLastIssued []dto.DMSLastIssued, total_issued int, err error) {
 	defer func(begin time.Time) {
 		mw.logger.Log(
 			"method", "GetDmsLastIssuedCert",

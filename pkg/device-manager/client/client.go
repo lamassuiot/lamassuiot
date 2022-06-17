@@ -18,14 +18,14 @@ type LamassuDeviceManagerClient interface {
 	UpdateDeviceById(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
 	GetDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error)
 	GetDeviceById(ctx context.Context, deviceId string) (dto.Device, error)
-	GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) ([]dto.Device, error)
+	GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) (dto.GetDevicesResponse, error)
 	DeleteDevice(ctx context.Context, id string) error
 	RevokeDeviceCert(ctx context.Context, id string, revocationReason string) error
-	GetDeviceLogs(ctx context.Context, id string) ([]dto.DeviceLog, error)
+	GetDeviceLogs(ctx context.Context, id string) (dto.GetLogsResponse, error)
 	GetDeviceCert(ctx context.Context, id string) (dto.DeviceCert, error)
 	GetDeviceCertHistory(ctx context.Context, id string) ([]dto.DeviceCertHistory, error)
 	GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSCertHistory, error)
-	GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSLastIssued, error)
+	GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) (dto.GetLastIssuedCertResponse, error)
 
 	//EST Endpoints
 	CACerts(ctx context.Context, aps string, clientCert *x509.Certificate, clientKey []byte, serverCert *x509.CertPool, estServerAddr string) ([]*x509.Certificate, error)
@@ -138,11 +138,11 @@ func (c *LamassuDeviceManagerClientConfig) GetDeviceById(ctx context.Context, de
 
 	return device, nil
 }
-func (c *LamassuDeviceManagerClientConfig) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) ([]dto.Device, error) {
+func (c *LamassuDeviceManagerClientConfig) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) (dto.GetDevicesResponse, error) {
 	var newParams string
 	req, err := c.client.NewRequest("GET", "v1/devices/dms/"+dmsId, nil)
 	if err != nil {
-		return []dto.Device{}, err
+		return dto.GetDevicesResponse{}, err
 	}
 
 	newParams = clientFilters.GenerateHttpQueryParams(queryParameters)
@@ -150,21 +150,13 @@ func (c *LamassuDeviceManagerClientConfig) GetDevicesByDMS(ctx context.Context, 
 	req.URL.RawQuery = newParams
 	respBody, _, err := c.client.Do(req)
 	if err != nil {
-		return []dto.Device{}, err
+		return dto.GetDevicesResponse{}, err
 	}
 	var resp dto.GetDevicesResponse
 
 	jsonString, _ := json.Marshal(respBody)
 	json.Unmarshal(jsonString, &resp)
-
-	var devices []dto.Device
-	for _, item := range resp.Devices {
-		device := dto.Device{}
-		jsonString, _ := json.Marshal(item)
-		json.Unmarshal(jsonString, &device)
-		devices = append(devices, device)
-	}
-	return devices, nil
+	return resp, nil
 }
 func (c *LamassuDeviceManagerClientConfig) DeleteDevice(ctx context.Context, id string) error {
 	req, err := c.client.NewRequest("DELETE", "v1/devices/"+id, nil)
@@ -189,24 +181,19 @@ func (c *LamassuDeviceManagerClientConfig) RevokeDeviceCert(ctx context.Context,
 	}
 	return nil
 }
-func (c *LamassuDeviceManagerClientConfig) GetDeviceLogs(ctx context.Context, id string) ([]dto.DeviceLog, error) {
+func (c *LamassuDeviceManagerClientConfig) GetDeviceLogs(ctx context.Context, id string) (dto.GetLogsResponse, error) {
 	req, err := c.client.NewRequest("GET", "v1/devices/"+id+"/logs", nil)
 	if err != nil {
-		return []dto.DeviceLog{}, err
+		return dto.GetLogsResponse{}, err
 	}
 	respBody, _, err := c.client.Do(req)
 	if err != nil {
-		return []dto.DeviceLog{}, err
+		return dto.GetLogsResponse{}, err
 	}
 
-	logsArrayInterface := respBody.([]interface{})
-	var logs []dto.DeviceLog
-	for _, item := range logsArrayInterface {
-		log := dto.DeviceLog{}
-		jsonString, _ := json.Marshal(item)
-		json.Unmarshal(jsonString, &log)
-		logs = append(logs, log)
-	}
+	var logs dto.GetLogsResponse
+	jsonString, _ := json.Marshal(respBody)
+	json.Unmarshal(jsonString, &logs)
 	return logs, nil
 }
 func (c *LamassuDeviceManagerClientConfig) GetDeviceCert(ctx context.Context, id string) (dto.DeviceCert, error) {
@@ -270,11 +257,11 @@ func (c *LamassuDeviceManagerClientConfig) GetDmsCertHistoryThirtyDays(ctx conte
 	}
 	return dmsCertHistory, nil
 }
-func (c *LamassuDeviceManagerClientConfig) GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSLastIssued, error) {
+func (c *LamassuDeviceManagerClientConfig) GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) (dto.GetLastIssuedCertResponse, error) {
 	var newParams string
 	req, err := c.client.NewRequest("GET", "v1/devices/dms-cert-history/last-issued", nil)
 	if err != nil {
-		return []dto.DMSLastIssued{}, err
+		return dto.GetLastIssuedCertResponse{}, err
 	}
 
 	newParams = clientFilters.GenerateHttpQueryParams(queryParameters)
@@ -282,17 +269,12 @@ func (c *LamassuDeviceManagerClientConfig) GetDmsLastIssuedCert(ctx context.Cont
 	req.URL.RawQuery = newParams
 	respBody, _, err := c.client.Do(req)
 	if err != nil {
-		return []dto.DMSLastIssued{}, err
+		return dto.GetLastIssuedCertResponse{}, err
 	}
 
-	dmsLastIssuedArrayInterface := respBody.([]interface{})
-	var dmsLastIssued []dto.DMSLastIssued
-	for _, item := range dmsLastIssuedArrayInterface {
-		lastIssued := dto.DMSLastIssued{}
-		jsonString, _ := json.Marshal(item)
-		json.Unmarshal(jsonString, &lastIssued)
-		dmsLastIssued = append(dmsLastIssued, lastIssued)
-	}
+	var dmsLastIssued dto.GetLastIssuedCertResponse
+	jsonString, _ := json.Marshal(respBody)
+	json.Unmarshal(jsonString, &dmsLastIssued)
 	return dmsLastIssued, nil
 }
 func (c *LamassuDeviceManagerClientConfig) CACerts(ctx context.Context, aps string, clientCert *x509.Certificate, clientKey []byte, serverCert *x509.CertPool, estServerAddr string) ([]*x509.Certificate, error) {

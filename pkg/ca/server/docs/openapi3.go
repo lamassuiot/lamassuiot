@@ -164,9 +164,12 @@ func NewOpenAPI3(config config.Config) openapi3.T {
 		"GetCAResponse": &openapi3.ResponseRef{
 			Value: openapi3.NewResponse().
 				WithDescription("Response returned back after getting a CA.").
-				WithContent(openapi3.NewContentWithJSONSchemaRef(arrayOf(&openapi3.SchemaRef{
-					Ref: "#/components/schemas/LamassuCA",
-				}))),
+				WithContent(openapi3.NewContentWithJSONSchema(openapi3.NewSchema().
+					WithProperty("total_cas", openapi3.NewIntegerSchema()).
+					WithPropertyRef("cas", arrayOf(&openapi3.SchemaRef{
+						Ref: "#/components/schemas/LamassuCA",
+					}))),
+				),
 		},
 		"CreateCAResponse": &openapi3.ResponseRef{
 			Value: openapi3.NewResponse().
@@ -188,9 +191,12 @@ func NewOpenAPI3(config config.Config) openapi3.T {
 		"GetIssuedCertsResponse": &openapi3.ResponseRef{
 			Value: openapi3.NewResponse().
 				WithDescription("Response returned back after getting list of issued certificates.").
-				WithContent(openapi3.NewContentWithJSONSchemaRef(arrayOf(&openapi3.SchemaRef{
-					Ref: "#/components/schemas/LamassuCA",
-				}))),
+				WithContent(openapi3.NewContentWithJSONSchema(openapi3.NewSchema().
+					WithProperty("total_certs", openapi3.NewIntegerSchema()).
+					WithPropertyRef("certs", arrayOf(&openapi3.SchemaRef{
+						Ref: "#/components/schemas/LamassuCA",
+					}))),
+				),
 		},
 		"GetCertResponse": &openapi3.ResponseRef{
 			Value: openapi3.NewResponse().
@@ -203,7 +209,8 @@ func NewOpenAPI3(config config.Config) openapi3.T {
 			Value: openapi3.NewResponse().
 				WithDescription("Response returned back after signing certificate.").
 				WithContent(openapi3.NewContentWithJSONSchema(openapi3.NewSchema().
-					WithProperty("crt", openapi3.NewBoolSchema())),
+					WithProperty("crt", openapi3.NewBoolSchema()).
+					WithProperty("cacrt", openapi3.NewBoolSchema())),
 				),
 		},
 		"DeleteCertResponse": &openapi3.ResponseRef{
@@ -235,6 +242,22 @@ func NewOpenAPI3(config config.Config) openapi3.T {
 							WithSchema(openapi3.NewSchema().
 								WithEnum("pki", "dmsenroller"),
 							),
+					},
+					{
+						Value: openapi3.NewQueryParameter("filter").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
+					},
+					{
+						Value: openapi3.NewQueryParameter("sort_by").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
+					},
+					{
+						Value: openapi3.NewQueryParameter("limit").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
+					},
+					{
+						Value: openapi3.NewQueryParameter("offset").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 				},
 				Responses: openapi3.Responses{
@@ -363,6 +386,22 @@ func NewOpenAPI3(config config.Config) openapi3.T {
 							WithSchema(openapi3.NewSchema().
 								WithEnum("pki", "dmsenroller"),
 							),
+					},
+					{
+						Value: openapi3.NewQueryParameter("filter").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
+					},
+					{
+						Value: openapi3.NewQueryParameter("sort_by").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
+					},
+					{
+						Value: openapi3.NewQueryParameter("limit").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
+					},
+					{
+						Value: openapi3.NewQueryParameter("offset").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 				},
 				Responses: openapi3.Responses{

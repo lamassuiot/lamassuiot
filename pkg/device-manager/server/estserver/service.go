@@ -116,6 +116,20 @@ func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, a
 		if err != nil {
 			return nil, err
 		}
+		log := dto.DeviceLog{
+			DeviceId:       csr.Subject.CommonName,
+			LogMessage:     devicesModel.LogDeviceCreated.String(),
+			LogDescription: "",
+			LogType:        "INFO",
+		}
+		s.devicesDb.InsertLog(ctx, log)
+		log = dto.DeviceLog{
+			DeviceId:       csr.Subject.CommonName,
+			LogMessage:     devicesModel.LogPendingProvision.String(),
+			LogDescription: "",
+			LogType:        "INFO",
+		}
+		s.devicesDb.InsertLog(ctx, log)
 	}
 	device, _ = s.devicesDb.SelectDeviceById(ctx, deviceId)
 	if device.Status == devicesModel.DeviceDecommisioned.String() {
@@ -158,15 +172,19 @@ func (s *EstService) Enroll(ctx context.Context, csr *x509.CertificateRequest, a
 
 	serialNumber := lamassuUtils.InsertNth(lamassuUtils.ToHexInt(dataCert.SerialNumber), 2)
 	log := dto.DeviceLog{
-		DeviceId:   deviceId,
-		LogType:    devicesModel.LogProvisioned.String(),
-		LogMessage: "The device has been provisioned through the enrollment process. The new certificate Serial Number is " + serialNumber,
+		DeviceId:       deviceId,
+		LogMessage:     devicesModel.LogProvisioned.String(),
+		LogDescription: "The device has been provisioned through the enrollment process. The new certificate Serial Number is " + serialNumber,
+		LogType:        "INFO",
 	}
-
-	err = s.devicesDb.InsertLog(ctx, log)
-	if err != nil {
-		return nil, err
+	s.devicesDb.InsertLog(ctx, log)
+	log = dto.DeviceLog{
+		DeviceId:       deviceId,
+		LogMessage:     devicesModel.LogDeviceCertExpiration.String(),
+		LogDescription: "Certificate with serial number " + serialNumber + " expires" + dataCert.NotAfter.String(),
+		LogType:        "WARNMING",
 	}
+	s.devicesDb.InsertLog(ctx, log)
 
 	certHistory := dto.DeviceCertHistory{
 		SerialNumber: serialNumber,
@@ -246,11 +264,13 @@ func (s *EstService) Reenroll(ctx context.Context, cert *x509.Certificate, csr *
 		level.Error(s.logger).Log("err", err, "msg", errMsg)
 		return nil, err
 	}
-	/*err = s.devicesDb.UpdateDeviceCertHistory(ctx, deviceId, device.CurrentCertificate.SerialNumber, dto.CertHistoryRevoked)
-	if err != nil {
-		return nil, err
-	}*/
-
+	log := dto.DeviceLog{
+		DeviceId:       deviceId,
+		LogMessage:     devicesModel.LogCertRevoked.String(),
+		LogDescription: "Certificate with serial number " + serialNumberToRevoke + " has been revoked",
+		LogType:        "CRITICAL",
+	}
+	s.devicesDb.InsertLog(ctx, log)
 	err = s.devicesDb.UpdateDeviceStatusByID(ctx, deviceId, devicesModel.DeviceCertRevoked.String())
 	if err != nil {
 		return nil, err
@@ -265,15 +285,18 @@ func (s *EstService) Reenroll(ctx context.Context, cert *x509.Certificate, csr *
 
 	deviceId = dataCert.Subject.CommonName
 	serialNumber := lamassuUtils.InsertNth(lamassuUtils.ToHexInt(dataCert.SerialNumber), 2)
-	log := dto.DeviceLog{
-		DeviceId:   deviceId,
-		LogType:    devicesModel.LogProvisioned.String(),
-		LogMessage: "The device has been provisioned through the enrollment process. The new certificate Serial Number is " + serialNumber,
+	log = dto.DeviceLog{
+		DeviceId:       deviceId,
+		LogMessage:     devicesModel.LogDeviceReenroll.String(),
+		LogDescription: "The device has been provisioned through the reenrollment process. The new certificate Serial Number is " + serialNumber,
+		LogType:        "SUCCESS",
 	}
-
-	err = s.devicesDb.InsertLog(ctx, log)
-	if err != nil {
-		return nil, err
+	s.devicesDb.InsertLog(ctx, log)
+	log = dto.DeviceLog{
+		DeviceId:       deviceId,
+		LogMessage:     devicesModel.LogDeviceCertExpiration.String(),
+		LogDescription: "Certificate with serial number " + serialNumber + " expires" + dataCert.NotAfter.String(),
+		LogType:        "WARNMING",
 	}
 
 	certHistory := dto.DeviceCertHistory{

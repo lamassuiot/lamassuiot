@@ -184,8 +184,8 @@ func MakeUpdateDeviceByIdEndpoint(s service.Service) endpoint.Endpoint {
 func MakeGetDevicesByDMSEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(GetDevicesByDMSRequest)
-		devices, e := s.GetDevicesByDMS(ctx, req.Id, req.QueryParameters)
-		return dto.GetDevicesResponse{TotalDevices: len(devices), Devices: devices}, e
+		devices, total_devices, e := s.GetDevicesByDMS(ctx, req.Id, req.QueryParameters)
+		return dto.GetDevicesResponse{TotalDevices: total_devices, Devices: devices}, e
 	}
 }
 func MakeDeleteDeviceEndpoint(s service.Service) endpoint.Endpoint {
@@ -210,8 +210,8 @@ func MakeDeleteRevokeEndpoint(s service.Service) endpoint.Endpoint {
 func MakeGetDeviceLogsEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		reqL := request.(GetDeviceLogsRequest)
-		logs, e := s.GetDeviceLogs(ctx, reqL.Id)
-		return logs, e
+		logs, total_logs, e := s.GetDeviceLogs(ctx, reqL.Id, reqL.QueryParameters)
+		return dto.GetLogsResponse{TotalLogs: total_logs, Logs: logs}, e
 	}
 }
 
@@ -239,8 +239,8 @@ func MakeGetDmsCertHistoryThirtyDaysEndpoint(s service.Service) endpoint.Endpoin
 func MakeGetDmsLastIssueCertEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(filters.QueryParameters)
-		history, e := s.GetDmsLastIssuedCert(ctx, req)
-		return history, e
+		history, total_certs, e := s.GetDmsLastIssuedCert(ctx, req)
+		return dto.GetLastIssuedCertResponse{TotalLastIssuedCert: total_certs, IssuedCert: history}, e
 	}
 }
 
@@ -287,7 +287,8 @@ type DeleteRevokeRequest struct {
 	Id string
 }
 type GetDeviceLogsRequest struct {
-	Id string
+	Id              string
+	QueryParameters filters.QueryParameters
 }
 type GetDeviceCertRequest struct {
 	Id string

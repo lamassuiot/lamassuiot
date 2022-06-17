@@ -276,7 +276,7 @@ func decodedecodeDeleteRevokeRequest(ctx context.Context, r *http.Request) (requ
 func decodedecodeGetDeviceLogsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
 	id, _ := vars["deviceId"]
-	return endpoint.GetDeviceLogsRequest{Id: id}, nil
+	return endpoint.GetDeviceLogsRequest{Id: id, QueryParameters: filters.FilterQuery(r, filtrableDeviceModelFields())}, nil
 }
 func decodedecodeGetDeviceCertRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
