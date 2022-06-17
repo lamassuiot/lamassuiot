@@ -45,7 +45,6 @@ func main() {
 	logger = log.NewJSONLogger(os.Stdout)
 	logger = level.NewFilter(logger, level.AllowDebug())
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	logger = log.With(logger, "trace", traceId)
 	logger = log.With(logger, "caller", log.DefaultCaller)
 
 	/*********************************************************************/
