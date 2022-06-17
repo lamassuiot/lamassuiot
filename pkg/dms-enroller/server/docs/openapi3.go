@@ -62,8 +62,7 @@ func NewOpenAPI3(config config.Config) openapi3.T {
 				WithProperty("csr", openapi3.NewStringSchema()).
 				WithProperty("crt", openapi3.NewStringSchema()).
 				WithProperty("creation_timestamp", openapi3.NewStringSchema()).
-				WithProperty("modification_timestamp", openapi3.NewStringSchema()).
-				WithProperty("enrolled_devices", openapi3.NewIntegerSchema()),
+				WithProperty("modification_timestamp", openapi3.NewStringSchema()),
 		),
 		"Subject": openapi3.NewSchemaRef("",
 			openapi3.NewObjectSchema().
@@ -162,7 +161,8 @@ func NewOpenAPI3(config config.Config) openapi3.T {
 			Value: openapi3.NewResponse().
 				WithDescription("Response returned back after getting pending CSRs.").
 				WithContent(openapi3.NewContentWithJSONSchema(openapi3.NewSchema().
-					WithPropertyRef("DMSs", arrayOf(&openapi3.SchemaRef{
+					WithProperty("total_dmss", openapi3.NewIntegerSchema()).
+					WithPropertyRef("dmss", arrayOf(&openapi3.SchemaRef{
 						Ref: "#/components/schemas/DMS",
 					}))),
 				),
@@ -170,25 +170,9 @@ func NewOpenAPI3(config config.Config) openapi3.T {
 		"GetDMSByIDResponse": &openapi3.ResponseRef{
 			Value: openapi3.NewResponse().
 				WithDescription("Response returned back after getting pending CSRs.").
-				WithContent(openapi3.NewContentWithJSONSchema(openapi3.NewSchema().
-					WithPropertyRef("dms", &openapi3.SchemaRef{
-						Ref: "#/components/schemas/DMS",
-					})),
-				),
-		},
-
-		"GetPendingCSRDBResponse": &openapi3.ResponseRef{
-			Value: openapi3.NewResponse().
-				WithDescription("Response returned back after getting pending CSRDB.").
 				WithContent(openapi3.NewContentWithJSONSchemaRef(&openapi3.SchemaRef{
 					Ref: "#/components/schemas/DMS",
 				})),
-		},
-		//TODO
-		"GetPendingCSRFileResponse": &openapi3.ResponseRef{
-			Value: openapi3.NewResponse().
-				WithDescription("Response returned back after getting CSR File.").
-				WithContent(openapi3.NewContentWithJSONSchema(openapi3.NewSchema())),
 		},
 		"PutChangeDMSStatusResponse": &openapi3.ResponseRef{
 			Value: openapi3.NewResponse().
@@ -200,11 +184,6 @@ func NewOpenAPI3(config config.Config) openapi3.T {
 		"DeleteDMSResponse": &openapi3.ResponseRef{
 			Value: openapi3.NewResponse().
 				WithDescription("Response returned back after deleting DMS.").
-				WithContent(openapi3.NewContentWithJSONSchema(openapi3.NewSchema())),
-		},
-		"GetCRTResponse": &openapi3.ResponseRef{
-			Value: openapi3.NewResponse().
-				WithDescription("Response returned back after getting Certificate.").
 				WithContent(openapi3.NewContentWithJSONSchema(openapi3.NewSchema())),
 		},
 	}
@@ -289,6 +268,24 @@ func NewOpenAPI3(config config.Config) openapi3.T {
 			Get: &openapi3.Operation{
 				OperationID: "GetDMSs",
 				Description: "Get DMSs",
+				Parameters: []*openapi3.ParameterRef{
+					{
+						Value: openapi3.NewQueryParameter("filter").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
+					},
+					{
+						Value: openapi3.NewQueryParameter("sort_by").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
+					},
+					{
+						Value: openapi3.NewQueryParameter("limit").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
+					},
+					{
+						Value: openapi3.NewQueryParameter("offset").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
+					},
+				},
 				Responses: openapi3.Responses{
 					"400": &openapi3.ResponseRef{
 						Ref: "#/components/responses/ErrorResponse",
@@ -391,35 +388,6 @@ func NewOpenAPI3(config config.Config) openapi3.T {
 					},
 					"200": &openapi3.ResponseRef{
 						Ref: "#/components/responses/DeleteDMSResponse",
-					},
-				},
-			},
-		},
-		"/v1/{id}/crt": &openapi3.PathItem{
-			Get: &openapi3.Operation{
-				OperationID: "GetCRT",
-				Description: "Get CRT by id",
-				Parameters: []*openapi3.ParameterRef{
-					{
-						Value: openapi3.NewPathParameter("id").
-							WithSchema(openapi3.NewStringSchema()),
-					},
-				},
-				Responses: openapi3.Responses{
-					"400": &openapi3.ResponseRef{
-						Ref: "#/components/responses/ErrorResponse",
-					},
-					"401": &openapi3.ResponseRef{
-						Ref: "#/components/responses/ErrorResponse",
-					},
-					"403": &openapi3.ResponseRef{
-						Ref: "#/components/responses/ErrorResponse",
-					},
-					"500": &openapi3.ResponseRef{
-						Ref: "#/components/responses/ErrorResponse",
-					},
-					"200": &openapi3.ResponseRef{
-						Ref: "#/components/responses/GetCRTResponse",
 					},
 				},
 			},

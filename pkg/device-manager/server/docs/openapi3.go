@@ -125,7 +125,19 @@ func NewOpenAPI3(config configs.Config) openapi3.T {
 				WithProperty("device_id", openapi3.NewStringSchema()).
 				WithProperty("log_type", openapi3.NewStringSchema()).
 				WithProperty("log_message", openapi3.NewStringSchema()).
+				WithProperty("log_description", openapi3.NewStringSchema()).
 				WithProperty("timestamp", openapi3.NewStringSchema()),
+		),
+		"DmsLastIssued": openapi3.NewSchemaRef("",
+			openapi3.NewObjectSchema().
+				WithProperty("dms_id", openapi3.NewStringSchema()).
+				WithProperty("creation_timestamp", openapi3.NewStringSchema()).
+				WithProperty("serial_number", openapi3.NewStringSchema()),
+		),
+		"DmsCertHistory": openapi3.NewSchemaRef("",
+			openapi3.NewObjectSchema().
+				WithProperty("dms_id", openapi3.NewStringSchema()).
+				WithProperty("issued_certs", openapi3.NewStringSchema()),
 		),
 	}
 
@@ -223,6 +235,13 @@ func NewOpenAPI3(config configs.Config) openapi3.T {
 					})),
 				)),
 		},
+		"GetDevicebyIDResponse": &openapi3.ResponseRef{
+			Value: openapi3.NewResponse().
+				WithDescription("Response returned back after creating a device.").
+				WithContent(openapi3.NewContentWithJSONSchemaRef(&openapi3.SchemaRef{
+					Ref: "#/components/schemas/Device",
+				})),
+		},
 		"DeleteRevokeResponse": &openapi3.ResponseRef{
 			Value: openapi3.NewResponse().
 				WithDescription("Response returned back after revoking a device.").
@@ -231,9 +250,12 @@ func NewOpenAPI3(config configs.Config) openapi3.T {
 		"GetDeviceLogsResponse": &openapi3.ResponseRef{
 			Value: openapi3.NewResponse().
 				WithDescription("Response returned back after getting logs of a device.").
-				WithContent(openapi3.NewContentWithJSONSchemaRef(arrayOf(&openapi3.SchemaRef{
-					Ref: "#/components/schemas/DeviceLog",
-				}))),
+				WithContent(openapi3.NewContentWithJSONSchema(openapi3.NewSchema().
+					WithProperty("total_logs", openapi3.NewIntegerSchema()).
+					WithPropertyRef("devices", arrayOf(&openapi3.SchemaRef{
+						Ref: "#/components/schemas/DeviceLog",
+					})),
+				)),
 		},
 		"GetDeviceCertResponse": &openapi3.ResponseRef{
 			Value: openapi3.NewResponse().
@@ -252,9 +274,20 @@ func NewOpenAPI3(config configs.Config) openapi3.T {
 		"GetDmsLastIssueCertResponse": &openapi3.ResponseRef{
 			Value: openapi3.NewResponse().
 				WithDescription("Response returned back after getting last iisued certificate of a device.").
-				WithContent(openapi3.NewContentWithJSONSchemaRef(&openapi3.SchemaRef{
-					Ref: "#/components/schemas/DeviceCertHistory",
+				WithContent(openapi3.NewContentWithJSONSchema(openapi3.NewSchema().
+					WithProperty("total_last_issued_cert", openapi3.NewIntegerSchema()).
+					WithPropertyRef("dms_last_issued_cert", arrayOf(&openapi3.SchemaRef{
+						Ref: "#/components/schemas/DmsLastIssued",
+					})),
+				)),
+		},
+		"GetDmsCertHistoryResponse": &openapi3.ResponseRef{
+			Value: openapi3.NewResponse().
+				WithDescription("Response returned back after getting last iisued certificate of a device.").
+				WithContent(openapi3.NewContentWithJSONSchemaRef(arrayOf(&openapi3.SchemaRef{
+					Ref: "#/components/schemas/DmsCertHistory",
 				})),
+				),
 		},
 		"EnrollResponse": &openapi3.ResponseRef{
 			Value: openapi3.NewResponse().
@@ -296,23 +329,19 @@ func NewOpenAPI3(config configs.Config) openapi3.T {
 				Description: "Get Devices",
 				Parameters: []*openapi3.ParameterRef{
 					{
-						Value: openapi3.NewPathParameter("f").
+						Value: openapi3.NewQueryParameter("filter").
 							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 					{
-						Value: openapi3.NewPathParameter("order").
+						Value: openapi3.NewQueryParameter("sort_by").
 							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 					{
-						Value: openapi3.NewPathParameter("field").
+						Value: openapi3.NewQueryParameter("limit").
 							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 					{
-						Value: openapi3.NewPathParameter("p").
-							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
-					},
-					{
-						Value: openapi3.NewPathParameter("offset").
+						Value: openapi3.NewQueryParameter("offset").
 							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 				},
@@ -386,7 +415,7 @@ func NewOpenAPI3(config configs.Config) openapi3.T {
 						Ref: "#/components/responses/ErrorResponse",
 					},
 					"200": &openapi3.ResponseRef{
-						Ref: "#/components/responses/GetDeviceResponse",
+						Ref: "#/components/responses/GetDevicebyIDResponse",
 					},
 				},
 			},
@@ -479,7 +508,7 @@ func NewOpenAPI3(config configs.Config) openapi3.T {
 				},
 			},
 		},
-		"/v1/devices/{deviceId}/logs": &openapi3.PathItem{
+		"/v1/devices/{deviceId}/logs?": &openapi3.PathItem{
 			Get: &openapi3.Operation{
 				OperationID: "GetDeviceLogs",
 				Description: "Get Device Logs of deviceId",
@@ -489,24 +518,20 @@ func NewOpenAPI3(config configs.Config) openapi3.T {
 							WithSchema(openapi3.NewStringSchema()),
 					},
 					{
-						Value: openapi3.NewPathParameter("f").
+						Value: openapi3.NewQueryParameter("filter").
 							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 					{
-						Value: openapi3.NewPathParameter("order").
+						Value: openapi3.NewQueryParameter("sort_by").
 							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 					{
-						Value: openapi3.NewPathParameter("field").
+						Value: openapi3.NewQueryParameter("limit").
 							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 					{
-						Value: openapi3.NewPathParameter("p").
-							WithSchema(openapi3.NewIntegerSchema()).WithRequired(false),
-					},
-					{
-						Value: openapi3.NewPathParameter("offset").
-							WithSchema(openapi3.NewIntegerSchema()).WithRequired(false),
+						Value: openapi3.NewQueryParameter("offset").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 				},
 				Responses: openapi3.Responses{
@@ -586,7 +611,7 @@ func NewOpenAPI3(config configs.Config) openapi3.T {
 				},
 			},
 		},
-		"/v1/devices/dms/{dmsId}": &openapi3.PathItem{
+		"/v1/devices/dms/{dmsId}?": &openapi3.PathItem{
 			Get: &openapi3.Operation{
 				OperationID: "GetDevicesByDmsId",
 				Description: "Get Devices By DMS Id",
@@ -594,6 +619,22 @@ func NewOpenAPI3(config configs.Config) openapi3.T {
 					{
 						Value: openapi3.NewPathParameter("dmsId").
 							WithSchema(openapi3.NewStringSchema()),
+					},
+					{
+						Value: openapi3.NewQueryParameter("filter").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
+					},
+					{
+						Value: openapi3.NewQueryParameter("sort_by").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
+					},
+					{
+						Value: openapi3.NewQueryParameter("limit").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
+					},
+					{
+						Value: openapi3.NewQueryParameter("offset").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 				},
 				Responses: openapi3.Responses{
@@ -615,30 +656,26 @@ func NewOpenAPI3(config configs.Config) openapi3.T {
 				},
 			},
 		},
-		"/v1/devices/dms-cert-history/thirty-days": &openapi3.PathItem{
+		"/v1/devices/dms-cert-history/thirty-days?": &openapi3.PathItem{
 			Get: &openapi3.Operation{
 				OperationID: "GetDmsCertHistoryThirtyDays",
 				Description: "Get Dms Cert History of last Thirty Days",
 				Parameters: []*openapi3.ParameterRef{
 					{
-						Value: openapi3.NewPathParameter("f").
+						Value: openapi3.NewQueryParameter("filter").
 							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 					{
-						Value: openapi3.NewPathParameter("order").
+						Value: openapi3.NewQueryParameter("sort_by").
 							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 					{
-						Value: openapi3.NewPathParameter("field").
+						Value: openapi3.NewQueryParameter("limit").
 							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 					{
-						Value: openapi3.NewPathParameter("p").
-							WithSchema(openapi3.NewIntegerSchema()).WithRequired(false),
-					},
-					{
-						Value: openapi3.NewPathParameter("offset").
-							WithSchema(openapi3.NewIntegerSchema()).WithRequired(false),
+						Value: openapi3.NewQueryParameter("offset").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 				},
 				Responses: openapi3.Responses{
@@ -655,7 +692,7 @@ func NewOpenAPI3(config configs.Config) openapi3.T {
 						Ref: "#/components/responses/ErrorResponse",
 					},
 					"200": &openapi3.ResponseRef{
-						Ref: "#/components/responses/GetDeviceCertHistoryResponse",
+						Ref: "#/components/responses/GetDmsCertHistoryResponse",
 					},
 				},
 			},
@@ -666,24 +703,20 @@ func NewOpenAPI3(config configs.Config) openapi3.T {
 				Description: "Get Dms Cert History of last Thirty Days",
 				Parameters: []*openapi3.ParameterRef{
 					{
-						Value: openapi3.NewPathParameter("f").
+						Value: openapi3.NewQueryParameter("filter").
 							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 					{
-						Value: openapi3.NewPathParameter("order").
+						Value: openapi3.NewQueryParameter("sort_by").
 							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 					{
-						Value: openapi3.NewPathParameter("field").
+						Value: openapi3.NewQueryParameter("limit").
 							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 					{
-						Value: openapi3.NewPathParameter("p").
-							WithSchema(openapi3.NewIntegerSchema()).WithRequired(false),
-					},
-					{
-						Value: openapi3.NewPathParameter("offset").
-							WithSchema(openapi3.NewIntegerSchema()).WithRequired(false),
+						Value: openapi3.NewQueryParameter("offset").
+							WithSchema(openapi3.NewStringSchema()).WithRequired(false),
 					},
 				},
 				Responses: openapi3.Responses{

@@ -282,13 +282,14 @@ func TestDeviceHandler(t *testing.T) {
 				obj := e.GET("/v1/devices/1/logs").
 					Expect().
 					Status(http.StatusOK).JSON()
+				obj.Object().ContainsKey("total_logs")
+				obj.Object().Value("logs").Array().Element(0).Object().ContainsKey("id")
+				obj.Object().Value("logs").Array().Element(0).Object().ContainsKey("device_id")
+				obj.Object().Value("logs").Array().Element(0).Object().ContainsKey("log_type")
+				obj.Object().Value("logs").Array().Element(0).Object().ContainsKey("log_message")
+				obj.Object().Value("logs").Array().Element(0).Object().ContainsKey("timestamp")
+				obj.Object().Value("logs").Array().Element(0).Object().ContainsKey("log_description")
 
-				obj.Array().Length().Equal(1)
-				obj.Array().Element(0).Object().ContainsKey("id")
-				obj.Array().Element(0).Object().ContainsKey("device_id")
-				obj.Array().Element(0).Object().ContainsKey("log_type")
-				obj.Array().Element(0).Object().ContainsKey("log_message")
-				obj.Array().Element(0).Object().ContainsKey("timestamp")
 			},
 			testEstRestEndpoint: func(s *httpexpect.Expect) {
 			},
@@ -538,7 +539,6 @@ func TestDeviceHandler(t *testing.T) {
 				obj.Array().Element(0).Object().ContainsKey("issuer_name")
 				obj.Array().Element(0).Object().ContainsKey("status")
 				obj.Array().Element(0).Object().ContainsKey("creation_timestamp")
-				obj.Array().Element(0).Object().ContainsKey("revocation_timestamp")
 			},
 			testEstRestEndpoint: func(s *httpexpect.Expect) {
 			},
@@ -582,11 +582,11 @@ func TestDeviceHandler(t *testing.T) {
 				obj := e.GET("/v1/devices/dms-cert-history/last-issued").
 					Expect().
 					Status(http.StatusOK).JSON()
+				obj.Object().ContainsKey("total_last_issued_cert")
+				obj.Object().Value("dms_last_issued_cert").Array().Element(0).Object().ContainsKey("dms_id")
+				obj.Object().Value("dms_last_issued_cert").Array().Element(0).Object().ContainsKey("creation_timestamp")
+				obj.Object().Value("dms_last_issued_cert").Array().Element(0).Object().ContainsKey("serial_number")
 
-				obj.Array().Length().Equal(1)
-				obj.Array().Element(0).Object().ContainsKey("dms_id")
-				obj.Array().Element(0).Object().ContainsKey("creation_timestamp")
-				obj.Array().Element(0).Object().ContainsKey("serial_number")
 			},
 			testEstRestEndpoint: func(s *httpexpect.Expect) {
 			},

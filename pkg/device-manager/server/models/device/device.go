@@ -57,12 +57,14 @@ func (c DeviceStatus) String() string {
 type LogDeviceStatus string
 
 const (
-	LogDeviceCreated       LogDeviceStatus = "LOG_DEVICE_CREATED"
-	LogPendingProvision    LogDeviceStatus = "LOG_PENDING_PROVISION"
-	LogProvisioned         LogDeviceStatus = "LOG_PROVISIONED"
-	LogCertRevoked         LogDeviceStatus = "LOG_CERT_REVOKED"
-	LogCertExpired         LogDeviceStatus = "LOG_CERT_EXPIRED"
-	LogDeviceDecommisioned LogDeviceStatus = "LOG_DEVICE_DECOMMISIONED"
+	LogDeviceCreated        LogDeviceStatus = "LOG_DEVICE_CREATED"
+	LogPendingProvision     LogDeviceStatus = "LOG_PENDING_PROVISION"
+	LogProvisioned          LogDeviceStatus = "LOG_PROVISIONED"
+	LogCertRevoked          LogDeviceStatus = "LOG_CERT_REVOKED"
+	LogCertExpired          LogDeviceStatus = "LOG_CERT_EXPIRED"
+	LogDeviceDecommisioned  LogDeviceStatus = "LOG_DEVICE_DECOMMISIONED"
+	LogDeviceReenroll       LogDeviceStatus = "LOG_DEVICE_REENROLL"
+	LogDeviceCertExpiration LogDeviceStatus = "LOG_DEVICE_CERT_EXPIRATION"
 )
 
 func LogDeviceStatusType(s string) (LogDeviceStatus, error) {
@@ -79,6 +81,10 @@ func LogDeviceStatusType(s string) (LogDeviceStatus, error) {
 		return LogCertExpired, nil
 	case "LOG_DEVICE_DECOMMISIONED":
 		return LogDeviceDecommisioned, nil
+	case "LOG_DEVICE_REENROLL":
+		return LogDeviceReenroll, nil
+	case "LOG_DEVICE_CERT_EXPIRATION":
+		return LogDeviceCertExpiration, nil
 	}
 	return "LOG_DEVICE_DECOMMISIONED", errors.New("LogDeviceStatus parsing error")
 }
@@ -97,6 +103,10 @@ func (c LogDeviceStatus) String() string {
 		return "LOG_DEVICE_DECOMMISIONED"
 	case LogDeviceDecommisioned:
 		return "LOG_DEVICE_DECOMMISIONED"
+	case LogDeviceReenroll:
+		return "LOG_DEVICE_REENROLL"
+	case LogDeviceCertExpiration:
+		return "LOG_DEVICE_CERT_EXPIRATION"
 	}
 	return "LOG_DEVICE_DECOMMISIONED"
 }

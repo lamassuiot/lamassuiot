@@ -327,7 +327,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 				ctx = context.WithValue(ctx, "DBGetCert", false)
 				ctx = context.WithValue(ctx, "DBSelectDeviceCertHistoryBySerialNumberFail", false)
 			}
-			_, err := srv.GetDevicesByDMS(ctx, tc.dmsId, filters.QueryParameters{})
+			_, _, err := srv.GetDevicesByDMS(ctx, tc.dmsId, filters.QueryParameters{})
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
 					t.Errorf("Got result is %s; want %s", tc.ret, err)
@@ -351,7 +351,7 @@ func TestGetDeviceLogs(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("Testing %s", tc.name), func(t *testing.T) {
 
-			_, err := srv.GetDeviceLogs(ctx, tc.id)
+			_, _, err := srv.GetDeviceLogs(ctx, tc.id, filters.QueryParameters{})
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
@@ -458,7 +458,7 @@ func TestGetDmsLastIssuedCert(t *testing.T) {
 			} else {
 				ctx = context.WithValue(ctx, "DBSelectDmssLastIssuedCert", false)
 			}
-			_, err := srv.GetDmsLastIssuedCert(ctx, filters.QueryParameters{})
+			_, _, err := srv.GetDmsLastIssuedCert(ctx, filters.QueryParameters{})
 			if err != nil {
 				if err.Error() != tc.ret.Error() {
 					t.Errorf("Got result is %s; want %s", err, tc.ret)
