@@ -183,7 +183,7 @@ func (s *devicesService) GetDevices(ctx context.Context, queryParameters filters
 				log := dto.DeviceLog{
 					DeviceId:       d.Id,
 					LogMessage:     devicesModel.LogCertRevoked.String(),
-					LogDescription: "Certificate with serial number " + d.CurrentCertificate.SerialNumber + " has been expired",
+					LogDescription: "Certificate with serial number " + d.CurrentCertificate.SerialNumber + " has expired",
 					LogType:        "CRITICAL",
 				}
 				s.devicesDb.InsertLog(ctx, log)
