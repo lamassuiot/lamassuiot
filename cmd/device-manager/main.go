@@ -39,6 +39,11 @@ import (
 	jaegerlog "github.com/uber/jaeger-client-go/log"
 )
 
+var (
+	sha1ver   string // sha1 revision used to build the program
+	buildTime string // when the executable was built
+)
+
 func main() {
 	var logger log.Logger
 	{
@@ -162,6 +167,22 @@ func main() {
 		}
 	}
 
+	infoHandler := func() http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			info := struct {
+				BuildVersion string `json:"build_version"`
+				BuildTime    string `json:"build_time"`
+			}{
+				BuildVersion: sha1ver,
+				BuildTime:    buildTime,
+			}
+			infoData, _ := json.Marshal(&info)
+			w.Header().Add("content-type", "application/json; charset=utf-8")
+			w.Write(infoData)
+		}
+	}
+
+	http.Handle("/info", infoHandler())
 	http.Handle("/.well-known/", accessControl(estserver.MakeHTTPHandler(estService, &lamassuCaClient, log.With(logger, "component", "HTTPS"), cfg, tracer, ctx)))
 	http.Handle("/v1/", accessControl(transport.MakeHTTPHandler(s, log.With(logger, "component", "HTTPS"), tracer)))
 	http.Handle("/v1/docs/", http.StripPrefix("/v1/docs", middleware.SwaggerUI(middleware.SwaggerUIOpts{

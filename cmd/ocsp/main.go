@@ -4,6 +4,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -25,6 +26,11 @@ import (
 	jaegercfg "github.com/uber/jaeger-client-go/config"
 
 	_ "github.com/lib/pq"
+)
+
+var (
+	sha1ver   string // sha1 revision used to build the program
+	buildTime string // when the executable was built
 )
 
 func main() {
@@ -103,6 +109,22 @@ func main() {
 	}
 
 	h := transport.MakeHTTPHandler(resp, log.With(logger, "component", "HTTP"), cfg.Strict, tracer)
+	infoHandler := func() http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			info := struct {
+				BuildVersion string `json:"build_version"`
+				BuildTime    string `json:"build_time"`
+			}{
+				BuildVersion: sha1ver,
+				BuildTime:    buildTime,
+			}
+			infoData, _ := json.Marshal(&info)
+			w.Header().Add("content-type", "application/json; charset=utf-8")
+			w.Write(infoData)
+		}
+	}
+
+	http.Handle("/info", infoHandler())
 	http.Handle("/metrics", promhttp.Handler())
 
 	errs := make(chan error)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -28,6 +29,11 @@ import (
 
 	jaegercfg "github.com/uber/jaeger-client-go/config"
 	jaegerlog "github.com/uber/jaeger-client-go/log"
+)
+
+var (
+	sha1ver   string // sha1 revision used to build the program
+	buildTime string // when the executable was built
 )
 
 func main() {
@@ -77,6 +83,22 @@ func main() {
 	}
 
 	// mux := http.NewServeMux()
+	infoHandler := func() http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			info := struct {
+				BuildVersion string `json:"build_version"`
+				BuildTime    string `json:"build_time"`
+			}{
+				BuildVersion: sha1ver,
+				BuildTime:    buildTime,
+			}
+			infoData, _ := json.Marshal(&info)
+			w.Header().Add("content-type", "application/json; charset=utf-8")
+			w.Write(infoData)
+		}
+	}
+
+	http.Handle("/info", infoHandler())
 	http.Handle("/v1/", accessControl(http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(logger, "component", "HTTPS"), tracer))))
 
 	errs := make(chan error)

@@ -78,7 +78,7 @@ func (s *devicesService) Stats(ctx context.Context) (dto.Stats, time.Time) {
 		return dto.Stats{}, time.Now()
 	}
 
-	for i := 0; i < totalDevices/limit; i++ {
+	for i := 0; i <= totalDevices/limit; i++ {
 		devices, _, _ := s.devicesDb.SelectAllDevices(ctx, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: limit, Offset: i * limit}})
 		for _, device := range devices {
 			if device.Status == devicesModel.DevicePendingProvision.String() {
