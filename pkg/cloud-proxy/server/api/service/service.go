@@ -67,6 +67,16 @@ func (s *cloudProxyService) GetCloudConnectors(ctx context.Context) ([]cloudprov
 			continue
 		}
 
+		connectorTypeString := agent.Meta["connector-type"]
+		connectorIp := agent.Address
+		connectorPort := strconv.Itoa(agent.Port)
+
+		connectortType, err := cloudproviders.ParseCloudProviderType(connectorTypeString)
+		if err != nil {
+			level.Error(s.logger).Log("err", err)
+			continue
+		}
+
 		syncCAs := make([]cloudproviders.SynchronizedCA, 0)
 		databaseSyncCAs, err := s.cloudProxyDatabase.SelectSynchronizedCAsByConnectorID(ctx, agent.ID)
 		if err != nil {
@@ -81,51 +91,54 @@ func (s *cloudProxyService) GetCloudConnectors(ctx context.Context) ([]cloudprov
 			})
 		}
 
-		connectorTypeString := agent.Meta["connector-type"]
-		connectorIp := agent.Address
-		connectorPort := strconv.Itoa(agent.Port)
+		if status != "passing" {
+			cloudConnectors = append(cloudConnectors, cloudproviders.CloudConnector{
+				ID:              agent.ID,
+				Status:          status,
+				Name:            agent.Meta["name"],
+				CloudProvider:   connectorTypeString,
+				IP:              connectorIp,
+				Port:            connectorPort,
+				SynchronizedCAs: syncCAs,
+				Configuration:   nil,
+			})
+		} else {
+			connectorService, err := cloudProviderClient.NewCloudConnectorService(agent.ID, connectorIp, connectorPort, connectortType, s.logger)
+			if err != nil {
+				level.Error(s.logger).Log("err", err)
+				continue
+			}
 
-		connectortType, err := cloudproviders.ParseCloudProviderType(connectorTypeString)
-		if err != nil {
-			level.Error(s.logger).Log("err", err)
-			continue
-		}
+			generalConfig, casConfig, err := connectorService.GetConfiguration(ctx)
+			if err != nil {
+				level.Error(s.logger).Log("msg", "Could not get connector configuration [TYPE]= "+connectorTypeString+" [ID]="+agent.ID+" [IP]="+connectorIp+" [PORT]="+connectorPort, "err", err)
+				continue
+			}
 
-		connectorService, err := cloudProviderClient.NewCloudConnectorService(agent.ID, connectorIp, connectorPort, connectortType, s.logger)
-		if err != nil {
-			level.Error(s.logger).Log("err", err)
-			continue
-		}
-
-		generalConfig, casConfig, err := connectorService.GetConfiguration(ctx)
-		if err != nil {
-			level.Error(s.logger).Log("err", err)
-			continue
-		}
-		for idx, syncCA := range syncCAs {
-			syncCAs[idx].ConsistencyStatus = cloudproviders.ConsistencyStatus_Disabled.String()
-
-			if status == "passing" {
-				syncCAs[idx].ConsistencyStatus = cloudproviders.ConsistencyStatus_Inconsistent.String()
-				for _, cloudCA := range casConfig {
-					if cloudCA.CAName == syncCA.CAName {
-						syncCAs[idx].ConsistencyStatus = cloudproviders.ConsistencyStatus_Consistent.String()
-						syncCAs[idx].CloudProviderConfig = cloudCA.Config
+			for idx, syncCA := range syncCAs {
+				syncCAs[idx].ConsistencyStatus = cloudproviders.ConsistencyStatus_Disabled.String()
+				if status == "passing" {
+					syncCAs[idx].ConsistencyStatus = cloudproviders.ConsistencyStatus_Inconsistent.String()
+					for _, cloudCA := range casConfig {
+						if cloudCA.CAName == syncCA.CAName {
+							syncCAs[idx].ConsistencyStatus = cloudproviders.ConsistencyStatus_Consistent.String()
+							syncCAs[idx].CloudProviderConfig = cloudCA.Config
+						}
 					}
 				}
 			}
-		}
 
-		cloudConnectors = append(cloudConnectors, cloudproviders.CloudConnector{
-			ID:              agent.ID,
-			Status:          status,
-			Name:            agent.Meta["name"],
-			CloudProvider:   connectorTypeString,
-			IP:              connectorIp,
-			Port:            connectorPort,
-			SynchronizedCAs: syncCAs,
-			Configuration:   generalConfig,
-		})
+			cloudConnectors = append(cloudConnectors, cloudproviders.CloudConnector{
+				ID:              agent.ID,
+				Status:          status,
+				Name:            agent.Meta["name"],
+				CloudProvider:   connectorTypeString,
+				IP:              connectorIp,
+				Port:            connectorPort,
+				SynchronizedCAs: syncCAs,
+				Configuration:   generalConfig,
+			})
+		}
 	}
 
 	return cloudConnectors, nil

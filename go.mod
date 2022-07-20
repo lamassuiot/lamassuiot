@@ -2,10 +2,13 @@ module github.com/lamassuiot/lamassuiot
 
 go 1.18
 
-replace github.com/lamassuiot/lamassu-aws-connector => /home/ikerlan/lamassu/lamassu-aws-2/aws-connector
+replace github.com/lamassuiot/lamassu-aws-connector => /home/ikerlan/lamassu/lamassu-aws/aws-connector
+
+replace github.com/lamassuiot/lamassu-azure-connector => /home/ikerlan/lamassu/lamassu-azure/azure-connector
 
 require (
-	github.com/cloudevents/sdk-go/v2 v2.6.0
+	github.com/ThalesIgnite/crypto11 v1.2.5
+	github.com/cloudevents/sdk-go/v2 v2.9.0
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/gavv/httpexpect/v2 v2.3.1
@@ -27,13 +30,17 @@ require (
 	github.com/jakehl/goid v1.1.0
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/lamassuiot/lamassu-aws-connector v0.0.1
+	github.com/lamassuiot/lamassu-azure-connector v0.0.0-00010101000000-000000000000
 	github.com/lib/pq v1.10.3
+	github.com/miekg/pkcs11 v1.0.3
 	github.com/opentracing/opentracing-go v1.2.0
 	github.com/prometheus/client_golang v1.11.1
 	github.com/streadway/amqp v1.0.0
 	github.com/stretchr/testify v1.7.0
-	github.com/uber/jaeger-client-go v2.25.0+incompatible
+	github.com/uber/jaeger-client-go v2.30.0+incompatible
 	go.mozilla.org/pkcs7 v0.0.0-20200128120323-432b2356ecb1
+	gorm.io/driver/sqlite v1.3.4
+	gorm.io/gorm v1.23.6
 )
 
 require (
@@ -156,6 +163,8 @@ require (
 	github.com/imkira/go-interpol v1.0.0 // indirect
 	github.com/jefferai/isbadcipher v0.0.0-20190226160619-51d2077c035f // indirect
 	github.com/jefferai/jsonx v1.0.0 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/joyent/triton-go v1.7.1-0.20200416154420-6801d15b779f // indirect
@@ -167,6 +176,7 @@ require (
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
+	github.com/mattn/go-sqlite3 v1.14.13 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/miekg/dns v1.1.43 // indirect
 	github.com/mitchellh/cli v1.1.2 // indirect
@@ -204,6 +214,7 @@ require (
 	github.com/softlayer/softlayer-go v0.0.0-20180806151055-260589d94c7d // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/tencentcloud/tencentcloud-sdk-go v3.0.171+incompatible // indirect
+	github.com/thales-e-security/pool v0.0.2 // indirect
 	github.com/tklauser/go-sysconf v0.3.9 // indirect
 	github.com/tklauser/numcpus v0.3.0 // indirect
 	github.com/tv42/httpunix v0.0.0-20191220191345-2ba4b9c3382c // indirect

@@ -27,15 +27,6 @@ type AwsConfiguration struct {
 	IotCore   IotCoreConfig `json:"iot_core"`
 }
 
-type AwsService interface {
-	RegisterCA(ctx context.Context, caName string, caSerialNumber string, caCertificate string) error
-	AttachAccessPolicy(ctx context.Context, caName string, caSerialNumber string, serializedAccessPolicy string) error
-	GetConfiguration(ctx context.Context) (interface{}, []cloudproviders.CloudProviderCAConfig, error)
-	GetDeviceConfiguration(ctx context.Context, deviceID string) (interface{}, error)
-	UpdateCertStatus(ctx context.Context, caName string, certSerialNumber string, status string, deviceCert string, caCert string) error
-	UpdateCaStatus(ctx context.Context, caName string, status string, certificateID string) error
-}
-
 type AwsConnectorSettings struct {
 	logger log.Logger
 	ID     string
@@ -43,7 +34,7 @@ type AwsConnectorSettings struct {
 	Port   string
 }
 
-func NewAwsConnectorClient(id string, ip string, port string, logger log.Logger) AwsService {
+func NewAwsConnectorClient(id string, ip string, port string, logger log.Logger) cloudproviders.Service {
 
 	return &AwsConnectorSettings{
 		logger: logger,

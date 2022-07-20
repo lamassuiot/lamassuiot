@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/lib/pq"
@@ -101,6 +102,7 @@ func (db *DB) SelectAllDevices(ctx context.Context, queryParameters filters.Quer
 	}
 	rows.Close()
 	sqlStatement := `SELECT * FROM devices  `
+	fmt.Printf("queryParameters: %s\n", queryParameters)
 	sqlStatement = filters.ApplySQLFilter(sqlStatement, queryParameters)
 
 	span := opentracing.StartSpan("lamassu-device-manager: Select All Devices from database", opentracing.ChildOf(parentSpan.Context()))
