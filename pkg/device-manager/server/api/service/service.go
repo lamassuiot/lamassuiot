@@ -28,15 +28,15 @@ type Service interface {
 	UpdateDeviceById(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
 	GetDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error)
 	GetDeviceById(ctx context.Context, deviceId string) (dto.Device, error)
-	GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) ([]dto.Device, error)
+	GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) ([]dto.Device, int, error)
 	DeleteDevice(ctx context.Context, id string) error
 	RevokeDeviceCert(ctx context.Context, id string, revocationReason string) error
 
-	GetDeviceLogs(ctx context.Context, id string) ([]dto.DeviceLog, error)
+	GetDeviceLogs(ctx context.Context, id string, queryparameters filters.QueryParameters) ([]dto.DeviceLog, int, error)
 	GetDeviceCert(ctx context.Context, id string) (dto.DeviceCert, error)
 	GetDeviceCertHistory(ctx context.Context, id string) ([]dto.DeviceCertHistory, error)
 	GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSCertHistory, error)
-	GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSLastIssued, error)
+	GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSLastIssued, int, error)
 
 	//getKeyStrength(keyType string, keyBits int) string
 	//_generateCSR(ctx context.Context, keyType string, priv interface{}, commonName string, country string, state string, locality string, org string, orgUnit string) ([]byte, error)
@@ -78,7 +78,7 @@ func (s *devicesService) Stats(ctx context.Context) (dto.Stats, time.Time) {
 		return dto.Stats{}, time.Now()
 	}
 
-	for i := 0; i < totalDevices/limit; i++ {
+	for i := 0; i <= totalDevices/limit; i++ {
 		devices, _, _ := s.devicesDb.SelectAllDevices(ctx, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: limit, Offset: i * limit}})
 		for _, device := range devices {
 			if device.Status == devicesModel.DevicePendingProvision.String() {
@@ -168,9 +168,29 @@ func (s *devicesService) GetDevices(ctx context.Context, queryParameters filters
 			}
 			if cert.Status == "revoked" {
 				s.devicesDb.UpdateDeviceStatusByID(ctx, d.Id, devicesModel.DeviceCertRevoked.String())
+				log := dto.DeviceLog{
+					DeviceId:       d.Id,
+					LogMessage:     devicesModel.LogCertRevoked.String(),
+					LogDescription: "Certificate with serial number " + d.CurrentCertificate.SerialNumber + " has been revoked",
+					LogType:        "CRITICAL",
+				}
+				s.devicesDb.InsertLog(ctx, log)
 				s.devicesDb.UpdateDeviceCertificateSerialNumberByID(ctx, d.Id, "")
 				d, _ = s.devicesDb.SelectDeviceById(ctx, d.Id)
 				dev = append(dev, d)
+			} else if cert.Status == "expired" {
+				s.devicesDb.UpdateDeviceStatusByID(ctx, d.Id, devicesModel.DeviceCertExpired.String())
+				log := dto.DeviceLog{
+					DeviceId:       d.Id,
+					LogMessage:     devicesModel.LogCertRevoked.String(),
+					LogDescription: "Certificate with serial number " + d.CurrentCertificate.SerialNumber + " has expired",
+					LogType:        "CRITICAL",
+				}
+				s.devicesDb.InsertLog(ctx, log)
+				s.devicesDb.UpdateDeviceCertificateSerialNumberByID(ctx, d.Id, "")
+				d, _ = s.devicesDb.SelectDeviceById(ctx, d.Id)
+				dev = append(dev, d)
+
 			} else {
 				d.CurrentCertificate.Valid_to = cert.ValidTo
 				d.CurrentCertificate.Cert = cert.CertContent.CerificateBase64
@@ -186,10 +206,10 @@ func (s *devicesService) GetDevices(ctx context.Context, queryParameters filters
 	return dev, length, nil
 }
 
-func (s *devicesService) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) ([]dto.Device, error) {
-	devices, err := s.devicesDb.SelectAllDevicesByDmsId(ctx, dmsId, queryParameters)
+func (s *devicesService) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) ([]dto.Device, int, error) {
+	devices, total_devices, err := s.devicesDb.SelectAllDevicesByDmsId(ctx, dmsId, queryParameters)
 	if err != nil {
-		return []dto.Device{}, err
+		return []dto.Device{}, 0, err
 	}
 
 	var dev []dto.Device
@@ -197,13 +217,13 @@ func (s *devicesService) GetDevicesByDMS(ctx context.Context, dmsId string, quer
 		if d.CurrentCertificate.SerialNumber != "" {
 			currentCertHistory, err := s.devicesDb.SelectDeviceCertHistoryBySerialNumber(ctx, d.CurrentCertificate.SerialNumber)
 			if err != nil {
-				return []dto.Device{}, err
+				return []dto.Device{}, 0, err
 			}
 
 			cert, err := s.lamassuCaClient.GetCert(ctx, caDTO.Pki, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
 
 			if err != nil {
-				return []dto.Device{}, err
+				return []dto.Device{}, 0, err
 			}
 			d.CurrentCertificate.Valid_to = cert.ValidTo
 			d.CurrentCertificate.Cert = cert.CertContent.CerificateBase64
@@ -215,7 +235,7 @@ func (s *devicesService) GetDevicesByDMS(ctx context.Context, dmsId string, quer
 
 	}
 
-	return dev, nil
+	return dev, total_devices, nil
 }
 func (s *devicesService) GetDeviceById(ctx context.Context, deviceId string) (dto.Device, error) {
 	device, err := s.devicesDb.SelectDeviceById(ctx, deviceId)
@@ -251,9 +271,10 @@ func (s *devicesService) DeleteDevice(ctx context.Context, id string) error {
 	}
 
 	log := dto.DeviceLog{
-		DeviceId:   id,
-		LogType:    devicesModel.LogDeviceDecommisioned.String(),
-		LogMessage: "",
+		DeviceId:       id,
+		LogMessage:     devicesModel.LogDeviceDecommisioned.String(),
+		LogDescription: "",
+		LogType:        "CRITICAL",
 	}
 	err = s.devicesDb.InsertLog(ctx, log)
 	if err != nil {
@@ -297,23 +318,21 @@ func (s *devicesService) RevokeDeviceCert(ctx context.Context, id string, revoca
 	}
 
 	log := dto.DeviceLog{
-		DeviceId:   id,
-		LogType:    devicesModel.LogCertRevoked.String(),
-		LogMessage: revocationReason + ". Certificate with Serial Number " + serialNumberToRevoke + " revoked.",
+		DeviceId:       id,
+		LogMessage:     devicesModel.LogCertRevoked.String(),
+		LogDescription: revocationReason + ". Certificate with Serial Number " + serialNumberToRevoke + " revoked.",
+		LogType:        "CRITICAL",
 	}
 	err = s.devicesDb.InsertLog(ctx, log)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
-func (s *devicesService) GetDeviceLogs(ctx context.Context, id string) ([]dto.DeviceLog, error) {
-	logs, err := s.devicesDb.SelectDeviceLogs(ctx, id)
+func (s *devicesService) GetDeviceLogs(ctx context.Context, id string, queryparameters filters.QueryParameters) ([]dto.DeviceLog, int, error) {
+	logs, total_logs, err := s.devicesDb.SelectDeviceLogs(ctx, id, queryparameters)
 	if err != nil {
-		return []dto.DeviceLog{}, err
+		return []dto.DeviceLog{}, 0, err
 	}
-	return logs, nil
+	return logs, total_logs, nil
 }
 
 func (s *devicesService) GetDeviceCertHistory(ctx context.Context, id string) ([]dto.DeviceCertHistory, error) {
@@ -321,7 +340,7 @@ func (s *devicesService) GetDeviceCertHistory(ctx context.Context, id string) ([
 	if err != nil {
 		return []dto.DeviceCertHistory{}, err
 	}
-	var certHistory []dto.DeviceCertHistory
+	certHistory := []dto.DeviceCertHistory{}
 	for _, element := range history {
 		dev, err := s.devicesDb.SelectDeviceById(ctx, id)
 		if err != nil {
@@ -429,13 +448,13 @@ func (s *devicesService) GetDmsCertHistoryThirtyDays(ctx context.Context, queryP
 	return dmsCerts, nil
 }
 
-func (s *devicesService) GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSLastIssued, error) {
-	lastIssued, err := s.devicesDb.SelectDmssLastIssuedCert(ctx, queryParameters)
+func (s *devicesService) GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSLastIssued, int, error) {
+	lastIssued, total_issued, err := s.devicesDb.SelectDmssLastIssuedCert(ctx, queryParameters)
 	if err != nil {
 		level.Debug(s.logger).Log("err", err, "msg", "Could not get devices from DB")
-		return []dto.DMSLastIssued{}, err
+		return []dto.DMSLastIssued{}, 0, err
 	}
-	return lastIssued, nil
+	return lastIssued, total_issued, nil
 }
 
 func _generateCSR(ctx context.Context, keyType string, priv interface{}, commonName string, country string, state string, locality string, org string, orgUnit string) ([]byte, error) {

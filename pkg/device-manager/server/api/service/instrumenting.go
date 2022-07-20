@@ -85,7 +85,7 @@ func (mw *instrumentingMiddleware) UpdateDeviceById(ctx context.Context, alias s
 	return mw.next.UpdateDeviceById(ctx, alias, deviceID, DmsID, description, tags, iconName, iconColor)
 }
 
-func (mw *instrumentingMiddleware) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) (devices []dto.Device, err error) {
+func (mw *instrumentingMiddleware) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) (devices []dto.Device, total_devices int, err error) {
 	defer func(begin time.Time) {
 		lvs := []string{"method", "GetDevicesByDMS", "error", fmt.Sprint(err != nil)}
 		mw.requestCount.With(lvs...).Add(1)
@@ -112,14 +112,14 @@ func (mw *instrumentingMiddleware) RevokeDeviceCert(ctx context.Context, id stri
 
 	return mw.next.RevokeDeviceCert(ctx, id, revocationReason)
 }
-func (mw *instrumentingMiddleware) GetDeviceLogs(ctx context.Context, id string) (logs []dto.DeviceLog, err error) {
+func (mw *instrumentingMiddleware) GetDeviceLogs(ctx context.Context, id string, queryParameters filters.QueryParameters) (logs []dto.DeviceLog, total_logs int, err error) {
 	defer func(begin time.Time) {
 		lvs := []string{"method", "GetDeviceLogs", "error", fmt.Sprint(err != nil)}
 		mw.requestCount.With(lvs...).Add(1)
 		mw.requestLatency.With(lvs...).Observe(time.Since(begin).Seconds())
 	}(time.Now())
 
-	return mw.next.GetDeviceLogs(ctx, id)
+	return mw.next.GetDeviceLogs(ctx, id, queryParameters)
 }
 func (mw *instrumentingMiddleware) GetDeviceCert(ctx context.Context, id string) (cert dto.DeviceCert, err error) {
 	defer func(begin time.Time) {
@@ -148,7 +148,7 @@ func (mw *instrumentingMiddleware) GetDmsCertHistoryThirtyDays(ctx context.Conte
 
 	return mw.next.GetDmsCertHistoryThirtyDays(ctx, queryParameters)
 }
-func (mw *instrumentingMiddleware) GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) (dmsLastIssued []dto.DMSLastIssued, err error) {
+func (mw *instrumentingMiddleware) GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) (dmsLastIssued []dto.DMSLastIssued, total_issued int, err error) {
 	defer func(begin time.Time) {
 		lvs := []string{"method", "GetDmsLastIssuedCert", "error", fmt.Sprint(err != nil)}
 		mw.requestCount.With(lvs...).Add(1)

@@ -50,11 +50,12 @@ type Subject struct {
 }
 
 type DeviceLog struct {
-	Id         string `json:"id"`
-	DeviceId   string `json:"device_id"`
-	LogType    string `json:"log_type"`
-	LogMessage string `json:"log_message"`
-	Timestamp  string `json:"timestamp"`
+	Id             string `json:"id"`
+	DeviceId       string `json:"device_id"`
+	LogType        string `json:"log_type"`
+	LogMessage     string `json:"log_message"`
+	LogDescription string `json:"log_description"`
+	Timestamp      string `json:"timestamp"`
 }
 
 type DMSCertHistory struct {
@@ -74,7 +75,7 @@ type DeviceCertHistory struct {
 	IsuuerName          string `json:"issuer_name"`
 	Status              string `json:"status"`
 	CreationTimestamp   string `json:"creation_timestamp"`
-	RevocationTimestamp string `json:"revocation_timestamp"`
+	RevocationTimestamp string `json:"revocation_timestamp,omitempty"`
 }
 
 type DeviceCert struct {
