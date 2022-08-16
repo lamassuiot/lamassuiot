@@ -1,33 +1,31 @@
 package filters
 
 import (
-	"strconv"
-	"strings"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
+	"gorm.io/gorm"
 )
 
-func ApplySQLFilter(sqlStatement string, queryParameters QueryParameters) string {
+func ApplySQLFilter(db *gorm.DB, queryParameters common.QueryParameters) *gorm.DB {
 	if len(queryParameters.Filters) > 0 {
-		if !strings.Contains(strings.ToLower(sqlStatement), "where") {
-			sqlStatement = sqlStatement + " WHERE 1=1 "
-		}
-
+		db = db.Where("1=1")
 		for _, f := range queryParameters.Filters {
-			sqlStatement = sqlStatement + " AND " + f.ToSQL()
+			db = db.Where(f.ToSQL())
 		}
 	}
 
 	if queryParameters.Sort.SortField != "" {
-		if strings.ToUpper(queryParameters.Sort.SortMode) == "ASC" || strings.ToUpper(queryParameters.Sort.SortMode) == "DESC" {
-			sqlStatement = sqlStatement + "ORDER BY " + queryParameters.Sort.SortField + " " + strings.ToUpper(queryParameters.Sort.SortMode)
+		if queryParameters.Sort.SortMode == common.SortModeAsc || queryParameters.Sort.SortMode == common.SortModeDesc {
+			db = db.Order(queryParameters.Sort.SortField + " " + string(queryParameters.Sort.SortMode))
 		}
 	}
 
 	if queryParameters.Pagination.Limit > 0 {
-		sqlStatement = sqlStatement + " LIMIT " + strconv.Itoa(queryParameters.Pagination.Limit)
+		db = db.Limit(queryParameters.Pagination.Limit)
 	}
 
 	if queryParameters.Pagination.Offset > 0 {
-		sqlStatement = sqlStatement + " OFFSET " + strconv.Itoa(queryParameters.Pagination.Offset)
+		db = db.Offset(queryParameters.Pagination.Offset)
 	}
-	return sqlStatement
+
+	return db
 }

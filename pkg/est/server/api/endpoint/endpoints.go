@@ -20,7 +20,7 @@ type Endpoints struct {
 	ServerKeyGenEndpoint endpoint.Endpoint
 }
 
-func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
+func MakeServerEndpoints(s service.ESTService, otTracer stdopentracing.Tracer) Endpoints {
 	var healthEndpoint endpoint.Endpoint
 	{
 		healthEndpoint = MakeHealthEndpoint(s)
@@ -58,21 +58,21 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 	}
 }
 
-func MakeHealthEndpoint(s service.Service) endpoint.Endpoint {
+func MakeHealthEndpoint(s service.ESTService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		healthy := s.Health(ctx)
 		return HealthResponse{Healthy: healthy}, nil
 	}
 }
 
-func MakeGetCAsEndpoint(s service.Service) endpoint.Endpoint {
+func MakeGetCAsEndpoint(s service.ESTService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		cas, err := s.CACerts(ctx, "")
 		return GetCasResponse{Certs: cas}, err
 	}
 }
 
-func MakeEnrollEndpoint(s service.Service) endpoint.Endpoint {
+func MakeEnrollEndpoint(s service.ESTService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(EnrollRequest)
 		err = ValidatetEnrollRequest(req)
@@ -87,7 +87,7 @@ func MakeEnrollEndpoint(s service.Service) endpoint.Endpoint {
 	}
 }
 
-func MakeReenrollEndpoint(s service.Service) endpoint.Endpoint {
+func MakeReenrollEndpoint(s service.ESTService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(ReenrollRequest)
 		err = ValidatetReenrollRequest(req)
@@ -102,7 +102,7 @@ func MakeReenrollEndpoint(s service.Service) endpoint.Endpoint {
 	}
 }
 
-func MakeServerKeyGenEndpoint(s service.Service) endpoint.Endpoint {
+func MakeServerKeyGenEndpoint(s service.ESTService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(ServerKeyGenRequest)
 		err = ValidateServerKeyGenRequest(req)

@@ -4,10 +4,10 @@ import (
 	"crypto"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"io/ioutil"
 
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/secrets/responder"
-	"github.com/lamassuiot/lamassuiot/pkg/utils"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -30,7 +30,11 @@ func (f *file) GetResponderCert() (*x509.Certificate, error) {
 		return nil, err
 	}
 	pemBlock, _ := pem.Decode(certPEM)
-	err = utils.CheckPEMBlock(pemBlock, utils.CertPEMBlockType)
+
+	if pemBlock == nil {
+		return nil, errors.New("cannot find the next PEM formatted block")
+	}
+
 	if err != nil {
 		level.Error(f.logger).Log("err", err, "msg", "Could not check PEM block of Responder certificate")
 		return nil, err
@@ -53,7 +57,9 @@ func (f *file) GetResponderKey() (crypto.PrivateKey, error) {
 		return nil, err
 	}
 	pemBlock, _ := pem.Decode(keyPEM)
-	err = utils.CheckPEMBlock(pemBlock, utils.KeyPEMBlockType)
+	if pemBlock == nil {
+		return nil, errors.New("cannot find the next PEM formatted block")
+	}
 	if err != nil {
 		level.Error(f.logger).Log("err", err, "msg", "Could not check PEM block of Responder key")
 		return nil, err

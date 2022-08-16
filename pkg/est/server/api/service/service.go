@@ -3,13 +3,9 @@ package service
 import (
 	"context"
 	"crypto/x509"
-	"sync"
-
-	"github.com/go-kit/kit/log"
-	lamassuca "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 )
 
-type Service interface {
+type ESTService interface {
 	Health(ctx context.Context) bool
 
 	// CACerts requests a copy of the current CA certificates. See RFC7030 4.1.
@@ -39,10 +35,4 @@ type Service interface {
 	// inside a CMS EnvelopedData encrypted with the credential as a pre-shared
 	// key.
 	//TPMEnroll(ctx context.Context, csr *x509.CertificateRequest, ekcerts []*x509.Certificate, ekPub, akPub []byte, aps string, r *http.Request) ([]byte, []byte, []byte, error)
-}
-
-type estService struct {
-	mtx             sync.RWMutex
-	logger          log.Logger
-	lamassuCaClient lamassuca.LamassuCaClient
 }

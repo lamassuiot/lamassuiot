@@ -17,6 +17,7 @@ import (
 type BaseClient interface {
 	NewRequest(method string, path string, body interface{}) (*http.Request, error)
 	Do(req *http.Request) (interface{}, *http.Response, error)
+	Do2(req *http.Request, response any) (*http.Response, error)
 }
 
 type ClientConfig struct {
@@ -25,18 +26,25 @@ type ClientConfig struct {
 }
 
 func NewBaseClient(config ClientConfiguration) (BaseClient, error) {
-	caPem, err := ioutil.ReadFile(config.CACertificate)
-	if err != nil {
-		return nil, err
+	tr := &http.Transport{}
+
+	if config.URL.Scheme == "https" {
+		caPem, err := ioutil.ReadFile(config.CACertificate)
+		if err != nil {
+			return nil, err
+		}
+
+		certPool := x509.NewCertPool()
+		certPool.AppendCertsFromPEM(caPem)
+
+		tr.TLSClientConfig = &tls.Config{
+			RootCAs: certPool,
+		}
 	}
 
-	certPool := x509.NewCertPool()
-	certPool.AppendCertsFromPEM(caPem)
+	var httpClient *http.Client
 
-	tr := &http.Transport{}
-	httpClient := &http.Client{Transport: tr}
-
-	if config.AuthMethod == MutualTLS {
+	if config.AuthMethod == AuthMethodMutualTLS {
 		authConfig, ok := config.AuthMethodConfig.(*MutualTLSConfig)
 		if !ok {
 			return nil, errors.New("invalid client configuration, missing AuthMethodConfig")
@@ -45,15 +53,8 @@ func NewBaseClient(config ClientConfiguration) (BaseClient, error) {
 		if err != nil {
 			return nil, err
 		}
-		httpClient = &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					RootCAs:      certPool,
-					Certificates: []tls.Certificate{cert},
-				},
-			},
-		}
-	} else if config.AuthMethod == JWT {
+		tr.TLSClientConfig.Certificates = []tls.Certificate{cert}
+	} else if config.AuthMethod == AuthMethodJWT {
 		authConfig, ok := config.AuthMethodConfig.(*JWTConfig)
 		if !ok {
 			return nil, errors.New("invalid client configuration, missing JWTConfig")
@@ -67,15 +68,19 @@ func NewBaseClient(config ClientConfiguration) (BaseClient, error) {
 		authCertPool := x509.NewCertPool()
 		authCertPool.AppendCertsFromPEM(authCAPem)
 
-		rt := jwtAuthRoundTripper{
-			AuthRootCAs: authCertPool,
-			Username:    authConfig.Username,
-			Password:    authConfig.Password,
-			URL:         authConfig.URL,
-		}
+		rt := NewJWTAuthTransport(
+			authConfig.Username,
+			authConfig.Password,
+			authConfig.URL,
+			tr.TLSClientConfig.RootCAs,
+			authCertPool,
+		)
+
 		httpClient = &http.Client{Transport: rt}
-	} else {
-		return nil, errors.New("invalid auth type")
+	}
+
+	if httpClient == nil {
+		httpClient = &http.Client{Transport: tr}
 	}
 
 	return &ClientConfig{
@@ -112,12 +117,34 @@ func (c *ClientConfig) Do(req *http.Request) (interface{}, *http.Response, error
 	if err != nil {
 		return nil, nil, err
 	}
+
 	if resp.StatusCode != 200 {
 		return nil, resp, errors.New("Response with status code: " + strconv.Itoa(resp.StatusCode) + "")
 	}
+
 	defer resp.Body.Close()
 	err = json.NewDecoder(resp.Body).Decode(&v)
 	return v, resp, err
+}
+
+func (c *ClientConfig) Do2(req *http.Request, response any) (*http.Response, error) {
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != 200 {
+		body, err := io.ReadAll(resp.Body)
+		bodyString := ""
+		if err == nil {
+			bodyString = string(body)
+		}
+		return resp, errors.New("Response with status code: " + strconv.Itoa(resp.StatusCode) + " Response body: " + bodyString)
+	}
+
+	defer resp.Body.Close()
+	err = json.NewDecoder(resp.Body).Decode(&response)
+	return resp, err
 }
 
 func ByteCountDecimal(b int64) string {

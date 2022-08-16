@@ -16,15 +16,19 @@ import (
 	"github.com/go-kit/kit/log/level"
 	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
 	"github.com/go-openapi/runtime/middleware"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	gormLogger "gorm.io/gorm/logger"
 
+	postgresRepository "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/repository/postgres"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
+	cryptoEngines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/crypto-engines"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/transport"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/config"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/docs"
-	"github.com/lamassuiot/lamassuiot/pkg/ca/server/models/ca/store/db"
-	"github.com/lamassuiot/lamassuiot/pkg/ca/server/secrets/vault"
+
 	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	"github.com/opentracing/opentracing-go"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
@@ -57,10 +61,13 @@ func main() {
 	level.Info(logger).Log("msg", "Environment configuration values loaded")
 
 	if strings.ToLower(cfg.DebugMode) == "debug" {
-		{
-			logger = level.NewFilter(logger, level.AllowDebug())
-		}
-		level.Debug(logger).Log("msg", "Starting Lamassu-ca in debug mode...")
+		logger = level.NewFilter(logger, level.AllowDebug())
+		level.Debug(logger).Log("msg", "Starting in debug mode...")
+	}
+
+	engine, err := cryptoEngines.NewHSMPEngine(logger, "/home/ikerlan/pkcs11-proxy/libpkcs11-proxy.so.0.1", "lamassuHSM", "1234")
+	if err != nil {
+		panic(err)
 	}
 
 	jcfg, err := jaegercfg.FromEnv()
@@ -82,18 +89,15 @@ func main() {
 	defer closer.Close()
 	level.Info(logger).Log("msg", "Jaeger tracer started")
 
-	secretsVault, err := vault.NewVaultSecrets(cfg.VaultAddress, cfg.VaultPkiCaPath, cfg.VaultRoleID, cfg.VaultSecretID, cfg.VaultCA, cfg.VaultUnsealKeysFile, cfg.OcspUrl, logger)
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", cfg.PostgresHostname, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresDatabase, cfg.PostgresPort)
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
+	})
 	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not start connection with Vault Secret Engine")
-		os.Exit(1)
+		panic(err)
 	}
-	level.Info(logger).Log("msg", "Connection established with secret engine")
-	casRawDb, err := serverUtils.InitializeDBConnection(cfg.PostgresCaDB, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresHostname, cfg.PostgresPort, true, cfg.PostgresMigrationsFilePath, logger)
-	if err != nil {
-		os.Exit(1)
-	}
-	caDBInstance := db.NewDB(casRawDb, logger)
-	fieldKeys := []string{"method", "error"}
+
+	certificateRepository := postgresRepository.NewPostgresDB(db, logger)
 
 	amq_cfg := new(tls.Config)
 	amq_cfg.RootCAs = x509.NewCertPool()
@@ -119,21 +123,23 @@ func main() {
 	}
 	defer amqpChannel.Close()
 
+	fieldKeys := []string{"method", "error"}
+
 	var s service.Service
 	{
-		s = service.NewCAService(logger, secretsVault, caDBInstance)
-		s = service.NewAmqpMiddleware(amqpChannel, logger)(s)
+		s = service.NewCAService(logger, engine, certificateRepository, cfg.OcspUrl)
+		// s = service.NewAmqpMiddleware(amqpChannel, logger)(s)
 		s = service.LoggingMiddleware(logger)(s)
 		s = service.NewInstrumentingMiddleware(
 			kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
-				Namespace: "enroller",
-				Subsystem: "enroller_service",
+				Namespace: "ca",
+				Subsystem: "ca_service",
 				Name:      "request_count",
 				Help:      "Number of requests received.",
 			}, fieldKeys),
 			kitprometheus.NewSummaryFrom(stdprometheus.SummaryOpts{
-				Namespace: "enroller",
-				Subsystem: "enroller_service",
+				Namespace: "ca",
+				Subsystem: "ca_service",
 				Name:      "request_latency_microseconds",
 				Help:      "Total duration of requests in microseconds.",
 			}, fieldKeys),
@@ -171,7 +177,7 @@ func main() {
 		}
 	}
 
-	http.Handle("/info", infoHandler())
+	http.Handle("/info", accessControl(infoHandler()))
 	http.Handle("/v1/", accessControl(http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(logger, "component", "HTTPS"), tracer))))
 	http.Handle("/v1/docs/", http.StripPrefix("/v1/docs", middleware.SwaggerUI(middleware.SwaggerUIOpts{
 		Path:    "/",

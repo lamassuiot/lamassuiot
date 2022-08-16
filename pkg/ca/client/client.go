@@ -2,36 +2,50 @@ package client
 
 import (
 	"context"
-	"crypto/x509"
 	"encoding/base64"
-	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
-	"time"
+	"net/http"
 
-	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
+	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	clientFilers "github.com/lamassuiot/lamassuiot/pkg/utils/client/filters"
-	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
 )
 
-type LamassuCaClient interface {
-	GetCAs(ctx context.Context, caType dto.CAType, queryparameters filters.QueryParameters) (dto.GetCasResponse, error)
-	CreateCA(ctx context.Context, caType dto.CAType, caName string, privateKeyMetadata dto.PrivateKeyMetadata, subject dto.Subject, caTTL time.Duration, enrollerTTL time.Duration) (dto.Cert, error)
-	ImportCA(ctx context.Context, caType dto.CAType, caName string, certificate x509.Certificate, privateKey dto.PrivateKey, enrollerTTL time.Duration) (dto.Cert, error)
-	DeleteCA(ctx context.Context, caType dto.CAType, caName string) error
+const (
+	//Generic Errors
+	ErrValidationError = "validation error"
 
-	SignCertificateRequest(ctx context.Context, caType dto.CAType, caName string, csr *x509.CertificateRequest, signVerbatim bool, cn string) (*x509.Certificate, *x509.Certificate, error)
-	RevokeCert(ctx context.Context, caType dto.CAType, caName string, serialNumberToRevoke string) error
-	GetCert(ctx context.Context, caType dto.CAType, caName string, serialNumber string) (dto.Cert, error)
-	GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, queryParameters filters.QueryParameters) (dto.IssuedCertsResponse, error)
+	//Specific Errors
+	ErrCADoesNotExist           = "CA does not exist"
+	ErrCAAlreadyRevoked         = "CA already revoked"
+	ErrDuplicateCA              = "duplicate CA"
+	ErrCertificateDoesNotExist  = "certificate does not exist"
+	ErrCerificateAlreadyRevoked = "certificate already revoked"
+)
+
+type LamassuCAClient interface {
+	CreateCA(ctx context.Context, input *api.CreateCAInput) (*api.CreateCAOutput, error)
+	GetCAs(ctx context.Context, input *api.GetCAsInput) (*api.GetCAsOutput, error)
+	GetCAByName(ctx context.Context, input *api.GetCAByNameInput) (*api.GetCAByNameOutput, error)
+	// ImportCA(ctx context.Context, input *api.ImportCAInput) (*api.ImportCAOutput, error)
+	RevokeCA(ctx context.Context, input *api.RevokeCAInput) (*api.RevokeCAOutput, error)
+	IterateCAsWithPredicate(ctx context.Context, input *api.IterateCAsWithPredicateInput) (*api.IterateCAsWithPredicateOutput, error)
+
+	SignCertificateRequest(ctx context.Context, input *api.SignCertificateRequestInput) (*api.SignCertificateRequestOutput, error)
+	RevokeCertificate(ctx context.Context, input *api.RevokeCertificateInput) (*api.RevokeCertificateOutput, error)
+	GetCertificateBySerialNumber(ctx context.Context, input *api.GetCertificateBySerialNumberInput) (*api.GetCertificateBySerialNumberOutput, error)
+	GetCertificates(ctx context.Context, input *api.GetCertificatesInput) (*api.GetCertificatesOutput, error)
+	IterateCertificatessWithPredicate(ctx context.Context, input *api.IterateCertificatesWithPredicateInput) (*api.IterateCertificatesWithPredicateOutput, error)
 }
 
 type lamassuCaClientConfig struct {
 	client clientUtils.BaseClient
 }
 
-func NewLamassuCAClient(config clientUtils.ClientConfiguration) (LamassuCaClient, error) {
+func NewLamassuCAClient(config clientUtils.ClientConfiguration) (LamassuCAClient, error) {
 	baseClient, err := clientUtils.NewBaseClient(config)
 	if err != nil {
 		return nil, err
@@ -42,193 +56,286 @@ func NewLamassuCAClient(config clientUtils.ClientConfiguration) (LamassuCaClient
 	}, nil
 }
 
-func (c *lamassuCaClientConfig) GetCAs(ctx context.Context, caType dto.CAType, queryparameters filters.QueryParameters) (dto.GetCasResponse, error) {
-	req, err := c.client.NewRequest("GET", "v1/"+caType.String(), nil)
+func (c *lamassuCaClientConfig) GetCAs(ctx context.Context, input *api.GetCAsInput) (*api.GetCAsOutput, error) {
+	output := api.GetCAsOutput{}
+
+	req, err := c.client.NewRequest("GET", "v1/"+string(input.CAType), nil)
 	if err != nil {
-		return dto.GetCasResponse{}, err
+		return &output, err
 	}
 
-	newParams := clientFilers.GenerateHttpQueryParams(queryparameters)
+	newParams := clientFilers.GenerateHttpQueryParams(input.QueryParameters)
 	req.URL.RawQuery = newParams
 
-	respBody, _, err := c.client.Do(req)
+	_, err = c.client.Do2(req, &output)
+
 	if err != nil {
-		return dto.GetCasResponse{}, err
+		return &output, err
 	}
 
-	var cas dto.GetCasResponse
-	jsonString, _ := json.Marshal(respBody)
-	json.Unmarshal(jsonString, &cas)
-
-	return cas, nil
+	return &output, nil
 }
 
-func (c *lamassuCaClientConfig) CreateCA(ctx context.Context, caType dto.CAType, caName string, privateKeyMetadata dto.PrivateKeyMetadata, subject dto.Subject, caTTL time.Duration, enrollerTTL time.Duration) (dto.Cert, error) {
-	body := &dto.CreateCARequestPayload{
-		CaTTL:       int(caTTL.Hours()),
-		EnrollerTTL: int(enrollerTTL.Hours()),
-		KeyMetadata: dto.PrivateKeyMetadata{
-			KeyType: privateKeyMetadata.KeyType,
-			KeyBits: privateKeyMetadata.KeyBits,
+func (c *lamassuCaClientConfig) GetCAByName(ctx context.Context, input *api.GetCAByNameInput) (*api.GetCAByNameOutput, error) {
+	req, err := c.client.NewRequest("GET", "v1/"+string(input.CAType)+"/"+input.CAName, nil)
+	if err != nil {
+		return &api.GetCAByNameOutput{}, err
+	}
+
+	var output api.GetCAByNameOutputSerialized
+	_, err = c.client.Do2(req, &output)
+
+	if err != nil {
+		return &api.GetCAByNameOutput{}, err
+	}
+
+	deserializedOutput := output.Deserialize()
+	return &deserializedOutput, nil
+}
+
+func (c *lamassuCaClientConfig) IterateCAsWithPredicate(ctx context.Context, input *api.IterateCAsWithPredicateInput) (*api.IterateCAsWithPredicateOutput, error) {
+	limit := 100
+	i := 0
+
+	var cas []api.CACertificate = make([]api.CACertificate, 0)
+
+	for {
+		getCAsOutput, err := c.GetCAs(ctx, &api.GetCAsInput{
+			CAType: api.CATypePKI,
+			QueryParameters: common.QueryParameters{
+				Pagination: common.PaginationOptions{
+					Limit:  i,
+					Offset: i * limit,
+				},
+			},
+		})
+		if err != nil {
+			return &api.IterateCAsWithPredicateOutput{}, errors.New("could not get CAs")
+		}
+
+		if len(getCAsOutput.CAs) == 0 {
+			break
+		}
+
+		cas = append(cas, getCAsOutput.CAs...)
+		i++
+	}
+
+	for _, ca := range cas {
+		input.PredicateFunc(&ca)
+	}
+
+	return &api.IterateCAsWithPredicateOutput{}, nil
+}
+
+func (c *lamassuCaClientConfig) CreateCA(ctx context.Context, input *api.CreateCAInput) (*api.CreateCAOutput, error) {
+	body := api.CreateCAPayload{
+		KeyMetadata: api.CreacteCAKeyMetadataSubject{
+			KeyType: string(input.KeyMetadata.KeyType),
+			KeyBits: input.KeyMetadata.KeyBits,
 		},
-		Subject: dto.Subject{
-			CommonName:       subject.CommonName,
-			Organization:     subject.Organization,
-			OrganizationUnit: subject.OrganizationUnit,
-			Country:          subject.Country,
-			State:            subject.State,
-			Locality:         subject.Locality,
+		Subject: api.CreateCASubjectPayload{
+			CommonName:       input.Subject.CommonName,
+			Country:          input.Subject.Country,
+			State:            input.Subject.State,
+			Locality:         input.Subject.Locality,
+			Organization:     input.Subject.Organization,
+			OrganizationUnit: input.Subject.OrganizationUnit,
 		},
+		CADuration:       int(input.CADuration.Seconds()),
+		IssuanceDuration: int(input.IssuanceDuration.Seconds()),
 	}
 
-	req, err := c.client.NewRequest("POST", "v1/pki/"+caName, body)
+	req, err := c.client.NewRequest("POST", "v1/pki", body)
+
 	if err != nil {
-		return dto.Cert{}, err
+		return &api.CreateCAOutput{}, err
 	}
-	respBody, _, err := c.client.Do(req)
+
+	var output api.CreateCAOutputSerialized
+	resp, err := c.client.Do2(req, &output)
+
 	if err != nil {
-		return dto.Cert{}, err
+		if resp.StatusCode == http.StatusConflict {
+			return &api.CreateCAOutput{}, errors.New(ErrDuplicateCA)
+		}
+
+		return &api.CreateCAOutput{}, err
 	}
 
-	var cert dto.Cert
-
-	jsonString, _ := json.Marshal(respBody)
-	json.Unmarshal(jsonString, &cert)
-	return cert, nil
+	deserializedOutput := output.Deserialize()
+	return &deserializedOutput, nil
 }
 
-func (c *lamassuCaClientConfig) ImportCA(ctx context.Context, caType dto.CAType, caName string, certificate x509.Certificate, privateKey dto.PrivateKey, enrollerTTL time.Duration) (dto.Cert, error) {
-	crtBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificate.Raw})
-	base64CrtContent := base64.StdEncoding.EncodeToString(crtBytes)
-	privKeyString, _ := privateKey.GetPEMString()
-	base64CKeyContent := base64.StdEncoding.EncodeToString([]byte(privKeyString))
-	body := &dto.ImportCARequestPayload{
-		Crt:         base64CrtContent,
-		EnrollerTTL: int(enrollerTTL.Hours()),
-		PrivateKey:  base64CKeyContent,
+// func (c *lamassuCaClientConfig) ImportCA(ctx context.Context, input *api.ImportCAInput) (*api.ImportCAOutput, error) {
+// 	crtBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: input.Certificate.Raw})
+// 	base64CrtContent := base64.StdEncoding.EncodeToString(crtBytes)
+// 	privKeyString, _ := input.PrivateKey.GetPEMString()
+// 	base64CKeyContent := base64.StdEncoding.EncodeToString([]byte(privKeyString))
+
+// 	body := struct {
+// 		IssuanceDuration int    `json:"issuance_duration"`
+// 		Certificate      string `json:"certificate"`
+// 		PrivateKey       string `json:"private_key"`
+// 	}{
+// 		Certificate:      base64CrtContent,
+// 		PrivateKey:       base64CKeyContent,
+// 		IssuanceDuration: int(input.IssuanceDuration.Hours()),
+// 	}
+
+// 	req, err := c.client.NewRequest("POST", "v1/"+string(input.CAType)+"/import/"+string(input.Certificate.Subject.CommonName), body)
+// 	if err != nil {
+// 		return &api.ImportCAOutput{}, err
+// 	}
+
+// 	var output api.ImportCAOutput
+// 	_, err = c.client.Do2(req, &output)
+// 	if err != nil {
+// 		return &output, err
+// 	}
+
+// 	return &output, err
+// }
+
+func (c *lamassuCaClientConfig) RevokeCA(ctx context.Context, input *api.RevokeCAInput) (*api.RevokeCAOutput, error) {
+	body := api.RevokeCAPayload{
+		RevocationReason: input.RevocationReason,
 	}
 
-	req, err := c.client.NewRequest("POST", "v1/"+caType.String()+"/import/"+caName, body)
+	req, err := c.client.NewRequest("DELETE", "v1/"+string(input.CAType)+"/"+input.CAName, body)
 	if err != nil {
-		return dto.Cert{}, err
+		return &api.RevokeCAOutput{}, err
 	}
-	respBody, _, err := c.client.Do(req)
+
+	var output api.RevokeCAOutputSerialized
+	_, err = c.client.Do2(req, &output)
 	if err != nil {
-		return dto.Cert{}, err
+		return &api.RevokeCAOutput{}, err
 	}
 
-	var cert dto.Cert
-
-	jsonString, _ := json.Marshal(respBody)
-	json.Unmarshal(jsonString, &cert)
-	return cert, nil
+	deserializedOutput := output.Deserialize()
+	return &deserializedOutput, nil
 }
 
-func (c *lamassuCaClientConfig) DeleteCA(ctx context.Context, caType dto.CAType, caName string) error {
-
-	req, err := c.client.NewRequest("DELETE", "v1/"+caType.String()+"/"+caName, nil)
-	if err != nil {
-		return err
-	}
-	_, _, err = c.client.Do(req)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (c *lamassuCaClientConfig) SignCertificateRequest(ctx context.Context, caType dto.CAType, caName string, csr *x509.CertificateRequest, signVerbatim bool, cn string) (*x509.Certificate, *x509.Certificate, error) {
-	csrBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr.Raw})
+func (c *lamassuCaClientConfig) SignCertificateRequest(ctx context.Context, input *api.SignCertificateRequestInput) (*api.SignCertificateRequestOutput, error) {
+	csrBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: input.CertificateSigningRequest.Raw})
 	base64CsrContent := base64.StdEncoding.EncodeToString(csrBytes)
-	body := &dto.SignPayload{
-		Csr:          base64CsrContent,
-		CommonName:   cn,
-		SignVerbatim: signVerbatim,
+	body := api.SignCertificateRequestPayload{
+		CertificateRequest: base64CsrContent,
+		CommonName:         input.CommonName,
+		SignVerbatim:       input.SignVerbatim,
 	}
-	req, err := c.client.NewRequest("POST", "v1/"+caType.String()+"/"+caName+"/sign", body)
+
+	req, err := c.client.NewRequest("POST", "v1/"+string(input.CAType)+"/"+input.CAName+"/sign", body)
 
 	if err != nil {
-		return nil, nil, err
+		return &api.SignCertificateRequestOutput{}, err
 	}
-	respBody, _, err := c.client.Do(req)
+
+	var output api.SignCertificateRequestOutputSerialized
+	_, err = c.client.Do2(req, &output)
+
 	if err != nil {
-		return nil, nil, err
+		return &api.SignCertificateRequestOutput{}, err
 	}
 
-	var cert dto.SignResponse
-
-	jsonString, _ := json.Marshal(respBody)
-	json.Unmarshal(jsonString, &cert)
-
-	data, _ := base64.StdEncoding.DecodeString(cert.Crt)
-	block, _ := pem.Decode([]byte(data))
-	x509Certificate, _ := x509.ParseCertificate(block.Bytes)
-	data, _ = base64.StdEncoding.DecodeString(cert.CaCrt)
-	block, _ = pem.Decode([]byte(data))
-	caCrt, _ := x509.ParseCertificate(block.Bytes)
-
-	return x509Certificate, caCrt, nil
+	deserializedOutput := output.Deserialize()
+	return &deserializedOutput, nil
 }
 
-func (c *lamassuCaClientConfig) RevokeCert(ctx context.Context, caType dto.CAType, caName string, serialNumberToRevoke string) error {
-
-	req, err := c.client.NewRequest("DELETE", "v1/"+caType.String()+"/"+caName+"/cert/"+serialNumberToRevoke, nil)
-	if err != nil {
-		return err
+func (c *lamassuCaClientConfig) RevokeCertificate(ctx context.Context, input *api.RevokeCertificateInput) (*api.RevokeCertificateOutput, error) {
+	body := api.RevokeCertificatePayload{
+		RevocationReason: input.RevocationReason,
 	}
-	_, resp, err := c.client.Do(req)
-	if resp.StatusCode == 412 {
-		return &AlreadyRevokedError{
-			CaName:       caName,
-			SerialNumber: serialNumberToRevoke,
+
+	req, err := c.client.NewRequest("DELETE", "v1/"+string(input.CAType)+"/"+input.CAName+"/certificates/"+input.CertificateSerialNumber, body)
+	if err != nil {
+		return &api.RevokeCertificateOutput{}, nil
+	}
+
+	var output api.RevokeCertificateOutputSerialized
+	response, err := c.client.Do2(req, &output)
+	if response.StatusCode == 409 {
+		return &api.RevokeCertificateOutput{}, &AlreadyRevokedError{
+			CaName:       input.CAName,
+			SerialNumber: input.CertificateSerialNumber,
 		}
 	} else if err != nil {
-		return err
-	} else {
-
-		return nil
+		return &api.RevokeCertificateOutput{}, err
 	}
 
+	deserializedOutput := output.Deserialize()
+	return &deserializedOutput, nil
 }
 
-func (c *lamassuCaClientConfig) GetCert(ctx context.Context, caType dto.CAType, caName string, serialNumber string) (dto.Cert, error) {
-
-	req, err := c.client.NewRequest("GET", "v1/"+caType.String()+"/"+caName+"/cert/"+serialNumber, nil)
+func (c *lamassuCaClientConfig) GetCertificateBySerialNumber(ctx context.Context, input *api.GetCertificateBySerialNumberInput) (*api.GetCertificateBySerialNumberOutput, error) {
+	req, err := c.client.NewRequest("GET", "v1/"+string(input.CAType)+"/"+input.CAName+"/certificates/"+input.CertificateSerialNumber, nil)
 	if err != nil {
-		return dto.Cert{}, err
-	}
-	respBody, _, err := c.client.Do(req)
-	if err != nil {
-		return dto.Cert{}, err
+		return &api.GetCertificateBySerialNumberOutput{}, err
 	}
 
-	var cert dto.Cert
-	jsonString, _ := json.Marshal(respBody)
-	json.Unmarshal(jsonString, &cert)
+	var output api.GetCertificateBySerialNumberOutputSerialized
+	_, err = c.client.Do2(req, &output)
+	if err != nil {
+		return &api.GetCertificateBySerialNumberOutput{}, err
+	}
 
-	return cert, nil
-
+	deserializedOutput := output.Deserialize()
+	return &deserializedOutput, nil
 }
 
-func (c *lamassuCaClientConfig) GetIssuedCerts(ctx context.Context, caType dto.CAType, caName string, queryParameters filters.QueryParameters) (dto.IssuedCertsResponse, error) {
-	req, err := c.client.NewRequest("GET", "v1/"+caType.String()+"/"+caName+"/issued", nil)
+func (c *lamassuCaClientConfig) GetCertificates(ctx context.Context, input *api.GetCertificatesInput) (*api.GetCertificatesOutput, error) {
+	req, err := c.client.NewRequest("GET", "v1/"+string(input.CAType)+"/"+input.CAName+"/issued", nil)
 	if err != nil {
-		return dto.IssuedCertsResponse{}, err
+		return &api.GetCertificatesOutput{}, err
 	}
 
-	newParams := clientFilers.GenerateHttpQueryParams(queryParameters)
+	newParams := clientFilers.GenerateHttpQueryParams(input.QueryParameters)
 	req.URL.RawQuery = newParams
 
-	respBody, _, err := c.client.Do(req)
+	var output api.GetCertificatesOutputSerialized
+	_, err = c.client.Do2(req, &output)
 	if err != nil {
-		return dto.IssuedCertsResponse{}, err
+		return &api.GetCertificatesOutput{}, err
 	}
 
-	var cert dto.IssuedCertsResponse
-	jsonString, _ := json.Marshal(respBody)
-	json.Unmarshal(jsonString, &cert)
+	deserializedOutput := output.Deserialize()
+	return &deserializedOutput, nil
+}
 
-	return cert, nil
+func (c *lamassuCaClientConfig) IterateCertificatessWithPredicate(ctx context.Context, input *api.IterateCertificatesWithPredicateInput) (*api.IterateCertificatesWithPredicateOutput, error) {
+	limit := 100
+	i := 0
+
+	var certs []api.Certificate = make([]api.Certificate, 0)
+
+	for {
+		getCAsOutput, err := c.GetCertificates(ctx, &api.GetCertificatesInput{
+			CAType: api.CATypePKI,
+			CAName: input.CAName,
+			QueryParameters: common.QueryParameters{
+				Pagination: common.PaginationOptions{
+					Limit:  i,
+					Offset: i * limit,
+				},
+			},
+		})
+		if err != nil {
+			return &api.IterateCertificatesWithPredicateOutput{}, errors.New("could not get Certificates")
+		}
+
+		if len(getCAsOutput.Certificates) == 0 {
+			break
+		}
+		certs = append(certs, getCAsOutput.Certificates...)
+		i++
+	}
+
+	for _, cert := range certs {
+		input.PredicateFunc(&cert)
+	}
+
+	return &api.IterateCertificatesWithPredicateOutput{}, nil
 }
 
 type AlreadyRevokedError struct {

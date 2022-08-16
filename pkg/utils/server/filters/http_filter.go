@@ -6,34 +6,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters/types"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/common/types"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
 
-type PaginationOptions struct {
-	Limit  int
-	Offset int
-}
-
-type SortOptions struct {
-	SortMode  string
-	SortField string
-}
-
-type QueryParameters struct {
-	Filters    []types.Filter
-	Sort       SortOptions
-	Pagination PaginationOptions
-}
-
-func FilterQuery(r *http.Request, fieldFiltersMap map[string]types.Filter) QueryParameters {
-	queryParams := QueryParameters{
-		Sort: SortOptions{
-			SortMode:  "asc",
+func FilterQuery(r *http.Request, fieldFiltersMap map[string]types.Filter) common.QueryParameters {
+	queryParams := common.QueryParameters{
+		Sort: common.SortOptions{
+			SortMode:  common.SortModeAsc,
 			SortField: "",
 		},
-		Pagination: PaginationOptions{
+		Pagination: common.PaginationOptions{
 			Limit:  100,
 			Offset: 0,
 		},
@@ -99,7 +84,12 @@ func FilterQuery(r *http.Request, fieldFiltersMap map[string]types.Filter) Query
 				if len(sortParamsSplit) != 2 {
 					continue
 				}
-				queryParams.Sort.SortMode = sortParamsSplit[1]
+
+				sortMode := common.SortModeAsc
+				if sortParamsSplit[1] == "desc" {
+					sortMode = common.SortModeDesc
+				}
+				queryParams.Sort.SortMode = sortMode
 				queryParams.Sort.SortField = sortParamsSplit[0]
 			case "offset":
 				offestQueryParam := v[len(v)-1]

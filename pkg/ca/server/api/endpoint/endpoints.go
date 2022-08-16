@@ -2,16 +2,11 @@ package endpoint
 
 import (
 	"context"
-	"crypto/x509"
-	"encoding/base64"
-	"encoding/pem"
-	"math"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
+	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
-	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/tracing/opentracing"
@@ -19,16 +14,17 @@ import (
 )
 
 type Endpoints struct {
-	HealthEndpoint         endpoint.Endpoint
-	StatsEndpoint          endpoint.Endpoint
-	GetCAsEndpoint         endpoint.Endpoint
-	CreateCAEndpoint       endpoint.Endpoint
-	ImportCAEndpoint       endpoint.Endpoint
-	DeleteCAEndpoint       endpoint.Endpoint
-	GetIssuedCertsEndpoint endpoint.Endpoint
-	GetCertEndpoint        endpoint.Endpoint
-	SignCertEndpoint       endpoint.Endpoint
-	DeleteCertEndpoint     endpoint.Endpoint
+	HealthEndpoint          endpoint.Endpoint
+	StatsEndpoint           endpoint.Endpoint
+	GetCAsEndpoint          endpoint.Endpoint
+	GetCAByNameEndpoint     endpoint.Endpoint
+	CreateCAEndpoint        endpoint.Endpoint
+	ImportCAEndpoint        endpoint.Endpoint
+	RevokeCAEndpoint        endpoint.Endpoint
+	GetCertificatesEndpoint endpoint.Endpoint
+	GetCertEndpoint         endpoint.Endpoint
+	SignCertEndpoint        endpoint.Endpoint
+	RevokeCertEndpoint      endpoint.Endpoint
 }
 
 func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
@@ -50,33 +46,39 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 		getCAsEndpoint = opentracing.TraceServer(otTracer, "GetCAs")(getCAsEndpoint)
 	}
 
+	var getCAByName endpoint.Endpoint
+	{
+		getCAByName = MakeGetCAByNameEndpoint(s)
+		getCAByName = opentracing.TraceServer(otTracer, "GetCAByName")(getCAByName)
+	}
+
 	var createCAEndpoint endpoint.Endpoint
 	{
 		createCAEndpoint = MakeCreateCAEndpoint(s)
 		createCAEndpoint = opentracing.TraceServer(otTracer, "CreateCA")(createCAEndpoint)
 	}
 
-	var importCAEndpoint endpoint.Endpoint
+	// var importCAEndpoint endpoint.Endpoint
+	// {
+	// 	importCAEndpoint = MakeImportCAEndpoint(s)
+	// 	importCAEndpoint = opentracing.TraceServer(otTracer, "ImportCA")(importCAEndpoint)
+	// }
+
+	var revokeCAEndpoint endpoint.Endpoint
 	{
-		importCAEndpoint = MakeImportCAEndpoint(s)
-		importCAEndpoint = opentracing.TraceServer(otTracer, "ImportCA")(importCAEndpoint)
+		revokeCAEndpoint = MakeRevokeCAEndpoint(s)
+		revokeCAEndpoint = opentracing.TraceServer(otTracer, "RevokeCA")(revokeCAEndpoint)
 	}
 
-	var deleteCAEndpoint endpoint.Endpoint
+	var getGetCertificatesEndpoint endpoint.Endpoint
 	{
-		deleteCAEndpoint = MakeDeleteCAEndpoint(s)
-		deleteCAEndpoint = opentracing.TraceServer(otTracer, "DeleteCA")(deleteCAEndpoint)
-	}
-
-	var getIssuedCertsEndpoint endpoint.Endpoint
-	{
-		getIssuedCertsEndpoint = MakeIssuedCertsEndpoint(s)
-		getIssuedCertsEndpoint = opentracing.TraceServer(otTracer, "GetIssuedCerts")(getIssuedCertsEndpoint)
+		getGetCertificatesEndpoint = MakeGetCertificatesEndpoint(s)
+		getGetCertificatesEndpoint = opentracing.TraceServer(otTracer, "GetGetCertificates")(getGetCertificatesEndpoint)
 	}
 	var getCertEndpoint endpoint.Endpoint
 	{
 		getCertEndpoint = MakeCertEndpoint(s)
-		getCertEndpoint = opentracing.TraceServer(otTracer, "GetCert")(getCertEndpoint)
+		getCertEndpoint = opentracing.TraceServer(otTracer, "GetCertificate")(getCertEndpoint)
 	}
 
 	var signCertificateEndpoint endpoint.Endpoint
@@ -85,56 +87,150 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 		signCertificateEndpoint = opentracing.TraceServer(otTracer, "SignCertificate")(signCertificateEndpoint)
 	}
 
-	var deleteCertEndpoint endpoint.Endpoint
+	var revokeCertEndpoint endpoint.Endpoint
 	{
-		deleteCertEndpoint = MakeDeleteCertEndpoint(s)
-		deleteCertEndpoint = opentracing.TraceServer(otTracer, "DeleteCert")(deleteCertEndpoint)
+		revokeCertEndpoint = MakeRevokeCertEndpoint(s)
+		revokeCertEndpoint = opentracing.TraceServer(otTracer, "RevokeCertificate")(revokeCertEndpoint)
 	}
 
 	return Endpoints{
-		HealthEndpoint:         healthEndpoint,
-		StatsEndpoint:          statsEndpoint,
-		GetCAsEndpoint:         getCAsEndpoint,
-		CreateCAEndpoint:       createCAEndpoint,
-		ImportCAEndpoint:       importCAEndpoint,
-		DeleteCAEndpoint:       deleteCAEndpoint,
-		GetIssuedCertsEndpoint: getIssuedCertsEndpoint,
-		GetCertEndpoint:        getCertEndpoint,
-		DeleteCertEndpoint:     deleteCertEndpoint,
-		SignCertEndpoint:       signCertificateEndpoint,
+		HealthEndpoint:          healthEndpoint,
+		StatsEndpoint:           statsEndpoint,
+		GetCAsEndpoint:          getCAsEndpoint,
+		GetCAByNameEndpoint:     getCAByName,
+		CreateCAEndpoint:        createCAEndpoint,
+		RevokeCAEndpoint:        revokeCAEndpoint,
+		GetCertificatesEndpoint: getGetCertificatesEndpoint,
+		GetCertEndpoint:         getCertEndpoint,
+		RevokeCertEndpoint:      revokeCertEndpoint,
+		SignCertEndpoint:        signCertificateEndpoint,
+		// ImportCAEndpoint:       importCAEndpoint,
 	}
 }
 
 func MakeHealthEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		healthy := s.Health(ctx)
+		healthy := s.Health()
 		return HealthResponse{Healthy: healthy}, nil
 	}
 }
 
+func ValidateStatsRequest(request api.GetStatsInput) error {
+	GetStatsRequestStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.GetStatsInput)
+	}
+
+	validate := validator.New()
+	validate.RegisterStructValidation(GetStatsRequestStructLevelValidation, api.CreateCAInput{})
+	return validate.Struct(request)
+}
+
 func MakeStatsEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		stats := s.Stats(ctx)
-		return stats, nil
+		input := request.(api.GetStatsInput)
+
+		err = ValidateStatsRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		stats, err := s.Stats(ctx, &input)
+		return stats, err
 	}
+}
+
+func ValidateGetCAsRequest(request api.GetCAsInput) error {
+	GetCAsRequestStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.GetCAsInput)
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(GetCAsRequestStructLevelValidation, api.GetCAsInput{})
+	return validate.Struct(request)
 }
 
 func MakeGetCAsEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(GetCAsRequest)
+		input := request.(api.GetCAsInput)
 
-		caType, _ := dto.ParseCAType(req.CaType)
+		err = ValidateGetCAsRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
 
-		cas, totalcas, err := s.GetCAs(ctx, caType, req.QueryParameters)
-		return dto.GetCasResponse{TotalCas: totalcas, CAs: cas}, err
+		output, err := s.GetCAs(ctx, &input)
+		return output, err
 	}
+}
+
+func ValidateGetCAByNameRequest(request api.GetCAByNameInput) error {
+	GetCAByNameRequestStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.GetCAByNameInput)
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(GetCAByNameRequestStructLevelValidation, api.GetCAByNameInput{})
+	return validate.Struct(request)
+}
+
+func MakeGetCAByNameEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.GetCAByNameInput)
+
+		err = ValidateGetCAByNameRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		output, err := s.GetCAByName(ctx, &input)
+		return output, err
+	}
+}
+
+func ValidateCreatrCARequest(request api.CreateCAInput) error {
+	CreateCARequestStructLevelValidation := func(sl validator.StructLevel) {
+		input := sl.Current().Interface().(api.CreateCAInput)
+
+		if input.Subject.CommonName == "" {
+			sl.ReportError(input.Subject.CommonName, "CommonName", "CommonName", "CommonNameIsEmpty", "")
+		}
+
+		if input.KeyMetadata.KeyType == api.RSA {
+			if input.KeyMetadata.KeyBits%1024 != 0 || input.KeyMetadata.KeyBits == 0 {
+				sl.ReportError(input.KeyMetadata.KeyBits, "KeyBits", "KeyBits", "InvalidRSAKeyBits", "")
+			}
+		}
+
+		if input.IssuanceDuration.Seconds() <= 0 {
+			sl.ReportError(input.IssuanceDuration, "IssuanceDuration", "IssuanceDuration", "MissingIssuanceDuration", "")
+		}
+
+		if input.CADuration.Seconds() <= 0 {
+			sl.ReportError(input.CADuration, "CADuration", "CADuration", "MissingCADuration", "")
+		}
+
+		if input.IssuanceDuration >= input.CADuration {
+			sl.ReportError(input.IssuanceDuration, "IssuanceDuration", "IssuanceDuration", "IssuanceDurationGreaterThanCADuration", "")
+		}
+	}
+
+	validate := validator.New()
+	validate.RegisterStructValidation(CreateCARequestStructLevelValidation, api.CreateCAInput{})
+	return validate.Struct(request)
 }
 
 func MakeCreateCAEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(CreateCARequest)
+		input := request.(api.CreateCAInput)
 
-		err = ValidateCreatrCARequest(req)
+		err = ValidateCreatrCARequest(input)
 		if err != nil {
 			valError := errors.ValidationError{
 				Msg: err.Error(),
@@ -142,38 +238,28 @@ func MakeCreateCAEndpoint(s service.Service) endpoint.Endpoint {
 			return nil, &valError
 		}
 
-		caType, _ := dto.ParseCAType(req.CaType)
-
-		ca, err := s.CreateCA(ctx, caType, req.CaName, dto.PrivateKeyMetadata(req.CaPayload.KeyMetadata), dto.Subject(req.CaPayload.Subject), req.CaPayload.CaTTL, req.CaPayload.EnrollerTTL)
+		ca, err := s.CreateCA(ctx, &input)
 		return ca, err
 	}
 }
 
-func MakeDeleteCAEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(DeleteCARequest)
-
-		issuedCerts, _, err := s.GetIssuedCerts(ctx, req.CaType, req.CA, filters.QueryParameters{})
-		if err != nil {
-			return nil, err
+func ValidateRevokeCARequest(request api.RevokeCAInput) error {
+	RevokeCARequestStructLevelValidation := func(sl validator.StructLevel) {
+		input := sl.Current().Interface().(api.RevokeCAInput)
+		if input.RevocationReason == "" {
+			sl.ReportError(input.RevocationReason, "RevocationReason", "RevocationReason", "RevocationReasonNotEmpty", "")
 		}
-
-		for _, issuedCert := range issuedCerts {
-			if issuedCert.Status != "revoked" {
-				s.DeleteCert(ctx, req.CaType, req.CA, issuedCert.SerialNumber)
-			}
-		}
-
-		err = s.DeleteCA(ctx, req.CaType, req.CA)
-		return nil, err
 	}
+	validate := validator.New()
+	validate.RegisterStructValidation(RevokeCARequestStructLevelValidation, api.RevokeCAInput{})
+	return validate.Struct(request)
 }
 
-func MakeImportCAEndpoint(s service.Service) endpoint.Endpoint {
+func MakeRevokeCAEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(ImportCARequest)
+		input := request.(api.RevokeCAInput)
 
-		err = ValidateImportCARequest(req)
+		err = ValidateRevokeCARequest(input)
 		if err != nil {
 			valError := errors.ValidationError{
 				Msg: err.Error(),
@@ -181,59 +267,77 @@ func MakeImportCAEndpoint(s service.Service) endpoint.Endpoint {
 			return nil, &valError
 		}
 
-		caType, _ := dto.ParseCAType(req.CaType)
-
-		data, _ := base64.StdEncoding.DecodeString(req.CaPayload.Crt)
-		block, _ := pem.Decode([]byte(data))
-		crt, _ := x509.ParseCertificate(block.Bytes)
-
-		privKey := dto.PrivateKey{}
-
-		privKeyData, _ := base64.StdEncoding.DecodeString(req.CaPayload.PrivateKey)
-		privKeyBlock, _ := pem.Decode([]byte(privKeyData))
-		ecdsaKey, err := x509.ParseECPrivateKey(privKeyBlock.Bytes)
-
-		if err == nil {
-			privKey.Key = ecdsaKey
-		} else {
-			rsaKey, err := x509.ParsePKCS8PrivateKey(privKeyBlock.Bytes)
-			if err == nil {
-				privKey.Key = rsaKey
-			} else {
-				err = &errors.GenericError{
-					Message:    "Invalid Key bits",
-					StatusCode: 400,
-				}
-				return nil, err
-			}
-		}
-
-		ca, err := s.ImportCA(ctx, caType, req.CaName, *crt, privKey, req.CaPayload.EnrollerTTL)
-		return ca, err
+		output, err := s.RevokeCA(ctx, &input)
+		return output, err
 	}
 }
 
-func MakeIssuedCertsEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(GetIssuedCertsRequest)
-		certs, length, err := s.GetIssuedCerts(ctx, req.CaType, req.CA, req.QueryParameters)
-		return dto.IssuedCertsResponse{TotalCerts: length, Certs: certs}, err
+// func ValidateImportCARequest(request api.ImportCAInput) error {
+// 	ImportCARequestStructLevelValidation := func(sl validator.StructLevel) {
+// 		_ = sl.Current().Interface().(api.ImportCAInput)
+// 	}
+// 	validate := validator.New()
+// 	validate.RegisterStructValidation(ImportCARequestStructLevelValidation, api.ImportCAInput{})
+// 	return validate.Struct(request)
+// }
+
+// func MakeImportCAEndpoint(s service.Service) endpoint.Endpoint {
+// 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+// 		req := request.(api.ImportCAInput)
+
+// 		err = ValidateImportCARequest(req)
+// 		if err != nil {
+// 			valError := errors.ValidationError{
+// 				Msg: err.Error(),
+// 			}
+// 			return nil, &valError
+// 		}
+
+// 		ca, err := s.ImportCA(ctx, caType, req.CaName, *crt, privKey, req.CaPayload.EnrollerTTL)
+// 		return ca, err
+// 	}
+// }
+
+func ValidateGetCertificatesRequest(request api.GetCertificatesInput) error {
+	GetCertificatesRequestStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.GetCertificatesInput)
 	}
+	validate := validator.New()
+	validate.RegisterStructValidation(GetCertificatesRequestStructLevelValidation, api.GetCertificatesInput{})
+	return validate.Struct(request)
+}
+
+func MakeGetCertificatesEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.GetCertificatesInput)
+
+		err = ValidateGetCertificatesRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		output, err := s.GetCertificates(ctx, &input)
+		return output, err
+	}
+}
+
+func ValidateGetCertificateBySerialNumberRequest(request api.GetCertificateBySerialNumberInput) error {
+	GetCertificateBySerialNumberRequestStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.GetCertificateBySerialNumberInput)
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(GetCertificateBySerialNumberRequestStructLevelValidation, api.GetCertificateBySerialNumberInput{})
+	return validate.Struct(request)
 }
 
 func MakeCertEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(GetCertRequest)
-		cert, err := s.GetCert(ctx, req.CaType, req.CaName, req.SerialNumber)
-		return cert, err
-	}
-}
+		input := request.(api.GetCertificateBySerialNumberInput)
 
-func MakeSignCertEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(SignCertificateRquest)
-
-		err = ValidateSignCertificateRquest(req)
+		err = ValidateGetCertificateBySerialNumberRequest(input)
 		if err != nil {
 			valError := errors.ValidationError{
 				Msg: err.Error(),
@@ -241,119 +345,69 @@ func MakeSignCertEndpoint(s service.Service) endpoint.Endpoint {
 			return nil, &valError
 		}
 
-		data, _ := base64.StdEncoding.DecodeString(req.SignPayload.Csr)
-		block, _ := pem.Decode([]byte(data))
-		csr, _ := x509.ParseCertificateRequest(block.Bytes)
-
-		caType, _ := dto.ParseCAType(req.CaType)
-
-		certs, err := s.SignCertificate(ctx, caType, req.CaName, *csr, req.SignPayload.SignVerbatim, req.SignPayload.CommonName)
-		return certs, err
+		output, err := s.GetCertificateBySerialNumber(ctx, &input)
+		return output, err
 	}
 }
 
-func MakeDeleteCertEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(DeleteCertRequest)
-		err = s.DeleteCert(ctx, req.CaType, req.CaName, req.SerialNumber)
-		if err != nil {
-			return "", err
-		} else {
-			return "OK", err
+func ValidateSignCertificateRequestRequest(request api.SignCertificateRequestInput) error {
+	SignCertificateRequestRequestStructLevelValidation := func(sl validator.StructLevel) {
+		input := sl.Current().Interface().(api.SignCertificateRequestInput)
+		if !input.SignVerbatim && input.CommonName == "" {
+			sl.ReportError(input.CommonName, "CommonName", "CommonName", "CommonNameNotEmptyIfNotSignVerbatim", "")
 		}
 	}
+	validate := validator.New()
+	validate.RegisterStructValidation(SignCertificateRequestRequestStructLevelValidation, api.SignCertificateRequestInput{})
+	return validate.Struct(request)
 }
 
-type HealthRequest struct{}
+func MakeSignCertEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.SignCertificateRequestInput)
+
+		err = ValidateSignCertificateRequestRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		output, err := s.SignCertificateRequest(ctx, &input)
+		return output, err
+	}
+}
+
+func ValidateRevokeCertificateRequest(request api.RevokeCertificateInput) error {
+	RevokeCertificateRequestStructLevelValidation := func(sl validator.StructLevel) {
+		input := sl.Current().Interface().(api.RevokeCertificateInput)
+		if input.RevocationReason == "" {
+			sl.ReportError(input.RevocationReason, "RevocationReason", "RevocationReason", "RevocationReasonNotEmpty", "")
+		}
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(RevokeCertificateRequestStructLevelValidation, api.RevokeCertificateInput{})
+	return validate.Struct(request)
+}
+
+func MakeRevokeCertEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.RevokeCertificateInput)
+
+		err = ValidateRevokeCertificateRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		output, err := s.RevokeCertificate(ctx, &input)
+		return output, err
+	}
+}
 
 type HealthResponse struct {
-	Healthy bool  `json:"healthy,omitempty"`
-	Err     error `json:"-"`
-}
-
-func ValidateCreatrCARequest(request CreateCARequest) error {
-	CreateCARequestStructLevelValidation := func(sl validator.StructLevel) {
-		req := sl.Current().Interface().(CreateCARequest)
-		switch req.CaPayload.KeyMetadata.KeyType {
-		case "RSA":
-			if math.Mod(float64(req.CaPayload.KeyMetadata.KeyBits), 1024) != 0 || req.CaPayload.KeyMetadata.KeyBits < 2048 {
-				sl.ReportError(req.CaPayload.KeyMetadata.KeyBits, "bits", "Bits", "bits1024multipleAndGt2048", "")
-			}
-		case "EC":
-			if req.CaPayload.KeyMetadata.KeyBits != 224 && req.CaPayload.KeyMetadata.KeyBits != 256 && req.CaPayload.KeyMetadata.KeyBits != 384 {
-				sl.ReportError(req.CaPayload.KeyMetadata.KeyBits, "bits", "Bits", "bitsEcdsaMultiple", "")
-			}
-		}
-
-		if req.CaPayload.EnrollerTTL >= req.CaPayload.CaTTL {
-			sl.ReportError(req.CaPayload.EnrollerTTL, "enrollerttl", "EnrollerTTL", "enrollerTtlGtCaTtl", "")
-		}
-
-		if req.CaPayload.Subject.CommonName != req.CaName {
-			sl.ReportError(req.CaPayload.Subject.CommonName, "commonName", "CommonName", "commonName and caName must be equal", "")
-		}
-	}
-
-	validate := validator.New()
-	validate.RegisterStructValidation(CreateCARequestStructLevelValidation, CreateCARequest{})
-	return validate.Struct(request)
-}
-
-func ValidateImportCARequest(request ImportCARequest) error {
-	validate := validator.New()
-	return validate.Struct(request)
-}
-
-func ValidateSignCertificateRquest(request SignCertificateRquest) error {
-	validate := validator.New()
-	return validate.Struct(request)
-}
-
-type StatsRequest struct {
-	ForceRefesh bool
-}
-
-type GetCAsRequest struct {
-	CaType          string
-	QueryParameters filters.QueryParameters
-}
-
-type CaRequest struct {
-	CaType dto.CAType
-	CA     string
-}
-type GetIssuedCertsRequest struct {
-	CaType          dto.CAType
-	CA              string
-	QueryParameters filters.QueryParameters
-}
-type DeleteCARequest struct {
-	CaType dto.CAType
-	CA     string
-}
-
-type GetCertRequest struct {
-	CaType       dto.CAType
-	CaName       string
-	SerialNumber string
-}
-type DeleteCertRequest struct {
-	CaName       string
-	SerialNumber string
-	CaType       dto.CAType
-}
-type CreateCARequest struct {
-	CaType    string `validate:"oneof='pki' 'dmsenroller'"`
-	CaName    string `validate:"required"`
-	CaPayload dto.CreateCARequestPayload
-}
-type ImportCARequest struct {
-	CaType    string `validate:"oneof='pki' 'dmsenroller'"`
-	CaName    string `validate:"required"`
-	CaPayload dto.ImportCARequestPayload
-}
-type SignCertificateRquest struct {
-	CaType      string `validate:"oneof='pki' 'dmsenroller'"`
-	CaName      string `validate:"required"`
-	SignPayload dto.SignPayload
+	Healthy bool `json:"healthy,omitempty"`
 }

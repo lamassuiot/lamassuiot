@@ -1,0 +1,13 @@
+FROM ubuntu:18.04
+
+# Dependencies for pkcs11-proxy and opensc for pkcs11-tool
+RUN apt-get update && \
+    apt-get install -y  git-core make cmake libssl-dev libseccomp-dev opensc
+
+RUN git clone https://github.com/SUNET/pkcs11-proxy && \
+    cd pkcs11-proxy && \
+    cmake . && make && make install
+
+COPY test.psk /root/test.psk
+ENV PKCS11_PROXY_TLS_PSK_FILE="/root/test.psk"
+ENV PKCS11_PROXY_SOCKET="tls://hsm:5657"

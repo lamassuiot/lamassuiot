@@ -23,8 +23,8 @@ type Config struct {
 
 	VaultPkiCaPath string `required:"true" split_words:"true"`
 
+	PostgresDatabase           string `required:"true" split_words:"true"`
 	PostgresUser               string `required:"true" split_words:"true"`
-	PostgresCaDB               string `required:"true" split_words:"true"`
 	PostgresPassword           string `required:"true" split_words:"true"`
 	PostgresHostname           string `required:"true" split_words:"true"`
 	PostgresPort               string `required:"true" split_words:"true"`

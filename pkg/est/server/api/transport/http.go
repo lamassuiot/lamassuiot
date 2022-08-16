@@ -15,12 +15,9 @@ import (
 	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
-	lamassuca "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	"github.com/lamassuiot/lamassuiot/pkg/est/server/api/endpoint"
 	esterror "github.com/lamassuiot/lamassuiot/pkg/est/server/api/errors"
-	"github.com/lamassuiot/lamassuiot/pkg/est/server/api/mtls"
 	"github.com/lamassuiot/lamassuiot/pkg/est/server/api/service"
-	"github.com/lamassuiot/lamassuiot/pkg/utils"
 	stdopentracing "github.com/opentracing/opentracing-go"
 	"go.mozilla.org/pkcs7"
 )
@@ -62,11 +59,13 @@ func ErrMalformedCert() error {
 func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
 	return func(ctx context.Context, req *http.Request) context.Context {
 		// Try to join to a trace propagated in `req`.
-		logger := log.With(logger, "span_id", stdopentracing.SpanFromContext(ctx))
-		return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
+		// logger := log.With(logger, "span_id", stdopentracing.SpanFromContext(ctx))
+		// return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
+		return ctx
 	}
 }
-func MakeHTTPHandler(service service.Service, lamassuCaClient *lamassuca.LamassuCaClient, logger log.Logger, otTracer stdopentracing.Tracer) http.Handler {
+
+func MakeHTTPHandler(service service.ESTService, logger log.Logger, otTracer stdopentracing.Tracer) http.Handler {
 	router := mux.NewRouter()
 	endpoints := endpoint.MakeServerEndpoints(service, otTracer)
 
@@ -79,8 +78,8 @@ func MakeHTTPHandler(service service.Service, lamassuCaClient *lamassuca.Lamassu
 	// MUST as per rfc7030
 	router.Methods("GET").Path("/.well-known/est/cacerts").Handler(httptransport.NewServer(
 		endpoints.GetCAsEndpoint,
-		DecodeRequest,
-		EncodeGetCaCertsResponse,
+		decodeRequest,
+		encodeGetCACertificatesResponse,
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "cacerts", logger)),
@@ -89,10 +88,9 @@ func MakeHTTPHandler(service service.Service, lamassuCaClient *lamassuca.Lamassu
 	))
 
 	router.Methods("POST").Path("/.well-known/est/{aps}/simpleenroll").Handler(httptransport.NewServer(
-		mtls.NewParser()(endpoints.EnrollerEndpoint),
-		//endpoints.EnrollerEndpoint,
-		DecodeEnrollRequest,
-		EncodeResponse,
+		endpoints.EnrollerEndpoint,
+		decodeEnrollRequest,
+		encodeResponse,
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "simpleenroll", logger)),
@@ -101,10 +99,9 @@ func MakeHTTPHandler(service service.Service, lamassuCaClient *lamassuca.Lamassu
 	))
 
 	router.Methods("POST").Path("/.well-known/est/simplereenroll").Handler(httptransport.NewServer(
-		mtls.NewParser()(endpoints.ReenrollerEndpoint),
-		//endpoints.ReenrollerEndpoint,
-		DecodeReenrollRequest,
-		EncodeResponse,
+		endpoints.ReenrollerEndpoint,
+		decodeReenrollRequest,
+		encodeResponse,
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "simplereenroll", logger)),
@@ -113,10 +110,9 @@ func MakeHTTPHandler(service service.Service, lamassuCaClient *lamassuca.Lamassu
 	))
 
 	router.Methods("POST").Path("/.well-known/est/{aps}/serverkeygen").Handler(httptransport.NewServer(
-		mtls.NewParser()(endpoints.ServerKeyGenEndpoint),
-		//endpoints.ServerKeyGenEndpoint,
-		DecodeServerkeygenRequest,
-		EncodeServerkeygenResponse,
+		endpoints.ServerKeyGenEndpoint,
+		decodeServerkeygenRequest,
+		encodeServerkeygenResponse,
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "serverkeygen", logger)),
@@ -127,12 +123,12 @@ func MakeHTTPHandler(service service.Service, lamassuCaClient *lamassuca.Lamassu
 	return router
 }
 
-func DecodeRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+func decodeRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	var req endpoint.EmptyRequest
 	return req, nil
 }
 
-func DecodeEnrollRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+func decodeEnrollRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
 	aps, ok := vars["aps"]
 
@@ -150,15 +146,14 @@ func DecodeEnrollRequest(ctx context.Context, r *http.Request) (request interfac
 		return nil, err
 	}
 
-	dec := make([]byte, base64.StdEncoding.DecodedLen(len(data)))
-	n, err := base64.StdEncoding.Decode(dec, data)
+	dec, err := base64.StdEncoding.DecodeString(string(data))
 	if err != nil {
-		return nil, err
+		return nil, ErrInvalidBase64()
 	}
 
-	csr, err := x509.ParseCertificateRequest(dec[:n])
+	csr, err := x509.ParseCertificateRequest(dec)
 	if err != nil {
-		return nil, err
+		return nil, ErrMalformedCert()
 	}
 
 	ClientCert := r.Header.Get("X-Forwarded-Client-Cert")
@@ -197,7 +192,7 @@ func DecodeEnrollRequest(ctx context.Context, r *http.Request) (request interfac
 	}
 }
 
-func DecodeReenrollRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+func decodeReenrollRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	contentType := r.Header.Get("Content-Type")
 	if contentType != "application/pkcs10" {
 		return nil, ErrContentType()
@@ -255,7 +250,7 @@ func DecodeReenrollRequest(ctx context.Context, r *http.Request) (request interf
 
 }
 
-func DecodeServerkeygenRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+func decodeServerkeygenRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
 	aps, ok := vars["aps"]
 
@@ -320,7 +315,7 @@ func DecodeServerkeygenRequest(ctx context.Context, r *http.Request) (request in
 
 }
 
-func EncodeServerkeygenResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+func encodeServerkeygenResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if e, ok := response.(errorer); ok && e.error() != nil {
 		// Not a Go kit transport error, but a business-logic error.
 		// Provide those as HTTP errors.
@@ -361,7 +356,7 @@ func EncodeServerkeygenResponse(ctx context.Context, w http.ResponseWriter, resp
 	return nil
 }
 
-func EncodeResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+func encodeResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if e, ok := response.(errorer); ok && e.error() != nil {
 		// Not a Go kit transport error, but a business-logic error.
 		// Provide those as HTTP errors.
@@ -379,7 +374,7 @@ func EncodeResponse(ctx context.Context, w http.ResponseWriter, response interfa
 		EncodeError(ctx, err, w)
 		return nil
 	}
-	body = utils.EncodeB64(body)
+	body = []byte(base64.StdEncoding.EncodeToString(body))
 
 	w.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
 	w.Header().Set("Content-Transfer-Encoding", "base64")
@@ -388,7 +383,7 @@ func EncodeResponse(ctx context.Context, w http.ResponseWriter, response interfa
 	return nil
 }
 
-func EncodeGetCaCertsResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+func encodeGetCACertificatesResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if e, ok := response.(errorer); ok && e.error() != nil {
 		// Not a Go kit transport error, but a business-logic error.
 		// Provide those as HTTP errors.
@@ -407,7 +402,7 @@ func EncodeGetCaCertsResponse(ctx context.Context, w http.ResponseWriter, respon
 		return nil
 	}
 
-	body = utils.EncodeB64(body)
+	body = []byte(base64.StdEncoding.EncodeToString(body))
 
 	w.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
 	w.Header().Set("Content-Transfer-Encoding", "base64")

@@ -2,16 +2,21 @@ package transport
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
+	"errors"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
+	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/endpoint"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
-	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/common/types"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
-	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters/types"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/tracing/opentracing"
@@ -19,7 +24,6 @@ import (
 	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	lamassuErrors "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/errors"
-
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -33,6 +37,7 @@ func InvalidJsonFormat() error {
 		StatusCode: 400,
 	}
 }
+
 func InvalidCaType() error {
 	return &lamassuErrors.GenericError{
 		Message:    "Invalid CA Type",
@@ -49,7 +54,8 @@ func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
 			span := stdopentracing.SpanFromContext(ctx)
 			logger = log.With(logger, "span_id", span)
 		}
-		return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
+		// return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
+		return ctx
 	}
 }
 
@@ -75,7 +81,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	r.Methods("GET").Path("/health").Handler(httptransport.NewServer(
 		e.HealthEndpoint,
 		decodeHealthRequest,
-		encodeResponse,
+		encodeHealthResponse,
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Health", logger)),
@@ -86,7 +92,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	r.Methods("GET").Path("/stats").Handler(httptransport.NewServer(
 		e.StatsEndpoint,
 		decodeStatsRequest,
-		encodeResponse,
+		encodeStatsResponse,
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Stats", logger)),
@@ -98,7 +104,19 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	r.Methods("GET").Path("/{caType}").Handler(httptransport.NewServer(
 		e.GetCAsEndpoint,
 		decodeGetCAsRequest,
-		encodeResponse,
+		encodeGetCAsResponse,
+		append(
+			options,
+			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCAs", logger)),
+			httptransport.ServerBefore(HTTPToContext(logger)),
+		)...,
+	))
+
+	// Get CA by Name
+	r.Methods("GET").Path("/{caType}/{caName}").Handler(httptransport.NewServer(
+		e.GetCAByNameEndpoint,
+		decodeGetCAByNameRequest,
+		encodeGetCAByNameResponse,
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCAs", logger)),
@@ -107,10 +125,10 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	))
 
 	// Create new CA using Form
-	r.Methods("POST").Path("/pki/{caName}").Handler(httptransport.NewServer(
+	r.Methods("POST").Path("/pki").Handler(httptransport.NewServer(
 		e.CreateCAEndpoint,
 		decodeCreateCARequest,
-		encodeResponse,
+		encodeCreateCAResponse,
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "CreateCA", logger)),
@@ -119,46 +137,46 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	))
 
 	// Import existing crt and key
-	r.Methods("POST").Path("/pki/import/{caName}").Handler(httptransport.NewServer(
-		e.ImportCAEndpoint,
-		decodeImportCARequest,
-		encodeResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "ImportCA", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	// r.Methods("POST").Path("/pki/import/{caName}").Handler(httptransport.NewServer(
+	// 	e.ImportCAEndpoint,
+	// 	decodeImportCARequest,
+	// 	encodeResponse,
+	// 	append(
+	// 		options,
+	// 		httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "ImportCA", logger)),
+	// 		httptransport.ServerBefore(HTTPToContext(logger)),
+	// 	)...,
+	// ))
 
 	// Revoke CA
-	r.Methods("DELETE").Path("/pki/{caName}").Handler(httptransport.NewServer(
-		e.DeleteCAEndpoint,
-		decodeDeleteCARequest,
-		encodeResponse,
+	r.Methods("DELETE").Path("/{caType}/{caName}").Handler(httptransport.NewServer(
+		e.RevokeCAEndpoint,
+		decodeRevokeCARequest,
+		encodeRevokeCAResponse,
 		append(
 			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "DeleteCA", logger)),
+			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "RevokeCA", logger)),
 			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
 	// Get Issued certificates by {ca}
-	r.Methods("GET").Path("/{caType}/{caName}/issued").Handler(httptransport.NewServer(
-		e.GetIssuedCertsEndpoint,
-		decodeGetIssuedCertsRequest,
-		encodeResponse,
+	r.Methods("GET").Path("/{caType}/{caName}/certificates").Handler(httptransport.NewServer(
+		e.GetCertificatesEndpoint,
+		decodeGetCertificatesRequest,
+		encodeGetCertificatesResponse,
 		append(
 			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetIssuedCerts", logger)),
+			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCertificates", logger)),
 			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
 	// Get certificate by {ca} and {serialNumber}
-	r.Methods("GET").Path("/{caType}/{caName}/cert/{serialNumber}").Handler(httptransport.NewServer(
+	r.Methods("GET").Path("/{caType}/{caName}/certificates/{serialNumber}").Handler(httptransport.NewServer(
 		e.GetCertEndpoint,
-		decodeGetCertRequest,
-		encodeResponse,
+		decodeGetCertificateBySerialNumberRequest,
+		encodeGetCertificateBySerialNumberResponse,
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCert", logger)),
@@ -170,7 +188,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	r.Methods("POST").Path("/{caType}/{caName}/sign").Handler(httptransport.NewServer(
 		e.SignCertEndpoint,
 		decodeSignCertificateRequest,
-		encodeResponse,
+		encodeSignCertificateResponse,
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "SignCSR", logger)),
@@ -179,10 +197,10 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	))
 
 	// Revoke certificate issued by {ca} and {serialNumber}
-	r.Methods("DELETE").Path("/{caType}/{caName}/cert/{serialNumber}").Handler(httptransport.NewServer(
-		e.DeleteCertEndpoint,
-		decodeDeleteCertRequest,
-		encodeResponse,
+	r.Methods("DELETE").Path("/{caType}/{caName}/certificates/{serialNumber}").Handler(httptransport.NewServer(
+		e.RevokeCertEndpoint,
+		decodeRevokeCertificateRequest,
+		encodeRevokeCertificateResponse,
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "DeleteCert", logger)),
@@ -194,159 +212,330 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 }
 
 func decodeHealthRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	var req endpoint.HealthRequest
-	return req, nil
+	return nil, nil
 }
 
 func decodeStatsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	var req endpoint.StatsRequest
-	return req, nil
+	forceRefreshString := r.URL.Query().Get("force_refresh")
+	forceRefresh := false
+	if forceRefreshString == "" {
+		parsedForceRefresh, err := strconv.ParseBool(forceRefreshString)
+		if err == nil {
+			forceRefresh = parsedForceRefresh
+		}
+	}
+
+	input := api.GetStatsInput{
+		ForceRefesh: forceRefresh,
+	}
+
+	return input, nil
 }
 
 func decodeGetCAsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	caTypeString, _ := vars["caType"]
+	CATypeString := vars["caType"]
 
-	return endpoint.GetCAsRequest{
-		CaType:          caTypeString,
+	return api.GetCAsInput{
+		CAType:          api.ParseCAType(CATypeString),
 		QueryParameters: filters.FilterQuery(r, filtrableCAModelFields()),
+	}, nil
+}
+
+func decodeGetCAByNameRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	CATypeString := vars["caType"]
+	CAName := vars["caName"]
+
+	return api.GetCAByNameInput{
+		CAType: api.ParseCAType(CATypeString),
+		CAName: CAName,
 	}, nil
 
 }
 
-func decodeGetIssuedCertsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+func decodeGetCertificatesRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	caName, _ := vars["caName"]
-	caTypeString, _ := vars["caType"]
+	CATypeString := vars["caType"]
+	CAName := vars["caName"]
 
-	caType, err := dto.ParseCAType(caTypeString)
-	if err != nil {
-		return nil, InvalidCaType()
-	}
-	return endpoint.GetIssuedCertsRequest{
-		CaType:          caType,
-		CA:              caName,
+	return api.GetCertificatesInput{
+		CAType:          api.ParseCAType(CATypeString),
+		CAName:          CAName,
 		QueryParameters: filters.FilterQuery(r, filtrableCAModelFields()),
 	}, nil
 }
 
 func decodeCreateCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	vars := mux.Vars(r)
-	var createCaRequest endpoint.CreateCARequest
-	err = json.NewDecoder(r.Body).Decode(&createCaRequest.CaPayload)
+	var input api.CreateCAInput
+	var body api.CreateCAPayload
+
+	err = json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
 		return nil, InvalidJsonFormat()
 	}
-	caName, _ := vars["caName"]
 
-	createCaRequest.CaName = caName
-	createCaRequest.CaType = "pki"
+	var CADuration time.Duration = time.Duration(body.CADuration * int(time.Second))
+	var IssuanceDuration time.Duration = time.Duration(body.IssuanceDuration * int(time.Second))
 
-	return createCaRequest, nil
+	input = api.CreateCAInput{
+		CAType: api.CATypePKI,
+		Subject: api.Subject{
+			CommonName:       body.Subject.CommonName,
+			Organization:     body.Subject.Organization,
+			OrganizationUnit: body.Subject.OrganizationUnit,
+			Country:          body.Subject.Country,
+			State:            body.Subject.State,
+			Locality:         body.Subject.Locality,
+		},
+		KeyMetadata: api.KeyMetadata{
+			KeyType: api.ParseKeyType(body.KeyMetadata.KeyType),
+			KeyBits: body.KeyMetadata.KeyBits,
+		},
+		CADuration:       CADuration,
+		IssuanceDuration: IssuanceDuration,
+	}
+
+	return input, nil
 }
 
-func decodeImportCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+// func decodeImportCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+// 	vars := mux.Vars(r)
+// 	var importCaRequest endpoint.ImportCARequest
+// 	err = json.NewDecoder(r.Body).Decode(&importCaRequest.CaPayload)
+// 	if err != nil {
+// 		return nil, InvalidJsonFormat()
+// 	}
+// 	caName, _ := vars["caName"]
+
+// 	importCaRequest.CaName = caName
+// 	importCaRequest.CaType = "pki"
+
+// 	return importCaRequest, nil
+// }
+
+func decodeRevokeCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	var importCaRequest endpoint.ImportCARequest
-	err = json.NewDecoder(r.Body).Decode(&importCaRequest.CaPayload)
+	CATypeString := vars["caType"]
+	CAName := vars["caName"]
+
+	var body api.RevokeCAPayload
+
+	err = json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
 		return nil, InvalidJsonFormat()
 	}
-	caName, _ := vars["caName"]
 
-	importCaRequest.CaName = caName
-	importCaRequest.CaType = "pki"
-
-	return importCaRequest, nil
-}
-
-func decodeDeleteCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	vars := mux.Vars(r)
-	CA, _ := vars["caName"]
-
-	return endpoint.DeleteCARequest{
-		CaType: dto.Pki,
-		CA:     CA,
+	return api.RevokeCAInput{
+		CAType:           api.ParseCAType(CATypeString),
+		CAName:           CAName,
+		RevocationReason: body.RevocationReason,
 	}, nil
 }
 
-func decodeGetCertRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+func decodeGetCertificateBySerialNumberRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	caName, _ := vars["caName"]
+	CATypeString := vars["caType"]
+	CAName := vars["caName"]
+	serialNumber := vars["serialNumber"]
 
-	caTypeString, _ := vars["caType"]
-
-	caType, err := dto.ParseCAType(caTypeString)
-	if err != nil {
-		return nil, InvalidCaType()
-	}
-	serialNumber, _ := vars["serialNumber"]
-
-	return endpoint.GetCertRequest{
-		CaType:       caType,
-		CaName:       caName,
-		SerialNumber: serialNumber,
+	return api.GetCertificateBySerialNumberInput{
+		CAType:                  api.ParseCAType(CATypeString),
+		CAName:                  CAName,
+		CertificateSerialNumber: serialNumber,
 	}, nil
 }
 
 func decodeSignCertificateRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
-	caName, _ := vars["caName"]
+	CATypeString := vars["caType"]
+	CAName := vars["caName"]
 
-	caType, _ := vars["caType"]
+	var body api.SignCertificateRequestPayload
 
-	var signRequest endpoint.SignCertificateRquest
-
-	err = json.NewDecoder(r.Body).Decode(&signRequest.SignPayload)
+	err = json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
 		return nil, InvalidJsonFormat()
 	}
 
-	signRequest.CaName = caName
-	signRequest.CaType = caType
-
-	return signRequest, nil
-}
-
-func decodeDeleteCertRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	vars := mux.Vars(r)
-	ca, _ := vars["caName"]
-
-	caTypeString, _ := vars["caType"]
-
-	caType, err := dto.ParseCAType(caTypeString)
+	decodedCert, err := base64.StdEncoding.DecodeString(body.CertificateRequest)
+	// decodedCert = strings.Trim(decodedCert, "\n")
 	if err != nil {
-		return nil, InvalidCaType()
+		return api.SignCertificateRequestInput{}, errors.New(lamassuErrors.ErrSignRequestNotInB64)
 	}
 
-	serialNumber, _ := vars["serialNumber"]
+	certBlock, _ := pem.Decode([]byte(decodedCert))
+	if certBlock == nil {
+		return api.SignCertificateRequestInput{}, errors.New(lamassuErrors.ErrSignRequestNotInPEMFormat)
+	}
+	certRequest, err := x509.ParseCertificateRequest(certBlock.Bytes)
+	if err != nil {
+		return api.SignCertificateRequestInput{}, errors.New("could not inflate certificate request")
+	}
 
-	return endpoint.DeleteCertRequest{
-		CaType:       caType,
-		CaName:       ca,
-		SerialNumber: serialNumber,
+	return api.SignCertificateRequestInput{
+		CAType:                    api.ParseCAType(CATypeString),
+		CAName:                    CAName,
+		CertificateSigningRequest: certRequest,
+		CommonName:                body.CommonName,
+		SignVerbatim:              body.SignVerbatim,
 	}, nil
 }
 
-func encodeResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+func decodeRevokeCertificateRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	CATypeString := vars["caType"]
+	CAName := vars["caName"]
+	serialNumber := vars["serialNumber"]
+
+	var body api.RevokeCertificatePayload
+
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+
+	return api.RevokeCertificateInput{
+		CAType:                  api.ParseCAType(CATypeString),
+		CAName:                  CAName,
+		CertificateSerialNumber: serialNumber,
+		RevocationReason:        body.RevocationReason,
+	}, nil
+}
+
+func encodeHealthResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if e, ok := response.(errorer); ok && e.error() != nil {
 		encodeError(ctx, e.error(), w)
-
 		return nil
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	return json.NewEncoder(w).Encode(response)
 }
 
+func encodeStatsResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.GetStatsOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func encodeGetCAsResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.GetCAsOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func encodeGetCAByNameResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.GetCAByNameOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func encodeCreateCAResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.CreateCAOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func encodeRevokeCAResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.RevokeCAOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func encodeGetCertificatesResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.GetCertificatesOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func encodeSignCertificateResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.SignCertificateRequestOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func encodeGetCertificateBySerialNumberResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.GetCertificateBySerialNumberOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func encodeRevokeCertificateResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.RevokeCertificateOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
 func encodeError(ctx context.Context, err error, w http.ResponseWriter) {
 	if err == nil {
-		panic("encodeError with nil error")
+		return
 	}
+
 	w.WriteHeader(codeFrom(err))
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-
 	json.NewEncoder(w).Encode(errorWrapper{Error: err.Error()})
-
 }
 
 type errorWrapper struct {
@@ -364,6 +553,15 @@ func codeFrom(err error) int {
 	case *lamassuErrors.GenericError:
 		return e.StatusCode
 	default:
-		return http.StatusInternalServerError
+		switch e.Error() {
+		case lamassuErrors.ErrAlreadyRevoked:
+			return http.StatusConflict
+		case lamassuErrors.ErrSignRequestNotInPEMFormat:
+			return http.StatusBadRequest
+		case lamassuErrors.ErrSignRequestNotInB64:
+			return http.StatusBadRequest
+		default:
+			return http.StatusInternalServerError
+		}
 	}
 }

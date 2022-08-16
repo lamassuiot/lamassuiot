@@ -98,7 +98,7 @@ func main() {
 		}
 	}
 
-	http.Handle("/info", infoHandler())
+	http.Handle("/info", accessControl(infoHandler()))
 	http.Handle("/v1/", accessControl(http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(logger, "component", "HTTPS"), tracer))))
 
 	errs := make(chan error)

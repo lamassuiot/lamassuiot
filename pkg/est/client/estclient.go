@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -20,7 +21,6 @@ import (
 
 	"github.com/go-kit/log"
 
-	"github.com/lamassuiot/lamassuiot/pkg/utils"
 	"go.mozilla.org/pkcs7"
 )
 
@@ -106,7 +106,7 @@ func (c *LamassuEstClientConfig) CACerts(ctx context.Context) ([]*x509.Certifica
 		return nil, err
 	}
 
-	decoded, err := utils.DecodeB64(string(body))
+	decoded, err := base64.StdEncoding.DecodeString(string(body))
 	if err != nil {
 		return nil, errInvalidBase64
 	}
@@ -119,7 +119,7 @@ func (c *LamassuEstClientConfig) CACerts(ctx context.Context) ([]*x509.Certifica
 }
 
 func (c *LamassuEstClientConfig) Enroll(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, error) {
-	reqBody := ioutil.NopCloser(bytes.NewBuffer(utils.EncodeB64(csr.Raw)))
+	reqBody := ioutil.NopCloser(bytes.NewBuffer([]byte(base64.StdEncoding.EncodeToString((csr.Raw)))))
 	var resp *http.Response
 	var body []byte
 
@@ -141,7 +141,7 @@ func (c *LamassuEstClientConfig) Enroll(ctx context.Context, aps string, csr *x5
 		return nil, err
 	}
 
-	decoded, err := utils.DecodeB64(string(body))
+	decoded, err := base64.StdEncoding.DecodeString(string(body))
 	if err != nil {
 		return nil, errInvalidBase64
 	}
@@ -155,7 +155,7 @@ func (c *LamassuEstClientConfig) Enroll(ctx context.Context, aps string, csr *x5
 }
 
 func (c *LamassuEstClientConfig) Reenroll(ctx context.Context, csr *x509.CertificateRequest /*, crt *x509.Certificate*/) (*x509.Certificate, error) {
-	reqBody := ioutil.NopCloser(bytes.NewBuffer(utils.EncodeB64(csr.Raw)))
+	reqBody := ioutil.NopCloser(bytes.NewBuffer([]byte(base64.StdEncoding.EncodeToString(csr.Raw))))
 	var resp *http.Response
 	var body []byte
 
@@ -177,7 +177,7 @@ func (c *LamassuEstClientConfig) Reenroll(ctx context.Context, csr *x509.Certifi
 		return nil, err
 	}
 
-	decoded, err := utils.DecodeB64(string(body))
+	decoded, err := base64.StdEncoding.DecodeString(string(body))
 	if err != nil {
 		return nil, errInvalidBase64
 	}
@@ -191,7 +191,7 @@ func (c *LamassuEstClientConfig) Reenroll(ctx context.Context, csr *x509.Certifi
 }
 
 func (c *LamassuEstClientConfig) ServerKeyGen(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, []byte, error) {
-	reqBody := ioutil.NopCloser(bytes.NewBuffer(utils.EncodeB64(csr.Raw)))
+	reqBody := ioutil.NopCloser(bytes.NewBuffer([]byte(base64.StdEncoding.EncodeToString(csr.Raw))))
 	var resp *http.Response
 	req, err := c.Client.NewRequest(http.MethodPost, "/serverkeygen", c.EstServerAddress, aps, "application/pkcs10", "base64", "multipart/mixed", reqBody)
 	if err != nil {

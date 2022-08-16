@@ -7,18 +7,14 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
-	"encoding/base64"
-	"encoding/pem"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/pkg/ca/client"
-	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
+	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/crypto/ocsp"
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/secrets/responder"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
-	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 )
 
 type Service interface {
@@ -27,13 +23,13 @@ type Service interface {
 }
 
 type OCSPResponder struct {
-	lamassuCAClient client.LamassuCaClient
+	lamassuCAClient client.LamassuCAClient
 	respSecrets     responder.Secrets
 	respCert        *x509.Certificate
 	nonceList       [][]byte
 }
 
-func NewService(respSecrets responder.Secrets, lamassuCAClient *client.LamassuCaClient) (Service, error) {
+func NewService(respSecrets responder.Secrets, lamassuCAClient *client.LamassuCAClient) (Service, error) {
 	//the certs should not change, so lets keep them in memory
 
 	respcert, err := respSecrets.GetResponderCert()
@@ -79,57 +75,34 @@ func (o *OCSPResponder) Health(ctx context.Context) bool {
 }
 
 func (o *OCSPResponder) Verify(ctx context.Context, msg []byte) ([]byte, error) {
+	var issuerCA *api.CACertificate
+
 	var status int
 	var revokedAt time.Time
-	var certs dto.GetCasResponse
-	limit := 50
-	i := 0
+
 	// parse the request
 	req, exts, err := ocsp.ParseRequest(msg)
-	if err != nil {
-		return nil, err
-	}
-	for {
-		cas, err := o.lamassuCAClient.GetCAs(ctx, dto.Pki, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: limit, Offset: i * limit}})
-		if err != nil {
-			return nil, errors.New("Could not get CAs")
-		}
-		if len(cas.CAs) == 0 {
-			break
-		}
-		certs.CAs = append(certs.CAs, cas.CAs...)
-		i++
-	}
-	var issuerCA dto.Cert
-	issuerCA = dto.Cert{}
-	var x509Certificate *x509.Certificate
-	//make sure the request is valid
-	for _, ca := range certs.CAs {
-		data, _ := base64.StdEncoding.DecodeString(ca.CertContent.CerificateBase64)
-		block, _ := pem.Decode([]byte(data))
-		x509Certificate, err = x509.ParseCertificate(block.Bytes)
-		if err != nil {
-			return nil, errors.New("Issuing CA is not valid")
-		}
 
-		fmt.Println()
-		err = o.verifyIssuer(req, x509Certificate)
-		if err != nil {
-			continue
-		} else {
-			issuerCA = ca
-			break
-		}
-	}
-	if issuerCA == (dto.Cert{}) {
-		return nil, err
-	}
+	o.lamassuCAClient.IterateCAsWithPredicate(ctx, &api.IterateCAsWithPredicateInput{
+		CAType: api.CATypePKI,
+		PredicateFunc: func(ca *api.CACertificate) {
+			err = o.verifyIssuer(req, ca.Certificate.Certificate)
+			if err == nil {
+				issuerCA = ca
+			}
+		},
+	})
 
-	if issuerCA.Status != "issued" {
+	if issuerCA.Status == api.StatusExpired || issuerCA.Status == api.StatusRevoked {
 		return nil, errors.New("Issuing CA is not valid")
 	}
 
-	cert, err := o.lamassuCAClient.GetCert(context.Background(), dto.Pki, issuerCA.Name, utils.InsertNth(utils.ToHexInt(req.SerialNumber), 2))
+	cert, err := o.lamassuCAClient.GetCertificateBySerialNumber(ctx, &api.GetCertificateBySerialNumberInput{
+		CAType:                  api.CATypePKI,
+		CAName:                  issuerCA.CAName,
+		CertificateSerialNumber: utils.InsertNth(utils.ToHexInt(req.SerialNumber), 2),
+	})
+
 	if err != nil {
 		return nil, errors.New("Could not get certificate")
 	}
@@ -137,11 +110,10 @@ func (o *OCSPResponder) Verify(ctx context.Context, msg []byte) ([]byte, error) 
 	if err != nil {
 		status = ocsp.Unknown
 	} else {
-		if cert.Status == "" || cert.Status == dto.StatusRevoked {
+		if cert.Status == api.StatusRevoked {
 			status = ocsp.Revoked
-			tm := time.Unix(cert.RevocationTimestamp, 0)
-			revokedAt = tm
-		} else if cert.Status == dto.StatusValid {
+			revokedAt = cert.RevocationTimestamp.Time
+		} else if cert.Status == api.StatusIssued || cert.Status == api.StatusAboutToExpire {
 			status = ocsp.Good
 		}
 	}
@@ -192,7 +164,7 @@ func (o *OCSPResponder) Verify(ctx context.Context, msg []byte) ([]byte, error) 
 	}
 
 	// make a response to return
-	resp, err := ocsp.CreateResponse(x509Certificate, o.respCert, rtemplate, key)
+	resp, err := ocsp.CreateResponse(issuerCA.Certificate.Certificate, o.respCert, rtemplate, key)
 	if err != nil {
 		return nil, err
 	}

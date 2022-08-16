@@ -16,6 +16,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -23,7 +24,6 @@ import (
 	"net/http"
 	"net/textproto"
 
-	"github.com/lamassuiot/lamassuiot/pkg/utils"
 	"go.mozilla.org/pkcs7"
 )
 
@@ -38,7 +38,7 @@ func ReadAllBase64Response(r io.Reader) ([]byte, error) {
 		return nil, fmt.Errorf("failed to read HTTP response body: %w", err)
 	}
 
-	decoded, err := utils.DecodeB64(string(b))
+	decoded, err := base64.StdEncoding.DecodeString(string(b))
 	if err != nil {
 		return nil, fmt.Errorf("failed to base64-decode HTTP response body: %w", err)
 	}
@@ -146,7 +146,7 @@ func EncodeMultiPart(boundary string, parts []MultipartPart) (*bytes.Buffer, str
 		v := textproto.MIMEHeader{}
 		v.Add("Content-Type", part.ContentType)
 		v.Add("Content-Transfer-Encoding", "base64")
-		data = utils.EncodeB64(data)
+		data = []byte(base64.RawURLEncoding.EncodeToString(data))
 
 		pw, err := w.CreatePart(v)
 		if err != nil {
@@ -191,7 +191,7 @@ func WriteResponse(w http.ResponseWriter, contentType string, encode bool, obj i
 
 	if encode {
 		w.Header().Set("Content-Transfer-Encoding", "base64")
-		body = utils.EncodeB64(body)
+		body = []byte(base64.StdEncoding.EncodeToString(body))
 	}
 
 	w.WriteHeader(http.StatusOK)

@@ -2,11 +2,11 @@ package client
 
 import (
 	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"io/ioutil"
 
-	"github.com/lamassuiot/lamassuiot/pkg/utils"
 	"go.mozilla.org/pkcs7"
 )
 
@@ -16,7 +16,7 @@ func ReadAllBase64Response(r io.Reader) ([]byte, error) {
 		return nil, fmt.Errorf("failed to read HTTP response body: %w", err)
 	}
 
-	decoded, err := utils.DecodeB64(string(b))
+	decoded, err := base64.StdEncoding.DecodeString(string(b))
 	if err != nil {
 		return nil, fmt.Errorf("failed to base64-decode HTTP response body: %w", err)
 	}
