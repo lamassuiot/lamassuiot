@@ -377,7 +377,7 @@ func (s *UpdateDeviceMetadataOutputSerialized) Deserialize() UpdateDeviceMetadat
 // ---------------------------------------------------------------------
 
 type GetDevicesOutputSerialized struct {
-	TotalDevices Device             `json:"total_devices"`
+	TotalDevices int                `json:"total_devices"`
 	Devices      []DeviceSerialized `json:"devices"`
 }
 

@@ -224,7 +224,7 @@ type GetDevicesInput struct {
 }
 
 type GetDevicesOutput struct {
-	TotalDevices Device
+	TotalDevices int
 	Devices      []Device
 }
 
@@ -327,6 +327,16 @@ type IterateDevicesWithPredicateInput struct {
 }
 
 type IterateDevicesWithPredicateOutput struct{}
+
+// ---------------------------------------------------------------------
+
+type CheckAndUpdateDeviceStatusInput struct {
+	DeviceID string
+}
+
+type CheckAndUpdateDeviceStatusOutput struct {
+	Device
+}
 
 // ---------------------------------------------------------------------
 

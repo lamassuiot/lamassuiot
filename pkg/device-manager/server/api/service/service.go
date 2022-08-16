@@ -23,6 +23,7 @@ import (
 	dmsManagerApi "github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
 	estErrors "github.com/lamassuiot/lamassuiot/pkg/est/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
 	"github.com/lib/pq"
 	"golang.org/x/exp/slices"
 
@@ -41,6 +42,7 @@ type Service interface {
 	DecommisionDevice(ctx context.Context, input *api.DecommisionDeviceInput) (*api.DecommisionDeviceOutput, error)
 	GetDevices(ctx context.Context, input *api.GetDevicesInput) (*api.GetDevicesOutput, error)
 	GetDeviceById(ctx context.Context, input *api.GetDeviceByIdInput) (*api.GetDeviceByIdOutput, error)
+	CheckAndUpdateDeviceStatus(ctx context.Context, input *api.CheckAndUpdateDeviceStatusInput) (*api.CheckAndUpdateDeviceStatusOutput, error)
 	IterateDevicesWithPredicate(ctx context.Context, input *api.IterateDevicesWithPredicateInput) (*api.IterateDevicesWithPredicateOutput, error)
 
 	AddDeviceSlot(ctx context.Context, input *api.AddDeviceSlotInput) (*api.AddDeviceSlotOutput, error)
@@ -179,7 +181,28 @@ func (s *devicesService) DecommisionDevice(ctx context.Context, input *api.Decom
 }
 
 func (s *devicesService) GetDevices(ctx context.Context, input *api.GetDevicesInput) (*api.GetDevicesOutput, error) {
-	return &api.GetDevicesOutput{}, nil
+	totalDevices, devicesSubset, err := s.devicesRepo.SelectDevices(ctx, input.QueryParameters)
+	if err != nil {
+		return nil, err
+	}
+
+	checkedDevices := make([]api.Device, 0)
+	// Apply Device Check
+	for _, device := range devicesSubset {
+		checkOutput, err := s.CheckAndUpdateDeviceStatus(ctx, &api.CheckAndUpdateDeviceStatusInput{
+			DeviceID: device.ID,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		checkedDevices = append(checkedDevices, checkOutput.Device)
+	}
+
+	return &api.GetDevicesOutput{
+		TotalDevices: totalDevices,
+		Devices:      checkedDevices,
+	}, nil
 }
 
 func (s *devicesService) GetDeviceById(ctx context.Context, input *api.GetDeviceByIdInput) (*api.GetDeviceByIdOutput, error) {
@@ -395,8 +418,42 @@ func (s *devicesService) RevokeActiveCertificate(ctx context.Context, input *api
 	}, nil
 }
 
+func (s *devicesService) CheckAndUpdateDeviceStatus(ctx context.Context, input *api.CheckAndUpdateDeviceStatusInput) (*api.CheckAndUpdateDeviceStatusOutput, error) {
+	return &api.CheckAndUpdateDeviceStatusOutput{}, nil
+}
+
 func (s *devicesService) IterateDevicesWithPredicate(ctx context.Context, input *api.IterateDevicesWithPredicateInput) (*api.IterateDevicesWithPredicateOutput, error) {
-	return &api.IterateDevicesWithPredicateOutput{}, nil
+	output := api.IterateDevicesWithPredicateOutput{}
+
+	var devices []api.Device
+	limit := 100
+	i := 0
+
+	for {
+		devicesOutput, err := s.GetDevices(ctx, &api.GetDevicesInput{
+			QueryParameters: common.QueryParameters{
+				Pagination: common.PaginationOptions{
+					Limit:  limit,
+					Offset: i * limit,
+				},
+			},
+		})
+		if err != nil {
+			return &output, err
+		}
+		if len(devicesOutput.Devices) == 0 {
+			break
+		}
+
+		devices = append(devices, devicesOutput.Devices...)
+		i++
+	}
+
+	for _, v := range devices {
+		input.PredicateFunc(&v)
+	}
+
+	return &output, nil
 }
 
 func (s *devicesService) AddDeviceLog(ctx context.Context, input *api.AddDeviceLogInput) (*api.AddDeviceLogOutput, error) {
@@ -553,8 +610,18 @@ func (s *devicesService) Reenroll(ctx context.Context, cert *x509.Certificate, c
 		return nil, err
 	}
 
+	if int(time.Until(cert.NotAfter).Hours())*24 > s.minimumReenrollmentDays {
+		return nil, &estErrors.GenericError{
+			Message:    "certificate can only be renewed" + fmt.Sprintf("%d", s.minimumReenrollmentDays) + " days before expiration",
+			StatusCode: 403,
+		}
+	}
+
 	if !reflect.DeepEqual(csr.Subject, cert.Subject) {
-		return nil, errors.New("CSR subject does not match certificate subject")
+		return nil, &estErrors.GenericError{
+			Message:    "CSR subject does not match certificate subject",
+			StatusCode: 400,
+		}
 	}
 
 	signOutput, err := s.caClient.SignCertificateRequest(ctx, &caApi.SignCertificateRequestInput{
@@ -579,7 +646,10 @@ func (s *devicesService) Reenroll(ctx context.Context, cert *x509.Certificate, c
 		slotID = splitedCsrCommonName[0]
 		deviceID = splitedCsrCommonName[1]
 	} else {
-		return nil, errors.New("Invalid Common Name Format")
+		return nil, &estErrors.GenericError{
+			Message:    "invalid common name format",
+			StatusCode: 400,
+		}
 	}
 
 	_, err = s.RotateActiveCertificate(ctx, &api.RotateActiveCertificateInput{
