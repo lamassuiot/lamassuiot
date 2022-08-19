@@ -8,5 +8,5 @@ nogit
 *.der
 *.pem
 *.p7
-cover.out
+*.out
 *.html

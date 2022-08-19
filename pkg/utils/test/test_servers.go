@@ -1,6 +1,11 @@
 package tests
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -30,6 +35,9 @@ import (
 	deviceTransport "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/transport"
 
 	estTransport "github.com/lamassuiot/lamassuiot/pkg/est/server/api/transport"
+
+	ocspService "github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/service"
+	ocspTransport "github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/transport"
 )
 
 func BuildCATestServer() (*httptest.Server, *caService.Service, error) {
@@ -89,7 +97,7 @@ func BuildDMSManagerTestServer(CATestServer *httptest.Server) (*httptest.Server,
 		return nil, nil, err
 	}
 
-	lamassuCAClient, err := caClient.NewLamassuCAClient(clientUtils.ClientConfiguration{
+	lamassuCAClient, err := caClient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
 		URL:        CATestServerURL,
 		AuthMethod: clientUtils.AuthMethodNone,
 	})
@@ -120,7 +128,7 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 
 	dialector := sqlite.Open("")
 	db, err := gorm.Open(dialector, &gorm.Config{
-		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
+		Logger: gormLogger.Default.LogMode(gormLogger.Info),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -134,7 +142,7 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 		return nil, nil, err
 	}
 
-	lamassuCAClient, err := caClient.NewLamassuCAClient(clientUtils.ClientConfiguration{
+	lamassuCAClient, err := caClient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
 		URL:        CATestServerURL,
 		AuthMethod: clientUtils.AuthMethodNone,
 	})
@@ -146,7 +154,7 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 	if err != nil {
 		return nil, nil, err
 	}
-	lamassuDMSClient, err := dmsClient.NewLamassuDMSManagerClientConfig(clientUtils.ClientConfiguration{
+	lamassuDMSClient, err := dmsClient.NewLamassuDMSManagerClientConfig(clientUtils.BaseClientConfigurationuration{
 		URL:        DMSTestServerURL,
 		AuthMethod: clientUtils.AuthMethodNone,
 	})
@@ -154,8 +162,7 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 		return nil, nil, err
 	}
 
-	var svc deviceService.Service
-	svc = deviceService.NewDeviceManagerService(logger, deviceRepository, nil, nil, 30, lamassuCAClient, lamassuDMSClient)
+	svc := deviceService.NewDeviceManagerService(logger, deviceRepository, nil, nil, 30, lamassuCAClient, lamassuDMSClient)
 	// svc = deviceService.LoggingMiddleware(logger)(svc)
 
 	handler := deviceTransport.MakeHTTPHandler(svc, logger, tracer)
@@ -167,4 +174,59 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 	server := httptest.NewUnstartedServer(mux)
 
 	return server, &svc, nil
+}
+
+func BuildOCSPTestServer(CATestServer *httptest.Server) (*httptest.Server, error) {
+	var logger log.Logger
+
+	logger = log.NewNopLogger()
+	logger = level.NewFilter(logger, level.AllowDebug())
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	logger = log.With(logger, "caller", log.DefaultCaller)
+
+	tracer := opentracing.NoopTracer{}
+
+	CATestServerURL, err := url.Parse(CATestServer.URL)
+	if err != nil {
+		return nil, err
+	}
+
+	lamassuCAClient, err := caClient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
+		URL:        CATestServerURL,
+		AuthMethod: clientUtils.AuthMethodNone,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	ocspSigner, _ := rsa.GenerateKey(rand.Reader, 2048)
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			Country:      []string{"ES"},
+			Locality:     []string{"Donostia"},
+			Organization: []string{"LAMASSU Foundation"},
+			CommonName:   "LAMASSU OCSP",
+		},
+	}
+
+	crtBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, ocspSigner.Public(), ocspSigner)
+	if err != nil {
+		panic(err)
+	}
+
+	ocspCertificate, err := x509.ParseCertificate(crtBytes)
+	if err != nil {
+		panic(err)
+	}
+
+	svc := ocspService.NewOCSPService(lamassuCAClient, ocspSigner, ocspCertificate)
+
+	handler := ocspTransport.MakeHTTPHandler(svc, logger, false, tracer)
+
+	mux := http.NewServeMux()
+	mux.Handle("/", handler)
+	server := httptest.NewUnstartedServer(mux)
+
+	return server, nil
 }

@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -159,33 +160,23 @@ func decodeEnrollRequest(ctx context.Context, r *http.Request) (request interfac
 	ClientCert := r.Header.Get("X-Forwarded-Client-Cert")
 
 	if len(ClientCert) != 0 {
-		splits := strings.Split(ClientCert, ";")
-		Cert := splits[1]
-		Cert = strings.Split(Cert, "=")[1]
-		Cert = strings.Replace(Cert, "\"", "", -1)
-		decodedCert, _ := url.QueryUnescape(Cert)
-
-		block, _ := pem.Decode([]byte(decodedCert))
-
-		certificate, err := x509.ParseCertificate(block.Bytes)
+		certificate, err := getCertificateFromHeader(r.Header)
 		if err != nil {
-			return nil, ErrMalformedCert()
+			return nil, err
 		}
-		req := endpoint.EnrollRequest{
+		return endpoint.EnrollRequest{
 			Csr: csr,
 			Crt: certificate,
 			Aps: aps,
-		}
-		return req, nil
+		}, nil
 
 	} else if len(r.TLS.PeerCertificates) != 0 {
 		cert := r.TLS.PeerCertificates[0]
-		req := endpoint.EnrollRequest{
+		return endpoint.EnrollRequest{
 			Csr: csr,
 			Crt: cert,
 			Aps: aps,
-		}
-		return req, nil
+		}, nil
 
 	} else {
 		return nil, ErrNoClientCert()
@@ -215,34 +206,20 @@ func decodeReenrollRequest(ctx context.Context, r *http.Request) (request interf
 
 	ClientCert := r.Header.Get("X-Forwarded-Client-Cert")
 	if len(ClientCert) != 0 {
-		splits := strings.Split(ClientCert, ";")
-		Cert := splits[1]
-		Cert = strings.Split(Cert, "=")[1]
-		Cert = strings.Replace(Cert, "\"", "", -1)
-		decodedCert, _ := url.QueryUnescape(Cert)
-
-		block, _ := pem.Decode([]byte(decodedCert))
-
-		certificate, err := x509.ParseCertificate(block.Bytes)
-
+		certificate, err := getCertificateFromHeader(r.Header)
 		if err != nil {
-			return nil, ErrMalformedCert()
+			return nil, err
 		}
-
-		req := endpoint.ReenrollRequest{
+		return endpoint.ReenrollRequest{
 			Csr: csr,
 			Crt: certificate,
-		}
-		return req, nil
-
+		}, nil
 	} else if len(r.TLS.PeerCertificates) != 0 {
 		cert := r.TLS.PeerCertificates[0]
-
-		req := endpoint.ReenrollRequest{
+		return endpoint.ReenrollRequest{
 			Csr: csr,
 			Crt: cert,
-		}
-		return req, nil
+		}, nil
 
 	} else {
 		return nil, ErrNoClientCert()
@@ -277,38 +254,26 @@ func decodeServerkeygenRequest(ctx context.Context, r *http.Request) (request in
 	if err != nil {
 		return nil, ErrMalformedCert()
 	}
-	ClientCert := r.Header.Get("X-Forwarded-Client-Cert")
 
-	if len(ClientCert) != 0 {
-		splits := strings.Split(ClientCert, ";")
-		Cert := splits[1]
-		Cert = strings.Split(Cert, "=")[1]
-		Cert = strings.Replace(Cert, "\"", "", -1)
-		decodedCert, _ := url.QueryUnescape(Cert)
-
-		block, _ := pem.Decode([]byte(decodedCert))
-
-		certificate, err := x509.ParseCertificate(block.Bytes)
+	clientCert := r.Header.Get("X-Forwarded-Client-Cert")
+	if len(clientCert) != 0 {
+		certificate, err := getCertificateFromHeader(r.Header)
 		if err != nil {
-			return nil, ErrMalformedCert()
+			return nil, err
 		}
-		req := endpoint.ServerKeyGenRequest{
+
+		return endpoint.ServerKeyGenRequest{
 			Csr: csr,
 			Crt: certificate,
 			Aps: aps,
-		}
-		return req, nil
-
+		}, nil
 	} else if len(r.TLS.PeerCertificates) != 0 {
 		cert := r.TLS.PeerCertificates[0]
-
-		req := endpoint.ServerKeyGenRequest{
+		return endpoint.ServerKeyGenRequest{
 			Csr: csr,
 			Crt: cert,
 			Aps: aps,
-		}
-		return req, nil
-
+		}, nil
 	} else {
 		return nil, ErrNoClientCert()
 	}
@@ -329,29 +294,35 @@ func encodeServerkeygenResponse(ctx context.Context, w http.ResponseWriter, resp
 	//var certs []*x509.Certificate
 	//certs = append(certs, cert)
 	//certs = append(certs, cacert)
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
 	var keyContentType string
 
-	_, p8err := x509.ParsePKCS8PrivateKey(key)
-	_, p7err := pkcs7.Parse(key)
-	if p8err == nil {
+	if err != nil {
+		return err
+	}
+
+	if _, p8err := x509.ParsePKCS8PrivateKey(keyDER); p8err == nil {
 		keyContentType = "application/pkcs8"
-	} else if p7err == nil {
+	} else if _, p7err := pkcs7.Parse(keyDER); p7err == nil {
 		keyContentType = "application/pkcs7-mime; smime-type=server-generated-key"
 	} else {
 		EncodeError(ctx, p7err, w)
 		return p7err
-
 	}
+
 	data, contentType, err := EncodeMultiPart(
 		"estServerKeyGenBoundary",
 		[]MultipartPart{
-			{ContentType: keyContentType, Data: key},
+			{ContentType: keyContentType, Data: keyDER},
 			{ContentType: "application/pkcs7-mime; smime-type=certs-only", Data: cert},
 		},
 	)
 	if err != nil {
 		return err
 	}
+
+	fmt.Println(data.String())
+
 	WriteResponse(w, contentType, false, data.Bytes())
 	return nil
 }
@@ -430,4 +401,30 @@ func codeFrom(err error) int {
 	default:
 		return http.StatusInternalServerError
 	}
+}
+
+func getCertificateFromHeader(h http.Header) (*x509.Certificate, error) {
+	forwardedClientCertificate := h.Get("X-Forwarded-Client-Cert")
+	if len(forwardedClientCertificate) != 0 {
+		splits := strings.Split(forwardedClientCertificate, ";")
+		for _, split := range splits {
+			splitedKeyVal := strings.Split(split, "=")
+			if len(splitedKeyVal) == 2 {
+				key := splitedKeyVal[0]
+				val := splitedKeyVal[1]
+				if key == "Cert" {
+					cert := strings.Replace(val, "\"", "", -1)
+					decodedCert, _ := url.QueryUnescape(cert)
+					block, _ := pem.Decode([]byte(decodedCert))
+					certificate, err := x509.ParseCertificate(block.Bytes)
+					if err != nil {
+						return nil, ErrMalformedCert()
+					}
+
+					return certificate, nil
+				}
+			}
+		}
+	}
+	return nil, ErrNoClientCert()
 }

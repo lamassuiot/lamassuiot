@@ -725,12 +725,12 @@ func TestGetCAs(t *testing.T) {
 					})
 
 					if err != nil {
-						t.Errorf("%s", err)
+						t.Fatalf("%s", err)
 					}
 				}
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				obj := e.GET("/v1/pki").WithQuery("limit", 3).WithQuery("offset", 0).WithQuery("sort_by", "name.asc").
+				obj := e.GET("/v1/pki").WithQuery("limit", 3).WithQuery("offset", 0).WithQuery("sort_by", "ca_name.asc").
 					Expect().
 					Status(http.StatusOK).JSON()
 
@@ -745,7 +745,7 @@ func TestGetCAs(t *testing.T) {
 					}
 				}
 
-				obj = e.GET("/v1/pki").WithQuery("limit", 3).WithQuery("offset", 3).WithQuery("sort_by", "name.asc").
+				obj = e.GET("/v1/pki").WithQuery("limit", 3).WithQuery("offset", 3).WithQuery("sort_by", "ca_name.asc").
 					Expect().
 					Status(http.StatusOK).JSON()
 
@@ -756,6 +756,173 @@ func TestGetCAs(t *testing.T) {
 					caName := v.Object().Value("name").String().Raw()
 					if caName != "ca-name-"+strconv.Itoa(idx+3) {
 						t.Errorf("Expected CA name to be ca-name-%d, got %s", idx+3, caName)
+					}
+				}
+			},
+		},
+		{
+			name: "PKI:DatesFilters",
+			serviceInitialization: func(svc *service.Service) {
+				caSets := []string{"set1", "set2"}
+				for _, caSet := range caSets {
+					for i := 0; i < 5; i++ {
+						_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
+							CAType: api.CATypePKI,
+							Subject: api.Subject{
+								CommonName: caSet + "-ca-name-" + strconv.Itoa(i),
+							},
+							KeyMetadata: api.KeyMetadata{
+								KeyType: api.RSA,
+								KeyBits: 4096,
+							},
+							CADuration:       time.Hour * 5,
+							IssuanceDuration: time.Hour,
+						})
+
+						if err != nil {
+							t.Fatalf("%s", err)
+						}
+					}
+				}
+			},
+			testRestEndpoint: func(e *httpexpect.Expect) {
+				obj := e.GET("/v1/pki").WithQuery("limit", 3).WithQuery("offset", 0).WithQuery("sort_by", "ca_name.asc").WithQuery("filter", "ca_name[contains]=set1-ca-name").
+					Expect().
+					Status(http.StatusOK).JSON()
+
+				obj.Object().ContainsKey("total_cas").ValueEqual("total_cas", 5)
+				obj.Object().ContainsKey("cas").Value("cas").Array().Length().Equal(3)
+
+				casIter := obj.Object().ContainsKey("cas").Value("cas").Array().Iter()
+				for idx, v := range casIter {
+					caName := v.Object().Value("name").String().Raw()
+					if caName != "set1-ca-name-"+strconv.Itoa(idx) {
+						t.Errorf("Expected CA name to be set1-ca-name-%d, got %s", idx, caName)
+					}
+				}
+
+				obj = e.GET("/v1/pki").WithQuery("limit", 3).WithQuery("offset", 3).WithQuery("sort_by", "ca_name.asc").WithQuery("filter", "ca_name[contains]=set1-ca-name").
+					Expect().
+					Status(http.StatusOK).JSON()
+
+				obj.Object().ContainsKey("total_cas").ValueEqual("total_cas", 5)
+				obj.Object().ContainsKey("cas").Value("cas").Array().Length().Equal(2)
+				casIter = obj.Object().ContainsKey("cas").Value("cas").Array().Iter()
+				for idx, v := range casIter {
+					caName := v.Object().Value("name").String().Raw()
+					if caName != "set1-ca-name-"+strconv.Itoa(idx+3) {
+						t.Errorf("Expected CA name to be set1-ca-name-%d, got %s", idx+3, caName)
+					}
+				}
+			},
+		},
+		{
+			name: "PKI:StringFilters:Contains",
+			serviceInitialization: func(svc *service.Service) {
+				caSets := []string{"set1", "set2"}
+				for _, caSet := range caSets {
+					for i := 0; i < 5; i++ {
+						_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
+							CAType: api.CATypePKI,
+							Subject: api.Subject{
+								CommonName: caSet + "-ca-name-" + strconv.Itoa(i),
+							},
+							KeyMetadata: api.KeyMetadata{
+								KeyType: api.RSA,
+								KeyBits: 4096,
+							},
+							CADuration:       time.Hour * 5,
+							IssuanceDuration: time.Hour,
+						})
+
+						if err != nil {
+							t.Fatalf("%s", err)
+						}
+					}
+				}
+			},
+			testRestEndpoint: func(e *httpexpect.Expect) {
+				obj := e.GET("/v1/pki").WithQuery("limit", 3).WithQuery("offset", 0).WithQuery("sort_by", "ca_name.asc").WithQuery("filter", "ca_name[contains]=set1-ca-name").
+					Expect().
+					Status(http.StatusOK).JSON()
+
+				obj.Object().ContainsKey("total_cas").ValueEqual("total_cas", 5)
+				obj.Object().ContainsKey("cas").Value("cas").Array().Length().Equal(3)
+
+				casIter := obj.Object().ContainsKey("cas").Value("cas").Array().Iter()
+				for idx, v := range casIter {
+					caName := v.Object().Value("name").String().Raw()
+					if caName != "set1-ca-name-"+strconv.Itoa(idx) {
+						t.Errorf("Expected CA name to be set1-ca-name-%d, got %s", idx, caName)
+					}
+				}
+
+				obj = e.GET("/v1/pki").WithQuery("limit", 3).WithQuery("offset", 3).WithQuery("sort_by", "ca_name.asc").WithQuery("filter", "ca_name[contains]=set1-ca-name").
+					Expect().
+					Status(http.StatusOK).JSON()
+
+				obj.Object().ContainsKey("total_cas").ValueEqual("total_cas", 5)
+				obj.Object().ContainsKey("cas").Value("cas").Array().Length().Equal(2)
+				casIter = obj.Object().ContainsKey("cas").Value("cas").Array().Iter()
+				for idx, v := range casIter {
+					caName := v.Object().Value("name").String().Raw()
+					if caName != "set1-ca-name-"+strconv.Itoa(idx+3) {
+						t.Errorf("Expected CA name to be set1-ca-name-%d, got %s", idx+3, caName)
+					}
+				}
+			},
+		},
+		{
+			name: "PKI:MultipleFilters",
+			serviceInitialization: func(svc *service.Service) {
+				caSets := []string{"set1", "set2"}
+				for _, caSet := range caSets {
+					for i := 0; i < 4; i++ {
+						_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
+							CAType: api.CATypePKI,
+							Subject: api.Subject{
+								CommonName: caSet + "-ca-name-" + strconv.Itoa(i),
+							},
+							KeyMetadata: api.KeyMetadata{
+								KeyType: api.RSA,
+								KeyBits: 4096,
+							},
+							CADuration:       time.Hour * 5,
+							IssuanceDuration: time.Hour,
+						})
+
+						if err != nil {
+							t.Fatalf("%s", err)
+						}
+
+						if i%2 == 1 {
+							_, err = (*svc).RevokeCA(context.Background(), &api.RevokeCAInput{
+								CAType:           api.CATypePKI,
+								CAName:           caSet + "-ca-name-" + strconv.Itoa(i),
+								RevocationReason: "testing",
+							})
+							if err != nil {
+								t.Fatalf("%s", err)
+							}
+						}
+					}
+				}
+			},
+			testRestEndpoint: func(e *httpexpect.Expect) {
+				obj := e.GET("/v1/pki").WithQuery("limit", 3).WithQuery("offset", 0).WithQuery("sort_by", "ca_name.asc").
+					WithQuery("filter", "ca_name[contains]=set2-ca-name").
+					WithQuery("filter", "status[equals]=issued").
+					Expect().
+					Status(http.StatusOK).JSON()
+
+				obj.Object().ContainsKey("total_cas").ValueEqual("total_cas", 2)
+				obj.Object().ContainsKey("cas").Value("cas").Array().Length().Equal(2)
+
+				casIter := obj.Object().ContainsKey("cas").Value("cas").Array().Iter()
+				for idx, v := range casIter {
+					caName := v.Object().Value("name").String().Raw()
+					if caName != "set2-ca-name-"+strconv.Itoa(idx*2) {
+						t.Errorf("Expected CA name to be set2-ca-name-%d, got %s", idx*2, caName)
 					}
 				}
 			},

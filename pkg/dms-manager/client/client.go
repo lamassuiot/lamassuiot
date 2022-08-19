@@ -26,7 +26,7 @@ type lamassuDMSManagerClientConfig struct {
 	client clientUtils.BaseClient
 }
 
-func NewLamassuDMSManagerClientConfig(config clientUtils.ClientConfiguration) (LamassuDMSManagerClient, error) {
+func NewLamassuDMSManagerClientConfig(config clientUtils.BaseClientConfigurationuration) (LamassuDMSManagerClient, error) {
 	baseClient, err := clientUtils.NewBaseClient(config)
 	if err != nil {
 		return nil, err

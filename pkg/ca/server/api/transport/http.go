@@ -63,7 +63,7 @@ func filtrableCAModelFields() map[string]types.Filter {
 	fieldFiltersMap := make(map[string]types.Filter)
 	fieldFiltersMap["status"] = &types.StringFilterField{}
 	fieldFiltersMap["serial_number"] = &types.StringFilterField{}
-	fieldFiltersMap["name"] = &types.StringFilterField{}
+	fieldFiltersMap["ca_name"] = &types.StringFilterField{}
 	fieldFiltersMap["valid_from"] = &types.DatesFilterField{}
 	fieldFiltersMap["valid_to"] = &types.DatesFilterField{}
 	return fieldFiltersMap

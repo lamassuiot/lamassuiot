@@ -600,7 +600,10 @@ func (s *caService) SignCertificateRequest(ctx context.Context, input *api.SignC
 	certificateBytes, err := x509.CreateCertificate(rand.Reader, &certificateTemplate, caOutput.Certificate.Certificate, input.CertificateSigningRequest.PublicKey, privkey)
 	if err != nil {
 		level.Debug(s.logger).Log("err", err)
-		return &api.SignCertificateRequestOutput{}, err
+		return &api.SignCertificateRequestOutput{}, &caerrors.GenericError{
+			StatusCode: 400,
+			Message:    err.Error(),
+		}
 	}
 
 	certificate, err := x509.ParseCertificate(certificateBytes)

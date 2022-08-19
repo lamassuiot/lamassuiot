@@ -23,8 +23,8 @@ import (
 )
 
 type CertificateDAO struct {
-	SerialNumber     string     `gorm:"primaryKey"`
-	CAName           string     `gorm:"column:name"`
+	SerialNumber     string `gorm:"primaryKey"`
+	CAName           string
 	CAType           api.CAType `gorm:"column:type"`
 	Certificate      string
 	Status           api.CertificateStatus
@@ -225,15 +225,17 @@ func (db PostgresDBContext) InsertCertificate(ctx context.Context, CAType api.CA
 }
 
 func (db PostgresDBContext) SelectCertificatesByCA(ctx context.Context, CAType api.CAType, CAName string, queryParameters common.QueryParameters) (int, []api.Certificate, error) {
-	var totalCAs int64
-	if err := db.Model(&CertificateDAO{}).Where("name = ?", CAName).Where("type = ?", CAType).Count(&totalCAs).Error; err != nil {
-		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Certificates from database")
+	var totalCertificates int64
+	tx := db.Model(&CertificateDAO{}).Where("type = ?", CAType)
+	tx = filters.ApplyFilters(tx, queryParameters.Filters) // only count certificates that match the filters
+	if err := tx.Count(&totalCertificates).Error; err != nil {
+		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain CAs from database")
 		return 0, []api.Certificate{}, err
 	}
 
 	var certificates []CertificateDAO
-	tx := db.Model(&CertificateDAO{}).Where("name = ?", CAName).Where("type = ?", CAType)
-	tx = filters.ApplySQLFilter(tx, queryParameters)
+	tx = db.Model(&CertificateDAO{}).Where("ca_name = ?", CAName).Where("type = ?", CAType)
+	tx = filters.ApplyQueryParametersFilters(tx, queryParameters)
 	if err := tx.Find(&certificates).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Certificates from database")
 		return 0, []api.Certificate{}, err
@@ -249,12 +251,12 @@ func (db PostgresDBContext) SelectCertificatesByCA(ctx context.Context, CAType a
 		parsedCertificates = append(parsedCertificates, certificate)
 	}
 
-	return int(totalCAs), parsedCertificates, nil
+	return int(totalCertificates), parsedCertificates, nil
 }
 
 func (db PostgresDBContext) SelectCertificateBySerialNumber(ctx context.Context, CAType api.CAType, CAName string, serialNumber string) (api.Certificate, error) {
 	var cert CertificateDAO
-	if err := db.Model(&CertificateDAO{}).Where("name = ?", CAName).Where("type = ?", CAType).Where("serial_number = ?", serialNumber).First(&cert).Error; err != nil {
+	if err := db.Model(&CertificateDAO{}).Where("ca_name = ?", CAName).Where("type = ?", CAType).Where("serial_number = ?", serialNumber).First(&cert).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain CAs from database")
 		notFoundErr := &caerrors.ResourceNotFoundError{
 			ResourceType: "Certificate",
@@ -268,7 +270,7 @@ func (db PostgresDBContext) SelectCertificateBySerialNumber(ctx context.Context,
 
 func (db PostgresDBContext) UpdateCAStatus(ctx context.Context, CAType api.CAType, CAName string, status api.CertificateStatus, revocationReason string) error {
 	var ca CertificateAuthorityDAO
-	db.Model(&CertificateAuthorityDAO{}).Where("name = ?", CAName).Where("type = ?", CAType).First(&ca)
+	db.Model(&CertificateAuthorityDAO{}).Where("ca_name = ?", CAName).Where("type = ?", CAType).First(&ca)
 
 	if ca.SerialNumber == "" {
 		level.Debug(db.logger).Log("msg", "Could not obtain CAs from database")
@@ -322,7 +324,7 @@ func (db PostgresDBContext) InsertCA(ctx context.Context, CAType api.CAType, cer
 
 func (db PostgresDBContext) SelectCAByName(ctx context.Context, CAType api.CAType, CAName string) (api.CACertificate, error) {
 	var ca CertificateAuthorityDAO
-	if err := db.Model(&CertificateAuthorityDAO{}).Where("name = ?", CAName).Where("type = ?", CAType).First(&ca).Error; err != nil {
+	if err := db.Model(&CertificateAuthorityDAO{}).Where("ca_name = ?", CAName).Where("type = ?", CAType).First(&ca).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain CAs from database")
 		notFoundErr := &caerrors.ResourceNotFoundError{
 			ResourceType: "CA",
@@ -336,14 +338,15 @@ func (db PostgresDBContext) SelectCAByName(ctx context.Context, CAType api.CATyp
 
 func (db PostgresDBContext) SelectCAs(ctx context.Context, CAType api.CAType, queryParameters common.QueryParameters) (int, []api.CACertificate, error) {
 	var totalCAs int64
-	tx := db.Model(&CertificateAuthorityDAO{}).Where("type = ?", CAType).Count(&totalCAs)
-	if tx.RowsAffected == 0 {
-		level.Debug(db.logger).Log("err", tx.Error, "msg", "Could not obtain CAs from database")
-		return 0, []api.CACertificate{}, tx.Error
+	tx := db.Model(&CertificateAuthorityDAO{}).Where("type = ?", CAType)
+	tx = filters.ApplyFilters(tx, queryParameters.Filters) // only count cas that match the filters
+	if err := tx.Count(&totalCAs).Error; err != nil {
+		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain CAs from database")
+		return 0, []api.CACertificate{}, err
 	}
 
 	tx = db.Model(&CertificateAuthorityDAO{}).Where("type = ?", CAType)
-	tx = filters.ApplySQLFilter(tx, queryParameters)
+	tx = filters.ApplyQueryParametersFilters(tx, queryParameters)
 
 	var cas []CertificateAuthorityDAO
 	tx = tx.Scan(&cas)

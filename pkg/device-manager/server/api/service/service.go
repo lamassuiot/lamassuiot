@@ -2,11 +2,9 @@ package service
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
-	"encoding/asn1"
 	"errors"
 	"fmt"
 	"reflect"
@@ -400,10 +398,9 @@ func (s *devicesService) RevokeActiveCertificate(ctx context.Context, input *api
 	slot.ActiveCertificate.RevocationReason = input.RevocationReason
 	slot.ActiveCertificate.RevocationTimestamp = revokeOutput.RevocationTimestamp
 
-	slot.ArchiveCertificates = append(slot.ArchiveCertificates, slot.ActiveCertificate)
 	slot.ActiveCertificate = nil
 
-	s.devicesRepo.UpdateSlot(ctx, input.DeviceID, *slot)
+	err = s.devicesRepo.UpdateSlot(ctx, input.DeviceID, *slot)
 	if err != nil {
 		return &api.RevokeActiveCertificateOutput{}, err
 	}
@@ -494,13 +491,16 @@ func (s *devicesService) CACerts(ctx context.Context, aps string) ([]*x509.Certi
 	return cas, nil
 }
 
-func (s *devicesService) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string, clientCertificate *x509.Certificate) (*x509.Certificate, error) {
+func (s *devicesService) Enroll(ctx context.Context, csr *x509.CertificateRequest, clientCertificate *x509.Certificate, aps string) (*x509.Certificate, error) {
 	outGetCA, err := s.caClient.GetCAByName(ctx, &caApi.GetCAByNameInput{
 		CAType: caApi.CATypeDMSEnroller,
 		CAName: "LAMASSU-DMS-MANAGER",
 	})
 	if err != nil {
-		return nil, err
+		return nil, &estErrors.GenericError{
+			Message:    "CA not found",
+			StatusCode: 404,
+		}
 	}
 
 	err = s.verifyCertificate(clientCertificate, outGetCA.Certificate.Certificate)
@@ -536,6 +536,12 @@ func (s *devicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 		deviceID = splitedCsrCommonName[0]
 	} else if len(splitedCsrCommonName) == 2 {
 		slotID = splitedCsrCommonName[0]
+		if slotID == "default" {
+			return nil, &estErrors.GenericError{
+				Message:    "invalid common name format: 'default' is a reserved slotID",
+				StatusCode: 400,
+			}
+		}
 		deviceID = splitedCsrCommonName[1]
 	} else {
 		return nil, &estErrors.GenericError{
@@ -564,7 +570,16 @@ func (s *devicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 			return nil, err
 		}
 	} else {
-		for _, slot := range getDevice.Device.Slots {
+		device := getDevice.Device
+
+		if device.Status == api.DeviceStatusDecommisioned {
+			return nil, &estErrors.GenericError{
+				Message:    "device is decommissioned",
+				StatusCode: 403,
+			}
+		}
+
+		for _, slot := range device.Slots {
 			if slot.ID == slotID && slot.ActiveCertificate != nil && slot.ActiveCertificate.Status != api.CertificateStatusPendingEnrollment {
 				return nil, &estErrors.GenericError{
 					Message:    "slot is already enrolled",
@@ -596,21 +611,28 @@ func (s *devicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 	return signOutput.Certificate, nil
 }
 
-func (s *devicesService) Reenroll(ctx context.Context, cert *x509.Certificate, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+func (s *devicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate) (*x509.Certificate, error) {
+	aps := cert.Issuer.CommonName
 	outGetCA, err := s.caClient.GetCAByName(ctx, &caApi.GetCAByNameInput{
 		CAType: caApi.CATypePKI,
 		CAName: aps,
 	})
 	if err != nil {
-		return nil, err
+		return nil, &estErrors.GenericError{
+			Message:    "CA not found",
+			StatusCode: 404,
+		}
 	}
 
 	err = s.verifyCertificate(cert, outGetCA.Certificate.Certificate)
 	if err != nil {
-		return nil, err
+		return nil, &estErrors.GenericError{
+			Message:    "client certificate is not valid: " + err.Error(),
+			StatusCode: 403,
+		}
 	}
 
-	if int(time.Until(cert.NotAfter).Hours())*24 > s.minimumReenrollmentDays {
+	if int(time.Until(cert.NotAfter).Hours())/24 > s.minimumReenrollmentDays {
 		return nil, &estErrors.GenericError{
 			Message:    "certificate can only be renewed" + fmt.Sprintf("%d", s.minimumReenrollmentDays) + " days before expiration",
 			StatusCode: 403,
@@ -664,13 +686,8 @@ func (s *devicesService) Reenroll(ctx context.Context, cert *x509.Certificate, c
 	return signOutput.Certificate, nil
 }
 
-func (s *devicesService) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string, cert *x509.Certificate) (*x509.Certificate, []byte, error) {
-	csrkey, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	privkey, err := x509.MarshalPKCS8PrivateKey(csrkey)
+func (s *devicesService) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, *rsa.PrivateKey, error) {
+	csrkey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -680,12 +697,12 @@ func (s *devicesService) ServerKeyGen(ctx context.Context, csr *x509.Certificate
 		return nil, nil, err
 	}
 
-	crt, err := s.Enroll(ctx, csr, aps, cert)
+	crt, err := s.Enroll(ctx, csr, cert, aps)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return crt, privkey, nil
+	return crt, csrkey, nil
 }
 
 // -------------------------------------------------------------------------------------------------------------------
@@ -710,20 +727,16 @@ func (s *devicesService) verifyCertificate(clientCertificate *x509.Certificate, 
 }
 
 func (s *devicesService) generateCSR(csr *x509.CertificateRequest, key interface{}) (*x509.CertificateRequest, error) {
-	subj := csr.Subject
-
-	rawSubject := subj.ToRDNSequence()
-	asn1Subj, _ := asn1.Marshal(rawSubject)
-	template := x509.CertificateRequest{
-		RawSubject:         asn1Subj,
-		SignatureAlgorithm: x509.ECDSAWithSHA512,
+	template := &x509.CertificateRequest{
+		Subject: csr.Subject,
 	}
-	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &template, key)
+
+	csrDER, err := x509.CreateCertificateRequest(rand.Reader, template, key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create certificate request: %v", err)
 	}
 
-	csrNew, err := x509.ParseCertificateRequest(csrBytes)
+	csrNew, err := x509.ParseCertificateRequest(csrDER)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse certificate request: %v", err)
 	}

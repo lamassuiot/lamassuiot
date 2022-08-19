@@ -171,7 +171,7 @@ func (db *PostgresDBContext) SelectAll(ctx context.Context, queryParameters comm
 
 	var dmss []DeviceManufacturingServiceDAO
 	tx := db.Model(&DeviceManufacturingServiceDAO{})
-	tx = filters.ApplySQLFilter(tx, queryParameters)
+	tx = filters.ApplyQueryParametersFilters(tx, queryParameters)
 	if err := tx.Find(&dmss).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain DMSs from database")
 		return 0, []api.DeviceManufacturingService{}, err

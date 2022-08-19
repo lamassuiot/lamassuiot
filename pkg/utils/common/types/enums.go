@@ -4,11 +4,11 @@ import (
 	"strings"
 )
 
-type EnumOperatorType int64
+type EnumOperatorType string
 
 const (
-	In EnumOperatorType = iota
-	NotIn
+	In    EnumOperatorType = "in"
+	NotIn EnumOperatorType = "notin"
 )
 
 func ParseEnumOperator(s string) EnumOperatorType {
@@ -41,14 +41,7 @@ func (f *EnumFilterField) ToSQL() string {
 }
 
 func (f EnumFilterField) GetOperatorToString() string {
-	switch f.Operator {
-	case In:
-		return "In"
-	case NotIn:
-		return "NotIn"
-	default:
-		return ""
-	}
+	return string(f.Operator)
 }
 
 func (f EnumFilterField) GetFieldName() string {

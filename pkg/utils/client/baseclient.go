@@ -14,18 +14,25 @@ import (
 	"strconv"
 )
 
+type BaseClientConfigurationuration struct {
+	URL              *url.URL
+	AuthMethod       AuthMethod
+	AuthMethodConfig interface{}
+	CACertificate    string
+}
+
+type ClientConfiguration struct {
+	BaseURL    *url.URL
+	httpClient *http.Client
+}
+
 type BaseClient interface {
 	NewRequest(method string, path string, body interface{}) (*http.Request, error)
 	Do(req *http.Request) (interface{}, *http.Response, error)
 	Do2(req *http.Request, response any) (*http.Response, error)
 }
 
-type ClientConfig struct {
-	BaseURL    *url.URL
-	httpClient *http.Client
-}
-
-func NewBaseClient(config ClientConfiguration) (BaseClient, error) {
+func NewBaseClient(config BaseClientConfigurationuration) (BaseClient, error) {
 	tr := &http.Transport{}
 
 	if config.URL.Scheme == "https" {
@@ -83,13 +90,13 @@ func NewBaseClient(config ClientConfiguration) (BaseClient, error) {
 		httpClient = &http.Client{Transport: tr}
 	}
 
-	return &ClientConfig{
+	return &ClientConfiguration{
 		BaseURL:    config.URL,
 		httpClient: httpClient,
 	}, nil
 }
 
-func (c *ClientConfig) NewRequest(method string, path string, body interface{}) (*http.Request, error) {
+func (c *ClientConfiguration) NewRequest(method string, path string, body interface{}) (*http.Request, error) {
 	rel := &url.URL{Path: path}
 	u := c.BaseURL.ResolveReference(rel)
 	var buf io.ReadWriter
@@ -111,7 +118,7 @@ func (c *ClientConfig) NewRequest(method string, path string, body interface{}) 
 	return req, nil
 }
 
-func (c *ClientConfig) Do(req *http.Request) (interface{}, *http.Response, error) {
+func (c *ClientConfiguration) Do(req *http.Request) (interface{}, *http.Response, error) {
 	var v interface{}
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -127,7 +134,7 @@ func (c *ClientConfig) Do(req *http.Request) (interface{}, *http.Response, error
 	return v, resp, err
 }
 
-func (c *ClientConfig) Do2(req *http.Request, response any) (*http.Response, error) {
+func (c *ClientConfiguration) Do2(req *http.Request, response any) (*http.Response, error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err

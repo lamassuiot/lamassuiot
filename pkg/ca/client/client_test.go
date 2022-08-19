@@ -126,7 +126,7 @@ func TestClientCreateCA(t *testing.T) {
 				t.Fatalf("an error '%s' was not expected when parsing url", err)
 			}
 
-			c, err := NewLamassuCAClient(clientUtils.ClientConfiguration{
+			c, err := NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
 				URL:           serverUrl,
 				AuthMethod:    clientUtils.AuthMethodNone,
 				CACertificate: "",

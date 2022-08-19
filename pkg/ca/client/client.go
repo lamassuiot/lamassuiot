@@ -45,7 +45,7 @@ type lamassuCaClientConfig struct {
 	client clientUtils.BaseClient
 }
 
-func NewLamassuCAClient(config clientUtils.ClientConfiguration) (LamassuCAClient, error) {
+func NewLamassuCAClient(config clientUtils.BaseClientConfigurationuration) (LamassuCAClient, error) {
 	baseClient, err := clientUtils.NewBaseClient(config)
 	if err != nil {
 		return nil, err
@@ -57,23 +57,24 @@ func NewLamassuCAClient(config clientUtils.ClientConfiguration) (LamassuCAClient
 }
 
 func (c *lamassuCaClientConfig) GetCAs(ctx context.Context, input *api.GetCAsInput) (*api.GetCAsOutput, error) {
-	output := api.GetCAsOutput{}
 
 	req, err := c.client.NewRequest("GET", "v1/"+string(input.CAType), nil)
 	if err != nil {
-		return &output, err
+		return &api.GetCAsOutput{}, err
 	}
 
 	newParams := clientFilers.GenerateHttpQueryParams(input.QueryParameters)
 	req.URL.RawQuery = newParams
 
+	var output api.GetCAsOutputSerialized
 	_, err = c.client.Do2(req, &output)
 
 	if err != nil {
-		return &output, err
+		return &api.GetCAsOutput{}, err
 	}
 
-	return &output, nil
+	deserializedOutput := output.Deserialize()
+	return &deserializedOutput, nil
 }
 
 func (c *lamassuCaClientConfig) GetCAByName(ctx context.Context, input *api.GetCAByNameInput) (*api.GetCAByNameOutput, error) {

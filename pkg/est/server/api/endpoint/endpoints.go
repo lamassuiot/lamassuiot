@@ -2,6 +2,7 @@ package endpoint
 
 import (
 	"context"
+	"crypto/rsa"
 	"crypto/x509"
 
 	"github.com/go-kit/kit/endpoint"
@@ -82,7 +83,7 @@ func MakeEnrollEndpoint(s service.ESTService) endpoint.Endpoint {
 			}
 			return nil, &valError
 		}
-		crt, err := s.Enroll(ctx, req.Csr, req.Aps, req.Crt)
+		crt, err := s.Enroll(ctx, req.Csr, req.Crt, req.Aps)
 		return EnrollReenrollResponse{Cert: crt}, err
 	}
 }
@@ -97,7 +98,7 @@ func MakeReenrollEndpoint(s service.ESTService) endpoint.Endpoint {
 			}
 			return nil, &valError
 		}
-		crt, err := s.Reenroll(ctx, req.Crt, req.Csr, "")
+		crt, err := s.Reenroll(ctx, req.Csr, req.Crt)
 		return EnrollReenrollResponse{Cert: crt}, err
 	}
 }
@@ -112,7 +113,7 @@ func MakeServerKeyGenEndpoint(s service.ESTService) endpoint.Endpoint {
 			}
 			return nil, &valError
 		}
-		crt, key, err := s.ServerKeyGen(ctx, req.Csr, req.Aps, req.Crt)
+		crt, key, err := s.ServerKeyGen(ctx, req.Csr, req.Crt, req.Aps)
 		return ServerKeyGenResponse{Cert: crt, Key: key}, err
 	}
 }
@@ -165,6 +166,6 @@ type EnrollReenrollResponse struct {
 }
 type ServerKeyGenResponse struct {
 	Cert   *x509.Certificate
-	Key    []byte
+	Key    *rsa.PrivateKey
 	CaCert *x509.Certificate
 }

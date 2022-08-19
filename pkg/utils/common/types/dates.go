@@ -6,13 +6,13 @@ import (
 	"time"
 )
 
-type DateOperatorType int64
+type DateOperatorType string
 
 const (
-	Before DateOperatorType = iota
-	After
-	Is
-	IsNot
+	Before DateOperatorType = "before"
+	After  DateOperatorType = "after"
+	Is     DateOperatorType = "is"
+	IsNot  DateOperatorType = "isnot"
 )
 
 func ParseDateOperator(s string) DateOperatorType {
@@ -32,18 +32,7 @@ func ParseDateOperator(s string) DateOperatorType {
 }
 
 func (f DatesFilterField) GetOperatorToString() string {
-	switch f.Operator {
-	case After:
-		return "After"
-	case Before:
-		return "Before"
-	case Is:
-		return "Is"
-	case IsNot:
-		return "IsNot"
-	default:
-		return ""
-	}
+	return string(f.Operator)
 }
 
 type DatesFilterField struct {
