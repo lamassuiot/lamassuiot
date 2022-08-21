@@ -60,12 +60,37 @@ type caService struct {
 }
 
 func NewCAService(logger log.Logger, engine CryptoEngine, certificateRepository repository.Certificates, ocspServerURL string) Service {
-	return &caService{
+	svc := caService{
 		logger:                logger,
 		cryptoEngine:          engine,
 		certificateRepository: certificateRepository,
 		ocspServerURL:         ocspServerURL,
 	}
+
+	_, err := svc.GetCAByName(context.Background(), &api.GetCAByNameInput{
+		CAType: api.CATypeDMSEnroller,
+		CAName: "LAMASSU-DMS-MANAGER",
+	})
+
+	if err != nil {
+		level.Debug(logger).Log("msg", "failed to get LAMASSU-DMS-MANAGER", "err", err)
+		level.Debug(logger).Log("msg", "Generating LAMASSU-DMS-MANAGER CA", "err", err)
+		svc.CreateCA(context.Background(), &api.CreateCAInput{
+			CAType: api.CATypeDMSEnroller,
+			Subject: api.Subject{
+				CommonName:   "LAMASSU-DMS-MANAGER",
+				Organization: "lamassu",
+			},
+			KeyMetadata: api.KeyMetadata{
+				KeyType: "RSA",
+				KeyBits: 4096,
+			},
+			CADuration:       time.Hour * 24 * 365 * 5,
+			IssuanceDuration: time.Hour * 24 * 365 * 3,
+		})
+	}
+
+	return &svc
 }
 
 func (s *caService) GetEngineProviderInfo() api.EngineProviderInfo {

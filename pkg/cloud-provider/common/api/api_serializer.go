@@ -1,0 +1,112 @@
+package api
+
+type CAConfigurationSerialized struct {
+	CAName        string      `json:"ca_name"`
+	Configuration interface{} `json:"configuration"`
+}
+
+func (o *CAConfiguration) Serialize() CAConfigurationSerialized {
+	return CAConfigurationSerialized{
+		CAName:        o.CAName,
+		Configuration: o.Configuration,
+	}
+}
+
+func (o *CAConfigurationSerialized) Deserialize() CAConfiguration {
+	return CAConfiguration{
+		CAName:        o.CAName,
+		Configuration: o.Configuration,
+	}
+}
+
+//------------------------------------------------------
+
+type RegisterCAOutputSerialized struct {
+}
+
+func (o *RegisterCAOutput) Serialize() RegisterCAOutputSerialized {
+	return RegisterCAOutputSerialized{}
+}
+
+func (o *RegisterCAOutputSerialized) Deserialize() RegisterCAOutput {
+	return RegisterCAOutput{}
+}
+
+//------------------------------------------------------
+
+type UpdateConfigurationOutputSerialized struct {
+	Configuration interface{} `json:"configuration"`
+}
+
+func (o *UpdateConfigurationOutput) Serialize() UpdateConfigurationOutputSerialized {
+	return UpdateConfigurationOutputSerialized{
+		Configuration: o.Configuration,
+	}
+}
+
+func (o *UpdateConfigurationOutputSerialized) Deserialize() UpdateConfigurationOutput {
+	return UpdateConfigurationOutput{
+		Configuration: o.Configuration,
+	}
+}
+
+//------------------------------------------------------
+
+type GetConfigurationOutputSerialized struct {
+	Configuration    interface{}                 `json:"configuration"`
+	CAsConfiguration []CAConfigurationSerialized `json:"cas"`
+}
+
+func (o *GetConfigurationOutput) Serialize() GetConfigurationOutputSerialized {
+	return GetConfigurationOutputSerialized{
+		Configuration: o.Configuration,
+	}
+}
+
+func (o *GetConfigurationOutputSerialized) Deserialize() GetConfigurationOutput {
+	return GetConfigurationOutput{
+		Configuration: o.Configuration,
+	}
+}
+
+//------------------------------------------------------
+
+type GetDeviceConfigurationOutputSerialized struct {
+	Configuration interface{} `json:"configuration"`
+}
+
+func (o *GetDeviceConfigurationOutput) Serialize() GetDeviceConfigurationOutputSerialized {
+	return GetDeviceConfigurationOutputSerialized{
+		Configuration: o.Configuration,
+	}
+}
+
+func (o *GetDeviceConfigurationOutputSerialized) Deserialize() GetDeviceConfigurationOutput {
+	return GetDeviceConfigurationOutput{
+		Configuration: o.Configuration,
+	}
+}
+
+//------------------------------------------------------
+type UpdateCAStatusOutputSerialized struct {
+}
+
+func (o *UpdateCAStatusOutput) Serialize() UpdateCAStatusOutputSerialized {
+	return UpdateCAStatusOutputSerialized{}
+}
+
+func (o *UpdateCAStatusOutputSerialized) Deserialize() UpdateCAStatusOutput {
+	return UpdateCAStatusOutput{}
+}
+
+//------------------------------------------------------
+type UpdateDeviceCertificateStatusOutputSerialized struct {
+}
+
+func (o *UpdateDeviceCertificateStatusOutput) Serialize() UpdateDeviceCertificateStatusOutputSerialized {
+	return UpdateDeviceCertificateStatusOutputSerialized{}
+}
+
+func (o *UpdateDeviceCertificateStatusOutputSerialized) Deserialize() UpdateDeviceCertificateStatusOutput {
+	return UpdateDeviceCertificateStatusOutput{}
+}

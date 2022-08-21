@@ -1,4 +1,4 @@
-package crypto_engines
+package cryptoengines
 
 import (
 	"crypto"

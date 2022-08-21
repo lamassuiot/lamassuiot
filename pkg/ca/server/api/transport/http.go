@@ -89,6 +89,17 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		)...,
 	))
 
+	r.Methods("GET").Path("/cryptoengine").Handler(httptransport.NewServer(
+		e.GetCryptoEngine,
+		decodeCryptoEngineRequest,
+		encodeCryptoEngineResponse,
+		append(
+			options,
+			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "CryptoEngine", logger)),
+			httptransport.ServerBefore(HTTPToContext(logger)),
+		)...,
+	))
+
 	r.Methods("GET").Path("/stats").Handler(httptransport.NewServer(
 		e.StatsEndpoint,
 		decodeStatsRequest,
@@ -212,6 +223,10 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 }
 
 func decodeHealthRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	return nil, nil
+}
+
+func decodeCryptoEngineRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	return nil, nil
 }
 
@@ -410,6 +425,19 @@ func encodeHealthResponse(ctx context.Context, w http.ResponseWriter, response i
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	return json.NewEncoder(w).Encode(response)
+}
+
+func encodeCryptoEngineResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(api.EngineProviderInfo)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
 }
 
 func encodeStatsResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {

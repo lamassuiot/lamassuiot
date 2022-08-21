@@ -1,233 +1,78 @@
 package main
 
-// import (
-// 	"crypto/tls"
-// 	"encoding/json"
-// 	"fmt"
-// 	"net/http"
-// 	"net/url"
-// 	"os"
-// 	"os/signal"
-// 	"strings"
-// 	"syscall"
+import (
+	"fmt"
+	"net/http"
+	"net/url"
+	"os"
+	"os/signal"
+	"syscall"
 
-// 	kitprometheus "github.com/go-kit/kit/metrics/prometheus"
-// 	"github.com/go-kit/log"
-// 	"github.com/go-kit/log/level"
-// 	"github.com/go-openapi/runtime/middleware"
-// 	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
-// 	postgresRepository "github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/repository/postgres"
-// 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/service"
-// 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/transport"
-// 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/config"
-// 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/docs"
-// 	"github.com/lamassuiot/lamassuiot/pkg/utils"
-// 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
-// 	"github.com/opentracing/opentracing-go"
-// 	stdprometheus "github.com/prometheus/client_golang/prometheus"
-// 	"github.com/prometheus/client_golang/prometheus/promhttp"
-// 	jaegercfg "github.com/uber/jaeger-client-go/config"
-// 	jaegerlog "github.com/uber/jaeger-client-go/log"
-// 	"gorm.io/driver/postgres"
-// 	"gorm.io/gorm"
-// 	gormLogger "gorm.io/gorm/logger"
-// )
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
+	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
+	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/service"
+	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/transport"
+	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/config"
+	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	gormLogger "gorm.io/gorm/logger"
 
-// var (
-// 	sha1ver   string // sha1 revision used to build the program
-// 	buildTime string // when the executable was built
-// )
+	postgresRepository "github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/repository/postgres"
+)
 
-// func main() {
-// 	var logger log.Logger
-// 	{
-// 		logger = log.NewJSONLogger(os.Stdout)
-// 		logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-// 		logger = level.NewFilter(logger, level.AllowInfo())
-// 		logger = log.With(logger, "caller", log.DefaultCaller)
-// 	}
+func main() {
+	config := config.NewDMSManagerConfig()
+	mainServer := server.NewServer(config)
 
-// 	err, cfg := config.NewConfig("")
-// 	if err != nil {
-// 		level.Error(logger).Log("err", err, "msg", "Could not read environment configuration values")
-// 		os.Exit(1)
-// 	}
-// 	level.Info(logger).Log("msg", "Environment configuration values loaded")
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUser, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
+	})
+	if err != nil {
+		panic(err)
+	}
 
-// 	if strings.ToLower(cfg.DebugMode) == "debug" {
-// 		{
-// 			logger = log.NewJSONLogger(os.Stdout)
-// 			logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-// 			logger = level.NewFilter(logger, level.AllowDebug())
-// 			logger = log.With(logger, "caller", log.DefaultCaller)
-// 		}
-// 		level.Debug(logger).Log("msg", "Starting Lamassu-DMS-Manager in debug mode...")
-// 	}
+	dmsRepo := postgresRepository.NewPostgresDB(db, mainServer.Logger)
+	caClient, err := lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
+		URL: &url.URL{
+			Scheme: "https",
+			Host:   config.LamassuCAAddress,
+		},
+		AuthMethod: clientUtils.AuthMethodMutualTLS,
+		AuthMethodConfig: &clientUtils.MutualTLSConfig{
+			ClientCert: config.CertFile,
+			ClientKey:  config.KeyFile,
+		},
+		CACertificate: config.LamassuCACertFile,
+	})
+	if err != nil {
+		level.Error(mainServer.Logger).Log("msg", "Could not connect to LamassuCA", "err", err)
+		os.Exit(1)
+	}
 
-// 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", cfg.PostgresHostname, cfg.PostgresUser, cfg.PostgresPassword, cfg.PostgresDB, cfg.PostgresPort)
-// 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-// 		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
-// 	})
-// 	if err != nil {
-// 		panic(err)
-// 	}
+	if err != nil {
+		level.Error(mainServer.Logger).Log("msg", "Could not connect to LamassuDMSManager", "err", err)
+		os.Exit(1)
+	}
 
-// 	dmsRepository := postgresRepository.NewPostgresDB(db, logger)
+	var s service.Service
+	{
+		s = service.NewDMSManagerService(mainServer.Logger, dmsRepo, &caClient)
+		s = service.LoggingMiddleware(mainServer.Logger)(s)
+	}
 
-// 	jcfg, err := jaegercfg.FromEnv()
-// 	if err != nil {
-// 		level.Error(logger).Log("err", err, "msg", "Could not load Jaeger configuration values fron environment")
-// 		os.Exit(1)
-// 	}
-// 	level.Info(logger).Log("msg", "Jaeger configuration values loaded")
-// 	tracer, closer, err := jcfg.NewTracer(
-// 		jaegercfg.Logger(jaegerlog.StdLogger),
-// 	)
-// 	opentracing.SetGlobalTracer(tracer)
-// 	if err != nil {
-// 		level.Error(logger).Log("err", err, "msg", "Could not start Jaeger tracer")
-// 		os.Exit(1)
-// 	}
-// 	defer closer.Close()
-// 	level.Info(logger).Log("msg", "Jaeger tracer started")
+	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), mainServer.Tracer)))
 
-// 	fieldKeys := []string{"method", "error"}
+	errs := make(chan error)
+	go func() {
+		c := make(chan os.Signal)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+		errs <- fmt.Errorf("%s", <-c)
+	}()
 
-// 	lamassuCaClient, err := lamassucaclient.NewLamassuCAClient(clientUtils.ClientConfiguration{
-// 		URL: &url.URL{
-// 			Scheme: "https",
-// 			Host:   cfg.LamassuCAAddress,
-// 		},
-// 		AuthMethod: clientUtils.AuthMethodMutualTLS,
-// 		AuthMethodConfig: &clientUtils.MutualTLSConfig{
-// 			ClientCert: cfg.CertFile,
-// 			ClientKey:  cfg.KeyFile,
-// 		},
-// 		CACertificate: cfg.LamassuCACertFile,
-// 	})
-
-// 	if err != nil {
-// 		level.Error(logger).Log("err", err, "msg", "Could not create lamassu CA client")
-// 		os.Exit(1)
-// 	}
-
-// 	var s service.Service
-// 	{
-// 		s = service.NewDMSManagerService(logger, dmsRepository, &lamassuCaClient)
-// 		s = service.LoggingMiddleware(logger)(s)
-// 		s = service.NewInstrumentingMiddleware(
-// 			kitprometheus.NewCounterFrom(stdprometheus.CounterOpts{
-// 				Namespace: "enroller",
-// 				Subsystem: "enroller_service",
-// 				Name:      "request_count",
-// 				Help:      "Number of requests received.",
-// 			}, fieldKeys),
-// 			kitprometheus.NewSummaryFrom(stdprometheus.SummaryOpts{
-// 				Namespace: "enroller",
-// 				Subsystem: "enroller_service",
-// 				Name:      "request_latency_microseconds",
-// 				Help:      "Total duration of requests in microseconds.",
-// 			}, fieldKeys),
-// 		)(s)
-// 	}
-// 	openapiSpec := docs.NewOpenAPI3(cfg)
-// 	specHandler := func(prefix string) http.HandlerFunc {
-// 		return func(w http.ResponseWriter, r *http.Request) {
-// 			url := r.URL.Path
-// 			if originalPrefix, ok := r.Header["X-Envoy-Original-Path"]; ok {
-// 				url = originalPrefix[0]
-// 			}
-// 			url = strings.Split(url, prefix)[0]
-// 			openapiSpec.Servers[0].URL = url
-// 			openapiSpecJsonData, _ := json.Marshal(&openapiSpec)
-// 			w.Write(openapiSpecJsonData)
-// 		}
-// 	}
-
-// 	mux := http.NewServeMux()
-// 	infoHandler := func() http.HandlerFunc {
-// 		return func(w http.ResponseWriter, r *http.Request) {
-// 			info := struct {
-// 				BuildVersion string `json:"build_version"`
-// 				BuildTime    string `json:"build_time"`
-// 			}{
-// 				BuildVersion: sha1ver,
-// 				BuildTime:    buildTime,
-// 			}
-// 			infoData, _ := json.Marshal(&info)
-// 			w.Header().Add("content-type", "application/json; charset=utf-8")
-// 			w.Write(infoData)
-// 		}
-// 	}
-
-// 	http.Handle("/info", accessControl(infoHandler()))
-// 	http.Handle("/metrics", promhttp.Handler())
-// 	http.Handle("/v1/", accessControl(http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(logger, "component", "HTTPS"), tracer))))
-// 	http.Handle("/v1/docs/", http.StripPrefix("/v1/docs", middleware.SwaggerUI(middleware.SwaggerUIOpts{
-// 		Path:    "/",
-// 		SpecURL: "spec.json",
-// 	}, mux)))
-// 	http.HandleFunc("/v1/docs/spec.json", specHandler("/v1/docs/"))
-
-// 	errs := make(chan error)
-// 	go func() {
-// 		c := make(chan os.Signal)
-// 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-// 		errs <- fmt.Errorf("%s", <-c)
-// 	}()
-
-// 	go func() {
-// 		if strings.ToLower(cfg.Protocol) == "https" {
-// 			if cfg.MutualTLSEnabled {
-// 				mTlsCertPool, err := utils.CreateCAPool(cfg.MutualTLSClientCA)
-// 				if err != nil {
-// 					level.Error(logger).Log("err", err, "msg", "Could not create mTls Cert Pool")
-// 					os.Exit(1)
-// 				}
-// 				tlsConfig := &tls.Config{
-// 					ClientCAs:          mTlsCertPool,
-// 					ClientAuth:         tls.RequireAndVerifyClientCert,
-// 					InsecureSkipVerify: true,
-// 				}
-
-// 				tlsConfig.BuildNameToCertificate()
-
-// 				http := &http.Server{
-// 					Addr:      ":" + cfg.Port,
-// 					TLSConfig: tlsConfig,
-// 				}
-
-// 				level.Info(logger).Log("transport", "Mutual TLS", "address", ":"+cfg.Port, "msg", "listening")
-// 				errs <- http.ListenAndServeTLS(cfg.CertFile, cfg.KeyFile)
-
-// 			} else {
-// 				level.Info(logger).Log("transport", "HTTPS", "address", ":"+cfg.Port, "msg", "listening")
-// 				errs <- http.ListenAndServeTLS(":"+cfg.Port, cfg.CertFile, cfg.KeyFile, nil)
-
-// 			}
-// 		} else if strings.ToLower(cfg.Protocol) == "http" {
-// 			level.Info(logger).Log("transport", "HTTP", "address", ":"+cfg.Port, "msg", "listening")
-// 			errs <- http.ListenAndServe(":"+cfg.Port, nil)
-
-// 		} else {
-// 			level.Error(logger).Log("err", "msg", "Unknown protocol")
-// 			os.Exit(1)
-
-// 		}
-// 	}()
-// 	level.Info(logger).Log("exit", <-errs)
-// }
-
-// func accessControl(h http.Handler) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		w.Header().Set("Access-Control-Allow-Origin", "*")
-// 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE")
-// 		w.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
-
-// 		if r.Method == "OPTIONS" {
-// 			return
-// 		}
-
-// 		h.ServeHTTP(w, r)
-// 	})
-// }
+	mainServer.Run(errs)
+	level.Info(mainServer.Logger).Log("exit", <-errs)
+}

@@ -19,6 +19,7 @@ type BaseClientConfigurationuration struct {
 	AuthMethod       AuthMethod
 	AuthMethodConfig interface{}
 	CACertificate    string
+	Insecure         bool
 }
 
 type ClientConfiguration struct {
@@ -28,24 +29,27 @@ type ClientConfiguration struct {
 
 type BaseClient interface {
 	NewRequest(method string, path string, body interface{}) (*http.Request, error)
-	Do(req *http.Request) (interface{}, *http.Response, error)
-	Do2(req *http.Request, response any) (*http.Response, error)
+	Do(req *http.Request, response any) (*http.Response, error)
+	Do2(req *http.Request) (*http.Response, error)
 }
 
 func NewBaseClient(config BaseClientConfigurationuration) (BaseClient, error) {
 	tr := &http.Transport{}
 
 	if config.URL.Scheme == "https" {
-		caPem, err := ioutil.ReadFile(config.CACertificate)
-		if err != nil {
-			return nil, err
+		certPool := x509.NewCertPool()
+		if !config.Insecure {
+			caPem, err := ioutil.ReadFile(config.CACertificate)
+			if err != nil {
+				return nil, err
+			}
+
+			certPool.AppendCertsFromPEM(caPem)
 		}
 
-		certPool := x509.NewCertPool()
-		certPool.AppendCertsFromPEM(caPem)
-
 		tr.TLSClientConfig = &tls.Config{
-			RootCAs: certPool,
+			RootCAs:            certPool,
+			InsecureSkipVerify: config.Insecure,
 		}
 	}
 
@@ -118,23 +122,7 @@ func (c *ClientConfiguration) NewRequest(method string, path string, body interf
 	return req, nil
 }
 
-func (c *ClientConfiguration) Do(req *http.Request) (interface{}, *http.Response, error) {
-	var v interface{}
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if resp.StatusCode != 200 {
-		return nil, resp, errors.New("Response with status code: " + strconv.Itoa(resp.StatusCode) + "")
-	}
-
-	defer resp.Body.Close()
-	err = json.NewDecoder(resp.Body).Decode(&v)
-	return v, resp, err
-}
-
-func (c *ClientConfiguration) Do2(req *http.Request, response any) (*http.Response, error) {
+func (c *ClientConfiguration) Do(req *http.Request, response any) (*http.Response, error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -152,6 +140,9 @@ func (c *ClientConfiguration) Do2(req *http.Request, response any) (*http.Respon
 	defer resp.Body.Close()
 	err = json.NewDecoder(resp.Body).Decode(&response)
 	return resp, err
+}
+func (c *ClientConfiguration) Do2(req *http.Request) (*http.Response, error) {
+	return c.httpClient.Do(req)
 }
 
 func ByteCountDecimal(b int64) string {

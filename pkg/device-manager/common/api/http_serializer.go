@@ -82,9 +82,9 @@ func (s *DevicesManagerStatsSerialized) Deserialize() DevicesManagerStats {
 }
 
 type KeyStrengthMetadataSerialized struct {
-	KeyType     KeyType     `json:"key_type"`
-	KeyBits     int         `json:"key_bits"`
-	KeyStrength KeyStrength `json:"key_strength"`
+	KeyType     KeyType     `json:"type"`
+	KeyBits     int         `json:"bits"`
+	KeyStrength KeyStrength `json:"strength"`
 }
 
 func (s *KeyStrengthMetadata) Serialize() KeyStrengthMetadataSerialized {
@@ -382,7 +382,7 @@ type GetDevicesOutputSerialized struct {
 }
 
 func (s *GetDevicesOutput) Serialize() GetDevicesOutputSerialized {
-	var devices []DeviceSerialized
+	devices := []DeviceSerialized{}
 	for _, device := range s.Devices {
 		devices = append(devices, device.Serialize())
 	}

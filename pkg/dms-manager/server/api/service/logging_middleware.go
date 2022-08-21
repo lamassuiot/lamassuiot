@@ -65,7 +65,9 @@ func (mw loggingMiddleware) CreateDMSWithCertificateRequest(ctx context.Context,
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
-			logMsg = append(logMsg, "output", output.Serialize())
+			if output != nil {
+				logMsg = append(logMsg, "output", output.Serialize())
+			}
 		} else {
 			logMsg = append(logMsg, "err", err)
 		}
@@ -81,7 +83,9 @@ func (mw loggingMiddleware) UpdateDMSStatus(ctx context.Context, input *api.Upda
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
-			logMsg = append(logMsg, "output", output.Serialize())
+			if output != nil {
+				logMsg = append(logMsg, "output", output.Serialize())
+			}
 		} else {
 			logMsg = append(logMsg, "err", err)
 		}
@@ -97,7 +101,9 @@ func (mw loggingMiddleware) UpdateDMSAuthorizedCAs(ctx context.Context, input *a
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
-			logMsg = append(logMsg, "output", output.Serialize())
+			if output != nil {
+				logMsg = append(logMsg, "output", output.Serialize())
+			}
 		} else {
 			logMsg = append(logMsg, "err", err)
 		}
@@ -113,7 +119,9 @@ func (mw loggingMiddleware) GetDMSs(ctx context.Context, input *api.GetDMSsInput
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
-			logMsg = append(logMsg, "output", output.Serialize())
+			if output != nil {
+				logMsg = append(logMsg, "output", output.Serialize())
+			}
 		} else {
 			logMsg = append(logMsg, "err", err)
 		}
@@ -129,7 +137,9 @@ func (mw loggingMiddleware) GetDMSByName(ctx context.Context, input *api.GetDMSB
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
-			logMsg = append(logMsg, "output", output.Serialize())
+			if output != nil {
+				logMsg = append(logMsg, "output", output.Serialize())
+			}
 		} else {
 			logMsg = append(logMsg, "err", err)
 		}

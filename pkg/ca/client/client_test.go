@@ -22,6 +22,8 @@ import (
 	gormLogger "gorm.io/gorm/logger"
 )
 
+//TODO: Complete testing of the client
+
 func TestClientCreateCA(t *testing.T) {
 	tt := []struct {
 		name                  string
@@ -36,11 +38,11 @@ func TestClientCreateCA(t *testing.T) {
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
 						CommonName:       "test",
-						OrganizationUnit: "test",
-						Organization:     "org",
-						Country:          "US",
-						State:            "NY",
-						Locality:         "NY",
+						OrganizationUnit: "IoT",
+						Organization:     "Lamassu",
+						Country:          "ES",
+						State:            "Gipuzkoa",
+						Locality:         "Donostia",
 					},
 					KeyMetadata: api.KeyMetadata{
 						KeyType: api.RSA,
@@ -63,11 +65,11 @@ func TestClientCreateCA(t *testing.T) {
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
 						CommonName:       "test",
-						OrganizationUnit: "test",
-						Organization:     "org",
-						Country:          "US",
-						State:            "NY",
-						Locality:         "NY",
+						OrganizationUnit: "IoT",
+						Organization:     "Lamassu",
+						Country:          "ES",
+						State:            "Gipuzkoa",
+						Locality:         "Donostia",
 					},
 					KeyMetadata: api.KeyMetadata{
 						KeyType: api.RSA,
@@ -85,11 +87,11 @@ func TestClientCreateCA(t *testing.T) {
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
 						CommonName:       "test",
-						OrganizationUnit: "test",
-						Organization:     "org",
-						Country:          "US",
-						State:            "NY",
-						Locality:         "NY",
+						OrganizationUnit: "IoT",
+						Organization:     "Lamassu",
+						Country:          "ES",
+						State:            "Gipuzkoa",
+						Locality:         "Donostia",
 					},
 					KeyMetadata: api.KeyMetadata{
 						KeyType: api.RSA,

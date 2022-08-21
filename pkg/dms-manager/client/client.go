@@ -60,7 +60,7 @@ func (c *lamassuDMSManagerClientConfig) CreateDMS(ctx context.Context, input *ap
 	}
 
 	var output api.CreateDMSOutputSerialized
-	_, err = c.client.Do2(req, &output)
+	_, err = c.client.Do(req, &output)
 
 	if err != nil {
 		return &api.CreateDMSOutput{}, err
@@ -85,7 +85,7 @@ func (c *lamassuDMSManagerClientConfig) CreateDMSWithCertificateRequest(ctx cont
 	}
 
 	var output api.CreateDMSWithCertificateRequestOutputSerialized
-	_, err = c.client.Do2(req, &output)
+	_, err = c.client.Do(req, &output)
 
 	if err != nil {
 		return &api.CreateDMSWithCertificateRequestOutput{}, err
@@ -107,7 +107,7 @@ func (c *lamassuDMSManagerClientConfig) UpdateDMSStatus(ctx context.Context, inp
 	}
 
 	var output api.UpdateDMSStatusOutputSerialized
-	_, err = c.client.Do2(req, &output)
+	_, err = c.client.Do(req, &output)
 
 	if err != nil {
 		return &api.UpdateDMSStatusOutput{}, err
@@ -129,7 +129,7 @@ func (c *lamassuDMSManagerClientConfig) UpdateDMSAuthorizedCAs(ctx context.Conte
 	}
 
 	var output api.UpdateDMSAuthorizedCAsOutputSerialized
-	_, err = c.client.Do2(req, &output)
+	_, err = c.client.Do(req, &output)
 
 	if err != nil {
 		return &api.UpdateDMSAuthorizedCAsOutput{}, err
@@ -150,7 +150,7 @@ func (c *lamassuDMSManagerClientConfig) GetDMSs(ctx context.Context, input *api.
 	}
 
 	var output api.GetDMSsOutputSerialized
-	_, err = c.client.Do2(req, &output)
+	_, err = c.client.Do(req, &output)
 
 	if err != nil {
 		return &api.GetDMSsOutput{}, err
@@ -168,8 +168,7 @@ func (c *lamassuDMSManagerClientConfig) GetDMSByName(ctx context.Context, input 
 	}
 
 	var output api.GetDMSByNameOutputSerialized
-	_, err = c.client.Do2(req, &output)
-
+	_, err = c.client.Do(req, &output)
 	if err != nil {
 		return &api.GetDMSByNameOutput{}, err
 	}

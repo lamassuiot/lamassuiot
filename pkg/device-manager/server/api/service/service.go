@@ -159,7 +159,7 @@ func (s *devicesService) DecommisionDevice(ctx context.Context, input *api.Decom
 		device.Slots[i] = &outputRevokeSlot.Slot
 	}
 
-	device.Status = api.DeviceStatusDecommisioned
+	device.Status = api.DeviceStatusDecommissioned
 
 	err = s.devicesRepo.UpdateDevice(ctx, device)
 	if err != nil {
@@ -416,7 +416,13 @@ func (s *devicesService) RevokeActiveCertificate(ctx context.Context, input *api
 }
 
 func (s *devicesService) CheckAndUpdateDeviceStatus(ctx context.Context, input *api.CheckAndUpdateDeviceStatusInput) (*api.CheckAndUpdateDeviceStatusOutput, error) {
-	return &api.CheckAndUpdateDeviceStatusOutput{}, nil
+	device, err := s.devicesRepo.SelectDeviceById(ctx, input.DeviceID)
+	if err != nil {
+		return &api.CheckAndUpdateDeviceStatusOutput{}, err
+	}
+	return &api.CheckAndUpdateDeviceStatusOutput{
+		Device: *device,
+	}, nil
 }
 
 func (s *devicesService) IterateDevicesWithPredicate(ctx context.Context, input *api.IterateDevicesWithPredicateInput) (*api.IterateDevicesWithPredicateOutput, error) {
@@ -572,7 +578,7 @@ func (s *devicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 	} else {
 		device := getDevice.Device
 
-		if device.Status == api.DeviceStatusDecommisioned {
+		if device.Status == api.DeviceStatusDecommissioned {
 			return nil, &estErrors.GenericError{
 				Message:    "device is decommissioned",
 				StatusCode: 403,
@@ -580,7 +586,7 @@ func (s *devicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 		}
 
 		for _, slot := range device.Slots {
-			if slot.ID == slotID && slot.ActiveCertificate != nil && slot.ActiveCertificate.Status != api.CertificateStatusPendingEnrollment {
+			if slot.ID == slotID && slot.ActiveCertificate != nil {
 				return nil, &estErrors.GenericError{
 					Message:    "slot is already enrolled",
 					StatusCode: 409,

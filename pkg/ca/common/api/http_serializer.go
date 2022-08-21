@@ -9,6 +9,70 @@ import (
 	"github.com/lib/pq"
 )
 
+type SupportedKeyTypeInfoSerialized struct {
+	Type        string `json:"type"`
+	MinimumSize int    `json:"minimum_size"`
+	MaximumSize int    `json:"maximum_size"`
+}
+
+func (s *SupportedKeyTypeInfo) Serialize() *SupportedKeyTypeInfoSerialized {
+	return &SupportedKeyTypeInfoSerialized{
+		Type:        string(s.Type),
+		MinimumSize: s.MinimumSize,
+		MaximumSize: s.MaximumSize,
+	}
+}
+
+func (s *SupportedKeyTypeInfoSerialized) Deserialize() *SupportedKeyTypeInfo {
+	return &SupportedKeyTypeInfo{
+		Type:        string(ParseKeyType(s.Type)),
+		MinimumSize: s.MinimumSize,
+		MaximumSize: s.MaximumSize,
+	}
+}
+
+type EngineProviderInfoSerialized struct {
+	Provider          string                           `json:"provider"`
+	CryptokiVersion   string                           `json:"cryptoki_version"`
+	Manufacturer      string                           `json:"manufacturer"`
+	Model             string                           `json:"model"`
+	Library           string                           `json:"library"`
+	SupportedKeyTypes []SupportedKeyTypeInfoSerialized `json:"supported_key_types"`
+}
+
+func (e *EngineProviderInfo) Serialize() EngineProviderInfoSerialized {
+	keys := make([]SupportedKeyTypeInfoSerialized, 0)
+	for _, key := range e.SupportedKeyTypes {
+		keys = append(keys, *key.Serialize())
+	}
+
+	serializer := EngineProviderInfoSerialized{
+		Provider:          e.Provider,
+		CryptokiVersion:   e.CryptokiVersion,
+		Manufacturer:      e.Manufacturer,
+		Model:             e.Model,
+		Library:           e.Library,
+		SupportedKeyTypes: keys,
+	}
+	return serializer
+}
+
+func (e *EngineProviderInfoSerialized) Deserialize() *EngineProviderInfo {
+	keys := make([]SupportedKeyTypeInfo, 0)
+	for _, key := range e.SupportedKeyTypes {
+		keys = append(keys, *key.Deserialize())
+	}
+
+	return &EngineProviderInfo{
+		Provider:          e.Provider,
+		CryptokiVersion:   e.CryptokiVersion,
+		Manufacturer:      e.Manufacturer,
+		Model:             e.Model,
+		Library:           e.Library,
+		SupportedKeyTypes: keys,
+	}
+}
+
 type SubjectSerialized struct {
 	CommonName       string `json:"common_name"`
 	Organization     string `json:"organization"`
@@ -348,6 +412,24 @@ func (o *RevokeCertificateOutputSerialized) Deserialize() RevokeCertificateOutpu
 }
 
 // -------------------------------------------------------------
+
+type UpdateCertificateStatusOutputSerialized struct {
+	CertificateSerialized
+}
+
+func (o *UpdateCertificateStatusOutput) Serialize() UpdateCertificateStatusOutputSerialized {
+	return UpdateCertificateStatusOutputSerialized{
+		CertificateSerialized: o.Certificate.Serialize(),
+	}
+}
+
+func (o *UpdateCertificateStatusOutputSerialized) Deserialize() UpdateCertificateStatusOutput {
+	return UpdateCertificateStatusOutput{
+		Certificate: o.CertificateSerialized.Deserialize(),
+	}
+}
+
+// -------------------------------------------------------------
 type GetCertificateBySerialNumberOutputSerialized struct {
 	CertificateSerialized
 }
@@ -392,4 +474,21 @@ func (o *GetCertificatesOutputSerialized) Deserialize() GetCertificatesOutput {
 		Certificates:      serializedCertificates,
 	}
 	return serializer
+}
+
+// -------------------------------------------------------------
+type UpdateCAStatusOutputSerialized struct {
+	CACertificateSerialized
+}
+
+func (o *UpdateCAStatusOutput) Serialize() UpdateCAStatusOutputSerialized {
+	return UpdateCAStatusOutputSerialized{
+		CACertificateSerialized: o.CACertificate.Serialize(),
+	}
+}
+
+func (o *UpdateCAStatusOutputSerialized) Deserialize() UpdateCAStatusOutput {
+	return UpdateCAStatusOutput{
+		CACertificate: o.CACertificateSerialized.Deserialize(),
+	}
 }

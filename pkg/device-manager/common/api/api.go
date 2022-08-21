@@ -95,7 +95,7 @@ const (
 	DeviceStatusFullyProvisioned        DeviceStatus = "FULLY_PROVISIONED"         // used if all the device slots are active
 	DeviceStatusPartiallyProvisioned    DeviceStatus = "PARTIALLY_PROVISIONED"     // used if the device has a slot in the pending enrollment
 	DeviceStatusProvisionedWithWarnings DeviceStatus = "PROVISIONED_WITH_WARNINGS" // used if the device has a slot expired or revoked
-	DeviceStatusDecommisioned           DeviceStatus = "DECOMMISIONED"
+	DeviceStatusDecommissioned          DeviceStatus = "DECOMMISSIONED"
 )
 
 func ParseDeviceStatus(t string) DeviceStatus {
@@ -108,8 +108,8 @@ func ParseDeviceStatus(t string) DeviceStatus {
 		return DeviceStatusPartiallyProvisioned
 	case "PROVISIONED_WITH_WARNINGS":
 		return DeviceStatusProvisionedWithWarnings
-	case "DECOMMISIONED":
-		return DeviceStatusDecommisioned
+	case "DECOMMISSIONED":
+		return DeviceStatusDecommissioned
 	default:
 		return DeviceStatusPendingProvisioning
 	}
@@ -118,24 +118,24 @@ func ParseDeviceStatus(t string) DeviceStatus {
 type CertificateStatus string
 
 const (
-	CertificateStatusPendingEnrollment CertificateStatus = "PENDING_ENROLLMENT"
-	CertificateStatusActive            CertificateStatus = "ACTIVE"
-	CertificateStatusExpired           CertificateStatus = "EXPIRED"
-	CertificateStatusRevoked           CertificateStatus = "REVOKED"
+	CertificateStatusActive        CertificateStatus = "ACTIVE"
+	CertificateStatusAboutToExpire CertificateStatus = "ABOUT_TO_EXPIRE"
+	CertificateStatusExpired       CertificateStatus = "EXPIRED"
+	CertificateStatusRevoked       CertificateStatus = "REVOKED"
 )
 
 func ParseCertificateStatus(t string) CertificateStatus {
 	switch t {
-	case "PENDING_ENROLLMENT":
-		return CertificateStatusPendingEnrollment
 	case "ACTIVE":
 		return CertificateStatusActive
+	case "ABOUT_TO_EXPIRE":
+		return CertificateStatusAboutToExpire
 	case "EXPIRED":
 		return CertificateStatusExpired
 	case "REVOKED":
 		return CertificateStatusRevoked
 	default:
-		return CertificateStatusPendingEnrollment
+		return CertificateStatusActive
 	}
 }
 

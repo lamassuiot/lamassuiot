@@ -60,7 +60,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
 	}
-	r.Methods("GET").Path("/v1/health").Handler(httptransport.NewServer(
+	r.Methods("GET").Path("/health").Handler(httptransport.NewServer(
 		e.HealthEndpoint,
 		decodeHealthRequest,
 		encodeHealthResponse,
@@ -70,7 +70,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
-	r.Methods("GET").Path("/v1/stats").Handler(httptransport.NewServer(
+	r.Methods("GET").Path("/stats").Handler(httptransport.NewServer(
 		e.GetStatsEndpoint,
 		decodeGetStatsRequest,
 		encodeGetStatsResponse,
@@ -81,7 +81,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		)...,
 	))
 
-	r.Methods("POST").Path("/v1/devices").Handler(httptransport.NewServer(
+	r.Methods("POST").Path("/devices").Handler(httptransport.NewServer(
 		e.CreateDeviceEndpoint,
 		decodeCreateDeviceRequest,
 		encodeCreateDeviceResponse,
@@ -92,10 +92,10 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		)...,
 	))
 
-	r.Methods("GET").Path("/v1/devices").Handler(httptransport.NewServer(
+	r.Methods("GET").Path("/devices").Handler(httptransport.NewServer(
 		e.GetDevicesEndpoint,
-		decodeUpdateDeviceMetadataRequest,
-		encodeUpdateDeviceMetadataResponse,
+		decodeGetDevicesRequest,
+		encodeGetDevicesResponse,
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetDevices", logger)),
@@ -103,10 +103,10 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		)...,
 	))
 
-	r.Methods("GET").Path("/v1/devices/{deviceID}").Handler(httptransport.NewServer(
+	r.Methods("GET").Path("/devices/{deviceID}").Handler(httptransport.NewServer(
 		e.GetDeviceByIdEndpoint,
-		decodeDecommisionDeviceRequest,
-		encodeDecommisionDeviceResponse,
+		decodeGetDeviceByIdRequest,
+		encodeGetDeviceByIdResponse,
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetDeviceById", logger)),
@@ -114,7 +114,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		)...,
 	))
 
-	r.Methods("PUT").Path("/v1/devices/{deviceID}").Handler(httptransport.NewServer(
+	r.Methods("PUT").Path("/devices/{deviceID}").Handler(httptransport.NewServer(
 		e.UpdateDeviceMetadataEndpoint,
 		decodeGetDevicesRequest,
 		encodeGetDevicesResponse,
@@ -125,7 +125,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		)...,
 	))
 
-	r.Methods("DELETE").Path("/v1/devices/{deviceID}").Handler(httptransport.NewServer(
+	r.Methods("DELETE").Path("/devices/{deviceID}").Handler(httptransport.NewServer(
 		e.DecommisionDeviceEndpoint,
 		decodeGetDeviceByIdRequest,
 		encodeGetDeviceByIdResponse,
@@ -136,7 +136,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		)...,
 	))
 
-	r.Methods("DELETE").Path("/v1/devices/{deviceID}/slots/{slotID}").Handler(httptransport.NewServer(
+	r.Methods("DELETE").Path("/devices/{deviceID}/slots/{slotID}").Handler(httptransport.NewServer(
 		e.RevokeActiveCertificateEndpoint,
 		decodeRevokeActiveCertificateRequest,
 		encodeRevokeActiveCertificateResponse,
@@ -147,7 +147,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		)...,
 	))
 
-	r.Methods("GET").Path("/v1/devices/{deviceID}/logs").Handler(httptransport.NewServer(
+	r.Methods("GET").Path("/devices/{deviceID}/logs").Handler(httptransport.NewServer(
 		e.GetDeviceLogsEndpoint,
 		decodeGetDeviceLogsRequest,
 		encodeGetDeviceLogsResponse,

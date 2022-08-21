@@ -15,6 +15,7 @@ import (
 
 type Endpoints struct {
 	HealthEndpoint          endpoint.Endpoint
+	GetCryptoEngine         endpoint.Endpoint
 	StatsEndpoint           endpoint.Endpoint
 	GetCAsEndpoint          endpoint.Endpoint
 	GetCAByNameEndpoint     endpoint.Endpoint
@@ -32,6 +33,11 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 	{
 		healthEndpoint = MakeHealthEndpoint(s)
 		healthEndpoint = opentracing.TraceServer(otTracer, "Health")(healthEndpoint)
+	}
+	var getCryptoEngineEndpoint endpoint.Endpoint
+	{
+		getCryptoEngineEndpoint = MakeGetCryptoEngine(s)
+		getCryptoEngineEndpoint = opentracing.TraceServer(otTracer, "CryptoEngine")(getCryptoEngineEndpoint)
 	}
 
 	var statsEndpoint endpoint.Endpoint
@@ -95,6 +101,7 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 
 	return Endpoints{
 		HealthEndpoint:          healthEndpoint,
+		GetCryptoEngine:         getCryptoEngineEndpoint,
 		StatsEndpoint:           statsEndpoint,
 		GetCAsEndpoint:          getCAsEndpoint,
 		GetCAByNameEndpoint:     getCAByName,
@@ -139,6 +146,12 @@ func MakeStatsEndpoint(s service.Service) endpoint.Endpoint {
 
 		stats, err := s.Stats(ctx, &input)
 		return stats, err
+	}
+}
+func MakeGetCryptoEngine(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		engineInfo := s.GetEngineProviderInfo()
+		return engineInfo, nil
 	}
 }
 
@@ -194,7 +207,7 @@ func MakeGetCAByNameEndpoint(s service.Service) endpoint.Endpoint {
 	}
 }
 
-func ValidateCreatrCARequest(request api.CreateCAInput) error {
+func ValidateCreateCARequest(request api.CreateCAInput) error {
 	CreateCARequestStructLevelValidation := func(sl validator.StructLevel) {
 		input := sl.Current().Interface().(api.CreateCAInput)
 
@@ -230,7 +243,7 @@ func MakeCreateCAEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		input := request.(api.CreateCAInput)
 
-		err = ValidateCreatrCARequest(input)
+		err = ValidateCreateCARequest(input)
 		if err != nil {
 			valError := errors.ValidationError{
 				Msg: err.Error(),
