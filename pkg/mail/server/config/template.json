@@ -1,0 +1,43 @@
+[
+    {
+        "event_type": "io.lamassu.ca.create",
+        "fields": [
+            {"event_field_name": "name", "email_field_name": "CA Name"},
+            {"event_field_name": "serial_number", "email_field_name": "Serial Number"},
+            {"event_field_name": "cert", "email_field_name": "Certificate"}
+        ]
+    },
+    {
+        "event_type": "io.lamassu.ca.import",
+        "fields": [
+            {"event_field_name": "name", "email_field_name": "CA Name"},
+            {"event_field_name": "serial_number", "email_field_name": "Serial Number"},
+            {"event_field_name": "cert", "email_field_name": "Certificate"}
+        ]
+    },
+    {
+        "event_type": "io.lamassu.ca.update",
+        "fields": [
+            {"event_field_name": "name", "email_field_name": "CA Name"},
+            {"event_field_name": "status", "email_field_name": "Status"}
+        ]
+    },
+    {
+        "event_type": "io.lamassu.cert.update",
+        "fields": [
+            {"event_field_name": "name", "email_field_name": "CA Name"},
+            {"event_field_name": "status", "email_field_name": "Status"},
+            {"event_field_name": "serial_number", "email_field_name": "Serial Number"}
+        ]
+    },
+    {
+        "event_type": "io.lamassu.iotcore.thing.config.response",
+        "fields": [
+            {"event_field_name": "aws_id", "email_field_name": "AWS Id"},
+            {"event_field_name": "device_id", "email_field_name": "Device Id"},
+            {"event_field_name": "last_connection", "email_field_name": "Last Connection"},
+            {"event_field_name": "certificates", "email_field_name": "Certificates"}
+            
+        ]
+    }
+]

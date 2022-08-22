@@ -156,8 +156,8 @@ func (o *Certificate) Serialize() CertificateSerialized {
 		CAName:           o.CAName,
 		Status:           string(o.Status),
 		SerialNumber:     o.SerialNumber,
-		ValidFrom:        int(o.ValidFrom.Unix()),
-		ValidTo:          int(o.ValidTo.Unix()),
+		ValidFrom:        int(o.ValidFrom.UnixMilli()),
+		ValidTo:          int(o.ValidTo.UnixMilli()),
 		RevocationReason: o.RevocationReason,
 		KeyMetadata:      o.KeyMetadata.Serialize(),
 		Subject:          o.Subject.Serialize(),
@@ -165,7 +165,7 @@ func (o *Certificate) Serialize() CertificateSerialized {
 	}
 
 	if o.RevocationTimestamp.Valid {
-		serializer.RevocationTimestamp = int(o.RevocationTimestamp.Time.Unix())
+		serializer.RevocationTimestamp = int(o.RevocationTimestamp.Time.UnixMilli())
 	}
 
 	return serializer
@@ -186,8 +186,8 @@ func (o *CertificateSerialized) Deserialize() Certificate {
 		CAName:           o.CAName,
 		Status:           ParseCertificateStatus(o.Status),
 		SerialNumber:     o.SerialNumber,
-		ValidFrom:        time.Unix(int64(o.ValidFrom), 0),
-		ValidTo:          time.Unix(int64(o.ValidTo), 0),
+		ValidFrom:        time.UnixMilli(int64(o.ValidFrom)),
+		ValidTo:          time.UnixMilli(int64(o.ValidTo)),
 		RevocationReason: o.RevocationReason,
 		KeyMetadata:      o.KeyMetadata.Deserialize(),
 		Subject:          o.Subject.Deserialize(),
@@ -196,7 +196,7 @@ func (o *CertificateSerialized) Deserialize() Certificate {
 
 	if o.RevocationTimestamp > 0 {
 		serializer.RevocationTimestamp = pq.NullTime{
-			Time:  time.Unix(int64(o.RevocationTimestamp), 0),
+			Time:  time.UnixMilli(int64(o.RevocationTimestamp)),
 			Valid: true,
 		}
 		serializer.RevocationReason = o.RevocationReason

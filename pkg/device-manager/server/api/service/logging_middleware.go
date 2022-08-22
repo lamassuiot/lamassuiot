@@ -250,22 +250,6 @@ func (mw loggingMiddleware) RevokeActiveCertificate(ctx context.Context, input *
 	return mw.next.RevokeActiveCertificate(ctx, input)
 }
 
-func (mw loggingMiddleware) AddDeviceLog(ctx context.Context, input *api.AddDeviceLogInput) (output *api.AddDeviceLogOutput, err error) {
-	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "AddDeviceLog")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
-		if err == nil {
-			logMsg = append(logMsg, "output", output)
-		} else {
-			logMsg = append(logMsg, "err", err)
-		}
-		mw.logger.Log(logMsg...)
-	}(time.Now())
-	return mw.next.AddDeviceLog(ctx, input)
-}
-
 func (mw loggingMiddleware) GetDeviceLogs(ctx context.Context, input *api.GetDeviceLogsInput) (output *api.GetDeviceLogsOutput, err error) {
 	defer func(begin time.Time) {
 		var logMsg = []interface{}{}

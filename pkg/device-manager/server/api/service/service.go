@@ -48,7 +48,6 @@ type Service interface {
 	RotateActiveCertificate(ctx context.Context, input *api.RotateActiveCertificateInput) (*api.RotateActiveCertificateOutput, error)
 	RevokeActiveCertificate(ctx context.Context, input *api.RevokeActiveCertificateInput) (*api.RevokeActiveCertificateOutput, error)
 
-	AddDeviceLog(ctx context.Context, input *api.AddDeviceLogInput) (*api.AddDeviceLogOutput, error)
 	GetDeviceLogs(ctx context.Context, input *api.GetDeviceLogsInput) (*api.GetDeviceLogsOutput, error)
 
 	IsDMSAuthorizedToEnroll(ctx context.Context, input *api.IsDMSAuthorizedToEnrollInput) (*api.IsDMSAuthorizedToEnrollOutput, error)
@@ -101,6 +100,8 @@ func (s *devicesService) CreateDevice(ctx context.Context, input *api.CreateDevi
 		return nil, err
 	}
 
+	s.logsRepo.InsertDeviceLog(ctx, input.DeviceID, api.LogTypeInfo, "Device Created", "")
+
 	output, err := s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
 		DeviceID: input.DeviceID,
 	})
@@ -143,12 +144,14 @@ func (s *devicesService) DecommisionDevice(ctx context.Context, input *api.Decom
 		return nil, err
 	}
 
+	s.logsRepo.InsertDeviceLog(ctx, input.DeviceID, api.LogTypeInfo, "Initiating Decommission Process", "All slots will be revoked")
+
 	device := outputGetDevice.Device
 	for i, slot := range device.Slots {
 		outputRevokeSlot, err := s.RevokeActiveCertificate(ctx, &api.RevokeActiveCertificateInput{
 			DeviceID:         input.DeviceID,
 			SlotID:           slot.ID,
-			RevocationReason: "Device is decommissioned",
+			RevocationReason: "Device is being decommissioned",
 		})
 
 		if err != nil {
@@ -165,6 +168,8 @@ func (s *devicesService) DecommisionDevice(ctx context.Context, input *api.Decom
 	if err != nil {
 		return nil, err
 	}
+
+	s.logsRepo.InsertDeviceLog(ctx, input.DeviceID, api.LogTypeInfo, "Decommissioned", "Decoomission process completed")
 
 	outputGetDevice, err = s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
 		DeviceID: input.DeviceID,
@@ -247,10 +252,11 @@ func (s *devicesService) AddDeviceSlot(ctx context.Context, input *api.AddDevice
 	})
 
 	err = s.devicesRepo.UpdateDevice(ctx, device)
-
 	if err != nil {
 		return nil, err
 	}
+
+	s.logsRepo.InsertSlotLog(ctx, input.DeviceID, input.SlotID, api.LogTypeInfo, "Slot Created", fmt.Sprintf("Slot uses certificate with serial number %s", utils.InsertNth(utils.ToHexInt(input.ActiveCertificate.SerialNumber), 2)))
 
 	outputGetDevice, err = s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
 		DeviceID: input.DeviceID,
@@ -354,6 +360,8 @@ func (s *devicesService) RotateActiveCertificate(ctx context.Context, input *api
 		return nil, err
 	}
 
+	s.logsRepo.InsertSlotLog(ctx, input.DeviceID, input.SlotID, api.LogTypeInfo, "Slot Renewed", fmt.Sprintf("Slot useses new certificate with serial number %s", utils.InsertNth(utils.ToHexInt(input.NewCertificate.SerialNumber), 2)))
+
 	slot, err = s.devicesRepo.SelectSlotByID(ctx, input.DeviceID, input.SlotID)
 	if err != nil {
 		return nil, err
@@ -394,6 +402,8 @@ func (s *devicesService) RevokeActiveCertificate(ctx context.Context, input *api
 		return &api.RevokeActiveCertificateOutput{}, err
 	}
 
+	revokedCertificateSerialNumber := slot.ActiveCertificate.SerialNumber
+
 	slot.ActiveCertificate.Status = api.CertificateStatusRevoked
 	slot.ActiveCertificate.RevocationReason = input.RevocationReason
 	slot.ActiveCertificate.RevocationTimestamp = revokeOutput.RevocationTimestamp
@@ -404,6 +414,8 @@ func (s *devicesService) RevokeActiveCertificate(ctx context.Context, input *api
 	if err != nil {
 		return &api.RevokeActiveCertificateOutput{}, err
 	}
+
+	s.logsRepo.InsertSlotLog(ctx, input.DeviceID, input.SlotID, api.LogTypeWarn, "Certificate Revoked", fmt.Sprintf("The certificate %s will no longer be usable", revokedCertificateSerialNumber))
 
 	slot, err = s.devicesRepo.SelectSlotByID(ctx, input.DeviceID, input.SlotID)
 	if err != nil {
@@ -459,12 +471,36 @@ func (s *devicesService) IterateDevicesWithPredicate(ctx context.Context, input 
 	return &output, nil
 }
 
-func (s *devicesService) AddDeviceLog(ctx context.Context, input *api.AddDeviceLogInput) (*api.AddDeviceLogOutput, error) {
-	return &api.AddDeviceLogOutput{}, nil
-}
-
 func (s *devicesService) GetDeviceLogs(ctx context.Context, input *api.GetDeviceLogsInput) (*api.GetDeviceLogsOutput, error) {
-	return &api.GetDeviceLogsOutput{}, nil
+	outputGetDevice, err := s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
+		DeviceID: input.DeviceID,
+	})
+	if err != nil {
+		return &api.GetDeviceLogsOutput{}, err
+	}
+
+	logs, err := s.logsRepo.SelectDeviceLogs(ctx, input.DeviceID)
+	if err != nil {
+		return &api.GetDeviceLogsOutput{}, err
+	}
+
+	deviceLogs := api.DeviceLogs{
+		DevciceID: input.DeviceID,
+		Logs:      logs,
+		SlotLogs:  map[string][]api.Log{},
+	}
+	for _, v := range outputGetDevice.Slots {
+		slotLogs, err := s.logsRepo.SelectSlotLogs(ctx, input.DeviceID, v.ID)
+		if err != nil {
+			continue
+		}
+
+		deviceLogs.SlotLogs[v.ID] = slotLogs
+	}
+
+	return &api.GetDeviceLogsOutput{
+		DeviceLogs: deviceLogs,
+	}, nil
 }
 
 func (s *devicesService) IsDMSAuthorizedToEnroll(ctx context.Context, input *api.IsDMSAuthorizedToEnrollInput) (*api.IsDMSAuthorizedToEnrollOutput, error) {

@@ -49,7 +49,7 @@ func TestCreateDMS(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status":        "PENDING_APPROVAL",
@@ -210,7 +210,7 @@ func TestCreateDMSWithCertificateRequest(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status":        "PENDING_APPROVAL",
@@ -349,7 +349,7 @@ func TestUpdateDMSStatus(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status": "APPROVED",
@@ -416,7 +416,7 @@ func TestUpdateDMSStatus(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"serial_number": "",
@@ -472,7 +472,7 @@ func TestUpdateDMSStatus(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status": "EXPIRED",
@@ -527,7 +527,7 @@ func TestUpdateDMSStatus(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status": "REVOKED",
@@ -740,7 +740,7 @@ func TestUpdateDMSAuthorizedCAs(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status": "APPROVED",
@@ -826,7 +826,7 @@ func TestUpdateDMSAuthorizedCAs(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status": "APPROVED",
@@ -919,7 +919,7 @@ func TestGetDMS(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status":        "PENDING_APPROVAL",
@@ -973,7 +973,7 @@ func TestGetDMS(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status":        "REJECTED",
@@ -1028,7 +1028,7 @@ func TestGetDMS(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status": "APPROVED",
@@ -1090,7 +1090,7 @@ func TestGetDMS(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status": "EXPIRED",
@@ -1152,7 +1152,7 @@ func TestGetDMS(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status": "REVOKED",

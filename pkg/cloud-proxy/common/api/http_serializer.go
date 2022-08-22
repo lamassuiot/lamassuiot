@@ -12,7 +12,7 @@ func (o *CABinding) Serialize() CABindingSerialized {
 	return CABindingSerialized{
 		CAName:           o.CAName,
 		SerialNumber:     o.SerialNumber,
-		EnabledTimestamp: int(o.EnabledTimestamp.Unix()),
+		EnabledTimestamp: int(o.EnabledTimestamp.UnixMilli()),
 	}
 }
 
@@ -20,7 +20,7 @@ func (o *CABindingSerialized) Deserialize() CABinding {
 	return CABinding{
 		CAName:           o.CAName,
 		SerialNumber:     o.SerialNumber,
-		EnabledTimestamp: time.Unix(int64(o.EnabledTimestamp), 0),
+		EnabledTimestamp: time.UnixMilli(int64(o.EnabledTimestamp)),
 	}
 }
 

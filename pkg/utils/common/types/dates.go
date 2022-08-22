@@ -62,5 +62,5 @@ func (f DatesFilterField) GetFieldName() string {
 }
 
 func (f DatesFilterField) GetValue() string {
-	return strconv.FormatInt(f.CompareWith.Unix(), 10)
+	return strconv.FormatInt(f.CompareWith.UnixMilli(), 10)
 }

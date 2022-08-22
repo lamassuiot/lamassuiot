@@ -205,7 +205,7 @@ func (db PostgresDBContext) InsertCertificate(ctx context.Context, CAType api.CA
 	base64.StdEncoding.Encode(enc, pemCert)
 
 	tx := db.Model(&CertificateDAO{}).Create(&CertificateDAO{
-		Status:       api.StatusIssued,
+		Status:       api.StatusActive,
 		SerialNumber: utils.InsertNth(utils.ToHexInt(certificate.SerialNumber), 2),
 		CAName:       CAName,
 		CAType:       CAType,
@@ -302,7 +302,7 @@ func (db PostgresDBContext) InsertCA(ctx context.Context, CAType api.CAType, cer
 
 	tx := db.Model(&CertificateAuthorityDAO{}).Create(&CertificateAuthorityDAO{
 		CertificateDAO: CertificateDAO{
-			Status:       api.StatusIssued,
+			Status:       api.StatusActive,
 			SerialNumber: utils.InsertNth(utils.ToHexInt(certificate.SerialNumber), 2),
 			CAName:       certificate.Subject.CommonName,
 			CAType:       CAType,

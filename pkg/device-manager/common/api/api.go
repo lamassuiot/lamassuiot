@@ -49,18 +49,18 @@ func ParseKeyType(s string) KeyType {
 type KeyStrength string
 
 const (
-	KeyStrengthHigh   KeyStrength = "high"
-	KeyStrengthMedium KeyStrength = "medium"
-	KeyStrengthLow    KeyStrength = "low"
+	KeyStrengthHigh   KeyStrength = "HIGH"
+	KeyStrengthMedium KeyStrength = "MEDIUM"
+	KeyStrengthLow    KeyStrength = "LOW"
 )
 
 func ParseKeyStrength(t string) KeyStrength {
 	switch t {
-	case "high":
+	case "HIGH":
 		return KeyStrengthHigh
-	case "medium":
+	case "MEDIUM":
 		return KeyStrengthMedium
-	case "low":
+	case "LOW":
 		return KeyStrengthLow
 
 	default:
@@ -93,8 +93,8 @@ type DeviceStatus string
 const (
 	DeviceStatusPendingProvisioning     DeviceStatus = "PENDING_PROVISIONING"      // used if all the device slots are pending enrollment
 	DeviceStatusFullyProvisioned        DeviceStatus = "FULLY_PROVISIONED"         // used if all the device slots are active
-	DeviceStatusPartiallyProvisioned    DeviceStatus = "PARTIALLY_PROVISIONED"     // used if the device has a slot in the pending enrollment
-	DeviceStatusProvisionedWithWarnings DeviceStatus = "PROVISIONED_WITH_WARNINGS" // used if the device has a slot expired or revoked
+	DeviceStatusRequiresAction          DeviceStatus = "REQUIRES_ACTION"           // used if the device has a slot about to expire
+	DeviceStatusProvisionedWithWarnings DeviceStatus = "PROVISIONED_WITH_WARNINGS" // used if the device has a slot EXPIRED or revoked
 	DeviceStatusDecommissioned          DeviceStatus = "DECOMMISSIONED"
 )
 
@@ -104,8 +104,8 @@ func ParseDeviceStatus(t string) DeviceStatus {
 		return DeviceStatusPendingProvisioning
 	case "FULLY_PROVISIONED":
 		return DeviceStatusFullyProvisioned
-	case "PARTIALLY_PROVISIONED":
-		return DeviceStatusPartiallyProvisioned
+	case "REQUIRES_ACTION":
+		return DeviceStatusRequiresAction
 	case "PROVISIONED_WITH_WARNINGS":
 		return DeviceStatusProvisionedWithWarnings
 	case "DECOMMISSIONED":
@@ -159,22 +159,37 @@ type Slot struct {
 }
 
 type Device struct {
-	ID          string
-	Alias       string
-	Status      DeviceStatus
-	Slots       []*Slot
-	Description string
-	Tags        []string
-	IconName    string
-	IconColor   string
+	ID                string
+	Alias             string
+	Status            DeviceStatus
+	Slots             []*Slot
+	Description       string
+	Tags              []string
+	IconName          string
+	IconColor         string
+	CreationTimestamp time.Time
 }
 
-type DeviceLog struct {
-	ID         string
-	DeviceID   string
-	LogType    string
-	LogMessage string
-	Timestamp  time.Time
+type LogType string
+
+const (
+	LogTypeInfo     LogType = "INFO"
+	LogTypeWarn     LogType = "WARN"
+	LogTypeCritical LogType = "CRITICAL"
+	LogTypeSuccess  LogType = "SUCCESS"
+)
+
+type Log struct {
+	LogType        LogType
+	LogMessage     string
+	LogDescription string
+	Timestamp      time.Time
+}
+
+type DeviceLogs struct {
+	DevciceID string
+	Logs      []Log
+	SlotLogs  map[string][]Log
 }
 
 // ---------------------------------------------------------------------
@@ -279,20 +294,7 @@ type GetDeviceLogsInput struct {
 }
 
 type GetDeviceLogsOutput struct {
-	TotalLogs int
-	Logs      []DeviceLog
-}
-
-// ---------------------------------------------------------------------
-
-type AddDeviceLogInput struct {
-	DeviceID   string
-	LogType    string
-	LogMessage string
-	Timestamp  time.Time
-}
-
-type AddDeviceLogOutput struct {
+	DeviceLogs
 }
 
 // ---------------------------------------------------------------------

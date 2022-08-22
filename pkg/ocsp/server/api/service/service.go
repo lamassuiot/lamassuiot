@@ -112,7 +112,7 @@ func (o *OCSPResponder) Verify(ctx context.Context, msg []byte) ([]byte, error) 
 		if cert.Status == api.StatusRevoked {
 			status = ocsp.Revoked
 			revokedAt = cert.RevocationTimestamp.Time
-		} else if cert.Status == api.StatusIssued || cert.Status == api.StatusAboutToExpire {
+		} else if cert.Status == api.StatusActive || cert.Status == api.StatusAboutToExpire {
 			status = ocsp.Good
 		}
 	}

@@ -41,10 +41,10 @@ func TestCreateCA(t *testing.T) {
 					"issuance_duration": 1000,
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
-					"status": "issued",
+					"status": "ACTIVE",
 					"subject": map[string]interface{}{
 						"common_name":       "ca-name-1",
 						"country":           "",
@@ -58,8 +58,8 @@ func TestCreateCA(t *testing.T) {
 				intValidTo := obj.Object().Value("valid_to").Number().Raw()
 				intValidFrom := obj.Object().Value("valid_from").Number().Raw()
 
-				validTo := time.Unix(int64(intValidTo), 0)
-				validFrom := time.Unix(int64(intValidFrom), 0)
+				validTo := time.UnixMilli(int64(intValidTo))
+				validFrom := time.UnixMilli(int64(intValidFrom))
 
 				if validTo.Sub(validFrom).Seconds() != 9000 {
 					t.Errorf("Expected CA duration to be 9000 seconds, got %f", validTo.Sub(validFrom).Seconds())
@@ -259,10 +259,10 @@ func TestGetCAByName(t *testing.T) {
 					"issuance_duration": int(issuanceDuration.Seconds()),
 					"key_metadata": map[string]interface{}{
 						"bits":     4096,
-						"strength": "high",
+						"strength": "HIGH",
 						"type":     "RSA",
 					},
-					"status": "issued",
+					"status": "ACTIVE",
 					"subject": map[string]interface{}{
 						"common_name":       "ca-name-1",
 						"country":           "",
@@ -276,8 +276,8 @@ func TestGetCAByName(t *testing.T) {
 				intValidTo := obj.Object().Value("valid_to").Number().Raw()
 				intValidFrom := obj.Object().Value("valid_from").Number().Raw()
 
-				validTo := time.Unix(int64(intValidTo), 0)
-				validFrom := time.Unix(int64(intValidFrom), 0)
+				validTo := time.UnixMilli(int64(intValidTo))
+				validFrom := time.UnixMilli(int64(intValidFrom))
 
 				if validTo.Sub(validFrom).Seconds() != CADuration.Seconds() {
 					t.Errorf("Expected CA duration to be %f seconds, got %f", CADuration.Seconds(), validTo.Sub(validFrom).Seconds())
@@ -354,10 +354,10 @@ func TestGetCAByName(t *testing.T) {
 					"issuance_duration": int(issuanceDuration.Seconds()),
 					"key_metadata": map[string]interface{}{
 						"bits":     4096,
-						"strength": "high",
+						"strength": "HIGH",
 						"type":     "RSA",
 					},
-					"status": "revoked",
+					"status": "REVOKED",
 					"subject": map[string]interface{}{
 						"common_name":       "ca-name-1",
 						"country":           "",
@@ -371,8 +371,8 @@ func TestGetCAByName(t *testing.T) {
 				intValidTo := obj.Object().Value("valid_to").Number().Raw()
 				intValidFrom := obj.Object().Value("valid_from").Number().Raw()
 
-				validTo := time.Unix(int64(intValidTo), 0)
-				validFrom := time.Unix(int64(intValidFrom), 0)
+				validTo := time.UnixMilli(int64(intValidTo))
+				validFrom := time.UnixMilli(int64(intValidFrom))
 
 				if validTo.Sub(validFrom).Seconds() != CADuration.Seconds() {
 					t.Errorf("Expected CA duration to be %f seconds, got %f", CADuration.Seconds(), validTo.Sub(validFrom).Seconds())
@@ -441,10 +441,10 @@ func TestGetCAByName(t *testing.T) {
 					"issuance_duration": int(issuanceDuration.Seconds()),
 					"key_metadata": map[string]interface{}{
 						"bits":     4096,
-						"strength": "high",
+						"strength": "HIGH",
 						"type":     "RSA",
 					},
-					"status": "expired",
+					"status": "EXPIRED",
 					"subject": map[string]interface{}{
 						"common_name":       "ca-name-1",
 						"country":           "",
@@ -458,8 +458,8 @@ func TestGetCAByName(t *testing.T) {
 				intValidTo := obj.Object().Value("valid_to").Number().Raw()
 				intValidFrom := obj.Object().Value("valid_from").Number().Raw()
 
-				validTo := time.Unix(int64(intValidTo), 0)
-				validFrom := time.Unix(int64(intValidFrom), 0)
+				validTo := time.UnixMilli(int64(intValidTo))
+				validFrom := time.UnixMilli(int64(intValidFrom))
 
 				if validTo.Sub(validFrom).Seconds() != CADuration.Seconds() {
 					t.Errorf("Expected CA duration to be %f seconds, got %f", CADuration.Seconds(), validTo.Sub(validFrom).Seconds())
@@ -566,10 +566,10 @@ func TestGetCAs(t *testing.T) {
 					"issuance_duration": time.Duration(time.Hour).Seconds(),
 					"key_metadata": map[string]interface{}{
 						"bits":     4096,
-						"strength": "high",
+						"strength": "HIGH",
 						"type":     "RSA",
 					},
-					"status": "issued",
+					"status": "ACTIVE",
 					"subject": map[string]interface{}{
 						"common_name":       "ca-name-1",
 						"country":           "",
@@ -583,8 +583,8 @@ func TestGetCAs(t *testing.T) {
 				intValidTo := caObj.Object().Value("valid_to").Number().Raw()
 				intValidFrom := caObj.Object().Value("valid_from").Number().Raw()
 
-				validTo := time.Unix(int64(intValidTo), 0)
-				validFrom := time.Unix(int64(intValidFrom), 0)
+				validTo := time.UnixMilli(int64(intValidTo))
+				validFrom := time.UnixMilli(int64(intValidFrom))
 
 				if validTo.Sub(validFrom).Seconds() != time.Duration(time.Hour*5).Seconds() {
 					t.Errorf("Expected CA duration to be 9000 seconds, got %f", validTo.Sub(validFrom).Seconds())
@@ -654,10 +654,10 @@ func TestGetCAs(t *testing.T) {
 					"issuance_duration": time.Duration(time.Second * 2).Seconds(),
 					"key_metadata": map[string]interface{}{
 						"bits":     4096,
-						"strength": "high",
+						"strength": "HIGH",
 						"type":     "RSA",
 					},
-					"status": "expired",
+					"status": "EXPIRED",
 					"subject": map[string]interface{}{
 						"common_name":       "ca-name-1",
 						"country":           "",
@@ -671,8 +671,8 @@ func TestGetCAs(t *testing.T) {
 				intValidTo := caObj.Object().Value("valid_to").Number().Raw()
 				intValidFrom := caObj.Object().Value("valid_from").Number().Raw()
 
-				validTo := time.Unix(int64(intValidTo), 0)
-				validFrom := time.Unix(int64(intValidFrom), 0)
+				validTo := time.UnixMilli(int64(intValidTo))
+				validFrom := time.UnixMilli(int64(intValidFrom))
 
 				if validTo.Sub(validFrom).Seconds() != time.Duration(time.Second*3).Seconds() {
 					t.Errorf("Expected CA duration to be 9000 seconds, got %f", validTo.Sub(validFrom).Seconds())
@@ -911,7 +911,7 @@ func TestGetCAs(t *testing.T) {
 			testRestEndpoint: func(e *httpexpect.Expect) {
 				obj := e.GET("/v1/pki").WithQuery("limit", 3).WithQuery("offset", 0).WithQuery("sort_by", "ca_name.asc").
 					WithQuery("filter", "ca_name[contains]=set2-ca-name").
-					WithQuery("filter", "status[equals]=issued").
+					WithQuery("filter", "status[equals]=ACTIVE").
 					Expect().
 					Status(http.StatusOK).JSON()
 
@@ -995,10 +995,10 @@ func TestRevokeCA(t *testing.T) {
 					"issuance_duration": int(issuanceDuration.Seconds()),
 					"key_metadata": map[string]interface{}{
 						"bits":     4096,
-						"strength": "high",
+						"strength": "HIGH",
 						"type":     "RSA",
 					},
-					"status":            "revoked",
+					"status":            "REVOKED",
 					"revocation_reason": "testing revocation",
 					"subject": map[string]interface{}{
 						"common_name":       "ca-name-1",
@@ -1072,10 +1072,10 @@ func TestRevokeCA(t *testing.T) {
 					"issuance_duration": int(issuanceDuration.Seconds()),
 					"key_metadata": map[string]interface{}{
 						"bits":     4096,
-						"strength": "high",
+						"strength": "HIGH",
 						"type":     "RSA",
 					},
-					"status":            "revoked",
+					"status":            "REVOKED",
 					"revocation_reason": "testing revocation",
 					"subject": map[string]interface{}{
 						"common_name":       "ca-name-1",
@@ -1094,8 +1094,8 @@ func TestRevokeCA(t *testing.T) {
 				certIter := obj.Object().ContainsKey("certificates").Value("certificates").Array().Iter()
 				for idx, v := range certIter {
 					status := v.Object().Value("status").String().Raw()
-					if status != "revoked" {
-						t.Errorf("Expected certificate %d to be revoked, but it was %s", idx, status)
+					if status != "REVOKED" {
+						t.Errorf("Expected certificate %d to be REVOKED, but it was %s", idx, status)
 					}
 				}
 
@@ -1504,10 +1504,10 @@ func TestRevokeCertificate(t *testing.T) {
 				obj.Object().ContainsMap(map[string]interface{}{
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
-					"status":            "revoked",
+					"status":            "REVOKED",
 					"revocation_reason": "testing revocation",
 					"subject": map[string]interface{}{
 						"common_name":       "device-1",
@@ -1659,10 +1659,10 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 				obj.Object().ContainsMap(map[string]interface{}{
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
-					"status":        "issued",
+					"status":        "ACTIVE",
 					"serial_number": serialNumber,
 					"subject": map[string]interface{}{
 						"common_name":       "device-1",
@@ -1737,7 +1737,7 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 				obj.Object().ContainsMap(map[string]interface{}{
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status":        "expired",
@@ -1879,10 +1879,10 @@ func TestGetCertificates(t *testing.T) {
 				certObj.Object().ContainsMap(map[string]interface{}{
 					"key_metadata": map[string]interface{}{
 						"bits":     1024,
-						"strength": "low",
+						"strength": "LOW",
 						"type":     "RSA",
 					},
-					"status": "issued",
+					"status": "ACTIVE",
 					"subject": map[string]interface{}{
 						"common_name":       "device-1",
 						"country":           "",
@@ -1896,8 +1896,8 @@ func TestGetCertificates(t *testing.T) {
 				intValidTo := certObj.Object().Value("valid_to").Number().Raw()
 				intValidFrom := certObj.Object().Value("valid_from").Number().Raw()
 
-				validTo := time.Unix(int64(intValidTo), 0)
-				validFrom := time.Unix(int64(intValidFrom), 0)
+				validTo := time.UnixMilli(int64(intValidTo))
+				validFrom := time.UnixMilli(int64(intValidFrom))
 
 				if validTo.Sub(validFrom).Seconds() != issuanceDuration.Seconds() {
 					t.Errorf("Expected Certificate duration to be %f seconds, got %f", issuanceDuration.Seconds(), validTo.Sub(validFrom).Seconds())

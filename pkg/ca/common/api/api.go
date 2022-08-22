@@ -53,18 +53,18 @@ func ParseCAType(t string) CAType {
 type KeyStrength string
 
 const (
-	KeyStrengthHigh   KeyStrength = "high"
-	KeyStrengthMedium KeyStrength = "medium"
-	KeyStrengthLow    KeyStrength = "low"
+	KeyStrengthHigh   KeyStrength = "HIGH"
+	KeyStrengthMedium KeyStrength = "MEDIUM"
+	KeyStrengthLow    KeyStrength = "LOW"
 )
 
 func ParseKeyStrength(t string) KeyStrength {
 	switch t {
-	case "high":
+	case "HIGH":
 		return KeyStrengthHigh
-	case "medium":
+	case "MEDIUM":
 		return KeyStrengthMedium
-	case "low":
+	case "LOW":
 		return KeyStrengthLow
 
 	default:
@@ -108,24 +108,24 @@ type SupportedKeyTypeInfo struct {
 type CertificateStatus string
 
 const (
-	StatusIssued        CertificateStatus = "issued"
-	StatusExpired       CertificateStatus = "expired"
-	StatusRevoked       CertificateStatus = "revoked"
-	StatusAboutToExpire CertificateStatus = "about_to_expire"
+	StatusActive        CertificateStatus = "ACTIVE"
+	StatusExpired       CertificateStatus = "EXPIRED"
+	StatusRevoked       CertificateStatus = "REVOKED"
+	StatusAboutToExpire CertificateStatus = "ABOUT_TO_EXPIRE"
 )
 
 func ParseCertificateStatus(t string) CertificateStatus {
 	switch t {
-	case "issued":
-		return StatusIssued
-	case "expired":
+	case "ACTIVE":
+		return StatusActive
+	case "EXPIRED":
 		return StatusExpired
-	case "revoked":
+	case "REVOKED":
 		return StatusRevoked
-	case "about_to_expire":
+	case "ABOUT_TO_EXPIRE":
 		return StatusAboutToExpire
 	default:
-		return StatusIssued
+		return StatusActive
 	}
 }
 

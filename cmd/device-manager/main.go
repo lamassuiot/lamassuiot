@@ -38,6 +38,7 @@ func main() {
 	}
 
 	deviceRepo := postgresRepository.NewDevicesPostgresDB(db, mainServer.Logger)
+	logsRepo := postgresRepository.NewLogsPostgresDB(db, mainServer.Logger)
 	caClient, err := lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
 		URL: &url.URL{
 			Scheme: "https",
@@ -74,7 +75,7 @@ func main() {
 
 	var s service.Service
 	{
-		s = service.NewDeviceManagerService(mainServer.Logger, deviceRepo, nil, nil, config.MinimumReenrollDays, caClient, dmsClient)
+		s = service.NewDeviceManagerService(mainServer.Logger, deviceRepo, logsRepo, nil, config.MinimumReenrollDays, caClient, dmsClient)
 		s = service.LoggingMiddleware(mainServer.Logger)(s)
 	}
 

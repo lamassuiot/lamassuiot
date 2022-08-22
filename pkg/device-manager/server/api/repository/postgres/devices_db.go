@@ -8,6 +8,8 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
+	"sort"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/log/level"
@@ -39,14 +41,15 @@ type SlotDAO struct {
 }
 
 type DeviceDAO struct {
-	ID          string `gorm:"primaryKey"`
-	Alias       string
-	Status      api.DeviceStatus
-	Slots       []SlotDAO      `gorm:"foreignKey:DeviceID"`
-	Tags        pq.StringArray `gorm:"type:text[]"`
-	Description string
-	IconName    string
-	IconColor   string
+	ID                string `gorm:"primaryKey"`
+	Alias             string
+	Status            api.DeviceStatus
+	Slots             []SlotDAO      `gorm:"foreignKey:DeviceID"`
+	Tags              pq.StringArray `gorm:"type:text[]"`
+	Description       string
+	IconName          string
+	IconColor         string
+	CreationTimestamp time.Time
 }
 
 func (DeviceDAO) TableName() string {
@@ -68,14 +71,15 @@ func toDeviceDAO(d *api.Device) DeviceDAO {
 	}
 
 	return DeviceDAO{
-		ID:          d.ID,
-		Alias:       d.Alias,
-		Status:      d.Status,
-		Tags:        d.Tags,
-		IconName:    d.IconName,
-		IconColor:   d.IconColor,
-		Description: d.Description,
-		Slots:       slots,
+		ID:                d.ID,
+		Alias:             d.Alias,
+		Status:            d.Status,
+		Tags:              d.Tags,
+		IconName:          d.IconName,
+		IconColor:         d.IconColor,
+		Description:       d.Description,
+		Slots:             slots,
+		CreationTimestamp: d.CreationTimestamp,
 	}
 }
 
@@ -87,14 +91,15 @@ func (d DeviceDAO) toDevice() *api.Device {
 	}
 
 	return &api.Device{
-		ID:          d.ID,
-		Alias:       d.Alias,
-		Status:      d.Status,
-		Tags:        d.Tags,
-		Slots:       slots,
-		Description: d.Description,
-		IconName:    d.IconName,
-		IconColor:   d.IconColor,
+		ID:                d.ID,
+		Alias:             d.Alias,
+		Status:            d.Status,
+		Tags:              d.Tags,
+		Slots:             slots,
+		Description:       d.Description,
+		IconName:          d.IconName,
+		IconColor:         d.IconColor,
+		CreationTimestamp: d.CreationTimestamp,
 	}
 }
 
@@ -275,7 +280,7 @@ type postgresDBContext struct {
 
 func (db *postgresDBContext) InsertDevice(ctx context.Context, device api.Device) error {
 	deviceDAO := toDeviceDAO(&device)
-
+	deviceDAO.CreationTimestamp = time.Now()
 	if err := db.Model(&DeviceDAO{}).Create(&deviceDAO).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not insert Device to database")
 		duplicationErr := &devicesErrors.DuplicateResourceError{
@@ -334,7 +339,14 @@ func (db *postgresDBContext) SelectDeviceById(ctx context.Context, id string) (*
 
 	device.Slots = slots
 
-	return device.toDevice(), nil
+	parsedDevice := device.toDevice()
+	for i := 0; i < len(parsedDevice.Slots); i++ {
+		sort.Slice(parsedDevice.Slots[i].ArchiveCertificates, func(x, y int) bool {
+			return parsedDevice.Slots[i].ArchiveCertificates[x].Certificate.NotBefore.After(parsedDevice.Slots[i].ArchiveCertificates[y].Certificate.NotBefore)
+		})
+	}
+
+	return parsedDevice, nil
 }
 
 func (db *postgresDBContext) UpdateDevice(ctx context.Context, device api.Device) error {

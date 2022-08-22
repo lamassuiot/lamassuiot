@@ -61,7 +61,7 @@ func FilterQuery(r *http.Request, fieldFiltersMap map[string]types.Filter) commo
 								continue
 							}
 							castedFilter.FieldName = fieldName
-							castedFilter.CompareWith = time.Unix(secs, 0)
+							castedFilter.CompareWith = time.UnixMilli(secs)
 							castedFilter.Operator = operator
 							filter = castedFilter
 						case *types.NumberFilterField:

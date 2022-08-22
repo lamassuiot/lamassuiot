@@ -25,6 +25,11 @@ type Devices interface {
 }
 
 type DeviceLogs interface {
+	InsertDeviceLog(ctx context.Context, deviceID string, logType api.LogType, logMessage string, logDescription string) error
+	SelectDeviceLogs(ctx context.Context, deviceID string) ([]api.Log, error)
+
+	InsertSlotLog(ctx context.Context, deviceID string, slotID string, logType api.LogType, logMessage string, logDescription string) error
+	SelectSlotLogs(ctx context.Context, deviceID string, slotID string) ([]api.Log, error)
 }
 
 type Statistics interface {
