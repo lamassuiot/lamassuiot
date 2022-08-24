@@ -52,7 +52,7 @@ type CloudConnectorSerialized struct {
 	Name            string                     `json:"name"`
 	Status          string                     `json:"status"`
 	IP              string                     `json:"ip"`
-	Portocol        string                     `json:"portocol"`
+	Protocol        string                     `json:"protocol"`
 	Port            int                        `json:"port"`
 	SynchronizedCAs []SynchronizedCASerialized `json:"synchronized_cas"`
 	Configuration   interface{}                `json:"configuration"`
@@ -70,7 +70,7 @@ func (o *CloudConnector) Serialize() CloudConnectorSerialized {
 		Name:            o.Name,
 		Status:          o.Status,
 		IP:              o.IP,
-		Portocol:        o.Portocol,
+		Protocol:        o.Protocol,
 		Port:            o.Port,
 		Configuration:   o.Configuration,
 		SynchronizedCAs: syncCAs,
@@ -89,7 +89,7 @@ func (o *CloudConnectorSerialized) Deserialize() CloudConnector {
 		Name:            o.Name,
 		Status:          o.Status,
 		IP:              o.IP,
-		Portocol:        o.Portocol,
+		Protocol:        o.Protocol,
 		Port:            o.Port,
 		Configuration:   o.Configuration,
 		SynchronizedCAs: syncCAs,

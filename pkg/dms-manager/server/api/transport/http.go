@@ -22,6 +22,7 @@ import (
 	"github.com/go-kit/kit/tracing/opentracing"
 	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
+	utilstransport "github.com/lamassuiot/lamassuiot/pkg/utils/server/transport"
 
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
@@ -42,26 +43,12 @@ func ErrMissingDMSStatus() error {
 		StatusCode: 400,
 	}
 }
-func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
-	return func(ctx context.Context, req *http.Request) context.Context {
-		// Try to join to a trace propagated in `req`.
-		uberTraceId := req.Header.Values("Uber-Trace-Id")
-		if uberTraceId != nil {
-			logger = log.With(logger, "span_id", uberTraceId)
-		} else {
-			span := stdopentracing.SpanFromContext(ctx)
-			logger = log.With(logger, "span_id", span)
-		}
-		// return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
-		return ctx
-	}
-}
+
 func filtrableDMSModelFields() map[string]types.Filter {
 	fieldFiltersMap := make(map[string]types.Filter)
-	fieldFiltersMap["id"] = &types.StringFilterField{}
 	fieldFiltersMap["name"] = &types.StringFilterField{}
-	fieldFiltersMap["serial_number"] = &types.StringFilterField{}
 	fieldFiltersMap["status"] = &types.StringFilterField{}
+	fieldFiltersMap["creation_timestamp"] = &types.DatesFilterField{}
 	return fieldFiltersMap
 }
 
@@ -71,7 +58,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	options := []httptransport.ServerOption{
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
-		// httptransport.ServerBefore(jwt.HTTPToContext()),
+		httptransport.ServerBefore(utilstransport.HTTPToContext(logger)),
 	}
 
 	r.Methods("GET").Path("/health").Handler(httptransport.NewServer(
@@ -81,7 +68,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Health", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -92,7 +78,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "PostCSR", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 	r.Methods("POST").Path("/csr").Handler(httptransport.NewServer(
@@ -102,7 +87,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "PostCSRForm", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -113,7 +97,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetPendingCSRs", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 	r.Methods("GET").Path("/{name}").Handler(httptransport.NewServer(
@@ -123,7 +106,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Get DMS By Name", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 	r.Methods("PUT").Path("/{name}/status").Handler(httptransport.NewServer(
@@ -133,7 +115,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "PutChangeCSRStatus", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 	r.Methods("PUT").Path("/{name}/auth").Handler(httptransport.NewServer(
@@ -143,7 +124,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "PutChangeCSRStatus", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 

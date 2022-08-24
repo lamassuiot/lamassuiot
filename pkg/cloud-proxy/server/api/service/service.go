@@ -95,7 +95,7 @@ func (cps *CloudProxyService) GetCloudConnectors(ctx context.Context, input *api
 				IP:              connectorIp,
 				Port:            connectorPort,
 				SynchronizedCAs: syncCAs,
-				Portocol:        agent.Meta["protocol"],
+				Protocol:        agent.Meta["protocol"],
 				Configuration:   nil,
 			})
 		} else {
@@ -130,7 +130,7 @@ func (cps *CloudProxyService) GetCloudConnectors(ctx context.Context, input *api
 				CloudProvider:   connectorType,
 				IP:              connectorIp,
 				Port:            connectorPort,
-				Portocol:        agent.Meta["protocol"],
+				Protocol:        agent.Meta["protocol"],
 				SynchronizedCAs: syncCAs,
 				Configuration:   getConfigOutput.Configuration,
 			})
@@ -334,7 +334,7 @@ func (cps *CloudProxyService) UpdateCAStatus(ctx context.Context, input *api.Upd
 }
 
 func (cps *CloudProxyService) newCloudPriverClientFromConnector(connector api.CloudConnector) (cloudProviderClient.LamassuCloudProviderClient, error) {
-	return cps.newCloudPriverClient(connector.Portocol, connector.IP, connector.Port)
+	return cps.newCloudPriverClient(connector.Protocol, connector.IP, connector.Port)
 }
 
 func (cps *CloudProxyService) newCloudPriverClient(protocol string, ip string, port int) (cloudProviderClient.LamassuCloudProviderClient, error) {
@@ -349,5 +349,6 @@ func (cps *CloudProxyService) newCloudPriverClient(protocol string, ip string, p
 			Host:   fmt.Sprintf("%s:%d", ip, port),
 		},
 		AuthMethod: clientUtils.AuthMethodNone,
+		Insecure:   true,
 	})
 }

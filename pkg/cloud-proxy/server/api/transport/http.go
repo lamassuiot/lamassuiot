@@ -16,6 +16,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/endpoint"
 	lamassuErrors "github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/service"
+	utilstransport "github.com/lamassuiot/lamassuiot/pkg/utils/server/transport"
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -30,26 +31,11 @@ func InvalidJsonFormat() error {
 	}
 }
 
-func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
-	return func(ctx context.Context, req *http.Request) context.Context {
-		// Try to join to a trace propagated in `req`.
-		uberTraceId := req.Header.Values("Uber-Trace-Id")
-		if uberTraceId != nil {
-			logger = log.With(logger, "span_id", uberTraceId)
-		} else {
-			span := stdopentracing.SpanFromContext(ctx)
-			logger = log.With(logger, "span_id", span)
-		}
-		// return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
-		return ctx
-	}
-}
-
 func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentracing.Tracer) http.Handler {
 	r := mux.NewRouter()
 	e := endpoint.MakeServerEndpoints(s, otTracer)
 	options := []httptransport.ServerOption{
-		httptransport.ServerBefore(HTTPToContext(logger)),
+		httptransport.ServerBefore(utilstransport.HTTPToContext(logger)),
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
 	}
@@ -61,7 +47,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Health", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -72,7 +57,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCloudConnectors", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -83,7 +67,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCloudConnectorsDevices", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -94,7 +77,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "SynchronizedCA", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -105,7 +87,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "UpdateConnectorConfiguration", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -116,7 +97,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "EventHandler", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -127,7 +107,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "UpdateDeviceCertStatus", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 	r.Methods("PUT").Path("/connectors/{connectorID}/ca/{caName}").Handler(httptransport.NewServer(
@@ -137,7 +116,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "UpdateCaStatus", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 	return r

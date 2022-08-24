@@ -8,16 +8,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/sd/consul"
-	"github.com/go-kit/log/level"
 	"github.com/hashicorp/consul/api"
 	uuid "github.com/satori/go.uuid"
 )
 
 type ServiceDiscovery struct {
 	client       consul.Client
-	logger       log.Logger
 	registration *api.AgentServiceRegistration
 }
 
@@ -51,7 +48,7 @@ func (sd *ServiceDiscovery) Register(advProtocol string, advPort string, tags []
 		Notes:         "Basic health checks",
 	}
 
-	meta := map[string]string{"connector-type": tags[0], "name": name}
+	meta := map[string]string{"connector-type": tags[0], "name": name, "protocol": advProtocol}
 
 	var svcId string
 
@@ -72,7 +69,6 @@ func (sd *ServiceDiscovery) Register(advProtocol string, advPort string, tags []
 			return "", errors.New("invalid uuidv4 string")
 		}
 	}
-	level.Info(sd.logger).Log("msg", "connector ID is: "+svcId)
 	port, _ := strconv.Atoi(advPort)
 	asr := api.AgentServiceRegistration{
 		ID:      svcId,

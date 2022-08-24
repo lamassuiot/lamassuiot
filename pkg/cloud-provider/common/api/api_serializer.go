@@ -58,14 +58,24 @@ type GetConfigurationOutputSerialized struct {
 }
 
 func (o *GetConfigurationOutput) Serialize() GetConfigurationOutputSerialized {
+	casConfig := []CAConfigurationSerialized{}
+	for _, ca := range o.CAsConfiguration {
+		casConfig = append(casConfig, ca.Serialize())
+	}
 	return GetConfigurationOutputSerialized{
-		Configuration: o.Configuration,
+		Configuration:    o.Configuration,
+		CAsConfiguration: casConfig,
 	}
 }
 
 func (o *GetConfigurationOutputSerialized) Deserialize() GetConfigurationOutput {
+	casConfig := []CAConfiguration{}
+	for _, ca := range o.CAsConfiguration {
+		casConfig = append(casConfig, ca.Deserialize())
+	}
 	return GetConfigurationOutput{
-		Configuration: o.Configuration,
+		Configuration:    o.Configuration,
+		CAsConfiguration: casConfig,
 	}
 }
 

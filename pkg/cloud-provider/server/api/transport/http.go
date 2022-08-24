@@ -15,6 +15,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-provider/server/api/endpoint"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-provider/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-provider/server/api/service"
+	utilstransport "github.com/lamassuiot/lamassuiot/pkg/utils/server/transport"
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -36,7 +37,15 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	options := []httptransport.ServerOption{
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
+		httptransport.ServerBefore(utilstransport.HTTPToContext(logger)),
 	}
+
+	r.Methods("GET").Path("/health").Handler(httptransport.NewServer(
+		e.HealthEndpoint,
+		decodeHealthRequest,
+		encodeHealthResponse,
+		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetConfig", logger)))...,
+	))
 
 	r.Methods("GET").Path("/config").Handler(httptransport.NewServer(
 		e.GetConfigurationEndpoint,
@@ -83,6 +92,19 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	return r
 }
 
+func decodeHealthRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	return nil, nil
+}
+
+func encodeHealthResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(response)
+}
 func decodeGetConfigurationRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	return api.GetConfigurationInput{}, nil
 }

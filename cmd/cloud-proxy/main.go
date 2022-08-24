@@ -64,7 +64,9 @@ func main() {
 	}
 
 	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), mainServer.Tracer)))
-	transport.MakeAmqpHandler(s, mainServer.Logger, mainServer.Tracer, config.AmqpServerCACert, config.CertFile, config.KeyFile, config.AmqpServerHost, config.AmqpServerPort)
+	go func() {
+		transport.MakeAmqpHandler(s, mainServer.Logger, mainServer.Tracer, config.AmqpServerCACert, config.CertFile, config.KeyFile, config.AmqpServerHost, config.AmqpServerPort)
+	}()
 
 	errs := make(chan error)
 	go func() {

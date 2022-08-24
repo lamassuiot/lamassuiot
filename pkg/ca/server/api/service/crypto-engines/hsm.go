@@ -3,6 +3,8 @@ package cryptoengines
 import (
 	"crypto"
 	"crypto/elliptic"
+	"crypto/rsa"
+	"crypto/x509"
 	"fmt"
 
 	"github.com/ThalesIgnite/crypto11"
@@ -13,10 +15,14 @@ import (
 	"github.com/miekg/pkcs11"
 )
 
-type hsmProviderContext struct {
-	logger   log.Logger
-	instance *crypto11.Context
-	config   api.EngineProviderInfo
+type HsmProviderContext struct {
+	logger          log.Logger
+	instance        *crypto11.Context
+	config          api.EngineProviderInfo
+	providerContext *pkcs11.Ctx
+	modulePath      string
+	hsmSlot         uint
+	pin             string
 }
 
 func NewHSMPEngine(logger log.Logger, modulePath string, label string, pin string) (service.CryptoEngine, error) {
@@ -40,6 +46,7 @@ func NewHSMPEngine(logger log.Logger, modulePath string, label string, pin strin
 	}
 
 	var tokenInfo pkcs11.TokenInfo
+	var slotID uint
 	for _, slot := range pkcs11ProviderSlots {
 		tokenInfoResp, err := pkcs11ProviderContext.GetTokenInfo(slot)
 		if err != nil {
@@ -48,6 +55,7 @@ func NewHSMPEngine(logger log.Logger, modulePath string, label string, pin strin
 
 		if label == tokenInfoResp.Label {
 			tokenInfo = tokenInfoResp
+			slotID = slot
 		}
 	}
 
@@ -77,9 +85,12 @@ func NewHSMPEngine(logger log.Logger, modulePath string, label string, pin strin
 		})
 	}
 
-	return &hsmProviderContext{
-		logger:   logger,
-		instance: instance,
+	return &HsmProviderContext{
+		logger:     logger,
+		modulePath: modulePath,
+		hsmSlot:    slotID,
+		pin:        pin,
+		instance:   instance,
 		config: api.EngineProviderInfo{
 			Provider:          "HSM",
 			Manufacturer:      pkcs11ProviderInfo.ManufacturerID,
@@ -88,10 +99,11 @@ func NewHSMPEngine(logger log.Logger, modulePath string, label string, pin strin
 			Library:           pkcs11ProviderInfo.LibraryDescription,
 			SupportedKeyTypes: pkcs11ProviderSupportedKeyTypes,
 		},
+		providerContext: pkcs11ProviderContext,
 	}, nil
 }
 
-func (hsmContext *hsmProviderContext) GetEngineConfig() api.EngineProviderInfo {
+func (hsmContext *HsmProviderContext) GetEngineConfig() api.EngineProviderInfo {
 	return hsmContext.config
 }
 
@@ -110,7 +122,7 @@ func (hsmContext *hsmProviderContext) GetEngineConfig() api.EngineProviderInfo {
 // 	return keys, nil
 // }
 
-func (hsmContext *hsmProviderContext) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
+func (hsmContext *HsmProviderContext) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
 	hsmKey, err := hsmContext.instance.FindKeyPair([]byte(keyID), nil)
 	if err != nil {
 		level.Debug(hsmContext.logger).Log("msg", "Could not get private keys from HSM", "err", err)
@@ -120,7 +132,7 @@ func (hsmContext *hsmProviderContext) GetPrivateKeyByID(keyID string) (crypto.Si
 	return hsmKey, nil
 }
 
-func (hsmContext *hsmProviderContext) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
+func (hsmContext *HsmProviderContext) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
 	hsmKey, err := hsmContext.GetPrivateKeyByID(keyID)
 	if hsmKey != nil {
 		level.Warn(hsmContext.logger).Log("msg", "RSA private key already exists and will be overwritten", "err", err)
@@ -139,7 +151,7 @@ func (hsmContext *hsmProviderContext) CreateRSAPrivateKey(keySize int, keyID str
 	return newSigner, nil
 }
 
-func (hsmContext *hsmProviderContext) CreateECDSAPrivateKey(curve elliptic.Curve, keyID string) (crypto.Signer, error) {
+func (hsmContext *HsmProviderContext) CreateECDSAPrivateKey(curve elliptic.Curve, keyID string) (crypto.Signer, error) {
 	hsmKey, err := hsmContext.GetPrivateKeyByID(keyID)
 	if hsmKey != nil {
 		level.Warn(hsmContext.logger).Log("msg", "ECDSA private key already exists and will be overwritten", "err", err)
@@ -170,7 +182,7 @@ func (hsmContext *hsmProviderContext) CreateECDSAPrivateKey(curve elliptic.Curve
 // 	return nil
 // }
 
-func (hsmContext *hsmProviderContext) DeleteKey(keyID string) error {
+func (hsmContext *HsmProviderContext) DeleteKey(keyID string) error {
 	hsmKey, err := hsmContext.instance.FindKeyPair([]byte(keyID), nil)
 	if err != nil {
 		return err
@@ -178,4 +190,81 @@ func (hsmContext *hsmProviderContext) DeleteKey(keyID string) error {
 
 	err = hsmKey.Delete()
 	return err
+}
+
+func (hsmContext *HsmProviderContext) ImportRSAKeyPair(signerKeyID string, privateKey *rsa.PrivateKey) error {
+	hsmCtx := pkcs11.New(hsmContext.modulePath)
+	hsmSession, err := hsmCtx.OpenSession(hsmContext.hsmSlot, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
+	if err != nil {
+		return err
+	}
+	defer hsmCtx.CloseSession(hsmSession)
+
+	attributes := crypto11.NewAttributeSet()
+	err = attributes.Set(crypto11.CkaId, signerKeyID)
+	if err != nil {
+		return err
+	}
+
+	keyHandlers, err := findKeysWithAttributes(hsmCtx, &hsmSession, attributes.ToSlice())
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(len(keyHandlers))
+	keyHandler := keyHandlers[1]
+
+	derKey := x509.MarshalPKCS1PrivateKey(privateKey)
+
+	err = hsmCtx.EncryptInit(hsmSession, []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_AES_CBC, make([]byte, 16))}, keyHandler)
+	if err != nil {
+		return err
+	}
+
+	wrappedKey, err := hsmCtx.Encrypt(hsmSession, derKey)
+	if err != nil {
+		return err
+	}
+
+	privateKeyAttrs := []*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_CLASS, pkcs11.CKO_PRIVATE_KEY),
+		pkcs11.NewAttribute(pkcs11.CKA_KEY_TYPE, pkcs11.CKK_RSA),
+	}
+
+	importKeyMechanism := []*pkcs11.Mechanism{
+		pkcs11.NewMechanism(pkcs11.CKM_DES3_CBC_PAD, nil),
+	}
+
+	h, err := hsmContext.providerContext.UnwrapKey(hsmSession, importKeyMechanism, keyHandler, wrappedKey, privateKeyAttrs)
+	fmt.Println(h)
+
+	return err
+}
+
+func findKeysWithAttributes(context *pkcs11.Ctx, session *pkcs11.SessionHandle, template []*pkcs11.Attribute) (handles []pkcs11.ObjectHandle, err error) {
+	if err = context.FindObjectsInit(*session, template); err != nil {
+		return nil, err
+	}
+	defer func() {
+		finalErr := context.FindObjectsFinal(*session)
+		if err == nil {
+			err = finalErr
+		}
+	}()
+
+	newhandles, _, err := context.FindObjects(*session, 20)
+	if err != nil {
+		return nil, err
+	}
+
+	for len(newhandles) > 0 {
+		handles = append(handles, newhandles...)
+
+		newhandles, _, err = context.FindObjects(*session, 20)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return handles, nil
 }

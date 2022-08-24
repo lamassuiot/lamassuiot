@@ -16,6 +16,7 @@ import (
 
 	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
+	utilstransport "github.com/lamassuiot/lamassuiot/pkg/utils/server/transport"
 	stdopentracing "github.com/opentracing/opentracing-go"
 
 	"github.com/gorilla/mux"
@@ -39,6 +40,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, strict bool, otTracer
 
 	options := []httptransport.ServerOption{
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
+		httptransport.ServerBefore(utilstransport.HTTPToContext(logger)),
 	}
 
 	r.Methods("GET").Path("/health").Handler(httptransport.NewServer(

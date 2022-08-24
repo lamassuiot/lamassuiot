@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
@@ -33,6 +34,6 @@ type DeviceLogs interface {
 }
 
 type Statistics interface {
-	GetStatistics(ctx context.Context) (api.DevicesManagerStats, error)
-	UpdateStats(ctx context.Context, stats api.DevicesManagerStats) error
+	GetStatistics(ctx context.Context) (api.DevicesManagerStats, time.Time, error)
+	UpdateStatistics(ctx context.Context, stats api.DevicesManagerStats) error
 }

@@ -18,7 +18,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
-	testUtils "github.com/lamassuiot/lamassuiot/pkg/utils/test"
+	testUtils "github.com/lamassuiot/lamassuiot/pkg/utils/test/utils"
 )
 
 func TestCreateDMS(t *testing.T) {
@@ -656,28 +656,28 @@ func TestUpdateDMSStatus(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			serverCA, svcCA, err := testUtils.BuildCATestServer()
+			serverCA, _, err := testUtils.BuildCATestServer()
 			if err != nil {
 				t.Errorf("%s", err)
 			}
 			defer serverCA.Close()
 			serverCA.Start()
 
-			_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
-				CAType: caApi.CATypeDMSEnroller,
-				Subject: caApi.Subject{
-					CommonName: "LAMASSU-DMS-MANAGER",
-				},
-				KeyMetadata: caApi.KeyMetadata{
-					KeyType: "RSA",
-					KeyBits: 4096,
-				},
-				CADuration:       time.Hour * 24 * 365 * 5,
-				IssuanceDuration: time.Hour * 24 * 365 * 3,
-			})
-			if err != nil {
-				t.Errorf("%s", err)
-			}
+			// _, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
+			// 	CAType: caApi.CATypeDMSEnroller,
+			// 	Subject: caApi.Subject{
+			// 		CommonName: "LAMASSU-DMS-MANAGER",
+			// 	},
+			// 	KeyMetadata: caApi.KeyMetadata{
+			// 		KeyType: "RSA",
+			// 		KeyBits: 4096,
+			// 	},
+			// 	CADuration:       time.Hour * 24 * 365 * 5,
+			// 	IssuanceDuration: time.Hour * 24 * 365 * 3,
+			// })
+			// if err != nil {
+			// 	t.Errorf("%s", err)
+			// }
 
 			serverDMS, svcDMS, err := testUtils.BuildDMSManagerTestServer(serverCA)
 			if err != nil {

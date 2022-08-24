@@ -19,7 +19,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
 	"golang.org/x/crypto/ocsp"
 
-	testUtils "github.com/lamassuiot/lamassuiot/pkg/utils/test"
+	testUtils "github.com/lamassuiot/lamassuiot/pkg/utils/test/utils"
 )
 
 type TestCase struct {

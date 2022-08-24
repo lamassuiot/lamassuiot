@@ -24,6 +24,7 @@ import (
 	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	lamassuErrors "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/errors"
+	utilstransport "github.com/lamassuiot/lamassuiot/pkg/utils/server/transport"
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -44,20 +45,6 @@ func InvalidCaType() error {
 		StatusCode: 400,
 	}
 }
-func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
-	return func(ctx context.Context, req *http.Request) context.Context {
-		// Try to join to a trace propagated in `req`.
-		uberTraceId := req.Header.Values("Uber-Trace-Id")
-		if uberTraceId != nil {
-			logger = log.With(logger, "span_id", uberTraceId)
-		} else {
-			span := stdopentracing.SpanFromContext(ctx)
-			logger = log.With(logger, "span_id", span)
-		}
-		// return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
-		return ctx
-	}
-}
 
 func filtrableCAModelFields() map[string]types.Filter {
 	fieldFiltersMap := make(map[string]types.Filter)
@@ -73,7 +60,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	r := mux.NewRouter()
 	e := endpoint.MakeServerEndpoints(s, otTracer)
 	options := []httptransport.ServerOption{
-		httptransport.ServerBefore(HTTPToContext(logger)),
+		httptransport.ServerBefore(utilstransport.HTTPToContext(logger)),
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
 	}
@@ -85,7 +72,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Health", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -96,7 +82,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "CryptoEngine", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -107,7 +92,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Stats", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -119,7 +103,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCAs", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -131,7 +114,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCAs", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -143,7 +125,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "CreateCA", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -167,7 +148,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "RevokeCA", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -179,7 +159,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCertificates", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -191,7 +170,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCert", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -203,7 +181,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "SignCSR", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -215,7 +192,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "DeleteCert", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 

@@ -17,16 +17,16 @@ import (
 	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	deviceErrors "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
+	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/repository"
 	dmsManagerClient "github.com/lamassuiot/lamassuiot/pkg/dms-manager/client"
 	dmsManagerApi "github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
 	estErrors "github.com/lamassuiot/lamassuiot/pkg/est/server/api/errors"
+	estserver "github.com/lamassuiot/lamassuiot/pkg/est/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
 	"github.com/lib/pq"
+	"github.com/robfig/cron/v3"
 	"golang.org/x/exp/slices"
-
-	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/repository"
-	estserver "github.com/lamassuiot/lamassuiot/pkg/est/server/api/service"
 )
 
 type Service interface {
@@ -49,7 +49,6 @@ type Service interface {
 	RevokeActiveCertificate(ctx context.Context, input *api.RevokeActiveCertificateInput) (*api.RevokeActiveCertificateOutput, error)
 
 	GetDeviceLogs(ctx context.Context, input *api.GetDeviceLogsInput) (*api.GetDeviceLogsOutput, error)
-
 	IsDMSAuthorizedToEnroll(ctx context.Context, input *api.IsDMSAuthorizedToEnrollInput) (*api.IsDMSAuthorizedToEnrollOutput, error)
 }
 
@@ -61,10 +60,13 @@ type devicesService struct {
 	caClient                caClient.LamassuCAClient
 	dmsManagerClient        dmsManagerClient.LamassuDMSManagerClient
 	minimumReenrollmentDays int
+	cronInstance            *cron.Cron
 }
 
 func NewDeviceManagerService(logger log.Logger, devicesRepo repository.Devices, deviceLogsRep repository.DeviceLogs, statsRepo repository.Statistics, minimumReenrollmentDays int, caClient caClient.LamassuCAClient, dmsManagerClient dmsManagerClient.LamassuDMSManagerClient) Service {
-	return &devicesService{
+	cronInstance := cron.New()
+
+	svc := &devicesService{
 		devicesRepo:             devicesRepo,
 		logsRepo:                deviceLogsRep,
 		statsRepo:               statsRepo,
@@ -72,7 +74,12 @@ func NewDeviceManagerService(logger log.Logger, devicesRepo repository.Devices, 
 		caClient:                caClient,
 		dmsManagerClient:        dmsManagerClient,
 		minimumReenrollmentDays: minimumReenrollmentDays,
+		cronInstance:            cronInstance,
 	}
+	svc.ScanDevicesAndUpdateStatistics()
+	cronInstance.AddFunc("1 * * * *", svc.ScanDevicesAndUpdateStatistics)
+
+	return svc
 }
 
 func (s *devicesService) Health(ctx context.Context) bool {
@@ -80,7 +87,18 @@ func (s *devicesService) Health(ctx context.Context) bool {
 }
 
 func (s *devicesService) GetStats(ctx context.Context, input *api.GetStatsInput) (*api.GetStatsOutput, error) {
-	return &api.GetStatsOutput{}, nil
+	if input.ForceRefresh {
+		s.ScanDevicesAndUpdateStatistics()
+	}
+	stats, time, err := s.statsRepo.GetStatistics(ctx)
+	if err != nil {
+		return &api.GetStatsOutput{}, err
+	}
+
+	return &api.GetStatsOutput{
+		DevicesManagerStats: stats,
+		ScanDate:            time,
+	}, nil
 }
 
 func (s *devicesService) CreateDevice(ctx context.Context, input *api.CreateDeviceInput) (*api.CreateDeviceOutput, error) {
@@ -242,7 +260,7 @@ func (s *devicesService) AddDeviceSlot(ctx context.Context, input *api.AddDevice
 			CAName:       input.ActiveCertificate.Issuer.CommonName,
 			SerialNumber: utils.InsertNth(utils.ToHexInt(input.ActiveCertificate.SerialNumber), 2),
 			Certificate:  input.ActiveCertificate,
-			Status:       api.CertificateStatusActive,
+			Status:       caApi.StatusActive,
 			RevocationTimestamp: pq.NullTime{
 				Valid: false,
 				Time:  time.Time{},
@@ -290,7 +308,7 @@ func (s *devicesService) UpdateActiveCertificateStatus(ctx context.Context, inpu
 		return nil, errors.New("no active certificate found")
 	}
 
-	if input.Status == api.CertificateStatusRevoked {
+	if input.Status == caApi.StatusRevoked {
 		output, err := s.RevokeActiveCertificate(ctx, &api.RevokeActiveCertificateInput{
 			DeviceID:         input.DeviceID,
 			RevocationReason: input.RevocationReason,
@@ -301,7 +319,7 @@ func (s *devicesService) UpdateActiveCertificateStatus(ctx context.Context, inpu
 		return &api.UpdateActiveCertificateStatusOutput{
 			Slot: output.Slot,
 		}, nil
-	} else if input.Status == api.CertificateStatusExpired {
+	} else if input.Status == caApi.StatusExpired {
 		slot.ActiveCertificate.Status = input.Status
 		slot.ArchiveCertificates = append(slot.ArchiveCertificates, slot.ActiveCertificate)
 		slot.ActiveCertificate = nil
@@ -348,7 +366,7 @@ func (s *devicesService) RotateActiveCertificate(ctx context.Context, input *api
 		CAName:       input.NewCertificate.Issuer.CommonName,
 		SerialNumber: utils.InsertNth(utils.ToHexInt(input.NewCertificate.SerialNumber), 2),
 		Certificate:  input.NewCertificate,
-		Status:       api.CertificateStatusActive,
+		Status:       caApi.StatusActive,
 		RevocationTimestamp: pq.NullTime{
 			Valid: false,
 			Time:  time.Time{},
@@ -383,11 +401,11 @@ func (s *devicesService) RevokeActiveCertificate(ctx context.Context, input *api
 		return &api.RevokeActiveCertificateOutput{}, errors.New("no active certificate found")
 	}
 
-	if slot.ActiveCertificate.Status == api.CertificateStatusRevoked {
+	if slot.ActiveCertificate.Status == caApi.StatusRevoked {
 		return &api.RevokeActiveCertificateOutput{}, errors.New("certificate is already revoked")
 	}
 
-	if slot.ActiveCertificate.Status == api.CertificateStatusExpired {
+	if slot.ActiveCertificate.Status == caApi.StatusExpired {
 		return &api.RevokeActiveCertificateOutput{}, errors.New("certificate is expired")
 	}
 
@@ -404,7 +422,7 @@ func (s *devicesService) RevokeActiveCertificate(ctx context.Context, input *api
 
 	revokedCertificateSerialNumber := slot.ActiveCertificate.SerialNumber
 
-	slot.ActiveCertificate.Status = api.CertificateStatusRevoked
+	slot.ActiveCertificate.Status = caApi.StatusRevoked
 	slot.ActiveCertificate.RevocationReason = input.RevocationReason
 	slot.ActiveCertificate.RevocationTimestamp = revokeOutput.RevocationTimestamp
 
@@ -432,9 +450,89 @@ func (s *devicesService) CheckAndUpdateDeviceStatus(ctx context.Context, input *
 	if err != nil {
 		return &api.CheckAndUpdateDeviceStatusOutput{}, err
 	}
+
+	if device.Status == api.DeviceStatusDecommissioned {
+		return &api.CheckAndUpdateDeviceStatusOutput{
+			Device: *device,
+		}, nil
+	}
+
+	theoricalStatus := device.Status
+
+	if len(device.Slots) == 0 && device.Status != api.DeviceStatusPendingProvisioning {
+		theoricalStatus = api.DeviceStatusPendingProvisioning
+	}
+
+	type StatusReport struct {
+		ActiveCounter  int
+		RevokedCounter int
+		ExpiredCounter int
+		AboutToExpire  int
+	}
+
+	counter := StatusReport{
+		ActiveCounter:  0,
+		RevokedCounter: 0,
+		ExpiredCounter: 0,
+		AboutToExpire:  0,
+	}
+
+	for _, v := range device.Slots {
+		getCertificateOutput, err := s.caClient.GetCertificateBySerialNumber(ctx, &caApi.GetCertificateBySerialNumberInput{
+			CAType:                  caApi.CATypePKI,
+			CAName:                  v.ActiveCertificate.CAName,
+			CertificateSerialNumber: v.ActiveCertificate.SerialNumber,
+		})
+		if err != nil {
+			return &api.CheckAndUpdateDeviceStatusOutput{}, err
+		}
+
+		if getCertificateOutput.Status != v.ActiveCertificate.Status {
+			s.UpdateActiveCertificateStatus(ctx, &api.UpdateActiveCertificateStatusInput{
+				DeviceID:         device.ID,
+				SlotID:           v.ID,
+				Status:           getCertificateOutput.Status,
+				RevocationReason: getCertificateOutput.RevocationReason,
+			})
+		}
+
+		switch getCertificateOutput.Status {
+		case caApi.StatusActive:
+			counter.ActiveCounter += 1
+		case caApi.StatusRevoked:
+			counter.RevokedCounter += 1
+		case caApi.StatusExpired:
+			counter.ExpiredCounter += 1
+		case caApi.StatusAboutToExpire:
+			counter.AboutToExpire += 1
+		}
+	}
+
+	if counter.ExpiredCounter > 0 || counter.RevokedCounter > 0 {
+		theoricalStatus = api.DeviceStatusProvisionedWithWarnings
+	} else if counter.AboutToExpire > 0 {
+		theoricalStatus = api.DeviceStatusRequiresAction
+	} else if counter.ActiveCounter > 0 {
+		theoricalStatus = api.DeviceStatusFullyProvisioned
+	}
+
+	if theoricalStatus != device.Status {
+		device.Status = theoricalStatus
+		err = s.devicesRepo.UpdateDevice(ctx, *device)
+		if err != nil {
+			return &api.CheckAndUpdateDeviceStatusOutput{}, err
+		}
+	}
+
+	device, err = s.devicesRepo.SelectDeviceById(ctx, input.DeviceID)
+	if err != nil {
+		return &api.CheckAndUpdateDeviceStatusOutput{}, err
+	}
+
 	return &api.CheckAndUpdateDeviceStatusOutput{
 		Device: *device,
 	}, nil
+
 }
 
 func (s *devicesService) IterateDevicesWithPredicate(ctx context.Context, input *api.IterateDevicesWithPredicateInput) (*api.IterateDevicesWithPredicateOutput, error) {
@@ -783,4 +881,31 @@ func (s *devicesService) generateCSR(csr *x509.CertificateRequest, key interface
 		return nil, fmt.Errorf("failed to parse certificate request: %v", err)
 	}
 	return csrNew, nil
+}
+
+func (s *devicesService) ScanDevicesAndUpdateStatistics() {
+	ctx := context.Background()
+
+	deviceStats := map[api.DeviceStatus]int{}
+	slotStatus := map[caApi.CertificateStatus]int{}
+	s.IterateDevicesWithPredicate(ctx, &api.IterateDevicesWithPredicateInput{
+		PredicateFunc: func(device *api.Device) {
+			output, err := s.CheckAndUpdateDeviceStatus(ctx, &api.CheckAndUpdateDeviceStatusInput{
+				DeviceID: device.ID,
+			})
+			if err != nil {
+				return
+			}
+
+			deviceStats[device.Status] += 1
+			for _, slot := range output.Device.Slots {
+				slotStatus[slot.ActiveCertificate.Status] += 1
+			}
+		},
+	})
+
+	s.statsRepo.UpdateStatistics(ctx, api.DevicesManagerStats{
+		DevicesStats: deviceStats,
+		SlotsStats:   slotStatus,
+	})
 }

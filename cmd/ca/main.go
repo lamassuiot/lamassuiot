@@ -25,7 +25,13 @@ func main() {
 	config := config.NewCAConfig()
 	mainServer := server.NewServer(config)
 
-	engine, err := cryptoengines.NewHSMPEngine(mainServer.Logger, "/home/ikerlan/pkcs11-proxy/libpkcs11-proxy.so.0.1", "lamassuHSM", "1234")
+	// engine, err := cryptoengines.NewHSMPEngine(mainServer.Logger, "/home/ikerlan/pkcs11-proxy/libpkcs11-proxy.so.0.1", "lamassuHSM", "1234")
+	// if err != nil {
+	// 	level.Error(mainServer.Logger).Log("msg", "Could not initialize HSM engine", "err", err)
+	// 	os.Exit(1)
+	// }
+
+	engine, err := cryptoengines.NewGolangPEMEngine(mainServer.Logger, "/home/ikerlan/lamassu/lamassuiot/cadata")
 	if err != nil {
 		level.Error(mainServer.Logger).Log("msg", "Could not initialize HSM engine", "err", err)
 		os.Exit(1)

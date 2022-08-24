@@ -4,28 +4,14 @@ import (
 	"crypto/x509"
 	"time"
 
+	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
 	"github.com/lib/pq"
 )
 
-type SlotsStats struct {
-	PendingEnrollment int
-	Active            int
-	Expired           int
-	Revoked           int
-}
-
-type DevicesStats struct {
-	PendingProvisioning     int
-	FullyProvisioned        int
-	PartiallyProvisioned    int
-	ProvisionedWithWarnings int
-	Decommisioned           int
-}
-
 type DevicesManagerStats struct {
-	DevicesStats DevicesStats
-	SlotsStats   SlotsStats
+	DevicesStats map[DeviceStatus]int
+	SlotsStats   map[caApi.CertificateStatus]int
 }
 
 type KeyType string
@@ -115,35 +101,11 @@ func ParseDeviceStatus(t string) DeviceStatus {
 	}
 }
 
-type CertificateStatus string
-
-const (
-	CertificateStatusActive        CertificateStatus = "ACTIVE"
-	CertificateStatusAboutToExpire CertificateStatus = "ABOUT_TO_EXPIRE"
-	CertificateStatusExpired       CertificateStatus = "EXPIRED"
-	CertificateStatusRevoked       CertificateStatus = "REVOKED"
-)
-
-func ParseCertificateStatus(t string) CertificateStatus {
-	switch t {
-	case "ACTIVE":
-		return CertificateStatusActive
-	case "ABOUT_TO_EXPIRE":
-		return CertificateStatusAboutToExpire
-	case "EXPIRED":
-		return CertificateStatusExpired
-	case "REVOKED":
-		return CertificateStatusRevoked
-	default:
-		return CertificateStatusActive
-	}
-}
-
 type Certificate struct {
 	CAName              string
 	SerialNumber        string
 	Certificate         *x509.Certificate
-	Status              CertificateStatus
+	Status              caApi.CertificateStatus
 	KeyMetadata         KeyStrengthMetadata
 	Subject             Subject
 	ValidFrom           time.Time
@@ -199,7 +161,8 @@ type GetStatsInput struct {
 }
 
 type GetStatsOutput struct {
-	DevicesManagerStats
+	DevicesManagerStats DevicesManagerStats
+	ScanDate            time.Time
 }
 
 // ---------------------------------------------------------------------
@@ -314,7 +277,7 @@ type AddDeviceSlotOutput struct {
 type UpdateActiveCertificateStatusInput struct {
 	DeviceID         string
 	SlotID           string
-	Status           CertificateStatus
+	Status           caApi.CertificateStatus
 	RevocationReason string
 }
 

@@ -130,3 +130,8 @@ func (mw *amqpMiddleware) UpdateCertificateStatus(ctx context.Context, input *ap
 func (mw *amqpMiddleware) IterateCertificatesWithPredicate(ctx context.Context, input *api.IterateCertificatesWithPredicateInput) (output *api.IterateCertificatesWithPredicateOutput, err error) {
 	return mw.next.IterateCertificatesWithPredicate(ctx, input)
 }
+
+func (mw *amqpMiddleware) CheckAndUpdateCACertificateStatus(ctx context.Context, input *api.CheckAndUpdateCACertificateStatusInput) (output *api.CheckAndUpdateCACertificateStatusOutput, err error) {
+	mw.sendAMQPMessage(fmt.Sprintf("%s.certificate.update", EventPrefix), output.Serialize())
+	return mw.next.CheckAndUpdateCACertificateStatus(ctx, input)
+}

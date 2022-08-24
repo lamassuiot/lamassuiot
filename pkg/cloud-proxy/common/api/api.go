@@ -22,7 +22,7 @@ type CloudConnector struct {
 	Name            string
 	Status          string
 	IP              string
-	Portocol        string
+	Protocol        string
 	Port            int
 	SynchronizedCAs []SynchronizedCA
 	Configuration   interface{}

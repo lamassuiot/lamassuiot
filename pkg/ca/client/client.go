@@ -344,6 +344,11 @@ func (c *lamassuCaClientConfig) IterateCertificatesWithPredicate(ctx context.Con
 	return &api.IterateCertificatesWithPredicateOutput{}, nil
 }
 
+func (c *lamassuCaClientConfig) CheckAndUpdateCACertificateStatus(ctx context.Context, input *api.CheckAndUpdateCACertificateStatusInput) (*api.CheckAndUpdateCACertificateStatusOutput, error) {
+	// TODO: To implement
+	return &api.CheckAndUpdateCACertificateStatusOutput{}, nil
+}
+
 type genericRequest struct {
 	client clientUtils.BaseClient
 }

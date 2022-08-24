@@ -19,6 +19,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/est/server/api/endpoint"
 	esterror "github.com/lamassuiot/lamassuiot/pkg/est/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/est/server/api/service"
+	utilstransport "github.com/lamassuiot/lamassuiot/pkg/utils/server/transport"
 	stdopentracing "github.com/opentracing/opentracing-go"
 	"go.mozilla.org/pkcs7"
 )
@@ -57,21 +58,13 @@ func ErrMalformedCert() error {
 		StatusCode: http.StatusBadRequest,
 	}
 }
-func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
-	return func(ctx context.Context, req *http.Request) context.Context {
-		// Try to join to a trace propagated in `req`.
-		// logger := log.With(logger, "span_id", stdopentracing.SpanFromContext(ctx))
-		// return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
-		return ctx
-	}
-}
 
 func MakeHTTPHandler(service service.ESTService, logger log.Logger, otTracer stdopentracing.Tracer) http.Handler {
 	router := mux.NewRouter()
 	endpoints := endpoint.MakeServerEndpoints(service, otTracer)
 
 	options := []httptransport.ServerOption{
-		httptransport.ServerBefore(HTTPToContext(logger)),
+		httptransport.ServerBefore(utilstransport.HTTPToContext(logger)),
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(EncodeError),
 	}
@@ -84,7 +77,6 @@ func MakeHTTPHandler(service service.ESTService, logger log.Logger, otTracer std
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "cacerts", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -95,7 +87,6 @@ func MakeHTTPHandler(service service.ESTService, logger log.Logger, otTracer std
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "simpleenroll", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -106,7 +97,6 @@ func MakeHTTPHandler(service service.ESTService, logger log.Logger, otTracer std
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "simplereenroll", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -117,7 +107,6 @@ func MakeHTTPHandler(service service.ESTService, logger log.Logger, otTracer std
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "serverkeygen", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 

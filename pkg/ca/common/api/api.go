@@ -345,3 +345,14 @@ type IterateCAsWithPredicateInput struct {
 
 type IterateCAsWithPredicateOutput struct {
 }
+
+// ---------------------------------------------------------------------
+
+type CheckAndUpdateCACertificateStatusInput struct {
+	CAType CAType
+	CAName string
+}
+
+type CheckAndUpdateCACertificateStatusOutput struct {
+	CACertificate
+}

@@ -10,6 +10,7 @@ import (
 )
 
 type Endpoints struct {
+	HealthEndpoint                        endpoint.Endpoint
 	RegisterCAEndpoint                    endpoint.Endpoint
 	UpdateConfigurationEndpoint           endpoint.Endpoint
 	GetConfigurationEndpoint              endpoint.Endpoint
@@ -19,6 +20,7 @@ type Endpoints struct {
 }
 
 func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
+	healthEndpoint := MakeHealthEndpoint(s)
 	registerCAEndpoint := MakeRegisterCAEndpoint(s)
 	updateConfigurationEndpoint := MakeUpdateConfigurationEndpoint(s)
 	getConfigurationEndpoint := MakeGetConfigurationEndpoint(s)
@@ -27,12 +29,20 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 	updateDeviceCertificateStatusEndpoint := MakeUpdateDeviceCertificateStatusEndpoint(s)
 
 	return Endpoints{
+		HealthEndpoint:                        healthEndpoint,
 		RegisterCAEndpoint:                    registerCAEndpoint,
 		UpdateConfigurationEndpoint:           updateConfigurationEndpoint,
 		GetConfigurationEndpoint:              getConfigurationEndpoint,
 		GetDeviceConfigurationEndpoint:        getDeviceConfigurationEndpoint,
 		UpdateCAStatusEndpoint:                updateCAStatusEndpoint,
 		UpdateDeviceCertificateStatusEndpoint: updateDeviceCertificateStatusEndpoint,
+	}
+}
+
+func MakeHealthEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		output := s.Health()
+		return output, nil
 	}
 }
 

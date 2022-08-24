@@ -18,6 +18,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common/types"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
+	utilstransport "github.com/lamassuiot/lamassuiot/pkg/utils/server/transport"
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -29,15 +30,6 @@ func InvalidJsonFormat() error {
 	return &devmanagererrors.GenericError{
 		Message:    "Invalid JSON format",
 		StatusCode: 400,
-	}
-}
-
-func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
-	return func(ctx context.Context, req *http.Request) context.Context {
-		// Try to join to a trace propagated in `req`.
-		// logger := log.With(logger, "span_id", stdopentracing.SpanFromContext(ctx))
-		// return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
-		return ctx
 	}
 }
 
@@ -56,7 +48,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	r := mux.NewRouter()
 	e := endpoint.MakeServerEndpoints(s, otTracer)
 	options := []httptransport.ServerOption{
-		httptransport.ServerBefore(HTTPToContext(logger)),
+		httptransport.ServerBefore(utilstransport.HTTPToContext(logger)),
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
 	}
@@ -67,7 +59,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Health", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
+			httptransport.ServerBefore(utilstransport.HTTPToContext(logger)),
 		)...,
 	))
 	r.Methods("GET").Path("/stats").Handler(httptransport.NewServer(
@@ -77,7 +69,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Stats", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -88,7 +79,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "PostDevice", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -99,7 +89,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetDevices", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -110,29 +99,26 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetDeviceById", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
 	r.Methods("PUT").Path("/devices/{deviceID}").Handler(httptransport.NewServer(
 		e.UpdateDeviceMetadataEndpoint,
-		decodeGetDevicesRequest,
-		encodeGetDevicesResponse,
+		decodeUpdateDeviceMetadataRequest,
+		encodeUpdateDeviceMetadataResponse,
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "UpdateDevicesById", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
 	r.Methods("DELETE").Path("/devices/{deviceID}").Handler(httptransport.NewServer(
 		e.DecommisionDeviceEndpoint,
-		decodeGetDeviceByIdRequest,
-		encodeGetDeviceByIdResponse,
+		decodeDecommisionDeviceRequest,
+		encodeDecommisionDeviceResponse,
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "DeleteDevice", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -143,7 +129,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "DeleteRevoke", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -154,7 +139,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetDeviceLogs", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
 		)...,
 	))
 
@@ -177,7 +161,7 @@ func encodeHealthResponse(ctx context.Context, w http.ResponseWriter, response i
 func decodeGetStatsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	forceRefreshString := r.URL.Query().Get("force_refresh")
 	forceRefresh := false
-	if forceRefreshString == "" {
+	if forceRefreshString != "" {
 		parsedForceRefresh, err := strconv.ParseBool(forceRefreshString)
 		if err == nil {
 			forceRefresh = parsedForceRefresh

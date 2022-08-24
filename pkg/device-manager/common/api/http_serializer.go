@@ -6,65 +6,13 @@ import (
 	"encoding/pem"
 	"time"
 
+	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lib/pq"
 )
 
-type SlotsStatsSerialized struct {
-	PendingEnrollment int `json:"pending_enrollment"`
-	Active            int `json:"active"`
-	Expired           int `json:"expired"`
-	Revoked           int `json:"revoked"`
-}
-
-func (s *SlotsStats) Serialize() SlotsStatsSerialized {
-	return SlotsStatsSerialized{
-		PendingEnrollment: s.PendingEnrollment,
-		Active:            s.Active,
-		Expired:           s.Expired,
-		Revoked:           s.Revoked,
-	}
-}
-
-func (s *SlotsStatsSerialized) Deserialize() SlotsStats {
-	return SlotsStats{
-		PendingEnrollment: s.PendingEnrollment,
-		Active:            s.Active,
-		Expired:           s.Expired,
-		Revoked:           s.Revoked,
-	}
-}
-
-type DevicesStatsSerialized struct {
-	PendingProvisioning     int `json:"pending_provisioning"`
-	FullyProvisioned        int `json:"fully_provisioned"`
-	PartiallyProvisioned    int `json:"partially_provisioned"`
-	ProvisionedWithWarnings int `json:"provisioned_with_warnings"`
-	Decommisioned           int `json:"decommisioned"`
-}
-
-func (s *DevicesStats) Serialize() DevicesStatsSerialized {
-	return DevicesStatsSerialized{
-		PendingProvisioning:     s.PendingProvisioning,
-		FullyProvisioned:        s.FullyProvisioned,
-		PartiallyProvisioned:    s.PartiallyProvisioned,
-		ProvisionedWithWarnings: s.ProvisionedWithWarnings,
-		Decommisioned:           s.Decommisioned,
-	}
-}
-
-func (s *DevicesStatsSerialized) Deserialize() DevicesStats {
-	return DevicesStats{
-		PendingProvisioning:     s.PendingProvisioning,
-		FullyProvisioned:        s.FullyProvisioned,
-		PartiallyProvisioned:    s.PartiallyProvisioned,
-		ProvisionedWithWarnings: s.ProvisionedWithWarnings,
-		Decommisioned:           s.Decommisioned,
-	}
-}
-
 type DevicesManagerStatsSerialized struct {
-	DevicesStats DevicesStats `json:"devices_stats"`
-	SlotsStats   SlotsStats   `json:"slots_stats"`
+	DevicesStats map[DeviceStatus]int            `json:"devices_stats"`
+	SlotsStats   map[caApi.CertificateStatus]int `json:"slots_stats"`
 }
 
 func (s *DevicesManagerStats) Serialize() DevicesManagerStatsSerialized {
@@ -138,7 +86,7 @@ type CertificateSerialized struct {
 	CAName              string                        `json:"ca_name"`
 	SerialNumber        string                        `json:"serial_number"`
 	Certificate         string                        `json:"certificate"`
-	Status              CertificateStatus             `json:"status"`
+	Status              caApi.CertificateStatus       `json:"status"`
 	KeyMetadata         KeyStrengthMetadataSerialized `json:"key_metadata"`
 	Subject             SubjectSerialized             `json:"subject"`
 	ValidFrom           int                           `json:"valid_from"`
@@ -188,7 +136,7 @@ func (s *CertificateSerialized) Deserialize() Certificate {
 
 	serializer := Certificate{
 		CAName:       s.CAName,
-		Status:       ParseCertificateStatus(string(s.Status)),
+		Status:       s.Status,
 		SerialNumber: s.SerialNumber,
 		ValidFrom:    time.UnixMilli(int64(s.ValidFrom)),
 		ValidTo:      time.UnixMilli(int64(s.ValidTo)),
@@ -257,7 +205,7 @@ type DeviceSerialized struct {
 }
 
 func (s *Device) Serialize() DeviceSerialized {
-	var slots []SlotSerialized
+	slots := []SlotSerialized{}
 	for _, slot := range s.Slots {
 		serializedSlot := slot.Serialize()
 		slots = append(slots, serializedSlot)
@@ -276,7 +224,7 @@ func (s *Device) Serialize() DeviceSerialized {
 }
 
 func (s *DeviceSerialized) Deserialize() Device {
-	var slots []*Slot
+	slots := []*Slot{}
 	for _, slot := range s.Slots {
 		deserializedSlot := slot.Deserialize()
 		slots = append(slots, &deserializedSlot)
@@ -369,18 +317,21 @@ func (s *DeviceLogsSerialized) Deserialize() DeviceLogs {
 // ---------------------------------------------------------------------
 
 type GetStatsOutputSerialized struct {
-	DevicesManagerStatsSerialized
+	DevicesManagerStatsSerialized DevicesManagerStatsSerialized `json:"stats"`
+	ScanDate                      int                           `json:"scan_date"`
 }
 
 func (s *GetStatsOutput) Serialize() GetStatsOutputSerialized {
 	return GetStatsOutputSerialized{
 		DevicesManagerStatsSerialized: s.DevicesManagerStats.Serialize(),
+		ScanDate:                      int(s.ScanDate.UnixMilli()),
 	}
 }
 
 func (s *GetStatsOutputSerialized) Deserialize() GetStatsOutput {
 	return GetStatsOutput{
 		DevicesManagerStats: s.DevicesManagerStatsSerialized.Deserialize(),
+		ScanDate:            time.UnixMilli(int64(s.ScanDate)),
 	}
 }
 

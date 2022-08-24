@@ -20,6 +20,7 @@ import (
 	caerrors "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/repository"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
+	"github.com/robfig/cron/v3"
 )
 
 type CryptoEngine interface {
@@ -50,6 +51,8 @@ type Service interface {
 	GetCertificates(ctx context.Context, input *api.GetCertificatesInput) (*api.GetCertificatesOutput, error)
 	UpdateCertificateStatus(ctx context.Context, input *api.UpdateCertificateStatusInput) (*api.UpdateCertificateStatusOutput, error)
 	IterateCertificatesWithPredicate(ctx context.Context, input *api.IterateCertificatesWithPredicateInput) (*api.IterateCertificatesWithPredicateOutput, error)
+
+	CheckAndUpdateCACertificateStatus(ctx context.Context, input *api.CheckAndUpdateCACertificateStatusInput) (*api.CheckAndUpdateCACertificateStatusOutput, error)
 }
 
 type caService struct {
@@ -57,9 +60,12 @@ type caService struct {
 	certificateRepository repository.Certificates
 	cryptoEngine          CryptoEngine
 	ocspServerURL         string
+	cronInstance          *cron.Cron
 }
 
 func NewCAService(logger log.Logger, engine CryptoEngine, certificateRepository repository.Certificates, ocspServerURL string) Service {
+	cronInstance := cron.New()
+
 	svc := caService{
 		logger:                logger,
 		cryptoEngine:          engine,
@@ -90,6 +96,19 @@ func NewCAService(logger log.Logger, engine CryptoEngine, certificateRepository 
 		})
 	}
 
+	cronInstance.AddFunc("1 0 * * *", func() { // runs daily at midnight
+		svc.IterateCAsWithPredicate(context.Background(), &api.IterateCAsWithPredicateInput{
+			CAType: api.CATypePKI,
+			PredicateFunc: func(ca *api.CACertificate) {
+				svc.CheckAndUpdateCACertificateStatus(context.Background(), &api.CheckAndUpdateCACertificateStatusInput{
+					CAType: api.CATypePKI,
+					CAName: ca.CAName,
+				})
+			},
+		})
+	})
+
+	svc.cronInstance = cronInstance
 	return &svc
 }
 
@@ -717,4 +736,66 @@ func getPublicKeyInfo(cert *x509.Certificate) (api.KeyType, int, api.KeyStrength
 	}
 
 	return key, keyBits, keyStrength
+}
+
+func (s *caService) CheckAndUpdateCACertificateStatus(ctx context.Context, input *api.CheckAndUpdateCACertificateStatusInput) (*api.CheckAndUpdateCACertificateStatusOutput, error) {
+	ca, err := s.GetCAByName(ctx, &api.GetCAByNameInput{
+		CAType: input.CAType,
+		CAName: input.CAName,
+	})
+	if err != nil {
+		return &api.CheckAndUpdateCACertificateStatusOutput{}, err
+	}
+
+	s.IterateCertificatesWithPredicate(ctx, &api.IterateCertificatesWithPredicateInput{
+		CAType: input.CAType,
+		CAName: input.CAName,
+		PredicateFunc: func(c *api.Certificate) {
+			if c.Status != api.StatusExpired && c.Status != api.StatusRevoked {
+				if time.Until(c.Certificate.NotAfter) < 0 {
+					s.UpdateCertificateStatus(ctx, &api.UpdateCertificateStatusInput{
+						CAType:                  input.CAType,
+						CAName:                  input.CAName,
+						CertificateSerialNumber: c.SerialNumber,
+						Status:                  api.StatusExpired,
+					})
+				} else if time.Until(c.Certificate.NotAfter) < time.Duration(30*24*time.Hour) {
+					s.UpdateCertificateStatus(ctx, &api.UpdateCertificateStatusInput{
+						CAType:                  input.CAType,
+						CAName:                  input.CAName,
+						CertificateSerialNumber: c.SerialNumber,
+						Status:                  api.StatusAboutToExpire,
+					})
+				}
+			}
+		},
+	})
+
+	if ca.Status != api.StatusExpired && ca.Status != api.StatusRevoked {
+		if time.Until(ca.Certificate.Certificate.NotAfter) < 0 {
+			s.UpdateCAStatus(ctx, &api.UpdateCAStatusInput{
+				CAType: input.CAType,
+				CAName: input.CAName,
+				Status: api.StatusExpired,
+			})
+		} else if time.Until(ca.Certificate.Certificate.NotAfter) < time.Duration(30*24*time.Hour) {
+			s.UpdateCAStatus(ctx, &api.UpdateCAStatusInput{
+				CAType: input.CAType,
+				CAName: input.CAName,
+				Status: api.StatusAboutToExpire,
+			})
+		}
+	}
+
+	ca, err = s.GetCAByName(ctx, &api.GetCAByNameInput{
+		CAType: input.CAType,
+		CAName: input.CAName,
+	})
+	if err != nil {
+		return &api.CheckAndUpdateCACertificateStatusOutput{}, err
+	}
+	return &api.CheckAndUpdateCACertificateStatusOutput{
+		CACertificate: ca.CACertificate,
+	}, nil
+
 }

@@ -19,7 +19,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
-	testUtils "github.com/lamassuiot/lamassuiot/pkg/utils/test"
+	testUtils "github.com/lamassuiot/lamassuiot/pkg/utils/test/utils"
 )
 
 func TestCreateCA(t *testing.T) {
@@ -1740,7 +1740,7 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
-					"status":        "expired",
+					"status":        "EXPIRED",
 					"serial_number": serialNumber,
 					"subject": map[string]interface{}{
 						"common_name":       "device-1",
@@ -2181,6 +2181,41 @@ func TestStats(t *testing.T) {
 		})
 	}
 }
+
+/*func TestHealth(t *testing.T) {
+	tt := []struct {
+		name                  string
+		serviceInitialization func(svc *service.Service)
+		testRestEndpoint      func(e *httpexpect.Expect)
+	}{
+		{
+			name:                  "CorrectHealth",
+			serviceInitialization: func(svc *service.Service) {},
+			testRestEndpoint: func(e *httpexpect.Expect) {
+				obj := e.GET("/v1/health").
+					Expect().
+					Status(http.StatusOK).JSON()
+				obj.Object().ContainsKey("healthy")
+			},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			server, svc, err := testUtils.BuildCATestServer()
+			if err != nil {
+				t.Errorf("%s", err)
+			}
+
+			defer server.Close()
+			server.Start()
+
+			tc.serviceInitialization(svc)
+			e := httpexpect.New(t, server.URL)
+			tc.testRestEndpoint(e)
+		})
+	}
+}*/
 
 func generateBase64EncodedCertificateRequest(commonName string) (*rsa.PrivateKey, string) {
 	key, _ := rsa.GenerateKey(rand.Reader, 2048)

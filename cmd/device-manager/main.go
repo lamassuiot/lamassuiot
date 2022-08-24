@@ -22,6 +22,7 @@ import (
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
 
+	badgerRepository "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/repository/badger"
 	postgresRepository "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/repository/postgres"
 )
 
@@ -34,9 +35,15 @@ func main() {
 		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
 	})
 	if err != nil {
-		panic(err)
+		level.Error(mainServer.Logger).Log("msg", "failed to connect to postgres", "err", err)
+		os.Exit(1)
 	}
 
+	statsRepo, err := badgerRepository.NewStatisticsDBInMemory()
+	if err != nil {
+		level.Error(mainServer.Logger).Log("msg", "failed to connect to badger", "err", err)
+		os.Exit(1)
+	}
 	deviceRepo := postgresRepository.NewDevicesPostgresDB(db, mainServer.Logger)
 	logsRepo := postgresRepository.NewLogsPostgresDB(db, mainServer.Logger)
 	caClient, err := lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
@@ -75,7 +82,7 @@ func main() {
 
 	var s service.Service
 	{
-		s = service.NewDeviceManagerService(mainServer.Logger, deviceRepo, logsRepo, nil, config.MinimumReenrollDays, caClient, dmsClient)
+		s = service.NewDeviceManagerService(mainServer.Logger, deviceRepo, logsRepo, statsRepo, config.MinimumReenrollDays, caClient, dmsClient)
 		s = service.LoggingMiddleware(mainServer.Logger)(s)
 	}
 

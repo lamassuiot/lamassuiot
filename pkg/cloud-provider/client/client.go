@@ -31,21 +31,40 @@ func NewCloudProviderClient(config clientUtils.BaseClientConfigurationuration) (
 	}, nil
 }
 
-func (self *cloudProviderConfig) RegisterCA(ctx context.Context, input *api.RegisterCAInput) (*api.RegisterCAOutput, error) {
+func (c *cloudProviderConfig) RegisterCA(ctx context.Context, input *api.RegisterCAInput) (*api.RegisterCAOutput, error) {
 	return nil, nil
 }
-func (self *cloudProviderConfig) UpdateConfiguration(ctx context.Context, input *api.UpdateConfigurationInput) (*api.UpdateConfigurationOutput, error) {
+func (c *cloudProviderConfig) UpdateConfiguration(ctx context.Context, input *api.UpdateConfigurationInput) (*api.UpdateConfigurationOutput, error) {
 	return nil, nil
 }
-func (self *cloudProviderConfig) GetConfiguration(ctx context.Context, input *api.GetConfigurationInput) (*api.GetConfigurationOutput, error) {
+func (c *cloudProviderConfig) GetConfiguration(ctx context.Context, input *api.GetConfigurationInput) (*api.GetConfigurationOutput, error) {
+	var output api.GetConfigurationOutputSerialized
+
+	req, err := c.client.NewRequest("GET", "v1/config", nil)
+	if err != nil {
+		return &api.GetConfigurationOutput{}, err
+	}
+
+	_, err = c.client.Do(req, &output)
+	if err != nil {
+		return &api.GetConfigurationOutput{}, err
+	}
+
+	parsedCAConfigs := make([]api.CAConfiguration, 0)
+	for _, caConfig := range output.CAsConfiguration {
+		parsedCAConfigs = append(parsedCAConfigs, caConfig.Deserialize())
+	}
+	return &api.GetConfigurationOutput{
+		Configuration:    output.Configuration,
+		CAsConfiguration: parsedCAConfigs,
+	}, err
+}
+func (c *cloudProviderConfig) GetDeviceConfiguration(ctx context.Context, input *api.GetDeviceConfigurationInput) (*api.GetDeviceConfigurationOutput, error) {
 	return nil, nil
 }
-func (self *cloudProviderConfig) GetDeviceConfiguration(ctx context.Context, input *api.GetDeviceConfigurationInput) (*api.GetDeviceConfigurationOutput, error) {
+func (c *cloudProviderConfig) UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (*api.UpdateCAStatusOutput, error) {
 	return nil, nil
 }
-func (self *cloudProviderConfig) UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (*api.UpdateCAStatusOutput, error) {
-	return nil, nil
-}
-func (self *cloudProviderConfig) UpdateDeviceCertificateStatus(ctx context.Context, input *api.UpdateDeviceCertificateStatusInput) (*api.UpdateDeviceCertificateStatusOutput, error) {
+func (c *cloudProviderConfig) UpdateDeviceCertificateStatus(ctx context.Context, input *api.UpdateDeviceCertificateStatusInput) (*api.UpdateDeviceCertificateStatusOutput, error) {
 	return nil, nil
 }

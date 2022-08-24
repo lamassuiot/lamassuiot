@@ -273,3 +273,21 @@ func (mw loggingMiddleware) GetCertificates(ctx context.Context, input *api.GetC
 	}(time.Now())
 	return mw.next.GetCertificates(ctx, input)
 }
+
+func (mw loggingMiddleware) CheckAndUpdateCACertificateStatus(ctx context.Context, input *api.CheckAndUpdateCACertificateStatusInput) (output *api.CheckAndUpdateCACertificateStatusOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "CheckAndUpdateCACertificateStatus")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			if output != nil {
+				logMsg = append(logMsg, "output", output.Serialize())
+			}
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
+	}(time.Now())
+	return mw.next.CheckAndUpdateCACertificateStatus(ctx, input)
+}

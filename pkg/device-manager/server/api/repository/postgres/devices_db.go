@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/log/level"
+	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	devicesErrors "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/repository"
@@ -29,7 +30,7 @@ type CertificateDAO struct {
 	SerialNumber        string `gorm:"primaryKey"`
 	CAName              string
 	Certificate         string
-	Status              api.CertificateStatus
+	Status              caApi.CertificateStatus
 	RevocationTimestamp pq.NullTime
 	RevocationReason    string
 }
@@ -114,10 +115,12 @@ func (c *SlotDAO) toSlot() api.Slot {
 	}
 
 	var activeCertificate *api.Certificate = nil
-	for _, certificate := range certificates {
-		if certificate.Status == api.CertificateStatusActive {
-			activeCertificate = certificate
-		}
+	sort.Slice(certificates, func(x, y int) bool {
+		return certificates[x].Certificate.NotBefore.After(certificates[y].Certificate.NotBefore)
+	})
+
+	if len(certificates) > 0 {
+		activeCertificate = certificates[0]
 	}
 
 	return api.Slot{

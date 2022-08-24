@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"strconv"
 	"testing"
 	"time"
 
@@ -26,7 +27,7 @@ import (
 	estClient "github.com/lamassuiot/lamassuiot/pkg/est/client"
 	"golang.org/x/exp/slices"
 
-	testUtils "github.com/lamassuiot/lamassuiot/pkg/utils/test"
+	testUtils "github.com/lamassuiot/lamassuiot/pkg/utils/test/utils"
 )
 
 type contextKey string
@@ -739,6 +740,7 @@ func TestGetESTCAs(t *testing.T) {
 		{
 			name: "ShouldGetESTCAs",
 			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+
 				ctx = context.WithValue(ctx, ContextKeyMTLSConfig, mTLSConfig{
 					useMTLS: false,
 				})
@@ -787,6 +789,761 @@ func TestGetESTCAs(t *testing.T) {
 	}
 }
 
+func TestHealth(t *testing.T) {
+
+	tt := []TestCase{
+		{
+			name: "CorrectHealth",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				obj := e.GET("/v1/health").
+					Expect().
+					Status(http.StatusOK).JSON()
+				obj.Object().ContainsKey("healthy")
+			},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			runTests(t, tc)
+		})
+	}
+}
+
+func TestGetStats(t *testing.T) {
+
+	tt := []TestCase{
+
+		{
+			name: "EmptyDevices",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				obj := e.GET("/v1/stats").
+					Expect().
+					Status(http.StatusOK).JSON()
+
+				obj.Object().ContainsKey("stats").ValueEqual("stats", 0)
+				obj.Object().ContainsKey("stats").ContainsKey("devices_stats").ValueEqual("devices_stats", 0)
+				obj.Object().ContainsKey("stats").ContainsKey("slots_stats").ValueEqual("slots_stats", 0)
+				obj.Object().ContainsKey("scan_date")
+			},
+		}, {
+			name: "DevicesWithCertificate",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				_, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
+					DeviceID:    "1234-5678-9012-3456",
+					Alias:       "Raspberry Pi",
+					Tags:        []string{"raspberry-pi", "5G"},
+					IconColor:   "",
+					IconName:    "",
+					Description: "Raspberry Pi is a small, low-cost, and light-weight computer",
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+				_, csr := generateCertificateRequestAndKey("slot1:1234-5678-9012-3456")
+				singOutput, err := (*caSvc).SignCertificateRequest(context.Background(), &caApi.SignCertificateRequestInput{
+					CAType:                    caApi.CATypePKI,
+					CAName:                    "RPI-CA",
+					CertificateSigningRequest: csr,
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+
+				_, err = (*svc).AddDeviceSlot(context.Background(), &api.AddDeviceSlotInput{
+					DeviceID:          "1234-5678-9012-3456",
+					SlotID:            "slot1",
+					ActiveCertificate: singOutput.Certificate,
+				})
+				if err != nil {
+					t.Fatalf("Failed to add slot : %s", err)
+				}
+
+				return ctx
+
+			},
+
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				obj := e.GET("/v1/stats").
+					Expect().
+					Status(http.StatusOK).JSON()
+
+				obj.Object().ContainsKey("stats").ValueEqual("stats", 0)
+				obj.Object().ContainsKey("stats").ContainsKey("devices_stats").ValueEqual("devices_stats", 0)
+				obj.Object().ContainsKey("stats").ContainsKey("slots_stats").ValueEqual("slots_stats", 0)
+				obj.Object().ContainsKey("scan_date")
+			},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			runTests(t, tc)
+		})
+
+	}
+}
+
+func TestGetDeviceById(t *testing.T) {
+
+	tt := []TestCase{
+
+		{
+			name: "GetDeviceById: NoSlots",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				_, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
+					DeviceID:    "1234-5678-9012-3456",
+					Alias:       "Raspberry Pi",
+					Tags:        []string{"raspberry-pi", "5G"},
+					IconColor:   "#0068D1",
+					IconName:    "Cg/CgSmartphoneChip",
+					Description: "Raspberry Pi is a small, low-cost, and light-weight computer",
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				obj := e.GET("/v1/devices/1234-5678-9012-3456").
+					Expect().
+					Status(http.StatusOK).JSON().Object()
+
+				obj.ContainsKey("id")
+				obj.ContainsKey("alias")
+				obj.ContainsKey("status")
+				obj.ContainsKey("slots")
+				obj.ContainsKey("description")
+				obj.ContainsKey("tags")
+				obj.ContainsKey("icon_name")
+				obj.ContainsKey("icon_color")
+				obj.ContainsKey("creation_timestamp")
+
+				obj.ContainsMap(map[string]interface{}{
+					"alias": "Raspberry Pi",
+					"id":    "1234-5678-9012-3456",
+
+					"status":      api.DeviceStatusPendingProvisioning,
+					"slots":       map[string]interface{}{},
+					"description": "Raspberry Pi is a small, low-cost, and light-weight computer",
+					"tags":        []string{"raspberry-pi", "5G"},
+					"icon_color":  "#0068D1",
+					"icon_name":   "#Cg/CgSmartphoneChip",
+				})
+
+			},
+		},
+		{
+			name: "GetDeviceById: WithSlots",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				_, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
+					DeviceID:    "1234-5678-9012-3456",
+					Alias:       "Raspberry Pi",
+					Tags:        []string{"raspberry-pi", "5G"},
+					IconColor:   "#0068D1",
+					IconName:    "Cg/CgSmartphoneChip",
+					Description: "Raspberry Pi is a small, low-cost, and light-weight computer",
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+				_, csr := generateCertificateRequestAndKey("slot1:1234-5678-9012-3456")
+				singOutput, err := (*caSvc).SignCertificateRequest(context.Background(), &caApi.SignCertificateRequestInput{
+					CAType:                    caApi.CATypePKI,
+					CAName:                    "RPI-CA",
+					CertificateSigningRequest: csr,
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+				_, err = (*svc).AddDeviceSlot(context.Background(), &api.AddDeviceSlotInput{
+					DeviceID:          "1234-5678-9012-3456",
+					SlotID:            "slot1",
+					ActiveCertificate: singOutput.Certificate,
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				obj := e.GET("/v1/devices/1234-5678-9012-3456").
+					Expect().
+					Status(http.StatusOK).JSON().Object()
+
+				obj.ContainsKey("id")
+				obj.ContainsKey("alias")
+				obj.ContainsKey("status")
+				obj.ContainsKey("slots")
+				obj.ContainsKey("description")
+				obj.ContainsKey("tags")
+				obj.ContainsKey("icon_name")
+				obj.ContainsKey("icon_color")
+				obj.ContainsKey("creation_timestamp")
+
+				obj.ContainsMap(map[string]interface{}{
+					"alias": "Raspberry Pi",
+					"id":    "1234-5678-9012-3456",
+
+					"status": api.DeviceStatusPendingProvisioning,
+					"slots": map[string]interface{}{
+						"id": "slot1",
+						"active_certificate": map[string]interface{}{
+							"ca_name": "RPI-CA",
+							//"serial_number" : ,
+							//"certificate": ,
+							"status": "ACTIVE",
+							"key_metadata": map[string]interface{}{
+								"bits":     2048,
+								"strength": "MEDIUM",
+								"type":     "RSA",
+							},
+							"subject": map[string]interface{}{
+								"common_name":       "slot1:1234-5678-9012-3456",
+								"country":           "",
+								"locality":          "",
+								"organization":      "",
+								"organization_unit": "",
+								"state":             "",
+							},
+							//"valid_from":,
+							//"valid_to":,
+							"revocation_timestamp": "",
+							"revocation_reason":    "",
+						},
+
+						"archive_certificates": "",
+					},
+					"description": "Raspberry Pi is a small, low-cost, and light-weight computer",
+					"tags":        []string{"raspberry-pi", "5G"},
+					"icon_color":  "#0068D1",
+					"icon_name":   "#Cg/CgSmartphoneChip",
+				})
+
+			},
+		},
+		{
+			name: "GetDeviceById_Error",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				e.GET("/v1/devices/error").
+					Expect().
+					Status(http.StatusNotFound)
+			},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			runTests(t, tc)
+		})
+
+	}
+}
+
+func TestGetDevices(t *testing.T) {
+	tt := []TestCase{
+		{
+			name: "GetDevices:EmptyList",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				obj := e.GET("/v1/devices").
+					Expect().
+					Status(http.StatusOK).JSON()
+
+				obj.Object().ContainsKey("total_devices").ValueEqual("total_devices", 0)
+				obj.Object().ContainsKey("devices")
+
+				obj.Object().Value("devices").Array().Empty()
+			},
+		},
+		{
+			name: "GetDevices:OneDevice",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				_, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
+					DeviceID:    "1234-5678-9012-3456",
+					Alias:       "Raspberry Pi",
+					Tags:        []string{"raspberry-pi", "5G"},
+					IconColor:   "",
+					IconName:    "",
+					Description: "Raspberry Pi is a small, low-cost, and light-weight computer",
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				resp := e.GET("/v1/devices").
+					Expect().
+					Status(http.StatusOK).JSON()
+
+				resp.Object().Value("devices").Array().Length().Equal(1)
+
+			},
+		},
+		{
+			name: "GetDevices:3Devices",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				for i := 1; i < 3; i++ {
+					_, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
+						DeviceID:    "device-" + strconv.Itoa(i),
+						Alias:       "Raspberry Pi",
+						Tags:        []string{"raspberry-pi", "5G"},
+						IconColor:   "",
+						IconName:    "",
+						Description: "Raspberry Pi is a small, low-cost, and light-weight computer",
+					})
+					if err != nil {
+						t.Fatalf("Failed to parse certificate: %s", err)
+					}
+				}
+
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				resp := e.GET("/v1/devices").
+					Expect().
+					Status(http.StatusOK).JSON()
+
+				resp.Object().Value("devices").Array().Length().Equal(3)
+
+				/*for _, cert := range resp.Object().Value("devices").Array() {
+					if !slices.Contains(expectedDevices, cert.Subject.CommonName) {
+						t.Errorf("Unexpected common name in response: %s", cert.Subject.CommonName)
+					} else {
+						visitedCAs = append(visitedCAs, cert.Subject.CommonName)
+					}
+				}*/
+
+			},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			runTests(t, tc)
+		})
+	}
+}
+
+func TestUpdateDeviceMetadata(t *testing.T) {
+	tt := []TestCase{
+
+		{
+			name: "NoDevice",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				e.PUT("/v1/devices/error").
+					Expect().
+					Status(http.StatusNotFound)
+
+			},
+		},
+		{
+			name: "UpdateDevice_JSONError",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				device := `"badRequest":"1"}`
+
+				e.PUT("/v1/devices/deviceID").WithBytes([]byte(device)).
+					Expect().
+					Status(http.StatusBadRequest)
+			},
+		},
+		{
+			name: "UpdateDeviceMetadata",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				_, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
+					DeviceID:    "1234-5678-9012-3456",
+					Alias:       "Raspberry Pi",
+					Tags:        []string{"raspberry-pi", "5G"},
+					IconColor:   "#0068D1",
+					IconName:    "Cg/CgSmartphoneChip",
+					Description: "Raspberry Pi is a small, low-cost, and light-weight computer",
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				reqBytes := `{"device_id":"1234", "alias", "Raspberry", "tags": {"raspberry-pi"}, "description": "Raspberry Pi is a small", "icon_color":"#0068D1", "icon_name": "Cg/CgSmartphoneChip"}`
+
+				obj := e.PUT("/v1/devices/1234-5678-9012-3456").WithBytes([]byte(reqBytes)).
+					Expect().
+					Status(http.StatusOK).JSON().Object()
+
+				obj.ContainsKey("id")
+				obj.ContainsKey("alias")
+				obj.ContainsKey("status")
+				obj.ContainsKey("slots")
+				obj.ContainsKey("description")
+				obj.ContainsKey("tags")
+				obj.ContainsKey("icon_name")
+				obj.ContainsKey("icon_color")
+				obj.ContainsKey("creation_timestamp")
+
+				obj.ContainsMap(map[string]interface{}{
+					"alias": "Raspberry Pi",
+					"id":    "1234-5678-9012-3456",
+
+					"status":      api.DeviceStatusPendingProvisioning,
+					"slots":       map[string]interface{}{},
+					"description": "Raspberry Pi is a small, low-cost, and light-weight computer",
+					"tags":        []string{"raspberry-pi", "5G"},
+					"icon_color":  "#0068D1",
+					"icon_name":   "#Cg/CgSmartphoneChip",
+				})
+
+			},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			runTests(t, tc)
+		})
+
+	}
+}
+
+func TestDecommisionDevice(t *testing.T) {
+	tt := []TestCase{
+
+		{
+			name: "NoDevice",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				e.DELETE("/v1/devices/error").
+					Expect().
+					Status(http.StatusNotFound)
+
+			},
+		},
+		{
+			name: "DecommisionDevice",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				_, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
+					DeviceID:    "1234-5678-9012-3456",
+					Alias:       "Raspberry Pi",
+					Tags:        []string{"raspberry-pi", "5G"},
+					IconColor:   "#0068D1",
+					IconName:    "Cg/CgSmartphoneChip",
+					Description: "Raspberry Pi is a small, low-cost, and light-weight computer",
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+
+				obj := e.DELETE("/v1/devices/1234-5678-9012-3456").
+					Expect().
+					Status(http.StatusOK).JSON().Object()
+
+				obj.ContainsKey("id")
+				obj.ContainsKey("alias")
+				obj.ContainsKey("status")
+				obj.ContainsKey("slots")
+				obj.ContainsKey("description")
+				obj.ContainsKey("tags")
+				obj.ContainsKey("icon_name")
+				obj.ContainsKey("icon_color")
+				obj.ContainsKey("creation_timestamp")
+
+				obj.ContainsMap(map[string]interface{}{
+					"alias":       "Raspberry Pi",
+					"id":          "1234-5678-9012-3456",
+					"status":      api.DeviceStatusPendingProvisioning,
+					"slots":       map[string]interface{}{},
+					"description": "Raspberry Pi is a small, low-cost, and light-weight computer",
+					"tags":        []string{"raspberry-pi", "5G"},
+					"icon_color":  "#0068D1",
+					"icon_name":   "#Cg/CgSmartphoneChip",
+				})
+
+			},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			runTests(t, tc)
+		})
+
+	}
+}
+
+func TestRevokeActiveCertificate(t *testing.T) {
+	tt := []TestCase{
+
+		{
+			name: "NoDevice",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+
+				e.DELETE("/v1/devices/device/slots/slot").
+					Expect().
+					Status(http.StatusNotFound)
+
+			},
+		},
+		{
+			name: "NoSlot",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				_, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
+					DeviceID:    "1234-5678-9012-3456",
+					Alias:       "Raspberry Pi",
+					Tags:        []string{"raspberry-pi", "5G"},
+					IconColor:   "#0068D1",
+					IconName:    "Cg/CgSmartphoneChip",
+					Description: "Raspberry Pi is a small, low-cost, and light-weight computer",
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+
+				e.DELETE("/v1/devices/1234-5678-9012-3456/slots/slot").
+					Expect().
+					Status(http.StatusNotFound)
+
+			},
+		},
+		{
+			name: "RevokeNonActiveCertificate",
+
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				_, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
+					DeviceID:    "1234-5678-9012-3456",
+					Alias:       "Raspberry Pi",
+					Tags:        []string{"raspberry-pi", "5G"},
+					IconColor:   "#0068D1",
+					IconName:    "Cg/CgSmartphoneChip",
+					Description: "Raspberry Pi is a small, low-cost, and light-weight computer",
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+				_, csr := generateCertificateRequestAndKey("slot1:1234-5678-9012-3456")
+				singOutput, err := (*caSvc).SignCertificateRequest(context.Background(), &caApi.SignCertificateRequestInput{
+					CAType:                    caApi.CATypePKI,
+					CAName:                    "RPI-CA-SHORT",
+					CertificateSigningRequest: csr,
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+
+				_, err = (*svc).AddDeviceSlot(context.Background(), &api.AddDeviceSlotInput{
+					DeviceID:          "1234-5678-9012-3456",
+					SlotID:            "slot1",
+					ActiveCertificate: singOutput.Certificate,
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+
+				obj := e.DELETE("/v1/devices/1234-5678-9012-3456").
+					Expect().
+					Status(http.StatusOK).JSON().Object()
+
+				obj.ContainsKey("id")
+				obj.ContainsKey("alias")
+				obj.ContainsKey("status")
+				obj.ContainsKey("slots")
+				obj.ContainsKey("description")
+				obj.ContainsKey("tags")
+				obj.ContainsKey("icon_name")
+				obj.ContainsKey("icon_color")
+				obj.ContainsKey("creation_timestamp")
+
+				obj.ContainsMap(map[string]interface{}{
+					"alias":       "Raspberry Pi",
+					"id":          "1234-5678-9012-3456",
+					"status":      api.DeviceStatusPendingProvisioning,
+					"slots":       map[string]interface{}{},
+					"description": "Raspberry Pi is a small, low-cost, and light-weight computer",
+					"tags":        []string{"raspberry-pi", "5G"},
+					"icon_color":  "#0068D1",
+					"icon_name":   "#Cg/CgSmartphoneChip",
+				})
+
+			},
+		},
+		{
+			name: "RevokeActiveCertificate",
+
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				_, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
+					DeviceID:    "1234-5678-9012-3456",
+					Alias:       "Raspberry Pi",
+					Tags:        []string{"raspberry-pi", "5G"},
+					IconColor:   "#0068D1",
+					IconName:    "Cg/CgSmartphoneChip",
+					Description: "Raspberry Pi is a small, low-cost, and light-weight computer",
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+				_, csr := generateCertificateRequestAndKey("slot1:1234-5678-9012-3456")
+				singOutput, err := (*caSvc).SignCertificateRequest(context.Background(), &caApi.SignCertificateRequestInput{
+					CAType:                    caApi.CATypePKI,
+					CAName:                    "RPI-CA-LONG",
+					CertificateSigningRequest: csr,
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+
+				_, err = (*svc).AddDeviceSlot(context.Background(), &api.AddDeviceSlotInput{
+					DeviceID:          "1234-5678-9012-3456",
+					SlotID:            "slot1",
+					ActiveCertificate: singOutput.Certificate,
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+
+				obj := e.DELETE("/v1/devices/1234-5678-9012-3456").
+					Expect().
+					Status(http.StatusOK).JSON().Object()
+
+				obj.ContainsKey("id")
+				obj.ContainsKey("alias")
+				obj.ContainsKey("status")
+				obj.ContainsKey("slots")
+				obj.ContainsKey("description")
+				obj.ContainsKey("tags")
+				obj.ContainsKey("icon_name")
+				obj.ContainsKey("icon_color")
+				obj.ContainsKey("creation_timestamp")
+
+				obj.ContainsMap(map[string]interface{}{
+					"alias":       "Raspberry Pi",
+					"id":          "1234-5678-9012-3456",
+					"status":      api.DeviceStatusPendingProvisioning,
+					"slots":       map[string]interface{}{},
+					"description": "Raspberry Pi is a small, low-cost, and light-weight computer",
+					"tags":        []string{"raspberry-pi", "5G"},
+					"icon_color":  "#0068D1",
+					"icon_name":   "#Cg/CgSmartphoneChip",
+				})
+
+			},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			runTests(t, tc)
+		})
+
+	}
+}
+func TestGetDeviceLogs(t *testing.T) {
+	tt := []TestCase{
+
+		{
+			name: "NoDevice",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				e.GET("/v1/devices/error/logs").
+					Expect().
+					Status(http.StatusNotFound)
+
+			},
+		},
+		{
+			name: "GetLogs: NoSlot",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				_, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
+					DeviceID:    "1234-5678-9012-3456",
+					Alias:       "Raspberry Pi",
+					Tags:        []string{"raspberry-pi", "5G"},
+					IconColor:   "",
+					IconName:    "",
+					Description: "Raspberry Pi is a small, low-cost, and light-weight computer",
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				resp := e.GET("/v1/device/1234-5678-9012-3456/logs").
+					Expect().
+					Status(http.StatusOK).JSON().Object()
+
+				resp.ContainsKey("device_id")
+				resp.ContainsKey("logs")
+				resp.ContainsKey("slot_logs")
+
+				resp.ContainsMap(map[string]interface{}{
+					"device_id": []string{},
+					"name":      "My DMS Server",
+					"logs": map[string]interface{}{
+						"log_type":        api.LogTypeInfo,
+						"log_message":     "Device Created",
+						"log_description": "",
+						//"timestamp":     "RSA",
+					},
+					//SlotLogs  map[string][]Log
+					"slot_logs": map[string]interface{}{
+						"common_name":       "My DMS Server",
+						"country":           "",
+						"locality":          "",
+						"organization":      "",
+						"organization_unit": "",
+						"state":             "",
+					},
+				})
+
+			},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			runTests(t, tc)
+		})
+	}
+}
+
 func runTests(t *testing.T, tc TestCase) {
 	ctx := context.Background()
 
@@ -797,21 +1554,21 @@ func runTests(t *testing.T, tc TestCase) {
 	defer serverCA.Close()
 	serverCA.Start()
 
-	_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
-		CAType: caApi.CATypeDMSEnroller,
-		Subject: caApi.Subject{
-			CommonName: "LAMASSU-DMS-MANAGER",
-		},
-		KeyMetadata: caApi.KeyMetadata{
-			KeyType: "RSA",
-			KeyBits: 4096,
-		},
-		CADuration:       time.Hour * 24 * 365 * 5,
-		IssuanceDuration: time.Hour * 24 * 365 * 3,
-	})
-	if err != nil {
-		t.Fatalf("%s", err)
-	}
+	// _, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
+	// 	CAType: caApi.CATypeDMSEnroller,
+	// 	Subject: caApi.Subject{
+	// 		CommonName: "LAMASSU-DMS-MANAGER",
+	// 	},
+	// 	KeyMetadata: caApi.KeyMetadata{
+	// 		KeyType: "RSA",
+	// 		KeyBits: 4096,
+	// 	},
+	// 	CADuration:       time.Hour * 24 * 365 * 5,
+	// 	IssuanceDuration: time.Hour * 24 * 365 * 3,
+	// })
+	// if err != nil {
+	// 	t.Fatalf("%s", err)
+	// }
 
 	_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
 		CAType: caApi.CATypePKI,
@@ -997,6 +1754,7 @@ func generateCertificate(commonName string, issuerCommonName string) (*rsa.Priva
 }
 
 func generateCertificateRequestAndKey(commonName string) (*rsa.PrivateKey, *x509.CertificateRequest) {
+
 	key, _ := rsa.GenerateKey(rand.Reader, 2048)
 	csr := generateCertificateRequest(commonName, key)
 	return key, csr
