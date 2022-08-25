@@ -49,109 +49,6 @@ type TestCase struct {
 	testRestEndpoint      func(ctx context.Context, e *httpexpect.Expect)
 }
 
-func TestHealth(t *testing.T) {
-
-	tt := []TestCase{
-		{
-			name: "CorrectHealth",
-			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
-
-				return ctx
-			},
-			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
-				obj := e.GET("/v1/health").
-					Expect().
-					Status(http.StatusOK).JSON()
-
-				obj.Object().ContainsKey("healthy")
-			},
-		},
-	}
-
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			runTests(t, tc)
-		})
-	}
-}
-
-func TestGetStats(t *testing.T) {
-
-	tt := []TestCase{
-
-		{
-			name: "EmptyDevices",
-			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
-				return ctx
-			},
-			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
-				obj := e.GET("/v1/stats").
-					Expect().
-					Status(http.StatusOK).JSON()
-				//TODO: check {}
-
-				obj.Object().Value("stats").Object().ContainsKey("devices_stats")
-				obj.Object().Value("stats").Object().ContainsKey("slots_stats")
-				obj.Object().ContainsKey("scan_date")
-				obj.Object().ContainsKey("stats")
-			},
-		}, /*{
-			name: "DevicesWithCertificate",
-			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
-				_, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
-					DeviceID:    "1234-5678-9012-3456",
-					Alias:       "Raspberry Pi",
-					Tags:        []string{"raspberry-pi", "5G"},
-					IconColor:   "",
-					IconName:    "",
-					Description: "Raspberry Pi is a small, low-cost, and light-weight computer",
-				})
-				if err != nil {
-					t.Fatalf("Failed to parse certificate: %s", err)
-				}
-				_, csr := generateCertificateRequestAndKey("slot1:1234-5678-9012-3456")
-				singOutput, err := (*caSvc).SignCertificateRequest(context.Background(), &caApi.SignCertificateRequestInput{
-					CAType:                    caApi.CATypePKI,
-					CAName:                    "RPI-CA",
-					CertificateSigningRequest: csr,
-				})
-				if err != nil {
-					t.Fatalf("Failed to parse certificate: %s", err)
-				}
-
-				_, err = (*svc).AddDeviceSlot(context.Background(), &api.AddDeviceSlotInput{
-					DeviceID:          "1234-5678-9012-3456",
-					SlotID:            "slot1",
-					ActiveCertificate: singOutput.Certificate,
-				})
-				if err != nil {
-					t.Fatalf("Failed to add slot : %s", err)
-				}
-
-				return ctx
-
-			},
-
-			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
-				obj := e.GET("/v1/stats").
-					Expect().
-					Status(http.StatusOK).JSON()
-
-				obj.Object().ContainsKey("stats").ContainsKey("devices_stats")
-				obj.Object().ContainsKey("stats").ContainsKey("slots_stats")
-				obj.Object().ContainsKey("scan_date")
-			},
-		},*/
-	}
-
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			runTests(t, tc)
-		})
-
-	}
-}
-
 func TestEnroll(t *testing.T) {
 	tt := []TestCase{
 		{
@@ -892,6 +789,107 @@ func TestGetESTCAs(t *testing.T) {
 	}
 }
 
+func TestHealth(t *testing.T) {
+
+	tt := []TestCase{
+		{
+			name: "CorrectHealth",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				obj := e.GET("/v1/health").
+					Expect().
+					Status(http.StatusOK).JSON()
+				obj.Object().ContainsKey("healthy")
+			},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			runTests(t, tc)
+		})
+	}
+}
+
+func TestGetStats(t *testing.T) {
+
+	tt := []TestCase{
+
+		{
+			name: "EmptyDevices",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				obj := e.GET("/v1/stats").
+					Expect().
+					Status(http.StatusOK).JSON()
+
+				obj.Object().ContainsKey("stats").ValueEqual("stats", 0)
+				obj.Object().ContainsKey("stats").ContainsKey("devices_stats").ValueEqual("devices_stats", 0)
+				obj.Object().ContainsKey("stats").ContainsKey("slots_stats").ValueEqual("slots_stats", 0)
+				obj.Object().ContainsKey("scan_date")
+			},
+		}, {
+			name: "DevicesWithCertificate",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
+				_, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
+					DeviceID:    "1234-5678-9012-3456",
+					Alias:       "Raspberry Pi",
+					Tags:        []string{"raspberry-pi", "5G"},
+					IconColor:   "",
+					IconName:    "",
+					Description: "Raspberry Pi is a small, low-cost, and light-weight computer",
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+				_, csr := generateCertificateRequestAndKey("slot1:1234-5678-9012-3456")
+				singOutput, err := (*caSvc).SignCertificateRequest(context.Background(), &caApi.SignCertificateRequestInput{
+					CAType:                    caApi.CATypePKI,
+					CAName:                    "RPI-CA",
+					CertificateSigningRequest: csr,
+				})
+				if err != nil {
+					t.Fatalf("Failed to parse certificate: %s", err)
+				}
+
+				_, err = (*svc).AddDeviceSlot(context.Background(), &api.AddDeviceSlotInput{
+					DeviceID:          "1234-5678-9012-3456",
+					SlotID:            "slot1",
+					ActiveCertificate: singOutput.Certificate,
+				})
+				if err != nil {
+					t.Fatalf("Failed to add slot : %s", err)
+				}
+
+				return ctx
+
+			},
+
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				obj := e.GET("/v1/stats").
+					Expect().
+					Status(http.StatusOK).JSON()
+
+				obj.Object().ContainsKey("stats").ValueEqual("stats", 0)
+				obj.Object().ContainsKey("stats").ContainsKey("devices_stats").ValueEqual("devices_stats", 0)
+				obj.Object().ContainsKey("stats").ContainsKey("slots_stats").ValueEqual("slots_stats", 0)
+				obj.Object().ContainsKey("scan_date")
+			},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			runTests(t, tc)
+		})
+
+	}
+}
+
 func TestGetDeviceById(t *testing.T) {
 
 	tt := []TestCase{
@@ -1490,7 +1488,7 @@ func TestGetDeviceLogs(t *testing.T) {
 
 			},
 		},
-		/*{
+		{
 			name: "GetLogs: NoSlot",
 			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
 				_, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
@@ -1536,7 +1534,7 @@ func TestGetDeviceLogs(t *testing.T) {
 				})
 
 			},
-		},*/
+		},
 	}
 
 	for _, tc := range tt {
@@ -1556,21 +1554,21 @@ func runTests(t *testing.T, tc TestCase) {
 	defer serverCA.Close()
 	serverCA.Start()
 
-	/*_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
-		CAType: caApi.CATypeDMSEnroller,
-		Subject: caApi.Subject{
-			CommonName: "LAMASSU-DMS-MANAGER",
-		},
-		KeyMetadata: caApi.KeyMetadata{
-			KeyType: "RSA",
-			KeyBits: 4096,
-		},
-		CADuration:       time.Hour * 24 * 365 * 5,
-		IssuanceDuration: time.Hour * 24 * 365 * 3,
-	})
-	if err != nil {
-		t.Fatalf("%s", err)
-	}*/
+	// _, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
+	// 	CAType: caApi.CATypeDMSEnroller,
+	// 	Subject: caApi.Subject{
+	// 		CommonName: "LAMASSU-DMS-MANAGER",
+	// 	},
+	// 	KeyMetadata: caApi.KeyMetadata{
+	// 		KeyType: "RSA",
+	// 		KeyBits: 4096,
+	// 	},
+	// 	CADuration:       time.Hour * 24 * 365 * 5,
+	// 	IssuanceDuration: time.Hour * 24 * 365 * 3,
+	// })
+	// if err != nil {
+	// 	t.Fatalf("%s", err)
+	// }
 
 	_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
 		CAType: caApi.CATypePKI,

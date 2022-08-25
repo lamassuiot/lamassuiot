@@ -76,11 +76,9 @@ func NewDeviceManagerService(logger log.Logger, devicesRepo repository.Devices, 
 		minimumReenrollmentDays: minimumReenrollmentDays,
 		cronInstance:            cronInstance,
 	}
-
 	svc.ScanDevicesAndUpdateStatistics()
 	cronInstance.AddFunc("1 * * * *", svc.ScanDevicesAndUpdateStatistics)
 
-	svc.cronInstance = cronInstance
 	return svc
 }
 
@@ -448,96 +446,93 @@ func (s *devicesService) RevokeActiveCertificate(ctx context.Context, input *api
 }
 
 func (s *devicesService) CheckAndUpdateDeviceStatus(ctx context.Context, input *api.CheckAndUpdateDeviceStatusInput) (*api.CheckAndUpdateDeviceStatusOutput, error) {
-	if len(input.DeviceID) > 0 {
-		device, err := s.devicesRepo.SelectDeviceById(ctx, input.DeviceID)
-		if err != nil {
-			return &api.CheckAndUpdateDeviceStatusOutput{}, err
-		}
+	device, err := s.devicesRepo.SelectDeviceById(ctx, input.DeviceID)
+	if err != nil {
+		return &api.CheckAndUpdateDeviceStatusOutput{}, err
+	}
 
-		if device.Status == api.DeviceStatusDecommissioned {
-			return &api.CheckAndUpdateDeviceStatusOutput{
-				Device: *device,
-			}, nil
-		}
-
-		theoricalStatus := device.Status
-
-		if len(device.Slots) == 0 && device.Status != api.DeviceStatusPendingProvisioning {
-			theoricalStatus = api.DeviceStatusPendingProvisioning
-		}
-
-		type StatusReport struct {
-			ActiveCounter  int
-			RevokedCounter int
-			ExpiredCounter int
-			AboutToExpire  int
-		}
-
-		counter := StatusReport{
-			ActiveCounter:  0,
-			RevokedCounter: 0,
-			ExpiredCounter: 0,
-			AboutToExpire:  0,
-		}
-
-		for _, v := range device.Slots {
-			getCertificateOutput, err := s.caClient.GetCertificateBySerialNumber(ctx, &caApi.GetCertificateBySerialNumberInput{
-				CAType:                  caApi.CATypePKI,
-				CAName:                  v.ActiveCertificate.CAName,
-				CertificateSerialNumber: v.ActiveCertificate.SerialNumber,
-			})
-			if err != nil {
-				return &api.CheckAndUpdateDeviceStatusOutput{}, err
-			}
-
-			if getCertificateOutput.Status != v.ActiveCertificate.Status {
-				s.UpdateActiveCertificateStatus(ctx, &api.UpdateActiveCertificateStatusInput{
-					DeviceID:         device.ID,
-					SlotID:           v.ID,
-					Status:           getCertificateOutput.Status,
-					RevocationReason: getCertificateOutput.RevocationReason,
-				})
-			}
-
-			switch getCertificateOutput.Status {
-			case caApi.StatusActive:
-				counter.ActiveCounter += 1
-			case caApi.StatusRevoked:
-				counter.RevokedCounter += 1
-			case caApi.StatusExpired:
-				counter.ExpiredCounter += 1
-			case caApi.StatusAboutToExpire:
-				counter.AboutToExpire += 1
-			}
-		}
-
-		if counter.ExpiredCounter > 0 || counter.RevokedCounter > 0 {
-			theoricalStatus = api.DeviceStatusProvisionedWithWarnings
-		} else if counter.AboutToExpire > 0 {
-			theoricalStatus = api.DeviceStatusRequiresAction
-		} else if counter.ActiveCounter > 0 {
-			theoricalStatus = api.DeviceStatusFullyProvisioned
-		}
-
-		if theoricalStatus != device.Status {
-			device.Status = theoricalStatus
-			err = s.devicesRepo.UpdateDevice(ctx, *device)
-			if err != nil {
-				return &api.CheckAndUpdateDeviceStatusOutput{}, err
-			}
-		}
-
-		device, err = s.devicesRepo.SelectDeviceById(ctx, input.DeviceID)
-		if err != nil {
-			return &api.CheckAndUpdateDeviceStatusOutput{}, err
-		}
-
+	if device.Status == api.DeviceStatusDecommissioned {
 		return &api.CheckAndUpdateDeviceStatusOutput{
 			Device: *device,
 		}, nil
-	} else {
-		return &api.CheckAndUpdateDeviceStatusOutput{}, nil
 	}
+
+	theoricalStatus := device.Status
+
+	if len(device.Slots) == 0 && device.Status != api.DeviceStatusPendingProvisioning {
+		theoricalStatus = api.DeviceStatusPendingProvisioning
+	}
+
+	type StatusReport struct {
+		ActiveCounter  int
+		RevokedCounter int
+		ExpiredCounter int
+		AboutToExpire  int
+	}
+
+	counter := StatusReport{
+		ActiveCounter:  0,
+		RevokedCounter: 0,
+		ExpiredCounter: 0,
+		AboutToExpire:  0,
+	}
+
+	for _, v := range device.Slots {
+		getCertificateOutput, err := s.caClient.GetCertificateBySerialNumber(ctx, &caApi.GetCertificateBySerialNumberInput{
+			CAType:                  caApi.CATypePKI,
+			CAName:                  v.ActiveCertificate.CAName,
+			CertificateSerialNumber: v.ActiveCertificate.SerialNumber,
+		})
+		if err != nil {
+			return &api.CheckAndUpdateDeviceStatusOutput{}, err
+		}
+
+		if getCertificateOutput.Status != v.ActiveCertificate.Status {
+			s.UpdateActiveCertificateStatus(ctx, &api.UpdateActiveCertificateStatusInput{
+				DeviceID:         device.ID,
+				SlotID:           v.ID,
+				Status:           getCertificateOutput.Status,
+				RevocationReason: getCertificateOutput.RevocationReason,
+			})
+		}
+
+		switch getCertificateOutput.Status {
+		case caApi.StatusActive:
+			counter.ActiveCounter += 1
+		case caApi.StatusRevoked:
+			counter.RevokedCounter += 1
+		case caApi.StatusExpired:
+			counter.ExpiredCounter += 1
+		case caApi.StatusAboutToExpire:
+			counter.AboutToExpire += 1
+		}
+	}
+
+	if counter.ExpiredCounter > 0 || counter.RevokedCounter > 0 {
+		theoricalStatus = api.DeviceStatusProvisionedWithWarnings
+	} else if counter.AboutToExpire > 0 {
+		theoricalStatus = api.DeviceStatusRequiresAction
+	} else if counter.ActiveCounter > 0 {
+		theoricalStatus = api.DeviceStatusFullyProvisioned
+	}
+
+	if theoricalStatus != device.Status {
+		device.Status = theoricalStatus
+		err = s.devicesRepo.UpdateDevice(ctx, *device)
+		if err != nil {
+			return &api.CheckAndUpdateDeviceStatusOutput{}, err
+		}
+	}
+
+	device, err = s.devicesRepo.SelectDeviceById(ctx, input.DeviceID)
+	if err != nil {
+		return &api.CheckAndUpdateDeviceStatusOutput{}, err
+	}
+
+	return &api.CheckAndUpdateDeviceStatusOutput{
+		Device: *device,
+	}, nil
+
 }
 
 func (s *devicesService) IterateDevicesWithPredicate(ctx context.Context, input *api.IterateDevicesWithPredicateInput) (*api.IterateDevicesWithPredicateOutput, error) {
@@ -895,7 +890,6 @@ func (s *devicesService) ScanDevicesAndUpdateStatistics() {
 	slotStatus := map[caApi.CertificateStatus]int{}
 	s.IterateDevicesWithPredicate(ctx, &api.IterateDevicesWithPredicateInput{
 		PredicateFunc: func(device *api.Device) {
-
 			output, err := s.CheckAndUpdateDeviceStatus(ctx, &api.CheckAndUpdateDeviceStatusInput{
 				DeviceID: device.ID,
 			})
@@ -907,7 +901,6 @@ func (s *devicesService) ScanDevicesAndUpdateStatistics() {
 			for _, slot := range output.Device.Slots {
 				slotStatus[slot.ActiveCertificate.Status] += 1
 			}
-
 		},
 	})
 
