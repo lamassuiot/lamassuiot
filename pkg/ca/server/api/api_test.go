@@ -2182,7 +2182,7 @@ func TestStats(t *testing.T) {
 	}
 }
 
-/*func TestHealth(t *testing.T) {
+func TestHealth(t *testing.T) {
 	tt := []struct {
 		name                  string
 		serviceInitialization func(svc *service.Service)
@@ -2215,7 +2215,51 @@ func TestStats(t *testing.T) {
 			tc.testRestEndpoint(e)
 		})
 	}
-}*/
+}
+
+func TestGetEnginerProviderInfo(t *testing.T) {
+	tt := []struct {
+		name                  string
+		serviceInitialization func(svc *service.Service)
+		testRestEndpoint      func(e *httpexpect.Expect)
+	}{
+		{
+			name:                  "GetEnginerProviderInfo",
+			serviceInitialization: func(svc *service.Service) {},
+			testRestEndpoint: func(e *httpexpect.Expect) {
+				obj := e.GET("/v1/cryptoengine").
+					Expect().
+					Status(http.StatusOK).JSON()
+
+				obj.Object().ContainsKey("provider")
+				obj.Object().ContainsKey("cryptoki_version")
+				obj.Object().ContainsKey("manufacturer")
+				obj.Object().ContainsKey("model")
+				obj.Object().ContainsKey("library")
+				obj.Object().Value("supported_key_types").Array().Element(0).Object().ContainsKey("type")
+				obj.Object().Value("supported_key_types").Array().Element(0).Object().ContainsKey("minimum_size")
+				obj.Object().Value("supported_key_types").Array().Element(0).Object().ContainsKey("maximum_size")
+
+			},
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			server, svc, err := testUtils.BuildCATestServer()
+			if err != nil {
+				t.Errorf("%s", err)
+			}
+
+			defer server.Close()
+			server.Start()
+
+			tc.serviceInitialization(svc)
+			e := httpexpect.New(t, server.URL)
+			tc.testRestEndpoint(e)
+		})
+	}
+}
 
 func generateBase64EncodedCertificateRequest(commonName string) (*rsa.PrivateKey, string) {
 	key, _ := rsa.GenerateKey(rand.Reader, 2048)

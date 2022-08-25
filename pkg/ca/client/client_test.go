@@ -160,7 +160,7 @@ func setup(t *testing.T) (http.Handler, service.Service) {
 	certificateRepository := postgresRepository.NewPostgresDB(db, logger)
 	tracer := opentracing.NoopTracer{}
 
-	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, "/tmp/tests")
+	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, "/home/ubuntu/lamassuiot/lamassuiot/pkg/tmp/tests")
 	var s service.Service
 	s = service.NewCAService(logger, engine, certificateRepository, "http://ocsp.test")
 	s = service.LoggingMiddleware(logger)(s)

@@ -36,6 +36,8 @@ import (
 
 	estTransport "github.com/lamassuiot/lamassuiot/pkg/est/server/api/transport"
 
+	badgerRepository "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/repository/badger"
+
 	ocspService "github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/service"
 	ocspTransport "github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/transport"
 )
@@ -59,7 +61,7 @@ func BuildCATestServer() (*httptest.Server, *caService.Service, error) {
 	certificateRepository := caRepository.NewPostgresDB(db, logger)
 	tracer := opentracing.NoopTracer{}
 
-	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, "/tmp/tests")
+	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, "/home/ubuntu/lamassuiot/lamassuiot/pkg/tmp/tests")
 	var svc caService.Service
 	svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test")
 	svc = caService.LoggingMiddleware(logger)(svc)
@@ -161,8 +163,14 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 	if err != nil {
 		return nil, nil, err
 	}
+	//logsRepo := postgresRepository.NewLogsPostgresDB(&gorm.DB{}, logger)
+	statsRepo, err := badgerRepository.NewStatisticsDBInMemory()
+	if err != nil {
+		return nil, nil, err
+	}
 
-	svc := deviceService.NewDeviceManagerService(logger, deviceRepository, nil, nil, 30, lamassuCAClient, lamassuDMSClient)
+	//logsRepo nil, statsRepo nil
+	svc := deviceService.NewDeviceManagerService(logger, deviceRepository, nil, statsRepo, 30, lamassuCAClient, lamassuDMSClient)
 	// svc = deviceService.LoggingMiddleware(logger)(svc)
 
 	handler := deviceTransport.MakeHTTPHandler(svc, logger, tracer)
