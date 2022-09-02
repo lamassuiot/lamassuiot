@@ -58,8 +58,10 @@ type UpdateCAStatusOutput struct{}
 //------------------------------------------------------
 
 type UpdateDeviceCertificateStatusInput struct {
-	Certificate caApi.Certificate
-	Status      string
+	DeviceID     string
+	CAName       string
+	SerialNumber string
+	Status       string
 }
 
 type UpdateDeviceCertificateStatusOutput struct{}

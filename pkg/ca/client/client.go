@@ -67,7 +67,7 @@ func (c *lamassuCaClientConfig) Stats(ctx context.Context, input *api.GetStatsIn
 func (c *lamassuCaClientConfig) GetCAs(ctx context.Context, input *api.GetCAsInput) (*api.GetCAsOutput, error) {
 	urlParams := clientFilers.GenerateHttpQueryParams(input.QueryParameters)
 	var output api.GetCAsOutputSerialized
-	_, err := newClient(c.client).Do("GET", fmt.Sprintf("v1/pki/%s", input.CAType), urlParams, nil).GetDeserializedResponse(&output)
+	_, err := newClient(c.client).Do("GET", fmt.Sprintf("v1/%s", input.CAType), urlParams, nil).GetDeserializedResponse(&output)
 	deserialized := output.Deserialize()
 	return &deserialized, err
 }

@@ -15,11 +15,12 @@ import (
 )
 
 type Endpoints struct {
-	HealthEndpoint            endpoint.Endpoint
-	EventHandlerEndpoint      endpoint.Endpoint
-	AddUserConfigEndpoint     endpoint.Endpoint
-	SubscribedEventEndpoint   endpoint.Endpoint
-	UnsubscribedEventEndpoint endpoint.Endpoint
+	HealthEndpoint                 endpoint.Endpoint
+	EventHandlerEndpoint           endpoint.Endpoint
+	SubscribedEventEndpoint        endpoint.Endpoint
+	UnsubscribedEventEndpoint      endpoint.Endpoint
+	GetEventsEndpoint              endpoint.Endpoint
+	CheckMailConfigirationEndpoint endpoint.Endpoint
 }
 
 func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
@@ -35,12 +36,6 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 		eventHandlerEndpoint = opentracing.TraceServer(otTracer, "EventHandlerEndpoint")(eventHandlerEndpoint)
 	}
 
-	var addUserConfigEndpoint endpoint.Endpoint
-	{
-		addUserConfigEndpoint = MakeAddUserConfigEndpoint(s)
-		addUserConfigEndpoint = opentracing.TraceServer(otTracer, "AddUserConfigEndpoint")(addUserConfigEndpoint)
-	}
-
 	var subscribedEventEndpoint endpoint.Endpoint
 	{
 		subscribedEventEndpoint = MakeSubscribedEventEndpoint(s)
@@ -52,13 +47,24 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 		unsubscribedEventEndpoint = MakeUnsubscribedEventEndpoint(s)
 		unsubscribedEventEndpoint = opentracing.TraceServer(otTracer, "UnsubscribedEventEndpoint")(unsubscribedEventEndpoint)
 	}
+	var getEventsEndpoint endpoint.Endpoint
+	{
+		getEventsEndpoint = MakeGetEventsEndpoint(s)
+		getEventsEndpoint = opentracing.TraceServer(otTracer, "GetLastEventEndpoint")(getEventsEndpoint)
+	}
+	var checkMailConfigirationEndpoint endpoint.Endpoint
+	{
+		checkMailConfigirationEndpoint = MakeCheckMailConfigirationEndpoint(s)
+		checkMailConfigirationEndpoint = opentracing.TraceServer(otTracer, "CheckMailConfigirationEndpoint")(checkMailConfigirationEndpoint)
+	}
 
 	return Endpoints{
-		HealthEndpoint:            healthEndpoint,
-		EventHandlerEndpoint:      eventHandlerEndpoint,
-		AddUserConfigEndpoint:     addUserConfigEndpoint,
-		SubscribedEventEndpoint:   subscribedEventEndpoint,
-		UnsubscribedEventEndpoint: unsubscribedEventEndpoint,
+		HealthEndpoint:                 healthEndpoint,
+		EventHandlerEndpoint:           eventHandlerEndpoint,
+		SubscribedEventEndpoint:        subscribedEventEndpoint,
+		UnsubscribedEventEndpoint:      unsubscribedEventEndpoint,
+		GetEventsEndpoint:              getEventsEndpoint,
+		CheckMailConfigirationEndpoint: checkMailConfigirationEndpoint,
 	}
 }
 func MakeHealthEndpoint(s service.Service) endpoint.Endpoint {
@@ -90,32 +96,6 @@ func MakeEventHandlerEndpoint(s service.Service) endpoint.Endpoint {
 		output, err := s.HandleEvent(ctx, &api.HandleEventInput{
 			Event: event,
 		})
-		return output, err
-	}
-}
-
-func ValidateAddUserConfigRequest(request api.AddUserConfigInput) error {
-	AddUserConfigRequestStructLevelValidation := func(sl validator.StructLevel) {
-		_ = sl.Current().Interface().(api.AddUserConfigInput)
-	}
-	validate := validator.New()
-	validate.RegisterStructValidation(AddUserConfigRequestStructLevelValidation, api.AddUserConfigInput{})
-	return validate.Struct(request)
-}
-
-func MakeAddUserConfigEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (interface{}, error) {
-		input := request.(api.AddUserConfigInput)
-
-		err := ValidateAddUserConfigRequest(input)
-		if err != nil {
-			valError := errors.ValidationError{
-				Msg: err.Error(),
-			}
-			return nil, &valError
-		}
-
-		output, err := s.AddUserConfig(ctx, &input)
 		return output, err
 	}
 }
@@ -168,6 +148,58 @@ func MakeUnsubscribedEventEndpoint(s service.Service) endpoint.Endpoint {
 		}
 
 		output, err := s.UnsubscribedEvent(ctx, &input)
+		return output, err
+	}
+}
+
+func ValidateGetEventsRequest(request api.GetEventsInput) error {
+	GetEventsRequestStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.GetEventsInput)
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(GetEventsRequestStructLevelValidation, api.GetEventsInput{})
+	return validate.Struct(request)
+}
+
+func MakeGetEventsEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		input := request.(api.GetEventsInput)
+
+		err := ValidateGetEventsRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		output, err := s.GetEventLogs(ctx, &input)
+		return output, err
+	}
+}
+
+func ValidateCheckMailConfigirationRequest(request api.CheckMailConfigirationInput) error {
+	CheckMailConfigirationRequestStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.CheckMailConfigirationInput)
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(CheckMailConfigirationRequestStructLevelValidation, api.CheckMailConfigirationInput{})
+	return validate.Struct(request)
+}
+
+func MakeCheckMailConfigirationEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		input := request.(api.CheckMailConfigirationInput)
+
+		err := ValidateCheckMailConfigirationRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		output, err := s.CheckMailConfigiration(ctx, &input)
 		return output, err
 	}
 }

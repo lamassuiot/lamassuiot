@@ -9,15 +9,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/opentracing/opentracing-go"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
-
-	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 
 	caClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	caRepository "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/repository/postgres"
@@ -30,7 +30,8 @@ import (
 	dmsService "github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/service"
 	dmsTransport "github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/transport"
 
-	deviceRepository "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/repository/postgres"
+	deviceStatsRepository "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/repository/badger"
+	postgresRepository "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/repository/postgres"
 	deviceService "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
 	deviceTransport "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/transport"
 
@@ -58,11 +59,11 @@ func BuildCATestServer() (*httptest.Server, *caService.Service, error) {
 
 	certificateRepository := caRepository.NewPostgresDB(db, logger)
 	tracer := opentracing.NoopTracer{}
-
+	os.Mkdir("/tmp/tests", 0755)
 	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, "/tmp/tests")
 	var svc caService.Service
 	svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test")
-	svc = caService.LoggingMiddleware(logger)(svc)
+	//svc = caService.LoggingMiddleware(logger)(svc)
 
 	handler := caTransport.MakeHTTPHandler(svc, logger, tracer)
 
@@ -128,13 +129,13 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 
 	dialector := sqlite.Open("")
 	db, err := gorm.Open(dialector, &gorm.Config{
-		Logger: gormLogger.Default.LogMode(gormLogger.Info),
+		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
 	})
 	if err != nil {
 		return nil, nil, err
 	}
 
-	deviceRepository := deviceRepository.NewDevicesPostgresDB(db, logger)
+	deviceRepository := postgresRepository.NewDevicesPostgresDB(db, logger)
 	tracer := opentracing.NoopTracer{}
 
 	CATestServerURL, err := url.Parse(CATestServer.URL)
@@ -162,8 +163,16 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 		return nil, nil, err
 	}
 
-	svc := deviceService.NewDeviceManagerService(logger, deviceRepository, nil, nil, 30, lamassuCAClient, lamassuDMSClient)
-	// svc = deviceService.LoggingMiddleware(logger)(svc)
+	statsRepo, err := deviceStatsRepository.NewStatisticsDBInMemory()
+	if err != nil {
+		return nil, nil, err
+	}
+	logsRepo := postgresRepository.NewLogsPostgresDB(db, logger)
+	if err != nil {
+		return nil, nil, err
+	}
+	svc := deviceService.NewDeviceManagerService(logger, deviceRepository, logsRepo, statsRepo, 30, lamassuCAClient, lamassuDMSClient)
+	svc = deviceService.LoggingMiddleware(logger)(svc)
 
 	handler := deviceTransport.MakeHTTPHandler(svc, logger, tracer)
 	estHandler := estTransport.MakeHTTPHandler(svc, logger, tracer)

@@ -59,35 +59,62 @@ func (cps *CloudProxyService) GetCloudConnectors(ctx context.Context, input *api
 	}
 
 	for _, agent := range agents {
-		status, _, err := cps.ConsulClient.Agent().AgentHealthServiceByID(agent.ID)
+		connectorOut, err := cps.GetCloudConnectorByID(ctx, &api.GetCloudConnectorByIDInput{
+			ConnectorID: agent.ID,
+		})
 		if err != nil {
 			continue
 		}
 
-		connectorIp := agent.Address
-		connectorPort := agent.Port
-		connectorType, err := api.ParseCloudProviderType(agent.Meta["connector-type"])
-		if err != nil {
-			continue
-		}
+		cloudConnectors = append(cloudConnectors, connectorOut.CloudConnector)
+	}
 
-		syncCAs := make([]api.SynchronizedCA, 0)
-		caBindngs, err := cps.CloudProxyDB.SelectCABindingsByConnectorID(ctx, agent.ID)
-		if err != nil {
-			level.Debug(cps.Logger).Log("err", err)
-			continue
-		}
+	return &api.GetCloudConnectorsOutput{
+		CloudConnectors: cloudConnectors,
+	}, nil
+}
 
-		for _, caBindng := range caBindngs {
-			syncCAs = append(syncCAs, api.SynchronizedCA{
-				CABinding:           caBindng,
-				ConsistencyStatus:   api.ConsistencyStatusDisabled, //Disabled by default. If Consul Agent is available, it will be either Inconsistent or Consistent.
-				CloudProviderConfig: nil,
-			})
-		}
+func (cps *CloudProxyService) GetCloudConnectorByID(ctx context.Context, input *api.GetCloudConnectorByIDInput) (*api.GetCloudConnectorByIDOutput, error) {
+	agents, err := cps.ConsulClient.Agent().ServicesWithFilter(fmt.Sprintf("Service == \"cloud-connector\" and ID == \"%s\"", input.ConnectorID))
+	if err != nil {
+		return &api.GetCloudConnectorByIDOutput{}, err
+	}
 
-		if status != "passing" {
-			cloudConnectors = append(cloudConnectors, api.CloudConnector{
+	if len(agents) != 1 {
+		return &api.GetCloudConnectorByIDOutput{}, &cProxyErrors.ResourceNotFoundError{ResourceType: "CloudConnector", ResourceId: input.ConnectorID}
+	}
+
+	agent := agents[input.ConnectorID]
+	status, _, err := cps.ConsulClient.Agent().AgentHealthServiceByID(agent.ID)
+	if err != nil {
+		return &api.GetCloudConnectorByIDOutput{}, err
+	}
+
+	connectorIp := agent.Address
+	connectorPort := agent.Port
+	connectorType, err := api.ParseCloudProviderType(agent.Meta["connector-type"])
+	if err != nil {
+		return &api.GetCloudConnectorByIDOutput{}, err
+	}
+
+	syncCAs := make([]api.SynchronizedCA, 0)
+	caBindngs, err := cps.CloudProxyDB.SelectCABindingsByConnectorID(ctx, agent.ID)
+	if err != nil {
+		level.Debug(cps.Logger).Log("err", err)
+		return &api.GetCloudConnectorByIDOutput{}, err
+	}
+
+	for _, caBindng := range caBindngs {
+		syncCAs = append(syncCAs, api.SynchronizedCA{
+			CABinding:           caBindng,
+			ConsistencyStatus:   api.ConsistencyStatusDisabled, //Disabled by default. If Consul Agent is available, it will be either Inconsistent or Consistent.
+			CloudProviderConfig: nil,
+		})
+	}
+
+	if status != "passing" {
+		return &api.GetCloudConnectorByIDOutput{
+			CloudConnector: api.CloudConnector{
 				ID:              agent.ID,
 				Status:          status,
 				Name:            agent.Meta["name"],
@@ -97,33 +124,35 @@ func (cps *CloudProxyService) GetCloudConnectors(ctx context.Context, input *api
 				SynchronizedCAs: syncCAs,
 				Protocol:        agent.Meta["protocol"],
 				Configuration:   nil,
-			})
-		} else {
-			connectorService, err := cps.newCloudPriverClient(agent.Meta["protocol"], connectorIp, connectorPort)
-			if err != nil {
-				level.Debug(cps.Logger).Log("err", err)
-				continue
-			}
+			},
+		}, nil
+	} else {
+		connectorService, err := cps.newCloudPriverClient(agent.Meta["protocol"], connectorIp, connectorPort)
+		if err != nil {
+			level.Debug(cps.Logger).Log("err", err)
+			return &api.GetCloudConnectorByIDOutput{}, err
+		}
 
-			getConfigOutput, err := connectorService.GetConfiguration(ctx, &cloudProvider.GetConfigurationInput{})
-			if err != nil {
-				level.Debug(cps.Logger).Log("msg", fmt.Sprintf("Could not get connector configuration [TYPE]=%s [ID]=%s [IP]=%s [PORT]=%d", connectorType, agent.ID, connectorIp, connectorPort), "err", err)
-				continue
-			}
+		getConfigOutput, err := connectorService.GetConfiguration(ctx, &cloudProvider.GetConfigurationInput{})
+		if err != nil {
+			level.Debug(cps.Logger).Log("msg", fmt.Sprintf("Could not get connector configuration [TYPE]=%s [ID]=%s [IP]=%s [PORT]=%d", connectorType, agent.ID, connectorIp, connectorPort), "err", err)
+			return &api.GetCloudConnectorByIDOutput{}, err
+		}
 
-			for idx, syncCA := range syncCAs {
-				if status == "passing" {
-					syncCAs[idx].ConsistencyStatus = api.ConsistencyStatusInconsistent
-					for _, cloudCA := range getConfigOutput.CAsConfiguration {
-						if cloudCA.CAName == syncCA.CAName {
-							syncCAs[idx].ConsistencyStatus = api.ConsistencyStatusConsistent
-							syncCAs[idx].CloudProviderConfig = cloudCA.Configuration
-						}
+		for idx, syncCA := range syncCAs {
+			if status == "passing" {
+				syncCAs[idx].ConsistencyStatus = api.ConsistencyStatusInconsistent
+				for _, cloudCA := range getConfigOutput.CAsConfiguration {
+					if cloudCA.CAName == syncCA.CAName {
+						syncCAs[idx].ConsistencyStatus = api.ConsistencyStatusConsistent
+						syncCAs[idx].CloudProviderConfig = cloudCA.Configuration
 					}
 				}
 			}
+		}
 
-			cloudConnectors = append(cloudConnectors, api.CloudConnector{
+		return &api.GetCloudConnectorByIDOutput{
+			CloudConnector: api.CloudConnector{
 				ID:              agent.ID,
 				Status:          status,
 				Name:            agent.Meta["name"],
@@ -133,30 +162,10 @@ func (cps *CloudProxyService) GetCloudConnectors(ctx context.Context, input *api
 				Protocol:        agent.Meta["protocol"],
 				SynchronizedCAs: syncCAs,
 				Configuration:   getConfigOutput.Configuration,
-			})
-		}
+			},
+		}, nil
 	}
 
-	return &api.GetCloudConnectorsOutput{
-		CloudConnectors: cloudConnectors,
-	}, nil
-}
-
-func (cps *CloudProxyService) GetCloudConnectorByID(ctx context.Context, input *api.GetCloudConnectorByIDInput) (*api.GetCloudConnectorByIDOutput, error) {
-	connectorsOutput, err := cps.GetCloudConnectors(ctx, &api.GetCloudConnectorsInput{})
-	if err != nil {
-		return &api.GetCloudConnectorByIDOutput{}, err
-	}
-
-	for _, connector := range connectorsOutput.CloudConnectors {
-		if connector.ID == input.ConnectorID {
-			return &api.GetCloudConnectorByIDOutput{
-				CloudConnector: connector,
-			}, nil
-		}
-	}
-
-	return &api.GetCloudConnectorByIDOutput{}, &cProxyErrors.ResourceNotFoundError{ResourceType: "CloudConnector", ResourceId: input.ConnectorID}
 }
 
 func (cps *CloudProxyService) GetDeviceConfiguration(ctx context.Context, input *api.GetDeviceConfigurationInput) (*api.GetDeviceConfigurationOutput, error) {
@@ -172,11 +181,16 @@ func (cps *CloudProxyService) GetDeviceConfiguration(ctx context.Context, input 
 		return &api.GetDeviceConfigurationOutput{}, err
 	}
 
-	devicesConfig, err := connectorClient.GetDeviceConfiguration(ctx, &cloudProvider.GetDeviceConfigurationInput{
+	deviceConfig, err := connectorClient.GetDeviceConfiguration(ctx, &cloudProvider.GetDeviceConfigurationInput{
 		DeviceID: input.DeviceID,
 	})
+
+	if err != nil {
+		return &api.GetDeviceConfigurationOutput{}, err
+	}
+
 	return &api.GetDeviceConfigurationOutput{
-		Configuration: devicesConfig,
+		Configuration: deviceConfig.Configuration,
 	}, err
 }
 
@@ -306,15 +320,14 @@ func (cps *CloudProxyService) HandleUpdateCertificateStatusEvent(ctx context.Con
 					continue
 				}
 
-				connectorClient, err := cps.newCloudPriverClientFromConnector(connector)
-				if err != nil {
-					level.Debug(cps.Logger).Log("err", err)
-					continue
-				}
-
-				_, err = connectorClient.UpdateDeviceCertificateStatus(ctx, &cloudProvider.UpdateDeviceCertificateStatusInput{
-					Certificate: input.Certificate,
+				cps.UpdateDeviceCertificateStatus(ctx, &api.UpdateDeviceCertificateStatusInput{
+					ConnectorID:  connector.ID,
+					DeviceID:     input.Certificate.Subject.CommonName,
+					CAName:       input.CAName,
+					Status:       string(input.Status),
+					SerialNumber: input.SerialNumber,
 				})
+
 				if err != nil {
 					level.Debug(cps.Logger).Log("err", err)
 					continue
@@ -326,6 +339,28 @@ func (cps *CloudProxyService) HandleUpdateCertificateStatusEvent(ctx context.Con
 }
 
 func (cps *CloudProxyService) UpdateDeviceCertificateStatus(ctx context.Context, input *api.UpdateDeviceCertificateStatusInput) (*api.UpdateDeviceCertificateStatusOutput, error) {
+	connectorOutput, err := cps.GetCloudConnectorByID(ctx, &api.GetCloudConnectorByIDInput{
+		ConnectorID: input.ConnectorID,
+	})
+	if err != nil {
+		return &api.UpdateDeviceCertificateStatusOutput{}, err
+	}
+
+	connectorClient, err := cps.newCloudPriverClientFromConnector(connectorOutput.CloudConnector)
+	if err != nil {
+		return &api.UpdateDeviceCertificateStatusOutput{}, err
+	}
+
+	_, err = connectorClient.UpdateDeviceCertificateStatus(ctx, &cloudProvider.UpdateDeviceCertificateStatusInput{
+		DeviceID:     input.DeviceID,
+		Status:       input.Status,
+		CAName:       input.CAName,
+		SerialNumber: input.SerialNumber,
+	})
+	if err != nil {
+		return &api.UpdateDeviceCertificateStatusOutput{}, err
+	}
+
 	return &api.UpdateDeviceCertificateStatusOutput{}, nil
 }
 

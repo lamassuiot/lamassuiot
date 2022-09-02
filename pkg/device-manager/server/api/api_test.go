@@ -827,9 +827,7 @@ func TestGetStats(t *testing.T) {
 					Expect().
 					Status(http.StatusOK).JSON()
 
-				obj.Object().ContainsKey("stats").ValueEqual("stats", 0)
-				obj.Object().ContainsKey("stats").ContainsKey("devices_stats").ValueEqual("devices_stats", 0)
-				obj.Object().ContainsKey("stats").ContainsKey("slots_stats").ValueEqual("slots_stats", 0)
+				obj.Object().ContainsKey("stats")
 				obj.Object().ContainsKey("scan_date")
 			},
 		}, {
@@ -874,9 +872,7 @@ func TestGetStats(t *testing.T) {
 					Expect().
 					Status(http.StatusOK).JSON()
 
-				obj.Object().ContainsKey("stats").ValueEqual("stats", 0)
-				obj.Object().ContainsKey("stats").ContainsKey("devices_stats").ValueEqual("devices_stats", 0)
-				obj.Object().ContainsKey("stats").ContainsKey("slots_stats").ValueEqual("slots_stats", 0)
+				obj.Object().ContainsKey("stats")
 				obj.Object().ContainsKey("scan_date")
 			},
 		},
@@ -924,18 +920,6 @@ func TestGetDeviceById(t *testing.T) {
 				obj.ContainsKey("icon_name")
 				obj.ContainsKey("icon_color")
 				obj.ContainsKey("creation_timestamp")
-
-				obj.ContainsMap(map[string]interface{}{
-					"alias": "Raspberry Pi",
-					"id":    "1234-5678-9012-3456",
-
-					"status":      api.DeviceStatusPendingProvisioning,
-					"slots":       map[string]interface{}{},
-					"description": "Raspberry Pi is a small, low-cost, and light-weight computer",
-					"tags":        []string{"raspberry-pi", "5G"},
-					"icon_color":  "#0068D1",
-					"icon_name":   "#Cg/CgSmartphoneChip",
-				})
 
 			},
 		},
@@ -987,45 +971,6 @@ func TestGetDeviceById(t *testing.T) {
 				obj.ContainsKey("icon_name")
 				obj.ContainsKey("icon_color")
 				obj.ContainsKey("creation_timestamp")
-
-				obj.ContainsMap(map[string]interface{}{
-					"alias": "Raspberry Pi",
-					"id":    "1234-5678-9012-3456",
-
-					"status": api.DeviceStatusPendingProvisioning,
-					"slots": map[string]interface{}{
-						"id": "slot1",
-						"active_certificate": map[string]interface{}{
-							"ca_name": "RPI-CA",
-							//"serial_number" : ,
-							//"certificate": ,
-							"status": "ACTIVE",
-							"key_metadata": map[string]interface{}{
-								"bits":     2048,
-								"strength": "MEDIUM",
-								"type":     "RSA",
-							},
-							"subject": map[string]interface{}{
-								"common_name":       "slot1:1234-5678-9012-3456",
-								"country":           "",
-								"locality":          "",
-								"organization":      "",
-								"organization_unit": "",
-								"state":             "",
-							},
-							//"valid_from":,
-							//"valid_to":,
-							"revocation_timestamp": "",
-							"revocation_reason":    "",
-						},
-
-						"archive_certificates": "",
-					},
-					"description": "Raspberry Pi is a small, low-cost, and light-weight computer",
-					"tags":        []string{"raspberry-pi", "5G"},
-					"icon_color":  "#0068D1",
-					"icon_name":   "#Cg/CgSmartphoneChip",
-				})
 
 			},
 		},
@@ -1120,14 +1065,6 @@ func TestGetDevices(t *testing.T) {
 
 				resp.Object().Value("devices").Array().Length().Equal(3)
 
-				/*for _, cert := range resp.Object().Value("devices").Array() {
-					if !slices.Contains(expectedDevices, cert.Subject.CommonName) {
-						t.Errorf("Unexpected common name in response: %s", cert.Subject.CommonName)
-					} else {
-						visitedCAs = append(visitedCAs, cert.Subject.CommonName)
-					}
-				}*/
-
 			},
 		},
 	}
@@ -1150,7 +1087,7 @@ func TestUpdateDeviceMetadata(t *testing.T) {
 			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
 				e.PUT("/v1/devices/error").
 					Expect().
-					Status(http.StatusNotFound)
+					Status(http.StatusBadRequest)
 
 			},
 		},
@@ -1184,7 +1121,7 @@ func TestUpdateDeviceMetadata(t *testing.T) {
 				return ctx
 			},
 			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
-				reqBytes := `{"device_id":"1234", "alias", "Raspberry", "tags": {"raspberry-pi"}, "description": "Raspberry Pi is a small", "icon_color":"#0068D1", "icon_name": "Cg/CgSmartphoneChip"}`
+				reqBytes := `{"device_id":"1234-5678-9012-3456", "alias":"Raspberry", "tags": {"raspberry-pi"}, "description": "Raspberry Pi is a small", "icon_color":"#0068D1", "icon_name": "Cg/CgSmartphoneChip"}`
 
 				obj := e.PUT("/v1/devices/1234-5678-9012-3456").WithBytes([]byte(reqBytes)).
 					Expect().
@@ -1199,18 +1136,6 @@ func TestUpdateDeviceMetadata(t *testing.T) {
 				obj.ContainsKey("icon_name")
 				obj.ContainsKey("icon_color")
 				obj.ContainsKey("creation_timestamp")
-
-				obj.ContainsMap(map[string]interface{}{
-					"alias": "Raspberry Pi",
-					"id":    "1234-5678-9012-3456",
-
-					"status":      api.DeviceStatusPendingProvisioning,
-					"slots":       map[string]interface{}{},
-					"description": "Raspberry Pi is a small, low-cost, and light-weight computer",
-					"tags":        []string{"raspberry-pi", "5G"},
-					"icon_color":  "#0068D1",
-					"icon_name":   "#Cg/CgSmartphoneChip",
-				})
 
 			},
 		},
@@ -1271,17 +1196,6 @@ func TestDecommisionDevice(t *testing.T) {
 				obj.ContainsKey("icon_color")
 				obj.ContainsKey("creation_timestamp")
 
-				obj.ContainsMap(map[string]interface{}{
-					"alias":       "Raspberry Pi",
-					"id":          "1234-5678-9012-3456",
-					"status":      api.DeviceStatusPendingProvisioning,
-					"slots":       map[string]interface{}{},
-					"description": "Raspberry Pi is a small, low-cost, and light-weight computer",
-					"tags":        []string{"raspberry-pi", "5G"},
-					"icon_color":  "#0068D1",
-					"icon_name":   "#Cg/CgSmartphoneChip",
-				})
-
 			},
 		},
 	}
@@ -1306,7 +1220,7 @@ func TestRevokeActiveCertificate(t *testing.T) {
 
 				e.DELETE("/v1/devices/device/slots/slot").
 					Expect().
-					Status(http.StatusNotFound)
+					Status(http.StatusBadRequest)
 
 			},
 		},
@@ -1330,7 +1244,7 @@ func TestRevokeActiveCertificate(t *testing.T) {
 
 				e.DELETE("/v1/devices/1234-5678-9012-3456/slots/slot").
 					Expect().
-					Status(http.StatusNotFound)
+					Status(http.StatusBadRequest)
 
 			},
 		},
@@ -1386,17 +1300,6 @@ func TestRevokeActiveCertificate(t *testing.T) {
 				obj.ContainsKey("icon_color")
 				obj.ContainsKey("creation_timestamp")
 
-				obj.ContainsMap(map[string]interface{}{
-					"alias":       "Raspberry Pi",
-					"id":          "1234-5678-9012-3456",
-					"status":      api.DeviceStatusPendingProvisioning,
-					"slots":       map[string]interface{}{},
-					"description": "Raspberry Pi is a small, low-cost, and light-weight computer",
-					"tags":        []string{"raspberry-pi", "5G"},
-					"icon_color":  "#0068D1",
-					"icon_name":   "#Cg/CgSmartphoneChip",
-				})
-
 			},
 		},
 		{
@@ -1450,17 +1353,6 @@ func TestRevokeActiveCertificate(t *testing.T) {
 				obj.ContainsKey("icon_name")
 				obj.ContainsKey("icon_color")
 				obj.ContainsKey("creation_timestamp")
-
-				obj.ContainsMap(map[string]interface{}{
-					"alias":       "Raspberry Pi",
-					"id":          "1234-5678-9012-3456",
-					"status":      api.DeviceStatusPendingProvisioning,
-					"slots":       map[string]interface{}{},
-					"description": "Raspberry Pi is a small, low-cost, and light-weight computer",
-					"tags":        []string{"raspberry-pi", "5G"},
-					"icon_color":  "#0068D1",
-					"icon_name":   "#Cg/CgSmartphoneChip",
-				})
 
 			},
 		},
@@ -1554,21 +1446,21 @@ func runTests(t *testing.T, tc TestCase) {
 	defer serverCA.Close()
 	serverCA.Start()
 
-	// _, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
-	// 	CAType: caApi.CATypeDMSEnroller,
-	// 	Subject: caApi.Subject{
-	// 		CommonName: "LAMASSU-DMS-MANAGER",
-	// 	},
-	// 	KeyMetadata: caApi.KeyMetadata{
-	// 		KeyType: "RSA",
-	// 		KeyBits: 4096,
-	// 	},
-	// 	CADuration:       time.Hour * 24 * 365 * 5,
-	// 	IssuanceDuration: time.Hour * 24 * 365 * 3,
-	// })
-	// if err != nil {
-	// 	t.Fatalf("%s", err)
-	// }
+	/*_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
+		CAType: caApi.CATypeDMSEnroller,
+		Subject: caApi.Subject{
+			CommonName: "LAMASSU-DMS-MANAGER",
+		},
+		KeyMetadata: caApi.KeyMetadata{
+			KeyType: "RSA",
+			KeyBits: 4096,
+		},
+		CADuration:       time.Hour * 24 * 365 * 5,
+		IssuanceDuration: time.Hour * 24 * 365 * 3,
+	})
+	if err != nil {
+		t.Fatalf("%s", err)
+	}*/
 
 	_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
 		CAType: caApi.CATypePKI,

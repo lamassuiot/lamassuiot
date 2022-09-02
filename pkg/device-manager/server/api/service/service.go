@@ -76,8 +76,11 @@ func NewDeviceManagerService(logger log.Logger, devicesRepo repository.Devices, 
 		minimumReenrollmentDays: minimumReenrollmentDays,
 		cronInstance:            cronInstance,
 	}
-	svc.ScanDevicesAndUpdateStatistics()
-	cronInstance.AddFunc("1 * * * *", svc.ScanDevicesAndUpdateStatistics)
+
+	go func() {
+		svc.ScanDevicesAndUpdateStatistics()
+		cronInstance.AddFunc("1 * * * *", svc.ScanDevicesAndUpdateStatistics) //hourly scann
+	}()
 
 	return svc
 }
@@ -567,6 +570,57 @@ func (s *devicesService) IterateDevicesWithPredicate(ctx context.Context, input 
 	}
 
 	return &output, nil
+	// output := api.IterateDevicesWithPredicateOutput{}
+
+	// limit := 100
+	// maxWorkers := 20
+
+	// jobs := make(chan int, maxWorkers)
+	// results := make(chan int)
+
+	// workerFunc := func(jobs chan int, results chan int) {
+	// 	for j := range jobs {
+	// 		ctr := 0
+	// 		for {
+	// 			devicesOutput, err := s.GetDevices(ctx, &api.GetDevicesInput{
+	// 				QueryParameters: common.QueryParameters{
+	// 					Pagination: common.PaginationOptions{
+	// 						Limit:  limit,
+	// 						Offset: (j + ctr) * limit,
+	// 					},
+	// 				},
+	// 			})
+
+	// 			if err != nil {
+	// 				break
+	// 			}
+
+	// 			if len(devicesOutput.Devices) > 0 {
+	// 				for _, v := range devicesOutput.Devices {
+	// 					input.PredicateFunc(&v)
+	// 				}
+	// 				ctr++
+	// 			} else {
+	// 				break
+	// 			}
+	// 		}
+	// 		results <- j
+	// 	}
+	// }
+
+	// for i := 0; i < maxWorkers; i++ {
+	// 	go workerFunc(jobs, results)
+	// 	jobs <- i
+	// }
+
+	// finished := 0
+	// for {
+	// 	<-results
+	// 	finished++
+	// 	fmt.Println("finished", finished)
+	// }
+
+	// return &output, nil
 }
 
 func (s *devicesService) GetDeviceLogs(ctx context.Context, input *api.GetDeviceLogsInput) (*api.GetDeviceLogsOutput, error) {
@@ -886,10 +940,14 @@ func (s *devicesService) generateCSR(csr *x509.CertificateRequest, key interface
 func (s *devicesService) ScanDevicesAndUpdateStatistics() {
 	ctx := context.Background()
 
+	t0 := time.Now()
+	level.Debug(s.logger).Log("msg", "Starting devices scan...")
+	counter := 0
 	deviceStats := map[api.DeviceStatus]int{}
 	slotStatus := map[caApi.CertificateStatus]int{}
 	s.IterateDevicesWithPredicate(ctx, &api.IterateDevicesWithPredicateInput{
 		PredicateFunc: func(device *api.Device) {
+			level.Debug(s.logger).Log("msg", "Starting devices scan...")
 			output, err := s.CheckAndUpdateDeviceStatus(ctx, &api.CheckAndUpdateDeviceStatusInput{
 				DeviceID: device.ID,
 			})
@@ -898,9 +956,13 @@ func (s *devicesService) ScanDevicesAndUpdateStatistics() {
 			}
 
 			deviceStats[device.Status] += 1
+			counter += 1
 			for _, slot := range output.Device.Slots {
 				slotStatus[slot.ActiveCertificate.Status] += 1
 			}
+
+			level.Debug(s.logger).Log("msg", "Scanned devices", "count", counter, "time", time.Since(t0).String())
+
 		},
 	})
 
@@ -908,4 +970,6 @@ func (s *devicesService) ScanDevicesAndUpdateStatistics() {
 		DevicesStats: deviceStats,
 		SlotsStats:   slotStatus,
 	})
+
+	level.Debug(s.logger).Log("msg", "Scan devices finished in "+time.Since(t0).String())
 }

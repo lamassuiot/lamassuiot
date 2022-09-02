@@ -1,42 +1,15 @@
 package api
 
-// -------------------------------------------------------------
-type AddUserConfigOutputSerialized struct {
-	UserID           string   `json:"user_id"`
-	Email            string   `json:"email"`
-	SubscribedEvents []string `json:"events"`
-}
-
-func (o *AddUserConfigOutput) Serialize() AddUserConfigOutputSerialized {
-	return AddUserConfigOutputSerialized{
-		UserID:           o.UserID,
-		Email:            o.Email,
-		SubscribedEvents: o.SubscribedEvents,
-	}
-}
-
-func (o *AddUserConfigOutputSerialized) Deserialize() AddUserConfigOutput {
-
-	serializer := AddUserConfigOutput{
-		UserConfiguration: UserConfiguration{
-			UserID:           o.UserID,
-			Email:            o.Email,
-			SubscribedEvents: o.SubscribedEvents,
-		},
-	}
-	return serializer
-}
+import cloudevents "github.com/cloudevents/sdk-go/v2"
 
 // -------------------------------------------------------------
 type SubscribedEventOutputSerialized struct {
-	UserID           string   `json:"user_id"`
 	Email            string   `json:"email"`
 	SubscribedEvents []string `json:"events"`
 }
 
 func (o *SubscribedEventOutput) Serialize() SubscribedEventOutputSerialized {
 	return SubscribedEventOutputSerialized{
-		UserID:           o.UserID,
 		Email:            o.Email,
 		SubscribedEvents: o.SubscribedEvents,
 	}
@@ -45,8 +18,7 @@ func (o *SubscribedEventOutput) Serialize() SubscribedEventOutputSerialized {
 func (o *SubscribedEventOutputSerialized) Deserialize() SubscribedEventOutput {
 
 	serializer := SubscribedEventOutput{
-		UserConfiguration: UserConfiguration{
-			UserID:           o.UserID,
+		Subscription: Subscription{
 			Email:            o.Email,
 			SubscribedEvents: o.SubscribedEvents,
 		},
@@ -56,14 +28,12 @@ func (o *SubscribedEventOutputSerialized) Deserialize() SubscribedEventOutput {
 
 // -------------------------------------------------------------
 type UnsubscribedEventOutputSerialized struct {
-	UserID           string   `json:"user_id"`
 	Email            string   `json:"email"`
 	SubscribedEvents []string `json:"events"`
 }
 
 func (o *UnsubscribedEventOutput) Serialize() UnsubscribedEventOutputSerialized {
 	return UnsubscribedEventOutputSerialized{
-		UserID:           o.UserID,
 		Email:            o.Email,
 		SubscribedEvents: o.SubscribedEvents,
 	}
@@ -72,11 +42,29 @@ func (o *UnsubscribedEventOutput) Serialize() UnsubscribedEventOutputSerialized 
 func (o *UnsubscribedEventOutputSerialized) Deserialize() UnsubscribedEventOutput {
 
 	serializer := UnsubscribedEventOutput{
-		UserConfiguration: UserConfiguration{
-			UserID:           o.UserID,
+		Subscription: Subscription{
 			Email:            o.Email,
 			SubscribedEvents: o.SubscribedEvents,
 		},
+	}
+	return serializer
+}
+
+// -------------------------------------------------------------
+type GetEventsOutputSerialized struct {
+	EventsLog []cloudevents.Event `json:"last_events"`
+}
+
+func (o *GetEventsOutput) Serialize() GetEventsOutputSerialized {
+	return GetEventsOutputSerialized{
+		EventsLog: o.LastEvents,
+	}
+}
+
+func (o *GetEventsOutputSerialized) Deserialize() GetEventsOutput {
+
+	serializer := GetEventsOutput{
+		LastEvents: o.EventsLog,
 	}
 	return serializer
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
-	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-provider/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-provider/server/api/endpoint"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-provider/server/api/errors"
@@ -68,7 +67,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetDevicesConfig", logger)))...,
 	))
 
-	r.Methods("PUT").Path("/certificate").Handler(httptransport.NewServer(
+	r.Methods("PUT").Path("/devices/{deviceID}/certificate").Handler(httptransport.NewServer(
 		e.UpdateDeviceCertificateStatusEndpoint,
 		decodeUpdateDeviceCertificateStatusRequest,
 		encodeUpdateDeviceCertificateStatusResponse,
@@ -122,9 +121,7 @@ func enocdeGetConnectorsResponse(ctx context.Context, w http.ResponseWriter, res
 }
 
 func decodeUpdateConfigurationRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	type UpdateConfigurationPayload struct {
-		Configuration interface{} `json:"configuration"`
-	}
+	type UpdateConfigurationPayload interface{}
 
 	var body UpdateConfigurationPayload
 	err = json.NewDecoder(r.Body).Decode(&body)
@@ -133,7 +130,7 @@ func decodeUpdateConfigurationRequest(ctx context.Context, r *http.Request) (req
 	}
 
 	return api.UpdateConfigurationInput{
-		Configuration: body.Configuration,
+		Configuration: body,
 	}, nil
 }
 
@@ -163,7 +160,8 @@ func enocdeGetDeviceConnectorsResponse(ctx context.Context, w http.ResponseWrite
 		encodeError(ctx, e.error(), w)
 		return nil
 	}
-	castedResponse := response.(*api.GetConfigurationOutput)
+
+	castedResponse := response.(*api.GetDeviceConfigurationOutput)
 	serializedResponse := castedResponse.Serialize()
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -171,20 +169,20 @@ func enocdeGetDeviceConnectorsResponse(ctx context.Context, w http.ResponseWrite
 }
 
 func decodeUpdateDeviceCertificateStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	type UpdateDeviceCertificateStatusPayload struct {
-		Certificate caApi.CertificateSerialized `json:"certificate"`
-		Status      string                      `json:"status"`
-	}
-
-	var body UpdateDeviceCertificateStatusPayload
+	var body api.UpdateDeviceCertificateStatusPayload
 	err = json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
 		return nil, InvalidJsonFormat()
 	}
 
+	vars := mux.Vars(r)
+	deviceID := vars["deviceID"]
+
 	return api.UpdateDeviceCertificateStatusInput{
-		Certificate: body.Certificate.Deserialize(),
-		Status:      body.Status,
+		DeviceID:     deviceID,
+		CAName:       body.CAName,
+		SerialNumber: body.SerialNumber,
+		Status:       body.Status,
 	}, nil
 }
 
@@ -201,11 +199,7 @@ func encodeUpdateDeviceCertificateStatusResponse(ctx context.Context, w http.Res
 }
 
 func decodeRegisterCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	type RegisterCAPayload struct {
-		caApi.CACertificateSerialized
-	}
-
-	var body RegisterCAPayload
+	var body api.RegisterCAPayload
 	err = json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
 		return nil, InvalidJsonFormat()

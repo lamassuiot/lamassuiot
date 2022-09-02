@@ -16,6 +16,8 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/config"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
+	"github.com/opentracing/opentracing-go"
+	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
@@ -33,6 +35,11 @@ func main() {
 	})
 	if err != nil {
 		panic(err)
+	}
+
+	if err := db.Use(otelgorm.NewPlugin()); err != nil {
+		level.Error(mainServer.Logger).Log("msg", "Could not initialize OpenTelemetry DB-GORM plugin", "err", err)
+		os.Exit(1)
 	}
 
 	dmsRepo := postgresRepository.NewPostgresDB(db, mainServer.Logger)
@@ -53,18 +60,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err != nil {
-		level.Error(mainServer.Logger).Log("msg", "Could not connect to LamassuDMSManager", "err", err)
-		os.Exit(1)
-	}
-
 	var s service.Service
 	{
 		s = service.NewDMSManagerService(mainServer.Logger, dmsRepo, &caClient)
+		s = service.NewAMQPMiddleware(mainServer.AmqpPublisher, mainServer.Logger)(s)
 		s = service.LoggingMiddleware(mainServer.Logger)(s)
 	}
 
-	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), mainServer.Tracer)))
+	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), opentracing.GlobalTracer())))
 
 	errs := make(chan error)
 	go func() {

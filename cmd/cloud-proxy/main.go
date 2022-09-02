@@ -17,6 +17,8 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/config"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
+	"github.com/opentracing/opentracing-go"
+	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
@@ -34,6 +36,11 @@ func main() {
 	})
 	if err != nil {
 		level.Error(mainServer.Logger).Log("msg", "Could not connect to Postgres", "err", err)
+		os.Exit(1)
+	}
+
+	if err := db.Use(otelgorm.NewPlugin()); err != nil {
+		level.Error(mainServer.Logger).Log("msg", "Could not initialize OpenTelemetry DB-GORM plugin", "err", err)
 		os.Exit(1)
 	}
 
@@ -63,10 +70,8 @@ func main() {
 		s = service.LoggingMiddleware(mainServer.Logger)(s)
 	}
 
-	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), mainServer.Tracer)))
-	go func() {
-		transport.MakeAmqpHandler(s, mainServer.Logger, mainServer.Tracer, config.AmqpServerCACert, config.CertFile, config.KeyFile, config.AmqpServerHost, config.AmqpServerPort)
-	}()
+	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), opentracing.GlobalTracer())))
+	mainServer.AddAmqpConsumer("lamassu-events", transport.MakeAmqpHandler(s, mainServer.Logger, opentracing.GlobalTracer()))
 
 	errs := make(chan error)
 	go func() {

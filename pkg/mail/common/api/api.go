@@ -1,13 +1,38 @@
 package api
 
 import (
+	"time"
+
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 )
 
-type UserConfiguration struct {
-	UserID           string
+type Subscription struct {
 	Email            string
 	SubscribedEvents []string
+}
+
+type LogEvent struct {
+	EventType string
+	Event     cloudevents.Event
+	Date      time.Time
+}
+type MailConfigurationSettings struct {
+	From                 string
+	To                   []string
+	Subject              string
+	Body                 string
+	Host                 string
+	Port                 string
+	Front                string
+	EnableSSL            bool
+	EnableTLS            bool
+	EnableAuth           bool
+	EnableAuthentication bool
+	Authentication       Authentication
+}
+type Authentication struct {
+	Username string
+	Password string
 }
 
 // ---------------------------------------------------------------------
@@ -21,33 +46,41 @@ type HandleEventOutput struct {
 
 // ---------------------------------------------------------------------
 
-type AddUserConfigInput struct {
-	UserID string
-	Email  string
-}
-
-type AddUserConfigOutput struct {
-	UserConfiguration
-}
-
-// ---------------------------------------------------------------------
-
 type SubscribedEventInput struct {
-	UserID    string
-	EventType []string
+	Email     string
+	EventType string
 }
 
 type SubscribedEventOutput struct {
-	UserConfiguration
+	Subscription
 }
 
 // ---------------------------------------------------------------------
 
 type UnsubscribedEventInput struct {
-	UserID    string
-	EventType []string
+	Email     string
+	EventType string
 }
 
 type UnsubscribedEventOutput struct {
-	UserConfiguration
+	Subscription
+}
+
+// ---------------------------------------------------------------------
+
+type GetEventsInput struct {
+}
+
+type GetEventsOutput struct {
+	LastEvents []cloudevents.Event
+}
+
+// ---------------------------------------------------------------------
+
+type CheckMailConfigirationInput struct {
+	Config MailConfigurationSettings
+}
+
+type CheckMailConfigirationOutput struct {
+	EmailSent bool
 }

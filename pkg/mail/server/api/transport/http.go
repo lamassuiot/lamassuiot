@@ -63,26 +63,6 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		)...,
 	))
 
-	r.Methods("POST").Path("/event").Handler(httptransport.NewServer(
-		e.EventHandlerEndpoint,
-		decodeEventHandlerRequest,
-		encodeEventHandlerResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "EventHandlerEndpoint", logger)),
-		)...,
-	))
-
-	r.Methods("POST").Path("/adduserconfig").Handler(httptransport.NewServer(
-		e.AddUserConfigEndpoint,
-		decodeAddUserConfigRequest,
-		encodeAddUserConfigResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "AddUserConfigEndpoint", logger)),
-		)...,
-	))
-
 	r.Methods("POST").Path("/subscribe").Handler(httptransport.NewServer(
 		e.SubscribedEventEndpoint,
 		decodeSubscribedEventRequest,
@@ -100,6 +80,15 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		append(
 			options,
 			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "UnsubscribedEventEndpoint", logger)),
+		)...,
+	))
+	r.Methods("GET").Path("/lastevents").Handler(httptransport.NewServer(
+		e.GetEventsEndpoint,
+		decodeGetEventsRequest,
+		encodeGetEventsResponse,
+		append(
+			options,
+			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetEventsEndpoint", logger)),
 		)...,
 	))
 
@@ -122,23 +111,6 @@ func decodeEventHandlerRequest(ctx context.Context, r *http.Request) (request in
 	return event, nil
 }
 
-func decodeAddUserConfigRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	var input api.AddUserConfigInput
-	var body api.AddUserConfigPayload
-
-	err = json.NewDecoder(r.Body).Decode(&body)
-	if err != nil {
-		return nil, InvalidJsonFormat()
-	}
-
-	input = api.AddUserConfigInput{
-		UserID: body.UserID,
-		Email:  body.Email,
-	}
-
-	return input, nil
-}
-
 func decodeSubscribedEventRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	var input api.SubscribedEventInput
 	var body api.SubscribedEventPayload
@@ -149,7 +121,7 @@ func decodeSubscribedEventRequest(ctx context.Context, r *http.Request) (request
 	}
 
 	input = api.SubscribedEventInput{
-		UserID:    body.UserID,
+		Email:     body.Email,
 		EventType: body.EventType,
 	}
 
@@ -166,16 +138,34 @@ func decodeUnsubscribedEventRequest(ctx context.Context, r *http.Request) (reque
 	}
 
 	input = api.UnsubscribedEventInput{
-		UserID:    body.UserID,
+		Email:     body.Email,
 		EventType: body.EventType,
 	}
 
 	return input, nil
 }
 
+func decodeGetEventsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	return api.GetEventsInput{}, nil
+}
+
 // func encodeGetSynchronizedCAsByConnectorRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 // 	encodeResponse()
 // }
+
+func encodeGetEventsResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+
+		return nil
+	}
+	castedResponse := response.(*api.GetEventsOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusCreated)
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
 
 func encodeUnsubscribedEventResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if e, ok := response.(errorer); ok && e.error() != nil {
@@ -198,20 +188,6 @@ func encodeSubscribedEventResponse(ctx context.Context, w http.ResponseWriter, r
 		return nil
 	}
 	castedResponse := response.(*api.SubscribedEventOutput)
-	serializedResponse := castedResponse.Serialize()
-
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusCreated)
-	return json.NewEncoder(w).Encode(serializedResponse)
-}
-
-func encodeAddUserConfigResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
-	if e, ok := response.(errorer); ok && e.error() != nil {
-		encodeError(ctx, e.error(), w)
-
-		return nil
-	}
-	castedResponse := response.(*api.AddUserConfigOutput)
 	serializedResponse := castedResponse.Serialize()
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

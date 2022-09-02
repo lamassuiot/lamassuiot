@@ -81,20 +81,10 @@ func (o *GetConfigurationOutputSerialized) Deserialize() GetConfigurationOutput 
 
 //------------------------------------------------------
 
-type GetDeviceConfigurationOutputSerialized struct {
-	Configuration interface{} `json:"configuration"`
-}
+type GetDeviceConfigurationOutputSerialized interface{}
 
 func (o *GetDeviceConfigurationOutput) Serialize() GetDeviceConfigurationOutputSerialized {
-	return GetDeviceConfigurationOutputSerialized{
-		Configuration: o.Configuration,
-	}
-}
-
-func (o *GetDeviceConfigurationOutputSerialized) Deserialize() GetDeviceConfigurationOutput {
-	return GetDeviceConfigurationOutput{
-		Configuration: o.Configuration,
-	}
+	return o.Configuration
 }
 
 //------------------------------------------------------

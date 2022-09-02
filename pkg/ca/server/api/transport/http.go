@@ -17,14 +17,13 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common/types"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/tracing/opentracing"
 
 	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	lamassuErrors "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/errors"
-	utilstransport "github.com/lamassuiot/lamassuiot/pkg/utils/server/transport"
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -60,73 +59,96 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	r := mux.NewRouter()
 	e := endpoint.MakeServerEndpoints(s, otTracer)
 	options := []httptransport.ServerOption{
-		httptransport.ServerBefore(utilstransport.HTTPToContext(logger)),
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
 	}
 
-	r.Methods("GET").Path("/health").Handler(httptransport.NewServer(
-		e.HealthEndpoint,
-		decodeHealthRequest,
-		encodeHealthResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Health", logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/health").Handler(
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.HealthEndpoint,
+				decodeHealthRequest,
+				encodeHealthResponse,
+				append(
+					options,
+				)...,
+			),
+			"Health",
+		),
+	)
 
-	r.Methods("GET").Path("/cryptoengine").Handler(httptransport.NewServer(
-		e.GetCryptoEngine,
-		decodeCryptoEngineRequest,
-		encodeCryptoEngineResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "CryptoEngine", logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/cryptoengine").Handler(
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetCryptoEngine,
+				decodeCryptoEngineRequest,
+				encodeCryptoEngineResponse,
+				append(
+					options,
+				)...,
+			),
+			"CryptoEngine",
+		),
+	)
 
-	r.Methods("GET").Path("/stats").Handler(httptransport.NewServer(
-		e.StatsEndpoint,
-		decodeStatsRequest,
-		encodeStatsResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Stats", logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/stats").Handler(
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.StatsEndpoint,
+				decodeStatsRequest,
+				encodeStatsResponse,
+				append(
+					options,
+				)...,
+			),
+			"Stats",
+		),
+	)
 
 	// Get all CAs
-	r.Methods("GET").Path("/{caType}").Handler(httptransport.NewServer(
-		e.GetCAsEndpoint,
-		decodeGetCAsRequest,
-		encodeGetCAsResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCAs", logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/{caType}").Handler(
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetCAsEndpoint,
+				decodeGetCAsRequest,
+				encodeGetCAsResponse,
+				append(
+					options,
+				)...,
+			),
+			"GetCAs",
+		),
+	)
 
 	// Get CA by Name
-	r.Methods("GET").Path("/{caType}/{caName}").Handler(httptransport.NewServer(
-		e.GetCAByNameEndpoint,
-		decodeGetCAByNameRequest,
-		encodeGetCAByNameResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCAs", logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/{caType}/{caName}").Handler(
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetCAByNameEndpoint,
+				decodeGetCAByNameRequest,
+				encodeGetCAByNameResponse,
+				append(
+					options,
+				)...,
+			),
+			"GetCAByName",
+		),
+	)
 
 	// Create new CA using Form
-	r.Methods("POST").Path("/pki").Handler(httptransport.NewServer(
-		e.CreateCAEndpoint,
-		decodeCreateCARequest,
-		encodeCreateCAResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "CreateCA", logger)),
-		)...,
-	))
+	r.Methods("POST").Path("/pki").Handler(
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.CreateCAEndpoint,
+				decodeCreateCARequest,
+				encodeCreateCAResponse,
+				append(
+					options,
+				)...,
+			),
+			"CreateCA",
+		),
+	)
 
 	// Import existing crt and key
 	// r.Methods("POST").Path("/pki/import/{caName}").Handler(httptransport.NewServer(
@@ -141,59 +163,79 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	// ))
 
 	// Revoke CA
-	r.Methods("DELETE").Path("/{caType}/{caName}").Handler(httptransport.NewServer(
-		e.RevokeCAEndpoint,
-		decodeRevokeCARequest,
-		encodeRevokeCAResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "RevokeCA", logger)),
-		)...,
-	))
+	r.Methods("DELETE").Path("/{caType}/{caName}").Handler(
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.RevokeCAEndpoint,
+				decodeRevokeCARequest,
+				encodeRevokeCAResponse,
+				append(
+					options,
+				)...,
+			),
+			"RevokeCA",
+		),
+	)
 
 	// Get Issued certificates by {ca}
-	r.Methods("GET").Path("/{caType}/{caName}/certificates").Handler(httptransport.NewServer(
-		e.GetCertificatesEndpoint,
-		decodeGetCertificatesRequest,
-		encodeGetCertificatesResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCertificates", logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/{caType}/{caName}/certificates").Handler(
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetCertificatesEndpoint,
+				decodeGetCertificatesRequest,
+				encodeGetCertificatesResponse,
+				append(
+					options,
+				)...,
+			),
+			"GetCertificates",
+		),
+	)
 
 	// Get certificate by {ca} and {serialNumber}
-	r.Methods("GET").Path("/{caType}/{caName}/certificates/{serialNumber}").Handler(httptransport.NewServer(
-		e.GetCertEndpoint,
-		decodeGetCertificateBySerialNumberRequest,
-		encodeGetCertificateBySerialNumberResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCert", logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/{caType}/{caName}/certificates/{serialNumber}").Handler(
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetCertEndpoint,
+				decodeGetCertificateBySerialNumberRequest,
+				encodeGetCertificateBySerialNumberResponse,
+				append(
+					options,
+				)...,
+			),
+			"GetCertificateBySerialNumber",
+		),
+	)
 
 	// Sign CSR by {ca}
-	r.Methods("POST").Path("/{caType}/{caName}/sign").Handler(httptransport.NewServer(
-		e.SignCertEndpoint,
-		decodeSignCertificateRequest,
-		encodeSignCertificateResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "SignCSR", logger)),
-		)...,
-	))
+	r.Methods("POST").Path("/{caType}/{caName}/sign").Handler(
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.SignCertEndpoint,
+				decodeSignCertificateRequest,
+				encodeSignCertificateResponse,
+				append(
+					options,
+				)...,
+			),
+			"SignCSR",
+		),
+	)
 
 	// Revoke certificate issued by {ca} and {serialNumber}
-	r.Methods("DELETE").Path("/{caType}/{caName}/certificates/{serialNumber}").Handler(httptransport.NewServer(
-		e.RevokeCertEndpoint,
-		decodeRevokeCertificateRequest,
-		encodeRevokeCertificateResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "DeleteCert", logger)),
-		)...,
-	))
+	r.Methods("DELETE").Path("/{caType}/{caName}/certificates/{serialNumber}").Handler(
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.RevokeCertEndpoint,
+				decodeRevokeCertificateRequest,
+				encodeRevokeCertificateResponse,
+				append(
+					options,
+				)...,
+			),
+			"RevokeCertificate",
+		),
+	)
 
 	return r
 }

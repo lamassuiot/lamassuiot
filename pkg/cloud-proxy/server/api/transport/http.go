@@ -100,7 +100,7 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		)...,
 	))
 
-	r.Methods("PUT").Path("/connectors/{connectorID}/devices/{deviceID}/cert").Handler(httptransport.NewServer(
+	r.Methods("PUT").Path("/connectors/{connectorID}/devices/{deviceID}/certificate").Handler(httptransport.NewServer(
 		e.UpdateDeviceCertStatusEndpoint,
 		decodeUpdateDeviceCertStatusRequest,
 		encodeUpdateDeviceCertStatusResponse,
@@ -211,7 +211,7 @@ func decodeUpdateConnectorConfigurationRequest(ctx context.Context, r *http.Requ
 	connectorID := vars["connectorID"]
 
 	type UpdateCloudProviderConfigurationPayload struct {
-		Config string `json:"configuration"`
+		Config interface{} `json:"configuration"`
 	}
 	var body UpdateCloudProviderConfigurationPayload
 
