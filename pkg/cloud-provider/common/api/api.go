@@ -66,4 +66,13 @@ type UpdateDeviceCertificateStatusInput struct {
 
 type UpdateDeviceCertificateStatusOutput struct{}
 
+// ------------------------------------------------------
+type UpdateDeviceDigitalTwinReenrollmentStatusInput struct {
+	DeviceID      string
+	SlotID        string
+	ForceReenroll bool
+}
+
+type UpdateDeviceDigitalTwinReenrollmentStatusOutput struct{}
+
 //------------------------------------------------------

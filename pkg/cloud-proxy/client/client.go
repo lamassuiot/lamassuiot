@@ -39,7 +39,7 @@ package client
 // }
 
 // func (c *lamassuCloudProxyClientConfig) GetCloudConnectors(ctx context.Context) ([]cloudproviders.CloudConnector, error) {
-// 	req, err := c.client.NewRequest("GET", "v1/connectors", nil)
+// 	req, err := c.client.NewRequest(ctx, "GET", "v1/connectors", nil)
 // 	if err != nil {
 // 		return make([]cloudproviders.CloudConnector, 0), err
 // 	}

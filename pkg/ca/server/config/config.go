@@ -10,10 +10,25 @@ type CAConfig struct {
 	OcspUrl string `required:"true" split_words:"true"`
 
 	PostgresDatabase string `required:"true" split_words:"true"`
-	PostgresUser     string `required:"true" split_words:"true"`
+	PostgresUsername string `required:"true" split_words:"true"`
 	PostgresPassword string `required:"true" split_words:"true"`
 	PostgresHostname string `required:"true" split_words:"true"`
 	PostgresPort     string `required:"true" split_words:"true"`
+
+	Engine string `required:"true" split_words:"true"`
+
+	GopemData string `split_words:"true"`
+
+	Pkcs11Driver string `split_words:"true"`
+	Pkcs11Pin    string `split_words:"true"`
+	Pkcs11Label  string `split_words:"true"`
+
+	VaultUnsealKeysFile string `split_words:"true"`
+	VaultAddress        string `split_words:"true"`
+	VaultRoleID         string `split_words:"true"`
+	VaultSecretID       string `split_words:"true"`
+	VaultCA             string `split_words:"true"`
+	VaultPkiCaPath      string `split_words:"true"`
 }
 
 func NewCAConfig() *CAConfig {

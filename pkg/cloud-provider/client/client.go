@@ -19,6 +19,7 @@ type LamassuCloudProviderClient interface {
 	GetDeviceConfiguration(ctx context.Context, input *api.GetDeviceConfigurationInput) (*api.GetDeviceConfigurationOutput, error)
 	UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (*api.UpdateCAStatusOutput, error)
 	UpdateDeviceCertificateStatus(ctx context.Context, input *api.UpdateDeviceCertificateStatusInput) (*api.UpdateDeviceCertificateStatusOutput, error)
+	UpdateDeviceDigitalTwinStatus(ctx context.Context, input *api.UpdateDeviceDigitalTwinReenrollmentStatusInput) (*api.UpdateDeviceDigitalTwinReenrollmentStatusOutput, error)
 }
 
 func NewCloudProviderClient(config clientUtils.BaseClientConfigurationuration) (LamassuCloudProviderClient, error) {
@@ -35,7 +36,7 @@ func NewCloudProviderClient(config clientUtils.BaseClientConfigurationuration) (
 func (c *cloudProviderConfig) RegisterCA(ctx context.Context, input *api.RegisterCAInput) (*api.RegisterCAOutput, error) {
 	var output api.GetConfigurationOutputSerialized
 
-	req, err := c.client.NewRequest("POST", "v1/ca", input.CACertificate.Serialize())
+	req, err := c.client.NewRequest(ctx, "POST", "v1/ca", input.CACertificate.Serialize())
 	if err != nil {
 		return &api.RegisterCAOutput{}, err
 	}
@@ -51,7 +52,7 @@ func (c *cloudProviderConfig) RegisterCA(ctx context.Context, input *api.Registe
 func (c *cloudProviderConfig) UpdateConfiguration(ctx context.Context, input *api.UpdateConfigurationInput) (*api.UpdateConfigurationOutput, error) {
 	var output api.GetConfigurationOutputSerialized
 
-	req, err := c.client.NewRequest("PUT", "v1/config", input.Configuration)
+	req, err := c.client.NewRequest(ctx, "PUT", "v1/config", input.Configuration)
 	if err != nil {
 		return &api.UpdateConfigurationOutput{}, err
 	}
@@ -67,7 +68,7 @@ func (c *cloudProviderConfig) UpdateConfiguration(ctx context.Context, input *ap
 func (c *cloudProviderConfig) GetConfiguration(ctx context.Context, input *api.GetConfigurationInput) (*api.GetConfigurationOutput, error) {
 	var output api.GetConfigurationOutputSerialized
 
-	req, err := c.client.NewRequest("GET", "v1/config", nil)
+	req, err := c.client.NewRequest(ctx, "GET", "v1/config", nil)
 	if err != nil {
 		return &api.GetConfigurationOutput{}, err
 	}
@@ -88,7 +89,7 @@ func (c *cloudProviderConfig) GetConfiguration(ctx context.Context, input *api.G
 }
 
 func (c *cloudProviderConfig) GetDeviceConfiguration(ctx context.Context, input *api.GetDeviceConfigurationInput) (*api.GetDeviceConfigurationOutput, error) {
-	req, err := c.client.NewRequest("GET", fmt.Sprintf("v1/devices/%s/config", input.DeviceID), nil)
+	req, err := c.client.NewRequest(ctx, "GET", fmt.Sprintf("v1/devices/%s/config", input.DeviceID), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +112,7 @@ func (c *cloudProviderConfig) UpdateCAStatus(ctx context.Context, input *api.Upd
 func (c *cloudProviderConfig) UpdateDeviceCertificateStatus(ctx context.Context, input *api.UpdateDeviceCertificateStatusInput) (*api.UpdateDeviceCertificateStatusOutput, error) {
 	var output api.GetDeviceConfigurationOutputSerialized
 
-	req, err := c.client.NewRequest("PUT", fmt.Sprintf("v1/devices/%s/certificate", input.DeviceID), api.UpdateDeviceCertificateStatusPayload{
+	req, err := c.client.NewRequest(ctx, "PUT", fmt.Sprintf("v1/devices/%s/certificate", input.DeviceID), api.UpdateDeviceCertificateStatusPayload{
 		CAName:       input.CAName,
 		SerialNumber: input.SerialNumber,
 		Status:       input.Status,
@@ -126,4 +127,22 @@ func (c *cloudProviderConfig) UpdateDeviceCertificateStatus(ctx context.Context,
 	}
 
 	return &api.UpdateDeviceCertificateStatusOutput{}, err
+}
+func (c *cloudProviderConfig) UpdateDeviceDigitalTwinStatus(ctx context.Context, input *api.UpdateDeviceDigitalTwinReenrollmentStatusInput) (*api.UpdateDeviceDigitalTwinReenrollmentStatusOutput, error) {
+	var output api.GetDeviceConfigurationOutputSerialized
+
+	req, err := c.client.NewRequest(ctx, "PUT", fmt.Sprintf("v1/devices/%s/digital-twin", input.DeviceID), api.UpdateDeviceDigitalTwinReenrollmentStatusPayload{
+		SlotID:        input.SlotID,
+		ForceReenroll: input.ForceReenroll,
+	})
+	if err != nil {
+		return &api.UpdateDeviceDigitalTwinReenrollmentStatusOutput{}, err
+	}
+
+	_, err = c.client.Do(req, &output)
+	if err != nil {
+		return &api.UpdateDeviceDigitalTwinReenrollmentStatusOutput{}, err
+	}
+
+	return &api.UpdateDeviceDigitalTwinReenrollmentStatusOutput{}, err
 }

@@ -11,3 +11,8 @@ type UpdateDeviceCertificateStatusPayload struct {
 type RegisterCAPayload struct {
 	caApi.CACertificateSerialized
 }
+
+type UpdateDeviceDigitalTwinReenrollmentStatusPayload struct {
+	SlotID        string `json:"slot_id"`
+	ForceReenroll bool   `json:"force_reenroll"`
+}

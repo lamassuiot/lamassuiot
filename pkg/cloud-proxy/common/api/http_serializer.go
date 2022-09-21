@@ -126,7 +126,7 @@ func (o *GetCloudConnectorsSerialized) Deserialize() GetCloudConnectorsOutput {
 	}
 }
 
-//------------------------------------------------------
+// ------------------------------------------------------
 type GetCloudConnectorByIDOutputSerialized struct {
 	CloudConnectorSerialized
 }
@@ -211,4 +211,13 @@ func (o *UpdateCAStatusOutput) Serialize() UpdateCAStatusOutputSerialized {
 
 func (o *UpdateCAStatusOutputSerialized) Deserialize() UpdateCAStatusOutput {
 	return UpdateCAStatusOutput{}
+}
+
+//------------------------------------------------------
+
+type UpdateDeviceDigitalTwinReenrolmentStatusOutputSerialized struct {
+}
+
+func (o *UpdateDeviceDigitalTwinReenrolmentStatusOutput) Serialize() UpdateDeviceDigitalTwinReenrolmentStatusOutputSerialized {
+	return UpdateDeviceDigitalTwinReenrolmentStatusOutputSerialized{}
 }

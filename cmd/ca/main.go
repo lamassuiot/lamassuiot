@@ -27,19 +27,31 @@ func main() {
 	config := config.NewCAConfig()
 	mainServer := server.NewServer(config)
 
-	// engine, err := cryptoengines.NewHSMPEngine(mainServer.Logger, "/home/ikerlan/pkcs11-proxy/libpkcs11-proxy.so.0.1", "lamassuHSM", "1234")
-	// if err != nil {
-	// 	level.Error(mainServer.Logger).Log("msg", "Could not initialize HSM engine", "err", err)
-	// 	os.Exit(1)
-	// }
-
-	engine, err := cryptoengines.NewGolangPEMEngine(mainServer.Logger, "/home/ikerlan/lamassu/lamassuiot/cadata")
-	if err != nil {
-		level.Error(mainServer.Logger).Log("msg", "Could not initialize HSM engine", "err", err)
+	var engine service.CryptoEngine
+	switch config.Engine {
+	case "pkcs11":
+		hsmEngine, err := cryptoengines.NewHSMPEngine(mainServer.Logger, config.Pkcs11Driver, config.Pkcs11Label, config.Pkcs11Pin)
+		if err != nil {
+			level.Error(mainServer.Logger).Log("msg", "Could not initialize HSM engine", "err", err)
+			os.Exit(1)
+		}
+		engine = hsmEngine
+	case "gopem":
+		gopemEngine, err := cryptoengines.NewGolangPEMEngine(mainServer.Logger, config.GopemData)
+		if err != nil {
+			level.Error(mainServer.Logger).Log("msg", "Could not initialize Golang PEM engine", "err", err)
+			os.Exit(1)
+		}
+		engine = gopemEngine
+	default:
+		level.Error(mainServer.Logger).Log("msg", "Engine not supported")
 		os.Exit(1)
 	}
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUser, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
+	level.Info(mainServer.Logger).Log("msg", "Engine initialized")
+	level.Info(mainServer.Logger).Log("msg", fmt.Sprintf("Engine options: %v", engine.GetEngineConfig()))
+
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUsername, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
 	})
@@ -58,6 +70,7 @@ func main() {
 	var s service.Service
 	s = service.NewCAService(mainServer.Logger, engine, certificateRepository, config.OcspUrl)
 	s = service.NewAMQPMiddleware(mainServer.AmqpPublisher, mainServer.Logger)(s)
+	s = service.NewInputValudationMiddleware()(s)
 	s = service.LoggingMiddleware(mainServer.Logger)(s)
 
 	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), opentracing.GlobalTracer())))

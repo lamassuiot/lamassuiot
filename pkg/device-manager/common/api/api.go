@@ -295,11 +295,11 @@ type IterateDevicesWithPredicateOutput struct{}
 
 // ---------------------------------------------------------------------
 
-type CheckAndUpdateDeviceStatusInput struct {
+type CheckDeviceStatusInput struct {
 	DeviceID string
 }
 
-type CheckAndUpdateDeviceStatusOutput struct {
+type CheckDeviceStatusOutput struct {
 	Device
 }
 

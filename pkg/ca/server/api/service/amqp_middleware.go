@@ -12,7 +12,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
-	"github.com/opentracing/opentracing-go"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/streadway/amqp"
 )
@@ -21,14 +21,13 @@ const Source = "lamassuiot/ca"
 const EventPrefix = "io.lamassuiot"
 
 func CreateEvent(ctx context.Context, version string, source string, eventType string, data interface{}) event.Event {
-	span := opentracing.SpanFromContext(ctx)
-	fmt.Println(fmt.Sprintf("%s", span))
+	spanCtx := trace.SpanContextFromContext(ctx)
 	event := cloudevents.NewEvent()
 	event.SetSpecVersion(version)
 	event.SetSource(source)
 	event.SetType(eventType)
 	event.SetTime(time.Now())
-	event.SetID(fmt.Sprintf("%s", span))
+	event.SetID(fmt.Sprintf("%s:%s", spanCtx.TraceID(), spanCtx.SpanID()))
 	event.SetData(cloudevents.ApplicationJSON, data)
 	return event
 }
@@ -57,13 +56,16 @@ func (mw *amqpMiddleware) sendAMQPMessage(ctx context.Context, eventType string,
 	}
 
 	msg := server.AmqpPublishMessage{
-		Exchange:  "",
-		Key:       "lamassu-events",
+		Exchange:  "lamassu",
+		Key:       eventType,
 		Mandatory: false,
 		Immediate: false,
 		Msg: amqp.Publishing{
 			ContentType: "text/json",
 			Body:        []byte(eventBytes),
+			Headers: amqp.Table{
+				"traceparent": event.ID(),
+			},
 		},
 	}
 
@@ -85,7 +87,9 @@ func (mw *amqpMiddleware) Stats(ctx context.Context, input *api.GetStatsInput) (
 
 func (mw *amqpMiddleware) CreateCA(ctx context.Context, input *api.CreateCAInput) (output *api.CreateCAOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(ctx, fmt.Sprintf("%s.ca.create", EventPrefix), output.Serialize())
+		if err == nil {
+			mw.sendAMQPMessage(ctx, fmt.Sprintf("%s.ca.create", EventPrefix), output.Serialize())
+		}
 	}()
 	return mw.next.CreateCA(ctx, input)
 }
@@ -100,14 +104,18 @@ func (mw *amqpMiddleware) GetCAByName(ctx context.Context, input *api.GetCAByNam
 
 func (mw *amqpMiddleware) UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (output *api.UpdateCAStatusOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(ctx, fmt.Sprintf("%s.ca.update", EventPrefix), output.Serialize())
+		if err == nil {
+			mw.sendAMQPMessage(ctx, fmt.Sprintf("%s.ca.update", EventPrefix), output.Serialize())
+		}
 	}()
 	return mw.next.UpdateCAStatus(ctx, input)
 }
 
 func (mw *amqpMiddleware) RevokeCA(ctx context.Context, input *api.RevokeCAInput) (output *api.RevokeCAOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(ctx, fmt.Sprintf("%s.ca.revoke", EventPrefix), output.Serialize())
+		if err == nil {
+			mw.sendAMQPMessage(ctx, fmt.Sprintf("%s.ca.revoke", EventPrefix), output.Serialize())
+		}
 	}()
 	return mw.next.RevokeCA(ctx, input)
 }
@@ -125,7 +133,9 @@ func (mw *amqpMiddleware) SignCertificateRequest(ctx context.Context, input *api
 
 func (mw *amqpMiddleware) RevokeCertificate(ctx context.Context, input *api.RevokeCertificateInput) (output *api.RevokeCertificateOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(ctx, fmt.Sprintf("%s.certificate.revoke", EventPrefix), output.Serialize())
+		if err == nil {
+			mw.sendAMQPMessage(ctx, fmt.Sprintf("%s.certificate.revoke", EventPrefix), output.Serialize())
+		}
 	}()
 	return mw.next.RevokeCertificate(ctx, input)
 }
@@ -140,7 +150,9 @@ func (mw *amqpMiddleware) GetCertificates(ctx context.Context, input *api.GetCer
 
 func (mw *amqpMiddleware) UpdateCertificateStatus(ctx context.Context, input *api.UpdateCertificateStatusInput) (output *api.UpdateCertificateStatusOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(ctx, fmt.Sprintf("%s.certificate.update", EventPrefix), output.Serialize())
+		if err == nil {
+			mw.sendAMQPMessage(ctx, fmt.Sprintf("%s.certificate.update", EventPrefix), output.Serialize())
+		}
 	}()
 	return mw.next.UpdateCertificateStatus(ctx, input)
 }

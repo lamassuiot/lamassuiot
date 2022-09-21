@@ -12,16 +12,16 @@ import (
 	"strings"
 
 	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/tracing/opentracing"
 	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
 	"github.com/lamassuiot/lamassuiot/pkg/est/server/api/endpoint"
 	esterror "github.com/lamassuiot/lamassuiot/pkg/est/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/est/server/api/service"
-	utilstransport "github.com/lamassuiot/lamassuiot/pkg/utils/server/transport"
+	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	stdopentracing "github.com/opentracing/opentracing-go"
 	"go.mozilla.org/pkcs7"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type errorer interface {
@@ -64,51 +64,74 @@ func MakeHTTPHandler(service service.ESTService, logger log.Logger, otTracer std
 	endpoints := endpoint.MakeServerEndpoints(service, otTracer)
 
 	options := []httptransport.ServerOption{
-		httptransport.ServerBefore(utilstransport.HTTPToContext(logger)),
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(EncodeError),
 	}
 
 	// MUST as per rfc7030
-	router.Methods("GET").Path("/.well-known/est/cacerts").Handler(httptransport.NewServer(
-		endpoints.GetCAsEndpoint,
-		decodeRequest,
-		encodeGetCACertificatesResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "cacerts", logger)),
-		)...,
-	))
+	router.Methods("GET").Path("/.well-known/est/cacerts").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					endpoints.GetCAsEndpoint,
+					decodeRequest,
+					encodeGetCACertificatesResponse,
+					append(
+						options,
+					)...,
+				),
+				"CACerts",
+			),
+		),
+	)
 
-	router.Methods("POST").Path("/.well-known/est/{aps}/simpleenroll").Handler(httptransport.NewServer(
-		endpoints.EnrollerEndpoint,
-		decodeEnrollRequest,
-		encodeResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "simpleenroll", logger)),
-		)...,
-	))
+	router.Methods("POST").Path("/.well-known/est/{aps}/simpleenroll").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					endpoints.EnrollerEndpoint,
+					decodeEnrollRequest,
+					encodeResponse,
+					append(
+						options,
+					)...,
+				),
+				"SimplEnroll",
+			),
+		),
+	)
 
-	router.Methods("POST").Path("/.well-known/est/simplereenroll").Handler(httptransport.NewServer(
-		endpoints.ReenrollerEndpoint,
-		decodeReenrollRequest,
-		encodeResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "simplereenroll", logger)),
-		)...,
-	))
+	router.Methods("POST").Path("/.well-known/est/simplereenroll").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					endpoints.ReenrollerEndpoint,
+					decodeReenrollRequest,
+					encodeResponse,
+					append(
+						options,
+					)...,
+				),
+				"SimplReEnroll",
+			),
+		),
+	)
 
-	router.Methods("POST").Path("/.well-known/est/{aps}/serverkeygen").Handler(httptransport.NewServer(
-		endpoints.ServerKeyGenEndpoint,
-		decodeServerkeygenRequest,
-		encodeServerkeygenResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "serverkeygen", logger)),
-		)...,
-	))
+	router.Methods("POST").Path("/.well-known/est/{aps}/serverkeygen").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					endpoints.ServerKeyGenEndpoint,
+					decodeServerkeygenRequest,
+					encodeServerkeygenResponse,
+					append(
+						options,
+					)...,
+				),
+				"ServerKeyGen",
+			),
+		),
+	)
 
 	return router
 }

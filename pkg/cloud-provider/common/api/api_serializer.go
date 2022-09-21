@@ -87,7 +87,7 @@ func (o *GetDeviceConfigurationOutput) Serialize() GetDeviceConfigurationOutputS
 	return o.Configuration
 }
 
-//------------------------------------------------------
+// ------------------------------------------------------
 type UpdateCAStatusOutputSerialized struct {
 }
 
@@ -99,7 +99,7 @@ func (o *UpdateCAStatusOutputSerialized) Deserialize() UpdateCAStatusOutput {
 	return UpdateCAStatusOutput{}
 }
 
-//------------------------------------------------------
+// ------------------------------------------------------
 type UpdateDeviceCertificateStatusOutputSerialized struct {
 }
 
@@ -110,3 +110,12 @@ func (o *UpdateDeviceCertificateStatusOutput) Serialize() UpdateDeviceCertificat
 func (o *UpdateDeviceCertificateStatusOutputSerialized) Deserialize() UpdateDeviceCertificateStatusOutput {
 	return UpdateDeviceCertificateStatusOutput{}
 }
+
+// ------------------------------------------------------
+type UpdateDeviceDigitalTwinReenrollmentStatusOutputSerialized struct{}
+
+func (o *UpdateDeviceDigitalTwinReenrollmentStatusOutput) Serialize() UpdateDeviceDigitalTwinReenrollmentStatusOutputSerialized {
+	return UpdateDeviceDigitalTwinReenrollmentStatusOutputSerialized{}
+}
+
+//------------------------------------------------------

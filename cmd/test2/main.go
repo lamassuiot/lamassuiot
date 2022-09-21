@@ -26,7 +26,7 @@ import (
 
 const (
 	maxWorkers = 10
-	devices    = 100000
+	devices    = 10000
 )
 
 type enrollJob struct {

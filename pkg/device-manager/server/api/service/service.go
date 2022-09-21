@@ -25,7 +25,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
 	"github.com/lib/pq"
-	"github.com/robfig/cron/v3"
 	"golang.org/x/exp/slices"
 )
 
@@ -40,7 +39,6 @@ type Service interface {
 	DecommisionDevice(ctx context.Context, input *api.DecommisionDeviceInput) (*api.DecommisionDeviceOutput, error)
 	GetDevices(ctx context.Context, input *api.GetDevicesInput) (*api.GetDevicesOutput, error)
 	GetDeviceById(ctx context.Context, input *api.GetDeviceByIdInput) (*api.GetDeviceByIdOutput, error)
-	CheckAndUpdateDeviceStatus(ctx context.Context, input *api.CheckAndUpdateDeviceStatusInput) (*api.CheckAndUpdateDeviceStatusOutput, error)
 	IterateDevicesWithPredicate(ctx context.Context, input *api.IterateDevicesWithPredicateInput) (*api.IterateDevicesWithPredicateOutput, error)
 
 	AddDeviceSlot(ctx context.Context, input *api.AddDeviceSlotInput) (*api.AddDeviceSlotOutput, error)
@@ -60,12 +58,9 @@ type devicesService struct {
 	caClient                caClient.LamassuCAClient
 	dmsManagerClient        dmsManagerClient.LamassuDMSManagerClient
 	minimumReenrollmentDays int
-	cronInstance            *cron.Cron
 }
 
 func NewDeviceManagerService(logger log.Logger, devicesRepo repository.Devices, deviceLogsRep repository.DeviceLogs, statsRepo repository.Statistics, minimumReenrollmentDays int, caClient caClient.LamassuCAClient, dmsManagerClient dmsManagerClient.LamassuDMSManagerClient) Service {
-	cronInstance := cron.New()
-
 	svc := &devicesService{
 		devicesRepo:             devicesRepo,
 		logsRepo:                deviceLogsRep,
@@ -74,12 +69,10 @@ func NewDeviceManagerService(logger log.Logger, devicesRepo repository.Devices, 
 		caClient:                caClient,
 		dmsManagerClient:        dmsManagerClient,
 		minimumReenrollmentDays: minimumReenrollmentDays,
-		cronInstance:            cronInstance,
 	}
 
 	go func() {
 		svc.ScanDevicesAndUpdateStatistics()
-		cronInstance.AddFunc("1 * * * *", svc.ScanDevicesAndUpdateStatistics) //hourly scann
 	}()
 
 	return svc
@@ -210,22 +203,14 @@ func (s *devicesService) GetDevices(ctx context.Context, input *api.GetDevicesIn
 		return nil, err
 	}
 
-	checkedDevices := make([]api.Device, 0)
-	// Apply Device Check
+	devices := make([]api.Device, 0)
 	for _, device := range devicesSubset {
-		checkOutput, err := s.CheckAndUpdateDeviceStatus(ctx, &api.CheckAndUpdateDeviceStatusInput{
-			DeviceID: device.ID,
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		checkedDevices = append(checkedDevices, checkOutput.Device)
+		devices = append(devices, *device)
 	}
 
 	return &api.GetDevicesOutput{
 		TotalDevices: totalDevices,
-		Devices:      checkedDevices,
+		Devices:      devices,
 	}, nil
 }
 
@@ -272,6 +257,10 @@ func (s *devicesService) AddDeviceSlot(ctx context.Context, input *api.AddDevice
 		ArchiveCertificates: []*api.Certificate{},
 	})
 
+	if device.Status == api.DeviceStatusPendingProvisioning {
+		device.Status = api.DeviceStatusFullyProvisioned
+	}
+
 	err = s.devicesRepo.UpdateDevice(ctx, device)
 	if err != nil {
 		return nil, err
@@ -314,6 +303,7 @@ func (s *devicesService) UpdateActiveCertificateStatus(ctx context.Context, inpu
 	if input.Status == caApi.StatusRevoked {
 		output, err := s.RevokeActiveCertificate(ctx, &api.RevokeActiveCertificateInput{
 			DeviceID:         input.DeviceID,
+			SlotID:           input.SlotID,
 			RevocationReason: input.RevocationReason,
 		})
 		if err != nil {
@@ -448,100 +438,9 @@ func (s *devicesService) RevokeActiveCertificate(ctx context.Context, input *api
 	}, nil
 }
 
-func (s *devicesService) CheckAndUpdateDeviceStatus(ctx context.Context, input *api.CheckAndUpdateDeviceStatusInput) (*api.CheckAndUpdateDeviceStatusOutput, error) {
-	device, err := s.devicesRepo.SelectDeviceById(ctx, input.DeviceID)
-	if err != nil {
-		return &api.CheckAndUpdateDeviceStatusOutput{}, err
-	}
-
-	if device.Status == api.DeviceStatusDecommissioned {
-		return &api.CheckAndUpdateDeviceStatusOutput{
-			Device: *device,
-		}, nil
-	}
-
-	theoricalStatus := device.Status
-
-	if len(device.Slots) == 0 && device.Status != api.DeviceStatusPendingProvisioning {
-		theoricalStatus = api.DeviceStatusPendingProvisioning
-	}
-
-	type StatusReport struct {
-		ActiveCounter  int
-		RevokedCounter int
-		ExpiredCounter int
-		AboutToExpire  int
-	}
-
-	counter := StatusReport{
-		ActiveCounter:  0,
-		RevokedCounter: 0,
-		ExpiredCounter: 0,
-		AboutToExpire:  0,
-	}
-
-	for _, v := range device.Slots {
-		getCertificateOutput, err := s.caClient.GetCertificateBySerialNumber(ctx, &caApi.GetCertificateBySerialNumberInput{
-			CAType:                  caApi.CATypePKI,
-			CAName:                  v.ActiveCertificate.CAName,
-			CertificateSerialNumber: v.ActiveCertificate.SerialNumber,
-		})
-		if err != nil {
-			return &api.CheckAndUpdateDeviceStatusOutput{}, err
-		}
-
-		if getCertificateOutput.Status != v.ActiveCertificate.Status {
-			s.UpdateActiveCertificateStatus(ctx, &api.UpdateActiveCertificateStatusInput{
-				DeviceID:         device.ID,
-				SlotID:           v.ID,
-				Status:           getCertificateOutput.Status,
-				RevocationReason: getCertificateOutput.RevocationReason,
-			})
-		}
-
-		switch getCertificateOutput.Status {
-		case caApi.StatusActive:
-			counter.ActiveCounter += 1
-		case caApi.StatusRevoked:
-			counter.RevokedCounter += 1
-		case caApi.StatusExpired:
-			counter.ExpiredCounter += 1
-		case caApi.StatusAboutToExpire:
-			counter.AboutToExpire += 1
-		}
-	}
-
-	if counter.ExpiredCounter > 0 || counter.RevokedCounter > 0 {
-		theoricalStatus = api.DeviceStatusProvisionedWithWarnings
-	} else if counter.AboutToExpire > 0 {
-		theoricalStatus = api.DeviceStatusRequiresAction
-	} else if counter.ActiveCounter > 0 {
-		theoricalStatus = api.DeviceStatusFullyProvisioned
-	}
-
-	if theoricalStatus != device.Status {
-		device.Status = theoricalStatus
-		err = s.devicesRepo.UpdateDevice(ctx, *device)
-		if err != nil {
-			return &api.CheckAndUpdateDeviceStatusOutput{}, err
-		}
-	}
-
-	device, err = s.devicesRepo.SelectDeviceById(ctx, input.DeviceID)
-	if err != nil {
-		return &api.CheckAndUpdateDeviceStatusOutput{}, err
-	}
-
-	return &api.CheckAndUpdateDeviceStatusOutput{
-		Device: *device,
-	}, nil
-
-}
-
 func (s *devicesService) IterateDevicesWithPredicate(ctx context.Context, input *api.IterateDevicesWithPredicateInput) (*api.IterateDevicesWithPredicateOutput, error) {
 	output := api.IterateDevicesWithPredicateOutput{}
 
-	var devices []api.Device
 	limit := 100
 	i := 0
 
@@ -557,69 +456,68 @@ func (s *devicesService) IterateDevicesWithPredicate(ctx context.Context, input 
 		if err != nil {
 			return &output, err
 		}
+
 		if len(devicesOutput.Devices) == 0 {
 			break
 		}
 
-		devices = append(devices, devicesOutput.Devices...)
-		i++
-	}
+		for _, v := range devicesOutput.Devices {
+			input.PredicateFunc(&v)
+		}
 
-	for _, v := range devices {
-		input.PredicateFunc(&v)
+		i++
 	}
 
 	return &output, nil
 	// output := api.IterateDevicesWithPredicateOutput{}
 
 	// limit := 100
-	// maxWorkers := 20
-
-	// jobs := make(chan int, maxWorkers)
+	// maxWorkers := 5
 	// results := make(chan int)
 
-	// workerFunc := func(jobs chan int, results chan int) {
-	// 	for j := range jobs {
-	// 		ctr := 0
-	// 		for {
-	// 			devicesOutput, err := s.GetDevices(ctx, &api.GetDevicesInput{
-	// 				QueryParameters: common.QueryParameters{
-	// 					Pagination: common.PaginationOptions{
-	// 						Limit:  limit,
-	// 						Offset: (j + ctr) * limit,
-	// 					},
+	// workerFunc := func(i int, results chan int) {
+	// 	ctr := 0
+	// 	for {
+	// 		devicesOutput, err := s.GetDevices(ctx, &api.GetDevicesInput{
+	// 			QueryParameters: common.QueryParameters{
+	// 				Pagination: common.PaginationOptions{
+	// 					Limit:  limit,
+	// 					Offset: (i + ctr) * limit,
 	// 				},
-	// 			})
+	// 			},
+	// 		})
 
-	// 			if err != nil {
-	// 				break
-	// 			}
-
-	// 			if len(devicesOutput.Devices) > 0 {
-	// 				for _, v := range devicesOutput.Devices {
-	// 					input.PredicateFunc(&v)
-	// 				}
-	// 				ctr++
-	// 			} else {
-	// 				break
-	// 			}
+	// 		if err != nil {
+	// 			break
 	// 		}
-	// 		results <- j
+
+	// 		if len(devicesOutput.Devices) > 0 {
+	// 			for _, v := range devicesOutput.Devices {
+	// 				input.PredicateFunc(&v)
+	// 			}
+	// 			ctr++
+	// 		} else {
+	// 			break
+	// 		}
 	// 	}
+	// 	results <- i
 	// }
 
 	// for i := 0; i < maxWorkers; i++ {
-	// 	go workerFunc(jobs, results)
-	// 	jobs <- i
+	// 	go workerFunc(i, results)
 	// }
 
 	// finished := 0
-	// for {
-	// 	<-results
+
+	// for r := range results {
 	// 	finished++
-	// 	fmt.Println("finished", finished)
+	// 	fmt.Println("finished", finished, r)
+	// 	if finished == maxWorkers {
+	// 		close(results)
+	// 	}
 	// }
 
+	// fmt.Println("returing")
 	// return &output, nil
 }
 
@@ -947,21 +845,15 @@ func (s *devicesService) ScanDevicesAndUpdateStatistics() {
 	slotStatus := map[caApi.CertificateStatus]int{}
 	s.IterateDevicesWithPredicate(ctx, &api.IterateDevicesWithPredicateInput{
 		PredicateFunc: func(device *api.Device) {
-			level.Debug(s.logger).Log("msg", "Starting devices scan...")
-			output, err := s.CheckAndUpdateDeviceStatus(ctx, &api.CheckAndUpdateDeviceStatusInput{
-				DeviceID: device.ID,
-			})
-			if err != nil {
-				return
+			for _, v := range device.Slots {
+				slotStatus[v.ActiveCertificate.Status]++
 			}
 
-			deviceStats[device.Status] += 1
-			counter += 1
-			for _, slot := range output.Device.Slots {
-				slotStatus[slot.ActiveCertificate.Status] += 1
-			}
+			deviceStats[device.Status]++
 
-			level.Debug(s.logger).Log("msg", "Scanned devices", "count", counter, "time", time.Since(t0).String())
+			if counter%1000 == 0 {
+				level.Debug(s.logger).Log("msg", "Scanned devices", "count", counter, "time", time.Since(t0).String())
+			}
 
 		},
 	})

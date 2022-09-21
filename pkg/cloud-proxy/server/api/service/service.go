@@ -27,23 +27,27 @@ type Service interface {
 	HandleCreateCAEvent(ctx context.Context, input *api.HandleCreateCAEventInput) (*api.HandleCreateCAEventOutput, error)
 	HandleUpdateCAStatusEvent(ctx context.Context, input *api.HandleUpdateCAStatusEventInput) (*api.HandleUpdateCAStatusEventOutput, error)
 	HandleUpdateCertificateStatusEvent(ctx context.Context, input *api.HandleUpdateCertificateStatusEventInput) (*api.HandleUpdateCertificateStatusEventOutput, error)
+	HandleReenrollEvent(ctx context.Context, input *api.HandleReenrollEventInput) (*api.HandleReenrollEventOutput, error)
 	UpdateDeviceCertificateStatus(ctx context.Context, input *api.UpdateDeviceCertificateStatusInput) (*api.UpdateDeviceCertificateStatusOutput, error)
 	UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (*api.UpdateCAStatusOutput, error)
+	UpdateDeviceDigitalTwinReenrolmentStatus(ctx context.Context, input *api.UpdateDeviceDigitalTwinReenrolmentStatusInput) (*api.UpdateDeviceDigitalTwinReenrolmentStatusOutput, error)
 }
 
 type CloudProxyService struct {
-	Logger          log.Logger
-	ConsulClient    *consul.Client
-	LamassuCAClient lamassuCAClient.LamassuCAClient
-	CloudProxyDB    repository.CloudProxyRepository
+	Logger              log.Logger
+	ConsulClient        *consul.Client
+	LamassuCAClient     lamassuCAClient.LamassuCAClient
+	CloudProxyDB        repository.CloudProxyRepository
+	ConnectorBaseConfig clientUtils.BaseClientConfigurationuration
 }
 
-func NewCloudPorxyService(consulClient *consul.Client, cloudProxyDatabase repository.CloudProxyRepository, lamassuCAClient lamassuCAClient.LamassuCAClient, logger log.Logger) Service {
+func NewCloudPorxyService(consulClient *consul.Client, cloudProxyDatabase repository.CloudProxyRepository, lamassuCAClient lamassuCAClient.LamassuCAClient, clientBaseConfig clientUtils.BaseClientConfigurationuration, logger log.Logger) Service {
 	return &CloudProxyService{
-		Logger:          logger,
-		ConsulClient:    consulClient,
-		LamassuCAClient: lamassuCAClient,
-		CloudProxyDB:    cloudProxyDatabase,
+		Logger:              logger,
+		ConsulClient:        consulClient,
+		LamassuCAClient:     lamassuCAClient,
+		CloudProxyDB:        cloudProxyDatabase,
+		ConnectorBaseConfig: clientBaseConfig,
 	}
 }
 
@@ -338,6 +342,33 @@ func (cps *CloudProxyService) HandleUpdateCertificateStatusEvent(ctx context.Con
 	return &api.HandleUpdateCertificateStatusEventOutput{}, nil
 }
 
+func (cps *CloudProxyService) HandleReenrollEvent(ctx context.Context, input *api.HandleReenrollEventInput) (*api.HandleReenrollEventOutput, error) {
+	connectorsOutput, err := cps.GetCloudConnectors(ctx, &api.GetCloudConnectorsInput{})
+	if err != nil {
+		return &api.HandleReenrollEventOutput{}, err
+	}
+
+	for _, connector := range connectorsOutput.CloudConnectors {
+		for _, syncCA := range connector.SynchronizedCAs {
+			if syncCA.ConsistencyStatus != api.ConsistencyStatusDisabled && syncCA.CAName == input.Certificate.Issuer.CommonName {
+				fmt.Println(fmt.Sprintf("	[%s](%s) %s  --->  %s:%d", connector.Status, connector.CloudProvider, connector.ID, connector.IP, connector.Port))
+				cps.UpdateDeviceDigitalTwinReenrolmentStatus(ctx, &api.UpdateDeviceDigitalTwinReenrolmentStatusInput{
+					ConnectorID:   connector.ID,
+					DeviceID:      input.Certificate.Subject.CommonName,
+					SlotID:        "",
+					ForceReenroll: true,
+				})
+
+				if err != nil {
+					level.Debug(cps.Logger).Log("err", err)
+					continue
+				}
+			}
+		}
+	}
+	return &api.HandleReenrollEventOutput{}, nil
+}
+
 func (cps *CloudProxyService) UpdateDeviceCertificateStatus(ctx context.Context, input *api.UpdateDeviceCertificateStatusInput) (*api.UpdateDeviceCertificateStatusOutput, error) {
 	connectorOutput, err := cps.GetCloudConnectorByID(ctx, &api.GetCloudConnectorByIDInput{
 		ConnectorID: input.ConnectorID,
@@ -364,6 +395,31 @@ func (cps *CloudProxyService) UpdateDeviceCertificateStatus(ctx context.Context,
 	return &api.UpdateDeviceCertificateStatusOutput{}, nil
 }
 
+func (cps *CloudProxyService) UpdateDeviceDigitalTwinReenrolmentStatus(ctx context.Context, input *api.UpdateDeviceDigitalTwinReenrolmentStatusInput) (*api.UpdateDeviceDigitalTwinReenrolmentStatusOutput, error) {
+	connectorOutput, err := cps.GetCloudConnectorByID(ctx, &api.GetCloudConnectorByIDInput{
+		ConnectorID: input.ConnectorID,
+	})
+	if err != nil {
+		return &api.UpdateDeviceDigitalTwinReenrolmentStatusOutput{}, err
+	}
+
+	connectorClient, err := cps.newCloudPriverClientFromConnector(connectorOutput.CloudConnector)
+	if err != nil {
+		return &api.UpdateDeviceDigitalTwinReenrolmentStatusOutput{}, err
+	}
+
+	_, err = connectorClient.UpdateDeviceDigitalTwinStatus(ctx, &cloudProvider.UpdateDeviceDigitalTwinReenrollmentStatusInput{
+		DeviceID:      input.DeviceID,
+		SlotID:        input.SlotID,
+		ForceReenroll: input.ForceReenroll,
+	})
+	if err != nil {
+		return &api.UpdateDeviceDigitalTwinReenrolmentStatusOutput{}, err
+	}
+
+	return &api.UpdateDeviceDigitalTwinReenrolmentStatusOutput{}, nil
+}
+
 func (cps *CloudProxyService) UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (*api.UpdateCAStatusOutput, error) {
 	return &api.UpdateCAStatusOutput{}, nil
 }
@@ -378,12 +434,11 @@ func (cps *CloudProxyService) newCloudPriverClient(protocol string, ip string, p
 		scheme = "https"
 	}
 
-	return cloudProviderClient.NewCloudProviderClient(clientUtils.BaseClientConfigurationuration{
-		URL: &url.URL{
-			Scheme: scheme,
-			Host:   fmt.Sprintf("%s:%d", ip, port),
-		},
-		AuthMethod: clientUtils.AuthMethodNone,
-		Insecure:   true,
-	})
+	config := cps.ConnectorBaseConfig
+	config.URL = &url.URL{
+		Scheme: scheme,
+		Host:   fmt.Sprintf("%s:%d", ip, port),
+	}
+
+	return cloudProviderClient.NewCloudProviderClient(config)
 }

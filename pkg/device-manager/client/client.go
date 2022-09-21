@@ -58,7 +58,7 @@ package lamassudevmanager
 // 		IconColor:   iconColor,
 // 		DmsId:       dmsID,
 // 	}
-// 	req, err := c.client.NewRequest("POST", "v1/devices", body)
+// 	req, err := c.client.NewRequest(ctx, "POST", "v1/devices", body)
 // 	if err != nil {
 // 		return dto.Device{}, err
 // 	}
@@ -81,7 +81,7 @@ package lamassudevmanager
 // 		IconColor:   iconColor,
 // 		DmsId:       dmsID,
 // 	}
-// 	req, err := c.client.NewRequest("PUT", "v1/devices/"+deviceID, body)
+// 	req, err := c.client.NewRequest(ctx, "PUT", "v1/devices/"+deviceID, body)
 // 	if err != nil {
 // 		return dto.Device{}, err
 // 	}
@@ -96,7 +96,7 @@ package lamassudevmanager
 // }
 // func (c *LamassuDeviceManagerClientConfig) GetDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error) {
 // 	var newParams string
-// 	req, err := c.client.NewRequest("GET", "v1/devices", nil)
+// 	req, err := c.client.NewRequest(ctx, "GET", "v1/devices", nil)
 // 	if err != nil {
 // 		return []dto.Device{}, 0, err
 // 	}
@@ -124,7 +124,7 @@ package lamassudevmanager
 // 	return devices, len(devices), nil
 // }
 // func (c *LamassuDeviceManagerClientConfig) GetDeviceById(ctx context.Context, deviceId string) (dto.Device, error) {
-// 	req, err := c.client.NewRequest("GET", "v1/devices/"+deviceId, nil)
+// 	req, err := c.client.NewRequest(ctx, "GET", "v1/devices/"+deviceId, nil)
 // 	if err != nil {
 // 		return dto.Device{}, err
 // 	}
@@ -140,7 +140,7 @@ package lamassudevmanager
 // }
 // func (c *LamassuDeviceManagerClientConfig) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) (dto.GetDevicesResponse, error) {
 // 	var newParams string
-// 	req, err := c.client.NewRequest("GET", "v1/devices/dms/"+dmsId, nil)
+// 	req, err := c.client.NewRequest(ctx, "GET", "v1/devices/dms/"+dmsId, nil)
 // 	if err != nil {
 // 		return dto.GetDevicesResponse{}, err
 // 	}
@@ -159,7 +159,7 @@ package lamassudevmanager
 // 	return resp, nil
 // }
 // func (c *LamassuDeviceManagerClientConfig) DeleteDevice(ctx context.Context, id string) error {
-// 	req, err := c.client.NewRequest("DELETE", "v1/devices/"+id, nil)
+// 	req, err := c.client.NewRequest(ctx, "DELETE", "v1/devices/"+id, nil)
 // 	if err != nil {
 // 		return err
 // 	}
@@ -171,7 +171,7 @@ package lamassudevmanager
 // 	return nil
 // }
 // func (c *LamassuDeviceManagerClientConfig) RevokeDeviceCert(ctx context.Context, id string, revocationReason string) error {
-// 	req, err := c.client.NewRequest("DELETE", "v1/devices/"+id+"/revoke", nil)
+// 	req, err := c.client.NewRequest(ctx, "DELETE", "v1/devices/"+id+"/revoke", nil)
 // 	if err != nil {
 // 		return err
 // 	}
@@ -182,7 +182,7 @@ package lamassudevmanager
 // 	return nil
 // }
 // func (c *LamassuDeviceManagerClientConfig) GetDeviceLogs(ctx context.Context, id string) (dto.GetLogsResponse, error) {
-// 	req, err := c.client.NewRequest("GET", "v1/devices/"+id+"/logs", nil)
+// 	req, err := c.client.NewRequest(ctx, "GET", "v1/devices/"+id+"/logs", nil)
 // 	if err != nil {
 // 		return dto.GetLogsResponse{}, err
 // 	}
@@ -197,7 +197,7 @@ package lamassudevmanager
 // 	return logs, nil
 // }
 // func (c *LamassuDeviceManagerClientConfig) GetDeviceCert(ctx context.Context, id string) (dto.DeviceCert, error) {
-// 	req, err := c.client.NewRequest("GET", "v1/devices/"+id+"/cert", nil)
+// 	req, err := c.client.NewRequest(ctx, "GET", "v1/devices/"+id+"/cert", nil)
 // 	if err != nil {
 // 		return dto.DeviceCert{}, err
 // 	}
@@ -213,7 +213,7 @@ package lamassudevmanager
 // 	return cert, nil
 // }
 // func (c *LamassuDeviceManagerClientConfig) GetDeviceCertHistory(ctx context.Context, id string) ([]dto.DeviceCertHistory, error) {
-// 	req, err := c.client.NewRequest("GET", "v1/devices/"+id+"/cert-history", nil)
+// 	req, err := c.client.NewRequest(ctx, "GET", "v1/devices/"+id+"/cert-history", nil)
 // 	if err != nil {
 // 		return []dto.DeviceCertHistory{}, err
 // 	}
@@ -234,7 +234,7 @@ package lamassudevmanager
 // }
 // func (c *LamassuDeviceManagerClientConfig) GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSCertHistory, error) {
 // 	var newParams string
-// 	req, err := c.client.NewRequest("GET", "v1/devices/dms-cert-history/thirty-days", nil)
+// 	req, err := c.client.NewRequest(ctx, "GET", "v1/devices/dms-cert-history/thirty-days", nil)
 // 	if err != nil {
 // 		return []dto.DMSCertHistory{}, err
 // 	}
@@ -259,7 +259,7 @@ package lamassudevmanager
 // }
 // func (c *LamassuDeviceManagerClientConfig) GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) (dto.GetLastIssuedCertResponse, error) {
 // 	var newParams string
-// 	req, err := c.client.NewRequest("GET", "v1/devices/dms-cert-history/last-issued", nil)
+// 	req, err := c.client.NewRequest(ctx, "GET", "v1/devices/dms-cert-history/last-issued", nil)
 // 	if err != nil {
 // 		return dto.GetLastIssuedCertResponse{}, err
 // 	}

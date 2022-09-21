@@ -10,23 +10,15 @@ import (
 	"github.com/go-kit/log"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/endpoint"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/service"
+	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	stdopentracing "github.com/opentracing/opentracing-go"
 	"github.com/streadway/amqp"
 )
 
-func AddLoggerToContext(logger log.Logger, otTracer stdopentracing.Tracer) amqptransport.RequestFunc {
-	return func(ctx context.Context, pub *amqp.Publishing, del *amqp.Delivery) context.Context {
-		span, ctx := stdopentracing.StartSpanFromContextWithTracer(ctx, otTracer, "event-handler")
-		logger = log.With(logger, "span_id", span)
-		// return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
-		return ctx
-	}
-}
-
 func MakeAmqpHandler(s service.Service, logger log.Logger, otTracer stdopentracing.Tracer) *amqptransport.Subscriber {
 	endpoints := endpoint.MakeServerEndpoints(s, otTracer)
 	options := []amqptransport.SubscriberOption{
-		amqptransport.SubscriberBefore(AddLoggerToContext(logger, otTracer)),
+		amqptransport.SubscriberBefore(serverUtils.InjectTracingToContextFromAMQP()),
 	}
 
 	// AMQP Subscribers

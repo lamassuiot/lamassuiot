@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"time"
 
@@ -59,8 +61,8 @@ func (mw *amqpMiddleware) sendAMQPMessage(eventType string, output interface{}) 
 	}
 
 	msg := server.AmqpPublishMessage{
-		Exchange:  "",
-		Key:       "lamassu-events",
+		Exchange:  "lamassu",
+		Key:       eventType,
 		Mandatory: false,
 		Immediate: false,
 		Msg: amqp.Publishing{
@@ -110,10 +112,6 @@ func (mw *amqpMiddleware) GetDeviceById(ctx context.Context, input *api.GetDevic
 	return mw.next.GetDeviceById(ctx, input)
 }
 
-func (mw *amqpMiddleware) CheckAndUpdateDeviceStatus(ctx context.Context, input *api.CheckAndUpdateDeviceStatusInput) (*api.CheckAndUpdateDeviceStatusOutput, error) {
-	return mw.next.CheckAndUpdateDeviceStatus(ctx, input)
-}
-
 func (mw *amqpMiddleware) IterateDevicesWithPredicate(ctx context.Context, input *api.IterateDevicesWithPredicateInput) (*api.IterateDevicesWithPredicateOutput, error) {
 	return mw.next.IterateDevicesWithPredicate(ctx, input)
 }
@@ -157,14 +155,24 @@ func (mw *amqpMiddleware) CACerts(ctx context.Context, aps string) ([]*x509.Cert
 
 func (mw *amqpMiddleware) Enroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (output *x509.Certificate, err error) {
 	defer func() {
-		mw.sendAMQPMessage(fmt.Sprintf("%s.certificate.enroll", EventPrefix), output)
+		type EnrollLog struct {
+			Certificate string `json:"certificate"`
+		}
+		crtBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: output.Raw})
+		crtB64 := base64.StdEncoding.EncodeToString(crtBytes)
+		mw.sendAMQPMessage(fmt.Sprintf("%s.certificate.enroll", EventPrefix), &EnrollLog{Certificate: crtB64})
 	}()
 	return mw.next.Enroll(ctx, csr, cert, aps)
 }
 
 func (mw *amqpMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate) (output *x509.Certificate, err error) {
 	defer func() {
-		mw.sendAMQPMessage(fmt.Sprintf("%s.certificate.enroll", EventPrefix), output)
+		type ReEnrollLog struct {
+			Certificate string `json:"certificate"`
+		}
+		crtBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: output.Raw})
+		crtB64 := base64.StdEncoding.EncodeToString(crtBytes)
+		mw.sendAMQPMessage(fmt.Sprintf("%s.certificate.enroll", EventPrefix), &ReEnrollLog{Certificate: crtB64})
 	}()
 	return mw.next.Reenroll(ctx, csr, cert)
 }

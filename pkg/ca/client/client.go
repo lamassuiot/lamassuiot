@@ -67,14 +67,14 @@ func (c *lamassuCaClientConfig) Stats(ctx context.Context, input *api.GetStatsIn
 func (c *lamassuCaClientConfig) GetCAs(ctx context.Context, input *api.GetCAsInput) (*api.GetCAsOutput, error) {
 	urlParams := clientFilers.GenerateHttpQueryParams(input.QueryParameters)
 	var output api.GetCAsOutputSerialized
-	_, err := newClient(c.client).Do("GET", fmt.Sprintf("v1/%s", input.CAType), urlParams, nil).GetDeserializedResponse(&output)
+	_, err := newClient(c.client).Do(ctx, "GET", fmt.Sprintf("v1/%s", input.CAType), urlParams, nil).GetDeserializedResponse(&output)
 	deserialized := output.Deserialize()
 	return &deserialized, err
 }
 
 func (c *lamassuCaClientConfig) GetCAByName(ctx context.Context, input *api.GetCAByNameInput) (*api.GetCAByNameOutput, error) {
 	var output api.GetCAByNameOutputSerialized
-	_, err := newClient(c.client).Do("GET", fmt.Sprintf("v1/%s/%s", input.CAType, input.CAName), "", nil).GetDeserializedResponse(&output)
+	_, err := newClient(c.client).Do(ctx, "GET", fmt.Sprintf("v1/%s/%s", input.CAType, input.CAName), "", nil).GetDeserializedResponse(&output)
 	deserialized := output.Deserialize()
 	return &deserialized, err
 }
@@ -133,7 +133,7 @@ func (c *lamassuCaClientConfig) CreateCA(ctx context.Context, input *api.CreateC
 		IssuanceDuration: int(input.IssuanceDuration.Seconds()),
 	}
 
-	req, err := c.client.NewRequest("POST", "v1/pki", body)
+	req, err := c.client.NewRequest(ctx, "POST", "v1/pki", body)
 
 	if err != nil {
 		return &api.CreateCAOutput{}, err
@@ -170,7 +170,7 @@ func (c *lamassuCaClientConfig) CreateCA(ctx context.Context, input *api.CreateC
 // 		IssuanceDuration: int(input.IssuanceDuration.Hours()),
 // 	}
 
-// 	req, err := c.client.NewRequest("POST", "v1/"+string(input.CAType)+"/import/"+string(input.Certificate.Subject.CommonName), body)
+// 	req, err := c.client.NewRequest(ctx, "POST", "v1/"+string(input.CAType)+"/import/"+string(input.Certificate.Subject.CommonName), body)
 // 	if err != nil {
 // 		return &api.ImportCAOutput{}, err
 // 	}
@@ -190,7 +190,7 @@ func (c *lamassuCaClientConfig) RevokeCA(ctx context.Context, input *api.RevokeC
 		RevocationReason: input.RevocationReason,
 	}
 
-	req, err := c.client.NewRequest("DELETE", "v1/"+string(input.CAType)+"/"+input.CAName, body)
+	req, err := c.client.NewRequest(ctx, "DELETE", "v1/"+string(input.CAType)+"/"+input.CAName, body)
 	if err != nil {
 		return &api.RevokeCAOutput{}, err
 	}
@@ -221,7 +221,7 @@ func (c *lamassuCaClientConfig) SignCertificateRequest(ctx context.Context, inpu
 		SignVerbatim:       input.SignVerbatim,
 	}
 
-	req, err := c.client.NewRequest("POST", "v1/"+string(input.CAType)+"/"+input.CAName+"/sign", body)
+	req, err := c.client.NewRequest(ctx, "POST", "v1/"+string(input.CAType)+"/"+input.CAName+"/sign", body)
 
 	if err != nil {
 		return &api.SignCertificateRequestOutput{}, err
@@ -245,7 +245,7 @@ func (c *lamassuCaClientConfig) RevokeCertificate(ctx context.Context, input *ap
 		RevocationReason: input.RevocationReason,
 	}
 
-	req, err := c.client.NewRequest("DELETE", "v1/"+string(input.CAType)+"/"+input.CAName+"/certificates/"+input.CertificateSerialNumber, body)
+	req, err := c.client.NewRequest(ctx, "DELETE", "v1/"+string(input.CAType)+"/"+input.CAName+"/certificates/"+input.CertificateSerialNumber, body)
 	if err != nil {
 		return &api.RevokeCertificateOutput{}, nil
 	}
@@ -273,7 +273,7 @@ func (c *lamassuCaClientConfig) UpdateCertificateStatus(ctx context.Context, inp
 func (c *lamassuCaClientConfig) GetCertificateBySerialNumber(ctx context.Context, input *api.GetCertificateBySerialNumberInput) (*api.GetCertificateBySerialNumberOutput, error) {
 	//TODO: To Refact with new synta. Check GetCAByName and GetCAs
 
-	req, err := c.client.NewRequest("GET", "v1/"+string(input.CAType)+"/"+input.CAName+"/certificates/"+input.CertificateSerialNumber, nil)
+	req, err := c.client.NewRequest(ctx, "GET", "v1/"+string(input.CAType)+"/"+input.CAName+"/certificates/"+input.CertificateSerialNumber, nil)
 	if err != nil {
 		return &api.GetCertificateBySerialNumberOutput{}, err
 	}
@@ -291,7 +291,7 @@ func (c *lamassuCaClientConfig) GetCertificateBySerialNumber(ctx context.Context
 func (c *lamassuCaClientConfig) GetCertificates(ctx context.Context, input *api.GetCertificatesInput) (*api.GetCertificatesOutput, error) {
 	//TODO: To Refact with new synta. Check GetCAByName and GetCAs
 
-	req, err := c.client.NewRequest("GET", "v1/"+string(input.CAType)+"/"+input.CAName+"/issued", nil)
+	req, err := c.client.NewRequest(ctx, "GET", "v1/"+string(input.CAType)+"/"+input.CAName+"/issued", nil)
 	if err != nil {
 		return &api.GetCertificatesOutput{}, err
 	}
@@ -364,8 +364,8 @@ func newClient(client clientUtils.BaseClient) *genericRequest {
 	}
 }
 
-func (greq *genericRequest) Do(method string, path string, queryParameters string, body interface{}) *genericResponse {
-	req, err := greq.client.NewRequest(method, path, body)
+func (greq *genericRequest) Do(ctx context.Context, method string, path string, queryParameters string, body interface{}) *genericResponse {
+	req, err := greq.client.NewRequest(ctx, method, path, body)
 	if queryParameters != "" {
 		req.URL.RawQuery = queryParameters
 	}

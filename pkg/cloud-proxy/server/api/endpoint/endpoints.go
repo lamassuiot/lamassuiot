@@ -138,7 +138,7 @@ func MakeEventHandlerEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		event := request.(cloudevents.Event)
 		switch event.Type() {
-		case "io.lamassu.ca.create":
+		case "io.lamassuiot.ca.create":
 			var data caApi.CreateCAOutputSerialized
 			json.Unmarshal(event.Data(), &data)
 			_, err := s.HandleCreateCAEvent(ctx, &api.HandleCreateCAEventInput{
@@ -153,7 +153,7 @@ func MakeEventHandlerEndpoint(s service.Service) endpoint.Endpoint {
 		// 	err := s.HandleCreateCAEvent(ctx, data.CaName, data.SerialNumber, data.CaCert)
 		// 	return nil, err
 
-		case "io.lamassu.ca.update":
+		case "io.lamassuiot.ca.update":
 			var data caApi.UpdateCAStatusOutputSerialized
 			json.Unmarshal(event.Data(), &data)
 			_, err := s.HandleUpdateCAStatusEvent(ctx, &api.HandleUpdateCAStatusEventInput{
@@ -161,7 +161,7 @@ func MakeEventHandlerEndpoint(s service.Service) endpoint.Endpoint {
 			})
 			return nil, err
 
-		case "io.lamassu.cert.update":
+		case "io.lamassuiot.certificate.update":
 			var data caApi.UpdateCertificateStatusOutputSerialized
 			json.Unmarshal(event.Data(), &data)
 			_, err := s.HandleUpdateCertificateStatusEvent(ctx, &api.HandleUpdateCertificateStatusEventInput{

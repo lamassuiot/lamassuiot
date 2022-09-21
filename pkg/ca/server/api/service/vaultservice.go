@@ -25,8 +25,8 @@ type VaultSecrets struct {
 	ocspUrl  string
 }
 
-func NewVaultService(address string, pkiPath string, roleID string, secretID string, CA string, unsealFile string, ocspUrl string) {
-
+func NewVaultService(address string, pkiPath string, roleID string, secretID string, CA string, unsealFile string, ocspUrl string) Service {
+	return &VaultSecrets{}
 }
 
 func NewVaultSecretsWithClient(client *vaultApi.Client, address string, pkiPath string, roleID string, secretID string, CA string, unsealFile string, ocspUrl string, logger log.Logger) (*VaultSecrets, error) {

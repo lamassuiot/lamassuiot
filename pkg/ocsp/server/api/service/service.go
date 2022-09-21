@@ -27,11 +27,11 @@ type OCSPResponder struct {
 	responderCertificate *x509.Certificate
 }
 
-func NewOCSPService(lamassuCAClient client.LamassuCAClient, key crypto.Signer, certificate *x509.Certificate) Service {
+func NewOCSPService(lamassuCAClient client.LamassuCAClient, responseKeySigner crypto.Signer, responseCertificate *x509.Certificate) Service {
 	responder := &OCSPResponder{
 		lamassuCAClient:      lamassuCAClient,
-		responderSigner:      key,
-		responderCertificate: certificate,
+		responderSigner:      responseKeySigner,
+		responderCertificate: responseCertificate,
 	}
 
 	return responder

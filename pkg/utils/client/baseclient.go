@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -12,6 +13,9 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type BaseClientConfigurationuration struct {
@@ -28,7 +32,7 @@ type ClientConfiguration struct {
 }
 
 type BaseClient interface {
-	NewRequest(method string, path string, body interface{}) (*http.Request, error)
+	NewRequest(ctx context.Context, method string, path string, body interface{}) (*http.Request, error)
 	Do(req *http.Request, response any) (*http.Response, error)
 	Do2(req *http.Request) (*http.Response, error)
 }
@@ -71,13 +75,15 @@ func NewBaseClient(config BaseClientConfigurationuration) (BaseClient, error) {
 			return nil, errors.New("invalid client configuration, missing JWTConfig")
 		}
 
-		authCAPem, err := ioutil.ReadFile(config.CACertificate)
-		if err != nil {
-			return nil, err
-		}
-
 		authCertPool := x509.NewCertPool()
-		authCertPool.AppendCertsFromPEM(authCAPem)
+		if !authConfig.Insecure {
+			authCAPem, err := ioutil.ReadFile(config.CACertificate)
+			if err != nil {
+				return nil, err
+			}
+
+			authCertPool.AppendCertsFromPEM(authCAPem)
+		}
 
 		rt := NewJWTAuthTransport(
 			authConfig.Username,
@@ -85,13 +91,15 @@ func NewBaseClient(config BaseClientConfigurationuration) (BaseClient, error) {
 			authConfig.URL,
 			tr.TLSClientConfig.RootCAs,
 			authCertPool,
+			config.Insecure,
+			authConfig.Insecure,
 		)
 
-		httpClient = &http.Client{Transport: rt}
+		httpClient = &http.Client{Transport: otelhttp.NewTransport(rt)}
 	}
 
 	if httpClient == nil {
-		httpClient = &http.Client{Transport: tr}
+		httpClient = &http.Client{Transport: otelhttp.NewTransport(tr)}
 	}
 
 	return &ClientConfiguration{
@@ -100,9 +108,11 @@ func NewBaseClient(config BaseClientConfigurationuration) (BaseClient, error) {
 	}, nil
 }
 
-func (c *ClientConfiguration) NewRequest(method string, path string, body interface{}) (*http.Request, error) {
-	rel := &url.URL{Path: path}
-	u := c.BaseURL.ResolveReference(rel)
+func (c *ClientConfiguration) NewRequest(ctx context.Context, method string, path string, body interface{}) (*http.Request, error) {
+	u, err := url.JoinPath(c.BaseURL.String(), path)
+	if err != nil {
+		return nil, err
+	}
 	var buf io.ReadWriter
 	if body != nil {
 		buf = new(bytes.Buffer)
@@ -111,7 +121,7 @@ func (c *ClientConfiguration) NewRequest(method string, path string, body interf
 			return nil, err
 		}
 	}
-	req, err := http.NewRequest(method, u.String(), buf)
+	req, err := http.NewRequestWithContext(ctx, method, u, buf)
 	if err != nil {
 		return nil, err
 	}
@@ -119,6 +129,8 @@ func (c *ClientConfiguration) NewRequest(method string, path string, body interf
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Accept", "application/json")
+	spanContext := trace.SpanContextFromContext(ctx)
+	req.Header.Set("x-request-id", fmt.Sprintf("%s:%s", spanContext.TraceID().String(), spanContext.SpanID().String()))
 	return req, nil
 }
 

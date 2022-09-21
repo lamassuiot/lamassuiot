@@ -1,6 +1,6 @@
 ARG BASE_IMAGE=scratch
 
-FROM golang:1.18
+FROM golang:1.19
 WORKDIR /app
 COPY . .
 WORKDIR /app
@@ -11,5 +11,4 @@ RUN now=$(date +'%Y-%m-%d_%T') && \
 
 FROM $BASE_IMAGE
 COPY --from=0 /app/cloud-proxy /
-COPY ./db/migrations/cloud-proxy /app/db/migrations
 CMD ["/cloud-proxy"]

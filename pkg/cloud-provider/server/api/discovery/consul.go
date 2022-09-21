@@ -36,7 +36,7 @@ func (sd *ServiceDiscovery) Register(advProtocol string, advPort string, tags []
 	cmd := exec.Command("hostname", "-i")
 	stdout, err := cmd.Output()
 	if err != nil {
-		return "", nil
+		return "", err
 	}
 	strStdout := strings.TrimSuffix(string(stdout), "\n")
 
@@ -51,7 +51,6 @@ func (sd *ServiceDiscovery) Register(advProtocol string, advPort string, tags []
 	meta := map[string]string{"connector-type": tags[0], "name": name, "protocol": advProtocol}
 
 	var svcId string
-
 	if _, err := os.Stat(persistenceDir + "/identifier"); errors.Is(err, os.ErrNotExist) {
 		svcId = uuid.NewV4().String()
 		os.WriteFile(persistenceDir+"/identifier", []byte(svcId), 0640)

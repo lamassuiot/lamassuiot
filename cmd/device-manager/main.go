@@ -73,14 +73,14 @@ func main() {
 	dmsClient, err := lamassudmsclient.NewLamassuDMSManagerClientConfig(clientUtils.BaseClientConfigurationuration{
 		URL: &url.URL{
 			Scheme: "https",
-			Host:   config.DMSManagerAddress,
+			Host:   config.LamassuDMSManagerAddress,
 		},
 		AuthMethod: clientUtils.AuthMethodMutualTLS,
 		AuthMethodConfig: &clientUtils.MutualTLSConfig{
 			ClientCert: config.CertFile,
 			ClientKey:  config.KeyFile,
 		},
-		CACertificate: config.LamassuCACertFile,
+		CACertificate: config.LamassuDMSManagerCertFile,
 	})
 	if err != nil {
 		level.Error(mainServer.Logger).Log("msg", "Could not connect to LamassuDMSManager", "err", err)
@@ -96,6 +96,7 @@ func main() {
 
 	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), opentracing.GlobalTracer())))
 	mainServer.AddHttpHandler("/.well-known/", esttransport.MakeHTTPHandler(s, mainServer.Logger, opentracing.GlobalTracer()))
+	mainServer.AddAmqpConsumer(config.ServiceName, []string{"io.lamassuiot.certificate.update", "io.lamassuiot.certificate.revoke"}, transport.MakeAmqpHandler(s, mainServer.Logger, opentracing.GlobalTracer()))
 
 	errs := make(chan error)
 	go func() {

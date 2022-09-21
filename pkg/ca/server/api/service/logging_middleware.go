@@ -53,7 +53,7 @@ func (mw loggingMiddleware) Stats(ctx context.Context, input *api.GetStatsInput)
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -71,7 +71,7 @@ func (mw loggingMiddleware) CreateCA(ctx context.Context, input *api.CreateCAInp
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -89,7 +89,7 @@ func (mw loggingMiddleware) GetCAs(ctx context.Context, input *api.GetCAsInput) 
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -107,7 +107,7 @@ func (mw loggingMiddleware) GetCAByName(ctx context.Context, input *api.GetCAByN
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -125,7 +125,7 @@ func (mw loggingMiddleware) RevokeCA(ctx context.Context, input *api.RevokeCAInp
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -143,7 +143,7 @@ func (mw loggingMiddleware) UpdateCAStatus(ctx context.Context, input *api.Updat
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -176,7 +176,7 @@ func (mw loggingMiddleware) SignCertificateRequest(ctx context.Context, input *a
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -194,7 +194,7 @@ func (mw loggingMiddleware) UpdateCertificateStatus(ctx context.Context, input *
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -212,7 +212,7 @@ func (mw loggingMiddleware) RevokeCertificate(ctx context.Context, input *api.Re
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -230,7 +230,7 @@ func (mw loggingMiddleware) GetCertificateBySerialNumber(ctx context.Context, in
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -264,7 +264,7 @@ func (mw loggingMiddleware) GetCertificates(ctx context.Context, input *api.GetC
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -282,7 +282,7 @@ func (mw loggingMiddleware) CheckAndUpdateCACertificateStatus(ctx context.Contex
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)

@@ -144,24 +144,6 @@ func (mw loggingMiddleware) GetDeviceById(ctx context.Context, input *api.GetDev
 	return mw.next.GetDeviceById(ctx, input)
 }
 
-func (mw loggingMiddleware) CheckAndUpdateDeviceStatus(ctx context.Context, input *api.CheckAndUpdateDeviceStatusInput) (output *api.CheckAndUpdateDeviceStatusOutput, err error) {
-	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "CheckAndUpdateDeviceStatus")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
-		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
-			}
-		} else {
-			logMsg = append(logMsg, "err", err)
-		}
-		mw.logger.Log(logMsg...)
-	}(time.Now())
-	return mw.next.CheckAndUpdateDeviceStatus(ctx, input)
-}
-
 func (mw loggingMiddleware) IterateDevicesWithPredicate(ctx context.Context, input *api.IterateDevicesWithPredicateInput) (output *api.IterateDevicesWithPredicateOutput, err error) {
 	defer func(begin time.Time) {
 		var logMsg = []interface{}{}

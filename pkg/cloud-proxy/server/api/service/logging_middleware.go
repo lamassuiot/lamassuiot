@@ -172,6 +172,22 @@ func (mw loggingMiddleware) HandleUpdateCertificateStatusEvent(ctx context.Conte
 	return mw.next.HandleUpdateCertificateStatusEvent(ctx, input)
 }
 
+func (mw loggingMiddleware) HandleReenrollEvent(ctx context.Context, input *api.HandleReenrollEventInput) (output *api.HandleReenrollEventOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "HandleReenrollEvent")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			logMsg = append(logMsg, "output", output)
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
+	}(time.Now())
+	return mw.next.HandleReenrollEvent(ctx, input)
+}
+
 func (mw loggingMiddleware) UpdateDeviceCertificateStatus(ctx context.Context, input *api.UpdateDeviceCertificateStatusInput) (output *api.UpdateDeviceCertificateStatusOutput, err error) {
 	defer func(begin time.Time) {
 		var logMsg = []interface{}{}
@@ -188,6 +204,24 @@ func (mw loggingMiddleware) UpdateDeviceCertificateStatus(ctx context.Context, i
 		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.UpdateDeviceCertificateStatus(ctx, input)
+}
+
+func (mw loggingMiddleware) UpdateDeviceDigitalTwinReenrolmentStatus(ctx context.Context, input *api.UpdateDeviceDigitalTwinReenrolmentStatusInput) (output *api.UpdateDeviceDigitalTwinReenrolmentStatusOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "UpdateDeviceDigitalTwinReenrolmentStatus")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			if output != nil {
+				logMsg = append(logMsg, "output", output.Serialize())
+			}
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
+	}(time.Now())
+	return mw.next.UpdateDeviceDigitalTwinReenrolmentStatus(ctx, input)
 }
 
 func (mw loggingMiddleware) UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (output *api.UpdateCAStatusOutput, err error) {

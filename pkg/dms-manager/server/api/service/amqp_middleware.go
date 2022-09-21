@@ -57,8 +57,8 @@ func (mw *amqpMiddleware) sendAMQPMessage(eventType string, output interface{}) 
 	}
 
 	msg := server.AmqpPublishMessage{
-		Exchange:  "",
-		Key:       "lamassu-events",
+		Exchange:  "lamassu",
+		Key:       eventType,
 		Mandatory: false,
 		Immediate: false,
 		Msg: amqp.Publishing{

@@ -10,13 +10,14 @@ import (
 )
 
 type Endpoints struct {
-	HealthEndpoint                        endpoint.Endpoint
-	RegisterCAEndpoint                    endpoint.Endpoint
-	UpdateConfigurationEndpoint           endpoint.Endpoint
-	GetConfigurationEndpoint              endpoint.Endpoint
-	GetDeviceConfigurationEndpoint        endpoint.Endpoint
-	UpdateCAStatusEndpoint                endpoint.Endpoint
-	UpdateDeviceCertificateStatusEndpoint endpoint.Endpoint
+	HealthEndpoint                                    endpoint.Endpoint
+	RegisterCAEndpoint                                endpoint.Endpoint
+	UpdateConfigurationEndpoint                       endpoint.Endpoint
+	GetConfigurationEndpoint                          endpoint.Endpoint
+	GetDeviceConfigurationEndpoint                    endpoint.Endpoint
+	UpdateCAStatusEndpoint                            endpoint.Endpoint
+	UpdateDeviceCertificateStatusEndpoint             endpoint.Endpoint
+	UpdateDeviceDigitalTwinReenrollmentStatusEndpoint endpoint.Endpoint
 }
 
 func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
@@ -27,15 +28,17 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 	getDeviceConfigurationEndpoint := MakeGetDeviceConfigurationEndpoint(s)
 	updateCAStatusEndpoint := MakeUpdateCAStatusEndpoint(s)
 	updateDeviceCertificateStatusEndpoint := MakeUpdateDeviceCertificateStatusEndpoint(s)
+	updateDeviceDigitalTwinReenrollmentStatusEndpoint := MakeUpdateDeviceDigitalTwinReenrollmentStatusEndpoint(s)
 
 	return Endpoints{
-		HealthEndpoint:                        healthEndpoint,
-		RegisterCAEndpoint:                    registerCAEndpoint,
-		UpdateConfigurationEndpoint:           updateConfigurationEndpoint,
-		GetConfigurationEndpoint:              getConfigurationEndpoint,
-		GetDeviceConfigurationEndpoint:        getDeviceConfigurationEndpoint,
-		UpdateCAStatusEndpoint:                updateCAStatusEndpoint,
-		UpdateDeviceCertificateStatusEndpoint: updateDeviceCertificateStatusEndpoint,
+		HealthEndpoint:                                    healthEndpoint,
+		RegisterCAEndpoint:                                registerCAEndpoint,
+		UpdateConfigurationEndpoint:                       updateConfigurationEndpoint,
+		GetConfigurationEndpoint:                          getConfigurationEndpoint,
+		GetDeviceConfigurationEndpoint:                    getDeviceConfigurationEndpoint,
+		UpdateCAStatusEndpoint:                            updateCAStatusEndpoint,
+		UpdateDeviceCertificateStatusEndpoint:             updateDeviceCertificateStatusEndpoint,
+		UpdateDeviceDigitalTwinReenrollmentStatusEndpoint: updateDeviceDigitalTwinReenrollmentStatusEndpoint,
 	}
 }
 
@@ -90,6 +93,14 @@ func MakeUpdateDeviceCertificateStatusEndpoint(s service.Service) endpoint.Endpo
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		input := request.(api.UpdateDeviceCertificateStatusInput)
 		output, err := s.UpdateDeviceCertificateStatus(ctx, &input)
+		return output, err
+	}
+}
+
+func MakeUpdateDeviceDigitalTwinReenrollmentStatusEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.UpdateDeviceDigitalTwinReenrollmentStatusInput)
+		output, err := s.UpdateDeviceDigitalTwinReenrollmentStatus(ctx, &input)
 		return output, err
 	}
 }

@@ -42,7 +42,7 @@ func NewPostgresDB(db *gorm.DB) repository.CloudProxyRepository {
 }
 
 func (db *PostgresDBContext) InsertCABinding(ctx context.Context, connectorID string, caName string) error {
-	tx := db.Model(&CABindingDAO{}).Create(&CABindingDAO{
+	tx := db.WithContext(ctx).Model(&CABindingDAO{}).Create(&CABindingDAO{
 		ConnectorID:       connectorID,
 		CAName:            caName,
 		SerialNumber:      "",
@@ -62,7 +62,7 @@ func (db *PostgresDBContext) InsertCABinding(ctx context.Context, connectorID st
 
 func (db *PostgresDBContext) UpdateCABindingSerialNumber(ctx context.Context, connectorID string, caName string, caSerialNumber string) error {
 	var caBinding CABindingDAO
-	if err := db.Model(&CABindingDAO{}).Where("connector_id = ?", connectorID).Where("ca_name = ?", caName).First(&caBinding).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&CABindingDAO{}).Where("connector_id = ?", connectorID).Where("ca_name = ?", caName).First(&caBinding).Error; err != nil {
 		return err
 	}
 
@@ -77,7 +77,7 @@ func (db *PostgresDBContext) UpdateCABindingSerialNumber(ctx context.Context, co
 
 func (db *PostgresDBContext) SelectCABindingsByConnectorID(ctx context.Context, connectorID string) ([]api.CABinding, error) {
 	var caBindings []CABindingDAO
-	if err := db.Model(&CABindingDAO{}).Where("connector_id = ?", connectorID).Find(&caBindings).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&CABindingDAO{}).Where("connector_id = ?", connectorID).Find(&caBindings).Error; err != nil {
 		return []api.CABinding{}, err
 	}
 
@@ -91,7 +91,7 @@ func (db *PostgresDBContext) SelectCABindingsByConnectorID(ctx context.Context, 
 
 func (db *PostgresDBContext) SelectCABindingByConnectorIDAndCAName(ctx context.Context, connectorID string, caName string) (api.CABinding, error) {
 	var caBinding CABindingDAO
-	if err := db.Model(&CABindingDAO{}).Where("connector_id = ?", connectorID).Where("ca_name = ?", caName).First(&caBinding).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&CABindingDAO{}).Where("connector_id = ?", connectorID).Where("ca_name = ?", caName).First(&caBinding).Error; err != nil {
 		return api.CABinding{}, err
 	}
 

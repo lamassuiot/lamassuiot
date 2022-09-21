@@ -64,14 +64,31 @@ func main() {
 		os.Exit(1)
 	}
 
+	clientBaseConfig := clientUtils.BaseClientConfigurationuration{
+		AuthMethod: clientUtils.AuthMethodNone,
+		Insecure:   true,
+	}
+
+	if config.LamassuConnectorsMutualTLS {
+		clientBaseConfig = clientUtils.BaseClientConfigurationuration{
+			AuthMethod: clientUtils.AuthMethodMutualTLS,
+			AuthMethodConfig: &clientUtils.MutualTLSConfig{
+				ClientCert: config.CertFile,
+				ClientKey:  config.KeyFile,
+			},
+			// CACertificate: config.LamassuConnectorsCertFile,
+			Insecure: true,
+		}
+	}
+
 	var s service.Service
 	{
-		s = service.NewCloudPorxyService(consulClient, cloudProxyRepo, lamassuCAClient, mainServer.Logger)
+		s = service.NewCloudPorxyService(consulClient, cloudProxyRepo, lamassuCAClient, clientBaseConfig, mainServer.Logger)
 		s = service.LoggingMiddleware(mainServer.Logger)(s)
 	}
 
 	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), opentracing.GlobalTracer())))
-	mainServer.AddAmqpConsumer("lamassu-events", transport.MakeAmqpHandler(s, mainServer.Logger, opentracing.GlobalTracer()))
+	mainServer.AddAmqpConsumer(config.ServiceName, []string{"#"}, transport.MakeAmqpHandler(s, mainServer.Logger, opentracing.GlobalTracer()))
 
 	errs := make(chan error)
 	go func() {

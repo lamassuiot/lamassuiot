@@ -11,21 +11,28 @@ import (
 	"strings"
 	"time"
 
-	"go.opentelemetry.io/otel"
-
 	// stdout "go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+
+	"go.opentelemetry.io/contrib/instrumentation/runtime"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/jaeger"
-	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
-
+	"go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/metric/global"
+	"go.opentelemetry.io/otel/sdk/metric/aggregator/histogram"
+	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
+	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
+	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
+	selector "go.opentelemetry.io/otel/sdk/metric/selector/simple"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 
 	amqptransport "github.com/go-kit/kit/transport/amqp"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/kelseyhightower/envconfig"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/streadway/amqp"
 )
 
@@ -63,11 +70,16 @@ type AmqpPublishMessage struct {
 	Msg       amqp.Publishing
 }
 
+type amqpConsumerConfig struct {
+	Subscriber  *amqptransport.Subscriber
+	RoutingKeys []string
+}
+
 type Server struct {
 	Logger        log.Logger
 	cfg           *BaseConfiguration
 	mux           *http.ServeMux
-	amqpConsumers map[string]*amqptransport.Subscriber //map queuName to amqptransport.Subscriber
+	amqpConsumers map[string]amqpConsumerConfig //map queuName to amqptransport.Subscriber and routing key
 	AmqpPublisher chan AmqpPublishMessage
 }
 
@@ -88,32 +100,35 @@ func NewServer(config Configuration) *Server {
 		logger = level.NewFilter(logger, level.AllowDebug())
 		level.Debug(logger).Log("msg", "Starting in debug mode...")
 	}
-	logger = log.With(logger, "caller", log.DefaultCaller)
 
+	logger = log.With(logger, "caller", log.DefaultCaller)
 	mux := http.NewServeMux()
 
 	http.Handle("/info", accessControl(infoHandler()))
-	http.Handle("/metrics", promhttp.Handler())
 
 	s := Server{
 		Logger:        logger,
 		cfg:           baseConfig,
 		mux:           mux,
-		amqpConsumers: map[string]*amqptransport.Subscriber{},
+		amqpConsumers: map[string]amqpConsumerConfig{},
 		AmqpPublisher: make(chan AmqpPublishMessage),
 	}
 
 	s.initTracer()
+	s.initMeter()
 
 	return &s
 }
 
-func (s *Server) AddAmqpConsumer(queuName string, subscriber *amqptransport.Subscriber) {
-	s.amqpConsumers[queuName] = subscriber
+func (s *Server) AddAmqpConsumer(queuName string, routingKeys []string, subscriber *amqptransport.Subscriber) {
+	s.amqpConsumers[queuName] = amqpConsumerConfig{
+		Subscriber:  subscriber,
+		RoutingKeys: routingKeys,
+	}
 }
 
 func (s *Server) AddHttpHandler(path string, handler http.Handler) {
-	http.Handle(path /*otelhttp.NewHandler(*/, accessControl(handler) /*, path)*/)
+	http.Handle(path, accessControl(handler))
 }
 
 func (s *Server) AddHttpFuncHandler(path string, handler func(http.ResponseWriter, *http.Request)) {
@@ -125,13 +140,13 @@ func (s *Server) Run(errorsChannel chan error) {
 		amq_cfg := tls.Config{}
 		amq_cfg.RootCAs = x509.NewCertPool()
 
-		ca, err := ioutil.ReadFile(s.cfg.AmqpServerCACert)
+		amqpCA, err := ioutil.ReadFile(s.cfg.AmqpServerCACert)
 		if err != nil {
 			level.Error(s.Logger).Log("err", err, "msg", "Could not read AMQP CA certificate")
 			os.Exit(1)
 		}
 
-		amq_cfg.RootCAs.AppendCertsFromPEM(ca)
+		amq_cfg.RootCAs.AppendCertsFromPEM(amqpCA)
 		cert, err := tls.LoadX509KeyPair(s.cfg.CertFile, s.cfg.KeyFile)
 
 		if err != nil {
@@ -154,20 +169,44 @@ func (s *Server) Run(errorsChannel chan error) {
 		}
 		// defer amqpChannel.Close()
 
-		for queueName, subscriber := range s.amqpConsumers {
+		amqpChannel.ExchangeDeclare(
+			"lamassu", // name
+			"topic",   // type
+			true,      // durable
+			false,     // auto-deleted
+			false,     // internal
+			false,     // no-wait
+			nil,       // arguments
+		)
+
+		for queueName, consumerConfig := range s.amqpConsumers {
 			consumerQueue, err := amqpChannel.QueueDeclare(queueName, true, false, false, false, nil)
 			if err != nil {
 				level.Error(s.Logger).Log("err", err, "msg", fmt.Sprintf("Failed to create AMQP %s queue", queueName))
 				os.Exit(1)
 			}
 
-			msgDelivery, err := amqpChannel.Consume(consumerQueue.Name, fmt.Sprintf("test-consumer-%s", queueName), true, false, false, false, nil)
+			for _, routingKey := range consumerConfig.RoutingKeys {
+				err = amqpChannel.QueueBind(
+					consumerQueue.Name, // queue name
+					routingKey,         // routing key
+					"lamassu",          // exchange
+					false,
+					nil,
+				)
+				if err != nil {
+					level.Error(s.Logger).Log("err", err, "msg", fmt.Sprintf("Failed to bind AMQP [%s] queue with routing key [%s]", queueName, routingKey))
+					os.Exit(1)
+				}
+			}
+
+			msgDelivery, err := amqpChannel.Consume(consumerQueue.Name, fmt.Sprintf("%s-consumer-%s", s.cfg.ServiceName, queueName), true, false, false, false, nil)
 			if err != nil {
 				level.Error(s.Logger).Log("err", err, "msg", fmt.Sprintf("Failed to consume AMQP %s queue", queueName))
 				os.Exit(1)
 			}
 
-			msgHandler := subscriber.ServeDelivery(amqpChannel)
+			msgHandler := consumerConfig.Subscriber.ServeDelivery(amqpChannel)
 
 			go func() {
 				for {
@@ -262,6 +301,48 @@ func (s *Server) initTracer() {
 		)),
 	)
 	otel.SetTracerProvider(tp)
+}
+
+func (s *Server) initMeter() {
+	// exporter, err := stdout.New(stdout.WithPrettyPrint())
+	// if err != nil {
+	// 	level.Error(s.Logger).Log("err", err, "msg", "Could not create stdout exporter")
+	// 	os.Exit(1)
+	// }
+	// cont := controller.New(
+	// 	processor.NewFactory(
+	// 		simple.NewWithInexpensiveDistribution(),
+	// 		exporter,
+	// 	),
+	// 	controller.WithExporter(exporter),
+	// 	controller.WithCollectPeriod(3*time.Second),
+	// )
+	// if err := cont.Start(context.Background()); err != nil {
+	// 	level.Error(s.Logger).Log("err", err, "msg", "Could not start metric controller")
+	// 	os.Exit(1)
+	// }
+	config := prometheus.Config{
+		DefaultHistogramBoundaries: []float64{1, 2, 5, 10, 20, 50},
+	}
+	c := controller.New(
+		processor.NewFactory(
+			selector.NewWithHistogramDistribution(
+				histogram.WithExplicitBoundaries(config.DefaultHistogramBoundaries),
+			),
+			aggregation.CumulativeTemporalitySelector(),
+			processor.WithMemory(true),
+		),
+	)
+
+	exporter, err := prometheus.New(config, c)
+	if err != nil {
+		level.Error(s.Logger).Log("err", err, "msg", "Could not create prometheus exporter")
+		os.Exit(1)
+	}
+
+	global.SetMeterProvider(exporter.MeterProvider())
+	http.HandleFunc("/metrics", exporter.ServeHTTP)
+	runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second))
 }
 
 func infoHandler() http.HandlerFunc {

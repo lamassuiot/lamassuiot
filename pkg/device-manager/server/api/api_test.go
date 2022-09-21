@@ -1087,7 +1087,7 @@ func TestUpdateDeviceMetadata(t *testing.T) {
 			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
 				e.PUT("/v1/devices/error").
 					Expect().
-					Status(http.StatusBadRequest)
+					Status(http.StatusNotFound)
 
 			},
 		},
@@ -1121,7 +1121,7 @@ func TestUpdateDeviceMetadata(t *testing.T) {
 				return ctx
 			},
 			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
-				reqBytes := `{"device_id":"1234-5678-9012-3456", "alias":"Raspberry", "tags": {"raspberry-pi"}, "description": "Raspberry Pi is a small", "icon_color":"#0068D1", "icon_name": "Cg/CgSmartphoneChip"}`
+				reqBytes := `{"device_id":"1234-5678-9012-3456", "alias":"Raspberry", "tags": ["raspberry-pi"], "description": "Raspberry Pi is a small", "icon_color":"#0068D1", "icon_name": "Cg/CgSmartphoneChip"}`
 
 				obj := e.PUT("/v1/devices/1234-5678-9012-3456").WithBytes([]byte(reqBytes)).
 					Expect().

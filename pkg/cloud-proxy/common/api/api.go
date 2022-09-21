@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/x509"
 	"errors"
 	"strings"
 	"time"
@@ -166,3 +167,22 @@ type UpdateCAStatusOutput struct {
 }
 
 // ---------------------------------------------------
+
+type HandleReenrollEventInput struct {
+	x509.Certificate
+}
+
+type HandleReenrollEventOutput struct {
+}
+
+// ---------------------------------------------------
+
+type UpdateDeviceDigitalTwinReenrolmentStatusInput struct {
+	ConnectorID   string
+	DeviceID      string
+	SlotID        string
+	ForceReenroll bool
+}
+
+type UpdateDeviceDigitalTwinReenrolmentStatusOutput struct {
+}

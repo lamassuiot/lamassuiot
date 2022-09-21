@@ -6,17 +6,17 @@ import (
 	"net/http"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
-	"github.com/go-kit/kit/tracing/opentracing"
 	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/go-kit/log"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/gorilla/mux"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/endpoint"
 	lamassuErrors "github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/service"
-	utilstransport "github.com/lamassuiot/lamassuiot/pkg/utils/server/transport"
+	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -35,89 +35,138 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	r := mux.NewRouter()
 	e := endpoint.MakeServerEndpoints(s, otTracer)
 	options := []httptransport.ServerOption{
-		httptransport.ServerBefore(utilstransport.HTTPToContext(logger)),
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
 	}
 
-	r.Methods("GET").Path("/health").Handler(httptransport.NewServer(
-		e.HealthEndpoint,
-		decodeHealthRequest,
-		encodeHealthResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Health", logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/health").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.HealthEndpoint,
+					decodeHealthRequest,
+					encodeHealthResponse,
+					append(
+						options,
+					)...,
+				),
+				"Health",
+			),
+		),
+	)
 
-	r.Methods("GET").Path("/connectors").Handler(httptransport.NewServer(
-		e.GetCloudConnectorsEndpoint,
-		decodeGetConnectorsRequest,
-		enocdeGetConnectorsResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCloudConnectors", logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/connectors").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.GetCloudConnectorsEndpoint,
+					decodeGetConnectorsRequest,
+					enocdeGetConnectorsResponse,
+					append(
+						options,
+					)...,
+				),
+				"GetCloudConnectors",
+			),
+		),
+	)
 
-	r.Methods("GET").Path("/connectors/{connectorID}/devices/{deviceID}").Handler(httptransport.NewServer(
-		e.GetDeviceConfigurationEndpoint,
-		decodeGetDeviceConfigurationRequest,
-		encodeGetDeviceConfigurationResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCloudConnectorsDevices", logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/connectors/{connectorID}/devices/{deviceID}").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.GetDeviceConfigurationEndpoint,
+					decodeGetDeviceConfigurationRequest,
+					encodeGetDeviceConfigurationResponse,
+					append(
+						options,
+					)...,
+				),
+				"GetCloudConnectorsDevices",
+			),
+		),
+	)
 
-	r.Methods("POST").Path("/connectors/synchronize").Handler(httptransport.NewServer(
-		e.SynchronizedCAEndpoint,
-		decodeSynchronizeCARequest,
-		enocdeSynchronizeCAResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "SynchronizedCA", logger)),
-		)...,
-	))
+	r.Methods("POST").Path("/connectors/synchronize").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.SynchronizedCAEndpoint,
+					decodeSynchronizeCARequest,
+					enocdeSynchronizeCAResponse,
+					append(
+						options,
+					)...,
+				),
+				"SynchronizedCA",
+			),
+		),
+	)
 
-	r.Methods("PUT").Path("/connectors/{connectorID}/config").Handler(httptransport.NewServer(
-		e.UpdateConnectorConfigurationEndpoint,
-		decodeUpdateConnectorConfigurationRequest,
-		enocdeUpdateConnectorConfigurationResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "UpdateConnectorConfiguration", logger)),
-		)...,
-	))
+	r.Methods("PUT").Path("/connectors/{connectorID}/config").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.UpdateConnectorConfigurationEndpoint,
+					decodeUpdateConnectorConfigurationRequest,
+					enocdeUpdateConnectorConfigurationResponse,
+					append(
+						options,
+					)...,
+				),
+				"UpdateConnectorConfiguration",
+			),
+		),
+	)
 
-	r.Methods("POST").Path("/event").Handler(httptransport.NewServer(
-		e.EventHandlerEndpoint,
-		decodeEventHandlerRequest,
-		encodeEventHandlerResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "EventHandler", logger)),
-		)...,
-	))
+	r.Methods("POST").Path("/event").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.EventHandlerEndpoint,
+					decodeEventHandlerRequest,
+					encodeEventHandlerResponse,
+					append(
+						options,
+					)...,
+				),
+				"EventHandler",
+			),
+		),
+	)
 
-	r.Methods("PUT").Path("/connectors/{connectorID}/devices/{deviceID}/certificate").Handler(httptransport.NewServer(
-		e.UpdateDeviceCertStatusEndpoint,
-		decodeUpdateDeviceCertStatusRequest,
-		encodeUpdateDeviceCertStatusResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "UpdateDeviceCertStatus", logger)),
-		)...,
-	))
-	r.Methods("PUT").Path("/connectors/{connectorID}/ca/{caName}").Handler(httptransport.NewServer(
-		e.UpdateCAStatusEndpoint,
-		decodeUpdateCAStatusRequest,
-		encodeUpdateCAStatusResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "UpdateCaStatus", logger)),
-		)...,
-	))
+	r.Methods("PUT").Path("/connectors/{connectorID}/devices/{deviceID}/certificate").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.UpdateDeviceCertStatusEndpoint,
+					decodeUpdateDeviceCertStatusRequest,
+					encodeUpdateDeviceCertStatusResponse,
+					append(
+						options,
+					)...,
+				),
+				"UpdateDeviceCertStatus",
+			),
+		),
+	)
+
+	r.Methods("PUT").Path("/connectors/{connectorID}/ca/{caName}").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.UpdateCAStatusEndpoint,
+					decodeUpdateCAStatusRequest,
+					encodeUpdateCAStatusResponse,
+					append(
+						options,
+					)...,
+				),
+				"UpdateCaStatus",
+			),
+		),
+	)
+
 	return r
 }
 

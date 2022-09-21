@@ -20,6 +20,9 @@ type CloudProxyConfig struct {
 
 	LamassuCACertFile string `required:"true" split_words:"true"`
 	LamassuCAAddress  string `required:"true" split_words:"true"`
+
+	LamassuConnectorsMutualTLS bool   `required:"true" split_words:"true"`
+	LamassuConnectorsCertFile  string `required:"true" split_words:"true"`
 }
 
 func NewCloudProxyConfig() *CloudProxyConfig {
