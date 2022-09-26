@@ -62,7 +62,7 @@ func (mw loggingMiddleware) CreateDevice(ctx context.Context, input *api.CreateD
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -116,7 +116,7 @@ func (mw loggingMiddleware) GetDevices(ctx context.Context, input *api.GetDevice
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -134,7 +134,7 @@ func (mw loggingMiddleware) GetDeviceById(ctx context.Context, input *api.GetDev
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -150,11 +150,7 @@ func (mw loggingMiddleware) IterateDevicesWithPredicate(ctx context.Context, inp
 		logMsg = append(logMsg, "method", "IterateDevicesWithPredicate")
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
-		if err == nil {
-			logMsg = append(logMsg, "output", output)
-		} else {
-			logMsg = append(logMsg, "err", err)
-		}
+
 		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.IterateDevicesWithPredicate(ctx, input)
@@ -168,7 +164,7 @@ func (mw loggingMiddleware) AddDeviceSlot(ctx context.Context, input *api.AddDev
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -186,7 +182,7 @@ func (mw loggingMiddleware) UpdateActiveCertificateStatus(ctx context.Context, i
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -204,7 +200,7 @@ func (mw loggingMiddleware) RotateActiveCertificate(ctx context.Context, input *
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -222,7 +218,7 @@ func (mw loggingMiddleware) RevokeActiveCertificate(ctx context.Context, input *
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -240,7 +236,7 @@ func (mw loggingMiddleware) GetDeviceLogs(ctx context.Context, input *api.GetDev
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)

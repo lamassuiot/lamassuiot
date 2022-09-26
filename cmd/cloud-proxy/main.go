@@ -84,7 +84,9 @@ func main() {
 	var s service.Service
 	{
 		s = service.NewCloudPorxyService(consulClient, cloudProxyRepo, lamassuCAClient, clientBaseConfig, mainServer.Logger)
+		s = service.NewInputValudationMiddleware()(s)
 		s = service.LoggingMiddleware(mainServer.Logger)(s)
+
 	}
 
 	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), opentracing.GlobalTracer())))

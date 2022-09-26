@@ -67,6 +67,9 @@ func main() {
 	}
 
 	s := service.NewOCSPService(lamassuCAClient, rsaKey, cert)
+	s = service.NewInputValudationMiddleware()(s)
+	s = service.LoggingMiddleware(mainServer.Logger)(s)
+
 	mainServer.AddHttpHandler("/", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), false, opentracing.GlobalTracer()))
 
 	errs := make(chan error)

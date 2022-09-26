@@ -91,6 +91,7 @@ func main() {
 	{
 		s = service.NewDeviceManagerService(mainServer.Logger, deviceRepo, logsRepo, statsRepo, config.MinimumReenrollDays, caClient, dmsClient)
 		s = service.NewAMQPMiddleware(mainServer.AmqpPublisher, mainServer.Logger)(s)
+		s = service.NewInputValudationMiddleware()(s)
 		s = service.LoggingMiddleware(mainServer.Logger)(s)
 	}
 
