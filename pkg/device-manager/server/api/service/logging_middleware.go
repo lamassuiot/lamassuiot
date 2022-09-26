@@ -62,7 +62,7 @@ func (mw loggingMiddleware) CreateDevice(ctx context.Context, input *api.CreateD
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.ToLogSerialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
