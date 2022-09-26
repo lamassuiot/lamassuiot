@@ -14,6 +14,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	"github.com/opentracing/opentracing-go"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -39,6 +40,11 @@ import (
 
 	ocspService "github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/service"
 	ocspTransport "github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/transport"
+
+	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/service"
+	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/service/outputchannels"
+	alertsTransport "github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/transport"
+	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/config"
 )
 
 func BuildCATestServer() (*httptest.Server, *caService.Service, error) {
@@ -232,6 +238,51 @@ func BuildOCSPTestServer(CATestServer *httptest.Server) (*httptest.Server, error
 	svc := ocspService.NewOCSPService(lamassuCAClient, ocspSigner, ocspCertificate)
 
 	handler := ocspTransport.MakeHTTPHandler(svc, logger, false, tracer)
+
+	mux := http.NewServeMux()
+	mux.Handle("/", handler)
+	server := httptest.NewUnstartedServer(mux)
+
+	return server, nil
+}
+
+func BuildMailTestServer(jsonTemplate string, smtpConfig outputchannels.SMTPOutputService) (*httptest.Server, error) {
+
+	var logger log.Logger
+
+	logger = log.NewNopLogger()
+	logger = level.NewFilter(logger, level.AllowDebug())
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	logger = log.With(logger, "caller", log.DefaultCaller)
+
+	tracer := opentracing.NoopTracer{}
+
+	config := config.NewMailConfig()
+	mainServer := server.NewServer(config)
+
+	//dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUser, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
+
+	dialector := sqlite.Open("")
+	db, err := gorm.Open(dialector, &gorm.Config{
+		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
+	})
+	if err != nil {
+		level.Error(mainServer.Logger).Log("msg", "Could not connect to Postgres", "err", err)
+		os.Exit(1)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	mailRepo := alertsRepository.NewPostgresDB(db, logger)
+
+	var svc alertsService.Service
+	svc, err = service.NewAlertsService(logger, mailRepo, jsonTemplate, smtpConfig)
+	if err != nil {
+		return nil, err
+	}
+	handler := alertsTransport.MakeHTTPHandler(svc, logger, tracer)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)

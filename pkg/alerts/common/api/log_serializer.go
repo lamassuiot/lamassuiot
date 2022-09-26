@@ -16,23 +16,17 @@ func (o *UserSubscription) ToSerializedLog() UserSubscriptionLogSerialized {
 }
 
 type SubscriptionLogSerialized struct {
-	ID               string            `json:"id"`
-	EventType        string            `json:"event_type"`
-	SubscriptionDate int               `json:"subscription_date"`
-	UserID           string            `json:"user_id"`
-	Conditions       []string          `json:"conditions"`
-	Channel          ChannelSerialized `json:"channel"`
+	ID        string `json:"id"`
+	EventType string `json:"event_type"`
+	UserID    string `json:"user_id"`
 }
 
 func (o *Subscription) ToSerializedLog() SubscriptionLogSerialized {
 
 	return SubscriptionLogSerialized{
-		ID:               o.ID,
-		EventType:        o.EventType,
-		SubscriptionDate: int(o.SubscriptionDate.UnixMilli()),
-		UserID:           o.UserID,
-		Conditions:       o.Conditions,
-		Channel:          o.Channel.Serialize(),
+		ID:        o.ID,
+		EventType: o.EventType,
+		UserID:    o.UserID,
 	}
 }
 

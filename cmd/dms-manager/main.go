@@ -64,6 +64,7 @@ func main() {
 	{
 		s = service.NewDMSManagerService(mainServer.Logger, dmsRepo, &caClient)
 		s = service.NewAMQPMiddleware(mainServer.AmqpPublisher, mainServer.Logger)(s)
+		s = service.NewInputValudationMiddleware()(s)
 		s = service.LoggingMiddleware(mainServer.Logger)(s)
 	}
 

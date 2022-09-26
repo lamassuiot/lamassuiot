@@ -59,6 +59,8 @@ func main() {
 		level.Error(mainServer.Logger).Log("msg", "Could not create mail service", "err", err)
 		os.Exit(1)
 	}
+	s = service.NewInputValudationMiddleware()(s)
+	s = service.LoggingMiddleware(mainServer.Logger)(s)
 
 	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), opentracing.GlobalTracer())))
 	mainServer.AddAmqpConsumer(config.ServiceName, []string{"#"}, transport.MakeAmqpHandler(s, mainServer.Logger, opentracing.GlobalTracer()))
