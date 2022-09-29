@@ -241,3 +241,21 @@ func (mw loggingMiddleware) UpdateCAStatus(ctx context.Context, input *api.Updat
 	}(time.Now())
 	return mw.next.UpdateCAStatus(ctx, input)
 }
+
+func (mw loggingMiddleware) HandleForceReenrollEvent(ctx context.Context, input *api.HandleForceReenrollEventInput) (output *api.HandleForceReenrollEventOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "HandleForceReenrollEvent")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			if output != nil {
+				logMsg = append(logMsg, "output", output)
+			}
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
+	}(time.Now())
+	return mw.next.HandleForceReenrollEvent(ctx, input)
+}

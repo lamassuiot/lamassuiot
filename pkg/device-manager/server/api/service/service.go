@@ -30,7 +30,6 @@ import (
 
 type Service interface {
 	estserver.ESTService
-
 	Health(ctx context.Context) bool
 	GetStats(ctx context.Context, input *api.GetStatsInput) (*api.GetStatsOutput, error)
 
@@ -45,7 +44,7 @@ type Service interface {
 	UpdateActiveCertificateStatus(ctx context.Context, input *api.UpdateActiveCertificateStatusInput) (*api.UpdateActiveCertificateStatusOutput, error)
 	RotateActiveCertificate(ctx context.Context, input *api.RotateActiveCertificateInput) (*api.RotateActiveCertificateOutput, error)
 	RevokeActiveCertificate(ctx context.Context, input *api.RevokeActiveCertificateInput) (*api.RevokeActiveCertificateOutput, error)
-
+	ForceReenroll(ctx context.Context, input *api.ForceReenrollInput) (*api.ForceReenrollOtput, error)
 	GetDeviceLogs(ctx context.Context, input *api.GetDeviceLogsInput) (*api.GetDeviceLogsOutput, error)
 	IsDMSAuthorizedToEnroll(ctx context.Context, input *api.IsDMSAuthorizedToEnrollInput) (*api.IsDMSAuthorizedToEnrollOutput, error)
 }
@@ -383,6 +382,30 @@ func (s *devicesService) RotateActiveCertificate(ctx context.Context, input *api
 	}, nil
 }
 
+func (s *devicesService) ForceReenroll(ctx context.Context, input *api.ForceReenrollInput) (*api.ForceReenrollOtput, error) {
+	// Does nothing, it is used by the AMQP Middleware to force a reenroll. Just return Device
+	outputGetDevice, err := s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
+		DeviceID: input.DeviceID,
+	})
+	if err != nil {
+		return &api.ForceReenrollOtput{}, err
+	}
+	var crt *x509.Certificate
+	for i := 0; i < len(outputGetDevice.Slots); i++ {
+		if input.SlotID == outputGetDevice.Slots[i].ID {
+			crt = outputGetDevice.Slots[i].ActiveCertificate.Certificate
+			break
+		}
+	}
+
+	return &api.ForceReenrollOtput{
+		DeviceID:      input.DeviceID,
+		SlotID:        input.SlotID,
+		ForceReenroll: input.ForceReenroll,
+		Crt:           crt,
+	}, nil
+}
+
 func (s *devicesService) RevokeActiveCertificate(ctx context.Context, input *api.RevokeActiveCertificateInput) (*api.RevokeActiveCertificateOutput, error) {
 	slot, err := s.devicesRepo.SelectSlotByID(ctx, input.DeviceID, input.SlotID)
 
@@ -709,6 +732,7 @@ func (s *devicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 		CAType: caApi.CATypePKI,
 		CAName: aps,
 	})
+	fmt.Printf("err: %v\n", err)
 	if err != nil {
 		return nil, &estErrors.GenericError{
 			Message:    "CA not found",
@@ -744,6 +768,7 @@ func (s *devicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 		CAName:                    aps,
 		SignVerbatim:              true,
 	})
+	fmt.Printf("err: %v\n", err)
 	if err != nil {
 		return nil, err
 	}

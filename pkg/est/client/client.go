@@ -98,7 +98,7 @@ func (c *ESTClientConfig) makeESTClient(ctx context.Context, aps string) *est.Cl
 
 	host := c.address.Host
 	if c.address.Path != "" {
-		host = host + "//" + c.address.Path
+		host = host + "/" + c.address.Path
 	}
 
 	return &est.Client{

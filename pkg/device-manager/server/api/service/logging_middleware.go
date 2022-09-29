@@ -62,7 +62,7 @@ func (mw loggingMiddleware) CreateDevice(ctx context.Context, input *api.CreateD
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "device_id", output.ID)
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -80,7 +80,8 @@ func (mw loggingMiddleware) UpdateDeviceMetadata(ctx context.Context, input *api
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "device_id", output.ID)
+				logMsg = append(logMsg, "status", output.Status)
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -98,7 +99,8 @@ func (mw loggingMiddleware) DecommisionDevice(ctx context.Context, input *api.De
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "device_id", output.ID)
+				logMsg = append(logMsg, "status", output.Status)
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -116,7 +118,7 @@ func (mw loggingMiddleware) GetDevices(ctx context.Context, input *api.GetDevice
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "total_devices", output.TotalDevices)
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -336,4 +338,17 @@ func (mw loggingMiddleware) ServerKeyGen(ctx context.Context, csr *x509.Certific
 		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.ServerKeyGen(ctx, csr, cert, aps)
+}
+
+func (mw loggingMiddleware) ForceReenroll(ctx context.Context, input *api.ForceReenrollInput) (output *api.ForceReenrollOtput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "ForceReenroll")
+		logMsg = append(logMsg, "took", time.Since(begin))
+
+		logMsg = append(logMsg, "err", err)
+
+		mw.logger.Log(logMsg...)
+	}(time.Now())
+	return mw.next.ForceReenroll(ctx, input)
 }
