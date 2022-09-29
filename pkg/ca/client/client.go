@@ -78,7 +78,9 @@ func (c *lamassuCaClientConfig) GetCAByName(ctx context.Context, input *api.GetC
 	deserialized := output.Deserialize()
 	return &deserialized, err
 }
-
+func (c *lamassuCaClientConfig) DeleteCA(ctx context.Context, input *api.GetCAByNameInput) error {
+	return nil
+}
 func (c *lamassuCaClientConfig) IterateCAsWithPredicate(ctx context.Context, input *api.IterateCAsWithPredicateInput) (*api.IterateCAsWithPredicateOutput, error) {
 	limit := 100
 	i := 0

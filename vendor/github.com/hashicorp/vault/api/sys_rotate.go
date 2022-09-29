@@ -4,21 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
 	"time"
 )
 
 func (c *Sys) Rotate() error {
-	return c.RotateWithContext(context.Background())
-}
+	r := c.c.NewRequest("POST", "/v1/sys/rotate")
 
-func (c *Sys) RotateWithContext(ctx context.Context) error {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-
-	r := c.c.NewRequest(http.MethodPost, "/v1/sys/rotate")
-
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err == nil {
 		defer resp.Body.Close()
 	}
@@ -26,16 +20,11 @@ func (c *Sys) RotateWithContext(ctx context.Context) error {
 }
 
 func (c *Sys) KeyStatus() (*KeyStatus, error) {
-	return c.KeyStatusWithContext(context.Background())
-}
+	r := c.c.NewRequest("GET", "/v1/sys/key-status")
 
-func (c *Sys) KeyStatusWithContext(ctx context.Context) (*KeyStatus, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-
-	r := c.c.NewRequest(http.MethodGet, "/v1/sys/key-status")
-
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err != nil {
 		return nil, err
 	}

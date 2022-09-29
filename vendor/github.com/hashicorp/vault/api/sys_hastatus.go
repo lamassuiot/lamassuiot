@@ -2,21 +2,15 @@ package api
 
 import (
 	"context"
-	"net/http"
 	"time"
 )
 
 func (c *Sys) HAStatus() (*HAStatusResponse, error) {
-	return c.HAStatusWithContext(context.Background())
-}
+	r := c.c.NewRequest("GET", "/v1/sys/ha-status")
 
-func (c *Sys) HAStatusWithContext(ctx context.Context) (*HAStatusResponse, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-
-	r := c.c.NewRequest(http.MethodGet, "/v1/sys/ha-status")
-
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +31,4 @@ type HANode struct {
 	ClusterAddress string     `json:"cluster_address"`
 	ActiveNode     bool       `json:"active_node"`
 	LastEcho       *time.Time `json:"last_echo"`
-	Version        string     `json:"version"`
-	UpgradeVersion string     `json:"upgrade_version,omitempty"`
-	RedundancyZone string     `json:"redundancy_zone,omitempty"`
 }

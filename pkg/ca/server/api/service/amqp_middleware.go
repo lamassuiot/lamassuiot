@@ -93,7 +93,9 @@ func (mw *amqpMiddleware) CreateCA(ctx context.Context, input *api.CreateCAInput
 func (mw *amqpMiddleware) GetCAs(ctx context.Context, input *api.GetCAsInput) (output *api.GetCAsOutput, err error) {
 	return mw.next.GetCAs(ctx, input)
 }
-
+func (mw *amqpMiddleware) DeleteCA(ctx context.Context, input *api.GetCAByNameInput) (err error) {
+	return mw.next.DeleteCA(ctx, input)
+}
 func (mw *amqpMiddleware) GetCAByName(ctx context.Context, input *api.GetCAByNameInput) (output *api.GetCAByNameOutput, err error) {
 	return mw.next.GetCAByName(ctx, input)
 }

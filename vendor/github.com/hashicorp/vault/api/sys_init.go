@@ -1,21 +1,13 @@
 package api
 
-import (
-	"context"
-	"net/http"
-)
+import "context"
 
 func (c *Sys) InitStatus() (bool, error) {
-	return c.InitStatusWithContext(context.Background())
-}
+	r := c.c.NewRequest("GET", "/v1/sys/init")
 
-func (c *Sys) InitStatusWithContext(ctx context.Context) (bool, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-
-	r := c.c.NewRequest(http.MethodGet, "/v1/sys/init")
-
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err != nil {
 		return false, err
 	}
@@ -27,19 +19,14 @@ func (c *Sys) InitStatusWithContext(ctx context.Context) (bool, error) {
 }
 
 func (c *Sys) Init(opts *InitRequest) (*InitResponse, error) {
-	return c.InitWithContext(context.Background(), opts)
-}
-
-func (c *Sys) InitWithContext(ctx context.Context, opts *InitRequest) (*InitResponse, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
-	defer cancelFunc()
-
-	r := c.c.NewRequest(http.MethodPut, "/v1/sys/init")
+	r := c.c.NewRequest("PUT", "/v1/sys/init")
 	if err := r.SetJSONBody(opts); err != nil {
 		return nil, err
 	}
 
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err != nil {
 		return nil, err
 	}

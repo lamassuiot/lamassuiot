@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -310,7 +309,7 @@ func encodeServerkeygenResponse(ctx context.Context, w http.ResponseWriter, resp
 		return err
 	}
 
-	fmt.Println(data.String())
+	//fmt.Println(data.String())
 
 	WriteResponse(w, contentType, false, data.Bytes())
 	return nil

@@ -6,9 +6,8 @@ COPY . .
 WORKDIR /app
 ENV GOSUMDB=off
 RUN now=$(date +'%Y-%m-%d_%T') && \
-    CGO_ENABLED=0 go build -ldflags "-X main.sha1ver=`git rev-parse HEAD` -X main.buildTime=$now" -mod=vendor -o ca cmd/ca/main.go 
+    go build -ldflags "-X main.sha1ver=`git rev-parse HEAD` -X main.buildTime=$now" -mod=vendor -o ca cmd/ca/main.go 
 
-FROM $BASE_IMAGE
-COPY --from=0 /app/ca /
-COPY ./db/migrations/ca /app/db/migrations
-CMD ["/ca"]
+#FROM $BASE_IMAGE
+#COPY --from=0 /app/ca /
+#CMD ["/ca"]

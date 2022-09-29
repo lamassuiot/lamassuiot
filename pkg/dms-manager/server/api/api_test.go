@@ -11,10 +11,8 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/gavv/httpexpect/v2"
-	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
@@ -164,7 +162,11 @@ func TestCreateDMS(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			serverCA, _, err := testUtils.BuildCATestServer()
+			cli, err := testUtils.NewVaultSecretsMock(t)
+			if err != nil {
+				t.Errorf("%s", err)
+			}
+			serverCA, _, err := testUtils.BuildCATestServer(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -290,7 +292,11 @@ func TestCreateDMSWithCertificateRequest(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			serverCA, _, err := testUtils.BuildCATestServer()
+			cli, err := testUtils.NewVaultSecretsMock(t)
+			if err != nil {
+				t.Errorf("%s", err)
+			}
+			serverCA, _, err := testUtils.BuildCATestServer(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -656,7 +662,11 @@ func TestUpdateDMSStatus(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			serverCA, _, err := testUtils.BuildCATestServer()
+			cli, err := testUtils.NewVaultSecretsMock(t)
+			if err != nil {
+				t.Errorf("%s", err)
+			}
+			serverCA, _, err := testUtils.BuildCATestServer(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -845,14 +855,18 @@ func TestUpdateDMSAuthorizedCAs(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			serverCA, svcCA, err := testUtils.BuildCATestServer()
+			cli, err := testUtils.NewVaultSecretsMock(t)
+			if err != nil {
+				t.Errorf("%s", err)
+			}
+			serverCA, _, err := testUtils.BuildCATestServer(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
 			defer serverCA.Close()
 			serverCA.Start()
 
-			_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
+			/*_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
 				CAType: caApi.CATypeDMSEnroller,
 				Subject: caApi.Subject{
 					CommonName: "LAMASSU-DMS-MANAGER",
@@ -866,7 +880,7 @@ func TestUpdateDMSAuthorizedCAs(t *testing.T) {
 			})
 			if err != nil {
 				t.Errorf("%s", err)
-			}
+			}*/
 
 			serverDMS, svcDMS, err := testUtils.BuildDMSManagerTestServer(serverCA)
 			if err != nil {
@@ -1180,14 +1194,18 @@ func TestGetDMS(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			serverCA, svcCA, err := testUtils.BuildCATestServer()
+			cli, err := testUtils.NewVaultSecretsMock(t)
+			if err != nil {
+				t.Errorf("%s", err)
+			}
+			serverCA, _, err := testUtils.BuildCATestServer(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
 			defer serverCA.Close()
 			serverCA.Start()
 
-			_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
+			/*_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
 				CAType: caApi.CATypeDMSEnroller,
 				Subject: caApi.Subject{
 					CommonName: "LAMASSU-DMS-MANAGER",
@@ -1201,7 +1219,7 @@ func TestGetDMS(t *testing.T) {
 			})
 			if err != nil {
 				t.Errorf("%s", err)
-			}
+			}*/
 
 			serverDMS, svcDMS, err := testUtils.BuildDMSManagerTestServer(serverCA)
 			if err != nil {
@@ -1296,14 +1314,18 @@ func TestGetDMSs(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			serverCA, svcCA, err := testUtils.BuildCATestServer()
+			cli, err := testUtils.NewVaultSecretsMock(t)
+			if err != nil {
+				t.Errorf("%s", err)
+			}
+			serverCA, _, err := testUtils.BuildCATestServer(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
 			defer serverCA.Close()
 			serverCA.Start()
 
-			_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
+			/*_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
 				CAType: caApi.CATypeDMSEnroller,
 				Subject: caApi.Subject{
 					CommonName: "LAMASSU-DMS-MANAGER",
@@ -1317,7 +1339,7 @@ func TestGetDMSs(t *testing.T) {
 			})
 			if err != nil {
 				t.Errorf("%s", err)
-			}
+			}*/
 
 			serverDMS, svcDMS, err := testUtils.BuildDMSManagerTestServer(serverCA)
 			if err != nil {

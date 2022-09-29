@@ -135,6 +135,21 @@ func (mw loggingMiddleware) RevokeCA(ctx context.Context, input *api.RevokeCAInp
 	return mw.next.RevokeCA(ctx, input)
 }
 
+func (mw loggingMiddleware) DeleteCA(ctx context.Context, input *api.GetCAByNameInput) (err error) {
+	defer func(begin time.Time) {
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "DeleteCA")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err != nil {
+			logMsg = append(logMsg, "err", err)
+		}
+
+		mw.logger.Log(logMsg...)
+	}(time.Now())
+	return mw.next.DeleteCA(ctx, input)
+}
+
 func (mw loggingMiddleware) UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (output *api.UpdateCAStatusOutput, err error) {
 	defer func(begin time.Time) {
 		var logMsg = []interface{}{}

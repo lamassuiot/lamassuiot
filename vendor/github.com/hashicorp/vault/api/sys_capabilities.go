@@ -4,30 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 
 	"github.com/mitchellh/mapstructure"
 )
 
 func (c *Sys) CapabilitiesSelf(path string) ([]string, error) {
-	return c.CapabilitiesSelfWithContext(context.Background(), path)
-}
-
-func (c *Sys) CapabilitiesSelfWithContext(ctx context.Context, path string) ([]string, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
-	defer cancelFunc()
-
-	return c.CapabilitiesWithContext(ctx, c.c.Token(), path)
+	return c.Capabilities(c.c.Token(), path)
 }
 
 func (c *Sys) Capabilities(token, path string) ([]string, error) {
-	return c.CapabilitiesWithContext(context.Background(), token, path)
-}
-
-func (c *Sys) CapabilitiesWithContext(ctx context.Context, token, path string) ([]string, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
-	defer cancelFunc()
-
 	body := map[string]string{
 		"token": token,
 		"path":  path,
@@ -38,12 +23,14 @@ func (c *Sys) CapabilitiesWithContext(ctx context.Context, token, path string) (
 		reqPath = fmt.Sprintf("%s-self", reqPath)
 	}
 
-	r := c.c.NewRequest(http.MethodPost, reqPath)
+	r := c.c.NewRequest("POST", reqPath)
 	if err := r.SetJSONBody(body); err != nil {
 		return nil, err
 	}
 
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err != nil {
 		return nil, err
 	}
