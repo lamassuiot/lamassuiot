@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 
@@ -27,6 +28,8 @@ import (
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
 
+	alertsRepository "github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/repository/postgres"
+	alertsService "github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/service"
 	caClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	caRepository "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/repository/postgres"
 	caService "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
@@ -257,7 +260,6 @@ func BuildOCSPTestServer(CATestServer *httptest.Server) (*httptest.Server, error
 
 	return server, nil
 }
-<<<<<<< HEAD
 
 func BuildMailTestServer(jsonTemplate string, smtpConfig outputchannels.SMTPOutputService) (*httptest.Server, error) {
 
@@ -284,7 +286,26 @@ func BuildMailTestServer(jsonTemplate string, smtpConfig outputchannels.SMTPOutp
 		os.Exit(1)
 	}
 
-=======
+	if err != nil {
+		return nil, err
+	}
+
+	mailRepo := alertsRepository.NewPostgresDB(db, logger)
+
+	var svc alertsService.Service
+	svc, err = service.NewAlertsService(logger, mailRepo, jsonTemplate, smtpConfig)
+	if err != nil {
+		return nil, err
+	}
+	handler := alertsTransport.MakeHTTPHandler(svc, logger, tracer)
+
+	mux := http.NewServeMux()
+	mux.Handle("/", handler)
+	server := httptest.NewUnstartedServer(mux)
+
+	return server, nil
+}
+
 func NewVaultSecretsMock(t *testing.T) (*api.Client, error) {
 	t.Helper()
 
@@ -332,27 +353,10 @@ func NewVaultSecretsMock(t *testing.T) (*api.Client, error) {
 		"max_ttl":        "262800h",
 		"key_type":       "any",
 	})
->>>>>>> vaultService
 	if err != nil {
 		return nil, err
 	}
 
-<<<<<<< HEAD
-	mailRepo := alertsRepository.NewPostgresDB(db, logger)
-
-	var svc alertsService.Service
-	svc, err = service.NewAlertsService(logger, mailRepo, jsonTemplate, smtpConfig)
-	if err != nil {
-		return nil, err
-	}
-	handler := alertsTransport.MakeHTTPHandler(svc, logger, tracer)
-
-	mux := http.NewServeMux()
-	mux.Handle("/", handler)
-	server := httptest.NewUnstartedServer(mux)
-
-	return server, nil
-=======
 	//Setup CA internal root certificate
 	_, err = client.Logical().Write("Lamassu-Root-CA1-RSA4096/root/generate/internal", map[string]interface{}{
 		"common_name":  "LKS Next Root CA 1",
@@ -368,5 +372,4 @@ func NewVaultSecretsMock(t *testing.T) (*api.Client, error) {
 		return nil, err
 	}
 	return client, err
->>>>>>> vaultService
 }

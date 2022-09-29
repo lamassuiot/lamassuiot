@@ -31,13 +31,6 @@ type CAConfig struct {
 	Pkcs11Driver string `split_words:"true"`
 	Pkcs11Pin    string `split_words:"true"`
 	Pkcs11Label  string `split_words:"true"`
-
-	VaultUnsealKeysFile string `split_words:"true"`
-	VaultAddress        string `split_words:"true"`
-	VaultRoleID         string `split_words:"true"`
-	VaultSecretID       string `split_words:"true"`
-	VaultCA             string `split_words:"true"`
-	VaultPkiCaPath      string `split_words:"true"`
 }
 
 func NewCAConfig() *CAConfig {

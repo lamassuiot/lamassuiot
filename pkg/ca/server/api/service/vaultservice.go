@@ -394,23 +394,6 @@ func (v *VaultSecrets) GetCAByName(ctx context.Context, input *api.GetCAByNameIn
 		CACertificate: ca,
 	}, nil
 }
-
-func (v *VaultSecrets) DeleteCA(ctx context.Context, input *api.GetCAByNameInput) error {
-	_, err := v.client.Logical().Delete(v.pkiPath + api.ToVaultPath(string(input.CAType)) + input.CAName + "/root")
-
-	if err != nil {
-
-		level.Debug(v.logger).Log("err", err, "msg", "Could not delete "+input.CAName+" certificate from Vault")
-		return errors.New("could not delete certificate from Vault")
-	}
-	_, err = v.client.Logical().Delete(v.pkiPath + api.ToVaultPath(string(input.CAType)) + input.CAName + "/roles/enroller")
-
-	if err != nil {
-		level.Debug(v.logger).Log("err", err, "msg", "Could not delete enroller role from CA "+input.CAName)
-		return errors.New("could not delete enroller role from CA")
-	}
-	return nil
-}
 func (v *VaultSecrets) UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (*api.UpdateCAStatusOutput, error) {
 	switch input.Status {
 	case api.StatusRevoked:

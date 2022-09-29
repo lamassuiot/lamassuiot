@@ -26,7 +26,7 @@ func (mw *validationMiddleware) Health(ctx context.Context) (healthy bool) {
 
 func (mw *validationMiddleware) CreateDMS(ctx context.Context, input *api.CreateDMSInput) (*api.CreateDMSOutput, error) {
 	validate := validator.New()
-	err = validate.Struct(input)
+	err := validate.Struct(input)
 	if err != nil {
 		valError := errors.ValidationError{
 			Msg: err.Error(),
@@ -38,7 +38,7 @@ func (mw *validationMiddleware) CreateDMS(ctx context.Context, input *api.Create
 
 func (mw *validationMiddleware) CreateDMSWithCertificateRequest(ctx context.Context, input *api.CreateDMSWithCertificateRequestInput) (*api.CreateDMSWithCertificateRequestOutput, error) {
 	validate := validator.New()
-	err = validate.Struct(input)
+	err := validate.Struct(input)
 	if err != nil {
 		valError := errors.ValidationError{
 			Msg: err.Error(),
@@ -50,7 +50,7 @@ func (mw *validationMiddleware) CreateDMSWithCertificateRequest(ctx context.Cont
 
 func (mw *validationMiddleware) UpdateDMSStatus(ctx context.Context, input *api.UpdateDMSStatusInput) (*api.UpdateDMSStatusOutput, error) {
 	validate := validator.New()
-	err = validate.Struct(input)
+	err := validate.Struct(input)
 	if err != nil {
 		valError := errors.ValidationError{
 			Msg: err.Error(),
@@ -62,7 +62,7 @@ func (mw *validationMiddleware) UpdateDMSStatus(ctx context.Context, input *api.
 
 func (mw *validationMiddleware) UpdateDMSAuthorizedCAs(ctx context.Context, input *api.UpdateDMSAuthorizedCAsInput) (*api.UpdateDMSAuthorizedCAsOutput, error) {
 	validate := validator.New()
-	err = validate.Struct(input)
+	err := validate.Struct(input)
 	if err != nil {
 		valError := errors.ValidationError{
 			Msg: err.Error(),
@@ -74,7 +74,7 @@ func (mw *validationMiddleware) UpdateDMSAuthorizedCAs(ctx context.Context, inpu
 
 func (mw *validationMiddleware) GetDMSs(ctx context.Context, input *api.GetDMSsInput) (*api.GetDMSsOutput, error) {
 	validate := validator.New()
-	err = validate.Struct(input)
+	err := validate.Struct(input)
 	if err != nil {
 		valError := errors.ValidationError{
 			Msg: err.Error(),
@@ -86,7 +86,7 @@ func (mw *validationMiddleware) GetDMSs(ctx context.Context, input *api.GetDMSsI
 
 func (mw *validationMiddleware) GetDMSByName(ctx context.Context, input *api.GetDMSByNameInput) (*api.GetDMSByNameOutput, error) {
 	validate := validator.New()
-	err = validate.Struct(input)
+	err := validate.Struct(input)
 	if err != nil {
 		valError := errors.ValidationError{
 			Msg: err.Error(),
