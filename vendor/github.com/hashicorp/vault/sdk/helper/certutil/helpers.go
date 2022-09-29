@@ -150,46 +150,6 @@ func ParsePKIJSON(input []byte) (*ParsedCertBundle, error) {
 	return nil, errutil.UserError{Err: "unable to parse out of either secret data or a secret object"}
 }
 
-func ParseDERKey(privateKeyBytes []byte) (signer crypto.Signer, format BlockType, err error) {
-	if signer, err = x509.ParseECPrivateKey(privateKeyBytes); err == nil {
-		format = ECBlock
-		return
-	}
-
-	if signer, err = x509.ParsePKCS1PrivateKey(privateKeyBytes); err == nil {
-		format = PKCS1Block
-		return
-	}
-
-	var rawKey interface{}
-	if rawKey, err = x509.ParsePKCS8PrivateKey(privateKeyBytes); err == nil {
-		switch rawSigner := rawKey.(type) {
-		case *rsa.PrivateKey:
-			signer = rawSigner
-		case *ecdsa.PrivateKey:
-			signer = rawSigner
-		case ed25519.PrivateKey:
-			signer = rawSigner
-		default:
-			return nil, UnknownBlock, errutil.InternalError{Err: "unknown type for parsed PKCS8 Private Key"}
-		}
-
-		format = PKCS8Block
-		return
-	}
-
-	return nil, UnknownBlock, err
-}
-
-func ParsePEMKey(keyPem string) (crypto.Signer, BlockType, error) {
-	pemBlock, _ := pem.Decode([]byte(keyPem))
-	if pemBlock == nil {
-		return nil, UnknownBlock, errutil.UserError{Err: "no data found in PEM block"}
-	}
-
-	return ParseDERKey(pemBlock.Bytes)
-}
-
 // ParsePEMBundle takes a string of concatenated PEM-format certificate
 // and private key values and decodes/parses them, checking validity along
 // the way. The first certificate must be the subject certificate and issuing
@@ -210,19 +170,43 @@ func ParsePEMBundle(pemBundle string) (*ParsedCertBundle, error) {
 			return nil, errutil.UserError{Err: "no data found in PEM block"}
 		}
 
-		if signer, format, err := ParseDERKey(pemBlock.Bytes); err == nil {
+		if signer, err := x509.ParseECPrivateKey(pemBlock.Bytes); err == nil {
 			if parsedBundle.PrivateKeyType != UnknownPrivateKey {
 				return nil, errutil.UserError{Err: "more than one private key given; provide only one private key in the bundle"}
 			}
-
-			parsedBundle.PrivateKeyFormat = format
-			parsedBundle.PrivateKeyType = GetPrivateKeyTypeFromSigner(signer)
-			if parsedBundle.PrivateKeyType == UnknownPrivateKey {
-				return nil, errutil.UserError{Err: "Unknown type of private key included in the bundle: %v"}
-			}
-
+			parsedBundle.PrivateKeyFormat = ECBlock
+			parsedBundle.PrivateKeyType = ECPrivateKey
 			parsedBundle.PrivateKeyBytes = pemBlock.Bytes
 			parsedBundle.PrivateKey = signer
+
+		} else if signer, err := x509.ParsePKCS1PrivateKey(pemBlock.Bytes); err == nil {
+			if parsedBundle.PrivateKeyType != UnknownPrivateKey {
+				return nil, errutil.UserError{Err: "more than one private key given; provide only one private key in the bundle"}
+			}
+			parsedBundle.PrivateKeyType = RSAPrivateKey
+			parsedBundle.PrivateKeyFormat = PKCS1Block
+			parsedBundle.PrivateKeyBytes = pemBlock.Bytes
+			parsedBundle.PrivateKey = signer
+		} else if signer, err := x509.ParsePKCS8PrivateKey(pemBlock.Bytes); err == nil {
+			parsedBundle.PrivateKeyFormat = PKCS8Block
+
+			if parsedBundle.PrivateKeyType != UnknownPrivateKey {
+				return nil, errutil.UserError{Err: "More than one private key given; provide only one private key in the bundle"}
+			}
+			switch signer := signer.(type) {
+			case *rsa.PrivateKey:
+				parsedBundle.PrivateKey = signer
+				parsedBundle.PrivateKeyType = RSAPrivateKey
+				parsedBundle.PrivateKeyBytes = pemBlock.Bytes
+			case *ecdsa.PrivateKey:
+				parsedBundle.PrivateKey = signer
+				parsedBundle.PrivateKeyType = ECPrivateKey
+				parsedBundle.PrivateKeyBytes = pemBlock.Bytes
+			case ed25519.PrivateKey:
+				parsedBundle.PrivateKey = signer
+				parsedBundle.PrivateKeyType = Ed25519PrivateKey
+				parsedBundle.PrivateKeyBytes = pemBlock.Bytes
+			}
 		} else if certificates, err := x509.ParseCertificates(pemBlock.Bytes); err == nil {
 			certPath = append(certPath, &CertBlock{
 				Certificate: certificates[0],
@@ -352,21 +336,7 @@ func generateSerialNumber(randReader io.Reader) (*big.Int, error) {
 	return serial, nil
 }
 
-// ComparePublicKeysAndType compares two public keys and returns true if they match,
-// false if their types or contents differ, and an error on unsupported key types.
-func ComparePublicKeysAndType(key1Iface, key2Iface crypto.PublicKey) (bool, error) {
-	equal, err := ComparePublicKeys(key1Iface, key2Iface)
-	if err != nil {
-		if strings.Contains(err.Error(), "key types do not match:") {
-			return false, nil
-		}
-	}
-
-	return equal, err
-}
-
-// ComparePublicKeys compares two public keys and returns true if they match,
-// returns an error if public key types are mismatched, or they are an unsupported key type.
+// ComparePublicKeys compares two public keys and returns true if they match
 func ComparePublicKeys(key1Iface, key2Iface crypto.PublicKey) (bool, error) {
 	switch key1Iface.(type) {
 	case *rsa.PublicKey:
@@ -446,30 +416,18 @@ func ParsePublicKeyPEM(data []byte) (interface{}, error) {
 	return nil, errors.New("data does not contain any valid public keys")
 }
 
-// AddPolicyIdentifiers adds certificate policies extension, based on CreationBundle
+// addPolicyIdentifiers adds certificate policies extension
+//
 func AddPolicyIdentifiers(data *CreationBundle, certTemplate *x509.Certificate) {
-	oidOnly := true
-	for _, oidStr := range data.Params.PolicyIdentifiers {
-		oid, err := StringToOid(oidStr)
+	for _, oidstr := range data.Params.PolicyIdentifiers {
+		oid, err := StringToOid(oidstr)
 		if err == nil {
 			certTemplate.PolicyIdentifiers = append(certTemplate.PolicyIdentifiers, oid)
-		}
-		if err != nil {
-			oidOnly = false
-		}
-	}
-	if !oidOnly { // Because all policy information is held in the same extension, when we use an extra extension to
-		// add policy qualifier information, that overwrites any information in the PolicyIdentifiers field on the Cert
-		// Template, so we need to reparse all the policy identifiers here
-		extension, err := CreatePolicyInformationExtensionFromStorageStrings(data.Params.PolicyIdentifiers)
-		if err == nil {
-			// If this errors out, don't add it, rely on the OIDs parsed into PolicyIdentifiers above
-			certTemplate.ExtraExtensions = append(certTemplate.ExtraExtensions, *extension)
 		}
 	}
 }
 
-// AddExtKeyUsageOids adds custom extended key usage OIDs to certificate
+// addExtKeyUsageOids adds custom extended key usage OIDs to certificate
 func AddExtKeyUsageOids(data *CreationBundle, certTemplate *x509.Certificate) {
 	for _, oidstr := range data.Params.ExtKeyUsageOIDs {
 		oid, err := StringToOid(oidstr)
@@ -883,25 +841,16 @@ func createCertificate(data *CreationBundle, randReader io.Reader, privateKeyGen
 	}
 
 	if data.SigningBundle != nil {
-		if (len(data.SigningBundle.Certificate.AuthorityKeyId) > 0 &&
-			!bytes.Equal(data.SigningBundle.Certificate.AuthorityKeyId, data.SigningBundle.Certificate.SubjectKeyId)) ||
-			data.Params.ForceAppendCaChain {
-			var chain []*CertBlock
+		if len(data.SigningBundle.Certificate.AuthorityKeyId) > 0 &&
+			!bytes.Equal(data.SigningBundle.Certificate.AuthorityKeyId, data.SigningBundle.Certificate.SubjectKeyId) {
 
-			signingChain := data.SigningBundle.CAChain
-			// Some bundles already include the root included in the chain, so don't include it twice.
-			if len(signingChain) == 0 || !bytes.Equal(signingChain[0].Bytes, data.SigningBundle.CertificateBytes) {
-				chain = append(chain, &CertBlock{
+			result.CAChain = []*CertBlock{
+				{
 					Certificate: data.SigningBundle.Certificate,
 					Bytes:       data.SigningBundle.CertificateBytes,
-				})
+				},
 			}
-
-			if len(signingChain) > 0 {
-				chain = append(chain, signingChain...)
-			}
-
-			result.CAChain = chain
+			result.CAChain = append(result.CAChain, data.SigningBundle.CAChain...)
 		}
 	}
 
@@ -1179,7 +1128,7 @@ func signCertificate(data *CreationBundle, randReader io.Reader) (*ParsedCertBun
 		return nil, errutil.InternalError{Err: fmt.Sprintf("unable to parse created certificate: %s", err)}
 	}
 
-	result.CAChain = data.SigningBundle.GetFullChain()
+	result.CAChain = data.SigningBundle.GetCAChain()
 
 	return result, nil
 }
@@ -1248,21 +1197,4 @@ func GetPublicKeySize(key crypto.PublicKey) int {
 	}
 
 	return -1
-}
-
-// CreateKeyBundle create a KeyBundle struct object which includes a generated key
-// of keyType with keyBits leveraging the randomness from randReader.
-func CreateKeyBundle(keyType string, keyBits int, randReader io.Reader) (KeyBundle, error) {
-	return CreateKeyBundleWithKeyGenerator(keyType, keyBits, randReader, generatePrivateKey)
-}
-
-// CreateKeyBundleWithKeyGenerator create a KeyBundle struct object which includes
-// a generated key of keyType with keyBits leveraging the randomness from randReader and
-// delegates the actual key generation to keyGenerator
-func CreateKeyBundleWithKeyGenerator(keyType string, keyBits int, randReader io.Reader, keyGenerator KeyGenerator) (KeyBundle, error) {
-	result := KeyBundle{}
-	if err := keyGenerator(keyType, keyBits, &result, randReader); err != nil {
-		return result, err
-	}
-	return result, nil
 }

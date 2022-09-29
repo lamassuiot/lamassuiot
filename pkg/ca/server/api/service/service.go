@@ -44,7 +44,6 @@ type Service interface {
 	UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (*api.UpdateCAStatusOutput, error)
 	RevokeCA(ctx context.Context, input *api.RevokeCAInput) (*api.RevokeCAOutput, error)
 	IterateCAsWithPredicate(ctx context.Context, input *api.IterateCAsWithPredicateInput) (*api.IterateCAsWithPredicateOutput, error)
-
 	SignCertificateRequest(ctx context.Context, input *api.SignCertificateRequestInput) (*api.SignCertificateRequestOutput, error)
 	RevokeCertificate(ctx context.Context, input *api.RevokeCertificateInput) (*api.RevokeCertificateOutput, error)
 	GetCertificateBySerialNumber(ctx context.Context, input *api.GetCertificateBySerialNumberInput) (*api.GetCertificateBySerialNumberOutput, error)
@@ -145,7 +144,9 @@ func (s *caService) Stats(ctx context.Context, input *api.GetStatsInput) (*api.G
 
 	return &stats, nil
 }
-
+func (s *caService) DeleteCA(ctx context.Context, input *api.GetCAByNameInput) error {
+	return nil
+}
 func (s *caService) IterateCAsWithPredicate(ctx context.Context, input *api.IterateCAsWithPredicateInput) (*api.IterateCAsWithPredicateOutput, error) {
 	var cas []api.CACertificate
 	limit := 100

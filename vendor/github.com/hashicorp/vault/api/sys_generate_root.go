@@ -1,41 +1,25 @@
 package api
 
-import (
-	"context"
-	"net/http"
-)
+import "context"
 
 func (c *Sys) GenerateRootStatus() (*GenerateRootStatusResponse, error) {
-	return c.GenerateRootStatusWithContext(context.Background())
+	return c.generateRootStatusCommon("/v1/sys/generate-root/attempt")
 }
 
 func (c *Sys) GenerateDROperationTokenStatus() (*GenerateRootStatusResponse, error) {
-	return c.GenerateDROperationTokenStatusWithContext(context.Background())
+	return c.generateRootStatusCommon("/v1/sys/replication/dr/secondary/generate-operation-token/attempt")
 }
 
 func (c *Sys) GenerateRecoveryOperationTokenStatus() (*GenerateRootStatusResponse, error) {
-	return c.GenerateRecoveryOperationTokenStatusWithContext(context.Background())
+	return c.generateRootStatusCommon("/v1/sys/generate-recovery-token/attempt")
 }
 
-func (c *Sys) GenerateRootStatusWithContext(ctx context.Context) (*GenerateRootStatusResponse, error) {
-	return c.generateRootStatusCommonWithContext(ctx, "/v1/sys/generate-root/attempt")
-}
+func (c *Sys) generateRootStatusCommon(path string) (*GenerateRootStatusResponse, error) {
+	r := c.c.NewRequest("GET", path)
 
-func (c *Sys) GenerateDROperationTokenStatusWithContext(ctx context.Context) (*GenerateRootStatusResponse, error) {
-	return c.generateRootStatusCommonWithContext(ctx, "/v1/sys/replication/dr/secondary/generate-operation-token/attempt")
-}
-
-func (c *Sys) GenerateRecoveryOperationTokenStatusWithContext(ctx context.Context) (*GenerateRootStatusResponse, error) {
-	return c.generateRootStatusCommonWithContext(ctx, "/v1/sys/generate-recovery-token/attempt")
-}
-
-func (c *Sys) generateRootStatusCommonWithContext(ctx context.Context, path string) (*GenerateRootStatusResponse, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-
-	r := c.c.NewRequest(http.MethodGet, path)
-
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -47,44 +31,31 @@ func (c *Sys) generateRootStatusCommonWithContext(ctx context.Context, path stri
 }
 
 func (c *Sys) GenerateRootInit(otp, pgpKey string) (*GenerateRootStatusResponse, error) {
-	return c.GenerateRootInitWithContext(context.Background(), otp, pgpKey)
+	return c.generateRootInitCommon("/v1/sys/generate-root/attempt", otp, pgpKey)
 }
 
 func (c *Sys) GenerateDROperationTokenInit(otp, pgpKey string) (*GenerateRootStatusResponse, error) {
-	return c.GenerateDROperationTokenInitWithContext(context.Background(), otp, pgpKey)
+	return c.generateRootInitCommon("/v1/sys/replication/dr/secondary/generate-operation-token/attempt", otp, pgpKey)
 }
 
 func (c *Sys) GenerateRecoveryOperationTokenInit(otp, pgpKey string) (*GenerateRootStatusResponse, error) {
-	return c.GenerateRecoveryOperationTokenInitWithContext(context.Background(), otp, pgpKey)
+	return c.generateRootInitCommon("/v1/sys/generate-recovery-token/attempt", otp, pgpKey)
 }
 
-func (c *Sys) GenerateRootInitWithContext(ctx context.Context, otp, pgpKey string) (*GenerateRootStatusResponse, error) {
-	return c.generateRootInitCommonWithContext(ctx, "/v1/sys/generate-root/attempt", otp, pgpKey)
-}
-
-func (c *Sys) GenerateDROperationTokenInitWithContext(ctx context.Context, otp, pgpKey string) (*GenerateRootStatusResponse, error) {
-	return c.generateRootInitCommonWithContext(ctx, "/v1/sys/replication/dr/secondary/generate-operation-token/attempt", otp, pgpKey)
-}
-
-func (c *Sys) GenerateRecoveryOperationTokenInitWithContext(ctx context.Context, otp, pgpKey string) (*GenerateRootStatusResponse, error) {
-	return c.generateRootInitCommonWithContext(ctx, "/v1/sys/generate-recovery-token/attempt", otp, pgpKey)
-}
-
-func (c *Sys) generateRootInitCommonWithContext(ctx context.Context, path, otp, pgpKey string) (*GenerateRootStatusResponse, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
-	defer cancelFunc()
-
+func (c *Sys) generateRootInitCommon(path, otp, pgpKey string) (*GenerateRootStatusResponse, error) {
 	body := map[string]interface{}{
 		"otp":     otp,
 		"pgp_key": pgpKey,
 	}
 
-	r := c.c.NewRequest(http.MethodPut, path)
+	r := c.c.NewRequest("PUT", path)
 	if err := r.SetJSONBody(body); err != nil {
 		return nil, err
 	}
 
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -96,36 +67,23 @@ func (c *Sys) generateRootInitCommonWithContext(ctx context.Context, path, otp, 
 }
 
 func (c *Sys) GenerateRootCancel() error {
-	return c.GenerateRootCancelWithContext(context.Background())
+	return c.generateRootCancelCommon("/v1/sys/generate-root/attempt")
 }
 
 func (c *Sys) GenerateDROperationTokenCancel() error {
-	return c.GenerateDROperationTokenCancelWithContext(context.Background())
+	return c.generateRootCancelCommon("/v1/sys/replication/dr/secondary/generate-operation-token/attempt")
 }
 
 func (c *Sys) GenerateRecoveryOperationTokenCancel() error {
-	return c.GenerateRecoveryOperationTokenCancelWithContext(context.Background())
+	return c.generateRootCancelCommon("/v1/sys/generate-recovery-token/attempt")
 }
 
-func (c *Sys) GenerateRootCancelWithContext(ctx context.Context) error {
-	return c.generateRootCancelCommonWithContext(ctx, "/v1/sys/generate-root/attempt")
-}
+func (c *Sys) generateRootCancelCommon(path string) error {
+	r := c.c.NewRequest("DELETE", path)
 
-func (c *Sys) GenerateDROperationTokenCancelWithContext(ctx context.Context) error {
-	return c.generateRootCancelCommonWithContext(ctx, "/v1/sys/replication/dr/secondary/generate-operation-token/attempt")
-}
-
-func (c *Sys) GenerateRecoveryOperationTokenCancelWithContext(ctx context.Context) error {
-	return c.generateRootCancelCommonWithContext(ctx, "/v1/sys/generate-recovery-token/attempt")
-}
-
-func (c *Sys) generateRootCancelCommonWithContext(ctx context.Context, path string) error {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-
-	r := c.c.NewRequest(http.MethodDelete, path)
-
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err == nil {
 		defer resp.Body.Close()
 	}
@@ -133,44 +91,31 @@ func (c *Sys) generateRootCancelCommonWithContext(ctx context.Context, path stri
 }
 
 func (c *Sys) GenerateRootUpdate(shard, nonce string) (*GenerateRootStatusResponse, error) {
-	return c.GenerateRootUpdateWithContext(context.Background(), shard, nonce)
+	return c.generateRootUpdateCommon("/v1/sys/generate-root/update", shard, nonce)
 }
 
 func (c *Sys) GenerateDROperationTokenUpdate(shard, nonce string) (*GenerateRootStatusResponse, error) {
-	return c.GenerateDROperationTokenUpdateWithContext(context.Background(), shard, nonce)
+	return c.generateRootUpdateCommon("/v1/sys/replication/dr/secondary/generate-operation-token/update", shard, nonce)
 }
 
 func (c *Sys) GenerateRecoveryOperationTokenUpdate(shard, nonce string) (*GenerateRootStatusResponse, error) {
-	return c.GenerateRecoveryOperationTokenUpdateWithContext(context.Background(), shard, nonce)
+	return c.generateRootUpdateCommon("/v1/sys/generate-recovery-token/update", shard, nonce)
 }
 
-func (c *Sys) GenerateRootUpdateWithContext(ctx context.Context, shard, nonce string) (*GenerateRootStatusResponse, error) {
-	return c.generateRootUpdateCommonWithContext(ctx, "/v1/sys/generate-root/update", shard, nonce)
-}
-
-func (c *Sys) GenerateDROperationTokenUpdateWithContext(ctx context.Context, shard, nonce string) (*GenerateRootStatusResponse, error) {
-	return c.generateRootUpdateCommonWithContext(ctx, "/v1/sys/replication/dr/secondary/generate-operation-token/update", shard, nonce)
-}
-
-func (c *Sys) GenerateRecoveryOperationTokenUpdateWithContext(ctx context.Context, shard, nonce string) (*GenerateRootStatusResponse, error) {
-	return c.generateRootUpdateCommonWithContext(ctx, "/v1/sys/generate-recovery-token/update", shard, nonce)
-}
-
-func (c *Sys) generateRootUpdateCommonWithContext(ctx context.Context, path, shard, nonce string) (*GenerateRootStatusResponse, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
-	defer cancelFunc()
-
+func (c *Sys) generateRootUpdateCommon(path, shard, nonce string) (*GenerateRootStatusResponse, error) {
 	body := map[string]interface{}{
 		"key":   shard,
 		"nonce": nonce,
 	}
 
-	r := c.c.NewRequest(http.MethodPut, path)
+	r := c.c.NewRequest("PUT", path)
 	if err := r.SetJSONBody(body); err != nil {
 		return nil, err
 	}
 
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err != nil {
 		return nil, err
 	}

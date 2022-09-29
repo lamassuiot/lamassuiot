@@ -248,8 +248,12 @@ func TestOCSPVerify(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
+			cli, err := testUtils.NewVaultSecretsMock(t)
+			if err != nil {
+				t.Errorf("%s", err)
+			}
 			ctx := context.Background()
-			serverCA, svcCA, err := testUtils.BuildCATestServer()
+			serverCA, svcCA, err := testUtils.BuildCATestServer(cli)
 			if err != nil {
 				t.Fatalf("%s", err)
 			}

@@ -29,22 +29,14 @@ type ListPluginsResponse struct {
 	Names []string `json:"names"`
 }
 
-// ListPlugins wraps ListPluginsWithContext using context.Background.
-func (c *Sys) ListPlugins(i *ListPluginsInput) (*ListPluginsResponse, error) {
-	return c.ListPluginsWithContext(context.Background(), i)
-}
-
-// ListPluginsWithContext lists all plugins in the catalog and returns their names as a
+// ListPlugins lists all plugins in the catalog and returns their names as a
 // list of strings.
-func (c *Sys) ListPluginsWithContext(ctx context.Context, i *ListPluginsInput) (*ListPluginsResponse, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
-	defer cancelFunc()
-
+func (c *Sys) ListPlugins(i *ListPluginsInput) (*ListPluginsResponse, error) {
 	path := ""
 	method := ""
 	if i.Type == consts.PluginTypeUnknown {
 		path = "/v1/sys/plugins/catalog"
-		method = http.MethodGet
+		method = "GET"
 	} else {
 		path = fmt.Sprintf("/v1/sys/plugins/catalog/%s", i.Type)
 		method = "LIST"
@@ -54,11 +46,13 @@ func (c *Sys) ListPluginsWithContext(ctx context.Context, i *ListPluginsInput) (
 	if method == "LIST" {
 		// Set this for broader compatibility, but we use LIST above to be able
 		// to handle the wrapping lookup function
-		req.Method = http.MethodGet
+		req.Method = "GET"
 		req.Params.Set("list", "true")
 	}
 
-	resp, err := c.c.rawRequestWithContext(ctx, req)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	resp, err := c.c.RawRequestWithContext(ctx, req)
 	if err != nil && resp == nil {
 		return nil, err
 	}
@@ -72,7 +66,7 @@ func (c *Sys) ListPluginsWithContext(ctx context.Context, i *ListPluginsInput) (
 	// switch it to a LIST.
 	if resp.StatusCode == 405 {
 		req.Params.Set("list", "true")
-		resp, err := c.c.rawRequestWithContext(ctx, req)
+		resp, err := c.c.RawRequestWithContext(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -100,24 +94,23 @@ func (c *Sys) ListPluginsWithContext(ctx context.Context, i *ListPluginsInput) (
 		PluginsByType: make(map[consts.PluginType][]string),
 	}
 	if i.Type == consts.PluginTypeUnknown {
-		for _, pluginType := range consts.PluginTypes {
-			pluginsRaw, ok := secret.Data[pluginType.String()]
-			if !ok {
-				continue
+		for pluginTypeStr, pluginsRaw := range secret.Data {
+			pluginType, err := consts.ParsePluginType(pluginTypeStr)
+			if err != nil {
+				return nil, err
 			}
 
 			pluginsIfc, ok := pluginsRaw.([]interface{})
 			if !ok {
-				return nil, fmt.Errorf("unable to parse plugins for %q type", pluginType.String())
+				return nil, fmt.Errorf("unable to parse plugins for %q type", pluginTypeStr)
 			}
 
-			plugins := make([]string, 0, len(pluginsIfc))
-			for _, nameIfc := range pluginsIfc {
+			plugins := make([]string, len(pluginsIfc))
+			for i, nameIfc := range pluginsIfc {
 				name, ok := nameIfc.(string)
 				if !ok {
-					continue
 				}
-				plugins = append(plugins, name)
+				plugins[i] = name
 			}
 			result.PluginsByType[pluginType] = plugins
 		}
@@ -149,20 +142,14 @@ type GetPluginResponse struct {
 	SHA256  string   `json:"sha256"`
 }
 
-// GetPlugin wraps GetPluginWithContext using context.Background.
+// GetPlugin retrieves information about the plugin.
 func (c *Sys) GetPlugin(i *GetPluginInput) (*GetPluginResponse, error) {
-	return c.GetPluginWithContext(context.Background(), i)
-}
-
-// GetPluginWithContext retrieves information about the plugin.
-func (c *Sys) GetPluginWithContext(ctx context.Context, i *GetPluginInput) (*GetPluginResponse, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
-	defer cancelFunc()
-
 	path := catalogPathByType(i.Type, i.Name)
 	req := c.c.NewRequest(http.MethodGet, path)
 
-	resp, err := c.c.rawRequestWithContext(ctx, req)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	resp, err := c.c.RawRequestWithContext(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -196,16 +183,8 @@ type RegisterPluginInput struct {
 	SHA256 string `json:"sha256,omitempty"`
 }
 
-// RegisterPlugin wraps RegisterPluginWithContext using context.Background.
+// RegisterPlugin registers the plugin with the given information.
 func (c *Sys) RegisterPlugin(i *RegisterPluginInput) error {
-	return c.RegisterPluginWithContext(context.Background(), i)
-}
-
-// RegisterPluginWithContext registers the plugin with the given information.
-func (c *Sys) RegisterPluginWithContext(ctx context.Context, i *RegisterPluginInput) error {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
-	defer cancelFunc()
-
 	path := catalogPathByType(i.Type, i.Name)
 	req := c.c.NewRequest(http.MethodPut, path)
 
@@ -213,7 +192,9 @@ func (c *Sys) RegisterPluginWithContext(ctx context.Context, i *RegisterPluginIn
 		return err
 	}
 
-	resp, err := c.c.rawRequestWithContext(ctx, req)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	resp, err := c.c.RawRequestWithContext(ctx, req)
 	if err == nil {
 		defer resp.Body.Close()
 	}
@@ -229,21 +210,15 @@ type DeregisterPluginInput struct {
 	Type consts.PluginType `json:"type"`
 }
 
-// DeregisterPlugin wraps DeregisterPluginWithContext using context.Background.
-func (c *Sys) DeregisterPlugin(i *DeregisterPluginInput) error {
-	return c.DeregisterPluginWithContext(context.Background(), i)
-}
-
-// DeregisterPluginWithContext removes the plugin with the given name from the plugin
+// DeregisterPlugin removes the plugin with the given name from the plugin
 // catalog.
-func (c *Sys) DeregisterPluginWithContext(ctx context.Context, i *DeregisterPluginInput) error {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
-	defer cancelFunc()
-
+func (c *Sys) DeregisterPlugin(i *DeregisterPluginInput) error {
 	path := catalogPathByType(i.Type, i.Name)
 	req := c.c.NewRequest(http.MethodDelete, path)
 
-	resp, err := c.c.rawRequestWithContext(ctx, req)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	resp, err := c.c.RawRequestWithContext(ctx, req)
 	if err == nil {
 		defer resp.Body.Close()
 	}
@@ -262,17 +237,9 @@ type ReloadPluginInput struct {
 	Scope string `json:"scope"`
 }
 
-// ReloadPlugin wraps ReloadPluginWithContext using context.Background.
-func (c *Sys) ReloadPlugin(i *ReloadPluginInput) (string, error) {
-	return c.ReloadPluginWithContext(context.Background(), i)
-}
-
-// ReloadPluginWithContext reloads mounted plugin backends, possibly returning
+// ReloadPlugin reloads mounted plugin backends, possibly returning
 // reloadId for a cluster scoped reload
-func (c *Sys) ReloadPluginWithContext(ctx context.Context, i *ReloadPluginInput) (string, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
-	defer cancelFunc()
-
+func (c *Sys) ReloadPlugin(i *ReloadPluginInput) (string, error) {
 	path := "/v1/sys/plugins/reload/backend"
 	req := c.c.NewRequest(http.MethodPut, path)
 
@@ -280,7 +247,10 @@ func (c *Sys) ReloadPluginWithContext(ctx context.Context, i *ReloadPluginInput)
 		return "", err
 	}
 
-	resp, err := c.c.rawRequestWithContext(ctx, req)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+
+	resp, err := c.c.RawRequestWithContext(ctx, req)
 	if err != nil {
 		return "", err
 	}
@@ -317,21 +287,16 @@ type ReloadPluginStatusInput struct {
 	ReloadID string `json:"reload_id"`
 }
 
-// ReloadPluginStatus wraps ReloadPluginStatusWithContext using context.Background.
+// ReloadPluginStatus retrieves the status of a reload operation
 func (c *Sys) ReloadPluginStatus(reloadStatusInput *ReloadPluginStatusInput) (*ReloadStatusResponse, error) {
-	return c.ReloadPluginStatusWithContext(context.Background(), reloadStatusInput)
-}
-
-// ReloadPluginStatusWithContext retrieves the status of a reload operation
-func (c *Sys) ReloadPluginStatusWithContext(ctx context.Context, reloadStatusInput *ReloadPluginStatusInput) (*ReloadStatusResponse, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
-	defer cancelFunc()
-
 	path := "/v1/sys/plugins/reload/backend/status"
 	req := c.c.NewRequest(http.MethodGet, path)
 	req.Params.Add("reload_id", reloadStatusInput.ReloadID)
 
-	resp, err := c.c.rawRequestWithContext(ctx, req)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+
+	resp, err := c.c.RawRequestWithContext(ctx, req)
 	if err != nil {
 		return nil, err
 	}

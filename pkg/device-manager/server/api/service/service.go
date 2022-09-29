@@ -145,7 +145,16 @@ func (s *devicesService) UpdateDeviceMetadata(ctx context.Context, input *api.Up
 	device.IconColor = input.IconColor
 
 	s.devicesRepo.UpdateDevice(ctx, device)
-	return &api.UpdateDeviceMetadataOutput{}, nil
+	outputGetDevice, err = s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
+		DeviceID: input.DeviceID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	outputDeviceMetadatada := &api.UpdateDeviceMetadataOutput{
+		Device: outputGetDevice.Device,
+	}
+	return outputDeviceMetadatada, nil
 }
 
 func (s *devicesService) DecommisionDevice(ctx context.Context, input *api.DecommisionDeviceInput) (*api.DecommisionDeviceOutput, error) {

@@ -3,23 +3,16 @@ package api
 import (
 	"context"
 	"fmt"
-	"net/http"
 )
 
-// Help wraps HelpWithContext using context.Background.
+// Help reads the help information for the given path.
 func (c *Client) Help(path string) (*Help, error) {
-	return c.HelpWithContext(context.Background(), path)
-}
-
-// HelpWithContext reads the help information for the given path.
-func (c *Client) HelpWithContext(ctx context.Context, path string) (*Help, error) {
-	ctx, cancelFunc := c.withConfiguredTimeout(ctx)
-	defer cancelFunc()
-
-	r := c.NewRequest(http.MethodGet, fmt.Sprintf("/v1/%s", path))
+	r := c.NewRequest("GET", fmt.Sprintf("/v1/%s", path))
 	r.Params.Add("help", "1")
 
-	resp, err := c.rawRequestWithContext(ctx, r)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	resp, err := c.RawRequestWithContext(ctx, r)
 	if err != nil {
 		return nil, err
 	}

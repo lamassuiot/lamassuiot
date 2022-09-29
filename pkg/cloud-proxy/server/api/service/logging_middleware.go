@@ -42,7 +42,7 @@ func (mw loggingMiddleware) GetCloudConnectors(ctx context.Context, input *api.G
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -60,7 +60,7 @@ func (mw loggingMiddleware) GetCloudConnectorByID(ctx context.Context, input *ap
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -78,7 +78,7 @@ func (mw loggingMiddleware) GetDeviceConfiguration(ctx context.Context, input *a
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -96,7 +96,7 @@ func (mw loggingMiddleware) SynchronizeCA(ctx context.Context, input *api.Synchr
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -114,7 +114,7 @@ func (mw loggingMiddleware) UpdateCloudProviderConfiguration(ctx context.Context
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -196,7 +196,7 @@ func (mw loggingMiddleware) UpdateDeviceCertificateStatus(ctx context.Context, i
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -214,7 +214,7 @@ func (mw loggingMiddleware) UpdateDeviceDigitalTwinReenrolmentStatus(ctx context
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)
@@ -232,7 +232,7 @@ func (mw loggingMiddleware) UpdateCAStatus(ctx context.Context, input *api.Updat
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
 			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
 			}
 		} else {
 			logMsg = append(logMsg, "err", err)

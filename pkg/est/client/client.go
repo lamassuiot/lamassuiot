@@ -61,7 +61,7 @@ func NewESTClient(logger log.Logger, url *url.URL, clientCert *x509.Certificate,
 }
 
 func (c *ESTClientConfig) CACerts(ctx context.Context) ([]*x509.Certificate, error) {
-	return nil, nil
+	return c.makeESTClient(ctx, "").CACerts(ctx)
 }
 
 func (c *ESTClientConfig) Enroll(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, error) {

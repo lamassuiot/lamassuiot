@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-secure-stdlib/parseutil"
+	"github.com/hashicorp/vault/sdk/helper/consts"
 	"github.com/mitchellh/mapstructure"
 )
 
@@ -44,7 +46,6 @@ type AutopilotConfig struct {
 	MaxTrailingLogs                uint64        `json:"max_trailing_logs" mapstructure:"max_trailing_logs"`
 	MinQuorum                      uint          `json:"min_quorum" mapstructure:"min_quorum"`
 	ServerStabilizationTime        time.Duration `json:"server_stabilization_time" mapstructure:"-"`
-	DisableUpgradeMigration        bool          `json:"disable_upgrade_migration" mapstructure:"disable_upgrade_migration"`
 }
 
 // MarshalJSON makes the autopilot config fields JSON compatible
@@ -56,7 +57,6 @@ func (ac *AutopilotConfig) MarshalJSON() ([]byte, error) {
 		"max_trailing_logs":                  ac.MaxTrailingLogs,
 		"min_quorum":                         ac.MinQuorum,
 		"server_stabilization_time":          ac.ServerStabilizationTime.String(),
-		"disable_upgrade_migration":          ac.DisableUpgradeMigration,
 	})
 }
 
@@ -86,79 +86,42 @@ func (ac *AutopilotConfig) UnmarshalJSON(b []byte) error {
 
 // AutopilotState represents the response of the raft autopilot state API
 type AutopilotState struct {
-	Healthy                    bool                        `mapstructure:"healthy"`
-	FailureTolerance           int                         `mapstructure:"failure_tolerance"`
-	Servers                    map[string]*AutopilotServer `mapstructure:"servers"`
-	Leader                     string                      `mapstructure:"leader"`
-	Voters                     []string                    `mapstructure:"voters"`
-	NonVoters                  []string                    `mapstructure:"non_voters"`
-	RedundancyZones            map[string]AutopilotZone    `mapstructure:"redundancy_zones,omitempty"`
-	Upgrade                    *AutopilotUpgrade           `mapstructure:"upgrade_info,omitempty"`
-	OptimisticFailureTolerance int                         `mapstructure:"optimistic_failure_tolerance,omitempty"`
+	Healthy          bool                        `mapstructure:"healthy"`
+	FailureTolerance int                         `mapstructure:"failure_tolerance"`
+	Servers          map[string]*AutopilotServer `mapstructure:"servers"`
+	Leader           string                      `mapstructure:"leader"`
+	Voters           []string                    `mapstructure:"voters"`
+	NonVoters        []string                    `mapstructure:"non_voters"`
 }
 
 // AutopilotServer represents the server blocks in the response of the raft
 // autopilot state API.
 type AutopilotServer struct {
-	ID             string `mapstructure:"id"`
-	Name           string `mapstructure:"name"`
-	Address        string `mapstructure:"address"`
-	NodeStatus     string `mapstructure:"node_status"`
-	LastContact    string `mapstructure:"last_contact"`
-	LastTerm       uint64 `mapstructure:"last_term"`
-	LastIndex      uint64 `mapstructure:"last_index"`
-	Healthy        bool   `mapstructure:"healthy"`
-	StableSince    string `mapstructure:"stable_since"`
-	Status         string `mapstructure:"status"`
-	Version        string `mapstructure:"version"`
-	UpgradeVersion string `mapstructure:"upgrade_version,omitempty"`
-	RedundancyZone string `mapstructure:"redundancy_zone,omitempty"`
-	NodeType       string `mapstructure:"node_type,omitempty"`
+	ID          string            `mapstructure:"id"`
+	Name        string            `mapstructure:"name"`
+	Address     string            `mapstructure:"address"`
+	NodeStatus  string            `mapstructure:"node_status"`
+	LastContact string            `mapstructure:"last_contact"`
+	LastTerm    uint64            `mapstructure:"last_term"`
+	LastIndex   uint64            `mapstructure:"last_index"`
+	Healthy     bool              `mapstructure:"healthy"`
+	StableSince string            `mapstructure:"stable_since"`
+	Status      string            `mapstructure:"status"`
+	Meta        map[string]string `mapstructure:"meta"`
 }
 
-type AutopilotZone struct {
-	Servers          []string `mapstructure:"servers,omitempty"`
-	Voters           []string `mapstructure:"voters,omitempty"`
-	FailureTolerance int      `mapstructure:"failure_tolerance,omitempty"`
-}
-
-type AutopilotUpgrade struct {
-	Status                    string                                  `mapstructure:"status"`
-	TargetVersion             string                                  `mapstructure:"target_version,omitempty"`
-	TargetVersionVoters       []string                                `mapstructure:"target_version_voters,omitempty"`
-	TargetVersionNonVoters    []string                                `mapstructure:"target_version_non_voters,omitempty"`
-	TargetVersionReadReplicas []string                                `mapstructure:"target_version_read_replicas,omitempty"`
-	OtherVersionVoters        []string                                `mapstructure:"other_version_voters,omitempty"`
-	OtherVersionNonVoters     []string                                `mapstructure:"other_version_non_voters,omitempty"`
-	OtherVersionReadReplicas  []string                                `mapstructure:"other_version_read_replicas,omitempty"`
-	RedundancyZones           map[string]AutopilotZoneUpgradeVersions `mapstructure:"redundancy_zones,omitempty"`
-}
-
-type AutopilotZoneUpgradeVersions struct {
-	TargetVersionVoters    []string `mapstructure:"target_version_voters,omitempty"`
-	TargetVersionNonVoters []string `mapstructure:"target_version_non_voters,omitempty"`
-	OtherVersionVoters     []string `mapstructure:"other_version_voters,omitempty"`
-	OtherVersionNonVoters  []string `mapstructure:"other_version_non_voters,omitempty"`
-}
-
-// RaftJoin wraps RaftJoinWithContext using context.Background.
-func (c *Sys) RaftJoin(opts *RaftJoinRequest) (*RaftJoinResponse, error) {
-	return c.RaftJoinWithContext(context.Background(), opts)
-}
-
-// RaftJoinWithContext adds the node from which this call is invoked from to the raft
+// RaftJoin adds the node from which this call is invoked from to the raft
 // cluster represented by the leader address in the parameter.
-func (c *Sys) RaftJoinWithContext(ctx context.Context, opts *RaftJoinRequest) (*RaftJoinResponse, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
-	defer cancelFunc()
-
-	r := c.c.NewRequest(http.MethodPost, "/v1/sys/storage/raft/join")
+func (c *Sys) RaftJoin(opts *RaftJoinRequest) (*RaftJoinResponse, error) {
+	r := c.c.NewRequest("POST", "/v1/sys/storage/raft/join")
 
 	if err := r.SetJSONBody(opts); err != nil {
 		return nil, err
 	}
 
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -169,22 +132,87 @@ func (c *Sys) RaftJoinWithContext(ctx context.Context, opts *RaftJoinRequest) (*
 	return &result, err
 }
 
-// RaftSnapshot wraps RaftSnapshotWithContext using context.Background.
-func (c *Sys) RaftSnapshot(snapWriter io.Writer) error {
-	return c.RaftSnapshotWithContext(context.Background(), snapWriter)
-}
-
-// RaftSnapshotWithContext invokes the API that takes the snapshot of the raft cluster and
+// RaftSnapshot invokes the API that takes the snapshot of the raft cluster and
 // writes it to the supplied io.Writer.
-func (c *Sys) RaftSnapshotWithContext(ctx context.Context, snapWriter io.Writer) error {
-	r := c.c.NewRequest(http.MethodGet, "/v1/sys/storage/raft/snapshot")
+func (c *Sys) RaftSnapshot(snapWriter io.Writer) error {
+	r := c.c.NewRequest("GET", "/v1/sys/storage/raft/snapshot")
 	r.URL.RawQuery = r.Params.Encode()
 
-	resp, err := c.c.httpRequestWithContext(ctx, r)
+	req, err := http.NewRequest(http.MethodGet, r.URL.RequestURI(), nil)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+
+	req.URL.User = r.URL.User
+	req.URL.Scheme = r.URL.Scheme
+	req.URL.Host = r.URL.Host
+	req.Host = r.URL.Host
+
+	if r.Headers != nil {
+		for header, vals := range r.Headers {
+			for _, val := range vals {
+				req.Header.Add(header, val)
+			}
+		}
+	}
+
+	if len(r.ClientToken) != 0 {
+		req.Header.Set(consts.AuthHeaderName, r.ClientToken)
+	}
+
+	if len(r.WrapTTL) != 0 {
+		req.Header.Set("X-Vault-Wrap-TTL", r.WrapTTL)
+	}
+
+	if len(r.MFAHeaderVals) != 0 {
+		for _, mfaHeaderVal := range r.MFAHeaderVals {
+			req.Header.Add("X-Vault-MFA", mfaHeaderVal)
+		}
+	}
+
+	if r.PolicyOverride {
+		req.Header.Set("X-Vault-Policy-Override", "true")
+	}
+
+	// Avoiding the use of RawRequestWithContext which reads the response body
+	// to determine if the body contains error message.
+	var result *Response
+	resp, err := c.c.config.HttpClient.Do(req)
+	if err != nil {
+		return err
+	}
+
+	if resp == nil {
+		return nil
+	}
+
+	// Check for a redirect, only allowing for a single redirect
+	if resp.StatusCode == 301 || resp.StatusCode == 302 || resp.StatusCode == 307 {
+		// Parse the updated location
+		respLoc, err := resp.Location()
+		if err != nil {
+			return err
+		}
+
+		// Ensure a protocol downgrade doesn't happen
+		if req.URL.Scheme == "https" && respLoc.Scheme != "https" {
+			return fmt.Errorf("redirect would cause protocol downgrade")
+		}
+
+		// Update the request
+		req.URL = respLoc
+
+		// Retry the request
+		resp, err = c.c.config.HttpClient.Do(req)
+		if err != nil {
+			return err
+		}
+	}
+
+	result = &Response{Response: resp}
+	if err := result.Error(); err != nil {
+		return err
+	}
 
 	// Make sure that the last file in the archive, SHA256SUMS.sealed, is present
 	// and non-empty.  This is to catch cases where the snapshot failed midstream,
@@ -243,23 +271,20 @@ func (c *Sys) RaftSnapshotWithContext(ctx context.Context, snapWriter io.Writer)
 	return nil
 }
 
-// RaftSnapshotRestore wraps RaftSnapshotRestoreWithContext using context.Background.
-func (c *Sys) RaftSnapshotRestore(snapReader io.Reader, force bool) error {
-	return c.RaftSnapshotRestoreWithContext(context.Background(), snapReader, force)
-}
-
-// RaftSnapshotRestoreWithContext reads the snapshot from the io.Reader and installs that
+// RaftSnapshotRestore reads the snapshot from the io.Reader and installs that
 // snapshot, returning the cluster to the state defined by it.
-func (c *Sys) RaftSnapshotRestoreWithContext(ctx context.Context, snapReader io.Reader, force bool) error {
+func (c *Sys) RaftSnapshotRestore(snapReader io.Reader, force bool) error {
 	path := "/v1/sys/storage/raft/snapshot"
 	if force {
 		path = "/v1/sys/storage/raft/snapshot-force"
 	}
+	r := c.c.NewRequest("POST", path)
 
-	r := c.c.NewRequest(http.MethodPost, path)
 	r.Body = snapReader
 
-	resp, err := c.c.httpRequestWithContext(ctx, r)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err != nil {
 		return err
 	}
@@ -268,19 +293,13 @@ func (c *Sys) RaftSnapshotRestoreWithContext(ctx context.Context, snapReader io.
 	return nil
 }
 
-// RaftAutopilotState wraps RaftAutopilotStateWithContext using context.Background.
+// RaftAutopilotState returns the state of the raft cluster as seen by autopilot.
 func (c *Sys) RaftAutopilotState() (*AutopilotState, error) {
-	return c.RaftAutopilotStateWithContext(context.Background())
-}
+	r := c.c.NewRequest("GET", "/v1/sys/storage/raft/autopilot/state")
 
-// RaftAutopilotStateWithContext returns the state of the raft cluster as seen by autopilot.
-func (c *Sys) RaftAutopilotStateWithContext(ctx context.Context) (*AutopilotState, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-
-	r := c.c.NewRequest(http.MethodGet, "/v1/sys/storage/raft/autopilot/state")
-
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if resp != nil {
 		defer resp.Body.Close()
 		if resp.StatusCode == 404 {
@@ -308,19 +327,13 @@ func (c *Sys) RaftAutopilotStateWithContext(ctx context.Context) (*AutopilotStat
 	return &result, err
 }
 
-// RaftAutopilotConfiguration wraps RaftAutopilotConfigurationWithContext using context.Background.
+// RaftAutopilotConfiguration fetches the autopilot config.
 func (c *Sys) RaftAutopilotConfiguration() (*AutopilotConfig, error) {
-	return c.RaftAutopilotConfigurationWithContext(context.Background())
-}
+	r := c.c.NewRequest("GET", "/v1/sys/storage/raft/autopilot/configuration")
 
-// RaftAutopilotConfigurationWithContext fetches the autopilot config.
-func (c *Sys) RaftAutopilotConfigurationWithContext(ctx context.Context) (*AutopilotConfig, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-
-	r := c.c.NewRequest(http.MethodGet, "/v1/sys/storage/raft/autopilot/configuration")
-
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if resp != nil {
 		defer resp.Body.Close()
 		if resp.StatusCode == 404 {
@@ -356,23 +369,17 @@ func (c *Sys) RaftAutopilotConfigurationWithContext(ctx context.Context) (*Autop
 	return &result, err
 }
 
-// PutRaftAutopilotConfiguration wraps PutRaftAutopilotConfigurationWithContext using context.Background.
+// PutRaftAutopilotConfiguration allows modifying the raft autopilot configuration
 func (c *Sys) PutRaftAutopilotConfiguration(opts *AutopilotConfig) error {
-	return c.PutRaftAutopilotConfigurationWithContext(context.Background(), opts)
-}
-
-// PutRaftAutopilotConfigurationWithContext allows modifying the raft autopilot configuration
-func (c *Sys) PutRaftAutopilotConfigurationWithContext(ctx context.Context, opts *AutopilotConfig) error {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
-	defer cancelFunc()
-
-	r := c.c.NewRequest(http.MethodPost, "/v1/sys/storage/raft/autopilot/configuration")
+	r := c.c.NewRequest("POST", "/v1/sys/storage/raft/autopilot/configuration")
 
 	if err := r.SetJSONBody(opts); err != nil {
 		return err
 	}
 
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err != nil {
 		return err
 	}

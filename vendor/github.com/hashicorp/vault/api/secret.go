@@ -94,7 +94,12 @@ func (s *Secret) TokenRemainingUses() (int, error) {
 		return -1, nil
 	}
 
-	return parseutil.SafeParseInt(s.Data["num_uses"])
+	uses, err := parseutil.ParseInt(s.Data["num_uses"])
+	if err != nil {
+		return 0, err
+	}
+
+	return int(uses), nil
 }
 
 // TokenPolicies returns the standardized list of policies for the given secret.

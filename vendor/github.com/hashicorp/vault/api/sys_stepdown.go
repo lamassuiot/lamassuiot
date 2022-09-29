@@ -1,21 +1,13 @@
 package api
 
-import (
-	"context"
-	"net/http"
-)
+import "context"
 
 func (c *Sys) StepDown() error {
-	return c.StepDownWithContext(context.Background())
-}
+	r := c.c.NewRequest("PUT", "/v1/sys/step-down")
 
-func (c *Sys) StepDownWithContext(ctx context.Context) error {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-
-	r := c.c.NewRequest(http.MethodPut, "/v1/sys/step-down")
-
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if resp != nil && resp.Body != nil {
 		resp.Body.Close()
 	}
