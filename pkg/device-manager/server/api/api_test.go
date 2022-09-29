@@ -257,6 +257,7 @@ func TestEnroll(t *testing.T) {
 					CAType:                    caApi.CATypePKI,
 					CAName:                    "RPI-CA",
 					CertificateSigningRequest: csr,
+					CommonName:                csr.Subject.CommonName,
 				})
 				if err != nil {
 					t.Fatalf("Failed to parse certificate: %s", err)
@@ -849,6 +850,7 @@ func TestGetStats(t *testing.T) {
 					CAType:                    caApi.CATypePKI,
 					CAName:                    "RPI-CA",
 					CertificateSigningRequest: csr,
+					CommonName:                csr.Subject.CommonName,
 				})
 				if err != nil {
 					t.Fatalf("Failed to parse certificate: %s", err)
@@ -942,6 +944,7 @@ func TestGetDeviceById(t *testing.T) {
 					CAType:                    caApi.CATypePKI,
 					CAName:                    "RPI-CA",
 					CertificateSigningRequest: csr,
+					CommonName:                csr.Subject.CommonName,
 				})
 				if err != nil {
 					t.Fatalf("Failed to parse certificate: %s", err)
@@ -1042,7 +1045,7 @@ func TestGetDevices(t *testing.T) {
 		{
 			name: "GetDevices:3Devices",
 			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
-				for i := 1; i < 3; i++ {
+				for i := 1; i < 4; i++ {
 					_, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
 						DeviceID:    "device-" + strconv.Itoa(i),
 						Alias:       "Raspberry Pi",
@@ -1085,7 +1088,8 @@ func TestUpdateDeviceMetadata(t *testing.T) {
 				return ctx
 			},
 			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
-				e.PUT("/v1/devices/error").
+				reqBytes := `{"alias":"Raspberry", "tags": ["raspberry-pi"], "description": "Raspberry Pi is a small", "icon_color":"#0068D1", "icon_name": "Cg/CgSmartphoneChip"}`
+				e.PUT("/v1/devices/error").WithBytes([]byte(reqBytes)).
 					Expect().
 					Status(http.StatusNotFound)
 
@@ -1121,21 +1125,28 @@ func TestUpdateDeviceMetadata(t *testing.T) {
 				return ctx
 			},
 			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+<<<<<<< HEAD
 				reqBytes := `{"device_id":"1234-5678-9012-3456", "alias":"Raspberry", "tags": ["raspberry-pi"], "description": "Raspberry Pi is a small", "icon_color":"#0068D1", "icon_name": "Cg/CgSmartphoneChip"}`
+=======
+				reqBytes := `{"device_id":"1234", "alias":"Raspberry", "tags": ["raspberry-pi"], "description": "Raspberry Pi is a small", "icon_color":"#0068D1", "icon_name": "Cg/CgSmartphoneChip"}`
+>>>>>>> vaultService
 
 				obj := e.PUT("/v1/devices/1234-5678-9012-3456").WithBytes([]byte(reqBytes)).
 					Expect().
 					Status(http.StatusOK).JSON().Object()
 
-				obj.ContainsKey("id")
-				obj.ContainsKey("alias")
-				obj.ContainsKey("status")
 				obj.ContainsKey("slots")
-				obj.ContainsKey("description")
-				obj.ContainsKey("tags")
-				obj.ContainsKey("icon_name")
-				obj.ContainsKey("icon_color")
 				obj.ContainsKey("creation_timestamp")
+
+				obj.ContainsMap(map[string]interface{}{
+					"alias":       "Raspberry",
+					"id":          "1234-5678-9012-3456",
+					"status":      api.DeviceStatusPendingProvisioning,
+					"description": "Raspberry Pi is a small",
+					"tags":        []string{"raspberry-pi"},
+					"icon_color":  "#0068D1",
+					"icon_name":   "Cg/CgSmartphoneChip",
+				})
 
 			},
 		},
@@ -1217,10 +1228,10 @@ func TestRevokeActiveCertificate(t *testing.T) {
 				return ctx
 			},
 			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
-
-				e.DELETE("/v1/devices/device/slots/slot").
+				reqBytes := `{"revocation_reason":"Device"}`
+				e.DELETE("/v1/devices/device/slots/slot").WithBytes([]byte(reqBytes)).
 					Expect().
-					Status(http.StatusBadRequest)
+					Status(http.StatusNotFound)
 
 			},
 		},
@@ -1241,10 +1252,10 @@ func TestRevokeActiveCertificate(t *testing.T) {
 				return ctx
 			},
 			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
-
-				e.DELETE("/v1/devices/1234-5678-9012-3456/slots/slot").
+				reqBytes := `{"revocation_reason":"Device"}`
+				e.DELETE("/v1/devices/1234-5678-9012-3456/slots/slot").WithBytes([]byte(reqBytes)).
 					Expect().
-					Status(http.StatusBadRequest)
+					Status(http.StatusNotFound)
 
 			},
 		},
@@ -1263,24 +1274,6 @@ func TestRevokeActiveCertificate(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Failed to parse certificate: %s", err)
 				}
-				_, csr := generateCertificateRequestAndKey("slot1:1234-5678-9012-3456")
-				singOutput, err := (*caSvc).SignCertificateRequest(context.Background(), &caApi.SignCertificateRequestInput{
-					CAType:                    caApi.CATypePKI,
-					CAName:                    "RPI-CA-SHORT",
-					CertificateSigningRequest: csr,
-				})
-				if err != nil {
-					t.Fatalf("Failed to parse certificate: %s", err)
-				}
-
-				_, err = (*svc).AddDeviceSlot(context.Background(), &api.AddDeviceSlotInput{
-					DeviceID:          "1234-5678-9012-3456",
-					SlotID:            "slot1",
-					ActiveCertificate: singOutput.Certificate,
-				})
-				if err != nil {
-					t.Fatalf("Failed to parse certificate: %s", err)
-				}
 
 				return ctx
 			},
@@ -1290,15 +1283,18 @@ func TestRevokeActiveCertificate(t *testing.T) {
 					Expect().
 					Status(http.StatusOK).JSON().Object()
 
-				obj.ContainsKey("id")
-				obj.ContainsKey("alias")
-				obj.ContainsKey("status")
 				obj.ContainsKey("slots")
-				obj.ContainsKey("description")
-				obj.ContainsKey("tags")
-				obj.ContainsKey("icon_name")
-				obj.ContainsKey("icon_color")
 				obj.ContainsKey("creation_timestamp")
+
+				obj.ContainsMap(map[string]interface{}{
+					"alias":       "Raspberry Pi",
+					"id":          "1234-5678-9012-3456",
+					"status":      api.DeviceStatusDecommissioned,
+					"description": "Raspberry Pi is a small, low-cost, and light-weight computer",
+					"tags":        []string{"raspberry-pi", "5G"},
+					"icon_color":  "#0068D1",
+					"icon_name":   "Cg/CgSmartphoneChip",
+				})
 
 			},
 		},
@@ -1322,6 +1318,7 @@ func TestRevokeActiveCertificate(t *testing.T) {
 					CAType:                    caApi.CATypePKI,
 					CAName:                    "RPI-CA-LONG",
 					CertificateSigningRequest: csr,
+					CommonName:                csr.Subject.CommonName,
 				})
 				if err != nil {
 					t.Fatalf("Failed to parse certificate: %s", err)
@@ -1344,15 +1341,18 @@ func TestRevokeActiveCertificate(t *testing.T) {
 					Expect().
 					Status(http.StatusOK).JSON().Object()
 
-				obj.ContainsKey("id")
-				obj.ContainsKey("alias")
-				obj.ContainsKey("status")
 				obj.ContainsKey("slots")
-				obj.ContainsKey("description")
-				obj.ContainsKey("tags")
-				obj.ContainsKey("icon_name")
-				obj.ContainsKey("icon_color")
 				obj.ContainsKey("creation_timestamp")
+
+				obj.ContainsMap(map[string]interface{}{
+					"alias":       "Raspberry Pi",
+					"id":          "1234-5678-9012-3456",
+					"status":      api.DeviceStatusDecommissioned,
+					"description": "Raspberry Pi is a small, low-cost, and light-weight computer",
+					"tags":        []string{"raspberry-pi", "5G"},
+					"icon_color":  "#0068D1",
+					"icon_name":   "Cg/CgSmartphoneChip",
+				})
 
 			},
 		},
@@ -1397,32 +1397,14 @@ func TestGetDeviceLogs(t *testing.T) {
 				return ctx
 			},
 			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
-				resp := e.GET("/v1/device/1234-5678-9012-3456/logs").
+				resp := e.GET("/v1/devices/1234-5678-9012-3456/logs").
 					Expect().
 					Status(http.StatusOK).JSON().Object()
 
-				resp.ContainsKey("device_id")
-				resp.ContainsKey("logs")
 				resp.ContainsKey("slot_logs")
-
+				resp.ContainsKey("logs")
 				resp.ContainsMap(map[string]interface{}{
-					"device_id": []string{},
-					"name":      "My DMS Server",
-					"logs": map[string]interface{}{
-						"log_type":        api.LogTypeInfo,
-						"log_message":     "Device Created",
-						"log_description": "",
-						//"timestamp":     "RSA",
-					},
-					//SlotLogs  map[string][]Log
-					"slot_logs": map[string]interface{}{
-						"common_name":       "My DMS Server",
-						"country":           "",
-						"locality":          "",
-						"organization":      "",
-						"organization_unit": "",
-						"state":             "",
-					},
+					"device_id": "1234-5678-9012-3456",
 				})
 
 			},
@@ -1438,8 +1420,11 @@ func TestGetDeviceLogs(t *testing.T) {
 
 func runTests(t *testing.T, tc TestCase) {
 	ctx := context.Background()
-
-	serverCA, svcCA, err := testUtils.BuildCATestServer()
+	cli, err := testUtils.NewVaultSecretsMock(t)
+	if err != nil {
+		t.Errorf("%s", err)
+	}
+	serverCA, svcCA, err := testUtils.BuildCATestServer(cli)
 	if err != nil {
 		t.Fatalf("%s", err)
 	}

@@ -4,22 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 
 	"github.com/mitchellh/mapstructure"
 )
 
 func (c *Sys) ListAuth() (map[string]*AuthMount, error) {
-	return c.ListAuthWithContext(context.Background())
-}
+	r := c.c.NewRequest("GET", "/v1/sys/auth")
 
-func (c *Sys) ListAuthWithContext(ctx context.Context) (map[string]*AuthMount, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-
-	r := c.c.NewRequest(http.MethodGet, "/v1/sys/auth")
-
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -51,19 +45,14 @@ func (c *Sys) EnableAuth(path, authType, desc string) error {
 }
 
 func (c *Sys) EnableAuthWithOptions(path string, options *EnableAuthOptions) error {
-	return c.EnableAuthWithOptionsWithContext(context.Background(), path, options)
-}
-
-func (c *Sys) EnableAuthWithOptionsWithContext(ctx context.Context, path string, options *EnableAuthOptions) error {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
-	defer cancelFunc()
-
-	r := c.c.NewRequest(http.MethodPost, fmt.Sprintf("/v1/sys/auth/%s", path))
+	r := c.c.NewRequest("POST", fmt.Sprintf("/v1/sys/auth/%s", path))
 	if err := r.SetJSONBody(options); err != nil {
 		return err
 	}
 
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	defer cancelFunc()
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err != nil {
 		return err
 	}
@@ -73,16 +62,11 @@ func (c *Sys) EnableAuthWithOptionsWithContext(ctx context.Context, path string,
 }
 
 func (c *Sys) DisableAuth(path string) error {
-	return c.DisableAuthWithContext(context.Background(), path)
-}
+	r := c.c.NewRequest("DELETE", fmt.Sprintf("/v1/sys/auth/%s", path))
 
-func (c *Sys) DisableAuthWithContext(ctx context.Context, path string) error {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-
-	r := c.c.NewRequest(http.MethodDelete, fmt.Sprintf("/v1/sys/auth/%s", path))
-
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err == nil {
 		defer resp.Body.Close()
 	}

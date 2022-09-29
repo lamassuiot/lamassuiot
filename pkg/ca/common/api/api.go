@@ -49,6 +49,15 @@ func ParseCAType(t string) CAType {
 
 	return CATypePKI
 }
+func ToVaultPath(c string) string {
+	switch c {
+	case "dms_enroller":
+		return "_internal/"
+	case "pki":
+		return "_pki/"
+	}
+	return "_pki"
+}
 
 type KeyStrength string
 

@@ -1,87 +1,59 @@
 package api
 
-import (
-	"context"
-	"net/http"
-)
+import "context"
 
 func (c *Sys) SealStatus() (*SealStatusResponse, error) {
-	return c.SealStatusWithContext(context.Background())
-}
-
-func (c *Sys) SealStatusWithContext(ctx context.Context) (*SealStatusResponse, error) {
-	r := c.c.NewRequest(http.MethodGet, "/v1/sys/seal-status")
-	return sealStatusRequestWithContext(ctx, c, r)
+	r := c.c.NewRequest("GET", "/v1/sys/seal-status")
+	return sealStatusRequest(c, r)
 }
 
 func (c *Sys) Seal() error {
-	return c.SealWithContext(context.Background())
-}
+	r := c.c.NewRequest("PUT", "/v1/sys/seal")
 
-func (c *Sys) SealWithContext(ctx context.Context) error {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-
-	r := c.c.NewRequest(http.MethodPut, "/v1/sys/seal")
-
-	resp, err := c.c.rawRequestWithContext(ctx, r)
-	if err != nil {
-		return err
+	resp, err := c.c.RawRequestWithContext(ctx, r)
+	if err == nil {
+		defer resp.Body.Close()
 	}
-	defer resp.Body.Close()
-
-	return nil
+	return err
 }
 
 func (c *Sys) ResetUnsealProcess() (*SealStatusResponse, error) {
-	return c.ResetUnsealProcessWithContext(context.Background())
-}
-
-func (c *Sys) ResetUnsealProcessWithContext(ctx context.Context) (*SealStatusResponse, error) {
 	body := map[string]interface{}{"reset": true}
 
-	r := c.c.NewRequest(http.MethodPut, "/v1/sys/unseal")
+	r := c.c.NewRequest("PUT", "/v1/sys/unseal")
 	if err := r.SetJSONBody(body); err != nil {
 		return nil, err
 	}
 
-	return sealStatusRequestWithContext(ctx, c, r)
+	return sealStatusRequest(c, r)
 }
 
 func (c *Sys) Unseal(shard string) (*SealStatusResponse, error) {
-	return c.UnsealWithContext(context.Background(), shard)
-}
-
-func (c *Sys) UnsealWithContext(ctx context.Context, shard string) (*SealStatusResponse, error) {
 	body := map[string]interface{}{"key": shard}
 
-	r := c.c.NewRequest(http.MethodPut, "/v1/sys/unseal")
+	r := c.c.NewRequest("PUT", "/v1/sys/unseal")
 	if err := r.SetJSONBody(body); err != nil {
 		return nil, err
 	}
 
-	return sealStatusRequestWithContext(ctx, c, r)
+	return sealStatusRequest(c, r)
 }
 
 func (c *Sys) UnsealWithOptions(opts *UnsealOpts) (*SealStatusResponse, error) {
-	return c.UnsealWithOptionsWithContext(context.Background(), opts)
-}
-
-func (c *Sys) UnsealWithOptionsWithContext(ctx context.Context, opts *UnsealOpts) (*SealStatusResponse, error) {
-	r := c.c.NewRequest(http.MethodPut, "/v1/sys/unseal")
-
+	r := c.c.NewRequest("PUT", "/v1/sys/unseal")
 	if err := r.SetJSONBody(opts); err != nil {
 		return nil, err
 	}
 
-	return sealStatusRequestWithContext(ctx, c, r)
+	return sealStatusRequest(c, r)
 }
 
-func sealStatusRequestWithContext(ctx context.Context, c *Sys, r *Request) (*SealStatusResponse, error) {
-	ctx, cancelFunc := c.c.withConfiguredTimeout(ctx)
+func sealStatusRequest(c *Sys, r *Request) (*SealStatusResponse, error) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
 	defer cancelFunc()
-
-	resp, err := c.c.rawRequestWithContext(ctx, r)
+	resp, err := c.c.RawRequestWithContext(ctx, r)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +73,6 @@ type SealStatusResponse struct {
 	Progress     int    `json:"progress"`
 	Nonce        string `json:"nonce"`
 	Version      string `json:"version"`
-	BuildDate    string `json:"build_date"`
 	Migration    bool   `json:"migration"`
 	ClusterName  string `json:"cluster_name,omitempty"`
 	ClusterID    string `json:"cluster_id,omitempty"`

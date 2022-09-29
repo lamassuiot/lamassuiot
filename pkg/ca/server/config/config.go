@@ -9,6 +9,15 @@ type CAConfig struct {
 
 	OcspUrl string `required:"true" split_words:"true"`
 
+	VaultUnsealKeysFile string `required:"true" split_words:"true"`
+
+	VaultAddress  string `required:"true" split_words:"true"`
+	VaultRoleID   string `required:"true" split_words:"true"`
+	VaultSecretID string `required:"true" split_words:"true"`
+	VaultCA       string `split_words:"true"`
+
+	VaultPkiCaPath string `required:"true" split_words:"true"`
+
 	PostgresDatabase string `required:"true" split_words:"true"`
 	PostgresUsername string `required:"true" split_words:"true"`
 	PostgresPassword string `required:"true" split_words:"true"`

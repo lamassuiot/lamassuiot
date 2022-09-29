@@ -113,9 +113,7 @@ type LifetimeWatcherInput struct {
 
 	// The new TTL, in seconds, that should be set on the lease. The TTL set
 	// here may or may not be honored by the vault server, based on Vault
-	// configuration or any associated max TTL values. If specified, the
-	// minimum of this value and the remaining lease duration will be used
-	// for grace period calculations.
+	// configuration or any associated max TTL values.
 	Increment int
 
 	// RenewBehavior controls what happens when a renewal errors or the
@@ -259,7 +257,7 @@ func (r *LifetimeWatcher) doRenewWithOptions(tokenMode bool, nonRenewable bool, 
 
 	initialTime := time.Now()
 	priorDuration := time.Duration(initLeaseDuration) * time.Second
-	r.calculateGrace(priorDuration, time.Duration(r.increment)*time.Second)
+	r.calculateGrace(priorDuration)
 	var errorBackoff backoff.BackOff
 
 	for {
@@ -347,7 +345,7 @@ func (r *LifetimeWatcher) doRenewWithOptions(tokenMode bool, nonRenewable bool, 
 			// extending. Once it stops extending, we've hit the max and need to
 			// rely on the grace duration.
 			if remainingLeaseDuration > priorDuration {
-				r.calculateGrace(remainingLeaseDuration, time.Duration(r.increment)*time.Second)
+				r.calculateGrace(remainingLeaseDuration)
 			}
 			priorDuration = remainingLeaseDuration
 
@@ -375,21 +373,16 @@ func (r *LifetimeWatcher) doRenewWithOptions(tokenMode bool, nonRenewable bool, 
 	}
 }
 
-// calculateGrace calculates the grace period based on the minimum of the
-// remaining lease duration and the token increment value; it also adds some
-// jitter to not have clients be in sync.
-func (r *LifetimeWatcher) calculateGrace(leaseDuration, increment time.Duration) {
-	minDuration := leaseDuration
-	if minDuration > increment && increment > 0 {
-		minDuration = increment
-	}
-
-	if minDuration <= 0 {
+// calculateGrace calculates the grace period based on a reasonable set of
+// assumptions given the total lease time; it also adds some jitter to not have
+// clients be in sync.
+func (r *LifetimeWatcher) calculateGrace(leaseDuration time.Duration) {
+	if leaseDuration <= 0 {
 		r.grace = 0
 		return
 	}
 
-	leaseNanos := float64(minDuration.Nanoseconds())
+	leaseNanos := float64(leaseDuration.Nanoseconds())
 	jitterMax := 0.1 * leaseNanos
 
 	// For a given lease duration, we want to allow 80-90% of that to elapse,

@@ -5,14 +5,21 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"io"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
+	"strings"
+	"testing"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/hashicorp/go-hclog"
+	"github.com/hashicorp/vault/api"
+	"github.com/hashicorp/vault/builtin/logical/pki"
+	"github.com/hashicorp/vault/sdk/logical"
+	"github.com/hashicorp/vault/vault"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	"github.com/opentracing/opentracing-go"
@@ -23,7 +30,6 @@ import (
 	caClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	caRepository "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/repository/postgres"
 	caService "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
-	cryptoEngines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/crypto-engines"
 	caTransport "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/transport"
 
 	dmsClient "github.com/lamassuiot/lamassuiot/pkg/dms-manager/client"
@@ -38,6 +44,8 @@ import (
 
 	estTransport "github.com/lamassuiot/lamassuiot/pkg/est/server/api/transport"
 
+	vaultapi "github.com/hashicorp/vault/api"
+	vaulthttp "github.com/hashicorp/vault/http"
 	ocspService "github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/service"
 	ocspTransport "github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/transport"
 
@@ -47,7 +55,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/config"
 )
 
-func BuildCATestServer() (*httptest.Server, *caService.Service, error) {
+func BuildCATestServer(vaultclient *api.Client) (*httptest.Server, *caService.Service, error) {
 	var logger log.Logger
 
 	logger = log.NewNopLogger()
@@ -65,10 +73,15 @@ func BuildCATestServer() (*httptest.Server, *caService.Service, error) {
 
 	certificateRepository := caRepository.NewPostgresDB(db, logger)
 	tracer := opentracing.NoopTracer{}
+	/*os.RemoveAll("/tmp/tests")
 	os.Mkdir("/tmp/tests", 0755)
-	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, "/tmp/tests")
+	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, "/tmp/tests")*/
 	var svc caService.Service
-	svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test")
+	svc, err = caService.NewVaultSecretsWithClient(vaultclient, "", "pki/lamassu/dev/", "", "", "", "", "http://ocsp.test", certificateRepository, logger)
+	if err != nil {
+		return nil, nil, err
+	}
+	//svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test")
 	//svc = caService.LoggingMiddleware(logger)(svc)
 
 	handler := caTransport.MakeHTTPHandler(svc, logger, tracer)
@@ -168,7 +181,6 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 	if err != nil {
 		return nil, nil, err
 	}
-
 	statsRepo, err := deviceStatsRepository.NewStatisticsDBInMemory()
 	if err != nil {
 		return nil, nil, err
@@ -245,6 +257,7 @@ func BuildOCSPTestServer(CATestServer *httptest.Server) (*httptest.Server, error
 
 	return server, nil
 }
+<<<<<<< HEAD
 
 func BuildMailTestServer(jsonTemplate string, smtpConfig outputchannels.SMTPOutputService) (*httptest.Server, error) {
 
@@ -271,10 +284,60 @@ func BuildMailTestServer(jsonTemplate string, smtpConfig outputchannels.SMTPOutp
 		os.Exit(1)
 	}
 
+=======
+func NewVaultSecretsMock(t *testing.T) (*api.Client, error) {
+	t.Helper()
+
+	appLogger := hclog.New(&hclog.LoggerOptions{
+		Name: "my-app",
+		// Level:  hclog.LevelFromString("DEBUG"),
+		Output: io.Discard,
+	})
+
+	coreConfig := &vault.CoreConfig{
+		Logger: appLogger,
+		LogicalBackends: map[string]logical.Factory{
+			"pki": pki.Factory,
+		},
+	}
+
+	core, keyShares, rootToken := vault.TestCoreUnsealedWithConfig(t, coreConfig)
+	_ = keyShares
+
+	_, addr := vaulthttp.TestServer(t, core)
+
+	conf := vaultapi.DefaultConfig()
+	conf.Address = strings.ReplaceAll(conf.Address, "https://127.0.0.1:8200", addr)
+
+	client, err := vaultapi.NewClient(conf)
+	if err != nil {
+		return nil, err
+	}
+	client.SetToken(rootToken)
+
+	//Mount CA PKI Backend
+	_, err = client.Logical().Write("sys/mounts/Lamassu-Root-CA1-RSA4096", map[string]interface{}{
+		"type": "pki",
+		"config": map[string]interface{}{
+			"max_lease_ttl": "262800h",
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
 
+	//Setup CA Role
+	_, err = client.Logical().Write("Lamassu-Root-CA1-RSA4096/roles/enroller", map[string]interface{}{
+		"allow_any_name": true,
+		"max_ttl":        "262800h",
+		"key_type":       "any",
+	})
+>>>>>>> vaultService
+	if err != nil {
+		return nil, err
+	}
+
+<<<<<<< HEAD
 	mailRepo := alertsRepository.NewPostgresDB(db, logger)
 
 	var svc alertsService.Service
@@ -289,4 +352,21 @@ func BuildMailTestServer(jsonTemplate string, smtpConfig outputchannels.SMTPOutp
 	server := httptest.NewUnstartedServer(mux)
 
 	return server, nil
+=======
+	//Setup CA internal root certificate
+	_, err = client.Logical().Write("Lamassu-Root-CA1-RSA4096/root/generate/internal", map[string]interface{}{
+		"common_name":  "LKS Next Root CA 1",
+		"key_type":     "rsa",
+		"key_bits":     "4096",
+		"organization": "LKS Next S. Coop",
+		"country":      "ES",
+		"ttl":          "262800h",
+		"province":     "Gipuzkoa",
+		"locality":     "Arrasate",
+	})
+	if err != nil {
+		return nil, err
+	}
+	return client, err
+>>>>>>> vaultService
 }
