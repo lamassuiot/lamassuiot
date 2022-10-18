@@ -166,7 +166,7 @@ func TestCreateDMS(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s", err)
 			}
-			serverCA, _, err := testUtils.BuildCATestServer(cli)
+			serverCA, _, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -296,7 +296,7 @@ func TestCreateDMSWithCertificateRequest(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s", err)
 			}
-			serverCA, _, err := testUtils.BuildCATestServer(cli)
+			serverCA, _, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -666,7 +666,7 @@ func TestUpdateDMSStatus(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s", err)
 			}
-			serverCA, _, err := testUtils.BuildCATestServer(cli)
+			serverCA, _, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -859,7 +859,7 @@ func TestUpdateDMSAuthorizedCAs(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s", err)
 			}
-			serverCA, _, err := testUtils.BuildCATestServer(cli)
+			serverCA, _, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -1198,7 +1198,7 @@ func TestGetDMS(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s", err)
 			}
-			serverCA, _, err := testUtils.BuildCATestServer(cli)
+			serverCA, _, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -1318,7 +1318,7 @@ func TestGetDMSs(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s", err)
 			}
-			serverCA, _, err := testUtils.BuildCATestServer(cli)
+			serverCA, _, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}

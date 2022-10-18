@@ -10,19 +10,21 @@ import (
 	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/service"
+	devApi "github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 type Endpoints struct {
-	HealthEndpoint                       endpoint.Endpoint
-	GetCloudConnectorsEndpoint           endpoint.Endpoint
-	GetDeviceConfigurationEndpoint       endpoint.Endpoint
-	SynchronizedCAEndpoint               endpoint.Endpoint
-	UpdateConnectorConfigurationEndpoint endpoint.Endpoint
-	UpdateDeviceCertStatusEndpoint       endpoint.Endpoint
-	EventHandlerEndpoint                 endpoint.Endpoint
-	UpdateCAStatusEndpoint               endpoint.Endpoint
+	HealthEndpoint                                   endpoint.Endpoint
+	GetCloudConnectorsEndpoint                       endpoint.Endpoint
+	GetDeviceConfigurationEndpoint                   endpoint.Endpoint
+	SynchronizedCAEndpoint                           endpoint.Endpoint
+	UpdateConnectorConfigurationEndpoint             endpoint.Endpoint
+	UpdateDeviceCertStatusEndpoint                   endpoint.Endpoint
+	EventHandlerEndpoint                             endpoint.Endpoint
+	UpdateCAStatusEndpoint                           endpoint.Endpoint
+	UpdateDeviceDigitalTwinReenrolmentStatusEndpoint endpoint.Endpoint
 }
 
 func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
@@ -66,6 +68,11 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 	{
 		getDeviceConfigurationEndpoint = MakeGetDeviceConfigurationEndpoint(s)
 		getDeviceConfigurationEndpoint = opentracing.TraceServer(otTracer, "GetDeviceConfigurationEndpoint")(getDeviceConfigurationEndpoint)
+	}
+	var updateDeviceDigitalTwinReenrolmentStatusEndpoint endpoint.Endpoint
+	{
+		updateDeviceDigitalTwinReenrolmentStatusEndpoint = MakeUpdateDeviceDigitalTwinReenrolmentStatusEndpoint(s)
+		updateDeviceDigitalTwinReenrolmentStatusEndpoint = opentracing.TraceServer(otTracer, "UpdateDeviceDigitalTwinReenrolmentStatusEndpoint")(updateDeviceDigitalTwinReenrolmentStatusEndpoint)
 	}
 
 	return Endpoints{
@@ -133,6 +140,13 @@ func MakeUpdateCAStatusEndpoint(s service.Service) endpoint.Endpoint {
 		return output, err
 	}
 }
+func MakeUpdateDeviceDigitalTwinReenrolmentStatusEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.UpdateDeviceDigitalTwinReenrolmentStatusInput)
+		output, err := s.UpdateDeviceDigitalTwinReenrolmentStatus(ctx, &input)
+		return output, err
+	}
+}
 
 func MakeEventHandlerEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
@@ -166,6 +180,26 @@ func MakeEventHandlerEndpoint(s service.Service) endpoint.Endpoint {
 			json.Unmarshal(event.Data(), &data)
 			_, err := s.HandleUpdateCertificateStatusEvent(ctx, &api.HandleUpdateCertificateStatusEventInput{
 				Certificate: data.CertificateSerialized.Deserialize(),
+			})
+			return nil, err
+		case "io.lamassuiot.device.forceReenroll":
+			var data devApi.ForceReenrollOutputSerialized
+			json.Unmarshal(event.Data(), &data)
+			_, err := s.HandleForceReenrollEvent(ctx, &api.HandleForceReenrollEventInput{
+				DeviceID:      data.Deserialize().DeviceID,
+				SlotID:        data.Deserialize().SlotID,
+				ForceReenroll: data.Deserialize().ForceReenroll,
+				Crt:           data.Deserialize().Crt,
+			})
+			return nil, err
+		case "io.lamassuiot.device.reenroll":
+			var data devApi.ForceReenrollOutputSerialized
+			json.Unmarshal(event.Data(), &data)
+			_, err := s.HandleForceReenrollEvent(ctx, &api.HandleForceReenrollEventInput{
+				DeviceID:      data.Deserialize().DeviceID,
+				SlotID:        data.Deserialize().SlotID,
+				ForceReenroll: data.Deserialize().ForceReenroll,
+				Crt:           data.Deserialize().Crt,
 			})
 			return nil, err
 		}

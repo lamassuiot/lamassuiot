@@ -1,5 +1,12 @@
 package lamassudevmanager
 
+import (
+	"context"
+
+	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
+	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
+)
+
 // import (
 // 	"context"
 // 	"crypto/x509"
@@ -9,45 +16,45 @@ package lamassudevmanager
 // 	clientFilters "github.com/lamassuiot/lamassuiot/pkg/utils/client/filters"
 // 	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 
-// 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
 // 	lamassuEstClient "github.com/lamassuiot/lamassuiot/pkg/est/client"
 // )
 
-// type LamassuDeviceManagerClient interface {
-// 	CreateDevice(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
-// 	UpdateDeviceById(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
-// 	GetDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error)
-// 	GetDeviceById(ctx context.Context, deviceId string) (dto.Device, error)
-// 	GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) (dto.GetDevicesResponse, error)
-// 	DeleteDevice(ctx context.Context, id string) error
-// 	RevokeDeviceCert(ctx context.Context, id string, revocationReason string) error
-// 	GetDeviceLogs(ctx context.Context, id string) (dto.GetLogsResponse, error)
-// 	GetDeviceCert(ctx context.Context, id string) (dto.DeviceCert, error)
-// 	GetDeviceCertHistory(ctx context.Context, id string) ([]dto.DeviceCertHistory, error)
-// 	GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSCertHistory, error)
-// 	GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) (dto.GetLastIssuedCertResponse, error)
+type LamassuDeviceManagerClient interface {
+	// 	CreateDevice(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
+	// 	UpdateDeviceById(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
+	// 	GetDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error)
+	GetDeviceById(ctx context.Context, deviceId string) (*api.GetDeviceByIdOutput, error)
+	// 	GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) (dto.GetDevicesResponse, error)
+	// 	DeleteDevice(ctx context.Context, id string) error
+	// 	RevokeDeviceCert(ctx context.Context, id string, revocationReason string) error
+	// 	GetDeviceLogs(ctx context.Context, id string) (dto.GetLogsResponse, error)
+	// 	GetDeviceCert(ctx context.Context, id string) (dto.DeviceCert, error)
+	// 	GetDeviceCertHistory(ctx context.Context, id string) ([]dto.DeviceCertHistory, error)
+	// 	GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSCertHistory, error)
+	// 	GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) (dto.GetLastIssuedCertResponse, error)
 
-// 	//EST Endpoints
-// 	CACerts(ctx context.Context, aps string, clientCert *x509.Certificate, clientKey []byte, serverCert *x509.CertPool, estServerAddr string) ([]*x509.Certificate, error)
-// 	Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string, clientCert *x509.Certificate, clientKey []byte, serverCert *x509.CertPool, estServerAddr string) (dto.Enroll, error)
-// 	Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string, clientCert *x509.Certificate, clientKey []byte, serverCert *x509.CertPool, estServerAddr string) (dto.Enroll, error)
-// 	ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string, clientCert *x509.Certificate, clientKey []byte, serverCert *x509.CertPool, estServerAddr string) (dto.ServerKeyGen, error)
-// }
+	// //EST Endpoints
+	// CACerts(ctx context.Context, aps string, clientCert *x509.Certificate, clientKey []byte, serverCert *x509.CertPool, estServerAddr string) ([]*x509.Certificate, error)
+	// Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string, clientCert *x509.Certificate, clientKey []byte, serverCert *x509.CertPool, estServerAddr string) (dto.Enroll, error)
+	// Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string, clientCert *x509.Certificate, clientKey []byte, serverCert *x509.CertPool, estServerAddr string) (dto.Enroll, error)
+	// ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string, clientCert *x509.Certificate, clientKey []byte, serverCert *x509.CertPool, estServerAddr string) (dto.ServerKeyGen, error)
+}
 
-// type LamassuDeviceManagerClientConfig struct {
-// 	client clientUtils.BaseClient
-// }
+type LamassuDeviceManagerClientConfig struct {
+	client clientUtils.BaseClient
+}
 
-// func NewLamassuDeviceManagerClient(config clientUtils.ClientConfiguration) (LamassuDeviceManagerClient, error) {
-// 	baseClient, err := clientUtils.NewBaseClient(config)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+func NewLamassuDeviceManagerClient(config clientUtils.BaseClientConfigurationuration) (LamassuDeviceManagerClient, error) {
+	baseClient, err := clientUtils.NewBaseClient(config)
+	if err != nil {
+		return nil, err
+	}
 
-// 	return &LamassuDeviceManagerClientConfig{
-// 		client: baseClient,
-// 	}, nil
-// }
+	return &LamassuDeviceManagerClientConfig{
+		client: baseClient,
+	}, nil
+}
+
 // func (c *LamassuDeviceManagerClientConfig) CreateDevice(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error) {
 // 	body := dto.CreateDeviceRequest{
 // 		DeviceID:    deviceID,
@@ -114,30 +121,30 @@ package lamassudevmanager
 // 	jsonString, _ := json.Marshal(respBody)
 // 	json.Unmarshal(jsonString, &resp)
 
-// 	var devices []dto.Device
-// 	for _, item := range resp.Devices {
-// 		device := dto.Device{}
-// 		jsonString, _ := json.Marshal(item)
-// 		json.Unmarshal(jsonString, &device)
-// 		devices = append(devices, device)
-// 	}
-// 	return devices, len(devices), nil
-// }
-// func (c *LamassuDeviceManagerClientConfig) GetDeviceById(ctx context.Context, deviceId string) (dto.Device, error) {
-// 	req, err := c.client.NewRequest(ctx, "GET", "v1/devices/"+deviceId, nil)
-// 	if err != nil {
-// 		return dto.Device{}, err
-// 	}
-// 	respBody, _, err := c.client.Do(req)
-// 	if err != nil {
-// 		return dto.Device{}, err
-// 	}
-// 	var device dto.Device
-// 	jsonString, _ := json.Marshal(respBody)
-// 	json.Unmarshal(jsonString, &device)
+//		var devices []dto.Device
+//		for _, item := range resp.Devices {
+//			device := dto.Device{}
+//			jsonString, _ := json.Marshal(item)
+//			json.Unmarshal(jsonString, &device)
+//			devices = append(devices, device)
+//		}
+//		return devices, len(devices), nil
+//	}
+func (c *LamassuDeviceManagerClientConfig) GetDeviceById(ctx context.Context, deviceId string) (*api.GetDeviceByIdOutput, error) {
+	req, err := c.client.NewRequest(ctx, "GET", "v1/devices/"+deviceId, nil)
+	if err != nil {
+		return &api.GetDeviceByIdOutput{}, err
+	}
+	var output api.GetDeviceByIdOutputSerialized
+	_, err = c.client.Do(req, &output)
+	if err != nil {
+		return &api.GetDeviceByIdOutput{}, err
+	}
+	deserialized := output.Deserialize()
 
-// 	return device, nil
-// }
+	return &deserialized, nil
+}
+
 // func (c *LamassuDeviceManagerClientConfig) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) (dto.GetDevicesResponse, error) {
 // 	var newParams string
 // 	req, err := c.client.NewRequest(ctx, "GET", "v1/devices/dms/"+dmsId, nil)

@@ -249,9 +249,9 @@ func (v *VaultSecrets) Stats(ctx context.Context, input *api.GetStatsInput) (*ap
 }
 
 func (v *VaultSecrets) CreateCA(ctx context.Context, input *api.CreateCAInput) (*api.CreateCAOutput, error) {
-	if input.KeyMetadata.KeyType == "RSA" {
+	if input.KeyMetadata.KeyType == api.RSA {
 		input.KeyMetadata.KeyType = "rsa"
-	} else if input.KeyMetadata.KeyType == "EC" {
+	} else if input.KeyMetadata.KeyType == api.ECDSA {
 		input.KeyMetadata.KeyType = "ec"
 	}
 	err := v.initPkiSecret(ctx, input.CAType, input.Subject.CommonName, fmt.Sprint(input.IssuanceDuration.Hours()))

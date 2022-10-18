@@ -27,6 +27,7 @@ type Service interface {
 	HandleCreateCAEvent(ctx context.Context, input *api.HandleCreateCAEventInput) (*api.HandleCreateCAEventOutput, error)
 	HandleUpdateCAStatusEvent(ctx context.Context, input *api.HandleUpdateCAStatusEventInput) (*api.HandleUpdateCAStatusEventOutput, error)
 	HandleUpdateCertificateStatusEvent(ctx context.Context, input *api.HandleUpdateCertificateStatusEventInput) (*api.HandleUpdateCertificateStatusEventOutput, error)
+	HandleForceReenrollEvent(ctx context.Context, input *api.HandleForceReenrollEventInput) (*api.HandleForceReenrollEventOutput, error)
 	HandleReenrollEvent(ctx context.Context, input *api.HandleReenrollEventInput) (*api.HandleReenrollEventOutput, error)
 	UpdateDeviceCertificateStatus(ctx context.Context, input *api.UpdateDeviceCertificateStatusInput) (*api.UpdateDeviceCertificateStatusOutput, error)
 	UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (*api.UpdateCAStatusOutput, error)
@@ -441,4 +442,29 @@ func (cps *CloudProxyService) newCloudPriverClient(protocol string, ip string, p
 	}
 
 	return cloudProviderClient.NewCloudProviderClient(config)
+}
+func (cps *CloudProxyService) HandleForceReenrollEvent(ctx context.Context, input *api.HandleForceReenrollEventInput) (*api.HandleForceReenrollEventOutput, error) {
+	connectorsOutput, err := cps.GetCloudConnectors(ctx, &api.GetCloudConnectorsInput{})
+	if err != nil {
+		return &api.HandleForceReenrollEventOutput{}, err
+	}
+
+	for _, connector := range connectorsOutput.CloudConnectors {
+		for _, syncCA := range connector.SynchronizedCAs {
+			if syncCA.ConsistencyStatus != api.ConsistencyStatusDisabled && syncCA.CAName == input.Crt.Issuer.CommonName {
+				fmt.Println(fmt.Sprintf("	[%s](%s) %s  --->  %s:%d", connector.Status, connector.CloudProvider, connector.ID, connector.IP, connector.Port))
+				cps.UpdateDeviceDigitalTwinReenrolmentStatus(ctx, &api.UpdateDeviceDigitalTwinReenrolmentStatusInput{
+					ConnectorID:   connector.ID,
+					DeviceID:      input.Crt.Subject.CommonName,
+					SlotID:        input.SlotID,
+					ForceReenroll: true,
+				})
+				if err != nil {
+					level.Debug(cps.Logger).Log("err", err)
+					continue
+				}
+			}
+		}
+	}
+	return &api.HandleForceReenrollEventOutput{}, nil
 }

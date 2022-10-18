@@ -180,6 +180,22 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		),
 	)
 
+	r.Methods("PUT").Path("/devices/{deviceID}/slots/{slotID}").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.ForceReenrollEndpoint,
+					decodeForceReenrollRequest,
+					encodeForceReenrollResponse,
+					append(
+						options,
+					)...,
+				),
+				"RotateDeviceCertificate",
+			),
+		),
+	)
+
 	r.Methods("GET").Path("/devices/{deviceID}/logs").Handler(
 		serverUtils.InjectTracingToContext(
 			otelhttp.NewHandler(
@@ -408,6 +424,38 @@ func encodeRevokeActiveCertificateResponse(ctx context.Context, w http.ResponseW
 		return nil
 	}
 	castedResponse := response.(*api.RevokeActiveCertificateOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func decodeForceReenrollRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	type ForceReenrollPayload struct {
+		ForceReenroll bool `json:"require_reenrollment"`
+	}
+	var body ForceReenrollPayload
+
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+	vars := mux.Vars(r)
+	deviceID := vars["deviceID"]
+	slotID := vars["slotID"]
+
+	return api.ForceReenrollInput{
+		DeviceID:      deviceID,
+		SlotID:        slotID,
+		ForceReenroll: body.ForceReenroll,
+	}, nil
+}
+func encodeForceReenrollResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+	castedResponse := response.(*api.ForceReenrollOtput)
 	serializedResponse := castedResponse.Serialize()
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

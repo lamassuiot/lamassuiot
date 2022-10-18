@@ -1,6 +1,7 @@
 package api
 
 import (
+	"strings"
 	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
@@ -17,6 +18,27 @@ type Subscription struct {
 	SubscriptionDate time.Time
 	Conditions       []string
 	Channel          Channel
+	ConditionType    ConditionType
+	ExpectedValue    string
+}
+
+type ConditionType string
+
+const (
+	JSONSchema ConditionType = "json_schema"
+	JSONPath   ConditionType = "json_path"
+)
+
+func ParseConditionType(s string) ConditionType {
+	s = strings.ToLower(s)
+	switch s {
+	case "json_schema":
+		return JSONSchema
+	case "json_path":
+		return JSONPath
+	default:
+		return JSONSchema
+	}
 }
 
 type ChannelType string
@@ -57,10 +79,11 @@ type ChannelCreation struct {
 }
 
 type SubscribeEventInput struct {
-	EventType  string
-	Conditions []string
-	Channel    ChannelCreation
-	UserID     string
+	EventType     string
+	Conditions    []string
+	Channel       ChannelCreation
+	UserID        string
+	ConditionType ConditionType
 }
 
 type SubscribeEventOutput struct {

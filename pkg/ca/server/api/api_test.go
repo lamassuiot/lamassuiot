@@ -201,7 +201,7 @@ func TestCreateCA(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s", err)
 			}
-			server, svc, err := testUtils.BuildCATestServer(cli)
+			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -506,7 +506,7 @@ func TestGetCAByName(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s", err)
 			}
-			server, svc, err := testUtils.BuildCATestServer(cli)
+			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -943,7 +943,7 @@ func TestGetCAs(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s", err)
 			}
-			server, svc, err := testUtils.BuildCATestServer(cli)
+			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -1176,7 +1176,7 @@ func TestRevokeCA(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s", err)
 			}
-			server, svc, err := testUtils.BuildCATestServer(cli)
+			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -1406,7 +1406,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s", err)
 			}
-			server, svc, err := testUtils.BuildCATestServer(cli)
+			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -1570,7 +1570,7 @@ func TestRevokeCertificate(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s", err)
 			}
-			server, svc, err := testUtils.BuildCATestServer(cli)
+			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -1786,7 +1786,7 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s", err)
 			}
-			server, svc, err := testUtils.BuildCATestServer(cli)
+			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -2099,7 +2099,7 @@ func TestGetCertificates(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s", err)
 			}
-			server, svc, err := testUtils.BuildCATestServer(cli)
+			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -2205,7 +2205,7 @@ func TestStats(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s", err)
 			}
-			server, svc, err := testUtils.BuildCATestServer(cli)
+			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -2244,7 +2244,7 @@ func TestHealth(t *testing.T) {
 			if err != nil {
 				t.Errorf("%s", err)
 			}
-			server, svc, err := testUtils.BuildCATestServer(cli)
+			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}

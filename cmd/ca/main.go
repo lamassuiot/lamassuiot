@@ -10,6 +10,7 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
+	cryptoengines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/crypto-engines"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/transport"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/config"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
@@ -26,29 +27,8 @@ func main() {
 	config := config.NewCAConfig()
 	mainServer := server.NewServer(config)
 
-	/*var engine service.CryptoEngine
-	switch config.Engine {
-	case "pkcs11":
-		hsmEngine, err := cryptoengines.NewHSMPEngine(mainServer.Logger, config.Pkcs11Driver, config.Pkcs11Label, config.Pkcs11Pin)
-		if err != nil {
-			level.Error(mainServer.Logger).Log("msg", "Could not initialize HSM engine", "err", err)
-			os.Exit(1)
-		}
-		engine = hsmEngine
-	case "gopem":
-		gopemEngine, err := cryptoengines.NewGolangPEMEngine(mainServer.Logger, config.GopemData)
-		if err != nil {
-			level.Error(mainServer.Logger).Log("msg", "Could not initialize Golang PEM engine", "err", err)
-			os.Exit(1)
-		}
-		engine = gopemEngine
-	default:
-		level.Error(mainServer.Logger).Log("msg", "Engine not supported")
-		os.Exit(1)
-	}
-
-	level.Info(mainServer.Logger).Log("msg", "Engine initialized")
-	level.Info(mainServer.Logger).Log("msg", fmt.Sprintf("Engine options: %v", engine.GetEngineConfig()))*/
+	var engine service.CryptoEngine
+	var s service.Service
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUsername, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
@@ -66,12 +46,41 @@ func main() {
 
 	certificateRepository := postgresRepository.NewPostgresDB(db, mainServer.Logger)
 
-	var s service.Service
-	s, err = service.NewVaultService(config.VaultAddress, config.VaultPkiCaPath, config.VaultRoleID, config.VaultSecretID, config.VaultCA, config.VaultUnsealKeysFile, config.OcspUrl, certificateRepository, mainServer.Logger)
-	if err != nil {
-		level.Error(mainServer.Logger).Log("err", err, "msg", "Could not start connection with Vault Secret Engine")
+	switch config.Engine {
+	case "pkcs11":
+		hsmEngine, err := cryptoengines.NewHSMPEngine(mainServer.Logger, config.Pkcs11Driver, config.Pkcs11Label, config.Pkcs11Pin)
+		if err != nil {
+			level.Error(mainServer.Logger).Log("msg", "Could not initialize HSM engine", "err", err)
+			os.Exit(1)
+		}
+		engine = hsmEngine
+		s = service.NewCAService(mainServer.Logger, engine, certificateRepository, config.OcspUrl)
+		level.Info(mainServer.Logger).Log("msg", "Engine initialized")
+		level.Info(mainServer.Logger).Log("msg", fmt.Sprintf("Engine options: %v", engine.GetEngineConfig()))
+
+	case "gopem":
+		gopemEngine, err := cryptoengines.NewGolangPEMEngine(mainServer.Logger, config.GopemData)
+		if err != nil {
+			level.Error(mainServer.Logger).Log("msg", "Could not initialize Golang PEM engine", "err", err)
+			os.Exit(1)
+		}
+		engine = gopemEngine
+		s = service.NewCAService(mainServer.Logger, engine, certificateRepository, config.OcspUrl)
+		level.Info(mainServer.Logger).Log("msg", "Engine initialized")
+		level.Info(mainServer.Logger).Log("msg", fmt.Sprintf("Engine options: %v", engine.GetEngineConfig()))
+
+	case "vault":
+		s, err = service.NewVaultService(config.VaultAddress, config.VaultPkiCaPath, config.VaultRoleID, config.VaultSecretID, config.VaultCA, config.VaultUnsealKeysFile, config.OcspUrl, certificateRepository, mainServer.Logger)
+		if err != nil {
+			level.Error(mainServer.Logger).Log("err", err, "msg", "Could not start connection with Vault Secret Engine")
+			os.Exit(1)
+		}
+
+	default:
+		level.Error(mainServer.Logger).Log("msg", "Engine not supported")
 		os.Exit(1)
 	}
+
 	s = service.NewAMQPMiddleware(mainServer.AmqpPublisher, mainServer.Logger)(s)
 	s = service.NewInputValudationMiddleware()(s)
 	s = service.LoggingMiddleware(mainServer.Logger)(s)

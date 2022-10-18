@@ -179,6 +179,12 @@ func decodeUnsubscribedEventRequest(ctx context.Context, r *http.Request) (reque
 	if err != nil {
 		return nil, InvalidJsonFormat()
 	}
+	if body.UserID == "" {
+		return nil, ErrMissingUserID()
+	}
+	if body.SubscriptionID == "" {
+		return nil, ErrMissingConnectorID()
+	}
 
 	input = api.UnsubscribedEventInput{
 		UserID:         body.UserID,

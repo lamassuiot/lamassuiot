@@ -9,7 +9,7 @@ import (
 
 type AlertsRepository interface {
 	GetUserSubscriptions(ctx context.Context, userID string) (api.UserSubscription, error)
-	Subscribe(ctx context.Context, userID string, channel api.Channel, conditions []string, eventType string) error
+	Subscribe(ctx context.Context, userID string, channel api.Channel, conditions []string, eventType string, conditionType api.ConditionType) error
 	Unsubscribe(ctx context.Context, userID string, subscriptionID string) error
 	GetSubscriptionsByEventType(ctx context.Context, eventType string) ([]api.Subscription, error)
 

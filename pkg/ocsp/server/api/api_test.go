@@ -253,7 +253,7 @@ func TestOCSPVerify(t *testing.T) {
 				t.Errorf("%s", err)
 			}
 			ctx := context.Background()
-			serverCA, svcCA, err := testUtils.BuildCATestServer(cli)
+			serverCA, svcCA, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Fatalf("%s", err)
 			}

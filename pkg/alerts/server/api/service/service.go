@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"strings"
 
@@ -12,8 +13,13 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/repository"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/service/outputchannels"
+	"github.com/ohler55/ojg/jp"
+	"github.com/ohler55/ojg/oj"
 	sf "github.com/sa-/slicefunk"
 	"github.com/xeipuuv/gojsonschema"
+
+	//"github.com/xeipuuv/gojsonschema"
+
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
@@ -109,6 +115,7 @@ func (s *alertsService) HandleEvent(ctx context.Context, input *api.HandleEventI
 	fullfiledSubs := []api.Subscription{}
 
 	documentLoader := gojsonschema.NewStringLoader(string(jsonData))
+	event, err := oj.ParseString(string(jsonData))
 	for _, sub := range subs {
 		//Test if event matches conditions and send
 		if len(sub.Conditions) == 0 {
@@ -116,16 +123,42 @@ func (s *alertsService) HandleEvent(ctx context.Context, input *api.HandleEventI
 			continue
 		}
 		for _, condition := range sub.Conditions {
-			schemaLoader := gojsonschema.NewStringLoader(condition)
-			result, err := gojsonschema.Validate(schemaLoader, documentLoader)
-			if err != nil {
-				continue
-			}
+			//TODO:check if JSONPath or jsonSchema
 
-			if result.Valid() {
-				fullfiledSubs = append(fullfiledSubs, sub)
+			switch sub.ConditionType {
+			case api.JSONSchema:
+				schemaLoader := gojsonschema.NewStringLoader(condition)
+				result, err := gojsonschema.Validate(schemaLoader, documentLoader)
+
+				if err != nil {
+					return nil, err
+				}
+
+				if result.Valid() {
+					fullfiledSubs = append(fullfiledSubs, sub)
+
+				}
+
+			case api.JSONPath:
+
+				json_condition, err := jp.ParseString(condition)
+				fullfiledSubs := []api.Subscription{}
+
+				if err != nil {
+					return nil, err
+				}
+				ys := json_condition.Get(event)
+				for k, v := range ys {
+					fmt.Println(k, "=>", v)
+				}
+				if err != nil {
+					return nil, err
+				} else {
+					fullfiledSubs = append(fullfiledSubs, sub)
+				}
 			}
 		}
+
 	}
 
 	for _, sub := range fullfiledSubs {
@@ -134,48 +167,50 @@ func (s *alertsService) HandleEvent(ctx context.Context, input *api.HandleEventI
 		msTeamsSvc := outputchannels.MSTeamsOutputService{}
 		msTeamsSvc.ParseEventAndSend(ctx, input.Event.Type(), "Some text", data, []api.Channel{sub.Channel})
 
-		// webhookSvc := outputchannels.WebhookOutputService{}
-		// webhookSvc.ParseEventAndSend(ctx, input.Event.Type(), "Some text", data, []api.Channel{sub.Channel})
+		webhookSvc := outputchannels.WebhookOutputService{}
+		webhookSvc.ParseEventAndSend(ctx, input.Event.Type(), "Some text", data, []api.Channel{sub.Channel})
+
 	}
 
 	return &api.HandleEventOutput{}, nil
 }
 
 func (s *alertsService) SubscribedEvent(ctx context.Context, input *api.SubscribeEventInput) (*api.SubscribeEventOutput, error) {
+
 	channel := api.Channel{
 		Type:   input.Channel.Type,
 		Name:   input.Channel.Name,
 		Config: input.Channel.Config,
 	}
-	err := s.alertsRepository.Subscribe(ctx, input.UserID, channel, input.Conditions, input.EventType)
+	err := s.alertsRepository.Subscribe(ctx, input.UserID, channel, input.Conditions, input.EventType, input.ConditionType)
 	if err != nil {
 		return &api.SubscribeEventOutput{}, err
 	}
 
 	userSub, err := s.alertsRepository.GetUserSubscriptions(ctx, input.UserID)
-	if err != nil {
-		return &api.SubscribeEventOutput{}, err
-	}
 
 	return &api.SubscribeEventOutput{
 		UserSubscription: userSub,
-	}, nil
+	}, err
 }
 
 func (s *alertsService) UnsubscribedEvent(ctx context.Context, input *api.UnsubscribedEventInput) (*api.UnsubscribedEventOutput, error) {
-	err := s.alertsRepository.Unsubscribe(ctx, input.UserID, input.SubscriptionID)
+	_, err := s.alertsRepository.GetUserSubscriptions(ctx, input.UserID)
 	if err != nil {
+		return &api.UnsubscribedEventOutput{}, err
+	}
+
+	err = s.alertsRepository.Unsubscribe(ctx, input.UserID, input.SubscriptionID)
+	if err != nil {
+
 		return &api.UnsubscribedEventOutput{}, err
 	}
 
 	userSub, err := s.alertsRepository.GetUserSubscriptions(ctx, input.UserID)
-	if err != nil {
-		return &api.UnsubscribedEventOutput{}, err
-	}
 
 	return &api.UnsubscribedEventOutput{
 		UserSubscription: userSub,
-	}, nil
+	}, err
 }
 
 func (s *alertsService) GetEventLogs(ctx context.Context, input *api.GetEventsInput) ([]cloudevents.Event, error) {

@@ -219,3 +219,19 @@ func (s *GetDeviceLogsOutput) ToSerializedLog() GetDeviceLogsOutputLogSerialized
 		DeviceLogsSerializedLog: s.DeviceLogs.ToSerializedLog(),
 	}
 }
+
+// ---------------------------------------------------------------------
+
+type ForceReenrollOtputLogSerialized struct {
+	DeviceID          string `json:"device_id"`
+	SlotID            string `json:"slot_id"`
+	ForceReenrollment bool   `json:"force_reenrollment"`
+}
+
+func (s *ForceReenrollOtput) ToSerializedLog() ForceReenrollOtputLogSerialized {
+	return ForceReenrollOtputLogSerialized{
+		DeviceID:          s.DeviceID,
+		SlotID:            s.SlotID,
+		ForceReenrollment: s.ForceReenroll,
+	}
+}

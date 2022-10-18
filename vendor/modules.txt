@@ -383,7 +383,7 @@ github.com/gophercloud/gophercloud/pagination
 # github.com/gorilla/mux v1.8.0
 ## explicit; go 1.12
 github.com/gorilla/mux
-# github.com/gorilla/websocket v1.4.2
+# github.com/gorilla/websocket v1.5.0
 ## explicit; go 1.12
 github.com/gorilla/websocket
 # github.com/hashicorp/consul/api v1.14.0
@@ -413,7 +413,7 @@ github.com/hashicorp/go-discover/provider/softlayer
 github.com/hashicorp/go-discover/provider/tencentcloud
 github.com/hashicorp/go-discover/provider/triton
 github.com/hashicorp/go-discover/provider/vsphere
-# github.com/hashicorp/go-hclog v1.2.0
+# github.com/hashicorp/go-hclog v1.2.2
 ## explicit; go 1.13
 github.com/hashicorp/go-hclog
 # github.com/hashicorp/go-immutable-radix v1.3.1
@@ -758,6 +758,13 @@ github.com/modern-go/reflect2
 # github.com/nicolai86/scaleway-sdk v1.10.2-0.20180628010248-798f60e20bb2
 ## explicit
 github.com/nicolai86/scaleway-sdk
+# github.com/ohler55/ojg v1.14.4
+## explicit; go 1.19
+github.com/ohler55/ojg
+github.com/ohler55/ojg/alt
+github.com/ohler55/ojg/gen
+github.com/ohler55/ojg/jp
+github.com/ohler55/ojg/oj
 # github.com/oklog/run v1.1.0
 ## explicit; go 1.13
 github.com/oklog/run

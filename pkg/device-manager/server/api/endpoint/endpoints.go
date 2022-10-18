@@ -25,6 +25,7 @@ type Endpoints struct {
 	GetDevicesEndpoint              endpoint.Endpoint
 	GetDeviceByIdEndpoint           endpoint.Endpoint
 	RevokeActiveCertificateEndpoint endpoint.Endpoint
+	ForceReenrollEndpoint           endpoint.Endpoint
 	GetDeviceLogsEndpoint           endpoint.Endpoint
 	HandleCACloudEvent              endpoint.Endpoint
 }
@@ -80,6 +81,11 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 		handleCACloudEvent = MakeHandleCACloudEvent(s)
 		handleCACloudEvent = opentracing.TraceServer(otTracer, "HandleCACloudEvent")(handleCACloudEvent)
 	}
+	var forceReenrollEndpoint endpoint.Endpoint
+	{
+		forceReenrollEndpoint = MakeForceReenrollEnpoint(s)
+		forceReenrollEndpoint = opentracing.TraceServer(otTracer, "ForceReenroll")(forceReenrollEndpoint)
+	}
 
 	return Endpoints{
 		HealthEndpoint:                  healthEndpoint,
@@ -92,6 +98,7 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 		RevokeActiveCertificateEndpoint: revokeActiveCertificateEndpoint,
 		GetDeviceLogsEndpoint:           getDeviceLogsEndpoint,
 		HandleCACloudEvent:              handleCACloudEvent,
+		ForceReenrollEndpoint:           forceReenrollEndpoint,
 	}
 }
 
@@ -354,6 +361,31 @@ func MakeHandleCACloudEvent(s service.Service) endpoint.Endpoint {
 		default:
 			return nil, nil
 		}
+	}
+}
+
+func ValidateForceReenrollRequest(request api.ForceReenrollInput) error {
+	ForceReenrollInputStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.ForceReenrollInput)
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(ForceReenrollInputStructLevelValidation, api.ForceReenrollInput{})
+	return validate.Struct(request)
+}
+func MakeForceReenrollEnpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.ForceReenrollInput)
+
+		err = ValidateForceReenrollRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		out, err := s.ForceReenroll(ctx, &input)
+		return out, err
 	}
 }
 

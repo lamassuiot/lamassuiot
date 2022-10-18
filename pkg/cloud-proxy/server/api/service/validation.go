@@ -167,3 +167,15 @@ func (mw *validationMiddleware) UpdateDeviceDigitalTwinReenrolmentStatus(ctx con
 	}
 	return mw.next.UpdateDeviceDigitalTwinReenrolmentStatus(ctx, input)
 }
+
+func (mw *validationMiddleware) HandleForceReenrollEvent(ctx context.Context, input *api.HandleForceReenrollEventInput) (*api.HandleForceReenrollEventOutput, error) {
+	validate := validator.New()
+	err := validate.Struct(input)
+	if err != nil {
+		valError := errors.ValidationError{
+			Msg: err.Error(),
+		}
+		return nil, &valError
+	}
+	return mw.next.HandleForceReenrollEvent(ctx, input)
+}

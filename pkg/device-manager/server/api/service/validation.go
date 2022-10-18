@@ -182,6 +182,18 @@ func (mw *validationMiddleware) IsDMSAuthorizedToEnroll(ctx context.Context, inp
 	return mw.next.IsDMSAuthorizedToEnroll(ctx, input)
 }
 
+func (mw *validationMiddleware) ForceReenroll(ctx context.Context, input *api.ForceReenrollInput) (*api.ForceReenrollOtput, error) {
+	validate := validator.New()
+	err := validate.Struct(input)
+	if err != nil {
+		valError := errors.ValidationError{
+			Msg: err.Error(),
+		}
+		return nil, &valError
+	}
+	return mw.next.ForceReenroll(ctx, input)
+}
+
 func (mw *validationMiddleware) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
 	return mw.next.CACerts(ctx, aps)
 }

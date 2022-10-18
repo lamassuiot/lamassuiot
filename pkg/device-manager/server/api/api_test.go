@@ -1420,7 +1420,7 @@ func runTests(t *testing.T, tc TestCase) {
 	if err != nil {
 		t.Errorf("%s", err)
 	}
-	serverCA, svcCA, err := testUtils.BuildCATestServer(cli)
+	serverCA, svcCA, err := testUtils.BuildCATestServerWithVault(cli)
 	if err != nil {
 		t.Fatalf("%s", err)
 	}

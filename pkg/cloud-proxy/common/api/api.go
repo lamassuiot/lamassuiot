@@ -186,3 +186,15 @@ type UpdateDeviceDigitalTwinReenrolmentStatusInput struct {
 
 type UpdateDeviceDigitalTwinReenrolmentStatusOutput struct {
 }
+
+// ---------------------------------------------------
+
+type HandleForceReenrollEventInput struct {
+	DeviceID      string
+	SlotID        string
+	ForceReenroll bool
+	Crt           *x509.Certificate
+}
+
+type HandleForceReenrollEventOutput struct {
+}

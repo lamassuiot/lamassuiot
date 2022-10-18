@@ -23,6 +23,7 @@ type SubscriptionDAO struct {
 	Channel          ChannelDAO     `gorm:"foreignKey:SubscriptionID"`
 	Conditions       pq.StringArray `gorm:"type:text[]"`
 	SubscriptionDate time.Time
+	ConditionType    api.ConditionType
 }
 
 type ChannelDAO struct {
@@ -92,10 +93,16 @@ type PostgresDBContext struct {
 
 func (db PostgresDBContext) GetUserSubscriptions(ctx context.Context, userID string) (api.UserSubscription, error) {
 	var susbscriptions []SubscriptionDAO
-	if err := db.WithContext(ctx).Model(&SubscriptionDAO{}).Where("user_id= ? ", userID).Preload("Channel").Find(&susbscriptions).Error; err != nil {
-		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain subscribers from database")
-		return api.UserSubscription{}, err
+
+	if err := db.WithContext(ctx).Model(&SubscriptionDAO{}).Where("user_id = ?", userID).First(&susbscriptions).Error; err != nil {
+		notFoundErr := &alerterrors.ResourceNotFoundError{
+			ResourceType: "User",
+			ResourceId:   userID,
+		}
+		return api.UserSubscription{}, notFoundErr
 	}
+
+	db.WithContext(ctx).Model(&SubscriptionDAO{}).Where("user_id= ? ", userID).Preload("Channel").Find(&susbscriptions)
 
 	userSubs := api.UserSubscription{
 		Subscriptions: []api.Subscription{},
@@ -109,13 +116,14 @@ func (db PostgresDBContext) GetUserSubscriptions(ctx context.Context, userID str
 			UserID:           v.UserID,
 			Channel:          v.Channel.toChannel(),
 			Conditions:       v.Conditions,
+			ConditionType:    v.ConditionType,
 		})
 	}
 
 	return userSubs, nil
 }
 
-func (db PostgresDBContext) Subscribe(ctx context.Context, userID string, channel api.Channel, conditions []string, eventType string) error {
+func (db PostgresDBContext) Subscribe(ctx context.Context, userID string, channel api.Channel, conditions []string, eventType string, conditionType api.ConditionType) error {
 	configBytes, err := json.Marshal(channel.Config)
 	if err != nil {
 		return err
@@ -133,6 +141,7 @@ func (db PostgresDBContext) Subscribe(ctx context.Context, userID string, channe
 		Event:            eventType,
 		SubscriptionDate: time.Now(),
 		Conditions:       conditions,
+		ConditionType:    conditionType,
 	}).Error; err != nil {
 		level.Debug(db.logger).Log("msg", "Could not create subscription", "err", err)
 		return err
@@ -144,7 +153,12 @@ func (db PostgresDBContext) Subscribe(ctx context.Context, userID string, channe
 func (db PostgresDBContext) Unsubscribe(ctx context.Context, userID string, subscriptionID string) error {
 	var sub SubscriptionDAO
 	if err := db.WithContext(ctx).Model(&SubscriptionDAO{}).Where("user_id= ? ", userID).Where("id= ? ", subscriptionID).Preload("Channel").Find(&sub).Error; err != nil {
-		return err
+		level.Debug(db.logger).Log("msg", "Could not obtain User from database")
+		notFoundErr := &alerterrors.ResourceNotFoundError{
+			ResourceType: "UserID",
+			ResourceId:   userID,
+		}
+		return notFoundErr
 	}
 
 	err := db.DeleteChannel(ctx, sub.Channel.ID)
@@ -175,6 +189,7 @@ func (db PostgresDBContext) GetSubscriptionsByEventType(ctx context.Context, eve
 			UserID:           v.UserID,
 			Channel:          v.Channel.toChannel(),
 			Conditions:       v.Conditions,
+			ConditionType:    v.ConditionType,
 		})
 	}
 
@@ -188,7 +203,11 @@ func (db PostgresDBContext) CreateChannel(ctx context.Context, id string, channe
 		Config: config,
 	}).Error; err != nil {
 		level.Debug(db.logger).Log("msg", "Could not create channel", "err", err)
-		return err
+		duplicateErr := &alerterrors.DuplicateResourceError{
+			ResourceType: "Channel",
+			ResourceId:   id,
+		}
+		return duplicateErr
 	}
 
 	return nil
@@ -197,7 +216,11 @@ func (db PostgresDBContext) CreateChannel(ctx context.Context, id string, channe
 func (db PostgresDBContext) DeleteChannel(ctx context.Context, id string) error {
 	if err := db.WithContext(ctx).Where("id = ?", id).Delete(&ChannelDAO{}).Error; err != nil {
 		level.Debug(db.logger).Log("msg", "Could not delte channel", "err", err)
-		return err
+		notFoundErr := &alerterrors.ResourceNotFoundError{
+			ResourceType: "Channel",
+			ResourceId:   id,
+		}
+		return notFoundErr
 	}
 
 	return nil
@@ -248,7 +271,7 @@ func (db PostgresDBContext) SelectEventLogs(ctx context.Context) ([]cloudevents.
 	var logEventsDAO []LogEventDAO
 	tx := db.WithContext(ctx).Model(&LogEventDAO{})
 	if err := tx.Find(&logEventsDAO).Error; err != nil {
-		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain subscribers from database")
+		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain logs from database")
 		return []cloudevents.Event{}, err
 	}
 

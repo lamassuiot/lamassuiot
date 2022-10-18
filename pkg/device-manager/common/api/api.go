@@ -313,3 +313,18 @@ type IsDMSAuthorizedToEnrollInput struct {
 type IsDMSAuthorizedToEnrollOutput struct {
 	IsAuthorized bool
 }
+
+// ---------------------------------------------------------------------
+
+type ForceReenrollInput struct {
+	DeviceID      string `validate:"required"`
+	SlotID        string `validate:"required"`
+	ForceReenroll bool
+}
+
+type ForceReenrollOtput struct {
+	DeviceID      string
+	SlotID        string
+	ForceReenroll bool
+	Crt           *x509.Certificate
+}

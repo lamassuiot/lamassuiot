@@ -474,3 +474,41 @@ func (s *GetDeviceLogsOutputSerialized) Deserialize() GetDeviceLogsOutput {
 		DeviceLogs: s.DeviceLogsSerialized.Deserialize(),
 	}
 }
+
+// ---------------------------------------------------------------------
+
+type ForceReenrollSerialized struct {
+	DeviceID      string `json:"device_id"`
+	SlotID        string `json:"slot_id"`
+	ForceReenroll bool   `json:"require_reenrollment"`
+	Certificate   string `json:"crt"`
+}
+type ForceReenrollOutputSerialized struct {
+	ForceReenrollSerialized
+}
+
+func (s *ForceReenrollOtput) Serialize() ForceReenrollSerialized {
+	crt := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: s.Crt.Raw})
+	encodedCrt := base64.StdEncoding.EncodeToString(crt)
+	return ForceReenrollSerialized{
+		DeviceID:      s.DeviceID,
+		SlotID:        s.SlotID,
+		ForceReenroll: s.ForceReenroll,
+		Certificate:   encodedCrt,
+	}
+}
+
+func (s *ForceReenrollSerialized) Deserialize() ForceReenrollOtput {
+	crt, _ := base64.StdEncoding.DecodeString(s.Certificate)
+	block, _ := pem.Decode(crt)
+	certificate, _ := x509.ParseCertificate(block.Bytes)
+
+	return ForceReenrollOtput{
+		DeviceID:      s.DeviceID,
+		SlotID:        s.SlotID,
+		ForceReenroll: s.ForceReenroll,
+		Crt:           certificate,
+	}
+}
+
+// ---------------------------------------------------------------------

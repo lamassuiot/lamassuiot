@@ -30,9 +30,11 @@ import (
 
 	alertsRepository "github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/repository/postgres"
 	alertsService "github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/service"
+
 	caClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	caRepository "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/repository/postgres"
 	caService "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
+	cryptoEngines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/crypto-engines"
 	caTransport "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/transport"
 
 	dmsClient "github.com/lamassuiot/lamassuiot/pkg/dms-manager/client"
@@ -58,7 +60,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/config"
 )
 
-func BuildCATestServer(vaultclient *api.Client) (*httptest.Server, *caService.Service, error) {
+func BuildCATestServerWithVault(vaultclient *api.Client) (*httptest.Server, *caService.Service, error) {
 	var logger log.Logger
 
 	logger = log.NewNopLogger()
@@ -76,16 +78,46 @@ func BuildCATestServer(vaultclient *api.Client) (*httptest.Server, *caService.Se
 
 	certificateRepository := caRepository.NewPostgresDB(db, logger)
 	tracer := opentracing.NoopTracer{}
-	/*os.RemoveAll("/tmp/tests")
-	os.Mkdir("/tmp/tests", 0755)
-	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, "/tmp/tests")*/
 	var svc caService.Service
 	svc, err = caService.NewVaultSecretsWithClient(vaultclient, "", "pki/lamassu/dev/", "", "", "", "", "http://ocsp.test", certificateRepository, logger)
 	if err != nil {
 		return nil, nil, err
 	}
-	//svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test")
-	//svc = caService.LoggingMiddleware(logger)(svc)
+
+	handler := caTransport.MakeHTTPHandler(svc, logger, tracer)
+
+	mux := http.NewServeMux()
+	mux.Handle("/v1/", http.StripPrefix("/v1", handler))
+	server := httptest.NewUnstartedServer(mux)
+
+	return server, &svc, nil
+}
+
+func BuildCATestServer() (*httptest.Server, *caService.Service, error) {
+	var logger log.Logger
+
+	logger = log.NewNopLogger()
+	logger = level.NewFilter(logger, level.AllowDebug())
+	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
+	logger = log.With(logger, "caller", log.DefaultCaller)
+
+	dialector := sqlite.Open("")
+	db, err := gorm.Open(dialector, &gorm.Config{
+		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	certificateRepository := caRepository.NewPostgresDB(db, logger)
+	tracer := opentracing.NoopTracer{}
+
+	os.RemoveAll("/tmp/tests")
+	os.Mkdir("/tmp/tests", 0755)
+	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, "/tmp/tests")
+	var svc caService.Service
+	svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test")
+	// svc = caService.LoggingMiddleware(logger)(svc)
 
 	handler := caTransport.MakeHTTPHandler(svc, logger, tracer)
 
@@ -261,7 +293,7 @@ func BuildOCSPTestServer(CATestServer *httptest.Server) (*httptest.Server, error
 	return server, nil
 }
 
-func BuildMailTestServer(jsonTemplate string, smtpConfig outputchannels.SMTPOutputService) (*httptest.Server, error) {
+func BuildMailTestServer(jsonTemplate string, smtpConfig outputchannels.SMTPOutputService) (*httptest.Server, *alertsService.Service, error) {
 
 	var logger log.Logger
 
@@ -287,7 +319,7 @@ func BuildMailTestServer(jsonTemplate string, smtpConfig outputchannels.SMTPOutp
 	}
 
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	mailRepo := alertsRepository.NewPostgresDB(db, logger)
@@ -295,7 +327,7 @@ func BuildMailTestServer(jsonTemplate string, smtpConfig outputchannels.SMTPOutp
 	var svc alertsService.Service
 	svc, err = service.NewAlertsService(logger, mailRepo, jsonTemplate, smtpConfig)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	handler := alertsTransport.MakeHTTPHandler(svc, logger, tracer)
 
@@ -303,7 +335,7 @@ func BuildMailTestServer(jsonTemplate string, smtpConfig outputchannels.SMTPOutp
 	mux.Handle("/", handler)
 	server := httptest.NewUnstartedServer(mux)
 
-	return server, nil
+	return server, &svc, nil
 }
 
 func NewVaultSecretsMock(t *testing.T) (*api.Client, error) {

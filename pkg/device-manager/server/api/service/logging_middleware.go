@@ -43,9 +43,7 @@ func (mw loggingMiddleware) GetStats(ctx context.Context, input *api.GetStatsInp
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.Serialize())
-			}
+			logMsg = append(logMsg, "output", output.Serialize())
 		} else {
 			logMsg = append(logMsg, "err", err)
 		}
@@ -61,9 +59,7 @@ func (mw loggingMiddleware) CreateDevice(ctx context.Context, input *api.CreateD
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			logMsg = append(logMsg, "output", output.ToSerializedLog())
 		} else {
 			logMsg = append(logMsg, "err", err)
 		}
@@ -98,10 +94,7 @@ func (mw loggingMiddleware) DecommisionDevice(ctx context.Context, input *api.De
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "device_id", output.ID)
-				logMsg = append(logMsg, "status", output.Status)
-			}
+			logMsg = append(logMsg, "device_id", output.ToSerializedLog())
 		} else {
 			logMsg = append(logMsg, "err", err)
 		}
@@ -117,9 +110,7 @@ func (mw loggingMiddleware) GetDevices(ctx context.Context, input *api.GetDevice
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			logMsg = append(logMsg, "output", output.ToSerializedLog())
 		} else {
 			logMsg = append(logMsg, "err", err)
 		}
@@ -135,9 +126,7 @@ func (mw loggingMiddleware) GetDeviceById(ctx context.Context, input *api.GetDev
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			logMsg = append(logMsg, "output", output.ToSerializedLog())
 		} else {
 			logMsg = append(logMsg, "err", err)
 		}
@@ -165,9 +154,7 @@ func (mw loggingMiddleware) AddDeviceSlot(ctx context.Context, input *api.AddDev
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			logMsg = append(logMsg, "output", output.ToSerializedLog())
 		} else {
 			logMsg = append(logMsg, "err", err)
 		}
@@ -183,9 +170,7 @@ func (mw loggingMiddleware) UpdateActiveCertificateStatus(ctx context.Context, i
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			logMsg = append(logMsg, "output", output.ToSerializedLog())
 		} else {
 			logMsg = append(logMsg, "err", err)
 		}
@@ -201,9 +186,7 @@ func (mw loggingMiddleware) RotateActiveCertificate(ctx context.Context, input *
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			logMsg = append(logMsg, "output", output.ToSerializedLog())
 		} else {
 			logMsg = append(logMsg, "err", err)
 		}
@@ -219,9 +202,7 @@ func (mw loggingMiddleware) RevokeActiveCertificate(ctx context.Context, input *
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			logMsg = append(logMsg, "output", output.ToSerializedLog())
 		} else {
 			logMsg = append(logMsg, "err", err)
 		}
@@ -237,9 +218,7 @@ func (mw loggingMiddleware) GetDeviceLogs(ctx context.Context, input *api.GetDev
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			logMsg = append(logMsg, "output", output.ToSerializedLog())
 		} else {
 			logMsg = append(logMsg, "err", err)
 		}
@@ -341,9 +320,11 @@ func (mw loggingMiddleware) ForceReenroll(ctx context.Context, input *api.ForceR
 		var logMsg = []interface{}{}
 		logMsg = append(logMsg, "method", "ForceReenroll")
 		logMsg = append(logMsg, "took", time.Since(begin))
-
-		logMsg = append(logMsg, "err", err)
-
+		if err == nil {
+			logMsg = append(logMsg, "output", output.ToSerializedLog())
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
 		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.ForceReenroll(ctx, input)

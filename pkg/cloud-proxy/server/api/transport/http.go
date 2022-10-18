@@ -151,6 +151,22 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 		),
 	)
 
+	r.Methods("PUT").Path("/connectors/{connectorID}/devices/{deviceID}/digital-twin").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.UpdateDeviceDigitalTwinReenrolmentStatusEndpoint,
+					decodeUpdateDeviceDigitalTwinReenrolmentStatusRequest,
+					encodeUpdateDeviceDigitalTwinReenrolmentStatusResponse,
+					append(
+						options,
+					)...,
+				),
+				"UpdateDeviceCertStatus",
+			),
+		),
+	)
+
 	r.Methods("PUT").Path("/connectors/{connectorID}/ca/{caName}").Handler(
 		serverUtils.InjectTracingToContext(
 			otelhttp.NewHandler(
@@ -337,6 +353,44 @@ func encodeUpdateDeviceCertStatusResponse(ctx context.Context, w http.ResponseWr
 	}
 
 	castedResponse := response.(*api.UpdateDeviceCertificateStatusOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func decodeUpdateDeviceDigitalTwinReenrolmentStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	connectorID := vars["connectorID"]
+	deviceID := vars["deviceID"]
+
+	type UpdateDeviceCertificateStatusPayload struct {
+		ForceReenroll bool   `json:"force_reenroll"`
+		SlotID        string `json:"slot_id"`
+	}
+
+	var body UpdateDeviceCertificateStatusPayload
+
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+
+	return api.UpdateDeviceDigitalTwinReenrolmentStatusInput{
+		ConnectorID:   connectorID,
+		DeviceID:      deviceID,
+		SlotID:        body.SlotID,
+		ForceReenroll: body.ForceReenroll,
+	}, nil
+}
+
+func encodeUpdateDeviceDigitalTwinReenrolmentStatusResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.UpdateDeviceDigitalTwinReenrolmentStatusOutput)
 	serializedResponse := castedResponse.Serialize()
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
