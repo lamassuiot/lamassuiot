@@ -2,14 +2,10 @@ package service
 
 import (
 	"context"
-	"crypto/x509"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
-	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
-	"github.com/opentracing/opentracing-go"
-
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
+	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 )
 
 type Middleware func(Service) Service
@@ -28,157 +24,270 @@ type loggingMiddleware struct {
 	logger log.Logger
 }
 
-func (mw loggingMiddleware) GetSecretProviderName(ctx context.Context) (providerName string) {
-
-	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "GetSecretProviderName",
-			"took", time.Since(begin),
-			"provider_name", providerName,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
-	}(time.Now())
-	return mw.next.GetSecretProviderName(ctx)
-}
-
-func (mw loggingMiddleware) Stats(ctx context.Context) (stats dto.Stats) {
-	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "Stats",
-			"took", time.Since(begin),
-			"stats", stats,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
-	}(time.Now())
-	return mw.next.Stats(ctx)
-}
-
-func (mw loggingMiddleware) Health(ctx context.Context) (healthy bool) {
+func (mw loggingMiddleware) Health() bool {
 	defer func(begin time.Time) {
 		mw.logger.Log(
 			"method", "Health",
 			"took", time.Since(begin),
-			"healthy", healthy,
-			"trace_id", opentracing.SpanFromContext(ctx),
 		)
 	}(time.Now())
-	return mw.next.Health(ctx)
+	return mw.next.Health()
 }
 
-func (mw loggingMiddleware) GetCAs(ctx context.Context, caType dto.CAType, queryparameters filters.QueryParameters) (CAs []dto.Cert, total int, err error) {
+func (mw loggingMiddleware) GetEngineProviderInfo() (output api.EngineProviderInfo) {
 	defer func(begin time.Time) {
 		mw.logger.Log(
-			"method", "GetCAs",
-			"number_cas", len(CAs),
-			"ca_type", caType,
+			"method", "GetEngineProviderInfo",
+			"output", output,
 			"took", time.Since(begin),
-			"err", err,
-			"trace_id", opentracing.SpanFromContext(ctx),
 		)
 	}(time.Now())
-	return mw.next.GetCAs(ctx, caType, queryparameters)
+	return mw.next.GetEngineProviderInfo()
 }
 
-func (mw loggingMiddleware) CreateCA(ctx context.Context, caType dto.CAType, caName string, privateKeyMetadata dto.PrivateKeyMetadata, subject dto.Subject, caTTL int, enrollerTTL int) (cretedCa dto.Cert, err error) {
+func (mw loggingMiddleware) Stats(ctx context.Context, input *api.GetStatsInput) (output *api.GetStatsOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "CreateCA",
-			"ca_name", caName,
-			"ca_type", caType,
-			"private_key_metadata", privateKeyMetadata,
-			"subject", subject,
-			"ca_ttl", caTTL,
-			"enroller_ttl", enrollerTTL,
-			"creted_ca", cretedCa,
-			"err", err,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "Stats")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			if output != nil {
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
+			}
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
 	}(time.Now())
-	return mw.next.CreateCA(ctx, caType, caName, privateKeyMetadata, subject, caTTL, enrollerTTL)
+	return mw.next.Stats(ctx, input)
 }
 
-func (mw loggingMiddleware) ImportCA(ctx context.Context, caType dto.CAType, caName string, certificate x509.Certificate, privateKey dto.PrivateKey, enrollerTTL int) (cretedCa dto.Cert, err error) {
+func (mw loggingMiddleware) CreateCA(ctx context.Context, input *api.CreateCAInput) (output *api.CreateCAOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "ImportCA",
-			"ca_name", caName,
-			"ca_type", caType,
-			"imported_certificate_SerialNumber", certificate.SerialNumber.String(),
-			"creted_ca", cretedCa,
-			"trace_id", opentracing.SpanFromContext(ctx),
-			"err", err,
-		)
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "CreateCA")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			if output != nil {
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
+			}
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
 	}(time.Now())
-	return mw.next.ImportCA(ctx, caType, caName, certificate, privateKey, enrollerTTL)
+	return mw.next.CreateCA(ctx, input)
 }
 
-func (mw loggingMiddleware) DeleteCA(ctx context.Context, caType dto.CAType, CA string) (err error) {
+func (mw loggingMiddleware) GetCAs(ctx context.Context, input *api.GetCAsInput) (output *api.GetCAsOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "DeleteCA",
-			"ca_name", CA,
-			"ca_type", caType,
-			"took", time.Since(begin),
-			"trace_id", opentracing.SpanFromContext(ctx),
-			"err", err,
-		)
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "GetCAs")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			if output != nil {
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
+			}
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
 	}(time.Now())
-	return mw.next.DeleteCA(ctx, caType, CA)
+	return mw.next.GetCAs(ctx, input)
 }
 
-func (mw loggingMiddleware) GetIssuedCerts(ctx context.Context, caType dto.CAType, CA string, queryParameters filters.QueryParameters) (certs []dto.Cert, length int, err error) {
+func (mw loggingMiddleware) GetCAByName(ctx context.Context, input *api.GetCAByNameInput) (output *api.GetCAByNameOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "GetIssuedCerts",
-			"ca_name", CA,
-			"number_issued_certs", len(certs),
-			"took", time.Since(begin),
-			"trace_id", opentracing.SpanFromContext(ctx),
-			"err", err,
-		)
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "GetCAByName")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			if output != nil {
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
+			}
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
 	}(time.Now())
-	return mw.next.GetIssuedCerts(ctx, caType, CA, queryParameters)
-}
-func (mw loggingMiddleware) GetCert(ctx context.Context, caType dto.CAType, caName string, serialNumber string) (cert dto.Cert, err error) {
-	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "GetCert",
-			"ca_name", caName,
-			"serialNumber", serialNumber,
-			"cert_CommonName", cert.Subject.CommonName,
-			"took", time.Since(begin),
-			"trace_id", opentracing.SpanFromContext(ctx),
-			"err", err,
-		)
-	}(time.Now())
-	return mw.next.GetCert(ctx, caType, caName, serialNumber)
+	return mw.next.GetCAByName(ctx, input)
 }
 
-func (mw loggingMiddleware) DeleteCert(ctx context.Context, caType dto.CAType, caName string, serialNumber string) (err error) {
+func (mw loggingMiddleware) RevokeCA(ctx context.Context, input *api.RevokeCAInput) (output *api.RevokeCAOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "DeleteCert",
-			"ca_name", caName,
-			"serialNumber", serialNumber,
-			"took", time.Since(begin),
-			"trace_id", opentracing.SpanFromContext(ctx),
-			"err", err,
-		)
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "RevokeCA")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			if output != nil {
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
+			}
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
 	}(time.Now())
-	return mw.next.DeleteCert(ctx, caType, caName, serialNumber)
+	return mw.next.RevokeCA(ctx, input)
 }
 
-func (mw loggingMiddleware) SignCertificate(ctx context.Context, caType dto.CAType, caName string, csr x509.CertificateRequest, signVerbatim bool, cn string) (certs dto.SignResponse, err error) {
+func (mw loggingMiddleware) UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (output *api.UpdateCAStatusOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "SignCertificate",
-			"ca_name", caName,
-			"ca_type", caType,
-			"csr_common_name", csr.Subject.CommonName,
-			"took", time.Since(begin),
-			"trace_id", opentracing.SpanFromContext(ctx),
-			"err", err,
-		)
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "UpdateCAStatus")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			if output != nil {
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
+			}
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
 	}(time.Now())
-	return mw.next.SignCertificate(ctx, caType, caName, csr, signVerbatim, cn)
+	return mw.next.UpdateCAStatus(ctx, input)
+}
+
+func (mw loggingMiddleware) IterateCAsWithPredicate(ctx context.Context, input *api.IterateCAsWithPredicateInput) (output *api.IterateCAsWithPredicateOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "IterateCAsWithPredicate")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			logMsg = append(logMsg, "output", output)
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
+	}(time.Now())
+	return mw.next.IterateCAsWithPredicate(ctx, input)
+}
+func (mw loggingMiddleware) SignCertificateRequest(ctx context.Context, input *api.SignCertificateRequestInput) (output *api.SignCertificateRequestOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "SignCertificateRequest")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			if output != nil {
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
+			}
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
+	}(time.Now())
+	return mw.next.SignCertificateRequest(ctx, input)
+}
+
+func (mw loggingMiddleware) UpdateCertificateStatus(ctx context.Context, input *api.UpdateCertificateStatusInput) (output *api.UpdateCertificateStatusOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "UpdateCertificateStatus")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			if output != nil {
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
+			}
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
+	}(time.Now())
+	return mw.next.UpdateCertificateStatus(ctx, input)
+}
+
+func (mw loggingMiddleware) RevokeCertificate(ctx context.Context, input *api.RevokeCertificateInput) (output *api.RevokeCertificateOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "RevokeCertificate")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			if output != nil {
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
+			}
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
+	}(time.Now())
+	return mw.next.RevokeCertificate(ctx, input)
+}
+
+func (mw loggingMiddleware) GetCertificateBySerialNumber(ctx context.Context, input *api.GetCertificateBySerialNumberInput) (output *api.GetCertificateBySerialNumberOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "GetCertificateBySerialNumber")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			if output != nil {
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
+			}
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
+	}(time.Now())
+	return mw.next.GetCertificateBySerialNumber(ctx, input)
+}
+
+func (mw loggingMiddleware) IterateCertificatesWithPredicate(ctx context.Context, input *api.IterateCertificatesWithPredicateInput) (output *api.IterateCertificatesWithPredicateOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "IterateCertificatesWithPredicate")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			logMsg = append(logMsg, "output", output)
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
+	}(time.Now())
+	return mw.next.IterateCertificatesWithPredicate(ctx, input)
+}
+
+func (mw loggingMiddleware) GetCertificates(ctx context.Context, input *api.GetCertificatesInput) (output *api.GetCertificatesOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "GetCertificates")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			if output != nil {
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
+			}
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
+	}(time.Now())
+	return mw.next.GetCertificates(ctx, input)
+}
+
+func (mw loggingMiddleware) CheckAndUpdateCACertificateStatus(ctx context.Context, input *api.CheckAndUpdateCACertificateStatusInput) (output *api.CheckAndUpdateCACertificateStatusOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "CheckAndUpdateCACertificateStatus")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			if output != nil {
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
+			}
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
+	}(time.Now())
+	return mw.next.CheckAndUpdateCACertificateStatus(ctx, input)
 }

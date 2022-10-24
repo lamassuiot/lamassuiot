@@ -1,33 +1,46 @@
 package filters
 
 import (
-	"strconv"
-	"strings"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/common/types"
+	"gorm.io/gorm"
 )
 
-func ApplySQLFilter(sqlStatement string, queryParameters QueryParameters) string {
-	if len(queryParameters.Filters) > 0 {
-		if !strings.Contains(strings.ToLower(sqlStatement), "where") {
-			sqlStatement = sqlStatement + " WHERE 1=1 "
+func ApplyQueryParametersFilters(db *gorm.DB, queryParameters common.QueryParameters) *gorm.DB {
+	db = ApplyFilters(db, queryParameters.Filters)
+	db = ApplySort(db, queryParameters.Sort)
+	db = ApplyPagination(db, queryParameters.Pagination)
+	return db
+}
+
+func ApplyFilters(db *gorm.DB, filters []types.Filter) *gorm.DB {
+	if len(filters) > 0 {
+		for _, f := range filters {
+			sqlFilter := f.ToSQL()
+			if sqlFilter != "" {
+				db = db.Where(sqlFilter)
+			}
 		}
+	}
+	return db
+}
 
-		for _, f := range queryParameters.Filters {
-			sqlStatement = sqlStatement + " AND " + f.ToSQL()
+func ApplyPagination(db *gorm.DB, pagination common.PaginationOptions) *gorm.DB {
+	if pagination.Limit > 0 {
+		db = db.Limit(pagination.Limit)
+	}
+
+	if pagination.Offset > 0 {
+		db = db.Offset(pagination.Offset)
+	}
+	return db
+}
+
+func ApplySort(db *gorm.DB, sortOptions common.SortOptions) *gorm.DB {
+	if sortOptions.SortField != "" {
+		if sortOptions.SortMode == common.SortModeAsc || sortOptions.SortMode == common.SortModeDesc {
+			db = db.Order(sortOptions.SortField + " " + string(sortOptions.SortMode))
 		}
 	}
-
-	if queryParameters.Sort.SortField != "" {
-		if strings.ToUpper(queryParameters.Sort.SortMode) == "ASC" || strings.ToUpper(queryParameters.Sort.SortMode) == "DESC" {
-			sqlStatement = sqlStatement + "ORDER BY " + queryParameters.Sort.SortField + " " + strings.ToUpper(queryParameters.Sort.SortMode)
-		}
-	}
-
-	if queryParameters.Pagination.Limit > 0 {
-		sqlStatement = sqlStatement + " LIMIT " + strconv.Itoa(queryParameters.Pagination.Limit)
-	}
-
-	if queryParameters.Pagination.Offset > 0 {
-		sqlStatement = sqlStatement + " OFFSET " + strconv.Itoa(queryParameters.Pagination.Offset)
-	}
-	return sqlStatement
+	return db
 }

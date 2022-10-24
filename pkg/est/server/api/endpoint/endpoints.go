@@ -2,6 +2,7 @@ package endpoint
 
 import (
 	"context"
+	"crypto/rsa"
 	"crypto/x509"
 
 	"github.com/go-kit/kit/endpoint"
@@ -20,7 +21,7 @@ type Endpoints struct {
 	ServerKeyGenEndpoint endpoint.Endpoint
 }
 
-func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
+func MakeServerEndpoints(s service.ESTService, otTracer stdopentracing.Tracer) Endpoints {
 	var healthEndpoint endpoint.Endpoint
 	{
 		healthEndpoint = MakeHealthEndpoint(s)
@@ -58,21 +59,21 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 	}
 }
 
-func MakeHealthEndpoint(s service.Service) endpoint.Endpoint {
+func MakeHealthEndpoint(s service.ESTService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		healthy := s.Health(ctx)
 		return HealthResponse{Healthy: healthy}, nil
 	}
 }
 
-func MakeGetCAsEndpoint(s service.Service) endpoint.Endpoint {
+func MakeGetCAsEndpoint(s service.ESTService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		cas, err := s.CACerts(ctx, "")
 		return GetCasResponse{Certs: cas}, err
 	}
 }
 
-func MakeEnrollEndpoint(s service.Service) endpoint.Endpoint {
+func MakeEnrollEndpoint(s service.ESTService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(EnrollRequest)
 		err = ValidatetEnrollRequest(req)
@@ -82,12 +83,12 @@ func MakeEnrollEndpoint(s service.Service) endpoint.Endpoint {
 			}
 			return nil, &valError
 		}
-		crt, err := s.Enroll(ctx, req.Csr, req.Aps, req.Crt)
+		crt, err := s.Enroll(ctx, req.Csr, req.Crt, req.Aps)
 		return EnrollReenrollResponse{Cert: crt}, err
 	}
 }
 
-func MakeReenrollEndpoint(s service.Service) endpoint.Endpoint {
+func MakeReenrollEndpoint(s service.ESTService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(ReenrollRequest)
 		err = ValidatetReenrollRequest(req)
@@ -97,12 +98,12 @@ func MakeReenrollEndpoint(s service.Service) endpoint.Endpoint {
 			}
 			return nil, &valError
 		}
-		crt, err := s.Reenroll(ctx, req.Crt, req.Csr, "")
+		crt, err := s.Reenroll(ctx, req.Csr, req.Crt)
 		return EnrollReenrollResponse{Cert: crt}, err
 	}
 }
 
-func MakeServerKeyGenEndpoint(s service.Service) endpoint.Endpoint {
+func MakeServerKeyGenEndpoint(s service.ESTService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		req := request.(ServerKeyGenRequest)
 		err = ValidateServerKeyGenRequest(req)
@@ -112,7 +113,7 @@ func MakeServerKeyGenEndpoint(s service.Service) endpoint.Endpoint {
 			}
 			return nil, &valError
 		}
-		crt, key, err := s.ServerKeyGen(ctx, req.Csr, req.Aps, req.Crt)
+		crt, key, err := s.ServerKeyGen(ctx, req.Csr, req.Crt, req.Aps)
 		return ServerKeyGenResponse{Cert: crt, Key: key}, err
 	}
 }
@@ -165,6 +166,6 @@ type EnrollReenrollResponse struct {
 }
 type ServerKeyGenResponse struct {
 	Cert   *x509.Certificate
-	Key    []byte
+	Key    *rsa.PrivateKey
 	CaCert *x509.Certificate
 }

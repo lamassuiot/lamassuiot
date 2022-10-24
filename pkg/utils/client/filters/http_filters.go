@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
 )
 
-func GenerateHttpQueryParams(queryParameters filters.QueryParameters) string {
+func GenerateHttpQueryParams(queryParameters common.QueryParameters) string {
 	urlQueryParams := ""
 	addeddQueryParam := false
 	if queryParameters.Sort.SortField != "" && queryParameters.Sort.SortMode != "" {

@@ -3,511 +3,900 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/asn1"
-	"sync"
+	"errors"
+	"fmt"
+	"reflect"
+	"strings"
 	"time"
 
 	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
-	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
-	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
-
-	caDTO "github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
-	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
-	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/device"
-	devicesModel "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/device"
-	devicesStore "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/models/device/store"
+	"github.com/go-kit/log/level"
+	caClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
+	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
+	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
+	deviceErrors "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
+	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/repository"
+	dmsManagerClient "github.com/lamassuiot/lamassuiot/pkg/dms-manager/client"
+	dmsManagerApi "github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
+	estErrors "github.com/lamassuiot/lamassuiot/pkg/est/server/api/errors"
+	estserver "github.com/lamassuiot/lamassuiot/pkg/est/server/api/service"
+	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
+	"github.com/lib/pq"
+	"golang.org/x/exp/slices"
 )
 
 type Service interface {
+	estserver.ESTService
 	Health(ctx context.Context) bool
-	Stats(ctx context.Context) (dto.Stats, time.Time)
-	PostDevice(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
-	UpdateDeviceById(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
-	GetDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error)
-	GetDeviceById(ctx context.Context, deviceId string) (dto.Device, error)
-	GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) ([]dto.Device, int, error)
-	DeleteDevice(ctx context.Context, id string) error
-	RevokeDeviceCert(ctx context.Context, id string, revocationReason string) error
+	GetStats(ctx context.Context, input *api.GetStatsInput) (*api.GetStatsOutput, error)
 
-	GetDeviceLogs(ctx context.Context, id string, queryparameters filters.QueryParameters) ([]dto.DeviceLog, int, error)
-	GetDeviceCert(ctx context.Context, id string) (dto.DeviceCert, error)
-	GetDeviceCertHistory(ctx context.Context, id string) ([]dto.DeviceCertHistory, error)
-	GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSCertHistory, error)
-	GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSLastIssued, int, error)
+	CreateDevice(ctx context.Context, input *api.CreateDeviceInput) (*api.CreateDeviceOutput, error)
+	UpdateDeviceMetadata(ctx context.Context, input *api.UpdateDeviceMetadataInput) (*api.UpdateDeviceMetadataOutput, error)
+	DecommisionDevice(ctx context.Context, input *api.DecommisionDeviceInput) (*api.DecommisionDeviceOutput, error)
+	GetDevices(ctx context.Context, input *api.GetDevicesInput) (*api.GetDevicesOutput, error)
+	GetDeviceById(ctx context.Context, input *api.GetDeviceByIdInput) (*api.GetDeviceByIdOutput, error)
+	IterateDevicesWithPredicate(ctx context.Context, input *api.IterateDevicesWithPredicateInput) (*api.IterateDevicesWithPredicateOutput, error)
 
-	//getKeyStrength(keyType string, keyBits int) string
-	//_generateCSR(ctx context.Context, keyType string, priv interface{}, commonName string, country string, state string, locality string, org string, orgUnit string) ([]byte, error)
+	AddDeviceSlot(ctx context.Context, input *api.AddDeviceSlotInput) (*api.AddDeviceSlotOutput, error)
+	UpdateActiveCertificateStatus(ctx context.Context, input *api.UpdateActiveCertificateStatusInput) (*api.UpdateActiveCertificateStatusOutput, error)
+	RotateActiveCertificate(ctx context.Context, input *api.RotateActiveCertificateInput) (*api.RotateActiveCertificateOutput, error)
+	RevokeActiveCertificate(ctx context.Context, input *api.RevokeActiveCertificateInput) (*api.RevokeActiveCertificateOutput, error)
+	ForceReenroll(ctx context.Context, input *api.ForceReenrollInput) (*api.ForceReenrollOtput, error)
+	GetDeviceLogs(ctx context.Context, input *api.GetDeviceLogsInput) (*api.GetDeviceLogsOutput, error)
+	IsDMSAuthorizedToEnroll(ctx context.Context, input *api.IsDMSAuthorizedToEnrollInput) (*api.IsDMSAuthorizedToEnrollOutput, error)
 }
 
 type devicesService struct {
-	mtx             sync.RWMutex
-	devicesDb       devicesStore.DB
-	statsDB         devicesStore.StatsDB
-	logger          log.Logger
-	lamassuCaClient lamassucaclient.LamassuCaClient
+	devicesRepo             repository.Devices
+	logsRepo                repository.DeviceLogs
+	statsRepo               repository.Statistics
+	logger                  log.Logger
+	caClient                caClient.LamassuCAClient
+	dmsManagerClient        dmsManagerClient.LamassuDMSManagerClient
+	minimumReenrollmentDays int
 }
 
-func NewDevicesService(devicesDb devicesStore.DB, statsDB devicesStore.StatsDB, lamassuCa *lamassucaclient.LamassuCaClient, logger log.Logger) Service {
-
-	return &devicesService{
-		statsDB:         statsDB,
-		devicesDb:       devicesDb,
-		lamassuCaClient: *lamassuCa,
-		logger:          logger,
+func NewDeviceManagerService(logger log.Logger, devicesRepo repository.Devices, deviceLogsRep repository.DeviceLogs, statsRepo repository.Statistics, minimumReenrollmentDays int, caClient caClient.LamassuCAClient, dmsManagerClient dmsManagerClient.LamassuDMSManagerClient) Service {
+	svc := &devicesService{
+		devicesRepo:             devicesRepo,
+		logsRepo:                deviceLogsRep,
+		statsRepo:               statsRepo,
+		logger:                  logger,
+		caClient:                caClient,
+		dmsManagerClient:        dmsManagerClient,
+		minimumReenrollmentDays: minimumReenrollmentDays,
 	}
+
+	go func() {
+		svc.ScanDevicesAndUpdateStatistics()
+	}()
+
+	return svc
 }
 
 func (s *devicesService) Health(ctx context.Context) bool {
 	return true
 }
 
-func (s *devicesService) Stats(ctx context.Context) (dto.Stats, time.Time) {
-	stats, scanDate, err := s.statsDB.GetStats(ctx)
-	if err == nil {
-		return stats, scanDate
+func (s *devicesService) GetStats(ctx context.Context, input *api.GetStatsInput) (*api.GetStatsOutput, error) {
+	if input.ForceRefresh {
+		s.ScanDevicesAndUpdateStatistics()
 	}
-
-	stats = dto.Stats{}
-
-	limit := 1000
-	_, totalDevices, err := s.devicesDb.SelectAllDevices(ctx, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: limit, Offset: 0}})
+	stats, time, err := s.statsRepo.GetStatistics(ctx)
 	if err != nil {
-		return dto.Stats{}, time.Now()
+		return &api.GetStatsOutput{}, err
 	}
 
-	for i := 0; i <= totalDevices/limit; i++ {
-		devices, _, _ := s.devicesDb.SelectAllDevices(ctx, filters.QueryParameters{Pagination: filters.PaginationOptions{Limit: limit, Offset: i * limit}})
-		for _, device := range devices {
-			if device.Status == devicesModel.DevicePendingProvision.String() {
-				stats.PendingEnrollment = stats.PendingEnrollment + 1
-			} else if device.Status == devicesModel.DeviceCertExpired.String() {
-				stats.Expired = stats.Expired + 1
-			} else if device.Status == devicesModel.DeviceDecommisioned.String() {
-				stats.Decomissioned = stats.Decomissioned + 1
-			} else if device.Status == devicesModel.DeviceCertRevoked.String() {
-				stats.Revoked = stats.Revoked + 1
-			} else {
-				stats.Provisioned = stats.Provisioned + 1
-			}
-		}
-	}
-
-	err = s.statsDB.UpdateStats(ctx, stats)
-	if err != nil {
-		level.Debug(s.logger).Log("err", err, "msg", "Could not update stats DB")
-	}
-
-	stats, scanDate, _ = s.statsDB.GetStats(ctx)
-	return stats, scanDate
-}
-
-func (s *devicesService) PostDevice(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error) {
-	err := s.devicesDb.InsertDevice(ctx, alias, deviceID, dmsID, description, tags, iconName, iconColor)
-	if err != nil {
-		return dto.Device{}, err
-	}
-
-	log := dto.DeviceLog{
-		DeviceId:   deviceID,
-		LogType:    devicesModel.LogDeviceCreated.String(),
-		LogMessage: "",
-	}
-	err = s.devicesDb.InsertLog(ctx, log)
-	if err != nil {
-		return dto.Device{}, err
-	}
-	log = dto.DeviceLog{
-		DeviceId:   deviceID,
-		LogType:    devicesModel.LogPendingProvision.String(),
-		LogMessage: "",
-	}
-	err = s.devicesDb.InsertLog(ctx, log)
-	if err != nil {
-		return dto.Device{}, err
-	}
-
-	device, err := s.devicesDb.SelectDeviceById(ctx, deviceID)
-	if err != nil {
-		return dto.Device{}, err
-	}
-	return device, err
-}
-
-func (s *devicesService) UpdateDeviceById(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error) {
-	err := s.devicesDb.UpdateByID(ctx, alias, deviceID, dmsID, description, tags, iconName, iconColor)
-	if err != nil {
-		return dto.Device{}, err
-	}
-
-	device, err := s.devicesDb.SelectDeviceById(ctx, deviceID)
-	if err != nil {
-		return dto.Device{}, err
-	}
-	return device, err
-}
-
-func (s *devicesService) GetDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error) {
-	devices, length, err := s.devicesDb.SelectAllDevices(ctx, queryParameters)
-	if err != nil {
-		return []dto.Device{}, 0, err
-	}
-	var dev []dto.Device
-	for _, d := range devices {
-		if d.CurrentCertificate.SerialNumber != "" {
-			currentCertHistory, err := s.devicesDb.SelectDeviceCertHistoryBySerialNumber(ctx, d.CurrentCertificate.SerialNumber)
-			if err != nil {
-				return []dto.Device{}, 0, err
-			}
-
-			cert, err := s.lamassuCaClient.GetCert(ctx, caDTO.Pki, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
-			if err != nil {
-				return []dto.Device{}, 0, err
-			}
-			if cert.Status == "revoked" {
-				s.devicesDb.UpdateDeviceStatusByID(ctx, d.Id, devicesModel.DeviceCertRevoked.String())
-				log := dto.DeviceLog{
-					DeviceId:       d.Id,
-					LogMessage:     devicesModel.LogCertRevoked.String(),
-					LogDescription: "Certificate with serial number " + d.CurrentCertificate.SerialNumber + " has been revoked",
-					LogType:        "CRITICAL",
-				}
-				s.devicesDb.InsertLog(ctx, log)
-				s.devicesDb.UpdateDeviceCertificateSerialNumberByID(ctx, d.Id, "")
-				d, _ = s.devicesDb.SelectDeviceById(ctx, d.Id)
-				dev = append(dev, d)
-			} else if cert.Status == "expired" {
-				s.devicesDb.UpdateDeviceStatusByID(ctx, d.Id, devicesModel.DeviceCertExpired.String())
-				log := dto.DeviceLog{
-					DeviceId:       d.Id,
-					LogMessage:     devicesModel.LogCertRevoked.String(),
-					LogDescription: "Certificate with serial number " + d.CurrentCertificate.SerialNumber + " has expired",
-					LogType:        "CRITICAL",
-				}
-				s.devicesDb.InsertLog(ctx, log)
-				s.devicesDb.UpdateDeviceCertificateSerialNumberByID(ctx, d.Id, "")
-				d, _ = s.devicesDb.SelectDeviceById(ctx, d.Id)
-				dev = append(dev, d)
-
-			} else {
-				d.CurrentCertificate.Valid_to = cert.ValidTo
-				d.CurrentCertificate.Cert = cert.CertContent.CerificateBase64
-				dev = append(dev, d)
-			}
-
-		} else {
-			dev = append(dev, d)
-		}
-
-	}
-
-	return dev, length, nil
-}
-
-func (s *devicesService) GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) ([]dto.Device, int, error) {
-	devices, total_devices, err := s.devicesDb.SelectAllDevicesByDmsId(ctx, dmsId, queryParameters)
-	if err != nil {
-		return []dto.Device{}, 0, err
-	}
-
-	var dev []dto.Device
-	for _, d := range devices {
-		if d.CurrentCertificate.SerialNumber != "" {
-			currentCertHistory, err := s.devicesDb.SelectDeviceCertHistoryBySerialNumber(ctx, d.CurrentCertificate.SerialNumber)
-			if err != nil {
-				return []dto.Device{}, 0, err
-			}
-
-			cert, err := s.lamassuCaClient.GetCert(ctx, caDTO.Pki, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
-
-			if err != nil {
-				return []dto.Device{}, 0, err
-			}
-			d.CurrentCertificate.Valid_to = cert.ValidTo
-			d.CurrentCertificate.Cert = cert.CertContent.CerificateBase64
-			dev = append(dev, d)
-
-		} else {
-			dev = append(dev, d)
-		}
-
-	}
-
-	return dev, total_devices, nil
-}
-func (s *devicesService) GetDeviceById(ctx context.Context, deviceId string) (dto.Device, error) {
-	device, err := s.devicesDb.SelectDeviceById(ctx, deviceId)
-	if err != nil {
-		return dto.Device{}, err
-	}
-	currentCertHistory, err := s.devicesDb.SelectDeviceCertHistoryBySerialNumber(ctx, device.CurrentCertificate.SerialNumber)
-	if err == nil {
-		cert, err := s.lamassuCaClient.GetCert(ctx, caDTO.Pki, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
-
-		if err != nil {
-			return dto.Device{}, err
-		}
-		device.CurrentCertificate.Valid_to = cert.ValidTo
-		device.CurrentCertificate.Cert = cert.CertContent.CerificateBase64
-	}
-
-	return device, nil
-}
-
-func (s *devicesService) DeleteDevice(ctx context.Context, id string) error {
-	err := s.RevokeDeviceCert(ctx, id, "Revocation due to device removal")
-
-	/*
-		err := s.devicesDb.DeleteDevice(id)
-		if err != nil {
-			return err
-		}
-	*/
-	err = s.devicesDb.UpdateDeviceStatusByID(ctx, id, devicesModel.DeviceDecommisioned.String())
-	if err != nil {
-		return err
-	}
-
-	log := dto.DeviceLog{
-		DeviceId:       id,
-		LogMessage:     devicesModel.LogDeviceDecommisioned.String(),
-		LogDescription: "",
-		LogType:        "CRITICAL",
-	}
-	err = s.devicesDb.InsertLog(ctx, log)
-	if err != nil {
-		return err
-	}
-	return err
-}
-
-func (s *devicesService) RevokeDeviceCert(ctx context.Context, id string, revocationReason string) error {
-	dev, err := s.devicesDb.SelectDeviceById(ctx, id)
-	if dev.CurrentCertificate.SerialNumber == "" {
-		return err
-	}
-
-	currentCertHistory, err := s.devicesDb.SelectDeviceCertHistoryBySerialNumber(ctx, dev.CurrentCertificate.SerialNumber)
-
-	if err != nil {
-		return err
-	}
-
-	serialNumberToRevoke := currentCertHistory.SerialNumber
-
-	err = s.lamassuCaClient.RevokeCert(ctx, caDTO.Pki, currentCertHistory.IsuuerName, serialNumberToRevoke)
-	if err != nil {
-		return err
-	}
-
-	/*err = s.devicesDb.UpdateDeviceCertHistory(ctx, id, dev.CurrentCertificate.SerialNumber, devicesModel.CertHistoryRevoked)
-	if err != nil {
-		return err
-	}*/
-
-	err = s.devicesDb.UpdateDeviceStatusByID(ctx, id, devicesModel.DeviceCertRevoked.String())
-	if err != nil {
-		return err
-	}
-
-	err = s.devicesDb.UpdateDeviceCertificateSerialNumberByID(ctx, id, "")
-	if err != nil {
-		return err
-	}
-
-	log := dto.DeviceLog{
-		DeviceId:       id,
-		LogMessage:     devicesModel.LogCertRevoked.String(),
-		LogDescription: revocationReason + ". Certificate with Serial Number " + serialNumberToRevoke + " revoked.",
-		LogType:        "CRITICAL",
-	}
-	err = s.devicesDb.InsertLog(ctx, log)
-	return nil
-}
-
-func (s *devicesService) GetDeviceLogs(ctx context.Context, id string, queryparameters filters.QueryParameters) ([]dto.DeviceLog, int, error) {
-	logs, total_logs, err := s.devicesDb.SelectDeviceLogs(ctx, id, queryparameters)
-	if err != nil {
-		return []dto.DeviceLog{}, 0, err
-	}
-	return logs, total_logs, nil
-}
-
-func (s *devicesService) GetDeviceCertHistory(ctx context.Context, id string) ([]dto.DeviceCertHistory, error) {
-	history, err := s.devicesDb.SelectDeviceCertHistory(ctx, id)
-	if err != nil {
-		return []dto.DeviceCertHistory{}, err
-	}
-	certHistory := []dto.DeviceCertHistory{}
-	for _, element := range history {
-		dev, err := s.devicesDb.SelectDeviceById(ctx, id)
-		if err != nil {
-			return []dto.DeviceCertHistory{}, err
-		}
-		cert, err := s.lamassuCaClient.GetCert(ctx, caDTO.Pki, element.IsuuerName, element.SerialNumber)
-		if err != nil {
-			return []dto.DeviceCertHistory{}, err
-		}
-		if cert.RevocationTimestamp != 0 {
-			t := time.Unix(cert.RevocationTimestamp, 0)
-			element.RevocationTimestamp = t.Format("2006-01-02T15:04:05Z")
-			element.Status = cert.Status
-		} else {
-
-			if (cert.Status != device.CertHistoryExpired.String()) && dev.CreationTimestamp == dev.ModificationTimestamp {
-				element.Status = device.DevicePendingProvision.String()
-			} else {
-				element.Status = cert.Status
-			}
-		}
-		certHistory = append(certHistory, element)
-
-	}
-	return certHistory, nil
-}
-
-func (s *devicesService) GetDeviceCert(ctx context.Context, id string) (dto.DeviceCert, error) {
-	dev, err := s.devicesDb.SelectDeviceById(ctx, id)
-
-	if err != nil {
-		return dto.DeviceCert{}, err
-	}
-
-	currentCertHistory, err := s.devicesDb.SelectDeviceCertHistoryBySerialNumber(ctx, dev.CurrentCertificate.SerialNumber)
-
-	if err != nil {
-		return dto.DeviceCert{}, err
-	}
-
-	cert, err := s.lamassuCaClient.GetCert(ctx, caDTO.Pki, currentCertHistory.IsuuerName, currentCertHistory.SerialNumber)
-
-	if err != nil {
-		return dto.DeviceCert{}, err
-	}
-
-	if (cert.Status != device.CertHistoryExpired.String()) && dev.CreationTimestamp == dev.ModificationTimestamp {
-		currentCertHistory.Status = device.DevicePendingProvision.String()
-	} else {
-		currentCertHistory.Status = cert.Status
-	}
-
-	return dto.DeviceCert{
-		DeviceId:     id,
-		SerialNumber: cert.SerialNumber,
-		Status:       cert.Status,
-		CAName:       cert.Name,
-		CRT:          cert.CertContent.CerificateBase64,
-		Subject:      dto.Subject(cert.Subject),
-		ValidFrom:    cert.ValidFrom,
-		ValidTo:      cert.ValidTo,
+	return &api.GetStatsOutput{
+		DevicesManagerStats: stats,
+		ScanDate:            time,
 	}, nil
 }
 
-func (s *devicesService) GetDmsCertHistoryThirtyDays(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSCertHistory, error) {
-	devices, _, err := s.devicesDb.SelectAllDevices(ctx, queryParameters)
+func (s *devicesService) CreateDevice(ctx context.Context, input *api.CreateDeviceInput) (*api.CreateDeviceOutput, error) {
+	device := api.Device{
+		Status:      api.DeviceStatusPendingProvisioning,
+		ID:          input.DeviceID,
+		Alias:       input.Alias,
+		Description: input.Description,
+		Tags:        input.Tags,
+		IconName:    input.IconName,
+		IconColor:   input.IconColor,
+		Slots:       []*api.Slot{},
+	}
+
+	err := s.devicesRepo.InsertDevice(ctx, device)
 	if err != nil {
-		level.Debug(s.logger).Log("err", err, "msg", "Could not get devices from DB")
-		return []dto.DMSCertHistory{}, err
+		return nil, err
 	}
 
-	deviceDmsMap := make(map[string]string)
-	for i := 0; i < len(devices); i++ {
-		dev := devices[i]
-		deviceDmsMap[dev.Id] = dev.DmsId
-	}
+	s.logsRepo.InsertDeviceLog(ctx, input.DeviceID, api.LogTypeInfo, "Device Created", "")
 
-	certHistory, err := s.devicesDb.SelectDeviceCertHistoryLastThirtyDays(ctx, queryParameters)
+	output, err := s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
+		DeviceID: input.DeviceID,
+	})
 
 	if err != nil {
-		level.Debug(s.logger).Log("err", err, "msg", "Could not get last 30 days issued certs from DB")
-		return []dto.DMSCertHistory{}, err
+		return nil, err
 	}
 
-	dmsCertsMap := make(map[string]int) //dmsId -> length
+	return &api.CreateDeviceOutput{
+		Device: output.Device,
+	}, nil
+}
 
-	for i := 0; i < len(certHistory); i++ {
-		certHistory := certHistory[i]
-		devId := certHistory.DeviceId
+func (s *devicesService) UpdateDeviceMetadata(ctx context.Context, input *api.UpdateDeviceMetadataInput) (*api.UpdateDeviceMetadataOutput, error) {
+	outputGetDevice, err := s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
+		DeviceID: input.DeviceID,
+	})
 
-		j := dmsCertsMap[deviceDmsMap[devId]]
-		if j == 0 {
-			// DMS not in map. Add it
-			dmsCertsMap[deviceDmsMap[devId]] = 1
-		} else {
-			dmsCertsMap[deviceDmsMap[devId]] = dmsCertsMap[deviceDmsMap[devId]] + 1
+	if err != nil {
+		return nil, err
+	}
+
+	device := outputGetDevice.Device
+	device.Alias = input.Alias
+	device.Description = input.Description
+	device.Tags = input.Tags
+	device.IconName = input.IconName
+	device.IconColor = input.IconColor
+
+	s.devicesRepo.UpdateDevice(ctx, device)
+	outputGetDevice, err = s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
+		DeviceID: input.DeviceID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	outputDeviceMetadatada := &api.UpdateDeviceMetadataOutput{
+		Device: outputGetDevice.Device,
+	}
+	return outputDeviceMetadatada, nil
+}
+
+func (s *devicesService) DecommisionDevice(ctx context.Context, input *api.DecommisionDeviceInput) (*api.DecommisionDeviceOutput, error) {
+	outputGetDevice, err := s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
+		DeviceID: input.DeviceID,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	s.logsRepo.InsertDeviceLog(ctx, input.DeviceID, api.LogTypeInfo, "Initiating Decommission Process", "All slots will be revoked")
+
+	device := outputGetDevice.Device
+	for i, slot := range device.Slots {
+		outputRevokeSlot, err := s.RevokeActiveCertificate(ctx, &api.RevokeActiveCertificateInput{
+			DeviceID:         input.DeviceID,
+			SlotID:           slot.ID,
+			RevocationReason: "Device is being decommissioned",
+		})
+
+		if err != nil {
+			level.Debug(s.logger).Log("err", err, "msg", "Could not revoke slot "+slot.ID+" certificate for device "+input.DeviceID)
+			continue
+		}
+
+		device.Slots[i] = &outputRevokeSlot.Slot
+	}
+
+	device.Status = api.DeviceStatusDecommissioned
+
+	err = s.devicesRepo.UpdateDevice(ctx, device)
+	if err != nil {
+		return nil, err
+	}
+
+	s.logsRepo.InsertDeviceLog(ctx, input.DeviceID, api.LogTypeInfo, "Decommissioned", "Decoomission process completed")
+
+	outputGetDevice, err = s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
+		DeviceID: input.DeviceID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.DecommisionDeviceOutput{
+		Device: outputGetDevice.Device,
+	}, nil
+}
+
+func (s *devicesService) GetDevices(ctx context.Context, input *api.GetDevicesInput) (*api.GetDevicesOutput, error) {
+	totalDevices, devicesSubset, err := s.devicesRepo.SelectDevices(ctx, input.QueryParameters)
+	if err != nil {
+		return nil, err
+	}
+
+	devices := make([]api.Device, 0)
+	for _, device := range devicesSubset {
+		devices = append(devices, *device)
+	}
+
+	return &api.GetDevicesOutput{
+		TotalDevices: totalDevices,
+		Devices:      devices,
+	}, nil
+}
+
+func (s *devicesService) GetDeviceById(ctx context.Context, input *api.GetDeviceByIdInput) (*api.GetDeviceByIdOutput, error) {
+	device, err := s.devicesRepo.SelectDeviceById(ctx, input.DeviceID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.GetDeviceByIdOutput{
+		Device: *device,
+	}, nil
+}
+
+func (s *devicesService) AddDeviceSlot(ctx context.Context, input *api.AddDeviceSlotInput) (*api.AddDeviceSlotOutput, error) {
+	outputGetDevice, err := s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
+		DeviceID: input.DeviceID,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	device := outputGetDevice.Device
+
+	for _, v := range device.Slots {
+		if v.ID == input.SlotID {
+			return nil, errors.New("slot name already exists")
 		}
 	}
 
-	var dmsCerts []dto.DMSCertHistory
-	for key, value := range dmsCertsMap {
-		dmsCerts = append(dmsCerts, dto.DMSCertHistory{DmsId: key, IssuedCerts: value})
+	device.Slots = append(device.Slots, &api.Slot{
+		ID: input.SlotID,
+		ActiveCertificate: &api.Certificate{
+			CAName:       input.ActiveCertificate.Issuer.CommonName,
+			SerialNumber: utils.InsertNth(utils.ToHexInt(input.ActiveCertificate.SerialNumber), 2),
+			Certificate:  input.ActiveCertificate,
+			Status:       caApi.StatusActive,
+			RevocationTimestamp: pq.NullTime{
+				Valid: false,
+				Time:  time.Time{},
+			},
+		},
+		ArchiveCertificates: []*api.Certificate{},
+	})
+
+	if device.Status == api.DeviceStatusPendingProvisioning {
+		device.Status = api.DeviceStatusFullyProvisioned
 	}
 
-	return dmsCerts, nil
-}
-
-func (s *devicesService) GetDmsLastIssuedCert(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.DMSLastIssued, int, error) {
-	lastIssued, total_issued, err := s.devicesDb.SelectDmssLastIssuedCert(ctx, queryParameters)
+	err = s.devicesRepo.UpdateDevice(ctx, device)
 	if err != nil {
-		level.Debug(s.logger).Log("err", err, "msg", "Could not get devices from DB")
-		return []dto.DMSLastIssued{}, 0, err
+		return nil, err
 	}
-	return lastIssued, total_issued, nil
+
+	s.logsRepo.InsertSlotLog(ctx, input.DeviceID, input.SlotID, api.LogTypeInfo, "Slot Created", fmt.Sprintf("Slot uses certificate with serial number %s", utils.InsertNth(utils.ToHexInt(input.ActiveCertificate.SerialNumber), 2)))
+
+	outputGetDevice, err = s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
+		DeviceID: input.DeviceID,
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	var slot *api.Slot = nil
+	for _, s := range outputGetDevice.Device.Slots {
+		if s.ID == input.SlotID {
+			slot = s
+			break
+		}
+	}
+
+	return &api.AddDeviceSlotOutput{
+		Slot: *slot,
+	}, nil
 }
 
-func _generateCSR(ctx context.Context, keyType string, priv interface{}, commonName string, country string, state string, locality string, org string, orgUnit string) ([]byte, error) {
-	var signingAlgorithm x509.SignatureAlgorithm
-	if keyType == "EC" {
-		signingAlgorithm = x509.ECDSAWithSHA256
+func (s *devicesService) UpdateActiveCertificateStatus(ctx context.Context, input *api.UpdateActiveCertificateStatusInput) (*api.UpdateActiveCertificateStatusOutput, error) {
+	slot, err := s.devicesRepo.SelectSlotByID(ctx, input.DeviceID, input.SlotID)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if slot.ActiveCertificate == nil {
+		return nil, errors.New("no active certificate found")
+	}
+
+	if input.Status == caApi.StatusRevoked {
+		output, err := s.RevokeActiveCertificate(ctx, &api.RevokeActiveCertificateInput{
+			DeviceID:         input.DeviceID,
+			SlotID:           input.SlotID,
+			RevocationReason: input.RevocationReason,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &api.UpdateActiveCertificateStatusOutput{
+			Slot: output.Slot,
+		}, nil
+	} else if input.Status == caApi.StatusExpired {
+		slot.ActiveCertificate.Status = input.Status
+		slot.ArchiveCertificates = append(slot.ArchiveCertificates, slot.ActiveCertificate)
+		slot.ActiveCertificate = nil
 	} else {
-		signingAlgorithm = x509.SHA256WithRSA
+		slot.ActiveCertificate.Status = input.Status
+	}
 
+	err = s.devicesRepo.UpdateSlot(ctx, input.DeviceID, *slot)
+	if err != nil {
+		return nil, err
 	}
-	//emailAddress := csrForm.EmailAddress
-	subj := pkix.Name{
-		CommonName:         commonName,
-		Country:            []string{country},
-		Province:           []string{state},
-		Locality:           []string{locality},
-		Organization:       []string{org},
-		OrganizationalUnit: []string{orgUnit},
-	}
-	rawSubj := subj.ToRDNSequence()
-	/*rawSubj = append(rawSubj, []pkix.AttributeTypeAndValue{
-		{Type: oidEmailAddress, Value: emailAddress},
-	})*/
 
-	asn1Subj, _ := asn1.Marshal(rawSubj)
-	template := x509.CertificateRequest{
-		RawSubject: asn1Subj,
-		//EmailAddresses:     []string{emailAddress},
-		SignatureAlgorithm: signingAlgorithm,
+	slot, err = s.devicesRepo.SelectSlotByID(ctx, input.DeviceID, input.SlotID)
+	if err != nil {
+		return nil, err
 	}
-	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &template, priv)
-	return csrBytes, err
+
+	return &api.UpdateActiveCertificateStatusOutput{
+		Slot: *slot,
+	}, nil
 }
 
-/*func getKeyStrength(keyType string, keyBits int) string {
-	var keyStrength string = "unknown"
-	switch keyType {
-	case "RSA":
-		if keyBits < 2048 {
-			keyStrength = "low"
-		} else if keyBits >= 2048 && keyBits < 3072 {
-			keyStrength = "medium"
-		} else {
-			keyStrength = "high"
-		}
-	case "EC":
-		if keyBits < 224 {
-			keyStrength = "low"
-		} else if keyBits >= 224 && keyBits < 256 {
-			keyStrength = "medium"
-		} else {
-			keyStrength = "high"
+func (s *devicesService) RotateActiveCertificate(ctx context.Context, input *api.RotateActiveCertificateInput) (*api.RotateActiveCertificateOutput, error) {
+	slot, err := s.devicesRepo.SelectSlotByID(ctx, input.DeviceID, input.SlotID)
+	if err != nil {
+		return nil, err
+	}
+
+	if slot.ActiveCertificate == nil {
+		return nil, errors.New("no active certificate found")
+	}
+
+	revokeOutput, err := s.RevokeActiveCertificate(ctx, &api.RevokeActiveCertificateInput{
+		DeviceID:         input.DeviceID,
+		SlotID:           input.SlotID,
+		RevocationReason: "Certificate is being rotated",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	slot = &revokeOutput.Slot
+	slot.ActiveCertificate = &api.Certificate{
+		CAName:       input.NewCertificate.Issuer.CommonName,
+		SerialNumber: utils.InsertNth(utils.ToHexInt(input.NewCertificate.SerialNumber), 2),
+		Certificate:  input.NewCertificate,
+		Status:       caApi.StatusActive,
+		RevocationTimestamp: pq.NullTime{
+			Valid: false,
+			Time:  time.Time{},
+		},
+	}
+
+	err = s.devicesRepo.UpdateSlot(ctx, input.DeviceID, *slot)
+	if err != nil {
+		return nil, err
+	}
+
+	s.logsRepo.InsertSlotLog(ctx, input.DeviceID, input.SlotID, api.LogTypeInfo, "Slot Renewed", fmt.Sprintf("Slot useses new certificate with serial number %s", utils.InsertNth(utils.ToHexInt(input.NewCertificate.SerialNumber), 2)))
+
+	slot, err = s.devicesRepo.SelectSlotByID(ctx, input.DeviceID, input.SlotID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &api.RotateActiveCertificateOutput{
+		Slot: *slot,
+	}, nil
+}
+
+func (s *devicesService) ForceReenroll(ctx context.Context, input *api.ForceReenrollInput) (*api.ForceReenrollOtput, error) {
+	// Does nothing, it is used by the AMQP Middleware to force a reenroll. Just return Device
+	outputGetDevice, err := s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
+		DeviceID: input.DeviceID,
+	})
+	if err != nil {
+		return &api.ForceReenrollOtput{}, err
+	}
+	var crt *x509.Certificate
+	for i := 0; i < len(outputGetDevice.Slots); i++ {
+		if input.SlotID == outputGetDevice.Slots[i].ID {
+			crt = outputGetDevice.Slots[i].ActiveCertificate.Certificate
+			break
 		}
 	}
-	return keyStrength
-}*/
+
+	return &api.ForceReenrollOtput{
+		DeviceID:      input.DeviceID,
+		SlotID:        input.SlotID,
+		ForceReenroll: input.ForceReenroll,
+		Crt:           crt,
+	}, nil
+}
+
+func (s *devicesService) RevokeActiveCertificate(ctx context.Context, input *api.RevokeActiveCertificateInput) (*api.RevokeActiveCertificateOutput, error) {
+	slot, err := s.devicesRepo.SelectSlotByID(ctx, input.DeviceID, input.SlotID)
+
+	if err != nil {
+		return &api.RevokeActiveCertificateOutput{}, err
+	}
+
+	if slot.ActiveCertificate == nil {
+		return &api.RevokeActiveCertificateOutput{}, errors.New("no active certificate found")
+	}
+
+	if slot.ActiveCertificate.Status == caApi.StatusRevoked {
+		return &api.RevokeActiveCertificateOutput{}, errors.New("certificate is already revoked")
+	}
+
+	if slot.ActiveCertificate.Status == caApi.StatusExpired {
+		return &api.RevokeActiveCertificateOutput{}, errors.New("certificate is expired")
+	}
+
+	revokeOutput, err := s.caClient.RevokeCertificate(ctx, &caApi.RevokeCertificateInput{
+		CAType:                  caApi.CATypePKI,
+		CAName:                  slot.ActiveCertificate.CAName,
+		CertificateSerialNumber: slot.ActiveCertificate.SerialNumber,
+		RevocationReason:        input.RevocationReason,
+	})
+
+	if err != nil {
+		return &api.RevokeActiveCertificateOutput{}, err
+	}
+
+	revokedCertificateSerialNumber := slot.ActiveCertificate.SerialNumber
+
+	slot.ActiveCertificate.Status = caApi.StatusRevoked
+	slot.ActiveCertificate.RevocationReason = input.RevocationReason
+	slot.ActiveCertificate.RevocationTimestamp = revokeOutput.RevocationTimestamp
+
+	slot.ActiveCertificate = nil
+
+	err = s.devicesRepo.UpdateSlot(ctx, input.DeviceID, *slot)
+	if err != nil {
+		return &api.RevokeActiveCertificateOutput{}, err
+	}
+
+	s.logsRepo.InsertSlotLog(ctx, input.DeviceID, input.SlotID, api.LogTypeWarn, "Certificate Revoked", fmt.Sprintf("The certificate %s will no longer be usable", revokedCertificateSerialNumber))
+
+	slot, err = s.devicesRepo.SelectSlotByID(ctx, input.DeviceID, input.SlotID)
+	if err != nil {
+		return &api.RevokeActiveCertificateOutput{}, err
+	}
+
+	return &api.RevokeActiveCertificateOutput{
+		Slot: *slot,
+	}, nil
+}
+
+func (s *devicesService) IterateDevicesWithPredicate(ctx context.Context, input *api.IterateDevicesWithPredicateInput) (*api.IterateDevicesWithPredicateOutput, error) {
+	output := api.IterateDevicesWithPredicateOutput{}
+
+	limit := 100
+	i := 0
+
+	for {
+		devicesOutput, err := s.GetDevices(ctx, &api.GetDevicesInput{
+			QueryParameters: common.QueryParameters{
+				Pagination: common.PaginationOptions{
+					Limit:  limit,
+					Offset: i * limit,
+				},
+			},
+		})
+		if err != nil {
+			return &output, err
+		}
+
+		if len(devicesOutput.Devices) == 0 {
+			break
+		}
+
+		for _, v := range devicesOutput.Devices {
+			input.PredicateFunc(&v)
+		}
+
+		i++
+	}
+
+	return &output, nil
+	// output := api.IterateDevicesWithPredicateOutput{}
+
+	// limit := 100
+	// maxWorkers := 5
+	// results := make(chan int)
+
+	// workerFunc := func(i int, results chan int) {
+	// 	ctr := 0
+	// 	for {
+	// 		devicesOutput, err := s.GetDevices(ctx, &api.GetDevicesInput{
+	// 			QueryParameters: common.QueryParameters{
+	// 				Pagination: common.PaginationOptions{
+	// 					Limit:  limit,
+	// 					Offset: (i + ctr) * limit,
+	// 				},
+	// 			},
+	// 		})
+
+	// 		if err != nil {
+	// 			break
+	// 		}
+
+	// 		if len(devicesOutput.Devices) > 0 {
+	// 			for _, v := range devicesOutput.Devices {
+	// 				input.PredicateFunc(&v)
+	// 			}
+	// 			ctr++
+	// 		} else {
+	// 			break
+	// 		}
+	// 	}
+	// 	results <- i
+	// }
+
+	// for i := 0; i < maxWorkers; i++ {
+	// 	go workerFunc(i, results)
+	// }
+
+	// finished := 0
+
+	// for r := range results {
+	// 	finished++
+	// 	fmt.Println("finished", finished, r)
+	// 	if finished == maxWorkers {
+	// 		close(results)
+	// 	}
+	// }
+
+	// fmt.Println("returing")
+	// return &output, nil
+}
+
+func (s *devicesService) GetDeviceLogs(ctx context.Context, input *api.GetDeviceLogsInput) (*api.GetDeviceLogsOutput, error) {
+	outputGetDevice, err := s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
+		DeviceID: input.DeviceID,
+	})
+	if err != nil {
+		return &api.GetDeviceLogsOutput{}, err
+	}
+
+	logs, err := s.logsRepo.SelectDeviceLogs(ctx, input.DeviceID)
+	if err != nil {
+		return &api.GetDeviceLogsOutput{}, err
+	}
+
+	deviceLogs := api.DeviceLogs{
+		DevciceID: input.DeviceID,
+		Logs:      logs,
+		SlotLogs:  map[string][]api.Log{},
+	}
+	for _, v := range outputGetDevice.Slots {
+		slotLogs, err := s.logsRepo.SelectSlotLogs(ctx, input.DeviceID, v.ID)
+		if err != nil {
+			continue
+		}
+
+		deviceLogs.SlotLogs[v.ID] = slotLogs
+	}
+
+	return &api.GetDeviceLogsOutput{
+		DeviceLogs: deviceLogs,
+	}, nil
+}
+
+func (s *devicesService) IsDMSAuthorizedToEnroll(ctx context.Context, input *api.IsDMSAuthorizedToEnrollInput) (*api.IsDMSAuthorizedToEnrollOutput, error) {
+	dmsOutput, err := s.dmsManagerClient.GetDMSByName(ctx, &dmsManagerApi.GetDMSByNameInput{
+		Name: input.DMSName,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	isAuthorized := slices.Contains(dmsOutput.AuthorizedCAs, input.CAName)
+
+	return &api.IsDMSAuthorizedToEnrollOutput{
+		IsAuthorized: isAuthorized,
+	}, nil
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+// 												EST Functions
+// -------------------------------------------------------------------------------------------------------------------
+
+func (s *devicesService) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
+	cas := make([]*x509.Certificate, 0)
+	s.caClient.IterateCAsWithPredicate(ctx, &caApi.IterateCAsWithPredicateInput{
+		CAType: caApi.CATypePKI,
+		PredicateFunc: func(c *caApi.CACertificate) {
+			cas = append(cas, c.Certificate.Certificate)
+		},
+	})
+	return cas, nil
+}
+
+func (s *devicesService) Enroll(ctx context.Context, csr *x509.CertificateRequest, clientCertificate *x509.Certificate, aps string) (*x509.Certificate, error) {
+	outGetCA, err := s.caClient.GetCAByName(ctx, &caApi.GetCAByNameInput{
+		CAType: caApi.CATypeDMSEnroller,
+		CAName: "LAMASSU-DMS-MANAGER",
+	})
+	if err != nil {
+		return nil, &estErrors.GenericError{
+			Message:    "CA not found",
+			StatusCode: 404,
+		}
+	}
+
+	err = s.verifyCertificate(clientCertificate, outGetCA.Certificate.Certificate)
+	if err != nil {
+		return nil, &estErrors.GenericError{
+			Message:    "client certificate is not valid: " + err.Error(),
+			StatusCode: 403,
+		}
+	}
+
+	isAuthroizedOutput, err := s.IsDMSAuthorizedToEnroll(ctx, &api.IsDMSAuthorizedToEnrollInput{
+		DMSName: clientCertificate.Subject.CommonName,
+		CAName:  aps,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if !isAuthroizedOutput.IsAuthorized {
+		return nil, &estErrors.GenericError{
+			Message:    "DMS is not authorized to enroll with the selected APS",
+			StatusCode: 403,
+		}
+	}
+
+	csrCommonName := csr.Subject.CommonName
+	splitedCsrCommonName := strings.Split(csrCommonName, ":")
+
+	var slotID string = ""
+	var deviceID string = ""
+	if len(splitedCsrCommonName) == 1 {
+		slotID = "default"
+		deviceID = splitedCsrCommonName[0]
+	} else if len(splitedCsrCommonName) == 2 {
+		slotID = splitedCsrCommonName[0]
+		if slotID == "default" {
+			return nil, &estErrors.GenericError{
+				Message:    "invalid common name format: 'default' is a reserved slotID",
+				StatusCode: 400,
+			}
+		}
+		deviceID = splitedCsrCommonName[1]
+	} else {
+		return nil, &estErrors.GenericError{
+			Message:    "invalid common name format",
+			StatusCode: 400,
+		}
+	}
+
+	getDevice, err := s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
+		DeviceID: deviceID,
+	})
+
+	if err != nil {
+		if _, ok := err.(*deviceErrors.ResourceNotFoundError); !ok {
+			return nil, err
+		}
+		_, err = s.CreateDevice(ctx, &api.CreateDeviceInput{
+			DeviceID: deviceID,
+			Alias:    deviceID,
+			Tags: []string{
+				clientCertificate.Subject.CommonName,
+				aps,
+			},
+			IconColor:   "#0068D1",
+			IconName:    "Cg/CgSmartphoneChip",
+			Description: fmt.Sprintf("New Device #%s", deviceID),
+		})
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		device := getDevice.Device
+
+		if device.Status == api.DeviceStatusDecommissioned {
+			return nil, &estErrors.GenericError{
+				Message:    "device is decommissioned",
+				StatusCode: 403,
+			}
+		}
+
+		for _, slot := range device.Slots {
+			if slot.ID == slotID && slot.ActiveCertificate != nil {
+				return nil, &estErrors.GenericError{
+					Message:    "slot is already enrolled",
+					StatusCode: 409,
+				}
+			}
+		}
+	}
+
+	signOutput, err := s.caClient.SignCertificateRequest(ctx, &caApi.SignCertificateRequestInput{
+		CAType:                    caApi.CATypePKI,
+		CertificateSigningRequest: csr,
+		CAName:                    aps,
+		SignVerbatim:              true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = s.AddDeviceSlot(ctx, &api.AddDeviceSlotInput{
+		DeviceID:          deviceID,
+		SlotID:            slotID,
+		ActiveCertificate: signOutput.Certificate,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return signOutput.Certificate, nil
+}
+
+func (s *devicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate) (*x509.Certificate, error) {
+	aps := cert.Issuer.CommonName
+	outGetCA, err := s.caClient.GetCAByName(ctx, &caApi.GetCAByNameInput{
+		CAType: caApi.CATypePKI,
+		CAName: aps,
+	})
+	if err != nil {
+		return nil, &estErrors.GenericError{
+			Message:    "CA not found",
+			StatusCode: 404,
+		}
+	}
+
+	err = s.verifyCertificate(cert, outGetCA.Certificate.Certificate)
+	if err != nil {
+		return nil, &estErrors.GenericError{
+			Message:    "client certificate is not valid: " + err.Error(),
+			StatusCode: 403,
+		}
+	}
+
+	if int(time.Until(cert.NotAfter).Hours())/24 > s.minimumReenrollmentDays {
+		return nil, &estErrors.GenericError{
+			Message:    "certificate can only be renewed" + fmt.Sprintf("%d", s.minimumReenrollmentDays) + " days before expiration",
+			StatusCode: 403,
+		}
+	}
+
+	if !reflect.DeepEqual(csr.Subject, cert.Subject) {
+		return nil, &estErrors.GenericError{
+			Message:    "CSR subject does not match certificate subject",
+			StatusCode: 400,
+		}
+	}
+
+	signOutput, err := s.caClient.SignCertificateRequest(ctx, &caApi.SignCertificateRequestInput{
+		CAType:                    caApi.CATypePKI,
+		CertificateSigningRequest: csr,
+		CAName:                    aps,
+		SignVerbatim:              true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	csrCommonName := csr.Subject.CommonName
+	splitedCsrCommonName := strings.Split(csrCommonName, ":")
+
+	var slotID string = ""
+	var deviceID string = ""
+	if len(splitedCsrCommonName) == 1 {
+		slotID = "default"
+		deviceID = splitedCsrCommonName[0]
+	} else if len(splitedCsrCommonName) == 2 {
+		slotID = splitedCsrCommonName[0]
+		deviceID = splitedCsrCommonName[1]
+	} else {
+		return nil, &estErrors.GenericError{
+			Message:    "invalid common name format",
+			StatusCode: 400,
+		}
+	}
+
+	_, err = s.RotateActiveCertificate(ctx, &api.RotateActiveCertificateInput{
+		DeviceID:       deviceID,
+		SlotID:         slotID,
+		NewCertificate: signOutput.Certificate,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return signOutput.Certificate, nil
+}
+
+func (s *devicesService) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, *rsa.PrivateKey, error) {
+	csrkey, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	csr, err = s.generateCSR(csr, csrkey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	crt, err := s.Enroll(ctx, csr, cert, aps)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return crt, csrkey, nil
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+// 													UTILS
+// -------------------------------------------------------------------------------------------------------------------
+
+func (s *devicesService) verifyCertificate(clientCertificate *x509.Certificate, caCertificate *x509.Certificate) error {
+	clientCAs := x509.NewCertPool()
+	clientCAs.AddCert(caCertificate)
+
+	opts := x509.VerifyOptions{
+		Roots:     clientCAs,
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	_, err := clientCertificate.Verify(opts)
+
+	if err != nil {
+		return errors.New("could not verify client certificate: " + err.Error())
+	}
+
+	return nil
+}
+
+func (s *devicesService) generateCSR(csr *x509.CertificateRequest, key interface{}) (*x509.CertificateRequest, error) {
+	template := &x509.CertificateRequest{
+		Subject: csr.Subject,
+	}
+
+	csrDER, err := x509.CreateCertificateRequest(rand.Reader, template, key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create certificate request: %v", err)
+	}
+
+	csrNew, err := x509.ParseCertificateRequest(csrDER)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse certificate request: %v", err)
+	}
+	return csrNew, nil
+}
+
+func (s *devicesService) ScanDevicesAndUpdateStatistics() {
+	ctx := context.Background()
+
+	t0 := time.Now()
+	level.Debug(s.logger).Log("msg", "Starting devices scan...")
+	counter := 0
+	deviceStats := map[api.DeviceStatus]int{}
+	slotStatus := map[caApi.CertificateStatus]int{}
+	s.IterateDevicesWithPredicate(ctx, &api.IterateDevicesWithPredicateInput{
+		PredicateFunc: func(device *api.Device) {
+			for _, v := range device.Slots {
+				slotStatus[v.ActiveCertificate.Status]++
+			}
+
+			deviceStats[device.Status]++
+
+			if counter%1000 == 0 {
+				level.Debug(s.logger).Log("msg", "Scanned devices", "count", counter, "time", time.Since(t0).String())
+			}
+
+		},
+	})
+
+	s.statsRepo.UpdateStatistics(ctx, api.DevicesManagerStats{
+		DevicesStats: deviceStats,
+		SlotsStats:   slotStatus,
+	})
+
+	level.Debug(s.logger).Log("msg", "Scan devices finished in "+time.Since(t0).String())
+}
