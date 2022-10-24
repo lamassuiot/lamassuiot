@@ -5,7 +5,7 @@ on:
     branches:
       - develop
     paths:
-        - '.github/workflows/dms-manager*/**'
+        - '.github/workflows/dms-manager*'
         - 'pkg/dms-manager/**'
         - 'main/dms-manager/**'
   workflow_call:

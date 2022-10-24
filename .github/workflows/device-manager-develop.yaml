@@ -5,7 +5,7 @@ on:
     branches:
       - develop
     paths:
-        - '.github/workflows/device-manager*/**'
+        - '.github/workflows/device-manager*'
         - 'pkg/device-manager/**'
         - 'main/device-manager/**'
   workflow_call:
