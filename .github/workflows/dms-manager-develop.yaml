@@ -5,13 +5,14 @@ on:
     branches:
       - develop
     paths:
-        - 'pkg/dms-enroller/**'
-        - 'main/dms-enroller/**'
+        - '.github/workflows/dms-manager*/**'
+        - 'pkg/dms-manager/**'
+        - 'main/dms-manager/**'
   workflow_call:
 
 jobs:
-  lamassu_dms_enroller_unit_testing:
-    name: DMS Enroller Unit Testing
+  lamassu_dms_manager_unit_testing:
+    name: DMS Manager Unit Testing
     # runs-on: self-hosted
     runs-on: ubuntu-latest
     steps:
