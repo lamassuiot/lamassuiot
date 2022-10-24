@@ -32,4 +32,4 @@ jobs:
       - name: Run Go Unit Tests
         run: |
           set -eo pipefail
-          go test -json -v ./pkg/ca/server/api/transport/ | gotestfmt
+          go test -json -v ./pkg/ca/server/api/ | gotestfmt
