@@ -70,7 +70,7 @@ func BuildCATestServerWithVault(vaultclient *api.Client) (*httptest.Server, *caS
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	logger = log.With(logger, "caller", log.DefaultCaller)
 
-	dialector := sqlite.Open("")
+	dialector := sqlite.Open(fmt.Sprintf("file:%s?mode=memory", goid.NewV4UUID().String()))
 	db, err := gorm.Open(dialector, &gorm.Config{
 		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
 	})
@@ -105,7 +105,7 @@ func BuildCATestServer() (*httptest.Server, *caService.Service, error) {
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	logger = log.With(logger, "caller", log.DefaultCaller)
 
-	dialector := sqlite.Open("")
+	dialector := sqlite.Open(fmt.Sprintf("file:%s?mode=memory", goid.NewV4UUID().String()))
 	db, err := gorm.Open(dialector, &gorm.Config{
 		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
 	})
@@ -143,7 +143,8 @@ func BuildDMSManagerTestServer(CATestServer *httptest.Server) (*httptest.Server,
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	logger = log.With(logger, "caller", log.DefaultCaller)
 
-	dialector := sqlite.Open("")
+	fmt.Sprintf("file:%s?mode=memory", goid.NewV4UUID().String())
+	dialector := sqlite.Open(fmt.Sprintf("file:%s?mode=memory", goid.NewV4UUID().String()))
 	db, err := gorm.Open(dialector, &gorm.Config{
 		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
 	})
@@ -188,7 +189,7 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	logger = log.With(logger, "caller", log.DefaultCaller)
 
-	dialector := sqlite.Open("")
+	dialector := sqlite.Open(fmt.Sprintf("file:%s?mode=memory", goid.NewV4UUID().String()))
 	db, err := gorm.Open(dialector, &gorm.Config{
 		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
 	})
@@ -316,7 +317,7 @@ func BuildMailTestServer(jsonTemplate string, smtpConfig outputchannels.SMTPOutp
 
 	//dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUser, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
 
-	dialector := sqlite.Open("")
+	dialector := sqlite.Open(fmt.Sprintf("file:%s?mode=memory", goid.NewV4UUID().String()))
 	db, err := gorm.Open(dialector, &gorm.Config{
 		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
 	})

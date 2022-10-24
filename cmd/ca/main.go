@@ -47,17 +47,6 @@ func main() {
 	certificateRepository := postgresRepository.NewPostgresDB(db, mainServer.Logger)
 
 	switch config.Engine {
-	case "pkcs11":
-		hsmEngine, err := cryptoengines.NewHSMPEngine(mainServer.Logger, config.Pkcs11Driver, config.Pkcs11Label, config.Pkcs11Pin)
-		if err != nil {
-			level.Error(mainServer.Logger).Log("msg", "Could not initialize HSM engine", "err", err)
-			os.Exit(1)
-		}
-		engine = hsmEngine
-		s = service.NewCAService(mainServer.Logger, engine, certificateRepository, config.OcspUrl)
-		level.Info(mainServer.Logger).Log("msg", "Engine initialized")
-		level.Info(mainServer.Logger).Log("msg", fmt.Sprintf("Engine options: %v", engine.GetEngineConfig()))
-
 	case "gopem":
 		gopemEngine, err := cryptoengines.NewGolangPEMEngine(mainServer.Logger, config.GopemData)
 		if err != nil {
