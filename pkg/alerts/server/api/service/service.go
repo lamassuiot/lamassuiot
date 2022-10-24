@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"strings"
 
@@ -122,9 +121,9 @@ func (s *alertsService) HandleEvent(ctx context.Context, input *api.HandleEventI
 			fullfiledSubs = append(fullfiledSubs, sub)
 			continue
 		}
+
 		for _, condition := range sub.Conditions {
 			//TODO:check if JSONPath or jsonSchema
-
 			switch sub.ConditionType {
 			case api.JSONSchema:
 				schemaLoader := gojsonschema.NewStringLoader(condition)
@@ -136,40 +135,40 @@ func (s *alertsService) HandleEvent(ctx context.Context, input *api.HandleEventI
 
 				if result.Valid() {
 					fullfiledSubs = append(fullfiledSubs, sub)
-
 				}
 
 			case api.JSONPath:
 
 				json_condition, err := jp.ParseString(condition)
-				fullfiledSubs := []api.Subscription{}
 
 				if err != nil {
 					return nil, err
 				}
 				ys := json_condition.Get(event)
-				for k, v := range ys {
-					fmt.Println(k, "=>", v)
-				}
 				if err != nil {
 					return nil, err
-				} else {
-					fullfiledSubs = append(fullfiledSubs, sub)
+				}
+				for _, v := range ys {
+					if v == sub.ExpectedValue {
+						fullfiledSubs = append(fullfiledSubs, sub)
+
+					}
 				}
 			}
 		}
-
 	}
 
 	for _, sub := range fullfiledSubs {
-		s.smtpServer.ParseEventAndSend(ctx, input.Event.Type(), "Some text", data, []api.Channel{sub.Channel})
-
-		msTeamsSvc := outputchannels.MSTeamsOutputService{}
-		msTeamsSvc.ParseEventAndSend(ctx, input.Event.Type(), "Some text", data, []api.Channel{sub.Channel})
-
-		webhookSvc := outputchannels.WebhookOutputService{}
-		webhookSvc.ParseEventAndSend(ctx, input.Event.Type(), "Some text", data, []api.Channel{sub.Channel})
-
+		switch sub.Channel.Type {
+		case api.ChannelTypeEmail:
+			s.smtpServer.ParseEventAndSend(ctx, input.Event.Type(), "", data, sub.Channel)
+		case api.ChannelTypeWebhook:
+			webhookSvc := outputchannels.WebhookOutputService{}
+			webhookSvc.ParseEventAndSend(ctx, input.Event.Type(), "", data, sub.Channel)
+		case api.ChannelTypeMSTeams:
+			msTeamsSvc := outputchannels.MSTeamsOutputService{}
+			msTeamsSvc.ParseEventAndSend(ctx, input.Event.Type(), "", data, sub.Channel)
+		}
 	}
 
 	return &api.HandleEventOutput{}, nil
@@ -182,7 +181,7 @@ func (s *alertsService) SubscribedEvent(ctx context.Context, input *api.Subscrib
 		Name:   input.Channel.Name,
 		Config: input.Channel.Config,
 	}
-	err := s.alertsRepository.Subscribe(ctx, input.UserID, channel, input.Conditions, input.EventType, input.ConditionType)
+	err := s.alertsRepository.Subscribe(ctx, input.UserID, channel, input.Conditions, input.EventType, input.ConditionType, input.ExpectedValue)
 	if err != nil {
 		return &api.SubscribeEventOutput{}, err
 	}
@@ -226,7 +225,6 @@ func (s *alertsService) GetSubscriptions(ctx context.Context, input *api.GetSubs
 	subscription, err := s.alertsRepository.GetUserSubscriptions(ctx, input.UserID)
 	if err != nil {
 		level.Debug(s.logger).Log("err", err)
-		return &api.GetSubscriptionsOutput{}, err
 	}
 
 	return &api.GetSubscriptionsOutput{

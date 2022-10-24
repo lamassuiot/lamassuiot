@@ -153,7 +153,6 @@ func TestEnroll(t *testing.T) {
 			name: "MissingContentTypeHeader",
 			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
 				return ctx
-
 			},
 			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
 				_, b64CSREncoded := generateBase64EncodedCertificateRequestAndKey("slot1:1234-5678-9012-3456")
@@ -307,7 +306,9 @@ func TestEnroll(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
 	}
@@ -613,7 +614,9 @@ func TestReEnroll(t *testing.T) {
 		},
 	}
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
 	}
@@ -730,7 +733,9 @@ func TestServerKeygen(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
 	}
@@ -784,7 +789,9 @@ func TestGetESTCAs(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
 	}
@@ -808,7 +815,9 @@ func TestHealth(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
 	}
@@ -881,10 +890,11 @@ func TestGetStats(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
-
 	}
 }
 
@@ -992,10 +1002,11 @@ func TestGetDeviceById(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
-
 	}
 }
 
@@ -1073,7 +1084,9 @@ func TestGetDevices(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
 	}
@@ -1149,10 +1162,11 @@ func TestUpdateDeviceMetadata(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
-
 	}
 }
 
@@ -1208,10 +1222,11 @@ func TestDecommisionDevice(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
-
 	}
 }
 
@@ -1355,10 +1370,11 @@ func TestRevokeActiveCertificate(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
-
 	}
 }
 func TestGetDeviceLogs(t *testing.T) {
@@ -1408,7 +1424,9 @@ func TestGetDeviceLogs(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
 	}
@@ -1416,11 +1434,13 @@ func TestGetDeviceLogs(t *testing.T) {
 
 func runTests(t *testing.T, tc TestCase) {
 	ctx := context.Background()
-	cli, err := testUtils.NewVaultSecretsMock(t)
-	if err != nil {
-		t.Errorf("%s", err)
-	}
-	serverCA, svcCA, err := testUtils.BuildCATestServerWithVault(cli)
+	serverCA, svcCA, err := testUtils.BuildCATestServer()
+	//cli, err := testUtils.NewVaultSecretsMock(t)
+	//if err != nil {
+	//	t.Errorf("%s", err)
+	//}
+	//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+
 	if err != nil {
 		t.Fatalf("%s", err)
 	}

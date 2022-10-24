@@ -7,5 +7,5 @@ import (
 )
 
 type OutputChannels interface {
-	ParseEventAndSend(ctx context.Context, eventType string, eventDescription string, eventData map[string]string, channels []api.Channel) error
+	ParseEventAndSend(ctx context.Context, eventType string, eventDescription string, eventData map[string]string, channel api.Channel) error
 }

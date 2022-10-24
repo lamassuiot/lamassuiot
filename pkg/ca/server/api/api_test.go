@@ -197,11 +197,13 @@ func TestCreateCA(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			cli, err := testUtils.NewVaultSecretsMock(t)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+			server, svc, err := testUtils.BuildCATestServer()
+			//cli, err := testUtils.NewVaultSecretsMock(t)
+			//if err != nil {
+			//	t.Errorf("%s", err)
+			//}
+			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -502,11 +504,12 @@ func TestGetCAByName(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			cli, err := testUtils.NewVaultSecretsMock(t)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+			server, svc, err := testUtils.BuildCATestServer()
+			//cli, err := testUtils.NewVaultSecretsMock(t)
+			//if err != nil {
+			//	t.Errorf("%s", err)
+			//}
+			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -939,11 +942,13 @@ func TestGetCAs(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			cli, err := testUtils.NewVaultSecretsMock(t)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+			server, svc, err := testUtils.BuildCATestServer()
+			//cli, err := testUtils.NewVaultSecretsMock(t)
+			//if err != nil {
+			//	t.Errorf("%s", err)
+			//}
+			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -1172,11 +1177,13 @@ func TestRevokeCA(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			cli, err := testUtils.NewVaultSecretsMock(t)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+			server, svc, err := testUtils.BuildCATestServer()
+			//cli, err := testUtils.NewVaultSecretsMock(t)
+			//if err != nil {
+			//	t.Errorf("%s", err)
+			//}
+			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -1402,11 +1409,13 @@ func TestSignCertificateRequest(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			cli, err := testUtils.NewVaultSecretsMock(t)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+			server, svc, err := testUtils.BuildCATestServer()
+			//cli, err := testUtils.NewVaultSecretsMock(t)
+			//if err != nil {
+			//	t.Errorf("%s", err)
+			//}
+			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -1566,11 +1575,13 @@ func TestRevokeCertificate(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			cli, err := testUtils.NewVaultSecretsMock(t)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+			server, svc, err := testUtils.BuildCATestServer()
+			//cli, err := testUtils.NewVaultSecretsMock(t)
+			//if err != nil {
+			//	t.Errorf("%s", err)
+			//}
+			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -1782,11 +1793,13 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			cli, err := testUtils.NewVaultSecretsMock(t)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+			server, svc, err := testUtils.BuildCATestServer()
+			//cli, err := testUtils.NewVaultSecretsMock(t)
+			//if err != nil {
+			//	t.Errorf("%s", err)
+			//}
+			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -2095,11 +2108,13 @@ func TestGetCertificates(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			cli, err := testUtils.NewVaultSecretsMock(t)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+			server, svc, err := testUtils.BuildCATestServer()
+			//cli, err := testUtils.NewVaultSecretsMock(t)
+			//if err != nil {
+			//	t.Errorf("%s", err)
+			//}
+			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -2201,11 +2216,13 @@ func TestStats(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			cli, err := testUtils.NewVaultSecretsMock(t)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+			server, svc, err := testUtils.BuildCATestServer()
+			//cli, err := testUtils.NewVaultSecretsMock(t)
+			//if err != nil {
+			//	t.Errorf("%s", err)
+			//}
+			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -2240,11 +2257,13 @@ func TestHealth(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			cli, err := testUtils.NewVaultSecretsMock(t)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-			server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+			server, svc, err := testUtils.BuildCATestServer()
+			//cli, err := testUtils.NewVaultSecretsMock(t)
+			//if err != nil {
+			//	t.Errorf("%s", err)
+			//}
+			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+
 			if err != nil {
 				t.Errorf("%s", err)
 			}

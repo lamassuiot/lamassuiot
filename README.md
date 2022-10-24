@@ -8,16 +8,23 @@ Lamassu is an IoT first PKI designed for industrial scenarios. This is the main 
 
 ## Running Unit tests
 
-Each service has its own set of unit tests. To run them, you can use the following command:
-
-```bash
+Each service has its own set of unit tests. To run them, you can use the following commands:
+ > **Note:** In order to speed up the process, the tests are run in parallel by default.
+ 
 #For pretty printing
 go install github.com/haveyoudebuggedit/gotestfmt/v2/cmd/gotestfmt@v2.3.1
 
 go test -json -v ./pkg/ca/server/api/ | gotestfmt
 go test -json -v ./pkg/dms-manager/server/api/ | gotestfmt
 go test -json -v ./pkg/device-manager/server/api/ | gotestfmt
+go test -json -v ./pkg/alerts/server/api/ | gotestfmt
 go test -json -v ./pkg/ocsp/server/api/ | gotestfmt
+```
+
+Or run all tests with:
+
+```bash
+go test ./pkg/...
 ```
 
 Also, it is also posible to run all the test at once and obtain the overall coverage:

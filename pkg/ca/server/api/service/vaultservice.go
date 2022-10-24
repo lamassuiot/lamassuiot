@@ -22,6 +22,7 @@ import (
 	caerrors "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/repository"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
+	"github.com/robfig/cron/v3"
 )
 
 type VaultSecrets struct {
@@ -32,9 +33,12 @@ type VaultSecrets struct {
 	pkiPath               string
 	ocspUrl               string
 	logger                log.Logger
+	cronInstance          *cron.Cron
 }
 
 func NewVaultService(address string, pkiPath string, roleID string, secretID string, CA string, unsealFile string, ocspUrl string, certificateRepository repository.Certificates, logger log.Logger) (*VaultSecrets, error) {
+	cronInstance := cron.New()
+
 	client, err := CreateVaultSdkClient(address, CA, logger)
 	if err != nil {
 		return nil, errors.New("Could not create Vault API client: " + err.Error())
@@ -49,7 +53,7 @@ func NewVaultService(address string, pkiPath string, roleID string, secretID str
 	if err != nil {
 		return nil, errors.New("Could not login into Vault: " + err.Error())
 	}
-	v := VaultSecrets{
+	svc := VaultSecrets{
 		client:                client,
 		pkiPath:               pkiPath,
 		roleID:                roleID,
@@ -57,8 +61,9 @@ func NewVaultService(address string, pkiPath string, roleID string, secretID str
 		ocspUrl:               ocspUrl,
 		logger:                logger,
 		certificateRepository: certificateRepository,
+		cronInstance:          cronInstance,
 	}
-	_, err = v.GetCAByName(context.Background(), &api.GetCAByNameInput{
+	_, err = svc.GetCAByName(context.Background(), &api.GetCAByNameInput{
 		CAType: api.CATypeDMSEnroller,
 		CAName: "LAMASSU-DMS-MANAGER",
 	})
@@ -66,7 +71,7 @@ func NewVaultService(address string, pkiPath string, roleID string, secretID str
 	if err != nil {
 		level.Debug(logger).Log("msg", "failed to get LAMASSU-DMS-MANAGER", "err", err)
 		level.Debug(logger).Log("msg", "Generating LAMASSU-DMS-MANAGER CA", "err", err)
-		v.CreateCA(context.Background(), &api.CreateCAInput{
+		svc.CreateCA(context.Background(), &api.CreateCAInput{
 			CAType: api.CATypeDMSEnroller,
 			Subject: api.Subject{
 				CommonName:   "LAMASSU-DMS-MANAGER",
@@ -80,7 +85,19 @@ func NewVaultService(address string, pkiPath string, roleID string, secretID str
 			IssuanceDuration: time.Hour * 24 * 365 * 3,
 		})
 	}
-	return &v, nil
+
+	// cronInstance.AddFunc("1 0 * * *", func() { // runs daily at midnight
+	// 	svc.IterateCAsWithPredicate(context.Background(), &api.IterateCAsWithPredicateInput{
+	// 		CAType: api.CATypePKI,
+	// 		PredicateFunc: func(ca *api.CACertificate) {
+	// 			svc.CheckAndUpdateCACertificateStatus(context.Background(), &api.CheckAndUpdateCACertificateStatusInput{
+	// 				CAType: api.CATypePKI,
+	// 				CAName: ca.CAName,
+	// 			})
+	// 		},
+	// 	})
+	// })
+	return &svc, nil
 }
 
 func NewVaultSecretsWithClient(client *vaultApi.Client, address string, pkiPath string, roleID string, secretID string, CA string, unsealFile string, ocspUrl string, certificateRepository repository.Certificates, logger log.Logger) (*VaultSecrets, error) {

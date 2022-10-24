@@ -84,6 +84,7 @@ type SubscribeEventInput struct {
 	Channel       ChannelCreation
 	UserID        string
 	ConditionType ConditionType
+	ExpectedValue string
 }
 
 type SubscribeEventOutput struct {

@@ -40,7 +40,9 @@ func TestHealth(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
 
@@ -104,7 +106,9 @@ func TestSubscribe(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
 
@@ -164,7 +168,9 @@ func TestGetSubscriptions(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
 
@@ -313,7 +319,9 @@ func TestUnsubscribe(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
 
@@ -368,7 +376,9 @@ func TestGetEvents(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			runTests(t, tc)
 		})
 

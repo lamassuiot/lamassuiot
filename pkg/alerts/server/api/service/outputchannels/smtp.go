@@ -26,24 +26,22 @@ type EmailChannelConfig struct {
 	EmailAddress string `json:"email_address"`
 }
 
-func (s *SMTPOutputService) ParseEventAndSend(ctx context.Context, eventType string, eventDescription string, eventData map[string]string, channels []api.Channel) error {
+func (s *SMTPOutputService) ParseEventAndSend(ctx context.Context, eventType string, eventDescription string, eventData map[string]string, channel api.Channel) error {
 	emails := make([]string, 0)
-	for _, channel := range channels {
-		if channel.Type == api.ChannelTypeEmail {
-			configBytes, err := json.Marshal(channel.Config)
-			if err != nil {
-				continue
-			}
+	if channel.Type == api.ChannelTypeEmail {
+		configBytes, err := json.Marshal(channel.Config)
+		if err != nil {
+			return err
+		}
 
-			var config EmailChannelConfig
-			err = json.Unmarshal(configBytes, &config)
-			if err != nil {
-				continue
-			}
+		var config EmailChannelConfig
+		err = json.Unmarshal(configBytes, &config)
+		if err != nil {
+			return err
+		}
 
-			if config.EmailAddress != "" {
-				emails = append(emails, config.EmailAddress)
-			}
+		if config.EmailAddress != "" {
+			emails = append(emails, config.EmailAddress)
 		}
 	}
 

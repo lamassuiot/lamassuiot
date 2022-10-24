@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"fmt"
 	"io"
 	"math/big"
 	"net/http"
@@ -21,6 +22,7 @@ import (
 	"github.com/hashicorp/vault/builtin/logical/pki"
 	"github.com/hashicorp/vault/sdk/logical"
 	"github.com/hashicorp/vault/vault"
+	"github.com/jakehl/goid"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	"github.com/opentracing/opentracing-go"
@@ -80,6 +82,8 @@ func BuildCATestServerWithVault(vaultclient *api.Client) (*httptest.Server, *caS
 	tracer := opentracing.NoopTracer{}
 	var svc caService.Service
 	svc, err = caService.NewVaultSecretsWithClient(vaultclient, "", "pki/lamassu/dev/", "", "", "", "", "http://ocsp.test", certificateRepository, logger)
+	svc = caService.NewInputValudationMiddleware()(svc)
+
 	if err != nil {
 		return nil, nil, err
 	}
@@ -112,11 +116,14 @@ func BuildCATestServer() (*httptest.Server, *caService.Service, error) {
 	certificateRepository := caRepository.NewPostgresDB(db, logger)
 	tracer := opentracing.NoopTracer{}
 
-	os.RemoveAll("/tmp/tests")
-	os.Mkdir("/tmp/tests", 0755)
-	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, "/tmp/tests")
+	dir := fmt.Sprintf("/tmp/test/%s", goid.NewV4UUID().String())
+	os.RemoveAll(dir)
+	os.Mkdir(dir, 0755)
+	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, dir)
 	var svc caService.Service
 	svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test")
+	svc = caService.NewInputValudationMiddleware()(svc)
+
 	// svc = caService.LoggingMiddleware(logger)(svc)
 
 	handler := caTransport.MakeHTTPHandler(svc, logger, tracer)
@@ -162,7 +169,7 @@ func BuildDMSManagerTestServer(CATestServer *httptest.Server) (*httptest.Server,
 
 	var svc dmsService.Service
 	svc = dmsService.NewDMSManagerService(logger, dmsRepository, &lamassuCAClient)
-	svc = dmsService.LoggingMiddleware(logger)(svc)
+	svc = dmsService.NewInputValudationMiddleware()(svc)
 
 	handler := dmsTransport.MakeHTTPHandler(svc, logger, tracer)
 
@@ -225,7 +232,7 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 		return nil, nil, err
 	}
 	svc := deviceService.NewDeviceManagerService(logger, deviceRepository, logsRepo, statsRepo, 30, lamassuCAClient, lamassuDMSClient)
-	svc = deviceService.LoggingMiddleware(logger)(svc)
+	svc = deviceService.NewInputValudationMiddleware()(svc)
 
 	handler := deviceTransport.MakeHTTPHandler(svc, logger, tracer)
 	estHandler := estTransport.MakeHTTPHandler(svc, logger, tracer)

@@ -24,6 +24,7 @@ type SubscriptionDAO struct {
 	Conditions       pq.StringArray `gorm:"type:text[]"`
 	SubscriptionDate time.Time
 	ConditionType    api.ConditionType
+	ExpectedValue    string
 }
 
 type ChannelDAO struct {
@@ -117,13 +118,14 @@ func (db PostgresDBContext) GetUserSubscriptions(ctx context.Context, userID str
 			Channel:          v.Channel.toChannel(),
 			Conditions:       v.Conditions,
 			ConditionType:    v.ConditionType,
+			ExpectedValue:    v.ExpectedValue,
 		})
 	}
 
 	return userSubs, nil
 }
 
-func (db PostgresDBContext) Subscribe(ctx context.Context, userID string, channel api.Channel, conditions []string, eventType string, conditionType api.ConditionType) error {
+func (db PostgresDBContext) Subscribe(ctx context.Context, userID string, channel api.Channel, conditions []string, eventType string, conditionType api.ConditionType, expectedValue string) error {
 	configBytes, err := json.Marshal(channel.Config)
 	if err != nil {
 		return err
@@ -142,6 +144,7 @@ func (db PostgresDBContext) Subscribe(ctx context.Context, userID string, channe
 		SubscriptionDate: time.Now(),
 		Conditions:       conditions,
 		ConditionType:    conditionType,
+		ExpectedValue:    expectedValue,
 	}).Error; err != nil {
 		level.Debug(db.logger).Log("msg", "Could not create subscription", "err", err)
 		return err

@@ -35,24 +35,22 @@ type MSTeamsChannelConfig struct {
 
 type MSTeamsOutputService struct{}
 
-func (s *MSTeamsOutputService) ParseEventAndSend(ctx context.Context, eventType string, eventDescription string, eventData map[string]string, channels []api.Channel) error {
+func (s *MSTeamsOutputService) ParseEventAndSend(ctx context.Context, eventType string, eventDescription string, eventData map[string]string, channel api.Channel) error {
 	webhooks := make([]string, 0)
-	for _, channel := range channels {
-		if channel.Type == api.ChannelTypeMSTeams {
-			configBytes, err := json.Marshal(channel.Config)
-			if err != nil {
-				continue
-			}
+	if channel.Type == api.ChannelTypeMSTeams {
+		configBytes, err := json.Marshal(channel.Config)
+		if err != nil {
+			return err
+		}
 
-			var config MSTeamsChannelConfig
-			err = json.Unmarshal(configBytes, &config)
-			if err != nil {
-				continue
-			}
+		var config MSTeamsChannelConfig
+		err = json.Unmarshal(configBytes, &config)
+		if err != nil {
+			return err
+		}
 
-			if config.WebhookURL != "" {
-				webhooks = append(webhooks, config.WebhookURL)
-			}
+		if config.WebhookURL != "" {
+			webhooks = append(webhooks, config.WebhookURL)
 		}
 	}
 

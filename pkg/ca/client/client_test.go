@@ -2,14 +2,17 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	postgresRepository "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/repository/postgres"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
@@ -160,7 +163,11 @@ func setup(t *testing.T) (http.Handler, service.Service) {
 	certificateRepository := postgresRepository.NewPostgresDB(db, logger)
 	tracer := opentracing.NoopTracer{}
 
-	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, "/tmp/tests")
+	dir := fmt.Sprintf("/tmp/test/%s", goid.NewV4UUID().String())
+	os.RemoveAll(dir)
+	os.Mkdir(dir, 0755)
+	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, dir)
+
 	var s service.Service
 	s = service.NewCAService(logger, engine, certificateRepository, "http://ocsp.test")
 	s = service.LoggingMiddleware(logger)(s)

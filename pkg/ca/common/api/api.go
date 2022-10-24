@@ -24,7 +24,7 @@ type KeyStrengthMetadata struct {
 }
 
 type Subject struct {
-	CommonName       string
+	CommonName       string `validate:"required"`
 	Organization     string
 	OrganizationUnit string
 	Country          string
@@ -188,7 +188,7 @@ type CACertificate struct {
 
 // ---------------------------------------------------------------------
 type GetStatsInput struct {
-	ForceRefesh bool `validate:"required"`
+	ForceRefesh bool
 }
 
 type GetStatsOutput struct {

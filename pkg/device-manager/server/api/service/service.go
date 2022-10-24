@@ -683,12 +683,15 @@ func (s *devicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 			return nil, err
 		}
 		_, err = s.CreateDevice(ctx, &api.CreateDeviceInput{
-			DeviceID:    deviceID,
-			Alias:       "",
-			Tags:        []string{},
+			DeviceID: deviceID,
+			Alias:    deviceID,
+			Tags: []string{
+				clientCertificate.Subject.CommonName,
+				aps,
+			},
 			IconColor:   "#0068D1",
 			IconName:    "Cg/CgSmartphoneChip",
-			Description: "",
+			Description: fmt.Sprintf("New Device #%s", deviceID),
 		})
 		if err != nil {
 			return nil, err
@@ -741,7 +744,6 @@ func (s *devicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 		CAType: caApi.CATypePKI,
 		CAName: aps,
 	})
-	fmt.Printf("err: %v\n", err)
 	if err != nil {
 		return nil, &estErrors.GenericError{
 			Message:    "CA not found",
@@ -777,7 +779,6 @@ func (s *devicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 		CAName:                    aps,
 		SignVerbatim:              true,
 	})
-	fmt.Printf("err: %v\n", err)
 	if err != nil {
 		return nil, err
 	}
