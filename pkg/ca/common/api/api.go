@@ -24,7 +24,7 @@ type KeyStrengthMetadata struct {
 }
 
 type Subject struct {
-	CommonName       string
+	CommonName       string `validate:"required"`
 	Organization     string
 	OrganizationUnit string
 	Country          string
@@ -49,22 +49,31 @@ func ParseCAType(t string) CAType {
 
 	return CATypePKI
 }
+func ToVaultPath(c string) string {
+	switch c {
+	case "dms_enroller":
+		return "_internal/"
+	case "pki":
+		return "_pki/"
+	}
+	return "_pki"
+}
 
 type KeyStrength string
 
 const (
-	KeyStrengthHigh   KeyStrength = "high"
-	KeyStrengthMedium KeyStrength = "medium"
-	KeyStrengthLow    KeyStrength = "low"
+	KeyStrengthHigh   KeyStrength = "HIGH"
+	KeyStrengthMedium KeyStrength = "MEDIUM"
+	KeyStrengthLow    KeyStrength = "LOW"
 )
 
 func ParseKeyStrength(t string) KeyStrength {
 	switch t {
-	case "high":
+	case "HIGH":
 		return KeyStrengthHigh
-	case "medium":
+	case "MEDIUM":
 		return KeyStrengthMedium
-	case "low":
+	case "LOW":
 		return KeyStrengthLow
 
 	default:
@@ -108,24 +117,24 @@ type SupportedKeyTypeInfo struct {
 type CertificateStatus string
 
 const (
-	StatusIssued        CertificateStatus = "issued"
-	StatusExpired       CertificateStatus = "expired"
-	StatusRevoked       CertificateStatus = "revoked"
-	StatusAboutToExpire CertificateStatus = "about_to_expire"
+	StatusActive        CertificateStatus = "ACTIVE"
+	StatusExpired       CertificateStatus = "EXPIRED"
+	StatusRevoked       CertificateStatus = "REVOKED"
+	StatusAboutToExpire CertificateStatus = "ABOUT_TO_EXPIRE"
 )
 
 func ParseCertificateStatus(t string) CertificateStatus {
 	switch t {
-	case "issued":
-		return StatusIssued
-	case "expired":
+	case "ACTIVE":
+		return StatusActive
+	case "EXPIRED":
 		return StatusExpired
-	case "revoked":
+	case "REVOKED":
 		return StatusRevoked
-	case "about_to_expire":
+	case "ABOUT_TO_EXPIRE":
 		return StatusAboutToExpire
 	default:
-		return StatusIssued
+		return StatusActive
 	}
 }
 
@@ -190,11 +199,11 @@ type GetStatsOutput struct {
 
 // ---------------------------------------------------------------------
 type CreateCAInput struct {
-	CAType           CAType
-	Subject          Subject
-	KeyMetadata      KeyMetadata
-	CADuration       time.Duration
-	IssuanceDuration time.Duration
+	CAType           CAType        `validate:"required"`
+	Subject          Subject       `validate:"required"`
+	KeyMetadata      KeyMetadata   `validate:"required"`
+	CADuration       time.Duration `validate:"required"`
+	IssuanceDuration time.Duration `validate:"required"`
 }
 
 type CreateCAOutput struct {
@@ -203,8 +212,8 @@ type CreateCAOutput struct {
 
 // ---------------------------------------------------------------------
 type GetCAsInput struct {
-	CAType          CAType
-	QueryParameters common.QueryParameters
+	CAType          CAType                 `validate:"required"`
+	QueryParameters common.QueryParameters `validate:"required"`
 }
 
 type GetCAsOutput struct {
@@ -214,8 +223,8 @@ type GetCAsOutput struct {
 
 // ---------------------------------------------------------------------
 type GetCAByNameInput struct {
-	CAType CAType
-	CAName string
+	CAType CAType `validate:"required"`
+	CAName string `validate:"required"`
 }
 
 type GetCAByNameOutput struct {
@@ -225,10 +234,10 @@ type GetCAByNameOutput struct {
 // ---------------------------------------------------------------------
 
 type ImportCAInput struct {
-	CAType           CAType
-	Certificate      *x509.Certificate
-	PrivateKey       *PrivateKey
-	IssuanceDuration time.Duration
+	CAType           CAType            `validate:"required"`
+	Certificate      *x509.Certificate `validate:"required"`
+	PrivateKey       *PrivateKey       `validate:"required"`
+	IssuanceDuration time.Duration     `validate:"required"`
 }
 
 type ImportCAOutput struct {
@@ -238,9 +247,9 @@ type ImportCAOutput struct {
 // ---------------------------------------------------------------------
 
 type UpdateCAStatusInput struct {
-	CAType CAType
-	CAName string
-	Status CertificateStatus
+	CAType CAType            `validate:"required"`
+	CAName string            `validate:"required"`
+	Status CertificateStatus `validate:"required"`
 }
 
 type UpdateCAStatusOutput struct {
@@ -250,9 +259,9 @@ type UpdateCAStatusOutput struct {
 // ---------------------------------------------------------------------
 
 type RevokeCAInput struct {
-	CAType           CAType
-	CAName           string
-	RevocationReason string
+	CAType           CAType `validate:"required"`
+	CAName           string `validate:"required"`
+	RevocationReason string `validate:"required"`
 }
 
 type RevokeCAOutput struct {
@@ -262,11 +271,11 @@ type RevokeCAOutput struct {
 // ---------------------------------------------------------------------
 
 type SignCertificateRequestInput struct {
-	CAType                    CAType
-	CAName                    string
-	CertificateSigningRequest *x509.CertificateRequest
-	CommonName                string
+	CAType                    CAType                   `validate:"required"`
+	CAName                    string                   `validate:"required"`
+	CertificateSigningRequest *x509.CertificateRequest `validate:"required"`
 	SignVerbatim              bool
+	CommonName                string
 }
 
 type SignCertificateRequestOutput struct {
@@ -277,10 +286,10 @@ type SignCertificateRequestOutput struct {
 // ---------------------------------------------------------------------
 
 type RevokeCertificateInput struct {
-	CAType                  CAType
-	CAName                  string
-	CertificateSerialNumber string
-	RevocationReason        string
+	CAType                  CAType `validate:"required"`
+	CAName                  string `validate:"required"`
+	CertificateSerialNumber string `validate:"required"`
+	RevocationReason        string `validate:"required"`
 }
 
 type RevokeCertificateOutput struct {
@@ -290,10 +299,10 @@ type RevokeCertificateOutput struct {
 // ---------------------------------------------------------------------
 
 type UpdateCertificateStatusInput struct {
-	CAType                  CAType
-	CAName                  string
-	CertificateSerialNumber string
-	Status                  CertificateStatus
+	CAType                  CAType            `validate:"required"`
+	CAName                  string            `validate:"required"`
+	CertificateSerialNumber string            `validate:"required"`
+	Status                  CertificateStatus `validate:"required"`
 }
 
 type UpdateCertificateStatusOutput struct {
@@ -303,9 +312,9 @@ type UpdateCertificateStatusOutput struct {
 // ---------------------------------------------------------------------
 
 type GetCertificateBySerialNumberInput struct {
-	CAType                  CAType
-	CAName                  string
-	CertificateSerialNumber string
+	CAType                  CAType `validate:"required"`
+	CAName                  string `validate:"required"`
+	CertificateSerialNumber string `validate:"required"`
 }
 
 type GetCertificateBySerialNumberOutput struct {
@@ -315,9 +324,9 @@ type GetCertificateBySerialNumberOutput struct {
 // ---------------------------------------------------------------------
 
 type GetCertificatesInput struct {
-	CAType          CAType
-	CAName          string
-	QueryParameters common.QueryParameters
+	CAType          CAType                 `validate:"required"`
+	CAName          string                 `validate:"required"`
+	QueryParameters common.QueryParameters `validate:"required"`
 }
 
 type GetCertificatesOutput struct {
@@ -328,9 +337,9 @@ type GetCertificatesOutput struct {
 // ---------------------------------------------------------------------
 
 type IterateCertificatesWithPredicateInput struct {
-	CAType        CAType
-	CAName        string
-	PredicateFunc func(c *Certificate)
+	CAType        CAType               `validate:"required"`
+	CAName        string               `validate:"required"`
+	PredicateFunc func(c *Certificate) `validate:"required"`
 }
 
 type IterateCertificatesWithPredicateOutput struct {
@@ -339,9 +348,20 @@ type IterateCertificatesWithPredicateOutput struct {
 // ---------------------------------------------------------------------
 
 type IterateCAsWithPredicateInput struct {
-	CAType        CAType
-	PredicateFunc func(c *CACertificate)
+	CAType        CAType                 `validate:"required"`
+	PredicateFunc func(c *CACertificate) `validate:"required"`
 }
 
 type IterateCAsWithPredicateOutput struct {
+}
+
+// ---------------------------------------------------------------------
+
+type CheckAndUpdateCACertificateStatusInput struct {
+	CAType CAType `validate:"required"`
+	CAName string `validate:"required"`
+}
+
+type CheckAndUpdateCACertificateStatusOutput struct {
+	CACertificate
 }

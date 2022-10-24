@@ -7,9 +7,9 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/tracing/opentracing"
 	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
@@ -17,6 +17,7 @@ import (
 	devmanagererrors "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common/types"
+	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
@@ -29,15 +30,6 @@ func InvalidJsonFormat() error {
 	return &devmanagererrors.GenericError{
 		Message:    "Invalid JSON format",
 		StatusCode: 400,
-	}
-}
-
-func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
-	return func(ctx context.Context, req *http.Request) context.Context {
-		// Try to join to a trace propagated in `req`.
-		// logger := log.With(logger, "span_id", stdopentracing.SpanFromContext(ctx))
-		// return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
-		return ctx
 	}
 }
 
@@ -56,107 +48,169 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	r := mux.NewRouter()
 	e := endpoint.MakeServerEndpoints(s, otTracer)
 	options := []httptransport.ServerOption{
-		httptransport.ServerBefore(HTTPToContext(logger)),
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
 	}
-	r.Methods("GET").Path("/v1/health").Handler(httptransport.NewServer(
-		e.HealthEndpoint,
-		decodeHealthRequest,
-		encodeHealthResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Health", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
-	r.Methods("GET").Path("/v1/stats").Handler(httptransport.NewServer(
-		e.GetStatsEndpoint,
-		decodeGetStatsRequest,
-		encodeGetStatsResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Stats", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
 
-	r.Methods("POST").Path("/v1/devices").Handler(httptransport.NewServer(
-		e.CreateDeviceEndpoint,
-		decodeCreateDeviceRequest,
-		encodeCreateDeviceResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "PostDevice", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/health").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.HealthEndpoint,
+					decodeHealthRequest,
+					encodeHealthResponse,
+					append(
+						options,
+					)...,
+				),
+				"Health",
+			),
+		),
+	)
 
-	r.Methods("GET").Path("/v1/devices").Handler(httptransport.NewServer(
-		e.GetDevicesEndpoint,
-		decodeUpdateDeviceMetadataRequest,
-		encodeUpdateDeviceMetadataResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetDevices", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/stats").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.GetStatsEndpoint,
+					decodeGetStatsRequest,
+					encodeGetStatsResponse,
+					append(
+						options,
+					)...,
+				),
+				"Stats",
+			),
+		),
+	)
 
-	r.Methods("GET").Path("/v1/devices/{deviceID}").Handler(httptransport.NewServer(
-		e.GetDeviceByIdEndpoint,
-		decodeDecommisionDeviceRequest,
-		encodeDecommisionDeviceResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetDeviceById", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("POST").Path("/devices").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.CreateDeviceEndpoint,
+					decodeCreateDeviceRequest,
+					encodeCreateDeviceResponse,
+					append(
+						options,
+					)...,
+				),
+				"CreateDevice",
+			),
+		),
+	)
 
-	r.Methods("PUT").Path("/v1/devices/{deviceID}").Handler(httptransport.NewServer(
-		e.UpdateDeviceMetadataEndpoint,
-		decodeGetDevicesRequest,
-		encodeGetDevicesResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "UpdateDevicesById", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/devices").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.GetDevicesEndpoint,
+					decodeGetDevicesRequest,
+					encodeGetDevicesResponse,
+					append(
+						options,
+					)...,
+				),
+				"GetDevices",
+			),
+		),
+	)
 
-	r.Methods("DELETE").Path("/v1/devices/{deviceID}").Handler(httptransport.NewServer(
-		e.DecommisionDeviceEndpoint,
-		decodeGetDeviceByIdRequest,
-		encodeGetDeviceByIdResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "DeleteDevice", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/devices/{deviceID}").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.GetDeviceByIdEndpoint,
+					decodeGetDeviceByIdRequest,
+					encodeGetDeviceByIdResponse,
+					append(
+						options,
+					)...,
+				),
+				"GetDeviceById",
+			),
+		),
+	)
 
-	r.Methods("DELETE").Path("/v1/devices/{deviceID}/slots/{slotID}").Handler(httptransport.NewServer(
-		e.RevokeActiveCertificateEndpoint,
-		decodeRevokeActiveCertificateRequest,
-		encodeRevokeActiveCertificateResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "DeleteRevoke", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("PUT").Path("/devices/{deviceID}").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.UpdateDeviceMetadataEndpoint,
+					decodeUpdateDeviceMetadataRequest,
+					encodeUpdateDeviceMetadataResponse,
+					append(
+						options,
+					)...,
+				),
+				"UpdateDevicesById",
+			),
+		),
+	)
 
-	r.Methods("GET").Path("/v1/devices/{deviceID}/logs").Handler(httptransport.NewServer(
-		e.GetDeviceLogsEndpoint,
-		decodeGetDeviceLogsRequest,
-		encodeGetDeviceLogsResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetDeviceLogs", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("DELETE").Path("/devices/{deviceID}").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.DecommisionDeviceEndpoint,
+					decodeDecommisionDeviceRequest,
+					encodeDecommisionDeviceResponse,
+					append(
+						options,
+					)...,
+				),
+				"DecommisionDevice",
+			),
+		),
+	)
+
+	r.Methods("DELETE").Path("/devices/{deviceID}/slots/{slotID}").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.RevokeActiveCertificateEndpoint,
+					decodeRevokeActiveCertificateRequest,
+					encodeRevokeActiveCertificateResponse,
+					append(
+						options,
+					)...,
+				),
+				"RevokeActiveCertificate",
+			),
+		),
+	)
+
+	r.Methods("PUT").Path("/devices/{deviceID}/slots/{slotID}").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.ForceReenrollEndpoint,
+					decodeForceReenrollRequest,
+					encodeForceReenrollResponse,
+					append(
+						options,
+					)...,
+				),
+				"RotateDeviceCertificate",
+			),
+		),
+	)
+
+	r.Methods("GET").Path("/devices/{deviceID}/logs").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.GetDeviceLogsEndpoint,
+					decodeGetDeviceLogsRequest,
+					encodeGetDeviceLogsResponse,
+					append(
+						options,
+					)...,
+				),
+				"GetDeviceLogs",
+			),
+		),
+	)
 
 	return r
 }
@@ -177,7 +231,7 @@ func encodeHealthResponse(ctx context.Context, w http.ResponseWriter, response i
 func decodeGetStatsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	forceRefreshString := r.URL.Query().Get("force_refresh")
 	forceRefresh := false
-	if forceRefreshString == "" {
+	if forceRefreshString != "" {
 		parsedForceRefresh, err := strconv.ParseBool(forceRefreshString)
 		if err == nil {
 			forceRefresh = parsedForceRefresh
@@ -370,6 +424,38 @@ func encodeRevokeActiveCertificateResponse(ctx context.Context, w http.ResponseW
 		return nil
 	}
 	castedResponse := response.(*api.RevokeActiveCertificateOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func decodeForceReenrollRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	type ForceReenrollPayload struct {
+		ForceReenroll bool `json:"require_reenrollment"`
+	}
+	var body ForceReenrollPayload
+
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+	vars := mux.Vars(r)
+	deviceID := vars["deviceID"]
+	slotID := vars["slotID"]
+
+	return api.ForceReenrollInput{
+		DeviceID:      deviceID,
+		SlotID:        slotID,
+		ForceReenroll: body.ForceReenroll,
+	}, nil
+}
+func encodeForceReenrollResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+	castedResponse := response.(*api.ForceReenrollOtput)
 	serializedResponse := castedResponse.Serialize()
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

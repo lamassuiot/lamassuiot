@@ -8,9 +8,12 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
+	"sort"
+	"time"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/log/level"
+	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	devicesErrors "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/repository"
@@ -27,7 +30,7 @@ type CertificateDAO struct {
 	SerialNumber        string `gorm:"primaryKey"`
 	CAName              string
 	Certificate         string
-	Status              api.CertificateStatus
+	Status              caApi.CertificateStatus
 	RevocationTimestamp pq.NullTime
 	RevocationReason    string
 }
@@ -39,14 +42,15 @@ type SlotDAO struct {
 }
 
 type DeviceDAO struct {
-	ID          string `gorm:"primaryKey"`
-	Alias       string
-	Status      api.DeviceStatus
-	Slots       []SlotDAO      `gorm:"foreignKey:DeviceID"`
-	Tags        pq.StringArray `gorm:"type:text[]"`
-	Description string
-	IconName    string
-	IconColor   string
+	ID                string `gorm:"primaryKey"`
+	Alias             string
+	Status            api.DeviceStatus
+	Slots             []SlotDAO      `gorm:"foreignKey:DeviceID"`
+	Tags              pq.StringArray `gorm:"type:text[]"`
+	Description       string
+	IconName          string
+	IconColor         string
+	CreationTimestamp time.Time
 }
 
 func (DeviceDAO) TableName() string {
@@ -68,14 +72,15 @@ func toDeviceDAO(d *api.Device) DeviceDAO {
 	}
 
 	return DeviceDAO{
-		ID:          d.ID,
-		Alias:       d.Alias,
-		Status:      d.Status,
-		Tags:        d.Tags,
-		IconName:    d.IconName,
-		IconColor:   d.IconColor,
-		Description: d.Description,
-		Slots:       slots,
+		ID:                d.ID,
+		Alias:             d.Alias,
+		Status:            d.Status,
+		Tags:              d.Tags,
+		IconName:          d.IconName,
+		IconColor:         d.IconColor,
+		Description:       d.Description,
+		Slots:             slots,
+		CreationTimestamp: d.CreationTimestamp,
 	}
 }
 
@@ -87,14 +92,15 @@ func (d DeviceDAO) toDevice() *api.Device {
 	}
 
 	return &api.Device{
-		ID:          d.ID,
-		Alias:       d.Alias,
-		Status:      d.Status,
-		Tags:        d.Tags,
-		Slots:       slots,
-		Description: d.Description,
-		IconName:    d.IconName,
-		IconColor:   d.IconColor,
+		ID:                d.ID,
+		Alias:             d.Alias,
+		Status:            d.Status,
+		Tags:              d.Tags,
+		Slots:             slots,
+		Description:       d.Description,
+		IconName:          d.IconName,
+		IconColor:         d.IconColor,
+		CreationTimestamp: d.CreationTimestamp,
 	}
 }
 
@@ -109,10 +115,12 @@ func (c *SlotDAO) toSlot() api.Slot {
 	}
 
 	var activeCertificate *api.Certificate = nil
-	for _, certificate := range certificates {
-		if certificate.Status == api.CertificateStatusActive {
-			activeCertificate = certificate
-		}
+	sort.Slice(certificates, func(x, y int) bool {
+		return certificates[x].Certificate.NotBefore.After(certificates[y].Certificate.NotBefore)
+	})
+
+	if len(certificates) > 0 {
+		activeCertificate = certificates[0]
 	}
 
 	return api.Slot{
@@ -129,12 +137,14 @@ func toSlotDAO(c api.Slot, deviceID string) SlotDAO {
 	certificates := make([]CertificateDAO, 0)
 	for _, certificate := range c.ArchiveCertificates {
 		certificates = append(certificates, toCertificateDAO(*certificate, c.ID, deviceID))
-		if certificate.SerialNumber == activeCertificate.SerialNumber {
-			addedActiveCertificate = true
+		if activeCertificate != nil {
+			if certificate.SerialNumber == activeCertificate.SerialNumber {
+				addedActiveCertificate = true
+			}
 		}
 	}
 
-	if !addedActiveCertificate {
+	if !addedActiveCertificate && activeCertificate != nil {
 		certificates = append(certificates, toCertificateDAO(*activeCertificate, c.ID, deviceID))
 	}
 
@@ -273,8 +283,8 @@ type postgresDBContext struct {
 
 func (db *postgresDBContext) InsertDevice(ctx context.Context, device api.Device) error {
 	deviceDAO := toDeviceDAO(&device)
-
-	if err := db.Model(&DeviceDAO{}).Create(&deviceDAO).Error; err != nil {
+	deviceDAO.CreationTimestamp = time.Now()
+	if err := db.WithContext(ctx).Model(&DeviceDAO{}).Create(&deviceDAO).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not insert Device to database")
 		duplicationErr := &devicesErrors.DuplicateResourceError{
 			ResourceType: "Device",
@@ -288,14 +298,14 @@ func (db *postgresDBContext) InsertDevice(ctx context.Context, device api.Device
 
 func (db *postgresDBContext) SelectDevices(ctx context.Context, queryParameters common.QueryParameters) (int, []*api.Device, error) {
 	var totalDevices int64
-	if err := db.Model(&DeviceDAO{}).Count(&totalDevices).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&DeviceDAO{}).Count(&totalDevices).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Device from database")
 		return 0, []*api.Device{}, err
 	}
 
 	var devicesDAO []DeviceDAO
-	tx := db.Model(&DeviceDAO{})
-	tx = filters.ApplySQLFilter(tx, queryParameters)
+	tx := db.WithContext(ctx).Model(&DeviceDAO{})
+	tx = filters.ApplyQueryParametersFilters(tx, queryParameters)
 	if err := tx.Find(&devicesDAO).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Devices from database")
 		return 0, []*api.Device{}, err
@@ -311,7 +321,7 @@ func (db *postgresDBContext) SelectDevices(ctx context.Context, queryParameters 
 
 func (db *postgresDBContext) SelectDeviceById(ctx context.Context, id string) (*api.Device, error) {
 	var device DeviceDAO
-	if err := db.Debug().Model(&DeviceDAO{}).Where("id = ?", id).First(&device).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&DeviceDAO{}).Where("id = ?", id).First(&device).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Device from database")
 		notFoundErr := &devicesErrors.ResourceNotFoundError{
 			ResourceType: "Device",
@@ -322,22 +332,29 @@ func (db *postgresDBContext) SelectDeviceById(ctx context.Context, id string) (*
 	}
 
 	var slots []SlotDAO
-	db.Model(&device).Association("Slots").Find(&slots)
+	db.WithContext(ctx).Model(&device).Association("Slots").Find(&slots)
 
 	for i, v := range slots {
 		var certificates []CertificateDAO
-		db.Model(&v).Association("Certificates").Find(&certificates)
+		db.WithContext(ctx).Model(&v).Association("Certificates").Find(&certificates)
 		slots[i].Certificates = certificates
 	}
 
 	device.Slots = slots
 
-	return device.toDevice(), nil
+	parsedDevice := device.toDevice()
+	for i := 0; i < len(parsedDevice.Slots); i++ {
+		sort.Slice(parsedDevice.Slots[i].ArchiveCertificates, func(x, y int) bool {
+			return parsedDevice.Slots[i].ArchiveCertificates[x].Certificate.NotBefore.After(parsedDevice.Slots[i].ArchiveCertificates[y].Certificate.NotBefore)
+		})
+	}
+
+	return parsedDevice, nil
 }
 
 func (db *postgresDBContext) UpdateDevice(ctx context.Context, device api.Device) error {
 	deviceDAO := toDeviceDAO(&device)
-	if err := db.Updates(&deviceDAO).Error; err != nil {
+	if err := db.Session(&gorm.Session{FullSaveAssociations: true}).Updates(&deviceDAO).Error; err != nil {
 		return err
 	}
 
@@ -349,7 +366,7 @@ func (db *postgresDBContext) UpdateDevice(ctx context.Context, device api.Device
 func (db *postgresDBContext) InsertSlot(ctx context.Context, deviceID string, slot api.Slot) error {
 	slotDAO := toSlotDAO(slot, deviceID)
 
-	if err := db.Model(&SlotDAO{}).Create(&slotDAO).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&SlotDAO{}).Create(&slotDAO).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not insert Slot to database")
 		duplicationErr := &devicesErrors.DuplicateResourceError{
 			ResourceType: "Slot",
@@ -363,14 +380,14 @@ func (db *postgresDBContext) InsertSlot(ctx context.Context, deviceID string, sl
 
 func (db *postgresDBContext) SelectSlots(ctx context.Context, deviceID string) ([]*api.Slot, error) {
 	var slotsDAO []SlotDAO
-	if err := db.Model(&SlotDAO{}).Find(&slotsDAO).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&SlotDAO{}).Find(&slotsDAO).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Slots from database")
 		return []*api.Slot{}, err
 	}
 
 	for i, v := range slotsDAO {
 		var certificates []CertificateDAO
-		db.Model(&v).Association("Certificates").Find(&certificates)
+		db.WithContext(ctx).Model(&v).Association("Certificates").Find(&certificates)
 		slotsDAO[i].Certificates = certificates
 	}
 
@@ -385,7 +402,7 @@ func (db *postgresDBContext) SelectSlots(ctx context.Context, deviceID string) (
 
 func (db *postgresDBContext) SelectSlotByID(ctx context.Context, deviceID string, id string) (*api.Slot, error) {
 	var slotDAO SlotDAO
-	if err := db.Debug().Model(&SlotDAO{}).Where("slot_id = ?", id).Where("device_id = ?", deviceID).First(&slotDAO).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&SlotDAO{}).Where("slot_id = ?", id).Where("device_id = ?", deviceID).First(&slotDAO).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Slot from database")
 		notFoundErr := &devicesErrors.ResourceNotFoundError{
 			ResourceType: "Slot",
@@ -396,7 +413,7 @@ func (db *postgresDBContext) SelectSlotByID(ctx context.Context, deviceID string
 	}
 
 	var certificates []CertificateDAO
-	db.Model(&slotDAO).Association("Certificates").Find(&certificates)
+	db.WithContext(ctx).Model(&slotDAO).Association("Certificates").Find(&certificates)
 	slotDAO.Certificates = certificates
 
 	slot := slotDAO.toSlot()
@@ -406,7 +423,8 @@ func (db *postgresDBContext) SelectSlotByID(ctx context.Context, deviceID string
 
 func (db *postgresDBContext) UpdateSlot(ctx context.Context, deviceID string, slot api.Slot) error {
 	slotDAO := toSlotDAO(slot, deviceID)
-	if err := db.Updates(&slotDAO).Error; err != nil {
+
+	if err := db.Session(&gorm.Session{FullSaveAssociations: true}).Updates(&slotDAO).Error; err != nil {
 		return err
 	}
 
@@ -418,7 +436,7 @@ func (db *postgresDBContext) UpdateSlot(ctx context.Context, deviceID string, sl
 func (db *postgresDBContext) InsertCertificate(ctx context.Context, deviceID string, slotID string, certificate api.Certificate) error {
 	certificateDAO := toCertificateDAO(certificate, slotID, deviceID)
 
-	if err := db.Model(&CertificateDAO{}).Create(&certificateDAO).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&CertificateDAO{}).Create(&certificateDAO).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not insert Certificate to database")
 		duplicationErr := &devicesErrors.DuplicateResourceError{
 			ResourceType: "Certificate",
@@ -432,7 +450,7 @@ func (db *postgresDBContext) InsertCertificate(ctx context.Context, deviceID str
 
 func (db *postgresDBContext) SelectCertificates(ctx context.Context, deviceID string, slotID string) ([]*api.Certificate, error) {
 	var certificatesDAO []CertificateDAO
-	if err := db.Model(&CertificateDAO{}).Where("slot_id = ?", slotID).Where("device_id = ?", deviceID).Find(&certificatesDAO).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&CertificateDAO{}).Where("slot_id = ?", slotID).Where("device_id = ?", deviceID).Find(&certificatesDAO).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Certificates from database")
 		return []*api.Certificate{}, err
 	}
@@ -451,7 +469,7 @@ func (db *postgresDBContext) SelectCertificates(ctx context.Context, deviceID st
 
 func (db *postgresDBContext) SelectCertificateBySerialNumber(ctx context.Context, deviceID string, slotID string, serialNumber string) (*api.Certificate, error) {
 	var certificateDAO CertificateDAO
-	if err := db.Debug().Model(&CertificateDAO{}).Where("serial_number = ?", serialNumber).Where("slot_id = ?", slotID).Where("device_id = ?", deviceID).First(&certificateDAO).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&CertificateDAO{}).Where("serial_number = ?", serialNumber).Where("slot_id = ?", slotID).Where("device_id = ?", deviceID).First(&certificateDAO).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Certificate from database")
 		notFoundErr := &devicesErrors.ResourceNotFoundError{
 			ResourceType: "Certificate",

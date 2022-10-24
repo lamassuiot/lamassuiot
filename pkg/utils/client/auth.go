@@ -1,13 +1,13 @@
 package client
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
-	"io"
 	"net/http"
 	"net/url"
-	"strings"
+
+	"golang.org/x/oauth2"
 )
 
 type AuthMethod string
@@ -28,6 +28,7 @@ type JWTConfig struct {
 	Password      string
 	URL           *url.URL
 	CACertificate string
+	Insecure      bool
 }
 
 type jwtAuthRoundTripper struct {
@@ -37,15 +38,19 @@ type jwtAuthRoundTripper struct {
 	serverRootCAs     *x509.CertPool
 	authServerRootCAs *x509.CertPool
 	token             string
+	insecure          bool
+	insecureAuth      bool
 }
 
-func NewJWTAuthTransport(username string, password string, authUrl *url.URL, rootCAs *x509.CertPool, authRootCAs *x509.CertPool) jwtAuthRoundTripper {
+func NewJWTAuthTransport(username string, password string, authUrl *url.URL, rootCAs *x509.CertPool, authRootCAs *x509.CertPool, insecure bool, insecureAuth bool) jwtAuthRoundTripper {
 	return jwtAuthRoundTripper{
 		username:          username,
 		password:          password,
 		authUrl:           authUrl,
 		serverRootCAs:     rootCAs,
 		authServerRootCAs: authRootCAs,
+		insecure:          insecure,
+		insecureAuth:      insecureAuth,
 	}
 }
 
@@ -55,6 +60,10 @@ func (t jwtAuthRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 		TLSClientConfig: &tls.Config{
 			RootCAs: t.serverRootCAs,
 		},
+	}
+
+	if t.insecure {
+		tr.TLSClientConfig.InsecureSkipVerify = true
 	}
 
 	if t.token == "" {
@@ -76,32 +85,26 @@ func (t jwtAuthRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 }
 
 func (t jwtAuthRoundTripper) getJWT() (string, error) {
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			RootCAs: t.authServerRootCAs,
+	if t.insecureAuth {
+		http.DefaultClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		}
+	}
+
+	var conf = oauth2.Config{
+		ClientID: "frontend",
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  t.authUrl.String() + "/auth/realms/lamassu/protocol/openid-connect/auth",
+			TokenURL: t.authUrl.String() + "/auth/realms/lamassu/protocol/openid-connect/token",
 		},
 	}
 
-	httpClient := &http.Client{Transport: tr}
-
-	t.authUrl.Path = "/auth/realms/lamassu/protocol/openid-connect/token/"
-	payload := strings.NewReader("grant_type=password&client_id=frontend&username=" + t.username + "&password=" + t.password)
-	request, err := http.NewRequest("POST", t.authUrl.String(), payload)
+	token, err := conf.PasswordCredentialsToken(context.Background(), t.username, t.password)
 	if err != nil {
 		return "", err
 	}
 
-	request.Header.Add("Content-Type", "application/x-www-form-urlencoded")
-	response, err := httpClient.Do(request)
-	if err != nil {
-		return "", err
-	}
-	bodyBytes, err := io.ReadAll(response.Body)
-	if err != nil {
-		return "", err
-	}
-
-	var jsonContent map[string]interface{}
-	json.Unmarshal(bodyBytes, &jsonContent)
-	return jsonContent["access_token"].(string), nil
+	return token.AccessToken, nil
 }

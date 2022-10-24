@@ -49,18 +49,18 @@ func ParseCAType(t string) CAType {
 type KeyStrength string
 
 const (
-	KeyStrengthHigh   KeyStrength = "high"
-	KeyStrengthMedium KeyStrength = "medium"
-	KeyStrengthLow    KeyStrength = "low"
+	KeyStrengthHigh   KeyStrength = "HIGH"
+	KeyStrengthMedium KeyStrength = "MEDIUM"
+	KeyStrengthLow    KeyStrength = "LOW"
 )
 
 func ParseKeyStrength(t string) KeyStrength {
 	switch t {
-	case "high":
+	case "HIGH":
 		return KeyStrengthHigh
-	case "medium":
+	case "MEDIUM":
 		return KeyStrengthMedium
-	case "low":
+	case "LOW":
 		return KeyStrengthLow
 
 	default:

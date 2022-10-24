@@ -5,15 +5,15 @@ import (
 	"strings"
 )
 
-type NumberOperatorType int64
+type NumberOperatorType string
 
 const (
-	LessThan NumberOperatorType = iota
-	GreaterThan
-	LessOrEqual
-	GreaterOrEqual
-	Equal
-	NotEqual
+	LessThan       NumberOperatorType = "lessthan"
+	GreaterThan    NumberOperatorType = "greaterthan"
+	LessOrEqual    NumberOperatorType = "lessorequal"
+	GreaterOrEqual NumberOperatorType = "greaterorequal"
+	Equal          NumberOperatorType = "equal"
+	NotEqual       NumberOperatorType = "notequal"
 )
 
 func ParseNumberOperator(s string) NumberOperatorType {
@@ -63,22 +63,7 @@ func (f *NumberFilterField) ToSQL() string {
 }
 
 func (f NumberFilterField) GetOperatorToString() string {
-	switch f.Operator {
-	case LessThan:
-		return "LessThan"
-	case GreaterThan:
-		return "GreaterThan"
-	case LessOrEqual:
-		return "LessOrEqual"
-	case GreaterOrEqual:
-		return "GreaterOrEqual"
-	case Equal:
-		return "Equal"
-	case NotEqual:
-		return "NotEqual"
-	default:
-		return ""
-	}
+	return string(f.Operator)
 }
 
 func (f NumberFilterField) GetFieldName() string {

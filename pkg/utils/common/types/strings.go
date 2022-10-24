@@ -2,13 +2,13 @@ package types
 
 import "strings"
 
-type StringOperatorType int64
+type StringOperatorType string
 
 const (
-	Equals StringOperatorType = iota
-	NotEquals
-	Contains
-	NotContains
+	Equals      StringOperatorType = "equals"
+	NotEquals   StringOperatorType = "notequals"
+	Contains    StringOperatorType = "contains"
+	NotContains StringOperatorType = "notcontains"
 )
 
 func ParseStringsOperator(s string) StringOperatorType {
@@ -33,31 +33,20 @@ type StringFilterField struct {
 	CompareWith string
 }
 
+func (f StringFilterField) GetOperatorToString() string {
+	return string(f.Operator)
+}
+
 func (f *StringFilterField) ToSQL() string {
 	switch f.Operator {
 	case Equals:
-		return f.FieldName + " = '" + f.CompareWith + "' "
+		return f.FieldName + " = '" + f.CompareWith + "'"
 	case Contains:
-		return f.FieldName + " LIKE '%" + f.CompareWith + "%' "
+		return f.FieldName + " LIKE '%" + f.CompareWith + "%'"
 	case NotEquals:
-		return f.FieldName + " <> '" + f.CompareWith + "' "
+		return f.FieldName + " <> '" + f.CompareWith + "'"
 	case NotContains:
-		return f.FieldName + " NOT LIKE '%" + f.CompareWith + "%' "
-	default:
-		return ""
-	}
-}
-
-func (f StringFilterField) GetOperatorToString() string {
-	switch f.Operator {
-	case Equals:
-		return "Equals"
-	case NotEquals:
-		return "NotEquals"
-	case NotContains:
-		return "NotContains"
-	case Contains:
-		return "Contains"
+		return f.FieldName + " NOT LIKE '%" + f.CompareWith + "%'"
 	default:
 		return ""
 	}

@@ -136,7 +136,7 @@ func (db *PostgresDBContext) Insert(ctx context.Context, csr *x509.CertificateRe
 		X509Asset:                 string(certificateEnc),
 	}
 
-	if err := db.Model(&DeviceManufacturingServiceDAO{}).Create(&dms).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&DeviceManufacturingServiceDAO{}).Create(&dms).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not insert DMS to database")
 		duplicationErr := &dmserrors.DuplicateResourceError{
 			ResourceType: "DMS",
@@ -150,7 +150,7 @@ func (db *PostgresDBContext) Insert(ctx context.Context, csr *x509.CertificateRe
 
 func (db *PostgresDBContext) SelectByName(ctx context.Context, name string) (api.DeviceManufacturingService, error) {
 	var dms DeviceManufacturingServiceDAO
-	if err := db.Model(&DeviceManufacturingServiceDAO{}).Where("name = ?", name).First(&dms).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&DeviceManufacturingServiceDAO{}).Where("name = ?", name).First(&dms).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain DMSs from database")
 		notFoundErr := &dmserrors.ResourceNotFoundError{
 			ResourceType: "DMS",
@@ -164,14 +164,14 @@ func (db *PostgresDBContext) SelectByName(ctx context.Context, name string) (api
 
 func (db *PostgresDBContext) SelectAll(ctx context.Context, queryParameters common.QueryParameters) (int, []api.DeviceManufacturingService, error) {
 	var totalDMSs int64
-	if err := db.Model(&DeviceManufacturingServiceDAO{}).Count(&totalDMSs).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&DeviceManufacturingServiceDAO{}).Count(&totalDMSs).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain DMSs from database")
 		return 0, []api.DeviceManufacturingService{}, err
 	}
 
 	var dmss []DeviceManufacturingServiceDAO
-	tx := db.Model(&DeviceManufacturingServiceDAO{})
-	tx = filters.ApplySQLFilter(tx, queryParameters)
+	tx := db.WithContext(ctx).Model(&DeviceManufacturingServiceDAO{})
+	tx = filters.ApplyQueryParametersFilters(tx, queryParameters)
 	if err := tx.Find(&dmss).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain DMSs from database")
 		return 0, []api.DeviceManufacturingService{}, err
@@ -192,7 +192,7 @@ func (db *PostgresDBContext) SelectAll(ctx context.Context, queryParameters comm
 
 func (db *PostgresDBContext) UpdateStatus(ctx context.Context, name string, status api.DMSStatus) error {
 	var dms DeviceManufacturingServiceDAO
-	if err := db.Model(&DeviceManufacturingServiceDAO{}).Where("name = ?", name).First(&dms).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&DeviceManufacturingServiceDAO{}).Where("name = ?", name).First(&dms).Error; err != nil {
 		return err
 	}
 
@@ -207,7 +207,7 @@ func (db *PostgresDBContext) UpdateStatus(ctx context.Context, name string, stat
 
 func (db *PostgresDBContext) UpdateAuthorizedCAs(ctx context.Context, name string, authorizedCAs []string) error {
 	var dms DeviceManufacturingServiceDAO
-	if err := db.Model(&DeviceManufacturingServiceDAO{}).Where("name = ?", name).First(&dms).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&DeviceManufacturingServiceDAO{}).Where("name = ?", name).First(&dms).Error; err != nil {
 		return err
 	}
 
@@ -223,7 +223,7 @@ func (db *PostgresDBContext) UpdateAuthorizedCAs(ctx context.Context, name strin
 
 func (db *PostgresDBContext) UpdateDMS(ctx context.Context, dms api.DeviceManufacturingService) error {
 	var dmsToUpdate DeviceManufacturingServiceDAO
-	if err := db.Model(&DeviceManufacturingServiceDAO{}).Where("name = ?", dms.Name).First(&dmsToUpdate).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&DeviceManufacturingServiceDAO{}).Where("name = ?", dms.Name).First(&dmsToUpdate).Error; err != nil {
 		return err
 	}
 

@@ -1,4 +1,4 @@
-package crypto_engines
+package cryptoengines
 
 import (
 	"crypto"
@@ -116,10 +116,16 @@ func (p *pemProviderContext) CreateRSAPrivateKey(keySize int, keyID string) (cry
 		return nil, err
 	}
 
+	if _, err := os.Stat(p.storageDirectory); os.IsNotExist(err) {
+		level.Warn(p.logger).Log("msg", fmt.Sprintf("PEM directory [%s]does not exist. Will create such directory", p.storageDirectory), "err", err)
+		os.MkdirAll(p.storageDirectory, 0755)
+	}
+
 	err = ioutil.WriteFile(p.storageDirectory+"/"+keyID, pem.EncodeToMemory(&pem.Block{
 		Bytes: x509.MarshalPKCS1PrivateKey(key),
 	}), 0644)
 	if err != nil {
+		fmt.Println(err)
 		return nil, err
 	}
 

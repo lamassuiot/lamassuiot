@@ -2,10 +2,14 @@ package endpoint
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 
+	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/go-kit/kit/endpoint"
 	"github.com/go-kit/kit/tracing/opentracing"
 	"github.com/go-playground/validator/v10"
+	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
@@ -21,7 +25,9 @@ type Endpoints struct {
 	GetDevicesEndpoint              endpoint.Endpoint
 	GetDeviceByIdEndpoint           endpoint.Endpoint
 	RevokeActiveCertificateEndpoint endpoint.Endpoint
+	ForceReenrollEndpoint           endpoint.Endpoint
 	GetDeviceLogsEndpoint           endpoint.Endpoint
+	HandleCACloudEvent              endpoint.Endpoint
 }
 
 func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
@@ -70,6 +76,16 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 		getDeviceLogsEndpoint = MakeGetDeviceLogsEndpoint(s)
 		getDeviceLogsEndpoint = opentracing.TraceServer(otTracer, "GetDeviceLogs")(getDeviceLogsEndpoint)
 	}
+	var handleCACloudEvent endpoint.Endpoint
+	{
+		handleCACloudEvent = MakeHandleCACloudEvent(s)
+		handleCACloudEvent = opentracing.TraceServer(otTracer, "HandleCACloudEvent")(handleCACloudEvent)
+	}
+	var forceReenrollEndpoint endpoint.Endpoint
+	{
+		forceReenrollEndpoint = MakeForceReenrollEnpoint(s)
+		forceReenrollEndpoint = opentracing.TraceServer(otTracer, "ForceReenroll")(forceReenrollEndpoint)
+	}
 
 	return Endpoints{
 		HealthEndpoint:                  healthEndpoint,
@@ -81,6 +97,8 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 		GetDeviceByIdEndpoint:           getDeviceByIdEndpoint,
 		RevokeActiveCertificateEndpoint: revokeActiveCertificateEndpoint,
 		GetDeviceLogsEndpoint:           getDeviceLogsEndpoint,
+		HandleCACloudEvent:              handleCACloudEvent,
+		ForceReenrollEndpoint:           forceReenrollEndpoint,
 	}
 }
 
@@ -288,6 +306,86 @@ func MakeGetDeviceLogsEndpoint(s service.Service) endpoint.Endpoint {
 
 		output, err := s.GetDeviceLogs(ctx, &input)
 		return output, err
+	}
+}
+func MakeHandleCACloudEvent(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		event := request.(cloudevents.Event)
+		switch event.Type() {
+		case "io.lamassuiot.certificate.update":
+			var data caApi.UpdateCertificateStatusOutputSerialized
+			json.Unmarshal(event.Data(), &data)
+			cetificate := data.CertificateSerialized.Deserialize()
+
+			deviceID := ""
+			slotID := "default"
+			if strings.Contains(cetificate.Certificate.Subject.CommonName, ":") {
+				identifier := strings.Split(cetificate.Certificate.Subject.CommonName, ":")
+				slotID = identifier[0]
+				deviceID = identifier[1]
+			} else {
+				deviceID = cetificate.Certificate.Subject.CommonName
+			}
+
+			_, err = s.UpdateActiveCertificateStatus(ctx, &api.UpdateActiveCertificateStatusInput{
+				DeviceID:         deviceID,
+				SlotID:           slotID,
+				Status:           cetificate.Status,
+				RevocationReason: cetificate.RevocationReason,
+			})
+			return nil, err
+
+		case "io.lamassuiot.certificate.revoke":
+			var data caApi.RevokeCertificateOutputSerialized
+			json.Unmarshal(event.Data(), &data)
+			cetificate := data.CertificateSerialized.Deserialize()
+
+			deviceID := ""
+			slotID := "default"
+			if strings.Contains(cetificate.Certificate.Subject.CommonName, ":") {
+				identifier := strings.Split(cetificate.Certificate.Subject.CommonName, ":")
+				slotID = identifier[0]
+				deviceID = identifier[1]
+			} else {
+				deviceID = cetificate.Certificate.Subject.CommonName
+			}
+
+			_, err = s.UpdateActiveCertificateStatus(ctx, &api.UpdateActiveCertificateStatusInput{
+				DeviceID:         deviceID,
+				SlotID:           slotID,
+				Status:           cetificate.Status,
+				RevocationReason: cetificate.RevocationReason,
+			})
+			return nil, err
+
+		default:
+			return nil, nil
+		}
+	}
+}
+
+func ValidateForceReenrollRequest(request api.ForceReenrollInput) error {
+	ForceReenrollInputStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.ForceReenrollInput)
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(ForceReenrollInputStructLevelValidation, api.ForceReenrollInput{})
+	return validate.Struct(request)
+}
+func MakeForceReenrollEnpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.ForceReenrollInput)
+
+		err = ValidateForceReenrollRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		out, err := s.ForceReenroll(ctx, &input)
+		return out, err
 	}
 }
 

@@ -26,7 +26,7 @@ type lamassuDMSManagerClientConfig struct {
 	client clientUtils.BaseClient
 }
 
-func NewLamassuDMSManagerClientConfig(config clientUtils.ClientConfiguration) (LamassuDMSManagerClient, error) {
+func NewLamassuDMSManagerClientConfig(config clientUtils.BaseClientConfigurationuration) (LamassuDMSManagerClient, error) {
 	baseClient, err := clientUtils.NewBaseClient(config)
 	if err != nil {
 		return nil, err
@@ -53,14 +53,14 @@ func (c *lamassuDMSManagerClientConfig) CreateDMS(ctx context.Context, input *ap
 		},
 	}
 
-	req, err := c.client.NewRequest("POST", "v1/", body)
+	req, err := c.client.NewRequest(ctx, "POST", "v1/", body)
 
 	if err != nil {
 		return &api.CreateDMSOutput{}, err
 	}
 
 	var output api.CreateDMSOutputSerialized
-	_, err = c.client.Do2(req, &output)
+	_, err = c.client.Do(req, &output)
 
 	if err != nil {
 		return &api.CreateDMSOutput{}, err
@@ -78,14 +78,14 @@ func (c *lamassuDMSManagerClientConfig) CreateDMSWithCertificateRequest(ctx cont
 		CertificateRequest: base64CsrContent,
 	}
 
-	req, err := c.client.NewRequest("POST", "v1/csr", body)
+	req, err := c.client.NewRequest(ctx, "POST", "v1/csr", body)
 
 	if err != nil {
 		return &api.CreateDMSWithCertificateRequestOutput{}, err
 	}
 
 	var output api.CreateDMSWithCertificateRequestOutputSerialized
-	_, err = c.client.Do2(req, &output)
+	_, err = c.client.Do(req, &output)
 
 	if err != nil {
 		return &api.CreateDMSWithCertificateRequestOutput{}, err
@@ -100,14 +100,14 @@ func (c *lamassuDMSManagerClientConfig) UpdateDMSStatus(ctx context.Context, inp
 		Status: string(input.Status),
 	}
 
-	req, err := c.client.NewRequest("PUT", "v1/"+input.Name+"/status", body)
+	req, err := c.client.NewRequest(ctx, "PUT", "v1/"+input.Name+"/status", body)
 
 	if err != nil {
 		return &api.UpdateDMSStatusOutput{}, err
 	}
 
 	var output api.UpdateDMSStatusOutputSerialized
-	_, err = c.client.Do2(req, &output)
+	_, err = c.client.Do(req, &output)
 
 	if err != nil {
 		return &api.UpdateDMSStatusOutput{}, err
@@ -122,14 +122,14 @@ func (c *lamassuDMSManagerClientConfig) UpdateDMSAuthorizedCAs(ctx context.Conte
 		AuthorizedCAs: input.AuthorizedCAs,
 	}
 
-	req, err := c.client.NewRequest("PUT", "v1/"+input.Name+"/auth", body)
+	req, err := c.client.NewRequest(ctx, "PUT", "v1/"+input.Name+"/auth", body)
 
 	if err != nil {
 		return &api.UpdateDMSAuthorizedCAsOutput{}, err
 	}
 
 	var output api.UpdateDMSAuthorizedCAsOutputSerialized
-	_, err = c.client.Do2(req, &output)
+	_, err = c.client.Do(req, &output)
 
 	if err != nil {
 		return &api.UpdateDMSAuthorizedCAsOutput{}, err
@@ -140,7 +140,7 @@ func (c *lamassuDMSManagerClientConfig) UpdateDMSAuthorizedCAs(ctx context.Conte
 }
 
 func (c *lamassuDMSManagerClientConfig) GetDMSs(ctx context.Context, input *api.GetDMSsInput) (*api.GetDMSsOutput, error) {
-	req, err := c.client.NewRequest("GET", "v1/", nil)
+	req, err := c.client.NewRequest(ctx, "GET", "v1/", nil)
 
 	newParams := clientFilers.GenerateHttpQueryParams(input.QueryParameters)
 	req.URL.RawQuery = newParams
@@ -150,7 +150,7 @@ func (c *lamassuDMSManagerClientConfig) GetDMSs(ctx context.Context, input *api.
 	}
 
 	var output api.GetDMSsOutputSerialized
-	_, err = c.client.Do2(req, &output)
+	_, err = c.client.Do(req, &output)
 
 	if err != nil {
 		return &api.GetDMSsOutput{}, err
@@ -161,15 +161,14 @@ func (c *lamassuDMSManagerClientConfig) GetDMSs(ctx context.Context, input *api.
 }
 
 func (c *lamassuDMSManagerClientConfig) GetDMSByName(ctx context.Context, input *api.GetDMSByNameInput) (*api.GetDMSByNameOutput, error) {
-	req, err := c.client.NewRequest("GET", "v1/"+input.Name, nil)
+	req, err := c.client.NewRequest(ctx, "GET", "v1/"+input.Name, nil)
 
 	if err != nil {
 		return &api.GetDMSByNameOutput{}, err
 	}
 
 	var output api.GetDMSByNameOutputSerialized
-	_, err = c.client.Do2(req, &output)
-
+	_, err = c.client.Do(req, &output)
 	if err != nil {
 		return &api.GetDMSByNameOutput{}, err
 	}

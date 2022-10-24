@@ -2,6 +2,7 @@ package client
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -12,33 +13,47 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 )
 
-type BaseClient interface {
-	NewRequest(method string, path string, body interface{}) (*http.Request, error)
-	Do(req *http.Request) (interface{}, *http.Response, error)
-	Do2(req *http.Request, response any) (*http.Response, error)
+type BaseClientConfigurationuration struct {
+	URL              *url.URL
+	AuthMethod       AuthMethod
+	AuthMethodConfig interface{}
+	CACertificate    string
+	Insecure         bool
 }
 
-type ClientConfig struct {
+type ClientConfiguration struct {
 	BaseURL    *url.URL
 	httpClient *http.Client
 }
 
-func NewBaseClient(config ClientConfiguration) (BaseClient, error) {
+type BaseClient interface {
+	NewRequest(ctx context.Context, method string, path string, body interface{}) (*http.Request, error)
+	Do(req *http.Request, response any) (*http.Response, error)
+	Do2(req *http.Request) (*http.Response, error)
+}
+
+func NewBaseClient(config BaseClientConfigurationuration) (BaseClient, error) {
 	tr := &http.Transport{}
 
 	if config.URL.Scheme == "https" {
-		caPem, err := ioutil.ReadFile(config.CACertificate)
-		if err != nil {
-			return nil, err
+		certPool := x509.NewCertPool()
+		if !config.Insecure {
+			caPem, err := ioutil.ReadFile(config.CACertificate)
+			if err != nil {
+				return nil, err
+			}
+
+			certPool.AppendCertsFromPEM(caPem)
 		}
 
-		certPool := x509.NewCertPool()
-		certPool.AppendCertsFromPEM(caPem)
-
 		tr.TLSClientConfig = &tls.Config{
-			RootCAs: certPool,
+			RootCAs:            certPool,
+			InsecureSkipVerify: config.Insecure,
 		}
 	}
 
@@ -60,13 +75,15 @@ func NewBaseClient(config ClientConfiguration) (BaseClient, error) {
 			return nil, errors.New("invalid client configuration, missing JWTConfig")
 		}
 
-		authCAPem, err := ioutil.ReadFile(config.CACertificate)
-		if err != nil {
-			return nil, err
-		}
-
 		authCertPool := x509.NewCertPool()
-		authCertPool.AppendCertsFromPEM(authCAPem)
+		if !authConfig.Insecure {
+			authCAPem, err := ioutil.ReadFile(config.CACertificate)
+			if err != nil {
+				return nil, err
+			}
+
+			authCertPool.AppendCertsFromPEM(authCAPem)
+		}
 
 		rt := NewJWTAuthTransport(
 			authConfig.Username,
@@ -74,24 +91,28 @@ func NewBaseClient(config ClientConfiguration) (BaseClient, error) {
 			authConfig.URL,
 			tr.TLSClientConfig.RootCAs,
 			authCertPool,
+			config.Insecure,
+			authConfig.Insecure,
 		)
 
-		httpClient = &http.Client{Transport: rt}
+		httpClient = &http.Client{Transport: otelhttp.NewTransport(rt)}
 	}
 
 	if httpClient == nil {
-		httpClient = &http.Client{Transport: tr}
+		httpClient = &http.Client{Transport: otelhttp.NewTransport(tr)}
 	}
 
-	return &ClientConfig{
+	return &ClientConfiguration{
 		BaseURL:    config.URL,
 		httpClient: httpClient,
 	}, nil
 }
 
-func (c *ClientConfig) NewRequest(method string, path string, body interface{}) (*http.Request, error) {
-	rel := &url.URL{Path: path}
-	u := c.BaseURL.ResolveReference(rel)
+func (c *ClientConfiguration) NewRequest(ctx context.Context, method string, path string, body interface{}) (*http.Request, error) {
+	u, err := url.JoinPath(c.BaseURL.String(), path)
+	if err != nil {
+		return nil, err
+	}
 	var buf io.ReadWriter
 	if body != nil {
 		buf = new(bytes.Buffer)
@@ -100,7 +121,7 @@ func (c *ClientConfig) NewRequest(method string, path string, body interface{}) 
 			return nil, err
 		}
 	}
-	req, err := http.NewRequest(method, u.String(), buf)
+	req, err := http.NewRequestWithContext(ctx, method, u, buf)
 	if err != nil {
 		return nil, err
 	}
@@ -108,26 +129,12 @@ func (c *ClientConfig) NewRequest(method string, path string, body interface{}) 
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Accept", "application/json")
+	spanContext := trace.SpanContextFromContext(ctx)
+	req.Header.Set("x-request-id", fmt.Sprintf("%s:%s", spanContext.TraceID().String(), spanContext.SpanID().String()))
 	return req, nil
 }
 
-func (c *ClientConfig) Do(req *http.Request) (interface{}, *http.Response, error) {
-	var v interface{}
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if resp.StatusCode != 200 {
-		return nil, resp, errors.New("Response with status code: " + strconv.Itoa(resp.StatusCode) + "")
-	}
-
-	defer resp.Body.Close()
-	err = json.NewDecoder(resp.Body).Decode(&v)
-	return v, resp, err
-}
-
-func (c *ClientConfig) Do2(req *http.Request, response any) (*http.Response, error) {
+func (c *ClientConfiguration) Do(req *http.Request, response any) (*http.Response, error) {
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -145,6 +152,9 @@ func (c *ClientConfig) Do2(req *http.Request, response any) (*http.Response, err
 	defer resp.Body.Close()
 	err = json.NewDecoder(resp.Body).Decode(&response)
 	return resp, err
+}
+func (c *ClientConfiguration) Do2(req *http.Request) (*http.Response, error) {
+	return c.httpClient.Do(req)
 }
 
 func ByteCountDecimal(b int64) string {

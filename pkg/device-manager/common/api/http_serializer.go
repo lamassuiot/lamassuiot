@@ -6,65 +6,13 @@ import (
 	"encoding/pem"
 	"time"
 
+	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lib/pq"
 )
 
-type SlotsStatsSerialized struct {
-	PendingEnrollment int `json:"pending_enrollment"`
-	Active            int `json:"active"`
-	Expired           int `json:"expired"`
-	Revoked           int `json:"revoked"`
-}
-
-func (s *SlotsStats) Serialize() SlotsStatsSerialized {
-	return SlotsStatsSerialized{
-		PendingEnrollment: s.PendingEnrollment,
-		Active:            s.Active,
-		Expired:           s.Expired,
-		Revoked:           s.Revoked,
-	}
-}
-
-func (s *SlotsStatsSerialized) Deserialize() SlotsStats {
-	return SlotsStats{
-		PendingEnrollment: s.PendingEnrollment,
-		Active:            s.Active,
-		Expired:           s.Expired,
-		Revoked:           s.Revoked,
-	}
-}
-
-type DevicesStatsSerialized struct {
-	PendingProvisioning     int `json:"pending_provisioning"`
-	FullyProvisioned        int `json:"fully_provisioned"`
-	PartiallyProvisioned    int `json:"partially_provisioned"`
-	ProvisionedWithWarnings int `json:"provisioned_with_warnings"`
-	Decommisioned           int `json:"decommisioned"`
-}
-
-func (s *DevicesStats) Serialize() DevicesStatsSerialized {
-	return DevicesStatsSerialized{
-		PendingProvisioning:     s.PendingProvisioning,
-		FullyProvisioned:        s.FullyProvisioned,
-		PartiallyProvisioned:    s.PartiallyProvisioned,
-		ProvisionedWithWarnings: s.ProvisionedWithWarnings,
-		Decommisioned:           s.Decommisioned,
-	}
-}
-
-func (s *DevicesStatsSerialized) Deserialize() DevicesStats {
-	return DevicesStats{
-		PendingProvisioning:     s.PendingProvisioning,
-		FullyProvisioned:        s.FullyProvisioned,
-		PartiallyProvisioned:    s.PartiallyProvisioned,
-		ProvisionedWithWarnings: s.ProvisionedWithWarnings,
-		Decommisioned:           s.Decommisioned,
-	}
-}
-
 type DevicesManagerStatsSerialized struct {
-	DevicesStats DevicesStats `json:"devices_stats"`
-	SlotsStats   SlotsStats   `json:"slots_stats"`
+	DevicesStats map[DeviceStatus]int            `json:"devices_stats"`
+	SlotsStats   map[caApi.CertificateStatus]int `json:"slots_stats"`
 }
 
 func (s *DevicesManagerStats) Serialize() DevicesManagerStatsSerialized {
@@ -82,9 +30,9 @@ func (s *DevicesManagerStatsSerialized) Deserialize() DevicesManagerStats {
 }
 
 type KeyStrengthMetadataSerialized struct {
-	KeyType     KeyType     `json:"key_type"`
-	KeyBits     int         `json:"key_bits"`
-	KeyStrength KeyStrength `json:"key_strength"`
+	KeyType     KeyType     `json:"type"`
+	KeyBits     int         `json:"bits"`
+	KeyStrength KeyStrength `json:"strength"`
 }
 
 func (s *KeyStrengthMetadata) Serialize() KeyStrengthMetadataSerialized {
@@ -138,7 +86,7 @@ type CertificateSerialized struct {
 	CAName              string                        `json:"ca_name"`
 	SerialNumber        string                        `json:"serial_number"`
 	Certificate         string                        `json:"certificate"`
-	Status              CertificateStatus             `json:"status"`
+	Status              caApi.CertificateStatus       `json:"status"`
 	KeyMetadata         KeyStrengthMetadataSerialized `json:"key_metadata"`
 	Subject             SubjectSerialized             `json:"subject"`
 	ValidFrom           int                           `json:"valid_from"`
@@ -163,13 +111,13 @@ func (s *Certificate) Serialize() CertificateSerialized {
 		Status:           s.Status,
 		KeyMetadata:      s.KeyMetadata.Serialize(),
 		Subject:          s.Subject.Serialize(),
-		ValidFrom:        int(s.ValidFrom.Unix()),
-		ValidTo:          int(s.ValidTo.Unix()),
+		ValidFrom:        int(s.ValidFrom.UnixMilli()),
+		ValidTo:          int(s.ValidTo.UnixMilli()),
 		RevocationReason: s.RevocationReason,
 	}
 
 	if s.RevocationTimestamp.Valid {
-		serializer.RevocationTimestamp = int(s.RevocationTimestamp.Time.Unix())
+		serializer.RevocationTimestamp = int(s.RevocationTimestamp.Time.UnixMilli())
 	}
 
 	return serializer
@@ -188,10 +136,10 @@ func (s *CertificateSerialized) Deserialize() Certificate {
 
 	serializer := Certificate{
 		CAName:       s.CAName,
-		Status:       ParseCertificateStatus(string(s.Status)),
+		Status:       s.Status,
 		SerialNumber: s.SerialNumber,
-		ValidFrom:    time.Unix(int64(s.ValidFrom), 0),
-		ValidTo:      time.Unix(int64(s.ValidTo), 0),
+		ValidFrom:    time.UnixMilli(int64(s.ValidFrom)),
+		ValidTo:      time.UnixMilli(int64(s.ValidTo)),
 		KeyMetadata:  s.KeyMetadata.Deserialize(),
 		Subject:      s.Subject.Deserialize(),
 		Certificate:  certificate,
@@ -199,7 +147,7 @@ func (s *CertificateSerialized) Deserialize() Certificate {
 
 	if s.RevocationTimestamp > 0 {
 		serializer.RevocationTimestamp = pq.NullTime{
-			Time:  time.Unix(int64(s.RevocationTimestamp), 0),
+			Time:  time.UnixMilli(int64(s.RevocationTimestamp)),
 			Valid: true,
 		}
 		serializer.RevocationReason = s.RevocationReason
@@ -245,96 +193,145 @@ func (s *SlotSerialized) Deserialize() Slot {
 }
 
 type DeviceSerialized struct {
-	ID          string           `json:"id"`
-	Alias       string           `json:"alias"`
-	Status      DeviceStatus     `json:"status"`
-	Slots       []SlotSerialized `json:"slots"`
-	Description string           `json:"description"`
-	Tags        []string         `json:"tags"`
-	IconName    string           `json:"icon_name"`
-	IconColor   string           `json:"icon_color"`
+	ID                string           `json:"id"`
+	Alias             string           `json:"alias"`
+	Status            DeviceStatus     `json:"status"`
+	Slots             []SlotSerialized `json:"slots"`
+	Description       string           `json:"description"`
+	Tags              []string         `json:"tags"`
+	IconName          string           `json:"icon_name"`
+	IconColor         string           `json:"icon_color"`
+	CreationTimestamp int              `json:"creation_timestamp"`
 }
 
 func (s *Device) Serialize() DeviceSerialized {
-	var slots []SlotSerialized
+	slots := []SlotSerialized{}
 	for _, slot := range s.Slots {
 		serializedSlot := slot.Serialize()
 		slots = append(slots, serializedSlot)
 	}
 	return DeviceSerialized{
-		ID:          s.ID,
-		Alias:       s.Alias,
-		Status:      s.Status,
-		Slots:       slots,
-		Description: s.Description,
-		Tags:        s.Tags,
-		IconName:    s.IconName,
-		IconColor:   s.IconColor,
+		ID:                s.ID,
+		Alias:             s.Alias,
+		Status:            s.Status,
+		Slots:             slots,
+		Description:       s.Description,
+		Tags:              s.Tags,
+		IconName:          s.IconName,
+		IconColor:         s.IconColor,
+		CreationTimestamp: int(s.CreationTimestamp.UnixMilli()),
 	}
 }
 
 func (s *DeviceSerialized) Deserialize() Device {
-	var slots []*Slot
+	slots := []*Slot{}
 	for _, slot := range s.Slots {
 		deserializedSlot := slot.Deserialize()
 		slots = append(slots, &deserializedSlot)
 	}
 
 	return Device{
-		ID:          s.ID,
-		Alias:       s.Alias,
-		Status:      s.Status,
-		Slots:       slots,
-		Description: s.Description,
-		Tags:        s.Tags,
-		IconName:    s.IconName,
-		IconColor:   s.IconColor,
+		ID:                s.ID,
+		Alias:             s.Alias,
+		Status:            s.Status,
+		Slots:             slots,
+		Description:       s.Description,
+		Tags:              s.Tags,
+		IconName:          s.IconName,
+		IconColor:         s.IconColor,
+		CreationTimestamp: time.UnixMilli(int64(s.CreationTimestamp)),
 	}
 }
 
-type DeviceLogSerialized struct {
-	ID         string `json:"id"`
-	DeviceID   string `json:"device_id"`
-	LogType    string `json:"log_type"`
-	LogMessage string `json:"log_message"`
-	Timestamp  int    `json:"timestamp"`
+type LogSerialized struct {
+	LogType        string `json:"log_type"`
+	LogMessage     string `json:"log_message"`
+	LogDescription string `json:"log_description"`
+	Timestamp      int    `json:"timestamp"`
 }
 
-func (s *DeviceLog) Serialize() DeviceLogSerialized {
-	return DeviceLogSerialized{
-		ID:         s.ID,
-		DeviceID:   s.DeviceID,
-		LogType:    s.LogType,
-		LogMessage: s.LogMessage,
-		Timestamp:  int(s.Timestamp.Unix()),
+func (s *Log) Serialize() LogSerialized {
+	return LogSerialized{
+		LogType:        string(s.LogType),
+		LogMessage:     s.LogMessage,
+		LogDescription: s.LogDescription,
+		Timestamp:      int(s.Timestamp.UnixMilli()),
 	}
 }
 
-func (s *DeviceLogSerialized) Deserialize() DeviceLog {
-	return DeviceLog{
-		ID:         s.ID,
-		DeviceID:   s.DeviceID,
-		LogType:    s.LogType,
-		LogMessage: s.LogMessage,
-		Timestamp:  time.Unix(int64(s.Timestamp), 0),
+func (s *LogSerialized) Deserialize() Log {
+	return Log{
+		LogType:        LogType(s.LogType),
+		LogMessage:     s.LogMessage,
+		LogDescription: s.LogDescription,
+		Timestamp:      time.UnixMilli(int64(s.Timestamp)),
+	}
+}
+
+type DeviceLogsSerialized struct {
+	DevciceID string                     `json:"device_id"`
+	Logs      []LogSerialized            `json:"logs"`
+	SlotLogs  map[string][]LogSerialized `json:"slot_logs"`
+}
+
+func (s *DeviceLogs) Serialize() DeviceLogsSerialized {
+	logs := []LogSerialized{}
+	for _, log := range s.Logs {
+		logs = append(logs, log.Serialize())
+	}
+	slotLogsMap := map[string][]LogSerialized{}
+	for slotID, slotLog := range s.SlotLogs {
+		slotLogs := []LogSerialized{}
+		for _, log := range slotLog {
+			slotLogs = append(slotLogs, log.Serialize())
+		}
+		slotLogsMap[slotID] = slotLogs
+	}
+	return DeviceLogsSerialized{
+		DevciceID: s.DevciceID,
+		Logs:      logs,
+		SlotLogs:  slotLogsMap,
+	}
+}
+
+func (s *DeviceLogsSerialized) Deserialize() DeviceLogs {
+	logs := []Log{}
+	for _, log := range s.Logs {
+		logs = append(logs, log.Deserialize())
+	}
+	slotLogsMap := map[string][]Log{}
+	for slotID, slotLog := range s.SlotLogs {
+		slotLogs := []Log{}
+		for _, log := range slotLog {
+			slotLogs = append(slotLogs, log.Deserialize())
+		}
+		slotLogsMap[slotID] = slotLogs
+	}
+	return DeviceLogs{
+		DevciceID: s.DevciceID,
+		Logs:      logs,
+		SlotLogs:  slotLogsMap,
 	}
 }
 
 // ---------------------------------------------------------------------
 
 type GetStatsOutputSerialized struct {
-	DevicesManagerStatsSerialized
+	DevicesManagerStatsSerialized DevicesManagerStatsSerialized `json:"stats"`
+	ScanDate                      int                           `json:"scan_date"`
 }
 
 func (s *GetStatsOutput) Serialize() GetStatsOutputSerialized {
 	return GetStatsOutputSerialized{
 		DevicesManagerStatsSerialized: s.DevicesManagerStats.Serialize(),
+		ScanDate:                      int(s.ScanDate.UnixMilli()),
 	}
 }
 
 func (s *GetStatsOutputSerialized) Deserialize() GetStatsOutput {
 	return GetStatsOutput{
 		DevicesManagerStats: s.DevicesManagerStatsSerialized.Deserialize(),
+		ScanDate:            time.UnixMilli(int64(s.ScanDate)),
 	}
 }
 
@@ -377,12 +374,12 @@ func (s *UpdateDeviceMetadataOutputSerialized) Deserialize() UpdateDeviceMetadat
 // ---------------------------------------------------------------------
 
 type GetDevicesOutputSerialized struct {
-	TotalDevices Device             `json:"total_devices"`
+	TotalDevices int                `json:"total_devices"`
 	Devices      []DeviceSerialized `json:"devices"`
 }
 
 func (s *GetDevicesOutput) Serialize() GetDevicesOutputSerialized {
-	var devices []DeviceSerialized
+	devices := []DeviceSerialized{}
 	for _, device := range s.Devices {
 		devices = append(devices, device.Serialize())
 	}
@@ -463,30 +460,55 @@ func (s *RevokeActiveCertificateOutputSerialized) Deserialize() RevokeActiveCert
 // ---------------------------------------------------------------------
 
 type GetDeviceLogsOutputSerialized struct {
-	TotalLogs int                   `json:"total_logs"`
-	Logs      []DeviceLogSerialized `json:"logs"`
+	DeviceLogsSerialized
 }
 
 func (s *GetDeviceLogsOutput) Serialize() GetDeviceLogsOutputSerialized {
-	var logs []DeviceLogSerialized
-	for _, log := range s.Logs {
-		logs = append(logs, log.Serialize())
-	}
-
 	return GetDeviceLogsOutputSerialized{
-		TotalLogs: s.TotalLogs,
-		Logs:      logs,
+		DeviceLogsSerialized: s.DeviceLogs.Serialize(),
 	}
 }
 
 func (s *GetDeviceLogsOutputSerialized) Deserialize() GetDeviceLogsOutput {
-	var logs []DeviceLog
-	for _, log := range s.Logs {
-		logs = append(logs, log.Deserialize())
-	}
-
 	return GetDeviceLogsOutput{
-		TotalLogs: s.TotalLogs,
-		Logs:      logs,
+		DeviceLogs: s.DeviceLogsSerialized.Deserialize(),
 	}
 }
+
+// ---------------------------------------------------------------------
+
+type ForceReenrollSerialized struct {
+	DeviceID      string `json:"device_id"`
+	SlotID        string `json:"slot_id"`
+	ForceReenroll bool   `json:"require_reenrollment"`
+	Certificate   string `json:"crt"`
+}
+type ForceReenrollOutputSerialized struct {
+	ForceReenrollSerialized
+}
+
+func (s *ForceReenrollOtput) Serialize() ForceReenrollSerialized {
+	crt := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: s.Crt.Raw})
+	encodedCrt := base64.StdEncoding.EncodeToString(crt)
+	return ForceReenrollSerialized{
+		DeviceID:      s.DeviceID,
+		SlotID:        s.SlotID,
+		ForceReenroll: s.ForceReenroll,
+		Certificate:   encodedCrt,
+	}
+}
+
+func (s *ForceReenrollSerialized) Deserialize() ForceReenrollOtput {
+	crt, _ := base64.StdEncoding.DecodeString(s.Certificate)
+	block, _ := pem.Decode(crt)
+	certificate, _ := x509.ParseCertificate(block.Bytes)
+
+	return ForceReenrollOtput{
+		DeviceID:      s.DeviceID,
+		SlotID:        s.SlotID,
+		ForceReenroll: s.ForceReenroll,
+		Crt:           certificate,
+	}
+}
+
+// ---------------------------------------------------------------------

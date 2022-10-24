@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
@@ -25,9 +26,14 @@ type Devices interface {
 }
 
 type DeviceLogs interface {
+	InsertDeviceLog(ctx context.Context, deviceID string, logType api.LogType, logMessage string, logDescription string) error
+	SelectDeviceLogs(ctx context.Context, deviceID string) ([]api.Log, error)
+
+	InsertSlotLog(ctx context.Context, deviceID string, slotID string, logType api.LogType, logMessage string, logDescription string) error
+	SelectSlotLogs(ctx context.Context, deviceID string, slotID string) ([]api.Log, error)
 }
 
 type Statistics interface {
-	GetStatistics(ctx context.Context) (api.DevicesManagerStats, error)
-	UpdateStats(ctx context.Context, stats api.DevicesManagerStats) error
+	GetStatistics(ctx context.Context) (api.DevicesManagerStats, time.Time, error)
+	UpdateStatistics(ctx context.Context, stats api.DevicesManagerStats) error
 }

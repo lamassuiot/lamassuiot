@@ -10,20 +10,19 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/transport"
+	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/endpoint"
 	dmsErrors "github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common/types"
+	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
-
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/tracing/opentracing"
-	"github.com/go-kit/kit/transport"
-	httptransport "github.com/go-kit/kit/transport/http"
-
 	stdopentracing "github.com/opentracing/opentracing-go"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type errorer interface {
@@ -42,26 +41,12 @@ func ErrMissingDMSStatus() error {
 		StatusCode: 400,
 	}
 }
-func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
-	return func(ctx context.Context, req *http.Request) context.Context {
-		// Try to join to a trace propagated in `req`.
-		uberTraceId := req.Header.Values("Uber-Trace-Id")
-		if uberTraceId != nil {
-			logger = log.With(logger, "span_id", uberTraceId)
-		} else {
-			span := stdopentracing.SpanFromContext(ctx)
-			logger = log.With(logger, "span_id", span)
-		}
-		// return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
-		return ctx
-	}
-}
+
 func filtrableDMSModelFields() map[string]types.Filter {
 	fieldFiltersMap := make(map[string]types.Filter)
-	fieldFiltersMap["id"] = &types.StringFilterField{}
 	fieldFiltersMap["name"] = &types.StringFilterField{}
-	fieldFiltersMap["serial_number"] = &types.StringFilterField{}
 	fieldFiltersMap["status"] = &types.StringFilterField{}
+	fieldFiltersMap["creation_timestamp"] = &types.DatesFilterField{}
 	return fieldFiltersMap
 }
 
@@ -71,81 +56,119 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	options := []httptransport.ServerOption{
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
-		// httptransport.ServerBefore(jwt.HTTPToContext()),
 	}
 
-	r.Methods("GET").Path("/health").Handler(httptransport.NewServer(
-		e.HealthEndpoint,
-		decodeHealthRequest,
-		encodeHealthResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Health", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/health").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.HealthEndpoint,
+					decodeHealthRequest,
+					encodeHealthResponse,
+					append(
+						options,
+					)...,
+				),
+				"Health",
+			),
+		),
+	)
 
-	r.Methods("POST").Path("/").Handler(httptransport.NewServer(
-		e.CreateDMSEndpoint,
-		decodeCreateDMSRequest,
-		encodeCreateDMSResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "PostCSR", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
-	r.Methods("POST").Path("/csr").Handler(httptransport.NewServer(
-		e.CreateDMSWithCSREndpoint,
-		decodeCreateDMSWithCSRequest,
-		encodeCreateDMSWithCSRResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "PostCSRForm", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("POST").Path("/").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.CreateDMSEndpoint,
+					decodeCreateDMSRequest,
+					encodeCreateDMSResponse,
+					append(
+						options,
+					)...,
+				),
+				"CreateDMS",
+			),
+		),
+	)
 
-	r.Methods("GET").Path("/").Handler(httptransport.NewServer(
-		e.GetDMSsEndpoint,
-		decodeGetDMSsRequest,
-		encodeGetDMSsResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetPendingCSRs", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
-	r.Methods("GET").Path("/{name}").Handler(httptransport.NewServer(
-		e.GetDMSByNameEndpoint,
-		decodeGetDMSByNameRequest,
-		encodeGetDMSByNameResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Get DMS By Name", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
-	r.Methods("PUT").Path("/{name}/status").Handler(httptransport.NewServer(
-		e.UpdateDMSStatusEndpoint,
-		decodeUpdateDMSStatusRequest,
-		encodeUpdateDMSStatusResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "PutChangeCSRStatus", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
-	r.Methods("PUT").Path("/{name}/auth").Handler(httptransport.NewServer(
-		e.UpdateDMSAuthorizedCAsEndpoint,
-		decodeUpdateDMSAuthorizedCAsRequest,
-		encodeUpdateDMSAuthorizedCAsResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "PutChangeCSRStatus", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("POST").Path("/csr").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.CreateDMSWithCSREndpoint,
+					decodeCreateDMSWithCSRequest,
+					encodeCreateDMSWithCSRResponse,
+					append(
+						options,
+					)...,
+				),
+				"CreateDMSWithCSR",
+			),
+		),
+	)
+
+	r.Methods("GET").Path("/").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.GetDMSsEndpoint,
+					decodeGetDMSsRequest,
+					encodeGetDMSsResponse,
+					append(
+						options,
+					)...,
+				),
+				"GetDMSs",
+			),
+		),
+	)
+
+	r.Methods("GET").Path("/{name}").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.GetDMSByNameEndpoint,
+					decodeGetDMSByNameRequest,
+					encodeGetDMSByNameResponse,
+					append(
+						options,
+					)...,
+				),
+				"GetDMSByName",
+			),
+		),
+	)
+
+	r.Methods("PUT").Path("/{name}/status").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.UpdateDMSStatusEndpoint,
+					decodeUpdateDMSStatusRequest,
+					encodeUpdateDMSStatusResponse,
+					append(
+						options,
+					)...,
+				),
+				"UpdateDMSStatus",
+			),
+		),
+	)
+
+	r.Methods("PUT").Path("/{name}/auth").Handler(
+		serverUtils.InjectTracingToContext(
+			otelhttp.NewHandler(
+				httptransport.NewServer(
+					e.UpdateDMSAuthorizedCAsEndpoint,
+					decodeUpdateDMSAuthorizedCAsRequest,
+					encodeUpdateDMSAuthorizedCAsResponse,
+					append(
+						options,
+					)...,
+				),
+				"UpdateAuthorizedCAs",
+			),
+		),
+	)
 
 	return r
 }

@@ -2,14 +2,17 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
+	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	postgresRepository "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/repository/postgres"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
@@ -21,6 +24,8 @@ import (
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
 )
+
+//TODO: Complete testing of the client
 
 func TestClientCreateCA(t *testing.T) {
 	tt := []struct {
@@ -36,11 +41,11 @@ func TestClientCreateCA(t *testing.T) {
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
 						CommonName:       "test",
-						OrganizationUnit: "test",
-						Organization:     "org",
-						Country:          "US",
-						State:            "NY",
-						Locality:         "NY",
+						OrganizationUnit: "IoT",
+						Organization:     "Lamassu",
+						Country:          "ES",
+						State:            "Gipuzkoa",
+						Locality:         "Donostia",
 					},
 					KeyMetadata: api.KeyMetadata{
 						KeyType: api.RSA,
@@ -63,11 +68,11 @@ func TestClientCreateCA(t *testing.T) {
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
 						CommonName:       "test",
-						OrganizationUnit: "test",
-						Organization:     "org",
-						Country:          "US",
-						State:            "NY",
-						Locality:         "NY",
+						OrganizationUnit: "IoT",
+						Organization:     "Lamassu",
+						Country:          "ES",
+						State:            "Gipuzkoa",
+						Locality:         "Donostia",
 					},
 					KeyMetadata: api.KeyMetadata{
 						KeyType: api.RSA,
@@ -85,11 +90,11 @@ func TestClientCreateCA(t *testing.T) {
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
 						CommonName:       "test",
-						OrganizationUnit: "test",
-						Organization:     "org",
-						Country:          "US",
-						State:            "NY",
-						Locality:         "NY",
+						OrganizationUnit: "IoT",
+						Organization:     "Lamassu",
+						Country:          "ES",
+						State:            "Gipuzkoa",
+						Locality:         "Donostia",
 					},
 					KeyMetadata: api.KeyMetadata{
 						KeyType: api.RSA,
@@ -126,7 +131,7 @@ func TestClientCreateCA(t *testing.T) {
 				t.Fatalf("an error '%s' was not expected when parsing url", err)
 			}
 
-			c, err := NewLamassuCAClient(clientUtils.ClientConfiguration{
+			c, err := NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
 				URL:           serverUrl,
 				AuthMethod:    clientUtils.AuthMethodNone,
 				CACertificate: "",
@@ -158,7 +163,11 @@ func setup(t *testing.T) (http.Handler, service.Service) {
 	certificateRepository := postgresRepository.NewPostgresDB(db, logger)
 	tracer := opentracing.NoopTracer{}
 
-	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, "/tmp/tests")
+	dir := fmt.Sprintf("/tmp/test/%s", goid.NewV4UUID().String())
+	os.RemoveAll(dir)
+	os.Mkdir(dir, 0755)
+	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, dir)
+
 	var s service.Service
 	s = service.NewCAService(logger, engine, certificateRepository, "http://ocsp.test")
 	s = service.LoggingMiddleware(logger)(s)

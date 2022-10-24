@@ -61,7 +61,7 @@ func FilterQuery(r *http.Request, fieldFiltersMap map[string]types.Filter) commo
 								continue
 							}
 							castedFilter.FieldName = fieldName
-							castedFilter.CompareWith = time.Unix(secs, 0)
+							castedFilter.CompareWith = time.UnixMilli(secs)
 							castedFilter.Operator = operator
 							filter = castedFilter
 						case *types.NumberFilterField:
@@ -85,12 +85,17 @@ func FilterQuery(r *http.Request, fieldFiltersMap map[string]types.Filter) commo
 					continue
 				}
 
+				sortField := sortParamsSplit[0]
+				if _, ok := fieldFiltersMap[sortField]; !ok { //prevent sorting by fields that are not in the filter map
+					continue
+				}
+
 				sortMode := common.SortModeAsc
 				if sortParamsSplit[1] == "desc" {
 					sortMode = common.SortModeDesc
 				}
 				queryParams.Sort.SortMode = sortMode
-				queryParams.Sort.SortField = sortParamsSplit[0]
+				queryParams.Sort.SortField = sortField
 			case "offset":
 				offestQueryParam := v[len(v)-1]
 				offestInt, err := strconv.Atoi(offestQueryParam)

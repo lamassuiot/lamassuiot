@@ -11,14 +11,12 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/gavv/httpexpect/v2"
-	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
-	testUtils "github.com/lamassuiot/lamassuiot/pkg/utils/test"
+	testUtils "github.com/lamassuiot/lamassuiot/pkg/utils/test/utils"
 )
 
 func TestCreateDMS(t *testing.T) {
@@ -49,7 +47,7 @@ func TestCreateDMS(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status":        "PENDING_APPROVAL",
@@ -165,6 +163,12 @@ func TestCreateDMS(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			serverCA, _, err := testUtils.BuildCATestServer()
+			//cli, err := testUtils.NewVaultSecretsMock(t)
+			//if err != nil {
+			//	t.Errorf("%s", err)
+			//}
+			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -210,7 +214,7 @@ func TestCreateDMSWithCertificateRequest(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status":        "PENDING_APPROVAL",
@@ -291,6 +295,12 @@ func TestCreateDMSWithCertificateRequest(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			serverCA, _, err := testUtils.BuildCATestServer()
+			//cli, err := testUtils.NewVaultSecretsMock(t)
+			//if err != nil {
+			//	t.Errorf("%s", err)
+			//}
+			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+
 			if err != nil {
 				t.Errorf("%s", err)
 			}
@@ -349,7 +359,7 @@ func TestUpdateDMSStatus(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status": "APPROVED",
@@ -416,7 +426,7 @@ func TestUpdateDMSStatus(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"serial_number": "",
@@ -472,7 +482,7 @@ func TestUpdateDMSStatus(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status": "EXPIRED",
@@ -527,7 +537,7 @@ func TestUpdateDMSStatus(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status": "REVOKED",
@@ -656,28 +666,34 @@ func TestUpdateDMSStatus(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			serverCA, svcCA, err := testUtils.BuildCATestServer()
+			serverCA, _, err := testUtils.BuildCATestServer()
+			//cli, err := testUtils.NewVaultSecretsMock(t)
+			//if err != nil {
+			//	t.Errorf("%s", err)
+			//}
+			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+
 			if err != nil {
 				t.Errorf("%s", err)
 			}
 			defer serverCA.Close()
 			serverCA.Start()
 
-			_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
-				CAType: caApi.CATypeDMSEnroller,
-				Subject: caApi.Subject{
-					CommonName: "LAMASSU-DMS-MANAGER",
-				},
-				KeyMetadata: caApi.KeyMetadata{
-					KeyType: "RSA",
-					KeyBits: 4096,
-				},
-				CADuration:       time.Hour * 24 * 365 * 5,
-				IssuanceDuration: time.Hour * 24 * 365 * 3,
-			})
-			if err != nil {
-				t.Errorf("%s", err)
-			}
+			// _, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
+			// 	CAType: caApi.CATypeDMSEnroller,
+			// 	Subject: caApi.Subject{
+			// 		CommonName: "LAMASSU-DMS-MANAGER",
+			// 	},
+			// 	KeyMetadata: caApi.KeyMetadata{
+			// 		KeyType: "RSA",
+			// 		KeyBits: 4096,
+			// 	},
+			// 	CADuration:       time.Hour * 24 * 365 * 5,
+			// 	IssuanceDuration: time.Hour * 24 * 365 * 3,
+			// })
+			// if err != nil {
+			// 	t.Errorf("%s", err)
+			// }
 
 			serverDMS, svcDMS, err := testUtils.BuildDMSManagerTestServer(serverCA)
 			if err != nil {
@@ -740,7 +756,7 @@ func TestUpdateDMSAuthorizedCAs(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status": "APPROVED",
@@ -826,7 +842,7 @@ func TestUpdateDMSAuthorizedCAs(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status": "APPROVED",
@@ -845,14 +861,20 @@ func TestUpdateDMSAuthorizedCAs(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			serverCA, svcCA, err := testUtils.BuildCATestServer()
+			serverCA, _, err := testUtils.BuildCATestServer()
+			//cli, err := testUtils.NewVaultSecretsMock(t)
+			//if err != nil {
+			//	t.Errorf("%s", err)
+			//}
+			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+
 			if err != nil {
 				t.Errorf("%s", err)
 			}
 			defer serverCA.Close()
 			serverCA.Start()
 
-			_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
+			/*_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
 				CAType: caApi.CATypeDMSEnroller,
 				Subject: caApi.Subject{
 					CommonName: "LAMASSU-DMS-MANAGER",
@@ -866,7 +888,7 @@ func TestUpdateDMSAuthorizedCAs(t *testing.T) {
 			})
 			if err != nil {
 				t.Errorf("%s", err)
-			}
+			}*/
 
 			serverDMS, svcDMS, err := testUtils.BuildDMSManagerTestServer(serverCA)
 			if err != nil {
@@ -919,7 +941,7 @@ func TestGetDMS(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status":        "PENDING_APPROVAL",
@@ -973,7 +995,7 @@ func TestGetDMS(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status":        "REJECTED",
@@ -1028,7 +1050,7 @@ func TestGetDMS(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status": "APPROVED",
@@ -1090,7 +1112,7 @@ func TestGetDMS(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status": "EXPIRED",
@@ -1152,7 +1174,7 @@ func TestGetDMS(t *testing.T) {
 					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
-						"strength": "medium",
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status": "REVOKED",
@@ -1180,14 +1202,20 @@ func TestGetDMS(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			serverCA, svcCA, err := testUtils.BuildCATestServer()
+			serverCA, _, err := testUtils.BuildCATestServer()
+			//cli, err := testUtils.NewVaultSecretsMock(t)
+			//if err != nil {
+			//	t.Errorf("%s", err)
+			//}
+			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+
 			if err != nil {
 				t.Errorf("%s", err)
 			}
 			defer serverCA.Close()
 			serverCA.Start()
 
-			_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
+			/*_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
 				CAType: caApi.CATypeDMSEnroller,
 				Subject: caApi.Subject{
 					CommonName: "LAMASSU-DMS-MANAGER",
@@ -1201,7 +1229,7 @@ func TestGetDMS(t *testing.T) {
 			})
 			if err != nil {
 				t.Errorf("%s", err)
-			}
+			}*/
 
 			serverDMS, svcDMS, err := testUtils.BuildDMSManagerTestServer(serverCA)
 			if err != nil {
@@ -1296,14 +1324,20 @@ func TestGetDMSs(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			serverCA, svcCA, err := testUtils.BuildCATestServer()
+			serverCA, _, err := testUtils.BuildCATestServer()
+			//cli, err := testUtils.NewVaultSecretsMock(t)
+			//if err != nil {
+			//	t.Errorf("%s", err)
+			//}
+			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
+
 			if err != nil {
 				t.Errorf("%s", err)
 			}
 			defer serverCA.Close()
 			serverCA.Start()
 
-			_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
+			/*_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
 				CAType: caApi.CATypeDMSEnroller,
 				Subject: caApi.Subject{
 					CommonName: "LAMASSU-DMS-MANAGER",
@@ -1317,7 +1351,7 @@ func TestGetDMSs(t *testing.T) {
 			})
 			if err != nil {
 				t.Errorf("%s", err)
-			}
+			}*/
 
 			serverDMS, svcDMS, err := testUtils.BuildDMSManagerTestServer(serverCA)
 			if err != nil {

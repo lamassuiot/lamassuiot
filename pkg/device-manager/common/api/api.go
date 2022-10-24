@@ -4,28 +4,14 @@ import (
 	"crypto/x509"
 	"time"
 
+	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
 	"github.com/lib/pq"
 )
 
-type SlotsStats struct {
-	PendingEnrollment int
-	Active            int
-	Expired           int
-	Revoked           int
-}
-
-type DevicesStats struct {
-	PendingProvisioning     int
-	FullyProvisioned        int
-	PartiallyProvisioned    int
-	ProvisionedWithWarnings int
-	Decommisioned           int
-}
-
 type DevicesManagerStats struct {
-	DevicesStats DevicesStats
-	SlotsStats   SlotsStats
+	DevicesStats map[DeviceStatus]int
+	SlotsStats   map[caApi.CertificateStatus]int
 }
 
 type KeyType string
@@ -49,18 +35,18 @@ func ParseKeyType(s string) KeyType {
 type KeyStrength string
 
 const (
-	KeyStrengthHigh   KeyStrength = "high"
-	KeyStrengthMedium KeyStrength = "medium"
-	KeyStrengthLow    KeyStrength = "low"
+	KeyStrengthHigh   KeyStrength = "HIGH"
+	KeyStrengthMedium KeyStrength = "MEDIUM"
+	KeyStrengthLow    KeyStrength = "LOW"
 )
 
 func ParseKeyStrength(t string) KeyStrength {
 	switch t {
-	case "high":
+	case "HIGH":
 		return KeyStrengthHigh
-	case "medium":
+	case "MEDIUM":
 		return KeyStrengthMedium
-	case "low":
+	case "LOW":
 		return KeyStrengthLow
 
 	default:
@@ -93,9 +79,9 @@ type DeviceStatus string
 const (
 	DeviceStatusPendingProvisioning     DeviceStatus = "PENDING_PROVISIONING"      // used if all the device slots are pending enrollment
 	DeviceStatusFullyProvisioned        DeviceStatus = "FULLY_PROVISIONED"         // used if all the device slots are active
-	DeviceStatusPartiallyProvisioned    DeviceStatus = "PARTIALLY_PROVISIONED"     // used if the device has a slot in the pending enrollment
-	DeviceStatusProvisionedWithWarnings DeviceStatus = "PROVISIONED_WITH_WARNINGS" // used if the device has a slot expired or revoked
-	DeviceStatusDecommisioned           DeviceStatus = "DECOMMISIONED"
+	DeviceStatusRequiresAction          DeviceStatus = "REQUIRES_ACTION"           // used if the device has a slot about to expire
+	DeviceStatusProvisionedWithWarnings DeviceStatus = "PROVISIONED_WITH_WARNINGS" // used if the device has a slot EXPIRED or revoked
+	DeviceStatusDecommissioned          DeviceStatus = "DECOMMISSIONED"
 )
 
 func ParseDeviceStatus(t string) DeviceStatus {
@@ -104,38 +90,14 @@ func ParseDeviceStatus(t string) DeviceStatus {
 		return DeviceStatusPendingProvisioning
 	case "FULLY_PROVISIONED":
 		return DeviceStatusFullyProvisioned
-	case "PARTIALLY_PROVISIONED":
-		return DeviceStatusPartiallyProvisioned
+	case "REQUIRES_ACTION":
+		return DeviceStatusRequiresAction
 	case "PROVISIONED_WITH_WARNINGS":
 		return DeviceStatusProvisionedWithWarnings
-	case "DECOMMISIONED":
-		return DeviceStatusDecommisioned
+	case "DECOMMISSIONED":
+		return DeviceStatusDecommissioned
 	default:
 		return DeviceStatusPendingProvisioning
-	}
-}
-
-type CertificateStatus string
-
-const (
-	CertificateStatusPendingEnrollment CertificateStatus = "PENDING_ENROLLMENT"
-	CertificateStatusActive            CertificateStatus = "ACTIVE"
-	CertificateStatusExpired           CertificateStatus = "EXPIRED"
-	CertificateStatusRevoked           CertificateStatus = "REVOKED"
-)
-
-func ParseCertificateStatus(t string) CertificateStatus {
-	switch t {
-	case "PENDING_ENROLLMENT":
-		return CertificateStatusPendingEnrollment
-	case "ACTIVE":
-		return CertificateStatusActive
-	case "EXPIRED":
-		return CertificateStatusExpired
-	case "REVOKED":
-		return CertificateStatusRevoked
-	default:
-		return CertificateStatusPendingEnrollment
 	}
 }
 
@@ -143,7 +105,7 @@ type Certificate struct {
 	CAName              string
 	SerialNumber        string
 	Certificate         *x509.Certificate
-	Status              CertificateStatus
+	Status              caApi.CertificateStatus
 	KeyMetadata         KeyStrengthMetadata
 	Subject             Subject
 	ValidFrom           time.Time
@@ -159,22 +121,37 @@ type Slot struct {
 }
 
 type Device struct {
-	ID          string
-	Alias       string
-	Status      DeviceStatus
-	Slots       []*Slot
-	Description string
-	Tags        []string
-	IconName    string
-	IconColor   string
+	ID                string
+	Alias             string
+	Status            DeviceStatus
+	Slots             []*Slot
+	Description       string
+	Tags              []string
+	IconName          string
+	IconColor         string
+	CreationTimestamp time.Time
 }
 
-type DeviceLog struct {
-	ID         string
-	DeviceID   string
-	LogType    string
-	LogMessage string
-	Timestamp  time.Time
+type LogType string
+
+const (
+	LogTypeInfo     LogType = "INFO"
+	LogTypeWarn     LogType = "WARN"
+	LogTypeCritical LogType = "CRITICAL"
+	LogTypeSuccess  LogType = "SUCCESS"
+)
+
+type Log struct {
+	LogType        LogType
+	LogMessage     string
+	LogDescription string
+	Timestamp      time.Time
+}
+
+type DeviceLogs struct {
+	DevciceID string
+	Logs      []Log
+	SlotLogs  map[string][]Log
 }
 
 // ---------------------------------------------------------------------
@@ -184,7 +161,8 @@ type GetStatsInput struct {
 }
 
 type GetStatsOutput struct {
-	DevicesManagerStats
+	DevicesManagerStats DevicesManagerStats
+	ScanDate            time.Time
 }
 
 // ---------------------------------------------------------------------
@@ -224,7 +202,7 @@ type GetDevicesInput struct {
 }
 
 type GetDevicesOutput struct {
-	TotalDevices Device
+	TotalDevices int
 	Devices      []Device
 }
 
@@ -279,20 +257,7 @@ type GetDeviceLogsInput struct {
 }
 
 type GetDeviceLogsOutput struct {
-	TotalLogs int
-	Logs      []DeviceLog
-}
-
-// ---------------------------------------------------------------------
-
-type AddDeviceLogInput struct {
-	DeviceID   string
-	LogType    string
-	LogMessage string
-	Timestamp  time.Time
-}
-
-type AddDeviceLogOutput struct {
+	DeviceLogs
 }
 
 // ---------------------------------------------------------------------
@@ -312,7 +277,7 @@ type AddDeviceSlotOutput struct {
 type UpdateActiveCertificateStatusInput struct {
 	DeviceID         string
 	SlotID           string
-	Status           CertificateStatus
+	Status           caApi.CertificateStatus
 	RevocationReason string
 }
 
@@ -330,6 +295,16 @@ type IterateDevicesWithPredicateOutput struct{}
 
 // ---------------------------------------------------------------------
 
+type CheckDeviceStatusInput struct {
+	DeviceID string
+}
+
+type CheckDeviceStatusOutput struct {
+	Device
+}
+
+// ---------------------------------------------------------------------
+
 type IsDMSAuthorizedToEnrollInput struct {
 	DMSName string
 	CAName  string
@@ -337,4 +312,19 @@ type IsDMSAuthorizedToEnrollInput struct {
 
 type IsDMSAuthorizedToEnrollOutput struct {
 	IsAuthorized bool
+}
+
+// ---------------------------------------------------------------------
+
+type ForceReenrollInput struct {
+	DeviceID      string `validate:"required"`
+	SlotID        string `validate:"required"`
+	ForceReenroll bool
+}
+
+type ForceReenrollOtput struct {
+	DeviceID      string
+	SlotID        string
+	ForceReenroll bool
+	Crt           *x509.Certificate
 }

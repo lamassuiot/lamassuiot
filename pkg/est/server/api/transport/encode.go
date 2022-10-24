@@ -146,7 +146,7 @@ func EncodeMultiPart(boundary string, parts []MultipartPart) (*bytes.Buffer, str
 		v := textproto.MIMEHeader{}
 		v.Add("Content-Type", part.ContentType)
 		v.Add("Content-Transfer-Encoding", "base64")
-		data = []byte(base64.RawURLEncoding.EncodeToString(data))
+		data = []byte(base64.StdEncoding.EncodeToString(data))
 
 		pw, err := w.CreatePart(v)
 		if err != nil {

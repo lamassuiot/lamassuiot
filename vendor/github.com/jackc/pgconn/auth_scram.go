@@ -149,8 +149,8 @@ func newScramClient(serverAuthMechanisms []string, password string) (*scramClien
 	if err != nil {
 		return nil, err
 	}
-	sc.clientNonce = make([]byte, base64.StdEncoding.EncodedLen(len(buf)))
-	base64.StdEncoding.Encode(sc.clientNonce, buf)
+	sc.clientNonce = make([]byte, base64.RawStdEncoding.EncodedLen(len(buf)))
+	base64.RawStdEncoding.Encode(sc.clientNonce, buf)
 
 	return sc, nil
 }

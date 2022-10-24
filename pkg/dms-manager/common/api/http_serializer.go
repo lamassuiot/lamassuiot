@@ -154,11 +154,11 @@ func (o *DeviceManufacturingService) Serialize() DeviceManufacturingServiceSeria
 	}
 
 	if o.CreationTimestamp.Valid {
-		serializer.CreationTimestamp = int(o.CreationTimestamp.Time.Unix())
+		serializer.CreationTimestamp = int(o.CreationTimestamp.Time.UnixMilli())
 	}
 
 	if o.CreationTimestamp.Valid {
-		serializer.LastStatusUpdateTimestamp = int(o.LastStatusUpdateTimestamp.Time.Unix())
+		serializer.LastStatusUpdateTimestamp = int(o.LastStatusUpdateTimestamp.Time.UnixMilli())
 	}
 	return serializer
 }
@@ -176,7 +176,7 @@ func (o *DeviceManufacturingServiceSerialized) Deserialize() DeviceManufacturing
 
 	if o.CreationTimestamp > 0 {
 		serializer.CreationTimestamp = pq.NullTime{
-			Time:  time.Unix(int64(o.CreationTimestamp), 0),
+			Time:  time.UnixMilli(int64(o.CreationTimestamp)),
 			Valid: true,
 		}
 	} else {
@@ -187,7 +187,7 @@ func (o *DeviceManufacturingServiceSerialized) Deserialize() DeviceManufacturing
 
 	if o.LastStatusUpdateTimestamp > 0 {
 		serializer.LastStatusUpdateTimestamp = pq.NullTime{
-			Time:  time.Unix(int64(o.LastStatusUpdateTimestamp), 0),
+			Time:  time.UnixMilli(int64(o.LastStatusUpdateTimestamp)),
 			Valid: true,
 		}
 	} else {
