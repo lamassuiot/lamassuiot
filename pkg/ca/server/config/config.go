@@ -19,10 +19,6 @@ type CAConfig struct {
 
 	GopemData string `split_words:"true"`
 
-	Pkcs11Driver string `split_words:"true"`
-	Pkcs11Pin    string `split_words:"true"`
-	Pkcs11Label  string `split_words:"true"`
-
 	VaultUnsealKeysFile string `split_words:"true"`
 	VaultAddress        string `split_words:"true"`
 	VaultRoleID         string `split_words:"true"`

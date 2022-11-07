@@ -65,8 +65,8 @@ jobs:
           lamassuiot/lamassu-device-manager:latest
         push: true
 
-  build_dms_enroller_docker_image:
-    name: DMS Enroller - Release docker images
+  build_dms_manager_docker_image:
+    name: DMS Manager - Release docker images
     runs-on: ubuntu-latest
     needs:
     - tag_generator
@@ -77,15 +77,15 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    - name: Build DMS Enroller docker image
+    - name: Build DMS Manager docker image
       uses: docker/build-push-action@v2
       with:
-        file: ci/dms-enroller.dockerfile
+        file: ci/dms-manager.dockerfile
         build-args: |
           BASE_IMAGE=alpine:3.14
         tags: |
-          lamassuiot/lamassu-dms-enroller:${{ needs.tag_generator.outputs.new-tag }}
-          lamassuiot/lamassu-dms-enroller:latest
+          lamassuiot/lamassu-dms-manager:${{ needs.tag_generator.outputs.new-tag }}
+          lamassuiot/lamassu-dms-manager:latest
         push: true
 
   build_ocsp_docker_image:
@@ -149,7 +149,7 @@ jobs:
     - name: Build DB docker image
       uses: docker/build-push-action@v2
       with:
-        file: ci/lamassu-db.dockerfile 
+        file: ci/database.dockerfile 
         tags: |
           lamassuiot/lamassu-db:${{ needs.tag_generator.outputs.new-tag }}
           lamassuiot/lamassu-db:latest
