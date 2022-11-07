@@ -810,6 +810,7 @@ func (s *devicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 			StatusCode: 400,
 		}
 	}
+	_, err := clientCertificate.Verify(opts)
 
 	signOutput, err := s.caClient.SignCertificateRequest(ctx, &caApi.SignCertificateRequestInput{
 		CAType:                    caApi.CATypePKI,
