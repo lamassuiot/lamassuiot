@@ -85,21 +85,29 @@ func (mw *amqpMiddleware) GetStats(ctx context.Context, input *api.GetStatsInput
 
 func (mw *amqpMiddleware) CreateDevice(ctx context.Context, input *api.CreateDeviceInput) (output *api.CreateDeviceOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(fmt.Sprintf("%s.device.create", EventPrefix), output.Serialize())
+		if err == nil {
+			mw.sendAMQPMessage(fmt.Sprintf("%s.device.create", EventPrefix), output.Serialize())
+		}
+
 	}()
 	return mw.next.CreateDevice(ctx, input)
 }
 
 func (mw *amqpMiddleware) UpdateDeviceMetadata(ctx context.Context, input *api.UpdateDeviceMetadataInput) (output *api.UpdateDeviceMetadataOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(fmt.Sprintf("%s.device.update", EventPrefix), output.Serialize())
+		if err == nil {
+			mw.sendAMQPMessage(fmt.Sprintf("%s.device.update", EventPrefix), output.Serialize())
+		}
+
 	}()
 	return mw.next.UpdateDeviceMetadata(ctx, input)
 }
 
 func (mw *amqpMiddleware) DecommisionDevice(ctx context.Context, input *api.DecommisionDeviceInput) (output *api.DecommisionDeviceOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(fmt.Sprintf("%s.device.decommision", EventPrefix), output.Serialize())
+		if err == nil {
+			mw.sendAMQPMessage(fmt.Sprintf("%s.device.decommision", EventPrefix), output.Serialize())
+		}
 	}()
 	return mw.next.DecommisionDevice(ctx, input)
 }
@@ -122,21 +130,28 @@ func (mw *amqpMiddleware) AddDeviceSlot(ctx context.Context, input *api.AddDevic
 
 func (mw *amqpMiddleware) UpdateActiveCertificateStatus(ctx context.Context, input *api.UpdateActiveCertificateStatusInput) (output *api.UpdateActiveCertificateStatusOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(fmt.Sprintf("%s.device.update", EventPrefix), output.Serialize())
+		if err == nil {
+			mw.sendAMQPMessage(fmt.Sprintf("%s.device.update", EventPrefix), output.Serialize())
+		}
+
 	}()
 	return mw.next.UpdateActiveCertificateStatus(ctx, input)
 }
 
 func (mw *amqpMiddleware) RotateActiveCertificate(ctx context.Context, input *api.RotateActiveCertificateInput) (output *api.RotateActiveCertificateOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(fmt.Sprintf("%s.device.rotate", EventPrefix), output.Serialize())
+		if err == nil {
+			mw.sendAMQPMessage(fmt.Sprintf("%s.device.rotate", EventPrefix), output.Serialize())
+		}
 	}()
 	return mw.next.RotateActiveCertificate(ctx, input)
 }
 
 func (mw *amqpMiddleware) RevokeActiveCertificate(ctx context.Context, input *api.RevokeActiveCertificateInput) (output *api.RevokeActiveCertificateOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(fmt.Sprintf("%s.device.revoke", EventPrefix), output.Serialize())
+		if err == nil {
+			mw.sendAMQPMessage(fmt.Sprintf("%s.device.revoke", EventPrefix), output.Serialize())
+		}
 	}()
 	return mw.next.RevokeActiveCertificate(ctx, input)
 }
@@ -158,9 +173,11 @@ func (mw *amqpMiddleware) Enroll(ctx context.Context, csr *x509.CertificateReque
 		type EnrollLog struct {
 			Certificate string `json:"certificate"`
 		}
-		crtBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: output.Raw})
-		crtB64 := base64.StdEncoding.EncodeToString(crtBytes)
-		mw.sendAMQPMessage(fmt.Sprintf("%s.device.enroll", EventPrefix), &EnrollLog{Certificate: crtB64})
+		if err == nil {
+			crtBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: output.Raw})
+			crtB64 := base64.StdEncoding.EncodeToString(crtBytes)
+			mw.sendAMQPMessage(fmt.Sprintf("%s.device.enroll", EventPrefix), &EnrollLog{Certificate: crtB64})
+		}
 	}()
 	return mw.next.Enroll(ctx, csr, cert, aps)
 }
@@ -170,9 +187,12 @@ func (mw *amqpMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateReq
 		type ReEnrollLog struct {
 			Certificate string `json:"certificate"`
 		}
-		crtBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: output.Raw})
-		crtB64 := base64.StdEncoding.EncodeToString(crtBytes)
-		mw.sendAMQPMessage(fmt.Sprintf("%s.device.reenroll", EventPrefix), &ReEnrollLog{Certificate: crtB64})
+		if err == nil {
+			crtBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: output.Raw})
+			crtB64 := base64.StdEncoding.EncodeToString(crtBytes)
+			mw.sendAMQPMessage(fmt.Sprintf("%s.device.reenroll", EventPrefix), &ReEnrollLog{Certificate: crtB64})
+		}
+
 	}()
 	return mw.next.Reenroll(ctx, csr, cert)
 }
@@ -183,7 +203,9 @@ func (mw *amqpMiddleware) ServerKeyGen(ctx context.Context, csr *x509.Certificat
 
 func (mw *amqpMiddleware) ForceReenroll(ctx context.Context, input *api.ForceReenrollInput) (output *api.ForceReenrollOtput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(fmt.Sprintf("%s.device.forceReenroll", EventPrefix), output.Serialize())
+		if err == nil {
+			mw.sendAMQPMessage(fmt.Sprintf("%s.device.forceReenroll", EventPrefix), output.Serialize())
+		}
 	}()
 	return mw.next.ForceReenroll(ctx, input)
 }

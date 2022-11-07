@@ -232,6 +232,7 @@ type RevokeActiveCertificateInput struct {
 	DeviceID         string
 	SlotID           string
 	RevocationReason string
+	CertSerialNumber string
 }
 
 type RevokeActiveCertificateOutput struct {
@@ -279,6 +280,7 @@ type UpdateActiveCertificateStatusInput struct {
 	SlotID           string
 	Status           caApi.CertificateStatus
 	RevocationReason string
+	CertSerialNumber string
 }
 
 type UpdateActiveCertificateStatusOutput struct {

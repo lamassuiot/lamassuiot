@@ -82,9 +82,9 @@ func (s *Certificate) ToSerializedLog() CertificateLogSerialized {
 }
 
 type SlotLogSerialized struct {
-	ID                string                   `json:"id"`
-	ActiveCertificate CertificateLogSerialized `json:"active_certificate"`
-	//ArchiveCertificates []CertificateSerialized `json:"archive_certificates"`
+	ID                  string                   `json:"id"`
+	ActiveCertificate   CertificateLogSerialized `json:"active_certificate"`
+	ArchiveCertificates []CertificateSerialized  `json:"archive_certificates"`
 }
 
 func (s *Slot) ToSerializedLog() SlotLogSerialized {
