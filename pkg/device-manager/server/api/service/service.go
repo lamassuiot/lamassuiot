@@ -113,7 +113,7 @@ func (s *devicesService) CreateDevice(ctx context.Context, input *api.CreateDevi
 		return nil, err
 	}
 
-	s.logsRepo.InsertDeviceLog(ctx, input.DeviceID, api.LogTypeInfo, "Device Created", "")
+	s.logsRepo.InsertDeviceLog(ctx, input.DeviceID, api.LogTypeSuccess, "Device Created", "")
 
 	output, err := s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
 		DeviceID: input.DeviceID,
@@ -174,6 +174,7 @@ func (s *devicesService) DecommisionDevice(ctx context.Context, input *api.Decom
 			DeviceID:         input.DeviceID,
 			SlotID:           slot.ID,
 			RevocationReason: "Device is being decommissioned",
+			CertSerialNumber: "",
 		})
 
 		if err != nil {
@@ -274,7 +275,7 @@ func (s *devicesService) AddDeviceSlot(ctx context.Context, input *api.AddDevice
 		return nil, err
 	}
 
-	s.logsRepo.InsertSlotLog(ctx, input.DeviceID, input.SlotID, api.LogTypeInfo, "Slot Created", fmt.Sprintf("Slot uses certificate with serial number %s", utils.InsertNth(utils.ToHexInt(input.ActiveCertificate.SerialNumber), 2)))
+	s.logsRepo.InsertSlotLog(ctx, input.DeviceID, input.SlotID, api.LogTypeSuccess, "Slot Created", fmt.Sprintf("Slot uses certificate with serial number %s", utils.InsertNth(utils.ToHexInt(input.ActiveCertificate.SerialNumber), 2)))
 
 	outputGetDevice, err = s.GetDeviceById(ctx, &api.GetDeviceByIdInput{
 		DeviceID: input.DeviceID,
@@ -313,6 +314,7 @@ func (s *devicesService) UpdateActiveCertificateStatus(ctx context.Context, inpu
 			DeviceID:         input.DeviceID,
 			SlotID:           input.SlotID,
 			RevocationReason: input.RevocationReason,
+			CertSerialNumber: input.CertSerialNumber,
 		})
 		if err != nil {
 			return nil, err
@@ -357,6 +359,7 @@ func (s *devicesService) RotateActiveCertificate(ctx context.Context, input *api
 		DeviceID:         input.DeviceID,
 		SlotID:           input.SlotID,
 		RevocationReason: "Certificate is being rotated",
+		CertSerialNumber: "",
 	})
 	if err != nil {
 		return nil, err
@@ -379,7 +382,7 @@ func (s *devicesService) RotateActiveCertificate(ctx context.Context, input *api
 		return nil, err
 	}
 
-	s.logsRepo.InsertSlotLog(ctx, input.DeviceID, input.SlotID, api.LogTypeInfo, "Slot Renewed", fmt.Sprintf("Slot useses new certificate with serial number %s", utils.InsertNth(utils.ToHexInt(input.NewCertificate.SerialNumber), 2)))
+	s.logsRepo.InsertSlotLog(ctx, input.DeviceID, input.SlotID, api.LogTypeSuccess, "Slot Reneweal process Complete", fmt.Sprintf("Slot useses new certificate with serial number %s", utils.InsertNth(utils.ToHexInt(input.NewCertificate.SerialNumber), 2)))
 
 	slot, err = s.devicesRepo.SelectSlotByID(ctx, input.DeviceID, input.SlotID)
 	if err != nil {
@@ -425,7 +428,9 @@ func (s *devicesService) RevokeActiveCertificate(ctx context.Context, input *api
 	if slot.ActiveCertificate == nil {
 		return &api.RevokeActiveCertificateOutput{}, errors.New("no active certificate found")
 	}
-
+	if input.CertSerialNumber == "" {
+		input.CertSerialNumber = slot.ActiveCertificate.SerialNumber
+	}
 	if slot.ActiveCertificate.Status == caApi.StatusRevoked {
 		return &api.RevokeActiveCertificateOutput{}, errors.New("certificate is already revoked")
 	}
@@ -433,41 +438,50 @@ func (s *devicesService) RevokeActiveCertificate(ctx context.Context, input *api
 	if slot.ActiveCertificate.Status == caApi.StatusExpired {
 		return &api.RevokeActiveCertificateOutput{}, errors.New("certificate is expired")
 	}
+	var cert api.Certificate
+	for i := 0; i < len(slot.ArchiveCertificates); i++ {
+		if slot.ArchiveCertificates[i].SerialNumber == input.CertSerialNumber {
+			cert = *slot.ArchiveCertificates[i]
+		}
+	}
+	if cert.Status == caApi.StatusRevoked {
+		return &api.RevokeActiveCertificateOutput{}, errors.New("certificate is already revoked")
+	} else {
+		revokeOutput, err := s.caClient.RevokeCertificate(ctx, &caApi.RevokeCertificateInput{
+			CAType:                  caApi.CATypePKI,
+			CAName:                  slot.ActiveCertificate.CAName,
+			CertificateSerialNumber: slot.ActiveCertificate.SerialNumber,
+			RevocationReason:        input.RevocationReason,
+		})
 
-	revokeOutput, err := s.caClient.RevokeCertificate(ctx, &caApi.RevokeCertificateInput{
-		CAType:                  caApi.CATypePKI,
-		CAName:                  slot.ActiveCertificate.CAName,
-		CertificateSerialNumber: slot.ActiveCertificate.SerialNumber,
-		RevocationReason:        input.RevocationReason,
-	})
+		if err != nil {
+			return &api.RevokeActiveCertificateOutput{}, err
+		}
 
-	if err != nil {
-		return &api.RevokeActiveCertificateOutput{}, err
+		revokedCertificateSerialNumber := slot.ActiveCertificate.SerialNumber
+
+		slot.ActiveCertificate.Status = caApi.StatusRevoked
+		slot.ActiveCertificate.RevocationReason = input.RevocationReason
+		slot.ActiveCertificate.RevocationTimestamp = revokeOutput.RevocationTimestamp
+
+		slot.ActiveCertificate = nil
+		err = s.devicesRepo.UpdateSlot(ctx, input.DeviceID, *slot)
+		if err != nil {
+			return &api.RevokeActiveCertificateOutput{}, err
+		}
+
+		s.logsRepo.InsertSlotLog(ctx, input.DeviceID, input.SlotID, api.LogTypeWarn, "Certificate Revoked", fmt.Sprintf("The certificate %s will no longer be usable: %s", revokedCertificateSerialNumber, input.RevocationReason))
+
+		slot, err = s.devicesRepo.SelectSlotByID(ctx, input.DeviceID, input.SlotID)
+		if err != nil {
+			return &api.RevokeActiveCertificateOutput{}, err
+		}
+
+		return &api.RevokeActiveCertificateOutput{
+			Slot: *slot,
+		}, nil
 	}
 
-	revokedCertificateSerialNumber := slot.ActiveCertificate.SerialNumber
-
-	slot.ActiveCertificate.Status = caApi.StatusRevoked
-	slot.ActiveCertificate.RevocationReason = input.RevocationReason
-	slot.ActiveCertificate.RevocationTimestamp = revokeOutput.RevocationTimestamp
-
-	slot.ActiveCertificate = nil
-
-	err = s.devicesRepo.UpdateSlot(ctx, input.DeviceID, *slot)
-	if err != nil {
-		return &api.RevokeActiveCertificateOutput{}, err
-	}
-
-	s.logsRepo.InsertSlotLog(ctx, input.DeviceID, input.SlotID, api.LogTypeWarn, "Certificate Revoked", fmt.Sprintf("The certificate %s will no longer be usable", revokedCertificateSerialNumber))
-
-	slot, err = s.devicesRepo.SelectSlotByID(ctx, input.DeviceID, input.SlotID)
-	if err != nil {
-		return &api.RevokeActiveCertificateOutput{}, err
-	}
-
-	return &api.RevokeActiveCertificateOutput{
-		Slot: *slot,
-	}, nil
 }
 
 func (s *devicesService) IterateDevicesWithPredicate(ctx context.Context, input *api.IterateDevicesWithPredicateInput) (*api.IterateDevicesWithPredicateOutput, error) {
@@ -739,50 +753,6 @@ func (s *devicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 }
 
 func (s *devicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate) (*x509.Certificate, error) {
-	aps := cert.Issuer.CommonName
-	outGetCA, err := s.caClient.GetCAByName(ctx, &caApi.GetCAByNameInput{
-		CAType: caApi.CATypePKI,
-		CAName: aps,
-	})
-	if err != nil {
-		return nil, &estErrors.GenericError{
-			Message:    "CA not found",
-			StatusCode: 404,
-		}
-	}
-
-	err = s.verifyCertificate(cert, outGetCA.Certificate.Certificate)
-	if err != nil {
-		return nil, &estErrors.GenericError{
-			Message:    "client certificate is not valid: " + err.Error(),
-			StatusCode: 403,
-		}
-	}
-
-	if int(time.Until(cert.NotAfter).Hours())/24 > s.minimumReenrollmentDays {
-		return nil, &estErrors.GenericError{
-			Message:    "certificate can only be renewed" + fmt.Sprintf("%d", s.minimumReenrollmentDays) + " days before expiration",
-			StatusCode: 403,
-		}
-	}
-
-	if !reflect.DeepEqual(csr.Subject, cert.Subject) {
-		return nil, &estErrors.GenericError{
-			Message:    "CSR subject does not match certificate subject",
-			StatusCode: 400,
-		}
-	}
-
-	signOutput, err := s.caClient.SignCertificateRequest(ctx, &caApi.SignCertificateRequestInput{
-		CAType:                    caApi.CATypePKI,
-		CertificateSigningRequest: csr,
-		CAName:                    aps,
-		SignVerbatim:              true,
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	csrCommonName := csr.Subject.CommonName
 	splitedCsrCommonName := strings.Split(csrCommonName, ":")
 
@@ -799,6 +769,57 @@ func (s *devicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 			Message:    "invalid common name format",
 			StatusCode: 400,
 		}
+	}
+
+	s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeInfo, "Slot Reneweal process Underway", "Certificate rotation request received")
+
+	aps := cert.Issuer.CommonName
+	outGetCA, err := s.caClient.GetCAByName(ctx, &caApi.GetCAByNameInput{
+		CAType: caApi.CATypePKI,
+		CAName: aps,
+	})
+	if err != nil {
+		s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeCritical, "Slot Reneweal process Failed", fmt.Sprintf("Could not retrive siging CA %s", aps))
+		return nil, &estErrors.GenericError{
+			Message:    "CA not found",
+			StatusCode: 404,
+		}
+	}
+
+	err = s.verifyCertificate(cert, outGetCA.Certificate.Certificate)
+	if err != nil {
+		s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeCritical, "Slot Reneweal process Failed", "Client certificate is not valid")
+		return nil, &estErrors.GenericError{
+			Message:    "client certificate is not valid: " + err.Error(),
+			StatusCode: 403,
+		}
+	}
+
+	if int(time.Until(cert.NotAfter).Hours())/24 > s.minimumReenrollmentDays {
+		s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeCritical, "Slot Reneweal process Failed", fmt.Sprintf("Certificate can only be renewed %d days before expiration", s.minimumReenrollmentDays))
+		return nil, &estErrors.GenericError{
+			Message:    fmt.Sprintf("Certificate can only be renewed %d days before expiration", s.minimumReenrollmentDays),
+			StatusCode: 403,
+		}
+	}
+
+	if !reflect.DeepEqual(csr.Subject, cert.Subject) {
+		s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeCritical, "Slot Reneweal process Failed", "CSR subject does not match certificate subject")
+		return nil, &estErrors.GenericError{
+			Message:    "CSR subject does not match certificate subject",
+			StatusCode: 400,
+		}
+	}
+	_, err := clientCertificate.Verify(opts)
+
+	signOutput, err := s.caClient.SignCertificateRequest(ctx, &caApi.SignCertificateRequestInput{
+		CAType:                    caApi.CATypePKI,
+		CertificateSigningRequest: csr,
+		CAName:                    aps,
+		SignVerbatim:              true,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	_, err = s.RotateActiveCertificate(ctx, &api.RotateActiveCertificateInput{

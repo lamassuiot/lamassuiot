@@ -355,6 +355,7 @@ func MakeHandleCACloudEvent(s service.Service) endpoint.Endpoint {
 				SlotID:           slotID,
 				Status:           cetificate.Status,
 				RevocationReason: cetificate.RevocationReason,
+				CertSerialNumber: cetificate.SerialNumber,
 			})
 			return nil, err
 

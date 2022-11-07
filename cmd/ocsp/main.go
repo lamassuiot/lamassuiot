@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -31,7 +32,7 @@ func main() {
 	}
 
 	block, _ := pem.Decode(keyBytes)
-	rsaKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	rsaKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 	if err != nil {
 		level.Error(mainServer.Logger).Log("msg", "Could not parse key file", "err", err)
 		os.Exit(1)
@@ -66,7 +67,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	s := service.NewOCSPService(lamassuCAClient, rsaKey, cert)
+	s := service.NewOCSPService(lamassuCAClient, rsaKey.(crypto.Signer), cert)
 
 	mainServer.AddHttpHandler("/", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), false, opentracing.GlobalTracer()))
 

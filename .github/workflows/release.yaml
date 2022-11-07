@@ -177,7 +177,7 @@ jobs:
       - name: Build DB DEV docker image
         uses: docker/build-push-action@v2
         with:
-          file: ci/lamassu-db.dockerfile 
+          file: ci/database.dockerfile 
           tags: |
             lamassuiot/lamassu-db-dev:${{ github.sha }}
             lamassuiot/lamassu-db-dev:latest
@@ -220,7 +220,7 @@ jobs:
     
     - name: Install dependencies
       working-directory: .github/infrastructure/tests/e2e
-      run: npm i &&  npm i -g cdk
+      run: npm i && npm i -g cdk
 
     - name: CDK synth
       working-directory: .github/infrastructure/tests/e2e

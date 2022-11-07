@@ -149,7 +149,7 @@ jobs:
     - name: Build DB docker image
       uses: docker/build-push-action@v2
       with:
-        file: ci/lamassu-db.dockerfile 
+        file: ci/database.dockerfile 
         tags: |
           lamassuiot/lamassu-db:${{ needs.tag_generator.outputs.new-tag }}
           lamassuiot/lamassu-db:latest
