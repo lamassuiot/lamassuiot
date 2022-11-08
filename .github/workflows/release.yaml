@@ -263,7 +263,7 @@ jobs:
         key: ${{ secrets.AWS_SSH_KEY }}
         port: ${{ secrets.AWS_SSH_PORT }}
         script: |
-          curl -fsSL https://raw.githubusercontent.com/lamassuiot/lamassu-compose/release/lamassu-compose.sh -o lamassu-compose.sh
+          curl -fsSL https://raw.githubusercontent.com/lamassuiot/lamassu-compose/develop/lamassu-compose.sh -o lamassu-compose.sh
           sudo bash lamassu-compose.sh --domain dev.lamassu.io --compose-version develop
 
   integration_test:
