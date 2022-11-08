@@ -14,7 +14,7 @@ export class E2EStack extends cdk.Stack {
       'apt-get update -y',
       'apt-get install -y docker-ce docker-ce-cli containerd.io',
       'sudo usermod -aG docker ubuntu',
-      "sudo curl -L \"https://github.com/docker/compose/releases/download/1.26.0/docker-compose-$(uname -s)-$(uname -m)\"  -o /usr/local/bin/docker-compose",
+      "sudo curl -L \"https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)\"  -o /usr/local/bin/docker-compose",
       "sudo mv /usr/local/bin/docker-compose /usr/bin/docker-compose",
       "sudo chmod +x /usr/bin/docker-compose",
       "wget -q https://go.dev/dl/go1.18.3.linux-amd64.tar.gz",
