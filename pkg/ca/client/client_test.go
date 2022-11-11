@@ -19,7 +19,6 @@ import (
 	cryptoEngines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/crypto-engines"
 	lamassuCATransport "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/transport"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
-	"github.com/opentracing/opentracing-go"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
@@ -161,7 +160,6 @@ func setup(t *testing.T) (http.Handler, service.Service) {
 	}
 
 	certificateRepository := postgresRepository.NewPostgresDB(db, logger)
-	tracer := opentracing.NoopTracer{}
 
 	dir := fmt.Sprintf("/tmp/test/%s", goid.NewV4UUID().String())
 	os.RemoveAll(dir)
@@ -172,6 +170,6 @@ func setup(t *testing.T) (http.Handler, service.Service) {
 	s = service.NewCAService(logger, engine, certificateRepository, "http://ocsp.test")
 	s = service.LoggingMiddleware(logger)(s)
 
-	handler := lamassuCATransport.MakeHTTPHandler(s, logger, tracer)
+	handler := lamassuCATransport.MakeHTTPHandler(s, logger)
 	return handler, s
 }

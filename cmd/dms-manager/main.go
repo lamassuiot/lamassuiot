@@ -16,7 +16,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/config"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
-	"github.com/opentracing/opentracing-go"
 	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -68,7 +67,7 @@ func main() {
 		s = service.LoggingMiddleware(mainServer.Logger)(s)
 	}
 
-	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), opentracing.GlobalTracer())))
+	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"))))
 
 	errs := make(chan error)
 	go func() {

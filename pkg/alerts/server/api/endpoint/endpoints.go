@@ -5,13 +5,10 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/tracing/opentracing"
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/service"
-	stdopentracing "github.com/opentracing/opentracing-go"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/go-kit/kit/otelkit"
 )
 
 type Endpoints struct {
@@ -24,41 +21,14 @@ type Endpoints struct {
 	GetSubscriptionsEndpoint       endpoint.Endpoint
 }
 
-func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
-	var healthEndpoint endpoint.Endpoint
-	{
-		healthEndpoint = MakeHealthEndpoint(s)
-		healthEndpoint = otelkit.EndpointMiddleware(otelkit.WithOperation("Health"))(healthEndpoint)
-	}
+func MakeServerEndpoints(s service.Service) Endpoints {
 
-	var eventHandlerEndpoint endpoint.Endpoint
-	{
-		eventHandlerEndpoint = MakeEventHandlerEndpoint(s)
-		eventHandlerEndpoint = otelkit.EndpointMiddleware(otelkit.WithOperation("EventHandlerEndpoint"))(eventHandlerEndpoint)
-	}
-
-	var subscribedEventEndpoint endpoint.Endpoint
-	{
-		subscribedEventEndpoint = MakeSubscribedEventEndpoint(s)
-		subscribedEventEndpoint = opentracing.TraceServer(otTracer, "SubscribedEventEndpoint")(subscribedEventEndpoint)
-	}
-
-	var unsubscribedEventEndpoint endpoint.Endpoint
-	{
-		unsubscribedEventEndpoint = MakeUnsubscribedEventEndpoint(s)
-		unsubscribedEventEndpoint = opentracing.TraceServer(otTracer, "UnsubscribedEventEndpoint")(unsubscribedEventEndpoint)
-	}
-	var getEventsEndpoint endpoint.Endpoint
-	{
-		getEventsEndpoint = MakeGetEventsEndpoint(s)
-		getEventsEndpoint = opentracing.TraceServer(otTracer, "GetLastEventEndpoint")(getEventsEndpoint)
-	}
-
-	var getSubscriptionsEndpoint endpoint.Endpoint
-	{
-		getSubscriptionsEndpoint = MakeGetSubscriptionsEndpoint(s)
-		getSubscriptionsEndpoint = opentracing.TraceServer(otTracer, "GetSubscriptionsEndpoint")(getSubscriptionsEndpoint)
-	}
+	var healthEndpoint = MakeHealthEndpoint(s)
+	var eventHandlerEndpoint = MakeEventHandlerEndpoint(s)
+	var subscribedEventEndpoint = MakeSubscribedEventEndpoint(s)
+	var unsubscribedEventEndpoint = MakeUnsubscribedEventEndpoint(s)
+	var getEventsEndpoint = MakeGetEventsEndpoint(s)
+	var getSubscriptionsEndpoint = MakeGetSubscriptionsEndpoint(s)
 
 	return Endpoints{
 		HealthEndpoint:            healthEndpoint,

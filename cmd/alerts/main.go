@@ -14,7 +14,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/transport"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/config"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
-	"github.com/opentracing/opentracing-go"
 	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -62,8 +61,8 @@ func main() {
 	s = service.NewInputValudationMiddleware()(s)
 	s = service.LoggingMiddleware(mainServer.Logger)(s)
 
-	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), opentracing.GlobalTracer())))
-	mainServer.AddAmqpConsumer(config.ServiceName, []string{"#"}, transport.MakeAmqpHandler(s, mainServer.Logger, opentracing.GlobalTracer()))
+	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"))))
+	mainServer.AddAmqpConsumer(config.ServiceName, []string{"#"}, transport.MakeAmqpHandler(s, mainServer.Logger))
 
 	errs := make(chan error)
 	go func() {

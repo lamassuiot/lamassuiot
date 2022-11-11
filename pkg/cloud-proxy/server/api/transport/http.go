@@ -9,14 +9,12 @@ import (
 	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/go-kit/log"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/gorilla/mux"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/endpoint"
 	lamassuErrors "github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/service"
-	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 type errorer interface {
@@ -30,137 +28,110 @@ func InvalidJsonFormat() error {
 	}
 }
 
-func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentracing.Tracer) http.Handler {
+func MakeHTTPHandler(s service.Service, logger log.Logger) http.Handler {
 	r := mux.NewRouter()
-	e := endpoint.MakeServerEndpoints(s, otTracer)
+	e := endpoint.MakeServerEndpoints(s)
 	options := []httptransport.ServerOption{
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
 	}
 
 	r.Methods("GET").Path("/health").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.HealthEndpoint,
-				decodeHealthRequest,
-				encodeHealthResponse,
-				append(
-					options,
-				)...,
-			),
-			"Health",
+		httptransport.NewServer(
+			e.HealthEndpoint,
+			decodeHealthRequest,
+			encodeHealthResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("GET").Path("/connectors").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.GetCloudConnectorsEndpoint,
-				decodeGetConnectorsRequest,
-				enocdeGetConnectorsResponse,
-				append(
-					options,
-				)...,
-			),
-			"GetCloudConnectors",
+		httptransport.NewServer(
+			e.GetCloudConnectorsEndpoint,
+			decodeGetConnectorsRequest,
+			enocdeGetConnectorsResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("GET").Path("/connectors/{connectorID}/devices/{deviceID}").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.GetDeviceConfigurationEndpoint,
-				decodeGetDeviceConfigurationRequest,
-				encodeGetDeviceConfigurationResponse,
-				append(
-					options,
-				)...,
-			),
-			"GetCloudConnectorsDevices",
+		httptransport.NewServer(
+			e.GetDeviceConfigurationEndpoint,
+			decodeGetDeviceConfigurationRequest,
+			encodeGetDeviceConfigurationResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("POST").Path("/connectors/synchronize").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.SynchronizedCAEndpoint,
-				decodeSynchronizeCARequest,
-				enocdeSynchronizeCAResponse,
-				append(
-					options,
-				)...,
-			),
-			"SynchronizedCA",
+		httptransport.NewServer(
+			e.SynchronizedCAEndpoint,
+			decodeSynchronizeCARequest,
+			enocdeSynchronizeCAResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("PUT").Path("/connectors/{connectorID}/config").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.UpdateConnectorConfigurationEndpoint,
-				decodeUpdateConnectorConfigurationRequest,
-				enocdeUpdateConnectorConfigurationResponse,
-				append(
-					options,
-				)...,
-			),
-			"UpdateConnectorConfiguration",
+		httptransport.NewServer(
+			e.UpdateConnectorConfigurationEndpoint,
+			decodeUpdateConnectorConfigurationRequest,
+			enocdeUpdateConnectorConfigurationResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("POST").Path("/event").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.EventHandlerEndpoint,
-				decodeEventHandlerRequest,
-				encodeEventHandlerResponse,
-				append(
-					options,
-				)...,
-			),
-			"EventHandler",
+		httptransport.NewServer(
+			e.EventHandlerEndpoint,
+			decodeEventHandlerRequest,
+			encodeEventHandlerResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("PUT").Path("/connectors/{connectorID}/devices/{deviceID}/certificate").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.UpdateDeviceCertStatusEndpoint,
-				decodeUpdateDeviceCertStatusRequest,
-				encodeUpdateDeviceCertStatusResponse,
-				append(
-					options,
-				)...,
-			),
-			"UpdateDeviceCertStatus",
+		httptransport.NewServer(
+			e.UpdateDeviceCertStatusEndpoint,
+			decodeUpdateDeviceCertStatusRequest,
+			encodeUpdateDeviceCertStatusResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("PUT").Path("/connectors/{connectorID}/devices/{deviceID}/digital-twin").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.UpdateDeviceDigitalTwinReenrolmentStatusEndpoint,
-				decodeUpdateDeviceDigitalTwinReenrolmentStatusRequest,
-				encodeUpdateDeviceDigitalTwinReenrolmentStatusResponse,
-				append(
-					options,
-				)...,
-			),
-			"UpdateDeviceCertStatus",
+		httptransport.NewServer(
+			e.UpdateDeviceDigitalTwinReenrolmentStatusEndpoint,
+			decodeUpdateDeviceDigitalTwinReenrolmentStatusRequest,
+			encodeUpdateDeviceDigitalTwinReenrolmentStatusResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("PUT").Path("/connectors/{connectorID}/ca/{caName}").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.UpdateCAStatusEndpoint,
-				decodeUpdateCAStatusRequest,
-				encodeUpdateCAStatusResponse,
-				append(
-					options,
-				)...,
-			),
-			"UpdateCaStatus",
+		httptransport.NewServer(
+			e.UpdateCAStatusEndpoint,
+			decodeUpdateCAStatusRequest,
+			encodeUpdateCAStatusResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 

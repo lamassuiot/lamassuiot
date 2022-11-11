@@ -96,7 +96,7 @@ reference.
 
             // Transmit the span's TraceContext as HTTP headers on our
             // outbound request.
-            opentracing.GlobalTracer().Inject(
+            .Inject(
                 span.Context(),
                 opentracing.HTTPHeaders,
                 opentracing.HTTPHeadersCarrier(httpReq.Header))
@@ -114,7 +114,7 @@ reference.
     http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
         var serverSpan opentracing.Span
         appSpecificOperationName := ...
-        wireContext, err := opentracing.GlobalTracer().Extract(
+        wireContext, err := .Extract(
             opentracing.HTTPHeaders,
             opentracing.HTTPHeadersCarrier(req.Header))
         if err != nil {

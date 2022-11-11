@@ -18,7 +18,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/config"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
-	"github.com/opentracing/opentracing-go"
 )
 
 func main() {
@@ -69,7 +68,7 @@ func main() {
 
 	s := service.NewOCSPService(lamassuCAClient, rsaKey.(crypto.Signer), cert)
 
-	mainServer.AddHttpHandler("/", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), false, opentracing.GlobalTracer()))
+	mainServer.AddHttpHandler("/", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), false))
 
 	errs := make(chan error)
 	go func() {

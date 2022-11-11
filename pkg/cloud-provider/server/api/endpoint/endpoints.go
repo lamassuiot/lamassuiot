@@ -6,7 +6,6 @@ import (
 	"github.com/go-kit/kit/endpoint"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-provider/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-provider/server/api/service"
-	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 type Endpoints struct {
@@ -20,7 +19,7 @@ type Endpoints struct {
 	UpdateDeviceDigitalTwinReenrollmentStatusEndpoint endpoint.Endpoint
 }
 
-func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
+func MakeServerEndpoints(s service.Service) Endpoints {
 	healthEndpoint := MakeHealthEndpoint(s)
 	registerCAEndpoint := MakeRegisterCAEndpoint(s)
 	updateConfigurationEndpoint := MakeUpdateConfigurationEndpoint(s)

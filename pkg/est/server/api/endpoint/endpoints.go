@@ -6,11 +6,9 @@ import (
 	"crypto/x509"
 
 	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/tracing/opentracing"
 	"github.com/go-playground/validator/v10"
 	esterror "github.com/lamassuiot/lamassuiot/pkg/est/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/est/server/api/service"
-	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 type Endpoints struct {
@@ -21,35 +19,13 @@ type Endpoints struct {
 	ServerKeyGenEndpoint endpoint.Endpoint
 }
 
-func MakeServerEndpoints(s service.ESTService, otTracer stdopentracing.Tracer) Endpoints {
-	var healthEndpoint endpoint.Endpoint
-	{
-		healthEndpoint = MakeHealthEndpoint(s)
-		healthEndpoint = opentracing.TraceServer(otTracer, "Health")(healthEndpoint)
-	}
+func MakeServerEndpoints(s service.ESTService) Endpoints {
+	var healthEndpoint = MakeHealthEndpoint(s)
+	var getCasEndpoint = MakeGetCAsEndpoint(s)
+	var enrollEndpoint = MakeEnrollEndpoint(s)
+	var reenrollEndpoint = MakeReenrollEndpoint(s)
+	var serverkeygenEndpoint = MakeServerKeyGenEndpoint(s)
 
-	var getCasEndpoint endpoint.Endpoint
-	{
-		getCasEndpoint = MakeGetCAsEndpoint(s)
-		getCasEndpoint = opentracing.TraceServer(otTracer, "GetCAs")(getCasEndpoint)
-	}
-
-	var enrollEndpoint endpoint.Endpoint
-	{
-		enrollEndpoint = MakeEnrollEndpoint(s)
-		enrollEndpoint = opentracing.TraceServer(otTracer, "Enroll")(enrollEndpoint)
-	}
-
-	var reenrollEndpoint endpoint.Endpoint
-	{
-		reenrollEndpoint = MakeReenrollEndpoint(s)
-		reenrollEndpoint = opentracing.TraceServer(otTracer, "Reenroll")(reenrollEndpoint)
-	}
-	var serverkeygenEndpoint endpoint.Endpoint
-	{
-		serverkeygenEndpoint = MakeServerKeyGenEndpoint(s)
-		serverkeygenEndpoint = opentracing.TraceServer(otTracer, "Serverkeygen")(serverkeygenEndpoint)
-	}
 	return Endpoints{
 		HealthEndpoint:       healthEndpoint,
 		GetCAsEndpoint:       getCasEndpoint,

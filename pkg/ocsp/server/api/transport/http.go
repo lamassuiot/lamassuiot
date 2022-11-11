@@ -15,8 +15,6 @@ import (
 	"github.com/gorilla/mux"
 	endpoints "github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/endpoint"
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/service"
-	stdopentracing "github.com/opentracing/opentracing-go"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 var (
@@ -31,53 +29,44 @@ type errorer interface {
 	error() error
 }
 
-func MakeHTTPHandler(s service.Service, logger log.Logger, strict bool, otTracer stdopentracing.Tracer) http.Handler {
+func MakeHTTPHandler(s service.Service, logger log.Logger, strict bool) http.Handler {
 	r := mux.NewRouter()
-	e := endpoints.MakeServerEndpoints(s, otTracer)
+	e := endpoints.MakeServerEndpoints(s)
 
 	options := []httptransport.ServerOption{
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 	}
 
 	r.Methods("GET").Path("/health").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.HealthEndpoint,
-				decodeHealthRequest,
-				encodeHealthResponse,
-				append(
-					options,
-				)...,
-			),
-			"Health",
+		httptransport.NewServer(
+			e.HealthEndpoint,
+			decodeHealthRequest,
+			encodeHealthResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("GET").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.GetEndpoint,
-				checkStrictRequest(strict),
-				encodeOCSPResponse,
-				append(
-					options,
-				)...,
-			),
-			"GetOCSPOperation",
+		httptransport.NewServer(
+			e.GetEndpoint,
+			checkStrictRequest(strict),
+			encodeOCSPResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("POST").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.PostEndpoint,
-				checkStrictRequest(strict),
-				encodeOCSPResponse,
-				append(
-					options,
-				)...,
-			),
-			"PostOCSPOperation",
+		httptransport.NewServer(
+			e.PostEndpoint,
+			checkStrictRequest(strict),
+			encodeOCSPResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 

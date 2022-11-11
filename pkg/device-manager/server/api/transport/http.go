@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/transport"
@@ -18,7 +17,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common/types"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
-	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 type errorer interface {
@@ -43,151 +41,121 @@ func filtrableDeviceModelFields() map[string]types.Filter {
 	return fieldFiltersMap
 }
 
-func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentracing.Tracer) http.Handler {
+func MakeHTTPHandler(s service.Service, logger log.Logger) http.Handler {
 	r := mux.NewRouter()
-	e := endpoint.MakeServerEndpoints(s, otTracer)
+	e := endpoint.MakeServerEndpoints(s)
 	options := []httptransport.ServerOption{
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
 	}
 
 	r.Methods("GET").Path("/health").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.HealthEndpoint,
-				decodeHealthRequest,
-				encodeHealthResponse,
-				append(
-					options,
-				)...,
-			),
-			"Health",
+		httptransport.NewServer(
+			e.HealthEndpoint,
+			decodeHealthRequest,
+			encodeHealthResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("GET").Path("/stats").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.GetStatsEndpoint,
-				decodeGetStatsRequest,
-				encodeGetStatsResponse,
-				append(
-					options,
-				)...,
-			),
-			"Stats",
+		httptransport.NewServer(
+			e.GetStatsEndpoint,
+			decodeGetStatsRequest,
+			encodeGetStatsResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("POST").Path("/devices").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.CreateDeviceEndpoint,
-				decodeCreateDeviceRequest,
-				encodeCreateDeviceResponse,
-				append(
-					options,
-				)...,
-			),
-			"CreateDevice",
+		httptransport.NewServer(
+			e.CreateDeviceEndpoint,
+			decodeCreateDeviceRequest,
+			encodeCreateDeviceResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("GET").Path("/devices").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.GetDevicesEndpoint,
-				decodeGetDevicesRequest,
-				encodeGetDevicesResponse,
-				append(
-					options,
-				)...,
-			),
-			"GetDevices",
+		httptransport.NewServer(
+			e.GetDevicesEndpoint,
+			decodeGetDevicesRequest,
+			encodeGetDevicesResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("GET").Path("/devices/{deviceID}").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.GetDeviceByIdEndpoint,
-				decodeGetDeviceByIdRequest,
-				encodeGetDeviceByIdResponse,
-				append(
-					options,
-				)...,
-			),
-			"GetDeviceById",
+		httptransport.NewServer(
+			e.GetDeviceByIdEndpoint,
+			decodeGetDeviceByIdRequest,
+			encodeGetDeviceByIdResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("PUT").Path("/devices/{deviceID}").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.UpdateDeviceMetadataEndpoint,
-				decodeUpdateDeviceMetadataRequest,
-				encodeUpdateDeviceMetadataResponse,
-				append(
-					options,
-				)...,
-			),
-			"UpdateDevicesById",
+		httptransport.NewServer(
+			e.UpdateDeviceMetadataEndpoint,
+			decodeUpdateDeviceMetadataRequest,
+			encodeUpdateDeviceMetadataResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("DELETE").Path("/devices/{deviceID}").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.DecommisionDeviceEndpoint,
-				decodeDecommisionDeviceRequest,
-				encodeDecommisionDeviceResponse,
-				append(
-					options,
-				)...,
-			),
-			"DecommisionDevice",
+		httptransport.NewServer(
+			e.DecommisionDeviceEndpoint,
+			decodeDecommisionDeviceRequest,
+			encodeDecommisionDeviceResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("DELETE").Path("/devices/{deviceID}/slots/{slotID}").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.RevokeActiveCertificateEndpoint,
-				decodeRevokeActiveCertificateRequest,
-				encodeRevokeActiveCertificateResponse,
-				append(
-					options,
-				)...,
-			),
-			"RevokeActiveCertificate",
+		httptransport.NewServer(
+			e.RevokeActiveCertificateEndpoint,
+			decodeRevokeActiveCertificateRequest,
+			encodeRevokeActiveCertificateResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("PUT").Path("/devices/{deviceID}/slots/{slotID}").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.ForceReenrollEndpoint,
-				decodeForceReenrollRequest,
-				encodeForceReenrollResponse,
-				append(
-					options,
-				)...,
-			),
-			"RotateDeviceCertificate",
+		httptransport.NewServer(
+			e.ForceReenrollEndpoint,
+			decodeForceReenrollRequest,
+			encodeForceReenrollResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("GET").Path("/devices/{deviceID}/logs").Handler(
-		otelhttp.NewHandler(
-			httptransport.NewServer(
-				e.GetDeviceLogsEndpoint,
-				decodeGetDeviceLogsRequest,
-				encodeGetDeviceLogsResponse,
-				append(
-					options,
-				)...,
-			),
-			"GetDeviceLogs",
+		httptransport.NewServer(
+			e.GetDeviceLogsEndpoint,
+			decodeGetDeviceLogsRequest,
+			encodeGetDeviceLogsResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 

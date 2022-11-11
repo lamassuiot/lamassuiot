@@ -10,12 +10,11 @@ import (
 	"github.com/go-kit/log"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/endpoint"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
-	stdopentracing "github.com/opentracing/opentracing-go"
 	"github.com/streadway/amqp"
 )
 
-func MakeAmqpHandler(s service.Service, logger log.Logger, otTracer stdopentracing.Tracer) *amqptransport.Subscriber {
-	endpoints := endpoint.MakeServerEndpoints(s, otTracer)
+func MakeAmqpHandler(s service.Service, logger log.Logger) *amqptransport.Subscriber {
+	endpoints := endpoint.MakeServerEndpoints(s)
 	options := []amqptransport.SubscriberOption{}
 
 	// AMQP Subscribers
