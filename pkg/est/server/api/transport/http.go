@@ -17,7 +17,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/est/server/api/endpoint"
 	esterror "github.com/lamassuiot/lamassuiot/pkg/est/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/est/server/api/service"
-	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	stdopentracing "github.com/opentracing/opentracing-go"
 	"go.mozilla.org/pkcs7"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -69,66 +68,58 @@ func MakeHTTPHandler(service service.ESTService, logger log.Logger, otTracer std
 
 	// MUST as per rfc7030
 	router.Methods("GET").Path("/.well-known/est/cacerts").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					endpoints.GetCAsEndpoint,
-					decodeRequest,
-					encodeGetCACertificatesResponse,
-					append(
-						options,
-					)...,
-				),
-				"CACerts",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				endpoints.GetCAsEndpoint,
+				decodeRequest,
+				encodeGetCACertificatesResponse,
+				append(
+					options,
+				)...,
 			),
+			"CACerts",
 		),
 	)
 
 	router.Methods("POST").Path("/.well-known/est/{aps}/simpleenroll").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					endpoints.EnrollerEndpoint,
-					decodeEnrollRequest,
-					encodeResponse,
-					append(
-						options,
-					)...,
-				),
-				"SimplEnroll",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				endpoints.EnrollerEndpoint,
+				decodeEnrollRequest,
+				encodeResponse,
+				append(
+					options,
+				)...,
 			),
+			"SimplEnroll",
 		),
 	)
 
 	router.Methods("POST").Path("/.well-known/est/simplereenroll").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					endpoints.ReenrollerEndpoint,
-					decodeReenrollRequest,
-					encodeResponse,
-					append(
-						options,
-					)...,
-				),
-				"SimplReEnroll",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				endpoints.ReenrollerEndpoint,
+				decodeReenrollRequest,
+				encodeResponse,
+				append(
+					options,
+				)...,
 			),
+			"SimplReEnroll",
 		),
 	)
 
 	router.Methods("POST").Path("/.well-known/est/{aps}/serverkeygen").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					endpoints.ServerKeyGenEndpoint,
-					decodeServerkeygenRequest,
-					encodeServerkeygenResponse,
-					append(
-						options,
-					)...,
-				),
-				"ServerKeyGen",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				endpoints.ServerKeyGenEndpoint,
+				decodeServerkeygenRequest,
+				encodeServerkeygenResponse,
+				append(
+					options,
+				)...,
 			),
+			"ServerKeyGen",
 		),
 	)
 

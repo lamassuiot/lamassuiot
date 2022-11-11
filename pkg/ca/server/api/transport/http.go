@@ -24,7 +24,6 @@ import (
 	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	lamassuErrors "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/errors"
-	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -65,101 +64,89 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	}
 
 	r.Methods("GET").Path("/health").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.HealthEndpoint,
-					decodeHealthRequest,
-					encodeHealthResponse,
-					append(
-						options,
-					)...,
-				),
-				"Health",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.HealthEndpoint,
+				decodeHealthRequest,
+				encodeHealthResponse,
+				append(
+					options,
+				)...,
 			),
+			"Health",
 		),
 	)
 
 	r.Methods("GET").Path("/cryptoengine").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.GetCryptoEngine,
-					decodeCryptoEngineRequest,
-					encodeCryptoEngineResponse,
-					append(
-						options,
-					)...,
-				),
-				"CryptoEngine",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetCryptoEngine,
+				decodeCryptoEngineRequest,
+				encodeCryptoEngineResponse,
+				append(
+					options,
+				)...,
 			),
+			"CryptoEngine",
 		),
 	)
 
 	r.Methods("GET").Path("/stats").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.StatsEndpoint,
-					decodeStatsRequest,
-					encodeStatsResponse,
-					append(
-						options,
-					)...,
-				),
-				"Stats",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.StatsEndpoint,
+				decodeStatsRequest,
+				encodeStatsResponse,
+				append(
+					options,
+				)...,
 			),
+			"Stats",
 		),
 	)
 
 	// Get all CAs
 	r.Methods("GET").Path("/{caType}").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.GetCAsEndpoint,
-					decodeGetCAsRequest,
-					encodeGetCAsResponse,
-					append(
-						options,
-					)...,
-				),
-				"GetCAs",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetCAsEndpoint,
+				decodeGetCAsRequest,
+				encodeGetCAsResponse,
+				append(
+					options,
+				)...,
 			),
+			"GetCAs",
 		),
 	)
 
 	// Get CA by Name
 	r.Methods("GET").Path("/{caType}/{caName}").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.GetCAByNameEndpoint,
-					decodeGetCAByNameRequest,
-					encodeGetCAByNameResponse,
-					append(
-						options,
-					)...,
-				),
-				"GetCAByName",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetCAByNameEndpoint,
+				decodeGetCAByNameRequest,
+				encodeGetCAByNameResponse,
+				append(
+					options,
+				)...,
 			),
+			"GetCAByName",
 		),
 	)
 
 	// Create new CA using Form
 	r.Methods("POST").Path("/pki").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.CreateCAEndpoint,
-					decodeCreateCARequest,
-					encodeCreateCAResponse,
-					append(
-						options,
-					)...,
-				),
-				"CreateCA",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.CreateCAEndpoint,
+				decodeCreateCARequest,
+				encodeCreateCAResponse,
+				append(
+					options,
+				)...,
 			),
+			"CreateCA",
 		),
 	)
 
@@ -177,86 +164,76 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 
 	// Revoke CA
 	r.Methods("DELETE").Path("/{caType}/{caName}").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.RevokeCAEndpoint,
-					decodeRevokeCARequest,
-					encodeRevokeCAResponse,
-					append(
-						options,
-					)...,
-				),
-				"RevokeCA",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.RevokeCAEndpoint,
+				decodeRevokeCARequest,
+				encodeRevokeCAResponse,
+				append(
+					options,
+				)...,
 			),
+			"RevokeCA",
 		),
 	)
 
 	// Get Issued certificates by {ca}
 	r.Methods("GET").Path("/{caType}/{caName}/certificates").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.GetCertificatesEndpoint,
-					decodeGetCertificatesRequest,
-					encodeGetCertificatesResponse,
-					append(
-						options,
-					)...,
-				),
-				"GetCertificates",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetCertificatesEndpoint,
+				decodeGetCertificatesRequest,
+				encodeGetCertificatesResponse,
+				append(
+					options,
+				)...,
 			),
+			"GetCertificates",
 		),
 	)
 
 	// Get certificate by {ca} and {serialNumber}
 	r.Methods("GET").Path("/{caType}/{caName}/certificates/{serialNumber}").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.GetCertEndpoint,
-					decodeGetCertificateBySerialNumberRequest,
-					encodeGetCertificateBySerialNumberResponse,
-					append(
-						options,
-					)...,
-				),
-				"GetCertificateBySerialNumber",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetCertEndpoint,
+				decodeGetCertificateBySerialNumberRequest,
+				encodeGetCertificateBySerialNumberResponse,
+				append(
+					options,
+				)...,
 			),
+			"GetCertificateBySerialNumber",
 		),
 	)
 
 	// Sign CSR by {ca}
 	r.Methods("POST").Path("/{caType}/{caName}/sign").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.SignCertEndpoint,
-					decodeSignCertificateRequest,
-					encodeSignCertificateResponse,
-					append(
-						options,
-					)...,
-				),
-				"SignCSR",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.SignCertEndpoint,
+				decodeSignCertificateRequest,
+				encodeSignCertificateResponse,
+				append(
+					options,
+				)...,
 			),
+			"SignCSR",
 		),
 	)
 
 	// Revoke certificate issued by {ca} and {serialNumber}
 	r.Methods("DELETE").Path("/{caType}/{caName}/certificates/{serialNumber}").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.RevokeCertEndpoint,
-					decodeRevokeCertificateRequest,
-					encodeRevokeCertificateResponse,
-					append(
-						options,
-					)...,
-				),
-				"RevokeCertificate",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.RevokeCertEndpoint,
+				decodeRevokeCertificateRequest,
+				encodeRevokeCertificateResponse,
+				append(
+					options,
+				)...,
 			),
+			"RevokeCertificate",
 		),
 	)
 

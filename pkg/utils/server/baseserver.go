@@ -13,21 +13,6 @@ import (
 
 	// stdout "go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 
-	"go.opentelemetry.io/contrib/instrumentation/runtime"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/jaeger"
-	"go.opentelemetry.io/otel/exporters/prometheus"
-	"go.opentelemetry.io/otel/metric/global"
-	"go.opentelemetry.io/otel/sdk/metric/aggregator/histogram"
-	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
-	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
-	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
-	selector "go.opentelemetry.io/otel/sdk/metric/selector/simple"
-	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
-
 	amqptransport "github.com/go-kit/kit/transport/amqp"
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
@@ -47,19 +32,17 @@ type Configuration interface {
 }
 
 type BaseConfiguration struct {
-	ServiceName           string `required:"true" split_words:"true"`
-	DeploymentEnvironment string `required:"true" split_words:"true"`
-	JaegerExporterURL     string `required:"true" split_words:"true"`
-	DebugMode             bool   `required:"true" split_words:"true"`
-	Port                  string `required:"true" split_words:"true"`
-	Protocol              string `required:"true" split_words:"true"`
-	CertFile              string `required:"true" split_words:"true"`
-	KeyFile               string `required:"true" split_words:"true"`
-	MutualTLSEnabled      bool   `required:"true" split_words:"true"`
-	MutualTLSClientCA     string `required:"true" split_words:"true"`
-	AmqpServerHost        string `required:"true" split_words:"true"`
-	AmqpServerPort        string `required:"true" split_words:"true"`
-	AmqpServerCACert      string `required:"true" split_words:"true"`
+	ServiceName       string `required:"true" split_words:"true"`
+	DebugMode         bool   `required:"true" split_words:"true"`
+	Port              string `required:"true" split_words:"true"`
+	Protocol          string `required:"true" split_words:"true"`
+	CertFile          string `required:"true" split_words:"true"`
+	KeyFile           string `required:"true" split_words:"true"`
+	MutualTLSEnabled  bool   `required:"true" split_words:"true"`
+	MutualTLSClientCA string `required:"true" split_words:"true"`
+	AmqpServerHost    string `required:"true" split_words:"true"`
+	AmqpServerPort    string `required:"true" split_words:"true"`
+	AmqpServerCACert  string `required:"true" split_words:"true"`
 }
 
 type AmqpPublishMessage struct {
@@ -113,9 +96,6 @@ func NewServer(config Configuration) *Server {
 		amqpConsumers: map[string]amqpConsumerConfig{},
 		AmqpPublisher: make(chan AmqpPublishMessage),
 	}
-
-	s.initTracer()
-	s.initMeter()
 
 	return &s
 }
@@ -274,75 +254,6 @@ func (s *Server) Run(errorsChannel chan error) {
 		}()
 
 	}()
-}
-
-func (s *Server) initTracer() {
-	// exporter, err := stdout.New(stdout.WithPrettyPrint())
-	// if err != nil {
-	// 	level.Error(s.Logger).Log("err", err, "msg", "Could not create stdout exporter")
-	// 	os.Exit(1)
-	// }
-
-	exporter, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(s.cfg.JaegerExporterURL)))
-	if err != nil {
-		level.Error(s.Logger).Log("err", err, "msg", "Could not create jaeger exporter")
-		os.Exit(1)
-	}
-
-	// For the demonstration, use sdktrace.AlwaysSample sampler to sample all traces.
-	// In a production application, use sdktrace.ProbabilitySampler with a desired probability.
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-		sdktrace.WithBatcher(exporter),
-		sdktrace.WithResource(resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceNameKey.String(s.cfg.ServiceName),
-			attribute.String("environment", s.cfg.DeploymentEnvironment),
-		)),
-	)
-	otel.SetTracerProvider(tp)
-}
-
-func (s *Server) initMeter() {
-	// exporter, err := stdout.New(stdout.WithPrettyPrint())
-	// if err != nil {
-	// 	level.Error(s.Logger).Log("err", err, "msg", "Could not create stdout exporter")
-	// 	os.Exit(1)
-	// }
-	// cont := controller.New(
-	// 	processor.NewFactory(
-	// 		simple.NewWithInexpensiveDistribution(),
-	// 		exporter,
-	// 	),
-	// 	controller.WithExporter(exporter),
-	// 	controller.WithCollectPeriod(3*time.Second),
-	// )
-	// if err := cont.Start(context.Background()); err != nil {
-	// 	level.Error(s.Logger).Log("err", err, "msg", "Could not start metric controller")
-	// 	os.Exit(1)
-	// }
-	config := prometheus.Config{
-		DefaultHistogramBoundaries: []float64{1, 2, 5, 10, 20, 50},
-	}
-	c := controller.New(
-		processor.NewFactory(
-			selector.NewWithHistogramDistribution(
-				histogram.WithExplicitBoundaries(config.DefaultHistogramBoundaries),
-			),
-			aggregation.CumulativeTemporalitySelector(),
-			processor.WithMemory(true),
-		),
-	)
-
-	exporter, err := prometheus.New(config, c)
-	if err != nil {
-		level.Error(s.Logger).Log("err", err, "msg", "Could not create prometheus exporter")
-		os.Exit(1)
-	}
-
-	global.SetMeterProvider(exporter.MeterProvider())
-	http.HandleFunc("/metrics", exporter.ServeHTTP)
-	runtime.Start(runtime.WithMinimumReadMemStatsInterval(time.Second))
 }
 
 func infoHandler() http.HandlerFunc {

@@ -14,7 +14,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/endpoint"
 	lamassuErrors "github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/service"
-	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	stdopentracing "github.com/opentracing/opentracing-go"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
@@ -52,82 +51,72 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	}
 
 	r.Methods("GET").Path("/health").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.HealthEndpoint,
-					decodeHealthRequest,
-					encodeResponse,
-					append(
-						options,
-					)...,
-				),
-				"Health",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.HealthEndpoint,
+				decodeHealthRequest,
+				encodeResponse,
+				append(
+					options,
+				)...,
 			),
+			"Health",
 		),
 	)
 
 	r.Methods("POST").Path("/subscribe").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.SubscribedEventEndpoint,
-					decodeSubscribedEventRequest,
-					encodeSubscribedEventResponse,
-					append(
-						options,
-					)...,
-				),
-				"SubscribedEvent",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.SubscribedEventEndpoint,
+				decodeSubscribedEventRequest,
+				encodeSubscribedEventResponse,
+				append(
+					options,
+				)...,
 			),
+			"SubscribedEvent",
 		),
 	)
 
 	r.Methods("POST").Path("/unsubscribe").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.UnsubscribedEventEndpoint,
-					decodeUnsubscribedEventRequest,
-					encodeUnsubscribedEventResponse,
-					append(
-						options,
-					)...,
-				),
-				"UnsubscribedEvent",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.UnsubscribedEventEndpoint,
+				decodeUnsubscribedEventRequest,
+				encodeUnsubscribedEventResponse,
+				append(
+					options,
+				)...,
 			),
+			"UnsubscribedEvent",
 		),
 	)
 
 	r.Methods("GET").Path("/lastevents").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.GetEventsEndpoint,
-					decodeGetEventsRequest,
-					encodeGetEventsResponse,
-					append(
-						options,
-					)...,
-				),
-				"GetEvents",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetEventsEndpoint,
+				decodeGetEventsRequest,
+				encodeGetEventsResponse,
+				append(
+					options,
+				)...,
 			),
+			"GetEvents",
 		),
 	)
 
 	r.Methods("GET").Path("/subscriptions/{userID}").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.GetSubscriptionsEndpoint,
-					decodeGetSubscriptionRequest,
-					encodeGetSubscriptionsResponse,
-					append(
-						options,
-					)...,
-				),
-				"GetSubscriptions",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetSubscriptionsEndpoint,
+				decodeGetSubscriptionRequest,
+				encodeGetSubscriptionsResponse,
+				append(
+					options,
+				)...,
 			),
+			"GetSubscriptions",
 		),
 	)
 

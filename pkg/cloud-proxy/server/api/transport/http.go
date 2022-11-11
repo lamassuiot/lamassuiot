@@ -16,7 +16,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/endpoint"
 	lamassuErrors "github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/service"
-	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -40,146 +39,128 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	}
 
 	r.Methods("GET").Path("/health").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.HealthEndpoint,
-					decodeHealthRequest,
-					encodeHealthResponse,
-					append(
-						options,
-					)...,
-				),
-				"Health",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.HealthEndpoint,
+				decodeHealthRequest,
+				encodeHealthResponse,
+				append(
+					options,
+				)...,
 			),
+			"Health",
 		),
 	)
 
 	r.Methods("GET").Path("/connectors").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.GetCloudConnectorsEndpoint,
-					decodeGetConnectorsRequest,
-					enocdeGetConnectorsResponse,
-					append(
-						options,
-					)...,
-				),
-				"GetCloudConnectors",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetCloudConnectorsEndpoint,
+				decodeGetConnectorsRequest,
+				enocdeGetConnectorsResponse,
+				append(
+					options,
+				)...,
 			),
+			"GetCloudConnectors",
 		),
 	)
 
 	r.Methods("GET").Path("/connectors/{connectorID}/devices/{deviceID}").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.GetDeviceConfigurationEndpoint,
-					decodeGetDeviceConfigurationRequest,
-					encodeGetDeviceConfigurationResponse,
-					append(
-						options,
-					)...,
-				),
-				"GetCloudConnectorsDevices",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetDeviceConfigurationEndpoint,
+				decodeGetDeviceConfigurationRequest,
+				encodeGetDeviceConfigurationResponse,
+				append(
+					options,
+				)...,
 			),
+			"GetCloudConnectorsDevices",
 		),
 	)
 
 	r.Methods("POST").Path("/connectors/synchronize").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.SynchronizedCAEndpoint,
-					decodeSynchronizeCARequest,
-					enocdeSynchronizeCAResponse,
-					append(
-						options,
-					)...,
-				),
-				"SynchronizedCA",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.SynchronizedCAEndpoint,
+				decodeSynchronizeCARequest,
+				enocdeSynchronizeCAResponse,
+				append(
+					options,
+				)...,
 			),
+			"SynchronizedCA",
 		),
 	)
 
 	r.Methods("PUT").Path("/connectors/{connectorID}/config").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.UpdateConnectorConfigurationEndpoint,
-					decodeUpdateConnectorConfigurationRequest,
-					enocdeUpdateConnectorConfigurationResponse,
-					append(
-						options,
-					)...,
-				),
-				"UpdateConnectorConfiguration",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.UpdateConnectorConfigurationEndpoint,
+				decodeUpdateConnectorConfigurationRequest,
+				enocdeUpdateConnectorConfigurationResponse,
+				append(
+					options,
+				)...,
 			),
+			"UpdateConnectorConfiguration",
 		),
 	)
 
 	r.Methods("POST").Path("/event").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.EventHandlerEndpoint,
-					decodeEventHandlerRequest,
-					encodeEventHandlerResponse,
-					append(
-						options,
-					)...,
-				),
-				"EventHandler",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.EventHandlerEndpoint,
+				decodeEventHandlerRequest,
+				encodeEventHandlerResponse,
+				append(
+					options,
+				)...,
 			),
+			"EventHandler",
 		),
 	)
 
 	r.Methods("PUT").Path("/connectors/{connectorID}/devices/{deviceID}/certificate").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.UpdateDeviceCertStatusEndpoint,
-					decodeUpdateDeviceCertStatusRequest,
-					encodeUpdateDeviceCertStatusResponse,
-					append(
-						options,
-					)...,
-				),
-				"UpdateDeviceCertStatus",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.UpdateDeviceCertStatusEndpoint,
+				decodeUpdateDeviceCertStatusRequest,
+				encodeUpdateDeviceCertStatusResponse,
+				append(
+					options,
+				)...,
 			),
+			"UpdateDeviceCertStatus",
 		),
 	)
 
 	r.Methods("PUT").Path("/connectors/{connectorID}/devices/{deviceID}/digital-twin").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.UpdateDeviceDigitalTwinReenrolmentStatusEndpoint,
-					decodeUpdateDeviceDigitalTwinReenrolmentStatusRequest,
-					encodeUpdateDeviceDigitalTwinReenrolmentStatusResponse,
-					append(
-						options,
-					)...,
-				),
-				"UpdateDeviceCertStatus",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.UpdateDeviceDigitalTwinReenrolmentStatusEndpoint,
+				decodeUpdateDeviceDigitalTwinReenrolmentStatusRequest,
+				encodeUpdateDeviceDigitalTwinReenrolmentStatusResponse,
+				append(
+					options,
+				)...,
 			),
+			"UpdateDeviceCertStatus",
 		),
 	)
 
 	r.Methods("PUT").Path("/connectors/{connectorID}/ca/{caName}").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.UpdateCAStatusEndpoint,
-					decodeUpdateCAStatusRequest,
-					encodeUpdateCAStatusResponse,
-					append(
-						options,
-					)...,
-				),
-				"UpdateCaStatus",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.UpdateCAStatusEndpoint,
+				decodeUpdateCAStatusRequest,
+				encodeUpdateCAStatusResponse,
+				append(
+					options,
+				)...,
 			),
+			"UpdateCaStatus",
 		),
 	)
 

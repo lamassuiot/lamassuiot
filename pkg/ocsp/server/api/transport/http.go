@@ -15,7 +15,6 @@ import (
 	"github.com/gorilla/mux"
 	endpoints "github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/endpoint"
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/service"
-	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	stdopentracing "github.com/opentracing/opentracing-go"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
@@ -41,50 +40,44 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, strict bool, otTracer
 	}
 
 	r.Methods("GET").Path("/health").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.HealthEndpoint,
-					decodeHealthRequest,
-					encodeHealthResponse,
-					append(
-						options,
-					)...,
-				),
-				"Health",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.HealthEndpoint,
+				decodeHealthRequest,
+				encodeHealthResponse,
+				append(
+					options,
+				)...,
 			),
+			"Health",
 		),
 	)
 
 	r.Methods("GET").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.GetEndpoint,
-					checkStrictRequest(strict),
-					encodeOCSPResponse,
-					append(
-						options,
-					)...,
-				),
-				"GetOCSPOperation",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetEndpoint,
+				checkStrictRequest(strict),
+				encodeOCSPResponse,
+				append(
+					options,
+				)...,
 			),
+			"GetOCSPOperation",
 		),
 	)
 
 	r.Methods("POST").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.PostEndpoint,
-					checkStrictRequest(strict),
-					encodeOCSPResponse,
-					append(
-						options,
-					)...,
-				),
-				"PostOCSPOperation",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.PostEndpoint,
+				checkStrictRequest(strict),
+				encodeOCSPResponse,
+				append(
+					options,
+				)...,
 			),
+			"PostOCSPOperation",
 		),
 	)
 

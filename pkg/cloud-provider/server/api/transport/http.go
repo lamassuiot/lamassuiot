@@ -13,7 +13,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-provider/server/api/endpoint"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-provider/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-provider/server/api/service"
-	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	stdopentracing "github.com/opentracing/opentracing-go"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
@@ -39,146 +38,128 @@ func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentraci
 	}
 
 	r.Methods("GET").Path("/health").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.HealthEndpoint,
-					decodeHealthRequest,
-					encodeHealthResponse,
-					append(
-						options,
-					)...,
-				),
-				"Health",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.HealthEndpoint,
+				decodeHealthRequest,
+				encodeHealthResponse,
+				append(
+					options,
+				)...,
 			),
+			"Health",
 		),
 	)
 
 	r.Methods("GET").Path("/config").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.GetConfigurationEndpoint,
-					decodeGetConfigurationRequest,
-					enocdeGetConnectorsResponse,
-					append(
-						options,
-					)...,
-				),
-				"GetConfig",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetConfigurationEndpoint,
+				decodeGetConfigurationRequest,
+				enocdeGetConnectorsResponse,
+				append(
+					options,
+				)...,
 			),
+			"GetConfig",
 		),
 	)
 
 	r.Methods("PUT").Path("/config").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.UpdateConfigurationEndpoint,
-					decodeUpdateConfigurationRequest,
-					encodeUpdateConfigurationResponse,
-					append(
-						options,
-					)...,
-				),
-				"UpdateConfig",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.UpdateConfigurationEndpoint,
+				decodeUpdateConfigurationRequest,
+				encodeUpdateConfigurationResponse,
+				append(
+					options,
+				)...,
 			),
+			"UpdateConfig",
 		),
 	)
 
 	r.Methods("PUT").Path("/config").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.UpdateConfigurationEndpoint,
-					decodeUpdateConfigurationRequest,
-					encodeUpdateConfigurationResponse,
-					append(
-						options,
-					)...,
-				),
-				"UpdateConfig",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.UpdateConfigurationEndpoint,
+				decodeUpdateConfigurationRequest,
+				encodeUpdateConfigurationResponse,
+				append(
+					options,
+				)...,
 			),
+			"UpdateConfig",
 		),
 	)
 
 	r.Methods("GET").Path("/devices/{deviceID}/config").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.GetDeviceConfigurationEndpoint,
-					decodeGetDeviceConfigRequest,
-					enocdeGetDeviceConnectorsResponse,
-					append(
-						options,
-					)...,
-				),
-				"GetDevicesConfig",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.GetDeviceConfigurationEndpoint,
+				decodeGetDeviceConfigRequest,
+				enocdeGetDeviceConnectorsResponse,
+				append(
+					options,
+				)...,
 			),
+			"GetDevicesConfig",
 		),
 	)
 
 	r.Methods("PUT").Path("/devices/{deviceID}/certificate").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.UpdateDeviceCertificateStatusEndpoint,
-					decodeUpdateDeviceCertificateStatusRequest,
-					encodeUpdateDeviceCertificateStatusResponse,
-					append(
-						options,
-					)...,
-				),
-				"UpdateCertStatus",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.UpdateDeviceCertificateStatusEndpoint,
+				decodeUpdateDeviceCertificateStatusRequest,
+				encodeUpdateDeviceCertificateStatusResponse,
+				append(
+					options,
+				)...,
 			),
+			"UpdateCertStatus",
 		),
 	)
 
 	r.Methods("PUT").Path("/devices/{deviceID}/digital-twin").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.UpdateDeviceDigitalTwinReenrollmentStatusEndpoint,
-					decodeUpdateDeviceDigitalTwinReenrollmentStatusRequest,
-					encodeUpdateDeviceDigitalTwinReenrollmentStatusResponse,
-					append(
-						options,
-					)...,
-				),
-				"UpdateDigitalTwin",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.UpdateDeviceDigitalTwinReenrollmentStatusEndpoint,
+				decodeUpdateDeviceDigitalTwinReenrollmentStatusRequest,
+				encodeUpdateDeviceDigitalTwinReenrollmentStatusResponse,
+				append(
+					options,
+				)...,
 			),
+			"UpdateDigitalTwin",
 		),
 	)
 
 	r.Methods("POST").Path("/ca").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.RegisterCAEndpoint,
-					decodeRegisterCARequest,
-					encodeRegisterCAResponse,
-					append(
-						options,
-					)...,
-				),
-				"CreateCA",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.RegisterCAEndpoint,
+				decodeRegisterCARequest,
+				encodeRegisterCAResponse,
+				append(
+					options,
+				)...,
 			),
+			"CreateCA",
 		),
 	)
 
 	r.Methods("PUT").Path("/ca/{caName}").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.UpdateCAStatusEndpoint,
-					decodeUpdateCAStatusRequest,
-					decodeUpdateCAStatusResponse,
-					append(
-						options,
-					)...,
-				),
-				"UpdateCAStatus",
+		otelhttp.NewHandler(
+			httptransport.NewServer(
+				e.UpdateCAStatusEndpoint,
+				decodeUpdateCAStatusRequest,
+				decodeUpdateCAStatusResponse,
+				append(
+					options,
+				)...,
 			),
+			"UpdateCAStatus",
 		),
 	)
 
