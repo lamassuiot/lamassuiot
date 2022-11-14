@@ -2,16 +2,11 @@ package service
 
 import (
 	"context"
-	"crypto"
 	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"errors"
 	"fmt"
-	"math/big"
 	"time"
 
 	"github.com/go-kit/log"
@@ -19,18 +14,10 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	caerrors "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/repository"
+	x509engines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/x509-engines"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
 	"github.com/robfig/cron/v3"
 )
-
-type CryptoEngine interface {
-	GetEngineConfig() api.EngineProviderInfo
-	// GetPrivateKeys() ([]crypto.Signer, error)
-	// DeleteAllKeys() error
-	GetPrivateKeyByID(string) (crypto.Signer, error)
-	CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error)
-	CreateECDSAPrivateKey(curve elliptic.Curve, keyID string) (crypto.Signer, error)
-}
 
 type Service interface {
 	Health() bool
@@ -57,17 +44,17 @@ type Service interface {
 type caService struct {
 	logger                log.Logger
 	certificateRepository repository.Certificates
-	cryptoEngine          CryptoEngine
+	engine                x509engines.X509Engine
 	ocspServerURL         string
 	cronInstance          *cron.Cron
 }
 
-func NewCAService(logger log.Logger, engine CryptoEngine, certificateRepository repository.Certificates, ocspServerURL string) Service {
+func NewCAService(logger log.Logger, engine x509engines.X509Engine, certificateRepository repository.Certificates, ocspServerURL string) Service {
 	cronInstance := cron.New()
 
 	svc := caService{
 		logger:                logger,
-		cryptoEngine:          engine,
+		engine:                engine,
 		certificateRepository: certificateRepository,
 		ocspServerURL:         ocspServerURL,
 	}
@@ -112,7 +99,7 @@ func NewCAService(logger log.Logger, engine CryptoEngine, certificateRepository 
 }
 
 func (s *caService) GetEngineProviderInfo() api.EngineProviderInfo {
-	return s.cryptoEngine.GetEngineConfig()
+	return s.engine.GetEngineConfig()
 }
 
 func (s *caService) Health() bool {
@@ -147,6 +134,7 @@ func (s *caService) Stats(ctx context.Context, input *api.GetStatsInput) (*api.G
 func (s *caService) DeleteCA(ctx context.Context, input *api.GetCAByNameInput) error {
 	return nil
 }
+
 func (s *caService) IterateCAsWithPredicate(ctx context.Context, input *api.IterateCAsWithPredicateInput) (*api.IterateCAsWithPredicateOutput, error) {
 	var cas []api.CACertificate
 	limit := 100
@@ -263,11 +251,7 @@ func (s *caService) GetCAs(ctx context.Context, input *api.GetCAsInput) (*api.Ge
 }
 
 func (s *caService) CreateCA(ctx context.Context, input *api.CreateCAInput) (*api.CreateCAOutput, error) {
-	var signer crypto.Signer
-	var derBytes []byte
-	var err error
-
-	_, err = s.GetCAByName(ctx, &api.GetCAByNameInput{
+	_, err := s.GetCAByName(ctx, &api.GetCAByNameInput{
 		CAType: input.CAType,
 		CAName: input.Subject.CommonName,
 	})
@@ -287,79 +271,13 @@ func (s *caService) CreateCA(ctx context.Context, input *api.CreateCAInput) (*ap
 		}
 	}
 
-	if api.KeyType(input.KeyMetadata.KeyType) == api.RSA {
-		signer, err = s.cryptoEngine.CreateRSAPrivateKey(input.KeyMetadata.KeyBits, input.Subject.CommonName)
-		if err != nil {
-			level.Debug(s.logger).Log("err", err)
-			return &api.CreateCAOutput{}, err
-		}
-
-	} else {
-		var curve elliptic.Curve
-		switch input.KeyMetadata.KeyBits {
-		case 224:
-			curve = elliptic.P224()
-		case 256:
-			curve = elliptic.P256()
-		case 384:
-			curve = elliptic.P384()
-		case 521:
-			curve = elliptic.P521()
-		default:
-			return &api.CreateCAOutput{}, errors.New("unsuported key size for ECDSA key")
-		}
-		signer, err = s.cryptoEngine.CreateECDSAPrivateKey(curve, input.Subject.CommonName)
-		if err != nil {
-			level.Debug(s.logger).Log("err", err)
-			return &api.CreateCAOutput{}, err
-		}
-	}
-
-	now := time.Now()
-	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
-
-	templateCA := x509.Certificate{
-		SerialNumber: sn,
-		Subject: pkix.Name{
-			CommonName:         input.Subject.CommonName,
-			Country:            []string{input.Subject.Country},
-			Province:           []string{input.Subject.State},
-			Locality:           []string{input.Subject.Locality},
-			Organization:       []string{input.Subject.Organization},
-			OrganizationalUnit: []string{input.Subject.OrganizationUnit},
-		},
-		OCSPServer:            []string{s.ocspServerURL},
-		NotBefore:             now,
-		NotAfter:              now.Add(time.Duration(input.CADuration)),
-		IsCA:                  true,
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-	}
-
-	if api.KeyType(input.KeyMetadata.KeyType) == api.RSA {
-		rsaPub := signer.Public().(*rsa.PublicKey)
-		derBytes, err = x509.CreateCertificate(rand.Reader, &templateCA, &templateCA, rsaPub, signer)
-		if err != nil {
-			level.Debug(s.logger).Log("err", err)
-			return &api.CreateCAOutput{}, err
-		}
-	} else {
-		ecdsaPub := signer.Public().(*ecdsa.PublicKey)
-		derBytes, err = x509.CreateCertificate(rand.Reader, &templateCA, &templateCA, ecdsaPub, signer)
-		if err != nil {
-			level.Debug(s.logger).Log("err", err)
-			return &api.CreateCAOutput{}, err
-		}
-	}
-
-	cert, err := x509.ParseCertificate(derBytes)
+	caCertificate, err := s.engine.CreateCA(*input)
 	if err != nil {
-		level.Debug(s.logger).Log("err", err)
-		return &api.CreateCAOutput{}, err
+		level.Debug(s.logger).Log("msg", "error while creating CA certificate", "err", err)
+		return nil, err
 	}
 
-	err = s.certificateRepository.InsertCA(ctx, input.CAType, cert, input.IssuanceDuration)
+	err = s.certificateRepository.InsertCA(ctx, input.CAType, caCertificate, input.IssuanceDuration)
 	if err != nil {
 		level.Debug(s.logger).Log("err", err)
 		return &api.CreateCAOutput{}, err
@@ -607,53 +525,9 @@ func (s *caService) SignCertificateRequest(ctx context.Context, input *api.SignC
 		return &api.SignCertificateRequestOutput{}, errors.New("CA is expired or revoked")
 	}
 
-	privkey, err := s.cryptoEngine.GetPrivateKeyByID(caOutput.CAName)
+	certificate, err := s.engine.SignCertificateRequest(caOutput.Certificate.Certificate, caOutput.IssuanceDuration, input)
 	if err != nil {
-		level.Debug(s.logger).Log("err", err)
-		return &api.SignCertificateRequestOutput{}, err
-	}
-
-	var subject pkix.Name
-	if input.SignVerbatim {
-		subject = input.CertificateSigningRequest.Subject
-	} else {
-		subject = pkix.Name{
-			CommonName: input.CommonName,
-		}
-	}
-
-	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
-
-	now := time.Now()
-
-	certificateTemplate := x509.Certificate{
-		Signature:          input.CertificateSigningRequest.Signature,
-		SignatureAlgorithm: input.CertificateSigningRequest.SignatureAlgorithm,
-
-		PublicKeyAlgorithm: input.CertificateSigningRequest.PublicKeyAlgorithm,
-		PublicKey:          input.CertificateSigningRequest.PublicKey,
-
-		SerialNumber: sn,
-		Issuer:       caOutput.Certificate.Certificate.Subject,
-		Subject:      subject,
-		NotBefore:    now,
-		NotAfter:     now.Add(caOutput.IssuanceDuration),
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-	}
-
-	certificateBytes, err := x509.CreateCertificate(rand.Reader, &certificateTemplate, caOutput.Certificate.Certificate, input.CertificateSigningRequest.PublicKey, privkey)
-	if err != nil {
-		level.Debug(s.logger).Log("err", err)
-		return &api.SignCertificateRequestOutput{}, &caerrors.GenericError{
-			StatusCode: 400,
-			Message:    err.Error(),
-		}
-	}
-
-	certificate, err := x509.ParseCertificate(certificateBytes)
-	if err != nil {
-		level.Debug(s.logger).Log("err", err)
+		level.Debug(s.logger).Log("msg", "could not sign certificate request", "err", err)
 		return &api.SignCertificateRequestOutput{}, err
 	}
 

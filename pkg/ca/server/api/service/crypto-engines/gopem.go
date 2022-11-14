@@ -15,7 +15,6 @@ import (
 	"github.com/go-kit/log"
 	"github.com/go-kit/log/level"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
-	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
 )
 
 type pemProviderContext struct {
@@ -24,7 +23,7 @@ type pemProviderContext struct {
 	storageDirectory string
 }
 
-func NewGolangPEMEngine(logger log.Logger, storageDirectory string) (service.CryptoEngine, error) {
+func NewGolangPEMEngine(logger log.Logger, storageDirectory string) (CryptoEngine, error) {
 
 	pkcs11ProviderSupportedKeyTypes := []api.SupportedKeyTypeInfo{}
 

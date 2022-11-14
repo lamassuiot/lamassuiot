@@ -11,6 +11,7 @@ import (
 	"github.com/go-kit/log/level"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
 	cryptoengines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/crypto-engines"
+	x509engines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/x509-engines"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/transport"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/config"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
@@ -26,7 +27,8 @@ func main() {
 	config := config.NewCAConfig()
 	mainServer := server.NewServer(config)
 
-	var engine service.CryptoEngine
+	var engine x509engines.X509Engine
+
 	var s service.Service
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUsername, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
@@ -52,13 +54,11 @@ func main() {
 			level.Error(mainServer.Logger).Log("msg", "Could not initialize Golang PEM engine", "err", err)
 			os.Exit(1)
 		}
-		engine = gopemEngine
-		s = service.NewCAService(mainServer.Logger, engine, certificateRepository, config.OcspUrl)
-		level.Info(mainServer.Logger).Log("msg", "Engine initialized")
-		level.Info(mainServer.Logger).Log("msg", fmt.Sprintf("Engine options: %v", engine.GetEngineConfig()))
+
+		engine = x509engines.NewStandardx509Engine(gopemEngine, config.OcspUrl)
 
 	case "vault":
-		s, err = service.NewVaultService(config.VaultAddress, config.VaultPkiCaPath, config.VaultRoleID, config.VaultSecretID, config.VaultCA, config.VaultUnsealKeysFile, config.OcspUrl, certificateRepository, mainServer.Logger)
+		engine, err = x509engines.NewVaultx509Engine(config.VaultAddress, config.VaultPkiCaPath, config.VaultRoleID, config.VaultSecretID, config.VaultCA, config.VaultUnsealKeysFile, config.OcspUrl, mainServer.Logger)
 		if err != nil {
 			level.Error(mainServer.Logger).Log("err", err, "msg", "Could not start connection with Vault Secret Engine")
 			os.Exit(1)
@@ -68,6 +68,11 @@ func main() {
 		level.Error(mainServer.Logger).Log("msg", "Engine not supported")
 		os.Exit(1)
 	}
+
+	s = service.NewCAService(mainServer.Logger, engine, certificateRepository, config.OcspUrl)
+
+	level.Info(mainServer.Logger).Log("msg", "Engine initialized")
+	level.Info(mainServer.Logger).Log("msg", fmt.Sprintf("Engine options: %v", s.GetEngineProviderInfo()))
 
 	s = service.NewAMQPMiddleware(mainServer.AmqpPublisher, mainServer.Logger)(s)
 	s = service.NewInputValudationMiddleware()(s)

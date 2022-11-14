@@ -36,6 +36,7 @@ import (
 	caRepository "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/repository/postgres"
 	caService "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
 	cryptoEngines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/crypto-engines"
+	x509engines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/x509-engines"
 	caTransport "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/transport"
 
 	dmsClient "github.com/lamassuiot/lamassuiot/pkg/dms-manager/client"
@@ -79,7 +80,10 @@ func BuildCATestServerWithVault(vaultclient *api.Client) (*httptest.Server, *caS
 
 	certificateRepository := caRepository.NewPostgresDB(db, logger)
 	var svc caService.Service
-	svc, err = caService.NewVaultSecretsWithClient(vaultclient, "", "pki/lamassu/dev/", "", "", "", "", "http://ocsp.test", certificateRepository, logger)
+
+	engine, _ := x509engines.NewVaultx509EngineWithClient(vaultclient, "", "pki/lamassu/dev/", "", "", "", "", "http://ocsp.test", logger)
+	svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test")
+
 	svc = caService.NewInputValudationMiddleware()(svc)
 
 	if err != nil {
@@ -115,7 +119,9 @@ func BuildCATestServer() (*httptest.Server, *caService.Service, error) {
 	dir := fmt.Sprintf("/tmp/test/%s", goid.NewV4UUID().String())
 	os.RemoveAll(dir)
 	os.Mkdir(dir, 0755)
-	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, dir)
+	goPemEngine, _ := cryptoEngines.NewGolangPEMEngine(logger, dir)
+	engine := x509engines.NewStandardx509Engine(goPemEngine, "https://ocsp.test")
+
 	var svc caService.Service
 	svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test")
 	svc = caService.NewInputValudationMiddleware()(svc)
