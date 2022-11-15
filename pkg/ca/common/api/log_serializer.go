@@ -221,3 +221,25 @@ func (o *UpdateCAStatusOutput) ToSerializedLog() UpdateCAStatusOutputLogSerializ
 		CACertificateLogSerialized: o.CACertificate.ToSerializedLog(),
 	}
 }
+
+// -------------------------------------------------------------
+type ScanAboutToExpireCertificatesOutputLogSerialized struct {
+	TotalAboutToExpire int `json:"certificates_aboutoexpire_count"`
+}
+
+func (o *ScanAboutToExpireCertificatesOutput) ToSerializedLog() ScanAboutToExpireCertificatesOutputLogSerialized {
+	return ScanAboutToExpireCertificatesOutputLogSerialized{
+		TotalAboutToExpire: o.AboutToExpiredTotal,
+	}
+}
+
+// -------------------------------------------------------------
+type ScanExpiredAndOutOfSyncCertificatesLogSerialized struct {
+	ExpiredCount int `json:"certificates_expired_count"`
+}
+
+func (o *ScanExpiredAndOutOfSyncCertificatesOutput) ToSerializedLog() ScanExpiredAndOutOfSyncCertificatesLogSerialized {
+	return ScanExpiredAndOutOfSyncCertificatesLogSerialized{
+		ExpiredCount: o.ExpiredTotal,
+	}
+}

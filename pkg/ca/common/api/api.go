@@ -170,6 +170,7 @@ func (pk *PrivateKey) GetPEMString() (string, error) {
 
 type Certificate struct {
 	CAName              string
+	CAType              CAType
 	Status              CertificateStatus
 	Certificate         *x509.Certificate
 	SerialNumber        string
@@ -357,11 +358,16 @@ type IterateCAsWithPredicateOutput struct {
 
 // ---------------------------------------------------------------------
 
-type CheckAndUpdateCACertificateStatusInput struct {
-	CAType CAType `validate:"required"`
-	CAName string `validate:"required"`
+type ScanAboutToExpireCertificatesInput struct{}
+
+type ScanAboutToExpireCertificatesOutput struct {
+	AboutToExpiredTotal int
 }
 
-type CheckAndUpdateCACertificateStatusOutput struct {
-	CACertificate
+// ---------------------------------------------------------------------
+
+type ScanExpiredAndOutOfSyncCertificatesInput struct{}
+
+type ScanExpiredAndOutOfSyncCertificatesOutput struct {
+	ExpiredTotal int
 }

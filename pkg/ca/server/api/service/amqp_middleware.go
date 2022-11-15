@@ -160,6 +160,10 @@ func (mw *amqpMiddleware) IterateCertificatesWithPredicate(ctx context.Context, 
 	return mw.next.IterateCertificatesWithPredicate(ctx, input)
 }
 
-func (mw *amqpMiddleware) CheckAndUpdateCACertificateStatus(ctx context.Context, input *api.CheckAndUpdateCACertificateStatusInput) (output *api.CheckAndUpdateCACertificateStatusOutput, err error) {
-	return mw.next.CheckAndUpdateCACertificateStatus(ctx, input)
+func (mw *amqpMiddleware) ScanAboutToExpireCertificates(ctx context.Context, input *api.ScanAboutToExpireCertificatesInput) (output *api.ScanAboutToExpireCertificatesOutput, err error) {
+	return mw.next.ScanAboutToExpireCertificates(ctx, input)
+}
+
+func (mw *amqpMiddleware) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (output *api.ScanExpiredAndOutOfSyncCertificatesOutput, err error) {
+	return mw.next.ScanExpiredAndOutOfSyncCertificates(ctx, input)
 }

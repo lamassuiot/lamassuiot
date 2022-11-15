@@ -212,6 +212,16 @@ func (c *lamassuCaClientConfig) UpdateCAStatus(ctx context.Context, input *api.U
 	return &api.UpdateCAStatusOutput{}, nil
 }
 
+func (c *lamassuCaClientConfig) ScanAboutToExpireCertificates(ctx context.Context, input *api.ScanAboutToExpireCertificatesInput) (*api.ScanAboutToExpireCertificatesOutput, error) {
+	// TODO: To implement
+	return &api.ScanAboutToExpireCertificatesOutput{}, nil
+}
+
+func (c *lamassuCaClientConfig) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (*api.ScanExpiredAndOutOfSyncCertificatesOutput, error) {
+	// TODO: To implement
+	return &api.ScanExpiredAndOutOfSyncCertificatesOutput{}, nil
+}
+
 func (c *lamassuCaClientConfig) SignCertificateRequest(ctx context.Context, input *api.SignCertificateRequestInput) (*api.SignCertificateRequestOutput, error) {
 	//TODO: To Refact with new synta. Check GetCAByName and GetCAs
 
@@ -344,11 +354,6 @@ func (c *lamassuCaClientConfig) IterateCertificatesWithPredicate(ctx context.Con
 	}
 
 	return &api.IterateCertificatesWithPredicateOutput{}, nil
-}
-
-func (c *lamassuCaClientConfig) CheckAndUpdateCACertificateStatus(ctx context.Context, input *api.CheckAndUpdateCACertificateStatusInput) (*api.CheckAndUpdateCACertificateStatusOutput, error) {
-	// TODO: To implement
-	return &api.CheckAndUpdateCACertificateStatusOutput{}, nil
 }
 
 type genericRequest struct {

@@ -69,7 +69,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	s = service.NewCAService(mainServer.Logger, engine, certificateRepository, config.OcspUrl)
+	s = service.NewCAService(mainServer.Logger, engine, certificateRepository, config.OcspUrl, config.AboutToExpireDays)
 
 	level.Info(mainServer.Logger).Log("msg", "Engine initialized")
 	level.Info(mainServer.Logger).Log("msg", fmt.Sprintf("Engine options: %v", s.GetEngineProviderInfo()))

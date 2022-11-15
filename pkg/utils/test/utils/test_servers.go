@@ -82,7 +82,7 @@ func BuildCATestServerWithVault(vaultclient *api.Client) (*httptest.Server, *caS
 	var svc caService.Service
 
 	engine, _ := x509engines.NewVaultx509EngineWithClient(vaultclient, "", "pki/lamassu/dev/", "", "", "", "", "http://ocsp.test", logger)
-	svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test")
+	svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test", 30)
 
 	svc = caService.NewInputValudationMiddleware()(svc)
 
@@ -123,7 +123,7 @@ func BuildCATestServer() (*httptest.Server, *caService.Service, error) {
 	engine := x509engines.NewStandardx509Engine(goPemEngine, "https://ocsp.test")
 
 	var svc caService.Service
-	svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test")
+	svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test", 30)
 	svc = caService.NewInputValudationMiddleware()(svc)
 
 	// svc = caService.LoggingMiddleware(logger)(svc)

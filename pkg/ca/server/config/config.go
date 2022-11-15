@@ -7,7 +7,8 @@ import (
 type CAConfig struct {
 	server.BaseConfiguration
 
-	OcspUrl string `required:"true" split_words:"true"`
+	OcspUrl           string `required:"true" split_words:"true"`
+	AboutToExpireDays int    `required:"true" split_words:"true"`
 
 	PostgresDatabase string `required:"true" split_words:"true"`
 	PostgresUsername string `required:"true" split_words:"true"`

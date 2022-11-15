@@ -28,6 +28,7 @@ type Service interface {
 	GetCAs(ctx context.Context, input *api.GetCAsInput) (*api.GetCAsOutput, error)
 	GetCAByName(ctx context.Context, input *api.GetCAByNameInput) (*api.GetCAByNameOutput, error)
 	// ImportCA(ctx context.Context, input *api.ImportCAInput) (*api.ImportCAOutput, error)
+
 	UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (*api.UpdateCAStatusOutput, error)
 	RevokeCA(ctx context.Context, input *api.RevokeCAInput) (*api.RevokeCAOutput, error)
 	IterateCAsWithPredicate(ctx context.Context, input *api.IterateCAsWithPredicateInput) (*api.IterateCAsWithPredicateOutput, error)
@@ -38,7 +39,8 @@ type Service interface {
 	UpdateCertificateStatus(ctx context.Context, input *api.UpdateCertificateStatusInput) (*api.UpdateCertificateStatusOutput, error)
 	IterateCertificatesWithPredicate(ctx context.Context, input *api.IterateCertificatesWithPredicateInput) (*api.IterateCertificatesWithPredicateOutput, error)
 
-	CheckAndUpdateCACertificateStatus(ctx context.Context, input *api.CheckAndUpdateCACertificateStatusInput) (*api.CheckAndUpdateCACertificateStatusOutput, error)
+	ScanAboutToExpireCertificates(ctx context.Context, input *api.ScanAboutToExpireCertificatesInput) (*api.ScanAboutToExpireCertificatesOutput, error)
+	ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (*api.ScanExpiredAndOutOfSyncCertificatesOutput, error)
 }
 
 type caService struct {
@@ -47,9 +49,10 @@ type caService struct {
 	engine                x509engines.X509Engine
 	ocspServerURL         string
 	cronInstance          *cron.Cron
+	aboutToExpireDays     int
 }
 
-func NewCAService(logger log.Logger, engine x509engines.X509Engine, certificateRepository repository.Certificates, ocspServerURL string) Service {
+func NewCAService(logger log.Logger, engine x509engines.X509Engine, certificateRepository repository.Certificates, ocspServerURL string, aboutToExpireDays int) Service {
 	cronInstance := cron.New()
 
 	svc := caService{
@@ -57,6 +60,7 @@ func NewCAService(logger log.Logger, engine x509engines.X509Engine, certificateR
 		engine:                engine,
 		certificateRepository: certificateRepository,
 		ocspServerURL:         ocspServerURL,
+		aboutToExpireDays:     aboutToExpireDays,
 	}
 
 	_, err := svc.GetCAByName(context.Background(), &api.GetCAByNameInput{
@@ -82,17 +86,12 @@ func NewCAService(logger log.Logger, engine x509engines.X509Engine, certificateR
 		})
 	}
 
-	cronInstance.AddFunc("1 0 * * *", func() { // runs daily at midnight
-		svc.IterateCAsWithPredicate(context.Background(), &api.IterateCAsWithPredicateInput{
-			CAType: api.CATypePKI,
-			PredicateFunc: func(ca *api.CACertificate) {
-				svc.CheckAndUpdateCACertificateStatus(context.Background(), &api.CheckAndUpdateCACertificateStatusInput{
-					CAType: api.CATypePKI,
-					CAName: ca.CAName,
-				})
-			},
-		})
-	})
+	// cronInstance.AddFunc("1 0 * * *", func() { // runs daily at midnight
+	output1, err := svc.ScanAboutToExpireCertificates(context.Background(), &api.ScanAboutToExpireCertificatesInput{})
+	fmt.Println("ScanAboutToExpireCertificates", output1.AboutToExpiredTotal, err)
+	output2, err := svc.ScanExpiredAndOutOfSyncCertificates(context.Background(), &api.ScanExpiredAndOutOfSyncCertificatesInput{})
+	fmt.Println("ScanExpiredAndOutOfSyncCertificates", output2.ExpiredTotal, err)
+	// })
 
 	svc.cronInstance = cronInstance
 	return &svc
@@ -613,64 +612,81 @@ func getPublicKeyInfo(cert *x509.Certificate) (api.KeyType, int, api.KeyStrength
 	return key, keyBits, keyStrength
 }
 
-func (s *caService) CheckAndUpdateCACertificateStatus(ctx context.Context, input *api.CheckAndUpdateCACertificateStatusInput) (*api.CheckAndUpdateCACertificateStatusOutput, error) {
-	ca, err := s.GetCAByName(ctx, &api.GetCAByNameInput{
-		CAType: input.CAType,
-		CAName: input.CAName,
-	})
-	if err != nil {
-		return &api.CheckAndUpdateCACertificateStatusOutput{}, err
-	}
+func (s *caService) ScanAboutToExpireCertificates(ctx context.Context, input *api.ScanAboutToExpireCertificatesInput) (*api.ScanAboutToExpireCertificatesOutput, error) {
+	limit := 100
+	i := 0
+	total := 0
 
-	s.IterateCertificatesWithPredicate(ctx, &api.IterateCertificatesWithPredicateInput{
-		CAType: input.CAType,
-		CAName: input.CAName,
-		PredicateFunc: func(c *api.Certificate) {
-			if c.Status != api.StatusExpired && c.Status != api.StatusRevoked {
-				if time.Until(c.Certificate.NotAfter) < 0 {
-					s.UpdateCertificateStatus(ctx, &api.UpdateCertificateStatusInput{
-						CAType:                  input.CAType,
-						CAName:                  input.CAName,
-						CertificateSerialNumber: c.SerialNumber,
-						Status:                  api.StatusExpired,
-					})
-				} else if time.Until(c.Certificate.NotAfter) < time.Duration(30*24*time.Hour) {
-					s.UpdateCertificateStatus(ctx, &api.UpdateCertificateStatusInput{
-						CAType:                  input.CAType,
-						CAName:                  input.CAName,
-						CertificateSerialNumber: c.SerialNumber,
-						Status:                  api.StatusAboutToExpire,
-					})
-				}
-			}
-		},
-	})
+	for {
+		totalAboutToExpire, certs, err := s.certificateRepository.SelectAboutToExpireCertificates(ctx, time.Duration(s.aboutToExpireDays*int(time.Hour)*24), common.QueryParameters{
+			Pagination: common.PaginationOptions{
+				Limit:  limit,
+				Offset: i * limit,
+			},
+		})
 
-	if ca.Status != api.StatusExpired && ca.Status != api.StatusRevoked {
-		if time.Until(ca.Certificate.Certificate.NotAfter) < 0 {
-			s.UpdateCAStatus(ctx, &api.UpdateCAStatusInput{
-				CAType: input.CAType,
-				CAName: input.CAName,
-				Status: api.StatusExpired,
-			})
-		} else if time.Until(ca.Certificate.Certificate.NotAfter) < time.Duration(30*24*time.Hour) {
-			s.UpdateCAStatus(ctx, &api.UpdateCAStatusInput{
-				CAType: input.CAType,
-				CAName: input.CAName,
-				Status: api.StatusAboutToExpire,
+		total = totalAboutToExpire
+
+		if err != nil {
+			return nil, err
+		}
+		if len(certs) == 0 {
+			break
+		}
+
+		i++
+
+		for _, cert := range certs {
+			s.UpdateCertificateStatus(ctx, &api.UpdateCertificateStatusInput{
+				CAType:                  cert.CAType,
+				CAName:                  cert.CAName,
+				CertificateSerialNumber: cert.SerialNumber,
+				Status:                  api.StatusAboutToExpire,
 			})
 		}
 	}
 
-	ca, err = s.GetCAByName(ctx, &api.GetCAByNameInput{
-		CAType: input.CAType,
-		CAName: input.CAName,
-	})
-	if err != nil {
-		return &api.CheckAndUpdateCACertificateStatusOutput{}, err
-	}
-	return &api.CheckAndUpdateCACertificateStatusOutput{
-		CACertificate: ca.CACertificate,
+	return &api.ScanAboutToExpireCertificatesOutput{
+		AboutToExpiredTotal: total,
 	}, nil
+}
 
+func (s *caService) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (*api.ScanExpiredAndOutOfSyncCertificatesOutput, error) {
+	limit := 100
+	i := 0
+	total := 0
+
+	now := time.Now()
+	for {
+		totalExpired, certs, err := s.certificateRepository.ScanExpiredAndOutOfSyncCertificates(ctx, now, common.QueryParameters{
+			Pagination: common.PaginationOptions{
+				Limit:  limit,
+				Offset: i * limit,
+			},
+		})
+
+		total = totalExpired
+
+		if err != nil {
+			return nil, err
+		}
+		if len(certs) == 0 {
+			break
+		}
+
+		i++
+
+		for _, cert := range certs {
+			s.UpdateCertificateStatus(ctx, &api.UpdateCertificateStatusInput{
+				CAType:                  cert.CAType,
+				CAName:                  cert.CAName,
+				CertificateSerialNumber: cert.SerialNumber,
+				Status:                  api.StatusExpired,
+			})
+		}
+	}
+
+	return &api.ScanExpiredAndOutOfSyncCertificatesOutput{
+		ExpiredTotal: total,
+	}, nil
 }
