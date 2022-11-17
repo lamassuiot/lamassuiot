@@ -68,7 +68,7 @@ type Server struct {
 
 func NewServer(config Configuration) *Server {
 	var logger log.Logger
-	logger = log.NewJSONLogger(os.Stdout)
+	logger = log.NewLogfmtLogger(os.Stdout)
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 
 	err := envconfig.Process("", config.GetConfiguration())
@@ -94,7 +94,7 @@ func NewServer(config Configuration) *Server {
 		cfg:           baseConfig,
 		mux:           mux,
 		amqpConsumers: map[string]amqpConsumerConfig{},
-		AmqpPublisher: make(chan AmqpPublishMessage),
+		AmqpPublisher: make(chan AmqpPublishMessage, 100),
 	}
 
 	return &s

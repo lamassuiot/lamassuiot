@@ -212,14 +212,14 @@ func (c *lamassuCaClientConfig) UpdateCAStatus(ctx context.Context, input *api.U
 	return &api.UpdateCAStatusOutput{}, nil
 }
 
-func (c *lamassuCaClientConfig) ScanAboutToExpireCertificates(ctx context.Context, input *api.ScanAboutToExpireCertificatesInput) (*api.ScanAboutToExpireCertificatesOutput, error) {
+func (c *lamassuCaClientConfig) GetExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.GetExpiredAndOutOfSyncCertificatesInput) (*api.GetExpiredAndOutOfSyncCertificatesOutput, error) {
 	// TODO: To implement
-	return &api.ScanAboutToExpireCertificatesOutput{}, nil
+	return &api.GetExpiredAndOutOfSyncCertificatesOutput{}, nil
 }
 
-func (c *lamassuCaClientConfig) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (*api.ScanExpiredAndOutOfSyncCertificatesOutput, error) {
+func (c *lamassuCaClientConfig) GetCertificatesAboutToExpire(ctx context.Context, input *api.GetCertificatesAboutToExpireInput) (*api.GetCertificatesAboutToExpireOutput, error) {
 	// TODO: To implement
-	return &api.ScanExpiredAndOutOfSyncCertificatesOutput{}, nil
+	return &api.GetCertificatesAboutToExpireOutput{}, nil
 }
 
 func (c *lamassuCaClientConfig) SignCertificateRequest(ctx context.Context, input *api.SignCertificateRequestInput) (*api.SignCertificateRequestOutput, error) {

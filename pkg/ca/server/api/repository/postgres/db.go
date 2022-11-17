@@ -298,13 +298,13 @@ func (db PostgresDBContext) ScanExpiredAndOutOfSyncCertificates(ctx context.Cont
 	var totalCertificates int64
 	var certificates []CertificateDAO
 
-	tx := db.WithContext(ctx).Not(map[string]interface{}{"status": []string{"EXPIRED", "REVOKED"}}).Model(&CertificateDAO{}).Where("expiration > ?", expirationDate)
+	tx := db.WithContext(ctx).Not(map[string]interface{}{"status": []string{"EXPIRED", "REVOKED"}}).Model(&CertificateDAO{}).Where("expiration < ?", expirationDate)
 	if err := tx.Count(&totalCertificates).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Certificates from database")
 		return 0, []api.Certificate{}, err
 	}
 
-	tx = db.WithContext(ctx).Not(map[string]interface{}{"status": []string{"EXPIRED", "REVOKED"}}).Model(&CertificateDAO{}).Where("expiration > ?", expirationDate)
+	tx = db.WithContext(ctx).Not(map[string]interface{}{"status": []string{"EXPIRED", "REVOKED"}}).Model(&CertificateDAO{}).Where("expiration < ?", expirationDate)
 	tx = filters.ApplyQueryParametersFilters(tx, queryParameters)
 	if err := tx.Find(&certificates).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Certificates from database")

@@ -223,23 +223,23 @@ func (o *UpdateCAStatusOutput) ToSerializedLog() UpdateCAStatusOutputLogSerializ
 }
 
 // -------------------------------------------------------------
-type ScanAboutToExpireCertificatesOutputLogSerialized struct {
-	TotalAboutToExpire int `json:"certificates_aboutoexpire_count"`
+type GetExpiredAndOutOfSyncCertificatesOutputLogSerialized struct {
+	ExpiredCount int `json:"certificates_expired_count"`
 }
 
-func (o *ScanAboutToExpireCertificatesOutput) ToSerializedLog() ScanAboutToExpireCertificatesOutputLogSerialized {
-	return ScanAboutToExpireCertificatesOutputLogSerialized{
-		TotalAboutToExpire: o.AboutToExpiredTotal,
+func (o *GetExpiredAndOutOfSyncCertificatesOutput) ToSerializedLog() GetExpiredAndOutOfSyncCertificatesOutputLogSerialized {
+	return GetExpiredAndOutOfSyncCertificatesOutputLogSerialized{
+		ExpiredCount: o.TotalCertificates,
 	}
 }
 
 // -------------------------------------------------------------
-type ScanExpiredAndOutOfSyncCertificatesLogSerialized struct {
-	ExpiredCount int `json:"certificates_expired_count"`
+type GetCertificatesAboutToExpireOutputLogSerialized struct {
+	AboutToExpireCount int `json:"certificates_expired_count"`
 }
 
-func (o *ScanExpiredAndOutOfSyncCertificatesOutput) ToSerializedLog() ScanExpiredAndOutOfSyncCertificatesLogSerialized {
-	return ScanExpiredAndOutOfSyncCertificatesLogSerialized{
-		ExpiredCount: o.ExpiredTotal,
+func (o *GetCertificatesAboutToExpireOutput) ToSerializedLog() GetCertificatesAboutToExpireOutputLogSerialized {
+	return GetCertificatesAboutToExpireOutputLogSerialized{
+		AboutToExpireCount: o.TotalCertificates,
 	}
 }

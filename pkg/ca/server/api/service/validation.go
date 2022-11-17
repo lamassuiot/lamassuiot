@@ -197,7 +197,7 @@ func (mw *validationMiddleware) IterateCertificatesWithPredicate(ctx context.Con
 	return mw.next.IterateCertificatesWithPredicate(ctx, input)
 }
 
-func (mw *validationMiddleware) ScanAboutToExpireCertificates(ctx context.Context, input *api.ScanAboutToExpireCertificatesInput) (output *api.ScanAboutToExpireCertificatesOutput, err error) {
+func (mw *validationMiddleware) GetCertificatesAboutToExpire(ctx context.Context, input *api.GetCertificatesAboutToExpireInput) (output *api.GetCertificatesAboutToExpireOutput, err error) {
 	validate := validator.New()
 	err = validate.Struct(input)
 	if err != nil {
@@ -206,10 +206,10 @@ func (mw *validationMiddleware) ScanAboutToExpireCertificates(ctx context.Contex
 		}
 		return nil, &valError
 	}
-	return mw.next.ScanAboutToExpireCertificates(ctx, input)
+	return mw.next.GetCertificatesAboutToExpire(ctx, input)
 }
 
-func (mw *validationMiddleware) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (output *api.ScanExpiredAndOutOfSyncCertificatesOutput, err error) {
+func (mw *validationMiddleware) GetExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.GetExpiredAndOutOfSyncCertificatesInput) (output *api.GetExpiredAndOutOfSyncCertificatesOutput, err error) {
 	validate := validator.New()
 	err = validate.Struct(input)
 	if err != nil {
@@ -218,5 +218,5 @@ func (mw *validationMiddleware) ScanExpiredAndOutOfSyncCertificates(ctx context.
 		}
 		return nil, &valError
 	}
-	return mw.next.ScanExpiredAndOutOfSyncCertificates(ctx, input)
+	return mw.next.GetExpiredAndOutOfSyncCertificates(ctx, input)
 }

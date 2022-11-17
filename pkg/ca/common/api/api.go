@@ -358,6 +358,28 @@ type IterateCAsWithPredicateOutput struct {
 
 // ---------------------------------------------------------------------
 
+type GetCertificatesAboutToExpireInput struct {
+	QueryParameters common.QueryParameters `validate:"required"`
+}
+
+type GetCertificatesAboutToExpireOutput struct {
+	Certificates      []Certificate
+	TotalCertificates int
+}
+
+// ---------------------------------------------------------------------
+
+type GetExpiredAndOutOfSyncCertificatesInput struct {
+	QueryParameters common.QueryParameters `validate:"required"`
+}
+
+type GetExpiredAndOutOfSyncCertificatesOutput struct {
+	Certificates      []Certificate
+	TotalCertificates int
+}
+
+// ---------------------------------------------------------------------
+
 type ScanAboutToExpireCertificatesInput struct{}
 
 type ScanAboutToExpireCertificatesOutput struct {
@@ -369,5 +391,5 @@ type ScanAboutToExpireCertificatesOutput struct {
 type ScanExpiredAndOutOfSyncCertificatesInput struct{}
 
 type ScanExpiredAndOutOfSyncCertificatesOutput struct {
-	ExpiredTotal int
+	TotalExpired int
 }

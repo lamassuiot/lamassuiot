@@ -70,7 +70,7 @@ func (mw *amqpMiddleware) sendAMQPMessage(ctx context.Context, eventType string,
 	}
 
 	mw.amqpPublisher <- msg
-
+	fmt.Println("message published")
 }
 
 func (mw *amqpMiddleware) Health() (healthy bool) {
@@ -160,10 +160,10 @@ func (mw *amqpMiddleware) IterateCertificatesWithPredicate(ctx context.Context, 
 	return mw.next.IterateCertificatesWithPredicate(ctx, input)
 }
 
-func (mw *amqpMiddleware) ScanAboutToExpireCertificates(ctx context.Context, input *api.ScanAboutToExpireCertificatesInput) (output *api.ScanAboutToExpireCertificatesOutput, err error) {
-	return mw.next.ScanAboutToExpireCertificates(ctx, input)
+func (mw *amqpMiddleware) GetCertificatesAboutToExpire(ctx context.Context, input *api.GetCertificatesAboutToExpireInput) (output *api.GetCertificatesAboutToExpireOutput, err error) {
+	return mw.next.GetCertificatesAboutToExpire(ctx, input)
 }
 
-func (mw *amqpMiddleware) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (output *api.ScanExpiredAndOutOfSyncCertificatesOutput, err error) {
-	return mw.next.ScanExpiredAndOutOfSyncCertificates(ctx, input)
+func (mw *amqpMiddleware) GetExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.GetExpiredAndOutOfSyncCertificatesInput) (output *api.GetExpiredAndOutOfSyncCertificatesOutput, err error) {
+	return mw.next.GetExpiredAndOutOfSyncCertificates(ctx, input)
 }

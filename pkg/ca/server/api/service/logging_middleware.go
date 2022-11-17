@@ -274,10 +274,10 @@ func (mw loggingMiddleware) GetCertificates(ctx context.Context, input *api.GetC
 	return mw.next.GetCertificates(ctx, input)
 }
 
-func (mw loggingMiddleware) ScanAboutToExpireCertificates(ctx context.Context, input *api.ScanAboutToExpireCertificatesInput) (output *api.ScanAboutToExpireCertificatesOutput, err error) {
+func (mw loggingMiddleware) GetCertificatesAboutToExpire(ctx context.Context, input *api.GetCertificatesAboutToExpireInput) (output *api.GetCertificatesAboutToExpireOutput, err error) {
 	defer func(begin time.Time) {
 		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "ScanAboutToExpireCertificates")
+		logMsg = append(logMsg, "method", "GetCertificatesAboutToExpire")
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
@@ -289,13 +289,13 @@ func (mw loggingMiddleware) ScanAboutToExpireCertificates(ctx context.Context, i
 		}
 		mw.logger.Log(logMsg...)
 	}(time.Now())
-	return mw.next.ScanAboutToExpireCertificates(ctx, input)
+	return mw.next.GetCertificatesAboutToExpire(ctx, input)
 }
 
-func (mw loggingMiddleware) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (output *api.ScanExpiredAndOutOfSyncCertificatesOutput, err error) {
+func (mw loggingMiddleware) GetExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.GetExpiredAndOutOfSyncCertificatesInput) (output *api.GetExpiredAndOutOfSyncCertificatesOutput, err error) {
 	defer func(begin time.Time) {
 		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "ScanExpiredAndOutOfSyncCertificates")
+		logMsg = append(logMsg, "method", "GetExpiredAndOutOfSyncCertificates")
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
@@ -307,5 +307,5 @@ func (mw loggingMiddleware) ScanExpiredAndOutOfSyncCertificates(ctx context.Cont
 		}
 		mw.logger.Log(logMsg...)
 	}(time.Now())
-	return mw.next.ScanExpiredAndOutOfSyncCertificates(ctx, input)
+	return mw.next.GetExpiredAndOutOfSyncCertificates(ctx, input)
 }
