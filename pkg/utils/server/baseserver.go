@@ -32,18 +32,21 @@ type Configuration interface {
 }
 
 type BaseConfiguration struct {
-	ServiceName         string `required:"true" split_words:"true"`
-	DebugMode           bool   `required:"true" split_words:"true"`
-	Port                string `required:"true" split_words:"true"`
-	Protocol            string `required:"true" split_words:"true"`
-	CertFile            string `split_words:"true"`
-	KeyFile             string `split_words:"true"`
-	MutualTLSEnabled    bool   `split_words:"true"`
-	MutualTLSClientCA   string `split_words:"true"`
-	AmqpServerHost      string `required:"true" split_words:"true"`
-	AmqpServerEnableTLS bool   `required:"true" split_words:"true"`
-	AmqpServerPort      string `required:"true" split_words:"true"`
-	AmqpServerCACert    string `split_words:"true"`
+	ServiceName            string `required:"true" split_words:"true"`
+	DebugMode              bool   `required:"true" split_words:"true"`
+	Port                   string `required:"true" split_words:"true"`
+	Protocol               string `required:"true" split_words:"true"`
+	CertFile               string `split_words:"true"`
+	KeyFile                string `split_words:"true"`
+	MutualTLSEnabled       bool   `split_words:"true"`
+	MutualTLSClientCA      string `split_words:"true"`
+	AmqpServerHost         string `required:"true" split_words:"true"`
+	AmqpServerEnableTLS    bool   `required:"true" split_words:"true"`
+	AmqpServerPort         string `required:"true" split_words:"true"`
+	AmqpServerCACert       string `split_words:"true"`
+	AmqpServerUseBasicAuth bool   `required:"true" split_words:"true"`
+	AmqpServerUsername     string `split_words:"true"`
+	AmqpServerPassword     string `split_words:"true"`
 }
 
 type AmqpPublishMessage struct {
@@ -118,34 +121,41 @@ func (s *Server) AddHttpFuncHandler(path string, handler func(http.ResponseWrite
 
 func (s *Server) Run(errorsChannel chan error) {
 	go func() {
-		amq_cfg := tls.Config{}
-		amq_cfg.RootCAs = x509.NewCertPool()
-
-		amqpCA, err := ioutil.ReadFile(s.cfg.AmqpServerCACert)
-		if err != nil {
-			level.Error(s.Logger).Log("err", err, "msg", "Could not read AMQP CA certificate")
-			os.Exit(1)
-		}
-
-		amq_cfg.RootCAs.AppendCertsFromPEM(amqpCA)
-		cert, err := tls.LoadX509KeyPair(s.cfg.CertFile, s.cfg.KeyFile)
-
-		if err != nil {
-			level.Error(s.Logger).Log("err", err, "msg", "Could not load AMQP TLS certificate")
-			os.Exit(1)
-		}
-
-		amq_cfg.Certificates = append(amq_cfg.Certificates, cert)
-
+		var err error
 		var amqpConn *amqp.Connection
+		userPassUrlPrefix := ""
+		if s.cfg.AmqpServerUseBasicAuth {
+			userPassUrlPrefix = fmt.Sprintf("%s:%s@", s.cfg.AmqpServerUsername, s.cfg.AmqpServerPassword)
+		}
+
 		if s.cfg.AmqpServerEnableTLS {
-			amqpConn, err = amqp.DialTLS(fmt.Sprintf("amqps://%s:%s", s.cfg.AmqpServerHost, s.cfg.AmqpServerPort), &amq_cfg)
+			amq_cfg := tls.Config{}
+			amq_cfg.RootCAs = x509.NewCertPool()
+
+			amqpCA, err := ioutil.ReadFile(s.cfg.AmqpServerCACert)
+			if err != nil {
+				level.Error(s.Logger).Log("err", err, "msg", "Could not read AMQP CA certificate")
+				os.Exit(1)
+			}
+
+			amq_cfg.RootCAs.AppendCertsFromPEM(amqpCA)
+			cert, err := tls.LoadX509KeyPair(s.cfg.CertFile, s.cfg.KeyFile)
+
+			if err != nil {
+				level.Error(s.Logger).Log("err", err, "msg", "Could not load AMQP TLS certificate")
+				os.Exit(1)
+			}
+
+			amq_cfg.Certificates = append(amq_cfg.Certificates, cert)
+
+			amqpConn, err = amqp.DialTLS(fmt.Sprintf("amqps://%s%s:%s", userPassUrlPrefix, s.cfg.AmqpServerHost, s.cfg.AmqpServerPort), &amq_cfg)
+
 			if err != nil {
 				level.Error(s.Logger).Log("err", err, "msg", "Failed to connect to AMQP with TLS")
 				os.Exit(1)
 			}
 		} else {
-			amqpConn, err = amqp.Dial(fmt.Sprintf("amqp://%s:%s", s.cfg.AmqpServerHost, s.cfg.AmqpServerPort))
+			amqpConn, err = amqp.Dial(fmt.Sprintf("amqp://%s%s:%s", userPassUrlPrefix, s.cfg.AmqpServerHost, s.cfg.AmqpServerPort))
 			if err != nil {
 				level.Error(s.Logger).Log("err", err, "msg", "Failed to connect to AMQP")
 				os.Exit(1)
