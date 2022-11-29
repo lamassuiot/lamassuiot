@@ -79,12 +79,14 @@ func CreateVaultSdkClient(vaultAddress string, vaultCaCertFilePath string, logge
 	httpTrasport := cleanhttp.DefaultPooledTransport()
 	caPool := x509.NewCertPool()
 
-	vaultCAFile, err := os.ReadFile(vaultCaCertFilePath)
-	if err != nil {
-		return nil, err
-	}
+	if strings.HasPrefix(vaultAddress, "https://") {
+		vaultCAFile, err := os.ReadFile(vaultCaCertFilePath)
+		if err != nil {
+			return nil, err
+		}
 
-	caPool.AppendCertsFromPEM(vaultCAFile)
+		caPool.AppendCertsFromPEM(vaultCAFile)
+	}
 
 	httpTrasport.TLSClientConfig = &tls.Config{
 		RootCAs: caPool,
