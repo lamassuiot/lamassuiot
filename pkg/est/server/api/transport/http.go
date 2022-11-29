@@ -333,7 +333,7 @@ func encodeResponse(ctx context.Context, w http.ResponseWriter, response interfa
 		EncodeError(ctx, err, w)
 		return nil
 	}
-	body = []byte(base64.StdEncoding.EncodeToString(body))
+	body = base64Encode(body)
 
 	w.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
 	w.Header().Set("Content-Transfer-Encoding", "base64")
@@ -361,7 +361,7 @@ func encodeGetCACertificatesResponse(ctx context.Context, w http.ResponseWriter,
 		return nil
 	}
 
-	body = []byte(base64.StdEncoding.EncodeToString(body))
+	body = base64Encode(body)
 
 	w.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
 	w.Header().Set("Content-Transfer-Encoding", "base64")

@@ -32,13 +32,33 @@ type MultipartPart struct {
 	Data        interface{}
 }
 
+const (
+	base64LineLength = 76
+)
+
+// base64Encode base64-encodes a slice of bytes using standard encoding.
+func base64Encode(src []byte) []byte {
+	enc := make([]byte, base64.StdEncoding.EncodedLen(len(src)))
+	base64.StdEncoding.Encode(enc, src)
+	return breakLines(enc, base64LineLength)
+}
+
+// base64Decode base64-decodes a slice of bytes using standard encoding.
+func base64Decode(src []byte) ([]byte, error) {
+	dec := make([]byte, base64.StdEncoding.DecodedLen(len(src)))
+	n, err := base64.StdEncoding.Decode(dec, src)
+	if err != nil {
+		return nil, err
+	}
+	return dec[:n], nil
+}
 func ReadAllBase64Response(r io.Reader) ([]byte, error) {
 	b, err := ioutil.ReadAll(r)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read HTTP response body: %w", err)
 	}
 
-	decoded, err := base64.StdEncoding.DecodeString(string(b))
+	decoded, err := base64Decode(b)
 	if err != nil {
 		return nil, fmt.Errorf("failed to base64-decode HTTP response body: %w", err)
 	}
@@ -191,7 +211,7 @@ func WriteResponse(w http.ResponseWriter, contentType string, encode bool, obj i
 
 	if encode {
 		w.Header().Set("Content-Transfer-Encoding", "base64")
-		body = []byte(base64.StdEncoding.EncodeToString(body))
+		body = base64Encode(body)
 	}
 
 	w.WriteHeader(http.StatusOK)
