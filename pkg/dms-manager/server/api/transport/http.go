@@ -19,10 +19,7 @@ import (
 	dmsErrors "github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common/types"
-	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
-	stdopentracing "github.com/opentracing/opentracing-go"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type errorer interface {
@@ -50,123 +47,88 @@ func filtrableDMSModelFields() map[string]types.Filter {
 	return fieldFiltersMap
 }
 
-func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentracing.Tracer) http.Handler {
+func MakeHTTPHandler(s service.Service, logger log.Logger) http.Handler {
 	r := mux.NewRouter()
-	e := endpoint.MakeServerEndpoints(s, otTracer)
+	e := endpoint.MakeServerEndpoints(s)
 	options := []httptransport.ServerOption{
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
 	}
 
 	r.Methods("GET").Path("/health").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.HealthEndpoint,
-					decodeHealthRequest,
-					encodeHealthResponse,
-					append(
-						options,
-					)...,
-				),
-				"Health",
-			),
+		httptransport.NewServer(
+			e.HealthEndpoint,
+			decodeHealthRequest,
+			encodeHealthResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("POST").Path("/").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.CreateDMSEndpoint,
-					decodeCreateDMSRequest,
-					encodeCreateDMSResponse,
-					append(
-						options,
-					)...,
-				),
-				"CreateDMS",
-			),
+		httptransport.NewServer(
+			e.CreateDMSEndpoint,
+			decodeCreateDMSRequest,
+			encodeCreateDMSResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("POST").Path("/csr").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.CreateDMSWithCSREndpoint,
-					decodeCreateDMSWithCSRequest,
-					encodeCreateDMSWithCSRResponse,
-					append(
-						options,
-					)...,
-				),
-				"CreateDMSWithCSR",
-			),
+		httptransport.NewServer(
+			e.CreateDMSWithCSREndpoint,
+			decodeCreateDMSWithCSRequest,
+			encodeCreateDMSWithCSRResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("GET").Path("/").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.GetDMSsEndpoint,
-					decodeGetDMSsRequest,
-					encodeGetDMSsResponse,
-					append(
-						options,
-					)...,
-				),
-				"GetDMSs",
-			),
+		httptransport.NewServer(
+			e.GetDMSsEndpoint,
+			decodeGetDMSsRequest,
+			encodeGetDMSsResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("GET").Path("/{name}").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.GetDMSByNameEndpoint,
-					decodeGetDMSByNameRequest,
-					encodeGetDMSByNameResponse,
-					append(
-						options,
-					)...,
-				),
-				"GetDMSByName",
-			),
+		httptransport.NewServer(
+			e.GetDMSByNameEndpoint,
+			decodeGetDMSByNameRequest,
+			encodeGetDMSByNameResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("PUT").Path("/{name}/status").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.UpdateDMSStatusEndpoint,
-					decodeUpdateDMSStatusRequest,
-					encodeUpdateDMSStatusResponse,
-					append(
-						options,
-					)...,
-				),
-				"UpdateDMSStatus",
-			),
+		httptransport.NewServer(
+			e.UpdateDMSStatusEndpoint,
+			decodeUpdateDMSStatusRequest,
+			encodeUpdateDMSStatusResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	r.Methods("PUT").Path("/{name}/auth").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					e.UpdateDMSAuthorizedCAsEndpoint,
-					decodeUpdateDMSAuthorizedCAsRequest,
-					encodeUpdateDMSAuthorizedCAsResponse,
-					append(
-						options,
-					)...,
-				),
-				"UpdateAuthorizedCAs",
-			),
+		httptransport.NewServer(
+			e.UpdateDMSAuthorizedCAsEndpoint,
+			decodeUpdateDMSAuthorizedCAsRequest,
+			encodeUpdateDMSAuthorizedCAsResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 

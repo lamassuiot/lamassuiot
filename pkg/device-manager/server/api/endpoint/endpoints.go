@@ -7,13 +7,11 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/tracing/opentracing"
 	"github.com/go-playground/validator/v10"
 	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
-	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 type Endpoints struct {
@@ -30,62 +28,18 @@ type Endpoints struct {
 	HandleCACloudEvent              endpoint.Endpoint
 }
 
-func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
-	var healthEndpoint endpoint.Endpoint
-	{
-		healthEndpoint = MakeHealthEndpoint(s)
-		healthEndpoint = opentracing.TraceServer(otTracer, "Health")(healthEndpoint)
-	}
-	var getStatsEndpoint endpoint.Endpoint
-	{
-		getStatsEndpoint = MakeGetStatsEndpoint(s)
-		getStatsEndpoint = opentracing.TraceServer(otTracer, "GetStats")(getStatsEndpoint)
-	}
-	var createDeviceEndpoint endpoint.Endpoint
-	{
-		createDeviceEndpoint = MakeCreateDeviceEndpoint(s)
-		createDeviceEndpoint = opentracing.TraceServer(otTracer, "CreateDevice")(createDeviceEndpoint)
-	}
-	var updateDeviceMetadataEndpoint endpoint.Endpoint
-	{
-		updateDeviceMetadataEndpoint = MakeUpdateDeviceMetadataEndpoint(s)
-		updateDeviceMetadataEndpoint = opentracing.TraceServer(otTracer, "UpdateDeviceMetadata")(updateDeviceMetadataEndpoint)
-	}
-	var decommisionDeviceEndpoint endpoint.Endpoint
-	{
-		decommisionDeviceEndpoint = MakeDecommisionDeviceEndpoint(s)
-		decommisionDeviceEndpoint = opentracing.TraceServer(otTracer, "DecommisionDevice")(decommisionDeviceEndpoint)
-	}
-	var getDevicesEndpoint endpoint.Endpoint
-	{
-		getDevicesEndpoint = MakeGetDevicesEndpoint(s)
-		getDevicesEndpoint = opentracing.TraceServer(otTracer, "GetDevices")(getDevicesEndpoint)
-	}
-	var getDeviceByIdEndpoint endpoint.Endpoint
-	{
-		getDeviceByIdEndpoint = MakeGetDeviceByIdEndpoint(s)
-		getDeviceByIdEndpoint = opentracing.TraceServer(otTracer, "GetDeviceById")(getDeviceByIdEndpoint)
-	}
-	var revokeActiveCertificateEndpoint endpoint.Endpoint
-	{
-		revokeActiveCertificateEndpoint = MakeRevokeActiveCertificateEndpoint(s)
-		revokeActiveCertificateEndpoint = opentracing.TraceServer(otTracer, "RevokeActiveCertificate")(revokeActiveCertificateEndpoint)
-	}
-	var getDeviceLogsEndpoint endpoint.Endpoint
-	{
-		getDeviceLogsEndpoint = MakeGetDeviceLogsEndpoint(s)
-		getDeviceLogsEndpoint = opentracing.TraceServer(otTracer, "GetDeviceLogs")(getDeviceLogsEndpoint)
-	}
-	var handleCACloudEvent endpoint.Endpoint
-	{
-		handleCACloudEvent = MakeHandleCACloudEvent(s)
-		handleCACloudEvent = opentracing.TraceServer(otTracer, "HandleCACloudEvent")(handleCACloudEvent)
-	}
-	var forceReenrollEndpoint endpoint.Endpoint
-	{
-		forceReenrollEndpoint = MakeForceReenrollEnpoint(s)
-		forceReenrollEndpoint = opentracing.TraceServer(otTracer, "ForceReenroll")(forceReenrollEndpoint)
-	}
+func MakeServerEndpoints(s service.Service) Endpoints {
+	var healthEndpoint = MakeHealthEndpoint(s)
+	var getStatsEndpoint = MakeGetStatsEndpoint(s)
+	var createDeviceEndpoint = MakeCreateDeviceEndpoint(s)
+	var updateDeviceMetadataEndpoint = MakeUpdateDeviceMetadataEndpoint(s)
+	var decommisionDeviceEndpoint = MakeDecommisionDeviceEndpoint(s)
+	var getDevicesEndpoint = MakeGetDevicesEndpoint(s)
+	var getDeviceByIdEndpoint = MakeGetDeviceByIdEndpoint(s)
+	var revokeActiveCertificateEndpoint = MakeRevokeActiveCertificateEndpoint(s)
+	var getDeviceLogsEndpoint = MakeGetDeviceLogsEndpoint(s)
+	var handleCACloudEvent = MakeHandleCACloudEvent(s)
+	var forceReenrollEndpoint = MakeForceReenrollEnpoint(s)
 
 	return Endpoints{
 		HealthEndpoint:                  healthEndpoint,

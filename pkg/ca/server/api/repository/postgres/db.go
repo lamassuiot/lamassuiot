@@ -28,8 +28,9 @@ type CertificateDAO struct {
 	CAType           api.CAType `gorm:"column:type"`
 	Certificate      string
 	Status           api.CertificateStatus
-	CreationTs       time.Time
-	RevocationTs     pq.NullTime
+	ValidFrom        time.Time
+	Expiration       time.Time
+	Revocation       pq.NullTime
 	RevocationReason string
 }
 
@@ -77,18 +78,19 @@ func (c *CertificateAuthorityDAO) toCertificate() (api.CACertificate, error) {
 	certificate := api.CACertificate{
 		Certificate: api.Certificate{
 			CAName:              c.CAName,
+			CAType:              c.CAType,
 			Status:              c.Status,
 			SerialNumber:        c.SerialNumber,
 			Subject:             subject,
 			Certificate:         cert,
-			ValidFrom:           cert.NotBefore,
-			ValidTo:             cert.NotAfter,
-			RevocationTimestamp: c.RevocationTs,
+			ValidFrom:           c.ValidFrom,
+			ValidTo:             c.Expiration,
+			RevocationTimestamp: c.Revocation,
 		},
 		IssuanceDuration: time.Duration(c.IssuanceDuration * int(time.Second)),
 	}
 
-	if c.RevocationTs.Valid {
+	if c.Revocation.Valid {
 		certificate.RevocationReason = c.RevocationReason
 	}
 
@@ -134,16 +136,17 @@ func (c *CertificateDAO) toCertificate() (api.Certificate, error) {
 
 	certificate := api.Certificate{
 		CAName:              c.CAName,
+		CAType:              c.CAType,
 		Status:              c.Status,
 		SerialNumber:        c.SerialNumber,
 		Subject:             subject,
 		Certificate:         cert,
-		ValidFrom:           cert.NotBefore,
-		ValidTo:             cert.NotAfter,
-		RevocationTimestamp: c.RevocationTs,
+		ValidFrom:           c.ValidFrom,
+		ValidTo:             c.Expiration,
+		RevocationTimestamp: c.Revocation,
 	}
 
-	if c.RevocationTs.Valid {
+	if c.Revocation.Valid {
 		certificate.RevocationReason = c.RevocationReason
 	}
 
@@ -156,9 +159,10 @@ type IssuedCertsTable struct {
 	CAName           string `gorm:"column_name:name"`
 	CAType           string `gorm:"column_name:type"`
 	Status           string
-	RevocationTs     pq.NullTime
+	ValidFrom        time.Time
+	Expiration       time.Time
+	Revocation       pq.NullTime
 	RevocationReason string
-	CreationTs       time.Time
 }
 
 func NewPostgresDB(db *gorm.DB, logger log.Logger) repository.Certificates {
@@ -187,14 +191,14 @@ func (db *PostgresDBContext) UpdateCertificateStatus(ctx context.Context, CAType
 
 	certifcate.Status = status
 	if status == api.StatusRevoked {
-		certifcate.RevocationTs = pq.NullTime{
+		certifcate.Revocation = pq.NullTime{
 			Time:  time.Now(),
 			Valid: true,
 		}
 		certifcate.RevocationReason = revocationReason
 	}
 
-	db.Save(&certifcate)
+	db.Save(&certifcate).Debug()
 
 	return nil
 }
@@ -205,12 +209,15 @@ func (db PostgresDBContext) InsertCertificate(ctx context.Context, CAType api.CA
 	base64.StdEncoding.Encode(enc, pemCert)
 
 	tx := db.WithContext(ctx).Model(&CertificateDAO{}).Create(&CertificateDAO{
-		Status:       api.StatusActive,
-		SerialNumber: utils.InsertNth(utils.ToHexInt(certificate.SerialNumber), 2),
-		CAName:       CAName,
-		CAType:       CAType,
-		Certificate:  string(enc),
-		CreationTs:   time.Now(),
+		Status:           api.StatusActive,
+		SerialNumber:     utils.InsertNth(utils.ToHexInt(certificate.SerialNumber), 2),
+		CAName:           CAName,
+		CAType:           CAType,
+		Certificate:      string(enc),
+		ValidFrom:        certificate.NotBefore,
+		Expiration:       certificate.NotAfter,
+		Revocation:       pq.NullTime{},
+		RevocationReason: "",
 	})
 
 	if tx.Error != nil {
@@ -235,6 +242,69 @@ func (db PostgresDBContext) SelectCertificatesByCA(ctx context.Context, CAType a
 
 	var certificates []CertificateDAO
 	tx = db.WithContext(ctx).Model(&CertificateDAO{}).Where("ca_name = ?", CAName).Where("type = ?", CAType)
+	tx = filters.ApplyQueryParametersFilters(tx, queryParameters)
+	if err := tx.Find(&certificates).Error; err != nil {
+		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Certificates from database")
+		return 0, []api.Certificate{}, err
+	}
+
+	var parsedCertificates []api.Certificate
+	for _, v := range certificates {
+		certificate, err := v.toCertificate()
+		if err != nil {
+			level.Debug(db.logger).Log("err", err)
+			continue
+		}
+		parsedCertificates = append(parsedCertificates, certificate)
+	}
+
+	return int(totalCertificates), parsedCertificates, nil
+}
+
+func (db PostgresDBContext) SelectAboutToExpireCertificates(ctx context.Context, expiringIn time.Duration, queryParameters common.QueryParameters) (int, []api.Certificate, error) {
+	var totalCertificates int64
+	var certificates []CertificateDAO
+
+	now := time.Now()
+	expirationAfter := now.Add(expiringIn)
+
+	tx := db.WithContext(ctx).Model(&CertificateDAO{}).Where("expiration > ?", now).Where("expiration <= ?", expirationAfter).Where("status <> ?", "REVOKED")
+	if err := tx.Count(&totalCertificates).Error; err != nil {
+		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Certificates from database")
+		return 0, []api.Certificate{}, err
+	}
+
+	tx = db.WithContext(ctx).Model(&CertificateDAO{}).Where("expiration > ?", now).Where("expiration <= ?", expirationAfter).Where("status <> ?", "REVOKED")
+	tx = filters.ApplyQueryParametersFilters(tx, queryParameters)
+	if err := tx.Find(&certificates).Error; err != nil {
+		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Certificates from database")
+		return 0, []api.Certificate{}, err
+	}
+
+	var parsedCertificates []api.Certificate
+	for _, v := range certificates {
+		certificate, err := v.toCertificate()
+		if err != nil {
+			level.Debug(db.logger).Log("err", err)
+			continue
+		}
+		parsedCertificates = append(parsedCertificates, certificate)
+	}
+
+	return int(totalCertificates), parsedCertificates, nil
+}
+
+func (db PostgresDBContext) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, expirationDate time.Time, queryParameters common.QueryParameters) (int, []api.Certificate, error) {
+	var totalCertificates int64
+	var certificates []CertificateDAO
+
+	tx := db.WithContext(ctx).Not(map[string]interface{}{"status": []string{"EXPIRED", "REVOKED"}}).Model(&CertificateDAO{}).Where("expiration < ?", expirationDate)
+	if err := tx.Count(&totalCertificates).Error; err != nil {
+		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Certificates from database")
+		return 0, []api.Certificate{}, err
+	}
+
+	tx = db.WithContext(ctx).Not(map[string]interface{}{"status": []string{"EXPIRED", "REVOKED"}}).Model(&CertificateDAO{}).Where("expiration < ?", expirationDate)
 	tx = filters.ApplyQueryParametersFilters(tx, queryParameters)
 	if err := tx.Find(&certificates).Error; err != nil {
 		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain Certificates from database")
@@ -283,7 +353,7 @@ func (db PostgresDBContext) UpdateCAStatus(ctx context.Context, CAType api.CATyp
 
 	ca.Status = status
 	if status == api.StatusRevoked {
-		ca.RevocationTs = pq.NullTime{
+		ca.Revocation = pq.NullTime{
 			Time:  time.Now(),
 			Valid: true,
 		}
@@ -302,12 +372,15 @@ func (db PostgresDBContext) InsertCA(ctx context.Context, CAType api.CAType, cer
 
 	tx := db.WithContext(ctx).Model(&CertificateAuthorityDAO{}).Create(&CertificateAuthorityDAO{
 		CertificateDAO: CertificateDAO{
-			Status:       api.StatusActive,
-			SerialNumber: utils.InsertNth(utils.ToHexInt(certificate.SerialNumber), 2),
-			CAName:       certificate.Subject.CommonName,
-			CAType:       CAType,
-			Certificate:  string(enc),
-			CreationTs:   time.Now(),
+			Status:           api.StatusActive,
+			SerialNumber:     utils.InsertNth(utils.ToHexInt(certificate.SerialNumber), 2),
+			CAName:           certificate.Subject.CommonName,
+			CAType:           CAType,
+			Certificate:      string(enc),
+			ValidFrom:        certificate.NotBefore,
+			Expiration:       certificate.NotAfter,
+			Revocation:       pq.NullTime{},
+			RevocationReason: "",
 		},
 		IssuanceDuration: int(issuanceDuration.Seconds()),
 	})

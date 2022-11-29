@@ -7,8 +7,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
 
 	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/tracing/opentracing"
-	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 type Endpoints struct {
@@ -26,41 +24,13 @@ type Endpoints struct {
 	RevokeCertEndpoint      endpoint.Endpoint
 }
 
-func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
-	var healthEndpoint endpoint.Endpoint
-	{
-		healthEndpoint = MakeHealthEndpoint(s)
-		healthEndpoint = opentracing.TraceServer(otTracer, "Health")(healthEndpoint)
-	}
-	var getCryptoEngineEndpoint endpoint.Endpoint
-	{
-		getCryptoEngineEndpoint = MakeGetCryptoEngine(s)
-		getCryptoEngineEndpoint = opentracing.TraceServer(otTracer, "CryptoEngine")(getCryptoEngineEndpoint)
-	}
-
-	var statsEndpoint endpoint.Endpoint
-	{
-		statsEndpoint = MakeStatsEndpoint(s)
-		statsEndpoint = opentracing.TraceServer(otTracer, "Stats")(statsEndpoint)
-	}
-
-	var getCAsEndpoint endpoint.Endpoint
-	{
-		getCAsEndpoint = MakeGetCAsEndpoint(s)
-		getCAsEndpoint = opentracing.TraceServer(otTracer, "GetCAs")(getCAsEndpoint)
-	}
-
-	var getCAByName endpoint.Endpoint
-	{
-		getCAByName = MakeGetCAByNameEndpoint(s)
-		getCAByName = opentracing.TraceServer(otTracer, "GetCAByName")(getCAByName)
-	}
-
-	var createCAEndpoint endpoint.Endpoint
-	{
-		createCAEndpoint = MakeCreateCAEndpoint(s)
-		createCAEndpoint = opentracing.TraceServer(otTracer, "CreateCA")(createCAEndpoint)
-	}
+func MakeServerEndpoints(s service.Service) Endpoints {
+	var healthEndpoint = MakeHealthEndpoint(s)
+	var getCryptoEngineEndpoint = MakeGetCryptoEngine(s)
+	var statsEndpoint = MakeStatsEndpoint(s)
+	var getCAsEndpoint = MakeGetCAsEndpoint(s)
+	var getCAByName = MakeGetCAByNameEndpoint(s)
+	var createCAEndpoint = MakeCreateCAEndpoint(s)
 
 	// var importCAEndpoint endpoint.Endpoint
 	// {
@@ -68,34 +38,11 @@ func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endp
 	// 	importCAEndpoint = opentracing.TraceServer(otTracer, "ImportCA")(importCAEndpoint)
 	// }
 
-	var revokeCAEndpoint endpoint.Endpoint
-	{
-		revokeCAEndpoint = MakeRevokeCAEndpoint(s)
-		revokeCAEndpoint = opentracing.TraceServer(otTracer, "RevokeCA")(revokeCAEndpoint)
-	}
-
-	var getGetCertificatesEndpoint endpoint.Endpoint
-	{
-		getGetCertificatesEndpoint = MakeGetCertificatesEndpoint(s)
-		getGetCertificatesEndpoint = opentracing.TraceServer(otTracer, "GetGetCertificates")(getGetCertificatesEndpoint)
-	}
-	var getCertEndpoint endpoint.Endpoint
-	{
-		getCertEndpoint = MakeCertEndpoint(s)
-		getCertEndpoint = opentracing.TraceServer(otTracer, "GetCertificate")(getCertEndpoint)
-	}
-
-	var signCertificateEndpoint endpoint.Endpoint
-	{
-		signCertificateEndpoint = MakeSignCertEndpoint(s)
-		signCertificateEndpoint = opentracing.TraceServer(otTracer, "SignCertificate")(signCertificateEndpoint)
-	}
-
-	var revokeCertEndpoint endpoint.Endpoint
-	{
-		revokeCertEndpoint = MakeRevokeCertEndpoint(s)
-		revokeCertEndpoint = opentracing.TraceServer(otTracer, "RevokeCertificate")(revokeCertEndpoint)
-	}
+	var revokeCAEndpoint = MakeRevokeCAEndpoint(s)
+	var getGetCertificatesEndpoint = MakeGetCertificatesEndpoint(s)
+	var getCertEndpoint = MakeCertEndpoint(s)
+	var signCertificateEndpoint = MakeSignCertEndpoint(s)
+	var revokeCertEndpoint = MakeRevokeCertEndpoint(s)
 
 	return Endpoints{
 		HealthEndpoint:          healthEndpoint,

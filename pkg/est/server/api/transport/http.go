@@ -17,10 +17,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/est/server/api/endpoint"
 	esterror "github.com/lamassuiot/lamassuiot/pkg/est/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/est/server/api/service"
-	serverUtils "github.com/lamassuiot/lamassuiot/pkg/utils/server"
-	stdopentracing "github.com/opentracing/opentracing-go"
 	"go.mozilla.org/pkcs7"
-	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type errorer interface {
@@ -58,9 +55,9 @@ func ErrMalformedCert() error {
 	}
 }
 
-func MakeHTTPHandler(service service.ESTService, logger log.Logger, otTracer stdopentracing.Tracer) http.Handler {
+func MakeHTTPHandler(service service.ESTService, logger log.Logger) http.Handler {
 	router := mux.NewRouter()
-	endpoints := endpoint.MakeServerEndpoints(service, otTracer)
+	endpoints := endpoint.MakeServerEndpoints(service)
 
 	options := []httptransport.ServerOption{
 		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
@@ -69,66 +66,46 @@ func MakeHTTPHandler(service service.ESTService, logger log.Logger, otTracer std
 
 	// MUST as per rfc7030
 	router.Methods("GET").Path("/.well-known/est/cacerts").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					endpoints.GetCAsEndpoint,
-					decodeRequest,
-					encodeGetCACertificatesResponse,
-					append(
-						options,
-					)...,
-				),
-				"CACerts",
-			),
+		httptransport.NewServer(
+			endpoints.GetCAsEndpoint,
+			decodeRequest,
+			encodeGetCACertificatesResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	router.Methods("POST").Path("/.well-known/est/{aps}/simpleenroll").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					endpoints.EnrollerEndpoint,
-					decodeEnrollRequest,
-					encodeResponse,
-					append(
-						options,
-					)...,
-				),
-				"SimplEnroll",
-			),
+		httptransport.NewServer(
+			endpoints.EnrollerEndpoint,
+			decodeEnrollRequest,
+			encodeResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	router.Methods("POST").Path("/.well-known/est/simplereenroll").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					endpoints.ReenrollerEndpoint,
-					decodeReenrollRequest,
-					encodeResponse,
-					append(
-						options,
-					)...,
-				),
-				"SimplReEnroll",
-			),
+		httptransport.NewServer(
+			endpoints.ReenrollerEndpoint,
+			decodeReenrollRequest,
+			encodeResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
 	router.Methods("POST").Path("/.well-known/est/{aps}/serverkeygen").Handler(
-		serverUtils.InjectTracingToContext(
-			otelhttp.NewHandler(
-				httptransport.NewServer(
-					endpoints.ServerKeyGenEndpoint,
-					decodeServerkeygenRequest,
-					encodeServerkeygenResponse,
-					append(
-						options,
-					)...,
-				),
-				"ServerKeyGen",
-			),
+		httptransport.NewServer(
+			endpoints.ServerKeyGenEndpoint,
+			decodeServerkeygenRequest,
+			encodeServerkeygenResponse,
+			append(
+				options,
+			)...,
 		),
 	)
 
@@ -356,7 +333,7 @@ func encodeResponse(ctx context.Context, w http.ResponseWriter, response interfa
 		EncodeError(ctx, err, w)
 		return nil
 	}
-	body = []byte(base64.StdEncoding.EncodeToString(body))
+	body = base64Encode(body)
 
 	w.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
 	w.Header().Set("Content-Transfer-Encoding", "base64")
@@ -384,7 +361,7 @@ func encodeGetCACertificatesResponse(ctx context.Context, w http.ResponseWriter,
 		return nil
 	}
 
-	body = []byte(base64.StdEncoding.EncodeToString(body))
+	body = base64Encode(body)
 
 	w.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
 	w.Header().Set("Content-Transfer-Encoding", "base64")

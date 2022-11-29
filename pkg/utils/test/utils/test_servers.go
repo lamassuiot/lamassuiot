@@ -25,7 +25,6 @@ import (
 	"github.com/jakehl/goid"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
-	"github.com/opentracing/opentracing-go"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
@@ -37,6 +36,7 @@ import (
 	caRepository "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/repository/postgres"
 	caService "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
 	cryptoEngines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/crypto-engines"
+	x509engines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/x509-engines"
 	caTransport "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/transport"
 
 	dmsClient "github.com/lamassuiot/lamassuiot/pkg/dms-manager/client"
@@ -79,16 +79,18 @@ func BuildCATestServerWithVault(vaultclient *api.Client) (*httptest.Server, *caS
 	}
 
 	certificateRepository := caRepository.NewPostgresDB(db, logger)
-	tracer := opentracing.NoopTracer{}
 	var svc caService.Service
-	svc, err = caService.NewVaultSecretsWithClient(vaultclient, "", "pki/lamassu/dev/", "", "", "", "", "http://ocsp.test", certificateRepository, logger)
+
+	engine, _ := x509engines.NewVaultx509EngineWithClient(vaultclient, "", "pki/lamassu/dev/", "", "", "", "", "http://ocsp.test", logger)
+	svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test", 30)
+
 	svc = caService.NewInputValudationMiddleware()(svc)
 
 	if err != nil {
 		return nil, nil, err
 	}
 
-	handler := caTransport.MakeHTTPHandler(svc, logger, tracer)
+	handler := caTransport.MakeHTTPHandler(svc, logger)
 
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", handler))
@@ -114,19 +116,19 @@ func BuildCATestServer() (*httptest.Server, *caService.Service, error) {
 	}
 
 	certificateRepository := caRepository.NewPostgresDB(db, logger)
-	tracer := opentracing.NoopTracer{}
-
 	dir := fmt.Sprintf("/tmp/test/%s", goid.NewV4UUID().String())
 	os.RemoveAll(dir)
 	os.Mkdir(dir, 0755)
-	engine, _ := cryptoEngines.NewGolangPEMEngine(logger, dir)
+	goPemEngine, _ := cryptoEngines.NewGolangPEMEngine(logger, dir)
+	engine := x509engines.NewStandardx509Engine(goPemEngine, "https://ocsp.test")
+
 	var svc caService.Service
-	svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test")
+	svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test", 30)
 	svc = caService.NewInputValudationMiddleware()(svc)
 
 	// svc = caService.LoggingMiddleware(logger)(svc)
 
-	handler := caTransport.MakeHTTPHandler(svc, logger, tracer)
+	handler := caTransport.MakeHTTPHandler(svc, logger)
 
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", handler))
@@ -153,7 +155,6 @@ func BuildDMSManagerTestServer(CATestServer *httptest.Server) (*httptest.Server,
 	}
 
 	dmsRepository := dmsRepository.NewPostgresDB(db, logger)
-	tracer := opentracing.NoopTracer{}
 
 	CATestServerURL, err := url.Parse(CATestServer.URL)
 	if err != nil {
@@ -172,7 +173,7 @@ func BuildDMSManagerTestServer(CATestServer *httptest.Server) (*httptest.Server,
 	svc = dmsService.NewDMSManagerService(logger, dmsRepository, &lamassuCAClient)
 	svc = dmsService.NewInputValudationMiddleware()(svc)
 
-	handler := dmsTransport.MakeHTTPHandler(svc, logger, tracer)
+	handler := dmsTransport.MakeHTTPHandler(svc, logger)
 
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", handler))
@@ -198,7 +199,6 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 	}
 
 	deviceRepository := postgresRepository.NewDevicesPostgresDB(db, logger)
-	tracer := opentracing.NoopTracer{}
 
 	CATestServerURL, err := url.Parse(CATestServer.URL)
 	if err != nil {
@@ -235,8 +235,8 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 	svc := deviceService.NewDeviceManagerService(logger, deviceRepository, logsRepo, statsRepo, 30, lamassuCAClient, lamassuDMSClient)
 	svc = deviceService.NewInputValudationMiddleware()(svc)
 
-	handler := deviceTransport.MakeHTTPHandler(svc, logger, tracer)
-	estHandler := estTransport.MakeHTTPHandler(svc, logger, tracer)
+	handler := deviceTransport.MakeHTTPHandler(svc, logger)
+	estHandler := estTransport.MakeHTTPHandler(svc, logger)
 
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", handler))
@@ -253,8 +253,6 @@ func BuildOCSPTestServer(CATestServer *httptest.Server) (*httptest.Server, error
 	logger = level.NewFilter(logger, level.AllowDebug())
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	logger = log.With(logger, "caller", log.DefaultCaller)
-
-	tracer := opentracing.NoopTracer{}
 
 	CATestServerURL, err := url.Parse(CATestServer.URL)
 	if err != nil {
@@ -292,7 +290,7 @@ func BuildOCSPTestServer(CATestServer *httptest.Server) (*httptest.Server, error
 
 	svc := ocspService.NewOCSPService(lamassuCAClient, ocspSigner, ocspCertificate)
 
-	handler := ocspTransport.MakeHTTPHandler(svc, logger, false, tracer)
+	handler := ocspTransport.MakeHTTPHandler(svc, logger, false)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)
@@ -309,8 +307,6 @@ func BuildMailTestServer(jsonTemplate string, smtpConfig outputchannels.SMTPOutp
 	logger = level.NewFilter(logger, level.AllowDebug())
 	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
 	logger = log.With(logger, "caller", log.DefaultCaller)
-
-	tracer := opentracing.NoopTracer{}
 
 	config := config.NewMailConfig()
 	mainServer := server.NewServer(config)
@@ -337,7 +333,7 @@ func BuildMailTestServer(jsonTemplate string, smtpConfig outputchannels.SMTPOutp
 	if err != nil {
 		return nil, nil, err
 	}
-	handler := alertsTransport.MakeHTTPHandler(svc, logger, tracer)
+	handler := alertsTransport.MakeHTTPHandler(svc, logger)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)

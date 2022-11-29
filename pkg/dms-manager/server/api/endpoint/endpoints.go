@@ -4,12 +4,10 @@ import (
 	"context"
 
 	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/tracing/opentracing"
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
 	dmsenrrors "github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/service"
-	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 type Endpoints struct {
@@ -22,43 +20,14 @@ type Endpoints struct {
 	GetDMSByNameEndpoint           endpoint.Endpoint
 }
 
-func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
-	var healthEndpoint endpoint.Endpoint
-	{
-		healthEndpoint = MakeHealthEndpoint(s)
-		healthEndpoint = opentracing.TraceServer(otTracer, "Health")(healthEndpoint)
-	}
-	var createDMSEndpoint endpoint.Endpoint
-	{
-		createDMSEndpoint = MakeCreateDMSEndpoint(s)
-		createDMSEndpoint = opentracing.TraceServer(otTracer, "Create DMS")(createDMSEndpoint)
-	}
-	var createDMSWithCertificateRequest endpoint.Endpoint
-	{
-		createDMSWithCertificateRequest = MakeCreateDMSWithCertificateRequestEndpoint(s)
-		createDMSWithCertificateRequest = opentracing.TraceServer(otTracer, "Create DMS with Certificate Request")(createDMSWithCertificateRequest)
-	}
-
-	var getDMSsEndpoint endpoint.Endpoint
-	{
-		getDMSsEndpoint = MakeGetDMSsEndpoint(s)
-		getDMSsEndpoint = opentracing.TraceServer(otTracer, "GetDMSs")(getDMSsEndpoint)
-	}
-	var getDMSByNameEndpoint endpoint.Endpoint
-	{
-		getDMSByNameEndpoint = MakeGetDMSByNameEndpoint(s)
-		getDMSByNameEndpoint = opentracing.TraceServer(otTracer, "Get DMS by name")(getDMSByNameEndpoint)
-	}
-	var updateDMSStatusEndpoint endpoint.Endpoint
-	{
-		updateDMSStatusEndpoint = MakeUpdateDMSStatusEndpoint(s)
-		updateDMSStatusEndpoint = opentracing.TraceServer(otTracer, "Update DMS status")(updateDMSStatusEndpoint)
-	}
-	var updateDMSAuthorizedCAsEndpointEndpoint endpoint.Endpoint
-	{
-		updateDMSAuthorizedCAsEndpointEndpoint = MakeUpdateDMSAuthorizedCAsEndpoint(s)
-		updateDMSAuthorizedCAsEndpointEndpoint = opentracing.TraceServer(otTracer, "Update DMS authorized CAs")(updateDMSAuthorizedCAsEndpointEndpoint)
-	}
+func MakeServerEndpoints(s service.Service) Endpoints {
+	var healthEndpoint = MakeHealthEndpoint(s)
+	var createDMSEndpoint = MakeCreateDMSEndpoint(s)
+	var createDMSWithCertificateRequest = MakeCreateDMSWithCertificateRequestEndpoint(s)
+	var getDMSsEndpoint = MakeGetDMSsEndpoint(s)
+	var getDMSByNameEndpoint = MakeGetDMSByNameEndpoint(s)
+	var updateDMSStatusEndpoint = MakeUpdateDMSStatusEndpoint(s)
+	var updateDMSAuthorizedCAsEndpointEndpoint = MakeUpdateDMSAuthorizedCAsEndpoint(s)
 
 	return Endpoints{
 		HealthEndpoint:                 healthEndpoint,

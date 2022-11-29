@@ -6,13 +6,10 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/tracing/opentracing"
 	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/service"
 	devApi "github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
-
-	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 type Endpoints struct {
@@ -27,63 +24,27 @@ type Endpoints struct {
 	UpdateDeviceDigitalTwinReenrolmentStatusEndpoint endpoint.Endpoint
 }
 
-func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
-	var healthEndpoint endpoint.Endpoint
-	{
-		healthEndpoint = MakeHealthEndpoint(s)
-		healthEndpoint = opentracing.TraceServer(otTracer, "Health")(healthEndpoint)
-	}
-	var getCloudConnectorsEndpoint endpoint.Endpoint
-	{
-		getCloudConnectorsEndpoint = MakeGetCloudConnectorsEndpoint(s)
-		getCloudConnectorsEndpoint = opentracing.TraceServer(otTracer, "GetCloudConnectorsEndpoint")(getCloudConnectorsEndpoint)
-	}
-
-	var synchronizedCAEndpoint endpoint.Endpoint
-	{
-		synchronizedCAEndpoint = MakeSynchronizeCAEndpoint(s)
-		synchronizedCAEndpoint = opentracing.TraceServer(otTracer, "SynchronizedCAEndpoint")(synchronizedCAEndpoint)
-	}
-	var updateDeviceCertStatusEndpoint endpoint.Endpoint
-	{
-		updateDeviceCertStatusEndpoint = MakeUpdateDeviceStatusEndpoint(s)
-		updateDeviceCertStatusEndpoint = opentracing.TraceServer(otTracer, "UpdateDeviceCertStatusEndpoint")(updateDeviceCertStatusEndpoint)
-	}
-	var updateCAStatusEndpoint endpoint.Endpoint
-	{
-		updateCAStatusEndpoint = MakeUpdateCAStatusEndpoint(s)
-		updateCAStatusEndpoint = opentracing.TraceServer(otTracer, "UpdateCAStatusEndpoint")(updateCAStatusEndpoint)
-	}
-	var updateConnectorConfigurationEndpoint endpoint.Endpoint
-	{
-		updateConnectorConfigurationEndpoint = MakeUpdateConnectorConfigurationEndpoint(s)
-		updateConnectorConfigurationEndpoint = opentracing.TraceServer(otTracer, "UpdateConnectorConfigurationEndpoint")(updateConnectorConfigurationEndpoint)
-	}
-	var eventHandlerEndpoint endpoint.Endpoint
-	{
-		eventHandlerEndpoint = MakeEventHandlerEndpoint(s)
-		eventHandlerEndpoint = opentracing.TraceServer(otTracer, "EventHandlerEndpoint")(eventHandlerEndpoint)
-	}
-	var getDeviceConfigurationEndpoint endpoint.Endpoint
-	{
-		getDeviceConfigurationEndpoint = MakeGetDeviceConfigurationEndpoint(s)
-		getDeviceConfigurationEndpoint = opentracing.TraceServer(otTracer, "GetDeviceConfigurationEndpoint")(getDeviceConfigurationEndpoint)
-	}
-	var updateDeviceDigitalTwinReenrolmentStatusEndpoint endpoint.Endpoint
-	{
-		updateDeviceDigitalTwinReenrolmentStatusEndpoint = MakeUpdateDeviceDigitalTwinReenrolmentStatusEndpoint(s)
-		updateDeviceDigitalTwinReenrolmentStatusEndpoint = opentracing.TraceServer(otTracer, "UpdateDeviceDigitalTwinReenrolmentStatusEndpoint")(updateDeviceDigitalTwinReenrolmentStatusEndpoint)
-	}
+func MakeServerEndpoints(s service.Service) Endpoints {
+	var healthEndpoint = MakeHealthEndpoint(s)
+	var getCloudConnectorsEndpoint = MakeGetCloudConnectorsEndpoint(s)
+	var synchronizedCAEndpoint = MakeSynchronizeCAEndpoint(s)
+	var updateDeviceCertStatusEndpoint = MakeUpdateDeviceStatusEndpoint(s)
+	var updateCAStatusEndpoint = MakeUpdateCAStatusEndpoint(s)
+	var updateConnectorConfigurationEndpoint = MakeUpdateConnectorConfigurationEndpoint(s)
+	var eventHandlerEndpoint = MakeEventHandlerEndpoint(s)
+	var getDeviceConfigurationEndpoint = MakeGetDeviceConfigurationEndpoint(s)
+	var updateDeviceDigitalTwinReenrolmentStatusEndpoint = MakeUpdateDeviceDigitalTwinReenrolmentStatusEndpoint(s)
 
 	return Endpoints{
-		HealthEndpoint:                       healthEndpoint,
-		GetCloudConnectorsEndpoint:           getCloudConnectorsEndpoint,
-		SynchronizedCAEndpoint:               synchronizedCAEndpoint,
-		EventHandlerEndpoint:                 eventHandlerEndpoint,
-		UpdateConnectorConfigurationEndpoint: updateConnectorConfigurationEndpoint,
-		UpdateDeviceCertStatusEndpoint:       updateDeviceCertStatusEndpoint,
-		GetDeviceConfigurationEndpoint:       getDeviceConfigurationEndpoint,
-		UpdateCAStatusEndpoint:               updateCAStatusEndpoint,
+		HealthEndpoint:                                   healthEndpoint,
+		GetCloudConnectorsEndpoint:                       getCloudConnectorsEndpoint,
+		SynchronizedCAEndpoint:                           synchronizedCAEndpoint,
+		EventHandlerEndpoint:                             eventHandlerEndpoint,
+		UpdateConnectorConfigurationEndpoint:             updateConnectorConfigurationEndpoint,
+		UpdateDeviceCertStatusEndpoint:                   updateDeviceCertStatusEndpoint,
+		GetDeviceConfigurationEndpoint:                   getDeviceConfigurationEndpoint,
+		UpdateCAStatusEndpoint:                           updateCAStatusEndpoint,
+		UpdateDeviceDigitalTwinReenrolmentStatusEndpoint: updateDeviceDigitalTwinReenrolmentStatusEndpoint,
 	}
 }
 func MakeHealthEndpoint(s service.Service) endpoint.Endpoint {

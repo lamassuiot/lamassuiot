@@ -18,7 +18,6 @@ import (
 	esttransport "github.com/lamassuiot/lamassuiot/pkg/est/server/api/transport"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
-	"github.com/opentracing/opentracing-go"
 	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -95,9 +94,9 @@ func main() {
 		s = service.LoggingMiddleware(mainServer.Logger)(s)
 	}
 
-	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"), opentracing.GlobalTracer())))
-	mainServer.AddHttpHandler("/.well-known/", esttransport.MakeHTTPHandler(s, mainServer.Logger, opentracing.GlobalTracer()))
-	mainServer.AddAmqpConsumer(config.ServiceName, []string{"io.lamassuiot.certificate.update", "io.lamassuiot.certificate.revoke"}, transport.MakeAmqpHandler(s, mainServer.Logger, opentracing.GlobalTracer()))
+	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"))))
+	mainServer.AddHttpHandler("/.well-known/", esttransport.MakeHTTPHandler(s, mainServer.Logger))
+	mainServer.AddAmqpConsumer(config.ServiceName, []string{"io.lamassuiot.certificate.update", "io.lamassuiot.certificate.revoke"}, transport.MakeAmqpHandler(s, mainServer.Logger))
 
 	errs := make(chan error)
 	go func() {

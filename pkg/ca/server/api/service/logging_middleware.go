@@ -274,10 +274,10 @@ func (mw loggingMiddleware) GetCertificates(ctx context.Context, input *api.GetC
 	return mw.next.GetCertificates(ctx, input)
 }
 
-func (mw loggingMiddleware) CheckAndUpdateCACertificateStatus(ctx context.Context, input *api.CheckAndUpdateCACertificateStatusInput) (output *api.CheckAndUpdateCACertificateStatusOutput, err error) {
+func (mw loggingMiddleware) GetCertificatesAboutToExpire(ctx context.Context, input *api.GetCertificatesAboutToExpireInput) (output *api.GetCertificatesAboutToExpireOutput, err error) {
 	defer func(begin time.Time) {
 		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "CheckAndUpdateCACertificateStatus")
+		logMsg = append(logMsg, "method", "GetCertificatesAboutToExpire")
 		logMsg = append(logMsg, "took", time.Since(begin))
 		logMsg = append(logMsg, "input", input)
 		if err == nil {
@@ -289,5 +289,23 @@ func (mw loggingMiddleware) CheckAndUpdateCACertificateStatus(ctx context.Contex
 		}
 		mw.logger.Log(logMsg...)
 	}(time.Now())
-	return mw.next.CheckAndUpdateCACertificateStatus(ctx, input)
+	return mw.next.GetCertificatesAboutToExpire(ctx, input)
+}
+
+func (mw loggingMiddleware) GetExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.GetExpiredAndOutOfSyncCertificatesInput) (output *api.GetExpiredAndOutOfSyncCertificatesOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = []interface{}{}
+		logMsg = append(logMsg, "method", "GetExpiredAndOutOfSyncCertificates")
+		logMsg = append(logMsg, "took", time.Since(begin))
+		logMsg = append(logMsg, "input", input)
+		if err == nil {
+			if output != nil {
+				logMsg = append(logMsg, "output", output.ToSerializedLog())
+			}
+		} else {
+			logMsg = append(logMsg, "err", err)
+		}
+		mw.logger.Log(logMsg...)
+	}(time.Now())
+	return mw.next.GetExpiredAndOutOfSyncCertificates(ctx, input)
 }
