@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/go-kit/log"
@@ -52,38 +53,69 @@ func main() {
 	}
 	deviceRepo := postgresRepository.NewDevicesPostgresDB(db, mainServer.Logger)
 	logsRepo := postgresRepository.NewLogsPostgresDB(db, mainServer.Logger)
-	caClient, err := lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
-		URL: &url.URL{
-			Scheme: "https",
-			Host:   config.LamassuCAAddress,
-		},
-		AuthMethod: clientUtils.AuthMethodMutualTLS,
-		AuthMethodConfig: &clientUtils.MutualTLSConfig{
-			ClientCert: config.CertFile,
-			ClientKey:  config.KeyFile,
-		},
-		CACertificate: config.LamassuCACertFile,
-	})
+
+	var caClient lamassucaclient.LamassuCAClient
+	parsedLamassuCAURL, err := url.Parse(config.LamassuCAAddress)
 	if err != nil {
-		level.Error(mainServer.Logger).Log("msg", "Could not connect to LamassuCA", "err", err)
+		level.Error(mainServer.Logger).Log("msg", "Could not parse CA URL", "err", err)
 		os.Exit(1)
 	}
 
-	dmsClient, err := lamassudmsclient.NewLamassuDMSManagerClientConfig(clientUtils.BaseClientConfigurationuration{
-		URL: &url.URL{
-			Scheme: "https",
-			Host:   config.LamassuDMSManagerAddress,
-		},
-		AuthMethod: clientUtils.AuthMethodMutualTLS,
-		AuthMethodConfig: &clientUtils.MutualTLSConfig{
-			ClientCert: config.CertFile,
-			ClientKey:  config.KeyFile,
-		},
-		CACertificate: config.LamassuDMSManagerCertFile,
-	})
+	if strings.HasPrefix(config.LamassuCAAddress, "https") {
+		caClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
+			URL:        parsedLamassuCAURL,
+			AuthMethod: clientUtils.AuthMethodMutualTLS,
+			AuthMethodConfig: &clientUtils.MutualTLSConfig{
+				ClientCert: config.CertFile,
+				ClientKey:  config.KeyFile,
+			},
+			CACertificate: config.LamassuCACertFile,
+		})
+		if err != nil {
+			level.Error(mainServer.Logger).Log("msg", "Could not create LamassuCA client", "err", err)
+			os.Exit(1)
+		}
+	} else {
+		caClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
+			URL:        parsedLamassuCAURL,
+			AuthMethod: clientUtils.AuthMethodNone,
+		})
+		if err != nil {
+			level.Error(mainServer.Logger).Log("msg", "Could not create LamassuCA client", "err", err)
+			os.Exit(1)
+		}
+	}
+
+	var dmsClient lamassudmsclient.LamassuDMSManagerClient
+	parsedLamassuDMSURL, err := url.Parse(config.LamassuDMSManagerAddress)
 	if err != nil {
-		level.Error(mainServer.Logger).Log("msg", "Could not connect to LamassuDMSManager", "err", err)
+		level.Error(mainServer.Logger).Log("msg", "Could not parse DMS URL", "err", err)
 		os.Exit(1)
+	}
+
+	if strings.HasPrefix(config.LamassuCAAddress, "https") {
+		dmsClient, err = lamassudmsclient.NewLamassuDMSManagerClientConfig(clientUtils.BaseClientConfigurationuration{
+			URL:        parsedLamassuDMSURL,
+			AuthMethod: clientUtils.AuthMethodMutualTLS,
+			AuthMethodConfig: &clientUtils.MutualTLSConfig{
+				ClientCert: config.CertFile,
+				ClientKey:  config.KeyFile,
+			},
+			CACertificate: config.LamassuCACertFile,
+		})
+		if err != nil {
+			level.Error(mainServer.Logger).Log("msg", "Could not create LamassuDMSManager client", "err", err)
+			os.Exit(1)
+		}
+	} else {
+		dmsClient, err = lamassudmsclient.NewLamassuDMSManagerClientConfig(clientUtils.BaseClientConfigurationuration{
+			URL:        parsedLamassuDMSURL,
+			AuthMethod: clientUtils.AuthMethodNone,
+		})
+		if err != nil {
+			level.Error(mainServer.Logger).Log("msg", "Could not create LamassuDMSManager client", "err", err)
+			os.Exit(1)
+		}
 	}
 
 	var s service.Service

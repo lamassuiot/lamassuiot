@@ -11,11 +11,11 @@ type DeviceManagerConfig struct {
 	PostgresHostname string `required:"true" split_words:"true"`
 	PostgresPort     string `required:"true" split_words:"true"`
 
-	LamassuCACertFile string `required:"true" split_words:"true"`
 	LamassuCAAddress  string `required:"true" split_words:"true"`
+	LamassuCACertFile string `split_words:"true"`
 
-	LamassuDMSManagerCertFile string `required:"true" split_words:"true"`
 	LamassuDMSManagerAddress  string `required:"true" split_words:"true"`
+	LamassuDMSManagerCertFile string `split_words:"true"`
 
 	MinimumReenrollDays int `required:"true" split_words:"true"`
 }

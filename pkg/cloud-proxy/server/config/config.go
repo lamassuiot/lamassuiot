@@ -18,11 +18,11 @@ type CloudProxyConfig struct {
 	ConsulPort     string `required:"true" split_words:"true"`
 	ConsulCA       string `required:"true" split_words:"true"`
 
-	LamassuCACertFile string `required:"true" split_words:"true"`
 	LamassuCAAddress  string `required:"true" split_words:"true"`
+	LamassuCACertFile string `split_words:"true"`
 
 	LamassuConnectorsMutualTLS bool   `required:"true" split_words:"true"`
-	LamassuConnectorsCertFile  string `required:"true" split_words:"true"`
+	LamassuConnectorsCertFile  string `split_words:"true"`
 }
 
 func NewCloudProxyConfig() *CloudProxyConfig {

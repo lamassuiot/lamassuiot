@@ -11,7 +11,7 @@ type OCSPConfig struct {
 	SignerCert string `required:"true" split_words:"true"`
 
 	LamassuCAAddress  string `required:"true" split_words:"true"`
-	LamassuCACertFile string `required:"true" split_words:"true"`
+	LamassuCACertFile string `split_words:"true"`
 }
 
 func NewOCSPConfig() *OCSPConfig {

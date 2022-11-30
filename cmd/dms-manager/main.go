@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/go-kit/log"
@@ -16,7 +17,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/config"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
-	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
@@ -36,27 +36,38 @@ func main() {
 		panic(err)
 	}
 
-	if err := db.Use(otelgorm.NewPlugin()); err != nil {
-		level.Error(mainServer.Logger).Log("msg", "Could not initialize OpenTelemetry DB-GORM plugin", "err", err)
+	dmsRepo := postgresRepository.NewPostgresDB(db, mainServer.Logger)
+
+	var caClient lamassucaclient.LamassuCAClient
+	parsedLamassuCAURL, err := url.Parse(config.LamassuCAAddress)
+	if err != nil {
+		level.Error(mainServer.Logger).Log("msg", "Could not parse CA URL", "err", err)
 		os.Exit(1)
 	}
 
-	dmsRepo := postgresRepository.NewPostgresDB(db, mainServer.Logger)
-	caClient, err := lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
-		URL: &url.URL{
-			Scheme: "https",
-			Host:   config.LamassuCAAddress,
-		},
-		AuthMethod: clientUtils.AuthMethodMutualTLS,
-		AuthMethodConfig: &clientUtils.MutualTLSConfig{
-			ClientCert: config.CertFile,
-			ClientKey:  config.KeyFile,
-		},
-		CACertificate: config.LamassuCACertFile,
-	})
-	if err != nil {
-		level.Error(mainServer.Logger).Log("msg", "Could not connect to LamassuCA", "err", err)
-		os.Exit(1)
+	if strings.HasPrefix(config.LamassuCAAddress, "https") {
+		caClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
+			URL:        parsedLamassuCAURL,
+			AuthMethod: clientUtils.AuthMethodMutualTLS,
+			AuthMethodConfig: &clientUtils.MutualTLSConfig{
+				ClientCert: config.CertFile,
+				ClientKey:  config.KeyFile,
+			},
+			CACertificate: config.LamassuCACertFile,
+		})
+		if err != nil {
+			level.Error(mainServer.Logger).Log("msg", "Could not create LamassuCA client", "err", err)
+			os.Exit(1)
+		}
+	} else {
+		caClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
+			URL:        parsedLamassuCAURL,
+			AuthMethod: clientUtils.AuthMethodNone,
+		})
+		if err != nil {
+			level.Error(mainServer.Logger).Log("msg", "Could not create LamassuCA client", "err", err)
+			os.Exit(1)
+		}
 	}
 
 	var s service.Service
