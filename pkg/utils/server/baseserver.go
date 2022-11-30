@@ -149,6 +149,7 @@ func (s *Server) Run(errorsChannel chan error) {
 			amq_cfg.Certificates = append(amq_cfg.Certificates, cert)
 
 			amqpConn, err = amqp.DialTLS(fmt.Sprintf("amqps://%s%s:%s", userPassUrlPrefix, s.cfg.AmqpServerHost, s.cfg.AmqpServerPort), &amq_cfg)
+
 			if err != nil {
 				level.Error(s.Logger).Log("err", err, "msg", "Failed to connect to AMQP with TLS")
 				os.Exit(1)
