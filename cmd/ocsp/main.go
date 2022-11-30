@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/go-kit/log"
@@ -48,21 +49,36 @@ func main() {
 		os.Exit(1)
 	}
 
-	lamassuCAClient, err := lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
-		URL: &url.URL{
-			Scheme: "https",
-			Host:   config.LamassuCAAddress,
-		},
-		AuthMethod: clientUtils.AuthMethodMutualTLS,
-		AuthMethodConfig: &clientUtils.MutualTLSConfig{
-			ClientCert: config.CertFile,
-			ClientKey:  config.KeyFile,
-		},
-		CACertificate: config.LamassuCACertFile,
-	})
+	var lamassuCAClient lamassucaclient.LamassuCAClient
+	parsedLamassuCAURL, err := url.Parse(config.LamassuCAAddress)
 	if err != nil {
-		level.Error(mainServer.Logger).Log("msg", "Could not connect to LamassuCA", "err", err)
+		level.Error(mainServer.Logger).Log("msg", "Could not parse CA URL", "err", err)
 		os.Exit(1)
+	}
+
+	if strings.HasPrefix(config.LamassuCAAddress, "https") {
+		lamassuCAClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
+			URL:        parsedLamassuCAURL,
+			AuthMethod: clientUtils.AuthMethodMutualTLS,
+			AuthMethodConfig: &clientUtils.MutualTLSConfig{
+				ClientCert: config.CertFile,
+				ClientKey:  config.KeyFile,
+			},
+			CACertificate: config.LamassuCACertFile,
+		})
+		if err != nil {
+			level.Error(mainServer.Logger).Log("msg", "Could not create LamassuCA client", "err", err)
+			os.Exit(1)
+		}
+	} else {
+		lamassuCAClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
+			URL:        parsedLamassuCAURL,
+			AuthMethod: clientUtils.AuthMethodNone,
+		})
+		if err != nil {
+			level.Error(mainServer.Logger).Log("msg", "Could not create LamassuCA client", "err", err)
+			os.Exit(1)
+		}
 	}
 
 	s := service.NewOCSPService(lamassuCAClient, rsaKey, cert)
