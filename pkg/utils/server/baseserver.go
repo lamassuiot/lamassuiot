@@ -63,11 +63,13 @@ type amqpConsumerConfig struct {
 }
 
 type Server struct {
-	Logger        log.Logger
-	cfg           *BaseConfiguration
-	mux           *http.ServeMux
-	amqpConsumers map[string]amqpConsumerConfig //map queuName to amqptransport.Subscriber and routing key
-	AmqpPublisher chan AmqpPublishMessage
+	Logger              log.Logger
+	cfg                 *BaseConfiguration
+	mux                 *http.ServeMux
+	amqpConn            *amqp.Connection
+	amqpChanNotifyClose chan *amqp.Error
+	amqpConsumers       map[string]amqpConsumerConfig //map queuName to amqptransport.Subscriber and routing key
+	AmqpPublisher       chan AmqpPublishMessage
 }
 
 func NewServer(config Configuration) *Server {
@@ -121,49 +123,34 @@ func (s *Server) AddHttpFuncHandler(path string, handler func(http.ResponseWrite
 
 func (s *Server) Run(errorsChannel chan error) {
 	go func() {
-		var err error
-		var amqpConn *amqp.Connection
-		userPassUrlPrefix := ""
-		if s.cfg.AmqpServerUseBasicAuth {
-			userPassUrlPrefix = fmt.Sprintf("%s:%s@", s.cfg.AmqpServerUsername, s.cfg.AmqpServerPassword)
+		err := s.buildAMQPConnection()
+
+		if err != nil {
+			os.Exit(1)
 		}
 
-		if s.cfg.AmqpServerEnableTLS {
-			amq_cfg := tls.Config{}
-			amq_cfg.RootCAs = x509.NewCertPool()
-
-			amqpCA, err := ioutil.ReadFile(s.cfg.AmqpServerCACert)
-			if err != nil {
-				level.Error(s.Logger).Log("err", err, "msg", "Could not read AMQP CA certificate")
-				os.Exit(1)
+		go func() {
+			for {
+				select { //check connection
+				case err = <-s.amqpChanNotifyClose:
+					//work with error
+					level.Error(s.Logger).Log("err", err, "msg", "Disconnected from AMQP")
+					for {
+						err = s.buildAMQPConnection()
+						if err != nil {
+							level.Error(s.Logger).Log("err", err, "msg", "Failed to reconnect. sleeping for 5 secodns")
+							time.Sleep(5 * time.Second)
+						} else {
+							break
+						}
+					}
+					level.Info(s.Logger).Log("err", err, "msg", "Reconnected to AMQP")
+				}
 			}
-
-			amq_cfg.RootCAs.AppendCertsFromPEM(amqpCA)
-			cert, err := tls.LoadX509KeyPair(s.cfg.CertFile, s.cfg.KeyFile)
-
-			if err != nil {
-				level.Error(s.Logger).Log("err", err, "msg", "Could not load AMQP TLS certificate")
-				os.Exit(1)
-			}
-
-			amq_cfg.Certificates = append(amq_cfg.Certificates, cert)
-
-			amqpConn, err = amqp.DialTLS(fmt.Sprintf("amqps://%s%s:%s", userPassUrlPrefix, s.cfg.AmqpServerHost, s.cfg.AmqpServerPort), &amq_cfg)
-
-			if err != nil {
-				level.Error(s.Logger).Log("err", err, "msg", "Failed to connect to AMQP with TLS")
-				os.Exit(1)
-			}
-		} else {
-			amqpConn, err = amqp.Dial(fmt.Sprintf("amqp://%s%s:%s", userPassUrlPrefix, s.cfg.AmqpServerHost, s.cfg.AmqpServerPort))
-			if err != nil {
-				level.Error(s.Logger).Log("err", err, "msg", "Failed to connect to AMQP")
-				os.Exit(1)
-			}
-		}
+		}()
 		// defer amqpConn.Close()
 
-		amqpChannel, err := amqpConn.Channel()
+		amqpChannel, err := s.amqpConn.Channel()
 		if err != nil {
 			level.Error(s.Logger).Log("err", err, "msg", "Failed to create AMQP channel")
 			os.Exit(1)
@@ -305,4 +292,51 @@ func accessControl(h http.Handler) http.Handler {
 
 		h.ServeHTTP(w, r)
 	})
+}
+
+func (s *Server) buildAMQPConnection() error {
+	userPassUrlPrefix := ""
+	var amqpConn *amqp.Connection
+	if s.cfg.AmqpServerUseBasicAuth {
+		userPassUrlPrefix = fmt.Sprintf("%s:%s@", s.cfg.AmqpServerUsername, s.cfg.AmqpServerPassword)
+	}
+
+	if s.cfg.AmqpServerEnableTLS {
+		amq_cfg := tls.Config{}
+		amq_cfg.RootCAs = x509.NewCertPool()
+
+		amqpCA, err := ioutil.ReadFile(s.cfg.AmqpServerCACert)
+		if err != nil {
+			level.Error(s.Logger).Log("err", err, "msg", "Could not read AMQP CA certificate")
+			os.Exit(1)
+		}
+
+		amq_cfg.RootCAs.AppendCertsFromPEM(amqpCA)
+		cert, err := tls.LoadX509KeyPair(s.cfg.CertFile, s.cfg.KeyFile)
+
+		if err != nil {
+			level.Error(s.Logger).Log("err", err, "msg", "Could not load AMQP TLS certificate")
+			os.Exit(1)
+		}
+
+		amq_cfg.Certificates = append(amq_cfg.Certificates, cert)
+
+		amqpConn, err = amqp.DialTLS(fmt.Sprintf("amqps://%s%s:%s", userPassUrlPrefix, s.cfg.AmqpServerHost, s.cfg.AmqpServerPort), &amq_cfg)
+
+		if err != nil {
+			level.Error(s.Logger).Log("err", err, "msg", "Failed to connect to AMQP with TLS")
+			return err
+		}
+		s.amqpConn = amqpConn
+	} else {
+		amqpConn, err := amqp.Dial(fmt.Sprintf("amqp://%s%s:%s", userPassUrlPrefix, s.cfg.AmqpServerHost, s.cfg.AmqpServerPort))
+		if err != nil {
+			level.Error(s.Logger).Log("err", err, "msg", "Failed to connect to AMQP")
+			return err
+		}
+		s.amqpConn = amqpConn
+	}
+
+	s.amqpChanNotifyClose = s.amqpConn.NotifyClose(make(chan *amqp.Error)) //error channel
+	return nil
 }

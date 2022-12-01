@@ -145,8 +145,12 @@ func (c *lamassuCaClientConfig) CreateCA(ctx context.Context, input *api.CreateC
 	resp, err := c.client.Do(req, &output)
 
 	if err != nil {
-		if resp.StatusCode == http.StatusConflict {
-			return &api.CreateCAOutput{}, errors.New(ErrDuplicateCA)
+		if resp != nil {
+			if resp.StatusCode == http.StatusConflict {
+				return &api.CreateCAOutput{}, errors.New(ErrDuplicateCA)
+			}
+		} else {
+			return &api.CreateCAOutput{}, err
 		}
 
 		return &api.CreateCAOutput{}, err
