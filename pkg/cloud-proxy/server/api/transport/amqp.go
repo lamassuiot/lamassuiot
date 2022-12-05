@@ -7,13 +7,12 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	amqptransport "github.com/go-kit/kit/transport/amqp"
-	"github.com/go-kit/log"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/endpoint"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/service"
 	"github.com/streadway/amqp"
 )
 
-func MakeAmqpHandler(s service.Service, logger log.Logger) *amqptransport.Subscriber {
+func MakeAmqpHandler(s service.Service) *amqptransport.Subscriber {
 	endpoints := endpoint.MakeServerEndpoints(s)
 	options := []amqptransport.SubscriberOption{}
 

@@ -12,29 +12,27 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
+	log "github.com/sirupsen/logrus"
+
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 )
 
 type pemProviderContext struct {
-	logger           log.Logger
 	config           api.EngineProviderInfo
 	storageDirectory string
 }
 
-func NewGolangPEMEngine(logger log.Logger, storageDirectory string) (CryptoEngine, error) {
+func NewGolangPEMEngine(storageDirectory string) (CryptoEngine, error) {
 
 	pkcs11ProviderSupportedKeyTypes := []api.SupportedKeyTypeInfo{}
 
 	pkcs11ProviderSupportedKeyTypes = append(pkcs11ProviderSupportedKeyTypes, api.SupportedKeyTypeInfo{
 		Type:        "RSA",
 		MinimumSize: 1024,
-		MaximumSize: 8192,
+		MaximumSize: 4096,
 	})
 
 	return &pemProviderContext{
-		logger:           logger,
 		storageDirectory: storageDirectory,
 		config: api.EngineProviderInfo{
 			Provider:          "Golang PEM",
@@ -102,7 +100,7 @@ func (p *pemProviderContext) GetPrivateKeyByID(keyID string) (crypto.Signer, err
 func (p *pemProviderContext) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
 	hsmKey, err := p.GetPrivateKeyByID(keyID)
 	if hsmKey != nil {
-		level.Warn(p.logger).Log("msg", "RSA private key already exists and will be overwritten", "err", err)
+		log.Warn("RSA private key already exists and will be overwritten: ", err)
 		err = p.DeleteKey(keyID)
 		if err != nil {
 			return nil, err
@@ -111,12 +109,12 @@ func (p *pemProviderContext) CreateRSAPrivateKey(keySize int, keyID string) (cry
 
 	key, err := rsa.GenerateKey(rand.Reader, keySize)
 	if err != nil {
-		level.Debug(p.logger).Log("msg", "Could not create RSA private key", "err", err)
+		log.Error("Could not create RSA private key: ", err)
 		return nil, err
 	}
 
 	if _, err := os.Stat(p.storageDirectory); os.IsNotExist(err) {
-		level.Warn(p.logger).Log("msg", fmt.Sprintf("PEM directory [%s]does not exist. Will create such directory", p.storageDirectory), "err", err)
+		log.Warn(fmt.Sprintf("PEM directory [%s] does not exist. Will create such directory", p.storageDirectory))
 		os.MkdirAll(p.storageDirectory, 0755)
 	}
 

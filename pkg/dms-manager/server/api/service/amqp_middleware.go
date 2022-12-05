@@ -8,11 +8,10 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/cloudevents/sdk-go/v2/event"
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/streadway/amqp"
 )
@@ -35,15 +34,13 @@ func CreateEvent(ctx context.Context, version string, source string, eventType s
 
 type amqpMiddleware struct {
 	amqpPublisher chan server.AmqpPublishMessage
-	logger        log.Logger
 	next          Service
 }
 
-func NewAMQPMiddleware(amqpPublisher chan server.AmqpPublishMessage, logger log.Logger) Middleware {
+func NewAMQPMiddleware(amqpPublisher chan server.AmqpPublishMessage) Middleware {
 	return func(next Service) Service {
 		return &amqpMiddleware{
 			amqpPublisher: amqpPublisher,
-			logger:        logger,
 			next:          next,
 		}
 	}
@@ -53,7 +50,7 @@ func (mw *amqpMiddleware) sendAMQPMessage(eventType string, output interface{}) 
 	event := CreateEvent(context.Background(), "1.0", Source, eventType, output)
 	eventBytes, marshalErr := json.Marshal(event)
 	if marshalErr != nil {
-		level.Error(mw.logger).Log("msg", "Error while serializing event", "err", marshalErr)
+		log.Error("Error while serializing event: ", marshalErr)
 	}
 
 	msg := server.AmqpPublishMessage{

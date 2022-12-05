@@ -11,8 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/log/level"
 	caClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
@@ -25,6 +23,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
 	"github.com/lib/pq"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
 )
 
@@ -53,18 +52,16 @@ type devicesService struct {
 	devicesRepo             repository.Devices
 	logsRepo                repository.DeviceLogs
 	statsRepo               repository.Statistics
-	logger                  log.Logger
 	caClient                caClient.LamassuCAClient
 	dmsManagerClient        dmsManagerClient.LamassuDMSManagerClient
 	minimumReenrollmentDays int
 }
 
-func NewDeviceManagerService(logger log.Logger, devicesRepo repository.Devices, deviceLogsRep repository.DeviceLogs, statsRepo repository.Statistics, minimumReenrollmentDays int, caClient caClient.LamassuCAClient, dmsManagerClient dmsManagerClient.LamassuDMSManagerClient) Service {
+func NewDeviceManagerService(devicesRepo repository.Devices, deviceLogsRep repository.DeviceLogs, statsRepo repository.Statistics, minimumReenrollmentDays int, caClient caClient.LamassuCAClient, dmsManagerClient dmsManagerClient.LamassuDMSManagerClient) Service {
 	svc := &devicesService{
 		devicesRepo:             devicesRepo,
 		logsRepo:                deviceLogsRep,
 		statsRepo:               statsRepo,
-		logger:                  logger,
 		caClient:                caClient,
 		dmsManagerClient:        dmsManagerClient,
 		minimumReenrollmentDays: minimumReenrollmentDays,
@@ -178,7 +175,7 @@ func (s *devicesService) DecommisionDevice(ctx context.Context, input *api.Decom
 		})
 
 		if err != nil {
-			level.Debug(s.logger).Log("err", err, "msg", "Could not revoke slot "+slot.ID+" certificate for device "+input.DeviceID)
+			log.Warn(fmt.Sprintf("Could not revoke slot [%s] certificate for device [%s]: %s", slot.ID, input.DeviceID, err))
 			continue
 		}
 
@@ -894,7 +891,7 @@ func (s *devicesService) ScanDevicesAndUpdateStatistics() {
 	ctx := context.Background()
 
 	t0 := time.Now()
-	level.Debug(s.logger).Log("msg", "Starting devices scan...")
+	log.Info("Starting devices scan...")
 	counter := 0
 	deviceStats := map[api.DeviceStatus]int{}
 	slotStatus := map[caApi.CertificateStatus]int{}
@@ -907,7 +904,7 @@ func (s *devicesService) ScanDevicesAndUpdateStatistics() {
 			deviceStats[device.Status]++
 
 			if counter%1000 == 0 {
-				level.Debug(s.logger).Log("msg", "Scanned devices", "count", counter, "time", time.Since(t0).String())
+				log.Info(fmt.Sprintf("Scanned devices. Count [%d] in %s", counter, time.Since(t0).String()))
 			}
 
 		},
@@ -918,5 +915,5 @@ func (s *devicesService) ScanDevicesAndUpdateStatistics() {
 		SlotsStats:   slotStatus,
 	})
 
-	level.Debug(s.logger).Log("msg", "Scan devices finished in "+time.Since(t0).String())
+	log.Info("Scan devices finished in " + time.Since(t0).String())
 }

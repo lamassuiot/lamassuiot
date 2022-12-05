@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/go-kit/kit/log"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/repository"
 	"gorm.io/gorm"
@@ -53,16 +52,15 @@ func (d SlotLogDAO) toLog() api.Log {
 	}
 }
 
-func NewLogsPostgresDB(db *gorm.DB, logger log.Logger) repository.DeviceLogs {
+func NewLogsPostgresDB(db *gorm.DB) repository.DeviceLogs {
 	db.AutoMigrate(&DeviceLogDAO{})
 	db.AutoMigrate(&SlotLogDAO{})
 
-	return &logsDBContext{db, logger}
+	return &logsDBContext{db}
 }
 
 type logsDBContext struct {
 	*gorm.DB
-	logger log.Logger
 }
 
 func (db *logsDBContext) InsertDeviceLog(ctx context.Context, deviceID string, logType api.LogType, logMessage string, logDescription string) error {

@@ -10,8 +10,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
@@ -47,11 +45,10 @@ func filtrableDMSModelFields() map[string]types.Filter {
 	return fieldFiltersMap
 }
 
-func MakeHTTPHandler(s service.Service, logger log.Logger) http.Handler {
+func MakeHTTPHandler(s service.Service) http.Handler {
 	r := mux.NewRouter()
 	e := endpoint.MakeServerEndpoints(s)
 	options := []httptransport.ServerOption{
-		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
 	}
 

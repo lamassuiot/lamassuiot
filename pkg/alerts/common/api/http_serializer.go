@@ -22,6 +22,7 @@ type SubscriptionSerialized struct {
 	UserID           string            `json:"user_id"`
 	Conditions       []string          `json:"conditions"`
 	Channel          ChannelSerialized `json:"channel"`
+	ConditionType    ConditionType     `json:"condition_type"`
 }
 
 func (o *Subscription) Serialize() SubscriptionSerialized {
@@ -32,6 +33,7 @@ func (o *Subscription) Serialize() SubscriptionSerialized {
 		UserID:           o.UserID,
 		Conditions:       o.Conditions,
 		Channel:          o.Channel.Serialize(),
+		ConditionType:    o.ConditionType,
 	}
 }
 

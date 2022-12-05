@@ -15,8 +15,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/vault/api"
 	"github.com/hashicorp/vault/builtin/logical/pki"
@@ -24,7 +22,6 @@ import (
 	"github.com/hashicorp/vault/vault"
 	"github.com/jakehl/goid"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
-	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
@@ -59,16 +56,9 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/service/outputchannels"
 	alertsTransport "github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/transport"
-	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/config"
 )
 
 func BuildCATestServerWithVault(vaultclient *api.Client) (*httptest.Server, *caService.Service, error) {
-	var logger log.Logger
-
-	logger = log.NewNopLogger()
-	logger = level.NewFilter(logger, level.AllowDebug())
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	logger = log.With(logger, "caller", log.DefaultCaller)
 
 	dialector := sqlite.Open(fmt.Sprintf("file:%s?mode=memory", goid.NewV4UUID().String()))
 	db, err := gorm.Open(dialector, &gorm.Config{
@@ -78,11 +68,11 @@ func BuildCATestServerWithVault(vaultclient *api.Client) (*httptest.Server, *caS
 		return nil, nil, err
 	}
 
-	certificateRepository := caRepository.NewPostgresDB(db, logger)
+	certificateRepository := caRepository.NewPostgresDB(db)
 	var svc caService.Service
 
-	engine, _ := x509engines.NewVaultx509EngineWithClient(vaultclient, "", "pki/lamassu/dev/", "", "", "", "", "http://ocsp.test", logger)
-	svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test", 30)
+	engine, _ := x509engines.NewVaultx509EngineWithClient(vaultclient, "", "pki/lamassu/dev/", "", "", "", "", "http://ocsp.test")
+	svc = caService.NewCAService(engine, certificateRepository, "http://ocsp.test", 30)
 
 	svc = caService.NewInputValudationMiddleware()(svc)
 
@@ -90,7 +80,7 @@ func BuildCATestServerWithVault(vaultclient *api.Client) (*httptest.Server, *caS
 		return nil, nil, err
 	}
 
-	handler := caTransport.MakeHTTPHandler(svc, logger)
+	handler := caTransport.MakeHTTPHandler(svc)
 
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", handler))
@@ -100,12 +90,6 @@ func BuildCATestServerWithVault(vaultclient *api.Client) (*httptest.Server, *caS
 }
 
 func BuildCATestServer() (*httptest.Server, *caService.Service, error) {
-	var logger log.Logger
-
-	logger = log.NewNopLogger()
-	logger = level.NewFilter(logger, level.AllowDebug())
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	logger = log.With(logger, "caller", log.DefaultCaller)
 
 	dialector := sqlite.Open(fmt.Sprintf("file:%s?mode=memory", goid.NewV4UUID().String()))
 	db, err := gorm.Open(dialector, &gorm.Config{
@@ -115,20 +99,20 @@ func BuildCATestServer() (*httptest.Server, *caService.Service, error) {
 		return nil, nil, err
 	}
 
-	certificateRepository := caRepository.NewPostgresDB(db, logger)
+	certificateRepository := caRepository.NewPostgresDB(db)
 	dir := fmt.Sprintf("/tmp/test/%s", goid.NewV4UUID().String())
 	os.RemoveAll(dir)
 	os.Mkdir(dir, 0755)
-	goPemEngine, _ := cryptoEngines.NewGolangPEMEngine(logger, dir)
+	goPemEngine, _ := cryptoEngines.NewGolangPEMEngine(dir)
 	engine := x509engines.NewStandardx509Engine(goPemEngine, "https://ocsp.test")
 
 	var svc caService.Service
-	svc = caService.NewCAService(logger, engine, certificateRepository, "http://ocsp.test", 30)
+	svc = caService.NewCAService(engine, certificateRepository, "http://ocsp.test", 30)
 	svc = caService.NewInputValudationMiddleware()(svc)
 
 	// svc = caService.LoggingMiddleware(logger)(svc)
 
-	handler := caTransport.MakeHTTPHandler(svc, logger)
+	handler := caTransport.MakeHTTPHandler(svc)
 
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", handler))
@@ -138,13 +122,6 @@ func BuildCATestServer() (*httptest.Server, *caService.Service, error) {
 }
 
 func BuildDMSManagerTestServer(CATestServer *httptest.Server) (*httptest.Server, *dmsService.Service, error) {
-	var logger log.Logger
-
-	logger = log.NewNopLogger()
-	logger = level.NewFilter(logger, level.AllowDebug())
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	logger = log.With(logger, "caller", log.DefaultCaller)
-
 	fmt.Sprintf("file:%s?mode=memory", goid.NewV4UUID().String())
 	dialector := sqlite.Open(fmt.Sprintf("file:%s?mode=memory", goid.NewV4UUID().String()))
 	db, err := gorm.Open(dialector, &gorm.Config{
@@ -154,7 +131,7 @@ func BuildDMSManagerTestServer(CATestServer *httptest.Server) (*httptest.Server,
 		return nil, nil, err
 	}
 
-	dmsRepository := dmsRepository.NewPostgresDB(db, logger)
+	dmsRepository := dmsRepository.NewPostgresDB(db)
 
 	CATestServerURL, err := url.Parse(CATestServer.URL)
 	if err != nil {
@@ -170,10 +147,10 @@ func BuildDMSManagerTestServer(CATestServer *httptest.Server) (*httptest.Server,
 	}
 
 	var svc dmsService.Service
-	svc = dmsService.NewDMSManagerService(logger, dmsRepository, &lamassuCAClient)
+	svc = dmsService.NewDMSManagerService(dmsRepository, &lamassuCAClient)
 	svc = dmsService.NewInputValudationMiddleware()(svc)
 
-	handler := dmsTransport.MakeHTTPHandler(svc, logger)
+	handler := dmsTransport.MakeHTTPHandler(svc)
 
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", handler))
@@ -183,13 +160,6 @@ func BuildDMSManagerTestServer(CATestServer *httptest.Server) (*httptest.Server,
 }
 
 func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *httptest.Server) (*httptest.Server, *deviceService.Service, error) {
-	var logger log.Logger
-
-	logger = log.NewNopLogger()
-	logger = level.NewFilter(logger, level.AllowDebug())
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	logger = log.With(logger, "caller", log.DefaultCaller)
-
 	dialector := sqlite.Open(fmt.Sprintf("file:%s?mode=memory", goid.NewV4UUID().String()))
 	db, err := gorm.Open(dialector, &gorm.Config{
 		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
@@ -198,7 +168,7 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 		return nil, nil, err
 	}
 
-	deviceRepository := postgresRepository.NewDevicesPostgresDB(db, logger)
+	deviceRepository := postgresRepository.NewDevicesPostgresDB(db)
 
 	CATestServerURL, err := url.Parse(CATestServer.URL)
 	if err != nil {
@@ -228,15 +198,15 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 	if err != nil {
 		return nil, nil, err
 	}
-	logsRepo := postgresRepository.NewLogsPostgresDB(db, logger)
+	logsRepo := postgresRepository.NewLogsPostgresDB(db)
 	if err != nil {
 		return nil, nil, err
 	}
-	svc := deviceService.NewDeviceManagerService(logger, deviceRepository, logsRepo, statsRepo, 30, lamassuCAClient, lamassuDMSClient)
+	svc := deviceService.NewDeviceManagerService(deviceRepository, logsRepo, statsRepo, 30, lamassuCAClient, lamassuDMSClient)
 	svc = deviceService.NewInputValudationMiddleware()(svc)
 
-	handler := deviceTransport.MakeHTTPHandler(svc, logger)
-	estHandler := estTransport.MakeHTTPHandler(svc, logger)
+	handler := deviceTransport.MakeHTTPHandler(svc)
+	estHandler := estTransport.MakeHTTPHandler(svc)
 
 	mux := http.NewServeMux()
 	mux.Handle("/v1/", http.StripPrefix("/v1", handler))
@@ -247,13 +217,6 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 }
 
 func BuildOCSPTestServer(CATestServer *httptest.Server) (*httptest.Server, error) {
-	var logger log.Logger
-
-	logger = log.NewNopLogger()
-	logger = level.NewFilter(logger, level.AllowDebug())
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	logger = log.With(logger, "caller", log.DefaultCaller)
-
 	CATestServerURL, err := url.Parse(CATestServer.URL)
 	if err != nil {
 		return nil, err
@@ -290,7 +253,7 @@ func BuildOCSPTestServer(CATestServer *httptest.Server) (*httptest.Server, error
 
 	svc := ocspService.NewOCSPService(lamassuCAClient, ocspSigner, ocspCertificate)
 
-	handler := ocspTransport.MakeHTTPHandler(svc, logger, false)
+	handler := ocspTransport.MakeHTTPHandler(svc, false)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)
@@ -300,40 +263,22 @@ func BuildOCSPTestServer(CATestServer *httptest.Server) (*httptest.Server, error
 }
 
 func BuildMailTestServer(jsonTemplate string, smtpConfig outputchannels.SMTPOutputService) (*httptest.Server, *alertsService.Service, error) {
-
-	var logger log.Logger
-
-	logger = log.NewNopLogger()
-	logger = level.NewFilter(logger, level.AllowDebug())
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	logger = log.With(logger, "caller", log.DefaultCaller)
-
-	config := config.NewMailConfig()
-	mainServer := server.NewServer(config)
-
-	//dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUser, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
-
 	dialector := sqlite.Open(fmt.Sprintf("file:%s?mode=memory", goid.NewV4UUID().String()))
 	db, err := gorm.Open(dialector, &gorm.Config{
 		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
 	})
 	if err != nil {
-		level.Error(mainServer.Logger).Log("msg", "Could not connect to Postgres", "err", err)
-		os.Exit(1)
-	}
-
-	if err != nil {
 		return nil, nil, err
 	}
 
-	mailRepo := alertsRepository.NewPostgresDB(db, logger)
+	mailRepo := alertsRepository.NewPostgresDB(db)
 
 	var svc alertsService.Service
-	svc, err = service.NewAlertsService(logger, mailRepo, jsonTemplate, smtpConfig)
+	svc, err = service.NewAlertsService(mailRepo, jsonTemplate, smtpConfig)
 	if err != nil {
 		return nil, nil, err
 	}
-	handler := alertsTransport.MakeHTTPHandler(svc, logger)
+	handler := alertsTransport.MakeHTTPHandler(svc)
 
 	mux := http.NewServeMux()
 	mux.Handle("/", handler)

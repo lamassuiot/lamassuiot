@@ -53,7 +53,7 @@ func TestSubscribe(t *testing.T) {
 
 	tt := []TestCase{
 		{
-			name: "CorrectSubscribe",
+			name: "CorrectSubscribe_EmptyCondition",
 			serviceInitialization: func(ctx context.Context, svc *service.Service, svcCA *caService.Service) context.Context {
 				return ctx
 			},
@@ -75,6 +75,35 @@ func TestSubscribe(t *testing.T) {
 					"conditions": nil,
 					"event_type": "io.lamassuiot.ca.create",
 					"user_id":    "",
+					"condition_type": nil,
+				})
+
+			},
+		},
+		{
+			name: "CorrectSubscribe_NonEmptyCondition",
+			serviceInitialization: func(ctx context.Context, svc *service.Service, svcCA *caService.Service) context.Context {
+				return ctx
+			},
+			testRestEndpoint: func(ctx context.Context, e *httpexpect.Expect) {
+				reqBody := `{"email":"ehernandez@ikerlan.es","event_type":"io.lamassuiot.ca.create" }`
+
+				obj := e.POST("/v1/subscribe").WithBytes([]byte(reqBody)).
+					Expect().
+					Status(http.StatusOK).JSON()
+
+				subscriptionsObj := obj.Object().Value("subscriptions").Array().First()
+				subscriptionsObj.Object().ContainsMap(map[string]interface{}{
+
+					"channel": map[string]interface{}{
+						"config": nil,
+						"name":   "",
+						"type":   "",
+					},
+					"conditions": nil,
+					"event_type": "io.lamassuiot.ca.create",
+					"user_id":    "",
+					"condition_type": "data.name",
 				})
 
 			},

@@ -6,9 +6,7 @@ import (
 	"net/http"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
-	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
-	"github.com/go-kit/log"
 	"github.com/gorilla/mux"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/endpoint"
@@ -40,11 +38,10 @@ func ErrMissingUserID() error {
 	}
 }
 
-func MakeHTTPHandler(s service.Service, logger log.Logger) http.Handler {
+func MakeHTTPHandler(s service.Service) http.Handler {
 	r := mux.NewRouter()
 	e := endpoint.MakeServerEndpoints(s)
 	options := []httptransport.ServerOption{
-		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
 	}
 
@@ -138,6 +135,7 @@ func decodeSubscribedEventRequest(ctx context.Context, r *http.Request) (request
 			Name:   body.Channel.Name,
 			Config: body.Channel.Config,
 		},
+		ConditionType: body.ConditionType,
 	}
 
 	return input, nil

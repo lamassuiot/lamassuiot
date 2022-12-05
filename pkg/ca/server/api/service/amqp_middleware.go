@@ -38,11 +38,10 @@ type amqpMiddleware struct {
 	next          Service
 }
 
-func NewAMQPMiddleware(amqpPublisher chan server.AmqpPublishMessage, logger log.Logger) Middleware {
+func NewAMQPMiddleware(amqpPublisher chan server.AmqpPublishMessage) Middleware {
 	return func(next Service) Service {
 		return &amqpMiddleware{
 			amqpPublisher: amqpPublisher,
-			logger:        logger,
 			next:          next,
 		}
 	}

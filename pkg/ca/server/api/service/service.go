@@ -9,14 +9,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	caerrors "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/repository"
 	x509engines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/x509-engines"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
 	"github.com/robfig/cron/v3"
+	log "github.com/sirupsen/logrus"
 )
 
 type Service interface {
@@ -46,7 +45,6 @@ type Service interface {
 }
 
 type caService struct {
-	logger                log.Logger
 	certificateRepository repository.Certificates
 	engine                x509engines.X509Engine
 	ocspServerURL         string
@@ -54,11 +52,10 @@ type caService struct {
 	aboutToExpireDays     int
 }
 
-func NewCAService(logger log.Logger, engine x509engines.X509Engine, certificateRepository repository.Certificates, ocspServerURL string, aboutToExpireDays int) Service {
+func NewCAService(engine x509engines.X509Engine, certificateRepository repository.Certificates, ocspServerURL string, aboutToExpireDays int) Service {
 	cronInstance := cron.New()
 
 	svc := caService{
-		logger:                logger,
 		engine:                engine,
 		certificateRepository: certificateRepository,
 		ocspServerURL:         ocspServerURL,
@@ -71,8 +68,7 @@ func NewCAService(logger log.Logger, engine x509engines.X509Engine, certificateR
 	})
 
 	if err != nil {
-		level.Debug(logger).Log("msg", "failed to get LAMASSU-DMS-MANAGER", "err", err)
-		level.Debug(logger).Log("msg", "Generating LAMASSU-DMS-MANAGER CA", "err", err)
+		log.Warn("Failed to get LAMASSU-DMS-MANAGER. Generating LAMASSU-DMS-MANAGER CA")
 		svc.CreateCA(context.Background(), &api.CreateCAInput{
 			CAType: api.CATypeDMSEnroller,
 			Subject: api.Subject{
@@ -80,8 +76,8 @@ func NewCAService(logger log.Logger, engine x509engines.X509Engine, certificateR
 				Organization: "lamassu",
 			},
 			KeyMetadata: api.KeyMetadata{
-				KeyType: "RSA",
-				KeyBits: 4096,
+				KeyType: api.KeyType(engine.GetEngineConfig().SupportedKeyTypes[0].Type),
+				KeyBits: engine.GetEngineConfig().SupportedKeyTypes[0].MaximumSize,
 			},
 			CADuration:       time.Hour * 24 * 365 * 5,
 			IssuanceDuration: time.Hour * 24 * 365 * 3,
@@ -180,7 +176,7 @@ func (s *caService) GetCAByName(ctx context.Context, input *api.GetCAByNameInput
 				Status: api.StatusExpired,
 			})
 			if err != nil {
-				level.Debug(s.logger).Log("err", err, "msg", "Could not update the status of an expired CA status: "+ca.CAName)
+				log.Errorf("Could not update the status of an expired CA status "+ca.CAName, err)
 				return &api.GetCAByNameOutput{}, err
 			}
 			ca = updateCAOutput.CACertificate
@@ -220,7 +216,7 @@ func (s *caService) GetCAs(ctx context.Context, input *api.GetCAsInput) (*api.Ge
 					Status: api.StatusExpired,
 				})
 				if err != nil {
-					level.Debug(s.logger).Log("err", err, "msg", "Could not update the status of an expired CA status: "+ca.CAName)
+					log.Error(fmt.Sprintf("Could not update the status of an expired CA [%s] status: ", ca.CAName), err)
 					continue
 				}
 				CAs[i] = updateCAOutput.CACertificate
@@ -267,19 +263,19 @@ func (s *caService) CreateCA(ctx context.Context, input *api.CreateCAInput) (*ap
 
 	caCertificate, err := s.engine.CreateCA(*input)
 	if err != nil {
-		level.Debug(s.logger).Log("msg", "error while creating CA certificate", "err", err)
+		log.Error("error while creating CA certificate: ", err)
 		return nil, err
 	}
 
 	err = s.certificateRepository.InsertCA(ctx, input.CAType, caCertificate, input.IssuanceDuration)
 	if err != nil {
-		level.Debug(s.logger).Log("err", err)
+		log.Error(err)
 		return &api.CreateCAOutput{}, err
 	}
 
 	ca, err := s.certificateRepository.SelectCAByName(ctx, input.CAType, input.Subject.CommonName)
 	if err != nil {
-		level.Debug(s.logger).Log("err", err)
+		log.Error(err)
 		return &api.CreateCAOutput{}, err
 	}
 
@@ -391,7 +387,7 @@ func (s *caService) GetCertificates(ctx context.Context, input *api.GetCertifica
 					Status:                  api.StatusExpired,
 				})
 				if err != nil {
-					level.Debug(s.logger).Log("err", err, "msg", "Could not update the status of an expired Certificate status: "+c.CAName+"-"+c.SerialNumber)
+					log.Errorf(fmt.Sprintf("Could not update the status of an expired Certificate status. CA [%s] SerialNumber [%s]: ", c.CAName, c.SerialNumber), err)
 					return &api.GetCertificatesOutput{}, err
 				}
 				certificates[i] = updateCertificateOutput.Certificate
@@ -429,7 +425,7 @@ func (s *caService) GetCertificateBySerialNumber(ctx context.Context, input *api
 				Status:                  api.StatusExpired,
 			})
 			if err != nil {
-				level.Debug(s.logger).Log("err", err, "msg", "Could not update the status of an expired Certificate status: "+certificate.CAName+"-"+certificate.SerialNumber)
+				log.Errorf(fmt.Sprintf("Could not update the status of an expired Certificate status. CA [%s] SerialNumber [%s]: ", certificate.CAName, certificate.SerialNumber), err)
 				return &api.GetCertificateBySerialNumberOutput{}, err
 			}
 			certificate = updateCertificateOutput.Certificate
@@ -511,7 +507,7 @@ func (s *caService) SignCertificateRequest(ctx context.Context, input *api.SignC
 		CAName: input.CAName,
 	})
 	if err != nil {
-		level.Debug(s.logger).Log("err", err)
+		log.Error(err)
 		return &api.SignCertificateRequestOutput{}, err
 	}
 
@@ -521,13 +517,13 @@ func (s *caService) SignCertificateRequest(ctx context.Context, input *api.SignC
 
 	certificate, err := s.engine.SignCertificateRequest(caOutput.Certificate.Certificate, caOutput.IssuanceDuration, input)
 	if err != nil {
-		level.Debug(s.logger).Log("msg", "could not sign certificate request", "err", err)
+		log.Error("Could not sign certificate request: ", err)
 		return &api.SignCertificateRequestOutput{}, err
 	}
 
 	err = s.certificateRepository.InsertCertificate(ctx, input.CAType, input.CAName, certificate)
 	if err != nil {
-		level.Debug(s.logger).Log("err", err)
+		log.Error(err)
 		return &api.SignCertificateRequestOutput{}, err
 	}
 

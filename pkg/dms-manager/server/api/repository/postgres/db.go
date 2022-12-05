@@ -9,8 +9,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
 	dmserrors "github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/repository"
@@ -109,15 +107,14 @@ func (DeviceManufacturingServiceDAO) TableName() string {
 	return "dms"
 }
 
-func NewPostgresDB(db *gorm.DB, logger log.Logger) repository.DeviceManufacturingServiceRepository {
+func NewPostgresDB(db *gorm.DB) repository.DeviceManufacturingServiceRepository {
 	db.AutoMigrate(&DeviceManufacturingServiceDAO{})
 
-	return &PostgresDBContext{db, logger}
+	return &PostgresDBContext{db}
 }
 
 type PostgresDBContext struct {
 	*gorm.DB
-	logger log.Logger
 }
 
 func (db *PostgresDBContext) Insert(ctx context.Context, csr *x509.CertificateRequest) error {
@@ -137,7 +134,6 @@ func (db *PostgresDBContext) Insert(ctx context.Context, csr *x509.CertificateRe
 	}
 
 	if err := db.WithContext(ctx).Model(&DeviceManufacturingServiceDAO{}).Create(&dms).Error; err != nil {
-		level.Debug(db.logger).Log("err", err, "msg", "Could not insert DMS to database")
 		duplicationErr := &dmserrors.DuplicateResourceError{
 			ResourceType: "DMS",
 			ResourceId:   dms.Name,
@@ -151,21 +147,22 @@ func (db *PostgresDBContext) Insert(ctx context.Context, csr *x509.CertificateRe
 func (db *PostgresDBContext) SelectByName(ctx context.Context, name string) (api.DeviceManufacturingService, error) {
 	var dms DeviceManufacturingServiceDAO
 	if err := db.WithContext(ctx).Model(&DeviceManufacturingServiceDAO{}).Where("name = ?", name).First(&dms).Error; err != nil {
-		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain DMSs from database")
-		notFoundErr := &dmserrors.ResourceNotFoundError{
-			ResourceType: "DMS",
-			ResourceId:   name,
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			notFoundErr := &dmserrors.ResourceNotFoundError{
+				ResourceType: "DMS",
+				ResourceId:   name,
+			}
+			return api.DeviceManufacturingService{}, notFoundErr
+		} else {
+			return api.DeviceManufacturingService{}, err
 		}
-		return api.DeviceManufacturingService{}, notFoundErr
 	}
-
 	return dms.toDeviceManufacturingService()
 }
 
 func (db *PostgresDBContext) SelectAll(ctx context.Context, queryParameters common.QueryParameters) (int, []api.DeviceManufacturingService, error) {
 	var totalDMSs int64
 	if err := db.WithContext(ctx).Model(&DeviceManufacturingServiceDAO{}).Count(&totalDMSs).Error; err != nil {
-		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain DMSs from database")
 		return 0, []api.DeviceManufacturingService{}, err
 	}
 
@@ -173,7 +170,6 @@ func (db *PostgresDBContext) SelectAll(ctx context.Context, queryParameters comm
 	tx := db.WithContext(ctx).Model(&DeviceManufacturingServiceDAO{})
 	tx = filters.ApplyQueryParametersFilters(tx, queryParameters)
 	if err := tx.Find(&dmss).Error; err != nil {
-		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain DMSs from database")
 		return 0, []api.DeviceManufacturingService{}, err
 	}
 
@@ -181,7 +177,6 @@ func (db *PostgresDBContext) SelectAll(ctx context.Context, queryParameters comm
 	for _, v := range dmss {
 		dms, err := v.toDeviceManufacturingService()
 		if err != nil {
-			level.Debug(db.logger).Log("err", err)
 			continue
 		}
 		parsedDMSs = append(parsedDMSs, dms)

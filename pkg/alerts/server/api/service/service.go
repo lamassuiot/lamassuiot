@@ -3,24 +3,16 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"io/ioutil"
-	"strings"
 
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/repository"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/service/outputchannels"
-	"github.com/ohler55/ojg/jp"
 	"github.com/ohler55/ojg/oj"
-	sf "github.com/sa-/slicefunk"
 	"github.com/xeipuuv/gojsonschema"
 
 	//"github.com/xeipuuv/gojsonschema"
-
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
+	"github.com/oliveagle/jsonpath"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 )
@@ -45,13 +37,12 @@ type Service interface {
 }
 
 type alertsService struct {
-	logger              log.Logger
 	alertsRepository    repository.AlertsRepository
 	eventsConfiguration map[string]EventTemplate
 	smtpServer          outputchannels.SMTPOutputService
 }
 
-func NewAlertsService(logger log.Logger, alertsRepository repository.AlertsRepository, templateDataFilePath string, smtpServer outputchannels.SMTPOutputService) (Service, error) {
+func NewAlertsService(alertsRepository repository.AlertsRepository, templateDataFilePath string, smtpServer outputchannels.SMTPOutputService) (Service, error) {
 	file, err := ioutil.ReadFile(templateDataFilePath)
 	if err != nil {
 		return nil, err
@@ -65,7 +56,6 @@ func NewAlertsService(logger log.Logger, alertsRepository repository.AlertsRepos
 	}
 
 	return &alertsService{
-		logger:              logger,
 		alertsRepository:    alertsRepository,
 		eventsConfiguration: eventsConfig,
 		smtpServer:          smtpServer,
@@ -114,7 +104,11 @@ func (s *alertsService) HandleEvent(ctx context.Context, input *api.HandleEventI
 	fullfiledSubs := []api.Subscription{}
 
 	documentLoader := gojsonschema.NewStringLoader(string(jsonData))
-	event, err := oj.ParseString(string(jsonData))
+	_, err = oj.ParseString(string(jsonData))
+	if err != nil {
+		return nil, err
+	}
+
 	for _, sub := range subs {
 		//Test if event matches conditions and send
 		if len(sub.Conditions) == 0 {
@@ -123,7 +117,7 @@ func (s *alertsService) HandleEvent(ctx context.Context, input *api.HandleEventI
 		}
 
 		for _, condition := range sub.Conditions {
-			//TODO:check if JSONPath or jsonSchema
+			//Check if JSONPath or JsonSchema
 			switch sub.ConditionType {
 			case api.JSONSchema:
 				schemaLoader := gojsonschema.NewStringLoader(condition)
@@ -139,20 +133,18 @@ func (s *alertsService) HandleEvent(ctx context.Context, input *api.HandleEventI
 
 			case api.JSONPath:
 
-				json_condition, err := jp.ParseString(condition)
+				/*json_condition, err := jp.ParseString(condition)
+				if err != nil {
+					return nil, err
+				}*/
 
+				res, err := jsonpath.JsonPathLookup(eventData, condition)
 				if err != nil {
 					return nil, err
 				}
-				ys := json_condition.Get(event)
-				if err != nil {
-					return nil, err
-				}
-				for _, v := range ys {
-					if v == sub.ExpectedValue {
-						fullfiledSubs = append(fullfiledSubs, sub)
 
-					}
+				if res != nil {
+					fullfiledSubs = append(fullfiledSubs, sub)
 				}
 			}
 		}
@@ -181,7 +173,7 @@ func (s *alertsService) SubscribedEvent(ctx context.Context, input *api.Subscrib
 		Name:   input.Channel.Name,
 		Config: input.Channel.Config,
 	}
-	err := s.alertsRepository.Subscribe(ctx, input.UserID, channel, input.Conditions, input.EventType, input.ConditionType, input.ExpectedValue)
+	err := s.alertsRepository.Subscribe(ctx, input.UserID, channel, input.Conditions, input.EventType, input.ConditionType)
 	if err != nil {
 		return &api.SubscribeEventOutput{}, err
 	}
@@ -222,29 +214,9 @@ func (s *alertsService) GetEventLogs(ctx context.Context, input *api.GetEventsIn
 }
 
 func (s *alertsService) GetSubscriptions(ctx context.Context, input *api.GetSubscriptionsInput) (*api.GetSubscriptionsOutput, error) {
-	subscription, err := s.alertsRepository.GetUserSubscriptions(ctx, input.UserID)
-	if err != nil {
-		level.Debug(s.logger).Log("err", err)
-	}
+	subscription, _ := s.alertsRepository.GetUserSubscriptions(ctx, input.UserID)
 
 	return &api.GetSubscriptionsOutput{
 		UserSubscription: subscription,
 	}, nil
-}
-
-func parseEventTypeToText(queue string) string {
-	array := strings.Split(queue, ".")
-	sf.Map(array, func(item string) string {
-		caser := cases.Title(language.English, cases.Compact)
-		return caser.String(item)
-	})
-	return strings.Join(array[2:], " ")
-}
-
-// validateLine checks to see if a line has CR or LF as per RFC 5321
-func validateLine(line string) error {
-	if strings.ContainsAny(line, "\n\r") {
-		return errors.New("smtp: A line must not contain CR or LF")
-	}
-	return nil
 }

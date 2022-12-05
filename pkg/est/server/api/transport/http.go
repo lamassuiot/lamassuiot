@@ -10,8 +10,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
 	"github.com/lamassuiot/lamassuiot/pkg/est/server/api/endpoint"
@@ -55,12 +53,11 @@ func ErrMalformedCert() error {
 	}
 }
 
-func MakeHTTPHandler(service service.ESTService, logger log.Logger) http.Handler {
+func MakeHTTPHandler(service service.ESTService) http.Handler {
 	router := mux.NewRouter()
 	endpoints := endpoint.MakeServerEndpoints(service)
 
 	options := []httptransport.ServerOption{
-		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(EncodeError),
 	}
 

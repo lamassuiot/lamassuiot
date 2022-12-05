@@ -38,11 +38,10 @@ type dmsManagerContext struct {
 	logger          log.Logger
 }
 
-func NewDMSManagerService(logger log.Logger, dmsRepo dmsRepository.DeviceManufacturingServiceRepository, client *lamassuCAClient.LamassuCAClient) Service {
+func NewDMSManagerService(dmsRepo dmsRepository.DeviceManufacturingServiceRepository, client *lamassuCAClient.LamassuCAClient) Service {
 	return &dmsManagerContext{
 		dmsRepository:   dmsRepo,
 		lamassuCAClient: *client,
-		logger:          logger,
 	}
 }
 
@@ -265,13 +264,6 @@ func (s *dmsManagerContext) UpdateDMSAuthorizedCAs(ctx context.Context, input *a
 	})
 	if err != nil {
 		return &api.UpdateDMSAuthorizedCAsOutput{}, err
-	}
-
-	if dmsOutput.Status != api.DMSStatusApproved {
-		return &api.UpdateDMSAuthorizedCAsOutput{}, &dmsErrors.GenericError{
-			StatusCode: http.StatusBadRequest,
-			Message:    "DMS is not approved, can not update authorized CAs",
-		}
 	}
 
 	err = s.dmsRepository.UpdateAuthorizedCAs(ctx, input.Name, input.AuthorizedCAs)

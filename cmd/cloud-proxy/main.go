@@ -4,13 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/hashicorp/consul/api"
 	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/service"
@@ -18,7 +13,9 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/config"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
-	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
+	gorm_logrus "github.com/onrik/gorm-logrus"
+	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
@@ -28,30 +25,31 @@ import (
 
 func main() {
 	config := config.NewCloudProxyConfig()
-	mainServer := server.NewServer(config)
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUser, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
-	})
-	if err != nil {
-		level.Error(mainServer.Logger).Log("msg", "Could not connect to Postgres", "err", err)
-		os.Exit(1)
+	dbLogrus := gormLogger.Default.LogMode(gormLogger.Silent)
+	if config.DebugMode {
+		logrus.SetLevel(logrus.InfoLevel)
+		dbLogrus = gorm_logrus.New()
+		dbLogrus.LogMode(gormLogger.Info)
 	}
 
-	if err := db.Use(otelgorm.NewPlugin()); err != nil {
-		level.Error(mainServer.Logger).Log("msg", "Could not initialize OpenTelemetry DB-GORM plugin", "err", err)
-		os.Exit(1)
+	mainServer := server.NewServer(config)
+
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUsername, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+		Logger: dbLogrus,
+	})
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	cloudProxyRepo := postgresRepository.NewPostgresDB(db)
-	consulClient := initializeConsulClient(config.ConsulProtocol, config.ConsulHost, config.ConsulPort, config.ConsulCA, mainServer.Logger)
+	consulClient := initializeConsulClient(config.ConsulProtocol, config.ConsulHost, config.ConsulPort, config.ConsulCA)
 
 	var lamassuCAClient lamassucaclient.LamassuCAClient
 	parsedLamassuCAURL, err := url.Parse(config.LamassuCAAddress)
 	if err != nil {
-		level.Error(mainServer.Logger).Log("msg", "Could not parse CA URL", "err", err)
-		os.Exit(1)
+		log.Fatal("Could not parse CA URL: ", err)
 	}
 
 	if strings.HasPrefix(config.LamassuCAAddress, "https") {
@@ -65,8 +63,7 @@ func main() {
 			CACertificate: config.LamassuCACertFile,
 		})
 		if err != nil {
-			level.Error(mainServer.Logger).Log("msg", "Could not create LamassuCA client", "err", err)
-			os.Exit(1)
+			log.Fatal("Could not create LamassuCA client: ", err)
 		}
 	} else {
 		lamassuCAClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
@@ -74,8 +71,7 @@ func main() {
 			AuthMethod: clientUtils.AuthMethodNone,
 		})
 		if err != nil {
-			level.Error(mainServer.Logger).Log("msg", "Could not create LamassuCA client", "err", err)
-			os.Exit(1)
+			log.Fatal("Could not create LamassuCA client: ", err)
 		}
 	}
 
@@ -96,29 +92,23 @@ func main() {
 		}
 	}
 
-	var s service.Service
+	var svc service.Service
 	{
-		s = service.NewCloudPorxyService(consulClient, cloudProxyRepo, lamassuCAClient, clientBaseConfig, mainServer.Logger)
-		s = service.NewInputValudationMiddleware()(s)
-		s = service.LoggingMiddleware(mainServer.Logger)(s)
+		svc = service.NewCloudPorxyService(consulClient, cloudProxyRepo, lamassuCAClient, clientBaseConfig)
+		svc = service.NewInputValudationMiddleware()(svc)
+		svc = service.LoggingMiddleware()(svc)
 
 	}
 
-	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"))))
-	mainServer.AddAmqpConsumer(config.ServiceName, []string{"#"}, transport.MakeAmqpHandler(s, mainServer.Logger))
+	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(svc)))
+	mainServer.AddAmqpConsumer(config.ServiceName, []string{"#"}, transport.MakeAmqpHandler(svc))
 
-	errs := make(chan error)
-	go func() {
-		c := make(chan os.Signal)
-		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-		errs <- fmt.Errorf("%s", <-c)
-	}()
-
-	mainServer.Run(errs)
-	level.Info(mainServer.Logger).Log("exit", <-errs)
+	mainServer.Run()
+	forever := make(chan struct{})
+	<-forever
 }
 
-func initializeConsulClient(consulProtocol string, consulHost string, consulPort string, consulCA string, logger log.Logger) *api.Client {
+func initializeConsulClient(consulProtocol string, consulHost string, consulPort string, consulCA string) *api.Client {
 	consulConfig := api.DefaultConfig()
 	if consulProtocol == "https" || consulProtocol == "http" {
 		if (consulProtocol == "https" && consulPort == "443") || (consulProtocol == "http" && consulPort == "80") {
@@ -127,19 +117,18 @@ func initializeConsulClient(consulProtocol string, consulHost string, consulPort
 			consulConfig.Address = consulProtocol + "://" + consulHost + ":" + consulPort
 		}
 	} else {
-		level.Error(logger).Log("msg", "Unsuported consul protocol")
+		log.Fatal("Unsuported consul protocol")
 	}
 	tlsConf := &api.TLSConfig{CAFile: consulCA}
 	consulConfig.TLSConfig = *tlsConf
 	consulClient, err := api.NewClient(consulConfig)
 	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not start Consul API Client")
-		os.Exit(1)
+		log.Fatal("Could not start Consul API Client: ", err)
 	}
 
 	agent := consulClient
 
-	level.Info(logger).Log("msg", "Connection established with Consul")
+	log.Info("Connection established with Consul")
 
 	return agent
 }

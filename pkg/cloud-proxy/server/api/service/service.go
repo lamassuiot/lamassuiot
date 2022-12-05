@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
+	log "github.com/sirupsen/logrus"
+
 	consul "github.com/hashicorp/consul/api"
 	lamassuCAClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	cloudProviderClient "github.com/lamassuiot/lamassuiot/pkg/cloud-provider/client"
@@ -35,16 +35,14 @@ type Service interface {
 }
 
 type CloudProxyService struct {
-	Logger              log.Logger
 	ConsulClient        *consul.Client
 	LamassuCAClient     lamassuCAClient.LamassuCAClient
 	CloudProxyDB        repository.CloudProxyRepository
 	ConnectorBaseConfig clientUtils.BaseClientConfigurationuration
 }
 
-func NewCloudPorxyService(consulClient *consul.Client, cloudProxyDatabase repository.CloudProxyRepository, lamassuCAClient lamassuCAClient.LamassuCAClient, clientBaseConfig clientUtils.BaseClientConfigurationuration, logger log.Logger) Service {
+func NewCloudPorxyService(consulClient *consul.Client, cloudProxyDatabase repository.CloudProxyRepository, lamassuCAClient lamassuCAClient.LamassuCAClient, clientBaseConfig clientUtils.BaseClientConfigurationuration) Service {
 	return &CloudProxyService{
-		Logger:              logger,
 		ConsulClient:        consulClient,
 		LamassuCAClient:     lamassuCAClient,
 		CloudProxyDB:        cloudProxyDatabase,
@@ -105,7 +103,6 @@ func (cps *CloudProxyService) GetCloudConnectorByID(ctx context.Context, input *
 	syncCAs := make([]api.SynchronizedCA, 0)
 	caBindngs, err := cps.CloudProxyDB.SelectCABindingsByConnectorID(ctx, agent.ID)
 	if err != nil {
-		level.Debug(cps.Logger).Log("err", err)
 		return &api.GetCloudConnectorByIDOutput{}, err
 	}
 
@@ -134,13 +131,12 @@ func (cps *CloudProxyService) GetCloudConnectorByID(ctx context.Context, input *
 	} else {
 		connectorService, err := cps.newCloudPriverClient(agent.Meta["protocol"], connectorIp, connectorPort)
 		if err != nil {
-			level.Debug(cps.Logger).Log("err", err)
 			return &api.GetCloudConnectorByIDOutput{}, err
 		}
 
 		getConfigOutput, err := connectorService.GetConfiguration(ctx, &cloudProvider.GetConfigurationInput{})
 		if err != nil {
-			level.Debug(cps.Logger).Log("msg", fmt.Sprintf("Could not get connector configuration [TYPE]=%s [ID]=%s [IP]=%s [PORT]=%d", connectorType, agent.ID, connectorIp, connectorPort), "err", err)
+			log.Warn("msg", fmt.Sprintf("Could not get connector configuration [TYPE]=%s [ID]=%s [IP]=%s [PORT]=%d", connectorType, agent.ID, connectorIp, connectorPort), "err", err)
 			return &api.GetCloudConnectorByIDOutput{}, err
 		}
 
@@ -249,13 +245,13 @@ func (cps *CloudProxyService) HandleCreateCAEvent(ctx context.Context, input *ap
 				fmt.Println(fmt.Sprintf("	[%s](%s) %s  --->  %s:%d", connector.Status, connector.CloudProvider, connector.ID, connector.IP, connector.Port))
 				err := cps.CloudProxyDB.UpdateCABindingSerialNumber(ctx, connector.ID, input.CAName, input.SerialNumber)
 				if err != nil {
-					level.Debug(cps.Logger).Log("err", err)
+					log.Warn(err)
 					continue
 				}
 
 				connectorClient, err := cps.newCloudPriverClientFromConnector(connector)
 				if err != nil {
-					level.Debug(cps.Logger).Log("err", err)
+					log.Warn(err)
 					continue
 				}
 
@@ -263,7 +259,7 @@ func (cps *CloudProxyService) HandleCreateCAEvent(ctx context.Context, input *ap
 					CACertificate: input.CACertificate,
 				})
 				if err != nil {
-					level.Debug(cps.Logger).Log("err", err)
+					log.Warn(err)
 					continue
 				}
 			}
@@ -285,13 +281,13 @@ func (cps *CloudProxyService) HandleUpdateCAStatusEvent(ctx context.Context, inp
 				fmt.Println(fmt.Sprintf("	[%s](%s) %s  --->  %s:%d", connector.Status, connector.CloudProvider, connector.ID, connector.IP, connector.Port))
 				err := cps.CloudProxyDB.UpdateCABindingSerialNumber(ctx, connector.ID, input.CAName, input.SerialNumber)
 				if err != nil {
-					level.Debug(cps.Logger).Log("err", err)
+					log.Warn(err)
 					continue
 				}
 
 				connectorClient, err := cps.newCloudPriverClientFromConnector(connector)
 				if err != nil {
-					level.Debug(cps.Logger).Log("err", err)
+					log.Warn(err)
 					continue
 				}
 
@@ -300,7 +296,7 @@ func (cps *CloudProxyService) HandleUpdateCAStatusEvent(ctx context.Context, inp
 					Status: string(input.Status),
 				})
 				if err != nil {
-					level.Debug(cps.Logger).Log("err", err)
+					log.Warn(err)
 					continue
 				}
 			}
@@ -321,7 +317,7 @@ func (cps *CloudProxyService) HandleUpdateCertificateStatusEvent(ctx context.Con
 				fmt.Println(fmt.Sprintf("	[%s](%s) %s  --->  %s:%d", connector.Status, connector.CloudProvider, connector.ID, connector.IP, connector.Port))
 				err := cps.CloudProxyDB.UpdateCABindingSerialNumber(ctx, connector.ID, input.CAName, input.SerialNumber)
 				if err != nil {
-					level.Debug(cps.Logger).Log("err", err)
+					log.Warn(err)
 					continue
 				}
 
@@ -334,7 +330,7 @@ func (cps *CloudProxyService) HandleUpdateCertificateStatusEvent(ctx context.Con
 				})
 
 				if err != nil {
-					level.Debug(cps.Logger).Log("err", err)
+					log.Warn(err)
 					continue
 				}
 			}
@@ -361,7 +357,7 @@ func (cps *CloudProxyService) HandleReenrollEvent(ctx context.Context, input *ap
 				})
 
 				if err != nil {
-					level.Debug(cps.Logger).Log("err", err)
+					log.Warn(err)
 					continue
 				}
 			}
@@ -460,7 +456,7 @@ func (cps *CloudProxyService) HandleForceReenrollEvent(ctx context.Context, inpu
 					ForceReenroll: true,
 				})
 				if err != nil {
-					level.Debug(cps.Logger).Log("err", err)
+					log.Warn(err)
 					continue
 				}
 			}

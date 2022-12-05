@@ -10,11 +10,10 @@ import (
 	"io/ioutil"
 	"time"
 
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	vaultApi "github.com/hashicorp/vault/api"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	caerrors "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/errors"
+	log "github.com/sirupsen/logrus"
 
 	"os"
 	"strconv"
@@ -32,13 +31,13 @@ type Vaultx509Engine struct {
 	logger   log.Logger
 }
 
-func NewVaultx509Engine(address string, pkiPath string, roleID string, secretID string, CA string, unsealFile string, ocspUrl string, logger log.Logger) (X509Engine, error) {
-	client, err := CreateVaultSdkClient(address, CA, logger)
+func NewVaultx509Engine(address string, pkiPath string, roleID string, secretID string, CA string, unsealFile string, ocspUrl string) (X509Engine, error) {
+	client, err := CreateVaultSdkClient(address, CA)
 	if err != nil {
 		return nil, errors.New("Could not create Vault API client: " + err.Error())
 	}
 
-	err = Unseal(client, unsealFile, logger)
+	err = Unseal(client, unsealFile)
 	if err != nil {
 		return nil, errors.New("Could not unseal Vault: " + err.Error())
 	}
@@ -54,26 +53,24 @@ func NewVaultx509Engine(address string, pkiPath string, roleID string, secretID 
 		roleID:   roleID,
 		secretID: secretID,
 		ocspUrl:  ocspUrl,
-		logger:   logger,
 	}
 
 	return svc, nil
 }
 
-func NewVaultx509EngineWithClient(client *vaultApi.Client, address string, pkiPath string, roleID string, secretID string, CA string, unsealFile string, ocspUrl string, logger log.Logger) (X509Engine, error) {
+func NewVaultx509EngineWithClient(client *vaultApi.Client, address string, pkiPath string, roleID string, secretID string, CA string, unsealFile string, ocspUrl string) (X509Engine, error) {
 	v := Vaultx509Engine{
 		client:   client,
 		pkiPath:  pkiPath,
 		roleID:   roleID,
 		secretID: secretID,
 		ocspUrl:  ocspUrl,
-		logger:   logger,
 	}
 
 	return &v, nil
 }
 
-func CreateVaultSdkClient(vaultAddress string, vaultCaCertFilePath string, logger log.Logger) (*vaultApi.Client, error) {
+func CreateVaultSdkClient(vaultAddress string, vaultCaCertFilePath string) (*vaultApi.Client, error) {
 	conf := vaultApi.DefaultConfig()
 	httpClient := cleanhttp.DefaultPooledClient()
 	httpTrasport := cleanhttp.DefaultPooledTransport()
@@ -100,7 +97,7 @@ func CreateVaultSdkClient(vaultAddress string, vaultCaCertFilePath string, logge
 
 }
 
-func Unseal(client *vaultApi.Client, unsealFile string, logger log.Logger) error {
+func Unseal(client *vaultApi.Client, unsealFile string) error {
 	usnealJsonFile, err := os.Open(unsealFile)
 	if err != nil {
 		return err
@@ -120,14 +117,14 @@ func Unseal(client *vaultApi.Client, unsealFile string, logger log.Logger) error
 	for sealed {
 		unsealStatusProgress, err := client.Sys().Unseal(unsealKeys[providedSharesCount].(string))
 		if err != nil {
-			level.Debug(logger).Log("err", "Error while unsealing vault", "provided_unseal_keys", providedSharesCount)
+			log.Error("Error while unsealing vault: ", err)
 			return err
 		}
-		level.Debug(logger).Log("msg", "Unseal progress shares="+strconv.Itoa(unsealStatusProgress.N)+" threshold="+strconv.Itoa(unsealStatusProgress.T)+" remaining_shares="+strconv.Itoa(unsealStatusProgress.Progress))
+		log.Info("Unseal progress shares=" + strconv.Itoa(unsealStatusProgress.N) + " threshold=" + strconv.Itoa(unsealStatusProgress.T) + " remaining_shares=" + strconv.Itoa(unsealStatusProgress.Progress))
 
 		providedSharesCount++
 		if !unsealStatusProgress.Sealed {
-			level.Debug(logger).Log("msg", "Vault is unsealed")
+			log.Info("Vault is unsealed")
 			sealed = false
 		}
 	}
@@ -164,7 +161,7 @@ func (v Vaultx509Engine) CreateCA(input api.CreateCAInput) (*x509.Certificate, e
 	_, err = v.client.Logical().Write("/sys/mounts/"+v.pkiPath+api.ToVaultPath(string(input.CAType))+input.Subject.CommonName+"/tune", tuneOptions)
 
 	if err != nil {
-		level.Debug(v.logger).Log("err", err, "msg", "Could not tune CA "+input.Subject.CommonName)
+		log.Error(fmt.Sprintf("Could not tune CA %s: ", input.Subject.CommonName), err)
 		return nil, err
 	}
 
@@ -182,17 +179,18 @@ func (v Vaultx509Engine) CreateCA(input api.CreateCAInput) (*x509.Certificate, e
 	_, err = v.client.Logical().Write(v.pkiPath+api.ToVaultPath(string(input.CAType))+input.Subject.CommonName+"/root/generate/internal", options)
 
 	if err != nil {
-		level.Debug(v.logger).Log("err", err, "msg", "Could not intialize the root CA certificate for "+input.Subject.CommonName+" CA on Vault")
+		log.Error(fmt.Sprintf("Could not intialize the root CA certificate for %s CA on Vault: ", input.Subject.CommonName), err)
 		return nil, err
 	}
 	resp, err := v.client.Logical().Read(v.pkiPath + api.ToVaultPath(string(input.CAType)) + input.Subject.CommonName + "/cert/ca")
 
 	if err != nil {
-		level.Debug(v.logger).Log("err", err, "msg", "Could not read "+input.Subject.CommonName+" certificate from Vault")
+		log.Error("Could not read "+input.Subject.CommonName+" certificate from Vault: ", err)
 		return nil, errors.New("could not read certificate from Vault")
 	}
+
 	if resp == nil {
-		level.Debug(v.logger).Log("Mount path for PKI " + input.Subject.CommonName + " does not have a root CA")
+		log.Error("Mount path for PKI " + input.Subject.CommonName + " does not have a root CA")
 		return nil, errors.New("mount path for PKI does not have a root CA")
 	}
 
@@ -233,7 +231,7 @@ func (v Vaultx509Engine) initPkiSecret(caType api.CAType, CAName string, enrolle
 	err := v.client.Sys().Mount(v.pkiPath+api.ToVaultPath(string(caType))+CAName, &mountInput)
 
 	if err != nil {
-		level.Debug(v.logger).Log("err", err, "msg", "Could not create a new pki mount point on Vault")
+		log.Error("Could not create a new pki mount point on Vault: ", err)
 		if strings.Contains(err.Error(), "path is already in use") {
 			duplicationErr := &caerrors.DuplicateResourceError{
 				ResourceType: "CA",
@@ -255,7 +253,7 @@ func (v Vaultx509Engine) initPkiSecret(caType api.CAType, CAName string, enrolle
 	})
 
 	if err != nil {
-		level.Debug(v.logger).Log("err", err, "msg", "Could not create a new role for "+CAName+" CA on Vault")
+		log.Error("Could not create a new role for "+CAName+" CA on Vault: ", err)
 		return err
 	}
 	_, err = v.client.Logical().Write(v.pkiPath+api.ToVaultPath(string(caType))+CAName+"/config/urls", map[string]interface{}{
@@ -265,7 +263,7 @@ func (v Vaultx509Engine) initPkiSecret(caType api.CAType, CAName string, enrolle
 	})
 
 	if err != nil {
-		level.Debug(v.logger).Log("err", err, "msg", "Could not configure OCSP information for "+CAName+" CA on Vault")
+		log.Error("Could not configure OCSP information for "+CAName+" CA on Vault: ", err)
 		return err
 	}
 
@@ -311,12 +309,10 @@ func (v Vaultx509Engine) SignCertificateRequest(caCertificate *x509.Certificate,
 	}
 	certificate, err := x509.ParseCertificate(certPEMBlock.Bytes)
 	if err != nil {
-		level.Debug(v.logger).Log("err", err)
 		return nil, err
 	}
 
 	if err != nil {
-		level.Debug(v.logger).Log("err", err)
 		return nil, err
 	}
 
