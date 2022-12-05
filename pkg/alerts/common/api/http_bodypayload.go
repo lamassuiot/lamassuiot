@@ -7,7 +7,9 @@ type SubscribedEventPayload struct {
 	EventType  string                 `json:"event_type"`
 	Channel    ChannelCreationPayload `json:"channel"`
 	Conditions []string               `json:"conditions"`
+	ConditionType    ConditionType     `json:"condition_type"`
 }
+
 
 type ChannelCreationPayload struct {
 	Type   ChannelType `json:"type"`

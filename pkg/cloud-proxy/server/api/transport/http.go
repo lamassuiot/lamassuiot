@@ -6,9 +6,7 @@ import (
 	"net/http"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
-	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
-	"github.com/go-kit/log"
 
 	"github.com/gorilla/mux"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/common/api"
@@ -28,11 +26,10 @@ func InvalidJsonFormat() error {
 	}
 }
 
-func MakeHTTPHandler(s service.Service, logger log.Logger) http.Handler {
+func MakeHTTPHandler(s service.Service) http.Handler {
 	r := mux.NewRouter()
 	e := endpoint.MakeServerEndpoints(s)
 	options := []httptransport.ServerOption{
-		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
 	}
 

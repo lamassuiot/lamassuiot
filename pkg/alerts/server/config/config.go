@@ -8,7 +8,7 @@ type MailConfig struct {
 	server.BaseConfiguration
 
 	PostgresDatabase string `required:"true" split_words:"true"`
-	PostgresUser     string `required:"true" split_words:"true"`
+	PostgresUsername string `required:"true" split_words:"true"`
 	PostgresPassword string `required:"true" split_words:"true"`
 	PostgresHostname string `required:"true" split_words:"true"`
 	PostgresPort     string `required:"true" split_words:"true"`

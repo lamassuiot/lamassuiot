@@ -10,11 +10,11 @@ type CAConfig struct {
 	OcspUrl           string `required:"true" split_words:"true"`
 	AboutToExpireDays int    `required:"true" split_words:"true"`
 
-	PostgresDatabase string `required:"true" split_words:"true"`
-	PostgresUsername string `required:"true" split_words:"true"`
-	PostgresPassword string `required:"true" split_words:"true"`
-	PostgresHostname string `required:"true" split_words:"true"`
-	PostgresPort     string `required:"true" split_words:"true"`
+	PostgresDatabase     string `required:"true" split_words:"true"`
+	PostgresUsernamename string `required:"true" split_words:"true"`
+	PostgresPassword     string `required:"true" split_words:"true"`
+	PostgresHostname     string `required:"true" split_words:"true"`
+	PostgresPort         string `required:"true" split_words:"true"`
 
 	Engine string `required:"true" split_words:"true"`
 

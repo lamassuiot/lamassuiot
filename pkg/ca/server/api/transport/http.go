@@ -18,9 +18,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common/types"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
 
-	"github.com/go-kit/kit/log"
-
-	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	lamassuErrors "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/errors"
 )
@@ -53,11 +50,10 @@ func filtrableCAModelFields() map[string]types.Filter {
 	return fieldFiltersMap
 }
 
-func MakeHTTPHandler(s service.Service, logger log.Logger) http.Handler {
+func MakeHTTPHandler(s service.Service) http.Handler {
 	r := mux.NewRouter()
 	e := endpoint.MakeServerEndpoints(s)
 	options := []httptransport.ServerOption{
-		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
 	}
 

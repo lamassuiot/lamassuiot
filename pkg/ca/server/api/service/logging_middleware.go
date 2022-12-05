@@ -2,310 +2,283 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
-	"github.com/go-kit/log"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
+	log "github.com/sirupsen/logrus"
 )
 
 type Middleware func(Service) Service
 
-func LoggingMiddleware(logger log.Logger) Middleware {
+func LoggingMiddleware() Middleware {
 	return func(next Service) Service {
 		return &loggingMiddleware{
-			next:   next,
-			logger: logger,
+			next: next,
 		}
 	}
 }
 
 type loggingMiddleware struct {
-	next   Service
-	logger log.Logger
+	next Service
 }
 
-func (mw loggingMiddleware) Health() bool {
+func (mw loggingMiddleware) Health() (output bool) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "Health",
-			"took", time.Since(begin),
-		)
+		log.WithFields(log.Fields{
+			"method": "Health",
+			"took":   time.Since(begin),
+		}).Trace(output)
 	}(time.Now())
 	return mw.next.Health()
 }
 
 func (mw loggingMiddleware) GetEngineProviderInfo() (output api.EngineProviderInfo) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "GetEngineProviderInfo",
-			"output", output,
-			"took", time.Since(begin),
-		)
+		log.WithFields(log.Fields{
+			"method": "GetEngineProviderInfo",
+			"output": output,
+			"took":   time.Since(begin),
+		}).Trace(fmt.Sprintf("output: %v", output))
 	}(time.Now())
 	return mw.next.GetEngineProviderInfo()
 }
 
 func (mw loggingMiddleware) Stats(ctx context.Context, input *api.GetStatsInput) (output *api.GetStatsOutput, err error) {
 	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "Stats")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "Stats"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
 		} else {
-			logMsg = append(logMsg, "err", err)
+			log.WithFields(logMsg).Error(err)
 		}
-		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.Stats(ctx, input)
 }
 
 func (mw loggingMiddleware) CreateCA(ctx context.Context, input *api.CreateCAInput) (output *api.CreateCAOutput, err error) {
 	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "CreateCA")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "CreateCA"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
 		} else {
-			logMsg = append(logMsg, "err", err)
+			log.WithFields(logMsg).Error(err)
 		}
-		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.CreateCA(ctx, input)
 }
 
 func (mw loggingMiddleware) GetCAs(ctx context.Context, input *api.GetCAsInput) (output *api.GetCAsOutput, err error) {
 	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "GetCAs")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "GetCAs"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
 		} else {
-			logMsg = append(logMsg, "err", err)
+			log.WithFields(logMsg).Error(err)
 		}
-		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.GetCAs(ctx, input)
 }
 
 func (mw loggingMiddleware) GetCAByName(ctx context.Context, input *api.GetCAByNameInput) (output *api.GetCAByNameOutput, err error) {
 	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "GetCAByName")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "GetCAByName"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
 		} else {
-			logMsg = append(logMsg, "err", err)
+			log.WithFields(logMsg).Error(err)
 		}
-		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.GetCAByName(ctx, input)
 }
 
 func (mw loggingMiddleware) RevokeCA(ctx context.Context, input *api.RevokeCAInput) (output *api.RevokeCAOutput, err error) {
 	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "RevokeCA")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "RevokeCA"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
 		} else {
-			logMsg = append(logMsg, "err", err)
+			log.WithFields(logMsg).Error(err)
 		}
-		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.RevokeCA(ctx, input)
 }
 
 func (mw loggingMiddleware) UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (output *api.UpdateCAStatusOutput, err error) {
 	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "UpdateCAStatus")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "UpdateCAStatus"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
 		} else {
-			logMsg = append(logMsg, "err", err)
+			log.WithFields(logMsg).Error(err)
 		}
-		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.UpdateCAStatus(ctx, input)
 }
 
 func (mw loggingMiddleware) IterateCAsWithPredicate(ctx context.Context, input *api.IterateCAsWithPredicateInput) (output *api.IterateCAsWithPredicateOutput, err error) {
 	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "IterateCAsWithPredicate")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "IterateCAsWithPredicate"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
 		if err == nil {
-			logMsg = append(logMsg, "output", output)
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %s", output))
 		} else {
-			logMsg = append(logMsg, "err", err)
+			log.WithFields(logMsg).Error(err)
 		}
-		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.IterateCAsWithPredicate(ctx, input)
 }
 func (mw loggingMiddleware) SignCertificateRequest(ctx context.Context, input *api.SignCertificateRequestInput) (output *api.SignCertificateRequestOutput, err error) {
 	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "SignCertificateRequest")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "SignCertificateRequest"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
 		} else {
-			logMsg = append(logMsg, "err", err)
+			log.WithFields(logMsg).Error(err)
 		}
-		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.SignCertificateRequest(ctx, input)
 }
 
 func (mw loggingMiddleware) UpdateCertificateStatus(ctx context.Context, input *api.UpdateCertificateStatusInput) (output *api.UpdateCertificateStatusOutput, err error) {
 	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "UpdateCertificateStatus")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "UpdateCertificateStatus"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
 		} else {
-			logMsg = append(logMsg, "err", err)
+			log.WithFields(logMsg).Error(err)
 		}
-		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.UpdateCertificateStatus(ctx, input)
 }
 
 func (mw loggingMiddleware) RevokeCertificate(ctx context.Context, input *api.RevokeCertificateInput) (output *api.RevokeCertificateOutput, err error) {
 	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "RevokeCertificate")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "RevokeCertificate"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
 		} else {
-			logMsg = append(logMsg, "err", err)
+			log.WithFields(logMsg).Error(err)
 		}
-		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.RevokeCertificate(ctx, input)
 }
 
 func (mw loggingMiddleware) GetCertificateBySerialNumber(ctx context.Context, input *api.GetCertificateBySerialNumberInput) (output *api.GetCertificateBySerialNumberOutput, err error) {
 	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "GetCertificateBySerialNumber")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "GetCertificateBySerialNumber"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
 		} else {
-			logMsg = append(logMsg, "err", err)
+			log.WithFields(logMsg).Error(err)
 		}
-		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.GetCertificateBySerialNumber(ctx, input)
 }
 
 func (mw loggingMiddleware) IterateCertificatesWithPredicate(ctx context.Context, input *api.IterateCertificatesWithPredicateInput) (output *api.IterateCertificatesWithPredicateOutput, err error) {
 	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "IterateCertificatesWithPredicate")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "IterateCertificatesWithPredicate"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
 		if err == nil {
-			logMsg = append(logMsg, "output", output)
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %s", output))
 		} else {
-			logMsg = append(logMsg, "err", err)
+			log.WithFields(logMsg).Error(err)
 		}
-		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.IterateCertificatesWithPredicate(ctx, input)
 }
 
 func (mw loggingMiddleware) GetCertificates(ctx context.Context, input *api.GetCertificatesInput) (output *api.GetCertificatesOutput, err error) {
 	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "GetCertificates")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "GetCertificates"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
 		} else {
-			logMsg = append(logMsg, "err", err)
+			log.WithFields(logMsg).Error(err)
 		}
-		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.GetCertificates(ctx, input)
 }
 
 func (mw loggingMiddleware) GetCertificatesAboutToExpire(ctx context.Context, input *api.GetCertificatesAboutToExpireInput) (output *api.GetCertificatesAboutToExpireOutput, err error) {
 	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "GetCertificatesAboutToExpire")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "GetCertificatesAboutToExpire"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
 		} else {
-			logMsg = append(logMsg, "err", err)
+			log.WithFields(logMsg).Error(err)
 		}
-		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.GetCertificatesAboutToExpire(ctx, input)
 }
 
 func (mw loggingMiddleware) GetExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.GetExpiredAndOutOfSyncCertificatesInput) (output *api.GetExpiredAndOutOfSyncCertificatesOutput, err error) {
 	defer func(begin time.Time) {
-		var logMsg = []interface{}{}
-		logMsg = append(logMsg, "method", "GetExpiredAndOutOfSyncCertificates")
-		logMsg = append(logMsg, "took", time.Since(begin))
-		logMsg = append(logMsg, "input", input)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "GetExpiredAndOutOfSyncCertificates"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
 		if err == nil {
-			if output != nil {
-				logMsg = append(logMsg, "output", output.ToSerializedLog())
-			}
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
 		} else {
-			logMsg = append(logMsg, "err", err)
+			log.WithFields(logMsg).Error(err)
 		}
-		mw.logger.Log(logMsg...)
 	}(time.Now())
 	return mw.next.GetExpiredAndOutOfSyncCertificates(ctx, input)
 }

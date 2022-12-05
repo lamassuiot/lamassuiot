@@ -7,15 +7,17 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
 	"os"
 	"strings"
 	"time"
 
+	log "github.com/sirupsen/logrus"
+
 	// stdout "go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 
 	amqptransport "github.com/go-kit/kit/transport/amqp"
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
+
 	"github.com/kelseyhightower/envconfig"
 
 	"github.com/streadway/amqp"
@@ -63,7 +65,6 @@ type amqpConsumerConfig struct {
 }
 
 type Server struct {
-	Logger              log.Logger
 	cfg                 *BaseConfiguration
 	mux                 *http.ServeMux
 	amqpConn            *amqp.Connection
@@ -73,30 +74,25 @@ type Server struct {
 }
 
 func NewServer(config Configuration) *Server {
-	var logger log.Logger
-	logger = log.NewLogfmtLogger(os.Stdout)
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-
 	err := envconfig.Process("", config.GetConfiguration())
 	if err != nil {
-		level.Error(logger).Log("err", err, "msg", "Could not process configuration")
+		log.Fatal("Could not process configuration: ", err)
 		os.Exit(1)
 	}
 
 	baseConfig := config.GetBaseConfiguration()
 
 	if baseConfig.DebugMode {
-		logger = level.NewFilter(logger, level.AllowDebug())
-		level.Debug(logger).Log("msg", "Starting in debug mode...")
+		log.SetLevel(log.TraceLevel)
+		log.Trace("Starting in debug mode")
 	}
 
-	logger = log.With(logger, "caller", log.DefaultCaller)
 	mux := http.NewServeMux()
 
+	http.HandleFunc("/", httpTraceLogHandler)
 	http.Handle("/info", accessControl(infoHandler()))
 
 	s := Server{
-		Logger:        logger,
 		cfg:           baseConfig,
 		mux:           mux,
 		amqpConsumers: map[string]amqpConsumerConfig{},
@@ -121,12 +117,12 @@ func (s *Server) AddHttpFuncHandler(path string, handler func(http.ResponseWrite
 	http.HandleFunc(path, handler)
 }
 
-func (s *Server) Run(errorsChannel chan error) {
+func (s *Server) Run() {
 	go func() {
 		err := s.buildAMQPConnection()
 
 		if err != nil {
-			os.Exit(1)
+			log.Fatal(err)
 		}
 
 		go func() {
@@ -134,17 +130,17 @@ func (s *Server) Run(errorsChannel chan error) {
 				select { //check connection
 				case err = <-s.amqpChanNotifyClose:
 					//work with error
-					level.Error(s.Logger).Log("err", err, "msg", "Disconnected from AMQP")
+					log.Error("Disconnected from AMQP: ", err)
 					for {
 						err = s.buildAMQPConnection()
 						if err != nil {
-							level.Error(s.Logger).Log("err", err, "msg", "Failed to reconnect. sleeping for 5 secodns")
+							log.Error("Failed to reconnect. Sleeping for 5 secodns: ", err)
 							time.Sleep(5 * time.Second)
 						} else {
 							break
 						}
 					}
-					level.Info(s.Logger).Log("err", err, "msg", "Reconnected to AMQP")
+					log.Info("AMQP reconnection success: ", err)
 				}
 			}
 		}()
@@ -152,8 +148,7 @@ func (s *Server) Run(errorsChannel chan error) {
 
 		amqpChannel, err := s.amqpConn.Channel()
 		if err != nil {
-			level.Error(s.Logger).Log("err", err, "msg", "Failed to create AMQP channel")
-			os.Exit(1)
+			log.Fatal("Failed to create AMQP channel: ", err)
 		}
 		// defer amqpChannel.Close()
 
@@ -170,8 +165,7 @@ func (s *Server) Run(errorsChannel chan error) {
 		for queueName, consumerConfig := range s.amqpConsumers {
 			consumerQueue, err := amqpChannel.QueueDeclare(queueName, true, false, false, false, nil)
 			if err != nil {
-				level.Error(s.Logger).Log("err", err, "msg", fmt.Sprintf("Failed to create AMQP %s queue", queueName))
-				os.Exit(1)
+				log.Fatal(fmt.Sprintf("Failed to create AMQP %s queue: ", queueName), err)
 			}
 
 			for _, routingKey := range consumerConfig.RoutingKeys {
@@ -183,15 +177,13 @@ func (s *Server) Run(errorsChannel chan error) {
 					nil,
 				)
 				if err != nil {
-					level.Error(s.Logger).Log("err", err, "msg", fmt.Sprintf("Failed to bind AMQP [%s] queue with routing key [%s]", queueName, routingKey))
-					os.Exit(1)
+					log.Fatal(fmt.Sprintf("Failed to bind AMQP [%s] queue with routing key [%s]: ", queueName, routingKey), err)
 				}
 			}
 
 			msgDelivery, err := amqpChannel.Consume(consumerQueue.Name, fmt.Sprintf("%s-consumer-%s", s.cfg.ServiceName, queueName), true, false, false, false, nil)
 			if err != nil {
-				level.Error(s.Logger).Log("err", err, "msg", fmt.Sprintf("Failed to consume AMQP %s queue", queueName))
-				os.Exit(1)
+				log.Fatal(fmt.Sprintf("Failed to consume AMQP %s queue: ", queueName), err)
 			}
 
 			msgHandler := consumerConfig.Subscriber.ServeDelivery(amqpChannel)
@@ -205,7 +197,7 @@ func (s *Server) Run(errorsChannel chan error) {
 				}
 			}()
 
-			level.Info(s.Logger).Log("msg", fmt.Sprintf("Waiting messages for queue %s", queueName))
+			log.Info(fmt.Sprintf("Waiting for AMQP messaged in queue %s", queueName))
 		}
 
 		go func() {
@@ -214,7 +206,7 @@ func (s *Server) Run(errorsChannel chan error) {
 				case amqpMessage := <-s.AmqpPublisher:
 					amqpErr := amqpChannel.Publish(amqpMessage.Exchange, amqpMessage.Key, amqpMessage.Mandatory, amqpMessage.Immediate, amqpMessage.Msg)
 					if amqpErr != nil {
-						level.Error(s.Logger).Log("msg", "Error while publishing to AMQP queue", "err", amqpErr)
+						log.Error("Error while publishing to AMQP queue: ", amqpErr)
 					}
 				}
 			}
@@ -226,13 +218,11 @@ func (s *Server) Run(errorsChannel chan error) {
 					mTlsCertPool := x509.NewCertPool()
 					caCert, err := ioutil.ReadFile(s.cfg.MutualTLSClientCA)
 					if err != nil {
-						level.Error(s.Logger).Log("err", err, "msg", "Could not read client CA file")
-						os.Exit(1)
+						log.Fatal("Could not read client CA file: ", err)
 					}
 
 					if !mTlsCertPool.AppendCertsFromPEM(caCert) {
-						level.Error(s.Logger).Log("msg", "Could not append client CA to cert pool")
-						os.Exit(1)
+						log.Fatal("Could not append client CA to cert pool")
 					}
 
 					tlsConfig := &tls.Config{
@@ -245,19 +235,25 @@ func (s *Server) Run(errorsChannel chan error) {
 						TLSConfig: tlsConfig,
 					}
 
-					level.Info(s.Logger).Log("transport", "Mutual TLS", "address", ":"+s.cfg.Port, "msg", "listening")
-					errorsChannel <- http.ListenAndServeTLS(s.cfg.CertFile, s.cfg.KeyFile)
-
+					log.Info("Listening on port " + s.cfg.Port + " using HTTPS and mTLS")
+					err = http.ListenAndServeTLS(s.cfg.CertFile, s.cfg.KeyFile)
+					if err != nil {
+						log.Fatal("Could not start HTTPS server with mTLS: ", err)
+					}
 				} else {
-					level.Info(s.Logger).Log("transport", "HTTPS", "address", ":"+s.cfg.Port, "msg", "listening")
-					errorsChannel <- http.ListenAndServeTLS(":"+s.cfg.Port, s.cfg.CertFile, s.cfg.KeyFile, nil)
+					log.Info("Listening on port " + s.cfg.Port + " using HTTPS")
+					err = http.ListenAndServeTLS(":"+s.cfg.Port, s.cfg.CertFile, s.cfg.KeyFile, nil)
+					if err != nil {
+						log.Fatal("Could not start HTTPS server: ", err)
+					}
 				}
 			} else if strings.ToLower(s.cfg.Protocol) == "http" {
-				level.Info(s.Logger).Log("transport", "HTTP", "address", ":"+s.cfg.Port, "msg", "listening")
-				errorsChannel <- http.ListenAndServe(":"+s.cfg.Port, nil)
+				log.Info("Listening on port " + s.cfg.Port + " using HTTP")
+				if err != nil {
+					err = http.ListenAndServe(":"+s.cfg.Port, nil)
+				}
 			} else {
-				level.Error(s.Logger).Log("err", "msg", "Unknown protocol")
-				os.Exit(1)
+				log.Fatal("Unknown protocol")
 			}
 		}()
 
@@ -307,7 +303,7 @@ func (s *Server) buildAMQPConnection() error {
 
 		amqpCA, err := ioutil.ReadFile(s.cfg.AmqpServerCACert)
 		if err != nil {
-			level.Error(s.Logger).Log("err", err, "msg", "Could not read AMQP CA certificate")
+			log.Error("msg", "Could not read AMQP CA certificate: ", err)
 			os.Exit(1)
 		}
 
@@ -315,7 +311,7 @@ func (s *Server) buildAMQPConnection() error {
 		cert, err := tls.LoadX509KeyPair(s.cfg.CertFile, s.cfg.KeyFile)
 
 		if err != nil {
-			level.Error(s.Logger).Log("err", err, "msg", "Could not load AMQP TLS certificate")
+			log.Error("msg", "Could not load AMQP TLS certificate: ", err)
 			os.Exit(1)
 		}
 
@@ -324,14 +320,14 @@ func (s *Server) buildAMQPConnection() error {
 		amqpConn, err = amqp.DialTLS(fmt.Sprintf("amqps://%s%s:%s", userPassUrlPrefix, s.cfg.AmqpServerHost, s.cfg.AmqpServerPort), &amq_cfg)
 
 		if err != nil {
-			level.Error(s.Logger).Log("err", err, "msg", "Failed to connect to AMQP with TLS")
+			log.Error("msg", "Failed to connect to AMQP with TLS: ", err)
 			return err
 		}
 		s.amqpConn = amqpConn
 	} else {
 		amqpConn, err := amqp.Dial(fmt.Sprintf("amqp://%s%s:%s", userPassUrlPrefix, s.cfg.AmqpServerHost, s.cfg.AmqpServerPort))
 		if err != nil {
-			level.Error(s.Logger).Log("err", err, "msg", "Failed to connect to AMQP")
+			log.Error("msg", "Failed to connect to AMQP: ", err)
 			return err
 		}
 		s.amqpConn = amqpConn
@@ -339,4 +335,13 @@ func (s *Server) buildAMQPConnection() error {
 
 	s.amqpChanNotifyClose = s.amqpConn.NotifyClose(make(chan *amqp.Error)) //error channel
 	return nil
+}
+
+func httpTraceLogHandler(w http.ResponseWriter, r *http.Request) {
+	reqDump, err := httputil.DumpRequest(r, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Trace(string(reqDump))
 }

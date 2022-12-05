@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
 	endpoints "github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/endpoint"
@@ -29,13 +27,11 @@ type errorer interface {
 	error() error
 }
 
-func MakeHTTPHandler(s service.Service, logger log.Logger, strict bool) http.Handler {
+func MakeHTTPHandler(s service.Service, strict bool) http.Handler {
 	r := mux.NewRouter()
 	e := endpoints.MakeServerEndpoints(s)
 
-	options := []httptransport.ServerOption{
-		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
-	}
+	options := []httptransport.ServerOption{}
 
 	r.Methods("GET").Path("/health").Handler(
 		httptransport.NewServer(

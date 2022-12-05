@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	"github.com/robfig/cron/v3"
+	log "github.com/sirupsen/logrus"
 )
 
 type ServiceProvider interface {
@@ -21,20 +20,18 @@ type ServiceProvider interface {
 
 type ServiceProviderContext struct {
 	Service
-	logger       log.Logger
 	cronInstance *cron.Cron
 }
 
-func NewServiceProvider(serviceInstance Service, amqpPublisher *chan server.AmqpPublishMessage, logger log.Logger) ServiceProvider {
-	serviceInstance = NewAMQPMiddleware(*amqpPublisher, logger)(serviceInstance)
+func NewServiceProvider(serviceInstance Service, amqpPublisher *chan server.AmqpPublishMessage) ServiceProvider {
+	serviceInstance = NewAMQPMiddleware(*amqpPublisher)(serviceInstance)
 	serviceInstance = NewInputValudationMiddleware()(serviceInstance)
-	serviceInstance = LoggingMiddleware(logger)(serviceInstance)
+	serviceInstance = LoggingMiddleware()(serviceInstance)
 
 	cronInstance := cron.New()
 
 	svc := ServiceProviderContext{
 		Service:      serviceInstance,
-		logger:       logger,
 		cronInstance: cronInstance,
 	}
 
@@ -44,8 +41,8 @@ func NewServiceProvider(serviceInstance Service, amqpPublisher *chan server.Amqp
 	})
 
 	if err != nil {
-		level.Debug(logger).Log("msg", "failed to get LAMASSU-DMS-MANAGER", "err", err)
-		level.Debug(logger).Log("msg", "Generating LAMASSU-DMS-MANAGER CA", "err", err)
+		log.Warn("failed to get LAMASSU-DMS-MANAGER: ", err)
+		log.Warn("generating LAMASSU-DMS-MANAGER CA")
 		serviceInstance.CreateCA(context.Background(), &api.CreateCAInput{
 			CAType: api.CATypeDMSEnroller,
 			Subject: api.Subject{
@@ -61,20 +58,20 @@ func NewServiceProvider(serviceInstance Service, amqpPublisher *chan server.Amqp
 		})
 	}
 
-	cronInstance.AddFunc("0 * * * *", func() { // runs hourly
-		level.Debug(logger).Log("msg", "Starting scan")
+	cronInstance.AddFunc("0 * * * *", func() { // runs daily
+		log.Info("msg", "Starting scan")
 		output1, err := svc.ScanAboutToExpireCertificates(context.Background(), &api.ScanAboutToExpireCertificatesInput{})
 		if err != nil {
-			level.Debug(logger).Log("msg", "Error while perfoming AboutToExpire scan", "err", err)
+			log.Error("Error while perfoming AboutToExpire scan: ", err)
 		} else {
-			level.Debug(logger).Log("msg", fmt.Sprintf("Total AboutToExpire scanned certificates: %d", output1.AboutToExpiredTotal), "err", err)
+			log.Info(fmt.Sprintf("Total AboutToExpire scanned certificates: %d", output1.AboutToExpiredTotal))
 		}
 
 		output2, err := svc.ScanExpiredAndOutOfSyncCertificates(context.Background(), &api.ScanExpiredAndOutOfSyncCertificatesInput{})
 		if err != nil {
-			level.Debug(logger).Log("msg", "Error while perfoming Expired scan", "err", err)
+			log.Error("Error while perfoming Expired scan: ", err)
 		} else {
-			level.Debug(logger).Log("msg", fmt.Sprintf("Total Expired scanned certificates: %d", output2.TotalExpired), "err", err)
+			log.Info(fmt.Sprintf("Total Expired scanned certificates: %d", output2.TotalExpired))
 		}
 	})
 

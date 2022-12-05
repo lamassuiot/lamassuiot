@@ -6,7 +6,7 @@ type DMSManagerConfig struct {
 	server.BaseConfiguration
 
 	PostgresPassword string `required:"true" split_words:"true"`
-	PostgresUser     string `required:"true" split_words:"true"`
+	PostgresUsername string `required:"true" split_words:"true"`
 	PostgresDatabase string `required:"true" split_words:"true"`
 	PostgresHostname string `required:"true" split_words:"true"`
 	PostgresPort     string `required:"true" split_words:"true"`

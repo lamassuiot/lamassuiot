@@ -3,11 +3,10 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/common/api"
 	alerterrors "github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/errors"
@@ -24,7 +23,6 @@ type SubscriptionDAO struct {
 	Conditions       pq.StringArray `gorm:"type:text[]"`
 	SubscriptionDate time.Time
 	ConditionType    api.ConditionType
-	ExpectedValue    string
 }
 
 type ChannelDAO struct {
@@ -79,17 +77,16 @@ func (c *LogEventDAO) toLogEvent() (api.LogEvent, error) {
 	return logEvent, nil
 }
 
-func NewPostgresDB(db *gorm.DB, logger log.Logger) repository.AlertsRepository {
+func NewPostgresDB(db *gorm.DB) repository.AlertsRepository {
 	db.AutoMigrate(&ChannelDAO{})
 	db.AutoMigrate(&SubscriptionDAO{})
 	db.AutoMigrate(&LogEventDAO{})
 
-	return &PostgresDBContext{db, logger}
+	return &PostgresDBContext{db}
 }
 
 type PostgresDBContext struct {
 	*gorm.DB
-	logger log.Logger
 }
 
 func (db PostgresDBContext) GetUserSubscriptions(ctx context.Context, userID string) (api.UserSubscription, error) {
@@ -118,14 +115,13 @@ func (db PostgresDBContext) GetUserSubscriptions(ctx context.Context, userID str
 			Channel:          v.Channel.toChannel(),
 			Conditions:       v.Conditions,
 			ConditionType:    v.ConditionType,
-			ExpectedValue:    v.ExpectedValue,
 		})
 	}
 
 	return userSubs, nil
 }
 
-func (db PostgresDBContext) Subscribe(ctx context.Context, userID string, channel api.Channel, conditions []string, eventType string, conditionType api.ConditionType, expectedValue string) error {
+func (db PostgresDBContext) Subscribe(ctx context.Context, userID string, channel api.Channel, conditions []string, eventType string, conditionType api.ConditionType) error {
 	configBytes, err := json.Marshal(channel.Config)
 	if err != nil {
 		return err
@@ -144,9 +140,7 @@ func (db PostgresDBContext) Subscribe(ctx context.Context, userID string, channe
 		SubscriptionDate: time.Now(),
 		Conditions:       conditions,
 		ConditionType:    conditionType,
-		ExpectedValue:    expectedValue,
 	}).Error; err != nil {
-		level.Debug(db.logger).Log("msg", "Could not create subscription", "err", err)
 		return err
 	}
 
@@ -156,12 +150,15 @@ func (db PostgresDBContext) Subscribe(ctx context.Context, userID string, channe
 func (db PostgresDBContext) Unsubscribe(ctx context.Context, userID string, subscriptionID string) error {
 	var sub SubscriptionDAO
 	if err := db.WithContext(ctx).Model(&SubscriptionDAO{}).Where("user_id= ? ", userID).Where("id= ? ", subscriptionID).Preload("Channel").Find(&sub).Error; err != nil {
-		level.Debug(db.logger).Log("msg", "Could not obtain User from database")
-		notFoundErr := &alerterrors.ResourceNotFoundError{
-			ResourceType: "UserID",
-			ResourceId:   userID,
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			notFoundErr := &alerterrors.ResourceNotFoundError{
+				ResourceType: "UserID",
+				ResourceId:   userID,
+			}
+			return notFoundErr
+		} else {
+			return err
 		}
-		return notFoundErr
 	}
 
 	err := db.DeleteChannel(ctx, sub.Channel.ID)
@@ -179,7 +176,6 @@ func (db PostgresDBContext) Unsubscribe(ctx context.Context, userID string, subs
 func (db PostgresDBContext) GetSubscriptionsByEventType(ctx context.Context, eventType string) ([]api.Subscription, error) {
 	subsDAO := []SubscriptionDAO{}
 	if err := db.WithContext(ctx).Where("event = ?", eventType).Preload("Channel").Find(&subsDAO).Error; err != nil {
-		level.Debug(db.logger).Log("msg", "Could not get subscription", "err", err)
 		return make([]api.Subscription, 0), err
 	}
 
@@ -205,7 +201,6 @@ func (db PostgresDBContext) CreateChannel(ctx context.Context, id string, channe
 		Name:   name,
 		Config: config,
 	}).Error; err != nil {
-		level.Debug(db.logger).Log("msg", "Could not create channel", "err", err)
 		duplicateErr := &alerterrors.DuplicateResourceError{
 			ResourceType: "Channel",
 			ResourceId:   id,
@@ -218,12 +213,7 @@ func (db PostgresDBContext) CreateChannel(ctx context.Context, id string, channe
 
 func (db PostgresDBContext) DeleteChannel(ctx context.Context, id string) error {
 	if err := db.WithContext(ctx).Where("id = ?", id).Delete(&ChannelDAO{}).Error; err != nil {
-		level.Debug(db.logger).Log("msg", "Could not delte channel", "err", err)
-		notFoundErr := &alerterrors.ResourceNotFoundError{
-			ResourceType: "Channel",
-			ResourceId:   id,
-		}
-		return notFoundErr
+		return err
 	}
 
 	return nil
@@ -234,7 +224,6 @@ func (db PostgresDBContext) InsertAndUpdateEventLog(ctx context.Context, eventTy
 	exists = true
 	var eventDAO LogEventDAO
 	if err := db.WithContext(ctx).Model(&LogEventDAO{}).Where("event_type = ?", eventType).First(&eventDAO).Error; err != nil {
-		level.Debug(db.logger).Log("msg", "Could not obtain event from database")
 		exists = false
 	}
 
@@ -274,7 +263,6 @@ func (db PostgresDBContext) SelectEventLogs(ctx context.Context) ([]cloudevents.
 	var logEventsDAO []LogEventDAO
 	tx := db.WithContext(ctx).Model(&LogEventDAO{})
 	if err := tx.Find(&logEventsDAO).Error; err != nil {
-		level.Debug(db.logger).Log("err", err, "msg", "Could not obtain logs from database")
 		return []cloudevents.Event{}, err
 	}
 
@@ -283,9 +271,9 @@ func (db PostgresDBContext) SelectEventLogs(ctx context.Context) ([]cloudevents.
 		event := cloudevents.Event{}
 		err := json.Unmarshal([]byte(v.Event), &event)
 		if err != nil {
-			level.Debug(db.logger).Log("err", err)
 			continue
 		}
+
 		logEvents = append(logEvents, event)
 	}
 

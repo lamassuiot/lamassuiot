@@ -5,12 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/transport"
@@ -19,7 +15,9 @@ import (
 	esttransport "github.com/lamassuiot/lamassuiot/pkg/est/server/api/transport"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
-	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
+	gorm_logrus "github.com/onrik/gorm-logrus"
+	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
@@ -30,34 +28,36 @@ import (
 
 func main() {
 	config := config.NewDeviceManagerConfig()
+
+	dbLogrus := gormLogger.Default.LogMode(gormLogger.Silent)
+	if config.DebugMode {
+		logrus.SetLevel(logrus.InfoLevel)
+		dbLogrus = gorm_logrus.New()
+		dbLogrus.LogMode(gormLogger.Info)
+	}
+
 	mainServer := server.NewServer(config)
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUser, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUsername, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
 	})
 	if err != nil {
-		level.Error(mainServer.Logger).Log("msg", "failed to connect to postgres", "err", err)
-		os.Exit(1)
-	}
-
-	if err := db.Use(otelgorm.NewPlugin()); err != nil {
-		level.Error(mainServer.Logger).Log("msg", "Could not initialize OpenTelemetry DB-GORM plugin", "err", err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
 
 	statsRepo, err := badgerRepository.NewStatisticsDBInMemory()
 	if err != nil {
-		level.Error(mainServer.Logger).Log("msg", "failed to connect to badger", "err", err)
-		os.Exit(1)
+		log.Fatal("Failed to connect to badger: ", err)
 	}
-	deviceRepo := postgresRepository.NewDevicesPostgresDB(db, mainServer.Logger)
-	logsRepo := postgresRepository.NewLogsPostgresDB(db, mainServer.Logger)
+
+	deviceRepo := postgresRepository.NewDevicesPostgresDB(db)
+	logsRepo := postgresRepository.NewLogsPostgresDB(db)
 
 	var caClient lamassucaclient.LamassuCAClient
 	parsedLamassuCAURL, err := url.Parse(config.LamassuCAAddress)
 	if err != nil {
-		level.Error(mainServer.Logger).Log("msg", "Could not parse CA URL", "err", err)
+		log.Fatal("Could not parse CA URL")
 		os.Exit(1)
 	}
 
@@ -72,8 +72,7 @@ func main() {
 			CACertificate: config.LamassuCACertFile,
 		})
 		if err != nil {
-			level.Error(mainServer.Logger).Log("msg", "Could not create LamassuCA client", "err", err)
-			os.Exit(1)
+			log.Fatal("Could not create LamassuCA client: ", err)
 		}
 	} else {
 		caClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
@@ -81,16 +80,14 @@ func main() {
 			AuthMethod: clientUtils.AuthMethodNone,
 		})
 		if err != nil {
-			level.Error(mainServer.Logger).Log("msg", "Could not create LamassuCA client", "err", err)
-			os.Exit(1)
+			log.Fatal("Could not create LamassuCA client: ", err)
 		}
 	}
 
 	var dmsClient lamassudmsclient.LamassuDMSManagerClient
 	parsedLamassuDMSURL, err := url.Parse(config.LamassuDMSManagerAddress)
 	if err != nil {
-		level.Error(mainServer.Logger).Log("msg", "Could not parse DMS URL", "err", err)
-		os.Exit(1)
+		log.Fatal("Could not parse LamassuDMS url: ", err)
 	}
 
 	if strings.HasPrefix(config.LamassuCAAddress, "https") {
@@ -104,8 +101,7 @@ func main() {
 			CACertificate: config.LamassuCACertFile,
 		})
 		if err != nil {
-			level.Error(mainServer.Logger).Log("msg", "Could not create LamassuDMSManager client", "err", err)
-			os.Exit(1)
+			log.Fatal("Could not create LamassuDMS client: ", err)
 		}
 	} else {
 		dmsClient, err = lamassudmsclient.NewLamassuDMSManagerClientConfig(clientUtils.BaseClientConfigurationuration{
@@ -113,30 +109,23 @@ func main() {
 			AuthMethod: clientUtils.AuthMethodNone,
 		})
 		if err != nil {
-			level.Error(mainServer.Logger).Log("msg", "Could not create LamassuDMSManager client", "err", err)
-			os.Exit(1)
+			log.Fatal("Could not create LamassuDMS client: ", err)
 		}
 	}
 
 	var s service.Service
 	{
-		s = service.NewDeviceManagerService(mainServer.Logger, deviceRepo, logsRepo, statsRepo, config.MinimumReenrollDays, caClient, dmsClient)
-		s = service.NewAMQPMiddleware(mainServer.AmqpPublisher, mainServer.Logger)(s)
+		s = service.NewDeviceManagerService(deviceRepo, logsRepo, statsRepo, config.MinimumReenrollDays, caClient, dmsClient)
+		s = service.NewAMQPMiddleware(mainServer.AmqpPublisher)(s)
 		s = service.NewInputValudationMiddleware()(s)
-		s = service.LoggingMiddleware(mainServer.Logger)(s)
+		s = service.LoggingMiddleware()(s)
 	}
 
-	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s, log.With(mainServer.Logger, "component", "HTTPS"))))
-	mainServer.AddHttpHandler("/.well-known/", esttransport.MakeHTTPHandler(s, mainServer.Logger))
-	mainServer.AddAmqpConsumer(config.ServiceName, []string{"io.lamassuiot.certificate.update", "io.lamassuiot.certificate.revoke"}, transport.MakeAmqpHandler(s, mainServer.Logger))
+	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s)))
+	mainServer.AddHttpHandler("/.well-known/", esttransport.MakeHTTPHandler(s))
+	mainServer.AddAmqpConsumer(config.ServiceName, []string{"io.lamassuiot.certificate.update", "io.lamassuiot.certificate.revoke"}, transport.MakeAmqpHandler(s))
 
-	errs := make(chan error)
-	go func() {
-		c := make(chan os.Signal)
-		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-		errs <- fmt.Errorf("%s", <-c)
-	}()
-
-	mainServer.Run(errs)
-	level.Info(mainServer.Logger).Log("exit", <-errs)
+	mainServer.Run()
+	forever := make(chan struct{})
+	<-forever
 }
