@@ -29,7 +29,7 @@ func NewGolangPEMEngine(storageDirectory string) (CryptoEngine, error) {
 	pkcs11ProviderSupportedKeyTypes = append(pkcs11ProviderSupportedKeyTypes, api.SupportedKeyTypeInfo{
 		Type:        "RSA",
 		MinimumSize: 1024,
-		MaximumSize: 8192,
+		MaximumSize: 4096,
 	})
 
 	return &pemProviderContext{
