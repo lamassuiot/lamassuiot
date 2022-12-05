@@ -62,7 +62,7 @@ func NewCAService(engine x509engines.X509Engine, certificateRepository repositor
 		aboutToExpireDays:     aboutToExpireDays,
 	}
 
-	_, err := *svc.GetCAByName(context.Background(), &api.GetCAByNameInput{
+	_, err := svc.GetCAByName(context.Background(), &api.GetCAByNameInput{
 		CAType: api.CATypeDMSEnroller,
 		CAName: "LAMASSU-DMS-MANAGER",
 	})
