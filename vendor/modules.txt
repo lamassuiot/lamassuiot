@@ -716,8 +716,8 @@ github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.14
 ## explicit; go 1.12
 github.com/mattn/go-isatty
-# github.com/mattn/go-sqlite3 v1.14.12
-## explicit; go 1.12
+# github.com/mattn/go-sqlite3 v1.14.15
+## explicit; go 1.16
 github.com/mattn/go-sqlite3
 # github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369
 ## explicit; go 1.9
@@ -769,10 +769,6 @@ github.com/oliveagle/jsonpath
 # github.com/onrik/gorm-logrus v0.5.0
 ## explicit; go 1.17
 github.com/onrik/gorm-logrus
-# github.com/opentracing/opentracing-go v1.2.0
-## explicit; go 1.14
-github.com/opentracing/opentracing-go
-github.com/opentracing/opentracing-go/log
 # github.com/oracle/oci-go-sdk v13.1.0+incompatible
 ## explicit
 github.com/oracle/oci-go-sdk/common
@@ -840,9 +836,6 @@ github.com/robfig/cron/v3
 # github.com/ryanuber/go-glob v1.0.0
 ## explicit
 github.com/ryanuber/go-glob
-# github.com/sa-/slicefunk v0.1.3
-## explicit; go 1.18
-github.com/sa-/slicefunk
 # github.com/sasha-s/go-deadlock v0.2.0
 ## explicit
 github.com/sasha-s/go-deadlock
@@ -904,12 +897,6 @@ github.com/tklauser/numcpus
 # github.com/tv42/httpunix v0.0.0-20191220191345-2ba4b9c3382c
 ## explicit; go 1.13
 github.com/tv42/httpunix
-# github.com/uptrace/opentelemetry-go-extra/otelgorm v0.1.15
-## explicit; go 1.17
-github.com/uptrace/opentelemetry-go-extra/otelgorm
-# github.com/uptrace/opentelemetry-go-extra/otelsql v0.1.15
-## explicit; go 1.17
-github.com/uptrace/opentelemetry-go-extra/otelsql
 # github.com/valyala/bytebufferpool v1.0.0
 ## explicit
 github.com/valyala/bytebufferpool
@@ -994,7 +981,6 @@ go.opentelemetry.io/otel/internal/baggage
 go.opentelemetry.io/otel/internal/global
 go.opentelemetry.io/otel/propagation
 go.opentelemetry.io/otel/semconv/internal
-go.opentelemetry.io/otel/semconv/v1.10.0
 go.opentelemetry.io/otel/semconv/v1.12.0
 # go.opentelemetry.io/otel/metric v0.31.0
 ## explicit; go 1.17
@@ -1288,7 +1274,7 @@ gopkg.in/yaml.v3
 # gorm.io/driver/postgres v1.3.9
 ## explicit; go 1.14
 gorm.io/driver/postgres
-# gorm.io/driver/sqlite v1.3.6
+# gorm.io/driver/sqlite v1.4.3
 ## explicit; go 1.14
 gorm.io/driver/sqlite
 # gorm.io/gorm v1.24.2

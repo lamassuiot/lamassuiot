@@ -26,7 +26,7 @@ type ServiceProviderContext struct {
 func NewServiceProvider(serviceInstance Service, amqpPublisher *chan server.AmqpPublishMessage) ServiceProvider {
 	serviceInstance = NewAMQPMiddleware(*amqpPublisher)(serviceInstance)
 	serviceInstance = NewInputValudationMiddleware()(serviceInstance)
-	serviceInstance = LoggingMiddleware()(serviceInstance)
+	// serviceInstance = LoggingMiddleware(s)(serviceInstance)
 
 	cronInstance := cron.New()
 

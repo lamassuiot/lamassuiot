@@ -23,13 +23,10 @@ require (
 	github.com/ohler55/ojg v1.14.4
 	github.com/oliveagle/jsonpath v0.0.0-20180606110733-2e52cf6e6852
 	github.com/onrik/gorm-logrus v0.5.0
-	github.com/opentracing/opentracing-go v1.2.0
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/sa-/slicefunk v0.1.3
 	github.com/satori/go.uuid v1.2.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/streadway/amqp v1.0.0
-	github.com/uptrace/opentelemetry-go-extra/otelgorm v0.1.15
 	github.com/xeipuuv/gojsonschema v1.2.0
 	go.mozilla.org/pkcs7 v0.0.0-20210826202110-33d05740a352
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.34.0
@@ -37,10 +34,9 @@ require (
 	golang.org/x/crypto v0.0.0-20220829220503-c86fa9a7ed90
 	golang.org/x/exp v0.0.0-20220827204233-334a2380cb91
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5
-	golang.org/x/text v0.3.7
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
 	gorm.io/driver/postgres v1.3.9
-	gorm.io/driver/sqlite v1.3.6
+	gorm.io/driver/sqlite v1.4.3
 	gorm.io/gorm v1.24.2
 
 )
@@ -141,7 +137,6 @@ require (
 	github.com/tklauser/go-sysconf v0.3.9 // indirect
 	github.com/tklauser/numcpus v0.3.0 // indirect
 	github.com/tv42/httpunix v0.0.0-20191220191345-2ba4b9c3382c // indirect
-	github.com/uptrace/opentelemetry-go-extra/otelsql v0.1.15 // indirect
 	github.com/vmware/govmomi v0.18.0 // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
 	go.opencensus.io v0.23.0 // indirect
@@ -149,6 +144,7 @@ require (
 	go.opentelemetry.io/otel/metric v0.31.0 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211 // indirect
+	golang.org/x/text v0.3.7 // indirect
 	google.golang.org/api v0.30.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
@@ -229,7 +225,7 @@ require (
 	github.com/leodido/go-urn v1.2.1 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
-	github.com/mattn/go-sqlite3 v1.14.12 // indirect
+	github.com/mattn/go-sqlite3 v1.14.15 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect

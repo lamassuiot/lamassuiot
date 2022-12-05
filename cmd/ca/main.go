@@ -36,7 +36,7 @@ func main() {
 
 	var svc service.Service
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUsernamename, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUsername, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: dbLogrus,
 	})
