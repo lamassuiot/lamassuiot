@@ -74,6 +74,11 @@ type Server struct {
 }
 
 func NewServer(config Configuration) *Server {
+	log.SetFormatter(&log.TextFormatter{
+		ForceColors:   true,
+		FullTimestamp: true,
+	})
+
 	err := envconfig.Process("", config.GetConfiguration())
 	if err != nil {
 		log.Fatal("Could not process configuration: ", err)

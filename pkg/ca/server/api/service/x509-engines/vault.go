@@ -31,15 +31,17 @@ type Vaultx509Engine struct {
 	logger   log.Logger
 }
 
-func NewVaultx509Engine(address string, pkiPath string, roleID string, secretID string, CA string, unsealFile string, ocspUrl string) (X509Engine, error) {
+func NewVaultx509Engine(address string, pkiPath string, roleID string, secretID string, CA string, autoUnsealEnabled bool, unsealFile string, ocspUrl string) (X509Engine, error) {
 	client, err := CreateVaultSdkClient(address, CA)
 	if err != nil {
 		return nil, errors.New("Could not create Vault API client: " + err.Error())
 	}
 
-	err = Unseal(client, unsealFile)
-	if err != nil {
-		return nil, errors.New("Could not unseal Vault: " + err.Error())
+	if autoUnsealEnabled {
+		err = Unseal(client, unsealFile)
+		if err != nil {
+			return nil, errors.New("Could not unseal Vault: " + err.Error())
+		}
 	}
 
 	err = Login(client, roleID, secretID)

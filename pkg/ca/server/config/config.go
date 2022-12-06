@@ -7,8 +7,10 @@ import (
 type CAConfig struct {
 	server.BaseConfiguration
 
-	OcspUrl           string `required:"true" split_words:"true"`
-	AboutToExpireDays int    `required:"true" split_words:"true"`
+	OcspUrl             string `required:"true" split_words:"true"`
+	AboutToExpireDays   int    `required:"true" split_words:"true"`
+	PeriodicScanEnabled bool   `required:"true" split_words:"true"`
+	PeriodicScanCron    string `required:"true" split_words:"true"`
 
 	PostgresDatabase string `required:"true" split_words:"true"`
 	PostgresUsername string `required:"true" split_words:"true"`
@@ -20,12 +22,13 @@ type CAConfig struct {
 
 	GopemData string `split_words:"true"`
 
-	VaultUnsealKeysFile string `split_words:"true"`
-	VaultAddress        string `split_words:"true"`
-	VaultRoleID         string `split_words:"true"`
-	VaultSecretID       string `split_words:"true"`
-	VaultCA             string `split_words:"true"`
-	VaultPkiCaPath      string `split_words:"true"`
+	VaultAutoUnsealEnabled bool   `split_words:"true"`
+	VaultUnsealKeysFile    string `split_words:"true"`
+	VaultAddress           string `split_words:"true"`
+	VaultRoleID            string `split_words:"true"`
+	VaultSecretID          string `split_words:"true"`
+	VaultCA                string `split_words:"true"`
+	VaultPkiCaPath         string `split_words:"true"`
 }
 
 func NewCAConfig() *CAConfig {
