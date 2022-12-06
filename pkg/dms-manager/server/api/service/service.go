@@ -266,6 +266,13 @@ func (s *dmsManagerContext) UpdateDMSAuthorizedCAs(ctx context.Context, input *a
 		return &api.UpdateDMSAuthorizedCAsOutput{}, err
 	}
 
+	if dmsOutput.Status != api.DMSStatusApproved {
+		return &api.UpdateDMSAuthorizedCAsOutput{}, &dmsErrors.GenericError{
+			StatusCode: http.StatusBadRequest,
+			Message:    "DMS is not approved, can not update authorized CAs",
+		}
+	}
+
 	err = s.dmsRepository.UpdateAuthorizedCAs(ctx, input.Name, input.AuthorizedCAs)
 	if err != nil {
 		return &api.UpdateDMSAuthorizedCAsOutput{}, err
