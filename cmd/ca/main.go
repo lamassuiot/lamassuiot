@@ -56,7 +56,7 @@ func main() {
 		engine = x509engines.NewStandardx509Engine(gopemEngine, config.OcspUrl)
 
 	case "vault":
-		engine, err = x509engines.NewVaultx509Engine(config.VaultAddress, config.VaultPkiCaPath, config.VaultRoleID, config.VaultSecretID, config.VaultCA, config.VaultUnsealKeysFile, config.OcspUrl)
+		engine, err = x509engines.NewVaultx509Engine(config.VaultAddress, config.VaultPkiCaPath, config.VaultRoleID, config.VaultSecretID, config.VaultCA, config.VaultAutoUnsealEnabled, config.VaultUnsealKeysFile, config.OcspUrl)
 		if err != nil {
 			log.Fatal("Could not start connection with Vault Secret Engine: ", err)
 		}
@@ -65,7 +65,7 @@ func main() {
 		log.Fatal("Engine not supported")
 	}
 
-	svc = service.NewCAService(engine, certificateRepository, config.OcspUrl, config.AboutToExpireDays)
+	svc = service.NewCAService(engine, certificateRepository, config.OcspUrl, config.AboutToExpireDays, config.PeriodicScanEnabled, config.PeriodicScanCron)
 	caSvc := svc.(*service.CAService)
 
 	svc = service.LoggingMiddleware()(svc)

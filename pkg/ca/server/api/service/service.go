@@ -56,7 +56,7 @@ type CAService struct {
 	aboutToExpireDays     int
 }
 
-func NewCAService(engine x509engines.X509Engine, certificateRepository repository.Certificates, ocspServerURL string, aboutToExpireDays int) Service {
+func NewCAService(engine x509engines.X509Engine, certificateRepository repository.Certificates, ocspServerURL string, aboutToExpireDays int, periodicScanEnabled bool, periodicScanCron string) Service {
 	cronInstance := cron.New()
 
 	svc := CAService{
@@ -92,22 +92,24 @@ func NewCAService(engine x509engines.X509Engine, certificateRepository repositor
 		log.Info("LAMASSU-DMS-MANAGER CA already provisioned")
 	}
 
-	cronInstance.AddFunc("0 * * * *", func() { // runs daily
-		log.Info("msg", "Starting scan")
-		output1, err := svc.ScanAboutToExpireCertificates(context.Background(), &api.ScanAboutToExpireCertificatesInput{})
-		if err != nil {
-			log.Error("Error while perfoming AboutToExpire scan: ", err)
-		} else {
-			log.Info(fmt.Sprintf("Total AboutToExpire scanned certificates: %d", output1.AboutToExpiredTotal))
-		}
+	if periodicScanEnabled {
+		cronInstance.AddFunc(periodicScanCron, func() { // runs daily
+			log.Info("msg", "Starting scan")
+			output1, err := svc.ScanAboutToExpireCertificates(context.Background(), &api.ScanAboutToExpireCertificatesInput{})
+			if err != nil {
+				log.Error("Error while perfoming AboutToExpire scan: ", err)
+			} else {
+				log.Info(fmt.Sprintf("Total AboutToExpire scanned certificates: %d", output1.AboutToExpiredTotal))
+			}
 
-		output2, err := svc.ScanExpiredAndOutOfSyncCertificates(context.Background(), &api.ScanExpiredAndOutOfSyncCertificatesInput{})
-		if err != nil {
-			log.Error("Error while perfoming Expired scan: ", err)
-		} else {
-			log.Info(fmt.Sprintf("Total Expired scanned certificates: %d", output2.TotalExpired))
-		}
-	})
+			output2, err := svc.ScanExpiredAndOutOfSyncCertificates(context.Background(), &api.ScanExpiredAndOutOfSyncCertificatesInput{})
+			if err != nil {
+				log.Error("Error while perfoming Expired scan: ", err)
+			} else {
+				log.Info(fmt.Sprintf("Total Expired scanned certificates: %d", output2.TotalExpired))
+			}
+		})
+	}
 
 	svc.cronInstance = cronInstance
 	return &svc
