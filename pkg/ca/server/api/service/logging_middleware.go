@@ -282,3 +282,35 @@ func (mw loggingMiddleware) GetExpiredAndOutOfSyncCertificates(ctx context.Conte
 	}(time.Now())
 	return mw.next.GetExpiredAndOutOfSyncCertificates(ctx, input)
 }
+
+func (mw loggingMiddleware) ScanAboutToExpireCertificates(ctx context.Context, input *api.ScanAboutToExpireCertificatesInput) (output *api.ScanAboutToExpireCertificatesOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "ScanAboutToExpireCertificates"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.ScanAboutToExpireCertificates(ctx, input)
+}
+
+func (mw loggingMiddleware) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (output *api.ScanExpiredAndOutOfSyncCertificatesOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "ScanExpiredAndOutOfSyncCertificates"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.ScanExpiredAndOutOfSyncCertificates(ctx, input)
+}

@@ -286,6 +286,16 @@ func (c *lamassuCaClientConfig) UpdateCertificateStatus(ctx context.Context, inp
 	return &api.UpdateCertificateStatusOutput{}, nil
 }
 
+func (c *lamassuCaClientConfig) ScanAboutToExpireCertificates(ctx context.Context, input *api.ScanAboutToExpireCertificatesInput) (*api.ScanAboutToExpireCertificatesOutput, error) {
+	// TODO: To implement
+	return &api.ScanAboutToExpireCertificatesOutput{}, nil
+}
+
+func (c *lamassuCaClientConfig) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (*api.ScanExpiredAndOutOfSyncCertificatesOutput, error) {
+	// TODO: To implement
+	return &api.ScanExpiredAndOutOfSyncCertificatesOutput{}, nil
+}
+
 func (c *lamassuCaClientConfig) GetCertificateBySerialNumber(ctx context.Context, input *api.GetCertificateBySerialNumberInput) (*api.GetCertificateBySerialNumberOutput, error) {
 	//TODO: To Refact with new synta. Check GetCAByName and GetCAs
 

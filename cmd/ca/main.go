@@ -66,13 +66,18 @@ func main() {
 	}
 
 	svc = service.NewCAService(engine, certificateRepository, config.OcspUrl, config.AboutToExpireDays)
+	caSvc := svc.(*service.CAService)
+
+	svc = service.LoggingMiddleware()(svc)
+	svc = service.NewAMQPMiddleware(mainServer.AmqpPublisher)(svc)
+	svc = service.NewInputValudationMiddleware()(svc)
+
+	caSvc.SetService(svc)
 
 	log.Info("Engine initialized")
 	log.Info(fmt.Sprintf("Engine options: %v", svc.GetEngineProviderInfo()))
 
-	svcProvider := service.NewServiceProvider(svc, &mainServer.AmqpPublisher)
-
-	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(svcProvider)))
+	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(svc)))
 
 	mainServer.Run()
 	forever := make(chan struct{})

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
-	caerrors "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/repository"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
@@ -176,13 +175,8 @@ type PostgresDBContext struct {
 
 func (db *PostgresDBContext) UpdateCertificateStatus(ctx context.Context, CAType api.CAType, CAName string, serialNumber string, status api.CertificateStatus, revocationReason string) error {
 	var certifcate CertificateDAO
-
 	if err := db.WithContext(ctx).Model(&CertificateDAO{}).Where("serial_number = ?", serialNumber).First(&certifcate).Error; err != nil {
-		notFoundErr := &caerrors.ResourceNotFoundError{
-			ResourceType: "Certificate",
-			ResourceId:   serialNumber,
-		}
-		return notFoundErr
+		return err
 	}
 
 	certifcate.Status = status
@@ -217,11 +211,7 @@ func (db PostgresDBContext) InsertCertificate(ctx context.Context, CAType api.CA
 	})
 
 	if tx.Error != nil {
-		duplicationErr := &caerrors.DuplicateResourceError{
-			ResourceType: "Certificate",
-			ResourceId:   utils.InsertNth(utils.ToHexInt(certificate.SerialNumber), 2),
-		}
-		return duplicationErr
+		return tx.Error
 	}
 
 	return nil
@@ -320,31 +310,23 @@ func (db PostgresDBContext) ScanExpiredAndOutOfSyncCertificates(ctx context.Cont
 	return int(totalCertificates), parsedCertificates, nil
 }
 
-func (db PostgresDBContext) SelectCertificateBySerialNumber(ctx context.Context, CAType api.CAType, CAName string, serialNumber string) (api.Certificate, error) {
+func (db PostgresDBContext) SelectCertificateBySerialNumber(ctx context.Context, CAType api.CAType, CAName string, serialNumber string) (bool, api.Certificate, error) {
 	var cert CertificateDAO
 	if err := db.WithContext(ctx).Model(&CertificateDAO{}).Where("ca_name = ?", CAName).Where("type = ?", CAType).Where("serial_number = ?", serialNumber).First(&cert).Error; err != nil {
-		notFoundErr := &caerrors.ResourceNotFoundError{
-			ResourceType: "Certificate",
-			ResourceId:   serialNumber,
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, api.Certificate{}, nil
+		} else {
+			return false, api.Certificate{}, err
 		}
-		return api.Certificate{}, notFoundErr
 	}
 
-	return cert.toCertificate()
+	decodedCert, err := cert.toCertificate()
+	return true, decodedCert, err
 }
 
 func (db PostgresDBContext) UpdateCAStatus(ctx context.Context, CAType api.CAType, CAName string, status api.CertificateStatus, revocationReason string) error {
 	var ca CertificateAuthorityDAO
 	db.WithContext(ctx).Model(&CertificateAuthorityDAO{}).Where("ca_name = ?", CAName).Where("type = ?", CAType).First(&ca)
-
-	if ca.SerialNumber == "" {
-
-		notFoundErr := &caerrors.ResourceNotFoundError{
-			ResourceType: "CA",
-			ResourceId:   CAName,
-		}
-		return notFoundErr
-	}
 
 	ca.Status = status
 	if status == api.StatusRevoked {
@@ -380,31 +362,25 @@ func (db PostgresDBContext) InsertCA(ctx context.Context, CAType api.CAType, cer
 		IssuanceDuration: int(issuanceDuration.Seconds()),
 	})
 	if tx.Error != nil {
-		duplicationErr := &caerrors.DuplicateResourceError{
-			ResourceType: "CA",
-			ResourceId:   certificate.Subject.CommonName,
-		}
-		return duplicationErr
+		return tx.Error
 	}
 
 	return nil
 }
 
-func (db PostgresDBContext) SelectCAByName(ctx context.Context, CAType api.CAType, CAName string) (api.CACertificate, error) {
+func (db PostgresDBContext) SelectCAByName(ctx context.Context, CAType api.CAType, CAName string) (bool, api.CACertificate, error) {
 	var ca CertificateAuthorityDAO
 	if err := db.WithContext(ctx).Model(&CertificateAuthorityDAO{}).Where("ca_name = ?", CAName).Where("type = ?", CAType).First(&ca).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			notFoundErr := &caerrors.ResourceNotFoundError{
-				ResourceType: "CA",
-				ResourceId:   CAName,
-			}
-			return api.CACertificate{}, notFoundErr
+			return false, api.CACertificate{}, nil
 		} else {
-			return api.CACertificate{}, err
+			return false, api.CACertificate{}, err
 		}
 	}
 
-	return ca.toCertificate()
+	decodedCA, err := ca.toCertificate()
+
+	return true, decodedCA, err
 }
 
 func (db PostgresDBContext) SelectCAs(ctx context.Context, CAType api.CAType, queryParameters common.QueryParameters) (int, []api.CACertificate, error) {
@@ -412,7 +388,6 @@ func (db PostgresDBContext) SelectCAs(ctx context.Context, CAType api.CAType, qu
 	tx := db.WithContext(ctx).Model(&CertificateAuthorityDAO{}).Where("type = ?", CAType)
 	tx = filters.ApplyFilters(tx, queryParameters.Filters) // only count cas that match the filters
 	if err := tx.Count(&totalCAs).Error; err != nil {
-
 		return 0, []api.CACertificate{}, err
 	}
 
