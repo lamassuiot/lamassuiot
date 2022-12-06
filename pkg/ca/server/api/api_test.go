@@ -989,7 +989,7 @@ func TestRevokeCA(t *testing.T) {
 					},
 					KeyMetadata: api.KeyMetadata{
 						KeyType: api.RSA,
-						KeyBits: 4096,
+						KeyBits: 2048,
 					},
 					CADuration:       time.Hour * 5,
 					IssuanceDuration: time.Hour,
@@ -1011,8 +1011,8 @@ func TestRevokeCA(t *testing.T) {
 				obj.Object().ContainsMap(map[string]interface{}{
 					"issuance_duration": int(issuanceDuration.Seconds()),
 					"key_metadata": map[string]interface{}{
-						"bits":     4096,
-						"strength": "HIGH",
+						"bits":     2048,
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status":            "REVOKED",
@@ -1039,7 +1039,7 @@ func TestRevokeCA(t *testing.T) {
 					},
 					KeyMetadata: api.KeyMetadata{
 						KeyType: api.RSA,
-						KeyBits: 4096,
+						KeyBits: 2048,
 					},
 					CADuration:       time.Hour * 5,
 					IssuanceDuration: time.Hour,
@@ -1089,8 +1089,8 @@ func TestRevokeCA(t *testing.T) {
 				obj.Object().ContainsMap(map[string]interface{}{
 					"issuance_duration": int(issuanceDuration.Seconds()),
 					"key_metadata": map[string]interface{}{
-						"bits":     4096,
-						"strength": "HIGH",
+						"bits":     2048,
+						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
 					"status":            "REVOKED",
@@ -1129,7 +1129,7 @@ func TestRevokeCA(t *testing.T) {
 					},
 					KeyMetadata: api.KeyMetadata{
 						KeyType: api.RSA,
-						KeyBits: 4096,
+						KeyBits: 2048,
 					},
 					CADuration:       time.Hour * 5,
 					IssuanceDuration: time.Hour,
@@ -1156,7 +1156,7 @@ func TestRevokeCA(t *testing.T) {
 					},
 					KeyMetadata: api.KeyMetadata{
 						KeyType: api.RSA,
-						KeyBits: 4096,
+						KeyBits: 2048,
 					},
 					CADuration:       time.Hour * 5,
 					IssuanceDuration: time.Hour,

@@ -24,6 +24,8 @@ func (mw *validationMiddleware) Health() (healthy bool) {
 	return mw.next.Health()
 }
 
+func (s *validationMiddleware) SetService(service Service) {}
+
 func (mw *validationMiddleware) GetEngineProviderInfo() (output api.EngineProviderInfo) {
 	return mw.next.GetEngineProviderInfo()
 }
@@ -219,4 +221,28 @@ func (mw *validationMiddleware) GetExpiredAndOutOfSyncCertificates(ctx context.C
 		return nil, &valError
 	}
 	return mw.next.GetExpiredAndOutOfSyncCertificates(ctx, input)
+}
+
+func (mw *validationMiddleware) ScanAboutToExpireCertificates(ctx context.Context, input *api.ScanAboutToExpireCertificatesInput) (output *api.ScanAboutToExpireCertificatesOutput, err error) {
+	validate := validator.New()
+	err = validate.Struct(input)
+	if err != nil {
+		valError := errors.ValidationError{
+			Msg: err.Error(),
+		}
+		return nil, &valError
+	}
+	return mw.next.ScanAboutToExpireCertificates(ctx, input)
+}
+
+func (mw *validationMiddleware) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (output *api.ScanExpiredAndOutOfSyncCertificatesOutput, err error) {
+	validate := validator.New()
+	err = validate.Struct(input)
+	if err != nil {
+		valError := errors.ValidationError{
+			Msg: err.Error(),
+		}
+		return nil, &valError
+	}
+	return mw.next.ScanExpiredAndOutOfSyncCertificates(ctx, input)
 }

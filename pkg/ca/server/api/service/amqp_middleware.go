@@ -46,6 +46,7 @@ func NewAMQPMiddleware(amqpPublisher chan server.AmqpPublishMessage) Middleware 
 		}
 	}
 }
+func (mw amqpMiddleware) SetService(service Service) {}
 
 func (mw *amqpMiddleware) sendAMQPMessage(ctx context.Context, eventType string, output interface{}) {
 	event := CreateEvent(ctx, "1.0", Source, eventType, output)
@@ -165,4 +166,12 @@ func (mw *amqpMiddleware) GetCertificatesAboutToExpire(ctx context.Context, inpu
 
 func (mw *amqpMiddleware) GetExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.GetExpiredAndOutOfSyncCertificatesInput) (output *api.GetExpiredAndOutOfSyncCertificatesOutput, err error) {
 	return mw.next.GetExpiredAndOutOfSyncCertificates(ctx, input)
+}
+
+func (mw *amqpMiddleware) ScanAboutToExpireCertificates(ctx context.Context, input *api.ScanAboutToExpireCertificatesInput) (*api.ScanAboutToExpireCertificatesOutput, error) {
+	return mw.next.ScanAboutToExpireCertificates(ctx, input)
+}
+
+func (mw *amqpMiddleware) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (*api.ScanExpiredAndOutOfSyncCertificatesOutput, error) {
+	return mw.next.ScanExpiredAndOutOfSyncCertificates(ctx, input)
 }
