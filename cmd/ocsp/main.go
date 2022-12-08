@@ -25,27 +25,6 @@ func main() {
 
 	mainServer := server.NewServer(config)
 
-	keyBytes, err := os.ReadFile(config.SignerKey)
-	if err != nil {
-		log.Fatal("Could not read key file: ", err)
-	}
-
-	block, _ := pem.Decode(keyBytes)
-	rsaKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		log.Fatal("Could not parse key file: ", err)
-	}
-
-	certBytes, err := os.ReadFile(config.SignerCert)
-	if err != nil {
-		log.Fatal("Could not read cert file: ", err)
-	}
-	block, _ = pem.Decode(certBytes)
-	cert, err := x509.ParseCertificate(block.Bytes)
-	if err != nil {
-		log.Fatal("Could not parse cert file: ", err)
-	}
-
 	var lamassuCAClient lamassucaclient.LamassuCAClient
 	parsedLamassuCAURL, err := url.Parse(config.LamassuCAAddress)
 	if err != nil {
@@ -75,9 +54,37 @@ func main() {
 		}
 	}
 
-	s := service.NewOCSPService(lamassuCAClient, rsaKey, cert)
+	certBytes, err := os.ReadFile(config.SignerCert)
+	if err != nil {
+		log.Fatal("Could not read cert file: ", err)
+	}
+	block, _ := pem.Decode(certBytes)
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		log.Fatal("Could not parse cert file: ", err)
+	}
 
-	mainServer.AddHttpHandler("/", transport.MakeHTTPHandler(s, false))
+	keyBytes, err := os.ReadFile(config.SignerKey)
+	if err != nil {
+		log.Fatal("Could not read key file: ", err)
+	}
+
+	block, _ = pem.Decode(keyBytes)
+
+	rsaKey, rsaerr := x509.ParsePKCS1PrivateKey(block.Bytes)
+	ecdsaKey, ecdsaerr := x509.ParseECPrivateKey(block.Bytes)
+	var svc service.Service
+	if rsaerr == nil {
+		svc = service.NewOCSPService(lamassuCAClient, rsaKey, cert)
+		log.Trace("RSA TYPE")
+	} else if ecdsaerr == nil {
+		svc = service.NewOCSPService(lamassuCAClient, ecdsaKey, cert)
+		log.Trace("ECDSA TYPE")
+	} else {
+		log.Fatal("Could not parse key file: ", err)
+	}
+
+	mainServer.AddHttpHandler("/", transport.MakeHTTPHandler(svc, false))
 
 	mainServer.Run()
 	forever := make(chan struct{})

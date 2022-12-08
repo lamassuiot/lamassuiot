@@ -35,10 +35,10 @@ func main() {
 	flag.IntVar(&maxGoRoutines, "max-go-routines", 1, "Max Go Routines")
 
 	var reenrolls int
-	flag.IntVar(&reenrolls, "reenrolls", 150, "Reenrolls")
+	flag.IntVar(&reenrolls, "reenrolls", 1, "Reenrolls")
 
 	var gatewayURL string
-	flag.StringVar(&gatewayURL, "gateway-url", "https://istio.lamassu.zpd.ikerlan.es", "gateway URL")
+	flag.StringVar(&gatewayURL, "gateway-url", "https://pre.lamassu.zpd.ikerlan.es", "gateway URL")
 
 	flag.Parse()
 
@@ -152,7 +152,7 @@ func worker(results chan<- int, urlEstServer url.URL, reenrolls int, caClient la
 			KeyBits: 4096,
 		},
 		CADuration:       time.Hour * 2,
-		IssuanceDuration: time.Hour,
+		IssuanceDuration: time.Minute * 7,
 	})
 	if err != nil {
 		fmt.Println("GoRoutine could not create CA: ", err)

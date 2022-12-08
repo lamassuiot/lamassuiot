@@ -13,7 +13,6 @@ import (
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	gorm_logrus "github.com/onrik/gorm-logrus"
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -27,7 +26,6 @@ func main() {
 
 	dbLogrus := gormLogger.Default.LogMode(gormLogger.Silent)
 	if config.DebugMode {
-		logrus.SetLevel(logrus.InfoLevel)
 		dbLogrus = gorm_logrus.New()
 		dbLogrus.LogMode(gormLogger.Info)
 	}
@@ -36,7 +34,7 @@ func main() {
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUsername, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
+		Logger: dbLogrus,
 	})
 	if err != nil {
 		log.Fatal(err)

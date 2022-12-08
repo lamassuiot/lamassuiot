@@ -12,15 +12,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/pkg/utils"
 	log "github.com/sirupsen/logrus"
-
-	// stdout "go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 
 	amqptransport "github.com/go-kit/kit/transport/amqp"
 
 	"github.com/kelseyhightower/envconfig"
-
 	"github.com/streadway/amqp"
+	"golang.org/x/exp/slices"
 )
 
 var (
@@ -77,6 +76,15 @@ func NewServer(config Configuration) *Server {
 	log.SetFormatter(&log.TextFormatter{
 		ForceColors:   true,
 		FullTimestamp: true,
+		SortingFunc: func(s []string) {
+			methodIdx := slices.IndexFunc(s, func(item string) bool {
+				return item == "method"
+			})
+
+			if methodIdx != -1 {
+				s = utils.SliceMove(s, methodIdx, 0)
+			}
+		},
 	})
 
 	err := envconfig.Process("", config.GetConfiguration())
@@ -94,7 +102,7 @@ func NewServer(config Configuration) *Server {
 
 	mux := http.NewServeMux()
 
-	http.HandleFunc("/", httpTraceLogHandler)
+	//http.HandleFunc("/", httpTraceLogHandler)
 	http.Handle("/info", accessControl(infoHandler()))
 
 	s := Server{

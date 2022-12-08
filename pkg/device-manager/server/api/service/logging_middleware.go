@@ -132,22 +132,6 @@ func (mw loggingMiddleware) GetDeviceById(ctx context.Context, input *api.GetDev
 	return mw.next.GetDeviceById(ctx, input)
 }
 
-func (mw loggingMiddleware) IterateDevicesWithPredicate(ctx context.Context, input *api.IterateDevicesWithPredicateInput) (output *api.IterateDevicesWithPredicateOutput, err error) {
-	defer func(begin time.Time) {
-		var logMsg = map[string]interface{}{}
-		logMsg["method"] = "IterateDevicesWithPredicate"
-		logMsg["took"] = time.Since(begin)
-		logMsg["input"] = input
-
-		if err == nil {
-			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output))
-		} else {
-			log.WithFields(logMsg).Error(err)
-		}
-	}(time.Now())
-	return mw.next.IterateDevicesWithPredicate(ctx, input)
-}
-
 func (mw loggingMiddleware) AddDeviceSlot(ctx context.Context, input *api.AddDeviceSlotInput) (output *api.AddDeviceSlotOutput, err error) {
 	defer func(begin time.Time) {
 		var logMsg = map[string]interface{}{}
@@ -270,6 +254,7 @@ func (mw loggingMiddleware) Enroll(ctx context.Context, csr *x509.CertificateReq
 		logMsg["aps"] = aps
 		logMsg["csr_cn"] = csr.Subject.CommonName
 		logMsg["crt_cn"] = cert.Subject.CommonName
+		logMsg["crt_sn"] = utils.InsertNth(utils.ToHexInt(cert.SerialNumber), 2)
 
 		if err == nil {
 			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", utils.InsertNth(utils.ToHexInt(crt.SerialNumber), 2)))
@@ -287,6 +272,7 @@ func (mw loggingMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateR
 		logMsg["took"] = time.Since(begin)
 		logMsg["csr_cn"] = csr.Subject.CommonName
 		logMsg["crt_cn"] = cert.Subject.CommonName
+		logMsg["crt_sn"] = utils.InsertNth(utils.ToHexInt(cert.SerialNumber), 2)
 
 		if err == nil {
 			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", utils.InsertNth(utils.ToHexInt(crt.SerialNumber), 2)))
@@ -305,6 +291,7 @@ func (mw loggingMiddleware) ServerKeyGen(ctx context.Context, csr *x509.Certific
 		logMsg["aps"] = aps
 		logMsg["csr_cn"] = csr.Subject.CommonName
 		logMsg["crt_cn"] = cert.Subject.CommonName
+		logMsg["crt_sn"] = utils.InsertNth(utils.ToHexInt(cert.SerialNumber), 2)
 
 		if err == nil {
 			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", utils.InsertNth(utils.ToHexInt(crt.SerialNumber), 2)))

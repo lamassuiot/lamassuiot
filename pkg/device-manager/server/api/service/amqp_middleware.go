@@ -117,21 +117,11 @@ func (mw *amqpMiddleware) GetDeviceById(ctx context.Context, input *api.GetDevic
 	return mw.next.GetDeviceById(ctx, input)
 }
 
-func (mw *amqpMiddleware) IterateDevicesWithPredicate(ctx context.Context, input *api.IterateDevicesWithPredicateInput) (*api.IterateDevicesWithPredicateOutput, error) {
-	return mw.next.IterateDevicesWithPredicate(ctx, input)
-}
-
 func (mw *amqpMiddleware) AddDeviceSlot(ctx context.Context, input *api.AddDeviceSlotInput) (*api.AddDeviceSlotOutput, error) {
 	return mw.next.AddDeviceSlot(ctx, input)
 }
 
 func (mw *amqpMiddleware) UpdateActiveCertificateStatus(ctx context.Context, input *api.UpdateActiveCertificateStatusInput) (output *api.UpdateActiveCertificateStatusOutput, err error) {
-	defer func() {
-		if err == nil {
-			mw.sendAMQPMessage(fmt.Sprintf("%s.device.update", EventPrefix), output.Serialize())
-		}
-
-	}()
 	return mw.next.UpdateActiveCertificateStatus(ctx, input)
 }
 

@@ -93,8 +93,9 @@ func NewCAService(engine x509engines.X509Engine, certificateRepository repositor
 	}
 
 	if periodicScanEnabled {
-		cronInstance.AddFunc(periodicScanCron, func() { // runs daily
-			log.Info("msg", "Starting scan")
+		log.Info(fmt.Sprintf("Adding periodic scan funcion at [%s]", periodicScanCron))
+		_, err := cronInstance.AddFunc(periodicScanCron, func() { // runs daily
+			log.Info("Starting scan")
 			output1, err := svc.ScanAboutToExpireCertificates(context.Background(), &api.ScanAboutToExpireCertificatesInput{})
 			if err != nil {
 				log.Error("Error while perfoming AboutToExpire scan: ", err)
@@ -109,9 +110,15 @@ func NewCAService(engine x509engines.X509Engine, certificateRepository repositor
 				log.Info(fmt.Sprintf("Total Expired scanned certificates: %d", output2.TotalExpired))
 			}
 		})
+		if err != nil {
+			log.Error("Could not add periodic scan function in cron service: ", err)
+		}
+	} else {
+		log.Info("Periodic scann is disabled")
 	}
 
 	svc.cronInstance = cronInstance
+	svc.cronInstance.Start()
 	return &svc
 }
 

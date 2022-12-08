@@ -7,6 +7,7 @@ on:
     paths:
         - '.github/workflows/device-manager*'
         - 'pkg/device-manager/**'
+        - 'pkg/utils/**'
         - 'main/device-manager/**'
   workflow_call:
 

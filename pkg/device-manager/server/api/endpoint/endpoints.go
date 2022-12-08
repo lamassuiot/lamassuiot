@@ -280,13 +280,22 @@ func MakeHandleCACloudEvent(s service.Service) endpoint.Endpoint {
 			} else {
 				deviceID = cetificate.Certificate.Subject.CommonName
 			}
+			if cetificate.Status == caApi.StatusAboutToExpire {
 
-			_, err = s.UpdateActiveCertificateStatus(ctx, &api.UpdateActiveCertificateStatusInput{
-				DeviceID:         deviceID,
-				SlotID:           slotID,
-				Status:           cetificate.Status,
-				RevocationReason: cetificate.RevocationReason,
-			})
+				_, err = s.ForceReenroll(ctx, &api.ForceReenrollInput{
+					DeviceID:      deviceID,
+					SlotID:        slotID,
+					ForceReenroll: true,
+				})
+			} else {
+				_, err = s.UpdateActiveCertificateStatus(ctx, &api.UpdateActiveCertificateStatusInput{
+					DeviceID:         deviceID,
+					SlotID:           slotID,
+					Status:           cetificate.Status,
+					RevocationReason: cetificate.RevocationReason,
+				})
+			}
+
 			return nil, err
 
 		case "io.lamassuiot.certificate.revoke":
