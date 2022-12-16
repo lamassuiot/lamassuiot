@@ -303,7 +303,12 @@ func (db *postgresDBContext) SelectDevices(ctx context.Context, queryParameters 
 
 	var devices []*api.Device
 	for _, v := range devicesDAO {
-		devices = append(devices, v.toDevice())
+		_, dev, err := db.SelectDeviceById(ctx, v.ID)
+		if err != nil {
+			continue
+		}
+
+		devices = append(devices, dev)
 	}
 
 	return int(totalDevices), devices, nil
@@ -323,7 +328,12 @@ func (db *postgresDBContext) SelectDevicesByStatus(ctx context.Context, status a
 
 	var devices []*api.Device
 	for _, v := range devicesDAO {
-		devices = append(devices, v.toDevice())
+		_, dev, err := db.SelectDeviceById(ctx, v.ID)
+		if err != nil {
+			continue
+		}
+
+		devices = append(devices, dev)
 	}
 
 	return int(totalDevices), devices, nil

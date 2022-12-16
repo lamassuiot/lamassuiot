@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	cloudevents "github.com/cloudevents/sdk-go/v2"
+	//cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/common/api"
 	log "github.com/sirupsen/logrus"
 )
@@ -83,7 +83,7 @@ func (mw loggingMiddleware) UnsubscribedEvent(ctx context.Context, input *api.Un
 	return mw.next.UnsubscribedEvent(ctx, input)
 }
 
-func (mw loggingMiddleware) GetEventLogs(ctx context.Context, input *api.GetEventsInput) (output []cloudevents.Event, err error) {
+func (mw loggingMiddleware) GetEventLogs(ctx context.Context, input *api.GetEventsInput) (output *api.GetEventsOutput, err error) {
 	defer func(begin time.Time) {
 		var logMsg = map[string]interface{}{}
 		logMsg["method"] = "GetEventLogs"
@@ -91,7 +91,7 @@ func (mw loggingMiddleware) GetEventLogs(ctx context.Context, input *api.GetEven
 		logMsg["input"] = input
 
 		if err == nil {
-			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %s", output))
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: Total number of events: %d", len(output.LastEvents)))
 		} else {
 			log.WithFields(logMsg).Error(err)
 		}

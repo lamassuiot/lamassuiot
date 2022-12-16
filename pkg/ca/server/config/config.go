@@ -22,6 +22,10 @@ type CAConfig struct {
 
 	GopemData string `split_words:"true"`
 
+	AWSAccessKeyID     string `split_words:"true"`
+	AWSSecretAccessKey string `split_words:"true"`
+	AWSDefaultRegion   string `split_words:"true"`
+
 	VaultAutoUnsealEnabled bool   `split_words:"true"`
 	VaultUnsealKeysFile    string `split_words:"true"`
 	VaultAddress           string `split_words:"true"`

@@ -90,13 +90,13 @@ func main() {
 		}
 	}
 
-	var svc service.Service
-	{
-		svc = service.NewCloudPorxyService(consulClient, cloudProxyRepo, lamassuCAClient, clientBaseConfig)
-		svc = service.NewInputValudationMiddleware()(svc)
-		svc = service.LoggingMiddleware()(svc)
+	svc := service.NewCloudPorxyService(consulClient, cloudProxyRepo, lamassuCAClient, clientBaseConfig)
+	cpSvc := svc.(*service.CloudProxyService)
 
-	}
+	svc = service.LoggingMiddleware()(svc)
+	svc = service.NewInputValudationMiddleware()(svc)
+
+	cpSvc.SetService(svc)
 
 	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(svc)))
 	mainServer.AddAmqpConsumer(config.ServiceName, []string{"#"}, transport.MakeAmqpHandler(svc))

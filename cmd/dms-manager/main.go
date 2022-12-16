@@ -32,7 +32,7 @@ func main() {
 
 	mainServer := server.NewServer(config)
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUsername, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
+	dsn := fmt.Sprintf("host=%svc user=%svc password=%svc dbname=%svc port=%svc sslmode=disable", config.PostgresHostname, config.PostgresUsername, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: dbLogrus,
 	})
@@ -71,15 +71,16 @@ func main() {
 		}
 	}
 
-	var s service.Service
-	{
-		s = service.NewDMSManagerService(dmsRepo, &caClient)
-		s = service.NewAMQPMiddleware(mainServer.AmqpPublisher)(s)
-		s = service.NewInputValudationMiddleware()(s)
-		s = service.LoggingMiddleware()(s)
-	}
+	svc := service.NewDMSManagerService(dmsRepo, &caClient)
+	dmsSvc := svc.(*service.DMSManagerService)
 
-	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s)))
+	svc = service.LoggingMiddleware()(svc)
+	svc = service.NewAMQPMiddleware(mainServer.AmqpPublisher)(svc)
+	svc = service.NewInputValudationMiddleware()(svc)
+
+	dmsSvc.SetService(svc)
+
+	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(svc)))
 
 	mainServer.Run()
 	forever := make(chan struct{})

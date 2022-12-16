@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/go-kit/kit/log"
 	lamassuCAClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	lamassuCAApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
@@ -32,24 +31,32 @@ type Service interface {
 	GetDMSByName(ctx context.Context, input *api.GetDMSByNameInput) (*api.GetDMSByNameOutput, error)
 }
 
-type dmsManagerContext struct {
+type DMSManagerService struct {
+	service         Service
 	dmsRepository   dmsRepository.DeviceManufacturingServiceRepository
 	lamassuCAClient lamassuCAClient.LamassuCAClient
-	logger          log.Logger
 }
 
 func NewDMSManagerService(dmsRepo dmsRepository.DeviceManufacturingServiceRepository, client *lamassuCAClient.LamassuCAClient) Service {
-	return &dmsManagerContext{
+	svc := DMSManagerService{
 		dmsRepository:   dmsRepo,
 		lamassuCAClient: *client,
 	}
+
+	svc.service = &svc
+
+	return &svc
 }
 
-func (s *dmsManagerContext) Health(ctx context.Context) bool {
+func (s *DMSManagerService) SetService(svc Service) {
+	s.service = svc
+}
+
+func (s *DMSManagerService) Health(ctx context.Context) bool {
 	return true
 }
 
-func (s *dmsManagerContext) CreateDMS(ctx context.Context, input *api.CreateDMSInput) (*api.CreateDMSOutput, error) {
+func (s *DMSManagerService) CreateDMS(ctx context.Context, input *api.CreateDMSInput) (*api.CreateDMSOutput, error) {
 	subject := pkix.Name{
 		CommonName:         input.Subject.CommonName,
 		Country:            []string{input.Subject.Country},
@@ -93,7 +100,7 @@ func (s *dmsManagerContext) CreateDMS(ctx context.Context, input *api.CreateDMSI
 		return &api.CreateDMSOutput{}, err
 	}
 
-	createDMSWithCSROutput, err := s.CreateDMSWithCertificateRequest(ctx, &api.CreateDMSWithCertificateRequestInput{
+	createDMSWithCSROutput, err := s.service.CreateDMSWithCertificateRequest(ctx, &api.CreateDMSWithCertificateRequestInput{
 		CertificateRequest: csr,
 	})
 	if err != nil {
@@ -106,13 +113,13 @@ func (s *dmsManagerContext) CreateDMS(ctx context.Context, input *api.CreateDMSI
 	}, nil
 }
 
-func (s *dmsManagerContext) CreateDMSWithCertificateRequest(ctx context.Context, input *api.CreateDMSWithCertificateRequestInput) (*api.CreateDMSWithCertificateRequestOutput, error) {
+func (s *DMSManagerService) CreateDMSWithCertificateRequest(ctx context.Context, input *api.CreateDMSWithCertificateRequestInput) (*api.CreateDMSWithCertificateRequestOutput, error) {
 	err := s.dmsRepository.Insert(ctx, input.CertificateRequest)
 	if err != nil {
 		return &api.CreateDMSWithCertificateRequestOutput{}, err
 	}
 
-	dms, err := s.GetDMSByName(ctx, &api.GetDMSByNameInput{
+	dms, err := s.service.GetDMSByName(ctx, &api.GetDMSByNameInput{
 		Name: input.CertificateRequest.Subject.CommonName,
 	})
 	if err != nil {
@@ -124,7 +131,7 @@ func (s *dmsManagerContext) CreateDMSWithCertificateRequest(ctx context.Context,
 	}, nil
 }
 
-func (s *dmsManagerContext) UpdateDMSStatus(ctx context.Context, input *api.UpdateDMSStatusInput) (*api.UpdateDMSStatusOutput, error) {
+func (s *DMSManagerService) UpdateDMSStatus(ctx context.Context, input *api.UpdateDMSStatusInput) (*api.UpdateDMSStatusOutput, error) {
 	peningApprovalNextStatus := []api.DMSStatus{
 		api.DMSStatusApproved,
 		api.DMSStatusRejected,
@@ -137,7 +144,7 @@ func (s *dmsManagerContext) UpdateDMSStatus(ctx context.Context, input *api.Upda
 	expiredNextStatus := []api.DMSStatus{}
 	revokedNextStatus := []api.DMSStatus{}
 
-	dmsOutput, err := s.GetDMSByName(ctx, &api.GetDMSByNameInput{
+	dmsOutput, err := s.service.GetDMSByName(ctx, &api.GetDMSByNameInput{
 		Name: input.Name,
 	})
 	if err != nil {
@@ -223,7 +230,7 @@ func (s *dmsManagerContext) UpdateDMSStatus(ctx context.Context, input *api.Upda
 		}
 	}
 
-	getDMSOutput, err := s.GetDMSByName(ctx, &api.GetDMSByNameInput{
+	getDMSOutput, err := s.service.GetDMSByName(ctx, &api.GetDMSByNameInput{
 		Name: input.Name,
 	})
 	if err != nil {
@@ -235,7 +242,7 @@ func (s *dmsManagerContext) UpdateDMSStatus(ctx context.Context, input *api.Upda
 	}, nil
 }
 
-func (s *dmsManagerContext) GetDMSs(ctx context.Context, input *api.GetDMSsInput) (*api.GetDMSsOutput, error) {
+func (s *DMSManagerService) GetDMSs(ctx context.Context, input *api.GetDMSsInput) (*api.GetDMSsOutput, error) {
 	totalDMS, dmsS, err := s.dmsRepository.SelectAll(ctx, input.QueryParameters)
 	if err != nil {
 		return &api.GetDMSsOutput{}, err
@@ -243,7 +250,7 @@ func (s *dmsManagerContext) GetDMSs(ctx context.Context, input *api.GetDMSsInput
 
 	var dmsList []api.DeviceManufacturingService
 	for _, v := range dmsS {
-		dmsOutput, err := s.GetDMSByName(ctx, &api.GetDMSByNameInput{
+		dmsOutput, err := s.service.GetDMSByName(ctx, &api.GetDMSByNameInput{
 			Name: v.Name,
 		})
 		if err != nil {
@@ -258,8 +265,8 @@ func (s *dmsManagerContext) GetDMSs(ctx context.Context, input *api.GetDMSsInput
 	}, nil
 }
 
-func (s *dmsManagerContext) UpdateDMSAuthorizedCAs(ctx context.Context, input *api.UpdateDMSAuthorizedCAsInput) (*api.UpdateDMSAuthorizedCAsOutput, error) {
-	dmsOutput, err := s.GetDMSByName(ctx, &api.GetDMSByNameInput{
+func (s *DMSManagerService) UpdateDMSAuthorizedCAs(ctx context.Context, input *api.UpdateDMSAuthorizedCAsInput) (*api.UpdateDMSAuthorizedCAsOutput, error) {
+	dmsOutput, err := s.service.GetDMSByName(ctx, &api.GetDMSByNameInput{
 		Name: input.Name,
 	})
 	if err != nil {
@@ -278,7 +285,7 @@ func (s *dmsManagerContext) UpdateDMSAuthorizedCAs(ctx context.Context, input *a
 		return &api.UpdateDMSAuthorizedCAsOutput{}, err
 	}
 
-	dmsOutput, err = s.GetDMSByName(ctx, &api.GetDMSByNameInput{
+	dmsOutput, err = s.service.GetDMSByName(ctx, &api.GetDMSByNameInput{
 		Name: input.Name,
 	})
 	if err != nil {
@@ -290,7 +297,7 @@ func (s *dmsManagerContext) UpdateDMSAuthorizedCAs(ctx context.Context, input *a
 	}, nil
 }
 
-func (s *dmsManagerContext) GetDMSByName(ctx context.Context, input *api.GetDMSByNameInput) (*api.GetDMSByNameOutput, error) {
+func (s *DMSManagerService) GetDMSByName(ctx context.Context, input *api.GetDMSByNameInput) (*api.GetDMSByNameOutput, error) {
 	dms, err := s.dmsRepository.SelectByName(ctx, input.Name)
 	if err != nil {
 		return &api.GetDMSByNameOutput{}, err
@@ -307,7 +314,7 @@ func (s *dmsManagerContext) GetDMSByName(ctx context.Context, input *api.GetDMSB
 		}
 
 		if caOutput.Status == lamassuCAApi.StatusExpired && dms.Status != api.DMSStatusExpired {
-			output, err := s.UpdateDMSStatus(ctx, &api.UpdateDMSStatusInput{
+			output, err := s.service.UpdateDMSStatus(ctx, &api.UpdateDMSStatusInput{
 				Name:   dms.Name,
 				Status: api.DMSStatusExpired,
 			})
@@ -317,7 +324,7 @@ func (s *dmsManagerContext) GetDMSByName(ctx context.Context, input *api.GetDMSB
 
 			dms = output.DeviceManufacturingService
 		} else if caOutput.Status == lamassuCAApi.StatusRevoked && dms.Status != api.DMSStatusRevoked {
-			output, err := s.UpdateDMSStatus(ctx, &api.UpdateDMSStatusInput{
+			output, err := s.service.UpdateDMSStatus(ctx, &api.UpdateDMSStatusInput{
 				Name:   dms.Name,
 				Status: api.DMSStatusRevoked,
 			})

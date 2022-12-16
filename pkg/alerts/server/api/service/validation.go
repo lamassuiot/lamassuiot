@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 
-	cloudevents "github.com/cloudevents/sdk-go/v2"
+	//cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/errors"
@@ -61,7 +61,7 @@ func (mw *validationMiddleware) UnsubscribedEvent(ctx context.Context, input *ap
 	return mw.next.UnsubscribedEvent(ctx, input)
 }
 
-func (mw *validationMiddleware) GetEventLogs(ctx context.Context, input *api.GetEventsInput) (output []cloudevents.Event, err error) {
+func (mw *validationMiddleware) GetEventLogs(ctx context.Context, input *api.GetEventsInput) (output *api.GetEventsOutput, err error) {
 	validate := validator.New()
 	err = validate.Struct(input)
 	if err != nil {

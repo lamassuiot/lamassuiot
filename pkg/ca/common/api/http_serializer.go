@@ -25,7 +25,7 @@ func (s *SupportedKeyTypeInfo) Serialize() *SupportedKeyTypeInfoSerialized {
 
 func (s *SupportedKeyTypeInfoSerialized) Deserialize() *SupportedKeyTypeInfo {
 	return &SupportedKeyTypeInfo{
-		Type:        string(ParseKeyType(s.Type)),
+		Type:        ParseKeyType(s.Type),
 		MinimumSize: s.MinimumSize,
 		MaximumSize: s.MaximumSize,
 	}

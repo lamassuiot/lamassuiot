@@ -55,11 +55,17 @@ func main() {
 	if err != nil {
 		log.Fatal("Could not create mail service: ", err)
 	}
+	aSvc := svc.(*service.AlertsService)
 
 	svc = service.NewInputValudationMiddleware()(svc)
 	svc = service.LoggingMiddleware()(svc)
 
+	aSvc.SetService(svc)
+
 	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(svc)))
 	mainServer.AddAmqpConsumer(config.ServiceName, []string{"#"}, transport.MakeAmqpHandler(svc))
 
+	mainServer.Run()
+	forever := make(chan struct{})
+	<-forever
 }
