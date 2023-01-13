@@ -131,6 +131,8 @@ type DeviceManufacturingServiceSerialized struct {
 	KeyMetadata               KeyStrengthMetadataSerialized `json:"key_metadata"`
 	Subject                   SubjectSerialized             `json:"subject"`
 	AuthorizedCAs             []string                      `json:"authorized_cas"`
+	HostCloudDMS              bool                          `json:"host_cloud_dms"`
+	BootstrapCAs              []string                      `json:"bootstrap_cas"`
 	CreationTimestamp         int                           `json:"creation_timestamp"`
 	LastStatusUpdateTimestamp int                           `json:"last_status_update_timestamp"`
 	Certificate               string                        `json:"certificate,omitempty"`
@@ -145,6 +147,8 @@ func (o *DeviceManufacturingService) Serialize() DeviceManufacturingServiceSeria
 		KeyMetadata:   o.KeyMetadata.Serialize(),
 		Subject:       o.Subject.Serialize(),
 		AuthorizedCAs: o.AuthorizedCAs,
+		BootstrapCAs:  o.BootstrapCAs,
+		HostCloudDMS:  o.HostCloudDMS,
 	}
 
 	if o.X509Asset.IsCertificate {
@@ -171,6 +175,8 @@ func (o *DeviceManufacturingServiceSerialized) Deserialize() DeviceManufacturing
 		KeyMetadata:   o.KeyMetadata.Deserialize(),
 		Subject:       o.Subject.Deserialize(),
 		AuthorizedCAs: o.AuthorizedCAs,
+		BootstrapCAs:  o.BootstrapCAs,
+		HostCloudDMS:  o.HostCloudDMS,
 		X509Asset:     DeserializeX509Asset(o.Certificate, o.CertificateRequest),
 	}
 

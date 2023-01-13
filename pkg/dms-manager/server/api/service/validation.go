@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/rsa"
+	"crypto/x509"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
@@ -18,6 +20,9 @@ func NewInputValudationMiddleware() Middleware {
 			next: next,
 		}
 	}
+}
+
+func (mw *validationMiddleware) UpdateDevManagerAddr(devManagerAddr string) {
 }
 
 func (mw *validationMiddleware) Health(ctx context.Context) (healthy bool) {
@@ -94,4 +99,20 @@ func (mw *validationMiddleware) GetDMSByName(ctx context.Context, input *api.Get
 		return nil, &valError
 	}
 	return mw.next.GetDMSByName(ctx, input)
+}
+
+func (mw *validationMiddleware) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
+	return mw.next.CACerts(ctx, aps)
+}
+
+func (mw *validationMiddleware) Enroll(ctx context.Context, csr *x509.CertificateRequest, clientCertificate *x509.Certificate, aps string) (*x509.Certificate, error) {
+	return mw.next.Enroll(ctx, csr, clientCertificate, aps)
+}
+
+func (mw *validationMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate) (*x509.Certificate, error) {
+	return mw.next.Reenroll(ctx, csr, cert)
+}
+
+func (mw *validationMiddleware) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, *rsa.PrivateKey, error) {
+	return mw.next.ServerKeyGen(ctx, csr, cert, aps)
 }

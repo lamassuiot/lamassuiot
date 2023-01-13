@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -67,6 +69,8 @@ func (mw *amqpMiddleware) sendAMQPMessage(eventType string, output interface{}) 
 	mw.amqpPublisher <- msg
 
 }
+func (mw *amqpMiddleware) UpdateDevManagerAddr(devManagerAddr string) {
+}
 
 func (mw *amqpMiddleware) Health(ctx context.Context) bool {
 	return mw.next.Health(ctx)
@@ -106,4 +110,21 @@ func (mw *amqpMiddleware) GetDMSs(ctx context.Context, input *api.GetDMSsInput) 
 
 func (mw *amqpMiddleware) GetDMSByName(ctx context.Context, input *api.GetDMSByNameInput) (*api.GetDMSByNameOutput, error) {
 	return mw.next.GetDMSByName(ctx, input)
+}
+
+func (mw *amqpMiddleware) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
+	return mw.next.CACerts(ctx, aps)
+}
+
+func (mw *amqpMiddleware) Enroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (output *x509.Certificate, err error) {
+	return mw.next.Enroll(ctx, csr, cert, aps)
+}
+
+func (mw *amqpMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate) (output *x509.Certificate, err error) {
+
+	return mw.next.Reenroll(ctx, csr, cert)
+}
+
+func (mw *amqpMiddleware) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, *rsa.PrivateKey, error) {
+	return mw.next.ServerKeyGen(ctx, csr, cert, aps)
 }

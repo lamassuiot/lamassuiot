@@ -155,6 +155,10 @@ func decodeCreateDMSRequest(ctx context.Context, r *http.Request) (request inter
 		return nil, InvalidJsonFormat()
 	}
 
+	bootstrapCAs := make([]string, 0)
+	if body.HostCloudDMS {
+		bootstrapCAs = body.BootstrapCAs
+	}
 	input = api.CreateDMSInput{
 		Subject: api.Subject{
 			CommonName:       body.Subject.CommonName,
@@ -168,6 +172,8 @@ func decodeCreateDMSRequest(ctx context.Context, r *http.Request) (request inter
 			KeyType: api.ParseKeyType(body.KeyMetadata.KeyType),
 			KeyBits: body.KeyMetadata.KeyBits,
 		},
+		BootstrapCAs: bootstrapCAs,
+		HostCloudDMS: body.HostCloudDMS,
 	}
 
 	return input, nil

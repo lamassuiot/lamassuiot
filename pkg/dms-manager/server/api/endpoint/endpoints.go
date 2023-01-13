@@ -59,6 +59,11 @@ func ValidateCreateDMS(request api.CreateDMSInput) error {
 				sl.ReportError(input.KeyMetadata.KeyBits, "KeyBits", "KeyBits", "InvalidRSAKeyBits", "")
 			}
 		}
+		if input.HostCloudDMS {
+			if len(input.BootstrapCAs) == 0 {
+				sl.ReportError(input.BootstrapCAs, "BootstrapCAs", "BootstrapCAs", "BootstrapCAsIsEmpty", "")
+			}
+		}
 	}
 
 	validate := validator.New()

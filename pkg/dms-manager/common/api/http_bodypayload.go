@@ -15,8 +15,10 @@ type CreateDMSKeyMetadataPayload struct {
 }
 
 type CreateDMSPayload struct {
-	Subject     CreateDMSSubjectPayload     `json:"subject"`
-	KeyMetadata CreateDMSKeyMetadataPayload `json:"key_metadata"`
+	Subject      CreateDMSSubjectPayload     `json:"subject"`
+	KeyMetadata  CreateDMSKeyMetadataPayload `json:"key_metadata"`
+	HostCloudDMS bool                        `json:"host_cloud_dms"`
+	BootstrapCAs []string                    `json:"bootstrap_cas"`
 }
 
 // -------------------------------------------------------------

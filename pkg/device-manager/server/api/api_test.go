@@ -111,17 +111,17 @@ func TestEnroll(t *testing.T) {
 		{
 			name: "ShouldEnrollCreatingSlot",
 			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
-				_, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
-					DeviceID:    "1234-5678-9012-3456",
-					Alias:       "Raspberry Pi",
-					Tags:        []string{"raspberry-pi", "5G"},
-					IconColor:   "",
-					IconName:    "",
-					Description: "Raspberry Pi is a small, low-cost, and light-weight computer",
-				})
-				if err != nil {
-					t.Fatalf("Failed to parse certificate: %s", err)
-				}
+				// _, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
+				// 	DeviceID:    "1234-5678-9012-3456",
+				// 	Alias:       "Raspberry Pi",
+				// 	Tags:        []string{"raspberry-pi", "5G"},
+				// 	IconColor:   "",
+				// 	IconName:    "",
+				// 	Description: "Raspberry Pi is a small, low-cost, and light-weight computer",
+				// })
+				// if err != nil {
+				// 	t.Fatalf("Failed to parse certificate: %s", err)
+				// }
 
 				return ctx
 
@@ -1518,7 +1518,7 @@ func runTests(t *testing.T, tc TestCase) {
 	defer serverDMS.Close()
 	serverDMS.Start()
 
-	dmsOutput, err := (*svcDMSanager).CreateDMS(context.Background(), &dmsApi.CreateDMSInput{
+	dmsOutput, err := (svcDMSanager).CreateDMS(context.Background(), &dmsApi.CreateDMSInput{
 		Subject: dmsApi.Subject{
 			CommonName: "RPI-DMS",
 		},
@@ -1533,7 +1533,7 @@ func runTests(t *testing.T, tc TestCase) {
 
 	dmsKey := dmsOutput.PrivateKey
 
-	dms, err := (*svcDMSanager).UpdateDMSStatus(context.Background(), &dmsApi.UpdateDMSStatusInput{
+	dms, err := (svcDMSanager).UpdateDMSStatus(context.Background(), &dmsApi.UpdateDMSStatusInput{
 		Name:   "RPI-DMS",
 		Status: dmsApi.DMSStatusApproved,
 	})
@@ -1547,7 +1547,7 @@ func runTests(t *testing.T, tc TestCase) {
 		mTLSCertificate: dms.X509Asset.Certificate,
 	})
 
-	_, err = (*svcDMSanager).UpdateDMSAuthorizedCAs(context.Background(), &dmsApi.UpdateDMSAuthorizedCAsInput{
+	_, err = (svcDMSanager).UpdateDMSAuthorizedCAs(context.Background(), &dmsApi.UpdateDMSAuthorizedCAsInput{
 		Name:          "RPI-DMS",
 		AuthorizedCAs: []string{"RPI-CA", "RPI-CA-LONG", "RPI-CA-SHORT"},
 	})

@@ -127,6 +127,12 @@ func decodeEnrollRequest(ctx context.Context, r *http.Request) (request interfac
 		return nil, ErrContentType()
 	}
 
+	pemMode := false
+	accept := r.Header.Get("Accept")
+	if accept == "application/x-pem-file" {
+		pemMode = true
+	}
+
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		return nil, err
@@ -150,17 +156,19 @@ func decodeEnrollRequest(ctx context.Context, r *http.Request) (request interfac
 			return nil, err
 		}
 		return endpoint.EnrollRequest{
-			Csr: csr,
-			Crt: certificate,
-			Aps: aps,
+			Csr:         csr,
+			Crt:         certificate,
+			Aps:         aps,
+			PemResponse: pemMode,
 		}, nil
 
 	} else if len(r.TLS.PeerCertificates) != 0 {
 		cert := r.TLS.PeerCertificates[0]
 		return endpoint.EnrollRequest{
-			Csr: csr,
-			Crt: cert,
-			Aps: aps,
+			Csr:         csr,
+			Crt:         cert,
+			Aps:         aps,
+			PemResponse: pemMode,
 		}, nil
 
 	} else {
@@ -172,6 +180,11 @@ func decodeReenrollRequest(ctx context.Context, r *http.Request) (request interf
 	contentType := r.Header.Get("Content-Type")
 	if contentType != "application/pkcs10" {
 		return nil, ErrContentType()
+	}
+	pemMode := false
+	accept := r.Header.Get("Accept")
+	if accept == "application/x-pem-file" {
+		pemMode = true
 	}
 	data, err := ioutil.ReadAll(r.Body)
 
@@ -196,14 +209,16 @@ func decodeReenrollRequest(ctx context.Context, r *http.Request) (request interf
 			return nil, err
 		}
 		return endpoint.ReenrollRequest{
-			Csr: csr,
-			Crt: certificate,
+			Csr:         csr,
+			Crt:         certificate,
+			PemResponse: pemMode,
 		}, nil
 	} else if len(r.TLS.PeerCertificates) != 0 {
 		cert := r.TLS.PeerCertificates[0]
 		return endpoint.ReenrollRequest{
-			Csr: csr,
-			Crt: cert,
+			Csr:         csr,
+			Crt:         cert,
+			PemResponse: pemMode,
 		}, nil
 
 	} else {
@@ -325,17 +340,24 @@ func encodeResponse(ctx context.Context, w http.ResponseWriter, response interfa
 	//var cb []byte
 	//cb = append(cb, cert.Raw...)
 	//cb = append(cb, cacert.Raw...)
-	body, err := pkcs7.DegenerateCertificate(cert.Raw)
-	if err != nil {
-		EncodeError(ctx, err, w)
-		return nil
-	}
-	body = base64Encode(body)
+	if enrollResponse.PemResponse {
+		crtBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
+		body := crtBytes
+		w.WriteHeader(http.StatusOK)
+		w.Write(body)
+	} else {
+		body, err := pkcs7.DegenerateCertificate(cert.Raw)
+		if err != nil {
+			EncodeError(ctx, err, w)
+			return nil
+		}
+		body = base64Encode(body)
 
-	w.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
-	w.Header().Set("Content-Transfer-Encoding", "base64")
-	w.WriteHeader(http.StatusOK)
-	w.Write(body)
+		w.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
+		w.Header().Set("Content-Transfer-Encoding", "base64")
+		w.WriteHeader(http.StatusOK)
+		w.Write(body)
+	}
 	return nil
 }
 
