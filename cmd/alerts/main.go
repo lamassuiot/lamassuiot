@@ -10,7 +10,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/config"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	gorm_logrus "github.com/onrik/gorm-logrus"
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -24,7 +23,6 @@ func main() {
 
 	dbLogrus := gormLogger.Default.LogMode(gormLogger.Silent)
 	if config.DebugMode {
-		logrus.SetLevel(logrus.InfoLevel)
 		dbLogrus = gorm_logrus.New()
 		dbLogrus.LogMode(gormLogger.Info)
 	}
@@ -33,7 +31,7 @@ func main() {
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUsername, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
+		Logger: dbLogrus,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -57,11 +55,17 @@ func main() {
 	if err != nil {
 		log.Fatal("Could not create mail service: ", err)
 	}
+	aSvc := svc.(*service.AlertsService)
 
 	svc = service.NewInputValudationMiddleware()(svc)
 	svc = service.LoggingMiddleware()(svc)
 
+	aSvc.SetService(svc)
+
 	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(svc)))
 	mainServer.AddAmqpConsumer(config.ServiceName, []string{"#"}, transport.MakeAmqpHandler(svc))
 
+	mainServer.Run()
+	forever := make(chan struct{})
+	<-forever
 }

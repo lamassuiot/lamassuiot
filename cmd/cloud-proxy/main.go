@@ -14,7 +14,6 @@ import (
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	gorm_logrus "github.com/onrik/gorm-logrus"
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -28,7 +27,6 @@ func main() {
 
 	dbLogrus := gormLogger.Default.LogMode(gormLogger.Silent)
 	if config.DebugMode {
-		logrus.SetLevel(logrus.InfoLevel)
 		dbLogrus = gorm_logrus.New()
 		dbLogrus.LogMode(gormLogger.Info)
 	}
@@ -92,13 +90,13 @@ func main() {
 		}
 	}
 
-	var svc service.Service
-	{
-		svc = service.NewCloudPorxyService(consulClient, cloudProxyRepo, lamassuCAClient, clientBaseConfig)
-		svc = service.NewInputValudationMiddleware()(svc)
-		svc = service.LoggingMiddleware()(svc)
+	svc := service.NewCloudPorxyService(consulClient, cloudProxyRepo, lamassuCAClient, clientBaseConfig)
+	cpSvc := svc.(*service.CloudProxyService)
 
-	}
+	svc = service.LoggingMiddleware()(svc)
+	svc = service.NewInputValudationMiddleware()(svc)
+
+	cpSvc.SetService(svc)
 
 	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(svc)))
 	mainServer.AddAmqpConsumer(config.ServiceName, []string{"#"}, transport.MakeAmqpHandler(svc))

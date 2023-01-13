@@ -13,8 +13,6 @@ import (
 
 	//"github.com/xeipuuv/gojsonschema"
 	"github.com/oliveagle/jsonpath"
-
-	cloudevents "github.com/cloudevents/sdk-go/v2"
 )
 
 type EventFieldsTemplate struct {
@@ -32,11 +30,12 @@ type Service interface {
 	HandleEvent(ctx context.Context, input *api.HandleEventInput) (*api.HandleEventOutput, error)
 	SubscribedEvent(ctx context.Context, input *api.SubscribeEventInput) (*api.SubscribeEventOutput, error)
 	UnsubscribedEvent(ctx context.Context, input *api.UnsubscribedEventInput) (*api.UnsubscribedEventOutput, error)
-	GetEventLogs(ctx context.Context, input *api.GetEventsInput) ([]cloudevents.Event, error)
+	GetEventLogs(ctx context.Context, input *api.GetEventsInput) (*api.GetEventsOutput, error)
 	GetSubscriptions(ctx context.Context, input *api.GetSubscriptionsInput) (*api.GetSubscriptionsOutput, error)
 }
 
-type alertsService struct {
+type AlertsService struct {
+	service             Service
 	alertsRepository    repository.AlertsRepository
 	eventsConfiguration map[string]EventTemplate
 	smtpServer          outputchannels.SMTPOutputService
@@ -47,6 +46,7 @@ func NewAlertsService(alertsRepository repository.AlertsRepository, templateData
 	if err != nil {
 		return nil, err
 	}
+
 	eventsConfigArray := []EventTemplate{}
 	_ = json.Unmarshal(file, &eventsConfigArray)
 
@@ -55,18 +55,26 @@ func NewAlertsService(alertsRepository repository.AlertsRepository, templateData
 		eventsConfig[v.EventType] = v
 	}
 
-	return &alertsService{
+	svc := AlertsService{
 		alertsRepository:    alertsRepository,
 		eventsConfiguration: eventsConfig,
 		smtpServer:          smtpServer,
-	}, nil
+	}
+
+	svc.service = &svc
+
+	return &svc, nil
 }
 
-func (s *alertsService) Health(ctx context.Context) bool {
+func (s *AlertsService) SetService(svc Service) {
+	s.service = svc
+}
+
+func (s *AlertsService) Health(ctx context.Context) bool {
 	return true
 }
 
-func (s *alertsService) HandleEvent(ctx context.Context, input *api.HandleEventInput) (*api.HandleEventOutput, error) {
+func (s *AlertsService) HandleEvent(ctx context.Context, input *api.HandleEventInput) (*api.HandleEventOutput, error) {
 	var eventData map[string]string
 	json.Unmarshal(input.Event.Data(), &eventData)
 
@@ -166,7 +174,7 @@ func (s *alertsService) HandleEvent(ctx context.Context, input *api.HandleEventI
 	return &api.HandleEventOutput{}, nil
 }
 
-func (s *alertsService) SubscribedEvent(ctx context.Context, input *api.SubscribeEventInput) (*api.SubscribeEventOutput, error) {
+func (s *AlertsService) SubscribedEvent(ctx context.Context, input *api.SubscribeEventInput) (*api.SubscribeEventOutput, error) {
 
 	channel := api.Channel{
 		Type:   input.Channel.Type,
@@ -185,7 +193,7 @@ func (s *alertsService) SubscribedEvent(ctx context.Context, input *api.Subscrib
 	}, err
 }
 
-func (s *alertsService) UnsubscribedEvent(ctx context.Context, input *api.UnsubscribedEventInput) (*api.UnsubscribedEventOutput, error) {
+func (s *AlertsService) UnsubscribedEvent(ctx context.Context, input *api.UnsubscribedEventInput) (*api.UnsubscribedEventOutput, error) {
 	_, err := s.alertsRepository.GetUserSubscriptions(ctx, input.UserID)
 	if err != nil {
 		return &api.UnsubscribedEventOutput{}, err
@@ -204,16 +212,18 @@ func (s *alertsService) UnsubscribedEvent(ctx context.Context, input *api.Unsubs
 	}, err
 }
 
-func (s *alertsService) GetEventLogs(ctx context.Context, input *api.GetEventsInput) ([]cloudevents.Event, error) {
+func (s *AlertsService) GetEventLogs(ctx context.Context, input *api.GetEventsInput) (*api.GetEventsOutput, error) {
 	logEvents, err := s.alertsRepository.SelectEventLogs(ctx)
 	if err != nil {
-		return []cloudevents.Event{}, err
+		return &api.GetEventsOutput{}, err
 	}
 
-	return logEvents, nil
+	return &api.GetEventsOutput{
+		LastEvents: logEvents,
+	}, err
 }
 
-func (s *alertsService) GetSubscriptions(ctx context.Context, input *api.GetSubscriptionsInput) (*api.GetSubscriptionsOutput, error) {
+func (s *AlertsService) GetSubscriptions(ctx context.Context, input *api.GetSubscriptionsInput) (*api.GetSubscriptionsOutput, error) {
 	subscription, _ := s.alertsRepository.GetUserSubscriptions(ctx, input.UserID)
 
 	return &api.GetSubscriptionsOutput{

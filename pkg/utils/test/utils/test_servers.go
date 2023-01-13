@@ -121,7 +121,7 @@ func BuildCATestServer() (*httptest.Server, *caService.Service, error) {
 	return server, &svc, nil
 }
 
-func BuildDMSManagerTestServer(CATestServer *httptest.Server) (*httptest.Server, *dmsService.Service, error) {
+func BuildDMSManagerTestServer(CATestServer *httptest.Server) (*httptest.Server, dmsService.Service, error) {
 	fmt.Sprintf("file:%s?mode=memory", goid.NewV4UUID().String())
 	dialector := sqlite.Open(fmt.Sprintf("file:%s?mode=memory", goid.NewV4UUID().String()))
 	db, err := gorm.Open(dialector, &gorm.Config{
@@ -145,9 +145,9 @@ func BuildDMSManagerTestServer(CATestServer *httptest.Server) (*httptest.Server,
 	if err != nil {
 		return nil, nil, err
 	}
-
+	var upstreamKey interface{}
 	var svc dmsService.Service
-	svc = dmsService.NewDMSManagerService(dmsRepository, &lamassuCAClient)
+	svc = dmsService.NewDMSManagerService(dmsRepository, &lamassuCAClient, nil, upstreamKey, "")
 	svc = dmsService.NewInputValudationMiddleware()(svc)
 
 	handler := dmsTransport.MakeHTTPHandler(svc)
@@ -156,11 +156,11 @@ func BuildDMSManagerTestServer(CATestServer *httptest.Server) (*httptest.Server,
 	mux.Handle("/v1/", http.StripPrefix("/v1", handler))
 	server := httptest.NewUnstartedServer(mux)
 
-	return server, &svc, nil
+	return server, svc, nil
 }
 
 func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *httptest.Server) (*httptest.Server, *deviceService.Service, error) {
-	dialector := sqlite.Open(fmt.Sprintf("file:%s?mode=memory", goid.NewV4UUID().String()))
+	dialector := sqlite.Open(fmt.Sprintf("file:/tmp/%s:memory:", goid.NewV4UUID().String()))
 	db, err := gorm.Open(dialector, &gorm.Config{
 		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
 	})

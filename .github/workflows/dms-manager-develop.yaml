@@ -8,6 +8,7 @@ on:
         - '.github/workflows/dms-manager*'
         - 'pkg/dms-manager/**'
         - 'main/dms-manager/**'
+        - 'pkg/utils/**'
   workflow_call:
 
 jobs:

@@ -70,7 +70,6 @@ func (mw *amqpMiddleware) sendAMQPMessage(ctx context.Context, eventType string,
 	}
 
 	mw.amqpPublisher <- msg
-	fmt.Println("message published")
 }
 
 func (mw *amqpMiddleware) Health() (healthy bool) {

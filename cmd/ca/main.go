@@ -11,7 +11,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/config"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	gorm_logrus "github.com/onrik/gorm-logrus"
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -25,7 +24,6 @@ func main() {
 
 	dbLogrus := gormLogger.Default.LogMode(gormLogger.Silent)
 	if config.DebugMode {
-		logrus.SetLevel(logrus.InfoLevel)
 		dbLogrus = gorm_logrus.New()
 		dbLogrus.LogMode(gormLogger.Info)
 	}
@@ -54,6 +52,14 @@ func main() {
 		}
 
 		engine = x509engines.NewStandardx509Engine(gopemEngine, config.OcspUrl)
+
+	case "awskms":
+		awskmsEngine, err := cryptoengines.NewAWSKMSEngine(config.AWSAccessKeyID, config.AWSSecretAccessKey, config.AWSDefaultRegion)
+		if err != nil {
+			log.Fatal("Could not initialize AWS KMS engine: ", err)
+		}
+
+		engine = x509engines.NewStandardx509Engine(awskmsEngine, config.OcspUrl)
 
 	case "vault":
 		engine, err = x509engines.NewVaultx509Engine(config.VaultAddress, config.VaultPkiCaPath, config.VaultRoleID, config.VaultSecretID, config.VaultCA, config.VaultAutoUnsealEnabled, config.VaultUnsealKeysFile, config.OcspUrl)

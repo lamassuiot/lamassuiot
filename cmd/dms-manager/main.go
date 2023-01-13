@@ -1,7 +1,10 @@
 package main
 
 import (
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
@@ -10,10 +13,10 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/transport"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/config"
+	esttransport "github.com/lamassuiot/lamassuiot/pkg/est/server/api/transport"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	gorm_logrus "github.com/onrik/gorm-logrus"
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -27,7 +30,6 @@ func main() {
 
 	dbLogrus := gormLogger.Default.LogMode(gormLogger.Silent)
 	if config.DebugMode {
-		logrus.SetLevel(logrus.InfoLevel)
 		dbLogrus = gorm_logrus.New()
 		dbLogrus.LogMode(gormLogger.Info)
 	}
@@ -36,7 +38,7 @@ func main() {
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUsername, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
+		Logger: dbLogrus,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -72,16 +74,36 @@ func main() {
 			log.Fatal("Could not create LamassuCA client: ", err)
 		}
 	}
+	certContent, _ := ioutil.ReadFile(config.CertFile)
+	cpb, _ := pem.Decode(certContent)
 
-	var s service.Service
-	{
-		s = service.NewDMSManagerService(dmsRepo, &caClient)
-		s = service.NewAMQPMiddleware(mainServer.AmqpPublisher)(s)
-		s = service.NewInputValudationMiddleware()(s)
-		s = service.LoggingMiddleware()(s)
+	upstreamCert, err := x509.ParseCertificate(cpb.Bytes)
+	if err != nil {
+		log.Fatal("Could not parse upstream Cert: ", err)
 	}
 
-	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s)))
+	key, _ := ioutil.ReadFile(config.KeyFile)
+	var upstreamKey interface{}
+	block, _ := pem.Decode([]byte(key))
+	upstreamKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		upstreamKey, err = x509.ParseECPrivateKey(block.Bytes)
+		if err != nil {
+			log.Fatal("Could not parse upstream Key: ", err)
+		}
+	}
+
+	svc := service.NewDMSManagerService(dmsRepo, &caClient, upstreamCert, upstreamKey, config.LamassuDeviceManagerAddress)
+	dmsSvc := svc.(*service.DMSManagerService)
+
+	svc = service.LoggingMiddleware()(svc)
+	svc = service.NewAMQPMiddleware(mainServer.AmqpPublisher)(svc)
+	svc = service.NewInputValudationMiddleware()(svc)
+
+	dmsSvc.SetService(svc)
+
+	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(svc)))
+	mainServer.AddHttpHandler("/.well-known/", esttransport.MakeHTTPHandler(svc))
 
 	mainServer.Run()
 	forever := make(chan struct{})

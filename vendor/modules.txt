@@ -710,6 +710,9 @@ github.com/lib/pq/scram
 # github.com/linode/linodego v0.7.1
 ## explicit
 github.com/linode/linodego
+# github.com/lstoll/awskms v0.0.0-20210310122415-d1696e9c112b
+## explicit; go 1.13
+github.com/lstoll/awskms
 # github.com/mattn/go-colorable v0.1.12
 ## explicit; go 1.13
 github.com/mattn/go-colorable

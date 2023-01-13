@@ -16,7 +16,6 @@ import (
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
 	gorm_logrus "github.com/onrik/gorm-logrus"
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -31,7 +30,6 @@ func main() {
 
 	dbLogrus := gormLogger.Default.LogMode(gormLogger.Silent)
 	if config.DebugMode {
-		logrus.SetLevel(logrus.InfoLevel)
 		dbLogrus = gorm_logrus.New()
 		dbLogrus.LogMode(gormLogger.Info)
 	}
@@ -40,7 +38,7 @@ func main() {
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUsername, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: gormLogger.Default.LogMode(gormLogger.Silent),
+		Logger: dbLogrus,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -113,17 +111,19 @@ func main() {
 		}
 	}
 
-	var s service.Service
-	{
-		s = service.NewDeviceManagerService(deviceRepo, logsRepo, statsRepo, config.MinimumReenrollDays, caClient, dmsClient)
-		s = service.NewAMQPMiddleware(mainServer.AmqpPublisher)(s)
-		s = service.NewInputValudationMiddleware()(s)
-		s = service.LoggingMiddleware()(s)
-	}
+	svc := service.NewDeviceManagerService(deviceRepo, logsRepo, statsRepo, config.MinimumReenrollDays, caClient, dmsClient)
+	dmSvc := svc.(*service.DevicesService)
 
-	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(s)))
-	mainServer.AddHttpHandler("/.well-known/", esttransport.MakeHTTPHandler(s))
-	mainServer.AddAmqpConsumer(config.ServiceName, []string{"io.lamassuiot.certificate.update", "io.lamassuiot.certificate.revoke"}, transport.MakeAmqpHandler(s))
+	svc = service.LoggingMiddleware()(svc)
+	svc = service.NewAMQPMiddleware(mainServer.AmqpPublisher)(svc)
+	svc = service.NewInputValudationMiddleware()(svc)
+
+	dmSvc.SetService(svc)
+
+	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(svc)))
+	mainServer.AddHttpHandler("/.well-known/", esttransport.MakeHTTPHandler(svc))
+
+	mainServer.AddAmqpConsumer(config.ServiceName, []string{"io.lamassuiot.certificate.update", "io.lamassuiot.certificate.revoke"}, transport.MakeAmqpHandler(svc))
 
 	mainServer.Run()
 	forever := make(chan struct{})

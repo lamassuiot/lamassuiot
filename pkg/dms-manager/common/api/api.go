@@ -126,6 +126,8 @@ type DeviceManufacturingService struct {
 	KeyMetadata               KeyStrengthMetadata
 	Subject                   Subject
 	AuthorizedCAs             []string
+	BootstrapCAs              []string
+	HostCloudDMS              bool
 	CreationTimestamp         pq.NullTime
 	LastStatusUpdateTimestamp pq.NullTime
 	X509Asset                 X509Asset
@@ -156,6 +158,7 @@ type GetDMSsOutput struct {
 
 type CreateDMSWithCertificateRequestInput struct {
 	CertificateRequest *x509.CertificateRequest
+	BootstrapCAs       []string
 }
 
 type CreateDMSWithCertificateRequestOutput struct {
@@ -165,8 +168,10 @@ type CreateDMSWithCertificateRequestOutput struct {
 // ----------------------------------------------
 
 type CreateDMSInput struct {
-	Subject     Subject
-	KeyMetadata KeyMetadata
+	Subject      Subject
+	KeyMetadata  KeyMetadata
+	BootstrapCAs []string
+	HostCloudDMS bool
 }
 
 type CreateDMSOutput struct {

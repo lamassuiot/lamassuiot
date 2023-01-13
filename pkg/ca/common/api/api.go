@@ -109,7 +109,7 @@ type EngineProviderInfo struct {
 }
 
 type SupportedKeyTypeInfo struct {
-	Type        string
+	Type        KeyType
 	MinimumSize int
 	MaximumSize int
 }

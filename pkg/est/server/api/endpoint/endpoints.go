@@ -60,7 +60,7 @@ func MakeEnrollEndpoint(s service.ESTService) endpoint.Endpoint {
 			return nil, &valError
 		}
 		crt, err := s.Enroll(ctx, req.Csr, req.Crt, req.Aps)
-		return EnrollReenrollResponse{Cert: crt}, err
+		return EnrollReenrollResponse{Cert: crt, PemResponse: req.PemResponse}, err
 	}
 }
 
@@ -75,7 +75,7 @@ func MakeReenrollEndpoint(s service.ESTService) endpoint.Endpoint {
 			return nil, &valError
 		}
 		crt, err := s.Reenroll(ctx, req.Csr, req.Crt)
-		return EnrollReenrollResponse{Cert: crt}, err
+		return EnrollReenrollResponse{Cert: crt, PemResponse: req.PemResponse}, err
 	}
 }
 
@@ -97,9 +97,10 @@ func MakeServerKeyGenEndpoint(s service.ESTService) endpoint.Endpoint {
 type EmptyRequest struct{}
 
 type EnrollRequest struct {
-	Csr *x509.CertificateRequest `validate:"required"`
-	Aps string                   `validate:"required"`
-	Crt *x509.Certificate        `validate:"required"`
+	Csr         *x509.CertificateRequest `validate:"required"`
+	Aps         string                   `validate:"required"`
+	Crt         *x509.Certificate        `validate:"required"`
+	PemResponse bool
 }
 
 func ValidatetEnrollRequest(request EnrollRequest) error {
@@ -108,8 +109,9 @@ func ValidatetEnrollRequest(request EnrollRequest) error {
 }
 
 type ReenrollRequest struct {
-	Csr *x509.CertificateRequest `validate:"required"`
-	Crt *x509.Certificate        `validate:"required"`
+	Csr         *x509.CertificateRequest `validate:"required"`
+	Crt         *x509.Certificate        `validate:"required"`
+	PemResponse bool
 }
 
 func ValidatetReenrollRequest(request ReenrollRequest) error {
@@ -137,8 +139,9 @@ type GetCasResponse struct {
 	Certs []*x509.Certificate
 }
 type EnrollReenrollResponse struct {
-	Cert   *x509.Certificate
-	CaCert *x509.Certificate
+	Cert        *x509.Certificate
+	CaCert      *x509.Certificate
+	PemResponse bool
 }
 type ServerKeyGenResponse struct {
 	Cert   *x509.Certificate

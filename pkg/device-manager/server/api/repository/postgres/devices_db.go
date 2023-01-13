@@ -29,6 +29,7 @@ type CertificateDAO struct {
 	CAName              string
 	Certificate         string
 	Status              caApi.CertificateStatus
+	IsActiveCertificate bool
 	RevocationTimestamp pq.NullTime
 	RevocationReason    string
 }
@@ -104,22 +105,24 @@ func (d DeviceDAO) toDevice() *api.Device {
 
 func (c *SlotDAO) toSlot() api.Slot {
 	certificates := make([]*api.Certificate, 0)
+	var activeCertificate *api.Certificate = nil
+
 	for _, certificate := range c.Certificates {
 		cert, err := certificate.toCertificate()
 		if err != nil {
 			continue
 		}
-		certificates = append(certificates, &cert)
+
+		if certificate.IsActiveCertificate {
+			activeCertificate = &cert
+		} else {
+			certificates = append(certificates, &cert)
+		}
 	}
 
-	var activeCertificate *api.Certificate = nil
 	sort.Slice(certificates, func(x, y int) bool {
 		return certificates[x].Certificate.NotBefore.After(certificates[y].Certificate.NotBefore)
 	})
-
-	if len(certificates) > 0 {
-		activeCertificate = certificates[0]
-	}
 
 	return api.Slot{
 		ID:                  c.SlotID,
@@ -129,22 +132,14 @@ func (c *SlotDAO) toSlot() api.Slot {
 }
 
 func toSlotDAO(c api.Slot, deviceID string) SlotDAO {
-	addedActiveCertificate := false
 	activeCertificate := c.ActiveCertificate
 
 	certificates := make([]CertificateDAO, 0)
 	for _, certificate := range c.ArchiveCertificates {
-		certificates = append(certificates, toCertificateDAO(*certificate, c.ID, deviceID))
-		if activeCertificate != nil {
-			if certificate.SerialNumber == activeCertificate.SerialNumber {
-				addedActiveCertificate = true
-			}
-		}
+		certificates = append(certificates, toCertificateDAO(*certificate, c.ID, deviceID, false))
 	}
 
-	if !addedActiveCertificate && activeCertificate != nil {
-		certificates = append(certificates, toCertificateDAO(*activeCertificate, c.ID, deviceID))
-	}
+	certificates = append(certificates, toCertificateDAO(*activeCertificate, c.ID, deviceID, true))
 
 	return SlotDAO{
 		SlotID:       c.ID,
@@ -153,7 +148,7 @@ func toSlotDAO(c api.Slot, deviceID string) SlotDAO {
 	}
 }
 
-func toCertificateDAO(c api.Certificate, slotID string, deviceID string) CertificateDAO {
+func toCertificateDAO(c api.Certificate, slotID string, deviceID string, isActiveCertificate bool) CertificateDAO {
 	certificate := ""
 	if c.Certificate != nil {
 		pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: c.Certificate.Raw})
@@ -170,6 +165,7 @@ func toCertificateDAO(c api.Certificate, slotID string, deviceID string) Certifi
 		Status:              c.Status,
 		RevocationTimestamp: c.RevocationTimestamp,
 		RevocationReason:    c.RevocationReason,
+		IsActiveCertificate: isActiveCertificate,
 	}
 }
 
@@ -307,23 +303,49 @@ func (db *postgresDBContext) SelectDevices(ctx context.Context, queryParameters 
 
 	var devices []*api.Device
 	for _, v := range devicesDAO {
-		devices = append(devices, v.toDevice())
+		_, dev, err := db.SelectDeviceById(ctx, v.ID)
+		if err != nil {
+			continue
+		}
+
+		devices = append(devices, dev)
+	}
+
+	return int(totalDevices), devices, nil
+}
+func (db *postgresDBContext) SelectDevicesByStatus(ctx context.Context, status api.DeviceStatus, queryParameters common.QueryParameters) (int, []*api.Device, error) {
+	var totalDevices int64
+	if err := db.WithContext(ctx).Model(&DeviceDAO{}).Where("status = ?", status).Count(&totalDevices).Error; err != nil {
+		return 0, []*api.Device{}, err
+	}
+
+	var devicesDAO []DeviceDAO
+	tx := db.WithContext(ctx).Model(&DeviceDAO{}).Where("status = ?", status)
+	tx = filters.ApplyQueryParametersFilters(tx, queryParameters)
+	if err := tx.Find(&devicesDAO).Error; err != nil {
+		return 0, []*api.Device{}, err
+	}
+
+	var devices []*api.Device
+	for _, v := range devicesDAO {
+		_, dev, err := db.SelectDeviceById(ctx, v.ID)
+		if err != nil {
+			continue
+		}
+
+		devices = append(devices, dev)
 	}
 
 	return int(totalDevices), devices, nil
 }
 
-func (db *postgresDBContext) SelectDeviceById(ctx context.Context, id string) (*api.Device, error) {
+func (db *postgresDBContext) SelectDeviceById(ctx context.Context, id string) (bool, *api.Device, error) {
 	var device DeviceDAO
 	if err := db.WithContext(ctx).Model(&DeviceDAO{}).Where("id = ?", id).First(&device).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			notFoundErr := &devicesErrors.ResourceNotFoundError{
-				ResourceType: "Device",
-				ResourceId:   id,
-			}
-			return &api.Device{}, notFoundErr
+			return false, &api.Device{}, nil
 		} else {
-			return &api.Device{}, err
+			return false, &api.Device{}, err
 		}
 	}
 
@@ -345,7 +367,7 @@ func (db *postgresDBContext) SelectDeviceById(ctx context.Context, id string) (*
 		})
 	}
 
-	return parsedDevice, nil
+	return true, parsedDevice, nil
 }
 
 func (db *postgresDBContext) UpdateDevice(ctx context.Context, device api.Device) error {
@@ -393,6 +415,14 @@ func (db *postgresDBContext) SelectSlots(ctx context.Context, deviceID string) (
 
 	return slotsList, nil
 }
+func (db *postgresDBContext) CountActiveCertificatesByStatus(ctx context.Context, status caApi.CertificateStatus) (int, error) {
+	var totalCertificates int64
+	if err := db.WithContext(ctx).Model(&CertificateDAO{}).Where("is_active_certificate = ?", true).Where("status = ?", status).Count(&totalCertificates).Error; err != nil {
+		return 0, err
+	}
+
+	return int(totalCertificates), nil
+}
 
 func (db *postgresDBContext) SelectSlotByID(ctx context.Context, deviceID string, id string) (*api.Slot, error) {
 	var slotDAO SlotDAO
@@ -429,8 +459,8 @@ func (db *postgresDBContext) UpdateSlot(ctx context.Context, deviceID string, sl
 
 //***********************************************************************************************
 
-func (db *postgresDBContext) InsertCertificate(ctx context.Context, deviceID string, slotID string, certificate api.Certificate) error {
-	certificateDAO := toCertificateDAO(certificate, slotID, deviceID)
+func (db *postgresDBContext) InsertCertificate(ctx context.Context, deviceID string, slotID string, certificate api.Certificate, isActiveCertificate bool) error {
+	certificateDAO := toCertificateDAO(certificate, slotID, deviceID, isActiveCertificate)
 
 	if err := db.WithContext(ctx).Model(&CertificateDAO{}).Create(&certificateDAO).Error; err != nil {
 		duplicationErr := &devicesErrors.DuplicateResourceError{
@@ -481,8 +511,8 @@ func (db *postgresDBContext) SelectCertificateBySerialNumber(ctx context.Context
 
 }
 
-func (db *postgresDBContext) UpdateCertificate(ctx context.Context, deviceID string, slotID string, certificate api.Certificate) error {
-	slotDAO := toCertificateDAO(certificate, slotID, deviceID)
+func (db *postgresDBContext) UpdateCertificate(ctx context.Context, deviceID string, slotID string, certificate api.Certificate, isActiveCertificate bool) error {
+	slotDAO := toCertificateDAO(certificate, slotID, deviceID, isActiveCertificate)
 	if err := db.Updates(&slotDAO).Error; err != nil {
 		return err
 	}

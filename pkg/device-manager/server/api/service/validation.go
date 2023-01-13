@@ -98,18 +98,6 @@ func (mw *validationMiddleware) GetDeviceById(ctx context.Context, input *api.Ge
 	return mw.next.GetDeviceById(ctx, input)
 }
 
-func (mw *validationMiddleware) IterateDevicesWithPredicate(ctx context.Context, input *api.IterateDevicesWithPredicateInput) (*api.IterateDevicesWithPredicateOutput, error) {
-	validate := validator.New()
-	err := validate.Struct(input)
-	if err != nil {
-		valError := errors.ValidationError{
-			Msg: err.Error(),
-		}
-		return nil, &valError
-	}
-	return mw.next.IterateDevicesWithPredicate(ctx, input)
-}
-
 func (mw *validationMiddleware) AddDeviceSlot(ctx context.Context, input *api.AddDeviceSlotInput) (*api.AddDeviceSlotOutput, error) {
 	validate := validator.New()
 	err := validate.Struct(input)

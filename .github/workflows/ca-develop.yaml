@@ -6,6 +6,7 @@ on:
       - develop
     paths:
         - '.github/workflows/ca*'
+        - 'pkg/utils/**'
         - 'pkg/ca/**'
         - 'main/ca/**'
   workflow_call:

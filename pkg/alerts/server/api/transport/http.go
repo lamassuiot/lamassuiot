@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	cloudevents "github.com/cloudevents/sdk-go/v2"
+	//cloudevents "github.com/cloudevents/sdk-go/v2"
+
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/common/api"
@@ -192,8 +193,9 @@ func encodeGetEventsResponse(ctx context.Context, w http.ResponseWriter, respons
 
 		return nil
 	}
-	castedResponse := response.([]cloudevents.Event)
-	serializedResponse := castedResponse
+
+	castedResponse := response.(*api.GetEventsOutput)
+	serializedResponse := castedResponse.LastEvents
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)

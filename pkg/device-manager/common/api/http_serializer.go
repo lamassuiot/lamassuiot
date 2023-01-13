@@ -167,7 +167,7 @@ type SlotSerialized struct {
 }
 
 func (s *Slot) Serialize() SlotSerialized {
-	var archiveCertificates []CertificateSerialized
+	archiveCertificates := make([]CertificateSerialized, 0)
 	for _, cert := range s.ArchiveCertificates {
 		archiveCertificates = append(archiveCertificates, cert.Serialize())
 	}
@@ -180,7 +180,7 @@ func (s *Slot) Serialize() SlotSerialized {
 
 func (s *SlotSerialized) Deserialize() Slot {
 	deserializedActiveSlot := s.ActiveCertificate.Deserialize()
-	var archiveCertificates []*Certificate
+	archiveCertificates := make([]*Certificate, 0)
 	for _, cert := range s.ArchiveCertificates {
 		deserializedCert := cert.Deserialize()
 		archiveCertificates = append(archiveCertificates, &deserializedCert)

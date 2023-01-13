@@ -182,7 +182,13 @@ func TestCreateDMS(t *testing.T) {
 			defer serverDMS.Close()
 			serverDMS.Start()
 
-			tc.serviceInitialization(svcDMS)
+			devManagerServer, _, err := testUtils.BuildDeviceManagerTestServer(serverCA, serverDMS)
+			if err != nil {
+				t.Errorf("%s", err)
+			}
+
+			svcDMS.UpdateDevManagerAddr(devManagerServer.URL)
+			tc.serviceInitialization(&svcDMS)
 			e := httpexpect.New(t, serverDMS.URL)
 			tc.testRestEndpoint(e)
 		})
@@ -314,7 +320,13 @@ func TestCreateDMSWithCertificateRequest(t *testing.T) {
 			defer serverDMS.Close()
 			serverDMS.Start()
 
-			tc.serviceInitialization(svcDMS)
+			devManagerServer, _, err := testUtils.BuildDeviceManagerTestServer(serverCA, serverDMS)
+			if err != nil {
+				t.Errorf("%s", err)
+			}
+
+			svcDMS.UpdateDevManagerAddr(devManagerServer.URL)
+			tc.serviceInitialization(&svcDMS)
 			e := httpexpect.New(t, serverDMS.URL)
 			tc.testRestEndpoint(e)
 		})
@@ -703,7 +715,13 @@ func TestUpdateDMSStatus(t *testing.T) {
 			defer serverDMS.Close()
 			serverDMS.Start()
 
-			tc.serviceInitialization(svcDMS)
+			devManagerServer, _, err := testUtils.BuildDeviceManagerTestServer(serverCA, serverDMS)
+			if err != nil {
+				t.Errorf("%s", err)
+			}
+
+			svcDMS.UpdateDevManagerAddr(devManagerServer.URL)
+			tc.serviceInitialization(&svcDMS)
 			e := httpexpect.New(t, serverDMS.URL)
 			tc.testRestEndpoint(e)
 		})
@@ -898,7 +916,13 @@ func TestUpdateDMSAuthorizedCAs(t *testing.T) {
 			defer serverDMS.Close()
 			serverDMS.Start()
 
-			tc.serviceInitialization(svcDMS)
+			devManagerServer, _, err := testUtils.BuildDeviceManagerTestServer(serverCA, serverDMS)
+			if err != nil {
+				t.Errorf("%s", err)
+			}
+
+			svcDMS.UpdateDevManagerAddr(devManagerServer.URL)
+			tc.serviceInitialization(&svcDMS)
 			e := httpexpect.New(t, serverDMS.URL)
 			tc.testRestEndpoint(e)
 		})
@@ -1239,7 +1263,13 @@ func TestGetDMS(t *testing.T) {
 			defer serverDMS.Close()
 			serverDMS.Start()
 
-			tc.serviceInitialization(svcDMS)
+			devManagerServer, _, err := testUtils.BuildDeviceManagerTestServer(serverCA, serverDMS)
+			if err != nil {
+				t.Errorf("%s", err)
+			}
+
+			svcDMS.UpdateDevManagerAddr(devManagerServer.URL)
+			tc.serviceInitialization(&svcDMS)
 			e := httpexpect.New(t, serverDMS.URL)
 			tc.testRestEndpoint(e)
 		})
@@ -1360,8 +1390,13 @@ func TestGetDMSs(t *testing.T) {
 
 			defer serverDMS.Close()
 			serverDMS.Start()
+			devManagerServer, _, err := testUtils.BuildDeviceManagerTestServer(serverCA, serverDMS)
+			if err != nil {
+				t.Errorf("%s", err)
+			}
 
-			tc.serviceInitialization(svcDMS)
+			svcDMS.UpdateDevManagerAddr(devManagerServer.URL)
+			tc.serviceInitialization(&svcDMS)
 			e := httpexpect.New(t, serverDMS.URL)
 			tc.testRestEndpoint(e)
 		})

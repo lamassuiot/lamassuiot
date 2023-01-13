@@ -35,6 +35,7 @@ type Service interface {
 }
 
 type CloudProxyService struct {
+	service             Service
 	ConsulClient        *consul.Client
 	LamassuCAClient     lamassuCAClient.LamassuCAClient
 	CloudProxyDB        repository.CloudProxyRepository
@@ -42,12 +43,20 @@ type CloudProxyService struct {
 }
 
 func NewCloudPorxyService(consulClient *consul.Client, cloudProxyDatabase repository.CloudProxyRepository, lamassuCAClient lamassuCAClient.LamassuCAClient, clientBaseConfig clientUtils.BaseClientConfigurationuration) Service {
-	return &CloudProxyService{
+	svc := CloudProxyService{
 		ConsulClient:        consulClient,
 		LamassuCAClient:     lamassuCAClient,
 		CloudProxyDB:        cloudProxyDatabase,
 		ConnectorBaseConfig: clientBaseConfig,
 	}
+
+	svc.service = &svc
+
+	return &svc
+}
+
+func (s *CloudProxyService) SetService(svc Service) {
+	s.service = svc
 }
 
 func (s *CloudProxyService) Health(ctx context.Context) bool {
@@ -62,7 +71,7 @@ func (cps *CloudProxyService) GetCloudConnectors(ctx context.Context, input *api
 	}
 
 	for _, agent := range agents {
-		connectorOut, err := cps.GetCloudConnectorByID(ctx, &api.GetCloudConnectorByIDInput{
+		connectorOut, err := cps.service.GetCloudConnectorByID(ctx, &api.GetCloudConnectorByIDInput{
 			ConnectorID: agent.ID,
 		})
 		if err != nil {
@@ -170,7 +179,7 @@ func (cps *CloudProxyService) GetCloudConnectorByID(ctx context.Context, input *
 }
 
 func (cps *CloudProxyService) GetDeviceConfiguration(ctx context.Context, input *api.GetDeviceConfigurationInput) (*api.GetDeviceConfigurationOutput, error) {
-	connector, err := cps.GetCloudConnectorByID(ctx, &api.GetCloudConnectorByIDInput{
+	connector, err := cps.service.GetCloudConnectorByID(ctx, &api.GetCloudConnectorByIDInput{
 		ConnectorID: input.ConnectorID,
 	})
 	if err != nil {
@@ -201,7 +210,7 @@ func (cps *CloudProxyService) SynchronizeCA(ctx context.Context, input *api.Sync
 		return &api.SynchronizeCAOutput{}, err
 	}
 
-	connectorOutput, err := cps.GetCloudConnectorByID(ctx, &api.GetCloudConnectorByIDInput{
+	connectorOutput, err := cps.service.GetCloudConnectorByID(ctx, &api.GetCloudConnectorByIDInput{
 		ConnectorID: input.ConnectorID,
 	})
 	if err != nil {
@@ -214,7 +223,7 @@ func (cps *CloudProxyService) SynchronizeCA(ctx context.Context, input *api.Sync
 }
 
 func (cps *CloudProxyService) UpdateCloudProviderConfiguration(ctx context.Context, input *api.UpdateCloudProviderConfigurationInput) (*api.UpdateCloudProviderConfigurationOutput, error) {
-	connectorOutput, err := cps.GetCloudConnectorByID(ctx, &api.GetCloudConnectorByIDInput{
+	connectorOutput, err := cps.service.GetCloudConnectorByID(ctx, &api.GetCloudConnectorByIDInput{
 		ConnectorID: input.ConnectorID,
 	})
 	if err != nil {
@@ -234,7 +243,7 @@ func (cps *CloudProxyService) UpdateCloudProviderConfiguration(ctx context.Conte
 }
 
 func (cps *CloudProxyService) HandleCreateCAEvent(ctx context.Context, input *api.HandleCreateCAEventInput) (*api.HandleCreateCAEventOutput, error) {
-	connectorsOutput, err := cps.GetCloudConnectors(ctx, &api.GetCloudConnectorsInput{})
+	connectorsOutput, err := cps.service.GetCloudConnectors(ctx, &api.GetCloudConnectorsInput{})
 	if err != nil {
 		return &api.HandleCreateCAEventOutput{}, err
 	}
@@ -270,7 +279,7 @@ func (cps *CloudProxyService) HandleCreateCAEvent(ctx context.Context, input *ap
 }
 
 func (cps *CloudProxyService) HandleUpdateCAStatusEvent(ctx context.Context, input *api.HandleUpdateCAStatusEventInput) (*api.HandleUpdateCAStatusEventOutput, error) {
-	connectorsOutput, err := cps.GetCloudConnectors(ctx, &api.GetCloudConnectorsInput{})
+	connectorsOutput, err := cps.service.GetCloudConnectors(ctx, &api.GetCloudConnectorsInput{})
 	if err != nil {
 		return &api.HandleUpdateCAStatusEventOutput{}, err
 	}
@@ -306,7 +315,7 @@ func (cps *CloudProxyService) HandleUpdateCAStatusEvent(ctx context.Context, inp
 }
 
 func (cps *CloudProxyService) HandleUpdateCertificateStatusEvent(ctx context.Context, input *api.HandleUpdateCertificateStatusEventInput) (*api.HandleUpdateCertificateStatusEventOutput, error) {
-	connectorsOutput, err := cps.GetCloudConnectors(ctx, &api.GetCloudConnectorsInput{})
+	connectorsOutput, err := cps.service.GetCloudConnectors(ctx, &api.GetCloudConnectorsInput{})
 	if err != nil {
 		return &api.HandleUpdateCertificateStatusEventOutput{}, err
 	}
@@ -321,7 +330,7 @@ func (cps *CloudProxyService) HandleUpdateCertificateStatusEvent(ctx context.Con
 					continue
 				}
 
-				cps.UpdateDeviceCertificateStatus(ctx, &api.UpdateDeviceCertificateStatusInput{
+				cps.service.UpdateDeviceCertificateStatus(ctx, &api.UpdateDeviceCertificateStatusInput{
 					ConnectorID:  connector.ID,
 					DeviceID:     input.Certificate.Subject.CommonName,
 					CAName:       input.CAName,
@@ -340,7 +349,7 @@ func (cps *CloudProxyService) HandleUpdateCertificateStatusEvent(ctx context.Con
 }
 
 func (cps *CloudProxyService) HandleReenrollEvent(ctx context.Context, input *api.HandleReenrollEventInput) (*api.HandleReenrollEventOutput, error) {
-	connectorsOutput, err := cps.GetCloudConnectors(ctx, &api.GetCloudConnectorsInput{})
+	connectorsOutput, err := cps.service.GetCloudConnectors(ctx, &api.GetCloudConnectorsInput{})
 	if err != nil {
 		return &api.HandleReenrollEventOutput{}, err
 	}
@@ -349,7 +358,7 @@ func (cps *CloudProxyService) HandleReenrollEvent(ctx context.Context, input *ap
 		for _, syncCA := range connector.SynchronizedCAs {
 			if syncCA.ConsistencyStatus != api.ConsistencyStatusDisabled && syncCA.CAName == input.Certificate.Issuer.CommonName {
 				fmt.Println(fmt.Sprintf("	[%s](%s) %s  --->  %s:%d", connector.Status, connector.CloudProvider, connector.ID, connector.IP, connector.Port))
-				cps.UpdateDeviceDigitalTwinReenrolmentStatus(ctx, &api.UpdateDeviceDigitalTwinReenrolmentStatusInput{
+				cps.service.UpdateDeviceDigitalTwinReenrolmentStatus(ctx, &api.UpdateDeviceDigitalTwinReenrolmentStatusInput{
 					ConnectorID:   connector.ID,
 					DeviceID:      input.Certificate.Subject.CommonName,
 					SlotID:        "",
@@ -367,7 +376,7 @@ func (cps *CloudProxyService) HandleReenrollEvent(ctx context.Context, input *ap
 }
 
 func (cps *CloudProxyService) UpdateDeviceCertificateStatus(ctx context.Context, input *api.UpdateDeviceCertificateStatusInput) (*api.UpdateDeviceCertificateStatusOutput, error) {
-	connectorOutput, err := cps.GetCloudConnectorByID(ctx, &api.GetCloudConnectorByIDInput{
+	connectorOutput, err := cps.service.GetCloudConnectorByID(ctx, &api.GetCloudConnectorByIDInput{
 		ConnectorID: input.ConnectorID,
 	})
 	if err != nil {
@@ -393,7 +402,7 @@ func (cps *CloudProxyService) UpdateDeviceCertificateStatus(ctx context.Context,
 }
 
 func (cps *CloudProxyService) UpdateDeviceDigitalTwinReenrolmentStatus(ctx context.Context, input *api.UpdateDeviceDigitalTwinReenrolmentStatusInput) (*api.UpdateDeviceDigitalTwinReenrolmentStatusOutput, error) {
-	connectorOutput, err := cps.GetCloudConnectorByID(ctx, &api.GetCloudConnectorByIDInput{
+	connectorOutput, err := cps.service.GetCloudConnectorByID(ctx, &api.GetCloudConnectorByIDInput{
 		ConnectorID: input.ConnectorID,
 	})
 	if err != nil {
@@ -440,7 +449,7 @@ func (cps *CloudProxyService) newCloudPriverClient(protocol string, ip string, p
 	return cloudProviderClient.NewCloudProviderClient(config)
 }
 func (cps *CloudProxyService) HandleForceReenrollEvent(ctx context.Context, input *api.HandleForceReenrollEventInput) (*api.HandleForceReenrollEventOutput, error) {
-	connectorsOutput, err := cps.GetCloudConnectors(ctx, &api.GetCloudConnectorsInput{})
+	connectorsOutput, err := cps.service.GetCloudConnectors(ctx, &api.GetCloudConnectorsInput{})
 	if err != nil {
 		return &api.HandleForceReenrollEventOutput{}, err
 	}
@@ -449,7 +458,7 @@ func (cps *CloudProxyService) HandleForceReenrollEvent(ctx context.Context, inpu
 		for _, syncCA := range connector.SynchronizedCAs {
 			if syncCA.ConsistencyStatus != api.ConsistencyStatusDisabled && syncCA.CAName == input.Crt.Issuer.CommonName {
 				fmt.Println(fmt.Sprintf("	[%s](%s) %s  --->  %s:%d", connector.Status, connector.CloudProvider, connector.ID, connector.IP, connector.Port))
-				cps.UpdateDeviceDigitalTwinReenrolmentStatus(ctx, &api.UpdateDeviceDigitalTwinReenrolmentStatusInput{
+				cps.service.UpdateDeviceDigitalTwinReenrolmentStatus(ctx, &api.UpdateDeviceDigitalTwinReenrolmentStatusInput{
 					ConnectorID:   connector.ID,
 					DeviceID:      input.Crt.Subject.CommonName,
 					SlotID:        input.SlotID,

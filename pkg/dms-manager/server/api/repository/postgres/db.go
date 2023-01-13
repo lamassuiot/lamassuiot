@@ -24,6 +24,8 @@ type DeviceManufacturingServiceDAO struct {
 	Status                    api.DMSStatus
 	X509Asset                 string
 	AuthorizedCAs             pq.StringArray `gorm:"type:text[]"`
+	BootstrapCAs              pq.StringArray `gorm:"type:text[]"`
+	IsCloudHostedDMS          bool
 	CreationTimestamp         pq.NullTime
 	LastStatusUpdateTimestamp pq.NullTime
 }
@@ -90,6 +92,13 @@ func (d *DeviceManufacturingServiceDAO) toDeviceManufacturingService() (api.Devi
 	if len(d.AuthorizedCAs) > 0 {
 		authorizedCAs = d.AuthorizedCAs
 	}
+	hostcloudDMS := false
+	bootstrapCAs := make([]string, 0)
+	if len(d.BootstrapCAs) > 0 {
+		bootstrapCAs = d.BootstrapCAs
+		hostcloudDMS = true
+
+	}
 
 	return api.DeviceManufacturingService{
 		Name:                      d.Name,
@@ -98,6 +107,8 @@ func (d *DeviceManufacturingServiceDAO) toDeviceManufacturingService() (api.Devi
 		X509Asset:                 x509Asset,
 		Subject:                   subject,
 		AuthorizedCAs:             authorizedCAs,
+		BootstrapCAs:              bootstrapCAs,
+		HostCloudDMS:              hostcloudDMS,
 		CreationTimestamp:         d.CreationTimestamp,
 		LastStatusUpdateTimestamp: d.LastStatusUpdateTimestamp,
 	}, nil
@@ -117,17 +128,24 @@ type PostgresDBContext struct {
 	*gorm.DB
 }
 
-func (db *PostgresDBContext) Insert(ctx context.Context, csr *x509.CertificateRequest) error {
+func (db *PostgresDBContext) Insert(ctx context.Context, input *api.CreateDMSWithCertificateRequestInput) error {
 	now := time.Now()
 
-	pemCert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr.Raw})
+	pemCert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: input.CertificateRequest.Raw})
 	certificateEnc := make([]byte, base64.StdEncoding.EncodedLen(len(pemCert)))
 	base64.StdEncoding.Encode(certificateEnc, pemCert)
-
+	hostCloudDMS := false
+	bootstrapCAs := make([]string, 0)
+	if len(input.BootstrapCAs) != 0 {
+		hostCloudDMS = true
+		bootstrapCAs = input.BootstrapCAs
+	}
 	dms := DeviceManufacturingServiceDAO{
-		Name:                      csr.Subject.CommonName,
+		Name:                      input.CertificateRequest.Subject.CommonName,
 		Status:                    api.DMSStatusPendingApproval,
 		AuthorizedCAs:             []string{},
+		BootstrapCAs:              bootstrapCAs,
+		IsCloudHostedDMS:          hostCloudDMS,
 		CreationTimestamp:         pq.NullTime{Valid: true, Time: now},
 		LastStatusUpdateTimestamp: pq.NullTime{Valid: true, Time: now},
 		X509Asset:                 string(certificateEnc),
@@ -246,6 +264,8 @@ func (db *PostgresDBContext) UpdateDMS(ctx context.Context, dms api.DeviceManufa
 		Status:                    dms.Status,
 		SerialNumber:              dms.SerialNumber,
 		AuthorizedCAs:             dms.AuthorizedCAs,
+		BootstrapCAs:              dms.BootstrapCAs,
+		IsCloudHostedDMS:          dms.HostCloudDMS,
 		CreationTimestamp:         dms.CreationTimestamp,
 		LastStatusUpdateTimestamp: newUpdateTimestamp,
 		X509Asset:                 asset,

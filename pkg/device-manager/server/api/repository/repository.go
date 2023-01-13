@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
 )
@@ -11,7 +12,8 @@ import (
 type Devices interface {
 	InsertDevice(ctx context.Context, device api.Device) error
 	SelectDevices(ctx context.Context, queryParameters common.QueryParameters) (int, []*api.Device, error)
-	SelectDeviceById(ctx context.Context, id string) (*api.Device, error)
+	SelectDevicesByStatus(ctx context.Context, status api.DeviceStatus, queryParameters common.QueryParameters) (int, []*api.Device, error)
+	SelectDeviceById(ctx context.Context, id string) (bool, *api.Device, error)
 	UpdateDevice(ctx context.Context, device api.Device) error
 
 	InsertSlot(ctx context.Context, deviceID string, slot api.Slot) error
@@ -19,10 +21,11 @@ type Devices interface {
 	SelectSlotByID(ctx context.Context, deviceID string, id string) (*api.Slot, error)
 	UpdateSlot(ctx context.Context, deviceID string, slot api.Slot) error
 
-	InsertCertificate(ctx context.Context, deviceID string, slotID string, certificate api.Certificate) error
+	CountActiveCertificatesByStatus(ctx context.Context, status caApi.CertificateStatus) (int, error)
+	InsertCertificate(ctx context.Context, deviceID string, slotID string, certificate api.Certificate, isActiveCertificate bool) error
 	SelectCertificates(ctx context.Context, deviceID string, slotID string) ([]*api.Certificate, error)
 	SelectCertificateBySerialNumber(ctx context.Context, deviceID string, slotID string, serialNumber string) (*api.Certificate, error)
-	UpdateCertificate(ctx context.Context, deviceID string, slotID string, certificate api.Certificate) error
+	UpdateCertificate(ctx context.Context, deviceID string, slotID string, certificate api.Certificate, isActiveCertificate bool) error
 }
 
 type DeviceLogs interface {

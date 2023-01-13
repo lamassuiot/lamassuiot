@@ -51,6 +51,8 @@ func (c *lamassuDMSManagerClientConfig) CreateDMS(ctx context.Context, input *ap
 			State:            input.Subject.State,
 			Locality:         input.Subject.Locality,
 		},
+		HostCloudDMS: input.HostCloudDMS,
+		BootstrapCAs: input.BootstrapCAs,
 	}
 
 	req, err := c.client.NewRequest(ctx, "POST", "v1/", body)
