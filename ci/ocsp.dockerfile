@@ -1,6 +1,6 @@
 ARG BASE_IMAGE=scratch
 
-FROM golang:1.18
+FROM golang:1.19
 WORKDIR /app
 COPY . .
 WORKDIR /app

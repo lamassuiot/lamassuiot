@@ -6,293 +6,257 @@ import (
 	"net/http"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
-	"github.com/go-kit/kit/tracing/opentracing"
-	"github.com/go-kit/kit/transport"
 	httptransport "github.com/go-kit/kit/transport/http"
-	"github.com/go-kit/log"
 
 	"github.com/gorilla/mux"
+	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/endpoint"
 	lamassuErrors "github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/service"
-	"github.com/lamassuiot/lamassuiot/pkg/utils"
-	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 type errorer interface {
 	error() error
 }
 
-func ErrMissingConnectorID() error {
+func InvalidJsonFormat() error {
 	return &lamassuErrors.GenericError{
-		Message:    "connectorID not specified",
+		Message:    "Invalid JSON format",
 		StatusCode: 400,
-	}
-}
-func ErrMissingCaName() error {
-	return &lamassuErrors.GenericError{
-		Message:    "CA Name not specified",
-		StatusCode: 400,
-	}
-}
-func ErrMissingDeviceID() error {
-	return &lamassuErrors.GenericError{
-		Message:    "deviceID not specified",
-		StatusCode: 400,
-	}
-}
-func HTTPToContext(logger log.Logger) httptransport.RequestFunc {
-	return func(ctx context.Context, req *http.Request) context.Context {
-		// Try to join to a trace propagated in `req`.
-		uberTraceId := req.Header.Values("Uber-Trace-Id")
-		if uberTraceId != nil {
-			logger = log.With(logger, "span_id", uberTraceId)
-		} else {
-			span := stdopentracing.SpanFromContext(ctx)
-			logger = log.With(logger, "span_id", span)
-		}
-		return context.WithValue(ctx, utils.LamassuLoggerContextKey, logger)
 	}
 }
 
-func MakeHTTPHandler(s service.Service, logger log.Logger, otTracer stdopentracing.Tracer) http.Handler {
+func MakeHTTPHandler(s service.Service) http.Handler {
 	r := mux.NewRouter()
-	e := endpoint.MakeServerEndpoints(s, otTracer)
+	e := endpoint.MakeServerEndpoints(s)
 	options := []httptransport.ServerOption{
-		httptransport.ServerBefore(HTTPToContext(logger)),
-		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
 		httptransport.ServerErrorEncoder(encodeError),
 	}
 
-	r.Methods("GET").Path("/health").Handler(httptransport.NewServer(
-		e.HealthEndpoint,
-		decodeHealthRequest,
-		encodeResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Health", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/health").Handler(
+		httptransport.NewServer(
+			e.HealthEndpoint,
+			decodeHealthRequest,
+			encodeHealthResponse,
+			append(
+				options,
+			)...,
+		),
+	)
 
-	r.Methods("GET").Path("/connectors").Handler(httptransport.NewServer(
-		e.GetCloudConnectorsEndpoint,
-		decodeEmptyRequest,
-		enocdeGetConnectorsResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCloudConnectorsEndpoint", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/connectors").Handler(
+		httptransport.NewServer(
+			e.GetCloudConnectorsEndpoint,
+			decodeGetConnectorsRequest,
+			enocdeGetConnectorsResponse,
+			append(
+				options,
+			)...,
+		),
+	)
 
-	r.Methods("GET").Path("/connectors/{connectorID}/devices/{deviceID}").Handler(httptransport.NewServer(
-		e.GetDeviceConfigurationEndpoint,
-		decodeGetDeviceConfigByID,
-		encodeResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetCloudConnectorsDevicesEndpoint", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("GET").Path("/connectors/{connectorID}/devices/{deviceID}").Handler(
+		httptransport.NewServer(
+			e.GetDeviceConfigurationEndpoint,
+			decodeGetDeviceConfigurationRequest,
+			encodeGetDeviceConfigurationResponse,
+			append(
+				options,
+			)...,
+		),
+	)
 
-	r.Methods("POST").Path("/connectors/synchronize").Handler(httptransport.NewServer(
-		e.SynchronizedCAEndpoint,
-		decodeSynchronizeCARequest,
-		enocdeSynchronizeCAResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "SynchronizedCAEndpoint", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("POST").Path("/connectors/synchronize").Handler(
+		httptransport.NewServer(
+			e.SynchronizedCAEndpoint,
+			decodeSynchronizeCARequest,
+			enocdeSynchronizeCAResponse,
+			append(
+				options,
+			)...,
+		),
+	)
 
-	r.Methods("PUT").Path("/connectors/{connectorID}/access-policy").Handler(httptransport.NewServer(
-		e.UpdateSecurityAccessPolicy,
-		decodeUpdateSecurityAccessPolicyRequest,
-		enocdeUpdateSecurityAccessPolicyResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "UpdateSecurityAccessPolicy", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("PUT").Path("/connectors/{connectorID}/config").Handler(
+		httptransport.NewServer(
+			e.UpdateConnectorConfigurationEndpoint,
+			decodeUpdateConnectorConfigurationRequest,
+			enocdeUpdateConnectorConfigurationResponse,
+			append(
+				options,
+			)...,
+		),
+	)
 
-	r.Methods("POST").Path("/event").Handler(httptransport.NewServer(
-		e.EventHandlerEndpoint,
-		decodeEventHandlerRequest,
-		encodeEventHandlerResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "EventHandlerEndpoint", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("POST").Path("/event").Handler(
+		httptransport.NewServer(
+			e.EventHandlerEndpoint,
+			decodeEventHandlerRequest,
+			encodeEventHandlerResponse,
+			append(
+				options,
+			)...,
+		),
+	)
 
-	r.Methods("PUT").Path("/connectors/{connectorID}/devices/{deviceID}/cert").Handler(httptransport.NewServer(
-		e.UpdateDeviceCertStatusEndpoint,
-		decodeUpdateDeviceCertStatusRequest,
-		encodeResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "UpdateDeviceCertStatus", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
-	r.Methods("PUT").Path("/{caName}").Handler(httptransport.NewServer(
-		e.UpdateCaStatusEndpoint,
-		decodeUpdateCaStatusRequest,
-		encodeResponse,
-		append(
-			options,
-			httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "UpdateCaStatusEndpoint", logger)),
-			httptransport.ServerBefore(HTTPToContext(logger)),
-		)...,
-	))
+	r.Methods("PUT").Path("/connectors/{connectorID}/devices/{deviceID}/certificate").Handler(
+		httptransport.NewServer(
+			e.UpdateDeviceCertStatusEndpoint,
+			decodeUpdateDeviceCertStatusRequest,
+			encodeUpdateDeviceCertStatusResponse,
+			append(
+				options,
+			)...,
+		),
+	)
+
+	r.Methods("PUT").Path("/connectors/{connectorID}/devices/{deviceID}/digital-twin").Handler(
+		httptransport.NewServer(
+			e.UpdateDeviceDigitalTwinReenrolmentStatusEndpoint,
+			decodeUpdateDeviceDigitalTwinReenrolmentStatusRequest,
+			encodeUpdateDeviceDigitalTwinReenrolmentStatusResponse,
+			append(
+				options,
+			)...,
+		),
+	)
+
+	r.Methods("PUT").Path("/connectors/{connectorID}/ca/{caName}").Handler(
+		httptransport.NewServer(
+			e.UpdateCAStatusEndpoint,
+			decodeUpdateCAStatusRequest,
+			encodeUpdateCAStatusResponse,
+			append(
+				options,
+			)...,
+		),
+	)
+
 	return r
 }
 
 func decodeHealthRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	var req endpoint.HealthRequest
-	return req, nil
+	return endpoint.HealthRequest{}, nil
 }
 
-func decodeEmptyRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	var req endpoint.EmptyRequest
-	return req, nil
-}
-func decodeGetDeviceConfigByID(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	vars := mux.Vars(r)
-	var deviceRequest endpoint.GetDeviceConfigurationRequest
-
-	connectorID, ok := vars["connectorID"]
-	if !ok {
-		return nil, ErrMissingConnectorID()
+func encodeHealthResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
 	}
-
-	deviceID, ok := vars["deviceID"]
-	if !ok {
-		return nil, ErrMissingDeviceID()
-	}
-
-	deviceRequest.ConnectorID = connectorID
-	deviceRequest.DeviceID = deviceID
-	return deviceRequest, nil
-}
-func decodeSynchronizeCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	var synchronizeCA endpoint.SynchronizeCARequest
-	err = json.NewDecoder(r.Body).Decode(&synchronizeCA)
-	if err != nil {
-		return nil, &lamassuErrors.GenericError{
-			Message:    "Could not deserialize JSON Content",
-			StatusCode: 400,
-		}
-	}
-	return synchronizeCA, nil
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(response)
 }
 
-func decodeUpdateSecurityAccessPolicyRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	vars := mux.Vars(r)
-	var updateRequest endpoint.UpdateSecurityAccessPolicyRequest
-
-	connectorID, ok := vars["connectorID"]
-	if !ok {
-		return nil, ErrMissingConnectorID()
-	}
-
-	err = json.NewDecoder(r.Body).Decode(&updateRequest.Payload)
-	if err != nil {
-		return nil, &lamassuErrors.GenericError{
-			Message:    "Could not deserialize JSON Content",
-			StatusCode: 400,
-		}
-	}
-	updateRequest.ConnectorID = connectorID
-	return updateRequest, nil
+func decodeGetConnectorsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	return api.GetCloudConnectorsInput{}, nil
 }
-func decodeUpdateDeviceCertStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	vars := mux.Vars(r)
-	var updateRequest endpoint.UpdateDeviceCertStatusRequest
-
-	connectorID, ok := vars["connectorID"]
-	if !ok {
-		return nil, ErrMissingConnectorID()
-	}
-	deviceID, ok := vars["deviceID"]
-	if !ok {
-		return nil, ErrMissingDeviceID()
-	}
-	err = json.NewDecoder(r.Body).Decode(&updateRequest.Payload)
-	if err != nil {
-		return nil, &lamassuErrors.GenericError{
-			Message:    "Could not deserialize JSON Content",
-			StatusCode: 400,
-		}
-	}
-	updateRequest.ConnectorID = connectorID
-	updateRequest.DeviceID = deviceID
-	return updateRequest, nil
-}
-func decodeUpdateCaStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	vars := mux.Vars(r)
-	var updateRequest endpoint.UpdateCaStatusRequest
-
-	caName, ok := vars["caName"]
-	if !ok {
-		return nil, ErrMissingCaName()
-	}
-	err = json.NewDecoder(r.Body).Decode(&updateRequest.Payload)
-	if err != nil {
-		return nil, &lamassuErrors.GenericError{
-			Message:    "Could not deserialize JSON Content",
-			StatusCode: 400,
-		}
-	}
-	updateRequest.CaName = caName
-	return updateRequest, nil
-}
-func decodeEventHandlerRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	var event cloudevents.Event
-	json.NewDecoder(r.Body).Decode((&event))
-	return event, nil
-}
-
-// func encodeGetSynchronizedCAsByConnectorRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-// 	encodeResponse()
-// }
 
 func enocdeGetConnectorsResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if e, ok := response.(errorer); ok && e.error() != nil {
 		encodeError(ctx, e.error(), w)
-
 		return nil
 	}
-	activeCloudConnectors := response.(endpoint.GetActiveCloudConnectorsResponse)
+
+	castedResponse := response.(*api.GetCloudConnectorsOutput)
+	serializedResponse := castedResponse.Serialize()
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	return json.NewEncoder(w).Encode(activeCloudConnectors.CloudConnectors)
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func decodeGetDeviceConfigurationRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	connectorID := vars["connectorID"]
+	deviceID := vars["deviceID"]
+
+	return api.GetDeviceConfigurationInput{
+		ConnectorID: connectorID,
+		DeviceID:    deviceID,
+	}, nil
+}
+
+func encodeGetDeviceConfigurationResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.GetDeviceConfigurationOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func decodeSynchronizeCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	type SynchronizeCAPayload struct {
+		CAName      string `json:"ca_name"`
+		ConnectorID string `json:"connector_id"`
+	}
+	var body SynchronizeCAPayload
+
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+
+	return api.SynchronizeCAInput{
+		CAName:      body.CAName,
+		ConnectorID: body.ConnectorID,
+	}, nil
 }
 
 func enocdeSynchronizeCAResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if e, ok := response.(errorer); ok && e.error() != nil {
 		encodeError(ctx, e.error(), w)
-
 		return nil
 	}
-	syncCAResponse := response.(endpoint.SynchronizedCAResponse)
+
+	castedResponse := response.(*api.SynchronizeCAOutput)
+	serializedResponse := castedResponse.Serialize()
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	return json.NewEncoder(w).Encode(syncCAResponse.CloudConnector)
+	return json.NewEncoder(w).Encode(serializedResponse)
 }
 
-func enocdeUpdateSecurityAccessPolicyResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+func decodeUpdateConnectorConfigurationRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	connectorID := vars["connectorID"]
+
+	type UpdateCloudProviderConfigurationPayload struct {
+		Config interface{} `json:"configuration"`
+	}
+	var body UpdateCloudProviderConfigurationPayload
+
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+
+	return api.UpdateCloudProviderConfigurationInput{
+		ConnectorID: connectorID,
+		Config:      body.Config,
+	}, nil
+}
+
+func enocdeUpdateConnectorConfigurationResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if e, ok := response.(errorer); ok && e.error() != nil {
 		encodeError(ctx, e.error(), w)
-
 		return nil
 	}
-	updateSecurityAccessPolicyResponse := response.(endpoint.UpdateSecurityAccessPolicyResponse)
+
+	castedResponse := response.(*api.UpdateCloudProviderConfigurationOutput)
+	serializedResponse := castedResponse.Serialize()
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	return json.NewEncoder(w).Encode(updateSecurityAccessPolicyResponse.CloudConnector)
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func decodeEventHandlerRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	var event cloudevents.Event
+	json.NewDecoder(r.Body).Decode((&event))
+	return event, nil
 }
 
 func encodeEventHandlerResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
@@ -305,19 +269,116 @@ func encodeEventHandlerResponse(ctx context.Context, w http.ResponseWriter, resp
 	return json.NewEncoder(w).Encode(response)
 }
 
-func encodeResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+func decodeUpdateDeviceCertStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	connectorID := vars["connectorID"]
+	deviceID := vars["deviceID"]
+
+	type UpdateDeviceCertificateStatusPayload struct {
+		Status       string `json:"status"`
+		CAName       string `json:"ca_name"`
+		SerialNumber string `json:"serial_number"`
+	}
+	var body UpdateDeviceCertificateStatusPayload
+
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+
+	return api.UpdateDeviceCertificateStatusInput{
+		ConnectorID:  connectorID,
+		DeviceID:     deviceID,
+		CAName:       body.CAName,
+		SerialNumber: body.SerialNumber,
+		Status:       body.Status,
+	}, nil
+}
+
+func encodeUpdateDeviceCertStatusResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if e, ok := response.(errorer); ok && e.error() != nil {
-		// Not a Go kit transport error, but a business-logic error.
-		// Provide those as HTTP errors.
-
-		// https://medium.com/@ozdemir.zynl/rest-api-error-handling-in-go-behavioral-type-assertion-509d93636afd
-		//
 		encodeError(ctx, e.error(), w)
-
 		return nil
 	}
+
+	castedResponse := response.(*api.UpdateDeviceCertificateStatusOutput)
+	serializedResponse := castedResponse.Serialize()
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	return json.NewEncoder(w).Encode(response)
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func decodeUpdateDeviceDigitalTwinReenrolmentStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	connectorID := vars["connectorID"]
+	deviceID := vars["deviceID"]
+
+	type UpdateDeviceCertificateStatusPayload struct {
+		ForceReenroll bool   `json:"force_reenroll"`
+		SlotID        string `json:"slot_id"`
+	}
+
+	var body UpdateDeviceCertificateStatusPayload
+
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+
+	return api.UpdateDeviceDigitalTwinReenrolmentStatusInput{
+		ConnectorID:   connectorID,
+		DeviceID:      deviceID,
+		SlotID:        body.SlotID,
+		ForceReenroll: body.ForceReenroll,
+	}, nil
+}
+
+func encodeUpdateDeviceDigitalTwinReenrolmentStatusResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.UpdateDeviceDigitalTwinReenrolmentStatusOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func decodeUpdateCAStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	CAName := vars["caName"]
+	connectorID := vars["connectorID"]
+
+	type UpdateDeviceCertificateStatusPayload struct {
+		Status string `json:"status"`
+	}
+	var body UpdateDeviceCertificateStatusPayload
+
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+
+	return api.UpdateCAStatusInput{
+		CAName:      CAName,
+		ConnectorID: connectorID,
+		Status:      body.Status,
+	}, nil
+}
+
+func encodeUpdateCAStatusResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.UpdateCAStatusOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
 }
 
 func encodeError(ctx context.Context, err error, w http.ResponseWriter) {

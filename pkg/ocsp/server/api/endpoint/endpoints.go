@@ -4,9 +4,7 @@ import (
 	"context"
 
 	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/tracing/opentracing"
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/service"
-	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 type Endpoints struct {
@@ -15,22 +13,11 @@ type Endpoints struct {
 	HealthEndpoint endpoint.Endpoint
 }
 
-func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
-	var healthEndpoint endpoint.Endpoint
-	{
-		healthEndpoint = MakeHealthEndpoint(s)
-		healthEndpoint = opentracing.TraceServer(otTracer, "Health")(healthEndpoint)
-	}
-	var getEndpoint endpoint.Endpoint
-	{
-		getEndpoint = MakeOCSPEndpoint(s)
-		getEndpoint = opentracing.TraceServer(otTracer, "GetOCSPOperation")(getEndpoint)
-	}
-	var postEndpoint endpoint.Endpoint
-	{
-		postEndpoint = MakeOCSPEndpoint(s)
-		postEndpoint = opentracing.TraceServer(otTracer, "PostOCSPOperation")(postEndpoint)
-	}
+func MakeServerEndpoints(s service.Service) Endpoints {
+	var healthEndpoint = MakeHealthEndpoint(s)
+	var getEndpoint = MakeOCSPEndpoint(s)
+	var postEndpoint = MakeOCSPEndpoint(s)
+
 	return Endpoints{
 		GetEndpoint:    getEndpoint,
 		PostEndpoint:   postEndpoint,

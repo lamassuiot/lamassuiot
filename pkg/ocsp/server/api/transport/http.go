@@ -9,16 +9,10 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/tracing/opentracing"
+	httptransport "github.com/go-kit/kit/transport/http"
+	"github.com/gorilla/mux"
 	endpoints "github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/endpoint"
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/service"
-
-	"github.com/go-kit/kit/transport"
-	httptransport "github.com/go-kit/kit/transport/http"
-	stdopentracing "github.com/opentracing/opentracing-go"
-
-	"github.com/gorilla/mux"
 )
 
 var (
@@ -33,34 +27,44 @@ type errorer interface {
 	error() error
 }
 
-func MakeHTTPHandler(s service.Service, logger log.Logger, strict bool, otTracer stdopentracing.Tracer) http.Handler {
+func MakeHTTPHandler(s service.Service, strict bool) http.Handler {
 	r := mux.NewRouter()
-	e := endpoints.MakeServerEndpoints(s, otTracer)
+	e := endpoints.MakeServerEndpoints(s)
 
-	options := []httptransport.ServerOption{
-		httptransport.ServerErrorHandler(transport.NewLogErrorHandler(logger)),
-	}
+	options := []httptransport.ServerOption{}
 
-	r.Methods("GET").Path("/health").Handler(httptransport.NewServer(
-		e.HealthEndpoint,
-		decodeHealthRequest,
-		encodeHealthResponse,
-		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "Health", logger)))...,
-	))
+	r.Methods("GET").Path("/health").Handler(
+		httptransport.NewServer(
+			e.HealthEndpoint,
+			decodeHealthRequest,
+			encodeHealthResponse,
+			append(
+				options,
+			)...,
+		),
+	)
 
-	r.Methods("GET").Handler(httptransport.NewServer(
-		e.GetEndpoint,
-		checkStrictRequest(strict),
-		encodeOCSPResponse,
-		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "GetOCSPOperation", logger)))...,
-	))
+	r.Methods("GET").Handler(
+		httptransport.NewServer(
+			e.GetEndpoint,
+			checkStrictRequest(strict),
+			encodeOCSPResponse,
+			append(
+				options,
+			)...,
+		),
+	)
 
-	r.Methods("POST").Handler(httptransport.NewServer(
-		e.PostEndpoint,
-		checkStrictRequest(strict),
-		encodeOCSPResponse,
-		append(options, httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "PostOCSPOperation", logger)))...,
-	))
+	r.Methods("POST").Handler(
+		httptransport.NewServer(
+			e.PostEndpoint,
+			checkStrictRequest(strict),
+			encodeOCSPResponse,
+			append(
+				options,
+			)...,
+		),
+	)
 
 	return r
 }

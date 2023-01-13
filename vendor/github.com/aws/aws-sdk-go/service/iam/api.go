@@ -699,9 +699,8 @@ func (c *IAM) ChangePasswordRequest(input *ChangePasswordInput) (req *request.Re
 //
 // Changes the password of the IAM user who is calling this operation. This
 // operation can be performed using the CLI, the Amazon Web Services API, or
-// the My Security Credentials page in the Amazon Web Services Management Console.
-// The Amazon Web Services account root user password is not affected by this
-// operation.
+// the My Security Credentials page in the Management Console. The account root
+// user password is not affected by this operation.
 //
 // Use UpdateLoginProfile to use the CLI, the Amazon Web Services API, or the
 // Users page in the IAM console to change the password for any IAM user. For
@@ -815,20 +814,19 @@ func (c *IAM) CreateAccessKeyRequest(input *CreateAccessKeyInput) (req *request.
 //
 // If you do not specify a user name, IAM determines the user name implicitly
 // based on the Amazon Web Services access key ID signing the request. This
-// operation works for access keys under the Amazon Web Services account. Consequently,
-// you can use this operation to manage Amazon Web Services account root user
-// credentials. This is true even if the Amazon Web Services account has no
-// associated users.
+// operation works for access keys under the account. Consequently, you can
+// use this operation to manage account root user credentials. This is true
+// even if the account has no associated users.
 //
 // For information about quotas on the number of keys you can create, see IAM
 // and STS quotas (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html)
 // in the IAM User Guide.
 //
-// To ensure the security of your Amazon Web Services account, the secret access
-// key is accessible only during key and user creation. You must save the key
-// (for example, in a text file) if you want to be able to access it again.
-// If a secret key is lost, you can delete the access keys for the associated
-// user and then create new keys.
+// To ensure the security of your account, the secret access key is accessible
+// only during key and user creation. You must save the key (for example, in
+// a text file) if you want to be able to access it again. If a secret key is
+// lost, you can delete the access keys for the associated user and then create
+// new keys.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -918,9 +916,8 @@ func (c *IAM) CreateAccountAliasRequest(input *CreateAccountAliasInput) (req *re
 
 // CreateAccountAlias API operation for AWS Identity and Access Management.
 //
-// Creates an alias for your Amazon Web Services account. For information about
-// using an Amazon Web Services account alias, see Using an alias for your Amazon
-// Web Services account ID (https://docs.aws.amazon.com/IAM/latest/UserGuide/AccountAlias.html)
+// Creates an alias for your account. For information about using an account
+// alias, see Using an alias for your account ID (https://docs.aws.amazon.com/IAM/latest/UserGuide/AccountAlias.html)
 // in the IAM User Guide.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
@@ -1213,13 +1210,12 @@ func (c *IAM) CreateLoginProfileRequest(input *CreateLoginProfileInput) (req *re
 // CreateLoginProfile API operation for AWS Identity and Access Management.
 //
 // Creates a password for the specified IAM user. A password allows an IAM user
-// to access Amazon Web Services services through the Amazon Web Services Management
-// Console.
+// to access Amazon Web Services services through the Management Console.
 //
 // You can use the CLI, the Amazon Web Services API, or the Users page in the
 // IAM console to create a password for any IAM user. Use ChangePassword to
 // update your own existing password in the My Security Credentials page in
-// the Amazon Web Services Management Console.
+// the Management Console.
 //
 // For more information about managing passwords, see Managing passwords (https://docs.aws.amazon.com/IAM/latest/UserGuide/Using_ManagingLogins.html)
 // in the IAM User Guide.
@@ -1344,8 +1340,8 @@ func (c *IAM) CreateOpenIDConnectProviderRequest(input *CreateOpenIDConnectProvi
 //    * A list of thumbprints of one or more server certificates that the IdP
 //    uses
 //
-// You get all of this information from the OIDC IdP you want to use to access
-// Amazon Web Services.
+// You get all of this information from the OIDC IdP that you want to use to
+// access Amazon Web Services.
 //
 // Amazon Web Services secures communication with some OIDC identity providers
 // (IdPs) through our library of trusted certificate authorities (CAs) instead
@@ -1454,7 +1450,7 @@ func (c *IAM) CreatePolicyRequest(input *CreatePolicyInput) (req *request.Reques
 
 // CreatePolicy API operation for AWS Identity and Access Management.
 //
-// Creates a new managed policy for your Amazon Web Services account.
+// Creates a new managed policy for your account.
 //
 // This operation creates a policy version with a version identifier of v1 and
 // sets v1 as the policy's default version. For more information about policy
@@ -1677,8 +1673,8 @@ func (c *IAM) CreateRoleRequest(input *CreateRoleInput) (req *request.Request, o
 
 // CreateRole API operation for AWS Identity and Access Management.
 //
-// Creates a new role for your Amazon Web Services account. For more information
-// about roles, see IAM roles (https://docs.aws.amazon.com/IAM/latest/UserGuide/WorkingWithRoles.html).
+// Creates a new role for your account. For more information about roles, see
+// IAM roles (https://docs.aws.amazon.com/IAM/latest/UserGuide/WorkingWithRoles.html).
 // For information about quotas for role names and the number of roles you can
 // create, see IAM and STS quotas (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html)
 // in the IAM User Guide.
@@ -1789,8 +1785,8 @@ func (c *IAM) CreateSAMLProviderRequest(input *CreateSAMLProviderInput) (req *re
 // The SAML provider resource that you create with this operation can be used
 // as a principal in an IAM role's trust policy. Such a policy can enable federated
 // users who sign in using the SAML IdP to assume the role. You can create an
-// IAM role that supports Web-based single sign-on (SSO) to the Amazon Web Services
-// Management Console or one that supports API access to Amazon Web Services.
+// IAM role that supports Web-based single sign-on (SSO) to the Management Console
+// or one that supports API access to Amazon Web Services.
 //
 // When you create the SAML provider resource, you upload a SAML metadata document
 // that you get from your IdP. That document includes the issuer's name, expiration
@@ -1802,7 +1798,7 @@ func (c *IAM) CreateSAMLProviderRequest(input *CreateSAMLProviderInput) (req *re
 // This operation requires Signature Version 4 (https://docs.aws.amazon.com/general/latest/gr/signature-version-4.html).
 //
 // For more information, see Enabling SAML 2.0 federated users to access the
-// Amazon Web Services Management Console (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_enable-console-saml.html)
+// Management Console (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_enable-console-saml.html)
 // and About SAML 2.0-based federation (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_saml.html)
 // in the IAM User Guide.
 //
@@ -2108,7 +2104,7 @@ func (c *IAM) CreateUserRequest(input *CreateUserInput) (req *request.Request, o
 
 // CreateUser API operation for AWS Identity and Access Management.
 //
-// Creates a new IAM user for your Amazon Web Services account.
+// Creates a new IAM user for your account.
 //
 // For information about quotas for the number of IAM users you can create,
 // see IAM and STS quotas (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html)
@@ -2214,10 +2210,10 @@ func (c *IAM) CreateVirtualMFADeviceRequest(input *CreateVirtualMFADeviceInput) 
 
 // CreateVirtualMFADevice API operation for AWS Identity and Access Management.
 //
-// Creates a new virtual MFA device for the Amazon Web Services account. After
-// creating the virtual MFA, use EnableMFADevice to attach the MFA device to
-// an IAM user. For more information about creating and working with virtual
-// MFA devices, see Using a virtual MFA device (https://docs.aws.amazon.com/IAM/latest/UserGuide/Using_VirtualMFA.html)
+// Creates a new virtual MFA device for the account. After creating the virtual
+// MFA, use EnableMFADevice to attach the MFA device to an IAM user. For more
+// information about creating and working with virtual MFA devices, see Using
+// a virtual MFA device (https://docs.aws.amazon.com/IAM/latest/UserGuide/Using_VirtualMFA.html)
 // in the IAM User Guide.
 //
 // For information about the maximum number of MFA devices you can create, see
@@ -2432,9 +2428,9 @@ func (c *IAM) DeleteAccessKeyRequest(input *DeleteAccessKeyInput) (req *request.
 //
 // If you do not specify a user name, IAM determines the user name implicitly
 // based on the Amazon Web Services access key ID signing the request. This
-// operation works for access keys under the Amazon Web Services account. Consequently,
-// you can use this operation to manage Amazon Web Services account root user
-// credentials even if the Amazon Web Services account has no associated users.
+// operation works for access keys under the account. Consequently, you can
+// use this operation to manage account root user credentials even if the account
+// has no associated users.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -2524,9 +2520,8 @@ func (c *IAM) DeleteAccountAliasRequest(input *DeleteAccountAliasInput) (req *re
 
 // DeleteAccountAlias API operation for AWS Identity and Access Management.
 //
-// Deletes the specified Amazon Web Services account alias. For information
-// about using an Amazon Web Services account alias, see Using an alias for
-// your Amazon Web Services account ID (https://docs.aws.amazon.com/IAM/latest/UserGuide/AccountAlias.html)
+// Deletes the specified account alias. For information about using an Amazon
+// Web Services account alias, see Using an alias for your account ID (https://docs.aws.amazon.com/IAM/latest/UserGuide/AccountAlias.html)
 // in the IAM User Guide.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
@@ -2617,8 +2612,7 @@ func (c *IAM) DeleteAccountPasswordPolicyRequest(input *DeleteAccountPasswordPol
 
 // DeleteAccountPasswordPolicy API operation for AWS Identity and Access Management.
 //
-// Deletes the password policy for the Amazon Web Services account. There are
-// no parameters.
+// Deletes the password policy for the account. There are no parameters.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -3003,13 +2997,12 @@ func (c *IAM) DeleteLoginProfileRequest(input *DeleteLoginProfileInput) (req *re
 // DeleteLoginProfile API operation for AWS Identity and Access Management.
 //
 // Deletes the password for the specified IAM user, which terminates the user's
-// ability to access Amazon Web Services services through the Amazon Web Services
-// Management Console.
+// ability to access Amazon Web Services services through the Management Console.
 //
 // You can use the CLI, the Amazon Web Services API, or the Users page in the
 // IAM console to delete a password for any IAM user. You can use ChangePassword
 // to update, but not delete, your own password in the My Security Credentials
-// page in the Amazon Web Services Management Console.
+// page in the Management Console.
 //
 // Deleting a user's password does not prevent a user from accessing Amazon
 // Web Services through the command line interface or the API. To prevent all
@@ -4231,10 +4224,9 @@ func (c *IAM) DeleteSigningCertificateRequest(input *DeleteSigningCertificateInp
 //
 // If you do not specify a user name, IAM determines the user name implicitly
 // based on the Amazon Web Services access key ID signing the request. This
-// operation works for access keys under the Amazon Web Services account. Consequently,
-// you can use this operation to manage Amazon Web Services account root user
-// credentials even if the Amazon Web Services account has no associated IAM
-// users.
+// operation works for access keys under the account. Consequently, you can
+// use this operation to manage account root user credentials even if the account
+// has no associated IAM users.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -4324,10 +4316,9 @@ func (c *IAM) DeleteUserRequest(input *DeleteUserInput) (req *request.Request, o
 
 // DeleteUser API operation for AWS Identity and Access Management.
 //
-// Deletes the specified IAM user. Unlike the Amazon Web Services Management
-// Console, when you delete a user programmatically, you must delete the items
-// attached to the user manually, or the deletion fails. For more information,
-// see Deleting an IAM user (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_manage.html#id_users_deleting_cli).
+// Deletes the specified IAM user. Unlike the Management Console, when you delete
+// a user programmatically, you must delete the items attached to the user manually,
+// or the deletion fails. For more information, see Deleting an IAM user (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_manage.html#id_users_deleting_cli).
 // Before attempting to delete a user, remove the following items:
 //
 //    * Password (DeleteLoginProfile)
@@ -5135,8 +5126,8 @@ func (c *IAM) GenerateCredentialReportRequest(input *GenerateCredentialReportInp
 
 // GenerateCredentialReport API operation for AWS Identity and Access Management.
 //
-// Generates a credential report for the Amazon Web Services account. For more
-// information about the credential report, see Getting credential reports (https://docs.aws.amazon.com/IAM/latest/UserGuide/credential-reports.html)
+// Generates a credential report for the account. For more information about
+// the credential report, see Getting credential reports (https://docs.aws.amazon.com/IAM/latest/UserGuide/credential-reports.html)
 // in the IAM User Guide.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
@@ -5250,14 +5241,13 @@ func (c *IAM) GenerateOrganizationsAccessReportRequest(input *GenerateOrganizati
 // in the IAM User Guide.
 //
 // The data includes all attempts to access Amazon Web Services, not just the
-// successful ones. This includes all attempts that were made using the Amazon
-// Web Services Management Console, the Amazon Web Services API through any
-// of the SDKs, or any of the command line tools. An unexpected entry in the
-// service last accessed data does not mean that an account has been compromised,
-// because the request might have been denied. Refer to your CloudTrail logs
-// as the authoritative source for information about all API calls and whether
-// they were successful or denied access. For more information, see Logging
-// IAM events with CloudTrail (https://docs.aws.amazon.com/IAM/latest/UserGuide/cloudtrail-integration.html)
+// successful ones. This includes all attempts that were made using the Management
+// Console, the Amazon Web Services API through any of the SDKs, or any of the
+// command line tools. An unexpected entry in the service last accessed data
+// does not mean that an account has been compromised, because the request might
+// have been denied. Refer to your CloudTrail logs as the authoritative source
+// for information about all API calls and whether they were successful or denied
+// access. For more information, see Logging IAM events with CloudTrail (https://docs.aws.amazon.com/IAM/latest/UserGuide/cloudtrail-integration.html)
 // in the IAM User Guide.
 //
 // This operation returns a JobId. Use this parameter in the GetOrganizationsAccessReport
@@ -5421,19 +5411,19 @@ func (c *IAM) GenerateServiceLastAccessedDetailsRequest(input *GenerateServiceLa
 // Generates a report that includes details about when an IAM resource (user,
 // group, role, or policy) was last used in an attempt to access Amazon Web
 // Services services. Recent activity usually appears within four hours. IAM
-// reports activity for at least the last 400 days, or less if your Region began
-// supporting this feature within the last year. For more information, see Regions
-// where data is tracked (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_access-advisor.html#access-advisor_tracking-period).
+// reports activity for the last 365 days, or less if your Region began supporting
+// this feature within the last year. For more information, see Regions where
+// data is tracked (https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_access-advisor.html#access-advisor_tracking-period).
 //
 // The service last accessed data includes all attempts to access an Amazon
 // Web Services API, not just the successful ones. This includes all attempts
-// that were made using the Amazon Web Services Management Console, the Amazon
-// Web Services API through any of the SDKs, or any of the command line tools.
-// An unexpected entry in the service last accessed data does not mean that
-// your account has been compromised, because the request might have been denied.
-// Refer to your CloudTrail logs as the authoritative source for information
-// about all API calls and whether they were successful or denied access. For
-// more information, see Logging IAM events with CloudTrail (https://docs.aws.amazon.com/IAM/latest/UserGuide/cloudtrail-integration.html)
+// that were made using the Management Console, the Amazon Web Services API
+// through any of the SDKs, or any of the command line tools. An unexpected
+// entry in the service last accessed data does not mean that your account has
+// been compromised, because the request might have been denied. Refer to your
+// CloudTrail logs as the authoritative source for information about all API
+// calls and whether they were successful or denied access. For more information,
+// see Logging IAM events with CloudTrail (https://docs.aws.amazon.com/IAM/latest/UserGuide/cloudtrail-integration.html)
 // in the IAM User Guide.
 //
 // The GenerateServiceLastAccessedDetails operation returns a JobId. Use this
@@ -5787,10 +5777,10 @@ func (c *IAM) GetAccountPasswordPolicyRequest(input *GetAccountPasswordPolicyInp
 
 // GetAccountPasswordPolicy API operation for AWS Identity and Access Management.
 //
-// Retrieves the password policy for the Amazon Web Services account. This tells
-// you the complexity requirements and mandatory rotation periods for the IAM
-// user passwords in your account. For more information about using a password
-// policy, see Managing an IAM password policy (https://docs.aws.amazon.com/IAM/latest/UserGuide/Using_ManagingPasswordPolicies.html).
+// Retrieves the password policy for the account. This tells you the complexity
+// requirements and mandatory rotation periods for the IAM user passwords in
+// your account. For more information about using a password policy, see Managing
+// an IAM password policy (https://docs.aws.amazon.com/IAM/latest/UserGuide/Using_ManagingPasswordPolicies.html).
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -6148,8 +6138,8 @@ func (c *IAM) GetCredentialReportRequest(input *GetCredentialReportInput) (req *
 
 // GetCredentialReport API operation for AWS Identity and Access Management.
 //
-// Retrieves a credential report for the Amazon Web Services account. For more
-// information about the credential report, see Getting credential reports (https://docs.aws.amazon.com/IAM/latest/UserGuide/credential-reports.html)
+// Retrieves a credential report for the account. For more information about
+// the credential report, see Getting credential reports (https://docs.aws.amazon.com/IAM/latest/UserGuide/credential-reports.html)
 // in the IAM User Guide.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
@@ -6575,18 +6565,18 @@ func (c *IAM) GetLoginProfileRequest(input *GetLoginProfileInput) (req *request.
 // GetLoginProfile API operation for AWS Identity and Access Management.
 //
 // Retrieves the user name for the specified IAM user. A login profile is created
-// when you create a password for the user to access the Amazon Web Services
-// Management Console. If the user does not exist or does not have a password,
-// the operation returns a 404 (NoSuchEntity) error.
+// when you create a password for the user to access the Management Console.
+// If the user does not exist or does not have a password, the operation returns
+// a 404 (NoSuchEntity) error.
 //
 // If you create an IAM user with access to the console, the CreateDate reflects
 // the date you created the initial password for the user.
 //
 // If you create an IAM user with programmatic access, and then later add a
-// password for the user to access the Amazon Web Services Management Console,
-// the CreateDate reflects the initial password creation date. A user with programmatic
-// access does not have a login profile unless you create a password for the
-// user to access the Amazon Web Services Management Console.
+// password for the user to access the Management Console, the CreateDate reflects
+// the initial password creation date. A user with programmatic access does
+// not have a login profile unless you create a password for the user to access
+// the Management Console.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -8064,13 +8054,12 @@ func (c *IAM) ListAccessKeysRequest(input *ListAccessKeysInput) (req *request.Re
 //
 // If the UserName field is not specified, the user name is determined implicitly
 // based on the Amazon Web Services access key ID used to sign the request.
-// This operation works for access keys under the Amazon Web Services account.
-// Consequently, you can use this operation to manage Amazon Web Services account
-// root user credentials even if the Amazon Web Services account has no associated
-// users.
+// This operation works for access keys under the account. Consequently, you
+// can use this operation to manage account root user credentials even if the
+// account has no associated users.
 //
-// To ensure the security of your Amazon Web Services account, the secret access
-// key is accessible only during key and user creation.
+// To ensure the security of your account, the secret access key is accessible
+// only during key and user creation.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -8212,11 +8201,10 @@ func (c *IAM) ListAccountAliasesRequest(input *ListAccountAliasesInput) (req *re
 
 // ListAccountAliases API operation for AWS Identity and Access Management.
 //
-// Lists the account alias associated with the Amazon Web Services account (Note:
-// you can have only one). For information about using an Amazon Web Services
-// account alias, see Using an alias for your Amazon Web Services account ID
-// (https://docs.aws.amazon.com/IAM/latest/UserGuide/AccountAlias.html) in the
-// IAM User Guide.
+// Lists the account alias associated with the account (Note: you can have only
+// one). For information about using an account alias, see Using an alias for
+// your account ID (https://docs.aws.amazon.com/IAM/latest/UserGuide/AccountAlias.html)
+// in the IAM User Guide.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -10123,7 +10111,7 @@ func (c *IAM) ListOpenIDConnectProvidersRequest(input *ListOpenIDConnectProvider
 // ListOpenIDConnectProviders API operation for AWS Identity and Access Management.
 //
 // Lists information about the IAM OpenID Connect (OIDC) provider resource objects
-// defined in the Amazon Web Services account.
+// defined in the account.
 //
 // IAM resource-listing operations return a subset of the available attributes
 // for the resource. For example, this operation does not return tags, even
@@ -10214,9 +10202,9 @@ func (c *IAM) ListPoliciesRequest(input *ListPoliciesInput) (req *request.Reques
 
 // ListPolicies API operation for AWS Identity and Access Management.
 //
-// Lists all the managed policies that are available in your Amazon Web Services
-// account, including your own customer-defined managed policies and all Amazon
-// Web Services managed policies.
+// Lists all the managed policies that are available in your account, including
+// your own customer-defined managed policies and all Amazon Web Services managed
+// policies.
 //
 // You can filter the list of policies that is returned using the optional OnlyAttached,
 // Scope, and PathPrefix parameters. For example, to list only the customer
@@ -11783,10 +11771,9 @@ func (c *IAM) ListSigningCertificatesRequest(input *ListSigningCertificatesInput
 //
 // If the UserName field is not specified, the user name is determined implicitly
 // based on the Amazon Web Services access key ID used to sign the request for
-// this operation. This operation works for access keys under the Amazon Web
-// Services account. Consequently, you can use this operation to manage Amazon
-// Web Services account root user credentials even if the Amazon Web Services
-// account has no associated users.
+// this operation. This operation works for access keys under the account. Consequently,
+// you can use this operation to manage account root user credentials even if
+// the account has no associated users.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -12225,8 +12212,8 @@ func (c *IAM) ListUsersRequest(input *ListUsersInput) (req *request.Request, out
 // ListUsers API operation for AWS Identity and Access Management.
 //
 // Lists the IAM users that have the specified path prefix. If no path prefix
-// is specified, the operation returns all users in the Amazon Web Services
-// account. If there are none, the operation returns an empty list.
+// is specified, the operation returns all users in the account. If there are
+// none, the operation returns an empty list.
 //
 // IAM resource-listing operations return a subset of the available attributes
 // for the resource. For example, this operation does not return tags, even
@@ -12371,15 +12358,15 @@ func (c *IAM) ListVirtualMFADevicesRequest(input *ListVirtualMFADevicesInput) (r
 
 // ListVirtualMFADevices API operation for AWS Identity and Access Management.
 //
-// Lists the virtual MFA devices defined in the Amazon Web Services account
-// by assignment status. If you do not specify an assignment status, the operation
-// returns a list of all virtual MFA devices. Assignment status can be Assigned,
-// Unassigned, or Any.
+// Lists the virtual MFA devices defined in the account by assignment status.
+// If you do not specify an assignment status, the operation returns a list
+// of all virtual MFA devices. Assignment status can be Assigned, Unassigned,
+// or Any.
 //
 // IAM resource-listing operations return a subset of the available attributes
 // for the resource. For example, this operation does not return tags, even
-// though they are an attribute of the returned object. To view tag information
-// for a virtual MFA device, see ListMFADeviceTags.
+// though they are an attribute of the returned object. To view all of the information
+// for a virtual MFA device, see ListVirtualMFADevices.
 //
 // You can paginate the results using the MaxItems and Marker parameters.
 //
@@ -13639,7 +13626,7 @@ func (c *IAM) SetSecurityTokenServicePreferencesRequest(input *SetSecurityTokenS
 // SetSecurityTokenServicePreferences API operation for AWS Identity and Access Management.
 //
 // Sets the specified version of the global endpoint token as the token version
-// used for the Amazon Web Services account.
+// used for the account.
 //
 // By default, Security Token Service (STS) is available as a global service,
 // and all STS requests go to a single endpoint at https://sts.amazonaws.com.
@@ -13651,12 +13638,12 @@ func (c *IAM) SetSecurityTokenServicePreferencesRequest(input *SetSecurityTokenS
 //
 // If you make an STS call to the global endpoint, the resulting session tokens
 // might be valid in some Regions but not others. It depends on the version
-// that is set in this operation. Version 1 tokens are valid only in Amazon
-// Web Services Regions that are available by default. These tokens do not work
-// in manually enabled Regions, such as Asia Pacific (Hong Kong). Version 2
-// tokens are valid in all Regions. However, version 2 tokens are longer and
-// might affect systems where you temporarily store tokens. For information,
-// see Activating and deactivating STS in an Amazon Web Services Region (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_enable-regions.html)
+// that is set in this operation. Version 1 tokens are valid only in Regions
+// that are available by default. These tokens do not work in manually enabled
+// Regions, such as Asia Pacific (Hong Kong). Version 2 tokens are valid in
+// all Regions. However, version 2 tokens are longer and might affect systems
+// where you temporarily store tokens. For information, see Activating and deactivating
+// STS in an Region (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_enable-regions.html)
 // in the IAM User Guide.
 //
 // To view the current session token version, see the GlobalEndpointTokenVersion
@@ -15893,10 +15880,9 @@ func (c *IAM) UpdateAccessKeyRequest(input *UpdateAccessKeyInput) (req *request.
 //
 // If the UserName is not specified, the user name is determined implicitly
 // based on the Amazon Web Services access key ID used to sign the request.
-// This operation works for access keys under the Amazon Web Services account.
-// Consequently, you can use this operation to manage Amazon Web Services account
-// root user credentials even if the Amazon Web Services account has no associated
-// users.
+// This operation works for access keys under the account. Consequently, you
+// can use this operation to manage account root user credentials even if the
+// account has no associated users.
 //
 // For information about rotating keys, see Managing keys and certificates (https://docs.aws.amazon.com/IAM/latest/UserGuide/ManagingCredentials.html)
 // in the IAM User Guide.
@@ -15989,14 +15975,14 @@ func (c *IAM) UpdateAccountPasswordPolicyRequest(input *UpdateAccountPasswordPol
 
 // UpdateAccountPasswordPolicy API operation for AWS Identity and Access Management.
 //
-// Updates the password policy settings for the Amazon Web Services account.
+// Updates the password policy settings for the account.
 //
-// This operation does not support partial updates. No parameters are required,
-// but if you do not specify a parameter, that parameter's value reverts to
-// its default value. See the Request Parameters section for each parameter's
-// default value. Also note that some parameters do not allow the default parameter
-// to be explicitly set. Instead, to invoke the default value, do not include
-// that parameter when you invoke the operation.
+//    * This operation does not support partial updates. No parameters are required,
+//    but if you do not specify a parameter, that parameter's value reverts
+//    to its default value. See the Request Parameters section for each parameter's
+//    default value. Also note that some parameters do not allow the default
+//    parameter to be explicitly set. Instead, to invoke the default value,
+//    do not include that parameter when you invoke the operation.
 //
 // For more information about using a password policy, see Managing an IAM password
 // policy (https://docs.aws.amazon.com/IAM/latest/UserGuide/Using_ManagingPasswordPolicies.html)
@@ -16305,8 +16291,7 @@ func (c *IAM) UpdateLoginProfileRequest(input *UpdateLoginProfileInput) (req *re
 // Changes the password for the specified IAM user. You can use the CLI, the
 // Amazon Web Services API, or the Users page in the IAM console to change the
 // password for any IAM user. Use ChangePassword to change your own password
-// in the My Security Credentials page in the Amazon Web Services Management
-// Console.
+// in the My Security Credentials page in the Management Console.
 //
 // For more information about modifying passwords, see Managing passwords (https://docs.aws.amazon.com/IAM/latest/UserGuide/Using_ManagingLogins.html)
 // in the IAM User Guide.
@@ -17091,10 +17076,9 @@ func (c *IAM) UpdateSigningCertificateRequest(input *UpdateSigningCertificateInp
 //
 // If the UserName field is not specified, the user name is determined implicitly
 // based on the Amazon Web Services access key ID used to sign the request.
-// This operation works for access keys under the Amazon Web Services account.
-// Consequently, you can use this operation to manage Amazon Web Services account
-// root user credentials even if the Amazon Web Services account has no associated
-// users.
+// This operation works for access keys under the account. Consequently, you
+// can use this operation to manage account root user credentials even if the
+// account has no associated users.
 //
 // Returns awserr.Error for service API and SDK errors. Use runtime type assertions
 // with awserr.Error's Code and Message methods to get detailed information about
@@ -17402,9 +17386,9 @@ func (c *IAM) UploadServerCertificateRequest(input *UploadServerCertificateInput
 
 // UploadServerCertificate API operation for AWS Identity and Access Management.
 //
-// Uploads a server certificate entity for the Amazon Web Services account.
-// The server certificate entity includes a public key certificate, a private
-// key, and an optional certificate chain, which should all be PEM-encoded.
+// Uploads a server certificate entity for the account. The server certificate
+// entity includes a public key certificate, a private key, and an optional
+// certificate chain, which should all be PEM-encoded.
 //
 // We recommend that you use Certificate Manager (https://docs.aws.amazon.com/acm/)
 // to provision, manage, and deploy your server certificates. With ACM you can
@@ -17546,10 +17530,9 @@ func (c *IAM) UploadSigningCertificateRequest(input *UploadSigningCertificateInp
 //
 // If the UserName is not specified, the IAM user name is determined implicitly
 // based on the Amazon Web Services access key ID used to sign the request.
-// This operation works for access keys under the Amazon Web Services account.
-// Consequently, you can use this operation to manage Amazon Web Services account
-// root user credentials even if the Amazon Web Services account has no associated
-// users.
+// This operation works for access keys under the account. Consequently, you
+// can use this operation to manage account root user credentials even if the
+// account has no associated users.
 //
 // Because the body of an X.509 certificate can be large, you should use POST
 // rather than GET when calling UploadSigningCertificate. For information about
@@ -17838,8 +17821,8 @@ type AccessKeyLastUsed struct {
 	// LastUsedDate is a required field
 	LastUsedDate *time.Time `type:"timestamp" required:"true"`
 
-	// The Amazon Web Services Region where this access key was most recently used.
-	// The value for this field is "N/A" in the following situations:
+	// The Region where this access key was most recently used. The value for this
+	// field is "N/A" in the following situations:
 	//
 	//    * The user does not have an access key.
 	//
@@ -17848,9 +17831,8 @@ type AccessKeyLastUsed struct {
 	//
 	//    * There is no sign-in data associated with the user.
 	//
-	// For more information about Amazon Web Services Regions, see Regions and endpoints
-	// (https://docs.aws.amazon.com/general/latest/gr/rande.html) in the Amazon
-	// Web Services General Reference.
+	// For more information about Regions, see Regions and endpoints (https://docs.aws.amazon.com/general/latest/gr/rande.html)
+	// in the Amazon Web Services General Reference.
 	//
 	// Region is a required field
 	Region *string `type:"string" required:"true"`
@@ -18644,17 +18626,17 @@ func (s *AttachedPolicy) SetPolicyName(v string) *AttachedPolicy {
 type ChangePasswordInput struct {
 	_ struct{} `type:"structure"`
 
-	// The new password. The new password must conform to the Amazon Web Services
-	// account's password policy, if one exists.
+	// The new password. The new password must conform to the account's password
+	// policy, if one exists.
 	//
 	// The regex pattern (http://wikipedia.org/wiki/regex) that is used to validate
 	// this parameter is a string of characters. That string can include almost
 	// any printable ASCII character from the space (\u0020) through the end of
 	// the ASCII character range (\u00FF). You can also include the tab (\u0009),
 	// line feed (\u000A), and carriage return (\u000D) characters. Any of these
-	// characters are valid in a password. However, many tools, such as the Amazon
-	// Web Services Management Console, might restrict the ability to type certain
-	// characters because they have special meaning within that tool.
+	// characters are valid in a password. However, many tools, such as the Management
+	// Console, might restrict the ability to type certain characters because they
+	// have special meaning within that tool.
 	//
 	// NewPassword is a sensitive parameter and its value will be
 	// replaced with "sensitive" in string returned by ChangePasswordInput's
@@ -19235,9 +19217,9 @@ type CreateLoginProfileInput struct {
 	// any printable ASCII character from the space (\u0020) through the end of
 	// the ASCII character range (\u00FF). You can also include the tab (\u0009),
 	// line feed (\u000A), and carriage return (\u000D) characters. Any of these
-	// characters are valid in a password. However, many tools, such as the Amazon
-	// Web Services Management Console, might restrict the ability to type certain
-	// characters because they have special meaning within that tool.
+	// characters are valid in a password. However, many tools, such as the Management
+	// Console, might restrict the ability to type certain characters because they
+	// have special meaning within that tool.
 	//
 	// Password is a sensitive parameter and its value will be
 	// replaced with "sensitive" in string returned by CreateLoginProfileInput's
@@ -19355,10 +19337,10 @@ func (s *CreateLoginProfileOutput) SetLoginProfile(v *LoginProfile) *CreateLogin
 type CreateOpenIDConnectProviderInput struct {
 	_ struct{} `type:"structure"`
 
-	// Provides a list of client IDs, also known as audiences. When a mobile or
-	// web app registers with an OpenID Connect provider, they establish a value
-	// that identifies the application. This is the value that's sent as the client_id
-	// parameter on OAuth requests.
+	// A list of client IDs (also known as audiences). When a mobile or web app
+	// registers with an OpenID Connect provider, they establish a value that identifies
+	// the application. (This is the value that's sent as the client_id parameter
+	// on OAuth requests.)
 	//
 	// You can register multiple client IDs with the same provider. For example,
 	// you might have multiple applications that use the same OIDC provider. You
@@ -19393,8 +19375,8 @@ type CreateOpenIDConnectProviderInput struct {
 	// In that case, the thumbprint string would be the hex-encoded SHA-1 hash value
 	// of the certificate used by https://keys.server.example.com.
 	//
-	// For more information about obtaining the OIDC provider thumbprint, see Obtaining
-	// the thumbprint for an OpenID Connect provider (https://docs.aws.amazon.com/IAM/latest/UserGuide/identity-providers-oidc-obtain-thumbprint.html)
+	// For more information about obtaining the OIDC provider's thumbprint, see
+	// Obtaining the thumbprint for an OpenID Connect provider (https://docs.aws.amazon.com/IAM/latest/UserGuide/identity-providers-oidc-obtain-thumbprint.html)
 	// in the IAM User Guide.
 	//
 	// ThumbprintList is a required field
@@ -19404,12 +19386,11 @@ type CreateOpenIDConnectProviderInput struct {
 	// correspond to the iss claim in the provider's OpenID Connect ID tokens. Per
 	// the OIDC standard, path components are allowed but query parameters are not.
 	// Typically the URL consists of only a hostname, like https://server.example.org
-	// or https://example.com. The URL should not contain a port number.
+	// or https://example.com.
 	//
-	// You cannot register the same provider multiple times in a single Amazon Web
-	// Services account. If you try to submit a URL that has already been used for
-	// an OpenID Connect provider in the Amazon Web Services account, you will get
-	// an error.
+	// You cannot register the same provider multiple times in a single account.
+	// If you try to submit a URL that has already been used for an OpenID Connect
+	// provider in the account, you will get an error.
 	//
 	// Url is a required field
 	Url *string `min:"1" type:"string" required:"true"`
@@ -19557,8 +19538,6 @@ type CreatePolicyInput struct {
 	// can contain any ASCII character from the ! (\u0021) through the DEL character
 	// (\u007F), including most punctuation characters, digits, and upper and lowercased
 	// letters.
-	//
-	// You cannot use an asterisk (*) in the path name.
 	Path *string `min:"1" type:"string"`
 
 	// The JSON policy document that you want to use as the content for the new
@@ -19901,8 +19880,8 @@ type CreateRoleInput struct {
 	Description *string `type:"string"`
 
 	// The maximum session duration (in seconds) that you want to set for the specified
-	// role. If you do not specify a value for this setting, the default value of
-	// one hour is applied. This setting can have a value from 1 hour to 12 hours.
+	// role. If you do not specify a value for this setting, the default maximum
+	// of one hour is applied. This setting can have a value from 1 hour to 12 hours.
 	//
 	// Anyone who assumes the role from the or API can use the DurationSeconds API
 	// parameter or the duration-seconds CLI parameter to request a longer session.
@@ -23869,7 +23848,7 @@ type GetAccountAuthorizationDetailsInput struct {
 	// The format for this parameter is a comma-separated (if more than one) list
 	// of strings. Each string value in the list must be one of the valid values
 	// listed below.
-	Filter []*string `type:"list" enum:"EntityType"`
+	Filter []*string `type:"list"`
 
 	// Use this parameter only when paginating results and only after you receive
 	// a response indicating that the results are truncated. Set it to the value
@@ -24912,7 +24891,7 @@ type GetOpenIDConnectProviderOutput struct {
 	ClientIDList []*string `type:"list"`
 
 	// The date and time when the IAM OIDC provider resource object was created
-	// in the Amazon Web Services account.
+	// in the account.
 	CreateDate *time.Time `type:"timestamp"`
 
 	// A list of tags that are attached to the specified IAM OIDC provider. The
@@ -29304,8 +29283,7 @@ func (s ListOpenIDConnectProvidersInput) GoString() string {
 type ListOpenIDConnectProvidersOutput struct {
 	_ struct{} `type:"structure"`
 
-	// The list of IAM OIDC provider resource objects defined in the Amazon Web
-	// Services account.
+	// The list of IAM OIDC provider resource objects defined in the account.
 	OpenIDConnectProviderList []*OpenIDConnectProviderListEntry `type:"list"`
 }
 
@@ -29584,8 +29562,7 @@ type ListPoliciesInput struct {
 	// The scope to use for filtering the results.
 	//
 	// To list only Amazon Web Services managed policies, set Scope to AWS. To list
-	// only the customer managed policies in your Amazon Web Services account, set
-	// Scope to Local.
+	// only the customer managed policies in your account, set Scope to Local.
 	//
 	// This parameter is optional. If it is not included, or if it is set to All,
 	// all policies are returned.
@@ -31916,8 +31893,8 @@ type LoginProfile struct {
 	// Specifies whether the user is required to set a new password on next sign-in.
 	PasswordResetRequired *bool `type:"boolean"`
 
-	// The name of the user, which can be used for signing in to the Amazon Web
-	// Services Management Console.
+	// The name of the user, which can be used for signing in to the Management
+	// Console.
 	//
 	// UserName is a required field
 	UserName *string `min:"1" type:"string" required:"true"`
@@ -32263,11 +32240,7 @@ func (s *OrganizationsDecisionDetail) SetAllowedByOrganizations(v bool) *Organiz
 type PasswordPolicy struct {
 	_ struct{} `type:"structure"`
 
-	// Specifies whether IAM users are allowed to change their own password. Gives
-	// IAM users permissions to iam:ChangePassword for only their user and to the
-	// iam:GetAccountPasswordPolicy action. This option does not attach a permissions
-	// policy to each user, rather the permissions are applied at the account-level
-	// for all users by IAM.
+	// Specifies whether IAM users are allowed to change their own password.
 	AllowUsersToChangePassword *bool `type:"boolean"`
 
 	// Indicates whether passwords in the account expire. Returns true if MaxPasswordAge
@@ -32275,11 +32248,8 @@ type PasswordPolicy struct {
 	// not present.
 	ExpirePasswords *bool `type:"boolean"`
 
-	// Specifies whether IAM users are prevented from setting a new password via
-	// the Amazon Web Services Management Console after their password has expired.
-	// The IAM user cannot access the console until an administrator resets the
-	// password. IAM users with iam:ChangePassword permission and active access
-	// keys can reset their own expired console password using the CLI or API.
+	// Specifies whether IAM users are prevented from setting a new password after
+	// their password has expired.
 	HardExpiry *bool `type:"boolean"`
 
 	// The number of days that an IAM user password is valid.
@@ -34534,7 +34504,7 @@ type RoleLastUsed struct {
 	// in the IAM User Guide.
 	LastUsedDate *time.Time `type:"timestamp"`
 
-	// The name of the Amazon Web Services Region in which the role was last used.
+	// The name of the Region in which the role was last used.
 	Region *string `type:"string"`
 }
 
@@ -35416,13 +35386,12 @@ type SetSecurityTokenServicePreferencesInput struct {
 	_ struct{} `type:"structure"`
 
 	// The version of the global endpoint token. Version 1 tokens are valid only
-	// in Amazon Web Services Regions that are available by default. These tokens
-	// do not work in manually enabled Regions, such as Asia Pacific (Hong Kong).
-	// Version 2 tokens are valid in all Regions. However, version 2 tokens are
-	// longer and might affect systems where you temporarily store tokens.
+	// in Regions that are available by default. These tokens do not work in manually
+	// enabled Regions, such as Asia Pacific (Hong Kong). Version 2 tokens are valid
+	// in all Regions. However, version 2 tokens are longer and might affect systems
+	// where you temporarily store tokens.
 	//
-	// For information, see Activating and deactivating STS in an Amazon Web Services
-	// Region (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_enable-regions.html)
+	// For information, see Activating and deactivating STS in an Region (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_temp_enable-regions.html)
 	// in the IAM User Guide.
 	//
 	// GlobalEndpointTokenVersion is a required field
@@ -35715,15 +35684,15 @@ type SimulateCustomPolicyInput struct {
 	//    subnet, volume
 	ResourceHandlingOption *string `min:"1" type:"string"`
 
-	// An ARN representing the Amazon Web Services account ID that specifies the
-	// owner of any simulated resource that does not identify its owner in the resource
-	// ARN. Examples of resource ARNs include an S3 bucket or object. If ResourceOwner
-	// is specified, it is also used as the account owner of any ResourcePolicy
-	// included in the simulation. If the ResourceOwner parameter is not specified,
-	// then the owner of the resources and the resource policy defaults to the account
-	// of the identity provided in CallerArn. This parameter is required only if
-	// you specify a resource-based policy and account that owns the resource is
-	// different from the account that owns the simulated calling user CallerArn.
+	// An ARN representing the account ID that specifies the owner of any simulated
+	// resource that does not identify its owner in the resource ARN. Examples of
+	// resource ARNs include an S3 bucket or object. If ResourceOwner is specified,
+	// it is also used as the account owner of any ResourcePolicy included in the
+	// simulation. If the ResourceOwner parameter is not specified, then the owner
+	// of the resources and the resource policy defaults to the account of the identity
+	// provided in CallerArn. This parameter is required only if you specify a resource-based
+	// policy and account that owns the resource is different from the account that
+	// owns the simulated calling user CallerArn.
 	//
 	// The ARN for an account uses the following syntax: arn:aws:iam::AWS-account-ID:root.
 	// For example, to represent the account with the 112233445566 ID, use the following
@@ -36098,13 +36067,13 @@ type SimulatePrincipalPolicyInput struct {
 	//    subnet, volume
 	ResourceHandlingOption *string `min:"1" type:"string"`
 
-	// An Amazon Web Services account ID that specifies the owner of any simulated
-	// resource that does not identify its owner in the resource ARN. Examples of
-	// resource ARNs include an S3 bucket or object. If ResourceOwner is specified,
-	// it is also used as the account owner of any ResourcePolicy included in the
-	// simulation. If the ResourceOwner parameter is not specified, then the owner
-	// of the resources and the resource policy defaults to the account of the identity
-	// provided in CallerArn. This parameter is required only if you specify a resource-based
+	// An account ID that specifies the owner of any simulated resource that does
+	// not identify its owner in the resource ARN. Examples of resource ARNs include
+	// an S3 bucket or object. If ResourceOwner is specified, it is also used as
+	// the account owner of any ResourcePolicy included in the simulation. If the
+	// ResourceOwner parameter is not specified, then the owner of the resources
+	// and the resource policy defaults to the account of the identity provided
+	// in CallerArn. This parameter is required only if you specify a resource-based
 	// policy and account that owns the resource is different from the account that
 	// owns the simulated calling user CallerArn.
 	ResourceOwner *string `min:"1" type:"string"`
@@ -38121,9 +38090,9 @@ func (s UpdateAccessKeyOutput) GoString() string {
 type UpdateAccountPasswordPolicyInput struct {
 	_ struct{} `type:"structure"`
 
-	// Allows all IAM users in your account to use the Amazon Web Services Management
-	// Console to change their own passwords. For more information, see Permitting
-	// IAM users to change their own passwords (https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_passwords_enable-user-change.html)
+	// Allows all IAM users in your account to use the Management Console to change
+	// their own passwords. For more information, see Letting IAM users change their
+	// own passwords (https://docs.aws.amazon.com/IAM/latest/UserGuide/HowToPwdIAMUser.html)
 	// in the IAM User Guide.
 	//
 	// If you do not specify a value for this parameter, then the operation uses
@@ -38131,22 +38100,12 @@ type UpdateAccountPasswordPolicyInput struct {
 	// not automatically have permissions to change their own password.
 	AllowUsersToChangePassword *bool `type:"boolean"`
 
-	// Prevents IAM users who are accessing the account via the Amazon Web Services
-	// Management Console from setting a new console password after their password
-	// has expired. The IAM user cannot access the console until an administrator
-	// resets the password.
+	// Prevents IAM users from setting a new password after their password has expired.
+	// The IAM user cannot be accessed until an administrator resets the password.
 	//
 	// If you do not specify a value for this parameter, then the operation uses
 	// the default value of false. The result is that IAM users can change their
 	// passwords after they expire and continue to sign in as the user.
-	//
-	// In the Amazon Web Services Management Console, the custom password policy
-	// option Allow users to change their own password gives IAM users permissions
-	// to iam:ChangePassword for only their user and to the iam:GetAccountPasswordPolicy
-	// action. This option does not attach a permissions policy to each user, rather
-	// the permissions are applied at the account-level for all users by IAM. IAM
-	// users with iam:ChangePassword permission and active access keys can reset
-	// their own expired console password using the CLI or API.
 	HardExpiry *bool `type:"boolean"`
 
 	// The number of days that an IAM user password is valid.
@@ -38555,8 +38514,7 @@ type UpdateLoginProfileInput struct {
 	//    return (\u000D)
 	//
 	// However, the format can be further restricted by the account administrator
-	// by setting a password policy on the Amazon Web Services account. For more
-	// information, see UpdateAccountPasswordPolicy.
+	// by setting a password policy on the account. For more information, see UpdateAccountPasswordPolicy.
 	//
 	// Password is a sensitive parameter and its value will be
 	// replaced with "sensitive" in string returned by UpdateLoginProfileInput's
@@ -38846,8 +38804,8 @@ type UpdateRoleInput struct {
 	Description *string `type:"string"`
 
 	// The maximum session duration (in seconds) that you want to set for the specified
-	// role. If you do not specify a value for this setting, the default value of
-	// one hour is applied. This setting can have a value from 1 hour to 12 hours.
+	// role. If you do not specify a value for this setting, the default maximum
+	// of one hour is applied. This setting can have a value from 1 hour to 12 hours.
 	//
 	// Anyone who assumes the role from the CLI or API can use the DurationSeconds
 	// API parameter or the duration-seconds CLI parameter to request a longer session.

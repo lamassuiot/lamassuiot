@@ -2,176 +2,243 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
-	"github.com/opentracing/opentracing-go"
+	log "github.com/sirupsen/logrus"
 
-	"github.com/go-kit/log"
-	cloudproviders "github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/cloud-providers"
+	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/common/api"
 )
 
 type Middleware func(Service) Service
 
-func LoggingMiddleware(logger log.Logger) Middleware {
+func LoggingMiddleware() Middleware {
 	return func(next Service) Service {
 		return &loggingMiddleware{
-			next:   next,
-			logger: logger,
+			next: next,
 		}
 	}
 }
 
 type loggingMiddleware struct {
-	next   Service
-	logger log.Logger
+	next Service
 }
 
-func (mw loggingMiddleware) Health(ctx context.Context) (healthy bool) {
+func (mw loggingMiddleware) Health(ctx context.Context) (output bool) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "Health",
-			"took", time.Since(begin),
-			"healthy", healthy,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "Health"
+		logMsg["took"] = time.Since(begin)
+
+		log.WithFields(logMsg).Trace(output)
 	}(time.Now())
 	return mw.next.Health(ctx)
 }
 
-func (mw loggingMiddleware) GetCloudConnectors(ctx context.Context) (cloudconnectors []cloudproviders.CloudConnector, err error) {
+func (mw loggingMiddleware) GetCloudConnectors(ctx context.Context, input *api.GetCloudConnectorsInput) (output *api.GetCloudConnectorsOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "GetCloudConnectors",
-			"took", time.Since(begin),
-			"number_cloud_connectors", len(cloudconnectors),
-			"error", err,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "GetCloudConnectors"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
 	}(time.Now())
-	return mw.next.GetCloudConnectors(ctx)
+	return mw.next.GetCloudConnectors(ctx, input)
 }
 
-func (mw loggingMiddleware) SynchronizeCA(ctx context.Context, cloudConnectorID string, caName string, enabledTs time.Time) (cloudConnector cloudproviders.CloudConnector, err error) {
+func (mw loggingMiddleware) GetCloudConnectorByID(ctx context.Context, input *api.GetCloudConnectorByIDInput) (output *api.GetCloudConnectorByIDOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "SynchronizeCA",
-			"took", time.Since(begin),
-			"cloud_connector_id", cloudConnectorID,
-			"ca_name", caName,
-			"enabled_ts", enabledTs,
-			"cloud_connector", cloudConnector,
-			"error", err,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "GetCloudConnectorByID"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
 	}(time.Now())
-	return mw.next.SynchronizeCA(ctx, cloudConnectorID, caName, enabledTs)
+	return mw.next.GetCloudConnectorByID(ctx, input)
 }
 
-func (mw loggingMiddleware) HandleCreateCAEvent(ctx context.Context, caName string, caSerialNumber string, caCertificate string) (err error) {
+func (mw loggingMiddleware) GetDeviceConfiguration(ctx context.Context, input *api.GetDeviceConfigurationInput) (output *api.GetDeviceConfigurationOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "HandleCreateCAEvent",
-			"took", time.Since(begin),
-			"ca_name", caName,
-			"ca_serial_number", caSerialNumber,
-			"ca_certificate", caCertificate,
-			"error", err,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "GetDeviceConfiguration"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
 	}(time.Now())
-	return mw.next.HandleCreateCAEvent(ctx, caName, caSerialNumber, caCertificate)
-}
-func (mw loggingMiddleware) HandleUpdateCaStatusEvent(ctx context.Context, caName string, status string) (err error) {
-	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "HandleDeleteCAEvent",
-			"took", time.Since(begin),
-			"ca_name", caName,
-			"status", status,
-			"error", err,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
-	}(time.Now())
-	return mw.next.HandleUpdateCaStatusEvent(ctx, caName, status)
-}
-func (mw loggingMiddleware) HandleUpdateCertStatusEvent(ctx context.Context, caName string, certSerialNumber string, status string) (err error) {
-	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "HandleUpdateCertStatusEvent",
-			"took", time.Since(begin),
-			"ca_name", caName,
-			"cert_serial_number", certSerialNumber,
-			"error", err,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
-	}(time.Now())
-	return mw.next.HandleUpdateCertStatusEvent(ctx, caName, certSerialNumber, status)
-}
-func (mw loggingMiddleware) UpdateSecurityAccessPolicy(ctx context.Context, cloudConnectorID string, caName string, serializedSecurityAccessPolicy string) (cloudConnector cloudproviders.CloudConnector, err error) {
-	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "UpdateSecurityAccessPolicy",
-			"took", time.Since(begin),
-			"cloud_connector_id", cloudConnectorID,
-			"ca_name", caName,
-			"serialized_security_access_policy", serializedSecurityAccessPolicy,
-			"error", err,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
-	}(time.Now())
-	return mw.next.UpdateSecurityAccessPolicy(ctx, cloudConnectorID, caName, serializedSecurityAccessPolicy)
-}
-func (mw loggingMiddleware) UpdateCertStatus(ctx context.Context, deviceID string, certSerialNumber string, status string, connectorID string, caName string) (err error) {
-	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "UpdateCertStatus",
-			"took", time.Since(begin),
-			"cloud_connector_id", connectorID,
-			"cert_serialNumber", certSerialNumber,
-			"device_id", deviceID,
-			"status", status,
-			"error", err,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
-	}(time.Now())
-	return mw.next.UpdateCertStatus(ctx, deviceID, certSerialNumber, status, connectorID, caName)
-}
-func (mw loggingMiddleware) GetCloudConnectorByID(ctx context.Context, cloudConnectorID string) (connector cloudproviders.CloudConnector, err error) {
-	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "GetCloudConnectorByID",
-			"took", time.Since(begin),
-			"cloud_connector_id", cloudConnectorID,
-			"error", err,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
-	}(time.Now())
-	return mw.next.GetCloudConnectorByID(ctx, cloudConnectorID)
+	return mw.next.GetDeviceConfiguration(ctx, input)
 }
 
-func (mw loggingMiddleware) GetDeviceConfiguration(ctx context.Context, cloudConnectorID string, deviceID string) (deviceConfig interface{}, err error) {
+func (mw loggingMiddleware) SynchronizeCA(ctx context.Context, input *api.SynchronizeCAInput) (output *api.SynchronizeCAOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "GetDeviceConfiguration",
-			"took", time.Since(begin),
-			"device_id", deviceID,
-			"device", deviceConfig,
-			"error", err,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "SynchronizeCA"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
 	}(time.Now())
-	return mw.next.GetDeviceConfiguration(ctx, cloudConnectorID, deviceID)
+	return mw.next.SynchronizeCA(ctx, input)
 }
-func (mw loggingMiddleware) UpdateCaStatus(ctx context.Context, caName string, status string) (err error) {
+
+func (mw loggingMiddleware) UpdateCloudProviderConfiguration(ctx context.Context, input *api.UpdateCloudProviderConfigurationInput) (output *api.UpdateCloudProviderConfigurationOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "UpdateCertStatus",
-			"took", time.Since(begin),
-			"ca_name", caName,
-			"status", status,
-			"error", err,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "UpdateCloudProviderConfiguration"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
 	}(time.Now())
-	return mw.next.UpdateCaStatus(ctx, caName, status)
+	return mw.next.UpdateCloudProviderConfiguration(ctx, input)
+}
+
+func (mw loggingMiddleware) HandleCreateCAEvent(ctx context.Context, input *api.HandleCreateCAEventInput) (output *api.HandleCreateCAEventOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "HandleCreateCAEvent"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.HandleCreateCAEvent(ctx, input)
+}
+
+func (mw loggingMiddleware) HandleUpdateCAStatusEvent(ctx context.Context, input *api.HandleUpdateCAStatusEventInput) (output *api.HandleUpdateCAStatusEventOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "HandleUpdateCAStatusEvent"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.HandleUpdateCAStatusEvent(ctx, input)
+}
+
+func (mw loggingMiddleware) HandleUpdateCertificateStatusEvent(ctx context.Context, input *api.HandleUpdateCertificateStatusEventInput) (output *api.HandleUpdateCertificateStatusEventOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "HandleUpdateCertificateStatusEvent"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.HandleUpdateCertificateStatusEvent(ctx, input)
+}
+
+func (mw loggingMiddleware) HandleReenrollEvent(ctx context.Context, input *api.HandleReenrollEventInput) (output *api.HandleReenrollEventOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "HandleReenrollEvent"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.HandleReenrollEvent(ctx, input)
+}
+
+func (mw loggingMiddleware) UpdateDeviceCertificateStatus(ctx context.Context, input *api.UpdateDeviceCertificateStatusInput) (output *api.UpdateDeviceCertificateStatusOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "UpdateDeviceCertificateStatus"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.UpdateDeviceCertificateStatus(ctx, input)
+}
+
+func (mw loggingMiddleware) UpdateDeviceDigitalTwinReenrolmentStatus(ctx context.Context, input *api.UpdateDeviceDigitalTwinReenrolmentStatusInput) (output *api.UpdateDeviceDigitalTwinReenrolmentStatusOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "UpdateDeviceDigitalTwinReenrolmentStatus"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.UpdateDeviceDigitalTwinReenrolmentStatus(ctx, input)
+}
+
+func (mw loggingMiddleware) UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (output *api.UpdateCAStatusOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "UpdateCAStatus"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.UpdateCAStatus(ctx, input)
+}
+
+func (mw loggingMiddleware) HandleForceReenrollEvent(ctx context.Context, input *api.HandleForceReenrollEventInput) (output *api.HandleForceReenrollEventOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "HandleForceReenrollEvent"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.HandleForceReenrollEvent(ctx, input)
 }

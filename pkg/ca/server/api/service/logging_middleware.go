@@ -2,183 +2,315 @@ package service
 
 import (
 	"context"
-	"crypto/x509"
+	"fmt"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/pkg/ca/common/dto"
-	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
-	"github.com/opentracing/opentracing-go"
-
-	"github.com/go-kit/kit/log"
+	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
+	log "github.com/sirupsen/logrus"
 )
 
 type Middleware func(Service) Service
 
-func LoggingMiddleware(logger log.Logger) Middleware {
+func LoggingMiddleware() Middleware {
 	return func(next Service) Service {
 		return &loggingMiddleware{
-			next:   next,
-			logger: logger,
+			next: next,
 		}
 	}
 }
 
 type loggingMiddleware struct {
-	next   Service
-	logger log.Logger
+	next Service
 }
 
-func (mw loggingMiddleware) GetSecretProviderName(ctx context.Context) (providerName string) {
-
+func (mw loggingMiddleware) Health() (output bool) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "GetSecretProviderName",
-			"took", time.Since(begin),
-			"provider_name", providerName,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
+		log.WithFields(log.Fields{
+			"method": "Health",
+			"took":   time.Since(begin),
+		}).Trace(output)
 	}(time.Now())
-	return mw.next.GetSecretProviderName(ctx)
+	return mw.next.Health()
 }
 
-func (mw loggingMiddleware) Stats(ctx context.Context) (stats dto.Stats) {
+func (mw loggingMiddleware) GetEngineProviderInfo() (output api.EngineProviderInfo) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "Stats",
-			"took", time.Since(begin),
-			"stats", stats,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
+		log.WithFields(log.Fields{
+			"method": "GetEngineProviderInfo",
+			"output": output,
+			"took":   time.Since(begin),
+		}).Trace(fmt.Sprintf("output: %v", output))
 	}(time.Now())
-	return mw.next.Stats(ctx)
+	return mw.next.GetEngineProviderInfo()
 }
 
-func (mw loggingMiddleware) Health(ctx context.Context) (healthy bool) {
+func (mw loggingMiddleware) Stats(ctx context.Context, input *api.GetStatsInput) (output *api.GetStatsOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "Health",
-			"took", time.Since(begin),
-			"healthy", healthy,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "Stats"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
 	}(time.Now())
-	return mw.next.Health(ctx)
+	return mw.next.Stats(ctx, input)
 }
 
-func (mw loggingMiddleware) GetCAs(ctx context.Context, caType dto.CAType, queryparameters filters.QueryParameters) (CAs []dto.Cert, total int, err error) {
+func (mw loggingMiddleware) CreateCA(ctx context.Context, input *api.CreateCAInput) (output *api.CreateCAOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "GetCAs",
-			"number_cas", len(CAs),
-			"ca_type", caType,
-			"took", time.Since(begin),
-			"err", err,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "CreateCA"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
 	}(time.Now())
-	return mw.next.GetCAs(ctx, caType, queryparameters)
+	return mw.next.CreateCA(ctx, input)
 }
 
-func (mw loggingMiddleware) CreateCA(ctx context.Context, caType dto.CAType, caName string, privateKeyMetadata dto.PrivateKeyMetadata, subject dto.Subject, caTTL int, enrollerTTL int) (cretedCa dto.Cert, err error) {
+func (mw loggingMiddleware) GetCAs(ctx context.Context, input *api.GetCAsInput) (output *api.GetCAsOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "CreateCA",
-			"ca_name", caName,
-			"ca_type", caType,
-			"private_key_metadata", privateKeyMetadata,
-			"subject", subject,
-			"ca_ttl", caTTL,
-			"enroller_ttl", enrollerTTL,
-			"creted_ca", cretedCa,
-			"err", err,
-			"trace_id", opentracing.SpanFromContext(ctx),
-		)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "GetCAs"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
 	}(time.Now())
-	return mw.next.CreateCA(ctx, caType, caName, privateKeyMetadata, subject, caTTL, enrollerTTL)
+	return mw.next.GetCAs(ctx, input)
 }
 
-func (mw loggingMiddleware) ImportCA(ctx context.Context, caType dto.CAType, caName string, certificate x509.Certificate, privateKey dto.PrivateKey, enrollerTTL int) (cretedCa dto.Cert, err error) {
+func (mw loggingMiddleware) GetCAByName(ctx context.Context, input *api.GetCAByNameInput) (output *api.GetCAByNameOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "ImportCA",
-			"ca_name", caName,
-			"ca_type", caType,
-			"imported_certificate_SerialNumber", certificate.SerialNumber.String(),
-			"creted_ca", cretedCa,
-			"trace_id", opentracing.SpanFromContext(ctx),
-			"err", err,
-		)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "GetCAByName"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
 	}(time.Now())
-	return mw.next.ImportCA(ctx, caType, caName, certificate, privateKey, enrollerTTL)
+	return mw.next.GetCAByName(ctx, input)
 }
 
-func (mw loggingMiddleware) DeleteCA(ctx context.Context, caType dto.CAType, CA string) (err error) {
+func (mw loggingMiddleware) RevokeCA(ctx context.Context, input *api.RevokeCAInput) (output *api.RevokeCAOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "DeleteCA",
-			"ca_name", CA,
-			"ca_type", caType,
-			"took", time.Since(begin),
-			"trace_id", opentracing.SpanFromContext(ctx),
-			"err", err,
-		)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "RevokeCA"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
 	}(time.Now())
-	return mw.next.DeleteCA(ctx, caType, CA)
+	return mw.next.RevokeCA(ctx, input)
 }
 
-func (mw loggingMiddleware) GetIssuedCerts(ctx context.Context, caType dto.CAType, CA string, queryParameters filters.QueryParameters) (certs []dto.Cert, length int, err error) {
+func (mw loggingMiddleware) UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (output *api.UpdateCAStatusOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "GetIssuedCerts",
-			"ca_name", CA,
-			"number_issued_certs", len(certs),
-			"took", time.Since(begin),
-			"trace_id", opentracing.SpanFromContext(ctx),
-			"err", err,
-		)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "UpdateCAStatus"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
 	}(time.Now())
-	return mw.next.GetIssuedCerts(ctx, caType, CA, queryParameters)
-}
-func (mw loggingMiddleware) GetCert(ctx context.Context, caType dto.CAType, caName string, serialNumber string) (cert dto.Cert, err error) {
-	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "GetCert",
-			"ca_name", caName,
-			"serialNumber", serialNumber,
-			"cert_CommonName", cert.Subject.CommonName,
-			"took", time.Since(begin),
-			"trace_id", opentracing.SpanFromContext(ctx),
-			"err", err,
-		)
-	}(time.Now())
-	return mw.next.GetCert(ctx, caType, caName, serialNumber)
+	return mw.next.UpdateCAStatus(ctx, input)
 }
 
-func (mw loggingMiddleware) DeleteCert(ctx context.Context, caType dto.CAType, caName string, serialNumber string) (err error) {
+func (mw loggingMiddleware) IterateCAsWithPredicate(ctx context.Context, input *api.IterateCAsWithPredicateInput) (output *api.IterateCAsWithPredicateOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "DeleteCert",
-			"ca_name", caName,
-			"serialNumber", serialNumber,
-			"took", time.Since(begin),
-			"trace_id", opentracing.SpanFromContext(ctx),
-			"err", err,
-		)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "IterateCAsWithPredicate"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %s", output))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
 	}(time.Now())
-	return mw.next.DeleteCert(ctx, caType, caName, serialNumber)
+	return mw.next.IterateCAsWithPredicate(ctx, input)
+}
+func (mw loggingMiddleware) SignCertificateRequest(ctx context.Context, input *api.SignCertificateRequestInput) (output *api.SignCertificateRequestOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "SignCertificateRequest"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.SignCertificateRequest(ctx, input)
 }
 
-func (mw loggingMiddleware) SignCertificate(ctx context.Context, caType dto.CAType, caName string, csr x509.CertificateRequest, signVerbatim bool, cn string) (certs dto.SignResponse, err error) {
+func (mw loggingMiddleware) UpdateCertificateStatus(ctx context.Context, input *api.UpdateCertificateStatusInput) (output *api.UpdateCertificateStatusOutput, err error) {
 	defer func(begin time.Time) {
-		mw.logger.Log(
-			"method", "SignCertificate",
-			"ca_name", caName,
-			"ca_type", caType,
-			"csr_common_name", csr.Subject.CommonName,
-			"took", time.Since(begin),
-			"trace_id", opentracing.SpanFromContext(ctx),
-			"err", err,
-		)
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "UpdateCertificateStatus"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
 	}(time.Now())
-	return mw.next.SignCertificate(ctx, caType, caName, csr, signVerbatim, cn)
+	return mw.next.UpdateCertificateStatus(ctx, input)
+}
+
+func (mw loggingMiddleware) RevokeCertificate(ctx context.Context, input *api.RevokeCertificateInput) (output *api.RevokeCertificateOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "RevokeCertificate"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.RevokeCertificate(ctx, input)
+}
+
+func (mw loggingMiddleware) GetCertificateBySerialNumber(ctx context.Context, input *api.GetCertificateBySerialNumberInput) (output *api.GetCertificateBySerialNumberOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "GetCertificateBySerialNumber"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.GetCertificateBySerialNumber(ctx, input)
+}
+
+func (mw loggingMiddleware) IterateCertificatesWithPredicate(ctx context.Context, input *api.IterateCertificatesWithPredicateInput) (output *api.IterateCertificatesWithPredicateOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "IterateCertificatesWithPredicate"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %s", output))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.IterateCertificatesWithPredicate(ctx, input)
+}
+
+func (mw loggingMiddleware) GetCertificates(ctx context.Context, input *api.GetCertificatesInput) (output *api.GetCertificatesOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "GetCertificates"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.GetCertificates(ctx, input)
+}
+
+func (mw loggingMiddleware) GetCertificatesAboutToExpire(ctx context.Context, input *api.GetCertificatesAboutToExpireInput) (output *api.GetCertificatesAboutToExpireOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "GetCertificatesAboutToExpire"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.GetCertificatesAboutToExpire(ctx, input)
+}
+
+func (mw loggingMiddleware) GetExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.GetExpiredAndOutOfSyncCertificatesInput) (output *api.GetExpiredAndOutOfSyncCertificatesOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "GetExpiredAndOutOfSyncCertificates"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.GetExpiredAndOutOfSyncCertificates(ctx, input)
+}
+
+func (mw loggingMiddleware) ScanAboutToExpireCertificates(ctx context.Context, input *api.ScanAboutToExpireCertificatesInput) (output *api.ScanAboutToExpireCertificatesOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "ScanAboutToExpireCertificates"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.ScanAboutToExpireCertificates(ctx, input)
+}
+
+func (mw loggingMiddleware) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (output *api.ScanExpiredAndOutOfSyncCertificatesOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "ScanExpiredAndOutOfSyncCertificates"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.ScanExpiredAndOutOfSyncCertificates(ctx, input)
 }

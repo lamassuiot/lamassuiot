@@ -2,307 +2,358 @@ package endpoint
 
 import (
 	"context"
-	"time"
+	"encoding/json"
+	"strings"
 
+	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/go-kit/kit/endpoint"
-	"github.com/go-kit/kit/tracing/opentracing"
 	"github.com/go-playground/validator/v10"
-	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/dto"
+	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
+	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
-	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
-	stdopentracing "github.com/opentracing/opentracing-go"
 )
 
 type Endpoints struct {
-	HealthEndpoint              endpoint.Endpoint
-	StatsEndpoint               endpoint.Endpoint
-	PostDeviceEndpoint          endpoint.Endpoint
-	GetDevices                  endpoint.Endpoint
-	GetDeviceById               endpoint.Endpoint
-	UpdateDeviceById            endpoint.Endpoint
-	GetDevicesByDMS             endpoint.Endpoint
-	DeleteDevice                endpoint.Endpoint
-	DeleteRevoke                endpoint.Endpoint
-	GetDeviceLogs               endpoint.Endpoint
-	GetDeviceCert               endpoint.Endpoint
-	GetDeviceCertHistory        endpoint.Endpoint
-	GetDmsCertHistoryThirtyDays endpoint.Endpoint
-	GetDmsLastIssueCert         endpoint.Endpoint
+	HealthEndpoint                  endpoint.Endpoint
+	GetStatsEndpoint                endpoint.Endpoint
+	CreateDeviceEndpoint            endpoint.Endpoint
+	UpdateDeviceMetadataEndpoint    endpoint.Endpoint
+	DecommisionDeviceEndpoint       endpoint.Endpoint
+	GetDevicesEndpoint              endpoint.Endpoint
+	GetDeviceByIdEndpoint           endpoint.Endpoint
+	RevokeActiveCertificateEndpoint endpoint.Endpoint
+	ForceReenrollEndpoint           endpoint.Endpoint
+	GetDeviceLogsEndpoint           endpoint.Endpoint
+	HandleCACloudEvent              endpoint.Endpoint
 }
 
-func MakeServerEndpoints(s service.Service, otTracer stdopentracing.Tracer) Endpoints {
-	var healthEndpoint endpoint.Endpoint
-	{
-		healthEndpoint = MakeHealthEndpoint(s)
-		healthEndpoint = opentracing.TraceServer(otTracer, "Health")(healthEndpoint)
-	}
-	var statsEndpoint endpoint.Endpoint
-	{
-		statsEndpoint = MakeStatsEndpoint(s)
-		statsEndpoint = opentracing.TraceServer(otTracer, "Stats")(statsEndpoint)
-	}
-	var postDeviceEndpoint endpoint.Endpoint
-	{
-		postDeviceEndpoint = MakePostDeviceEndpoint(s)
-		postDeviceEndpoint = opentracing.TraceServer(otTracer, "PostCSR")(postDeviceEndpoint)
-	}
-	var getDevicesEndpoint endpoint.Endpoint
-	{
-		getDevicesEndpoint = MakeGetDevicesEndpoint(s)
-		getDevicesEndpoint = opentracing.TraceServer(otTracer, "GetDevices")(getDevicesEndpoint)
-	}
-	var getDevicesByIdEndpoint endpoint.Endpoint
-	{
-		getDevicesByIdEndpoint = MakeGetDeviceByIdEndpoint(s)
-		getDevicesByIdEndpoint = opentracing.TraceServer(otTracer, "GetDeviceById")(getDevicesByIdEndpoint)
-	}
-	var updateDevicesByIdEndpoint endpoint.Endpoint
-	{
-		updateDevicesByIdEndpoint = MakeUpdateDeviceByIdEndpoint(s)
-		updateDevicesByIdEndpoint = opentracing.TraceServer(otTracer, "UpdateDeviceById")(updateDevicesByIdEndpoint)
-	}
-	var getDevicesByDMSEndpoint endpoint.Endpoint
-	{
-		getDevicesByDMSEndpoint = MakeGetDevicesByDMSEndpoint(s)
-		getDevicesByDMSEndpoint = opentracing.TraceServer(otTracer, "GetDevicesByDMS")(getDevicesByDMSEndpoint)
-	}
-	var deleteDeviceEndpoint endpoint.Endpoint
-	{
-		deleteDeviceEndpoint = MakeDeleteDeviceEndpoint(s)
-		deleteDeviceEndpoint = opentracing.TraceServer(otTracer, "DeleteDevice")(deleteDeviceEndpoint)
-	}
-	var deleteRevokeEndpoint endpoint.Endpoint
-	{
-		deleteRevokeEndpoint = MakeDeleteRevokeEndpoint(s)
-		deleteRevokeEndpoint = opentracing.TraceServer(otTracer, "deleteRevokeEndpoint")(deleteRevokeEndpoint)
-	}
-	var getDeviceLogsEndpoint endpoint.Endpoint
-	{
-		getDeviceLogsEndpoint = MakeGetDeviceLogsEndpoint(s)
-		getDeviceLogsEndpoint = opentracing.TraceServer(otTracer, "getDeviceLogsEndpoint")(getDeviceLogsEndpoint)
-	}
-	var getDeviceCertEndpoint endpoint.Endpoint
-	{
-		getDeviceCertEndpoint = MakeGetDeviceCertEndpoint(s)
-		getDeviceCertEndpoint = opentracing.TraceServer(otTracer, "getDeviceCertEndpoint")(getDeviceCertEndpoint)
-	}
-	var getDeviceCertHistoryEndpoint endpoint.Endpoint
-	{
-		getDeviceCertHistoryEndpoint = MakeGetDeviceCertHistoryEndpoint(s)
-		getDeviceCertHistoryEndpoint = opentracing.TraceServer(otTracer, "getDeviceCertHistoryEndpoint")(getDeviceCertHistoryEndpoint)
-	}
-	var getDmsCertHistoryThirtyDaysEndpoint endpoint.Endpoint
-	{
-		getDmsCertHistoryThirtyDaysEndpoint = MakeGetDmsCertHistoryThirtyDaysEndpoint(s)
-		getDmsCertHistoryThirtyDaysEndpoint = opentracing.TraceServer(otTracer, "getDmsCertHistoryThirtyDaysEndpoint")(getDmsCertHistoryThirtyDaysEndpoint)
-	}
-	var getDmsLastIssueCertEndpoint endpoint.Endpoint
-	{
-		getDmsLastIssueCertEndpoint = MakeGetDmsLastIssueCertEndpoint(s)
-		getDmsLastIssueCertEndpoint = opentracing.TraceServer(otTracer, "getDmsLastIssueCertEndpoint")(getDmsLastIssueCertEndpoint)
-	}
+func MakeServerEndpoints(s service.Service) Endpoints {
+	var healthEndpoint = MakeHealthEndpoint(s)
+	var getStatsEndpoint = MakeGetStatsEndpoint(s)
+	var createDeviceEndpoint = MakeCreateDeviceEndpoint(s)
+	var updateDeviceMetadataEndpoint = MakeUpdateDeviceMetadataEndpoint(s)
+	var decommisionDeviceEndpoint = MakeDecommisionDeviceEndpoint(s)
+	var getDevicesEndpoint = MakeGetDevicesEndpoint(s)
+	var getDeviceByIdEndpoint = MakeGetDeviceByIdEndpoint(s)
+	var revokeActiveCertificateEndpoint = MakeRevokeActiveCertificateEndpoint(s)
+	var getDeviceLogsEndpoint = MakeGetDeviceLogsEndpoint(s)
+	var handleCACloudEvent = MakeHandleCACloudEvent(s)
+	var forceReenrollEndpoint = MakeForceReenrollEnpoint(s)
 
 	return Endpoints{
-		HealthEndpoint:              healthEndpoint,
-		StatsEndpoint:               statsEndpoint,
-		PostDeviceEndpoint:          postDeviceEndpoint,
-		GetDevices:                  getDevicesEndpoint,
-		GetDeviceById:               getDevicesByIdEndpoint,
-		UpdateDeviceById:            updateDevicesByIdEndpoint,
-		GetDevicesByDMS:             getDevicesByDMSEndpoint,
-		DeleteDevice:                deleteDeviceEndpoint,
-		DeleteRevoke:                deleteRevokeEndpoint,
-		GetDeviceLogs:               getDeviceLogsEndpoint,
-		GetDeviceCert:               getDeviceCertEndpoint,
-		GetDeviceCertHistory:        getDeviceCertHistoryEndpoint,
-		GetDmsCertHistoryThirtyDays: getDmsCertHistoryThirtyDaysEndpoint,
-		GetDmsLastIssueCert:         getDmsLastIssueCertEndpoint,
+		HealthEndpoint:                  healthEndpoint,
+		GetStatsEndpoint:                getStatsEndpoint,
+		CreateDeviceEndpoint:            createDeviceEndpoint,
+		UpdateDeviceMetadataEndpoint:    updateDeviceMetadataEndpoint,
+		DecommisionDeviceEndpoint:       decommisionDeviceEndpoint,
+		GetDevicesEndpoint:              getDevicesEndpoint,
+		GetDeviceByIdEndpoint:           getDeviceByIdEndpoint,
+		RevokeActiveCertificateEndpoint: revokeActiveCertificateEndpoint,
+		GetDeviceLogsEndpoint:           getDeviceLogsEndpoint,
+		HandleCACloudEvent:              handleCACloudEvent,
+		ForceReenrollEndpoint:           forceReenrollEndpoint,
 	}
 }
 
 func MakeHealthEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		healthy := s.Health(ctx)
-		return HealthResponse{Healthy: healthy}, nil
+		output := s.Health(ctx)
+		return HealthResponse{Healthy: output}, nil
 	}
 }
 
-func MakeStatsEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		stats, scanDate := s.Stats(ctx)
-		return StatsResponse{Stats: stats, ScanDate: scanDate}, nil
+func ValidateGetStatsRequest(request api.GetStatsInput) error {
+	GetStatsInputStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.GetStatsInput)
 	}
+	validate := validator.New()
+	validate.RegisterStructValidation(GetStatsInputStructLevelValidation, api.GetStatsInput{})
+	return validate.Struct(request)
 }
-
-func MakePostDeviceEndpoint(s service.Service) endpoint.Endpoint {
+func MakeGetStatsEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(dto.CreateDeviceRequest)
-		err = ValidatePostDeviceRequest(req)
+		input := request.(api.GetStatsInput)
+
+		err = ValidateGetStatsRequest(input)
 		if err != nil {
 			valError := errors.ValidationError{
 				Msg: err.Error(),
 			}
 			return nil, &valError
 		}
-		device, e := s.PostDevice(ctx, req.Alias, req.DeviceID, req.DmsId, req.Description, req.Tags, req.IconName, req.IconColor)
-		return device, e
+
+		output, err := s.GetStats(ctx, &input)
+		return output, err
 	}
 }
 
+func ValidateCreateDeviceRequest(request api.CreateDeviceInput) error {
+	CreateDeviceInputStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.CreateDeviceInput)
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(CreateDeviceInputStructLevelValidation, api.CreateDeviceInput{})
+	return validate.Struct(request)
+}
+func MakeCreateDeviceEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.CreateDeviceInput)
+
+		err = ValidateCreateDeviceRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		output, err := s.CreateDevice(ctx, &input)
+		return output, err
+	}
+}
+
+func ValidateUpdateDeviceMetadataRequest(request api.UpdateDeviceMetadataInput) error {
+	UpdateDeviceMetadataInputStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.UpdateDeviceMetadataInput)
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(UpdateDeviceMetadataInputStructLevelValidation, api.UpdateDeviceMetadataInput{})
+	return validate.Struct(request)
+}
+func MakeUpdateDeviceMetadataEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.UpdateDeviceMetadataInput)
+
+		err = ValidateUpdateDeviceMetadataRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		output, err := s.UpdateDeviceMetadata(ctx, &input)
+		return output, err
+	}
+}
+
+func ValidateDecommisionDeviceRequest(request api.DecommisionDeviceInput) error {
+	DecommisionDeviceInputStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.DecommisionDeviceInput)
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(DecommisionDeviceInputStructLevelValidation, api.DecommisionDeviceInput{})
+	return validate.Struct(request)
+}
+func MakeDecommisionDeviceEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.DecommisionDeviceInput)
+
+		err = ValidateDecommisionDeviceRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		output, err := s.DecommisionDevice(ctx, &input)
+		return output, err
+	}
+}
+
+func ValidateGetDevicesRequest(request api.GetDevicesInput) error {
+	GetDevicesInputStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.GetDevicesInput)
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(GetDevicesInputStructLevelValidation, api.GetDevicesInput{})
+	return validate.Struct(request)
+}
 func MakeGetDevicesEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(filters.QueryParameters)
-		devices, length, e := s.GetDevices(ctx, req)
-		return dto.GetDevicesResponse{TotalDevices: length, Devices: devices}, e
-	}
-}
+		input := request.(api.GetDevicesInput)
 
-func MakeGetDeviceByIdEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(GetDevicesByIdRequest)
-		device, e := s.GetDeviceById(ctx, req.Id)
-		return device, e
-	}
-}
-
-func MakeUpdateDeviceByIdEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(dto.UpdateDevicesByIdRequest)
-		err = ValidateUpdateDeviceById(req)
+		err = ValidateGetDevicesRequest(input)
 		if err != nil {
 			valError := errors.ValidationError{
 				Msg: err.Error(),
 			}
 			return nil, &valError
 		}
-		device, e := s.UpdateDeviceById(ctx, req.Alias, req.DeviceID, req.DmsId, req.Description, req.Tags, req.IconName, req.IconColor)
-		return device, e
+
+		output, err := s.GetDevices(ctx, &input)
+		return output, err
 	}
 }
 
-func MakeGetDevicesByDMSEndpoint(s service.Service) endpoint.Endpoint {
+func ValidateGetDeviceByIdRequest(request api.GetDeviceByIdInput) error {
+	GetDeviceByIdInputStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.GetDeviceByIdInput)
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(GetDeviceByIdInputStructLevelValidation, api.GetDeviceByIdInput{})
+	return validate.Struct(request)
+}
+func MakeGetDeviceByIdEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(GetDevicesByDMSRequest)
-		devices, total_devices, e := s.GetDevicesByDMS(ctx, req.Id, req.QueryParameters)
-		return dto.GetDevicesResponse{TotalDevices: total_devices, Devices: devices}, e
+		input := request.(api.GetDeviceByIdInput)
+
+		err = ValidateGetDeviceByIdRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		output, err := s.GetDeviceById(ctx, &input)
+		return output, err
 	}
 }
-func MakeDeleteDeviceEndpoint(s service.Service) endpoint.Endpoint {
+
+func ValidateRevokeActiveCertificateRequest(request api.RevokeActiveCertificateInput) error {
+	RevokeActiveCertificateInputStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.RevokeActiveCertificateInput)
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(RevokeActiveCertificateInputStructLevelValidation, api.RevokeActiveCertificateInput{})
+	return validate.Struct(request)
+}
+func MakeRevokeActiveCertificateEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(DeleteDeviceRequest)
-		e := s.DeleteDevice(ctx, req.Id)
-		if e != nil {
-			return "", e
-		} else {
-			return "OK", e
+		input := request.(api.RevokeActiveCertificateInput)
+
+		err = ValidateRevokeActiveCertificateRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		output, err := s.RevokeActiveCertificate(ctx, &input)
+		return output, err
+	}
+}
+
+func ValidateGetDeviceLogsRequest(request api.GetDeviceLogsInput) error {
+	GetDeviceLogsInputStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.GetDeviceLogsInput)
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(GetDeviceLogsInputStructLevelValidation, api.GetDeviceLogsInput{})
+	return validate.Struct(request)
+}
+func MakeGetDeviceLogsEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.GetDeviceLogsInput)
+
+		err = ValidateGetDeviceLogsRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		output, err := s.GetDeviceLogs(ctx, &input)
+		return output, err
+	}
+}
+func MakeHandleCACloudEvent(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		event := request.(cloudevents.Event)
+		switch event.Type() {
+		case "io.lamassuiot.certificate.update":
+			var data caApi.UpdateCertificateStatusOutputSerialized
+			json.Unmarshal(event.Data(), &data)
+			cetificate := data.CertificateSerialized.Deserialize()
+
+			deviceID := ""
+			slotID := "default"
+			if strings.Contains(cetificate.Certificate.Subject.CommonName, ":") {
+				identifier := strings.Split(cetificate.Certificate.Subject.CommonName, ":")
+				slotID = identifier[0]
+				deviceID = identifier[1]
+			} else {
+				deviceID = cetificate.Certificate.Subject.CommonName
+			}
+			if cetificate.Status == caApi.StatusAboutToExpire {
+
+				_, err = s.ForceReenroll(ctx, &api.ForceReenrollInput{
+					DeviceID:      deviceID,
+					SlotID:        slotID,
+					ForceReenroll: true,
+				})
+			} else {
+				_, err = s.UpdateActiveCertificateStatus(ctx, &api.UpdateActiveCertificateStatusInput{
+					DeviceID:         deviceID,
+					SlotID:           slotID,
+					Status:           cetificate.Status,
+					RevocationReason: cetificate.RevocationReason,
+				})
+			}
+
+			return nil, err
+
+		case "io.lamassuiot.certificate.revoke":
+			var data caApi.RevokeCertificateOutputSerialized
+			json.Unmarshal(event.Data(), &data)
+			cetificate := data.CertificateSerialized.Deserialize()
+
+			deviceID := ""
+			slotID := "default"
+			if strings.Contains(cetificate.Certificate.Subject.CommonName, ":") {
+				identifier := strings.Split(cetificate.Certificate.Subject.CommonName, ":")
+				slotID = identifier[0]
+				deviceID = identifier[1]
+			} else {
+				deviceID = cetificate.Certificate.Subject.CommonName
+			}
+
+			_, err = s.UpdateActiveCertificateStatus(ctx, &api.UpdateActiveCertificateStatusInput{
+				DeviceID:         deviceID,
+				SlotID:           slotID,
+				Status:           cetificate.Status,
+				RevocationReason: cetificate.RevocationReason,
+				CertSerialNumber: cetificate.SerialNumber,
+			})
+			return nil, err
+
+		default:
+			return nil, nil
 		}
 	}
 }
-func MakeDeleteRevokeEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(DeleteRevokeRequest)
-		e := s.RevokeDeviceCert(ctx, req.Id, "Manual revocation")
-		return nil, e
-	}
-}
 
-func MakeGetDeviceLogsEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		reqL := request.(GetDeviceLogsRequest)
-		logs, total_logs, e := s.GetDeviceLogs(ctx, reqL.Id, reqL.QueryParameters)
-		return dto.GetLogsResponse{TotalLogs: total_logs, Logs: logs}, e
+func ValidateForceReenrollRequest(request api.ForceReenrollInput) error {
+	ForceReenrollInputStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.ForceReenrollInput)
 	}
+	validate := validator.New()
+	validate.RegisterStructValidation(ForceReenrollInputStructLevelValidation, api.ForceReenrollInput{})
+	return validate.Struct(request)
 }
+func MakeForceReenrollEnpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.ForceReenrollInput)
 
-func MakeGetDeviceCertEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(GetDeviceCertRequest)
-		deviceCert, e := s.GetDeviceCert(ctx, req.Id)
-		return deviceCert, e
-	}
-}
-func MakeGetDeviceCertHistoryEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		reqCHR := request.(GetDeviceCertHistoryRequest)
-		history, e := s.GetDeviceCertHistory(ctx, reqCHR.Id)
-		return history, e
-	}
-}
-func MakeGetDmsCertHistoryThirtyDaysEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		var req filters.QueryParameters
-		history, e := s.GetDmsCertHistoryThirtyDays(ctx, req)
-		return history, e
-	}
-}
-func MakeGetDmsLastIssueCertEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		req := request.(filters.QueryParameters)
-		history, total_certs, e := s.GetDmsLastIssuedCert(ctx, req)
-		return dto.GetLastIssuedCertResponse{TotalLastIssuedCert: total_certs, IssuedCert: history}, e
-	}
-}
+		err = ValidateForceReenrollRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
 
-type HealthRequest struct{}
+		out, err := s.ForceReenroll(ctx, &input)
+		return out, err
+	}
+}
 
 type HealthResponse struct {
 	Healthy bool  `json:"healthy,omitempty"`
 	Err     error `json:"err,omitempty"`
-}
-
-type StatsRequest struct{}
-
-type StatsResponse struct {
-	Stats    dto.Stats `json:"stats"`
-	ScanDate time.Time `json:"scan_date"`
-}
-
-type PostDeviceResponse struct {
-	Device dto.Device `json:"device,omitempty"`
-	Err    error      `json:"err,omitempty"`
-}
-
-type GetDevicesByIdRequest struct {
-	Id string
-}
-
-type GetDevicesByDMSRequest struct {
-	Id              string
-	QueryParameters filters.QueryParameters
-}
-type DeleteDeviceRequest struct {
-	Id string
-}
-type PostIssueCertResponse struct {
-	Crt string `json:"crt,omitempty"`
-	Err error  `json:"err,omitempty"`
-}
-type PostIssueCertUsingDefaultResponse struct {
-	Crt     string `json:"crt,omitempty"`
-	PrivKey string `json:"priv_key,omitempty"`
-	Err     error  `json:"err,omitempty"`
-}
-type DeleteRevokeRequest struct {
-	Id string
-}
-type GetDeviceLogsRequest struct {
-	Id              string
-	QueryParameters filters.QueryParameters
-}
-type GetDeviceCertRequest struct {
-	Id string
-}
-type GetDeviceCertHistoryRequest struct {
-	Id string
-}
-
-func ValidatePostDeviceRequest(request dto.CreateDeviceRequest) error {
-	validate := validator.New()
-	return validate.Struct(request)
-}
-
-func ValidateUpdateDeviceById(request dto.UpdateDevicesByIdRequest) error {
-	validate := validator.New()
-	return validate.Struct(request)
 }

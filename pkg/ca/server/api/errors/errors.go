@@ -38,3 +38,9 @@ type GenericError struct {
 func (e *GenericError) Error() string {
 	return fmt.Sprintf("%s", e.Message)
 }
+
+const (
+	ErrAlreadyRevoked            = "already revoked"
+	ErrSignRequestNotInPEMFormat = "csr is not in PEM format"
+	ErrSignRequestNotInB64       = "csr is not encoded in base64"
+)

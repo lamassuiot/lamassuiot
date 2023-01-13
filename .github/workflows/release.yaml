@@ -10,9 +10,9 @@ jobs:
     name: CA Unit Testing
     uses: ./.github/workflows/ca-develop.yaml
 
-  unit_testing_dms_enroller:
-    name: DMS Enroller Unit Testing
-    uses: ./.github/workflows/dms-enroller-develop.yaml
+  unit_testing_dms_manager:
+    name: DMS Manager Unit Testing
+    uses: ./.github/workflows/dms-manager-develop.yaml
 
   unit_testing_device_manager:
     name: DeviceManager Unit Testing
@@ -22,7 +22,7 @@ jobs:
       name: CA - Release DEV docker images
       needs:
       - unit_testing_ca
-      - unit_testing_dms_enroller
+      - unit_testing_dms_manager
       - unit_testing_device_manager
       # runs-on: self-hosted
       runs-on: ubuntu-latest
@@ -59,7 +59,7 @@ jobs:
       name: Device Manager - Release DEV docker images
       needs:
       - unit_testing_ca
-      - unit_testing_dms_enroller
+      - unit_testing_dms_manager
       - unit_testing_device_manager
       # runs-on: self-hosted
       runs-on: ubuntu-latest
@@ -81,11 +81,11 @@ jobs:
             lamassuiot/lamassu-device-manager-dev:latest
           push: true
 
-  build_dms_enroller_dev_docker_image:
-      name: DMS Enroller - Release DEV docker images
+  build_dms_manager_dev_docker_image:
+      name: DMS Manager - Release DEV docker images
       needs:
       - unit_testing_ca
-      - unit_testing_dms_enroller
+      - unit_testing_dms_manager
       - unit_testing_device_manager
       # runs-on: self-hosted
       runs-on: ubuntu-latest
@@ -96,22 +96,22 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build DMS Enroller DEV docker image
+      - name: Build DMS Managwer DEV docker image
         uses: docker/build-push-action@v2
         with:
-          file: ci/dms-enroller.dockerfile
+          file: ci/dms-manager.dockerfile
           build-args: |
             BASE_IMAGE=alpine:3.14
           tags: |
-            lamassuiot/lamassu-dms-enroller-dev:${{ github.sha }}
-            lamassuiot/lamassu-dms-enroller-dev:latest
+            lamassuiot/lamassu-dms-manager-dev:${{ github.sha }}
+            lamassuiot/lamassu-dms-manager-dev:latest
           push: true
 
   build_ocsp_dev_docker_image:
       name: OCSP - Release DEV docker images
       needs:
       - unit_testing_ca
-      - unit_testing_dms_enroller
+      - unit_testing_dms_manager
       - unit_testing_device_manager
       # runs-on: self-hosted
       runs-on: ubuntu-latest
@@ -137,7 +137,7 @@ jobs:
       name: Cloud Proxy - Release DEV docker images
       needs:
       - unit_testing_ca
-      - unit_testing_dms_enroller
+      - unit_testing_dms_manager
       - unit_testing_device_manager
       # runs-on: self-hosted
       runs-on: ubuntu-latest
@@ -163,7 +163,7 @@ jobs:
       name: DB - Release DEV docker images
       needs:
       - unit_testing_ca
-      - unit_testing_dms_enroller
+      - unit_testing_dms_manager
       - unit_testing_device_manager
       # runs-on: self-hosted
       runs-on: ubuntu-latest
@@ -177,7 +177,7 @@ jobs:
       - name: Build DB DEV docker image
         uses: docker/build-push-action@v2
         with:
-          file: ci/lamassu-db.dockerfile 
+          file: ci/database.dockerfile 
           tags: |
             lamassuiot/lamassu-db-dev:${{ github.sha }}
             lamassuiot/lamassu-db-dev:latest
@@ -189,7 +189,7 @@ jobs:
     - build_ca_dev_docker_image
     - build_cloud_proxy_dev_docker_image
     - build_device_manager_dev_docker_image
-    - build_dms_enroller_dev_docker_image
+    - build_dms_manager_dev_docker_image
     - build_ocsp_dev_docker_image
     - build_lamassu_db_dev_docker_image
     runs-on: ubuntu-latest
@@ -220,7 +220,7 @@ jobs:
     
     - name: Install dependencies
       working-directory: .github/infrastructure/tests/e2e
-      run: npm i &&  npm i -g cdk
+      run: npm i && npm i -g cdk
 
     - name: CDK synth
       working-directory: .github/infrastructure/tests/e2e
@@ -263,44 +263,8 @@ jobs:
         key: ${{ secrets.AWS_SSH_KEY }}
         port: ${{ secrets.AWS_SSH_PORT }}
         script: |
-          git clone https://github.com/vegasbrianc/prometheus.git
-          docker swarm init
-          cd prometheus
-          HOSTNAME=$(hostname) docker stack deploy -c docker-stack.yml prom
-          cd ..
-          
-          git clone https://github.com/lamassuiot/lamassuiot -b release
-          git clone https://github.com/lamassuiot/lamassu-compose -b develop && cd lamassu-compose
-
-          export DB_USER=admin
-          export DB_PASSWORD=admin
-          export DOMAIN=dev.lamassu.io
-
-          export LAMASSU_GATEWAY_DOCKER_IMAGE=lamassuiot/lamassu-gateway:latest
-          export LAMASSU_UI_DOCKER_IMAGE=lamassuiot/lamassu-ui:latest
-          export LAMASSU_DB_DOCKER_IMAGE=lamassuiot/lamassu-db:latest
-          export LAMASSU_AUTH_DOCKER_IMAGE=lamassuiot/lamassu-auth:latest
-          export LAMASSU_CA_DOCKER_IMAGE=lamassuiot/lamassu-ca-dev:latest
-          export LAMASSU_DMS_ENROLLER_DOCKER_IMAGE=lamassuiot/lamassu-dms-enroller-dev:latest
-          export LAMASSU_DEVICE_MANAGER_DOCKER_IMAGE=lamassuiot/lamassu-device-manager-dev:latest
-          export LAMASSU_RABBITMQ_DOCKER_IMAGE=lamassuiot/lamassu-rabbitmq:latest
-          export LAMASSU_CLOUD_PROXY_DOCKER_IMAGE=lamassuiot/lamassu-cloud-proxy-dev:latest
-          export LAMASSU_OCSP_DOCKER_IMAGE=lamassuiot/lamassu-ocsp-dev:latest
-
-          mv .env .env.tmp 
-          cat .env.tmp | envsubst > .env
-
-          sudo tee -a /etc/hosts > /dev/null <<EOT
-          127.0.0.1  ${DOMAIN}
-          127.0.0.1  vault.${DOMAIN}
-          127.0.0.1  auth.${DOMAIN}
-          127.0.0.1  tracing.${DOMAIN}
-          127.0.0.1  consul.${DOMAIN}
-          EOT
-
-          sed -i 's/30/'300000'/g' .env
-          
-          bash install.sh
+          curl -fsSL https://raw.githubusercontent.com/lamassuiot/lamassu-compose/develop/lamassu-compose.sh -o lamassu-compose.sh
+          sudo bash lamassu-compose.sh --domain dev.lamassu.io --compose-version develop
 
   integration_test:
     name: Integration test
