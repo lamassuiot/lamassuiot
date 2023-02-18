@@ -159,6 +159,32 @@ jobs:
             lamassuiot/lamassu-cloud-proxy-dev:latest
           push: true
 
+  build_alerts_dev_docker_image:
+      name: Alerts - Release DEV docker images
+      needs:
+      - unit_testing_ca
+      - unit_testing_dms_manager
+      - unit_testing_device_manager
+      # runs-on: self-hosted
+      runs-on: ubuntu-latest
+      steps:
+      - name: Login to DockerHub
+        uses: docker/login-action@v1 
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build Cloud Proxy DEV docker image
+        uses: docker/build-push-action@v2
+        with:
+          file: ci/cloud-proxy.dockerfile 
+          build-args: |
+            BASE_IMAGE=alpine:3.14
+          tags: |
+            lamassuiot/lamassu-alerts-dev:${{ github.sha }}
+            lamassuiot/lamassu-alerts-dev:latest
+          push: true
+
   build_lamassu_db_dev_docker_image:
       name: DB - Release DEV docker images
       needs:
@@ -188,6 +214,7 @@ jobs:
     needs:
     - build_ca_dev_docker_image
     - build_cloud_proxy_dev_docker_image
+    - build_alerts_dev_docker_image
     - build_device_manager_dev_docker_image
     - build_dms_manager_dev_docker_image
     - build_ocsp_dev_docker_image

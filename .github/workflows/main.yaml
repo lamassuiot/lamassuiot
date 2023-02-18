@@ -10,7 +10,8 @@ jobs:
     name: Tag Generator
     runs-on: ubuntu-latest
     outputs:
-      new-tag: ${{ steps.tag_version.outputs.new_tag  }}
+      new-tag: ${{ steps.tag_version.outputs.new_tag }}
+      new-version: ${{ steps.tag_version.outputs.new_version }}
     steps:   
       - name: Automatic Tag (Bump version and push tag)
         id: tag_version
@@ -38,7 +39,7 @@ jobs:
         build-args: |
           BASE_IMAGE=alpine:3.14
         tags: |
-          lamassuiot/lamassu-ca:${{ needs.tag_generator.outputs.new-tag }}
+          lamassuiot/lamassu-ca:${{ needs.tag_generator.outputs.new-version }}
           lamassuiot/lamassu-ca:latest
         push: true
 
@@ -61,7 +62,7 @@ jobs:
         build-args: |
           BASE_IMAGE=alpine:3.14
         tags: |
-          lamassuiot/lamassu-device-manager:${{ needs.tag_generator.outputs.new-tag }}
+          lamassuiot/lamassu-device-manager:${{ needs.tag_generator.outputs.new-version }}
           lamassuiot/lamassu-device-manager:latest
         push: true
 
@@ -84,7 +85,7 @@ jobs:
         build-args: |
           BASE_IMAGE=alpine:3.14
         tags: |
-          lamassuiot/lamassu-dms-manager:${{ needs.tag_generator.outputs.new-tag }}
+          lamassuiot/lamassu-dms-manager:${{ needs.tag_generator.outputs.new-version }}
           lamassuiot/lamassu-dms-manager:latest
         push: true
 
@@ -107,7 +108,7 @@ jobs:
         build-args: |
           BASE_IMAGE=alpine:3.14
         tags: |
-          lamassuiot/lamassu-ocsp:${{ needs.tag_generator.outputs.new-tag }}
+          lamassuiot/lamassu-ocsp:${{ needs.tag_generator.outputs.new-version }}
           lamassuiot/lamassu-ocsp:latest
         push: true
 
@@ -130,7 +131,7 @@ jobs:
         build-args: |
           BASE_IMAGE=alpine:3.14
         tags: |
-          lamassuiot/lamassu-cloud-proxy:${{ needs.tag_generator.outputs.new-tag }}
+          lamassuiot/lamassu-cloud-proxy:${{ needs.tag_generator.outputs.new-version }}
           lamassuiot/lamassu-cloud-proxy:latest
         push: true
 
@@ -151,6 +152,27 @@ jobs:
       with:
         file: ci/database.dockerfile 
         tags: |
-          lamassuiot/lamassu-db:${{ needs.tag_generator.outputs.new-tag }}
+          lamassuiot/lamassu-db:${{ needs.tag_generator.outputs.new-version }}
           lamassuiot/lamassu-db:latest
+        push: true
+
+  build_lamassu_alerts_docker_image:
+    name: Alerts - Release docker images
+    runs-on: ubuntu-latest
+    needs:
+    - tag_generator
+    steps:
+    - name: Login to DockerHub
+      uses: docker/login-action@v1 
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Build DB docker image
+      uses: docker/build-push-action@v2
+      with:
+        file: ci/alerts.dockerfile 
+        tags: |
+          lamassuiot/lamassu-alerts:${{ needs.tag_generator.outputs.new-version }}
+          lamassuiot/lamassu-alerts:latest
         push: true
