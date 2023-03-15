@@ -10,3 +10,5 @@ nogit
 *.p7
 *.out
 *.html
+data
+k8s

@@ -1,91 +1,154 @@
 package main
 
 import (
+	"crypto/x509"
 	"fmt"
-	"net/http"
+	"net/url"
 
-	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
-	cryptoengines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/crypto-engines"
-	x509engines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/x509-engines"
-	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/transport"
-	"github.com/lamassuiot/lamassuiot/pkg/ca/server/config"
-	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
-	gorm_logrus "github.com/onrik/gorm-logrus"
+	"github.com/lamassuiot/lamassuiot/internal/ca/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/pkg/config"
+	"github.com/lamassuiot/lamassuiot/pkg/helppers"
+	"github.com/lamassuiot/lamassuiot/pkg/middlewares/amqppub"
+	"github.com/lamassuiot/lamassuiot/pkg/routes"
+	"github.com/lamassuiot/lamassuiot/pkg/services"
+	"github.com/lamassuiot/lamassuiot/pkg/storage/couchdb"
 	log "github.com/sirupsen/logrus"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	gormLogger "gorm.io/gorm/logger"
-
-	postgresRepository "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/repository/postgres"
 )
 
 func main() {
-	config := config.NewCAConfig()
-
-	dbLogrus := gormLogger.Default.LogMode(gormLogger.Silent)
-	if config.DebugMode {
-		dbLogrus = gorm_logrus.New()
-		dbLogrus.LogMode(gormLogger.Info)
-	}
-
-	mainServer := server.NewServer(config)
-
-	var engine x509engines.X509Engine
-
-	var svc service.Service
-
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUsername, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: dbLogrus,
-	})
+	conf, err := config.LoadConfig[config.CAConfig]()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	certificateRepository := postgresRepository.NewPostgresDB(db)
-
-	switch config.Engine {
-	case "gopem":
-		gopemEngine, err := cryptoengines.NewGolangPEMEngine(config.GopemData)
-		if err != nil {
-			log.Fatal("Could not initialize Golang PEM engine: ", err)
-		}
-
-		engine = x509engines.NewStandardx509Engine(gopemEngine, config.OcspUrl)
-
-	case "awskms":
-		awskmsEngine, err := cryptoengines.NewAWSKMSEngine(config.AWSAccessKeyID, config.AWSSecretAccessKey, config.AWSDefaultRegion)
-		if err != nil {
-			log.Fatal("Could not initialize AWS KMS engine: ", err)
-		}
-
-		engine = x509engines.NewStandardx509Engine(awskmsEngine, config.OcspUrl)
-
-	case "vault":
-		engine, err = x509engines.NewVaultx509Engine(config.VaultAddress, config.VaultPkiCaPath, config.VaultRoleID, config.VaultSecretID, config.VaultCA, config.VaultAutoUnsealEnabled, config.VaultUnsealKeysFile, config.OcspUrl)
-		if err != nil {
-			log.Fatal("Could not start connection with Vault Secret Engine: ", err)
-		}
-
-	default:
-		log.Fatal("Engine not supported")
+	logLevel, err := log.ParseLevel(string(conf.Logs.Level))
+	if err != nil {
+		log.SetLevel(log.InfoLevel)
+		log.Warn("unknown log level. defaulting to 'info' log level")
+	} else {
+		log.SetLevel(logLevel)
 	}
 
-	svc = service.NewCAService(engine, certificateRepository, config.OcspUrl, config.AboutToExpireDays, config.PeriodicScanEnabled, config.PeriodicScanCron)
-	caSvc := svc.(*service.CAService)
+	_, amqpPub, err := amqppub.SetupAMQPConnection(conf.AMQPEventPublisher)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	svc = service.LoggingMiddleware()(svc)
-	svc = service.NewAMQPMiddleware(mainServer.AmqpPublisher)(svc)
-	svc = service.NewInputValudationMiddleware()(svc)
+	engines := createCryptoEngines(*conf)
 
+	caStorage, err := couchdb.NewCouchCARepository(url.URL{
+		Scheme: string(conf.Storage.CouchDB.Protocol),
+		Host:   fmt.Sprintf("%s:%d", conf.Storage.CouchDB.Hostname, conf.Storage.CouchDB.Port),
+	}, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	certStorage, err := couchdb.NewCouchCertificateRepository(url.URL{
+		Scheme: string(conf.Storage.CouchDB.Protocol),
+		Host:   fmt.Sprintf("%s:%d", conf.Storage.CouchDB.Hostname, conf.Storage.CouchDB.Port),
+	}, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	svc := services.NeCAService(services.CAServiceBuilder{
+		CryptoEngines:        engines,
+		CAStorage:            caStorage,
+		CertificateStorage:   certStorage,
+		CryptoMonitoringConf: conf.CryptoMonitoring,
+	})
+	caSvc := svc.(*services.CAServiceImpl)
+
+	svc = amqppub.NewCAAmqpEventPublisher(amqpPub)(svc)
+
+	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
 	caSvc.SetService(svc)
 
-	log.Info("Engine initialized")
-	log.Info(fmt.Sprintf("Engine options: %v", svc.GetEngineProviderInfo()))
+	err = routes.NewCAHTTPLayer(svc, conf.Server.ListenAddress, conf.Server.Port, conf.Server.DebugMode)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(svc)))
-
-	mainServer.Run()
 	forever := make(chan struct{})
 	<-forever
+}
+
+func createCryptoEngines(conf config.CAConfig) map[string]services.EngineServiceMap {
+	var err error
+
+	engines := map[string]services.EngineServiceMap{}
+
+	//Create all Vault CryptoEngines
+	for _, vaultCryptoEngineConfig := range conf.CryptoEngines.HashicorpVaultProviders {
+		var caCert *x509.Certificate
+		if vaultCryptoEngineConfig.CACertificateFile != "" {
+			caCert, err = helppers.ReadCertificateFromFile(vaultCryptoEngineConfig.CACertificateFile)
+			if err != nil {
+				log.Warn("could not load CA certificate for Vault. Skipping engine")
+				log.Error(err)
+				continue
+			}
+		}
+
+		addr := fmt.Sprintf("%s://%s:%d", vaultCryptoEngineConfig.Protocol, vaultCryptoEngineConfig.Hostname, vaultCryptoEngineConfig.Port)
+		roleID := vaultCryptoEngineConfig.RoleID
+		secretID := vaultCryptoEngineConfig.SecretID
+		insecure := vaultCryptoEngineConfig.InsecureSkipVerify
+		autoUnseal := vaultCryptoEngineConfig.AutoUnsealEnabled
+		autoUnsealKeysFile := vaultCryptoEngineConfig.AutoUnsealKeysFile
+		vaultEngine, err := cryptoengines.NewVaultCryptoEngine(addr, roleID, secretID, caCert, insecure, autoUnseal, autoUnsealKeysFile)
+
+		if err != nil {
+			log.Warn("could not create Vault engine. Skipping engine")
+			log.Error(err)
+			continue
+		}
+
+		log.Info("adding new Vault engine with ID: ", vaultCryptoEngineConfig.ID)
+		engines[vaultCryptoEngineConfig.ID] = services.EngineServiceMap{
+			Name:         vaultCryptoEngineConfig.Name,
+			Metadata:     vaultCryptoEngineConfig.Metadata,
+			CryptoEngine: vaultEngine,
+		}
+	}
+
+	//Create all GoPEM CryptoEngines
+	for _, gopemConfig := range conf.CryptoEngines.GoPemProviders {
+		gopemEngine, err := cryptoengines.NewGolangPEMEngine(gopemConfig.StorageDirectory)
+		if err != nil {
+			log.Warn("could not create GoPEM engine. Skipping engine")
+			log.Error(err)
+			continue
+		}
+
+		log.Info("adding new GoPEM engine with ID: ", gopemConfig.ID)
+		engines[gopemConfig.ID] = services.EngineServiceMap{
+			Name:         gopemConfig.Name,
+			Metadata:     gopemConfig.Metadata,
+			CryptoEngine: gopemEngine,
+		}
+	}
+
+	//Create all AWSKMS CryptoEngines
+	for _, awsKmsConfig := range conf.CryptoEngines.AWSKMSProviders {
+		awsEngine, err := cryptoengines.NewAWSKMSEngine(awsKmsConfig.AccessKeyID, awsKmsConfig.SecretAccessKey, awsKmsConfig.Region)
+		if err != nil {
+			log.Warn("could not create AWS KMS engine. Skipping engine")
+			log.Error(err)
+			continue
+		}
+
+		log.Info("adding new AWS KMS engine with ID: ", awsKmsConfig.ID)
+		engines[awsKmsConfig.ID] = services.EngineServiceMap{
+			Name:         awsKmsConfig.Name,
+			Metadata:     awsKmsConfig.Metadata,
+			CryptoEngine: awsEngine,
+		}
+
+	}
+
+	return engines
 }
