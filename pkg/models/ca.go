@@ -22,8 +22,6 @@ const (
 )
 
 type Certificate struct {
-	Kind                string              `json:"kind" default:"v1/Certificate"`
-	Rev                 string              `json:"_rev,omitempty"`
 	IssuerCAMetadata    IssuerCAMetadata    `json:"issuer_metadata"`
 	Status              CertificateStatus   `json:"status"`
 	Fingerprint         string              `json:"fingerprint"`
@@ -52,9 +50,7 @@ type IssuerCAMetadata struct {
 
 type CACertificate struct {
 	Certificate
-	Rev              string         `json:"_rev,omitempty"`
 	ID               string         `json:"id"`
-	Kind             string         `json:"kind" default:"v1/CACertificate"`
 	Version          int            `json:"version"`
 	IssuanceDuration TimeDuration   `json:"issuance_duration"`
 	Metadata         CAMetadata     `json:"metadata"`

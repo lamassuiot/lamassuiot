@@ -87,8 +87,7 @@ func createCryptoEngines(conf config.CAConfig) map[string]services.EngineService
 		if vaultCryptoEngineConfig.CACertificateFile != "" {
 			caCert, err = helppers.ReadCertificateFromFile(vaultCryptoEngineConfig.CACertificateFile)
 			if err != nil {
-				log.Warn("could not load CA certificate for Vault. Skipping engine")
-				log.Error(err)
+				log.Warnf("could not load CA certificate for Vault. Skipping engine: %s", err)
 				continue
 			}
 		}
@@ -102,12 +101,11 @@ func createCryptoEngines(conf config.CAConfig) map[string]services.EngineService
 		vaultEngine, err := cryptoengines.NewVaultCryptoEngine(addr, roleID, secretID, caCert, insecure, autoUnseal, autoUnsealKeysFile)
 
 		if err != nil {
-			log.Warn("could not create Vault engine. Skipping engine")
-			log.Error(err)
+			log.Warnf("could not create Vault engine. Skipping engine: %s", err)
 			continue
 		}
 
-		log.Info("adding new Vault engine with ID: ", vaultCryptoEngineConfig.ID)
+		log.Infof("adding new Vault engine with ID: %s", vaultCryptoEngineConfig.ID)
 		engines[vaultCryptoEngineConfig.ID] = services.EngineServiceMap{
 			Name:         vaultCryptoEngineConfig.Name,
 			Metadata:     vaultCryptoEngineConfig.Metadata,
@@ -119,12 +117,11 @@ func createCryptoEngines(conf config.CAConfig) map[string]services.EngineService
 	for _, gopemConfig := range conf.CryptoEngines.GoPemProviders {
 		gopemEngine, err := cryptoengines.NewGolangPEMEngine(gopemConfig.StorageDirectory)
 		if err != nil {
-			log.Warn("could not create GoPEM engine. Skipping engine")
-			log.Error(err)
+			log.Warnf("could not create GoPEM engine. Skipping engine: %s", err)
 			continue
 		}
 
-		log.Info("adding new GoPEM engine with ID: ", gopemConfig.ID)
+		log.Infof("adding new GoPEM engine with ID: %s", gopemConfig.ID)
 		engines[gopemConfig.ID] = services.EngineServiceMap{
 			Name:         gopemConfig.Name,
 			Metadata:     gopemConfig.Metadata,
@@ -136,12 +133,11 @@ func createCryptoEngines(conf config.CAConfig) map[string]services.EngineService
 	for _, awsKmsConfig := range conf.CryptoEngines.AWSKMSProviders {
 		awsEngine, err := cryptoengines.NewAWSKMSEngine(awsKmsConfig.AccessKeyID, awsKmsConfig.SecretAccessKey, awsKmsConfig.Region)
 		if err != nil {
-			log.Warn("could not create AWS KMS engine. Skipping engine")
-			log.Error(err)
+			log.Warnf("could not create AWS KMS engine. Skipping engine: %s", err)
 			continue
 		}
 
-		log.Info("adding new AWS KMS engine with ID: ", awsKmsConfig.ID)
+		log.Infof("adding new AWS KMS engine with ID: %s", awsKmsConfig.ID)
 		engines[awsKmsConfig.ID] = services.EngineServiceMap{
 			Name:         awsKmsConfig.Name,
 			Metadata:     awsKmsConfig.Metadata,

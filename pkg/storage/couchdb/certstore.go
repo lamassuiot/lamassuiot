@@ -27,7 +27,7 @@ func NewCouchCertificateRepository(couchURL url.URL, username, password string) 
 		return nil, err
 	}
 
-	querier := newCouchDBQuerier[models.Certificate](client.DB(caDBName))
+	querier := newCouchDBQuerier[models.Certificate](client.DB(certDBName))
 	querier.CreateBasicCounterView()
 
 	return &CouchDBCertificateStorage{
@@ -64,11 +64,11 @@ func (db *CouchDBCertificateStorage) Select(ctx context.Context, id string) (*mo
 }
 
 func (db *CouchDBCertificateStorage) Insert(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error) {
-	return db.querier.InsertUpdate(*certificate, certificate.SerialNumber)
+	return db.querier.Insert(*certificate, certificate.SerialNumber)
 }
 
 func (db *CouchDBCertificateStorage) Update(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error) {
-	return db.querier.InsertUpdate(*certificate, certificate.SerialNumber)
+	return db.querier.Update(*certificate, certificate.SerialNumber)
 }
 
 func (db *CouchDBCertificateStorage) SelectByCA(ctx context.Context, caID string, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
@@ -89,12 +89,12 @@ func (db *CouchDBCertificateStorage) SelectByExpirationDate(ctx context.Context,
 			"$and": []map[string]interface{}{
 				{
 					"valid_to": map[string]interface{}{
-						"$gt": afterExpirationDate.String(),
+						"$gt": afterExpirationDate.Format(time.RFC3339),
 					},
 				},
 				{
 					"valid_to": map[string]interface{}{
-						"$lt": beforeExpirationDate.String(),
+						"$lt": beforeExpirationDate.Format(time.RFC3339),
 					},
 				},
 				{
@@ -103,7 +103,7 @@ func (db *CouchDBCertificateStorage) SelectByExpirationDate(ctx context.Context,
 					},
 				},
 				{
-					"valid_to": map[string]interface{}{
+					"status": map[string]interface{}{
 						"$ne": models.StatusRevoked,
 					},
 				},

@@ -326,7 +326,7 @@ func (svc dmsManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 
 		//check if certificate is a certificate issued by bootstrap CA
 		if !slices.Contains(dms.IdentityProfile.EnrollmentSettings.BootstrapCAs, certificate.IssuerCAMetadata.ID) {
-			log.Warnf("using a certificate not authorized for this DMS. used certificate with sn %s issued by CA %s (cn: %s)", certificate.SerialNumber, certificate.IssuerCAMetadata.ID, certificate.IssuerCAMetadata.Name)
+			log.Warnf("using a certificate not authorized for this DMS. used certificate with sn %s issued by CA %s", certificate.SerialNumber, certificate.IssuerCAMetadata.ID)
 			return nil, errs.SentinelAPIError{
 				Status: http.StatusForbidden,
 				Msg:    "invalid certificate",

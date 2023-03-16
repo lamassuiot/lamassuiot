@@ -46,9 +46,9 @@ func (db *CouchDBDMSStorage) Select(ctx context.Context, ID string) (*models.DMS
 }
 
 func (db *CouchDBDMSStorage) Update(ctx context.Context, dms *models.DMS) (*models.DMS, error) {
-	return db.querier.InsertUpdate(*dms, dms.ID)
+	return db.querier.Update(*dms, dms.ID)
 }
 
 func (db *CouchDBDMSStorage) Insert(ctx context.Context, dms *models.DMS) (*models.DMS, error) {
-	return db.querier.InsertUpdate(*dms, dms.ID)
+	return db.querier.Insert(*dms, dms.ID)
 }

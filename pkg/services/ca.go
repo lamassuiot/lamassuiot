@@ -157,6 +157,7 @@ func NeCAService(builder CAServiceBuilder) CAService {
 				QueryParameters: nil,
 				ExhaustiveRun:   true,
 				ApplyFunc: func(cert *models.Certificate) {
+					log.Debugf("updating certificate status from cert with sn '%s' to status '%s'", cert.SerialNumber, models.SlotExpired)
 					svc.service.UpdateCertificateStatus(UpdateCertificateStatusInput{
 						SerialNumber: cert.SerialNumber,
 						Status:       models.StatusExpired,
@@ -171,6 +172,7 @@ func NeCAService(builder CAServiceBuilder) CAService {
 				QueryParameters: nil,
 				ExhaustiveRun:   true,
 				ApplyFunc: func(cert *models.Certificate) {
+					log.Debugf("updating certificate status from cert with sn '%s' to status '%s'", cert.SerialNumber, models.StatusCriticalExpiration)
 					svc.service.UpdateCertificateStatus(UpdateCertificateStatusInput{
 						SerialNumber: cert.SerialNumber,
 						Status:       models.StatusCriticalExpiration,
@@ -185,6 +187,7 @@ func NeCAService(builder CAServiceBuilder) CAService {
 				QueryParameters: nil,
 				ExhaustiveRun:   true,
 				ApplyFunc: func(cert *models.Certificate) {
+					log.Debugf("updating certificate status from cert with sn '%s' to status '%s'", cert.SerialNumber, models.StatusNearingExpiration)
 					svc.service.UpdateCertificateStatus(UpdateCertificateStatusInput{
 						SerialNumber: cert.SerialNumber,
 						Status:       models.StatusNearingExpiration,
@@ -429,6 +432,11 @@ func (svc *CAServiceImpl) RotateCA(input RotateCAInput) (*models.CACertificate, 
 		log.Warn("rotating an expired CA")
 	}
 
+	caID := ca.IssuerCAMetadata.ID
+	if ca.Level == 0 {
+		caID = ""
+	}
+
 	issuedCA, err := svc.issueCA(issueCAInput{
 		EngineID: ca.Metadata.EngineProviderID,
 		KeyMetadata: models.KeyMetadata{
@@ -437,7 +445,7 @@ func (svc *CAServiceImpl) RotateCA(input RotateCAInput) (*models.CACertificate, 
 		},
 		Subject:    ca.Subject,
 		CADuration: ca.Certificate.Certificate.NotAfter.Sub(ca.Certificate.Certificate.NotBefore),
-		IssuerCAID: ca.IssuerCAMetadata.ID,
+		IssuerCAID: caID,
 		CAType:     ca.Metadata.Type,
 	})
 	if err != nil {

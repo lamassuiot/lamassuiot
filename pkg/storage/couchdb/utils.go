@@ -2,6 +2,7 @@ package couchdb
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 
@@ -28,7 +29,7 @@ func createCouchDBConnection(couchURL url.URL, username, password string, dbs []
 
 	for _, db := range dbs {
 		if exists, err := client.DBExists(context.TODO(), db); err == nil && !exists {
-			log.Warnf("db does not exist. Creating db.", db)
+			log.Warnf("db does not exist. Creating db: %s", db)
 			if err := client.CreateDB(context.TODO(), db); err != nil {
 				log.Error(fmt.Sprintf("could not create db %s: %s", db, err))
 				return nil, err
@@ -160,11 +161,42 @@ func (db *couchDBQuerier[E]) SelectByID(elemID string) (*E, error) {
 	}
 
 	return &elem, nil
-
 }
 
-func (db *couchDBQuerier[E]) InsertUpdate(elem E, elemID string) (*E, error) {
+func (db *couchDBQuerier[E]) Insert(elem E, elemID string) (*E, error) {
 	_, err := db.Put(context.Background(), elemID, elem)
+	if err != nil {
+		return nil, err
+	}
+
+	return db.SelectByID(elemID)
+}
+
+func (db *couchDBQuerier[E]) Update(elem E, elemID string) (*E, error) {
+	rs := db.Get(context.Background(), elemID)
+	if rs.Err() != nil {
+		return nil, rs.Err()
+	}
+
+	rs.Next()
+	var prevElem map[string]interface{}
+	if err := rs.ScanDoc(&prevElem); err != nil {
+		return nil, err
+	}
+
+	marshalElem, err := json.Marshal(elem)
+	if err != nil {
+		return nil, err
+	}
+
+	var newElem map[string]interface{}
+	err = json.Unmarshal(marshalElem, &newElem)
+	if err != nil {
+		return nil, err
+	}
+
+	newElem["_rev"] = prevElem["_rev"]
+	_, err = db.Put(context.Background(), elemID, newElem)
 	if err != nil {
 		return nil, err
 	}

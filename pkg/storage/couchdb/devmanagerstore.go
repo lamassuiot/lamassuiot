@@ -47,9 +47,9 @@ func (db *CouchDBDeviceManagerStorage) Select(ctx context.Context, ID string) (*
 }
 
 func (db *CouchDBDeviceManagerStorage) Update(ctx context.Context, device *models.Device) (*models.Device, error) {
-	return db.querier.InsertUpdate(*device, device.ID)
+	return db.querier.Update(*device, device.ID)
 }
 
 func (db *CouchDBDeviceManagerStorage) Insert(ctx context.Context, device *models.Device) (*models.Device, error) {
-	return db.querier.InsertUpdate(*device, device.ID)
+	return db.querier.Insert(*device, device.ID)
 }

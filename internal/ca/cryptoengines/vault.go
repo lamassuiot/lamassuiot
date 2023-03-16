@@ -28,19 +28,19 @@ type VaultCryptoEngine struct {
 func NewVaultCryptoEngine(address string, roleID string, secretID string, CACert *x509.Certificate, insecure bool, autoUnsealEnabled bool, unsealFile string) (CryptoEngine, error) {
 	client, err := CreateVaultSdkClient(address, CACert)
 	if err != nil {
-		return nil, errors.New("Could not create Vault API client: " + err.Error())
+		return nil, errors.New("could not create Vault API client: " + err.Error())
 	}
 
 	if autoUnsealEnabled {
 		err = Unseal(client, unsealFile)
 		if err != nil {
-			return nil, errors.New("Could not unseal Vault: " + err.Error())
+			return nil, errors.New("could not unseal Vault: " + err.Error())
 		}
 	}
 
 	err = Login(client, roleID, secretID)
 	if err != nil {
-		return nil, errors.New("Could not login into Vault: " + err.Error())
+		return nil, errors.New("could not login into Vault: " + err.Error())
 	}
 
 	svc := &VaultCryptoEngine{

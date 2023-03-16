@@ -3,11 +3,9 @@ package config
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"golang.org/x/exp/slices"
 )
 
 type BaseConfig struct {
@@ -68,17 +66,14 @@ type AMQPConnection struct {
 	KeyFile          string       `mapstructure:"key_file"`
 }
 
-func readConfig[E any](configFileName string, paths []string) (*E, error) {
-	viper.SetConfigName(configFileName)
+func readConfig[E any](configFilePath string) (*E, error) {
+	vp := viper.New()
+	vp.SetConfigFile(configFilePath)
 
-	for _, path := range paths {
-		viper.AddConfigPath(path)
-	}
-
-	if err := viper.ReadInConfig(); err != nil {
+	if err := vp.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file not found; ignore error if desired
-			return nil, fmt.Errorf("config file not found")
+			return nil, fmt.Errorf("config file not found: %s", err)
 		} else {
 			// Config file was found but another error was produced
 			return nil, fmt.Errorf("error while procesing config file: %w", err)
@@ -86,7 +81,7 @@ func readConfig[E any](configFileName string, paths []string) (*E, error) {
 	}
 
 	var config E
-	err := viper.Unmarshal(&config)
+	err := vp.Unmarshal(&config)
 	if err != nil {
 		return nil, fmt.Errorf("could not unmarshal config: %w", err)
 	}
@@ -104,17 +99,11 @@ func LoadConfig[E any]() (*E, error) {
 
 	if configFileEnv != "" {
 		loadStandardPaths = false
-		configFileEnvSplit := strings.Split(configFileEnv, "/")
-		fileName := configFileEnvSplit[len(configFileEnvSplit)-1]
-		filePath := strings.Join(slices.Delete(configFileEnvSplit, len(configFileEnvSplit)-1, len(configFileEnvSplit)), "/")
-
-		log.Infof("Loading config file from %s/%s", filePath, fileName)
-		conf, err = readConfig[E](fileName, []string{
-			filePath,
-		})
+		log.Infof("loading config file from %s", configFileEnv)
+		conf, err = readConfig[E](configFileEnv)
 
 		if err != nil {
-			log.Warnf("Failed to load config file specified in ENV '%s' variable. while try to load from standard paths: %s", configFileEnvVar, err)
+			log.Warnf("failed to load config file specified in ENV '%s' variable. will try to load from standard paths: %s", configFileEnvVar, err)
 			loadStandardPaths = true
 		}
 	} else {
@@ -122,10 +111,7 @@ func LoadConfig[E any]() (*E, error) {
 	}
 
 	if loadStandardPaths {
-		conf, err = readConfig[E]("config.yml", []string{
-			"/etc/lamassuiot/ca",
-			".",
-		})
+		conf, err = readConfig[E]("/etc/lamassuiot/config.yml")
 	}
 	if err != nil {
 		return nil, err
