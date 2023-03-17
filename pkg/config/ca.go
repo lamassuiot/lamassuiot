@@ -11,18 +11,8 @@ type CAConfig struct {
 			Metadata map[string]interface{} `mapstructure:"metadata"`
 			Token    string                 `mapstructure:"token"`
 		} `mapstructure:"pkcs11"`
-		HashicorpVaultProviders []struct {
-			ID                 string                 `mapstructure:"id"`
-			Name               string                 `mapstructure:"name"`
-			Metadata           map[string]interface{} `mapstructure:"metadata"`
-			RoleID             string                 `mapstructure:"role_id"`
-			SecretID           string                 `mapstructure:"secret_id"`
-			Protocol           HTTPProtocol           `mapstructure:"protocol"`
-			BasicConnection    `mapstructure:",squash"`
-			AutoUnsealEnabled  bool   `mapstructure:"auto_unseal_enabled"`
-			AutoUnsealKeysFile string `mapstructure:"auto_unseal_keys_file"`
-		} `mapstructure:"hashicrorp_vault"`
-		AWSKMSProviders []struct {
+		HashicorpVaultProviders []HashicorpVaultCryptoEngineConfig `mapstructure:"hashicrorp_vault"`
+		AWSKMSProviders         []struct {
 			ID              string                 `mapstructure:"id"`
 			Name            string                 `mapstructure:"name"`
 			Metadata        map[string]interface{} `mapstructure:"metadata"`
@@ -40,6 +30,18 @@ type CAConfig struct {
 
 	CryptoMonitoring `mapstructure:"crypto_monitoring"`
 	OCSPServerURL    string `mapstructure:"ocsp_server_url"`
+}
+
+type HashicorpVaultCryptoEngineConfig struct {
+	ID                 string                 `mapstructure:"id"`
+	Name               string                 `mapstructure:"name"`
+	Metadata           map[string]interface{} `mapstructure:"metadata"`
+	RoleID             string                 `mapstructure:"role_id"`
+	SecretID           string                 `mapstructure:"secret_id"`
+	Protocol           HTTPProtocol           `mapstructure:"protocol"`
+	BasicConnection    `mapstructure:",squash"`
+	AutoUnsealEnabled  bool   `mapstructure:"auto_unseal_enabled"`
+	AutoUnsealKeysFile string `mapstructure:"auto_unseal_keys_file"`
 }
 
 type CryptoMonitoring struct {

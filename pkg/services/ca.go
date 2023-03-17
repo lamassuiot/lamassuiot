@@ -293,7 +293,7 @@ func (svc *CAServiceImpl) issueCA(input issueCAInput) (*issueCAOutput, error) {
 		parentCertificate := (*x509.Certificate)(issuerCA.Certificate.Certificate)
 		parentSigner, err := x509engine.NewX509Engine(parentEngine, "").GetCACryptoSigner(parentCertificate)
 		if err != nil {
-			return nil, fmt.Errorf("issuer signer (private key abstraction) %s does not exist. Corrupted engine?", issuerCA.Metadata.EngineProviderID)
+			return nil, fmt.Errorf("issuer signer (private key abstraction) %s does not exist. Corrupted %s engine?: %w", issuerCA.ID, issuerCA.Metadata.EngineProviderID, err)
 		}
 
 		caMetadata = models.IssuerCAMetadata{

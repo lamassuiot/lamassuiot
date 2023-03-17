@@ -10,7 +10,6 @@ import (
 type CryptoEngine interface {
 	GetEngineConfig() models.CryptoEngineProvider
 
-	GetPrivateKeys() ([]crypto.Signer, error)
 	GetPrivateKeyByID(string) (crypto.Signer, error)
 
 	CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error)

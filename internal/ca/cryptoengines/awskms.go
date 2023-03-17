@@ -59,10 +59,6 @@ func (p *AWSKMSCryptoEngine) GetEngineConfig() models.CryptoEngineProvider {
 	return p.config
 }
 
-func (p *AWSKMSCryptoEngine) GetPrivateKeys() ([]crypto.Signer, error) {
-	return []crypto.Signer{}, fmt.Errorf("TODO")
-}
-
 func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, error) {
 	var keyID = ""
 	keys, err := p.kmscli.ListKeys(&kms.ListKeysInput{

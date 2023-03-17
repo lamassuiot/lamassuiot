@@ -2,7 +2,6 @@ package amqppub
 
 import (
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -95,26 +94,11 @@ func buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Connection, error) {
 	}
 
 	amqpTlsConfig := tls.Config{}
-	certPool := x509.NewCertPool()
-	systemCertPool, err := x509.SystemCertPool()
-	if err == nil {
-		certPool = systemCertPool
-	} else {
-		log.Warnf("could not get system cert pool (trusted CAs). Using empty pool: %s", err)
-	}
-
+	certPool := helppers.LoadSytemCACertPoolWithExtraCAsFromFiles([]string{cfg.CACertificateFile})
 	amqpTlsConfig.RootCAs = certPool
 
 	if cfg.InsecureSkipVerify {
 		amqpTlsConfig.InsecureSkipVerify = true
-	} else if cfg.CACertificateFile != "" {
-		amqpCA, err := helppers.ReadCertificateFromFile(cfg.CACertificateFile)
-		if err != nil {
-			log.Error("could not load AMQP CA certificate: ", err)
-			return nil, err
-		}
-
-		amqpTlsConfig.RootCAs.AddCert(amqpCA)
 	}
 
 	if cfg.UseClientTLSAuth {

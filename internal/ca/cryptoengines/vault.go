@@ -1,80 +1,115 @@
 package cryptoengines
 
 import (
+	"context"
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"strconv"
-	"strings"
 
-	"github.com/hashicorp/go-cleanhttp"
-	vaultApi "github.com/hashicorp/vault/api"
+	"github.com/hashicorp/vault/api"
+	"github.com/lamassuiot/lamassuiot/pkg/config"
+	"github.com/lamassuiot/lamassuiot/pkg/helppers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	log "github.com/sirupsen/logrus"
 )
 
 type VaultCryptoEngine struct {
-	client   *vaultApi.Client
+	client   *api.Client
+	kv2      *api.KVv2
 	roleID   string
 	secretID string
 }
 
-func NewVaultCryptoEngine(address string, roleID string, secretID string, CACert *x509.Certificate, insecure bool, autoUnsealEnabled bool, unsealFile string) (CryptoEngine, error) {
-	client, err := CreateVaultSdkClient(address, CACert)
+func NewVaultCryptoEngine(conf config.HashicorpVaultCryptoEngineConfig) (CryptoEngine, error) {
+	var extraCAFiles = []string{}
+	var err error
+
+	if !conf.InsecureSkipVerify && conf.CACertificateFile != "" {
+		extraCAFiles = append(extraCAFiles, conf.CACertificateFile)
+	}
+
+	caPool := helppers.LoadSytemCACertPoolWithExtraCAsFromFiles(extraCAFiles)
+
+	address := fmt.Sprintf("%s://%s:%d", conf.Protocol, conf.Hostname, conf.Port)
+	vaultClientConf := api.DefaultConfig()
+
+	httpClient := &http.Client{}
+	httpTrasport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: conf.InsecureSkipVerify,
+			RootCAs:            caPool,
+		},
+	}
+
+	httpClient.Transport = httpTrasport
+
+	vaultClientConf.HttpClient = httpClient
+	vaultClientConf.Address = address
+
+	vaultClient, err := api.NewClient(vaultClientConf)
 	if err != nil {
 		return nil, errors.New("could not create Vault API client: " + err.Error())
 	}
 
-	if autoUnsealEnabled {
-		err = Unseal(client, unsealFile)
+	if conf.AutoUnsealEnabled {
+		err = Unseal(vaultClient, conf.AutoUnsealKeysFile)
 		if err != nil {
 			return nil, errors.New("could not unseal Vault: " + err.Error())
 		}
 	}
 
-	err = Login(client, roleID, secretID)
+	err = Login(vaultClient, conf.RoleID, conf.SecretID)
 	if err != nil {
 		return nil, errors.New("could not login into Vault: " + err.Error())
 	}
 
+	mounts, err := vaultClient.Sys().ListMounts()
+	if err != nil {
+		return nil, err
+	}
+
+	hasMount := false
+	for mountPath, _ := range mounts {
+		if mountPath == "lamassu-engine/" {
+			hasMount = true
+		}
+	}
+
+	if !hasMount {
+		err = vaultClient.Sys().Mount("lamassu-engine", &api.MountInput{
+			Type: "kv-v2",
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	kv2 := vaultClient.KVv2("lamassu-engine")
+
 	svc := &VaultCryptoEngine{
-		client:   client,
-		roleID:   roleID,
-		secretID: secretID,
+		client:   vaultClient,
+		roleID:   conf.RoleID,
+		secretID: conf.SecretID,
+		kv2:      kv2,
 	}
 
 	return svc, nil
 }
 
-func CreateVaultSdkClient(vaultAddress string, CACert *x509.Certificate) (*vaultApi.Client, error) {
-	conf := vaultApi.DefaultConfig()
-	httpClient := cleanhttp.DefaultPooledClient()
-	httpTrasport := cleanhttp.DefaultPooledTransport()
-	caPool := x509.NewCertPool()
-
-	if CACert != nil {
-		caPool.AddCert(CACert)
-	}
-
-	httpTrasport.TLSClientConfig = &tls.Config{
-		RootCAs: caPool,
-	}
-	httpClient.Transport = httpTrasport
-	conf.HttpClient = httpClient
-	conf.Address = strings.ReplaceAll(conf.Address, "https://127.0.0.1:8200", vaultAddress)
-	// tlsConf := &api.TLSConfig{CACert: CA}
-	// conf.ConfigureTLS(tlsConf)
-	return vaultApi.NewClient(conf)
-
-}
-
-func Unseal(client *vaultApi.Client, unsealFile string) error {
+func Unseal(client *api.Client, unsealFile string) error {
 	usnealJsonFile, err := os.Open(unsealFile)
 	if err != nil {
 		return err
@@ -94,7 +129,8 @@ func Unseal(client *vaultApi.Client, unsealFile string) error {
 	for sealed {
 		unsealStatusProgress, err := client.Sys().Unseal(unsealKeys[providedSharesCount].(string))
 		if err != nil {
-			log.Error("Error while unsealing vault: ", err)
+			err = fmt.Errorf("error while unsealing vault: %w", err)
+			log.Error(err)
 			return err
 		}
 		log.Info("Unseal progress shares=" + strconv.Itoa(unsealStatusProgress.N) + " threshold=" + strconv.Itoa(unsealStatusProgress.T) + " remaining_shares=" + strconv.Itoa(unsealStatusProgress.Progress))
@@ -108,7 +144,7 @@ func Unseal(client *vaultApi.Client, unsealFile string) error {
 	return nil
 }
 
-func Login(client *vaultApi.Client, roleID string, secretID string) error {
+func Login(client *api.Client, roleID string, secretID string) error {
 	loginPath := "auth/approle/login"
 	options := map[string]interface{}{
 		"role_id":   roleID,
@@ -126,20 +162,88 @@ func (engine *VaultCryptoEngine) GetEngineConfig() models.CryptoEngineProvider {
 	return models.CryptoEngineProvider{}
 }
 
-func (engine *VaultCryptoEngine) GetPrivateKeys() ([]crypto.Signer, error) {
-	return []crypto.Signer{}, fmt.Errorf("TODO")
-}
+func (engine *VaultCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
+	secret, err := engine.kv2.Get(context.Background(), keyID)
+	if err != nil {
+		return nil, err
+	}
 
-func (engine *VaultCryptoEngine) GetPrivateKeyByID(string) (crypto.Signer, error) {
-	return nil, fmt.Errorf("TODO")
+	rawB64Key := secret.Data["key"].(string)
+	if rawB64Key == "" {
+		return nil, fmt.Errorf("private key cannot be empty")
+	}
+
+	pemBytes, err := base64.RawStdEncoding.DecodeString(rawB64Key)
+	if err != nil {
+		return nil, err
+	}
+
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, errors.New("no key found")
+	}
+
+	switch block.Type {
+	case "RSA PRIVATE KEY":
+		return x509.ParsePKCS1PrivateKey(block.Bytes)
+	case "EC PRIVATE KEY":
+		return x509.ParseECPrivateKey(block.Bytes)
+	default:
+		return nil, fmt.Errorf("unsupported key type %q", block.Type)
+	}
 }
 
 func (engine *VaultCryptoEngine) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
-	return nil, fmt.Errorf("TODO")
+	key, err := rsa.GenerateKey(rand.Reader, keySize)
+	if err != nil {
+		log.Error("Could not create RSA private key: ", err)
+		return nil, err
+	}
+
+	keyBytes := pem.EncodeToMemory(&pem.Block{
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+		Type:  "RSA PRIVATE KEY",
+	})
+
+	b64Key := base64.StdEncoding.EncodeToString(keyBytes)
+
+	_, err = engine.kv2.Put(context.Background(), keyID, map[string]interface{}{
+		"key": b64Key,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return key, nil
 }
 
 func (engine *VaultCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, keyID string) (crypto.Signer, error) {
-	return nil, fmt.Errorf("TODO")
+	key, err := ecdsa.GenerateKey(curve, rand.Reader)
+	if err != nil {
+		log.Error("Could not create ECDSA private key: ", err)
+		return nil, err
+	}
+
+	keyBytes, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		return nil, err
+	}
+
+	keyBytes = pem.EncodeToMemory(&pem.Block{
+		Bytes: keyBytes,
+		Type:  "EC PRIVATE KEY",
+	})
+
+	b64Key := base64.StdEncoding.EncodeToString(keyBytes)
+
+	_, err = engine.kv2.Put(context.Background(), keyID, map[string]interface{}{
+		"key": b64Key,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return key, nil
 }
 
 func (engine *VaultCryptoEngine) DeleteAllKeys() error {

@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 
 	"github.com/lamassuiot/lamassuiot/pkg/models"
+	log "github.com/sirupsen/logrus"
 )
 
 func GenerateCertificateRequest(subject models.Subject, key *rsa.PrivateKey) (*x509.CertificateRequest, error) {
@@ -56,4 +57,42 @@ func DecryptWithPrivateKey(ciphertext []byte, priv *rsa.PrivateKey) ([]byte, err
 		return nil, err
 	}
 	return plaintext, nil
+}
+
+func LoadSytemCACertPool() *x509.CertPool {
+	certPool := x509.NewCertPool()
+	systemCertPool, err := x509.SystemCertPool()
+	if err == nil {
+		certPool = systemCertPool
+	} else {
+		log.Warnf("could not get system cert pool (trusted CAs). Using empty pool: %s", err)
+	}
+
+	return certPool
+}
+
+func LoadSytemCACertPoolWithExtraCAsFromFiles(casToAdd []string) *x509.CertPool {
+	certPool := x509.NewCertPool()
+	systemCertPool, err := x509.SystemCertPool()
+	if err == nil {
+		certPool = systemCertPool
+	} else {
+		log.Warnf("could not get system cert pool (trusted CAs). Using empty pool: %s", err)
+	}
+
+	for _, ca := range casToAdd {
+		if ca == "" {
+			continue
+		}
+
+		caCert, err := ReadCertificateFromFile(ca)
+		if err != nil {
+			log.Warnf("could not load CA certificate in %s. Skipping CA: %s", ca, err)
+			continue
+		}
+
+		certPool.AddCert(caCert)
+	}
+
+	return certPool
 }

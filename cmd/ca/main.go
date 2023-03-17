@@ -1,13 +1,11 @@
 package main
 
 import (
-	"crypto/x509"
 	"fmt"
 	"net/url"
 
 	"github.com/lamassuiot/lamassuiot/internal/ca/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
 	"github.com/lamassuiot/lamassuiot/pkg/middlewares/amqppub"
 	"github.com/lamassuiot/lamassuiot/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/pkg/services"
@@ -77,29 +75,11 @@ func main() {
 }
 
 func createCryptoEngines(conf config.CAConfig) map[string]services.EngineServiceMap {
-	var err error
-
 	engines := map[string]services.EngineServiceMap{}
 
 	//Create all Vault CryptoEngines
 	for _, vaultCryptoEngineConfig := range conf.CryptoEngines.HashicorpVaultProviders {
-		var caCert *x509.Certificate
-		if vaultCryptoEngineConfig.CACertificateFile != "" {
-			caCert, err = helppers.ReadCertificateFromFile(vaultCryptoEngineConfig.CACertificateFile)
-			if err != nil {
-				log.Warnf("could not load CA certificate for Vault. Skipping engine: %s", err)
-				continue
-			}
-		}
-
-		addr := fmt.Sprintf("%s://%s:%d", vaultCryptoEngineConfig.Protocol, vaultCryptoEngineConfig.Hostname, vaultCryptoEngineConfig.Port)
-		roleID := vaultCryptoEngineConfig.RoleID
-		secretID := vaultCryptoEngineConfig.SecretID
-		insecure := vaultCryptoEngineConfig.InsecureSkipVerify
-		autoUnseal := vaultCryptoEngineConfig.AutoUnsealEnabled
-		autoUnsealKeysFile := vaultCryptoEngineConfig.AutoUnsealKeysFile
-		vaultEngine, err := cryptoengines.NewVaultCryptoEngine(addr, roleID, secretID, caCert, insecure, autoUnseal, autoUnsealKeysFile)
-
+		vaultEngine, err := cryptoengines.NewVaultCryptoEngine(vaultCryptoEngineConfig)
 		if err != nil {
 			log.Warnf("could not create Vault engine. Skipping engine: %s", err)
 			continue
