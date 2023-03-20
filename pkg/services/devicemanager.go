@@ -65,8 +65,8 @@ func (svc deviceManagerServiceImpl) CreateDevice(input CreateDeviceInput) (*mode
 		Tags:                            input.Tags,
 		Status:                          models.DeviceNoIdentity,
 		Metadata:                        input.Metadata,
-		DefaultSlot:                     nil,
-		ExtraSlots:                      map[string]*models.Slot{},
+		IdentitySlot:                    nil,
+		ExtraSlots:                      map[string]*models.Slot[any]{},
 		EmergencyReEnrollAuthentication: nil,
 		ConnectionMetadata:              map[string]string{},
 		DMSOwnerID:                      input.DMSID,
@@ -87,7 +87,7 @@ func (svc deviceManagerServiceImpl) ProvisionDeviceSlot(input ProvisionDeviceSlo
 		return nil, err
 	}
 
-	if device.DefaultSlot == nil {
+	if device.IdentitySlot == nil {
 		return nil, errs.SentinelAPIError{
 			Status: http.StatusForbidden,
 			Msg:    "device is not provisioned",
@@ -154,8 +154,8 @@ func (svc deviceManagerServiceImpl) ProvisionDeviceSlot(input ProvisionDeviceSlo
 
 		slotVal := rfuncProvsionResult.SecretValue
 		if slotSettings.Confidential {
-			deviceSlotCert := device.DefaultSlot.Secrets[device.DefaultSlot.ActiveVersion].(*x509.Certificate)
-			devicePubKey := deviceSlotCert.PublicKey.(*rsa.PublicKey)
+			deviceSlotCert := device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion]
+			devicePubKey := deviceSlotCert.Certificate.PublicKey.(*rsa.PublicKey)
 			slotValBytes, err := helppers.EncryptWithPublicKey([]byte(slotVal), devicePubKey)
 			if err != nil {
 				return nil, err
@@ -164,15 +164,16 @@ func (svc deviceManagerServiceImpl) ProvisionDeviceSlot(input ProvisionDeviceSlo
 			slotVal = string(slotValBytes)
 		}
 
-		newSlot := &models.Slot{
+
+		newSlot := &models.Slot[any]{
 			DMSManaged:                  true,
 			Status:                      models.SlotActive,
 			ActiveVersion:               0,
 			PreventiveReenrollmentDelta: slotSettings.PreventiveReenrollmentDelta,
 			CriticalDetla:               slotSettings.CriticalDetla,
 			SecretType:                  models.OtherSlotProfileType,
-			Secrets: map[int]interface{}{
-				0: slotVal,
+			Secrets: map[int]any{
+				0: &slotVal,
 			},
 		}
 
@@ -202,7 +203,7 @@ func (svc deviceManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certif
 		return nil, err
 	}
 
-	if device.DefaultSlot != nil {
+	if device.IdentitySlot != nil {
 		return nil, errs.SentinelAPIError{
 			Status: http.StatusForbidden,
 			Msg:    "slot default already enrolled",
@@ -233,15 +234,15 @@ func (svc deviceManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certif
 		return nil, err
 	}
 
-	device.DefaultSlot = &models.Slot{
+	device.IdentitySlot = &models.Slot[models.Certificate]{
 		DMSManaged:                  false,
 		Status:                      models.SlotActive,
 		ActiveVersion:               0,
 		PreventiveReenrollmentDelta: dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.IdentitySlot.PreventiveReenrollmentDelta,
 		CriticalDetla:               dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.IdentitySlot.CriticalReenrollmentDetla,
 		SecretType:                  models.X509SlotProfileType,
-		Secrets: map[int]interface{}{
-			0: signedCert,
+		Secrets: map[int]models.Certificate{
+			0: *signedCert,
 		},
 	}
 

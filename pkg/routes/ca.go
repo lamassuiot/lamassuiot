@@ -6,14 +6,16 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/pkg/controllers"
+	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/services"
 )
 
-func NewCAHTTPLayer(svc services.CAService, listenAddress string, port int, debugMode bool) error {
+func NewCAHTTPLayer(svc services.CAService, listenAddress string, port int, debugMode bool, apiInfo models.APIServiceInfo) error {
 	if !debugMode {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
+	hcheckRoute := controllers.NewHealthCheckRoute(apiInfo)
 	routes := controllers.NewCAHttpRoutes(svc)
 	router := gin.Default()
 
@@ -38,7 +40,11 @@ func NewCAHTTPLayer(svc services.CAService, listenAddress string, port int, debu
 
 	rv1.GET("/certificates", routes.GetCertificates)
 	rv1.GET("/certificates/:sn", routes.GetCertificateBySerialNumber)
+
 	rv1.GET("/engines", routes.GetCryptoEngineProviders)
+	rv1.GET("/stats", routes.GetCryptoEngineProviders)
+
+	rv1.GET("/health", hcheckRoute.HealtCheck)
 
 	addr := fmt.Sprintf("%s:%d", listenAddress, port)
 	err := router.Run(addr)

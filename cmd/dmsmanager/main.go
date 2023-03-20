@@ -47,7 +47,7 @@ func main() {
 	fmt.Println(amqpPub)
 
 	caURL := fmt.Sprintf("%s://%s:%d", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port)
-	client := clients.NewCAClient(*http.DefaultClient, caURL)
+	client := clients.NewCAClient(http.DefaultClient, caURL)
 
 	var downstreamCert *x509.Certificate
 	if conf.Server.Protocol == config.HTTPS {

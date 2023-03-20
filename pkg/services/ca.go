@@ -23,6 +23,7 @@ import (
 type CAMiddleware func(CAService) CAService
 
 type CAService interface {
+	// GetStats() models.CAStats
 	GetCryptoEngineProviders() []models.EngineProvider
 
 	CreateCA(input CreateCAInput) (*models.CACertificate, error)

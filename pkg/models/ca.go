@@ -57,3 +57,16 @@ type CACertificate struct {
 	VersionHistory   map[int]string `json:"version_history"`
 	CreationTS       time.Time      `json:"creation_ts"`
 }
+
+type CAStats struct {
+	CACertificatesStats struct {
+		TotalCAs                 int                       `json:"total"`
+		CAsDistributionPerEngine map[string]int            `json:"engine_distribution"`
+		CAsStatus                map[CertificateStatus]int `json:"status_distribution"`
+	} `json:"cas"`
+	CertificatesStats struct {
+		TotalCertificates            int                       `json:"total"`
+		CertificateDistributionPerCA map[string]int            `json:"ca_distribution"`
+		CertificateStatus            map[CertificateStatus]int `json:"status_distribution"`
+	} `json:"certificates"`
+}

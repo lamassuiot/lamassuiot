@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -33,6 +34,11 @@ func Post[T any](ctx context.Context, url string, data any) (T, error) {
 	if err != nil {
 		return m, err
 	}
+
+	if res.StatusCode != 200 && res.StatusCode != 201 {
+		return m, fmt.Errorf("unexpected status code %d. Body msg: %s", res.StatusCode, string(body))
+	}
+
 	return parseJSON[T](body)
 }
 
@@ -57,11 +63,17 @@ func Get[T any](ctx context.Context, url string, queryParams *resources.QueryPar
 	if err != nil {
 		return m, err
 	}
+
 	body, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
 		return m, err
 	}
+
+	if res.StatusCode != 200 {
+		return m, fmt.Errorf("unexpected status code %d. Body msg: %s", res.StatusCode, string(body))
+	}
+
 	return parseJSON[T](body)
 }
 

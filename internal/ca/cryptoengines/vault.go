@@ -31,6 +31,7 @@ type VaultCryptoEngine struct {
 	kv2      *api.KVv2
 	roleID   string
 	secretID string
+	config   models.CryptoEngineProvider
 }
 
 func NewVaultCryptoEngine(conf config.HashicorpVaultCryptoEngineConfig) (CryptoEngine, error) {
@@ -104,6 +105,23 @@ func NewVaultCryptoEngine(conf config.HashicorpVaultCryptoEngineConfig) (CryptoE
 		roleID:   conf.RoleID,
 		secretID: conf.SecretID,
 		kv2:      kv2,
+		config: models.CryptoEngineProvider{
+			Provider:     "Hashicorp Vault",
+			Manufacturer: "Hashicrop",
+			Model:        "KV-V2",
+			SupportedKeyTypes: []models.SupportedKeyTypeInfo{
+				models.SupportedKeyTypeInfo{
+					Type:        models.RSA,
+					MinimumSize: 1024,
+					MaximumSize: 4096,
+				},
+				models.SupportedKeyTypeInfo{
+					Type:        models.ECDSA,
+					MinimumSize: 256,
+					MaximumSize: 512,
+				},
+			},
+		},
 	}
 
 	return svc, nil
@@ -159,7 +177,7 @@ func Login(client *api.Client, roleID string, secretID string) error {
 }
 
 func (engine *VaultCryptoEngine) GetEngineConfig() models.CryptoEngineProvider {
-	return models.CryptoEngineProvider{}
+	return engine.config
 }
 
 func (engine *VaultCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {

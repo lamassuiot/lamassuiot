@@ -36,19 +36,19 @@ type Device struct {
 	//Metadata collected by the server when a device tries to connect (ie. User Agent, Remote Address)
 	ConnectionMetadata              map[string]string                `json:"connection_metadata"`
 	DMSOwnerID                      string                           `json:"dms_owner"`
-	DefaultSlot                     *Slot                            `json:"identity"`
-	ExtraSlots                      map[string]*Slot                 `json:"slots"`
+	IdentitySlot                    *Slot[Certificate]               `json:"identity"`
+	ExtraSlots                      map[string]*Slot[any]            `json:"slots"`
 	EmergencyReEnrollAuthentication *EmergencyReEnrollAuthentication `json:"emergency_reenroll_auth"`
 }
 
-type Slot struct {
-	DMSManaged                  bool                `json:"dms_managed"` //if true, the certificate MUST be obtained from the DMS server
-	Status                      SlotStatus          `json:"status"`
-	ActiveVersion               int                 `json:"active_version"`
-	PreventiveReenrollmentDelta TimeDuration        `json:"preventive_reenrollment_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
-	CriticalDetla               TimeDuration        `json:"critical_delta"`                // (expiration time - delta < time.now) at witch point an event is issued notify critical status
-	SecretType                  CryptoSecretType    `json:"type"`
-	Secrets                     map[int]interface{} `json:"versions"` // version -> secret
+type Slot[E any] struct {
+	DMSManaged                  bool             `json:"dms_managed"` //if true, the certificate MUST be obtained from the DMS server
+	Status                      SlotStatus       `json:"status"`
+	ActiveVersion               int              `json:"active_version"`
+	PreventiveReenrollmentDelta TimeDuration     `json:"preventive_reenrollment_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
+	CriticalDetla               TimeDuration     `json:"critical_delta"`                // (expiration time - delta < time.now) at witch point an event is issued notify critical status
+	SecretType                  CryptoSecretType `json:"type"`
+	Secrets                     map[int]E       `json:"versions"` // version -> secret
 }
 
 type EmergencyReEnrollAuthentication struct {

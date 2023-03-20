@@ -11,11 +11,11 @@ import (
 )
 
 type caClient struct {
-	httpClient http.Client
+	httpClient *http.Client
 	baseUrl    string
 }
 
-func NewCAClient(client http.Client, url string) services.CAService {
+func NewCAClient(client *http.Client, url string) services.CAService {
 	baseURL := url
 	return &caClient{
 		httpClient: client,
