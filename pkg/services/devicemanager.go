@@ -2,10 +2,8 @@ package services
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"encoding/base64"
 	"fmt"
 	"net/http"
 	"time"
@@ -15,6 +13,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/remfuncs"
 	"github.com/lamassuiot/lamassuiot/pkg/storage"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
@@ -60,17 +59,16 @@ func (svc deviceManagerServiceImpl) CreateDevice(input CreateDeviceInput) (*mode
 	now := time.Now()
 
 	device := &models.Device{
-		ID:                              input.ID,
-		Alias:                           input.Alias,
-		Tags:                            input.Tags,
-		Status:                          models.DeviceNoIdentity,
-		Metadata:                        input.Metadata,
-		IdentitySlot:                    nil,
-		ExtraSlots:                      map[string]*models.Slot[any]{},
-		EmergencyReEnrollAuthentication: nil,
-		ConnectionMetadata:              map[string]string{},
-		DMSOwnerID:                      input.DMSID,
-		CreationDate:                    now,
+		ID:                 input.ID,
+		Alias:              input.Alias,
+		Tags:               input.Tags,
+		Status:             models.DeviceNoIdentity,
+		Metadata:           input.Metadata,
+		IdentitySlot:       nil,
+		ExtraSlots:         map[string]*models.Slot[any]{},
+		ConnectionMetadata: map[string]string{},
+		DMSOwnerID:         input.DMSID,
+		CreationDate:       now,
 	}
 
 	return svc.devicesStorage.Insert(context.Background(), device)
@@ -164,7 +162,6 @@ func (svc deviceManagerServiceImpl) ProvisionDeviceSlot(input ProvisionDeviceSlo
 			slotVal = string(slotValBytes)
 		}
 
-
 		newSlot := &models.Slot[any]{
 			DMSManaged:                  true,
 			Status:                      models.SlotActive,
@@ -193,7 +190,12 @@ func (svc deviceManagerServiceImpl) GetDevice(input GetDeviceInput) (*models.Dev
 	return svc.devicesStorage.Select(context.Background(), input.ID)
 }
 
-func (svc deviceManagerServiceImpl) Enroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, error) {
+// Validation:
+//
+//   - Cert:
+//     1. Certificate issued By UPSTREAM CA (i.e. DMS Manager)
+//     2. [Or] Certificate signed by LMS-DMS-MANAGER
+func (svc deviceManagerServiceImpl) Enroll(ctx context.Context, authMode models.ESTAuthMode, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	deviceID := csr.Subject.CommonName
 
 	device, err := svc.GetDevice(GetDeviceInput{
@@ -207,6 +209,23 @@ func (svc deviceManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certif
 		return nil, errs.SentinelAPIError{
 			Status: http.StatusForbidden,
 			Msg:    "slot default already enrolled",
+		}
+	}
+
+	if authMode != models.MutualTLS {
+		log.Errorf("invalid auth while enrolling CSR with CN %s with APS %s .%s authn method not supported by DeviceManager while enrolling. Use MutualTLS instead", csr.Subject.CommonName, aps, authMode)
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusUnauthorized,
+			Msg:    "only supports mTLS authentication",
+		}
+	}
+
+	certCtxVal := ctx.Value(authMode)
+	cert, ok := certCtxVal.(*x509.Certificate)
+	if !ok {
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusInternalServerError,
+			Msg:    "corrupted ctx while authenticating. Could not extract certificate",
 		}
 	}
 
@@ -238,28 +257,12 @@ func (svc deviceManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certif
 		DMSManaged:                  false,
 		Status:                      models.SlotActive,
 		ActiveVersion:               0,
-		PreventiveReenrollmentDelta: dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.IdentitySlot.PreventiveReenrollmentDelta,
-		CriticalDetla:               dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.IdentitySlot.CriticalReenrollmentDetla,
+		PreventiveReenrollmentDelta: dms.IdentityProfile.ReEnrollmentSettings.PreventiveReenrollmentDelta,
+		CriticalDetla:               dms.IdentityProfile.ReEnrollmentSettings.CriticalReenrollmentDetla,
 		SecretType:                  models.X509SlotProfileType,
 		Secrets: map[int]models.Certificate{
 			0: *signedCert,
 		},
-	}
-
-	key, err := generatePSKey()
-	if err != nil {
-		return nil, err
-	}
-
-	cipheredKey, err := helppers.EncryptWithPublicKey([]byte(key), signedCert.Certificate.PublicKey.(*rsa.PublicKey))
-	if err != nil {
-		return nil, err
-	}
-
-	device.EmergencyReEnrollAuthentication = &models.EmergencyReEnrollAuthentication{
-		PreSharedKey:          base64.URLEncoding.EncodeToString(cipheredKey),
-		UsedAt:                time.Time{},
-		ValidityAfterFirstUse: time.Hour,
 	}
 
 	device.Status = models.DeviceActive
@@ -272,28 +275,14 @@ func (svc deviceManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certif
 	return (*x509.Certificate)(signedCert.Certificate), nil
 }
 
-func (svc deviceManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, error) {
+func (svc deviceManagerServiceImpl) Reenroll(ctx context.Context, authMode models.ESTAuthMode, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	return nil, fmt.Errorf("TODO")
 }
 
-func (svc deviceManagerServiceImpl) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, interface{}, error) {
+func (svc deviceManagerServiceImpl) ServerKeyGen(ctx context.Context, authMode models.ESTAuthMode, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
 	return nil, nil, fmt.Errorf("TODO")
 }
 
 func (svc deviceManagerServiceImpl) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
 	return nil, fmt.Errorf("TODO")
-}
-
-func generatePSKey() (string, error) {
-	//rand key 256 bits - 32 bytes
-	keyBytes := make([]byte, 32)
-
-	_, err := rand.Read(keyBytes)
-	if err != nil {
-		return "", err
-	}
-
-	key := fmt.Sprintf("%x", keyBytes)
-
-	return key, nil
 }

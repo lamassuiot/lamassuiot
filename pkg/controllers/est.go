@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/services"
 	log "github.com/sirupsen/logrus"
 	"go.mozilla.org/pkcs7"
@@ -105,25 +106,63 @@ func (r *estHttpRoutes) Enroll(ctx *gin.Context) {
 		return
 	}
 
+	var authMode models.ESTAuthMode
 	var crt *x509.Certificate
 	//check if certificate is in X-Forwarded-Client-Cert header
+	log.Debug("detecting auth mode in order: MTLS -> PSK -> JWT -> NoAuth")
+	log.Debug("checking if MTLS used")
+
+	log.Trace("checking if certificate is present in 'X-Forwarded-Client-Cert' header")
 	if crt, err = getCertificateFromHeader(ctx.Request.Header); err != nil {
 		if err != ErrorMissingClientCertificate {
-			log.Warnf("something went wrong while processing X-Forwarded-Client-Cert header: %s", err)
+			log.Trace("something went wrong while processing X-Forwarded-Client-Cert header: %s", err)
 		}
 
 		//no (valid) certificate in the header. check if a certificate can be obtained from client TLS connection
 		if len(ctx.Request.TLS.PeerCertificates) > 0 {
+			log.Trace("Using certificate presented in peer connection")
 			crt = ctx.Request.TLS.PeerCertificates[0]
+		} else {
+			log.Trace("No certificate presented in peer connection")
 		}
 	}
 
-	if crt == nil {
-		//TODO handle no client certificate
-		return
+	if crt != nil {
+		authMode = models.MutualTLS
+		c = context.WithValue(c, authMode, crt)
+	} else {
+		log.Debug("MTLS NOT used. No client certificate presented")
+		log.Debug("checking if PSK used")
+		log.Trace("checking if PSK is present in 'X-Psk-Key' header")
+		pskHeader := ctx.Request.Header.Get("X-Psk-Key")
+		if pskHeader != "" {
+			authMode = models.PSK
+			c = context.WithValue(c, authMode, pskHeader)
+		} else {
+			log.Trace("PSK NOT used. no PSK value provided")
+			log.Debug("checking if JWT used")
+			log.Trace("checking if JWT is present in 'Authorization' header")
+			authHeader := ctx.Request.Header.Get("Authorization")
+			if authHeader != "" {
+				authMode = models.JWT
+				authHeader = strings.ToLower(authHeader)
+				if !strings.HasSuffix(authHeader, "bearer ") {
+					//TODO err handle no valid bearer token
+					return
+				}
+				jwt := strings.Replace("bearer ", authHeader, "", 1)
+				c = context.WithValue(c, authMode, jwt)
+			} else {
+				authMode = models.NoAuth
+			}
+		}
 	}
 
-	signedCrt, err := r.svc.Enroll(c, csr, crt, params.APS)
+	signedCrt, err := r.svc.Enroll(c, authMode, csr, params.APS)
+	if err != nil {
+		// TODO handle error
+		return
+	}
 
 	body, err := pkcs7.DegenerateCertificate(signedCrt.Raw)
 	if err != nil {

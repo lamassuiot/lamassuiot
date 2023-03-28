@@ -89,8 +89,8 @@ func SetupAMQPConnection(config config.AMQPConnection) (*amqp.Channel, chan *Amq
 
 func buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Connection, error) {
 	userPassUrlPrefix := ""
-	if cfg.UseBasicAuth {
-		userPassUrlPrefix = fmt.Sprintf("%s:%s@", url.PathEscape(cfg.Username), url.PathEscape(cfg.Password))
+	if cfg.BasicAuth.Enabled {
+		userPassUrlPrefix = fmt.Sprintf("%s:%s@", url.PathEscape(cfg.BasicAuth.Username), url.PathEscape(cfg.BasicAuth.Password))
 	}
 
 	amqpTlsConfig := tls.Config{}
@@ -101,8 +101,8 @@ func buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Connection, error) {
 		amqpTlsConfig.InsecureSkipVerify = true
 	}
 
-	if cfg.UseClientTLSAuth {
-		clientTLSCerts, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
+	if cfg.ClientTLSAuth.Enabled {
+		clientTLSCerts, err := tls.LoadX509KeyPair(cfg.ClientTLSAuth.CertFile, cfg.ClientTLSAuth.KeyFile)
 		if err != nil {
 			log.Error("could not load AMQP client TLS certificate or key: ", err)
 			return nil, err

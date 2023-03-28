@@ -3,7 +3,9 @@ package cryptoengines
 import (
 	"context"
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/rsa"
 	"errors"
 	"fmt"
 	"strings"
@@ -150,10 +152,16 @@ func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, keyID s
 	return p.GetPrivateKeyByID(keyID)
 }
 
-func (p *AWSKMSCryptoEngine) DeleteAllKeys() error {
-	return fmt.Errorf("TODO")
+func (p *AWSKMSCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) (crypto.Signer, error) {
+	log.Warnf("KMS does not support asymetric key import. See https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys.html")
+	return nil, fmt.Errorf("KMS does not support asymetric key import")
+}
+
+func (p *AWSKMSCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID string) (crypto.Signer, error) {
+	log.Warnf("KMS does not support asymetric key import. See https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys.html")
+	return nil, fmt.Errorf("KMS does not support asymetric key import")
 }
 
 func (p *AWSKMSCryptoEngine) DeleteKey(keyID string) error {
-	return errors.New(fmt.Sprintf("cannot delete key [%s]. Go to your aws account and do it manually", keyID))
+	return fmt.Errorf("cannot delete key [%s]. Go to your aws account and do it manually", keyID)
 }

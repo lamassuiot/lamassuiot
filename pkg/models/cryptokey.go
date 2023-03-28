@@ -33,18 +33,6 @@ type KeyStrengthMetadata struct {
 
 //---------------------------------------
 
-type PrivateKey struct {
-	Key interface{}
-}
-
-func NewPrivateKeyFromRSA(key *rsa.PrivateKey) *PrivateKey {
-	return &PrivateKey{
-		Key: key,
-	}
-}
-
-func NewPrivateKeyFromECDSA(key *ecdsa.PrivateKey) *PrivateKey {
-	return &PrivateKey{
-		Key: key,
-	}
+type PrivateKey interface {
+	rsa.PrivateKey | ecdsa.PrivateKey
 }

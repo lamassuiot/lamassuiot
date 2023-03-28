@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net/url"
-	"time"
 
 	"github.com/lamassuiot/lamassuiot/internal/ca/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
@@ -16,12 +15,13 @@ import (
 )
 
 var (
-	version   string = "v0"                // api version
-	sha1ver   string = "-"                 // sha1 revision used to build the program
-	buildTime string = time.Now().String() // when the executable was built
+	version   string = "v0"    // api version
+	sha1ver   string = "-"     // sha1 revision used to build the program
+	buildTime string = "devTS" // when the executable was built
 )
 
 func main() {
+	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
 	conf, err := config.LoadConfig[config.CAConfig]()
 	if err != nil {
 		log.Fatal(err)
@@ -73,7 +73,7 @@ func main() {
 	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
 	caSvc.SetService(svc)
 
-	err = routes.NewCAHTTPLayer(svc, conf.Server.ListenAddress, conf.Server.Port, conf.Server.DebugMode, models.APIServiceInfo{
+	err = routes.NewCAHTTPLayer(svc, conf.Server, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,

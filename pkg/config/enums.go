@@ -15,6 +15,14 @@ const (
 	HTTP  HTTPProtocol = "http"
 )
 
+type HTTPClientAuthMethod string
+
+const (
+	JWT    HTTPClientAuthMethod = "jwt"
+	MTLS   HTTPClientAuthMethod = "mtls"
+	NoAuth HTTPClientAuthMethod = "no-auth"
+)
+
 type AMQPProtocol string
 
 const (

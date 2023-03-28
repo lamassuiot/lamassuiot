@@ -5,7 +5,6 @@ go 1.18
 require (
 	github.com/aws/aws-sdk-go v1.40.45
 	github.com/cloudevents/sdk-go/v2 v2.11.0
-	github.com/ghodss/yaml v1.0.0
 	github.com/gin-contrib/cors v1.4.0
 	github.com/gin-gonic/gin v1.9.0
 	github.com/globalsign/est v1.0.6
@@ -21,7 +20,6 @@ require (
 	github.com/streadway/amqp v1.0.0
 	go.mozilla.org/pkcs7 v0.0.0-20210826202110-33d05740a352
 	golang.org/x/exp v0.0.0-20220827204233-334a2380cb91
-	golang.org/x/oauth2 v0.6.0
 
 )
 
@@ -82,6 +80,7 @@ require (
 	go.uber.org/zap v1.19.1 // indirect
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
 	golang.org/x/net v0.8.0 // indirect
+	golang.org/x/oauth2 v0.6.0 // indirect
 	golang.org/x/sys v0.6.0 // indirect
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect

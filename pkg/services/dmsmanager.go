@@ -63,6 +63,7 @@ type CreateInput struct {
 	Metadata                    map[string]string
 	Tags                        []string
 	RemoteAccessIdentity        *RemoteAccessIdentity
+	AllowExpiredRenewal         bool
 	PreventiveReenrollmentDelta models.TimeDuration
 	CriticalReenrollmentDetla   models.TimeDuration
 }
@@ -86,21 +87,22 @@ func (svc dmsManagerServiceImpl) Create(input CreateInput) (*models.DMS, string,
 		CreationDate: now,
 		IdentityProfile: &models.IdentityProfile{
 			EnrollmentSettings: models.EnrollmentSettings{
-				AuthenticationMode: models.BootstrapCertificate,
-				AuthorizedCAs:      []string{},
+				AuthMode:      models.EST,
+				AuthorizedCAs: []string{},
 				DeviceProvisionSettings: models.DeviceProvisionSettings{
 					Icon:       "Cg/CgSmartphoneChip",
 					IconColor:  "#25ee32",
 					Metadata:   map[string]string{},
 					Tags:       []string{},
 					ExtraSlots: map[string]models.SlotProfile{},
-					IdentitySlot: models.IdentitySlot{
-						PreventiveReenrollmentDelta: input.PreventiveReenrollmentDelta,
-						CriticalReenrollmentDetla:   input.CriticalReenrollmentDetla,
-					},
 				},
 				BootstrapCAs: []string{},
 				BootstrapPSK: "",
+			},
+			ReEnrollmentSettings: models.ReEnrollmentSettings{
+				PreventiveReenrollmentDelta: input.PreventiveReenrollmentDelta,
+				CriticalReenrollmentDetla:   input.CriticalReenrollmentDetla,
+				AllowExpiredRenewal:         input.AllowExpiredRenewal,
 			},
 			CADistributionSettings: models.CADistributionSettings{
 				IncludeLamassuSystemCA: true,
@@ -292,7 +294,10 @@ func (svc dmsManagerServiceImpl) CACerts(ctx context.Context, aps string) ([]*x5
 	return cas, fmt.Errorf("TODO")
 }
 
-func (svc dmsManagerServiceImpl) Enroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, error) {
+// Validation:
+//   - Cert:
+//     Only Bootstrap cert (CA issued By Lamassu)
+func (svc dmsManagerServiceImpl) Enroll(ctx context.Context, authMode models.ESTAuthMode, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	dms, err := svc.GetDMSByID(GetDMSByIDInput{
 		ID: aps,
 	})
@@ -307,7 +312,25 @@ func (svc dmsManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 		}
 	}
 
-	if dms.IdentityProfile.EnrollmentSettings.AuthenticationMode == models.BootstrapCertificate {
+	estAuthOptions := dms.IdentityProfile.EnrollmentSettings.AuthOptions.(models.ESTAuthOptions)
+	if estAuthOptions.AuthMode != authMode {
+		log.Errorf("invalid dms authentication used during enrollment for %s. Auth mode used %s. Auth mode configured for this DMS %s", csr.Subject.CommonName, authMode, estAuthOptions.AuthMode)
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusForbidden,
+			Msg:    "invalid auth mode for this DMS",
+		}
+	}
+
+	if estAuthOptions.AuthMode == models.MutualTLS {
+		certCtxVal := ctx.Value(authMode)
+		cert, ok := certCtxVal.(*x509.Certificate)
+		if !ok {
+			return nil, errs.SentinelAPIError{
+				Status: http.StatusInternalServerError,
+				Msg:    "corrupted ctx while authenticating. Could not extract certificate",
+			}
+		}
+
 		certificate, err := svc.caClient.GetCertificateBySerialNumber(GetCertificatesBySerialNumberInput{
 			SerialNumber: helppers.SerialNumberToString(cert.SerialNumber),
 		})
@@ -333,7 +356,7 @@ func (svc dmsManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 			}
 		}
 
-	} else if dms.IdentityProfile.EnrollmentSettings.AuthenticationMode == models.BootstrapPSK {
+	} else if estAuthOptions.AuthMode == models.PSK {
 
 	}
 
@@ -343,10 +366,10 @@ func (svc dmsManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 	return nil, fmt.Errorf("TODO")
 }
 
-func (svc dmsManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, error) {
+func (svc dmsManagerServiceImpl) Reenroll(ctx context.Context, authMode models.ESTAuthMode, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	return nil, fmt.Errorf("TODO")
 }
 
-func (svc dmsManagerServiceImpl) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, interface{}, error) {
+func (svc dmsManagerServiceImpl) ServerKeyGen(ctx context.Context, authMode models.ESTAuthMode, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
 	return nil, nil, fmt.Errorf("TODO")
 }

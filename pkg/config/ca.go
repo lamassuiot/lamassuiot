@@ -20,6 +20,14 @@ type CAConfig struct {
 			SecretAccessKey string                 `mapstructure:"secret_access_key"`
 			Region          string                 `mapstructure:"region"`
 		} `mapstructure:"aws_kms"`
+		AWSSecretsManagerProviders []struct {
+			ID              string                 `mapstructure:"id"`
+			Name            string                 `mapstructure:"name"`
+			Metadata        map[string]interface{} `mapstructure:"metadata"`
+			AccessKeyID     string                 `mapstructure:"access_key_id"`
+			SecretAccessKey string                 `mapstructure:"secret_access_key"`
+			Region          string                 `mapstructure:"region"`
+		} `mapstructure:"aws_secrets_manager"`
 		GoPemProviders []struct {
 			ID               string                 `mapstructure:"id"`
 			Name             string                 `mapstructure:"name"`

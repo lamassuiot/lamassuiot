@@ -14,22 +14,24 @@ type BaseConfig struct {
 		IncludeHealthLog bool     `mapstructure:"include_health"`
 	} `mapstructure:"logs"`
 
-	Server struct {
-		DebugMode      bool         `mapstructure:"debug_mode"`
-		ListenAddress  string       `mapstructure:"listen_address"`
-		Port           int          `mapstructure:"port"`
-		Protocol       HTTPProtocol `mapstructure:"protocol"`
-		CertFile       string       `mapstructure:"cert_file"`
-		KeyFile        string       `mapstructure:"key_file"`
-		Authentication struct {
-			MutualTLS struct {
-				Enabled           bool   `mapstructure:"enabled"`
-				CACertificateFile string `mapstructure:"ca_certificate_file"`
-			} `mapstructure:"mutual_tls"`
-		} `mapstructure:"authentication"`
-	} `mapstructure:"server"`
+	Server HttpServer `mapstructure:"server"`
 
 	AMQPEventPublisher AMQPConnection `mapstructure:"amqp_event_publisher"`
+}
+
+type HttpServer struct {
+	DebugMode      bool         `mapstructure:"debug_mode"`
+	ListenAddress  string       `mapstructure:"listen_address"`
+	Port           int          `mapstructure:"port"`
+	Protocol       HTTPProtocol `mapstructure:"protocol"`
+	CertFile       string       `mapstructure:"cert_file"`
+	KeyFile        string       `mapstructure:"key_file"`
+	Authentication struct {
+		MutualTLS struct {
+			Enabled           bool   `mapstructure:"enabled"`
+			CACertificateFile string `mapstructure:"ca_cert_file"`
+		} `mapstructure:"mutual_tls"`
+	} `mapstructure:"authentication"`
 }
 
 type PluggableStorageEngine struct {
@@ -43,11 +45,10 @@ type PluggableStorageEngine struct {
 }
 
 type BasicConnection struct {
-	Protocol           HTTPProtocol `mapstructure:"protocol"`
-	Hostname           string       `mapstructure:"hostname"`
-	Port               int          `mapstructure:"port"`
-	InsecureSkipVerify bool         `mapstructure:"insecure_skip_verify"`
-	CACertificateFile  string       `mapstructure:"ca_cert_file"`
+	Hostname           string `mapstructure:"hostname"`
+	Port               int    `mapstructure:"port"`
+	InsecureSkipVerify bool   `mapstructure:"insecure_skip_verify"`
+	CACertificateFile  string `mapstructure:"ca_cert_file"`
 }
 
 type HTTPConnection struct {
@@ -56,14 +57,36 @@ type HTTPConnection struct {
 }
 
 type AMQPConnection struct {
-	BasicConnection  `mapstructure:",squash"`
-	Protocol         AMQPProtocol `mapstructure:"protocol"`
-	UseBasicAuth     bool         `mapstructure:"basic_auth"`
-	Username         string       `mapstructure:"username"`
-	Password         string       `mapstructure:"password"`
-	UseClientTLSAuth bool         `mapstructure:"client_tls_auth"`
-	CertFile         string       `mapstructure:"cert_file"`
-	KeyFile          string       `mapstructure:"key_file"`
+	BasicConnection `mapstructure:",squash"`
+	Protocol        AMQPProtocol `mapstructure:"protocol"`
+	BasicAuth       struct {
+		Enabled  bool   `mapstructure:"enabled"`
+		Username string `mapstructure:"username"`
+		Password string `mapstructure:"password"`
+	} `mapstructure:"basic_auth"`
+	ClientTLSAuth struct {
+		Enabled  bool   `mapstructure:"enabled"`
+		CertFile string `mapstructure:"cert_file"`
+		KeyFile  string `mapstructure:"key_file"`
+	} `mapstructure:"client_tls_auth"`
+}
+
+type HTTPClient struct {
+	AuthMode        HTTPClientAuthMethod
+	AuthJWTOptions  AuthJWTOptions  `mapstructure:"jwt_options"`
+	AuthMTLSOptions AuthMTLSOptions `mapstructure:"mtls_options"`
+	HTTPConnection  `mapstructure:",squash"`
+}
+
+type AuthJWTOptions struct {
+	ClientID         string `mapstructure:"oidc_client_id"`
+	ClientSecret     string `mapstructure:"oidc_client_secret"`
+	OIDCWellKnownURL string `mapstructure:"oidc_well_known"`
+}
+
+type AuthMTLSOptions struct {
+	CertFile string `mapstructure:"cert_file"`
+	KeyFile  string `mapstructure:"key_file"`
 }
 
 func readConfig[E any](configFilePath string) (*E, error) {
@@ -107,7 +130,7 @@ func LoadConfig[E any]() (*E, error) {
 			loadStandardPaths = true
 		}
 	} else {
-		log.Infof("ENV '%s' variable not set, while try to load from standard paths", configFileEnvVar)
+		log.Infof("ENV '%s' variable not set, will try to load from standard paths", configFileEnvVar)
 	}
 
 	if loadStandardPaths {

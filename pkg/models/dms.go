@@ -33,49 +33,46 @@ type RemoteAccessIdentity struct {
 
 type IdentityProfile struct {
 	EnrollmentSettings     EnrollmentSettings     `json:"enrollment_settings"`
+	ReEnrollmentSettings   ReEnrollmentSettings   `json:"reenrollment_settings"`
 	CADistributionSettings CADistributionSettings `json:"ca_distribution_settings"`
 }
 
-type EnrollmentAuthenticationMode string
+type EnrollmentMethod string
 
 const (
-	NoAuth               EnrollmentAuthenticationMode = "NO_AUTH"
-	BootstrapPSK         EnrollmentAuthenticationMode = "GENERIC_PSK"
-	BootstrapCertificate EnrollmentAuthenticationMode = "BOOTSTRAP_CERT"
+	EST EnrollmentMethod = "EST"
 )
 
 type DeviceProvisionSettings struct {
-	Icon         string                 `json:"icon"`
-	IconColor    string                 `json:"icon_color"`
-	Metadata     map[string]string      `json:"metadata"`
-	Tags         []string               `json:"tags"`
-	ExtraSlots   map[string]SlotProfile `json:"extra_slots"` //slot ID => lambda-esk ID runner (maybe with open FaaS? // AwsLambdas) ?
-	IdentitySlot IdentitySlot
-}
-
-type IdentitySlot struct {
-	PreventiveReenrollmentDelta TimeDuration `json:"preventive_reenrollment_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
-	CriticalReenrollmentDetla   TimeDuration `json:"critical_delta"`                // (expiration time - delta < time.now) at witch point an event is issued notify critical status
+	Icon       string                 `json:"icon"`
+	IconColor  string                 `json:"icon_color"`
+	Metadata   map[string]string      `json:"metadata"`
+	Tags       []string               `json:"tags"`
+	ExtraSlots map[string]SlotProfile `json:"extra_slots"` //slot ID => lambda-esk ID runner (maybe with open FaaS? // AwsLambdas) ?
 }
 
 type SlotProfile struct {
-	Confidential                bool             `json:"confidential"`
-	PreventiveReenrollmentDelta TimeDuration     `json:"preventive_reenrollment_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
-	CriticalDetla               TimeDuration     `json:"critical_delta"`                // (expiration time - delta < time.now) at witch point an event is issued notify critical status
-	Type                        CryptoSecretType `json:"type"`
-	Secret                      interface{}      `json:"secret"`
-	Hash                        string           `json:"hash"`
-	HashAlgorithm               string           `json:"hash_alg"`
-	UpdateTS                    time.Time        `json:"update_ts"`
-	RemoteFunc                  *RemoteFuncExec  `json:"lambda"`
+	Confidential                bool            `json:"confidential"`
+	PreventiveReenrollmentDelta TimeDuration    `json:"preventive_reenrollment_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
+	CriticalDetla               TimeDuration    `json:"critical_delta"`                // (expiration time - delta < time.now) at witch point an event is issued notify critical status
+	Hash                        string          `json:"hash"`
+	HashAlgorithm               string          `json:"hash_alg"`
+	RemoteFunc                  *RemoteFuncExec `json:"lambda"`
 }
 
 type EnrollmentSettings struct {
-	AuthenticationMode      EnrollmentAuthenticationMode `json:"auth_mode"`
-	DeviceProvisionSettings DeviceProvisionSettings      `json:"device_provisioning"`
-	AuthorizedCAs           []string                     `json:"authorized_cas"`
-	BootstrapCAs            []string                     `json:"bootstrap_cas"`
-	BootstrapPSK            string                       `json:"bootstap_psk"`
+	AuthMode                EnrollmentMethod        `json:"auth_mode"`
+	AuthOptions             interface{}             `json:"auth_options"`
+	DeviceProvisionSettings DeviceProvisionSettings `json:"device_provisioning"`
+	AuthorizedCAs           []string                `json:"authorized_cas"`
+	BootstrapCAs            []string                `json:"bootstrap_cas"`
+	BootstrapPSK            string                  `json:"bootstap_psk"`
+}
+
+type ReEnrollmentSettings struct {
+	AllowExpiredRenewal         bool         `json:"allow_expired_renewal"`
+	PreventiveReenrollmentDelta TimeDuration `json:"preventive_reenrollment_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
+	CriticalReenrollmentDetla   TimeDuration `json:"critical_delta"`                // (expiration time - delta < time.now) at witch point an event is issued notify critical status
 }
 
 type CADistributionSettings struct {
@@ -97,4 +94,8 @@ type DynamicCA struct {
 	LambdaID string    `json:"lambda"`
 	Name     string    `json:"name"`
 	UpdateTS time.Time `json:"update_ts"`
+}
+
+type ESTAuthOptions struct {
+	AuthMode ESTAuthMode `json:"auth_mode"`
 }

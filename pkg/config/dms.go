@@ -5,8 +5,8 @@ type DMSconfig struct {
 	Storage    PluggableStorageEngine `mapstructure:"storage"`
 
 	CAClient struct {
-		HTTPConnection
+		HTTPClient
 	} `mapstructure:"ca_client"`
 
-	DownstreamCertificateFile string `mapstructure:"downstream_cerificate_file"`
+	DownstreamCertificateFile string `mapstructure:"downstream_cert_file"`
 }

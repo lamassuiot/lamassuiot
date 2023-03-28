@@ -2,7 +2,9 @@ package cryptoengines
 
 import (
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/rsa"
 
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 )
@@ -10,10 +12,11 @@ import (
 type CryptoEngine interface {
 	GetEngineConfig() models.CryptoEngineProvider
 
-	GetPrivateKeyByID(string) (crypto.Signer, error)
+	GetPrivateKeyByID(keyID string) (crypto.Signer, error)
 
 	CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error)
 	CreateECDSAPrivateKey(curve elliptic.Curve, keyID string) (crypto.Signer, error)
 
-	DeleteAllKeys() error
+	ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) (crypto.Signer, error)
+	ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID string) (crypto.Signer, error)
 }

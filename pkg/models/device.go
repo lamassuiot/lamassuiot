@@ -34,21 +34,21 @@ type Device struct {
 	//Metadata set by DMS or end users
 	Metadata map[string]string `json:"metadata"`
 	//Metadata collected by the server when a device tries to connect (ie. User Agent, Remote Address)
-	ConnectionMetadata              map[string]string                `json:"connection_metadata"`
-	DMSOwnerID                      string                           `json:"dms_owner"`
-	IdentitySlot                    *Slot[Certificate]               `json:"identity"`
-	ExtraSlots                      map[string]*Slot[any]            `json:"slots"`
-	EmergencyReEnrollAuthentication *EmergencyReEnrollAuthentication `json:"emergency_reenroll_auth"`
+	ConnectionMetadata map[string]string     `json:"connection_metadata"`
+	DMSOwnerID         string                `json:"dms_owner"`
+	IdentitySlot       *Slot[Certificate]    `json:"identity"`
+	ExtraSlots         map[string]*Slot[any] `json:"slots"`
 }
 
 type Slot[E any] struct {
 	DMSManaged                  bool             `json:"dms_managed"` //if true, the certificate MUST be obtained from the DMS server
 	Status                      SlotStatus       `json:"status"`
 	ActiveVersion               int              `json:"active_version"`
+	AllowExpiredRenewal         bool             `json:"allow_expired_renewal"`
 	PreventiveReenrollmentDelta TimeDuration     `json:"preventive_reenrollment_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
 	CriticalDetla               TimeDuration     `json:"critical_delta"`                // (expiration time - delta < time.now) at witch point an event is issued notify critical status
 	SecretType                  CryptoSecretType `json:"type"`
-	Secrets                     map[int]E       `json:"versions"` // version -> secret
+	Secrets                     map[int]E        `json:"versions"` // version -> secret
 }
 
 type EmergencyReEnrollAuthentication struct {

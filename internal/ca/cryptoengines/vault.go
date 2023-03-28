@@ -218,21 +218,7 @@ func (engine *VaultCryptoEngine) CreateRSAPrivateKey(keySize int, keyID string) 
 		return nil, err
 	}
 
-	keyBytes := pem.EncodeToMemory(&pem.Block{
-		Bytes: x509.MarshalPKCS1PrivateKey(key),
-		Type:  "RSA PRIVATE KEY",
-	})
-
-	b64Key := base64.StdEncoding.EncodeToString(keyBytes)
-
-	_, err = engine.kv2.Put(context.Background(), keyID, map[string]interface{}{
-		"key": b64Key,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return key, nil
+	return engine.ImportRSAPrivateKey(key, keyID)
 }
 
 func (engine *VaultCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, keyID string) (crypto.Signer, error) {
@@ -242,9 +228,31 @@ func (engine *VaultCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, key
 		return nil, err
 	}
 
-	keyBytes, err := x509.MarshalECPrivateKey(key)
+	return engine.ImportECDSAPrivateKey(key, keyID)
+}
+
+func (engine *VaultCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) (crypto.Signer, error) {
+	err := engine.storeRSAPrivateKey(key, keyID)
 	if err != nil {
 		return nil, err
+	}
+
+	return engine.GetPrivateKeyByID(keyID)
+}
+
+func (engine *VaultCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID string) (crypto.Signer, error) {
+	err := engine.storeECDSAPrivateKey(key, keyID)
+	if err != nil {
+		return nil, err
+	}
+
+	return engine.GetPrivateKeyByID(keyID)
+}
+
+func (engine *VaultCryptoEngine) storeECDSAPrivateKey(key *ecdsa.PrivateKey, keyID string) error {
+	keyBytes, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		return err
 	}
 
 	keyBytes = pem.EncodeToMemory(&pem.Block{
@@ -254,16 +262,36 @@ func (engine *VaultCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, key
 
 	b64Key := base64.StdEncoding.EncodeToString(keyBytes)
 
-	_, err = engine.kv2.Put(context.Background(), keyID, map[string]interface{}{
-		"key": b64Key,
-	})
+	err = engine.storeKey(keyID, b64Key)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return key, nil
+	return nil
 }
 
-func (engine *VaultCryptoEngine) DeleteAllKeys() error {
-	return fmt.Errorf("TODO")
+func (engine *VaultCryptoEngine) storeRSAPrivateKey(key *rsa.PrivateKey, keyID string) error {
+	keyBytes := pem.EncodeToMemory(&pem.Block{
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+		Type:  "RSA PRIVATE KEY",
+	})
+
+	b64Key := base64.StdEncoding.EncodeToString(keyBytes)
+	err := engine.storeKey(keyID, b64Key)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (engine *VaultCryptoEngine) storeKey(keyID string, keyVal string) error {
+	_, err := engine.kv2.Put(context.Background(), keyID, map[string]interface{}{
+		"key": keyVal,
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
