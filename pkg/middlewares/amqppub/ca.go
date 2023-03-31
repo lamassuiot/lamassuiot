@@ -33,6 +33,16 @@ func (mw amqpEventPublisher) CreateCA(input services.CreateCAInput) (output *mod
 	}()
 	return mw.next.CreateCA(input)
 }
+
+func (mw amqpEventPublisher) ImportCA(input services.ImportCAInput) (output *models.CACertificate, err error) {
+	defer func() {
+		if err == nil {
+			mw.publishEvent("ca.import", caSource, output)
+		}
+	}()
+	return mw.next.ImportCA(input)
+}
+
 func (mw amqpEventPublisher) RotateCA(input services.RotateCAInput) (output *models.CACertificate, err error) {
 	defer func() {
 		if err == nil {

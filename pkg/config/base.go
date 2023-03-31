@@ -44,20 +44,26 @@ type PluggableStorageEngine struct {
 	} `mapstructure:"couch_db"`
 }
 
-type BasicConnection struct {
-	Hostname           string `mapstructure:"hostname"`
-	Port               int    `mapstructure:"port"`
+type TLSConfig struct {
 	InsecureSkipVerify bool   `mapstructure:"insecure_skip_verify"`
 	CACertificateFile  string `mapstructure:"ca_cert_file"`
 }
 
+type BasicConnection struct {
+	Hostname  string `mapstructure:"hostname"`
+	Port      int    `mapstructure:"port"`
+	TLSConfig `mapstructure:",squash"`
+}
+
 type HTTPConnection struct {
 	Protocol        HTTPProtocol `mapstructure:"protocol"`
+	BasePath        string       `mapstructure:"base_path"`
 	BasicConnection `mapstructure:",squash"`
 }
 
 type AMQPConnection struct {
 	BasicConnection `mapstructure:",squash"`
+	Enabled         bool         `mapstructure:"enabled"`
 	Protocol        AMQPProtocol `mapstructure:"protocol"`
 	BasicAuth       struct {
 		Enabled  bool   `mapstructure:"enabled"`

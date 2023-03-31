@@ -7,7 +7,6 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -15,7 +14,6 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
-	"net/http"
 	"os"
 	"strconv"
 
@@ -35,27 +33,15 @@ type VaultCryptoEngine struct {
 }
 
 func NewVaultCryptoEngine(conf config.HashicorpVaultCryptoEngineConfig) (CryptoEngine, error) {
-	var extraCAFiles = []string{}
 	var err error
-
-	if !conf.InsecureSkipVerify && conf.CACertificateFile != "" {
-		extraCAFiles = append(extraCAFiles, conf.CACertificateFile)
-	}
-
-	caPool := helppers.LoadSytemCACertPoolWithExtraCAsFromFiles(extraCAFiles)
 
 	address := fmt.Sprintf("%s://%s:%d", conf.Protocol, conf.Hostname, conf.Port)
 	vaultClientConf := api.DefaultConfig()
 
-	httpClient := &http.Client{}
-	httpTrasport := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: conf.InsecureSkipVerify,
-			RootCAs:            caPool,
-		},
+	httpClient, err := helppers.BuildHTTPClient("Vault KV-V2", conf.TLSConfig)
+	if err != nil {
+		return nil, err
 	}
-
-	httpClient.Transport = httpTrasport
 
 	vaultClientConf.HttpClient = httpClient
 	vaultClientConf.Address = address
@@ -106,16 +92,18 @@ func NewVaultCryptoEngine(conf config.HashicorpVaultCryptoEngineConfig) (CryptoE
 		secretID: conf.SecretID,
 		kv2:      kv2,
 		config: models.CryptoEngineProvider{
-			Provider:     "Hashicorp Vault",
-			Manufacturer: "Hashicrop",
-			Model:        "KV-V2",
+			Type:          models.VaultKV2,
+			SecurityLevel: models.SL1,
+			Provider:      "Hashicorp Vault",
+			Manufacturer:  "Hashicrop",
+			Model:         "KV-V2",
 			SupportedKeyTypes: []models.SupportedKeyTypeInfo{
-				models.SupportedKeyTypeInfo{
+				{
 					Type:        models.RSA,
 					MinimumSize: 1024,
 					MaximumSize: 4096,
 				},
-				models.SupportedKeyTypeInfo{
+				{
 					Type:        models.ECDSA,
 					MinimumSize: 256,
 					MaximumSize: 512,

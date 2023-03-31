@@ -4,16 +4,29 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 
+	_ "github.com/go-kivik/couchdb" // The CouchDB driver
+	"github.com/go-kivik/couchdb/v4"
 	"github.com/go-kivik/kivik/v4"
+	"github.com/lamassuiot/lamassuiot/pkg/config"
+	"github.com/lamassuiot/lamassuiot/pkg/helppers"
 	"github.com/lamassuiot/lamassuiot/pkg/resources"
 	log "github.com/sirupsen/logrus"
 )
 
-func createCouchDBConnection(couchURL url.URL, username, password string, dbs []string) (*kivik.Client, error) {
-	address := fmt.Sprintf("%s://%s:%s@%s", couchURL.Scheme, username, password, couchURL.Host)
-	client, err := kivik.New("couch", address, kivik.Options{})
+func createCouchDBConnection(cfg config.HTTPConnection, username, password string, dbs []string) (*kivik.Client, error) {
+	address := fmt.Sprintf("%s://%s:%s@%s:%d%s", cfg.Protocol, username, password, cfg.Hostname, cfg.Port, cfg.BasePath)
+
+	httpCli, err := helppers.BuildHTTPClient("CouchDB", cfg.TLSConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	kivikOpts := kivik.Options{
+		couchdb.OptionHTTPClient: httpCli,
+	}
+
+	client, err := kivik.New("couch", address, kivikOpts)
 	if err != nil {
 		return nil, err
 	}

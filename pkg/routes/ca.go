@@ -20,6 +20,8 @@ func NewCAHTTPLayer(svc services.CAService, httpServerCfg config.HttpServer, api
 
 	rv1.GET("/cas", routes.GetAllCAs)
 	rv1.POST("/cas", routes.CreateCA)
+	rv1.POST("/cas/import", routes.ImportCA)
+
 	rv1.GET("/cas/:id", routes.CreateCA)
 	//TODO
 	rv1.DELETE("/cas/:id", routes.DeleteCA)

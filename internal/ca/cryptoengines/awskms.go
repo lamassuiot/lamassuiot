@@ -14,6 +14,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kms"
+	"github.com/lamassuiot/lamassuiot/pkg/config"
+	"github.com/lamassuiot/lamassuiot/pkg/helppers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 
 	"github.com/lstoll/awskms"
@@ -26,9 +28,15 @@ type AWSKMSCryptoEngine struct {
 }
 
 func NewAWSKMSEngine(accessKeyID string, secretAccessKey string, region string) (CryptoEngine, error) {
+	httpCli, err := helppers.BuildHTTPClient(fmt.Sprintf("AWS KMS - %s", accessKeyID), config.TLSConfig{})
+	if err != nil {
+		return nil, err
+	}
+
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(region),
 		Credentials: credentials.NewStaticCredentials(accessKeyID, secretAccessKey, ""),
+		HTTPClient:  httpCli,
 	}))
 	kmscli := kms.New(sess)
 
@@ -49,6 +57,8 @@ func NewAWSKMSEngine(accessKeyID string, secretAccessKey string, region string) 
 	return &AWSKMSCryptoEngine{
 		kmscli: kmscli,
 		config: models.CryptoEngineProvider{
+			Type:              models.AWSKMS,
+			SecurityLevel:     models.SL2,
 			Provider:          "Amazon Web Services",
 			Manufacturer:      "AWS",
 			Model:             "KMS",

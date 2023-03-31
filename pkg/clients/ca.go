@@ -2,6 +2,9 @@ package clients
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
 	"fmt"
 	"net/http"
 
@@ -64,6 +67,40 @@ func (cli *caClient) CreateCA(input services.CreateCAInput) (*models.CACertifica
 		CAType:             models.CAType(input.CAType),
 		IssuanceDuration:   models.TimeDuration(input.IssuanceDuration),
 		CAVailidtyDurarion: models.TimeDuration(input.CADuration),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (cli *caClient) ImportCA(input services.ImportCAInput) (*models.CACertificate, error) {
+	var privKey string
+	if input.KeyType == models.RSA {
+		rsaBytes := x509.MarshalPKCS1PrivateKey(input.CARSAKey)
+		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: rsaBytes,
+		}))
+	} else if input.KeyType == models.ECDSA {
+		ecBytes, err := x509.MarshalECPrivateKey(input.CAECKey)
+		if err != nil {
+			return nil, err
+		}
+		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
+			Type:  "EC PRIVATE KEY",
+			Bytes: ecBytes,
+		}))
+	}
+
+	response, err := Post[*models.CACertificate](context.Background(), cli.HttpClient, cli.baseUrl+"/v1/cas/import", resources.ImportCABody{
+		EngineID:         input.EngineID,
+		CAType:           models.CAType(input.CAType),
+		IssuanceDuration: models.TimeDuration(input.IssuanceDuration),
+		CACertificate:    input.CACertificate,
+		CAChain:          input.CAChain,
+		CAPrivateKey:     privKey,
 	})
 	if err != nil {
 		return nil, err

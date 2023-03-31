@@ -4,7 +4,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net/http"
-	"net/url"
 
 	"github.com/lamassuiot/lamassuiot/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
@@ -35,10 +34,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	dmsStorage, err := couchdb.NewCouchDMSRepository(url.URL{
-		Scheme: string(conf.Storage.CouchDB.Protocol),
-		Host:   fmt.Sprintf("%s:%d", conf.Storage.CouchDB.Hostname, conf.Storage.CouchDB.Port),
-	}, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
+	dmsStorage, err := couchdb.NewCouchDMSRepository(conf.CAClient.HTTPConnection, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
 
 	if err != nil {
 		log.Fatal(err)

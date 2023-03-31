@@ -1,9 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"net/url"
-
 	"github.com/lamassuiot/lamassuiot/internal/ca/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
 	"github.com/lamassuiot/lamassuiot/pkg/middlewares/amqppub"
@@ -21,7 +18,13 @@ var (
 )
 
 func main() {
+	customFormatter := new(log.TextFormatter)
+	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
+	customFormatter.FullTimestamp = true
+	log.SetFormatter(customFormatter)
+
 	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
+
 	conf, err := config.LoadConfig[config.CAConfig]()
 	if err != nil {
 		log.Fatal(err)
@@ -35,27 +38,14 @@ func main() {
 		log.SetLevel(logLevel)
 	}
 
-	_, amqpPub, err := amqppub.SetupAMQPConnection(conf.AMQPEventPublisher)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	engines := createCryptoEngines(*conf)
 
-	caStorage, err := couchdb.NewCouchCARepository(url.URL{
-		Scheme: string(conf.Storage.CouchDB.Protocol),
-		Host:   fmt.Sprintf("%s:%d", conf.Storage.CouchDB.Hostname, conf.Storage.CouchDB.Port),
-	}, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
-
+	caStorage, err := couchdb.NewCouchCARepository(conf.Storage.CouchDB.HTTPConnection, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	certStorage, err := couchdb.NewCouchCertificateRepository(url.URL{
-		Scheme: string(conf.Storage.CouchDB.Protocol),
-		Host:   fmt.Sprintf("%s:%d", conf.Storage.CouchDB.Hostname, conf.Storage.CouchDB.Port),
-	}, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
-
+	certStorage, err := couchdb.NewCouchCertificateRepository(conf.Storage.CouchDB.HTTPConnection, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -68,7 +58,14 @@ func main() {
 	})
 	caSvc := svc.(*services.CAServiceImpl)
 
-	svc = amqppub.NewCAAmqpEventPublisher(amqpPub)(svc)
+	if conf.AMQPEventPublisher.Enabled {
+		_, amqpPub, err := amqppub.SetupAMQPConnection(conf.AMQPEventPublisher)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		svc = amqppub.NewCAAmqpEventPublisher(amqpPub)(svc)
+	}
 
 	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
 	caSvc.SetService(svc)
@@ -133,6 +130,23 @@ func createCryptoEngines(conf config.CAConfig) map[string]services.EngineService
 		engines[awsKmsConfig.ID] = services.EngineServiceMap{
 			Name:         awsKmsConfig.Name,
 			Metadata:     awsKmsConfig.Metadata,
+			CryptoEngine: awsEngine,
+		}
+
+	}
+
+	//Create all AWS Secret Manager CryptoEngines
+	for _, awsSecretsMngrCfg := range conf.CryptoEngines.AWSSecretsManagerProviders {
+		awsEngine, err := cryptoengines.NewAWSSecretManagerEngine(awsSecretsMngrCfg.AccessKeyID, awsSecretsMngrCfg.SecretAccessKey, awsSecretsMngrCfg.Region)
+		if err != nil {
+			log.Warnf("could not create AWS Secrets Manager engine. Skipping engine: %s", err)
+			continue
+		}
+
+		log.Infof("adding new AWS Secrets Manager engine with ID: %s", awsSecretsMngrCfg.ID)
+		engines[awsSecretsMngrCfg.ID] = services.EngineServiceMap{
+			Name:         awsSecretsMngrCfg.Name,
+			Metadata:     awsSecretsMngrCfg.Metadata,
 			CryptoEngine: awsEngine,
 		}
 

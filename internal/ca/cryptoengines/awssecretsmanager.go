@@ -16,6 +16,8 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
+	"github.com/lamassuiot/lamassuiot/pkg/config"
+	"github.com/lamassuiot/lamassuiot/pkg/helppers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 
 	log "github.com/sirupsen/logrus"
@@ -27,9 +29,15 @@ type AWSSecretsManagerCryptoEngine struct {
 }
 
 func NewAWSSecretManagerEngine(accessKeyID string, secretAccessKey string, region string) (CryptoEngine, error) {
+	httpCli, err := helppers.BuildHTTPClient(fmt.Sprintf("AWS SecretsManager - %s", accessKeyID), config.TLSConfig{})
+	if err != nil {
+		return nil, err
+	}
+
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(region),
 		Credentials: credentials.NewStaticCredentials(accessKeyID, secretAccessKey, ""),
+		HTTPClient:  httpCli,
 	}))
 	smngerCli := secretsmanager.New(sess)
 
@@ -50,6 +58,8 @@ func NewAWSSecretManagerEngine(accessKeyID string, secretAccessKey string, regio
 	return &AWSSecretsManagerCryptoEngine{
 		smngerCli: smngerCli,
 		config: models.CryptoEngineProvider{
+			Type:              models.AWSSecretsManager,
+			SecurityLevel:     models.SL1,
 			Provider:          "Amazon Web Services",
 			Manufacturer:      "AWS",
 			Model:             "Secrets Manager",
@@ -86,7 +96,7 @@ func (engine *AWSSecretsManagerCryptoEngine) GetPrivateKeyByID(keyID string) (cr
 		return nil, fmt.Errorf("'key' not found in secret")
 	}
 
-	pemBytes, err := base64.RawStdEncoding.DecodeString(b64Key)
+	pemBytes, err := base64.StdEncoding.DecodeString(b64Key)
 	if err != nil {
 		return nil, err
 	}
@@ -135,10 +145,14 @@ func (engine *AWSSecretsManagerCryptoEngine) ImportRSAPrivateKey(key *rsa.Privat
 	b64Key := base64.StdEncoding.EncodeToString(keyBytes)
 	keyVal := `{"key": "` + b64Key + `"}`
 
-	engine.smngerCli.CreateSecret(&secretsmanager.CreateSecretInput{
+	_, err := engine.smngerCli.CreateSecret(&secretsmanager.CreateSecretInput{
 		Name:         &keyID,
 		SecretString: aws.String(keyVal),
 	})
+
+	if err != nil {
+		return nil, err
+	}
 
 	return key, nil
 }
@@ -157,10 +171,14 @@ func (engine *AWSSecretsManagerCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.Pr
 	b64Key := base64.StdEncoding.EncodeToString(keyBytes)
 	keyVal := `{"key": "` + b64Key + `"}`
 
-	engine.smngerCli.CreateSecret(&secretsmanager.CreateSecretInput{
+	_, err = engine.smngerCli.CreateSecret(&secretsmanager.CreateSecretInput{
 		Name:         &keyID,
 		SecretString: aws.String(keyVal),
 	})
+
+	if err != nil {
+		return nil, err
+	}
 
 	return key, nil
 }

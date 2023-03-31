@@ -12,6 +12,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/pkg/helppers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
+	log "github.com/sirupsen/logrus"
 )
 
 func newHttpRouter(routerEngine *gin.Engine, httpServerCfg config.HttpServer, apiInfo models.APIServiceInfo) error {
@@ -32,6 +33,7 @@ func newHttpRouter(routerEngine *gin.Engine, httpServerCfg config.HttpServer, ap
 	}
 
 	if httpServerCfg.Protocol == config.HTTPS {
+		srvExtraLog := ""
 		if httpServerCfg.Authentication.MutualTLS.Enabled {
 			valCAPool := x509.NewCertPool()
 
@@ -46,11 +48,14 @@ func newHttpRouter(routerEngine *gin.Engine, httpServerCfg config.HttpServer, ap
 				ClientAuth: tls.RequireAndVerifyClientCert,
 				ClientCAs:  valCAPool,
 			}
+			srvExtraLog = "with mTLS enabled"
 		}
 
+		log.Infof("HTTPS server listening on %s %s", addr, srvExtraLog)
 		err := server.ListenAndServeTLS(httpServerCfg.CertFile, httpServerCfg.KeyFile)
 		return err
 	} else {
+		log.Infof("HTTP server listening on %s", addr)
 		err := server.ListenAndServe()
 		return err
 	}

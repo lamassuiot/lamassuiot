@@ -39,7 +39,7 @@ type Certificate struct {
 type CAMetadata struct {
 	EngineProviderID string `json:"engine_provider"`
 	Name             string `json:"name"`
-	Type             string `json:"type"`
+	Type             CAType `json:"type"`
 }
 
 type IssuerCAMetadata struct {
@@ -51,6 +51,7 @@ type IssuerCAMetadata struct {
 type CACertificate struct {
 	Certificate
 	ID               string         `json:"id"`
+	External         bool           `json:"external"`
 	Version          int            `json:"version"`
 	IssuanceDuration TimeDuration   `json:"issuance_duration"`
 	Metadata         CAMetadata     `json:"metadata"`

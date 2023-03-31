@@ -1,9 +1,13 @@
 package controllers
 
 import (
+	"crypto/ecdsa"
+	"crypto/rsa"
+	"encoding/base64"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/pkg/helppers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/pkg/services"
@@ -36,9 +40,57 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 		IssuerCAID:       requestBody.IssuerCAID,
 		KeyMetadata:      requestBody.KeyMetadata,
 		Subject:          requestBody.Subject,
+		IssuanceDuration: requestBody.IssuanceDuration,
+		CADuration:       requestBody.CAVailidtyDurarion,
+		CAType:           requestBody.CAType,
+	})
+	if err != nil {
+		ctx.JSON(500, gin.H{"err": err.Error()})
+		return
+	}
+
+	ctx.JSON(201, ca)
+}
+
+func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
+	var requestBody resources.ImportCABody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	decodedKey, err := base64.StdEncoding.DecodeString(requestBody.CAPrivateKey)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	key, err := helppers.ParsePrivateKey(decodedKey)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var keyType models.KeyType
+	var rsaKey *rsa.PrivateKey
+	var ecKey *ecdsa.PrivateKey
+
+	switch key.(type) {
+	case *rsa.PrivateKey:
+		rsaKey = key.(*rsa.PrivateKey)
+	case *ecdsa.PrivateKey:
+		ecKey = key.(*ecdsa.PrivateKey)
+	}
+
+	ca, err := r.svc.ImportCA(services.ImportCAInput{
+		EngineID:         requestBody.EngineID,
 		IssuanceDuration: time.Duration(requestBody.IssuanceDuration),
-		CADuration:       time.Duration(requestBody.CAVailidtyDurarion),
-		CAType:           string(requestBody.CAType),
+		CAType:           requestBody.CAType,
+		CAChain:          requestBody.CAChain,
+		CACertificate:    requestBody.CACertificate,
+		KeyType:          keyType,
+		CARSAKey:         rsaKey,
+		CAECKey:          ecKey,
 	})
 	if err != nil {
 		ctx.JSON(500, gin.H{"err": err.Error()})

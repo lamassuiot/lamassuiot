@@ -2,10 +2,10 @@ package couchdb
 
 import (
 	"context"
-	"net/url"
 
 	_ "github.com/go-kivik/couchdb/v4" // The CouchDB driver
 	kivik "github.com/go-kivik/kivik/v4"
+	"github.com/lamassuiot/lamassuiot/pkg/config"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/pkg/storage"
@@ -18,8 +18,8 @@ type CouchDBDMSStorage struct {
 	querier *couchDBQuerier[models.DMS]
 }
 
-func NewCouchDMSRepository(couchURL url.URL, username, password string) (storage.DMSRepo, error) {
-	client, err := createCouchDBConnection(couchURL, username, password, []string{dmsDB})
+func NewCouchDMSRepository(cfg config.HTTPConnection, username, password string) (storage.DMSRepo, error) {
+	client, err := createCouchDBConnection(cfg, username, password, []string{dmsDB})
 	if err != nil {
 		return nil, err
 	}

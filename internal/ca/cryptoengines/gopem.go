@@ -41,6 +41,8 @@ func NewGolangPEMEngine(storageDirectory string) (CryptoEngine, error) {
 	return &GoCryptoEngine{
 		storageDirectory: storageDirectory,
 		config: models.CryptoEngineProvider{
+			Type:              models.Golang,
+			SecurityLevel:     models.SL0,
 			Provider:          "Golang PEM",
 			Manufacturer:      "Golang",
 			Model:             runtime.Version(),

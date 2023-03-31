@@ -3,11 +3,11 @@ package couchdb
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"time"
 
 	_ "github.com/go-kivik/couchdb/v4" // The CouchDB driver
 	kivik "github.com/go-kivik/kivik/v4"
+	"github.com/lamassuiot/lamassuiot/pkg/config"
 	"github.com/lamassuiot/lamassuiot/pkg/helppers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/resources"
@@ -21,8 +21,8 @@ type CouchDBCertificateStorage struct {
 	querier *couchDBQuerier[models.Certificate]
 }
 
-func NewCouchCertificateRepository(couchURL url.URL, username, password string) (storage.CertificatesRepo, error) {
-	client, err := createCouchDBConnection(couchURL, username, password, []string{certDBName})
+func NewCouchCertificateRepository(cfg config.HTTPConnection, username, password string) (storage.CertificatesRepo, error) {
+	client, err := createCouchDBConnection(cfg, username, password, []string{certDBName})
 	if err != nil {
 		return nil, err
 	}

@@ -1,14 +1,12 @@
 package helppers
 
-func SliceInsert[E any](array []E, value E, index int) []E {
-	return append(array[:index], append([]E{value}, array[index:]...)...)
-}
+func SliceFilter[E any](array []E, filterFunc func(elem E) bool) []E {
+	filteredList := []E{}
+	for _, elem := range array {
+		if filterFunc(elem) {
+			filteredList = append(filteredList, elem)
+		}
+	}
 
-func SliceRemove[E any](array []E, index int) []E {
-	return append(array[:index], array[index+1:]...)
-}
-
-func SliceMove[E any](array []E, srcIndex int, dstIndex int) []E {
-	value := array[srcIndex]
-	return SliceInsert(SliceRemove(array, srcIndex), value, dstIndex)
+	return filteredList
 }

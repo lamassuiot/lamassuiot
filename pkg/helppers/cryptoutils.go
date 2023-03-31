@@ -1,13 +1,18 @@
 package helppers
 
 import (
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha512"
+	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
+	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 )
 
 func GenerateCertificateRequest(subject models.Subject, key *rsa.PrivateKey) (*x509.CertificateRequest, error) {
@@ -95,4 +100,48 @@ func LoadSytemCACertPoolWithExtraCAsFromFiles(casToAdd []string) *x509.CertPool 
 	}
 
 	return certPool
+}
+
+func ValidateCertAndPrivKey(cert *x509.Certificate, rsaKey *rsa.PrivateKey, ecKey *ecdsa.PrivateKey) (bool, error) {
+	errs := []string{
+		"tls: private key type does not match public key type",
+		"tls: private key does not match public key",
+	}
+
+	pemCert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
+	if rsaKey != nil {
+		keyBytes := x509.MarshalPKCS1PrivateKey(rsaKey)
+		_, err := tls.X509KeyPair(pemCert, pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyBytes}))
+		if err == nil {
+			return true, nil
+		}
+
+		contains := slices.Contains(errs, err.Error())
+		if contains {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	if ecKey != nil {
+		keyBytes, err := x509.MarshalECPrivateKey(ecKey)
+		if err != nil {
+			return false, err
+		}
+
+		_, err = tls.X509KeyPair(pemCert, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}))
+		if err == nil {
+			return true, nil
+		}
+
+		contains := slices.Contains(errs, err.Error())
+		if contains {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	return false, fmt.Errorf("both keys are nil")
 }

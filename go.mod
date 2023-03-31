@@ -8,6 +8,7 @@ require (
 	github.com/gin-contrib/cors v1.4.0
 	github.com/gin-gonic/gin v1.9.0
 	github.com/globalsign/est v1.0.6
+	github.com/go-kivik/couchdb v2.0.0+incompatible
 	github.com/go-kivik/couchdb/v4 v4.0.0-20220217152009-9380cf8517a0
 	github.com/go-kivik/kivik/v4 v4.0.0-20221214110802-0ad92c6bcd46
 	github.com/go-playground/validator/v10 v10.11.2
@@ -20,6 +21,7 @@ require (
 	github.com/streadway/amqp v1.0.0
 	go.mozilla.org/pkcs7 v0.0.0-20210826202110-33d05740a352
 	golang.org/x/exp v0.0.0-20220827204233-334a2380cb91
+	golang.org/x/oauth2 v0.6.0
 
 )
 
@@ -44,8 +46,12 @@ require (
 	github.com/bytedance/sonic v1.8.0 // indirect
 	github.com/cenkalti/backoff/v3 v3.2.2 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
+	github.com/flimzy/diff v0.1.7 // indirect
+	github.com/flimzy/testy v0.1.17 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible // indirect
+	github.com/go-kivik/kivik v2.0.0+incompatible // indirect
+	github.com/go-kivik/kiviktest v2.0.0+incompatible // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/goccy/go-json v0.10.0 // indirect
@@ -80,7 +86,6 @@ require (
 	go.uber.org/zap v1.19.1 // indirect
 	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
 	golang.org/x/net v0.8.0 // indirect
-	golang.org/x/oauth2 v0.6.0 // indirect
 	golang.org/x/sys v0.6.0 // indirect
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect

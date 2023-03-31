@@ -91,6 +91,10 @@ github.com/cloudevents/sdk-go/v2/event/datacodec/xml
 github.com/cloudevents/sdk-go/v2/protocol
 github.com/cloudevents/sdk-go/v2/protocol/http
 github.com/cloudevents/sdk-go/v2/types
+# github.com/flimzy/diff v0.1.7
+## explicit
+# github.com/flimzy/testy v0.1.17
+## explicit
 # github.com/fsnotify/fsnotify v1.4.9
 ## explicit; go 1.13
 github.com/fsnotify/fsnotify
@@ -114,15 +118,25 @@ github.com/globalsign/est
 ## explicit
 github.com/go-chi/chi
 github.com/go-chi/chi/middleware
+# github.com/go-kivik/couchdb v2.0.0+incompatible
+## explicit
+github.com/go-kivik/couchdb
+github.com/go-kivik/couchdb/chttp
 # github.com/go-kivik/couchdb/v4 v4.0.0-20220217152009-9380cf8517a0
 ## explicit; go 1.13
 github.com/go-kivik/couchdb/v4
 github.com/go-kivik/couchdb/v4/chttp
+# github.com/go-kivik/kivik v2.0.0+incompatible
+## explicit
+github.com/go-kivik/kivik
+github.com/go-kivik/kivik/driver
 # github.com/go-kivik/kivik/v4 v4.0.0-20221214110802-0ad92c6bcd46
 ## explicit; go 1.13
 github.com/go-kivik/kivik/v4
 github.com/go-kivik/kivik/v4/driver
 github.com/go-kivik/kivik/v4/internal/registry
+# github.com/go-kivik/kiviktest v2.0.0+incompatible
+## explicit
 # github.com/go-playground/locales v0.14.1
 ## explicit; go 1.17
 github.com/go-playground/locales

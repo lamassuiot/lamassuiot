@@ -14,7 +14,6 @@ const (
 )
 
 type DMS struct {
-	ID                   string                `json:"id"`
 	Name                 string                `json:"name"`
 	Status               DMSStatus             `json:"status"`
 	CloudDMS             bool                  `json:"cloud_dms"`
@@ -37,10 +36,10 @@ type IdentityProfile struct {
 	CADistributionSettings CADistributionSettings `json:"ca_distribution_settings"`
 }
 
-type EnrollmentMethod string
+type EnrollmentProto string
 
 const (
-	EST EnrollmentMethod = "EST"
+	EST EnrollmentProto = "EST_RFC7030"
 )
 
 type DeviceProvisionSettings struct {
@@ -55,14 +54,12 @@ type SlotProfile struct {
 	Confidential                bool            `json:"confidential"`
 	PreventiveReenrollmentDelta TimeDuration    `json:"preventive_reenrollment_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
 	CriticalDetla               TimeDuration    `json:"critical_delta"`                // (expiration time - delta < time.now) at witch point an event is issued notify critical status
-	Hash                        string          `json:"hash"`
-	HashAlgorithm               string          `json:"hash_alg"`
-	RemoteFunc                  *RemoteFuncExec `json:"lambda"`
+	RemoteFunc                  *RemoteFuncExec `json:"pfe_id"`
 }
 
 type EnrollmentSettings struct {
-	AuthMode                EnrollmentMethod        `json:"auth_mode"`
-	AuthOptions             interface{}             `json:"auth_options"`
+	EnrollmentProtocol      EnrollmentProto         `json:"protocol"`
+	EnrollOptions           interface{}             `json:"protocol_options"`
 	DeviceProvisionSettings DeviceProvisionSettings `json:"device_provisioning"`
 	AuthorizedCAs           []string                `json:"authorized_cas"`
 	BootstrapCAs            []string                `json:"bootstrap_cas"`

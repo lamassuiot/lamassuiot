@@ -1,6 +1,25 @@
 package models
 
+type CryptoEngineType string
+
+const (
+	Golang            CryptoEngineType = "GOLANG"
+	VaultKV2          CryptoEngineType = "HASHICORP_VAULT_KV_V2"
+	AWSKMS            CryptoEngineType = "AWS_KMS"
+	AWSSecretsManager CryptoEngineType = "AWS_SECRETS_MANAGER"
+)
+
+type CryptoEngineSL int
+
+const (
+	SL0 CryptoEngineSL = 0
+	SL1 CryptoEngineSL = 1
+	SL2 CryptoEngineSL = 2
+)
+
 type CryptoEngineProvider struct {
+	Type              CryptoEngineType       `json:"type"`
+	SecurityLevel     CryptoEngineSL         `json:"security_level"`
 	Provider          string                 `json:"provider"`
 	Manufacturer      string                 `json:"manufacturer"`
 	Model             string                 `json:"model"`
