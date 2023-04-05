@@ -11,6 +11,12 @@ const (
 	CATypePKI      CAType = "PKI"
 )
 
+type InternalCA string
+
+const (
+	CALocalRA InternalCA = "lms-lra"
+)
+
 type CertificateStatus string
 
 const (
@@ -33,30 +39,24 @@ type Certificate struct {
 	ValidTo             time.Time           `json:"valid_to"`
 	RevocationTimestamp time.Time           `json:"revocation_timestamp"`
 	RevocationReason    string              `json:"revocation_reason"`
-	Level               int                 `json:"level"`
 }
 
 type CAMetadata struct {
-	EngineProviderID string `json:"engine_provider"`
-	Name             string `json:"name"`
-	Type             CAType `json:"type"`
+	Name string `json:"name"`
+	Type CAType `json:"type"`
 }
 
 type IssuerCAMetadata struct {
-	EngineProviderID string `json:"engine_provider"`
-	SerialNumber     string `json:"serial_number"`
-	ID               string `json:"id"`
+	SerialNumber string `json:"serial_number"`
+	CAID         string `json:"ca_name"`
 }
 
 type CACertificate struct {
 	Certificate
-	ID               string         `json:"id"`
-	External         bool           `json:"external"`
-	Version          int            `json:"version"`
-	IssuanceDuration TimeDuration   `json:"issuance_duration"`
-	Metadata         CAMetadata     `json:"metadata"`
-	VersionHistory   map[int]string `json:"version_history"`
-	CreationTS       time.Time      `json:"creation_ts"`
+	ID               string       `json:"id"`
+	IssuanceDuration TimeDuration `json:"issuance_duration"`
+	Metadata         CAMetadata   `json:"metadata"`
+	CreationTS       time.Time    `json:"creation_ts"`
 }
 
 type CAStats struct {

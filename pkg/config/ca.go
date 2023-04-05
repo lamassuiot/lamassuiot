@@ -1,55 +1,51 @@
 package config
 
+import "github.com/lamassuiot/lamassuiot/pkg/models"
+
 type CAConfig struct {
 	BaseConfig `mapstructure:",squash"`
 	Storage    PluggableStorageEngine `mapstructure:"storage"`
 
-	CryptoEngines struct {
-		PKCS11Providers []struct {
-			ID       string                 `mapstructure:"id"`
-			Name     string                 `mapstructure:"name"`
-			Metadata map[string]interface{} `mapstructure:"metadata"`
-			Token    string                 `mapstructure:"token"`
-		} `mapstructure:"pkcs11"`
-		HashicorpVaultProviders []HashicorpVaultCryptoEngineConfig `mapstructure:"hashicrorp_vault"`
-		AWSKMSProviders         []struct {
-			ID              string                 `mapstructure:"id"`
-			Name            string                 `mapstructure:"name"`
-			Metadata        map[string]interface{} `mapstructure:"metadata"`
-			AccessKeyID     string                 `mapstructure:"access_key_id"`
-			SecretAccessKey string                 `mapstructure:"secret_access_key"`
-			Region          string                 `mapstructure:"region"`
-		} `mapstructure:"aws_kms"`
-		AWSSecretsManagerProviders []struct {
-			ID              string                 `mapstructure:"id"`
-			Name            string                 `mapstructure:"name"`
-			Metadata        map[string]interface{} `mapstructure:"metadata"`
-			AccessKeyID     string                 `mapstructure:"access_key_id"`
-			SecretAccessKey string                 `mapstructure:"secret_access_key"`
-			Region          string                 `mapstructure:"region"`
-		} `mapstructure:"aws_secrets_manager"`
-		GoPemProviders []struct {
-			ID               string                 `mapstructure:"id"`
-			Name             string                 `mapstructure:"name"`
-			Metadata         map[string]interface{} `mapstructure:"metadata"`
-			StorageDirectory string                 `mapstructure:"storage_directory"`
-		} `mapstructure:"gopem"`
-	} `mapstructure:"crypto_engines"`
+	CryptoEngine models.CryptoEngineType `mapstructure:"crypto_engine"`
+
+	PKCS11Provider struct {
+		Name     string                 `mapstructure:"name"`
+		Metadata map[string]interface{} `mapstructure:"metadata"`
+		Token    string                 `mapstructure:"token"`
+	} `mapstructure:"pkcs11"`
+	HashicorpVaultProvider HashicorpVaultCryptoEngineConfig `mapstructure:"hashicrorp_vault"`
+	AWSKMSProvider         struct {
+		Name            string                 `mapstructure:"name"`
+		Metadata        map[string]interface{} `mapstructure:"metadata"`
+		AccessKeyID     string                 `mapstructure:"access_key_id"`
+		SecretAccessKey string                 `mapstructure:"secret_access_key"`
+		Region          string                 `mapstructure:"region"`
+	} `mapstructure:"aws_kms"`
+	AWSSecretsManagerProvider struct {
+		Name            string                 `mapstructure:"name"`
+		Metadata        map[string]interface{} `mapstructure:"metadata"`
+		AccessKeyID     string                 `mapstructure:"access_key_id"`
+		SecretAccessKey string                 `mapstructure:"secret_access_key"`
+		Region          string                 `mapstructure:"region"`
+	} `mapstructure:"aws_secrets_manager"`
+	GoPemProvider struct {
+		Name             string                 `mapstructure:"name"`
+		Metadata         map[string]interface{} `mapstructure:"metadata"`
+		StorageDirectory string                 `mapstructure:"storage_directory"`
+	} `mapstructure:"gopem"`
 
 	CryptoMonitoring `mapstructure:"crypto_monitoring"`
 	OCSPServerURL    string `mapstructure:"ocsp_server_url"`
 }
 
 type HashicorpVaultCryptoEngineConfig struct {
-	ID                 string                 `mapstructure:"id"`
 	Name               string                 `mapstructure:"name"`
 	Metadata           map[string]interface{} `mapstructure:"metadata"`
 	RoleID             string                 `mapstructure:"role_id"`
 	SecretID           string                 `mapstructure:"secret_id"`
-	Protocol           HTTPProtocol           `mapstructure:"protocol"`
-	BasicConnection    `mapstructure:",squash"`
-	AutoUnsealEnabled  bool   `mapstructure:"auto_unseal_enabled"`
-	AutoUnsealKeysFile string `mapstructure:"auto_unseal_keys_file"`
+	AutoUnsealEnabled  bool                   `mapstructure:"auto_unseal_enabled"`
+	AutoUnsealKeysFile string                 `mapstructure:"auto_unseal_keys_file"`
+	HTTPConnection     `mapstructure:",squash"`
 }
 
 type CryptoMonitoring struct {

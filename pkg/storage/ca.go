@@ -14,6 +14,7 @@ type CertificatesRepo interface {
 	SelectByExpirationDate(ctx context.Context, beforeExpirationDate time.Time, afterExpirationDate time.Time, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
 
 	Count(ctx context.Context) (int, error)
+	Exists(ctx context.Context, sn string) (bool, error)
 	SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
 	Select(ctx context.Context, serialNumber string) (*models.Certificate, error)
 	Update(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error)
@@ -21,6 +22,7 @@ type CertificatesRepo interface {
 }
 
 type CACertificatesRepo interface {
+	Exists(ctx context.Context, caID string) (bool, error)
 	SelectByType(ctx context.Context, CAType models.CAType, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
 
 	Count(ctx context.Context) (int, error)

@@ -6,28 +6,24 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/globalsign/est"
-
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/services"
 )
 
 type dmsManagerClient struct {
-	httpClient http.Client
+	httpClient *http.Client
 	baseUrl    string
-	estClient  *est.Client
 }
 
-func NewDMSManagerClient(client http.Client, url string, estClient *est.Client) services.DMSManagerService {
+func NewDMSManagerClient(client *http.Client, url string) services.DMSManagerService {
 	baseURL := url
 	return &dmsManagerClient{
 		httpClient: client,
 		baseUrl:    baseURL,
-		estClient:  estClient,
 	}
 }
 
-func (cli *dmsManagerClient) Create(input services.CreateInput) (*models.DMS, string, error) {
+func (cli *dmsManagerClient) CreateDMS(input services.CreateDMSInput) (*models.DMS, string, error) {
 	return nil, "", fmt.Errorf("TODO")
 }
 

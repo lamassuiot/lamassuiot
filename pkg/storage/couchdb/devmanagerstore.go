@@ -18,14 +18,14 @@ type CouchDBDeviceManagerStorage struct {
 	querier *couchDBQuerier[models.Device]
 }
 
-func NewCouchDeviceManagerSRepository(cfg config.HTTPConnection, username, password string) (storage.DeviceManagerRepo, error) {
+func NewCouchDeviceManagerRepository(cfg config.HTTPConnection, username, password string) (storage.DeviceManagerRepo, error) {
 
 	client, err := createCouchDBConnection(cfg, username, password, []string{deviceDB})
 	if err != nil {
 		return nil, err
 	}
 
-	querier := newCouchDBQuerier[models.Device](client.DB(caDBName))
+	querier := newCouchDBQuerier[models.Device](client.DB(deviceDB))
 	querier.CreateBasicCounterView()
 
 	return &CouchDBDeviceManagerStorage{
@@ -44,6 +44,10 @@ func (db *CouchDBDeviceManagerStorage) SelectAll(ctx context.Context, exhaustive
 
 func (db *CouchDBDeviceManagerStorage) Select(ctx context.Context, ID string) (*models.Device, error) {
 	return db.querier.SelectByID(ID)
+}
+
+func (db *CouchDBDeviceManagerStorage) Exists(ctx context.Context, ID string) (bool, error) {
+	return db.querier.Exists(ID)
 }
 
 func (db *CouchDBDeviceManagerStorage) Update(ctx context.Context, device *models.Device) (*models.Device, error) {

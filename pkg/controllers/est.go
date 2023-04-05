@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/services"
 	log "github.com/sirupsen/logrus"
@@ -50,6 +51,9 @@ func (r *estHttpRoutes) GetCACerts(ctx *gin.Context) {
 	ctx.ShouldBindUri(&params)
 
 	c := ctx.Request.Context()
+	for headerName, headerVal := range ctx.Request.Header {
+		c = context.WithValue(c, headerName, headerVal)
+	}
 
 	cacerts, err := r.svc.CACerts(c, params.APS)
 	if err != nil {
@@ -84,25 +88,25 @@ func (r *estHttpRoutes) Enroll(ctx *gin.Context) {
 
 	contentType := ctx.ContentType()
 	if contentType != "application/pkcs10" {
-		//TODO err in contentType
+		ctx.JSON(400, gin.H{"err": "content-type must be application/pkcs10"})
 		return
 	}
 
 	data, err := ioutil.ReadAll(ctx.Request.Body)
 	if err != nil {
-		//TODO err in Body content
+		ctx.JSON(400, gin.H{"err": fmt.Sprintf("could not read the body payload: %s", err)})
 		return
 	}
 
 	dec, err := base64.StdEncoding.DecodeString(string(data))
 	if err != nil {
-		//TODO err in Body format
+		ctx.JSON(400, gin.H{"err": "body payload must be base64 encoded"})
 		return
 	}
 
 	csr, err := x509.ParseCertificateRequest(dec)
 	if err != nil {
-		//TODO err in Body format
+		ctx.JSON(400, gin.H{"err": fmt.Sprintf("could not parse the payload into a csr: %s", err)})
 		return
 	}
 
@@ -147,7 +151,7 @@ func (r *estHttpRoutes) Enroll(ctx *gin.Context) {
 				authMode = models.JWT
 				authHeader = strings.ToLower(authHeader)
 				if !strings.HasSuffix(authHeader, "bearer ") {
-					//TODO err handle no valid bearer token
+					ctx.JSON(400, gin.H{"err": "the 'Authorization' was set but no valid token found"})
 					return
 				}
 				jwt := strings.Replace("bearer ", authHeader, "", 1)
@@ -160,13 +164,19 @@ func (r *estHttpRoutes) Enroll(ctx *gin.Context) {
 
 	signedCrt, err := r.svc.Enroll(c, authMode, csr, params.APS)
 	if err != nil {
-		// TODO handle error
+		switch t := err.(type) {
+		case errs.SentinelAPIError:
+			ctx.JSON(t.Status, gin.H{"err": t.Msg})
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
 		return
 	}
 
 	body, err := pkcs7.DegenerateCertificate(signedCrt.Raw)
 	if err != nil {
 		// TODO handle error
+		ctx.JSON(500, gin.H{"err": err})
 		return
 	}
 	body = base64Encode(body)

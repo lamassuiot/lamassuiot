@@ -26,14 +26,13 @@ func NewCAClient(client *http.Client, url string) services.CAService {
 	}
 }
 
-func (cli *caClient) GetCryptoEngineProviders() []models.EngineProvider {
-	engines, err := Get[[]models.EngineProvider](context.Background(), cli.HttpClient, cli.baseUrl+"/v1/engines", nil)
+func (cli *caClient) GetCryptoEngineProvider() (*models.EngineProvider, error) {
+	engine, err := Get[models.EngineProvider](context.Background(), cli.HttpClient, cli.baseUrl+"/v1/engines", nil)
 	if err != nil {
-		fmt.Println(err)
-		return []models.EngineProvider{}
+		return nil, err
 	}
 
-	return engines
+	return &engine, nil
 }
 
 func (cli *caClient) GetCAs(input services.GetCAsInput) (string, error) {
@@ -50,7 +49,7 @@ func (cli *caClient) GetCAs(input services.GetCAsInput) (string, error) {
 }
 
 func (cli *caClient) GetCAByID(input services.GetCAByIDInput) (*models.CACertificate, error) {
-	response, err := Get[models.CACertificate](context.Background(), cli.HttpClient, cli.baseUrl+"/v1/ca/"+input.ID, nil)
+	response, err := Get[models.CACertificate](context.Background(), cli.HttpClient, cli.baseUrl+"/v1/ca/"+input.CAID, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -60,8 +59,6 @@ func (cli *caClient) GetCAByID(input services.GetCAByIDInput) (*models.CACertifi
 
 func (cli *caClient) CreateCA(input services.CreateCAInput) (*models.CACertificate, error) {
 	response, err := Post[*models.CACertificate](context.Background(), cli.HttpClient, cli.baseUrl+"/v1/cas", resources.CreateCABody{
-		EngineID:           input.EngineID,
-		IssuerCAID:         input.IssuerCAID,
 		Subject:            input.Subject,
 		KeyMetadata:        input.KeyMetadata,
 		CAType:             models.CAType(input.CAType),
@@ -95,7 +92,6 @@ func (cli *caClient) ImportCA(input services.ImportCAInput) (*models.CACertifica
 	}
 
 	response, err := Post[*models.CACertificate](context.Background(), cli.HttpClient, cli.baseUrl+"/v1/cas/import", resources.ImportCABody{
-		EngineID:         input.EngineID,
 		CAType:           models.CAType(input.CAType),
 		IssuanceDuration: models.TimeDuration(input.IssuanceDuration),
 		CACertificate:    input.CACertificate,
@@ -123,10 +119,6 @@ func (cli *caClient) SignCertificate(input services.SignCertificateInput) (*mode
 }
 
 func (cli *caClient) UpdateCAStatus(input services.UpdateCAStatusInput) (*models.CACertificate, error) {
-	return nil, fmt.Errorf("TODO")
-}
-
-func (cli *caClient) RotateCA(input services.RotateCAInput) (*models.CACertificate, error) {
 	return nil, fmt.Errorf("TODO")
 }
 

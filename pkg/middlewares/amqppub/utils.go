@@ -111,7 +111,8 @@ func buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Connection, error) {
 		amqpTlsConfig.Certificates = append(amqpTlsConfig.Certificates, clientTLSCerts)
 	}
 
-	amqpConn, err := amqp.DialTLS(fmt.Sprintf("%s://%s%s:%d", cfg.Protocol, userPassUrlPrefix, cfg.Hostname, cfg.Port), &amqpTlsConfig)
+	amqpURL := fmt.Sprintf("%s://%s%s:%d", cfg.Protocol, userPassUrlPrefix, cfg.Hostname, cfg.Port)
+	amqpConn, err := amqp.DialTLS(amqpURL, &amqpTlsConfig)
 	if err != nil {
 		log.Error("failed to connect to AMQP broker: ", err)
 		return nil, err

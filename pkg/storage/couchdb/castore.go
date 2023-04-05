@@ -34,6 +34,10 @@ func NewCouchCARepository(cfg config.HTTPConnection, username, password string) 
 	}, nil
 }
 
+func (db *CouchDBCAStorage) Exists(ctx context.Context, caID string) (bool, error) {
+	return db.querier.Exists(caID)
+}
+
 func (db *CouchDBCAStorage) Count(ctx context.Context) (int, error) {
 	return db.querier.Count()
 }
@@ -54,9 +58,9 @@ func (db *CouchDBCAStorage) Select(ctx context.Context, id string) (*models.CACe
 }
 
 func (db *CouchDBCAStorage) Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Insert(*caCertificate, caCertificate.ID)
+	return db.querier.Insert(*caCertificate, caCertificate.Metadata.Name)
 }
 
 func (db *CouchDBCAStorage) Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Update(*caCertificate, caCertificate.ID)
+	return db.querier.Update(*caCertificate, caCertificate.Metadata.Name)
 }

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/lamassuiot/lamassuiot/internal/ca/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
 	"github.com/lamassuiot/lamassuiot/pkg/middlewares/amqppub"
@@ -38,7 +40,10 @@ func main() {
 		log.SetLevel(logLevel)
 	}
 
-	engines := createCryptoEngines(*conf)
+	engine, err := createCryptoEngine(*conf)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	caStorage, err := couchdb.NewCouchCARepository(conf.Storage.CouchDB.HTTPConnection, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
 	if err != nil {
@@ -51,7 +56,7 @@ func main() {
 	}
 
 	svc := services.NeCAService(services.CAServiceBuilder{
-		CryptoEngines:        engines,
+		CryptoEngine:         engine,
 		CAStorage:            caStorage,
 		CertificateStorage:   certStorage,
 		CryptoMonitoringConf: conf.CryptoMonitoring,
@@ -83,74 +88,41 @@ func main() {
 	<-forever
 }
 
-func createCryptoEngines(conf config.CAConfig) map[string]services.EngineServiceMap {
-	engines := map[string]services.EngineServiceMap{}
-
-	//Create all Vault CryptoEngines
-	for _, vaultCryptoEngineConfig := range conf.CryptoEngines.HashicorpVaultProviders {
-		vaultEngine, err := cryptoengines.NewVaultCryptoEngine(vaultCryptoEngineConfig)
-		if err != nil {
-			log.Warnf("could not create Vault engine. Skipping engine: %s", err)
-			continue
-		}
-
-		log.Infof("adding new Vault engine with ID: %s", vaultCryptoEngineConfig.ID)
-		engines[vaultCryptoEngineConfig.ID] = services.EngineServiceMap{
-			Name:         vaultCryptoEngineConfig.Name,
-			Metadata:     vaultCryptoEngineConfig.Metadata,
-			CryptoEngine: vaultEngine,
-		}
-	}
-
-	//Create all GoPEM CryptoEngines
-	for _, gopemConfig := range conf.CryptoEngines.GoPemProviders {
-		gopemEngine, err := cryptoengines.NewGolangPEMEngine(gopemConfig.StorageDirectory)
-		if err != nil {
-			log.Warnf("could not create GoPEM engine. Skipping engine: %s", err)
-			continue
-		}
-
-		log.Infof("adding new GoPEM engine with ID: %s", gopemConfig.ID)
-		engines[gopemConfig.ID] = services.EngineServiceMap{
-			Name:         gopemConfig.Name,
-			Metadata:     gopemConfig.Metadata,
-			CryptoEngine: gopemEngine,
-		}
-	}
-
-	//Create all AWSKMS CryptoEngines
-	for _, awsKmsConfig := range conf.CryptoEngines.AWSKMSProviders {
+func createCryptoEngine(conf config.CAConfig) (cryptoengines.CryptoEngine, error) {
+	switch conf.CryptoEngine {
+	case models.AWSKMS:
+		awsKmsConfig := conf.AWSKMSProvider
 		awsEngine, err := cryptoengines.NewAWSKMSEngine(awsKmsConfig.AccessKeyID, awsKmsConfig.SecretAccessKey, awsKmsConfig.Region)
 		if err != nil {
-			log.Warnf("could not create AWS KMS engine. Skipping engine: %s", err)
-			continue
+			log.Panicf("could not create AWS KMS engine. Skipping engine: %s", err)
 		}
 
-		log.Infof("adding new AWS KMS engine with ID: %s", awsKmsConfig.ID)
-		engines[awsKmsConfig.ID] = services.EngineServiceMap{
-			Name:         awsKmsConfig.Name,
-			Metadata:     awsKmsConfig.Metadata,
-			CryptoEngine: awsEngine,
-		}
-
-	}
-
-	//Create all AWS Secret Manager CryptoEngines
-	for _, awsSecretsMngrCfg := range conf.CryptoEngines.AWSSecretsManagerProviders {
+		return awsEngine, nil
+	case models.AWSSecretsManager:
+		awsSecretsMngrCfg := conf.AWSSecretsManagerProvider
 		awsEngine, err := cryptoengines.NewAWSSecretManagerEngine(awsSecretsMngrCfg.AccessKeyID, awsSecretsMngrCfg.SecretAccessKey, awsSecretsMngrCfg.Region)
 		if err != nil {
-			log.Warnf("could not create AWS Secrets Manager engine. Skipping engine: %s", err)
-			continue
+			log.Panicf("could not create AWS Secrets Manager engine. Skipping engine: %s", err)
 		}
 
-		log.Infof("adding new AWS Secrets Manager engine with ID: %s", awsSecretsMngrCfg.ID)
-		engines[awsSecretsMngrCfg.ID] = services.EngineServiceMap{
-			Name:         awsSecretsMngrCfg.Name,
-			Metadata:     awsSecretsMngrCfg.Metadata,
-			CryptoEngine: awsEngine,
+		return awsEngine, nil
+	case models.VaultKV2:
+		vaultCryptoEngineConfig := conf.HashicorpVaultProvider
+		vaultEngine, err := cryptoengines.NewVaultCryptoEngine(vaultCryptoEngineConfig)
+		if err != nil {
+			log.Panicf("could not create Vault engine. Skipping engine: %s", err)
 		}
 
+		return vaultEngine, nil
+	case models.Golang:
+		gopemConfig := conf.GoPemProvider
+		gopemEngine, err := cryptoengines.NewGolangPEMEngine(gopemConfig.StorageDirectory)
+		if err != nil {
+			log.Panicf("could not create GoPEM engine. Skipping engine: %s", err)
+		}
+
+		return gopemEngine, nil
 	}
 
-	return engines
+	return nil, fmt.Errorf("no crypto engine")
 }

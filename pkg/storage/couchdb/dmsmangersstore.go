@@ -24,7 +24,7 @@ func NewCouchDMSRepository(cfg config.HTTPConnection, username, password string)
 		return nil, err
 	}
 
-	querier := newCouchDBQuerier[models.DMS](client.DB(caDBName))
+	querier := newCouchDBQuerier[models.DMS](client.DB(dmsDB))
 	querier.CreateBasicCounterView()
 
 	return &CouchDBDMSStorage{
@@ -43,6 +43,10 @@ func (db *CouchDBDMSStorage) SelectAll(ctx context.Context, exhaustiveRun bool, 
 
 func (db *CouchDBDMSStorage) Select(ctx context.Context, ID string) (*models.DMS, error) {
 	return db.querier.SelectByID(ID)
+}
+
+func (db *CouchDBDMSStorage) Exists(ctx context.Context, ID string) (bool, error) {
+	return db.querier.Exists(ID)
 }
 
 func (db *CouchDBDMSStorage) Update(ctx context.Context, dms *models.DMS) (*models.DMS, error) {

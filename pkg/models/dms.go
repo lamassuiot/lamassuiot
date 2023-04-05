@@ -14,6 +14,7 @@ const (
 )
 
 type DMS struct {
+	ID                   string                `json:"id"`
 	Name                 string                `json:"name"`
 	Status               DMSStatus             `json:"status"`
 	CloudDMS             bool                  `json:"cloud_dms"`
@@ -52,30 +53,33 @@ type DeviceProvisionSettings struct {
 
 type SlotProfile struct {
 	Confidential                bool            `json:"confidential"`
-	PreventiveReenrollmentDelta TimeDuration    `json:"preventive_reenrollment_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
-	CriticalDetla               TimeDuration    `json:"critical_delta"`                // (expiration time - delta < time.now) at witch point an event is issued notify critical status
+	PreventiveReenrollmentDelta TimeDuration    `json:"preventive_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
+	CriticalDetla               TimeDuration    `json:"critical_delta"`   // (expiration time - delta < time.now) at witch point an event is issued notify critical status
 	RemoteFunc                  *RemoteFuncExec `json:"pfe_id"`
 }
 
 type EnrollmentSettings struct {
 	EnrollmentProtocol      EnrollmentProto         `json:"protocol"`
-	EnrollOptions           interface{}             `json:"protocol_options"`
+	EnrollOptions           interface{}             `json:"protocol_options"` // ESTServerAuthOptionsMutualTLS |
 	DeviceProvisionSettings DeviceProvisionSettings `json:"device_provisioning"`
-	AuthorizedCAs           []string                `json:"authorized_cas"`
-	BootstrapCAs            []string                `json:"bootstrap_cas"`
-	BootstrapPSK            string                  `json:"bootstap_psk"`
+	AuthorizedCA            string                  `json:"authorized_ca"`
+}
+
+type EnrollmentOptionsESTRFC7030 struct {
+	AuthMode        ESTAuthMode                   `json:"auth_mode"`
+	AuthOptionsMTLS ESTServerAuthOptionsMutualTLS `json:"mutual_tls_options"`
 }
 
 type ReEnrollmentSettings struct {
+	AllowedReenrollmentDelta    TimeDuration `json:"allowed_reenrollment_detlta"`
 	AllowExpiredRenewal         bool         `json:"allow_expired_renewal"`
-	PreventiveReenrollmentDelta TimeDuration `json:"preventive_reenrollment_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
-	CriticalReenrollmentDetla   TimeDuration `json:"critical_delta"`                // (expiration time - delta < time.now) at witch point an event is issued notify critical status
+	PreventiveReenrollmentDelta TimeDuration `json:"preventive_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
+	CriticalReenrollmentDetla   TimeDuration `json:"critical_delta"`   // (expiration time - delta < time.now) at witch point an event is issued notify critical status
 }
 
 type CADistributionSettings struct {
 	IncludeLamassuSystemCA bool        `json:"include_system_ca"`
-	IncludeBootstrapCAs    bool        `json:"include_bootstrap_cas"`
-	IncludeAuthorizedCAs   bool        `json:"include_authorized_cas"`
+	IncludeAuthorizedCA    bool        `json:"include_authorized_ca"`
 	ManagedCAs             []string    `json:"managed_cas"`
 	StaticCAs              []StaticCA  `json:"static_cas"`
 	DynamicCAs             []DynamicCA `json:"dynamic_cas"`
@@ -91,8 +95,4 @@ type DynamicCA struct {
 	LambdaID string    `json:"lambda"`
 	Name     string    `json:"name"`
 	UpdateTS time.Time `json:"update_ts"`
-}
-
-type ESTAuthOptions struct {
-	AuthMode ESTAuthMode `json:"auth_mode"`
 }

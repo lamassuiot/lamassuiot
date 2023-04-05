@@ -47,6 +47,10 @@ func (db *CouchDBCertificateStorage) SelectByType(ctx context.Context, CAType mo
 	return db.querier.SelecAll(queryParams, helppers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
+func (db *CouchDBCertificateStorage) Exists(ctx context.Context, sn string) (bool, error) {
+	return db.querier.Exists(sn)
+}
+
 func (db *CouchDBCertificateStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{

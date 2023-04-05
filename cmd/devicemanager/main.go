@@ -1,13 +1,10 @@
 package main
 
 import (
-	"crypto/x509"
 	"fmt"
-	"net/http"
 
 	"github.com/lamassuiot/lamassuiot/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
 	"github.com/lamassuiot/lamassuiot/pkg/middlewares/amqppub"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/routes"
@@ -23,7 +20,7 @@ var (
 )
 
 func main() {
-	conf, err := config.LoadConfig[config.DMSconfig]()
+	conf, err := config.LoadConfig[config.DeviceManagerConfig]()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -41,8 +38,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	dmsStorage, err := couchdb.NewCouchDMSRepository(conf.Storage.CouchDB.HTTPConnection, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
-
+	devMngrStroage, err := couchdb.NewCouchDeviceManagerRepository(conf.Storage.CouchDB.HTTPConnection, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -50,35 +46,27 @@ func main() {
 	fmt.Println(amqpPub)
 
 	caURL := fmt.Sprintf("%s://%s:%d", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port)
-	client := clients.NewCAClient(http.DefaultClient, caURL)
-
-	var downstreamCert *x509.Certificate
-	if conf.Server.Protocol == config.HTTPS {
-		downstreamCert, err = helppers.ReadCertificateFromFile(conf.DownstreamCertificateFile)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
-	if conf.DevManagerESTClient.AuthMode != config.MTLS {
-		log.Fatalf("device manager EST client must use mutual TLS")
-	}
-
-	devManagerESTCli, err := clients.NewESTClient(clients.ESTClientBuilder{
-		HTTPClient: &conf.DevManagerESTClient.HTTPClient,
-	})
+	caHttpClient, err := clients.BuildHTTPClient(conf.CAClient.HTTPClient)
 	if err != nil {
-		log.Fatalf("could not build device manager EST client: %s", err)
+		log.Fatal(err)
 	}
 
-	svc := services.NewDMSManagerService(services.ServiceDMSBuilder{
-		CAClient:         client,
-		DMSStorage:       dmsStorage,
-		DownstreamCert:   downstreamCert,
-		DevManagerESTCli: devManagerESTCli,
+	caClient := clients.NewCAClient(caHttpClient, caURL)
+
+	dmsMngrURL := fmt.Sprintf("%s://%s:%d", conf.DMSManagerClient.Protocol, conf.DMSManagerClient.Hostname, conf.DMSManagerClient.Port)
+	dmsHttpClient, err := clients.BuildHTTPClient(conf.DMSManagerClient.HTTPClient)
+	if err != nil {
+		log.Fatal(err)
+	}
+	dmsClient := clients.NewDMSManagerClient(dmsHttpClient, dmsMngrURL)
+
+	svc := services.NewDeviceManagerService(services.ServiceDeviceManagerBuilder{
+		CAClient:       caClient,
+		DevicesStorage: devMngrStroage,
+		DMSClient:      dmsClient,
 	})
 
-	err = routes.NewDMSManagerHTTPLayer(svc, conf.Server, models.APIServiceInfo{
+	err = routes.NewDeviceManagerHTTPLayer(svc, conf.Server, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,

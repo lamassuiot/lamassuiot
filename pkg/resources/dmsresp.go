@@ -8,6 +8,5 @@ type CreateDMSResponse struct {
 }
 
 type GetDMSsResponse struct {
-	NextBookmark string        `json:"next"`
-	DMSs         []*models.DMS `json:"list"`
+	IterbaleList[models.DMS]
 }

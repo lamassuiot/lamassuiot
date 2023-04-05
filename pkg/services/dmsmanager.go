@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/pkg/helppers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
@@ -28,7 +27,7 @@ var (
 
 type DMSManagerService interface {
 	ESTService
-	Create(input CreateInput) (*models.DMS, string, error)
+	CreateDMS(input CreateDMSInput) (*models.DMS, string, error)
 	UpdateStatus(input UpdateStatusInput) (*models.DMS, error)
 	UpdateIdentityProfile(input UpdateIdentityProfileInput) (*models.DMS, error)
 	GetDMSByID(input GetDMSByIDInput) (*models.DMS, error)
@@ -36,89 +35,73 @@ type DMSManagerService interface {
 }
 
 type dmsManagerServiceImpl struct {
-	dmsCAID        string
-	downstreamCert *x509.Certificate
-	dmsStorage     storage.DMSRepo
-	caClient       CAService
+	downstreamCert      *x509.Certificate
+	deviceManagerESTCli ESTService
+	deviceManagerCli    DeviceManagerService
+	dmsStorage          storage.DMSRepo
+	caClient            CAService
 }
 
 type ServiceDMSBuilder struct {
-	DownstreamCert *x509.Certificate
-	CAClient       CAService
-	DMSStorage     storage.DMSRepo
+	DownstreamCert   *x509.Certificate
+	DevManagerESTCli ESTService
+	DevManagerCli    DeviceManagerService
+
+	CAClient   CAService
+	DMSStorage storage.DMSRepo
 }
 
 func NewDMSManagerService(builder ServiceDMSBuilder) DMSManagerService {
 	return &dmsManagerServiceImpl{
-		dmsCAID:        "",
-		dmsStorage:     builder.DMSStorage,
-		caClient:       builder.CAClient,
-		downstreamCert: builder.DownstreamCert,
+		dmsStorage:          builder.DMSStorage,
+		caClient:            builder.CAClient,
+		downstreamCert:      builder.DownstreamCert,
+		deviceManagerESTCli: builder.DevManagerESTCli,
+		deviceManagerCli:    builder.DevManagerCli,
 	}
 }
 
-type CreateInput struct {
-	CloudDMS                    bool
-	Name                        string
-	Metadata                    map[string]string
-	Tags                        []string
-	RemoteAccessIdentity        *RemoteAccessIdentity
-	AllowExpiredRenewal         bool
-	PreventiveReenrollmentDelta models.TimeDuration
-	CriticalReenrollmentDetla   models.TimeDuration
+type CreateDMSInput struct {
+	Name                 string
+	CloudDMS             bool
+	Metadata             map[string]string
+	Tags                 []string
+	IdentityProfile      models.IdentityProfile
+	RemoteAccessIdentity *RemoteAccessIdentityInput
 }
 
-type RemoteAccessIdentity struct {
+type RemoteAccessIdentityInput struct {
 	Csr     *models.X509CertificateRequest
 	Subject *models.Subject
 }
 
-func (svc dmsManagerServiceImpl) Create(input CreateInput) (*models.DMS, string, error) {
+func (svc dmsManagerServiceImpl) CreateDMS(input CreateDMSInput) (*models.DMS, string, error) {
+	if exists, err := svc.dmsStorage.Exists(context.Background(), input.Name); err != nil {
+		return nil, "", err
+	} else if exists {
+		return nil, "", errs.SentinelAPIError{
+			Status: http.StatusConflict,
+			Msg:    "dms already exists",
+		}
+	}
+
 	now := time.Now()
 	generatedPrivKey := ""
 
 	dms := &models.DMS{
-		ID:           goid.NewV4UUID().String(),
-		Status:       models.PendingACKDMSStatus,
-		Name:         input.Name,
-		CloudDMS:     input.CloudDMS,
-		Metadata:     input.Metadata,
-		Tags:         input.Tags,
-		CreationDate: now,
-		IdentityProfile: &models.IdentityProfile{
-			EnrollmentSettings: models.EnrollmentSettings{
-				AuthMode:      models.EST,
-				AuthorizedCAs: []string{},
-				DeviceProvisionSettings: models.DeviceProvisionSettings{
-					Icon:       "Cg/CgSmartphoneChip",
-					IconColor:  "#25ee32",
-					Metadata:   map[string]string{},
-					Tags:       []string{},
-					ExtraSlots: map[string]models.SlotProfile{},
-				},
-				BootstrapCAs: []string{},
-				BootstrapPSK: "",
-			},
-			ReEnrollmentSettings: models.ReEnrollmentSettings{
-				PreventiveReenrollmentDelta: input.PreventiveReenrollmentDelta,
-				CriticalReenrollmentDetla:   input.CriticalReenrollmentDetla,
-				AllowExpiredRenewal:         input.AllowExpiredRenewal,
-			},
-			CADistributionSettings: models.CADistributionSettings{
-				IncludeLamassuSystemCA: true,
-				IncludeBootstrapCAs:    false,
-				IncludeAuthorizedCAs:   true,
-				ManagedCAs:             []string{},
-				StaticCAs:              []models.StaticCA{},
-				DynamicCAs:             []models.DynamicCA{},
-			},
-		},
+		ID:              input.Name,
+		Status:          models.PendingACKDMSStatus,
+		Name:            input.Name,
+		CloudDMS:        input.CloudDMS,
+		Metadata:        input.Metadata,
+		Tags:            input.Tags,
+		CreationDate:    now,
+		IdentityProfile: mergeAndBuildDefaulIDProfile(&input.IdentityProfile),
 	}
 
 	if !input.CloudDMS {
 		if input.RemoteAccessIdentity != nil {
 			var csr *x509.CertificateRequest
-
 			if input.RemoteAccessIdentity.Csr != nil {
 				csr = (*x509.CertificateRequest)(input.RemoteAccessIdentity.Csr)
 			} else {
@@ -153,12 +136,24 @@ func (svc dmsManagerServiceImpl) Create(input CreateInput) (*models.DMS, string,
 		}
 	}
 
-	dms, err := svc.dmsStorage.Insert(context.Background(), &models.DMS{})
+	dms, err := svc.dmsStorage.Insert(context.Background(), dms)
 	if err != nil {
 		return nil, "", err
 	}
 
 	return dms, generatedPrivKey, nil
+}
+
+func mergeAndBuildDefaulIDProfile(idProfile *models.IdentityProfile) *models.IdentityProfile {
+	if idProfile.EnrollmentSettings.DeviceProvisionSettings.Icon == "" {
+		idProfile.EnrollmentSettings.DeviceProvisionSettings.Icon = "Cg/CgSmartphoneChip"
+	}
+
+	if idProfile.EnrollmentSettings.DeviceProvisionSettings.IconColor == "" {
+		idProfile.EnrollmentSettings.DeviceProvisionSettings.IconColor = "#00FAFC"
+	}
+
+	return idProfile
 }
 
 type UpdateStatusInput struct {
@@ -180,7 +175,7 @@ func (svc dmsManagerServiceImpl) UpdateStatus(input UpdateStatusInput) (*models.
 			if !dms.CloudDMS {
 				csr := dms.RemoteAccessIdentity.CertificateRequest
 				crt, err := svc.caClient.SignCertificate(SignCertificateInput{
-					CAID:         svc.dmsCAID,
+					CAID:         string(models.CALocalRA),
 					CertRequest:  csr,
 					Subject:      models.Subject{},
 					SignVerbatim: true,
@@ -263,17 +258,13 @@ func (svc dmsManagerServiceImpl) CACerts(ctx context.Context, aps string) ([]*x5
 	reqCAs := []string{}
 	reqCAs = append(reqCAs, dms.IdentityProfile.CADistributionSettings.ManagedCAs...)
 
-	if caDistribSettings.IncludeAuthorizedCAs {
-		reqCAs = append(reqCAs, dms.IdentityProfile.EnrollmentSettings.AuthorizedCAs...)
-	}
-
-	if caDistribSettings.IncludeBootstrapCAs {
-		reqCAs = append(reqCAs, dms.IdentityProfile.EnrollmentSettings.BootstrapCAs...)
+	if caDistribSettings.IncludeAuthorizedCA {
+		reqCAs = append(reqCAs, dms.IdentityProfile.EnrollmentSettings.AuthorizedCA)
 	}
 
 	for _, ca := range reqCAs {
 		caResponse, err := svc.caClient.GetCAByID(GetCAByIDInput{
-			ID: ca,
+			CAID: ca,
 		})
 		if err != nil {
 			return nil, err
@@ -307,63 +298,97 @@ func (svc dmsManagerServiceImpl) Enroll(ctx context.Context, authMode models.EST
 
 	if !dms.CloudDMS {
 		return nil, errs.SentinelAPIError{
-			Status: http.StatusForbidden,
+			Status: http.StatusUnauthorized,
 			Msg:    "invalid dms mode: use cloud dms",
 		}
 	}
 
-	estAuthOptions := dms.IdentityProfile.EnrollmentSettings.AuthOptions.(models.ESTAuthOptions)
+	if dms.IdentityProfile.EnrollmentSettings.EnrollmentProtocol != models.EST {
+		return nil, fmt.Errorf("only EST enrollment supported ")
+	}
+
+	estAuthOptions := dms.IdentityProfile.EnrollmentSettings.EnrollOptions.(models.EnrollmentOptionsESTRFC7030)
 	if estAuthOptions.AuthMode != authMode {
 		log.Errorf("invalid dms authentication used during enrollment for %s. Auth mode used %s. Auth mode configured for this DMS %s", csr.Subject.CommonName, authMode, estAuthOptions.AuthMode)
 		return nil, errs.SentinelAPIError{
-			Status: http.StatusForbidden,
+			Status: http.StatusUnauthorized,
 			Msg:    "invalid auth mode for this DMS",
 		}
 	}
 
-	if estAuthOptions.AuthMode == models.MutualTLS {
-		certCtxVal := ctx.Value(authMode)
-		cert, ok := certCtxVal.(*x509.Certificate)
-		if !ok {
-			return nil, errs.SentinelAPIError{
-				Status: http.StatusInternalServerError,
-				Msg:    "corrupted ctx while authenticating. Could not extract certificate",
-			}
+	if estAuthOptions.AuthMode != authMode {
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusUnauthorized,
+			Msg:    "authentication method used does not match the configured",
 		}
+	}
 
-		certificate, err := svc.caClient.GetCertificateBySerialNumber(GetCertificatesBySerialNumberInput{
-			SerialNumber: helppers.SerialNumberToString(cert.SerialNumber),
-		})
-		if err != nil {
-			return nil, err
+	if authMode != models.MutualTLS {
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusUnauthorized,
+			Msg:    fmt.Sprintf("authentication method '%s' not supported", authMode),
 		}
+	}
 
-		//validate fingerprint
-		if certificate.Fingerprint != helppers.X509CertFingerprint(*cert) {
-			log.Warnf("a modified certificate was presented while enrolling. tried to impersonate cert sn %s", certificate.SerialNumber)
-			return nil, errs.SentinelAPIError{
-				Status: http.StatusUnauthorized,
-				Msg:    "invalid certificate",
-			}
+	certCtxVal := ctx.Value(authMode)
+	cert, ok := certCtxVal.(*x509.Certificate)
+	if !ok {
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusInternalServerError,
+			Msg:    "corrupt ctx. no certificate found",
 		}
+	}
 
-		//check if certificate is a certificate issued by bootstrap CA
-		if !slices.Contains(dms.IdentityProfile.EnrollmentSettings.BootstrapCAs, certificate.IssuerCAMetadata.ID) {
-			log.Warnf("using a certificate not authorized for this DMS. used certificate with sn %s issued by CA %s", certificate.SerialNumber, certificate.IssuerCAMetadata.ID)
-			return nil, errs.SentinelAPIError{
-				Status: http.StatusForbidden,
-				Msg:    "invalid certificate",
-			}
+	certificate, err := svc.caClient.GetCertificateBySerialNumber(GetCertificatesBySerialNumberInput{
+		SerialNumber: helppers.SerialNumberToString(cert.SerialNumber),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	//validate fingerprint
+	if certificate.Fingerprint != helppers.X509CertFingerprint(*cert) {
+		log.Warnf("a modified certificate was presented while enrolling. tried to impersonate cert sn %s", certificate.SerialNumber)
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusUnauthorized,
+			Msg:    "invalid certificate",
 		}
+	}
 
-	} else if estAuthOptions.AuthMode == models.PSK {
-
+	//check if certificate is a certificate issued by bootstrap CA
+	estEnrollOpts, ok := dms.IdentityProfile.EnrollmentSettings.EnrollOptions.(models.EnrollmentOptionsESTRFC7030)
+	if !ok {
+		return nil, fmt.Errorf("corrupt dms enrollment options. Should be EnrollmentOptionsESTRFC7030 struct")
+	}
+	if !slices.Contains(estEnrollOpts.AuthOptionsMTLS.ValidationCAs, certificate.IssuerCAMetadata.CAID) {
+		log.Warnf("using a certificate not authorized for this DMS. used certificate with sn %s issued by CA %s", certificate.SerialNumber, certificate.IssuerCAMetadata.CAID)
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusForbidden,
+			Msg:    "invalid certificate",
+		}
 	}
 
 	//contact device manager and register device first
-	//contact device manager and enroll
+	_, err = svc.deviceManagerCli.CreateDevice(CreateDeviceInput{
+		ID:        csr.Subject.CommonName,
+		Alias:     csr.Subject.CommonName,
+		Tags:      dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.Tags,
+		Metadata:  dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.Metadata,
+		Icon:      dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.Icon,
+		IconColor: dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.IconColor,
+		DMSID:     dms.ID,
+	})
+	if err != nil {
+		return nil, err
+	}
 
-	return nil, fmt.Errorf("TODO")
+	//contact device manager and enroll
+	additionalHeaders := map[string]string{
+		"x-dms-id": dms.ID,
+	}
+
+	ctx = context.WithValue(ctx, models.ESTHeaders, additionalHeaders)
+	return svc.deviceManagerESTCli.Enroll(ctx, models.MutualTLS, csr, dms.IdentityProfile.EnrollmentSettings.AuthorizedCA)
 }
 
 func (svc dmsManagerServiceImpl) Reenroll(ctx context.Context, authMode models.ESTAuthMode, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {

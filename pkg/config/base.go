@@ -28,11 +28,19 @@ type HttpServer struct {
 	KeyFile        string       `mapstructure:"key_file"`
 	Authentication struct {
 		MutualTLS struct {
-			Enabled           bool   `mapstructure:"enabled"`
-			CACertificateFile string `mapstructure:"ca_cert_file"`
+			Enabled           bool          `mapstructure:"enabled"`
+			ValidationMode    MutualTLSMode `mapstructure:"validation_mode"`
+			CACertificateFile string        `mapstructure:"ca_cert_file"`
 		} `mapstructure:"mutual_tls"`
 	} `mapstructure:"authentication"`
 }
+
+type MutualTLSMode string
+
+const (
+	Strict MutualTLSMode = "strict"
+	Any    MutualTLSMode = "any"
+)
 
 type PluggableStorageEngine struct {
 	Provider StorageProvider `mapstructure:"provider"`
@@ -78,9 +86,9 @@ type AMQPConnection struct {
 }
 
 type HTTPClient struct {
-	AuthMode        HTTPClientAuthMethod
-	AuthJWTOptions  AuthJWTOptions  `mapstructure:"jwt_options"`
-	AuthMTLSOptions AuthMTLSOptions `mapstructure:"mtls_options"`
+	AuthMode        HTTPClientAuthMethod `mapstructure:"auth_mode"`
+	AuthJWTOptions  AuthJWTOptions       `mapstructure:"jwt_options"`
+	AuthMTLSOptions AuthMTLSOptions      `mapstructure:"mtls_options"`
 	HTTPConnection  `mapstructure:",squash"`
 }
 

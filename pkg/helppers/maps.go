@@ -1,7 +1,7 @@
 package helppers
 
-func MergeMaps(m1 *map[string]interface{}, m2 *map[string]interface{}) *map[string]interface{} {
-	mout := map[string]interface{}{}
+func MergeMaps[E any](m1 *map[string]E, m2 *map[string]E) *map[string]E {
+	mout := map[string]E{}
 	if m1 != nil {
 		for key, val := range *m1 {
 			mout[key] = val

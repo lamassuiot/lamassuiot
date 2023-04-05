@@ -30,6 +30,8 @@ type Device struct {
 	Alias        string       `json:"alias"`
 	Tags         []string     `json:"tags"`
 	Status       DeviceStatus `json:"status"`
+	Icon         string       `json:"icon"`
+	IconColor    string       `json:"icon_color"`
 	CreationDate time.Time    `json:"creation_ts"`
 	//Metadata set by DMS or end users
 	Metadata map[string]string `json:"metadata"`
@@ -38,18 +40,35 @@ type Device struct {
 	DMSOwnerID         string                `json:"dms_owner"`
 	IdentitySlot       *Slot[Certificate]    `json:"identity"`
 	ExtraSlots         map[string]*Slot[any] `json:"slots"`
+	Logs               map[time.Time]LogMsg  `json:"logs"`
 }
 
 type Slot[E any] struct {
-	DMSManaged                  bool             `json:"dms_managed"` //if true, the certificate MUST be obtained from the DMS server
-	Status                      SlotStatus       `json:"status"`
-	ActiveVersion               int              `json:"active_version"`
-	AllowExpiredRenewal         bool             `json:"allow_expired_renewal"`
-	PreventiveReenrollmentDelta TimeDuration     `json:"preventive_reenrollment_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
-	CriticalDetla               TimeDuration     `json:"critical_delta"`                // (expiration time - delta < time.now) at witch point an event is issued notify critical status
-	SecretType                  CryptoSecretType `json:"type"`
-	Secrets                     map[int]E        `json:"versions"` // version -> secret
+	DMSManaged                  bool                 `json:"dms_managed"` //if true, the certificate MUST be obtained from the DMS server
+	Status                      SlotStatus           `json:"status"`
+	ActiveVersion               int                  `json:"active_version"`
+	AllowExpiredRenewal         bool                 `json:"allow_expired_renewal"`
+	AllowOverrideeEnrollment    bool                 `json:"allow_override_enrollment"`
+	AllowedReenrollmentDelta    TimeDuration         `json:"allowed_reenrollment_detlta"`
+	PreventiveReenrollmentDelta TimeDuration         `json:"preventive_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
+	CriticalDetla               TimeDuration         `json:"critical_delta"`   // (expiration time - delta < time.now) at witch point an event is issued notify critical status
+	SecretType                  CryptoSecretType     `json:"type"`
+	Secrets                     map[int]E            `json:"versions"` // version -> secret
+	Logs                        map[time.Time]LogMsg `json:"logs"`
 }
+
+type LogMsg struct {
+	Msg       string       `json:"message"`
+	Criticity LogCriticity `json:"criticity"`
+}
+
+type LogCriticity string
+
+const (
+	InfoCriticity  LogCriticity = "INFO"
+	ErrorCriticity LogCriticity = "ERROR"
+	WarnCriticity  LogCriticity = "WARN"
+)
 
 type EmergencyReEnrollAuthentication struct {
 	PreSharedKey          string        `json:"psk"` //this can be encrypted with the last PublicKey/Cert of the device and should be get by the device

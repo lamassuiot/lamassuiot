@@ -8,24 +8,21 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/services"
 )
 
-func NewDMSManagerHTTPLayer(svc services.DMSManagerService, httpServerCfg config.HttpServer, apiInfo models.APIServiceInfo) error {
+func NewDeviceManagerHTTPLayer(svc services.DeviceManagerService, httpServerCfg config.HttpServer, apiInfo models.APIServiceInfo) error {
 	if !httpServerCfg.DebugMode {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	router := gin.New()
 	router.Use(ginResponseErorrLogger, gin.Logger(), gin.Recovery())
 
-	routes := controllers.NewDMSManagerHttpRoutes(svc)
+	routes := controllers.NewDeviceManagerHttpRoutes(svc)
 
 	NewESTHttpRoutes(router, svc)
 
 	rv1 := router.Group("/v1")
-
-	rv1.GET("/dms", routes.GetAllDMSs)
-	rv1.POST("/dms", routes.CreateDMS)
-	rv1.GET("/dms/:id", routes.GetDMSByID)
-	rv1.PUT("/dms/:id/status", routes.UpdateStatus)
-	rv1.PUT("/dms/:id/id-profile", routes.UpdateIdentityProfile)
+	rv1.GET("/devices", routes.GetAllDevices)
+	rv1.POST("/devices", routes.GetAllDevices)
+	rv1.GET("/devices/:id", routes.GetAllDevices)
 
 	return newHttpRouter(router, httpServerCfg, apiInfo)
 }

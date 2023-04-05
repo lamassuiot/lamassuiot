@@ -1,7 +1,5 @@
 package models
 
-import "crypto/x509"
-
 type ESTAuthMode string
 
 const (
@@ -11,7 +9,21 @@ const (
 	MutualTLS ESTAuthMode = "MUTUAL_TLS"
 )
 
-type ESTAuthModeBootstapCertificate *x509.Certificate
-type ESTAuthModeJWT string
-type ESTAuthModeBootstrapPSK string
-type ESTAuthModeNoAuth interface{}
+type ESTServerAuthOptionsMutualTLS struct {
+	ValidationCAs []string `json:"validation_cas"`
+}
+
+type ESTClientAuthOptionsMutualTLS struct {
+	Certificate *X509Certificate
+	PrivateKey  interface{}
+}
+
+type ESTServerAuthOptionJWT struct {
+}
+
+type ESTServerAuthOptionPSK struct {
+}
+
+const (
+	ESTHeaders string = "ESTHeaders"
+)

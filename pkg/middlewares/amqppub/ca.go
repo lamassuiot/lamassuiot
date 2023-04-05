@@ -21,8 +21,8 @@ func NewCAAmqpEventPublisher(amqpPublisher chan *AmqpPublishMessage) services.CA
 	}
 }
 
-func (mw amqpEventPublisher) GetCryptoEngineProviders() []models.EngineProvider {
-	return mw.next.GetCryptoEngineProviders()
+func (mw amqpEventPublisher) GetCryptoEngineProvider() (*models.EngineProvider, error) {
+	return mw.next.GetCryptoEngineProvider()
 }
 
 func (mw amqpEventPublisher) CreateCA(input services.CreateCAInput) (output *models.CACertificate, err error) {
@@ -41,15 +41,6 @@ func (mw amqpEventPublisher) ImportCA(input services.ImportCAInput) (output *mod
 		}
 	}()
 	return mw.next.ImportCA(input)
-}
-
-func (mw amqpEventPublisher) RotateCA(input services.RotateCAInput) (output *models.CACertificate, err error) {
-	defer func() {
-		if err == nil {
-			mw.publishEvent("ca.rotate", caSource, output)
-		}
-	}()
-	return mw.next.RotateCA(input)
 }
 
 func (mw amqpEventPublisher) GetCAByID(input services.GetCAByIDInput) (*models.CACertificate, error) {

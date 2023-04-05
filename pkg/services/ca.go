@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/internal/ca/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/internal/ca/x509engine"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
@@ -26,14 +25,13 @@ type CAMiddleware func(CAService) CAService
 
 type CAService interface {
 	// GetStats() models.CAStats
-	GetCryptoEngineProviders() []models.EngineProvider
+	GetCryptoEngineProvider() (*models.EngineProvider, error)
 
 	CreateCA(input CreateCAInput) (*models.CACertificate, error)
 	ImportCA(input ImportCAInput) (*models.CACertificate, error)
 	GetCAByID(input GetCAByIDInput) (*models.CACertificate, error)
 	GetCAs(input GetCAsInput) (string, error)
 	UpdateCAStatus(input UpdateCAStatusInput) (*models.CACertificate, error)
-	RotateCA(input RotateCAInput) (*models.CACertificate, error)
 	DeleteCA(input DeleteCAInput) error
 
 	SignCertificate(input SignCertificateInput) (*models.Certificate, error)
@@ -54,25 +52,19 @@ var (
 	ErrStatusTransitionNotAllowed error = errors.New("status transition not allowed")
 )
 
-type EngineServiceMap struct {
-	Name         string
-	Metadata     map[string]interface{}
-	CryptoEngine cryptoengines.CryptoEngine
-}
-
 var validate *validator.Validate
 
 type CAServiceImpl struct {
-	service                 CAService
-	cryptoEngineServicesMap map[string]EngineServiceMap
-	caStorage               storage.CACertificatesRepo
-	certStorage             storage.CertificatesRepo
-	cronInstance            *cron.Cron
-	crtyptoMonitorConfig    config.CryptoMonitoring
+	service              CAService
+	cryptoEngine         cryptoengines.CryptoEngine
+	caStorage            storage.CACertificatesRepo
+	certStorage          storage.CertificatesRepo
+	cronInstance         *cron.Cron
+	crtyptoMonitorConfig config.CryptoMonitoring
 }
 
 type CAServiceBuilder struct {
-	CryptoEngines        map[string]EngineServiceMap
+	CryptoEngine         cryptoengines.CryptoEngine
 	CAStorage            storage.CACertificatesRepo
 	CertificateStorage   storage.CertificatesRepo
 	CryptoMonitoringConf config.CryptoMonitoring
@@ -82,14 +74,48 @@ func NeCAService(builder CAServiceBuilder) CAService {
 	validate = validator.New()
 
 	svc := CAServiceImpl{
-		cronInstance:            cron.New(),
-		cryptoEngineServicesMap: builder.CryptoEngines,
-		caStorage:               builder.CAStorage,
-		certStorage:             builder.CertificateStorage,
-		crtyptoMonitorConfig:    builder.CryptoMonitoringConf,
+		cronInstance:         cron.New(),
+		cryptoEngine:         builder.CryptoEngine,
+		caStorage:            builder.CAStorage,
+		certStorage:          builder.CertificateStorage,
+		crtyptoMonitorConfig: builder.CryptoMonitoringConf,
 	}
 
 	svc.service = &svc
+
+	internalCAs := []models.InternalCA{
+		models.CALocalRA,
+	}
+
+	for _, internalCA := range internalCAs {
+		exists, err := svc.caStorage.Exists(context.Background(), string(internalCA))
+		if err != nil {
+			log.Panicf("could not initialize service: could not check if internal CA '%s' exists: %s", internalCA, err)
+		}
+
+		if !exists {
+			caDur, _ := models.ParseDuration("50y")
+			issuanceDur, _ := models.ParseDuration("3y")
+			_, err := svc.service.CreateCA(CreateCAInput{
+				CAType: models.CATypeInternal,
+				KeyMetadata: models.KeyMetadata{
+					Type: models.ECDSA,
+					Bits: 256,
+				},
+				Subject: models.Subject{
+					CommonName:       string(internalCA),
+					Organization:     "LAMASSU",
+					OrganizationUnit: "INTERNAL CA",
+				},
+				CADuration:       models.TimeDuration(caDur),
+				IssuanceDuration: models.TimeDuration(issuanceDur),
+			})
+
+			if err != nil {
+				log.Panicf("could not initialize service: could not create internal CA '%s': %s", internalCA, err)
+			}
+		}
+	}
 
 	cryptoMonitor := func() {
 		//TODO
@@ -120,37 +146,32 @@ func NeCAService(builder CAServiceBuilder) CAService {
 			}
 
 			caScanFunc := func(ca *models.CACertificate) {
-				allowableRotTime := ca.Certificate.Certificate.NotAfter.Add(-time.Duration(ca.IssuanceDuration)).Add(-reenrollableCADelta)
-				now := time.Now()
-				if allowableRotTime.After(now) {
-					log.Tracef(
-						"not rotating CA %s. Now is %s. Expiration (minus IssuanceDuration and RenewalDelta) is %s. Delta is %s ",
-						ca.ID,
-						now.Format("2006-01-02 15:04:05"),
-						allowableRotTime.Format("2006-01-02 15:04:05"),
-						models.DurationToString(allowableRotTime.Sub(now)),
-					)
-				} else {
-					log.Infof(
-						"rotating CA %s. Now is %s. Expiration (minus IssuanceDuration and RenewalDelta) is %s. Delta is %s ",
-						ca.ID,
-						now.Format("2006-01-02 15:04:05"),
-						allowableRotTime.Format("2006-01-02 15:04:05"),
-						models.DurationToString(allowableRotTime.Sub(now)),
-					)
+				// allowableRotTime := ca.Certificate.Certificate.NotAfter.Add(-time.Duration(ca.IssuanceDuration)).Add(-reenrollableCADelta)
+				// now := time.Now()
+				// if allowableRotTime.After(now) {
+				// 	log.Tracef(
+				// 		"not rotating CA %s. Now is %s. Expiration (minus IssuanceDuration and RenewalDelta) is %s. Delta is %s ",
+				// 		ca.ID,
+				// 		now.Format("2006-01-02 15:04:05"),
+				// 		allowableRotTime.Format("2006-01-02 15:04:05"),
+				// 		models.DurationToString(allowableRotTime.Sub(now)),
+				// 	)
+				// } else {
+				// 	log.Infof(
+				// 		"rotating CA %s. Now is %s. Expiration (minus IssuanceDuration and RenewalDelta) is %s. Delta is %s ",
+				// 		ca.ID,
+				// 		now.Format("2006-01-02 15:04:05"),
+				// 		allowableRotTime.Format("2006-01-02 15:04:05"),
+				// 		models.DurationToString(allowableRotTime.Sub(now)),
+				// 	)
 
-					if ca.External {
-						log.Warnf("cannot rotate an external CA cn=[%s] id=[%s]: %s", ca.Metadata.Name, ca.ID, err)
-						return
-					}
-
-					_, err = svc.service.RotateCA(RotateCAInput{
-						ID: ca.ID,
-					})
-					if err != nil {
-						log.Errorf("something went wrong while rotating CA: %s", err)
-					}
-				}
+				// 	_, err = svc.service.RotateCA(RotateCAInput{
+				// 		CAID: ca.ID,
+				// 	})
+				// 	if err != nil {
+				// 		log.Errorf("something went wrong while rotating CA: %s", err)
+				// 	}
+				// }
 			}
 
 			svc.service.GetCAs(GetCAsInput{
@@ -227,23 +248,18 @@ func (svc *CAServiceImpl) SetService(service CAService) {
 	svc.service = service
 }
 
-func (svc *CAServiceImpl) GetCryptoEngineProviders() []models.EngineProvider {
-	enginesInfo := []models.EngineProvider{}
-	for engineID, engine := range svc.cryptoEngineServicesMap {
-		enginesInfo = append(enginesInfo, models.EngineProvider{
-			ID:                   engineID,
-			Name:                 engine.Name,
-			Metadata:             engine.Metadata,
-			CryptoEngineProvider: engine.CryptoEngine.GetEngineConfig(),
-		})
+func (svc *CAServiceImpl) GetCryptoEngineProvider() (*models.EngineProvider, error) {
+	engineInfo := models.EngineProvider{
+		ID:                   "-",
+		Name:                 "-",
+		Metadata:             map[string]interface{}{},
+		CryptoEngineProvider: svc.cryptoEngine.GetEngineConfig(),
 	}
 
-	return enginesInfo
+	return &engineInfo, nil
 }
 
 type issueCAInput struct {
-	IssuerCAID  string
-	EngineID    string              `validate:"required"`
 	KeyMetadata models.KeyMetadata  `validate:"required"`
 	Subject     models.Subject      `validate:"required"`
 	CADuration  models.TimeDuration `validate:"required"`
@@ -251,93 +267,27 @@ type issueCAInput struct {
 }
 
 type issueCAOutput struct {
-	CertificateLevel int
-	Certificate      *x509.Certificate
-	IssuerCAMetadata models.IssuerCAMetadata
+	Certificate *x509.Certificate
 }
 
 func (svc *CAServiceImpl) issueCA(input issueCAInput) (*issueCAOutput, error) {
 	var err error
 
-	engine := svc.cryptoEngineServicesMap[input.EngineID].CryptoEngine
-	if engine == nil {
-		return nil, ErrEngineNotFound
-	}
+	x509Engine := x509engine.NewX509Engine(svc.cryptoEngine, "")
 
-	x509Engine := x509engine.NewX509Engine(engine, "")
-
-	var certificateLevel = 0
-	var caMetadata models.IssuerCAMetadata
 	var caCert *x509.Certificate
 
-	if input.IssuerCAID != "" {
-		issuerCA, err := svc.service.GetCAByID(GetCAByIDInput{
-			ID: input.IssuerCAID,
-		})
-		if err != nil {
-			return nil, ErrCANotFound
-		}
-
-		certificateLevel = issuerCA.Level + 1
-
-		t0 := time.Now().Add(time.Hour).Add(time.Duration(input.CADuration))
-		t1 := issuerCA.Certificate.Certificate.NotAfter
-		if t0.After(t1) {
-			return nil, fmt.Errorf("can't issue a certificate that has a longer lifespan than the remaining lifespan of its CA parent")
-		}
-
-		if time.Now().After(issuerCA.Certificate.Certificate.NotAfter) {
-			return nil, fmt.Errorf("can't issue a certificate from an expired CA")
-		}
-
-		if input.CAType != issuerCA.Metadata.Type {
-			return nil, fmt.Errorf("can't issue a certificate with different type than its CA parent")
-		}
-
-		parentEngine := svc.cryptoEngineServicesMap[issuerCA.Metadata.EngineProviderID].CryptoEngine
-		if engine == nil {
-			return nil, fmt.Errorf("issuer engine %s does not exist. Missing engine in config file?", issuerCA.Metadata.EngineProviderID)
-		}
-
-		parentCertificate := (*x509.Certificate)(issuerCA.Certificate.Certificate)
-		parentSigner, err := x509engine.NewX509Engine(parentEngine, "").GetCACryptoSigner(parentCertificate)
-		if err != nil {
-			return nil, fmt.Errorf("issuer signer (private key abstraction) %s does not exist. Corrupted %s engine?: %w", issuerCA.ID, issuerCA.Metadata.EngineProviderID, err)
-		}
-
-		caMetadata = models.IssuerCAMetadata{
-			ID:               issuerCA.ID,
-			EngineProviderID: issuerCA.Metadata.EngineProviderID,
-			SerialNumber:     helppers.SerialNumberToString(parentCertificate.SerialNumber),
-		}
-
-		caCert, err = x509Engine.CreateSubordinateCA(parentCertificate, parentSigner, input.KeyMetadata, input.Subject, time.Duration(input.CADuration))
-		if err != nil {
-			return nil, err
-		}
-
-	} else {
-		caCert, err = x509Engine.CreateRootCA(input.KeyMetadata, input.Subject, time.Duration(input.CADuration))
-		if err != nil {
-			return nil, err
-		}
-
-		caMetadata = models.IssuerCAMetadata{
-			EngineProviderID: input.EngineID,
-			ID:               goid.NewV4UUID().String(),
-			SerialNumber:     helppers.SerialNumberToString(caCert.SerialNumber),
-		}
+	caCert, err = x509Engine.CreateRootCA(input.KeyMetadata, input.Subject, time.Duration(input.CADuration))
+	if err != nil {
+		return nil, err
 	}
 
 	return &issueCAOutput{
-		CertificateLevel: certificateLevel,
-		Certificate:      caCert,
-		IssuerCAMetadata: caMetadata,
+		Certificate: caCert,
 	}, nil
 }
 
 type ImportCAInput struct {
-	EngineID         string         `validate:"required"`
 	CAType           models.CAType  `validate:"required"`
 	IssuanceDuration time.Duration  `validate:"required"`
 	KeyType          models.KeyType `validate:"required"`
@@ -359,119 +309,41 @@ func (svc *CAServiceImpl) ImportCA(input ImportCAInput) (*models.CACertificate, 
 		return nil, fmt.Errorf("CA and the provided key dont match: %w", err)
 	}
 
-	caID := goid.NewV4UUID().String()
-	engine := svc.cryptoEngineServicesMap[input.EngineID].CryptoEngine
-	if engine == nil {
-		return nil, fmt.Errorf("engine does not exist")
-	}
+	engine := svc.cryptoEngine
 
 	if input.CARSAKey != nil {
-		_, err = engine.ImportRSAPrivateKey(input.CARSAKey, caID)
+		_, err = engine.ImportRSAPrivateKey(input.CARSAKey, input.CACertificate.Subject.CommonName)
 	} else if input.CAECKey != nil {
-		_, err = engine.ImportECDSAPrivateKey(input.CAECKey, caID)
+		_, err = engine.ImportECDSAPrivateKey(input.CAECKey, input.CACertificate.Subject.CommonName)
 	}
 
 	if err != nil {
 		return nil, fmt.Errorf("could not import key: %w", err)
 	}
 
-	var parentCA *models.CACertificate = nil
-	for i, ca := range input.CAChain {
-		var parentCACert *models.X509Certificate
-		var parentCAID string
-
-		newID := goid.NewV4UUID().String()
-		if i > 0 {
-			parentCACert = input.CAChain[i-1]
-			parentCAID = parentCA.ID
-		} else {
-			parentCACert = input.CAChain[0]
-			parentCAID = newID
-		}
-
-		parentCA = &models.CACertificate{
-			ID:               newID,
-			Version:          0,
-			External:         true,
-			IssuanceDuration: models.TimeDuration(input.IssuanceDuration),
-			Metadata: models.CAMetadata{
-				EngineProviderID: input.EngineID,
-				Name:             input.CACertificate.Subject.CommonName,
-				Type:             input.CAType,
-			},
-			VersionHistory: map[int]string{
-				0: helppers.SerialNumberToString(ca.SerialNumber),
-			},
-			CreationTS: ca.NotBefore,
-			Certificate: models.Certificate{
-				Level:               len(input.CAChain),
-				Fingerprint:         helppers.X509CertFingerprint(x509.Certificate(*input.CACertificate)),
-				Certificate:         input.CACertificate,
-				Status:              models.StatusActive,
-				SerialNumber:        helppers.SerialNumberToString(ca.SerialNumber),
-				KeyMetadata:         helppers.KeyStrengthMetadataFromCertificate((*x509.Certificate)(ca)),
-				Subject:             helppers.PkixNameToSubject(ca.Subject),
-				ValidFrom:           ca.NotBefore,
-				ValidTo:             ca.NotAfter,
-				RevocationTimestamp: time.Time{},
-				RevocationReason:    "",
-				IssuerCAMetadata: models.IssuerCAMetadata{
-					EngineProviderID: "-",
-					SerialNumber:     helppers.SerialNumberToString(parentCACert.SerialNumber),
-					ID:               parentCAID,
-				},
-			},
-		}
-
-		svc.caStorage.Insert(context.Background(), parentCA)
-	}
-
-	keyMeta := helppers.KeyStrengthMetadataFromCertificate((*x509.Certificate)(caCert))
-
-	var caIssuerMeta models.IssuerCAMetadata
-	if parentCA != nil {
-		//It's not a self signed CA. it has a parentCA
-		caIssuerMeta = models.IssuerCAMetadata{
-			EngineProviderID: parentCA.Metadata.EngineProviderID,
-			SerialNumber:     parentCA.SerialNumber,
-			ID:               parentCA.ID,
-		}
-	} else {
-		//It's a SelfSigned ROOT CA
-		caIssuerMeta = models.IssuerCAMetadata{
-			ID:               caID,
-			EngineProviderID: input.EngineID,
-			SerialNumber:     helppers.SerialNumberToString(caCert.SerialNumber),
-		}
-	}
-
+	caID := input.CACertificate.Subject.CommonName
 	ca := &models.CACertificate{
 		ID:               caID,
-		Version:          0,
-		External:         false,
 		IssuanceDuration: models.TimeDuration(input.IssuanceDuration),
 		Metadata: models.CAMetadata{
-			EngineProviderID: input.EngineID,
-			Name:             input.CACertificate.Subject.CommonName,
-			Type:             input.CAType,
-		},
-		VersionHistory: map[int]string{
-			0: helppers.SerialNumberToString(caCert.SerialNumber),
+			Name: input.CACertificate.Subject.CommonName,
+			Type: input.CAType,
 		},
 		CreationTS: caCert.NotBefore,
 		Certificate: models.Certificate{
-			Level:               len(input.CAChain),
 			Fingerprint:         helppers.X509CertFingerprint(x509.Certificate(*input.CACertificate)),
 			Certificate:         input.CACertificate,
 			Status:              models.StatusActive,
 			SerialNumber:        helppers.SerialNumberToString(caCert.SerialNumber),
-			KeyMetadata:         keyMeta,
+			KeyMetadata:         helppers.KeyStrengthMetadataFromCertificate((*x509.Certificate)(caCert)),
 			Subject:             helppers.PkixNameToSubject(caCert.Subject),
 			ValidFrom:           caCert.NotBefore,
 			ValidTo:             caCert.NotAfter,
 			RevocationTimestamp: time.Time{},
 			RevocationReason:    "",
-			IssuerCAMetadata:    caIssuerMeta,
+			IssuerCAMetadata: models.IssuerCAMetadata{
+				CAID: caID,
+			},
 		},
 	}
 
@@ -479,8 +351,6 @@ func (svc *CAServiceImpl) ImportCA(input ImportCAInput) (*models.CACertificate, 
 }
 
 type CreateCAInput struct {
-	IssuerCAID       string
-	EngineID         string              `validate:"required"`
 	CAType           models.CAType       `validate:"required"`
 	KeyMetadata      models.KeyMetadata  `validate:"required"`
 	Subject          models.Subject      `validate:"required"`
@@ -496,8 +366,6 @@ func (svc *CAServiceImpl) CreateCA(input CreateCAInput) (*models.CACertificate, 
 	}
 
 	issuedCA, err := svc.issueCA(issueCAInput{
-		EngineID:    input.EngineID,
-		IssuerCAID:  input.IssuerCAID,
 		KeyMetadata: input.KeyMetadata,
 		Subject:     input.Subject,
 		CADuration:  input.CADuration,
@@ -508,30 +376,16 @@ func (svc *CAServiceImpl) CreateCA(input CreateCAInput) (*models.CACertificate, 
 	}
 
 	caCert := issuedCA.Certificate
-
-	caID := ""
-	if issuedCA.CertificateLevel == 0 {
-		caID = issuedCA.IssuerCAMetadata.ID
-	} else {
-		caID = goid.NewV4UUID().String()
-	}
-
+	caID := caCert.Subject.CommonName
 	ca := models.CACertificate{
 		ID:               caID,
-		Version:          0,
-		External:         false,
 		IssuanceDuration: models.TimeDuration(input.IssuanceDuration),
 		Metadata: models.CAMetadata{
-			EngineProviderID: input.EngineID,
-			Name:             input.Subject.CommonName,
-			Type:             input.CAType,
-		},
-		VersionHistory: map[int]string{
-			0: helppers.SerialNumberToString(caCert.SerialNumber),
+			Name: input.Subject.CommonName,
+			Type: input.CAType,
 		},
 		CreationTS: caCert.NotBefore,
 		Certificate: models.Certificate{
-			Level:        issuedCA.CertificateLevel,
 			Fingerprint:  helppers.X509CertFingerprint(*caCert),
 			Certificate:  (*models.X509Certificate)(caCert),
 			Status:       models.StatusActive,
@@ -546,7 +400,10 @@ func (svc *CAServiceImpl) CreateCA(input CreateCAInput) (*models.CACertificate, 
 			ValidTo:             caCert.NotAfter,
 			RevocationTimestamp: time.Time{},
 			RevocationReason:    "",
-			IssuerCAMetadata:    issuedCA.IssuerCAMetadata,
+			IssuerCAMetadata: models.IssuerCAMetadata{
+				SerialNumber: helppers.SerialNumberToString(caCert.SerialNumber),
+				CAID:         caID,
+			},
 		},
 	}
 
@@ -560,84 +417,11 @@ func (svc *CAServiceImpl) CreateCA(input CreateCAInput) (*models.CACertificate, 
 }
 
 type RotateCAInput struct {
-	ID string `validate:"required"`
-}
-
-func (svc *CAServiceImpl) RotateCA(input RotateCAInput) (*models.CACertificate, error) {
-	err := validate.Struct(input)
-	if err != nil {
-		return nil, err
-	}
-
-	ca, err := svc.caStorage.Select(context.Background(), input.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	now := time.Now()
-
-	if now.After(ca.Certificate.Certificate.NotAfter) {
-		if !svc.crtyptoMonitorConfig.AutomaticCARotation.Enabled {
-			return nil, fmt.Errorf("can't rotate expired CA. Change your configuration if necessary to enable rotating expired CAs")
-		}
-
-		log.Warn("rotating an expired CA")
-	}
-
-	caID := ca.IssuerCAMetadata.ID
-	if ca.Level == 0 {
-		caID = ""
-	}
-
-	issuedCA, err := svc.issueCA(issueCAInput{
-		EngineID: ca.Metadata.EngineProviderID,
-		KeyMetadata: models.KeyMetadata{
-			Type: ca.KeyMetadata.Type,
-			Bits: ca.KeyMetadata.Bits,
-		},
-		Subject:    ca.Subject,
-		CADuration: models.TimeDuration(ca.Certificate.Certificate.NotAfter.Sub(ca.Certificate.Certificate.NotBefore)),
-		IssuerCAID: caID,
-		CAType:     ca.Metadata.Type,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	newCACert := issuedCA.Certificate
-
-	ca.Version += 1
-	ca.VersionHistory[ca.Version] = helppers.SerialNumberToString(newCACert.SerialNumber)
-	ca.Certificate = models.Certificate{
-		Level:        issuedCA.CertificateLevel,
-		Certificate:  (*models.X509Certificate)(newCACert),
-		Status:       models.StatusActive,
-		Fingerprint:  helppers.X509CertFingerprint(*newCACert),
-		SerialNumber: helppers.SerialNumberToString(newCACert.SerialNumber),
-		KeyMetadata: models.KeyStrengthMetadata{
-			Type:     ca.KeyMetadata.Type,
-			Bits:     ca.KeyMetadata.Bits,
-			Strength: models.KeyStrengthHigh,
-		},
-		Subject:             ca.Subject,
-		ValidFrom:           newCACert.NotBefore,
-		ValidTo:             newCACert.NotAfter,
-		RevocationTimestamp: time.Time{},
-		RevocationReason:    "",
-		IssuerCAMetadata:    issuedCA.IssuerCAMetadata,
-	}
-
-	//Store a copy of the certificate, otherwise when rotated, the cert is lost
-	_, err = svc.certStorage.Insert(context.Background(), &ca.Certificate)
-	if err != nil {
-		return nil, err
-	}
-
-	return svc.caStorage.Update(context.Background(), ca)
+	CAID string `validate:"required"`
 }
 
 type GetCAByIDInput struct {
-	ID string `validate:"required"`
+	CAID string `validate:"required"`
 }
 
 func (svc *CAServiceImpl) GetCAByID(input GetCAByIDInput) (*models.CACertificate, error) {
@@ -646,7 +430,7 @@ func (svc *CAServiceImpl) GetCAByID(input GetCAByIDInput) (*models.CACertificate
 		return nil, err
 	}
 
-	ca, err := svc.caStorage.Select(context.Background(), input.ID)
+	ca, err := svc.caStorage.Select(context.Background(), input.CAID)
 	return ca, err
 }
 
@@ -667,7 +451,7 @@ func (svc *CAServiceImpl) GetCAs(input GetCAsInput) (string, error) {
 }
 
 type UpdateCAStatusInput struct {
-	ID     string                   `validate:"required"`
+	CAID   string                   `validate:"required"`
 	Status models.CertificateStatus `validate:"required"`
 }
 
@@ -677,7 +461,7 @@ func (svc *CAServiceImpl) UpdateCAStatus(input UpdateCAStatusInput) (*models.CAC
 		return nil, err
 	}
 
-	ca, err := svc.caStorage.Select(context.Background(), input.ID)
+	ca, err := svc.caStorage.Select(context.Background(), input.CAID)
 	if err != nil {
 		return nil, err
 	}
@@ -689,11 +473,28 @@ func (svc *CAServiceImpl) UpdateCAStatus(input UpdateCAStatusInput) (*models.CAC
 		return nil, err
 	}
 
+	if input.Status == models.StatusRevoked {
+		revokeCertFunc := func(c *models.Certificate) {
+			_, err := svc.UpdateCertificateStatus(UpdateCertificateStatusInput{
+				SerialNumber: c.SerialNumber,
+				Status:       models.StatusRevoked,
+			})
+			if err != nil {
+				log.Errorf("could not revoke certificate %s issued by CA %s", c.SerialNumber, c.IssuerCAMetadata.CAID)
+			}
+		}
+
+		_, err = svc.certStorage.SelectByCA(context.Background(), ca.Metadata.Name, true, revokeCertFunc, &resources.QueryParameters{}, map[string]interface{}{})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return ca, err
 }
 
 type DeleteCAInput struct {
-	ID string `validate:"required"`
+	CAID string `validate:"required"`
 }
 
 func (svc *CAServiceImpl) DeleteCA(input DeleteCAInput) error {
@@ -702,7 +503,7 @@ func (svc *CAServiceImpl) DeleteCA(input DeleteCAInput) error {
 		return err
 	}
 
-	ca, err := svc.caStorage.Select(context.Background(), input.ID)
+	ca, err := svc.caStorage.Select(context.Background(), input.CAID)
 	if err != nil {
 		return err
 	}
@@ -729,7 +530,7 @@ func (svc *CAServiceImpl) SignCertificate(input SignCertificateInput) (*models.C
 	}
 
 	ca, err := svc.service.GetCAByID(GetCAByIDInput{
-		ID: input.CAID,
+		CAID: input.CAID,
 	})
 	if err != nil {
 		return nil, err
@@ -739,12 +540,7 @@ func (svc *CAServiceImpl) SignCertificate(input SignCertificateInput) (*models.C
 		return nil, fmt.Errorf("CA is not active")
 	}
 
-	engine := svc.cryptoEngineServicesMap[ca.Metadata.EngineProviderID].CryptoEngine
-	if engine == nil {
-		return nil, fmt.Errorf("engine does not exist")
-	}
-
-	x509Engine := x509engine.NewX509Engine(engine, "")
+	x509Engine := x509engine.NewX509Engine(svc.cryptoEngine, "")
 
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
 	x509Cert, err := x509Engine.SignCertificateRequest(caCert, (*x509.CertificateRequest)(input.CertRequest), time.Duration(ca.IssuanceDuration), input.SignVerbatim, input.Subject)
@@ -754,12 +550,10 @@ func (svc *CAServiceImpl) SignCertificate(input SignCertificateInput) (*models.C
 
 	cert := models.Certificate{
 		Certificate: (*models.X509Certificate)(x509Cert),
-		Level:       ca.Level + 1,
 		Fingerprint: helppers.X509CertFingerprint(*x509Cert),
 		IssuerCAMetadata: models.IssuerCAMetadata{
-			EngineProviderID: ca.Metadata.EngineProviderID,
-			SerialNumber:     helppers.SerialNumberToString(caCert.SerialNumber),
-			ID:               ca.ID,
+			SerialNumber: helppers.SerialNumberToString(caCert.SerialNumber),
+			CAID:         ca.ID,
 		},
 		Status:              models.StatusActive,
 		KeyMetadata:         helppers.KeyStrengthMetadataFromCertificate(x509Cert),

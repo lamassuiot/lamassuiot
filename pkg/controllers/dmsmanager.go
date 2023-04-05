@@ -11,7 +11,7 @@ type dmsManagerHttpRoutes struct {
 	svc services.DMSManagerService
 }
 
-func NewDMSManagerdmsManagerHttpRoutes(svc services.DMSManagerService) *dmsManagerHttpRoutes {
+func NewDMSManagerHttpRoutes(svc services.DMSManagerService) *dmsManagerHttpRoutes {
 	return &dmsManagerHttpRoutes{
 		svc: svc,
 	}
@@ -37,8 +37,10 @@ func (r *dmsManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, resources.GetDMSsResponse{
-		NextBookmark: nextBookmark,
-		DMSs:         dmss,
+		IterbaleList: resources.IterbaleList[models.DMS]{
+			NextBookmark: nextBookmark,
+			List:         dmss,
+		},
 	})
 }
 
@@ -65,25 +67,45 @@ func (r *dmsManagerHttpRoutes) GetDMSByID(ctx *gin.Context) {
 }
 
 func (r *dmsManagerHttpRoutes) CreateDMS(ctx *gin.Context) {
-	var requestBody resources.CreateBody
+	var requestBody resources.CreateDMSBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
+		ctx.AbortWithStatusJSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
-	ca, key, err := r.svc.Create(services.CreateInput{
+	input := services.CreateDMSInput{
 		CloudDMS: requestBody.CloudDMS,
 		Metadata: requestBody.Metadata,
 		Tags:     requestBody.Tags,
-		RemoteAccessIdentity: &services.RemoteAccessIdentity{
-			Csr:     requestBody.RemoteAccessIdentityRequest.CertificateRequest,
-			Subject: requestBody.RemoteAccessIdentityRequest.Subject,
+		Name:     requestBody.Name,
+		IdentityProfile: models.IdentityProfile{
+			EnrollmentSettings: models.EnrollmentSettings{
+				EnrollmentProtocol: requestBody.IdentityProfile.EnrollmentSettings.EnrollmentProtocol,
+				EnrollOptions:      requestBody.IdentityProfile.EnrollmentSettings.EnrollOptions,
+				DeviceProvisionSettings: models.DeviceProvisionSettings{
+					Icon:       requestBody.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.Icon,
+					IconColor:  requestBody.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.IconColor,
+					Metadata:   requestBody.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.Metadata,
+					Tags:       requestBody.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.Tags,
+					ExtraSlots: map[string]models.SlotProfile{},
+				},
+				AuthorizedCA: requestBody.IdentityProfile.EnrollmentSettings.AuthorizedCA,
+			},
+			ReEnrollmentSettings:   requestBody.IdentityProfile.ReEnrollmentSettings,
+			CADistributionSettings: requestBody.IdentityProfile.CADistributionSettings,
 		},
-		Name: requestBody.Name,
-	})
+	}
+
+	if requestBody.RemoteAccessIdentity != nil {
+		input.RemoteAccessIdentity = &services.RemoteAccessIdentityInput{
+			Csr:     requestBody.RemoteAccessIdentity.CertificateRequest,
+			Subject: requestBody.RemoteAccessIdentity.Subject,
+		}
+	}
+	ca, key, err := r.svc.CreateDMS(input)
 
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		ctx.AbortWithStatusJSON(500, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -104,7 +126,7 @@ func (r *dmsManagerHttpRoutes) UpdateStatus(ctx *gin.Context) {
 		return
 	}
 
-	var requestBody resources.UpdateStatusBody
+	var requestBody resources.UpdateDMSStatusBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return

@@ -20,7 +20,7 @@ type HTTPClientAuthMethod string
 const (
 	JWT    HTTPClientAuthMethod = "jwt"
 	MTLS   HTTPClientAuthMethod = "mtls"
-	NoAuth HTTPClientAuthMethod = "no-auth"
+	NoAuth HTTPClientAuthMethod = "noauth"
 )
 
 type AMQPProtocol string

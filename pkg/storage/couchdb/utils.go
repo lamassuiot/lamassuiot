@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 
 	_ "github.com/go-kivik/couchdb" // The CouchDB driver
 	"github.com/go-kivik/couchdb/v4"
+	"github.com/go-kivik/couchdb/v4/chttp"
 	"github.com/go-kivik/kivik/v4"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
 	"github.com/lamassuiot/lamassuiot/pkg/helppers"
@@ -174,6 +176,27 @@ func (db *couchDBQuerier[E]) SelectByID(elemID string) (*E, error) {
 	}
 
 	return &elem, nil
+}
+
+func (db *couchDBQuerier[E]) Exists(elemID string) (bool, error) {
+	rs := db.Get(context.Background(), elemID)
+	err := rs.Err()
+	if err != nil {
+		switch t := err.(type) {
+		case *chttp.HTTPError:
+			resp := err.(*chttp.HTTPError)
+			if resp.Response.StatusCode == http.StatusNotFound {
+				return false, nil
+			} else {
+				return false, err
+			}
+		default:
+			fmt.Println(t)
+			return false, err
+		}
+	}
+
+	return rs.Next(), nil
 }
 
 func (db *couchDBQuerier[E]) Insert(elem E, elemID string) (*E, error) {

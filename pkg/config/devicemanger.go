@@ -1,6 +1,6 @@
 package config
 
-type DMSconfig struct {
+type DeviceManagerConfig struct {
 	BaseConfig `mapstructure:",squash"`
 	Storage    PluggableStorageEngine `mapstructure:"storage"`
 
@@ -8,9 +8,7 @@ type DMSconfig struct {
 		HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"ca_client"`
 
-	DevManagerESTClient struct {
+	DMSManagerClient struct {
 		HTTPClient `mapstructure:",squash"`
-	} `mapstructure:"device_manager_est_client"`
-
-	DownstreamCertificateFile string `mapstructure:"downstream_cert_file"`
+	} `mapstructure:"dms_manager_client"`
 }

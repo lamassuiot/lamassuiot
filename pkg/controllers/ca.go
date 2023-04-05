@@ -23,9 +23,15 @@ func NewCAHttpRoutes(svc services.CAService) *caHttpRoutes {
 	}
 }
 
-func (r *caHttpRoutes) GetCryptoEngineProviders(ctx *gin.Context) {
-	engines := r.svc.GetCryptoEngineProviders()
-	ctx.JSON(200, engines)
+func (r *caHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
+	engine, err := r.svc.GetCryptoEngineProvider()
+	if err != nil {
+		if err != nil {
+			ctx.JSON(500, gin.H{"err": err.Error()})
+			return
+		}
+	}
+	ctx.JSON(200, engine)
 }
 
 func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
@@ -36,8 +42,6 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 	}
 
 	ca, err := r.svc.CreateCA(services.CreateCAInput{
-		EngineID:         requestBody.EngineID,
-		IssuerCAID:       requestBody.IssuerCAID,
 		KeyMetadata:      requestBody.KeyMetadata,
 		Subject:          requestBody.Subject,
 		IssuanceDuration: requestBody.IssuanceDuration,
@@ -83,7 +87,6 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 	}
 
 	ca, err := r.svc.ImportCA(services.ImportCAInput{
-		EngineID:         requestBody.EngineID,
 		IssuanceDuration: time.Duration(requestBody.IssuanceDuration),
 		CAType:           requestBody.CAType,
 		CAChain:          requestBody.CAChain,
@@ -125,9 +128,32 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 	})
 }
 
+func (r *caHttpRoutes) GetCAByID(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err})
+		return
+	}
+
+	ca, err := r.svc.GetCAByID(services.GetCAByIDInput{
+		CAID: params.ID,
+	})
+
+	if err != nil {
+		ctx.JSON(500, gin.H{"err": err.Error()})
+		return
+	}
+
+	ctx.JSON(200, ca)
+}
+
 func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 	err := r.svc.DeleteCA(services.DeleteCAInput{
-		ID: "",
+		CAID: "",
 	})
 
 	if err != nil {
@@ -136,6 +162,35 @@ func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 	}
 
 	ctx.JSON(201, gin.H{})
+}
+
+func (r *caHttpRoutes) RevokeCA(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err})
+		return
+	}
+
+	var requestBody resources.SignCertificateBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	ca, err := r.svc.UpdateCAStatus(services.UpdateCAStatusInput{
+		CAID:   params.ID,
+		Status: models.StatusRevoked,
+	})
+	if err != nil {
+		ctx.JSON(500, gin.H{"err": err.Error()})
+		return
+	}
+
+	ctx.JSON(201, ca)
 }
 
 func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
@@ -244,7 +299,6 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 
 	ca, err := r.svc.SignCertificate(services.SignCertificateInput{
 		Subject:      requestBody.Subject,
-		CAID:         params.ID,
 		CertRequest:  requestBody.CertRequest,
 		SignVerbatim: requestBody.SignVerbatim,
 	})
