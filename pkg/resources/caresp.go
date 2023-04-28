@@ -9,3 +9,11 @@ type GetCAsResponse struct {
 type GetCertsResponse struct {
 	IterbaleList[models.Certificate]
 }
+
+type SignResponse struct {
+	SignedData string `json:"signed_data"`
+}
+
+type VerifyResponse struct {
+	Valid bool `json:"valid"`
+}

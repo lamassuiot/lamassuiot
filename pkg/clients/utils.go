@@ -10,16 +10,20 @@ import (
 	"net/http"
 
 	"github.com/lamassuiot/lamassuiot/pkg/config"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
+	"github.com/lamassuiot/lamassuiot/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/resources"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 )
 
-func BuildHTTPClient(cfg config.HTTPClient) (*http.Client, error) {
-	client := http.DefaultClient
+func BuildURL(cfg config.HTTPClient) string {
+	return fmt.Sprintf("%s://%s:%d%s", cfg.Protocol, cfg.Hostname, cfg.Port, cfg.BasePath)
+}
 
-	caPool := helppers.LoadSytemCACertPool()
+func BuildHTTPClient(cfg config.HTTPClient, clientName string) (*http.Client, error) {
+	client := &http.Client{}
+
+	caPool := helpers.LoadSytemCACertPool()
 
 	tlsConfig := &tls.Config{}
 
@@ -28,7 +32,7 @@ func BuildHTTPClient(cfg config.HTTPClient) (*http.Client, error) {
 	}
 
 	if cfg.CACertificateFile != "" {
-		cert, err := helppers.ReadCertificateFromFile(cfg.CACertificateFile)
+		cert, err := helpers.ReadCertificateFromFile(cfg.CACertificateFile)
 		if err != nil {
 			return nil, err
 		}
@@ -54,7 +58,7 @@ func BuildHTTPClient(cfg config.HTTPClient) (*http.Client, error) {
 		authHttpCli, err := BuildHTTPClient(config.HTTPClient{
 			AuthMode:       config.NoAuth,
 			HTTPConnection: cfg.HTTPConnection,
-		})
+		}, fmt.Sprintf("%s-JWT", clientName))
 		if err != nil {
 			return nil, err
 		}
@@ -96,7 +100,7 @@ func BuildHTTPClient(cfg config.HTTPClient) (*http.Client, error) {
 		}
 	}
 
-	return client, nil
+	return helpers.BuildHTTPClientWithloggger(client, clientName)
 }
 
 func Post[T any](ctx context.Context, client *http.Client, url string, data any) (T, error) {
@@ -105,6 +109,7 @@ func Post[T any](ctx context.Context, client *http.Client, url string, data any)
 	if err != nil {
 		return m, err
 	}
+	fmt.Println(string(b))
 
 	byteReader := bytes.NewReader(b)
 	r, err := http.NewRequestWithContext(ctx, "POST", url, byteReader)

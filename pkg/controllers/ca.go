@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
+	"github.com/lamassuiot/lamassuiot/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/pkg/services"
@@ -27,7 +27,7 @@ func (r *caHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
 	engine, err := r.svc.GetCryptoEngineProvider()
 	if err != nil {
 		if err != nil {
-			ctx.JSON(500, gin.H{"err": err.Error()})
+			HandleControllerError(ctx, err)
 			return
 		}
 	}
@@ -49,7 +49,7 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 		CAType:           requestBody.CAType,
 	})
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
@@ -69,7 +69,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		return
 	}
 
-	key, err := helppers.ParsePrivateKey(decodedKey)
+	key, err := helpers.ParsePrivateKey(decodedKey)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -96,7 +96,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		CAECKey:          ecKey,
 	})
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
@@ -116,7 +116,7 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
@@ -144,7 +144,7 @@ func (r *caHttpRoutes) GetCAByID(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
@@ -157,7 +157,7 @@ func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
@@ -186,7 +186,7 @@ func (r *caHttpRoutes) RevokeCA(ctx *gin.Context) {
 		Status: models.StatusRevoked,
 	})
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
@@ -209,7 +209,7 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
@@ -231,7 +231,7 @@ func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
@@ -268,7 +268,7 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 		},
 	})
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
@@ -298,14 +298,131 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 	}
 
 	ca, err := r.svc.SignCertificate(services.SignCertificateInput{
+		CAID:         params.ID,
 		Subject:      requestBody.Subject,
 		CertRequest:  requestBody.CertRequest,
 		SignVerbatim: requestBody.SignVerbatim,
 	})
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
 	ctx.JSON(201, ca)
+}
+
+func (r *caHttpRoutes) Sign(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err})
+		return
+	}
+
+	var requestBody resources.SignBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	decodedDigest, err := base64.StdEncoding.DecodeString(requestBody.Message)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	signedBytes, err := r.svc.Sign(services.SignInput{
+		CAID:               params.ID,
+		Message:            decodedDigest,
+		MessageType:        requestBody.MessageType,
+		SignatureAlgorithm: requestBody.SignatureAlgorithm,
+	})
+	if err != nil {
+		HandleControllerError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, resources.SignResponse{
+		SignedData: base64.StdEncoding.EncodeToString(signedBytes),
+	})
+}
+
+func (r *caHttpRoutes) Verify(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err})
+		return
+	}
+
+	var requestBody resources.VerifyBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	decodedDigest, err := base64.StdEncoding.DecodeString(requestBody.Message)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	decodedSignature, err := base64.StdEncoding.DecodeString(requestBody.Signature)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	valid, err := r.svc.VerifySignature(services.VerifySignatureInput{
+		CAID:               params.ID,
+		Message:            decodedDigest,
+		MessageType:        requestBody.MessageType,
+		SignatureAlgorithm: requestBody.SignatureAlgorithm,
+		Signature:          decodedSignature,
+	})
+	if err != nil {
+		HandleControllerError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, resources.VerifyResponse{
+		Valid: valid,
+	})
+}
+
+func (r *caHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
+	type uriParams struct {
+		SerialNumber string `uri:"sn" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err})
+		return
+	}
+
+	var requestBody resources.UpdateCertificateStatusBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	cert, err := r.svc.UpdateCertificateStatus(services.UpdateCertificateStatusInput{
+		SerialNumber:     params.SerialNumber,
+		NewStatus:        requestBody.NewStatus,
+		RevocationReason: requestBody.RevocationReason,
+	})
+
+	if err != nil {
+		HandleControllerError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, cert)
 }

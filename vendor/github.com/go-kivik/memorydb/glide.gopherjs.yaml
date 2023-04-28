@@ -1,0 +1,16 @@
+package: github.com/go-kivik/memorydb
+ignore:
+- github.com/gopherjs/gopherjs
+import:
+- package: github.com/flimzy/kivik
+  version: ^1.0.5
+  subpackages:
+  - driver
+  - driver/common
+  - driver/util
+  - errors
+- package: github.com/go-kivik/mango
+  version: ^0.0.1
+testImport:
+- package: github.com/flimzy/diff
+  version: ^0.1.1

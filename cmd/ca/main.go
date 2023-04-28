@@ -45,12 +45,17 @@ func main() {
 		log.Fatal(err)
 	}
 
-	caStorage, err := couchdb.NewCouchCARepository(conf.Storage.CouchDB.HTTPConnection, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
+	couchdbClient, err := couchdb.CreateCouchDBConnection(conf.Storage.CouchDB.HTTPConnection, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	certStorage, err := couchdb.NewCouchCertificateRepository(conf.Storage.CouchDB.HTTPConnection, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
+	caStorage, err := couchdb.NewCouchCARepository(couchdbClient)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	certStorage, err := couchdb.NewCouchCertificateRepository(couchdbClient)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -64,12 +69,12 @@ func main() {
 	caSvc := svc.(*services.CAServiceImpl)
 
 	if conf.AMQPEventPublisher.Enabled {
-		_, amqpPub, err := amqppub.SetupAMQPConnection(conf.AMQPEventPublisher)
+		amqpHander, err := amqppub.SetupAMQPConnection(conf.AMQPEventPublisher)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		svc = amqppub.NewCAAmqpEventPublisher(amqpPub)(svc)
+		svc = amqppub.NewCAAmqpEventPublisher(amqpHander.PublisherChan)(svc)
 	}
 
 	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)

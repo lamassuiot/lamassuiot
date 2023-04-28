@@ -8,9 +8,9 @@ type DMSconfig struct {
 		HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"ca_client"`
 
-	DevManagerESTClient struct {
+	DevManagerClient struct {
 		HTTPClient `mapstructure:",squash"`
-	} `mapstructure:"device_manager_est_client"`
+	} `mapstructure:"device_manager_client"`
 
 	DownstreamCertificateFile string `mapstructure:"downstream_cert_file"`
 }

@@ -27,13 +27,13 @@ func NewGolangPEMEngine(storageDirectory string) (CryptoEngine, error) {
 	pkcs11ProviderSupportedKeyTypes := []models.SupportedKeyTypeInfo{}
 
 	pkcs11ProviderSupportedKeyTypes = append(pkcs11ProviderSupportedKeyTypes, models.SupportedKeyTypeInfo{
-		Type:        models.RSA,
+		Type:        models.KeyType(x509.RSA),
 		MinimumSize: 1024,
 		MaximumSize: 4096,
 	})
 
 	pkcs11ProviderSupportedKeyTypes = append(pkcs11ProviderSupportedKeyTypes, models.SupportedKeyTypeInfo{
-		Type:        models.ECDSA,
+		Type:        models.KeyType(x509.ECDSA),
 		MinimumSize: 256,
 		MaximumSize: 512,
 	})

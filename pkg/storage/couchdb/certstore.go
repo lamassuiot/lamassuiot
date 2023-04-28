@@ -7,8 +7,7 @@ import (
 
 	_ "github.com/go-kivik/couchdb/v4" // The CouchDB driver
 	kivik "github.com/go-kivik/kivik/v4"
-	"github.com/lamassuiot/lamassuiot/pkg/config"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
+	"github.com/lamassuiot/lamassuiot/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/pkg/storage"
@@ -21,8 +20,8 @@ type CouchDBCertificateStorage struct {
 	querier *couchDBQuerier[models.Certificate]
 }
 
-func NewCouchCertificateRepository(cfg config.HTTPConnection, username, password string) (storage.CertificatesRepo, error) {
-	client, err := createCouchDBConnection(cfg, username, password, []string{certDBName})
+func NewCouchCertificateRepository(client *kivik.Client) (storage.CertificatesRepo, error) {
+	err := CheckAndCreateDB(client, certDBName)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +43,7 @@ func (db *CouchDBCertificateStorage) SelectByType(ctx context.Context, CAType mo
 	opts := map[string]interface{}{
 		"type": CAType,
 	}
-	return db.querier.SelecAll(queryParams, helppers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelecAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
 func (db *CouchDBCertificateStorage) Exists(ctx context.Context, sn string) (bool, error) {
@@ -60,7 +59,7 @@ func (db *CouchDBCertificateStorage) SelectAll(ctx context.Context, exhaustiveRu
 		},
 	}
 
-	return db.querier.SelecAll(queryParams, helppers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelecAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
 func (db *CouchDBCertificateStorage) Select(ctx context.Context, id string) (*models.Certificate, error) {
@@ -78,13 +77,13 @@ func (db *CouchDBCertificateStorage) Update(ctx context.Context, certificate *mo
 func (db *CouchDBCertificateStorage) SelectByCA(ctx context.Context, caID string, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
-			"issuer_metadata.id": map[string]string{
+			"issuer_metadata.ca_name": map[string]string{
 				"$eq": caID,
 			},
 		},
 	}
 
-	return db.querier.SelecAll(queryParams, helppers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelecAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
 func (db *CouchDBCertificateStorage) SelectByExpirationDate(ctx context.Context, beforeExpirationDate time.Time, afterExpirationDate time.Time, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
@@ -115,7 +114,7 @@ func (db *CouchDBCertificateStorage) SelectByExpirationDate(ctx context.Context,
 		},
 	}
 
-	return db.querier.SelecAll(queryParams, helppers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelecAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
 func (db *CouchDBCertificateStorage) CountByCA(ctx context.Context, caID string) (int, error) {

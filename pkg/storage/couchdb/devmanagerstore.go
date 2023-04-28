@@ -5,7 +5,6 @@ import (
 
 	_ "github.com/go-kivik/couchdb/v4" // The CouchDB driver
 	kivik "github.com/go-kivik/kivik/v4"
-	"github.com/lamassuiot/lamassuiot/pkg/config"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/pkg/storage"
@@ -18,9 +17,8 @@ type CouchDBDeviceManagerStorage struct {
 	querier *couchDBQuerier[models.Device]
 }
 
-func NewCouchDeviceManagerRepository(cfg config.HTTPConnection, username, password string) (storage.DeviceManagerRepo, error) {
-
-	client, err := createCouchDBConnection(cfg, username, password, []string{deviceDB})
+func NewCouchDeviceManagerRepository(client *kivik.Client) (storage.DeviceManagerRepo, error) {
+	err := CheckAndCreateDB(client, deviceDB)
 	if err != nil {
 		return nil, err
 	}

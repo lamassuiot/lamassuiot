@@ -11,7 +11,7 @@ import (
 	"github.com/cloudevents/sdk-go/v2/event"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
+	"github.com/lamassuiot/lamassuiot/pkg/helpers"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
@@ -24,21 +24,34 @@ type AmqpPublishMessage struct {
 	Msg       amqp.Publishing
 }
 
-func SetupAMQPConnection(config config.AMQPConnection) (*amqp.Channel, chan *AmqpPublishMessage, error) {
-	amqpConnection, err := buildAMQPConnection(config)
+type amqpHandler struct {
+	AmqpConnection      *amqp.Connection
+	PublisherChan       chan *AmqpPublishMessage
+	amqpChannel         *amqp.Channel
+	amqpChanNotifyClose chan *amqp.Error
+	amqpConfig          config.AMQPConnection
+}
+
+func SetupAMQPConnection(config config.AMQPConnection) (*amqpHandler, error) {
+	handler := &amqpHandler{
+		amqpConfig: config,
+	}
+	err := handler.buildAMQPConnection(config)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	amqpCloseChan := amqpConnection.NotifyClose(make(chan *amqp.Error)) //error channel
+	// amqpCloseChan := amqpConnection.NotifyClose(make(chan *amqp.Error)) //error channel
+	// publisherChan := make(chan *AmqpPublishMessage, 100)
+
 	go func() {
 		for {
 			select { //check connection
-			case err = <-amqpCloseChan:
+			case err = <-handler.amqpChanNotifyClose:
 				//work with error
 				log.Errorf("disconnected from AMQP: %s", err)
 				for {
-					amqpConnection, err = buildAMQPConnection(config)
+					err = handler.buildAMQPConnection(config)
 					if err != nil {
 						log.Errorf("failed to reconnect. Sleeping for 5 secodns: %s", err)
 						time.Sleep(5 * time.Second)
@@ -51,9 +64,44 @@ func SetupAMQPConnection(config config.AMQPConnection) (*amqp.Channel, chan *Amq
 		}
 	}()
 
-	amqpChannel, err := amqpConnection.Channel()
+	return handler, nil
+}
+
+func (h *amqpHandler) buildAMQPConnection(cfg config.AMQPConnection) error {
+	userPassUrlPrefix := ""
+	if cfg.BasicAuth.Enabled {
+		userPassUrlPrefix = fmt.Sprintf("%s:%s@", url.PathEscape(cfg.BasicAuth.Username), url.PathEscape(cfg.BasicAuth.Password))
+	}
+
+	amqpTlsConfig := tls.Config{}
+	certPool := helpers.LoadSytemCACertPoolWithExtraCAsFromFiles([]string{cfg.CACertificateFile})
+	amqpTlsConfig.RootCAs = certPool
+
+	if cfg.InsecureSkipVerify {
+		amqpTlsConfig.InsecureSkipVerify = true
+	}
+
+	if cfg.ClientTLSAuth.Enabled {
+		clientTLSCerts, err := tls.LoadX509KeyPair(cfg.ClientTLSAuth.CertFile, cfg.ClientTLSAuth.KeyFile)
+		if err != nil {
+			log.Error("could not load AMQP client TLS certificate or key: ", err)
+			return err
+		}
+
+		amqpTlsConfig.Certificates = append(amqpTlsConfig.Certificates, clientTLSCerts)
+	}
+
+	amqpURL := fmt.Sprintf("%s://%s%s:%d", cfg.Protocol, userPassUrlPrefix, cfg.Hostname, cfg.Port)
+	amqpConn, err := amqp.DialTLS(amqpURL, &amqpTlsConfig)
 	if err != nil {
-		return nil, nil, err
+		log.Error("failed to connect to AMQP broker: ", err)
+		return err
+	}
+	publisherChan := make(chan *AmqpPublishMessage, 100)
+
+	amqpChannel, err := amqpConn.Channel()
+	if err != nil {
+		return err
 	}
 
 	err = amqpChannel.ExchangeDeclare(
@@ -66,10 +114,8 @@ func SetupAMQPConnection(config config.AMQPConnection) (*amqp.Channel, chan *Amq
 		nil,       // arguments
 	)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
-
-	publisherChan := make(chan *AmqpPublishMessage, 100)
 
 	go func() {
 		for {
@@ -84,41 +130,12 @@ func SetupAMQPConnection(config config.AMQPConnection) (*amqp.Channel, chan *Amq
 		}
 	}()
 
-	return amqpChannel, publisherChan, nil
-}
+	h.AmqpConnection = amqpConn
+	h.PublisherChan = publisherChan
+	h.amqpChanNotifyClose = amqpConn.NotifyClose(make(chan *amqp.Error))
+	h.amqpChannel = amqpChannel
 
-func buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Connection, error) {
-	userPassUrlPrefix := ""
-	if cfg.BasicAuth.Enabled {
-		userPassUrlPrefix = fmt.Sprintf("%s:%s@", url.PathEscape(cfg.BasicAuth.Username), url.PathEscape(cfg.BasicAuth.Password))
-	}
-
-	amqpTlsConfig := tls.Config{}
-	certPool := helppers.LoadSytemCACertPoolWithExtraCAsFromFiles([]string{cfg.CACertificateFile})
-	amqpTlsConfig.RootCAs = certPool
-
-	if cfg.InsecureSkipVerify {
-		amqpTlsConfig.InsecureSkipVerify = true
-	}
-
-	if cfg.ClientTLSAuth.Enabled {
-		clientTLSCerts, err := tls.LoadX509KeyPair(cfg.ClientTLSAuth.CertFile, cfg.ClientTLSAuth.KeyFile)
-		if err != nil {
-			log.Error("could not load AMQP client TLS certificate or key: ", err)
-			return nil, err
-		}
-
-		amqpTlsConfig.Certificates = append(amqpTlsConfig.Certificates, clientTLSCerts)
-	}
-
-	amqpURL := fmt.Sprintf("%s://%s%s:%d", cfg.Protocol, userPassUrlPrefix, cfg.Hostname, cfg.Port)
-	amqpConn, err := amqp.DialTLS(amqpURL, &amqpTlsConfig)
-	if err != nil {
-		log.Error("failed to connect to AMQP broker: ", err)
-		return nil, err
-	}
-
-	return amqpConn, nil
+	return nil
 }
 
 func (mw amqpEventPublisher) publishEvent(eventType string, eventSource string, payload interface{}) {

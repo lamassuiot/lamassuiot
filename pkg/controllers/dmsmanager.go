@@ -32,7 +32,7 @@ func (r *dmsManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
@@ -59,7 +59,7 @@ func (r *dmsManagerHttpRoutes) GetDMSByID(ctx *gin.Context) {
 		ID: params.ID,
 	})
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
@@ -80,8 +80,8 @@ func (r *dmsManagerHttpRoutes) CreateDMS(ctx *gin.Context) {
 		Name:     requestBody.Name,
 		IdentityProfile: models.IdentityProfile{
 			EnrollmentSettings: models.EnrollmentSettings{
-				EnrollmentProtocol: requestBody.IdentityProfile.EnrollmentSettings.EnrollmentProtocol,
-				EnrollOptions:      requestBody.IdentityProfile.EnrollmentSettings.EnrollOptions,
+				EnrollmentProtocol:          requestBody.IdentityProfile.EnrollmentSettings.EnrollmentProtocol,
+				EnrollmentOptionsESTRFC7030: requestBody.IdentityProfile.EnrollmentSettings.EnrollOptions,
 				DeviceProvisionSettings: models.DeviceProvisionSettings{
 					Icon:       requestBody.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.Icon,
 					IconColor:  requestBody.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.IconColor,
@@ -137,7 +137,7 @@ func (r *dmsManagerHttpRoutes) UpdateStatus(ctx *gin.Context) {
 		NewStatus: requestBody.Status,
 	})
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
@@ -166,7 +166,7 @@ func (r *dmsManagerHttpRoutes) UpdateIdentityProfile(ctx *gin.Context) {
 		NewIdentityProfile: requestBody,
 	})
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 

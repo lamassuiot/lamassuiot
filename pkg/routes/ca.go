@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
 	"github.com/lamassuiot/lamassuiot/pkg/controllers"
@@ -12,8 +13,12 @@ func NewCAHTTPLayer(svc services.CAService, httpServerCfg config.HttpServer, api
 	if !httpServerCfg.DebugMode {
 		gin.SetMode(gin.ReleaseMode)
 	}
+	corsConfig := cors.DefaultConfig()
+	corsConfig.AllowAllOrigins = true
+	corsConfig.AllowHeaders = []string{"*"}
+
 	router := gin.New()
-	router.Use(ginResponseErorrLogger, gin.Logger(), gin.Recovery())
+	router.Use(cors.New(corsConfig), ginResponseErorrLogger, gin.Logger(), gin.Recovery())
 
 	routes := controllers.NewCAHttpRoutes(svc)
 
@@ -24,7 +29,9 @@ func NewCAHTTPLayer(svc services.CAService, httpServerCfg config.HttpServer, api
 	rv1.POST("/cas/import", routes.ImportCA)
 
 	rv1.GET("/cas/:id", routes.GetCAByID)
-	rv1.POST("/cas/:id/sign", routes.SignCertificate)
+	rv1.POST("/cas/:id/sign", routes.Sign)
+	rv1.POST("/cas/:id/verify", routes.Verify)
+	rv1.POST("/cas/:id/sign-cert", routes.SignCertificate)
 	rv1.POST("/cas/:id/revoke", routes.RevokeCA)
 	rv1.GET("/cas/:id/certificates", routes.GetCertificatesByCA)
 	rv1.GET("/cas/:id/certificates/:sn", routes.GetCertificateBySerialNumber)
@@ -32,6 +39,7 @@ func NewCAHTTPLayer(svc services.CAService, httpServerCfg config.HttpServer, api
 
 	rv1.GET("/certificates", routes.GetCertificates)
 	rv1.GET("/certificates/:sn", routes.GetCertificateBySerialNumber)
+	rv1.PUT("/certificates/:sn/status", routes.UpdateCertificateStatus)
 
 	rv1.GET("/engines", routes.GetCryptoEngineProvider)
 	rv1.GET("/stats", routes.GetCryptoEngineProvider)

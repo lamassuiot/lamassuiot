@@ -34,6 +34,13 @@ func (mw amqpEventPublisher) CreateCA(input services.CreateCAInput) (output *mod
 	return mw.next.CreateCA(input)
 }
 
+func (mw amqpEventPublisher) Sign(input services.SignInput) (output []byte, err error) {
+	return mw.next.Sign(input)
+}
+func (mw amqpEventPublisher) VerifySignature(input services.VerifySignatureInput) (bool, error) {
+	return mw.next.VerifySignature(input)
+}
+
 func (mw amqpEventPublisher) ImportCA(input services.ImportCAInput) (output *models.CACertificate, err error) {
 	defer func() {
 		if err == nil {
@@ -72,7 +79,7 @@ func (mw amqpEventPublisher) DeleteCA(input services.DeleteCAInput) (err error) 
 func (mw amqpEventPublisher) SignCertificate(input services.SignCertificateInput) (output *models.Certificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.publishEvent("ca.sign", caSource, output)
+			mw.publishEvent("ca.sign-certificate", caSource, output)
 		}
 	}()
 	return mw.next.SignCertificate(input)

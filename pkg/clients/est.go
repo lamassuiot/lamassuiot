@@ -5,11 +5,12 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"net/http"
 	"net/url"
 
 	"github.com/globalsign/est"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
+	"github.com/lamassuiot/lamassuiot/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/services"
 )
@@ -44,7 +45,7 @@ func NewESTClient(cliBuilder ESTClientBuilder) (services.ESTService, error) {
 	estClient.Host = urlAddress
 
 	if cliBuilder.HTTPClient.HTTPConnection.CACertificateFile != "" {
-		caCert, err := helppers.ReadCertificateFromFile(cliBuilder.HTTPClient.HTTPConnection.CACertificateFile)
+		caCert, err := helpers.ReadCertificateFromFile(cliBuilder.HTTPClient.HTTPConnection.CACertificateFile)
 		if err != nil {
 			return nil, err
 		}
@@ -57,12 +58,12 @@ func NewESTClient(cliBuilder ESTClientBuilder) (services.ESTService, error) {
 	switch cliBuilder.HTTPClient.AuthMode {
 	case config.MTLS:
 		authOptions := cliBuilder.HTTPClient.AuthMTLSOptions
-		privKey, err := helppers.ReadPrivateKeyFromFile(authOptions.KeyFile)
+		privKey, err := helpers.ReadPrivateKeyFromFile(authOptions.KeyFile)
 		if err != nil {
 			return nil, err
 		}
 
-		cert, err := helppers.ReadCertificateFromFile(authOptions.CertFile)
+		cert, err := helpers.ReadCertificateFromFile(authOptions.CertFile)
 		if err != nil {
 			return nil, err
 		}
@@ -89,11 +90,15 @@ func (c *ESTClient) CACerts(ctx context.Context, aps string) ([]*x509.Certificat
 
 func (c *ESTClient) Enroll(ctx context.Context, authMode models.ESTAuthMode, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	ogHeaders := c.estClient.AdditionalHeaders
-	if headers := ctx.Value(models.ESTHeaders); headers != nil {
-		if headersMap, ok := headers.(map[string]string); ok {
-			newHeaders := helppers.MergeMaps(&c.estClient.AdditionalHeaders, &headersMap)
-			c.estClient.AdditionalHeaders = *newHeaders
+	if headers, ok := ctx.Value(models.ESTHeaders).(http.Header); ok {
+		flattenHeadersMap := map[string]string{}
+		for key, val := range headers {
+			for _, valItem := range val {
+				flattenHeadersMap[key] = valItem
+			}
 		}
+		newHeaders := helpers.MergeMaps(&c.estClient.AdditionalHeaders, &flattenHeadersMap)
+		c.estClient.AdditionalHeaders = *newHeaders
 	}
 
 	signedCert, err := c.estClient.Enroll(ctx, csr)

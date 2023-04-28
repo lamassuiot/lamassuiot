@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
+	"github.com/lamassuiot/lamassuiot/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/remfuncs"
 	"github.com/lamassuiot/lamassuiot/pkg/storage"
@@ -25,7 +25,7 @@ type DeviceManagerService interface {
 	GetDeviceByID(input GetDeviceByIDInput) (*models.Device, error)
 	GetDevices(input GetDevicesInput) (string, error)
 	// ProvisionDeviceSlot(input ProvisionDeviceSlotInput) (*models.Device, error)
-	// UpdateDevice()
+	DecommisionDevice(input DecommisionDeviceInput) (*models.Device, error)
 }
 
 type deviceManagerServiceImpl struct {
@@ -55,13 +55,14 @@ func NewDeviceManagerService(builder ServiceDeviceManagerBuilder) DeviceManagerS
 }
 
 type CreateDeviceInput struct {
-	ID        string
-	Alias     string
-	Tags      []string
-	Metadata  map[string]string
-	DMSID     string
-	Icon      string
-	IconColor string
+	ID                 string
+	Alias              string
+	Tags               []string
+	Metadata           map[string]string
+	ConnectionMetadata map[string]string
+	DMSID              string
+	Icon               string
+	IconColor          string
 }
 
 func (svc deviceManagerServiceImpl) CreateDevice(input CreateDeviceInput) (*models.Device, error) {
@@ -69,15 +70,15 @@ func (svc deviceManagerServiceImpl) CreateDevice(input CreateDeviceInput) (*mode
 
 	device := &models.Device{
 		ID:                 input.ID,
+		IdentitySlot:       nil,
+		Status:             models.DeviceNoIdentity,
+		ExtraSlots:         map[string]*models.Slot[any]{},
 		Alias:              input.Alias,
 		Tags:               input.Tags,
-		Status:             models.DeviceNoIdentity,
 		Metadata:           input.Metadata,
-		IdentitySlot:       nil,
+		ConnectionMetadata: input.ConnectionMetadata,
 		Icon:               input.Icon,
 		IconColor:          input.IconColor,
-		ExtraSlots:         map[string]*models.Slot[any]{},
-		ConnectionMetadata: map[string]string{},
 		DMSOwnerID:         input.DMSID,
 		CreationDate:       now,
 		Logs: map[time.Time]models.LogMsg{
@@ -171,7 +172,7 @@ func (svc deviceManagerServiceImpl) ProvisionDeviceSlot(input ProvisionDeviceSlo
 		if slotSettings.Confidential {
 			deviceSlotCert := device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion]
 			devicePubKey := deviceSlotCert.Certificate.PublicKey.(*rsa.PublicKey)
-			slotValBytes, err := helppers.EncryptWithPublicKey([]byte(slotVal), devicePubKey)
+			slotValBytes, err := helpers.EncryptWithPublicKey([]byte(slotVal), devicePubKey)
 			if err != nil {
 				return nil, err
 			}
@@ -223,6 +224,28 @@ func (svc deviceManagerServiceImpl) ExistsDevice(input ExistsDeviceByID) (bool, 
 	return svc.devicesStorage.Exists(context.Background(), input.ID)
 }
 
+type DecommisionDeviceInput struct {
+	ID string
+}
+
+func (svc deviceManagerServiceImpl) DecommisionDevice(input DecommisionDeviceInput) (*models.Device, error) {
+	device, err := svc.devicesStorage.Select(context.Background(), input.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = svc.caClient.UpdateCertificateStatus(UpdateCertificateStatusInput{
+		SerialNumber: device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion].SerialNumber,
+		NewStatus:    models.StatusRevoked,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	device.Status = models.DeviceDecommissioned
+	return svc.devicesStorage.Update(context.Background(), device)
+}
+
 // Validation:
 //
 //   - Cert:
@@ -247,8 +270,12 @@ func (svc deviceManagerServiceImpl) Enroll(ctx context.Context, authMode models.
 	}
 
 	dmsID := cert.Subject.CommonName
-	if ctxDMSID := ctx.Value("x-dms-id"); ctxDMSID != nil {
-		dmsID = ctxDMSID.(string)
+
+	if headersMap, ok := ctx.Value(models.ESTHeaders).(http.Header); ok {
+		headers := http.Header(headersMap)
+		if id := headers.Get("x-dms-id"); id != "" {
+			dmsID = id
+		}
 	}
 
 	dms, err := svc.dmsClient.GetDMSByID(GetDMSByIDInput{
@@ -298,24 +325,29 @@ func (svc deviceManagerServiceImpl) Enroll(ctx context.Context, authMode models.
 	}
 
 	if device != nil {
-		if device.IdentitySlot != nil {
-			return nil, errs.SentinelAPIError{
-				Status: http.StatusForbidden,
-				Msg:    "slot default already enrolled",
-			}
-		}
+		// if device.IdentitySlot != nil {
+		// 	if !device.IdentitySlot.AllowOverrideEnrollment {
+		// 		return nil, errs.SentinelAPIError{
+		// 			Status: http.StatusForbidden,
+		// 			Msg:    "slot default already enrolled",
+		// 		}
+		// 	}
+		// }
 	} else {
-		svc.CreateDevice(CreateDeviceInput{
+		device, err = svc.CreateDevice(CreateDeviceInput{
 			ID:       deviceID,
 			Alias:    dms.ID,
 			Tags:     dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.Tags,
 			Metadata: dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.Metadata,
 			DMSID:    dms.ID,
 		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	signedCert, err := svc.caClient.SignCertificate(SignCertificateInput{
-		CAID:         aps,
+		CAID:         dms.IdentityProfile.EnrollmentSettings.AuthorizedCA,
 		CertRequest:  (*models.X509CertificateRequest)(csr),
 		Subject:      models.Subject{},
 		SignVerbatim: true,
@@ -325,20 +357,27 @@ func (svc deviceManagerServiceImpl) Enroll(ctx context.Context, authMode models.
 	}
 
 	device.IdentitySlot = &models.Slot[models.Certificate]{
-		DMSManaged:                  false,
-		Status:                      models.SlotActive,
-		ActiveVersion:               0,
-		AllowExpiredRenewal:         dms.IdentityProfile.ReEnrollmentSettings.AllowExpiredRenewal,
+		DMSManaged:    false,
+		Status:        models.SlotActive,
+		ActiveVersion: 0,
+		// AllowExpiredRenewal:         dms.IdentityProfile.ReEnrollmentSettings.AllowExpiredRenewal,
 		PreventiveReenrollmentDelta: dms.IdentityProfile.ReEnrollmentSettings.PreventiveReenrollmentDelta,
 		CriticalDetla:               dms.IdentityProfile.ReEnrollmentSettings.CriticalReenrollmentDetla,
 		SecretType:                  models.X509SlotProfileType,
 		Secrets: map[int]models.Certificate{
 			0: *signedCert,
 		},
+		// AllowOverrideEnrollment:  false,
+		AllowedReenrollmentDelta: dms.IdentityProfile.ReEnrollmentSettings.AllowedReenrollmentDelta,
+		Logs: map[time.Time]models.LogMsg{
+			time.Now(): {
+				Msg:       "Identity Slot Enrollment completed",
+				Criticity: models.InfoCriticity,
+			},
+		},
 	}
 
 	device.Status = models.DeviceActive
-
 	device, err = svc.devicesStorage.Update(ctx, device)
 	if err != nil {
 		return nil, err

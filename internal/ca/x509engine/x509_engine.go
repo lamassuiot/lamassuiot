@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/internal/ca/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
+	"github.com/lamassuiot/lamassuiot/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 )
 
@@ -42,7 +42,7 @@ func (s X509EngineProvider) GetEngineConfig() models.CryptoEngineProvider {
 }
 
 func (s X509EngineProvider) GetCACryptoSigner(caCertificate *x509.Certificate) (crypto.Signer, error) {
-	caSn := helppers.SerialNumberToString(caCertificate.SerialNumber)
+	caSn := helpers.SerialNumberToString(caCertificate.SerialNumber)
 	return s.cryptoEngine.GetPrivateKeyByID(caSn)
 }
 
@@ -55,7 +55,7 @@ func (s X509EngineProvider) CreateRootCA(keyMetadata models.KeyMetadata, subject
 	templateCA.IsCA = true
 
 	var derBytes []byte
-	if models.KeyType(keyMetadata.Type) == models.RSA {
+	if models.KeyType(keyMetadata.Type) == models.KeyType(x509.RSA) {
 		rsaPub := signer.Public().(*rsa.PublicKey)
 		derBytes, err = x509.CreateCertificate(rand.Reader, templateCA, templateCA, rsaPub, signer)
 		if err != nil {
@@ -84,7 +84,7 @@ func (s X509EngineProvider) CreateSubordinateCA(parentCACertificate *x509.Certif
 	}
 
 	var pubKey interface{}
-	if models.KeyType(keyMetadata.Type) == models.RSA {
+	if models.KeyType(keyMetadata.Type) == models.KeyType(x509.RSA) {
 		pubKey = signer.Public().(*rsa.PublicKey)
 	} else {
 		pubKey = signer.Public().(*ecdsa.PublicKey)
@@ -106,7 +106,7 @@ func (s X509EngineProvider) CreateSubordinateCA(parentCACertificate *x509.Certif
 }
 
 func (s X509EngineProvider) SignCertificateRequest(caCertificate *x509.Certificate, csr *x509.CertificateRequest, issuanceDuration time.Duration, signVerbatim bool, subject models.Subject) (*x509.Certificate, error) {
-	caSn := helppers.SerialNumberToString(caCertificate.SerialNumber)
+	caSn := helpers.SerialNumberToString(caCertificate.SerialNumber)
 
 	privkey, err := s.cryptoEngine.GetPrivateKeyByID(caSn)
 	if err != nil {
@@ -166,8 +166,8 @@ func (s X509EngineProvider) genCertTemplateAndPrivateKey(keyMetadata models.KeyM
 
 	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
 
-	if models.KeyType(keyMetadata.Type) == models.RSA {
-		signer, err = s.cryptoEngine.CreateRSAPrivateKey(keyMetadata.Bits, helppers.SerialNumberToString(sn))
+	if models.KeyType(keyMetadata.Type) == models.KeyType(x509.RSA) {
+		signer, err = s.cryptoEngine.CreateRSAPrivateKey(keyMetadata.Bits, helpers.SerialNumberToString(sn))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -185,7 +185,7 @@ func (s X509EngineProvider) genCertTemplateAndPrivateKey(keyMetadata models.KeyM
 		default:
 			return nil, nil, errors.New("unsuported key size for ECDSA key")
 		}
-		signer, err = s.cryptoEngine.CreateECDSAPrivateKey(curve, helppers.SerialNumberToString(sn))
+		signer, err = s.cryptoEngine.CreateECDSAPrivateKey(curve, helpers.SerialNumberToString(sn))
 		if err != nil {
 			return nil, nil, err
 		}

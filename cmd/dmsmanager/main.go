@@ -3,11 +3,10 @@ package main
 import (
 	"crypto/x509"
 	"fmt"
-	"net/http"
 
 	"github.com/lamassuiot/lamassuiot/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
+	"github.com/lamassuiot/lamassuiot/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/middlewares/amqppub"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/routes"
@@ -23,6 +22,13 @@ var (
 )
 
 func main() {
+	customFormatter := new(log.TextFormatter)
+	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
+	customFormatter.FullTimestamp = true
+	log.SetFormatter(customFormatter)
+
+	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
+
 	conf, err := config.LoadConfig[config.DMSconfig]()
 	if err != nil {
 		log.Fatal(err)
@@ -36,46 +42,64 @@ func main() {
 		log.SetLevel(logLevel)
 	}
 
-	_, amqpPub, err := amqppub.SetupAMQPConnection(conf.AMQPEventPublisher)
+	if conf.AMQPEventPublisher.Enabled {
+		amqpHander, err := amqppub.SetupAMQPConnection(conf.AMQPEventPublisher)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Println(amqpHander)
+	}
+
+	couchdbClient, err := couchdb.CreateCouchDBConnection(conf.Storage.CouchDB.HTTPConnection, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	dmsStorage, err := couchdb.NewCouchDMSRepository(conf.Storage.CouchDB.HTTPConnection, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
-
+	dmsStorage, err := couchdb.NewCouchDMSRepository(couchdbClient)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println(amqpPub)
+	caHttpClient, err := clients.BuildHTTPClient(conf.CAClient.HTTPClient, "CA")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	caURL := fmt.Sprintf("%s://%s:%d", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port)
-	client := clients.NewCAClient(http.DefaultClient, caURL)
+	caClient := clients.NewCAClient(caHttpClient, clients.BuildURL(conf.CAClient.HTTPClient))
+
+	devManagerHttpClient, err := clients.BuildHTTPClient(conf.DevManagerClient.HTTPClient, "Device Manager")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	devManagerClient := clients.NewDeviceManagerClient(devManagerHttpClient, clients.BuildURL(conf.DevManagerClient.HTTPClient))
 
 	var downstreamCert *x509.Certificate
 	if conf.Server.Protocol == config.HTTPS {
-		downstreamCert, err = helppers.ReadCertificateFromFile(conf.DownstreamCertificateFile)
+		downstreamCert, err = helpers.ReadCertificateFromFile(conf.DownstreamCertificateFile)
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
 
-	if conf.DevManagerESTClient.AuthMode != config.MTLS {
+	if conf.DevManagerClient.AuthMode != config.MTLS {
 		log.Fatalf("device manager EST client must use mutual TLS")
 	}
 
 	devManagerESTCli, err := clients.NewESTClient(clients.ESTClientBuilder{
-		HTTPClient: &conf.DevManagerESTClient.HTTPClient,
+		HTTPClient: &conf.DevManagerClient.HTTPClient,
 	})
 	if err != nil {
 		log.Fatalf("could not build device manager EST client: %s", err)
 	}
 
 	svc := services.NewDMSManagerService(services.ServiceDMSBuilder{
-		CAClient:         client,
+		CAClient:         caClient,
 		DMSStorage:       dmsStorage,
 		DownstreamCert:   downstreamCert,
 		DevManagerESTCli: devManagerESTCli,
+		DevManagerCli:    devManagerClient,
 	})
 
 	err = routes.NewDMSManagerHTTPLayer(svc, conf.Server, models.APIServiceInfo{

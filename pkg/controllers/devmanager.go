@@ -32,7 +32,7 @@ func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
@@ -59,7 +59,7 @@ func (r *devManagerHttpRoutes) GetDeviceByID(ctx *gin.Context) {
 		ID: params.ID,
 	})
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
@@ -74,18 +74,43 @@ func (r *devManagerHttpRoutes) CreateDevice(ctx *gin.Context) {
 	}
 
 	dev, err := r.svc.CreateDevice(services.CreateDeviceInput{
-		ID:        requestBody.ID,
-		Alias:     requestBody.Alias,
-		Tags:      requestBody.Tags,
-		Metadata:  requestBody.Metadata,
-		Icon:      requestBody.Icon,
-		IconColor: requestBody.IconColor,
+		ID:                 requestBody.ID,
+		Alias:              requestBody.Alias,
+		Tags:               requestBody.Tags,
+		Metadata:           requestBody.Metadata,
+		Icon:               requestBody.Icon,
+		IconColor:          requestBody.IconColor,
+		ConnectionMetadata: requestBody.ConnectionMetadata,
+		DMSID:              requestBody.DMSID,
 	})
 
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
 	ctx.JSON(201, dev)
+}
+
+func (r *devManagerHttpRoutes) DecommisionDevice(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err})
+		return
+	}
+
+	dev, err := r.svc.DecommisionDevice(services.DecommisionDeviceInput{
+		ID: params.ID,
+	})
+
+	if err != nil {
+		HandleControllerError(ctx, err)
+		return
+	}
+
+	ctx.JSON(200, dev)
 }

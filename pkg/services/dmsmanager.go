@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
+	"github.com/lamassuiot/lamassuiot/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/storage"
 	log "github.com/sirupsen/logrus"
@@ -114,7 +114,7 @@ func (svc dmsManagerServiceImpl) CreateDMS(input CreateDMSInput) (*models.DMS, s
 				generatedPrivKey = base64.StdEncoding.EncodeToString(pemEncodedKey)
 
 				csrTmpl := &x509.CertificateRequest{
-					Subject: helppers.SubjectToPkixName(*input.RemoteAccessIdentity.Subject),
+					Subject: helpers.SubjectToPkixName(*input.RemoteAccessIdentity.Subject),
 				}
 
 				csrBytes, err := x509.CreateCertificateRequest(rand.Reader, csrTmpl, key)
@@ -307,7 +307,7 @@ func (svc dmsManagerServiceImpl) Enroll(ctx context.Context, authMode models.EST
 		return nil, fmt.Errorf("only EST enrollment supported ")
 	}
 
-	estAuthOptions := dms.IdentityProfile.EnrollmentSettings.EnrollOptions.(models.EnrollmentOptionsESTRFC7030)
+	estAuthOptions := dms.IdentityProfile.EnrollmentSettings.EnrollmentOptionsESTRFC7030
 	if estAuthOptions.AuthMode != authMode {
 		log.Errorf("invalid dms authentication used during enrollment for %s. Auth mode used %s. Auth mode configured for this DMS %s", csr.Subject.CommonName, authMode, estAuthOptions.AuthMode)
 		return nil, errs.SentinelAPIError{
@@ -340,14 +340,14 @@ func (svc dmsManagerServiceImpl) Enroll(ctx context.Context, authMode models.EST
 	}
 
 	certificate, err := svc.caClient.GetCertificateBySerialNumber(GetCertificatesBySerialNumberInput{
-		SerialNumber: helppers.SerialNumberToString(cert.SerialNumber),
+		SerialNumber: helpers.SerialNumberToString(cert.SerialNumber),
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	//validate fingerprint
-	if certificate.Fingerprint != helppers.X509CertFingerprint(*cert) {
+	if certificate.Fingerprint != helpers.X509CertFingerprint(*cert) {
 		log.Warnf("a modified certificate was presented while enrolling. tried to impersonate cert sn %s", certificate.SerialNumber)
 		return nil, errs.SentinelAPIError{
 			Status: http.StatusUnauthorized,
@@ -356,10 +356,7 @@ func (svc dmsManagerServiceImpl) Enroll(ctx context.Context, authMode models.EST
 	}
 
 	//check if certificate is a certificate issued by bootstrap CA
-	estEnrollOpts, ok := dms.IdentityProfile.EnrollmentSettings.EnrollOptions.(models.EnrollmentOptionsESTRFC7030)
-	if !ok {
-		return nil, fmt.Errorf("corrupt dms enrollment options. Should be EnrollmentOptionsESTRFC7030 struct")
-	}
+	estEnrollOpts := dms.IdentityProfile.EnrollmentSettings.EnrollmentOptionsESTRFC7030
 	if !slices.Contains(estEnrollOpts.AuthOptionsMTLS.ValidationCAs, certificate.IssuerCAMetadata.CAID) {
 		log.Warnf("using a certificate not authorized for this DMS. used certificate with sn %s issued by CA %s", certificate.SerialNumber, certificate.IssuerCAMetadata.CAID)
 		return nil, errs.SentinelAPIError{
@@ -368,26 +365,33 @@ func (svc dmsManagerServiceImpl) Enroll(ctx context.Context, authMode models.EST
 		}
 	}
 
+	connectionMeta := map[string]string{}
+	if headers, ok := ctx.Value(models.ESTHeaders).(http.Header); ok {
+		if ua := headers.Get("user-agent"); ua != "" {
+			connectionMeta["user-agent"] = ua
+		}
+	}
 	//contact device manager and register device first
 	_, err = svc.deviceManagerCli.CreateDevice(CreateDeviceInput{
-		ID:        csr.Subject.CommonName,
-		Alias:     csr.Subject.CommonName,
-		Tags:      dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.Tags,
-		Metadata:  dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.Metadata,
-		Icon:      dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.Icon,
-		IconColor: dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.IconColor,
-		DMSID:     dms.ID,
+		ID:                 csr.Subject.CommonName,
+		Alias:              csr.Subject.CommonName,
+		Tags:               dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.Tags,
+		Metadata:           dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.Metadata,
+		Icon:               dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.Icon,
+		IconColor:          dms.IdentityProfile.EnrollmentSettings.DeviceProvisionSettings.IconColor,
+		ConnectionMetadata: connectionMeta,
+		DMSID:              dms.ID,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	//contact device manager and enroll
-	additionalHeaders := map[string]string{
-		"x-dms-id": dms.ID,
+	additionalHeaders := map[string][]string{
+		"x-dms-id": {dms.ID},
 	}
 
-	ctx = context.WithValue(ctx, models.ESTHeaders, additionalHeaders)
+	ctx = context.WithValue(ctx, models.ESTHeaders, http.Header(additionalHeaders))
 	return svc.deviceManagerESTCli.Enroll(ctx, models.MutualTLS, csr, dms.IdentityProfile.EnrollmentSettings.AuthorizedCA)
 }
 

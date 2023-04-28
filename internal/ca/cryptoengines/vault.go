@@ -14,12 +14,13 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"strconv"
 
 	"github.com/hashicorp/vault/api"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
+	"github.com/lamassuiot/lamassuiot/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	log "github.com/sirupsen/logrus"
 )
@@ -38,7 +39,12 @@ func NewVaultCryptoEngine(conf config.HashicorpVaultCryptoEngineConfig) (CryptoE
 	address := fmt.Sprintf("%s://%s:%d", conf.Protocol, conf.Hostname, conf.Port)
 	vaultClientConf := api.DefaultConfig()
 
-	httpClient, err := helppers.BuildHTTPClient("Vault KV-V2", conf.TLSConfig)
+	httpClient, err := helpers.BuildHTTPClientWithTLSOptions(&http.Client{}, conf.TLSConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	httpClient, err = helpers.BuildHTTPClientWithloggger(httpClient, "Vault KV-V2")
 	if err != nil {
 		return nil, err
 	}
@@ -99,12 +105,12 @@ func NewVaultCryptoEngine(conf config.HashicorpVaultCryptoEngineConfig) (CryptoE
 			Model:         "KV-V2",
 			SupportedKeyTypes: []models.SupportedKeyTypeInfo{
 				{
-					Type:        models.RSA,
+					Type:        models.KeyType(x509.RSA),
 					MinimumSize: 1024,
 					MaximumSize: 4096,
 				},
 				{
-					Type:        models.ECDSA,
+					Type:        models.KeyType(x509.ECDSA),
 					MinimumSize: 256,
 					MaximumSize: 512,
 				},

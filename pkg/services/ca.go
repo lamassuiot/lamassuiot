@@ -3,17 +3,20 @@ package services
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/internal/ca/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/internal/ca/x509engine"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
+	"github.com/lamassuiot/lamassuiot/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/pkg/storage"
@@ -26,6 +29,10 @@ type CAMiddleware func(CAService) CAService
 type CAService interface {
 	// GetStats() models.CAStats
 	GetCryptoEngineProvider() (*models.EngineProvider, error)
+
+	//returns a singnature in bytes
+	Sign(input SignInput) ([]byte, error)
+	VerifySignature(input VerifySignatureInput) (bool, error)
 
 	CreateCA(input CreateCAInput) (*models.CACertificate, error)
 	ImportCA(input ImportCAInput) (*models.CACertificate, error)
@@ -99,7 +106,7 @@ func NeCAService(builder CAServiceBuilder) CAService {
 			_, err := svc.service.CreateCA(CreateCAInput{
 				CAType: models.CATypeInternal,
 				KeyMetadata: models.KeyMetadata{
-					Type: models.ECDSA,
+					Type: models.KeyType(x509.ECDSA),
 					Bits: 256,
 				},
 				Subject: models.Subject{
@@ -190,7 +197,7 @@ func NeCAService(builder CAServiceBuilder) CAService {
 					log.Debugf("updating certificate status from cert with sn '%s' to status '%s'", cert.SerialNumber, models.SlotExpired)
 					svc.service.UpdateCertificateStatus(UpdateCertificateStatusInput{
 						SerialNumber: cert.SerialNumber,
-						Status:       models.StatusExpired,
+						NewStatus:    models.StatusExpired,
 					})
 				},
 			},
@@ -205,7 +212,7 @@ func NeCAService(builder CAServiceBuilder) CAService {
 					log.Debugf("updating certificate status from cert with sn '%s' to status '%s'", cert.SerialNumber, models.StatusCriticalExpiration)
 					svc.service.UpdateCertificateStatus(UpdateCertificateStatusInput{
 						SerialNumber: cert.SerialNumber,
-						Status:       models.StatusCriticalExpiration,
+						NewStatus:    models.StatusCriticalExpiration,
 					})
 				},
 			},
@@ -220,7 +227,7 @@ func NeCAService(builder CAServiceBuilder) CAService {
 					log.Debugf("updating certificate status from cert with sn '%s' to status '%s'", cert.SerialNumber, models.StatusNearingExpiration)
 					svc.service.UpdateCertificateStatus(UpdateCertificateStatusInput{
 						SerialNumber: cert.SerialNumber,
-						Status:       models.StatusNearingExpiration,
+						NewStatus:    models.StatusNearingExpiration,
 					})
 				},
 			},
@@ -257,6 +264,63 @@ func (svc *CAServiceImpl) GetCryptoEngineProvider() (*models.EngineProvider, err
 	}
 
 	return &engineInfo, nil
+}
+
+type SignInput struct {
+	CAID               string
+	Message            []byte
+	MessageType        models.SigningMessageType
+	SignatureAlgorithm models.SigningAlgorithm
+}
+
+func (svc *CAServiceImpl) Sign(input SignInput) ([]byte, error) {
+	digest := input.Message
+	if input.MessageType == models.RAW {
+		digest = input.SignatureAlgorithm.GenerateDigest(input.Message)
+	}
+
+	ca, err := svc.GetCAByID(GetCAByIDInput{CAID: input.CAID})
+	if err != nil {
+		return nil, err
+	}
+
+	if ca.KeyMetadata.Type != input.SignatureAlgorithm.GetKeyType() {
+		return nil, errs.SentinelAPIError{
+			Status: 400,
+			Msg:    fmt.Sprintf("incompatible signing hash function. CA uses '%s' key, the selected algorithm is based on '%s'", ca.KeyMetadata.Type.String(), input.SignatureAlgorithm.GetKeyType().String()),
+		}
+	}
+
+	x509Engine := x509engine.NewX509Engine(svc.cryptoEngine, "")
+	signer, err := x509Engine.GetCACryptoSigner((*x509.Certificate)(ca.Certificate.Certificate))
+	if err != nil {
+		return nil, err
+	}
+
+	return signer.Sign(rand.Reader, digest, input.SignatureAlgorithm.GetSignerOpts())
+}
+
+type VerifySignatureInput struct {
+	CAID               string
+	Message            []byte
+	MessageType        models.SigningMessageType
+	Signature          []byte
+	SignatureAlgorithm models.SigningAlgorithm
+}
+
+func (svc *CAServiceImpl) VerifySignature(input VerifySignatureInput) (bool, error) {
+	ca, err := svc.GetCAByID(GetCAByIDInput{CAID: input.CAID})
+	if err != nil {
+		return false, err
+	}
+
+	digest := input.Message
+	if input.MessageType == models.RAW {
+		digest = input.SignatureAlgorithm.GenerateDigest(input.Message)
+	}
+
+	err = input.SignatureAlgorithm.VerifySignature(ca.Certificate.Certificate.PublicKey, digest, input.Signature)
+	return err == nil, nil
 }
 
 type issueCAInput struct {
@@ -300,7 +364,7 @@ type ImportCAInput struct {
 func (svc *CAServiceImpl) ImportCA(input ImportCAInput) (*models.CACertificate, error) {
 	caCert := input.CACertificate
 
-	valid, err := helppers.ValidateCertAndPrivKey((*x509.Certificate)(caCert), input.CARSAKey, input.CAECKey)
+	valid, err := helpers.ValidateCertAndPrivKey((*x509.Certificate)(caCert), input.CARSAKey, input.CAECKey)
 	if err != nil {
 		return nil, err
 	}
@@ -331,16 +395,16 @@ func (svc *CAServiceImpl) ImportCA(input ImportCAInput) (*models.CACertificate, 
 		},
 		CreationTS: caCert.NotBefore,
 		Certificate: models.Certificate{
-			Fingerprint:         helppers.X509CertFingerprint(x509.Certificate(*input.CACertificate)),
+			Fingerprint:         helpers.X509CertFingerprint(x509.Certificate(*input.CACertificate)),
 			Certificate:         input.CACertificate,
 			Status:              models.StatusActive,
-			SerialNumber:        helppers.SerialNumberToString(caCert.SerialNumber),
-			KeyMetadata:         helppers.KeyStrengthMetadataFromCertificate((*x509.Certificate)(caCert)),
-			Subject:             helppers.PkixNameToSubject(caCert.Subject),
+			SerialNumber:        helpers.SerialNumberToString(caCert.SerialNumber),
+			KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate((*x509.Certificate)(caCert)),
+			Subject:             helpers.PkixNameToSubject(caCert.Subject),
 			ValidFrom:           caCert.NotBefore,
 			ValidTo:             caCert.NotAfter,
 			RevocationTimestamp: time.Time{},
-			RevocationReason:    "",
+			RevocationReason:    -1,
 			IssuerCAMetadata: models.IssuerCAMetadata{
 				CAID: caID,
 			},
@@ -386,10 +450,10 @@ func (svc *CAServiceImpl) CreateCA(input CreateCAInput) (*models.CACertificate, 
 		},
 		CreationTS: caCert.NotBefore,
 		Certificate: models.Certificate{
-			Fingerprint:  helppers.X509CertFingerprint(*caCert),
+			Fingerprint:  helpers.X509CertFingerprint(*caCert),
 			Certificate:  (*models.X509Certificate)(caCert),
 			Status:       models.StatusActive,
-			SerialNumber: helppers.SerialNumberToString(caCert.SerialNumber),
+			SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
 			KeyMetadata: models.KeyStrengthMetadata{
 				Type:     input.KeyMetadata.Type,
 				Bits:     input.KeyMetadata.Bits,
@@ -399,9 +463,9 @@ func (svc *CAServiceImpl) CreateCA(input CreateCAInput) (*models.CACertificate, 
 			ValidFrom:           caCert.NotBefore,
 			ValidTo:             caCert.NotAfter,
 			RevocationTimestamp: time.Time{},
-			RevocationReason:    "",
+			RevocationReason:    -1,
 			IssuerCAMetadata: models.IssuerCAMetadata{
-				SerialNumber: helppers.SerialNumberToString(caCert.SerialNumber),
+				SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
 				CAID:         caID,
 			},
 		},
@@ -477,7 +541,7 @@ func (svc *CAServiceImpl) UpdateCAStatus(input UpdateCAStatusInput) (*models.CAC
 		revokeCertFunc := func(c *models.Certificate) {
 			_, err := svc.UpdateCertificateStatus(UpdateCertificateStatusInput{
 				SerialNumber: c.SerialNumber,
-				Status:       models.StatusRevoked,
+				NewStatus:    models.StatusRevoked,
 			})
 			if err != nil {
 				log.Errorf("could not revoke certificate %s issued by CA %s", c.SerialNumber, c.IssuerCAMetadata.CAID)
@@ -550,19 +614,19 @@ func (svc *CAServiceImpl) SignCertificate(input SignCertificateInput) (*models.C
 
 	cert := models.Certificate{
 		Certificate: (*models.X509Certificate)(x509Cert),
-		Fingerprint: helppers.X509CertFingerprint(*x509Cert),
+		Fingerprint: helpers.X509CertFingerprint(*x509Cert),
 		IssuerCAMetadata: models.IssuerCAMetadata{
-			SerialNumber: helppers.SerialNumberToString(caCert.SerialNumber),
+			SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
 			CAID:         ca.ID,
 		},
 		Status:              models.StatusActive,
-		KeyMetadata:         helppers.KeyStrengthMetadataFromCertificate(x509Cert),
-		Subject:             helppers.PkixNameToSubject(x509Cert.Subject),
-		SerialNumber:        helppers.SerialNumberToString(x509Cert.SerialNumber),
+		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate(x509Cert),
+		Subject:             helpers.PkixNameToSubject(x509Cert.Subject),
+		SerialNumber:        helpers.SerialNumberToString(x509Cert.SerialNumber),
 		ValidFrom:           x509Cert.NotBefore,
 		ValidTo:             x509Cert.NotAfter,
 		RevocationTimestamp: time.Time{},
-		RevocationReason:    "",
+		RevocationReason:    -1,
 	}
 
 	return svc.certStorage.Insert(context.Background(), &cert)
@@ -576,6 +640,15 @@ func (svc *CAServiceImpl) GetCertificateBySerialNumber(input GetCertificatesBySe
 	err := validate.Struct(input)
 	if err != nil {
 		return nil, err
+	}
+
+	if exists, err := svc.certStorage.Exists(context.Background(), input.SerialNumber); err != nil {
+		return nil, err
+	} else if !exists {
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusNotFound,
+			Msg:    "",
+		}
 	}
 
 	return svc.certStorage.Select(context.Background(), input.SerialNumber)
@@ -614,8 +687,9 @@ func (svc *CAServiceImpl) GetCertificatesByExpirationDate(input GetCertificatesB
 }
 
 type UpdateCertificateStatusInput struct {
-	SerialNumber string                   `validate:"required"`
-	Status       models.CertificateStatus `validate:"required"`
+	SerialNumber     string                   `validate:"required"`
+	NewStatus        models.CertificateStatus `validate:"required"`
+	RevocationReason models.RevocationReasonRFC5280
 }
 
 func (svc *CAServiceImpl) UpdateCertificateStatus(input UpdateCertificateStatusInput) (*models.Certificate, error) {
@@ -629,15 +703,19 @@ func (svc *CAServiceImpl) UpdateCertificateStatus(input UpdateCertificateStatusI
 		return nil, err
 	}
 
-	if cert.Status == input.Status {
+	if cert.Status == input.NewStatus {
 		return cert, nil
 	} else if cert.Status == models.StatusExpired || cert.Status == models.StatusRevoked {
 		return nil, ErrStatusTransitionNotAllowed
-	} else if cert.Status == models.StatusNearingExpiration && input.Status == models.StatusActive {
+	} else if cert.Status == models.StatusNearingExpiration && input.NewStatus == models.StatusActive {
 		return nil, ErrStatusTransitionNotAllowed
 	}
 
-	cert.Status = input.Status
+	cert.Status = input.NewStatus
+
+	if input.NewStatus == models.StatusRevoked {
+		cert.RevocationReason = input.RevocationReason
+	}
 
 	return svc.certStorage.Update(context.Background(), cert)
 }

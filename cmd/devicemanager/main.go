@@ -20,6 +20,13 @@ var (
 )
 
 func main() {
+	customFormatter := new(log.TextFormatter)
+	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
+	customFormatter.FullTimestamp = true
+	log.SetFormatter(customFormatter)
+
+	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
+
 	conf, err := config.LoadConfig[config.DeviceManagerConfig]()
 	if err != nil {
 		log.Fatal(err)
@@ -33,32 +40,38 @@ func main() {
 		log.SetLevel(logLevel)
 	}
 
-	_, amqpPub, err := amqppub.SetupAMQPConnection(conf.AMQPEventPublisher)
+	if conf.AMQPEventPublisher.Enabled {
+		amqpHander, err := amqppub.SetupAMQPConnection(conf.AMQPEventPublisher)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Println(amqpHander)
+	}
+
+	couchdbClient, err := couchdb.CreateCouchDBConnection(conf.Storage.CouchDB.HTTPConnection, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	devMngrStroage, err := couchdb.NewCouchDeviceManagerRepository(conf.Storage.CouchDB.HTTPConnection, conf.Storage.CouchDB.Username, conf.Storage.CouchDB.Password)
+	devMngrStroage, err := couchdb.NewCouchDeviceManagerRepository(couchdbClient)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println(amqpPub)
-
-	caURL := fmt.Sprintf("%s://%s:%d", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port)
-	caHttpClient, err := clients.BuildHTTPClient(conf.CAClient.HTTPClient)
+	caHttpClient, err := clients.BuildHTTPClient(conf.CAClient.HTTPClient, "CA")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	caClient := clients.NewCAClient(caHttpClient, caURL)
+	caClient := clients.NewCAClient(caHttpClient, clients.BuildURL(conf.CAClient.HTTPClient))
 
-	dmsMngrURL := fmt.Sprintf("%s://%s:%d", conf.DMSManagerClient.Protocol, conf.DMSManagerClient.Hostname, conf.DMSManagerClient.Port)
-	dmsHttpClient, err := clients.BuildHTTPClient(conf.DMSManagerClient.HTTPClient)
+	dmsHttpClient, err := clients.BuildHTTPClient(conf.DMSManagerClient.HTTPClient, "DMS Mngr")
 	if err != nil {
 		log.Fatal(err)
 	}
-	dmsClient := clients.NewDMSManagerClient(dmsHttpClient, dmsMngrURL)
+
+	dmsClient := clients.NewDMSManagerClient(dmsHttpClient, clients.BuildURL(conf.DMSManagerClient.HTTPClient))
 
 	svc := services.NewDeviceManagerService(services.ServiceDeviceManagerBuilder{
 		CAClient:       caClient,

@@ -11,7 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
 	"github.com/lamassuiot/lamassuiot/pkg/controllers"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
+	"github.com/lamassuiot/lamassuiot/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	log "github.com/sirupsen/logrus"
 )
@@ -40,7 +40,7 @@ func newHttpRouter(routerEngine *gin.Engine, httpServerCfg config.HttpServer, ap
 
 			valCAPool := x509.NewCertPool()
 
-			vaCert, err := helppers.ReadCertificateFromFile(httpServerCfg.Authentication.MutualTLS.CACertificateFile)
+			vaCert, err := helpers.ReadCertificateFromFile(httpServerCfg.Authentication.MutualTLS.CACertificateFile)
 			if err != nil {
 				return fmt.Errorf("could not load CA cert used while validating mTLS requests: %s", err)
 			}

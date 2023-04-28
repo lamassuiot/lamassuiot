@@ -11,15 +11,16 @@ import (
 	"github.com/go-kivik/couchdb/v4/chttp"
 	"github.com/go-kivik/kivik/v4"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
+	"github.com/lamassuiot/lamassuiot/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/resources"
 	log "github.com/sirupsen/logrus"
 )
 
-func createCouchDBConnection(cfg config.HTTPConnection, username, password string, dbs []string) (*kivik.Client, error) {
+func CreateCouchDBConnection(cfg config.HTTPConnection, username, password string) (*kivik.Client, error) {
 	address := fmt.Sprintf("%s://%s:%s@%s:%d%s", cfg.Protocol, username, password, cfg.Hostname, cfg.Port, cfg.BasePath)
 
-	httpCli, err := helppers.BuildHTTPClient("CouchDB", cfg.TLSConfig)
+	httpCli, err := helpers.BuildHTTPClientWithTLSOptions(&http.Client{}, cfg.TLSConfig)
+	httpCli, err = helpers.BuildHTTPClientWithloggger(httpCli, "CouchDB")
 	if err != nil {
 		return nil, err
 	}
@@ -42,17 +43,19 @@ func createCouchDBConnection(cfg config.HTTPConnection, username, password strin
 		return nil, fmt.Errorf("no connectivity with couchdb")
 	}
 
-	for _, db := range dbs {
-		if exists, err := client.DBExists(context.TODO(), db); err == nil && !exists {
-			log.Warnf("db does not exist. Creating db: %s", db)
-			if err := client.CreateDB(context.TODO(), db); err != nil {
-				log.Error(fmt.Sprintf("could not create db %s: %s", db, err))
-				return nil, err
-			}
+	return client, nil
+}
+
+func CheckAndCreateDB(client *kivik.Client, db string) error {
+	if exists, err := client.DBExists(context.TODO(), db); err == nil && !exists {
+		log.Infof("db does not exist. Creating db: %s", db)
+		if err := client.CreateDB(context.TODO(), db); err != nil {
+			log.Error(fmt.Sprintf("could not create db %s: %s", db, err))
+			return err
 		}
 	}
 
-	return client, nil
+	return nil
 }
 
 type couchDBQuerier[E any] struct {

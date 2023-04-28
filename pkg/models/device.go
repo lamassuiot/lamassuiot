@@ -38,7 +38,7 @@ type Device struct {
 	//Metadata collected by the server when a device tries to connect (ie. User Agent, Remote Address)
 	ConnectionMetadata map[string]string     `json:"connection_metadata"`
 	DMSOwnerID         string                `json:"dms_owner"`
-	IdentitySlot       *Slot[Certificate]    `json:"identity"`
+	IdentitySlot       *Slot[Certificate]    `json:"identity,omitempty"`
 	ExtraSlots         map[string]*Slot[any] `json:"slots"`
 	Logs               map[time.Time]LogMsg  `json:"logs"`
 }
@@ -47,8 +47,6 @@ type Slot[E any] struct {
 	DMSManaged                  bool                 `json:"dms_managed"` //if true, the certificate MUST be obtained from the DMS server
 	Status                      SlotStatus           `json:"status"`
 	ActiveVersion               int                  `json:"active_version"`
-	AllowExpiredRenewal         bool                 `json:"allow_expired_renewal"`
-	AllowOverrideeEnrollment    bool                 `json:"allow_override_enrollment"`
 	AllowedReenrollmentDelta    TimeDuration         `json:"allowed_reenrollment_detlta"`
 	PreventiveReenrollmentDelta TimeDuration         `json:"preventive_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
 	CriticalDetla               TimeDuration         `json:"critical_delta"`   // (expiration time - delta < time.now) at witch point an event is issued notify critical status
@@ -69,12 +67,6 @@ const (
 	ErrorCriticity LogCriticity = "ERROR"
 	WarnCriticity  LogCriticity = "WARN"
 )
-
-type EmergencyReEnrollAuthentication struct {
-	PreSharedKey          string        `json:"psk"` //this can be encrypted with the last PublicKey/Cert of the device and should be get by the device
-	UsedAt                time.Time     `json:"used_at"`
-	ValidityAfterFirstUse time.Duration `json:"validity_after_use"` //time after witch the PSK will render invalid. It must be regenerated (or update the UsedAt to "zero" time)
-}
 
 type Criticity string
 

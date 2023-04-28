@@ -1,8 +1,9 @@
 package models
 
 import (
-	"crypto/ecdsa"
-	"crypto/rsa"
+	"crypto/x509"
+	"encoding/json"
+	"fmt"
 )
 
 type KeyStrength string
@@ -13,12 +14,7 @@ const (
 	KeyStrengthLow    KeyStrength = "LOW"
 )
 
-type KeyType string
-
-const (
-	RSA   KeyType = "RSA"
-	ECDSA KeyType = "ECDSA"
-)
+type KeyType x509.PublicKeyAlgorithm
 
 type KeyMetadata struct {
 	Type KeyType `json:"type"`
@@ -33,6 +29,40 @@ type KeyStrengthMetadata struct {
 
 //---------------------------------------
 
-type PrivateKey interface {
-	rsa.PrivateKey | ecdsa.PrivateKey
+func (kt KeyType) String() string {
+	publicKeyAlg := x509.PublicKeyAlgorithm(kt)
+	return publicKeyAlg.String()
+}
+
+func (kt KeyType) MarshalJSON() ([]byte, error) {
+	str := kt.String()
+	return json.Marshal(str)
+}
+
+func (kt *KeyType) UnmarshalJSON(data []byte) error {
+	var t string
+	err := json.Unmarshal(data, &t)
+	if err != nil {
+		return err
+	}
+
+	var nkt KeyType
+
+	switch string(t) {
+	case "UNKNOWN":
+		nkt = KeyType(x509.UnknownPublicKeyAlgorithm)
+	case "RSA":
+		nkt = KeyType(x509.RSA)
+	case "DSA":
+		nkt = KeyType(x509.DSA)
+	case "ECDSA":
+		nkt = KeyType(x509.ECDSA)
+	case "Ed25519":
+		nkt = KeyType(x509.Ed25519)
+	default:
+		return fmt.Errorf("unknown key type")
+	}
+
+	*kt = nkt
+	return nil
 }

@@ -36,7 +36,9 @@ func (cli *dmsManagerClient) UpdateIdentityProfile(input services.UpdateIdentity
 }
 
 func (cli *dmsManagerClient) GetDMSByID(input services.GetDMSByIDInput) (*models.DMS, error) {
-	return nil, fmt.Errorf("TODO")
+	url := cli.baseUrl + "/v1/dms/" + input.ID
+	resp, err := Get[models.DMS](context.Background(), cli.httpClient, url, nil)
+	return &resp, err
 }
 
 func (cli *dmsManagerClient) GetAll(input services.GetAllInput) (string, error) {

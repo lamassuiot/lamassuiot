@@ -6,16 +6,17 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rsa"
+	"crypto/x509"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kms"
-	"github.com/lamassuiot/lamassuiot/pkg/config"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
+	"github.com/lamassuiot/lamassuiot/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 
 	"github.com/lstoll/awskms"
@@ -28,7 +29,7 @@ type AWSKMSCryptoEngine struct {
 }
 
 func NewAWSKMSEngine(accessKeyID string, secretAccessKey string, region string) (CryptoEngine, error) {
-	httpCli, err := helppers.BuildHTTPClient(fmt.Sprintf("AWS KMS - %s", accessKeyID), config.TLSConfig{})
+	httpCli, err := helpers.BuildHTTPClientWithloggger(&http.Client{}, fmt.Sprintf("AWS KMS - %s", accessKeyID))
 	if err != nil {
 		return nil, err
 	}
@@ -43,13 +44,13 @@ func NewAWSKMSEngine(accessKeyID string, secretAccessKey string, region string) 
 	pkcs11ProviderSupportedKeyTypes := []models.SupportedKeyTypeInfo{}
 
 	pkcs11ProviderSupportedKeyTypes = append(pkcs11ProviderSupportedKeyTypes, models.SupportedKeyTypeInfo{
-		Type:        models.RSA,
+		Type:        models.KeyType(x509.RSA),
 		MinimumSize: 2048,
 		MaximumSize: 4096,
 	})
 
 	pkcs11ProviderSupportedKeyTypes = append(pkcs11ProviderSupportedKeyTypes, models.SupportedKeyTypeInfo{
-		Type:        models.ECDSA,
+		Type:        models.KeyType(x509.ECDSA),
 		MinimumSize: 256,
 		MaximumSize: 512,
 	})

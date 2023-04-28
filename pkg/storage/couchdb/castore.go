@@ -5,8 +5,7 @@ import (
 
 	_ "github.com/go-kivik/couchdb/v4" // The CouchDB driver
 	kivik "github.com/go-kivik/kivik/v4"
-	"github.com/lamassuiot/lamassuiot/pkg/config"
-	"github.com/lamassuiot/lamassuiot/pkg/helppers"
+	"github.com/lamassuiot/lamassuiot/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/pkg/storage"
@@ -19,8 +18,8 @@ type CouchDBCAStorage struct {
 	querier *couchDBQuerier[models.CACertificate]
 }
 
-func NewCouchCARepository(cfg config.HTTPConnection, username, password string) (storage.CACertificatesRepo, error) {
-	client, err := createCouchDBConnection(cfg, username, password, []string{caDBName})
+func NewCouchCARepository(client *kivik.Client) (storage.CACertificatesRepo, error) {
+	err := CheckAndCreateDB(client, caDBName)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +45,7 @@ func (db *CouchDBCAStorage) SelectByType(ctx context.Context, CAType models.CATy
 	opts := map[string]interface{}{
 		"type": CAType,
 	}
-	return db.querier.SelecAll(queryParams, helppers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelecAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
 func (db *CouchDBCAStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {

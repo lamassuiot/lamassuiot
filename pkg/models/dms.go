@@ -59,15 +59,17 @@ type SlotProfile struct {
 }
 
 type EnrollmentSettings struct {
-	EnrollmentProtocol      EnrollmentProto         `json:"protocol"`
-	EnrollOptions           interface{}             `json:"protocol_options"` // ESTServerAuthOptionsMutualTLS |
-	DeviceProvisionSettings DeviceProvisionSettings `json:"device_provisioning"`
-	AuthorizedCA            string                  `json:"authorized_ca"`
+	EnrollmentProtocol          EnrollmentProto             `json:"protocol"`
+	EnrollmentOptionsESTRFC7030 EnrollmentOptionsESTRFC7030 `json:"estrfc7030_options"`
+	DeviceProvisionSettings     DeviceProvisionSettings     `json:"device_provisioning"`
+	AuthorizedCA                string                      `json:"authorized_ca"`
 }
 
 type EnrollmentOptionsESTRFC7030 struct {
-	AuthMode        ESTAuthMode                   `json:"auth_mode"`
-	AuthOptionsMTLS ESTServerAuthOptionsMutualTLS `json:"mutual_tls_options"`
+	AuthMode               ESTAuthMode                   `json:"auth_mode"`
+	AllowNewEnrollment     bool                          `json:"allow_new_enrollment"`      //switch-like option that enables enrolling, already enrolled devices
+	AllowNewAutoEnrollment bool                          `json:"allow_new_auto_enrollment"` //no switch required
+	AuthOptionsMTLS        ESTServerAuthOptionsMutualTLS `json:"mutual_tls_options"`
 }
 
 type ReEnrollmentSettings struct {

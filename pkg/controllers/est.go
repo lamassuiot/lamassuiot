@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/services"
 	log "github.com/sirupsen/logrus"
@@ -57,7 +56,7 @@ func (r *estHttpRoutes) GetCACerts(ctx *gin.Context) {
 
 	cacerts, err := r.svc.CACerts(c, params.APS)
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 	}
 
 	var cb []byte
@@ -67,7 +66,7 @@ func (r *estHttpRoutes) GetCACerts(ctx *gin.Context) {
 
 	body, err := pkcs7.DegenerateCertificate(cb)
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		HandleControllerError(ctx, err)
 		return
 	}
 
@@ -85,6 +84,8 @@ func (r *estHttpRoutes) Enroll(ctx *gin.Context) {
 
 	var params aps
 	ctx.ShouldBindUri(&params)
+
+	c = context.WithValue(c, models.ESTHeaders, ctx.Request.Header)
 
 	contentType := ctx.ContentType()
 	if contentType != "application/pkcs10" {
@@ -164,28 +165,22 @@ func (r *estHttpRoutes) Enroll(ctx *gin.Context) {
 
 	signedCrt, err := r.svc.Enroll(c, authMode, csr, params.APS)
 	if err != nil {
-		switch t := err.(type) {
-		case errs.SentinelAPIError:
-			ctx.JSON(t.Status, gin.H{"err": t.Msg})
-		default:
-			ctx.JSON(500, gin.H{"err": err})
-		}
+		HandleControllerError(ctx, err)
 		return
 	}
 
 	body, err := pkcs7.DegenerateCertificate(signedCrt.Raw)
 	if err != nil {
-		// TODO handle error
-		ctx.JSON(500, gin.H{"err": err})
+		HandleControllerError(ctx, err)
 		return
 	}
+
 	body = base64Encode(body)
 
 	ctx.Writer.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
 	ctx.Writer.Header().Set("Content-Transfer-Encoding", "base64")
 	ctx.Writer.WriteHeader(http.StatusOK)
 	ctx.Writer.Write(body)
-
 }
 
 func getCertificateFromHeader(h http.Header) (*x509.Certificate, error) {
