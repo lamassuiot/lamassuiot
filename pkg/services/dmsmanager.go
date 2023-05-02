@@ -396,7 +396,104 @@ func (svc dmsManagerServiceImpl) Enroll(ctx context.Context, authMode models.EST
 }
 
 func (svc dmsManagerServiceImpl) Reenroll(ctx context.Context, authMode models.ESTAuthMode, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
-	return nil, fmt.Errorf("TODO")
+	if authMode != models.MutualTLS {
+		log.Errorf("invalid auth while enrolling CSR with CN %s with APS %s .%s authn method not supported by DeviceManager while enrolling. Use MutualTLS instead", csr.Subject.CommonName, aps, authMode)
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusUnauthorized,
+			Msg:    "only supports mTLS authentication",
+		}
+	}
+	var dms *models.DMS
+	ctxValue := ctx.Value(authMode)
+	deviceCert, ok := ctxValue.(*x509.Certificate)
+	if !ok {
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusInternalServerError,
+			Msg:    "corrupted ctx while authenticating. Could not extract certificate",
+		}
+	}
+
+	device, err := svc.deviceManagerCli.GetDeviceByID(GetDeviceByIDInput{ID: csr.Subject.CommonName})
+	if err != nil {
+		return nil, err
+	}
+
+	if deviceCert.Subject.CommonName != csr.Subject.CommonName {
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusBadRequest,
+			Msg:    "The common name of the certificate and the csr are not the same.",
+		}
+	}
+
+	if aps != "" {
+		dms, err = svc.GetDMSByID(GetDMSByIDInput{ID: aps})
+		if err != nil {
+			return nil, err
+		}
+		if device.DMSOwnerID != dms.ID {
+			return nil, errs.SentinelAPIError{
+				Status: http.StatusUnauthorized,
+				Msg:    "The DMS does not have the device provisioned.",
+			}
+		}
+	} else {
+		dms, err = svc.GetDMSByID(GetDMSByIDInput{ID: device.DMSOwnerID})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if !dms.CloudDMS {
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusUnauthorized,
+			Msg:    "invalid dms mode: use cloud dms",
+		}
+	}
+
+	caCert, err := svc.caClient.GetCAByID(GetCAByIDInput{CAID: deviceCert.Issuer.CommonName})
+	if err != nil {
+		return nil, err
+	}
+	err = verifyIssuedByCA(deviceCert, (*x509.Certificate)(caCert.Certificate.Certificate))
+	if err != nil {
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusUnauthorized,
+			Msg:    fmt.Sprintf("validation error: %s", err),
+		}
+	}
+
+	cert, err := svc.caClient.GetCertificateBySerialNumber(GetCertificatesBySerialNumberInput{SerialNumber: SerialNumberToString(deviceCert.SerialNumber)})
+	if err != nil {
+		return nil, err
+	}
+	if dms.IdentityProfile.ReEnrollmentSettings.AllowExpiredRenewal {
+		if cert.Status == models.StatusRevoked {
+			return nil, errs.SentinelAPIError{
+				Status: http.StatusUnauthorized,
+				Msg:    fmt.Sprintf("Certificate Status is: %s" + string(cert.Status)),
+			}
+		}
+	} else {
+		if cert.Status == models.StatusExpired || cert.Status == models.StatusRevoked {
+			return nil, errs.SentinelAPIError{
+				Status: http.StatusUnauthorized,
+				Msg:    fmt.Sprintf("Certificate Status is: %s" + string(cert.Status)),
+			}
+
+		}
+	}
+	//contact device manager and enroll
+	additionalHeaders := map[string][]string{
+		"x-dms-id": {dms.ID},
+	}
+
+	ctx = context.WithValue(ctx, models.ESTHeaders, http.Header(additionalHeaders))
+	deviceNewCert, err := svc.deviceManagerESTCli.Reenroll(ctx, models.MutualTLS, csr, dms.IdentityProfile.EnrollmentSettings.AuthorizedCA)
+	if err != nil {
+		return nil, err
+	}
+
+	return deviceNewCert, nil
 }
 
 func (svc dmsManagerServiceImpl) ServerKeyGen(ctx context.Context, authMode models.ESTAuthMode, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {

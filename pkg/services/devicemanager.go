@@ -387,7 +387,57 @@ func (svc deviceManagerServiceImpl) Enroll(ctx context.Context, authMode models.
 }
 
 func (svc deviceManagerServiceImpl) Reenroll(ctx context.Context, authMode models.ESTAuthMode, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
-	return nil, fmt.Errorf("TODO")
+	if authMode != models.MutualTLS {
+		log.Errorf("invalid auth while enrolling CSR with CN %s with APS %s .%s authn method not supported by DeviceManager while enrolling. Use MutualTLS instead", csr.Subject.CommonName, aps, authMode)
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusUnauthorized,
+			Msg:    "only supports mTLS authentication",
+		}
+	}
+	certCtxVal := ctx.Value(authMode)
+	cert, ok := certCtxVal.(*x509.Certificate)
+	if !ok {
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusInternalServerError,
+			Msg:    "corrupted ctx while authenticating. Could not extract certificate",
+		}
+	}
+
+	err := verifyIssuedByCA(cert, svc.upstreamCA)
+	if err != nil {
+		return nil, errs.SentinelAPIError{
+			Status: http.StatusForbidden,
+			Msg:    "this device must be enrolled through the DMS Manager service",
+		}
+	}
+
+	dmsID := cert.Subject.CommonName
+
+	if headersMap, ok := ctx.Value(models.ESTHeaders).(http.Header); ok {
+		headers := http.Header(headersMap)
+		if id := headers.Get("x-dms-id"); id != "" {
+			dmsID = id
+		}
+	}
+
+	dms, err := svc.dmsClient.GetDMSByID(GetDMSByIDInput{
+		ID: dmsID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	deviceCert, err := svc.caClient.SignCertificate(SignCertificateInput{
+		CAID:         dms.IdentityProfile.EnrollmentSettings.AuthorizedCA,
+		CertRequest:  (*models.X509CertificateRequest)(csr),
+		Subject:      models.Subject{},
+		SignVerbatim: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return (*x509.Certificate)(deviceCert.Certificate), nil
 }
 
 func (svc deviceManagerServiceImpl) ServerKeyGen(ctx context.Context, authMode models.ESTAuthMode, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
@@ -400,7 +450,7 @@ func (svc deviceManagerServiceImpl) CACerts(ctx context.Context, aps string) ([]
 
 func verifyIssuedByCA(certToVerify *x509.Certificate, rootCA *x509.Certificate) error {
 	clientCAs := x509.NewCertPool()
-	clientCAs.AddCert(certToVerify)
+	clientCAs.AddCert(rootCA)
 
 	opts := x509.VerifyOptions{
 		Roots:     clientCAs,

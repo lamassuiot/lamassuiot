@@ -52,7 +52,12 @@ func (cli *deviceManagerClient) DecommisionDevice(input services.DecommisionDevi
 }
 
 func (cli *deviceManagerClient) GetDeviceByID(input services.GetDeviceByIDInput) (*models.Device, error) {
-	return nil, fmt.Errorf("TODO")
+	response, err := Get[*models.Device](context.Background(), cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID, &resources.QueryParameters{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
 }
 
 func (cli *deviceManagerClient) GetDevices(input services.GetDevicesInput) (string, error) {

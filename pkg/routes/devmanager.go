@@ -22,7 +22,7 @@ func NewDeviceManagerHTTPLayer(svc services.DeviceManagerService, httpServerCfg 
 	rv1 := router.Group("/v1")
 	rv1.GET("/devices", routes.GetAllDevices)
 	rv1.POST("/devices", routes.CreateDevice)
-	rv1.GET("/devices/:id", routes.GetAllDevices)
+	rv1.GET("/devices/:id", routes.GetDeviceByID)
 	rv1.POST("/devices/:id/decommission", routes.DecommisionDevice)
 
 	return newHttpRouter(router, httpServerCfg, apiInfo)

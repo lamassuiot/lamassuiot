@@ -183,6 +183,71 @@ func (r *estHttpRoutes) Enroll(ctx *gin.Context) {
 	ctx.Writer.Write(body)
 }
 
+func (r *estHttpRoutes) Reenroll(ctx *gin.Context) {
+	c := ctx.Request.Context()
+
+	var params aps
+	ctx.ShouldBindUri(&params)
+
+	c = context.WithValue(c, models.ESTHeaders, ctx.Request.Header)
+
+	contentType := ctx.ContentType()
+	if contentType != "application/pkcs10" {
+		ctx.JSON(400, gin.H{"err": "content-type must be application/pkcs10"})
+		return
+	}
+
+	data, err := ioutil.ReadAll(ctx.Request.Body)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": fmt.Sprintf("could not read the body payload: %s", err)})
+		return
+	}
+
+	dec, err := base64.StdEncoding.DecodeString(string(data))
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": "body payload must be base64 encoded"})
+		return
+	}
+
+	csr, err := x509.ParseCertificateRequest(dec)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": fmt.Sprintf("could not parse the payload into a csr: %s", err)})
+		return
+	}
+
+	var crt *x509.Certificate
+
+	//check if a certificate can be obtained from client TLS connection
+	if len(ctx.Request.TLS.PeerCertificates) > 0 {
+		log.Trace("Using certificate presented in peer connection")
+		crt = ctx.Request.TLS.PeerCertificates[0]
+	} else {
+		ctx.JSON(400, gin.H{"err": "No certificate presented in peer connection"})
+		return
+	}
+
+	c = context.WithValue(c, models.MutualTLS, crt)
+
+	signedCrt, err := r.svc.Reenroll(c, models.MutualTLS, csr, params.APS)
+	if err != nil {
+		HandleControllerError(ctx, err)
+		return
+	}
+
+	body, err := pkcs7.DegenerateCertificate(signedCrt.Raw)
+	if err != nil {
+		HandleControllerError(ctx, err)
+		return
+	}
+
+	body = base64Encode(body)
+
+	ctx.Writer.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
+	ctx.Writer.Header().Set("Content-Transfer-Encoding", "base64")
+	ctx.Writer.WriteHeader(http.StatusOK)
+	ctx.Writer.Write(body)
+}
+
 func getCertificateFromHeader(h http.Header) (*x509.Certificate, error) {
 	forwardedClientCertificate := h.Get("X-Forwarded-Client-Cert")
 	if len(forwardedClientCertificate) != 0 {

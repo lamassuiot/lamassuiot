@@ -1,10 +1,12 @@
 package main
 
 import (
+	"crypto/x509"
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/pkg/config"
+	"github.com/lamassuiot/lamassuiot/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/middlewares/amqppub"
 	"github.com/lamassuiot/lamassuiot/pkg/models"
 	"github.com/lamassuiot/lamassuiot/pkg/routes"
@@ -64,6 +66,14 @@ func main() {
 		log.Fatal(err)
 	}
 
+	var upstreamCA *x509.Certificate
+	if conf.Server.Authentication.MutualTLS.Enabled {
+		upstreamCA, err = helpers.ReadCertificateFromFile(conf.Server.Authentication.MutualTLS.CACertificateFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	caClient := clients.NewCAClient(caHttpClient, clients.BuildURL(conf.CAClient.HTTPClient))
 
 	dmsHttpClient, err := clients.BuildHTTPClient(conf.DMSManagerClient.HTTPClient, "DMS Mngr")
@@ -77,6 +87,7 @@ func main() {
 		CAClient:       caClient,
 		DevicesStorage: devMngrStroage,
 		DMSClient:      dmsClient,
+		UpstreamCA:     upstreamCA,
 	})
 
 	err = routes.NewDeviceManagerHTTPLayer(svc, conf.Server, models.APIServiceInfo{

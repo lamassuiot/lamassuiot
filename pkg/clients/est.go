@@ -109,7 +109,22 @@ func (c *ESTClient) Enroll(ctx context.Context, authMode models.ESTAuthMode, csr
 
 // Reenroll renews an existing certificate.
 func (c *ESTClient) Reenroll(ctx context.Context, authMode models.ESTAuthMode, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
-	return nil, fmt.Errorf("TODO")
+	ogHeaders := c.estClient.AdditionalHeaders
+	if headers, ok := ctx.Value(models.ESTHeaders).(http.Header); ok {
+		flattenHeadersMap := map[string]string{}
+		for key, val := range headers {
+			for _, valItem := range val {
+				flattenHeadersMap[key] = valItem
+			}
+		}
+		newHeaders := helpers.MergeMaps(&c.estClient.AdditionalHeaders, &flattenHeadersMap)
+		c.estClient.AdditionalHeaders = *newHeaders
+	}
+
+	signedCert, err := c.estClient.Reenroll(ctx, csr)
+	c.estClient.AdditionalHeaders = ogHeaders
+
+	return signedCert, err
 }
 
 func (c *ESTClient) ServerKeyGen(ctx context.Context, authMode models.ESTAuthMode, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
