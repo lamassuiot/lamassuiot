@@ -55,9 +55,10 @@ type DevicesService struct {
 	caClient                caClient.LamassuCAClient
 	dmsManagerClient        dmsManagerClient.LamassuDMSManagerClient
 	minimumReenrollmentDays int
+	upstreamCACert          *x509.Certificate
 }
 
-func NewDeviceManagerService(devicesRepo repository.Devices, deviceLogsRep repository.DeviceLogs, statsRepo repository.Statistics, minimumReenrollmentDays int, caClient caClient.LamassuCAClient, dmsManagerClient dmsManagerClient.LamassuDMSManagerClient) Service {
+func NewDeviceManagerService(upstreamCACert *x509.Certificate, devicesRepo repository.Devices, deviceLogsRep repository.DeviceLogs, statsRepo repository.Statistics, minimumReenrollmentDays int, caClient caClient.LamassuCAClient, dmsManagerClient dmsManagerClient.LamassuDMSManagerClient) Service {
 	svc := &DevicesService{
 		devicesRepo:             devicesRepo,
 		logsRepo:                deviceLogsRep,
@@ -65,6 +66,7 @@ func NewDeviceManagerService(devicesRepo repository.Devices, deviceLogsRep repos
 		caClient:                caClient,
 		dmsManagerClient:        dmsManagerClient,
 		minimumReenrollmentDays: minimumReenrollmentDays,
+		upstreamCACert:          upstreamCACert,
 	}
 
 	svc.service = svc
@@ -534,7 +536,13 @@ func (s *DevicesService) IsDMSAuthorizedToEnroll(ctx context.Context, input *api
 		return nil, err
 	}
 
-	isAuthorized := slices.Contains(dmsOutput.AuthorizedCAs, input.CAName)
+	isAuthorized := false
+
+	if dmsOutput.CloudDMS {
+		isAuthorized = dmsOutput.IdentityProfile.EnrollmentSettings.AuthorizedCA == input.CAName
+	} else {
+		isAuthorized = slices.Contains(dmsOutput.RemoteAccessIdentity.AuthorizedCAs, input.CAName)
+	}
 
 	return &api.IsDMSAuthorizedToEnrollOutput{
 		IsAuthorized: isAuthorized,
@@ -557,6 +565,7 @@ func (s *DevicesService) CACerts(ctx context.Context, aps string) ([]*x509.Certi
 }
 
 func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateRequest, clientCertificate *x509.Certificate, aps string) (*x509.Certificate, error) {
+	isCloudDMS := false
 	outGetCA, err := s.caClient.GetCAByName(ctx, &caApi.GetCAByNameInput{
 		CAType: caApi.CATypeDMSEnroller,
 		CAName: "LAMASSU-DMS-MANAGER",
@@ -570,24 +579,35 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 
 	err = s.verifyCertificate(clientCertificate, outGetCA.Certificate.Certificate)
 	if err != nil {
+		log.Debug("the presented client certificate was not issued by LAMASSU-DMS-MANAGER. Trying Upstream CA validation")
+		err = s.verifyCertificate(clientCertificate, s.upstreamCACert)
+		if err == nil {
+			isCloudDMS = true
+		}
+	}
+
+	if err != nil {
+		log.Debug("the presented client certificate was not issued by LAMASSU-DMS-MANAGER nor by the Upstream CA")
 		return nil, &estErrors.GenericError{
 			Message:    "client certificate is not valid: " + err.Error(),
 			StatusCode: 403,
 		}
 	}
 
-	isAuthroizedOutput, err := s.service.IsDMSAuthorizedToEnroll(ctx, &api.IsDMSAuthorizedToEnrollInput{
-		DMSName: clientCertificate.Subject.CommonName,
-		CAName:  aps,
-	})
-	if err != nil {
-		return nil, err
-	}
+	if !isCloudDMS {
+		isAuthroizedOutput, err := s.service.IsDMSAuthorizedToEnroll(ctx, &api.IsDMSAuthorizedToEnrollInput{
+			DMSName: clientCertificate.Subject.CommonName,
+			CAName:  aps,
+		})
+		if err != nil {
+			return nil, err
+		}
 
-	if !isAuthroizedOutput.IsAuthorized {
-		return nil, &estErrors.GenericError{
-			Message:    "DMS is not authorized to enroll with the selected APS",
-			StatusCode: 403,
+		if !isAuthroizedOutput.IsAuthorized {
+			return nil, &estErrors.GenericError{
+				Message:    "DMS is not authorized to enroll with the selected APS",
+				StatusCode: 403,
+			}
 		}
 	}
 

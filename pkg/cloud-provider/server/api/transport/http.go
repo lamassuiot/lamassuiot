@@ -76,6 +76,17 @@ func MakeHTTPHandler(s service.Service) http.Handler {
 		),
 	)
 
+	r.Methods("PUT").Path("/dms/cacerts").Handler(
+		httptransport.NewServer(
+			e.UpdateDmsCaCerts,
+			decodeUpdateDmsCaCertsRequest,
+			encodeUpdateDmsCaCertsResponse,
+			append(
+				options,
+			)...,
+		),
+	)
+
 	r.Methods("GET").Path("/devices/{deviceID}/config").Handler(
 		httptransport.NewServer(
 			e.GetDeviceConfigurationEndpoint,
@@ -265,6 +276,29 @@ func encodeRegisterCAResponse(ctx context.Context, w http.ResponseWriter, respon
 	return json.NewEncoder(w).Encode(serializedResponse)
 }
 
+func decodeUpdateDmsCaCertsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	var body api.UpdateDMSCaCertPayload
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+
+	return api.UpdateDMSCaCertsInput{
+		DeviceManufacturingService: body.Deserialize(),
+	}, nil
+}
+
+func encodeUpdateDmsCaCertsResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+	castedResponse := response.(*api.UpdateDMSCaCertsOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
 func decodeUpdateCAStatusRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
 	caName := vars["caName"]

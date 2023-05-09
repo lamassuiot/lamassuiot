@@ -2,6 +2,7 @@ package lamassudevmanager
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
@@ -20,7 +21,7 @@ import (
 // )
 
 type LamassuDeviceManagerClient interface {
-	// 	CreateDevice(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
+	CreateDevice(ctx context.Context, alias string, deviceID string, description string, tags []string, iconName string, iconColor string) (*api.Device, error)
 	// 	UpdateDeviceById(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
 	// 	GetDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error)
 	GetDeviceById(ctx context.Context, deviceId string) (*api.GetDeviceByIdOutput, error)
@@ -55,29 +56,37 @@ func NewLamassuDeviceManagerClient(config clientUtils.BaseClientConfigurationura
 	}, nil
 }
 
-// func (c *LamassuDeviceManagerClientConfig) CreateDevice(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error) {
-// 	body := dto.CreateDeviceRequest{
-// 		DeviceID:    deviceID,
-// 		Alias:       alias,
-// 		Description: description,
-// 		Tags:        tags,
-// 		IconName:    iconName,
-// 		IconColor:   iconColor,
-// 		DmsId:       dmsID,
-// 	}
-// 	req, err := c.client.NewRequest(ctx, "POST", "v1/devices", body)
-// 	if err != nil {
-// 		return dto.Device{}, err
-// 	}
-// 	respBody, _, err := c.client.Do(req)
-// 	if err != nil {
-// 		return dto.Device{}, err
-// 	}
-// 	var device dto.Device
-// 	jsonString, _ := json.Marshal(respBody)
-// 	json.Unmarshal(jsonString, &device)
-// 	return device, nil
-// }
+func (c *LamassuDeviceManagerClientConfig) CreateDevice(ctx context.Context, alias string, deviceID string, description string, tags []string, iconName string, iconColor string) (*api.Device, error) {
+	body := struct {
+		DeviceID    string   `json:"id"`
+		Alias       string   `json:"alias"`
+		Tags        []string `json:"tags"`
+		Description string   `json:"description"`
+		IconColor   string   `json:"icon_color"`
+		IconName    string   `json:"icon_name"`
+	}{
+		DeviceID:    deviceID,
+		Alias:       alias,
+		Tags:        tags,
+		Description: description,
+		IconColor:   iconColor,
+		IconName:    iconName,
+	}
+
+	req, err := c.client.NewRequest(ctx, "POST", "v1/devices", body)
+	if err != nil {
+		return nil, err
+	}
+	respBody, err := c.client.Do2(req)
+	if err != nil {
+		return nil, err
+	}
+	var device api.Device
+	jsonString, _ := json.Marshal(respBody)
+	json.Unmarshal(jsonString, &device)
+	return &device, nil
+}
+
 // func (c *LamassuDeviceManagerClientConfig) UpdateDeviceById(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error) {
 // 	body := dto.UpdateDevicesByIdRequest{
 // 		DeviceID:    deviceID,
@@ -101,6 +110,7 @@ func NewLamassuDeviceManagerClient(config clientUtils.BaseClientConfigurationura
 // 	json.Unmarshal(jsonString, &device)
 // 	return device, nil
 // }
+
 // func (c *LamassuDeviceManagerClientConfig) GetDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error) {
 // 	var newParams string
 // 	req, err := c.client.NewRequest(ctx, "GET", "v1/devices", nil)

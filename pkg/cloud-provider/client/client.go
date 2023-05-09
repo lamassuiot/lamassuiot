@@ -14,6 +14,7 @@ type cloudProviderConfig struct {
 
 type LamassuCloudProviderClient interface {
 	RegisterCA(ctx context.Context, input *api.RegisterCAInput) (*api.RegisterCAOutput, error)
+	UpdateDMSCaCerts(ctx context.Context, input *api.UpdateDMSCaCertsInput) (*api.UpdateDMSCaCertsOutput, error)
 	UpdateConfiguration(ctx context.Context, input *api.UpdateConfigurationInput) (*api.UpdateConfigurationOutput, error)
 	GetConfiguration(ctx context.Context, input *api.GetConfigurationInput) (*api.GetConfigurationOutput, error)
 	GetDeviceConfiguration(ctx context.Context, input *api.GetDeviceConfigurationInput) (*api.GetDeviceConfigurationOutput, error)
@@ -63,6 +64,22 @@ func (c *cloudProviderConfig) UpdateConfiguration(ctx context.Context, input *ap
 	}
 
 	return &api.UpdateConfigurationOutput{}, err
+}
+
+func (c *cloudProviderConfig) UpdateDMSCaCerts(ctx context.Context, input *api.UpdateDMSCaCertsInput) (*api.UpdateDMSCaCertsOutput, error) {
+	var output api.GetConfigurationOutputSerialized
+
+	req, err := c.client.NewRequest(ctx, "PUT", "v1/dms/cacerts", input.DeviceManufacturingService.Serialize())
+	if err != nil {
+		return &api.UpdateDMSCaCertsOutput{}, err
+	}
+
+	_, err = c.client.Do(req, &output)
+	if err != nil {
+		return &api.UpdateDMSCaCertsOutput{}, err
+	}
+
+	return &api.UpdateDMSCaCertsOutput{}, err
 }
 
 func (c *cloudProviderConfig) GetConfiguration(ctx context.Context, input *api.GetConfigurationInput) (*api.GetConfigurationOutput, error) {

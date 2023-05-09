@@ -7,6 +7,7 @@ import (
 	"time"
 
 	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
+	dmsApi "github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
 )
 
 type ConsistencyStatus string
@@ -197,4 +198,13 @@ type HandleForceReenrollEventInput struct {
 }
 
 type HandleForceReenrollEventOutput struct {
+}
+
+// ---------------------------------------------------
+
+type HandleUpdateDMSCaCertsInput struct {
+	dmsApi.DeviceManufacturingService
+}
+
+type HandleUpdateDMSCaCertsOutput struct {
 }

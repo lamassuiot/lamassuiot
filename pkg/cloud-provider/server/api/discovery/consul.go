@@ -2,33 +2,71 @@ package discovery
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/go-kit/kit/sd/consul"
 	"github.com/hashicorp/consul/api"
 	uuid "github.com/satori/go.uuid"
+	log "github.com/sirupsen/logrus"
 )
 
 type ServiceDiscovery struct {
-	client       consul.Client
+	consulClient *api.Client
 	registration *api.AgentServiceRegistration
 }
 
-func NewServiceDiscovery(consulProtocol string, consulHost string, consulPort string, CA string) (*ServiceDiscovery, error) {
+func NewServiceDiscovery(consulProtocol string, consulHost string, consulPort string, CA string, insecureVerify bool) (*ServiceDiscovery, error) {
 	consulConfig := api.DefaultConfig()
 	consulConfig.Address = consulProtocol + "://" + consulHost + ":" + consulPort
-	tlsConf := &api.TLSConfig{CAFile: CA}
+	tlsConf := &api.TLSConfig{}
+	if insecureVerify {
+		tlsConf.InsecureSkipVerify = true
+	} else {
+		tlsConf.CAFile = CA
+	}
 	consulConfig.TLSConfig = *tlsConf
 	consulClient, err := api.NewClient(consulConfig)
 	if err != nil {
 		return nil, err
 	}
-	client := consul.NewClient(consulClient)
-	return &ServiceDiscovery{client: client}, nil
+
+	return &ServiceDiscovery{
+		consulClient: consulClient,
+	}, nil
+}
+
+func (sd *ServiceDiscovery) CheckHealth() (bool, []api.Node, error) {
+	nodes, _, err := sd.consulClient.Catalog().Nodes(&api.QueryOptions{})
+	if err != nil {
+		return false, []api.Node{}, err
+	}
+
+	healthyNodes := []api.Node{}
+	for _, node := range nodes {
+		healthChecks, _, err := sd.consulClient.Health().Node(node.Node, &api.QueryOptions{})
+		for _, healthCheck := range healthChecks {
+			if healthCheck.CheckID == "serfHealth" {
+				if err != nil || healthCheck.Status != "passing" {
+					log.Debug(fmt.Sprintf("Consul node %s not healthy", node.Node))
+				} else {
+					healthyNodes = append(healthyNodes, *node)
+				}
+
+			}
+		}
+	}
+
+	log.Info(fmt.Sprintf("Consul healthy nodes: %d/%d", len(healthyNodes), len(nodes)))
+
+	if len(healthyNodes) == 0 {
+		return false, []api.Node{}, nil
+	}
+
+	return true, healthyNodes, nil
 }
 
 func (sd *ServiceDiscovery) Register(advProtocol string, advPort string, tags []string, name string, persistenceDir string) (string, error) {
@@ -78,10 +116,7 @@ func (sd *ServiceDiscovery) Register(advProtocol string, advPort string, tags []
 		Meta:    meta,
 		Check:   &check,
 	}
-	sd.registration = &asr
-	return svcId, sd.client.Register(sd.registration)
-}
 
-func (sd *ServiceDiscovery) Deregister() error {
-	return sd.client.Deregister(sd.registration)
+	sd.registration = &asr
+	return svcId, sd.consulClient.Agent().ServiceRegister(sd.registration)
 }

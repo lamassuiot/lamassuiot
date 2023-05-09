@@ -1,7 +1,10 @@
 package main
 
 import (
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -111,7 +114,12 @@ func main() {
 		}
 	}
 
-	svc := service.NewDeviceManagerService(deviceRepo, logsRepo, statsRepo, config.MinimumReenrollDays, caClient, dmsClient)
+	upstreamCA, err := readCertificarteFille(config.CACertFile)
+	if err != nil {
+		log.Fatal("Could not read CA certificate: ", err)
+	}
+
+	svc := service.NewDeviceManagerService(upstreamCA, deviceRepo, logsRepo, statsRepo, config.MinimumReenrollDays, caClient, dmsClient)
 	dmSvc := svc.(*service.DevicesService)
 
 	svc = service.LoggingMiddleware()(svc)
@@ -128,4 +136,20 @@ func main() {
 	mainServer.Run()
 	forever := make(chan struct{})
 	<-forever
+}
+
+func readCertificarteFille(path string) (*x509.Certificate, error) {
+	certContent, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	cpb, _ := pem.Decode(certContent)
+
+	cert, err := x509.ParseCertificate(cpb.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return cert, nil
 }

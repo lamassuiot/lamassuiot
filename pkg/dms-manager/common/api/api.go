@@ -3,9 +3,9 @@ package api
 import (
 	"crypto/x509"
 	"errors"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
-	"github.com/lib/pq"
 )
 
 type KeyMetadata struct {
@@ -113,24 +113,75 @@ func ParseDMSStatus(status string) (DMSStatus, error) {
 	}
 }
 
-type X509Asset struct {
-	Certificate        *x509.Certificate
-	CertificateRequest *x509.CertificateRequest
-	IsCertificate      bool
+type DeviceManufacturingService struct {
+	Name                 string
+	Status               DMSStatus
+	CreationTimestamp    time.Time
+	CloudDMS             bool
+	IdentityProfile      *IdentityProfile
+	RemoteAccessIdentity *RemoteAccessIdentity
 }
 
-type DeviceManufacturingService struct {
-	Name                      string
-	Status                    DMSStatus
-	SerialNumber              string
-	KeyMetadata               KeyStrengthMetadata
-	Subject                   Subject
-	AuthorizedCAs             []string
-	BootstrapCAs              []string
-	HostCloudDMS              bool
-	CreationTimestamp         pq.NullTime
-	LastStatusUpdateTimestamp pq.NullTime
-	X509Asset                 X509Asset
+type RemoteAccessIdentity struct {
+	ExternalKeyGeneration    bool
+	SerialNumber             string
+	KeyMetadata              KeyStrengthMetadata
+	Subject                  Subject
+	AuthorizedCAs            []string
+	CertificateString        string
+	Certificate              *x509.Certificate
+	CertificateRequestString string
+	CertificateRequest       *x509.CertificateRequest
+}
+
+type IdentityProfile struct {
+	GeneralSettings        IdentityProfileGeneralSettings
+	EnrollmentSettings     IdentityProfileEnrollmentSettings
+	ReerollmentSettings    IdentityProfileReenrollmentSettings
+	CADistributionSettings IdentityProfileCADistributionSettings
+	PublishToAWS           bool
+}
+
+type EnrollmentMode string
+
+const (
+	EnrollmentModeEST EnrollmentMode = "EST"
+)
+
+type IdentityProfileGeneralSettings struct {
+	EnrollmentMode EnrollmentMode
+}
+
+type ESTAuthenticationMode string
+
+const (
+	BootstrapMutualTLS ESTAuthenticationMode = "BOOTSTRAP_MTLS"
+)
+
+type IdentityProfileEnrollmentSettings struct {
+	AuthenticationMode ESTAuthenticationMode
+	Tags               []string
+	Icon               string
+	Color              string
+	AuthorizedCA       string
+	BootstrapCAs       []string
+}
+
+type IdentityProfileReenrollmentSettings struct {
+	PreventiveRenewalInterval time.Duration
+}
+
+type StaticCA struct {
+	ID          string
+	Certificate *x509.Certificate
+}
+
+type IdentityProfileCADistributionSettings struct {
+	IncludeAuthorizedCA        bool
+	IncludeBootstrapCAs        bool
+	IncludeLamassuDownstreamCA bool
+	ManagedCAs                 []string
+	StaticCAs                  []StaticCA
 }
 
 // ----------------------------------------------
@@ -156,22 +207,18 @@ type GetDMSsOutput struct {
 
 // ----------------------------------------------
 
-type CreateDMSWithCertificateRequestInput struct {
-	CertificateRequest *x509.CertificateRequest
-	BootstrapCAs       []string
+type UpdateDMSInput struct {
+	DeviceManufacturingService
 }
 
-type CreateDMSWithCertificateRequestOutput struct {
+type UpdateDMSOutput struct {
 	DeviceManufacturingService
 }
 
 // ----------------------------------------------
 
 type CreateDMSInput struct {
-	Subject      Subject
-	KeyMetadata  KeyMetadata
-	BootstrapCAs []string
-	HostCloudDMS bool
+	DeviceManufacturingService
 }
 
 type CreateDMSOutput struct {

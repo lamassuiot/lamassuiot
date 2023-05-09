@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -35,7 +36,7 @@ import (
 	cryptoEngines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/crypto-engines"
 	x509engines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/x509-engines"
 	caTransport "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/transport"
-
+	devClient "github.com/lamassuiot/lamassuiot/pkg/device-manager/client"
 	dmsClient "github.com/lamassuiot/lamassuiot/pkg/dms-manager/client"
 	dmsRepository "github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/repository/postgres"
 	dmsService "github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/service"
@@ -46,10 +47,10 @@ import (
 	deviceService "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
 	deviceTransport "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/transport"
 
-	estTransport "github.com/lamassuiot/lamassuiot/pkg/est/server/api/transport"
-
 	vaultapi "github.com/hashicorp/vault/api"
 	vaulthttp "github.com/hashicorp/vault/http"
+	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
+	estTransport "github.com/lamassuiot/lamassuiot/pkg/est/server/api/transport"
 	ocspService "github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/service"
 	ocspTransport "github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/transport"
 
@@ -145,9 +146,17 @@ func BuildDMSManagerTestServer(CATestServer *httptest.Server) (*httptest.Server,
 	if err != nil {
 		return nil, nil, err
 	}
+	parsedLamassuDevManagerURL, err := url.Parse("http://localhost")
+	devClient, err := devClient.NewLamassuDeviceManagerClient(clientUtils.BaseClientConfigurationuration{
+		URL:        parsedLamassuDevManagerURL,
+		AuthMethod: clientUtils.AuthMethodNone,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
 	var upstreamKey interface{}
 	var svc dmsService.Service
-	svc = dmsService.NewDMSManagerService(dmsRepository, &lamassuCAClient, nil, upstreamKey, "")
+	svc = dmsService.NewDMSManagerService(dmsRepository, &lamassuCAClient, &devClient, nil, nil, upstreamKey, "")
 	svc = dmsService.NewInputValudationMiddleware()(svc)
 
 	handler := dmsTransport.MakeHTTPHandler(svc)
@@ -194,6 +203,10 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 	if err != nil {
 		return nil, nil, err
 	}
+	outGetCA, err := lamassuCAClient.GetCAByName(context.Background(), &caApi.GetCAByNameInput{
+		CAType: caApi.CATypeDMSEnroller,
+		CAName: "LAMASSU-DMS-MANAGER",
+	})
 	statsRepo, err := deviceStatsRepository.NewStatisticsDBInMemory()
 	if err != nil {
 		return nil, nil, err
@@ -202,7 +215,7 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 	if err != nil {
 		return nil, nil, err
 	}
-	svc := deviceService.NewDeviceManagerService(deviceRepository, logsRepo, statsRepo, 30, lamassuCAClient, lamassuDMSClient)
+	svc := deviceService.NewDeviceManagerService(outGetCA.Certificate.Certificate, deviceRepository, logsRepo, statsRepo, 30, lamassuCAClient, lamassuDMSClient)
 	svc = deviceService.NewInputValudationMiddleware()(svc)
 
 	handler := deviceTransport.MakeHTTPHandler(svc)

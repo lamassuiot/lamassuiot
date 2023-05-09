@@ -15,10 +15,14 @@ type CreateDMSKeyMetadataPayload struct {
 }
 
 type CreateDMSPayload struct {
-	Subject      CreateDMSSubjectPayload     `json:"subject"`
-	KeyMetadata  CreateDMSKeyMetadataPayload `json:"key_metadata"`
-	HostCloudDMS bool                        `json:"host_cloud_dms"`
-	BootstrapCAs []string                    `json:"bootstrap_cas"`
+	Name                 string                         `json:"name"`
+	CloudDMS             bool                           `json:"cloud_dms"`
+	IdentityProfile      IdentityProfileSerialized      `json:"identity_profile"`
+	RemoteAccessIdentity RemoteAccessIdentitySerialized `json:"remote_access_identity"`
+}
+
+type UpdateMSPayload struct {
+	DeviceManufacturingServiceSerialized
 }
 
 // -------------------------------------------------------------
@@ -37,10 +41,4 @@ type UpdateDMSAuthorizedCAsPayload struct {
 
 type RevokeCertificatePayload struct {
 	RevocationReason string `json:"revocation_reason"`
-}
-
-// -------------------------------------------------------------
-
-type CreateDMSWithCertificateRequestPayload struct {
-	CertificateRequest string `json:"certificate_request"`
 }

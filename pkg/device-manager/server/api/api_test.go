@@ -339,7 +339,7 @@ func TestReEnroll(t *testing.T) {
 				deviceID := "1234-5678-9012-3456"
 				deviceMTLSConfig := ctx.Value(ContextKeyMTLSConfig).(mTLSConfig)
 				b64CSREncoded := generateBase64EncodedCertificateRequest(deviceID, deviceMTLSConfig.mTLSRSAKey)
-				b := e.POST("/.well-known/est/simplereenroll").
+				b := e.POST("/.well-known/est/ca/simplereenroll").
 					WithHeader("Content-Type", "application/pkcs10").
 					WithBytes([]byte(b64CSREncoded)).
 					Expect().
@@ -383,7 +383,7 @@ func TestReEnroll(t *testing.T) {
 				deviceID := "slot1:1234-5678-9012-3456"
 				deviceMTLSConfig := ctx.Value(ContextKeyMTLSConfig).(mTLSConfig)
 				b64CSREncoded := generateBase64EncodedCertificateRequest(deviceID, deviceMTLSConfig.mTLSRSAKey)
-				b := e.POST("/.well-known/est/simplereenroll").
+				b := e.POST("/.well-known/est/ca/simplereenroll").
 					WithHeader("Content-Type", "application/pkcs10").
 					WithBytes([]byte(b64CSREncoded)).
 					Expect().
@@ -430,7 +430,7 @@ func TestReEnroll(t *testing.T) {
 				params := url.Values{}
 				params.Add("Cert", cert)
 
-				b := e.POST("/.well-known/est/simplereenroll").
+				b := e.POST("/.well-known/est/ca/simplereenroll").
 					WithHeader("Content-Type", "application/pkcs10").
 					WithHeader("X-Forwarded-Client-Cert", params.Encode()).
 					WithBytes([]byte(b64CSREncoded)).
@@ -475,7 +475,7 @@ func TestReEnroll(t *testing.T) {
 				deviceID := "slot1:1234-5678-9012-3456"
 				deviceMTLSConfig := ctx.Value(ContextKeyMTLSConfig).(mTLSConfig)
 				b64CSREncoded := generateBase64EncodedCertificateRequest(deviceID, deviceMTLSConfig.mTLSRSAKey)
-				_ = e.POST("/.well-known/est/simplereenroll").
+				_ = e.POST("/.well-known/est/ca/simplereenroll").
 					WithHeader("Content-Type", "application/pkcs10").
 					WithBytes([]byte(b64CSREncoded)).
 					Expect().
@@ -506,7 +506,7 @@ func TestReEnroll(t *testing.T) {
 				deviceID := "slot1:1234-5678-9012-3456"
 				deviceMTLSConfig := ctx.Value(ContextKeyMTLSConfig).(mTLSConfig)
 				b64CSREncoded := generateBase64EncodedCertificateRequest(deviceID+"something", deviceMTLSConfig.mTLSRSAKey)
-				_ = e.POST("/.well-known/est/simplereenroll").
+				_ = e.POST("/.well-known/est/ca/simplereenroll").
 					WithHeader("Content-Type", "application/pkcs10").
 					WithBytes([]byte(b64CSREncoded)).
 					Expect().
@@ -540,7 +540,7 @@ func TestReEnroll(t *testing.T) {
 
 				time.Sleep(time.Second * 3)
 
-				_ = e.POST("/.well-known/est/simplereenroll").
+				_ = e.POST("/.well-known/est/ca/simplereenroll").
 					WithHeader("Content-Type", "application/pkcs10").
 					WithBytes([]byte(b64CSREncoded)).
 					Expect().
@@ -571,7 +571,7 @@ func TestReEnroll(t *testing.T) {
 				deviceID := "slot1:1234-5678-9012-3456"
 				deviceMTLSConfig := ctx.Value(ContextKeyMTLSConfig).(mTLSConfig)
 				b64CSREncoded := generateBase64EncodedCertificateRequest(deviceID+"something", deviceMTLSConfig.mTLSRSAKey)
-				_ = e.POST("/.well-known/est/simplereenroll").
+				_ = e.POST("/.well-known/est/ca/simplereenroll").
 					WithHeader("Content-Type", "application/pkcs10").
 					WithBytes([]byte(b64CSREncoded)).
 					Expect().
@@ -604,7 +604,7 @@ func TestReEnroll(t *testing.T) {
 				deviceID := "slot1:1234-5678-9012-3456"
 				deviceMTLSConfig := ctx.Value(ContextKeyMTLSConfig).(mTLSConfig)
 				b64CSREncoded := generateBase64EncodedCertificateRequest(deviceID, deviceMTLSConfig.mTLSRSAKey)
-				_ = e.POST("/.well-known/est/simplereenroll").
+				_ = e.POST("/.well-known/est/ca/simplereenroll").
 					WithHeader("Content-Type", "application/pkcs10").
 					WithBytes([]byte(b64CSREncoded)).
 					Expect().
@@ -1519,12 +1519,19 @@ func runTests(t *testing.T, tc TestCase) {
 	serverDMS.Start()
 
 	dmsOutput, err := (svcDMSanager).CreateDMS(context.Background(), &dmsApi.CreateDMSInput{
-		Subject: dmsApi.Subject{
-			CommonName: "RPI-DMS",
-		},
-		KeyMetadata: dmsApi.KeyMetadata{
-			KeyType: "RSA",
-			KeyBits: 4096,
+		DeviceManufacturingService: dmsApi.DeviceManufacturingService{
+			Name:     "RPI-DMS",
+			CloudDMS: false,
+			RemoteAccessIdentity: &dmsApi.RemoteAccessIdentity{
+				ExternalKeyGeneration: false,
+				KeyMetadata: dmsApi.KeyStrengthMetadata{
+					KeyType: dmsApi.RSA,
+					KeyBits: 2048,
+				},
+				Subject: dmsApi.Subject{
+					CommonName: "RPI-DMS",
+				},
+			},
 		},
 	})
 	if err != nil {
@@ -1544,7 +1551,7 @@ func runTests(t *testing.T, tc TestCase) {
 	ctx = context.WithValue(ctx, ContextKeyMTLSConfig, mTLSConfig{
 		useMTLS:         true,
 		mTLSRSAKey:      dmsKey.(*rsa.PrivateKey),
-		mTLSCertificate: dms.X509Asset.Certificate,
+		mTLSCertificate: dms.RemoteAccessIdentity.Certificate,
 	})
 
 	_, err = (svcDMSanager).UpdateDMSAuthorizedCAs(context.Background(), &dmsApi.UpdateDMSAuthorizedCAsInput{

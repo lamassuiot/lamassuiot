@@ -2,10 +2,12 @@ package lamassuenroller
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/base64"
-	"encoding/pem"
 	"errors"
+	"io/ioutil"
 
+	"github.com/fullsailor/pkcs7"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	clientFilers "github.com/lamassuiot/lamassuiot/pkg/utils/client/filters"
@@ -13,8 +15,8 @@ import (
 )
 
 type LamassuDMSManagerClient interface {
+	CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error)
 	CreateDMS(ctx context.Context, input *api.CreateDMSInput) (*api.CreateDMSOutput, error)
-	CreateDMSWithCertificateRequest(ctx context.Context, input *api.CreateDMSWithCertificateRequestInput) (*api.CreateDMSWithCertificateRequestOutput, error)
 	UpdateDMSStatus(ctx context.Context, input *api.UpdateDMSStatusInput) (*api.UpdateDMSStatusOutput, error)
 	UpdateDMSAuthorizedCAs(ctx context.Context, input *api.UpdateDMSAuthorizedCAsInput) (*api.UpdateDMSAuthorizedCAsOutput, error)
 	GetDMSs(ctx context.Context, input *api.GetDMSsInput) (*api.GetDMSsOutput, error)
@@ -39,20 +41,10 @@ func NewLamassuDMSManagerClientConfig(config clientUtils.BaseClientConfiguration
 
 func (c *lamassuDMSManagerClientConfig) CreateDMS(ctx context.Context, input *api.CreateDMSInput) (*api.CreateDMSOutput, error) {
 	body := &api.CreateDMSPayload{
-		KeyMetadata: api.CreateDMSKeyMetadataPayload{
-			KeyType: string(input.KeyMetadata.KeyType),
-			KeyBits: input.KeyMetadata.KeyBits,
-		},
-		Subject: api.CreateDMSSubjectPayload{
-			CommonName:       input.Subject.CommonName,
-			Organization:     input.Subject.Organization,
-			OrganizationUnit: input.Subject.OrganizationUnit,
-			Country:          input.Subject.Country,
-			State:            input.Subject.State,
-			Locality:         input.Subject.Locality,
-		},
-		HostCloudDMS: input.HostCloudDMS,
-		BootstrapCAs: input.BootstrapCAs,
+		CloudDMS:             input.CloudDMS,
+		Name:                 input.Name,
+		IdentityProfile:      input.IdentityProfile.Serialize(),
+		RemoteAccessIdentity: input.RemoteAccessIdentity.Serialize(),
 	}
 
 	req, err := c.client.NewRequest(ctx, "POST", "v1/", body)
@@ -66,31 +58,6 @@ func (c *lamassuDMSManagerClientConfig) CreateDMS(ctx context.Context, input *ap
 
 	if err != nil {
 		return &api.CreateDMSOutput{}, err
-	}
-
-	deserializedOutput := output.Deserialize()
-	return &deserializedOutput, nil
-}
-
-func (c *lamassuDMSManagerClientConfig) CreateDMSWithCertificateRequest(ctx context.Context, input *api.CreateDMSWithCertificateRequestInput) (*api.CreateDMSWithCertificateRequestOutput, error) {
-	csrBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: input.CertificateRequest.Raw})
-	base64CsrContent := base64.StdEncoding.EncodeToString(csrBytes)
-
-	body := &api.CreateDMSWithCertificateRequestPayload{
-		CertificateRequest: base64CsrContent,
-	}
-
-	req, err := c.client.NewRequest(ctx, "POST", "v1/csr", body)
-
-	if err != nil {
-		return &api.CreateDMSWithCertificateRequestOutput{}, err
-	}
-
-	var output api.CreateDMSWithCertificateRequestOutputSerialized
-	_, err = c.client.Do(req, &output)
-
-	if err != nil {
-		return &api.CreateDMSWithCertificateRequestOutput{}, err
 	}
 
 	deserializedOutput := output.Deserialize()
@@ -210,4 +177,32 @@ func (c *lamassuDMSManagerClientConfig) IterateDMSsWithPredicate(ctx context.Con
 	}
 
 	return &api.IterateDMSsWithPredicateOutput{}, nil
+}
+
+func (c *lamassuDMSManagerClientConfig) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
+	req, err := c.client.NewRequest(ctx, "GET", "/.well-known/est/"+aps+"/cacerts", nil)
+
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.client.Do2(req)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	dec := make([]byte, base64.StdEncoding.DecodedLen(len(body)))
+	n, err := base64.StdEncoding.Decode(dec, body)
+	if err != nil {
+		return nil, err
+	}
+	decoded := dec[:n]
+	p7, err := pkcs7.Parse(decoded)
+	if err != nil {
+		return nil, err
+	}
+	return p7.Certificates, nil
 }

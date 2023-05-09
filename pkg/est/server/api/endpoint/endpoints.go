@@ -44,8 +44,9 @@ func MakeHealthEndpoint(s service.ESTService) endpoint.Endpoint {
 
 func MakeGetCAsEndpoint(s service.ESTService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		cas, err := s.CACerts(ctx, "")
-		return GetCasResponse{Certs: cas}, err
+		req := request.(CACertsRequest)
+		cas, err := s.CACerts(ctx, req.Aps)
+		return GetCasResponse{Certs: cas, PemResponse: req.PemResponse}, err
 	}
 }
 
@@ -97,9 +98,14 @@ func MakeServerKeyGenEndpoint(s service.ESTService) endpoint.Endpoint {
 type EmptyRequest struct{}
 
 type EnrollRequest struct {
-	Csr         *x509.CertificateRequest `validate:"required"`
 	Aps         string                   `validate:"required"`
+	Csr         *x509.CertificateRequest `validate:"required"`
 	Crt         *x509.Certificate        `validate:"required"`
+	PemResponse bool
+}
+
+type CACertsRequest struct {
+	Aps         string
 	PemResponse bool
 }
 
@@ -109,6 +115,7 @@ func ValidatetEnrollRequest(request EnrollRequest) error {
 }
 
 type ReenrollRequest struct {
+	Aps         string
 	Csr         *x509.CertificateRequest `validate:"required"`
 	Crt         *x509.Certificate        `validate:"required"`
 	PemResponse bool
@@ -136,8 +143,10 @@ type HealthResponse struct {
 }
 
 type GetCasResponse struct {
-	Certs []*x509.Certificate
+	Certs       []*x509.Certificate
+	PemResponse bool
 }
+
 type EnrollReenrollResponse struct {
 	Cert        *x509.Certificate
 	CaCert      *x509.Certificate

@@ -117,7 +117,7 @@ func initializeConsulClient(consulProtocol string, consulHost string, consulPort
 	} else {
 		log.Fatal("Unsuported consul protocol")
 	}
-	tlsConf := &api.TLSConfig{CAFile: consulCA}
+	tlsConf := &api.TLSConfig{CAFile: consulCA, InsecureSkipVerify: true}
 	consulConfig.TLSConfig = *tlsConf
 	consulClient, err := api.NewClient(consulConfig)
 	if err != nil {

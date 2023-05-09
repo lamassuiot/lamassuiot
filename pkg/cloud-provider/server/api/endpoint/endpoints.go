@@ -14,6 +14,7 @@ type Endpoints struct {
 	UpdateConfigurationEndpoint                       endpoint.Endpoint
 	GetConfigurationEndpoint                          endpoint.Endpoint
 	GetDeviceConfigurationEndpoint                    endpoint.Endpoint
+	UpdateDmsCaCerts                                  endpoint.Endpoint
 	UpdateCAStatusEndpoint                            endpoint.Endpoint
 	UpdateDeviceCertificateStatusEndpoint             endpoint.Endpoint
 	UpdateDeviceDigitalTwinReenrollmentStatusEndpoint endpoint.Endpoint
@@ -23,6 +24,7 @@ func MakeServerEndpoints(s service.Service) Endpoints {
 	healthEndpoint := MakeHealthEndpoint(s)
 	registerCAEndpoint := MakeRegisterCAEndpoint(s)
 	updateConfigurationEndpoint := MakeUpdateConfigurationEndpoint(s)
+	updateDmsCaCerts := MakeUpdateDmsCaCertsEndpoint(s)
 	getConfigurationEndpoint := MakeGetConfigurationEndpoint(s)
 	getDeviceConfigurationEndpoint := MakeGetDeviceConfigurationEndpoint(s)
 	updateCAStatusEndpoint := MakeUpdateCAStatusEndpoint(s)
@@ -33,6 +35,7 @@ func MakeServerEndpoints(s service.Service) Endpoints {
 		HealthEndpoint:                                    healthEndpoint,
 		RegisterCAEndpoint:                                registerCAEndpoint,
 		UpdateConfigurationEndpoint:                       updateConfigurationEndpoint,
+		UpdateDmsCaCerts:                                  updateDmsCaCerts,
 		GetConfigurationEndpoint:                          getConfigurationEndpoint,
 		GetDeviceConfigurationEndpoint:                    getDeviceConfigurationEndpoint,
 		UpdateCAStatusEndpoint:                            updateCAStatusEndpoint,
@@ -64,6 +67,13 @@ func MakeUpdateConfigurationEndpoint(s service.Service) endpoint.Endpoint {
 	}
 }
 
+func MakeUpdateDmsCaCertsEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.UpdateDMSCaCertsInput)
+		output, err := s.UpdateDMSCaCerts(ctx, &input)
+		return output, err
+	}
+}
 func MakeGetConfigurationEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
 		input := request.(api.GetConfigurationInput)

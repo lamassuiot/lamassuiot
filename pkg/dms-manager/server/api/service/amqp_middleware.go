@@ -83,23 +83,23 @@ func (mw *amqpMiddleware) CreateDMS(ctx context.Context, input *api.CreateDMSInp
 	return mw.next.CreateDMS(ctx, input)
 }
 
-func (mw *amqpMiddleware) CreateDMSWithCertificateRequest(ctx context.Context, input *api.CreateDMSWithCertificateRequestInput) (output *api.CreateDMSWithCertificateRequestOutput, err error) {
-	defer func() {
-		mw.sendAMQPMessage(fmt.Sprintf("%s.dms.createcertificate", EventPrefix), output.Serialize())
-	}()
-	return mw.next.CreateDMSWithCertificateRequest(ctx, input)
-}
-
 func (mw *amqpMiddleware) UpdateDMSStatus(ctx context.Context, input *api.UpdateDMSStatusInput) (output *api.UpdateDMSStatusOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(fmt.Sprintf("%s.dms.update", EventPrefix), output.Serialize())
+		mw.sendAMQPMessage(fmt.Sprintf("%s.dms.update-status", EventPrefix), output.Serialize())
 	}()
 	return mw.next.UpdateDMSStatus(ctx, input)
 }
 
+func (mw *amqpMiddleware) UpdateDMS(ctx context.Context, input *api.UpdateDMSInput) (output *api.UpdateDMSOutput, err error) {
+	defer func() {
+		mw.sendAMQPMessage(fmt.Sprintf("%s.dms.update", EventPrefix), output.Serialize())
+	}()
+	return mw.next.UpdateDMS(ctx, input)
+}
+
 func (mw *amqpMiddleware) UpdateDMSAuthorizedCAs(ctx context.Context, input *api.UpdateDMSAuthorizedCAsInput) (output *api.UpdateDMSAuthorizedCAsOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(fmt.Sprintf("%s.dms.authorizedcas", EventPrefix), output.Serialize())
+		mw.sendAMQPMessage(fmt.Sprintf("%s.dms.update-authorizedcas", EventPrefix), output.Serialize())
 	}()
 	return mw.next.UpdateDMSAuthorizedCAs(ctx, input)
 }

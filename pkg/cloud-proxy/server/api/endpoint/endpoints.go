@@ -10,6 +10,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/service"
 	devApi "github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
+	dmsApi "github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
 )
 
 type Endpoints struct {
@@ -136,6 +137,21 @@ func MakeEventHandlerEndpoint(s service.Service) endpoint.Endpoint {
 			})
 			return nil, err
 
+		case "io.lamassuiot.dms.update":
+			var data dmsApi.DeviceManufacturingServiceSerialized
+			json.Unmarshal(event.Data(), &data)
+			_, err := s.HandleUpdateDMSCaCerts(ctx, &api.HandleUpdateDMSCaCertsInput{
+				DeviceManufacturingService: data.Deserialize(),
+			})
+			return nil, err
+
+		case "io.lamassuiot.dms.update-authorizedcas":
+			var data dmsApi.DeviceManufacturingServiceSerialized
+			json.Unmarshal(event.Data(), &data)
+			_, err := s.HandleUpdateDMSCaCerts(ctx, &api.HandleUpdateDMSCaCertsInput{
+				DeviceManufacturingService: data.Deserialize(),
+			})
+			return nil, err
 		case "io.lamassuiot.certificate.update":
 			var data caApi.UpdateCertificateStatusOutputSerialized
 			json.Unmarshal(event.Data(), &data)

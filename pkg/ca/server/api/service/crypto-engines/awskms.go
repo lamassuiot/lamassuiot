@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto"
 	"crypto/elliptic"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -22,9 +24,18 @@ type AWSKMSProviderContext struct {
 }
 
 func NewAWSKMSEngine(accessKeyID string, secretAccessKey string, region string) (CryptoEngine, error) {
+	httpCli := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
+
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(region),
 		Credentials: credentials.NewStaticCredentials(accessKeyID, secretAccessKey, ""),
+		HTTPClient:  httpCli,
 	}))
 	kmscli := kms.New(sess)
 

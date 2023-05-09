@@ -106,6 +106,17 @@ func (mw loggingMiddleware) UpdateCAStatus(ctx context.Context, input *api.Updat
 	return mw.next.UpdateCAStatus(ctx, input)
 }
 
+func (mw loggingMiddleware) UpdateDMSCaCerts(ctx context.Context, input *api.UpdateDMSCaCertsInput) (output *api.UpdateDMSCaCertsOutput, err error) {
+	defer func(begin time.Time) {
+		log.WithFields(log.Fields{
+			"method": "UpdateDMSCaCerts",
+			"output": output,
+			"took":   time.Since(begin),
+		}).Trace(fmt.Sprintf("output: %v", output))
+	}(time.Now())
+	return mw.next.UpdateDMSCaCerts(ctx, input)
+}
+
 func (mw loggingMiddleware) UpdateDeviceCertificateStatus(ctx context.Context, input *api.UpdateDeviceCertificateStatusInput) (output *api.UpdateDeviceCertificateStatusOutput, err error) {
 	defer func(begin time.Time) {
 		var logMsg = map[string]interface{}{}

@@ -2,13 +2,8 @@ package transport
 
 import (
 	"context"
-	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
-	"errors"
 	"net/http"
-	"strings"
 
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
@@ -74,17 +69,6 @@ func MakeHTTPHandler(s service.Service) http.Handler {
 		),
 	)
 
-	r.Methods("POST").Path("/csr").Handler(
-		httptransport.NewServer(
-			e.CreateDMSWithCSREndpoint,
-			decodeCreateDMSWithCSRequest,
-			encodeCreateDMSWithCSRResponse,
-			append(
-				options,
-			)...,
-		),
-	)
-
 	r.Methods("GET").Path("/").Handler(
 		httptransport.NewServer(
 			e.GetDMSsEndpoint,
@@ -128,6 +112,16 @@ func MakeHTTPHandler(s service.Service) http.Handler {
 			)...,
 		),
 	)
+	r.Methods("PUT").Path("/").Handler(
+		httptransport.NewServer(
+			e.UpdateDMSEndpoint,
+			decodeUpdateDMSRequest,
+			encodeUpdateDMSResponse,
+			append(
+				options,
+			)...,
+		),
+	)
 
 	return r
 }
@@ -155,25 +149,13 @@ func decodeCreateDMSRequest(ctx context.Context, r *http.Request) (request inter
 		return nil, InvalidJsonFormat()
 	}
 
-	bootstrapCAs := make([]string, 0)
-	if body.HostCloudDMS {
-		bootstrapCAs = body.BootstrapCAs
-	}
 	input = api.CreateDMSInput{
-		Subject: api.Subject{
-			CommonName:       body.Subject.CommonName,
-			Organization:     body.Subject.Organization,
-			OrganizationUnit: body.Subject.OrganizationUnit,
-			Country:          body.Subject.Country,
-			State:            body.Subject.State,
-			Locality:         body.Subject.Locality,
+		DeviceManufacturingService: api.DeviceManufacturingService{
+			Name:                 body.Name,
+			CloudDMS:             body.CloudDMS,
+			IdentityProfile:      body.IdentityProfile.Deserialize(),
+			RemoteAccessIdentity: body.RemoteAccessIdentity.Deserialize(),
 		},
-		KeyMetadata: api.KeyMetadata{
-			KeyType: api.ParseKeyType(body.KeyMetadata.KeyType),
-			KeyBits: body.KeyMetadata.KeyBits,
-		},
-		BootstrapCAs: bootstrapCAs,
-		HostCloudDMS: body.HostCloudDMS,
 	}
 
 	return input, nil
@@ -192,54 +174,30 @@ func encodeCreateDMSResponse(ctx context.Context, w http.ResponseWriter, respons
 	return json.NewEncoder(w).Encode(serializedResponse)
 }
 
-func decodeCreateDMSWithCSRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+func decodeUpdateDMSRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 
-	var input api.CreateDMSWithCertificateRequestInput
-	var body api.CreateDMSWithCertificateRequestPayload
+	var input api.UpdateDMSInput
+	var body api.DeviceManufacturingServiceSerialized
 
 	err = json.NewDecoder(r.Body).Decode(&body)
 	if err != nil {
 		return nil, InvalidJsonFormat()
 	}
 
-	decodedCertBytes, err := base64.StdEncoding.DecodeString(body.CertificateRequest)
-	if err != nil {
-		return nil, InvalidJsonFormat()
-	}
-	decodedCert := strings.Trim(string(decodedCertBytes), "\n")
-	if err != nil {
-		return api.CreateDMSWithCertificateRequestInput{}, &dmsErrors.GenericError{
-			StatusCode: http.StatusBadRequest,
-			Message:    dmsErrors.ErrSignRequestNotInB64,
-		}
-	}
-
-	certBlock, _ := pem.Decode([]byte(decodedCert))
-	if certBlock == nil {
-		return api.CreateDMSWithCertificateRequestInput{}, &dmsErrors.GenericError{
-			StatusCode: http.StatusBadRequest,
-			Message:    dmsErrors.ErrSignRequestNotInPEMFormat,
-		}
-	}
-	certRequest, err := x509.ParseCertificateRequest(certBlock.Bytes)
-	if err != nil {
-		return api.CreateDMSWithCertificateRequestInput{}, errors.New("could not inflate certificate request")
-	}
-
-	input = api.CreateDMSWithCertificateRequestInput{
-		CertificateRequest: certRequest,
+	input = api.UpdateDMSInput{
+		DeviceManufacturingService: body.Deserialize(),
 	}
 
 	return input, nil
 }
 
-func encodeCreateDMSWithCSRResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+func encodeUpdateDMSResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if e, ok := response.(errorer); ok && e.error() != nil {
 		encodeError(ctx, e.error(), w)
 		return nil
 	}
 
-	castedResponse := response.(*api.CreateDMSWithCertificateRequestOutput)
+	castedResponse := response.(*api.UpdateDMSOutput)
 	serializedResponse := castedResponse.Serialize()
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

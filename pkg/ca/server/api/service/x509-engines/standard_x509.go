@@ -141,6 +141,7 @@ func (s StandardX509Engine) SignCertificateRequest(caCertificate *x509.Certifica
 		NotAfter:     now.Add(issuanceDuration),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		DNSNames:     input.CertificateSigningRequest.DNSNames,
 	}
 
 	certificateBytes, err := x509.CreateCertificate(rand.Reader, &certificateTemplate, caCertificate, input.CertificateSigningRequest.PublicKey, privkey)

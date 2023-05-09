@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	httptransport "github.com/go-kit/kit/transport/http"
@@ -65,7 +66,18 @@ func MakeHTTPHandler(service service.ESTService) http.Handler {
 	router.Methods("GET").Path("/.well-known/est/cacerts").Handler(
 		httptransport.NewServer(
 			endpoints.GetCAsEndpoint,
-			decodeRequest,
+			decodeCACertsRequest,
+			encodeGetCACertificatesResponse,
+			append(
+				options,
+			)...,
+		),
+	)
+	// MUST as per rfc7030
+	router.Methods("GET").Path("/.well-known/est/{aps}/cacerts").Handler(
+		httptransport.NewServer(
+			endpoints.GetCAsEndpoint,
+			decodeCACertsRequest,
 			encodeGetCACertificatesResponse,
 			append(
 				options,
@@ -84,7 +96,7 @@ func MakeHTTPHandler(service service.ESTService) http.Handler {
 		),
 	)
 
-	router.Methods("POST").Path("/.well-known/est/simplereenroll").Handler(
+	router.Methods("POST").Path("/.well-known/est/{aps}/simplereenroll").Handler(
 		httptransport.NewServer(
 			endpoints.ReenrollerEndpoint,
 			decodeReenrollRequest,
@@ -109,11 +121,22 @@ func MakeHTTPHandler(service service.ESTService) http.Handler {
 	return router
 }
 
-func decodeRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-	var req endpoint.EmptyRequest
-	return req, nil
-}
+func decodeCACertsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	aps, _ := vars["aps"]
 
+	pemMode := false
+	accept := r.Header.Get("Accept")
+	if accept == "application/x-pem-file" {
+		pemMode = true
+	}
+
+	return endpoint.CACertsRequest{
+		Aps:         aps,
+		PemResponse: pemMode,
+	}, nil
+
+}
 func decodeEnrollRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
 	aps, ok := vars["aps"]
@@ -177,6 +200,9 @@ func decodeEnrollRequest(ctx context.Context, r *http.Request) (request interfac
 }
 
 func decodeReenrollRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	aps, _ := vars["aps"]
+
 	contentType := r.Header.Get("Content-Type")
 	if contentType != "application/pkcs10" {
 		return nil, ErrContentType()
@@ -209,6 +235,7 @@ func decodeReenrollRequest(ctx context.Context, r *http.Request) (request interf
 			return nil, err
 		}
 		return endpoint.ReenrollRequest{
+			Aps:         aps,
 			Csr:         csr,
 			Crt:         certificate,
 			PemResponse: pemMode,
@@ -216,6 +243,7 @@ func decodeReenrollRequest(ctx context.Context, r *http.Request) (request interf
 	} else if len(r.TLS.PeerCertificates) != 0 {
 		cert := r.TLS.PeerCertificates[0]
 		return endpoint.ReenrollRequest{
+			Aps:         aps,
 			Csr:         csr,
 			Crt:         cert,
 			PemResponse: pemMode,
@@ -369,24 +397,39 @@ func encodeGetCACertificatesResponse(ctx context.Context, w http.ResponseWriter,
 		return nil
 	}
 	getCAsResponse := response.(endpoint.GetCasResponse)
-	var cb []byte
-	for _, cert := range getCAsResponse.Certs {
-		cb = append(cb, cert.Raw...)
+
+	var body []byte
+	if getCAsResponse.PemResponse {
+		for _, cert := range getCAsResponse.Certs {
+			crtBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
+			body = append(body, crtBytes...)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/pem-mime; smime-type=certs-only")
+		ctLength := len(body)
+
+		w.Header().Set("Contnet-Length", strconv.Itoa(ctLength))
+		w.Write(body)
+	} else {
+		var cb []byte
+		for _, cert := range getCAsResponse.Certs {
+			cb = append(cb, cert.Raw...)
+		}
+
+		body, err := pkcs7.DegenerateCertificate(cb)
+		if err != nil {
+			EncodeError(ctx, err, w)
+			return nil
+		}
+
+		body = base64Encode(body)
+		w.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
+		w.Header().Set("Content-Transfer-Encoding", "base64")
+		w.WriteHeader(http.StatusOK)
+		w.Write(body)
 	}
 
-	body, err := pkcs7.DegenerateCertificate(cb)
-	if err != nil {
-		EncodeError(ctx, err, w)
-		return nil
-	}
-
-	body = base64Encode(body)
-
-	w.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
-	w.Header().Set("Content-Transfer-Encoding", "base64")
-
-	w.WriteHeader(http.StatusOK)
-	w.Write(body)
 	return nil
 }
 

@@ -29,29 +29,28 @@ func TestCreateDMS(t *testing.T) {
 			name:                  "ShouldCreateDMS",
 			serviceInitialization: func(svc *service.Service) {},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				reqBytes := `{"subject":{"common_name":"My DMS Server"},"key_metadata":{"type":"RSA","bits":2048}}`
+				reqBytes := `{"name":"My DMS Server","cloud_dms":false,"remote_access_identity":{"subject":{"common_name":"My DMS Server"},"key_metadata":{"type":"RSA","bits":2048}}}`
 				obj := e.POST("/v1/").WithBytes([]byte(reqBytes)).
 					Expect().
 					Status(http.StatusOK).JSON()
 
 				obj.Object().ContainsKey("dms")
-				obj.Object().ContainsKey("private_key")
 
 				dmsObj := obj.Object().Value("dms").Object()
-				dmsObj.ContainsKey("last_status_update_timestamp")
+				dmsObj.ContainsKey("status")
 				dmsObj.ContainsKey("creation_timestamp")
-				dmsObj.ContainsKey("certificate_request")
-
+				dmsObj.ContainsKey("name")
+				dmsObj.ContainsKey("remote_access_identity")
+				remoteIdentity := obj.Object().Value("dms").Object().Value("remote_access_identity").Object()
 				dmsObj.ContainsMap(map[string]interface{}{
+					"name":      "My DMS Server",
+					"status":    "PENDING_APPROVAL",
+					"cloud_dms": false,
+				})
+
+				remoteIdentity.ContainsMap(map[string]interface{}{
 					"authorized_cas": []string{},
-					"name":           "My DMS Server",
-					"key_metadata": map[string]interface{}{
-						"bits":     2048,
-						"strength": "MEDIUM",
-						"type":     "RSA",
-					},
-					"status":        "PENDING_APPROVAL",
-					"serial_number": "",
+					"serial_number":  "",
 					"subject": map[string]interface{}{
 						"common_name":       "My DMS Server",
 						"country":           "",
@@ -62,23 +61,7 @@ func TestCreateDMS(t *testing.T) {
 					},
 				})
 
-				b64PemEncodedKey := obj.Object().Value("private_key").String().Raw()
-				pemEncodedKey, err := base64.StdEncoding.DecodeString(b64PemEncodedKey)
-				if err != nil {
-					t.Errorf("Failed to decode b64 encoded private key: %v", err)
-				}
-
-				derKey, _ := pem.Decode(pemEncodedKey)
-				rsaKey, err := x509.ParsePKCS1PrivateKey(derKey.Bytes)
-				if err != nil {
-					t.Errorf("Failed to parse private key: %v", err)
-				}
-
-				if rsaKey.N.BitLen() != 2048 {
-					t.Errorf("Expected 2048 bit key, got %d", rsaKey.N.BitLen())
-				}
-
-				b64PemEncodedCsr := dmsObj.Value("certificate_request").String().Raw()
+				b64PemEncodedCsr := remoteIdentity.Value("certificate_request").String().Raw()
 				pemEncodedCsr, err := base64.StdEncoding.DecodeString(b64PemEncodedCsr)
 				if err != nil {
 					t.Errorf("Failed to decode b64 encoded CSR: %v", err)
@@ -99,12 +82,19 @@ func TestCreateDMS(t *testing.T) {
 			name: "ShouldNotCreateDuplicateDMS",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+							Subject: api.Subject{
+								CommonName: "My DMS Server",
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -112,7 +102,7 @@ func TestCreateDMS(t *testing.T) {
 				}
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				reqBytes := `{"subject":{"common_name":"My DMS Server"},"key_metadata":{"type":"RSA","bits":2048}}`
+				reqBytes := `{"name":"My DMS Server","cloud_dms":false,"remote_access_identity":{"subject":{"common_name":"My DMS Server"},"key_metadata":{"type":"RSA","bits":2048}}}`
 				_ = e.POST("/v1/").WithBytes([]byte(reqBytes)).
 					Expect().
 					Status(http.StatusConflict)
@@ -122,7 +112,7 @@ func TestCreateDMS(t *testing.T) {
 			name:                  "Validation:EmptyCommonName",
 			serviceInitialization: func(svc *service.Service) {},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				reqBytes := `{"subject":{},"key_metadata":{"type":"RSA","bits":2048}}`
+				reqBytes := `{"name":"","cloud_dms":false,"remote_access_identity":{"subject":{"common_name":"My DMS Server"},"key_metadata":{"type":"RSA","bits":2048}}}`
 				_ = e.POST("/v1/").WithBytes([]byte(reqBytes)).
 					Expect().
 					Status(http.StatusBadRequest)
@@ -132,7 +122,7 @@ func TestCreateDMS(t *testing.T) {
 			name:                  "Validation:EmptySubject",
 			serviceInitialization: func(svc *service.Service) {},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				reqBytes := `{"key_metadata":{"type":"RSA","bits":2048}}`
+				reqBytes := `{"cloud_dms":false,"remote_access_identity":{"subject":{"common_name":"My DMS Server"},"key_metadata":{"type":"RSA","bits":2048}}}`
 				_ = e.POST("/v1/").WithBytes([]byte(reqBytes)).
 					Expect().
 					Status(http.StatusBadRequest)
@@ -142,7 +132,7 @@ func TestCreateDMS(t *testing.T) {
 			name:                  "Validation:InvalidKeyBits",
 			serviceInitialization: func(svc *service.Service) {},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				reqBytes := `{"subject":{"common_name":"My DMS Server"},"key_metadata":{"type":"RSA","bits":2049}}`
+				reqBytes := `{"name":"My DMS Server","cloud_dms":false,"remote_access_identity":{"subject":{"common_name":"My DMS Server"},"key_metadata":{"type":"RSA","bits":2049}}}`
 				_ = e.POST("/v1/").WithBytes([]byte(reqBytes)).
 					Expect().
 					Status(http.StatusBadRequest)
@@ -152,7 +142,7 @@ func TestCreateDMS(t *testing.T) {
 			name:                  "Validation:NoKeyBits",
 			serviceInitialization: func(svc *service.Service) {},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				reqBytes := `{"subject":{"common_name":"My DMS Server"}}`
+				reqBytes := `{"name":"My DMS Server","cloud_dms":false}`
 				_ = e.POST("/v1/").WithBytes([]byte(reqBytes)).
 					Expect().
 					Status(http.StatusBadRequest)
@@ -181,151 +171,6 @@ func TestCreateDMS(t *testing.T) {
 			}
 			defer serverDMS.Close()
 			serverDMS.Start()
-
-			devManagerServer, _, err := testUtils.BuildDeviceManagerTestServer(serverCA, serverDMS)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-
-			svcDMS.UpdateDevManagerAddr(devManagerServer.URL)
-			tc.serviceInitialization(&svcDMS)
-			e := httpexpect.New(t, serverDMS.URL)
-			tc.testRestEndpoint(e)
-		})
-	}
-}
-
-func TestCreateDMSWithCertificateRequest(t *testing.T) {
-	tt := []struct {
-		name                  string
-		serviceInitialization func(svc *service.Service)
-		testRestEndpoint      func(e *httpexpect.Expect)
-	}{
-		{
-			name:                  "ShouldCreateDMS",
-			serviceInitialization: func(svc *service.Service) {},
-			testRestEndpoint: func(e *httpexpect.Expect) {
-				_, generatedCSR := generateBase64EncodedCertificateRequest("My DMS Server")
-				reqBytes := `{"certificate_request":"` + generatedCSR + `"}`
-				dmsObj := e.POST("/v1/csr").WithBytes([]byte(reqBytes)).
-					Expect().
-					Status(http.StatusOK).JSON().Object()
-
-				dmsObj.ContainsKey("last_status_update_timestamp")
-				dmsObj.ContainsKey("creation_timestamp")
-				dmsObj.ContainsKey("certificate_request")
-
-				dmsObj.ContainsMap(map[string]interface{}{
-					"authorized_cas": []string{},
-					"name":           "My DMS Server",
-					"key_metadata": map[string]interface{}{
-						"bits":     2048,
-						"strength": "MEDIUM",
-						"type":     "RSA",
-					},
-					"status":        "PENDING_APPROVAL",
-					"serial_number": "",
-					"subject": map[string]interface{}{
-						"common_name":       "My DMS Server",
-						"country":           "",
-						"locality":          "",
-						"organization":      "",
-						"organization_unit": "",
-						"state":             "",
-					},
-				})
-
-				b64PemEncodedCsr := dmsObj.Value("certificate_request").String().Raw()
-				if generatedCSR != b64PemEncodedCsr {
-					t.Errorf("Expected CSR to be %s, got %s", generatedCSR, b64PemEncodedCsr)
-				}
-			},
-		},
-		{
-			name: "ShouldNotCreateDuplicateDMS",
-			serviceInitialization: func(svc *service.Service) {
-				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
-					},
-				})
-				if err != nil {
-					t.Errorf("Failed to create DMS: %v", err)
-				}
-			},
-			testRestEndpoint: func(e *httpexpect.Expect) {
-				_, generatedCSR := generateBase64EncodedCertificateRequest("My DMS Server")
-				reqBytes := `{"certificate_request":"` + generatedCSR + `"}`
-				_ = e.POST("/v1/csr").WithBytes([]byte(reqBytes)).
-					Expect().
-					Status(http.StatusConflict)
-			},
-		},
-		{
-			name:                  "Validation:EmptyCertificateRequest",
-			serviceInitialization: func(svc *service.Service) {},
-			testRestEndpoint: func(e *httpexpect.Expect) {
-				reqBytes := `{"certificate_request":""}`
-				_ = e.POST("/v1/csr").WithBytes([]byte(reqBytes)).
-					Expect().
-					Status(http.StatusBadRequest)
-			},
-		},
-		{
-			name:                  "Validation:StringNotBase64Encoded",
-			serviceInitialization: func(svc *service.Service) {},
-			testRestEndpoint: func(e *httpexpect.Expect) {
-				reqBytes := `{"certificate_request":"11236544"}`
-				_ = e.POST("/v1/csr").WithBytes([]byte(reqBytes)).
-					Expect().
-					Status(http.StatusBadRequest)
-			},
-		},
-		{
-			name:                  "Validation:StringNotPEMEncoded",
-			serviceInitialization: func(svc *service.Service) {},
-			testRestEndpoint: func(e *httpexpect.Expect) {
-				encodedString := base64.StdEncoding.EncodeToString([]byte("this is not a PEM csr"))
-				reqBytes := `{"certificate_request":"` + encodedString + `"}`
-				_ = e.POST("/v1/csr").WithBytes([]byte(reqBytes)).
-					Expect().
-					Status(http.StatusBadRequest)
-			},
-		},
-	}
-
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			serverCA, _, err := testUtils.BuildCATestServer()
-			//cli, err := testUtils.NewVaultSecretsMock(t)
-			//if err != nil {
-			//	t.Errorf("%s", err)
-			//}
-			//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
-
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-			defer serverCA.Close()
-			serverCA.Start()
-
-			serverDMS, svcDMS, err := testUtils.BuildDMSManagerTestServer(serverCA)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-			defer serverDMS.Close()
-			serverDMS.Start()
-
-			devManagerServer, _, err := testUtils.BuildDeviceManagerTestServer(serverCA, serverDMS)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-
-			svcDMS.UpdateDevManagerAddr(devManagerServer.URL)
 			tc.serviceInitialization(&svcDMS)
 			e := httpexpect.New(t, serverDMS.URL)
 			tc.testRestEndpoint(e)
@@ -343,12 +188,19 @@ func TestUpdateDMSStatus(t *testing.T) {
 			name: "ShouldUpdateFromPendingToApproved",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+							Subject: api.Subject{
+								CommonName: "My DMS Server",
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -361,20 +213,20 @@ func TestUpdateDMSStatus(t *testing.T) {
 					Expect().
 					Status(http.StatusOK).JSON().Object()
 
-				obj.ContainsKey("last_status_update_timestamp")
+				obj.ContainsKey("status")
 				obj.ContainsKey("creation_timestamp")
-				obj.ContainsKey("certificate")
-				obj.ContainsKey("serial_number")
+				obj.ContainsKey("name")
+				obj.ContainsKey("remote_access_identity")
 
+				remoteIdentity := obj.Value("remote_access_identity").Object()
 				obj.ContainsMap(map[string]interface{}{
+					"name":      "My DMS Server",
+					"status":    "APPROVED",
+					"cloud_dms": false,
+				})
+
+				remoteIdentity.ContainsMap(map[string]interface{}{
 					"authorized_cas": []string{},
-					"name":           "My DMS Server",
-					"key_metadata": map[string]interface{}{
-						"bits":     2048,
-						"strength": "MEDIUM",
-						"type":     "RSA",
-					},
-					"status": "APPROVED",
 					"subject": map[string]interface{}{
 						"common_name":       "My DMS Server",
 						"country":           "",
@@ -385,8 +237,8 @@ func TestUpdateDMSStatus(t *testing.T) {
 					},
 				})
 
-				serialNumber := obj.Value("serial_number").String().Raw()
-				b64PemEncodedCrt := obj.Value("certificate").String().Raw()
+				serialNumber := remoteIdentity.Value("serial_number").String().Raw()
+				b64PemEncodedCrt := remoteIdentity.Value("certificate").String().Raw()
 				pemEncodedCrt, err := base64.StdEncoding.DecodeString(b64PemEncodedCrt)
 				if err != nil {
 					t.Errorf("Failed to decode b64 encoded CSR: %v", err)
@@ -411,12 +263,19 @@ func TestUpdateDMSStatus(t *testing.T) {
 			name: "ShouldUpdateFromPendingToRejected",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+							Subject: api.Subject{
+								CommonName: "My DMS Server",
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -429,20 +288,20 @@ func TestUpdateDMSStatus(t *testing.T) {
 					Expect().
 					Status(http.StatusOK).JSON().Object()
 
-				obj.ContainsKey("last_status_update_timestamp")
+				obj.ContainsKey("status")
 				obj.ContainsKey("creation_timestamp")
-				obj.ContainsKey("certificate_request")
+				obj.ContainsKey("name")
+				obj.ContainsKey("remote_access_identity")
 
+				remoteIdentity := obj.Value("remote_access_identity").Object()
 				obj.ContainsMap(map[string]interface{}{
+					"name":      "My DMS Server",
+					"status":    "REJECTED",
+					"cloud_dms": false,
+				})
+
+				remoteIdentity.ContainsMap(map[string]interface{}{
 					"authorized_cas": []string{},
-					"name":           "My DMS Server",
-					"key_metadata": map[string]interface{}{
-						"bits":     2048,
-						"strength": "MEDIUM",
-						"type":     "RSA",
-					},
-					"serial_number": "",
-					"status":        "REJECTED",
 					"subject": map[string]interface{}{
 						"common_name":       "My DMS Server",
 						"country":           "",
@@ -458,12 +317,19 @@ func TestUpdateDMSStatus(t *testing.T) {
 			name: "ShouldUpdateFromApprovedToExpired",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+							Subject: api.Subject{
+								CommonName: "My DMS Server",
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -484,20 +350,20 @@ func TestUpdateDMSStatus(t *testing.T) {
 					Expect().
 					Status(http.StatusOK).JSON().Object()
 
-				obj.ContainsKey("last_status_update_timestamp")
+				obj.ContainsKey("status")
 				obj.ContainsKey("creation_timestamp")
-				obj.ContainsKey("certificate")
-				obj.ContainsKey("serial_number")
+				obj.ContainsKey("name")
+				obj.ContainsKey("remote_access_identity")
 
+				remoteIdentity := obj.Value("remote_access_identity").Object()
 				obj.ContainsMap(map[string]interface{}{
+					"name":      "My DMS Server",
+					"status":    "EXPIRED",
+					"cloud_dms": false,
+				})
+
+				remoteIdentity.ContainsMap(map[string]interface{}{
 					"authorized_cas": []string{},
-					"name":           "My DMS Server",
-					"key_metadata": map[string]interface{}{
-						"bits":     2048,
-						"strength": "MEDIUM",
-						"type":     "RSA",
-					},
-					"status": "EXPIRED",
 					"subject": map[string]interface{}{
 						"common_name":       "My DMS Server",
 						"country":           "",
@@ -513,12 +379,19 @@ func TestUpdateDMSStatus(t *testing.T) {
 			name: "ShouldUpdateFromApprovedToRevoked",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+							Subject: api.Subject{
+								CommonName: "My DMS Server",
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -539,20 +412,25 @@ func TestUpdateDMSStatus(t *testing.T) {
 					Expect().
 					Status(http.StatusOK).JSON().Object()
 
-				obj.ContainsKey("last_status_update_timestamp")
+				obj.ContainsKey("status")
 				obj.ContainsKey("creation_timestamp")
-				obj.ContainsKey("certificate")
-				obj.ContainsKey("serial_number")
+				obj.ContainsKey("name")
+				obj.ContainsKey("remote_access_identity")
 
+				remoteIdentity := obj.Value("remote_access_identity").Object()
 				obj.ContainsMap(map[string]interface{}{
+					"name":      "My DMS Server",
+					"status":    "REVOKED",
+					"cloud_dms": false,
+				})
+
+				remoteIdentity.ContainsMap(map[string]interface{}{
 					"authorized_cas": []string{},
-					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
 						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
-					"status": "REVOKED",
 					"subject": map[string]interface{}{
 						"common_name":       "My DMS Server",
 						"country":           "",
@@ -568,12 +446,16 @@ func TestUpdateDMSStatus(t *testing.T) {
 			name: "ShouldNotUpdateFromApprovedToPending",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -599,12 +481,16 @@ func TestUpdateDMSStatus(t *testing.T) {
 			name: "ShouldNotUpdateFromPendingToRevoked",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -622,12 +508,16 @@ func TestUpdateDMSStatus(t *testing.T) {
 			name: "ShouldNotUpdateFromPendingToExpired",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -645,12 +535,16 @@ func TestUpdateDMSStatus(t *testing.T) {
 			name: "InvalidStatus",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -715,12 +609,6 @@ func TestUpdateDMSStatus(t *testing.T) {
 			defer serverDMS.Close()
 			serverDMS.Start()
 
-			devManagerServer, _, err := testUtils.BuildDeviceManagerTestServer(serverCA, serverDMS)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-
-			svcDMS.UpdateDevManagerAddr(devManagerServer.URL)
 			tc.serviceInitialization(&svcDMS)
 			e := httpexpect.New(t, serverDMS.URL)
 			tc.testRestEndpoint(e)
@@ -738,12 +626,19 @@ func TestUpdateDMSAuthorizedCAs(t *testing.T) {
 			name: "ShouldUpdateAuthorizedCAs",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+							Subject: api.Subject{
+								CommonName: "My DMS Server",
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -764,20 +659,25 @@ func TestUpdateDMSAuthorizedCAs(t *testing.T) {
 					Expect().
 					Status(http.StatusOK).JSON().Object()
 
-				obj.ContainsKey("last_status_update_timestamp")
+				obj.ContainsKey("status")
 				obj.ContainsKey("creation_timestamp")
-				obj.ContainsKey("certificate")
-				obj.ContainsKey("serial_number")
+				obj.ContainsKey("name")
+				obj.ContainsKey("remote_access_identity")
 
+				remoteIdentity := obj.Value("remote_access_identity").Object()
 				obj.ContainsMap(map[string]interface{}{
+					"name":      "My DMS Server",
+					"status":    "APPROVED",
+					"cloud_dms": false,
+				})
+
+				remoteIdentity.ContainsMap(map[string]interface{}{
 					"authorized_cas": []string{"ca1", "ca2"},
-					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
 						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
-					"status": "APPROVED",
 					"subject": map[string]interface{}{
 						"common_name":       "My DMS Server",
 						"country":           "",
@@ -793,12 +693,19 @@ func TestUpdateDMSAuthorizedCAs(t *testing.T) {
 			name: "ShouldNotUpdateAuthorizedCAsInPendingStatus",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+							Subject: api.Subject{
+								CommonName: "My DMS Server",
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -816,12 +723,19 @@ func TestUpdateDMSAuthorizedCAs(t *testing.T) {
 			name: "ShouldRemoveAuthorizedCAs",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+							Subject: api.Subject{
+								CommonName: "My DMS Server",
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -850,20 +764,25 @@ func TestUpdateDMSAuthorizedCAs(t *testing.T) {
 					Expect().
 					Status(http.StatusOK).JSON().Object()
 
-				obj.ContainsKey("last_status_update_timestamp")
+				obj.ContainsKey("status")
 				obj.ContainsKey("creation_timestamp")
-				obj.ContainsKey("certificate")
-				obj.ContainsKey("serial_number")
+				obj.ContainsKey("name")
+				obj.ContainsKey("remote_access_identity")
 
+				remoteIdentity := obj.Value("remote_access_identity").Object()
 				obj.ContainsMap(map[string]interface{}{
+					"name":      "My DMS Server",
+					"status":    "APPROVED",
+					"cloud_dms": false,
+				})
+
+				remoteIdentity.ContainsMap(map[string]interface{}{
 					"authorized_cas": []string{},
-					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
 						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
-					"status": "APPROVED",
 					"subject": map[string]interface{}{
 						"common_name":       "My DMS Server",
 						"country":           "",
@@ -916,12 +835,6 @@ func TestUpdateDMSAuthorizedCAs(t *testing.T) {
 			defer serverDMS.Close()
 			serverDMS.Start()
 
-			devManagerServer, _, err := testUtils.BuildDeviceManagerTestServer(serverCA, serverDMS)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-
-			svcDMS.UpdateDevManagerAddr(devManagerServer.URL)
 			tc.serviceInitialization(&svcDMS)
 			e := httpexpect.New(t, serverDMS.URL)
 			tc.testRestEndpoint(e)
@@ -939,12 +852,19 @@ func TestGetDMS(t *testing.T) {
 			name: "ShouldGetPendingDMS",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+							Subject: api.Subject{
+								CommonName: "My DMS Server",
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -956,20 +876,25 @@ func TestGetDMS(t *testing.T) {
 					Expect().
 					Status(http.StatusOK).JSON().Object()
 
-				dmsObj.ContainsKey("last_status_update_timestamp")
+				dmsObj.ContainsKey("status")
 				dmsObj.ContainsKey("creation_timestamp")
-				dmsObj.ContainsKey("certificate_request")
+				dmsObj.ContainsKey("name")
+				dmsObj.ContainsKey("remote_access_identity")
 
+				remoteIdentity := dmsObj.Value("remote_access_identity").Object()
 				dmsObj.ContainsMap(map[string]interface{}{
+					"name":      "My DMS Server",
+					"status":    "PENDING_APPROVAL",
+					"cloud_dms": false,
+				})
+
+				remoteIdentity.ContainsMap(map[string]interface{}{
 					"authorized_cas": []string{},
-					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
 						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
-					"status":        "PENDING_APPROVAL",
-					"serial_number": "",
 					"subject": map[string]interface{}{
 						"common_name":       "My DMS Server",
 						"country":           "",
@@ -985,12 +910,19 @@ func TestGetDMS(t *testing.T) {
 			name: "ShouldGetRejectedDMS",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+							Subject: api.Subject{
+								CommonName: "My DMS Server",
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -1010,20 +942,25 @@ func TestGetDMS(t *testing.T) {
 					Expect().
 					Status(http.StatusOK).JSON().Object()
 
-				dmsObj.ContainsKey("last_status_update_timestamp")
+				dmsObj.ContainsKey("status")
 				dmsObj.ContainsKey("creation_timestamp")
-				dmsObj.ContainsKey("certificate_request")
+				dmsObj.ContainsKey("name")
+				dmsObj.ContainsKey("remote_access_identity")
 
+				remoteIdentity := dmsObj.Value("remote_access_identity").Object()
 				dmsObj.ContainsMap(map[string]interface{}{
+					"name":      "My DMS Server",
+					"status":    "REJECTED",
+					"cloud_dms": false,
+				})
+
+				remoteIdentity.ContainsMap(map[string]interface{}{
 					"authorized_cas": []string{},
-					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
 						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
-					"status":        "REJECTED",
-					"serial_number": "",
 					"subject": map[string]interface{}{
 						"common_name":       "My DMS Server",
 						"country":           "",
@@ -1039,12 +976,19 @@ func TestGetDMS(t *testing.T) {
 			name: "ShouldGetApprovedDMS",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+							Subject: api.Subject{
+								CommonName: "My DMS Server",
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -1063,21 +1007,25 @@ func TestGetDMS(t *testing.T) {
 				dmsObj := e.GET("/v1/My DMS Server").
 					Expect().
 					Status(http.StatusOK).JSON().Object()
-
-				dmsObj.ContainsKey("last_status_update_timestamp")
+				dmsObj.ContainsKey("status")
 				dmsObj.ContainsKey("creation_timestamp")
-				dmsObj.ContainsKey("certificate")
-				dmsObj.ContainsKey("serial_number")
+				dmsObj.ContainsKey("name")
+				dmsObj.ContainsKey("remote_access_identity")
 
+				remoteIdentity := dmsObj.Value("remote_access_identity").Object()
 				dmsObj.ContainsMap(map[string]interface{}{
+					"name":      "My DMS Server",
+					"status":    "APPROVED",
+					"cloud_dms": false,
+				})
+
+				remoteIdentity.ContainsMap(map[string]interface{}{
 					"authorized_cas": []string{},
-					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
 						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
-					"status": "APPROVED",
 					"subject": map[string]interface{}{
 						"common_name":       "My DMS Server",
 						"country":           "",
@@ -1087,18 +1035,26 @@ func TestGetDMS(t *testing.T) {
 						"state":             "",
 					},
 				})
+
 			},
 		},
 		{
 			name: "ShouldGetExpiredDMS",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+							Subject: api.Subject{
+								CommonName: "My DMS Server",
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -1125,21 +1081,25 @@ func TestGetDMS(t *testing.T) {
 				dmsObj := e.GET("/v1/My DMS Server").
 					Expect().
 					Status(http.StatusOK).JSON().Object()
-
-				dmsObj.ContainsKey("last_status_update_timestamp")
+				dmsObj.ContainsKey("status")
 				dmsObj.ContainsKey("creation_timestamp")
-				dmsObj.ContainsKey("certificate")
-				dmsObj.ContainsKey("serial_number")
+				dmsObj.ContainsKey("name")
+				dmsObj.ContainsKey("remote_access_identity")
 
+				remoteIdentity := dmsObj.Value("remote_access_identity").Object()
 				dmsObj.ContainsMap(map[string]interface{}{
+					"name":      "My DMS Server",
+					"status":    "EXPIRED",
+					"cloud_dms": false,
+				})
+
+				remoteIdentity.ContainsMap(map[string]interface{}{
 					"authorized_cas": []string{},
-					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
 						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
-					"status": "EXPIRED",
 					"subject": map[string]interface{}{
 						"common_name":       "My DMS Server",
 						"country":           "",
@@ -1155,12 +1115,19 @@ func TestGetDMS(t *testing.T) {
 			name: "ShouldGetRevokedDMS",
 			serviceInitialization: func(svc *service.Service) {
 				_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-					Subject: api.Subject{
-						CommonName: "My DMS Server",
-					},
-					KeyMetadata: api.KeyMetadata{
-						KeyType: "RSA",
-						KeyBits: 2048,
+					DeviceManufacturingService: api.DeviceManufacturingService{
+						Name:     "My DMS Server",
+						CloudDMS: false,
+						RemoteAccessIdentity: &api.RemoteAccessIdentity{
+							ExternalKeyGeneration: false,
+							KeyMetadata: api.KeyStrengthMetadata{
+								KeyType: api.RSA,
+								KeyBits: 2048,
+							},
+							Subject: api.Subject{
+								CommonName: "My DMS Server",
+							},
+						},
 					},
 				})
 				if err != nil {
@@ -1188,20 +1155,25 @@ func TestGetDMS(t *testing.T) {
 					Expect().
 					Status(http.StatusOK).JSON().Object()
 
-				dmsObj.ContainsKey("last_status_update_timestamp")
+				dmsObj.ContainsKey("status")
 				dmsObj.ContainsKey("creation_timestamp")
-				dmsObj.ContainsKey("certificate")
-				dmsObj.ContainsKey("serial_number")
+				dmsObj.ContainsKey("name")
+				dmsObj.ContainsKey("remote_access_identity")
 
+				remoteIdentity := dmsObj.Value("remote_access_identity").Object()
 				dmsObj.ContainsMap(map[string]interface{}{
+					"name":      "My DMS Server",
+					"status":    "REVOKED",
+					"cloud_dms": false,
+				})
+
+				remoteIdentity.ContainsMap(map[string]interface{}{
 					"authorized_cas": []string{},
-					"name":           "My DMS Server",
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
 						"strength": "MEDIUM",
 						"type":     "RSA",
 					},
-					"status": "REVOKED",
 					"subject": map[string]interface{}{
 						"common_name":       "My DMS Server",
 						"country":           "",
@@ -1263,12 +1235,6 @@ func TestGetDMS(t *testing.T) {
 			defer serverDMS.Close()
 			serverDMS.Start()
 
-			devManagerServer, _, err := testUtils.BuildDeviceManagerTestServer(serverCA, serverDMS)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
-
-			svcDMS.UpdateDevManagerAddr(devManagerServer.URL)
 			tc.serviceInitialization(&svcDMS)
 			e := httpexpect.New(t, serverDMS.URL)
 			tc.testRestEndpoint(e)
@@ -1301,12 +1267,19 @@ func TestGetDMSs(t *testing.T) {
 			serviceInitialization: func(svc *service.Service) {
 				for i := 0; i < 10; i++ {
 					_, err := (*svc).CreateDMS(context.Background(), &api.CreateDMSInput{
-						Subject: api.Subject{
-							CommonName: "My DMS Server " + strconv.Itoa(i),
-						},
-						KeyMetadata: api.KeyMetadata{
-							KeyType: "RSA",
-							KeyBits: 2048,
+						DeviceManufacturingService: api.DeviceManufacturingService{
+							Name:     "My DMS Server " + strconv.Itoa(i),
+							CloudDMS: false,
+							RemoteAccessIdentity: &api.RemoteAccessIdentity{
+								ExternalKeyGeneration: false,
+								KeyMetadata: api.KeyStrengthMetadata{
+									KeyType: api.RSA,
+									KeyBits: 2048,
+								},
+								Subject: api.Subject{
+									CommonName: "My DMS Server " + strconv.Itoa(i),
+								},
+							},
 						},
 					})
 					if err != nil {
@@ -1390,12 +1363,7 @@ func TestGetDMSs(t *testing.T) {
 
 			defer serverDMS.Close()
 			serverDMS.Start()
-			devManagerServer, _, err := testUtils.BuildDeviceManagerTestServer(serverCA, serverDMS)
-			if err != nil {
-				t.Errorf("%s", err)
-			}
 
-			svcDMS.UpdateDevManagerAddr(devManagerServer.URL)
 			tc.serviceInitialization(&svcDMS)
 			e := httpexpect.New(t, serverDMS.URL)
 			tc.testRestEndpoint(e)

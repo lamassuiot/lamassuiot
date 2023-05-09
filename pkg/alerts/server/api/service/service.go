@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"os"
 
 	log "github.com/sirupsen/logrus"
 
@@ -13,7 +13,6 @@ import (
 	"github.com/ohler55/ojg/oj"
 	"github.com/xeipuuv/gojsonschema"
 
-	//"github.com/xeipuuv/gojsonschema"
 	"github.com/oliveagle/jsonpath"
 )
 
@@ -44,7 +43,7 @@ type AlertsService struct {
 }
 
 func NewAlertsService(alertsRepository repository.AlertsRepository, templateDataFilePath string, smtpServer outputchannels.SMTPOutputService) (Service, error) {
-	file, err := ioutil.ReadFile(templateDataFilePath)
+	file, err := os.ReadFile(templateDataFilePath)
 	if err != nil {
 		return nil, err
 	}

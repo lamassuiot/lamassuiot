@@ -5,6 +5,8 @@ import "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 type DeviceManagerConfig struct {
 	server.BaseConfiguration
 
+	CACertFile string `required:"true" split_words:"true"`
+
 	PostgresPassword string `required:"true" split_words:"true"`
 	PostgresUsername string `required:"true" split_words:"true"`
 	PostgresDatabase string `required:"true" split_words:"true"`
