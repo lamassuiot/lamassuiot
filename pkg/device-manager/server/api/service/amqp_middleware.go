@@ -143,6 +143,10 @@ func (mw *amqpMiddleware) RevokeActiveCertificate(ctx context.Context, input *ap
 	return mw.next.RevokeActiveCertificate(ctx, input)
 }
 
+func (mw *amqpMiddleware) ImportDeviceCert(ctx context.Context, input *api.ImportDeviceCertInput) (output *api.ImportDeviceCertOutput, err error) {
+	return mw.next.ImportDeviceCert(ctx, input)
+}
+
 func (mw *amqpMiddleware) GetDeviceLogs(ctx context.Context, input *api.GetDeviceLogsInput) (*api.GetDeviceLogsOutput, error) {
 	return mw.next.GetDeviceLogs(ctx, input)
 }

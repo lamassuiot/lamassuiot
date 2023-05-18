@@ -24,6 +24,7 @@ type Endpoints struct {
 	GetDeviceByIdEndpoint           endpoint.Endpoint
 	RevokeActiveCertificateEndpoint endpoint.Endpoint
 	ForceReenrollEndpoint           endpoint.Endpoint
+	ImportDeviceCertEndpoint        endpoint.Endpoint
 	GetDeviceLogsEndpoint           endpoint.Endpoint
 	HandleCACloudEvent              endpoint.Endpoint
 }
@@ -38,6 +39,7 @@ func MakeServerEndpoints(s service.Service) Endpoints {
 	var getDeviceByIdEndpoint = MakeGetDeviceByIdEndpoint(s)
 	var revokeActiveCertificateEndpoint = MakeRevokeActiveCertificateEndpoint(s)
 	var getDeviceLogsEndpoint = MakeGetDeviceLogsEndpoint(s)
+	var importDeviceCertEndpoint = MakeImportDeviceCertEndpoint(s)
 	var handleCACloudEvent = MakeHandleCACloudEvent(s)
 	var forceReenrollEndpoint = MakeForceReenrollEnpoint(s)
 
@@ -53,6 +55,7 @@ func MakeServerEndpoints(s service.Service) Endpoints {
 		GetDeviceLogsEndpoint:           getDeviceLogsEndpoint,
 		HandleCACloudEvent:              handleCACloudEvent,
 		ForceReenrollEndpoint:           forceReenrollEndpoint,
+		ImportDeviceCertEndpoint:        importDeviceCertEndpoint,
 	}
 }
 
@@ -259,6 +262,31 @@ func MakeGetDeviceLogsEndpoint(s service.Service) endpoint.Endpoint {
 		}
 
 		output, err := s.GetDeviceLogs(ctx, &input)
+		return output, err
+	}
+}
+
+func ValidateImportDeviceCertRequest(request api.ImportDeviceCertInput) error {
+	GetDeviceLogsInputStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.GetDeviceLogsInput)
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(GetDeviceLogsInputStructLevelValidation, api.GetDeviceLogsInput{})
+	return validate.Struct(request)
+}
+func MakeImportDeviceCertEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.ImportDeviceCertInput)
+
+		err = ValidateImportDeviceCertRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		output, err := s.ImportDeviceCert(ctx, &input)
 		return output, err
 	}
 }

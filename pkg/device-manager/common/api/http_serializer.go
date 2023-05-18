@@ -195,6 +195,7 @@ func (s *SlotSerialized) Deserialize() Slot {
 type DeviceSerialized struct {
 	ID                string           `json:"id"`
 	Alias             string           `json:"alias"`
+	DmsName           string           `json:"dms_name"`
 	Status            DeviceStatus     `json:"status"`
 	Slots             []SlotSerialized `json:"slots"`
 	Description       string           `json:"description"`
@@ -212,6 +213,7 @@ func (s *Device) Serialize() DeviceSerialized {
 	}
 	return DeviceSerialized{
 		ID:                s.ID,
+		DmsName:           s.DmsName,
 		Alias:             s.Alias,
 		Status:            s.Status,
 		Slots:             slots,
@@ -232,6 +234,7 @@ func (s *DeviceSerialized) Deserialize() Device {
 
 	return Device{
 		ID:                s.ID,
+		DmsName:           s.DmsName,
 		Alias:             s.Alias,
 		Status:            s.Status,
 		Slots:             slots,

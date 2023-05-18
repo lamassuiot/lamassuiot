@@ -28,6 +28,24 @@ type Subject struct {
 	Locality         string
 }
 
+type ShadowType string
+
+const (
+	ShadowTypeClassic ShadowType = "CLASSIC"
+	ShadowTypeNamed   ShadowType = "NAMED"
+)
+
+func ParseShadowType(t string) ShadowType {
+	switch t {
+	case "CLASSIC":
+		return ShadowTypeClassic
+	case "NAMED":
+		return ShadowTypeNamed
+	default:
+		return ShadowTypeNamed
+	}
+}
+
 type CAType string
 
 const (
@@ -118,8 +136,13 @@ type DeviceManufacturingService struct {
 	Status               DMSStatus
 	CreationTimestamp    time.Time
 	CloudDMS             bool
+	Aws                  AwsSpecification
 	IdentityProfile      *IdentityProfile
 	RemoteAccessIdentity *RemoteAccessIdentity
+}
+
+type AwsSpecification struct {
+	ShadowType ShadowType
 }
 
 type RemoteAccessIdentity struct {

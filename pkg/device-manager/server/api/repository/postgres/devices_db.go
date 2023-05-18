@@ -43,6 +43,7 @@ type SlotDAO struct {
 type DeviceDAO struct {
 	ID                string `gorm:"primaryKey"`
 	Alias             string
+	DmsName           string
 	Status            api.DeviceStatus
 	Slots             []SlotDAO      `gorm:"foreignKey:DeviceID"`
 	Tags              pq.StringArray `gorm:"type:text[]"`
@@ -72,6 +73,7 @@ func toDeviceDAO(d *api.Device) DeviceDAO {
 
 	return DeviceDAO{
 		ID:                d.ID,
+		DmsName:           d.DmsName,
 		Alias:             d.Alias,
 		Status:            d.Status,
 		Tags:              d.Tags,
@@ -92,6 +94,7 @@ func (d DeviceDAO) toDevice() *api.Device {
 
 	return &api.Device{
 		ID:                d.ID,
+		DmsName:           d.DmsName,
 		Alias:             d.Alias,
 		Status:            d.Status,
 		Tags:              d.Tags,

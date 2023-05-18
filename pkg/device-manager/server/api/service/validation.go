@@ -110,6 +110,18 @@ func (mw *validationMiddleware) AddDeviceSlot(ctx context.Context, input *api.Ad
 	return mw.next.AddDeviceSlot(ctx, input)
 }
 
+func (mw *validationMiddleware) ImportDeviceCert(ctx context.Context, input *api.ImportDeviceCertInput) (*api.ImportDeviceCertOutput, error) {
+	validate := validator.New()
+	err := validate.Struct(input)
+	if err != nil {
+		valError := errors.ValidationError{
+			Msg: err.Error(),
+		}
+		return nil, &valError
+	}
+	return mw.next.ImportDeviceCert(ctx, input)
+}
+
 func (mw *validationMiddleware) UpdateActiveCertificateStatus(ctx context.Context, input *api.UpdateActiveCertificateStatusInput) (*api.UpdateActiveCertificateStatusOutput, error) {
 	validate := validator.New()
 	err := validate.Struct(input)

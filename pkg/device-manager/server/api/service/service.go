@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -38,6 +39,7 @@ type Service interface {
 	GetDevices(ctx context.Context, input *api.GetDevicesInput) (*api.GetDevicesOutput, error)
 	GetDeviceById(ctx context.Context, input *api.GetDeviceByIdInput) (*api.GetDeviceByIdOutput, error)
 
+	ImportDeviceCert(ctx context.Context, input *api.ImportDeviceCertInput) (*api.ImportDeviceCertOutput, error)
 	AddDeviceSlot(ctx context.Context, input *api.AddDeviceSlotInput) (*api.AddDeviceSlotOutput, error)
 	UpdateActiveCertificateStatus(ctx context.Context, input *api.UpdateActiveCertificateStatusInput) (*api.UpdateActiveCertificateStatusOutput, error)
 	RotateActiveCertificate(ctx context.Context, input *api.RotateActiveCertificateInput) (*api.RotateActiveCertificateOutput, error)
@@ -106,6 +108,7 @@ func (s *DevicesService) CreateDevice(ctx context.Context, input *api.CreateDevi
 	device := api.Device{
 		Status:      api.DeviceStatusPendingProvisioning,
 		ID:          input.DeviceID,
+		DmsName:     input.DmsName,
 		Alias:       input.Alias,
 		Description: input.Description,
 		Tags:        input.Tags,
@@ -549,6 +552,58 @@ func (s *DevicesService) IsDMSAuthorizedToEnroll(ctx context.Context, input *api
 	}, nil
 }
 
+func (s *DevicesService) ImportDeviceCert(ctx context.Context, input *api.ImportDeviceCertInput) (*api.ImportDeviceCertOutput, error) {
+	deviceCert, err := s.caClient.GetCertificateBySerialNumber(ctx, &caApi.GetCertificateBySerialNumberInput{
+		CAType:                  caApi.CATypePKI,
+		CAName:                  input.CaName,
+		CertificateSerialNumber: input.SerialNumber,
+	})
+	if err != nil {
+		return &api.ImportDeviceCertOutput{}, err
+	}
+
+	if deviceCert.Subject.CommonName != input.DeviceID {
+		return nil, &estErrors.GenericError{
+			Message:    "Common Name and ID are not the same",
+			StatusCode: 400,
+		}
+	}
+
+	device, err := s.service.GetDeviceById(ctx, &api.GetDeviceByIdInput{
+		DeviceID: input.DeviceID,
+	})
+	if err != nil {
+		return &api.ImportDeviceCertOutput{}, err
+	}
+
+	dms, err := s.dmsManagerClient.GetDMSByName(ctx, &dmsManagerApi.GetDMSByNameInput{
+		Name: device.DmsName,
+	})
+	if err != nil {
+		return &api.ImportDeviceCertOutput{}, err
+	}
+
+	if dms.RemoteAccessIdentity.AuthorizedCAs[0] != input.CaName {
+		return nil, &estErrors.GenericError{
+			Message:    "CA is not authorized",
+			StatusCode: 400,
+		}
+	}
+
+	slot, err := s.service.AddDeviceSlot(ctx, &api.AddDeviceSlotInput{
+		DeviceID:          input.DeviceID,
+		SlotID:            input.SlotID,
+		ActiveCertificate: deviceCert.Certificate.Certificate,
+	})
+	if err != nil {
+		return &api.ImportDeviceCertOutput{}, err
+	}
+
+	return &api.ImportDeviceCertOutput{
+		Slot: slot.Slot,
+	}, nil
+}
+
 // -------------------------------------------------------------------------------------------------------------------
 // 												EST Functions
 // -------------------------------------------------------------------------------------------------------------------
@@ -888,4 +943,37 @@ func (s *DevicesService) ScanDevicesAndUpdateStatistics() {
 	})
 
 	log.Info("Scan devices finished in " + time.Since(t0).String())
+}
+
+func getPublicKeyInfo(cert *x509.Certificate) (api.KeyType, int, api.KeyStrength) {
+	key := api.ParseKeyType(cert.PublicKeyAlgorithm.String())
+	var keyBits int
+	switch key {
+	case api.RSA:
+		keyBits = cert.PublicKey.(*rsa.PublicKey).N.BitLen()
+	case api.ECDSA:
+		keyBits = cert.PublicKey.(*ecdsa.PublicKey).Params().BitSize
+	}
+
+	var keyStrength api.KeyStrength = api.KeyStrengthLow
+	switch key {
+	case api.RSA:
+		if keyBits < 2048 {
+			keyStrength = api.KeyStrengthLow
+		} else if keyBits >= 2048 && keyBits < 3072 {
+			keyStrength = api.KeyStrengthMedium
+		} else {
+			keyStrength = api.KeyStrengthHigh
+		}
+	case api.ECDSA:
+		if keyBits <= 128 {
+			keyStrength = api.KeyStrengthLow
+		} else if keyBits > 128 && keyBits < 256 {
+			keyStrength = api.KeyStrengthMedium
+		} else {
+			keyStrength = api.KeyStrengthHigh
+		}
+	}
+
+	return key, keyBits, keyStrength
 }

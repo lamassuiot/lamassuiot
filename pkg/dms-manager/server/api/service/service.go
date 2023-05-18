@@ -79,6 +79,7 @@ func (s *DMSManagerService) CreateDMS(ctx context.Context, input *api.CreateDMSI
 	var privateKey interface{}
 	dms := api.DeviceManufacturingService{
 		Name:     input.Name,
+		Aws:      input.Aws,
 		Status:   api.DMSStatusPendingApproval,
 		CloudDMS: input.CloudDMS,
 		RemoteAccessIdentity: &api.RemoteAccessIdentity{
@@ -533,7 +534,7 @@ func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateReq
 		}
 	}
 
-	_, err = s.lamassuDevManagerClient.CreateDevice(ctx, csr.Subject.CommonName, csr.Subject.CommonName, "-", dms.IdentityProfile.EnrollmentSettings.Tags, dms.IdentityProfile.EnrollmentSettings.Icon, dms.IdentityProfile.EnrollmentSettings.Color)
+	_, err = s.lamassuDevManagerClient.CreateDevice(ctx, csr.Subject.CommonName, csr.Subject.CommonName, aps, "-", dms.IdentityProfile.EnrollmentSettings.Tags, dms.IdentityProfile.EnrollmentSettings.Icon, dms.IdentityProfile.EnrollmentSettings.Color)
 	if err != nil {
 		log.Error(fmt.Sprintf("something went while registering the device: %s", err))
 		return nil, err

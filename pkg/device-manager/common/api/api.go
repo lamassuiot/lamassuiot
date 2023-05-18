@@ -122,6 +122,7 @@ type Slot struct {
 
 type Device struct {
 	ID                string
+	DmsName           string
 	Alias             string
 	Status            DeviceStatus
 	Slots             []*Slot
@@ -169,6 +170,7 @@ type GetStatsOutput struct {
 
 type CreateDeviceInput struct {
 	DeviceID    string
+	DmsName     string
 	Alias       string
 	Tags        []string
 	IconColor   string
@@ -330,3 +332,18 @@ type ForceReenrollOtput struct {
 	ForceReenroll bool
 	Crt           *x509.Certificate
 }
+
+// ---------------------------------------------------------------------
+
+type ImportDeviceCertInput struct {
+	DeviceID     string
+	SlotID       string
+	SerialNumber string
+	CaName       string
+}
+
+type ImportDeviceCertOutput struct {
+	Slot
+}
+
+// ---------------------------------------------------------------------

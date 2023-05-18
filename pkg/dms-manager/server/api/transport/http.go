@@ -153,6 +153,7 @@ func decodeCreateDMSRequest(ctx context.Context, r *http.Request) (request inter
 		DeviceManufacturingService: api.DeviceManufacturingService{
 			Name:                 body.Name,
 			CloudDMS:             body.CloudDMS,
+			Aws:                  body.Aws.Deserialize(),
 			IdentityProfile:      body.IdentityProfile.Deserialize(),
 			RemoteAccessIdentity: body.RemoteAccessIdentity.Deserialize(),
 		},

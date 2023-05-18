@@ -19,6 +19,7 @@ type CreateDMSPayload struct {
 	CloudDMS             bool                           `json:"cloud_dms"`
 	IdentityProfile      IdentityProfileSerialized      `json:"identity_profile"`
 	RemoteAccessIdentity RemoteAccessIdentitySerialized `json:"remote_access_identity"`
+	Aws                  AwsSpecificationSerialized     `json:"aws"`
 }
 
 type UpdateMSPayload struct {

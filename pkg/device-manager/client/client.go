@@ -21,7 +21,7 @@ import (
 // )
 
 type LamassuDeviceManagerClient interface {
-	CreateDevice(ctx context.Context, alias string, deviceID string, description string, tags []string, iconName string, iconColor string) (*api.Device, error)
+	CreateDevice(ctx context.Context, alias string, deviceID string, dmsName string, description string, tags []string, iconName string, iconColor string) (*api.Device, error)
 	// 	UpdateDeviceById(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
 	// 	GetDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error)
 	GetDeviceById(ctx context.Context, deviceId string) (*api.GetDeviceByIdOutput, error)
@@ -56,10 +56,11 @@ func NewLamassuDeviceManagerClient(config clientUtils.BaseClientConfigurationura
 	}, nil
 }
 
-func (c *LamassuDeviceManagerClientConfig) CreateDevice(ctx context.Context, alias string, deviceID string, description string, tags []string, iconName string, iconColor string) (*api.Device, error) {
+func (c *LamassuDeviceManagerClientConfig) CreateDevice(ctx context.Context, alias string, deviceID string, dmsName string, description string, tags []string, iconName string, iconColor string) (*api.Device, error) {
 	body := struct {
 		DeviceID    string   `json:"id"`
 		Alias       string   `json:"alias"`
+		DmsName     string   `json:"dms_name"`
 		Tags        []string `json:"tags"`
 		Description string   `json:"description"`
 		IconColor   string   `json:"icon_color"`
@@ -67,6 +68,7 @@ func (c *LamassuDeviceManagerClientConfig) CreateDevice(ctx context.Context, ali
 	}{
 		DeviceID:    deviceID,
 		Alias:       alias,
+		DmsName:     dmsName,
 		Tags:        tags,
 		Description: description,
 		IconColor:   iconColor,

@@ -222,6 +222,24 @@ func (o IdentityProfileReenrollmentSettingsSerialized) Deserialize() IdentityPro
 	}
 }
 
+type AwsSpecificationSerialized struct {
+	ShadowType string `json:"shadow_type"`
+}
+
+func (o *AwsSpecification) Serialize() AwsSpecificationSerialized {
+	serializer := AwsSpecificationSerialized{
+		ShadowType: string(o.ShadowType),
+	}
+	return serializer
+}
+
+func (o *AwsSpecificationSerialized) Deserialize() AwsSpecification {
+	serializer := AwsSpecification{
+		ShadowType: ParseShadowType(o.ShadowType),
+	}
+	return serializer
+}
+
 type StaticCASerialized struct {
 	ID          string `json:"id"`
 	Certificate string `json:"certificate"`
@@ -311,6 +329,7 @@ type DeviceManufacturingServiceSerialized struct {
 	Name                 string                          `json:"name"`
 	Status               DMSStatus                       `json:"status"`
 	CloudDMS             bool                            `json:"cloud_dms"`
+	Aws                  AwsSpecificationSerialized      `json:"aws"`
 	CreationTimestamp    int                             `json:"creation_timestamp"`
 	RemoteAccessIdentity *RemoteAccessIdentitySerialized `json:"remote_access_identity,omitempty"`
 	IdentityProfile      *IdentityProfileSerialized      `json:"identity_profile,omitempty"`
@@ -321,6 +340,7 @@ func (o *DeviceManufacturingService) Serialize() DeviceManufacturingServiceSeria
 		Name:              o.Name,
 		Status:            o.Status,
 		CloudDMS:          o.CloudDMS,
+		Aws:               o.Aws.Serialize(),
 		CreationTimestamp: int(o.CreationTimestamp.UnixMilli()),
 	}
 
@@ -342,6 +362,7 @@ func (o *DeviceManufacturingServiceSerialized) Deserialize() DeviceManufacturing
 		Name:              o.Name,
 		Status:            o.Status,
 		CloudDMS:          o.CloudDMS,
+		Aws:               o.Aws.Deserialize(),
 		CreationTimestamp: time.UnixMilli(int64(o.CreationTimestamp)),
 	}
 

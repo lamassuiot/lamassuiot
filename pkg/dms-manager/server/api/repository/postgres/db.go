@@ -22,6 +22,7 @@ type DeviceManufacturingServiceDAO struct {
 	Name                 string `gorm:"primaryKey"`
 	Status               api.DMSStatus
 	IsCloudDMS           bool
+	ShadowType           api.ShadowType
 	CreationTimestamp    time.Time
 	IdentityProfile      IdentityProfileDAO      `gorm:"foreignKey:DMSName"`
 	RemoteAccessIdentity RemoteAccessIdentityDAO `gorm:"foreignKey:DMSName"`
@@ -226,6 +227,7 @@ func (d *DeviceManufacturingServiceDAO) toDeviceManufacturingService() api.Devic
 		Status:               d.Status,
 		CreationTimestamp:    d.CreationTimestamp,
 		CloudDMS:             d.IsCloudDMS,
+		Aws:                  api.AwsSpecification{ShadowType: d.ShadowType},
 		IdentityProfile:      nil,
 		RemoteAccessIdentity: nil,
 	}
@@ -244,6 +246,7 @@ func toDeviceManufacturingServiceDAO(d api.DeviceManufacturingService) DeviceMan
 		Status:            d.Status,
 		CreationTimestamp: d.CreationTimestamp,
 		IsCloudDMS:        d.CloudDMS,
+		ShadowType:        d.Aws.ShadowType,
 	}
 
 	if d.CloudDMS {

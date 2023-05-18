@@ -134,7 +134,7 @@ func (cps *CloudProxyService) GetCloudConnectorByID(ctx context.Context, input *
 	}
 
 	syncCAs := make([]api.SynchronizedCA, 0)
-	caBindngs, err := cps.CloudProxyDB.SelectCABindingsByConnectorID(ctx, connector.ID)
+	caBindngs, err := cps.CloudProxyDB.SelectCABindingsByConnectorID(ctx, connector.ServiceID)
 	if err != nil {
 		return &api.GetCloudConnectorByIDOutput{}, err
 	}
@@ -169,7 +169,7 @@ func (cps *CloudProxyService) GetCloudConnectorByID(ctx context.Context, input *
 
 		getConfigOutput, err := connectorService.GetConfiguration(ctx, &cloudProvider.GetConfigurationInput{})
 		if err != nil {
-			log.Warn("msg", fmt.Sprintf("Could not get connector configuration [TYPE]=%s [ID]=%s [IP]=%s [PORT]=%d", connectorType, connector.ID, connectorIp, connectorPort), "err", err)
+			log.Warn("msg", fmt.Sprintf("Could not get connector configuration [TYPE]=%s [ID]=%s [IP]=%s [PORT]=%d", connectorType, connector.ServiceID, connectorIp, connectorPort), "err", err)
 			return &api.GetCloudConnectorByIDOutput{}, err
 		}
 
