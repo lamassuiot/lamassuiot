@@ -41,16 +41,17 @@ type SlotDAO struct {
 }
 
 type DeviceDAO struct {
-	ID                string `gorm:"primaryKey"`
-	Alias             string
-	DmsName           string
-	Status            api.DeviceStatus
-	Slots             []SlotDAO      `gorm:"foreignKey:DeviceID"`
-	Tags              pq.StringArray `gorm:"type:text[]"`
-	Description       string
-	IconName          string
-	IconColor         string
-	CreationTimestamp time.Time
+	ID                 string `gorm:"primaryKey"`
+	Alias              string
+	DmsName            string
+	Status             api.DeviceStatus
+	AllowNewEnrollment bool
+	Slots              []SlotDAO      `gorm:"foreignKey:DeviceID"`
+	Tags               pq.StringArray `gorm:"type:text[]"`
+	Description        string
+	IconName           string
+	IconColor          string
+	CreationTimestamp  time.Time
 }
 
 func (DeviceDAO) TableName() string {
@@ -72,16 +73,17 @@ func toDeviceDAO(d *api.Device) DeviceDAO {
 	}
 
 	return DeviceDAO{
-		ID:                d.ID,
-		DmsName:           d.DmsName,
-		Alias:             d.Alias,
-		Status:            d.Status,
-		Tags:              d.Tags,
-		IconName:          d.IconName,
-		IconColor:         d.IconColor,
-		Description:       d.Description,
-		Slots:             slots,
-		CreationTimestamp: d.CreationTimestamp,
+		ID:                 d.ID,
+		DmsName:            d.DmsName,
+		Alias:              d.Alias,
+		Status:             d.Status,
+		AllowNewEnrollment: d.AllowNewEnrollment,
+		Tags:               d.Tags,
+		IconName:           d.IconName,
+		IconColor:          d.IconColor,
+		Description:        d.Description,
+		Slots:              slots,
+		CreationTimestamp:  d.CreationTimestamp,
 	}
 }
 
@@ -93,16 +95,17 @@ func (d DeviceDAO) toDevice() *api.Device {
 	}
 
 	return &api.Device{
-		ID:                d.ID,
-		DmsName:           d.DmsName,
-		Alias:             d.Alias,
-		Status:            d.Status,
-		Tags:              d.Tags,
-		Slots:             slots,
-		Description:       d.Description,
-		IconName:          d.IconName,
-		IconColor:         d.IconColor,
-		CreationTimestamp: d.CreationTimestamp,
+		ID:                 d.ID,
+		DmsName:            d.DmsName,
+		Alias:              d.Alias,
+		Status:             d.Status,
+		AllowNewEnrollment: d.AllowNewEnrollment,
+		Tags:               d.Tags,
+		Slots:              slots,
+		Description:        d.Description,
+		IconName:           d.IconName,
+		IconColor:          d.IconColor,
+		CreationTimestamp:  d.CreationTimestamp,
 	}
 }
 

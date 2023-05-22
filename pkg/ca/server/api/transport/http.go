@@ -33,6 +33,13 @@ func InvalidJsonFormat() error {
 	}
 }
 
+func InvalidExpirationType() error {
+	return &lamassuErrors.GenericError{
+		Message:    "Invalid Expiration Type",
+		StatusCode: 400,
+	}
+}
+
 func InvalidCaType() error {
 	return &lamassuErrors.GenericError{
 		Message:    "Invalid CA Type",
@@ -268,9 +275,28 @@ func decodeCreateCARequest(ctx context.Context, r *http.Request) (request interf
 	if err != nil {
 		return nil, InvalidJsonFormat()
 	}
-
-	var CADuration time.Duration = time.Duration(body.CADuration * int(time.Second))
-	var IssuanceDuration time.Duration = time.Duration(body.IssuanceDuration * int(time.Second))
+	var CAExpiration, IssuanceExpiration time.Time
+	var expirationType api.ExpirationType
+	switch api.ParseExpirationType(body.ExpirationType) {
+	case api.ExpirationTypeDuration:
+		caExpiration, _ := strconv.Atoi(body.CAExpiration)
+		issuanceExpiration, _ := strconv.Atoi(body.IssuanceExpiration)
+		CAExpiration = time.Now().Add(time.Duration(caExpiration * int(time.Second)))
+		IssuanceExpiration = time.Now().Add(time.Duration(issuanceExpiration * int(time.Second)))
+		expirationType = api.ExpirationTypeDuration
+	case api.ExpirationTypeDate:
+		CAExpiration, err = time.Parse("20060102T150405Z", body.CAExpiration)
+		if err != nil {
+			return nil, err
+		}
+		IssuanceExpiration, err = time.Parse("20060102T150405Z", body.IssuanceExpiration)
+		if err != nil {
+			return nil, err
+		}
+		expirationType = api.ExpirationTypeDate
+	default:
+		return nil, InvalidExpirationType()
+	}
 
 	input = api.CreateCAInput{
 		CAType: api.CATypePKI,
@@ -286,8 +312,9 @@ func decodeCreateCARequest(ctx context.Context, r *http.Request) (request interf
 			KeyType: api.ParseKeyType(body.KeyMetadata.KeyType),
 			KeyBits: body.KeyMetadata.KeyBits,
 		},
-		CADuration:       CADuration,
-		IssuanceDuration: IssuanceDuration,
+		CAExpiration:       CAExpiration,
+		IssuanceExpiration: IssuanceExpiration,
+		ExpirationType:     expirationType,
 	}
 
 	return input, nil

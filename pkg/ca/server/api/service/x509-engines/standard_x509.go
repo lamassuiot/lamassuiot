@@ -79,7 +79,7 @@ func (s StandardX509Engine) CreateCA(input api.CreateCAInput) (*x509.Certificate
 		},
 		OCSPServer:            []string{s.ocspURL},
 		NotBefore:             now,
-		NotAfter:              now.Add(time.Duration(input.CADuration)),
+		NotAfter:              input.CAExpiration.UTC(),
 		IsCA:                  true,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},

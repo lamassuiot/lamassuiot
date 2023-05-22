@@ -51,8 +51,8 @@ func (mw *validationMiddleware) CreateCA(ctx context.Context, input *api.CreateC
 				sl.ReportError(input.KeyMetadata.KeyBits, "KeyBits", "KeyBits", "InvalidRSAKeyBits", "")
 			}
 		}
-		if input.IssuanceDuration >= input.CADuration {
-			sl.ReportError(input.IssuanceDuration, "IssuanceDuration", "IssuanceDuration", "IssuanceDurationGreaterThanCADuration", "")
+		if input.CAExpiration.Before(input.IssuanceExpiration) {
+			sl.ReportError(input.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
 		}
 	}
 	validate := validator.New()

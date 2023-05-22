@@ -120,9 +120,9 @@ func (mw *amqpMiddleware) Enroll(ctx context.Context, csr *x509.CertificateReque
 	return mw.next.Enroll(ctx, csr, cert, aps)
 }
 
-func (mw *amqpMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate) (output *x509.Certificate, err error) {
+func (mw *amqpMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (output *x509.Certificate, err error) {
 
-	return mw.next.Reenroll(ctx, csr, cert)
+	return mw.next.Reenroll(ctx, csr, cert, aps)
 }
 
 func (mw *amqpMiddleware) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, *rsa.PrivateKey, error) {

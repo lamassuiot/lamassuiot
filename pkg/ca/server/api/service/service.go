@@ -85,8 +85,8 @@ func NewCAService(engine x509engines.X509Engine, certificateRepository repositor
 				KeyType: api.KeyType(engine.GetEngineConfig().SupportedKeyTypes[0].Type),
 				KeyBits: engine.GetEngineConfig().SupportedKeyTypes[0].MaximumSize,
 			},
-			CADuration:       time.Hour * 24 * 365 * 5,
-			IssuanceDuration: time.Hour * 24 * 365 * 3,
+			CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
+			IssuanceExpiration: time.Now().Add(time.Hour * 24 * 365 * 3),
 		})
 	} else {
 		log.Info("LAMASSU-DMS-MANAGER CA already provisioned")
@@ -304,7 +304,7 @@ func (s *CAService) CreateCA(ctx context.Context, input *api.CreateCAInput) (*ap
 		return nil, err
 	}
 
-	err = s.certificateRepository.InsertCA(ctx, input.CAType, caCertificate, input.IssuanceDuration)
+	err = s.certificateRepository.InsertCA(ctx, input.CAType, caCertificate, input.IssuanceExpiration)
 	if err != nil {
 		log.Error(err)
 		return &api.CreateCAOutput{}, err

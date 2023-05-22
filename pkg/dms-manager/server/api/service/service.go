@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 
 	log "github.com/sirupsen/logrus"
 
@@ -493,18 +494,14 @@ func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateReq
 		return nil, err
 	}
 
-	fmt.Println(aps)
-	fmt.Println(csr.Subject.CommonName)
-	fmt.Println(clientCertificate.Subject.CommonName)
-
-	if !dms.CloudDMS {
+	if !dms.DeviceManufacturingService.CloudDMS {
 		return nil, &estErrors.GenericError{
 			Message:    "dms is not managed by lamasssu",
 			StatusCode: 403,
 		}
 	}
 
-	if dms.Status != api.DMSStatusApproved {
+	if dms.DeviceManufacturingService.Status != api.DMSStatusApproved {
 		return nil, &estErrors.GenericError{
 			Message:    "dms is not in the approved state",
 			StatusCode: 403,
@@ -520,7 +517,7 @@ func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateReq
 		if err != nil {
 			return nil, err
 		}
-		err = s.verifyCertificate(clientCertificate, cacert.CACertificate.Certificate.Certificate)
+		err = s.verifyCertificate(clientCertificate, cacert.CACertificate.Certificate.Certificate, false)
 		if err == nil {
 			break
 		}
@@ -533,10 +530,85 @@ func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateReq
 			StatusCode: 401,
 		}
 	}
-
-	_, err = s.lamassuDevManagerClient.CreateDevice(ctx, csr.Subject.CommonName, csr.Subject.CommonName, aps, "-", dms.IdentityProfile.EnrollmentSettings.Tags, dms.IdentityProfile.EnrollmentSettings.Icon, dms.IdentityProfile.EnrollmentSettings.Color)
+	_, err = s.lamassuDevManagerClient.GetDeviceById(ctx, csr.Subject.CommonName)
 	if err != nil {
-		log.Error(fmt.Sprintf("something went while registering the device: %s", err))
+		_, err = s.lamassuDevManagerClient.CreateDevice(ctx, csr.Subject.CommonName, csr.Subject.CommonName, aps, "-", dms.IdentityProfile.EnrollmentSettings.Tags, dms.IdentityProfile.EnrollmentSettings.Icon, dms.IdentityProfile.EnrollmentSettings.Color)
+		if err != nil {
+			log.Error(fmt.Sprintf("something went while registering the device: %s", err))
+			return nil, err
+		}
+	}
+
+	estURL, err := url.Parse(s.DevManagerAddr)
+	if err != nil {
+		log.Error(fmt.Sprintf("could not parse EST Server URL: %s", err))
+		return nil, err
+	}
+
+	estClient, err := lamassuEstClient.NewESTClient(nil, estURL, s.UpstreamCert, s.UpstreamKey, nil, true)
+	if err != nil {
+		return nil, err
+	}
+
+	crt, err := estClient.Enroll(ctx, dms.DeviceManufacturingService.Name, csr)
+	if err != nil {
+		return nil, err
+	}
+	return crt, nil
+}
+
+func (s *DMSManagerService) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, error) {
+	device, err := s.lamassuDevManagerClient.GetDeviceById(ctx, csr.Subject.CommonName)
+	if err != nil {
+		return nil, err
+	}
+
+	if !reflect.DeepEqual(csr.Subject, cert.Subject) {
+		return nil, &estErrors.GenericError{
+			Message:    "CSR subject does not match certificate subject",
+			StatusCode: 400,
+		}
+	}
+
+	var dms *api.GetDMSByNameOutput
+	if aps != "" {
+		dms, err = s.GetDMSByName(ctx, &api.GetDMSByNameInput{
+			Name: aps,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if device.Device.DmsName != dms.DeviceManufacturingService.Name {
+			return nil, &estErrors.GenericError{
+				StatusCode: http.StatusUnauthorized,
+				Message:    "The DMS does not have the device provisioned.",
+			}
+		}
+	} else {
+		dms, err = s.GetDMSByName(ctx, &api.GetDMSByNameInput{
+			Name: device.DmsName,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if !dms.DeviceManufacturingService.CloudDMS {
+		return nil, &estErrors.GenericError{
+			StatusCode: http.StatusUnauthorized,
+			Message:    "invalid dms mode: use cloud dms",
+		}
+	}
+	caCert, err := s.lamassuCAClient.GetCAByName(ctx, &lamassuCAApi.GetCAByNameInput{
+		CAType: lamassuCAApi.CATypePKI,
+		CAName: dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.AuthorizedCA,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.verifyCertificate(cert, caCert.CACertificate.Certificate.Certificate, dms.DeviceManufacturingService.IdentityProfile.ReerollmentSettings.AllowExpiredRenewal)
+	if err != nil {
 		return nil, err
 	}
 
@@ -551,15 +623,13 @@ func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateReq
 		return nil, err
 	}
 
-	crt, err := estClient.Enroll(ctx, dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.AuthorizedCA, csr)
+	deviceNewCert, err := estClient.Reenroll(ctx, csr)
+
 	if err != nil {
 		return nil, err
 	}
-	return crt, nil
-}
 
-func (s *DMSManagerService) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate) (*x509.Certificate, error) {
-	return nil, nil
+	return deviceNewCert, nil
 }
 
 func (s *DMSManagerService) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, *rsa.PrivateKey, error) {
@@ -570,7 +640,7 @@ func (s *DMSManagerService) ServerKeyGen(ctx context.Context, csr *x509.Certific
 // 													UTILS
 // -------------------------------------------------------------------------------------------------------------------
 
-func (s *DMSManagerService) verifyCertificate(clientCertificate *x509.Certificate, caCertificate *x509.Certificate) error {
+func (s *DMSManagerService) verifyCertificate(clientCertificate *x509.Certificate, caCertificate *x509.Certificate, allowExpiredRenewal bool) error {
 	clientCAs := x509.NewCertPool()
 	clientCAs.AddCert(caCertificate)
 
@@ -578,17 +648,20 @@ func (s *DMSManagerService) verifyCertificate(clientCertificate *x509.Certificat
 		Roots:     clientCAs,
 		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
-	_, err := clientCertificate.Verify(opts)
-	if err != nil {
-		return errors.New("could not verify client certificate: " + err.Error())
-	}
-
 	cert, _ := s.lamassuCAClient.GetCertificateBySerialNumber(context.Background(), &lamassuCAApi.GetCertificateBySerialNumberInput{
 		CAType:                  lamassuCAApi.CATypePKI,
 		CAName:                  caCertificate.Subject.CommonName,
 		CertificateSerialNumber: utils.InsertNth(utils.ToHexInt(clientCertificate.SerialNumber), 2),
 	})
-	if cert.Status == lamassuCAApi.StatusExpired || cert.Status == lamassuCAApi.StatusRevoked {
+	_, err := clientCertificate.Verify(opts)
+	if err != nil {
+		if cert.Status == lamassuCAApi.StatusExpired && !allowExpiredRenewal {
+			return errors.New("could not verify client certificate: " + err.Error())
+		}
+
+	}
+
+	if cert.Status == lamassuCAApi.StatusRevoked {
 		return errors.New("certificate status is: " + string(cert.Status))
 	}
 	return nil

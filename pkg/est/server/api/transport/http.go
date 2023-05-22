@@ -107,6 +107,17 @@ func MakeHTTPHandler(service service.ESTService) http.Handler {
 		),
 	)
 
+	router.Methods("POST").Path("/.well-known/est/simplereenroll").Handler(
+		httptransport.NewServer(
+			endpoints.ReenrollerEndpoint,
+			decodeReenrollRequest,
+			encodeResponse,
+			append(
+				options,
+			)...,
+		),
+	)
+
 	router.Methods("POST").Path("/.well-known/est/{aps}/serverkeygen").Handler(
 		httptransport.NewServer(
 			endpoints.ServerKeyGenEndpoint,

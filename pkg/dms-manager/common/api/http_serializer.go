@@ -173,42 +173,47 @@ func (o *IdentityProfileGeneralSettingsSerialized) Deserialize() IdentityProfile
 }
 
 type IdentityProfileEnrollmentSettingsSerialized struct {
-	AuthenticationMode ESTAuthenticationMode `json:"authentication_mode"`
-	Tags               []string              `json:"tags"`
-	Icon               string                `json:"icon"`
-	Color              string                `json:"color"`
-	AuthorizedCA       string                `json:"authorized_ca"`
-	BootstrapCAs       []string              `json:"bootstrap_cas"`
+	AuthenticationMode     ESTAuthenticationMode `json:"authentication_mode"`
+	AllowNewAutoEnrollment bool                  `json:"allow_new_auto_enrollment"`
+	Tags                   []string              `json:"tags"`
+	Icon                   string                `json:"icon"`
+	Color                  string                `json:"color"`
+	AuthorizedCA           string                `json:"authorized_ca"`
+	BootstrapCAs           []string              `json:"bootstrap_cas"`
 }
 
 func (o *IdentityProfileEnrollmentSettings) Serialize() IdentityProfileEnrollmentSettingsSerialized {
 	return IdentityProfileEnrollmentSettingsSerialized{
-		AuthenticationMode: o.AuthenticationMode,
-		Tags:               o.Tags,
-		Icon:               o.Icon,
-		Color:              o.Color,
-		AuthorizedCA:       o.AuthorizedCA,
-		BootstrapCAs:       o.BootstrapCAs,
+		AuthenticationMode:     o.AuthenticationMode,
+		AllowNewAutoEnrollment: o.AllowNewAutoEnrollment,
+		Tags:                   o.Tags,
+		Icon:                   o.Icon,
+		Color:                  o.Color,
+		AuthorizedCA:           o.AuthorizedCA,
+		BootstrapCAs:           o.BootstrapCAs,
 	}
 }
 
 func (o *IdentityProfileEnrollmentSettingsSerialized) Deserialize() IdentityProfileEnrollmentSettings {
 	return IdentityProfileEnrollmentSettings{
-		AuthenticationMode: o.AuthenticationMode,
-		Tags:               o.Tags,
-		Icon:               o.Icon,
-		Color:              o.Color,
-		AuthorizedCA:       o.AuthorizedCA,
-		BootstrapCAs:       o.BootstrapCAs,
+		AuthenticationMode:     o.AuthenticationMode,
+		AllowNewAutoEnrollment: o.AllowNewAutoEnrollment,
+		Tags:                   o.Tags,
+		Icon:                   o.Icon,
+		Color:                  o.Color,
+		AuthorizedCA:           o.AuthorizedCA,
+		BootstrapCAs:           o.BootstrapCAs,
 	}
 }
 
 type IdentityProfileReenrollmentSettingsSerialized struct {
+	AllowExpiredRenewal       bool   `json:"allow_expired_renewal"`
 	PreventiveRenewalInterval string `json:"preventive_renewal_interval"`
 }
 
 func (o *IdentityProfileReenrollmentSettings) Serialize() IdentityProfileReenrollmentSettingsSerialized {
 	return IdentityProfileReenrollmentSettingsSerialized{
+		AllowExpiredRenewal:       o.AllowExpiredRenewal,
 		PreventiveRenewalInterval: utils.ShortDuration(o.PreventiveRenewalInterval),
 	}
 }
@@ -218,6 +223,7 @@ func (o IdentityProfileReenrollmentSettingsSerialized) Deserialize() IdentityPro
 	duration, _ = time.ParseDuration(o.PreventiveRenewalInterval)
 
 	return IdentityProfileReenrollmentSettings{
+		AllowExpiredRenewal:       o.AllowExpiredRenewal,
 		PreventiveRenewalInterval: duration,
 	}
 }

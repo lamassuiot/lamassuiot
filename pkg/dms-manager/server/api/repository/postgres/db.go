@@ -47,6 +47,8 @@ type IdentityProfileDAO struct {
 	Color                      string
 	Tags                       pq.StringArray `gorm:"type:text[]"`
 	PreventiveRenewalInterval  string
+	AllowNewAutoEnrollment     bool
+	AllowExpiredRenewal        bool
 	IncludeAuthorizedCA        bool
 	IncludeBootstrapCAs        bool
 	IncludeLamassuDownstreamCA bool
@@ -175,14 +177,16 @@ func (d *IdentityProfileDAO) toIdentityProfile() *api.IdentityProfile {
 			EnrollmentMode: api.EnrollmentMode(d.EnrollmentMode),
 		},
 		EnrollmentSettings: api.IdentityProfileEnrollmentSettings{
-			AuthenticationMode: api.ESTAuthenticationMode(d.AuthenticationMode),
-			Tags:               d.Tags,
-			Icon:               d.Icon,
-			Color:              d.Color,
-			AuthorizedCA:       d.AuthorizedCA,
-			BootstrapCAs:       d.BootstrapCAs,
+			AuthenticationMode:     api.ESTAuthenticationMode(d.AuthenticationMode),
+			Tags:                   d.Tags,
+			Icon:                   d.Icon,
+			Color:                  d.Color,
+			AuthorizedCA:           d.AuthorizedCA,
+			AllowNewAutoEnrollment: d.AllowNewAutoEnrollment,
+			BootstrapCAs:           d.BootstrapCAs,
 		},
 		ReerollmentSettings: api.IdentityProfileReenrollmentSettings{
+			AllowExpiredRenewal:       d.AllowExpiredRenewal,
 			PreventiveRenewalInterval: duration,
 		},
 		CADistributionSettings: api.IdentityProfileCADistributionSettings{
@@ -211,6 +215,8 @@ func toIdentityProfileDAO(dmsName string, d api.IdentityProfile) IdentityProfile
 		Icon:                       d.EnrollmentSettings.Icon,
 		Color:                      d.EnrollmentSettings.Color,
 		Tags:                       d.EnrollmentSettings.Tags,
+		AllowNewAutoEnrollment:     d.EnrollmentSettings.AllowNewAutoEnrollment,
+		AllowExpiredRenewal:        d.ReerollmentSettings.AllowExpiredRenewal,
 		PreventiveRenewalInterval:  d.ReerollmentSettings.PreventiveRenewalInterval.String(),
 		IncludeAuthorizedCA:        d.CADistributionSettings.IncludeAuthorizedCA,
 		IncludeBootstrapCAs:        d.CADistributionSettings.IncludeBootstrapCAs,

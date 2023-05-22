@@ -1472,8 +1472,8 @@ func runTests(t *testing.T, tc TestCase) {
 			KeyType: "RSA",
 			KeyBits: 4096,
 		},
-		CADuration:       time.Hour * 24 * 365 * 5,
-		IssuanceDuration: time.Hour * 24 * 25,
+		CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
+		IssuanceExpiration: time.Now().Add(time.Hour * 24 * 25),
 	})
 	if err != nil {
 		t.Fatalf("%s", err)
@@ -1488,8 +1488,8 @@ func runTests(t *testing.T, tc TestCase) {
 			KeyType: "RSA",
 			KeyBits: 4096,
 		},
-		CADuration:       time.Hour * 24 * 365 * 5,
-		IssuanceDuration: time.Hour * 24 * 365 * 3,
+		CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
+		IssuanceExpiration: time.Now().Add(time.Hour * 24 * 365 * 3),
 	})
 	if err != nil {
 		t.Fatalf("%s", err)
@@ -1504,8 +1504,8 @@ func runTests(t *testing.T, tc TestCase) {
 			KeyType: "RSA",
 			KeyBits: 4096,
 		},
-		CADuration:       time.Hour * 24 * 365 * 5,
-		IssuanceDuration: time.Second * 3,
+		CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
+		IssuanceExpiration: time.Now().Add(time.Hour * 3),
 	})
 	if err != nil {
 		t.Fatalf("%s", err)

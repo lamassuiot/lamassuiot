@@ -32,6 +32,24 @@ type Subject struct {
 	Locality         string
 }
 
+type ExpirationType string
+
+const (
+	ExpirationTypeDate     ExpirationType = "DATE"
+	ExpirationTypeDuration ExpirationType = "DURATION"
+)
+
+func ParseExpirationType(t string) ExpirationType {
+	switch t {
+	case "DATE":
+		return ExpirationTypeDate
+	case "DURATION":
+		return ExpirationTypeDuration
+	default:
+		return ""
+	}
+}
+
 type CAType string
 
 const (
@@ -200,11 +218,12 @@ type GetStatsOutput struct {
 
 // ---------------------------------------------------------------------
 type CreateCAInput struct {
-	CAType           CAType        `validate:"required"`
-	Subject          Subject       `validate:"required"`
-	KeyMetadata      KeyMetadata   `validate:"required"`
-	CADuration       time.Duration `validate:"required"`
-	IssuanceDuration time.Duration `validate:"required"`
+	CAType             CAType         `validate:"required"`
+	Subject            Subject        `validate:"required"`
+	KeyMetadata        KeyMetadata    `validate:"required"`
+	ExpirationType     ExpirationType `validate:"required"`
+	CAExpiration       time.Time      `validate:"required"`
+	IssuanceExpiration time.Time      `validate:"required"`
 }
 
 type CreateCAOutput struct {

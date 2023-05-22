@@ -182,15 +182,17 @@ const (
 )
 
 type IdentityProfileEnrollmentSettings struct {
-	AuthenticationMode ESTAuthenticationMode
-	Tags               []string
-	Icon               string
-	Color              string
-	AuthorizedCA       string
-	BootstrapCAs       []string
+	AuthenticationMode     ESTAuthenticationMode
+	AllowNewAutoEnrollment bool
+	Tags                   []string
+	Icon                   string
+	Color                  string
+	AuthorizedCA           string
+	BootstrapCAs           []string
 }
 
 type IdentityProfileReenrollmentSettings struct {
+	AllowExpiredRenewal       bool
 	PreventiveRenewalInterval time.Duration
 }
 

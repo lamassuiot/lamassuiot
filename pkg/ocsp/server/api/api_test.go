@@ -50,8 +50,8 @@ func TestOCSPVerify(t *testing.T) {
 						KeyType: "RSA",
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 24 * 365 * 5,
-					IssuanceDuration: time.Hour * 24 * 25,
+					CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour * 24 * 25),
 				})
 				if err != nil {
 					t.Fatalf("%s", err)
@@ -116,8 +116,8 @@ func TestOCSPVerify(t *testing.T) {
 						KeyType: "RSA",
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 24 * 365 * 5,
-					IssuanceDuration: time.Hour * 24 * 25,
+					CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour * 24 * 25),
 				})
 				if err != nil {
 					t.Fatalf("%s", err)
@@ -181,8 +181,8 @@ func TestOCSPVerify(t *testing.T) {
 						KeyType: "RSA",
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 24 * 365 * 5,
-					IssuanceDuration: time.Hour * 24 * 25,
+					CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour * 24 * 25),
 				})
 				if err != nil {
 					t.Fatalf("%s", err)

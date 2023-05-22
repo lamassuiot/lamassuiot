@@ -75,7 +75,7 @@ func MakeReenrollEndpoint(s service.ESTService) endpoint.Endpoint {
 			}
 			return nil, &valError
 		}
-		crt, err := s.Reenroll(ctx, req.Csr, req.Crt)
+		crt, err := s.Reenroll(ctx, req.Csr, req.Crt, req.Aps)
 		return EnrollReenrollResponse{Cert: crt, PemResponse: req.PemResponse}, err
 	}
 }

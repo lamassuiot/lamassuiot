@@ -106,8 +106,8 @@ func TestCreateCA(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 
 				if err != nil {
@@ -245,8 +245,8 @@ func TestGetCAByName(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 
 				if err != nil {
@@ -330,8 +330,8 @@ func TestGetCAByName(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 
 				if err != nil {
@@ -425,8 +425,8 @@ func TestGetCAByName(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Second * 5,
-					IssuanceDuration: time.Second * 3,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour * 3),
 				})
 
 				if err != nil {
@@ -556,8 +556,8 @@ func TestGetCAs(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 
 				if err != nil {
@@ -642,8 +642,8 @@ func TestGetCAs(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Second * 3,
-					IssuanceDuration: time.Second * 2,
+					CAExpiration:       time.Now().Add(time.Hour * 3),
+					IssuanceExpiration: time.Now().Add(time.Hour * 2),
 				})
 
 				if err != nil {
@@ -731,8 +731,8 @@ func TestGetCAs(t *testing.T) {
 							KeyType: api.RSA,
 							KeyBits: 4096,
 						},
-						CADuration:       time.Hour * 5,
-						IssuanceDuration: time.Hour,
+						CAExpiration:       time.Now().Add(time.Hour * 5),
+						IssuanceExpiration: time.Now().Add(time.Hour),
 					})
 
 					if err != nil {
@@ -786,8 +786,8 @@ func TestGetCAs(t *testing.T) {
 								KeyType: api.RSA,
 								KeyBits: 4096,
 							},
-							CADuration:       time.Hour * 5,
-							IssuanceDuration: time.Hour,
+							CAExpiration:       time.Now().Add(time.Hour * 5),
+							IssuanceExpiration: time.Now().Add(time.Hour),
 						})
 
 						if err != nil {
@@ -842,8 +842,8 @@ func TestGetCAs(t *testing.T) {
 								KeyType: api.RSA,
 								KeyBits: 4096,
 							},
-							CADuration:       time.Hour * 5,
-							IssuanceDuration: time.Hour,
+							CAExpiration:       time.Now().Add(time.Hour * 5),
+							IssuanceExpiration: time.Now().Add(time.Hour),
 						})
 
 						if err != nil {
@@ -898,8 +898,8 @@ func TestGetCAs(t *testing.T) {
 								KeyType: api.RSA,
 								KeyBits: 4096,
 							},
-							CADuration:       time.Hour * 5,
-							IssuanceDuration: time.Hour,
+							CAExpiration:       time.Now().Add(time.Hour * 5),
+							IssuanceExpiration: time.Now().Add(time.Hour),
 						})
 
 						if err != nil {
@@ -991,8 +991,8 @@ func TestRevokeCA(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 2048,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 
 				if err != nil {
@@ -1041,8 +1041,8 @@ func TestRevokeCA(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 2048,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 
 				if err != nil {
@@ -1131,8 +1131,8 @@ func TestRevokeCA(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 2048,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 
 				if err != nil {
@@ -1158,8 +1158,8 @@ func TestRevokeCA(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 2048,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 
 				if err != nil {
@@ -1230,8 +1230,8 @@ func TestSignCertificateRequest(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 
 				if err != nil {
@@ -1296,8 +1296,8 @@ func TestSignCertificateRequest(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 
 				if err != nil {
@@ -1458,8 +1458,8 @@ func TestRevokeCertificate(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 
 				if err != nil {
@@ -1485,8 +1485,8 @@ func TestRevokeCertificate(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 				if err != nil {
 					t.Errorf("%s", err)
@@ -1623,8 +1623,8 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 				if err != nil {
 					t.Errorf("%s", err)
@@ -1648,8 +1648,8 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 				if err != nil {
 					t.Errorf("%s", err)
@@ -1723,8 +1723,8 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Second * 3,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour * 3),
 				})
 				if err != nil {
 					t.Errorf("%s", err)
@@ -1841,8 +1841,8 @@ func TestGetCertificates(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 				if err != nil {
 					t.Errorf("%s", err)
@@ -1872,8 +1872,8 @@ func TestGetCertificates(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 
 				if err != nil {
@@ -1986,8 +1986,8 @@ func TestGetCertificates(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 				if err != nil {
 					t.Errorf("%s", err)
@@ -2050,8 +2050,8 @@ func TestGetCertificates(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Second * 3,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour * 3),
 				})
 				if err != nil {
 					t.Errorf("%s", err)
@@ -2164,8 +2164,8 @@ func TestStats(t *testing.T) {
 							KeyType: api.RSA,
 							KeyBits: 4096,
 						},
-						CADuration:       time.Hour * 5,
-						IssuanceDuration: time.Hour,
+						CAExpiration:       time.Now().Add(time.Hour * 5),
+						IssuanceExpiration: time.Now().Add(time.Hour),
 					})
 					if err != nil {
 						t.Errorf("%s", err)

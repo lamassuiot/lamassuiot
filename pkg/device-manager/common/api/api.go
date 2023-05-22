@@ -121,16 +121,17 @@ type Slot struct {
 }
 
 type Device struct {
-	ID                string
-	DmsName           string
-	Alias             string
-	Status            DeviceStatus
-	Slots             []*Slot
-	Description       string
-	Tags              []string
-	IconName          string
-	IconColor         string
-	CreationTimestamp time.Time
+	ID                 string
+	DmsName            string
+	Alias              string
+	Status             DeviceStatus
+	Slots              []*Slot
+	AllowNewEnrollment bool
+	Description        string
+	Tags               []string
+	IconName           string
+	IconColor          string
+	CreationTimestamp  time.Time
 }
 
 type LogType string
@@ -185,12 +186,13 @@ type CreateDeviceOutput struct {
 // ---------------------------------------------------------------------
 
 type UpdateDeviceMetadataInput struct {
-	DeviceID    string
-	Alias       string
-	Tags        []string
-	Description string
-	IconColor   string
-	IconName    string
+	DeviceID           string
+	Alias              string
+	Tags               []string
+	Description        string
+	AllowNewEnrollment bool
+	IconColor          string
+	IconName           string
 }
 
 type UpdateDeviceMetadataOutput struct {

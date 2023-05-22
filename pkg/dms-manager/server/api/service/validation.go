@@ -108,8 +108,8 @@ func (mw *validationMiddleware) Enroll(ctx context.Context, csr *x509.Certificat
 	return mw.next.Enroll(ctx, csr, clientCertificate, aps)
 }
 
-func (mw *validationMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate) (*x509.Certificate, error) {
-	return mw.next.Reenroll(ctx, csr, cert)
+func (mw *validationMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, error) {
+	return mw.next.Reenroll(ctx, csr, cert, aps)
 }
 
 func (mw *validationMiddleware) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, *rsa.PrivateKey, error) {

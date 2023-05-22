@@ -342,7 +342,7 @@ func (db PostgresDBContext) UpdateCAStatus(ctx context.Context, CAType api.CATyp
 	return nil
 }
 
-func (db PostgresDBContext) InsertCA(ctx context.Context, CAType api.CAType, certificate *x509.Certificate, issuanceDuration time.Duration) error {
+func (db PostgresDBContext) InsertCA(ctx context.Context, CAType api.CAType, certificate *x509.Certificate, issuanceExpiration time.Time) error {
 	pemCert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificate.Raw})
 	enc := make([]byte, base64.StdEncoding.EncodedLen(len(pemCert)))
 	base64.StdEncoding.Encode(enc, pemCert)
@@ -359,7 +359,7 @@ func (db PostgresDBContext) InsertCA(ctx context.Context, CAType api.CAType, cer
 			Revocation:       pq.NullTime{},
 			RevocationReason: "",
 		},
-		IssuanceDuration: int(issuanceDuration.Seconds()),
+		IssuanceDuration: int(issuanceExpiration.Unix()),
 	})
 	if tx.Error != nil {
 		return tx.Error
