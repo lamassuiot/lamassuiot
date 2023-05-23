@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
@@ -123,8 +124,8 @@ func (c *lamassuCaClientConfig) CreateCA(ctx context.Context, input *api.CreateC
 		caExpiration = fmt.Sprintf("%d%02d%02dT%02d%02d%dZ", input.CAExpiration.Year(), input.CAExpiration.Month(), input.CAExpiration.Day(), input.CAExpiration.Hour(), input.CAExpiration.Minute(), input.CAExpiration.Second())
 		issuanceExpiration = fmt.Sprintf("%d%02d%02dT%02d%02d%dZ", input.IssuanceExpiration.Year(), input.IssuanceExpiration.Month(), input.IssuanceExpiration.Day(), input.IssuanceExpiration.Hour(), input.IssuanceExpiration.Minute(), input.IssuanceExpiration.Second())
 	} else {
-		caExpiration = fmt.Sprintf("%d", input.CAExpiration.Second())
-		issuanceExpiration = fmt.Sprintf("%d", input.IssuanceExpiration.Second())
+		caExpiration = fmt.Sprintf("%d", input.CAExpiration.Unix()-time.Now().Unix())
+		issuanceExpiration = fmt.Sprintf("%d", input.IssuanceExpiration.Unix()-time.Now().Unix())
 	}
 	body := api.CreateCAPayload{
 		KeyMetadata: api.CreacteCAKeyMetadataSubject{
@@ -139,6 +140,7 @@ func (c *lamassuCaClientConfig) CreateCA(ctx context.Context, input *api.CreateC
 			Organization:     input.Subject.Organization,
 			OrganizationUnit: input.Subject.OrganizationUnit,
 		},
+		ExpirationType:     string(input.ExpirationType),
 		CAExpiration:       caExpiration,
 		IssuanceExpiration: issuanceExpiration,
 	}
@@ -236,15 +238,22 @@ func (c *lamassuCaClientConfig) GetCertificatesAboutToExpire(ctx context.Context
 
 func (c *lamassuCaClientConfig) SignCertificateRequest(ctx context.Context, input *api.SignCertificateRequestInput) (*api.SignCertificateRequestOutput, error) {
 	//TODO: To Refact with new synta. Check GetCAByName and GetCAs
-
+	var certificateExpiration string
+	if input.ExpirationType == api.ExpirationTypeDate {
+		certificateExpiration = fmt.Sprintf("%d%02d%02dT%02d%02d%dZ", input.CertificateExpiration.Year(), input.CertificateExpiration.Month(), input.CertificateExpiration.Day(), input.CertificateExpiration.Hour(), input.CertificateExpiration.Minute(), input.CertificateExpiration.Second())
+	} else if input.ExpirationType == api.ExpirationTypeDuration {
+		certificateExpiration = fmt.Sprintf("%d", input.CertificateExpiration.Unix()-time.Now().Unix())
+	}
 	csrBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: input.CertificateSigningRequest.Raw})
 	base64CsrContent := base64.StdEncoding.EncodeToString(csrBytes)
-	body := api.SignCertificateRequestPayload{
-		CertificateRequest: base64CsrContent,
-		CommonName:         input.CommonName,
-		SignVerbatim:       input.SignVerbatim,
-	}
 
+	body := api.SignCertificateRequestPayload{
+		CertificateRequest:    base64CsrContent,
+		CommonName:            input.CommonName,
+		SignVerbatim:          input.SignVerbatim,
+		ExpirationType:        string(input.ExpirationType),
+		CertificateExpiration: certificateExpiration,
+	}
 	req, err := c.client.NewRequest(ctx, "POST", "v1/"+string(input.CAType)+"/"+input.CAName+"/sign", body)
 
 	if err != nil {

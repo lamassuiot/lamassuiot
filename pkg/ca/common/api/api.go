@@ -296,6 +296,8 @@ type SignCertificateRequestInput struct {
 	CertificateSigningRequest *x509.CertificateRequest `validate:"required"`
 	SignVerbatim              bool
 	CommonName                string
+	ExpirationType            ExpirationType
+	CertificateExpiration     time.Time
 }
 
 type SignCertificateRequestOutput struct {

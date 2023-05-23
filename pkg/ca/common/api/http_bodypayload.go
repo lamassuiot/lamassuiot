@@ -25,9 +25,11 @@ type CreateCAPayload struct {
 // -------------------------------------------------------------
 
 type SignCertificateRequestPayload struct {
-	CertificateRequest string `json:"certificate_request"`
-	SignVerbatim       bool   `json:"sign_verbatim"`
-	CommonName         string `json:"common_name,omitempty"`
+	CertificateRequest    string `json:"certificate_request"`
+	SignVerbatim          bool   `json:"sign_verbatim"`
+	CommonName            string `json:"common_name,omitempty"`
+	ExpirationType        string `json:"expiration_type"`
+	CertificateExpiration string `json:"certificate_expiration"`
 }
 
 // -------------------------------------------------------------

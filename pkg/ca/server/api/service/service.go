@@ -600,8 +600,16 @@ func (s *CAService) SignCertificateRequest(ctx context.Context, input *api.SignC
 	if caOutput.Status == api.StatusExpired || caOutput.Status == api.StatusRevoked {
 		return &api.SignCertificateRequestOutput{}, errors.New("CA is expired or revoked")
 	}
-
-	certificate, err := s.engine.SignCertificateRequest(caOutput.Certificate.Certificate, caOutput.IssuanceDuration, input)
+	var certificateExpiration time.Time
+	if input.ExpirationType != "" {
+		if caOutput.ValidTo.Before(input.CertificateExpiration) {
+			return &api.SignCertificateRequestOutput{}, errors.New("Certificate Expiration Greater Than CA Expiration")
+		}
+		certificateExpiration = input.CertificateExpiration
+	} else {
+		certificateExpiration = time.Now().Add(caOutput.IssuanceDuration)
+	}
+	certificate, err := s.engine.SignCertificateRequest(caOutput.Certificate.Certificate, certificateExpiration, input)
 	if err != nil {
 		log.Error("Could not sign certificate request: ", err)
 		return &api.SignCertificateRequestOutput{}, err

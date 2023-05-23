@@ -378,6 +378,20 @@ func decodeSignCertificateRequest(ctx context.Context, r *http.Request) (request
 	if err != nil {
 		return nil, InvalidJsonFormat()
 	}
+	var certificateExpiration time.Time
+	var expirationType api.ExpirationType
+	switch api.ParseExpirationType(body.ExpirationType) {
+	case api.ExpirationTypeDuration:
+		duration, _ := strconv.Atoi(body.CertificateExpiration)
+		certificateExpiration = time.Now().Add(time.Duration(duration * int(time.Second)))
+		expirationType = api.ExpirationTypeDuration
+	case api.ExpirationTypeDate:
+		certificateExpiration, err = time.Parse("20060102T150405Z", body.CertificateExpiration)
+		if err != nil {
+			return nil, err
+		}
+		expirationType = api.ExpirationTypeDate
+	}
 
 	decodedCert, err := base64.StdEncoding.DecodeString(body.CertificateRequest)
 	// decodedCert = strings.Trim(decodedCert, "\n")
@@ -400,6 +414,8 @@ func decodeSignCertificateRequest(ctx context.Context, r *http.Request) (request
 		CertificateSigningRequest: certRequest,
 		CommonName:                body.CommonName,
 		SignVerbatim:              body.SignVerbatim,
+		CertificateExpiration:     certificateExpiration,
+		ExpirationType:            expirationType,
 	}, nil
 }
 

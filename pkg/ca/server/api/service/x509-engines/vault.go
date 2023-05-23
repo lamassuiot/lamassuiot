@@ -273,7 +273,7 @@ func (v Vaultx509Engine) initPkiSecret(caType api.CAType, CAName string, enrolle
 }
 
 // falta meter el CACertificates en output + insert en BD
-func (v Vaultx509Engine) SignCertificateRequest(caCertificate *x509.Certificate, issuanceDuration time.Duration, input *api.SignCertificateRequestInput) (*x509.Certificate, error) {
+func (v Vaultx509Engine) SignCertificateRequest(caCertificate *x509.Certificate, certificateExpiration time.Time, input *api.SignCertificateRequestInput) (*x509.Certificate, error) {
 	var err error
 
 	csrBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: input.CertificateSigningRequest.Raw})

@@ -832,7 +832,12 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 	}
 	s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeInfo, "Slot Reneweal process Underway", "Certificate rotation request received")
 
-	aps = cert.Issuer.CommonName
+	if dms.DeviceManufacturingService.CloudDMS {
+		aps = dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.AuthorizedCA
+	} else {
+		aps = cert.Issuer.CommonName
+	}
+
 	isAuthroizedOutput, err := s.service.IsDMSAuthorizedToEnroll(ctx, &api.IsDMSAuthorizedToEnrollInput{
 		DMSName: dms.DeviceManufacturingService.Name,
 		CAName:  aps,

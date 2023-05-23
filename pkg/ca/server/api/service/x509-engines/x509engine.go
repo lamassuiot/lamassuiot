@@ -10,5 +10,5 @@ import (
 type X509Engine interface {
 	GetEngineConfig() api.EngineProviderInfo
 	CreateCA(input api.CreateCAInput) (*x509.Certificate, error)
-	SignCertificateRequest(caCertificate *x509.Certificate, issuanceDuration time.Duration, input *api.SignCertificateRequestInput) (*x509.Certificate, error)
+	SignCertificateRequest(caCertificate *x509.Certificate, certificateExpiration time.Time, input *api.SignCertificateRequestInput) (*x509.Certificate, error)
 }

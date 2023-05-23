@@ -108,7 +108,7 @@ func (s StandardX509Engine) CreateCA(input api.CreateCAInput) (*x509.Certificate
 	return cert, nil
 }
 
-func (s StandardX509Engine) SignCertificateRequest(caCertificate *x509.Certificate, issuanceDuration time.Duration, input *api.SignCertificateRequestInput) (*x509.Certificate, error) {
+func (s StandardX509Engine) SignCertificateRequest(caCertificate *x509.Certificate, certificateExpiration time.Time, input *api.SignCertificateRequestInput) (*x509.Certificate, error) {
 	privkey, err := s.cryptoEngine.GetPrivateKeyByID(input.CAName)
 	if err != nil {
 		return nil, err
@@ -138,7 +138,7 @@ func (s StandardX509Engine) SignCertificateRequest(caCertificate *x509.Certifica
 		Issuer:       caCertificate.Subject,
 		Subject:      subject,
 		NotBefore:    now,
-		NotAfter:     now.Add(issuanceDuration),
+		NotAfter:     certificateExpiration,
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 		DNSNames:     input.CertificateSigningRequest.DNSNames,

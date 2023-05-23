@@ -50,7 +50,7 @@ func NewAWSKMSEngine(accessKeyID string, secretAccessKey string, region string) 
 	pkcs11ProviderSupportedKeyTypes = append(pkcs11ProviderSupportedKeyTypes, api.SupportedKeyTypeInfo{
 		Type:        api.ECDSA,
 		MinimumSize: 256,
-		MaximumSize: 512,
+		MaximumSize: 521,
 	})
 
 	return &AWSKMSProviderContext{

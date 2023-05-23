@@ -552,7 +552,7 @@ func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateReq
 
 	ctx = context.WithValue(ctx, "dmsName", dms.DeviceManufacturingService.Name)
 
-	crt, err := estClient.Enroll(ctx, dms.DeviceManufacturingService.Name, csr)
+	crt, err := estClient.Enroll(ctx, dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.AuthorizedCA, csr)
 	if err != nil {
 		return nil, err
 	}
@@ -625,6 +625,7 @@ func (s *DMSManagerService) Reenroll(ctx context.Context, csr *x509.CertificateR
 		return nil, err
 	}
 
+	ctx = context.WithValue(ctx, "dmsName", dms.DeviceManufacturingService.Name)
 	deviceNewCert, err := estClient.Reenroll(ctx, csr)
 
 	if err != nil {
