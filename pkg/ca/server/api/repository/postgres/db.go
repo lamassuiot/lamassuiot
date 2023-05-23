@@ -359,7 +359,7 @@ func (db PostgresDBContext) InsertCA(ctx context.Context, CAType api.CAType, cer
 			Revocation:       pq.NullTime{},
 			RevocationReason: "",
 		},
-		IssuanceDuration: int(issuanceExpiration.Unix()),
+		IssuanceDuration: int(issuanceExpiration.Unix() - time.Now().Unix()),
 	})
 	if tx.Error != nil {
 		return tx.Error

@@ -60,6 +60,8 @@ func MakeEnrollEndpoint(s service.ESTService) endpoint.Endpoint {
 			}
 			return nil, &valError
 		}
+
+		ctx = context.WithValue(ctx, "dmsName", req.DmsName)
 		crt, err := s.Enroll(ctx, req.Csr, req.Crt, req.Aps)
 		return EnrollReenrollResponse{Cert: crt, PemResponse: req.PemResponse}, err
 	}
@@ -90,6 +92,7 @@ func MakeServerKeyGenEndpoint(s service.ESTService) endpoint.Endpoint {
 			}
 			return nil, &valError
 		}
+		ctx = context.WithValue(ctx, "dmsName", req.DmsName)
 		crt, key, err := s.ServerKeyGen(ctx, req.Csr, req.Crt, req.Aps)
 		return ServerKeyGenResponse{Cert: crt, Key: key}, err
 	}
@@ -101,6 +104,7 @@ type EnrollRequest struct {
 	Aps         string                   `validate:"required"`
 	Csr         *x509.CertificateRequest `validate:"required"`
 	Crt         *x509.Certificate        `validate:"required"`
+	DmsName     string
 	PemResponse bool
 }
 
@@ -127,9 +131,10 @@ func ValidatetReenrollRequest(request ReenrollRequest) error {
 }
 
 type ServerKeyGenRequest struct {
-	Csr *x509.CertificateRequest `validate:"required"`
-	Aps string                   `validate:"required"`
-	Crt *x509.Certificate        `validate:"required"`
+	Csr     *x509.CertificateRequest `validate:"required"`
+	Aps     string                   `validate:"required"`
+	Crt     *x509.Certificate        `validate:"required"`
+	DmsName string
 }
 
 func ValidateServerKeyGenRequest(request ServerKeyGenRequest) error {

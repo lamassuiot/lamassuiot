@@ -32,13 +32,12 @@ func TestCreateCA(t *testing.T) {
 			name:                  "ShouldCreateCA",
 			serviceInitialization: func(svc *service.Service) {},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				reqBody := `{"subject":{"common_name": "ca-name-1"},"key_metadata":{"type": "RSA", "bits": 2048},"ca_duration": 9000, "issuance_duration": 1000 }`
+				reqBody := `{"subject":{"common_name": "ca-name-1"},"key_metadata":{"type": "RSA", "bits": 2048},"ca_expiration": "9000", "issuance_expiration": "1000", "expiration_type":"DURATION" }`
 				obj := e.POST("/v1/pki").WithBytes([]byte(reqBody)).
 					Expect().
 					Status(http.StatusOK).JSON()
 
 				obj.Object().ContainsMap(map[string]interface{}{
-					"issuance_duration": 1000,
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
 						"strength": "MEDIUM",
@@ -54,16 +53,6 @@ func TestCreateCA(t *testing.T) {
 						"state":             "",
 					},
 				})
-
-				/*intValidTo := obj.Object().Value("valid_to").Number().Raw()
-				intValidFrom := obj.Object().Value("valid_from").Number().Raw()
-
-				validTo := time.UnixMilli(int64(intValidTo))
-				validFrom := time.UnixMilli(int64(intValidFrom))
-
-				if validTo.Sub(validFrom).Seconds() != 9000 {
-					t.Errorf("Expected CA duration to be 9000 seconds, got %f", validTo.Sub(validFrom).Seconds())
-				}*/
 
 				stringCACertificate := obj.Object().Value("certificate").String().Raw()
 				decodedCertBytes, err := base64.StdEncoding.DecodeString(stringCACertificate)
@@ -106,6 +95,7 @@ func TestCreateCA(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -115,7 +105,7 @@ func TestCreateCA(t *testing.T) {
 				}
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				reqBody := `{"subject":{"common_name": "ca-name-1"},"key_metadata":{"type": "RSA", "bits": 4096},"ca_duration": 9000, "issuance_duration": 1000 }`
+				reqBody := `{"subject":{"common_name": "ca-name-1"},"key_metadata":{"type": "RSA", "bits": 4096},"ca_expiration": "9000", "issuance_expiration": "1000", "expiration_type":"DURATION" }`
 				r := e.POST("/v1/pki").WithBytes([]byte(reqBody)).
 					Expect().
 					Status(http.StatusConflict)
@@ -137,7 +127,7 @@ func TestCreateCA(t *testing.T) {
 			name:                  "ValidationCA:MissingCommonName",
 			serviceInitialization: func(svc *service.Service) {},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				reqBody := `{"subject":{"country": "ES"},"key_metadata":{"type": "RSA", "bits": 4096},"ca_duration": 9000, "issuance_duration": 1000 }`
+				reqBody := `{"subject":{"country": "ES"},"key_metadata":{"type": "RSA", "bits": 4096},"ca_expiration": "9000", "issuance_expiration": "1000", "expiration_type":"DURATION" }`
 				_ = e.POST("/v1/pki").WithBytes([]byte(reqBody)).
 					Expect().
 					Status(http.StatusBadRequest)
@@ -147,7 +137,7 @@ func TestCreateCA(t *testing.T) {
 			name:                  "ValidationCA:BadKeyType",
 			serviceInitialization: func(svc *service.Service) {},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				reqBody := `{"subject":{"common_name": "ca-name-1"},"key_metadata":{"type": "---", "bits": 4096},"ca_duration": 9000, "issuance_duration": 1000 }`
+				reqBody := `{"subject":{"common_name": "ca-name-1"},"key_metadata":{"type": "---", "bits": 4096},"ca_expiration": "9000", "issuance_expiration": "1000", "expiration_type":"DURATION" }`
 				_ = e.POST("/v1/pki").WithBytes([]byte(reqBody)).
 					Expect().
 					Status(http.StatusOK)
@@ -157,7 +147,7 @@ func TestCreateCA(t *testing.T) {
 			name:                  "ValidationCA:BadKeySizeForRSAKey",
 			serviceInitialization: func(svc *service.Service) {},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				reqBody := `{"subject":{"common_name": "ca-name-1"},"key_metadata":{"type": "RSA", "bits": 5000},"ca_duration": 9000, "issuance_duration": 1000 }`
+				reqBody := `{"subject":{"common_name": "ca-name-1"},"key_metadata":{"type": "RSA", "bits": 5000},"ca_expiration": "9000", "issuance_expiration": "1000", "expiration_type":"DURATION" }`
 				_ = e.POST("/v1/pki").WithBytes([]byte(reqBody)).
 					Expect().
 					Status(http.StatusBadRequest)
@@ -167,7 +157,7 @@ func TestCreateCA(t *testing.T) {
 			name:                  "ValidationCA:MissingCADuration",
 			serviceInitialization: func(svc *service.Service) {},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				reqBody := `{"subject":{"common_name": "ca-name-1"},"key_metadata":{"type": "RSA", "bits": 4096},"issuance_duration": 1000 }`
+				reqBody := `{"subject":{"common_name": "ca-name-1"},"key_metadata":{"type": "RSA", "bits": 4096},"issuance_expiration": "1000", "expiration_type":"DURATION" }`
 				_ = e.POST("/v1/pki").WithBytes([]byte(reqBody)).
 					Expect().
 					Status(http.StatusBadRequest)
@@ -177,7 +167,7 @@ func TestCreateCA(t *testing.T) {
 			name:                  "ValidationCA:MissingIssuanceDuration",
 			serviceInitialization: func(svc *service.Service) {},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				reqBody := `{"subject":{"common_name": "ca-name-1"},"key_metadata":{"type": "RSA", "bits": 4096},"ca_duration": 1000 }`
+				reqBody := `{"subject":{"common_name": "ca-name-1"},"key_metadata":{"type": "RSA", "bits": 4096},"ca_expiration": "1000" }`
 				_ = e.POST("/v1/pki").WithBytes([]byte(reqBody)).
 					Expect().
 					Status(http.StatusBadRequest)
@@ -187,7 +177,7 @@ func TestCreateCA(t *testing.T) {
 			name:                  "ValidationCA:CADurationIsLessThanIssuanceDuration",
 			serviceInitialization: func(svc *service.Service) {},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				reqBody := `{"subject":{"common_name": "ca-name-1"},"key_metadata":{"type": "RSA", "bits": 4096},"ca_duration": 1000, "issuance_duration": 9000 }`
+				reqBody := `{"subject":{"common_name": "ca-name-1"},"key_metadata":{"type": "RSA", "bits": 4096},"ca_expiration": "1000", "issuance_expiration": "9000", "expiration_type":"DURATION" }`
 				_ = e.POST("/v1/pki").WithBytes([]byte(reqBody)).
 					Expect().
 					Status(http.StatusBadRequest)
@@ -245,6 +235,7 @@ func TestGetCAByName(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -254,15 +245,12 @@ func TestGetCAByName(t *testing.T) {
 				}
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				issuanceDuration := time.Duration(time.Hour)
-				//CADuration := time.Duration(time.Hour * 5)
 
 				obj := e.GET("/v1/pki/ca-name-1").
 					Expect().
 					Status(http.StatusOK).JSON()
 
 				obj.Object().ContainsMap(map[string]interface{}{
-					"issuance_duration": int(issuanceDuration.Seconds()),
 					"key_metadata": map[string]interface{}{
 						"bits":     4096,
 						"strength": "HIGH",
@@ -278,16 +266,6 @@ func TestGetCAByName(t *testing.T) {
 						"state":             "",
 					},
 				})
-
-				/*intValidTo := obj.Object().Value("valid_to").Number().Raw()
-				intValidFrom := obj.Object().Value("valid_from").Number().Raw()
-
-				validTo := time.UnixMilli(int64(intValidTo))
-				validFrom := time.UnixMilli(int64(intValidFrom))
-
-				if validTo.Sub(validFrom).Seconds() != CADuration.Seconds() {
-					t.Errorf("Expected CA duration to be %f seconds, got %f", CADuration.Seconds(), validTo.Sub(validFrom).Seconds())
-				}*/
 
 				stringCACertificate := obj.Object().Value("certificate").String().Raw()
 				decodedCertBytes, err := base64.StdEncoding.DecodeString(stringCACertificate)
@@ -330,6 +308,7 @@ func TestGetCAByName(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -349,15 +328,12 @@ func TestGetCAByName(t *testing.T) {
 				}
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				issuanceDuration := time.Duration(time.Hour)
-				//CADuration := time.Duration(time.Hour * 5)
 
 				obj := e.GET("/v1/pki/ca-name-1").
 					Expect().
 					Status(http.StatusOK).JSON()
 
 				obj.Object().ContainsMap(map[string]interface{}{
-					"issuance_duration": int(issuanceDuration.Seconds()),
 					"key_metadata": map[string]interface{}{
 						"bits":     4096,
 						"strength": "HIGH",
@@ -373,16 +349,6 @@ func TestGetCAByName(t *testing.T) {
 						"state":             "",
 					},
 				})
-
-				/*intValidTo := obj.Object().Value("valid_to").Number().Raw()
-				intValidFrom := obj.Object().Value("valid_from").Number().Raw()
-
-				validTo := time.UnixMilli(int64(intValidTo))
-				validFrom := time.UnixMilli(int64(intValidFrom))
-
-				if validTo.Sub(validFrom).Seconds() != CADuration.Seconds() {
-					t.Errorf("Expected CA duration to be %f seconds, got %f", CADuration.Seconds(), validTo.Sub(validFrom).Seconds())
-				}*/
 
 				stringCACertificate := obj.Object().Value("certificate").String().Raw()
 				decodedCertBytes, err := base64.StdEncoding.DecodeString(stringCACertificate)
@@ -425,8 +391,9 @@ func TestGetCAByName(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour * 3),
+					ExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:       time.Now().Add(time.Second * 5),
+					IssuanceExpiration: time.Now().Add(time.Second * 3),
 				})
 
 				if err != nil {
@@ -435,7 +402,6 @@ func TestGetCAByName(t *testing.T) {
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
 				CADuration := time.Duration(time.Second * 5)
-				issuanceDuration := time.Duration(time.Second * 3)
 
 				time.Sleep(CADuration)
 
@@ -444,7 +410,6 @@ func TestGetCAByName(t *testing.T) {
 					Status(http.StatusOK).JSON()
 
 				obj.Object().ContainsMap(map[string]interface{}{
-					"issuance_duration": int(issuanceDuration.Seconds()),
 					"key_metadata": map[string]interface{}{
 						"bits":     4096,
 						"strength": "HIGH",
@@ -460,16 +425,6 @@ func TestGetCAByName(t *testing.T) {
 						"state":             "",
 					},
 				})
-
-				/*intValidTo := obj.Object().Value("valid_to").Number().Raw()
-				intValidFrom := obj.Object().Value("valid_from").Number().Raw()
-
-				validTo := time.UnixMilli(int64(intValidTo))
-				validFrom := time.UnixMilli(int64(intValidFrom))
-
-				if validTo.Sub(validFrom).Seconds() != CADuration.Seconds() {
-					t.Errorf("Expected CA duration to be %f seconds, got %f", CADuration.Seconds(), validTo.Sub(validFrom).Seconds())
-				}*/
 
 				stringCACertificate := obj.Object().Value("certificate").String().Raw()
 				decodedCertBytes, err := base64.StdEncoding.DecodeString(stringCACertificate)
@@ -556,6 +511,7 @@ func TestGetCAs(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -574,7 +530,6 @@ func TestGetCAs(t *testing.T) {
 
 				caObj := obj.Object().Value("cas").Array().First()
 				caObj.Object().ContainsMap(map[string]interface{}{
-					"issuance_duration": time.Duration(time.Hour).Seconds(),
 					"key_metadata": map[string]interface{}{
 						"bits":     4096,
 						"strength": "HIGH",
@@ -590,16 +545,6 @@ func TestGetCAs(t *testing.T) {
 						"state":             "",
 					},
 				})
-
-				/*intValidTo := caObj.Object().Value("valid_to").Number().Raw()
-				intValidFrom := caObj.Object().Value("valid_from").Number().Raw()
-
-				validTo := time.UnixMilli(int64(intValidTo))
-				validFrom := time.UnixMilli(int64(intValidFrom))
-
-				if validTo.Sub(validFrom).Seconds() != time.Duration(time.Hour*5).Seconds() {
-					t.Errorf("Expected CA duration to be 9000 seconds, got %f", validTo.Sub(validFrom).Seconds())
-				}*/
 
 				stringCACertificate := caObj.Object().Value("certificate").String().Raw()
 				decodedCertBytes, err := base64.StdEncoding.DecodeString(stringCACertificate)
@@ -642,8 +587,9 @@ func TestGetCAs(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					CAExpiration:       time.Now().Add(time.Hour * 3),
-					IssuanceExpiration: time.Now().Add(time.Hour * 2),
+					ExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:       time.Now().Add(time.Second * 6),
+					IssuanceExpiration: time.Now().Add(time.Second * 2),
 				})
 
 				if err != nil {
@@ -651,7 +597,7 @@ func TestGetCAs(t *testing.T) {
 				}
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				time.Sleep(time.Second * 3)
+				time.Sleep(time.Second * 6)
 
 				obj := e.GET("/v1/pki").
 					Expect().
@@ -662,7 +608,6 @@ func TestGetCAs(t *testing.T) {
 
 				caObj := obj.Object().Value("cas").Array().First()
 				caObj.Object().ContainsMap(map[string]interface{}{
-					"issuance_duration": time.Duration(time.Second * 2).Seconds(),
 					"key_metadata": map[string]interface{}{
 						"bits":     4096,
 						"strength": "HIGH",
@@ -678,17 +623,6 @@ func TestGetCAs(t *testing.T) {
 						"state":             "",
 					},
 				})
-
-				/*intValidTo := caObj.Object().Value("valid_to").Number().Raw()
-				intValidFrom := caObj.Object().Value("valid_from").Number().Raw()
-
-				validTo := time.UnixMilli(int64(intValidTo))
-				validFrom := time.UnixMilli(int64(intValidFrom))
-
-				if validTo.Sub(validFrom).Seconds() != time.Duration(time.Second*3).Seconds() {
-					t.Errorf("Expected CA duration to be 9000 seconds, got %f", validTo.Sub(validFrom).Seconds())
-				}*/
-
 				stringCACertificate := caObj.Object().Value("certificate").String().Raw()
 				decodedCertBytes, err := base64.StdEncoding.DecodeString(stringCACertificate)
 				if err != nil {
@@ -731,6 +665,7 @@ func TestGetCAs(t *testing.T) {
 							KeyType: api.RSA,
 							KeyBits: 4096,
 						},
+						ExpirationType:     api.ExpirationTypeDuration,
 						CAExpiration:       time.Now().Add(time.Hour * 5),
 						IssuanceExpiration: time.Now().Add(time.Hour),
 					})
@@ -786,6 +721,7 @@ func TestGetCAs(t *testing.T) {
 								KeyType: api.RSA,
 								KeyBits: 4096,
 							},
+							ExpirationType:     api.ExpirationTypeDuration,
 							CAExpiration:       time.Now().Add(time.Hour * 5),
 							IssuanceExpiration: time.Now().Add(time.Hour),
 						})
@@ -842,6 +778,7 @@ func TestGetCAs(t *testing.T) {
 								KeyType: api.RSA,
 								KeyBits: 4096,
 							},
+							ExpirationType:     api.ExpirationTypeDuration,
 							CAExpiration:       time.Now().Add(time.Hour * 5),
 							IssuanceExpiration: time.Now().Add(time.Hour),
 						})
@@ -898,6 +835,7 @@ func TestGetCAs(t *testing.T) {
 								KeyType: api.RSA,
 								KeyBits: 4096,
 							},
+							ExpirationType:     api.ExpirationTypeDuration,
 							CAExpiration:       time.Now().Add(time.Hour * 5),
 							IssuanceExpiration: time.Now().Add(time.Hour),
 						})
@@ -991,6 +929,7 @@ func TestRevokeCA(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 2048,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -1000,7 +939,6 @@ func TestRevokeCA(t *testing.T) {
 				}
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				issuanceDuration := time.Duration(time.Hour * 1)
 
 				reqBody := `{"revocation_reason":"testing revocation"}`
 				obj := e.DELETE("/v1/pki/ca-name-1").WithBytes([]byte(reqBody)).
@@ -1009,7 +947,6 @@ func TestRevokeCA(t *testing.T) {
 
 				obj.Object().ContainsKey("revocation_timestamp")
 				obj.Object().ContainsMap(map[string]interface{}{
-					"issuance_duration": int(issuanceDuration.Seconds()),
 					"key_metadata": map[string]interface{}{
 						"bits":     2048,
 						"strength": "MEDIUM",
@@ -1041,6 +978,7 @@ func TestRevokeCA(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 2048,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -1131,6 +1069,7 @@ func TestRevokeCA(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 2048,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -1158,6 +1097,7 @@ func TestRevokeCA(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 2048,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -1230,6 +1170,7 @@ func TestSignCertificateRequest(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -1296,6 +1237,7 @@ func TestSignCertificateRequest(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -1458,6 +1400,7 @@ func TestRevokeCertificate(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -1485,6 +1428,7 @@ func TestRevokeCertificate(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -1623,6 +1567,7 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -1648,6 +1593,7 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -1723,8 +1669,9 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour * 3),
+					IssuanceExpiration: time.Now().Add(time.Second * 3),
 				})
 				if err != nil {
 					t.Errorf("%s", err)
@@ -1841,6 +1788,7 @@ func TestGetCertificates(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -1872,6 +1820,7 @@ func TestGetCertificates(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -1986,6 +1935,7 @@ func TestGetCertificates(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
@@ -2050,6 +2000,7 @@ func TestGetCertificates(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
+					ExpirationType:     api.ExpirationTypeDuration,
 					CAExpiration:       time.Now().Add(time.Hour * 5),
 					IssuanceExpiration: time.Now().Add(time.Hour * 3),
 				})
@@ -2164,6 +2115,7 @@ func TestStats(t *testing.T) {
 							KeyType: api.RSA,
 							KeyBits: 4096,
 						},
+						ExpirationType:     api.ExpirationTypeDuration,
 						CAExpiration:       time.Now().Add(time.Hour * 5),
 						IssuanceExpiration: time.Now().Add(time.Hour),
 					})

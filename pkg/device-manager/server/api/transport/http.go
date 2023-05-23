@@ -254,11 +254,12 @@ func encodeCreateDeviceResponse(ctx context.Context, w http.ResponseWriter, resp
 
 func decodeUpdateDeviceMetadataRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	type UpdateDeviceMetadataPayload struct {
-		Alias       string   `json:"alias"`
-		Tags        []string `json:"tags"`
-		Description string   `json:"description"`
-		IconColor   string   `json:"icon_color"`
-		IconName    string   `json:"icon_name"`
+		Alias              string   `json:"alias"`
+		Tags               []string `json:"tags"`
+		AllowNewEnrollment bool     `json:"allow_new_enrollment"`
+		Description        string   `json:"description"`
+		IconColor          string   `json:"icon_color"`
+		IconName           string   `json:"icon_name"`
 	}
 
 	var input api.UpdateDeviceMetadataInput
@@ -273,12 +274,13 @@ func decodeUpdateDeviceMetadataRequest(ctx context.Context, r *http.Request) (re
 	deviceID := vars["deviceID"]
 
 	input = api.UpdateDeviceMetadataInput{
-		DeviceID:    deviceID,
-		Alias:       body.Alias,
-		Tags:        body.Tags,
-		Description: body.Description,
-		IconColor:   body.IconColor,
-		IconName:    body.IconName,
+		DeviceID:           deviceID,
+		Alias:              body.Alias,
+		AllowNewEnrollment: body.AllowNewEnrollment,
+		Tags:               body.Tags,
+		Description:        body.Description,
+		IconColor:          body.IconColor,
+		IconName:           body.IconName,
 	}
 
 	return input, nil

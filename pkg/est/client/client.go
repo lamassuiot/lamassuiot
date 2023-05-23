@@ -85,6 +85,7 @@ func (c *ESTClientConfig) ServerKeyGen(ctx context.Context, aps string, csr *x50
 func (c *ESTClientConfig) makeESTClient(ctx context.Context, aps string) *est.Client {
 	certs := []*x509.Certificate{c.certificate}
 
+	dmsName := ctx.Value("dmsName").(string)
 	additionalHeaders := map[string]string{}
 
 	if ctx != nil {
@@ -100,6 +101,7 @@ func (c *ESTClientConfig) makeESTClient(ctx context.Context, aps string) *est.Cl
 	if c.address.Path != "" {
 		host = host + "/" + c.address.Path
 	}
+	additionalHeaders["x-dms-name"] = dmsName
 
 	return &est.Client{
 		Host:                  host,

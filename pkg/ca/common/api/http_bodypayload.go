@@ -17,9 +17,9 @@ type CreacteCAKeyMetadataSubject struct {
 type CreateCAPayload struct {
 	Subject            CreateCASubjectPayload      `json:"subject"`
 	KeyMetadata        CreacteCAKeyMetadataSubject `json:"key_metadata"`
-	ExpirationType     string                      `json:"expiration_type"`
-	CAExpiration       string                      `json:"ca_expiration"`
-	IssuanceExpiration string                      `json:"issuance_expiration"`
+	ExpirationType     string                      `json:"expiration_type" validate:"required"`
+	CAExpiration       string                      `json:"ca_expiration" validate:"required"`
+	IssuanceExpiration string                      `json:"issuance_expiration" validate:"required"`
 }
 
 // -------------------------------------------------------------

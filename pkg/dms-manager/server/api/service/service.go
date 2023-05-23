@@ -550,6 +550,8 @@ func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateReq
 		return nil, err
 	}
 
+	ctx = context.WithValue(ctx, "dmsName", dms.DeviceManufacturingService.Name)
+
 	crt, err := estClient.Enroll(ctx, dms.DeviceManufacturingService.Name, csr)
 	if err != nil {
 		return nil, err

@@ -105,15 +105,16 @@ func (s *DevicesService) GetStats(ctx context.Context, input *api.GetStatsInput)
 
 func (s *DevicesService) CreateDevice(ctx context.Context, input *api.CreateDeviceInput) (*api.CreateDeviceOutput, error) {
 	device := api.Device{
-		Status:      api.DeviceStatusPendingProvisioning,
-		ID:          input.DeviceID,
-		DmsName:     input.DmsName,
-		Alias:       input.Alias,
-		Description: input.Description,
-		Tags:        input.Tags,
-		IconName:    input.IconName,
-		IconColor:   input.IconColor,
-		Slots:       []*api.Slot{},
+		Status:             api.DeviceStatusPendingProvisioning,
+		ID:                 input.DeviceID,
+		DmsName:            input.DmsName,
+		AllowNewEnrollment: false,
+		Alias:              input.Alias,
+		Description:        input.Description,
+		Tags:               input.Tags,
+		IconName:           input.IconName,
+		IconColor:          input.IconColor,
+		Slots:              []*api.Slot{},
 	}
 
 	err := s.devicesRepo.InsertDevice(ctx, device)
@@ -630,14 +631,14 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 			StatusCode: 404,
 		}
 	}
-
+	dmsName := ctx.Value("dmsName").(string)
 	dms, err := s.dmsManagerClient.GetDMSByName(ctx, &dmsManagerApi.GetDMSByNameInput{
-		Name: aps,
+		Name: dmsName,
 	})
 	if err != nil {
 		return nil, err
 	}
-	aps = dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.AuthorizedCA
+
 	if dms.DeviceManufacturingService.CloudDMS {
 		err = s.verifyCertificate(clientCertificate, s.upstreamCACert, false)
 		if err != nil {
@@ -710,6 +711,7 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 				clientCertificate.Subject.CommonName,
 				aps,
 			},
+			DmsName:     dms.DeviceManufacturingService.Name,
 			IconColor:   "#0068D1",
 			IconName:    "Cg/CgSmartphoneChip",
 			Description: fmt.Sprintf("New Device #%s", deviceID),
@@ -817,7 +819,10 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 		DeviceID: deviceID,
 	})
 	if err != nil {
-		return nil, err
+		return nil, &estErrors.GenericError{
+			Message:    "Device dont exists",
+			StatusCode: 400,
+		}
 	}
 	dms, err := s.dmsManagerClient.GetDMSByName(ctx, &dmsManagerApi.GetDMSByNameInput{
 		Name: device.Device.DmsName,
@@ -827,7 +832,21 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 	}
 	s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeInfo, "Slot Reneweal process Underway", "Certificate rotation request received")
 
-	aps = dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.AuthorizedCA
+	aps = cert.Issuer.CommonName
+	isAuthroizedOutput, err := s.service.IsDMSAuthorizedToEnroll(ctx, &api.IsDMSAuthorizedToEnrollInput{
+		DMSName: dms.DeviceManufacturingService.Name,
+		CAName:  aps,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !isAuthroizedOutput.IsAuthorized {
+		return nil, &estErrors.GenericError{
+			Message:    "DMS is not authorized to enroll with the selected APS",
+			StatusCode: 403,
+		}
+	}
+
 	outGetCA, err := s.caClient.GetCAByName(ctx, &caApi.GetCAByNameInput{
 		CAType: caApi.CATypePKI,
 		CAName: aps,
@@ -839,13 +858,23 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 			StatusCode: 404,
 		}
 	}
-
-	err = s.verifyCertificate(cert, outGetCA.Certificate.Certificate, dms.DeviceManufacturingService.IdentityProfile.ReerollmentSettings.AllowExpiredRenewal)
-	if err != nil {
-		s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeCritical, "Slot Reneweal process Failed", "Client certificate is not valid")
-		return nil, &estErrors.GenericError{
-			Message:    "client certificate is not valid: " + err.Error(),
-			StatusCode: 403,
+	if dms.DeviceManufacturingService.CloudDMS {
+		err = s.verifyCertificate(cert, outGetCA.Certificate.Certificate, dms.DeviceManufacturingService.IdentityProfile.ReerollmentSettings.AllowExpiredRenewal)
+		if err != nil {
+			s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeCritical, "Slot Reneweal process Failed", "Client certificate is not valid")
+			return nil, &estErrors.GenericError{
+				Message:    "client certificate is not valid: " + err.Error(),
+				StatusCode: 403,
+			}
+		}
+	} else {
+		err = s.verifyCertificate(cert, outGetCA.Certificate.Certificate, false)
+		if err != nil {
+			s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeCritical, "Slot Reneweal process Failed", "Client certificate is not valid")
+			return nil, &estErrors.GenericError{
+				Message:    "client certificate is not valid: " + err.Error(),
+				StatusCode: 403,
+			}
 		}
 	}
 
@@ -917,7 +946,9 @@ func (s *DevicesService) verifyCertificate(clientCertificate *x509.Certificate, 
 	})
 	_, err := clientCertificate.Verify(opts)
 	if err != nil {
-		if cert.Status == caApi.StatusExpired && !allowExpiredRenewal {
+		if cert.Status != caApi.StatusExpired && !allowExpiredRenewal {
+			return errors.New("could not verify client certificate: " + err.Error())
+		} else if cert.Status == caApi.StatusExpired && !allowExpiredRenewal {
 			return errors.New("could not verify client certificate: " + err.Error())
 		}
 

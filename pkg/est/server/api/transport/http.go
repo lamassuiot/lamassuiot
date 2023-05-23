@@ -181,7 +181,7 @@ func decodeEnrollRequest(ctx context.Context, r *http.Request) (request interfac
 	if err != nil {
 		return nil, ErrMalformedCert()
 	}
-
+	dmsName := r.Header.Get("x-dms-name")
 	ClientCert := r.Header.Get("X-Forwarded-Client-Cert")
 
 	if len(ClientCert) != 0 {
@@ -193,6 +193,7 @@ func decodeEnrollRequest(ctx context.Context, r *http.Request) (request interfac
 			Csr:         csr,
 			Crt:         certificate,
 			Aps:         aps,
+			DmsName:     dmsName,
 			PemResponse: pemMode,
 		}, nil
 
@@ -202,6 +203,7 @@ func decodeEnrollRequest(ctx context.Context, r *http.Request) (request interfac
 			Csr:         csr,
 			Crt:         cert,
 			Aps:         aps,
+			DmsName:     dmsName,
 			PemResponse: pemMode,
 		}, nil
 
@@ -293,7 +295,7 @@ func decodeServerkeygenRequest(ctx context.Context, r *http.Request) (request in
 	if err != nil {
 		return nil, ErrMalformedCert()
 	}
-
+	dmsName := r.Header.Get("x-dms-name")
 	clientCert := r.Header.Get("X-Forwarded-Client-Cert")
 	if len(clientCert) != 0 {
 		certificate, err := getCertificateFromHeader(r.Header)
@@ -302,16 +304,18 @@ func decodeServerkeygenRequest(ctx context.Context, r *http.Request) (request in
 		}
 
 		return endpoint.ServerKeyGenRequest{
-			Csr: csr,
-			Crt: certificate,
-			Aps: aps,
+			Csr:     csr,
+			Crt:     certificate,
+			Aps:     aps,
+			DmsName: dmsName,
 		}, nil
 	} else if len(r.TLS.PeerCertificates) != 0 {
 		cert := r.TLS.PeerCertificates[0]
 		return endpoint.ServerKeyGenRequest{
-			Csr: csr,
-			Crt: cert,
-			Aps: aps,
+			Csr:     csr,
+			Crt:     cert,
+			Aps:     aps,
+			DmsName: dmsName,
 		}, nil
 	} else {
 		return nil, ErrNoClientCert()
