@@ -1,0 +1,88 @@
+logs:
+  level: "trace" #info | debug | trace
+  include_health: false
+
+server:
+  debug_mode: false
+  listen_address: "0.0.0.0"
+  port: 8085
+  protocol: "https" #http | https
+  cert_file: "/some/dir"
+  key_file: "/some/dir"
+  authentication:
+    mutual_tls:
+      enabled: true
+      ca_cert_file: "/some/dir"
+
+amqp_event_publisher:
+  enabled: true
+  protocol: amqps #amqp | amqps
+  hostname: b-2018d843-26a6-4f95-812b-f70ae847b6ce.mq.eu-west-1.amazonaws.com
+  port: 5671
+  insecure_skip_verify: false
+  ca_cert_file: ""
+  basic_auth: true
+  username: "admin"
+  password: "gw8NJj6L%3hT"
+  client_tls_auth: false
+  cert_file: "/some/dir"
+  key_file: "/some/dir"
+
+storage:
+  provider: "couch_db"
+  couch_db: 
+    hostname: localhost
+    port: 5984
+    protocol: http
+    username: admin
+    password: admin
+
+crypto_engines:
+  pkcs11:
+    - name: SoftHSM
+      id: cbe8980c-0fb1-45ed-bc72-d16b248a97ce
+      metadata:
+        location: "Donosti"
+        fipsCompliant: true
+      token: "1234"
+  hashicrorp_vault:
+    # - name: Default Vault
+    #   id: 69891cce-c76a-47e0-be29-9e5772f6fa4a
+    #   metadata:
+    #     location: "Arrasate"
+    #     fipsCompliant: true
+    #   role_id: "abc"
+    #   secret_id: "xyz"
+    #   protocol: https #http | https
+    #   hostname: "dev.lamassu.io"
+    #   port: 443
+    #   insecure_skip_verify: false
+    #   ca_cert_file: ""
+  aws_kms:
+    - name: Ikerlan ZPD
+      id: 8289b238-95d1-4473-90cd-bbae48ad65a2
+      metadata:
+        location: "Bcn"
+        fipsCompliant: true
+      access_key_id: "a1b2"
+      secret_access_key: "b2aq"
+      region: "eu-west-1"
+  gopem:
+    - name: Go Pem
+      id: 33967d97-5106-4fa5-957c-73ee234ae6d8
+      metadata:
+        location: "Bilbo"
+        fipsCompliant: true
+      storage_directory: "/Users/haritzsaiz/Desktop/dev/lamassu/v3.lamassuiot/data"
+
+crypto_monitoring:
+  enabled: true
+  frequency: "* * * * *"
+  status_machine_deltas:
+    near_expiration: "90d"
+    critical_expiration: "30d"
+  automatic_ca_rotation:
+    enabled: true
+    renewal_delta: "1d"
+
+ocsp_server_url: https://dev.lamassu.io/api/ocsp

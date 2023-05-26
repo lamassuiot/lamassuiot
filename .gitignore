@@ -12,3 +12,4 @@ nogit
 *.html
 data
 k8s
+pkg/storage/dynamodb/docker/
