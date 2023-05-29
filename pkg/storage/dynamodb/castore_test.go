@@ -66,24 +66,65 @@ func createCA(id string) *models.CACertificate {
 	}
 }
 
-func setup(t *testing.T, tableName, region, accessKeyID, secretAccessKey, url string) (context.Context, storage.CACertificatesRepo, error) {
+func setup(t *testing.T, tableName, region, accessKeyID, secretAccessKey, url, customerName string) (context.Context, storage.CACertificatesRepo, error) {
 	ctx := context.TODO()
-	dynamodb, err := NewDynamoDBCARepository(ctx, tableName, region, accessKeyID, secretAccessKey, url)
+	repo, err := NewDynamoDBCARepository(ctx, tableName, region, accessKeyID, secretAccessKey, url, customerName)
+	if err != nil {
+		return nil, nil, err
+	}
+	dbClient, err := CreateDynamoDBConnection(ctx, region, accessKeyID, secretAccessKey, url)
+	if err != nil {
+		return nil, nil, err
+	}
+	err = CreateCustomer(ctx, dbClient, customerName, tableName)
 	if err != nil {
 		return nil, nil, err
 	}
 	t.Cleanup(func() {
-		ctx := context.TODO()
-		err := dynamodb.(*DynamoDBCAStorage).Clean(ctx)
-		if err != nil {
-			t.Fatalf("Error cleaning database: %v", err)
-		}
+		Clean(t, ctx, dbClient, tableName)
 	})
-	return ctx, dynamodb, nil
+	return ctx, repo, nil
+}
+
+func TestCADoesNotExist(t *testing.T) {
+	ctx, dynamodb, err := setup(t, "lamassuiot", "default", "custom", "custom", "http://localhost:8000", "TestCustomer")
+	if err != nil {
+		t.Fatalf("Connection with DynamoDB not stablished: %v", err)
+	}
+	exists, err := dynamodb.Exists(ctx, "Test")
+	if err != nil {
+		t.Fatalf("Unable to check if CA certificate exists: %v", err)
+	}
+	if exists {
+		t.Error("Expected CA to not be found")
+	}
+}
+
+func TestCAExists(t *testing.T) {
+	ctx, dynamodb, err := setup(t, "lamassuiot", "default", "custom", "custom", "http://localhost:8000", "TestCustomer")
+	if err != nil {
+		t.Fatalf("Connection with DynamoDB not stablished: %v", err)
+	}
+	caCertificate := createCA("Test")
+	out, err := dynamodb.Insert(ctx, caCertificate)
+	if err != nil {
+		t.Fatalf("Unable to insert CA certificate: %v", err)
+	}
+	if out.ID != caCertificate.ID {
+		t.Errorf("Expected id to be %s and found is %s", caCertificate.ID, out.ID)
+	}
+	exists, err := dynamodb.Exists(ctx, caCertificate.ID)
+	if err != nil {
+		t.Fatalf("Unable to check if CA certificate exists: %v", err)
+	}
+	if !exists {
+		t.Errorf("Expected CA with ID %s to be found", caCertificate.ID)
+	}
+
 }
 
 func TestPreviouslyInsertedCA(t *testing.T) {
-	ctx, dynamodb, err := setup(t, "lamassuiot", "default", "custom", "custom", "http://localhost:8000")
+	ctx, dynamodb, err := setup(t, "lamassuiot", "default", "custom", "custom", "http://localhost:8000", "TestCustomer")
 	if err != nil {
 		t.Fatalf("Connection with DynamoDB not stablished: %v", err)
 	}
@@ -105,7 +146,7 @@ func TestPreviouslyInsertedCA(t *testing.T) {
 }
 
 func TestInsertCA(t *testing.T) {
-	ctx, dynamodb, err := setup(t, "lamassuiot", "default", "custom", "custom", "http://localhost:8000")
+	ctx, dynamodb, err := setup(t, "lamassuiot", "default", "custom", "custom", "http://localhost:8000", "TestCustomer")
 	if err != nil {
 		t.Fatalf("Connection with DynamoDB not stablished: %v", err)
 	}
@@ -121,7 +162,7 @@ func TestInsertCA(t *testing.T) {
 }
 
 func TestGetCADoesNotExist(t *testing.T) {
-	ctx, dynamodb, err := setup(t, "lamassuiot", "default", "custom", "custom", "http://localhost:8000")
+	ctx, dynamodb, err := setup(t, "lamassuiot", "default", "custom", "custom", "http://localhost:8000", "TestCustomer")
 	if err != nil {
 		t.Fatalf("Connection with DynamoDB not stablished: %v", err)
 	}
@@ -135,7 +176,7 @@ func TestGetCADoesNotExist(t *testing.T) {
 }
 
 func TestUpdateCADoesNotExist(t *testing.T) {
-	ctx, dynamodb, err := setup(t, "lamassuiot", "default", "custom", "custom", "http://localhost:8000")
+	ctx, dynamodb, err := setup(t, "lamassuiot", "default", "custom", "custom", "http://localhost:8000", "TestCustomer")
 	if err != nil {
 		t.Fatalf("Connection with DynamoDB not stablished: %v", err)
 	}
@@ -149,7 +190,7 @@ func TestUpdateCADoesNotExist(t *testing.T) {
 }
 
 func TestUpdateCA(t *testing.T) {
-	ctx, dynamodb, err := setup(t, "lamassuiot", "default", "custom", "custom", "http://localhost:8000")
+	ctx, dynamodb, err := setup(t, "lamassuiot", "default", "custom", "custom", "http://localhost:8000", "TestCustomer")
 	if err != nil {
 		t.Fatalf("Connection with DynamoDB not stablished: %v", err)
 	}
