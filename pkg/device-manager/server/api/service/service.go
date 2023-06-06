@@ -873,7 +873,7 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 			}
 		}
 	} else {
-		err = s.verifyCertificate(cert, outGetCA.Certificate.Certificate, dms.DeviceManufacturingService.IdentityProfile.ReerollmentSettings.AllowExpiredRenewal)
+		err = s.verifyCertificate(cert, outGetCA.Certificate.Certificate, false)
 		if err != nil {
 			s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeCritical, "Slot Reneweal process Failed", "Client certificate is not valid")
 			return nil, &estErrors.GenericError{
