@@ -864,7 +864,7 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 		}
 	}
 	if dms.DeviceManufacturingService.CloudDMS {
-		err = s.verifyCertificate(cert, outGetCA.Certificate.Certificate, dms.DeviceManufacturingService.IdentityProfile.ReerollmentSettings.AllowExpiredRenewal)
+		err = s.verifyCertificate(cert, s.upstreamCACert, false)
 		if err != nil {
 			s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeCritical, "Slot Reneweal process Failed", "Client certificate is not valid")
 			return nil, &estErrors.GenericError{
@@ -873,7 +873,7 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 			}
 		}
 	} else {
-		err = s.verifyCertificate(cert, outGetCA.Certificate.Certificate, false)
+		err = s.verifyCertificate(cert, outGetCA.Certificate.Certificate, dms.DeviceManufacturingService.IdentityProfile.ReerollmentSettings.AllowExpiredRenewal)
 		if err != nil {
 			s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeCritical, "Slot Reneweal process Failed", "Client certificate is not valid")
 			return nil, &estErrors.GenericError{
@@ -956,7 +956,6 @@ func (s *DevicesService) verifyCertificate(clientCertificate *x509.Certificate, 
 		} else if cert.Status == caApi.StatusExpired && !allowExpiredRenewal {
 			return errors.New("could not verify client certificate: " + err.Error())
 		}
-
 	}
 
 	if cert.Status == caApi.StatusRevoked {
