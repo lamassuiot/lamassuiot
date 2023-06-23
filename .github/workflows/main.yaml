@@ -26,11 +26,12 @@ jobs:
     needs:
       - tag_generator
     steps:        
-    - name: Login to DockerHub
+    - name: Login to Github Registry
       uses: docker/login-action@v1 
       with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
     
     - name: Build CA docker image
       uses: docker/build-push-action@v2
@@ -39,8 +40,8 @@ jobs:
         build-args: |
           BASE_IMAGE=alpine:3.14
         tags: |
-          lamassuiot/lamassu-ca:${{ needs.tag_generator.outputs.new-version }}
-          lamassuiot/lamassu-ca:latest
+          ghcr.io/lamassuiot/lamassu-ca:${{ needs.tag_generator.outputs.new-version }}
+          ghcr.io/lamassuiot/lamassu-ca:latest
         push: true
 
   build_device_manager_docker_image:
@@ -49,11 +50,12 @@ jobs:
     needs:
     - tag_generator
     steps:
-    - name: Login to DockerHub
+    - name: Login to Github Registry
       uses: docker/login-action@v1 
       with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build Device Manager docker image
       uses: docker/build-push-action@v2
@@ -62,8 +64,8 @@ jobs:
         build-args: |
           BASE_IMAGE=alpine:3.14
         tags: |
-          lamassuiot/lamassu-device-manager:${{ needs.tag_generator.outputs.new-version }}
-          lamassuiot/lamassu-device-manager:latest
+          ghcr.io/lamassuiot/lamassu-device-manager:${{ needs.tag_generator.outputs.new-version }}
+          ghcr.io/lamassuiot/lamassu-device-manager:latest
         push: true
 
   build_dms_manager_docker_image:
@@ -72,11 +74,12 @@ jobs:
     needs:
     - tag_generator
     steps:
-    - name: Login to DockerHub
+    - name: Login to Github Registry
       uses: docker/login-action@v1 
       with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build DMS Manager docker image
       uses: docker/build-push-action@v2
@@ -85,8 +88,8 @@ jobs:
         build-args: |
           BASE_IMAGE=alpine:3.14
         tags: |
-          lamassuiot/lamassu-dms-manager:${{ needs.tag_generator.outputs.new-version }}
-          lamassuiot/lamassu-dms-manager:latest
+          ghcr.io/lamassuiot/lamassu-dms-manager:${{ needs.tag_generator.outputs.new-version }}
+          ghcr.io/lamassuiot/lamassu-dms-manager:latest
         push: true
 
   build_ocsp_docker_image:
@@ -95,11 +98,12 @@ jobs:
     needs:
     - tag_generator
     steps:
-    - name: Login to DockerHub
+    - name: Login to Github Registry
       uses: docker/login-action@v1 
       with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build OCSP docker image
       uses: docker/build-push-action@v2
@@ -108,8 +112,8 @@ jobs:
         build-args: |
           BASE_IMAGE=alpine:3.14
         tags: |
-          lamassuiot/lamassu-ocsp:${{ needs.tag_generator.outputs.new-version }}
-          lamassuiot/lamassu-ocsp:latest
+          ghcr.io/lamassuiot/lamassu-ocsp:${{ needs.tag_generator.outputs.new-version }}
+          ghcr.io/lamassuiot/lamassu-ocsp:latest
         push: true
 
   build_cloud_proxy_docker_image:
@@ -118,11 +122,12 @@ jobs:
     needs:
     - tag_generator
     steps:
-    - name: Login to DockerHub
+    - name: Login to Github Registry
       uses: docker/login-action@v1 
       with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build Cloud Proxy docker image
       uses: docker/build-push-action@v2
@@ -131,8 +136,8 @@ jobs:
         build-args: |
           BASE_IMAGE=alpine:3.14
         tags: |
-          lamassuiot/lamassu-cloud-proxy:${{ needs.tag_generator.outputs.new-version }}
-          lamassuiot/lamassu-cloud-proxy:latest
+          ghcr.io/lamassuiot/lamassu-cloud-proxy:${{ needs.tag_generator.outputs.new-version }}
+          ghcr.io/lamassuiot/lamassu-cloud-proxy:latest
         push: true
 
   build_lamassu_db_docker_image:
@@ -141,19 +146,20 @@ jobs:
     needs:
     - tag_generator
     steps:
-    - name: Login to DockerHub
+    - name: Login to Github Registry
       uses: docker/login-action@v1 
       with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build DB docker image
       uses: docker/build-push-action@v2
       with:
         file: ci/database.dockerfile 
         tags: |
-          lamassuiot/lamassu-db:${{ needs.tag_generator.outputs.new-version }}
-          lamassuiot/lamassu-db:latest
+          ghcr.io/lamassuiot/lamassu-db:${{ needs.tag_generator.outputs.new-version }}
+          ghcr.io/lamassuiot/lamassu-db:latest
         push: true
 
   build_lamassu_alerts_docker_image:
@@ -162,17 +168,18 @@ jobs:
     needs:
     - tag_generator
     steps:
-    - name: Login to DockerHub
+    - name: Login to Github Registry
       uses: docker/login-action@v1 
       with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build DB docker image
       uses: docker/build-push-action@v2
       with:
         file: ci/alerts.dockerfile 
         tags: |
-          lamassuiot/lamassu-alerts:${{ needs.tag_generator.outputs.new-version }}
-          lamassuiot/lamassu-alerts:latest
+          ghcr.io/lamassuiot/lamassu-alerts:${{ needs.tag_generator.outputs.new-version }}
+          ghcr.io/lamassuiot/lamassu-alerts:latest
         push: true
