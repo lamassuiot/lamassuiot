@@ -78,28 +78,36 @@ func (mw *amqpMiddleware) Health(ctx context.Context) bool {
 
 func (mw *amqpMiddleware) CreateDMS(ctx context.Context, input *api.CreateDMSInput) (output *api.CreateDMSOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(fmt.Sprintf("%s.dms.create", EventPrefix), output.Serialize())
+		if err == nil {
+			mw.sendAMQPMessage(fmt.Sprintf("%s.dms.create", EventPrefix), output.Serialize())
+		}
 	}()
 	return mw.next.CreateDMS(ctx, input)
 }
 
 func (mw *amqpMiddleware) UpdateDMSStatus(ctx context.Context, input *api.UpdateDMSStatusInput) (output *api.UpdateDMSStatusOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(fmt.Sprintf("%s.dms.update-status", EventPrefix), output.Serialize())
+		if err == nil {
+			mw.sendAMQPMessage(fmt.Sprintf("%s.dms.update-status", EventPrefix), output.Serialize())
+		}
 	}()
 	return mw.next.UpdateDMSStatus(ctx, input)
 }
 
 func (mw *amqpMiddleware) UpdateDMS(ctx context.Context, input *api.UpdateDMSInput) (output *api.UpdateDMSOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(fmt.Sprintf("%s.dms.update", EventPrefix), output.Serialize())
+		if err == nil {
+			mw.sendAMQPMessage(fmt.Sprintf("%s.dms.update", EventPrefix), output.Serialize())
+		}
 	}()
 	return mw.next.UpdateDMS(ctx, input)
 }
 
 func (mw *amqpMiddleware) UpdateDMSAuthorizedCAs(ctx context.Context, input *api.UpdateDMSAuthorizedCAsInput) (output *api.UpdateDMSAuthorizedCAsOutput, err error) {
 	defer func() {
-		mw.sendAMQPMessage(fmt.Sprintf("%s.dms.update-authorizedcas", EventPrefix), output.Serialize())
+		if err == nil {
+			mw.sendAMQPMessage(fmt.Sprintf("%s.dms.update-authorizedcas", EventPrefix), output.Serialize())
+		}
 	}()
 	return mw.next.UpdateDMSAuthorizedCAs(ctx, input)
 }

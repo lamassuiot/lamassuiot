@@ -123,7 +123,27 @@ func (s *Server) AddAmqpConsumer(queuName string, routingKeys []string, subscrib
 }
 
 func (s *Server) AddHttpHandler(path string, handler http.Handler) {
-	http.Handle(path, accessControl(handler))
+	WithLogging := func(h http.Handler) http.Handler {
+		logFn := func(rw http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+
+			uri := r.RequestURI
+			method := r.Method
+			h.ServeHTTP(rw, r) // serve the original request
+
+			duration := time.Since(start)
+
+			// log request details
+			log.Debug(log.WithFields(log.Fields{
+				"uri":      uri,
+				"method":   method,
+				"duration": duration,
+			}))
+		}
+		return http.HandlerFunc(logFn)
+	}
+
+	http.Handle(path, WithLogging(accessControl(handler)))
 }
 
 func (s *Server) AddHttpFuncHandler(path string, handler func(http.ResponseWriter, *http.Request)) {

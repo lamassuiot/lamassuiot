@@ -34,7 +34,7 @@ func filtrableDeviceModelFields() map[string]types.Filter {
 	fieldFiltersMap["description"] = &types.StringFilterField{}
 	fieldFiltersMap["alias"] = &types.StringFilterField{}
 	fieldFiltersMap["status"] = &types.StringFilterField{}
-	fieldFiltersMap["dms_id"] = &types.StringFilterField{}
+	fieldFiltersMap["dms_name"] = &types.StringFilterField{}
 	fieldFiltersMap["creation_timestamp"] = &types.DatesFilterField{}
 	fieldFiltersMap["tags"] = &types.EnumFilterField{}
 	return fieldFiltersMap
@@ -96,6 +96,17 @@ func MakeHTTPHandler(s service.Service) http.Handler {
 			e.GetDeviceByIdEndpoint,
 			decodeGetDeviceByIdRequest,
 			encodeGetDeviceByIdResponse,
+			append(
+				options,
+			)...,
+		),
+	)
+
+	r.Methods("GET").Path("/devices/dms/{dmsName}").Handler(
+		httptransport.NewServer(
+			e.GetDevicesByDmsEndpoint,
+			decodeGetDeviceByDmsRequest,
+			encodeGetDeviceByDmsResponse,
 			append(
 				options,
 			)...,
@@ -349,6 +360,27 @@ func encodeGetDeviceByIdResponse(ctx context.Context, w http.ResponseWriter, res
 		return nil
 	}
 	castedResponse := response.(*api.GetDeviceByIdOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func decodeGetDeviceByDmsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	dmsName := vars["dmsName"]
+
+	return api.GetDevicesByDMSInput{
+		DmsName:         dmsName,
+		QueryParameters: filters.FilterQuery(r, filtrableDeviceModelFields()),
+	}, nil
+}
+func encodeGetDeviceByDmsResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+	castedResponse := response.(*api.GetDevicesByDMSOutput)
 	serializedResponse := castedResponse.Serialize()
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

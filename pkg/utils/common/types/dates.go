@@ -36,7 +36,7 @@ func (f DatesFilterField) GetOperatorToString() string {
 }
 
 type DatesFilterField struct {
-	baseFilter
+	BaseFilter
 	Operator    DateOperatorType
 	CompareWith time.Time
 }

@@ -86,6 +86,18 @@ func (mw *validationMiddleware) GetDevices(ctx context.Context, input *api.GetDe
 	return mw.next.GetDevices(ctx, input)
 }
 
+func (mw *validationMiddleware) GetDevicesByDMS(ctx context.Context, input *api.GetDevicesByDMSInput) (*api.GetDevicesByDMSOutput, error) {
+	validate := validator.New()
+	err := validate.Struct(input)
+	if err != nil {
+		valError := errors.ValidationError{
+			Msg: err.Error(),
+		}
+		return nil, &valError
+	}
+	return mw.next.GetDevicesByDMS(ctx, input)
+}
+
 func (mw *validationMiddleware) GetDeviceById(ctx context.Context, input *api.GetDeviceByIdInput) (*api.GetDeviceByIdOutput, error) {
 	validate := validator.New()
 	err := validate.Struct(input)

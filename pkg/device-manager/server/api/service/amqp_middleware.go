@@ -109,6 +109,10 @@ func (mw *amqpMiddleware) DecommisionDevice(ctx context.Context, input *api.Deco
 	return mw.next.DecommisionDevice(ctx, input)
 }
 
+func (mw *amqpMiddleware) GetDevicesByDMS(ctx context.Context, input *api.GetDevicesByDMSInput) (output *api.GetDevicesByDMSOutput, err error) {
+	return mw.next.GetDevicesByDMS(ctx, input)
+}
+
 func (mw *amqpMiddleware) GetDevices(ctx context.Context, input *api.GetDevicesInput) (*api.GetDevicesOutput, error) {
 	return mw.next.GetDevices(ctx, input)
 }

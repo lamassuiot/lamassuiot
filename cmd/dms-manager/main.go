@@ -122,7 +122,10 @@ func main() {
 	if err != nil {
 		upstreamKey, err = x509.ParseECPrivateKey(block.Bytes)
 		if err != nil {
-			log.Fatal("Could not parse upstream Key: ", err)
+			upstreamKey, err = x509.ParsePKCS8PrivateKey(block.Bytes)
+			if err != nil {
+				log.Fatal("Could not parse upstream Key: ", err)
+			}
 		}
 	}
 

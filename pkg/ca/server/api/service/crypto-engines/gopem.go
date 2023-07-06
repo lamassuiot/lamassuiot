@@ -35,8 +35,8 @@ func NewGolangPEMEngine(storageDirectory string) (CryptoEngine, error) {
 	return &pemProviderContext{
 		storageDirectory: storageDirectory,
 		config: api.EngineProviderInfo{
-			Provider:          "Golang PEM",
 			Manufacturer:      "Golang",
+			Provider:          "Golang x509",
 			Model:             "Golang",
 			CryptokiVersion:   "-",
 			Library:           "-",

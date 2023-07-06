@@ -376,6 +376,32 @@ func (db *postgresDBContext) SelectDeviceById(ctx context.Context, id string) (b
 	return true, parsedDevice, nil
 }
 
+func (db *postgresDBContext) SelectDevicesByDmsName(ctx context.Context, dmsName string, queryParameters common.QueryParameters) (int, []*api.Device, error) {
+	var totalDevices int64
+	if err := db.WithContext(ctx).Model(&DeviceDAO{}).Where("dms_name = ?", dmsName).Count(&totalDevices).Error; err != nil {
+		return 0, []*api.Device{}, err
+	}
+
+	var devicesDAO []DeviceDAO
+	tx := db.WithContext(ctx).Model(&DeviceDAO{}).Where("dms_name = ?", dmsName)
+	tx = filters.ApplyQueryParametersFilters(tx, queryParameters)
+	if err := tx.Find(&devicesDAO).Error; err != nil {
+		return 0, []*api.Device{}, err
+	}
+
+	var devices []*api.Device
+	for _, v := range devicesDAO {
+		_, dev, err := db.SelectDeviceById(ctx, v.ID)
+		if err != nil {
+			continue
+		}
+
+		devices = append(devices, dev)
+	}
+
+	return int(totalDevices), devices, nil
+}
+
 func (db *postgresDBContext) UpdateDevice(ctx context.Context, device api.Device) error {
 	deviceDAO := toDeviceDAO(&device)
 	if err := db.Session(&gorm.Session{FullSaveAssociations: true}).Updates(&deviceDAO).Error; err != nil {
