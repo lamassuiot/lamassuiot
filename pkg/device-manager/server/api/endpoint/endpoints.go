@@ -21,6 +21,7 @@ type Endpoints struct {
 	UpdateDeviceMetadataEndpoint    endpoint.Endpoint
 	DecommisionDeviceEndpoint       endpoint.Endpoint
 	GetDevicesEndpoint              endpoint.Endpoint
+	GetDevicesByDmsEndpoint         endpoint.Endpoint
 	GetDeviceByIdEndpoint           endpoint.Endpoint
 	RevokeActiveCertificateEndpoint endpoint.Endpoint
 	ForceReenrollEndpoint           endpoint.Endpoint
@@ -36,6 +37,7 @@ func MakeServerEndpoints(s service.Service) Endpoints {
 	var updateDeviceMetadataEndpoint = MakeUpdateDeviceMetadataEndpoint(s)
 	var decommisionDeviceEndpoint = MakeDecommisionDeviceEndpoint(s)
 	var getDevicesEndpoint = MakeGetDevicesEndpoint(s)
+	var getDevicesByDmsEndpoint = MakeGetDevicesByDmsEndpoint(s)
 	var getDeviceByIdEndpoint = MakeGetDeviceByIdEndpoint(s)
 	var revokeActiveCertificateEndpoint = MakeRevokeActiveCertificateEndpoint(s)
 	var getDeviceLogsEndpoint = MakeGetDeviceLogsEndpoint(s)
@@ -50,6 +52,7 @@ func MakeServerEndpoints(s service.Service) Endpoints {
 		UpdateDeviceMetadataEndpoint:    updateDeviceMetadataEndpoint,
 		DecommisionDeviceEndpoint:       decommisionDeviceEndpoint,
 		GetDevicesEndpoint:              getDevicesEndpoint,
+		GetDevicesByDmsEndpoint:         getDevicesByDmsEndpoint,
 		GetDeviceByIdEndpoint:           getDeviceByIdEndpoint,
 		RevokeActiveCertificateEndpoint: revokeActiveCertificateEndpoint,
 		GetDeviceLogsEndpoint:           getDeviceLogsEndpoint,
@@ -187,6 +190,31 @@ func MakeGetDevicesEndpoint(s service.Service) endpoint.Endpoint {
 		}
 
 		output, err := s.GetDevices(ctx, &input)
+		return output, err
+	}
+}
+
+func ValidateGetDevicesByDmsRequest(request api.GetDevicesByDMSInput) error {
+	GetDevicesByDmsInputStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.GetDevicesByDMSInput)
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(GetDevicesByDmsInputStructLevelValidation, api.GetDevicesByDMSInput{})
+	return validate.Struct(request)
+}
+func MakeGetDevicesByDmsEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.GetDevicesByDMSInput)
+
+		err = ValidateGetDevicesByDmsRequest(input)
+		if err != nil {
+			valError := errors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+
+		output, err := s.GetDevicesByDMS(ctx, &input)
 		return output, err
 	}
 }

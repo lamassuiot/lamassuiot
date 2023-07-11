@@ -116,6 +116,22 @@ func (mw loggingMiddleware) GetDevices(ctx context.Context, input *api.GetDevice
 	return mw.next.GetDevices(ctx, input)
 }
 
+func (mw loggingMiddleware) GetDevicesByDMS(ctx context.Context, input *api.GetDevicesByDMSInput) (output *api.GetDevicesByDMSOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "GetDevicesByDMS"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.GetDevicesByDMS(ctx, input)
+}
+
 func (mw loggingMiddleware) GetDeviceById(ctx context.Context, input *api.GetDeviceByIdInput) (output *api.GetDeviceByIdOutput, err error) {
 	defer func(begin time.Time) {
 		var logMsg = map[string]interface{}{}

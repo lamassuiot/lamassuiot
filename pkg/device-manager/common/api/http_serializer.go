@@ -409,6 +409,36 @@ func (s *GetDevicesOutputSerialized) Deserialize() GetDevicesOutput {
 	}
 }
 
+type GetDevicesByDMSOutputSerialized struct {
+	TotalDevices int                `json:"total_devices"`
+	Devices      []DeviceSerialized `json:"devices"`
+}
+
+func (s *GetDevicesByDMSOutput) Serialize() GetDevicesByDMSOutputSerialized {
+	devices := []DeviceSerialized{}
+	for _, device := range s.Devices {
+		devices = append(devices, device.Serialize())
+	}
+
+	return GetDevicesByDMSOutputSerialized{
+		TotalDevices: s.TotalDevices,
+		Devices:      devices,
+	}
+}
+
+func (s *GetDevicesByDMSOutputSerialized) Deserialize() GetDevicesByDMSOutput {
+	var devices []Device
+	for _, device := range s.Devices {
+		deserializedDevice := device.Deserialize()
+		devices = append(devices, deserializedDevice)
+	}
+
+	return GetDevicesByDMSOutput{
+		TotalDevices: s.TotalDevices,
+		Devices:      devices,
+	}
+}
+
 // ---------------------------------------------------------------------
 
 type GetDeviceByIdOutputSerialized struct {

@@ -37,6 +37,7 @@ type Service interface {
 	DecommisionDevice(ctx context.Context, input *api.DecommisionDeviceInput) (*api.DecommisionDeviceOutput, error)
 	GetDevices(ctx context.Context, input *api.GetDevicesInput) (*api.GetDevicesOutput, error)
 	GetDeviceById(ctx context.Context, input *api.GetDeviceByIdInput) (*api.GetDeviceByIdOutput, error)
+	GetDevicesByDMS(ctx context.Context, input *api.GetDevicesByDMSInput) (*api.GetDevicesByDMSOutput, error)
 
 	ImportDeviceCert(ctx context.Context, input *api.ImportDeviceCertInput) (*api.ImportDeviceCertOutput, error)
 	AddDeviceSlot(ctx context.Context, input *api.AddDeviceSlotInput) (*api.AddDeviceSlotOutput, error)
@@ -228,6 +229,23 @@ func (s *DevicesService) GetDevices(ctx context.Context, input *api.GetDevicesIn
 	}
 
 	return &api.GetDevicesOutput{
+		TotalDevices: totalDevices,
+		Devices:      devices,
+	}, nil
+}
+
+func (s *DevicesService) GetDevicesByDMS(ctx context.Context, input *api.GetDevicesByDMSInput) (*api.GetDevicesByDMSOutput, error) {
+	totalDevices, devicesSubset, err := s.devicesRepo.SelectDevicesByDmsName(ctx, input.DmsName, input.QueryParameters)
+	if err != nil {
+		return nil, err
+	}
+
+	devices := make([]api.Device, 0)
+	for _, device := range devicesSubset {
+		devices = append(devices, *device)
+	}
+
+	return &api.GetDevicesByDMSOutput{
 		TotalDevices: totalDevices,
 		Devices:      devices,
 	}, nil

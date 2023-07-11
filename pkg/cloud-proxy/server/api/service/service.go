@@ -79,8 +79,16 @@ func (cps *CloudProxyService) GetCloudConnectors(ctx context.Context, input *api
 		if err != nil {
 			continue
 		}
-
-		cloudConnectors = append(cloudConnectors, connectorOut.CloudConnector)
+		exist := false
+		for _, cloudConnector := range cloudConnectors {
+			if cloudConnector.ID == connectorOut.ID {
+				exist = true
+				break
+			}
+		}
+		if !exist {
+			cloudConnectors = append(cloudConnectors, connectorOut.CloudConnector)
+		}
 	}
 
 	return &api.GetCloudConnectorsOutput{
@@ -100,19 +108,33 @@ func (cps *CloudProxyService) GetCloudConnectorByID(ctx context.Context, input *
 	if len(services) == 0 {
 		return &api.GetCloudConnectorByIDOutput{}, &cProxyErrors.ResourceNotFoundError{ResourceType: "CloudConnector", ResourceId: input.ConnectorID}
 	}
-
 	status := "passing"
-	//Get First Status == passing
+	// Get First Status == passing
 	selectedServiceIdx := slices.IndexFunc(services, func(item *consul.CatalogService) bool {
 		hchecks, _, err := cps.ConsulClient.Health().Node(item.Node, &consul.QueryOptions{})
 		if err != nil {
 			return false
 		}
-
+		serviceChecks, _, err := cps.ConsulClient.Health().Checks("cloud-connector", &consul.QueryOptions{
+			Filter: fmt.Sprintf("ServiceID == \"%s\"", item.ServiceID),
+		})
+		if err != nil {
+			return false
+		}
+		nodeCheck := false
 		for _, check := range hchecks {
 			if check.CheckID == "service:"+item.ServiceID && check.Status == "passing" {
-				return true
+				nodeCheck = true
 			}
+		}
+		serviceCheck := false
+		for _, sCheck := range serviceChecks {
+			if sCheck.CheckID == "service:"+item.ServiceID && sCheck.Status == "passing" {
+				serviceCheck = true
+			}
+		}
+		if serviceCheck && nodeCheck {
+			return true
 		}
 
 		return false

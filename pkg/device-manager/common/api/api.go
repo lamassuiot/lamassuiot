@@ -210,7 +210,23 @@ type GetDevicesOutput struct {
 	Devices      []Device
 }
 
+type GetDevicesByDMSInput struct {
+	DmsName         string
+	QueryParameters common.QueryParameters
+}
+
+type GetDevicesByDMSOutput struct {
+	TotalDevices int
+	Devices      []Device
+}
+
 // ---------------------------------------------------------------------
+type IterateDevicesByDMSWithPredicateInput struct {
+	DmsName       string          `validate:"required"`
+	PredicateFunc func(d *Device) `validate:"required"`
+}
+
+type IterateDevicesByDMSWithPredicateOutput struct{}
 
 type GetDeviceByIdInput struct {
 	DeviceID string
