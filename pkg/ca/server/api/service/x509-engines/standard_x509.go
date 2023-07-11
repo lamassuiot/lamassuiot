@@ -127,10 +127,7 @@ func (s StandardX509Engine) SignCertificateRequest(caCertificate *x509.Certifica
 
 	now := time.Now()
 
-	certificateTemplate := x509.Certificate{
-		Signature:          input.CertificateSigningRequest.Signature,
-		SignatureAlgorithm: input.CertificateSigningRequest.SignatureAlgorithm,
-
+	certificateTemplate := x509.Certificate{ç
 		PublicKeyAlgorithm: input.CertificateSigningRequest.PublicKeyAlgorithm,
 		PublicKey:          input.CertificateSigningRequest.PublicKey,
 
