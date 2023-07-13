@@ -275,25 +275,28 @@ func decodeCreateCARequest(ctx context.Context, r *http.Request) (request interf
 	if err != nil {
 		return nil, InvalidJsonFormat()
 	}
-	var CAExpiration, IssuanceExpiration time.Time
-	var expirationType api.ExpirationType
-	switch api.ParseExpirationType(body.ExpirationType) {
+	var CAExpiration time.Time
+	var IssuanceExpirationDuration time.Duration
+	var IssuanceExpirationDate time.Time
+	var IssuanceexpirationType api.ExpirationType
+
+	switch api.ParseExpirationType(body.IssuanceExpirationType) {
 	case api.ExpirationTypeDuration:
+		IssuanceExpiration, _ := strconv.Atoi(body.IssuanceExpiration)
+		IssuanceExpirationDuration = time.Duration(IssuanceExpiration)
 		caExpiration, _ := strconv.Atoi(body.CAExpiration)
-		issuanceExpiration, _ := strconv.Atoi(body.IssuanceExpiration)
 		CAExpiration = time.Now().Add(time.Duration(caExpiration * int(time.Second)))
-		IssuanceExpiration = time.Now().Add(time.Duration(issuanceExpiration * int(time.Second)))
-		expirationType = api.ExpirationTypeDuration
+		IssuanceexpirationType = api.ExpirationTypeDuration
 	case api.ExpirationTypeDate:
+		IssuanceExpirationDate, err = time.Parse("20060102T150405Z", body.IssuanceExpiration)
+		if err != nil {
+			return nil, err
+		}
 		CAExpiration, err = time.Parse("20060102T150405Z", body.CAExpiration)
 		if err != nil {
 			return nil, err
 		}
-		IssuanceExpiration, err = time.Parse("20060102T150405Z", body.IssuanceExpiration)
-		if err != nil {
-			return nil, err
-		}
-		expirationType = api.ExpirationTypeDate
+		IssuanceexpirationType = api.ExpirationTypeDate
 	default:
 		return nil, InvalidExpirationType()
 	}
@@ -312,9 +315,11 @@ func decodeCreateCARequest(ctx context.Context, r *http.Request) (request interf
 			KeyType: api.ParseKeyType(body.KeyMetadata.KeyType),
 			KeyBits: body.KeyMetadata.KeyBits,
 		},
-		CAExpiration:       CAExpiration,
-		IssuanceExpiration: IssuanceExpiration,
-		ExpirationType:     expirationType,
+		CAExpiration: CAExpiration,
+
+		IssuanceExpirationDate:     &IssuanceExpirationDate,
+		IssuanceExpirationDuration: &IssuanceExpirationDuration,
+		IssuanceExpirationType:     IssuanceexpirationType,
 	}
 
 	return input, nil

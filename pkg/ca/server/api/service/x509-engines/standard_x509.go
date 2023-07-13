@@ -127,18 +127,17 @@ func (s StandardX509Engine) SignCertificateRequest(caCertificate *x509.Certifica
 
 	now := time.Now()
 
-	certificateTemplate := x509.Certificate{ç
+	certificateTemplate := x509.Certificate{
 		PublicKeyAlgorithm: input.CertificateSigningRequest.PublicKeyAlgorithm,
 		PublicKey:          input.CertificateSigningRequest.PublicKey,
-
-		SerialNumber: sn,
-		Issuer:       caCertificate.Subject,
-		Subject:      subject,
-		NotBefore:    now,
-		NotAfter:     certificateExpiration,
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-		DNSNames:     input.CertificateSigningRequest.DNSNames,
+		SerialNumber:       sn,
+		Issuer:             caCertificate.Subject,
+		Subject:            subject,
+		NotBefore:          now,
+		NotAfter:           certificateExpiration,
+		KeyUsage:           x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		DNSNames:           input.CertificateSigningRequest.DNSNames,
 	}
 
 	certificateBytes, err := x509.CreateCertificate(rand.Reader, &certificateTemplate, caCertificate, input.CertificateSigningRequest.PublicKey, privkey)

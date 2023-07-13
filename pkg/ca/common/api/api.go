@@ -202,7 +202,9 @@ type Certificate struct {
 
 type CACertificate struct {
 	Certificate
-	IssuanceDuration time.Duration
+	IssuanceDuration *time.Duration
+	IssuanceDate     *time.Time
+	IssuanceType     string
 }
 
 // ---------------------------------------------------------------------
@@ -218,12 +220,13 @@ type GetStatsOutput struct {
 
 // ---------------------------------------------------------------------
 type CreateCAInput struct {
-	CAType             CAType         `validate:"required"`
-	Subject            Subject        `validate:"required"`
-	KeyMetadata        KeyMetadata    `validate:"required"`
-	ExpirationType     ExpirationType `validate:"required"`
-	CAExpiration       time.Time      `validate:"required"`
-	IssuanceExpiration time.Time      `validate:"required"`
+	CAType                     CAType         `validate:"required"`
+	Subject                    Subject        `validate:"required"`
+	KeyMetadata                KeyMetadata    `validate:"required"`
+	IssuanceExpirationType     ExpirationType `validate:"required"`
+	CAExpiration               time.Time      `validate:"required"`
+	IssuanceExpirationDate     *time.Time
+	IssuanceExpirationDuration *time.Duration
 }
 
 type CreateCAOutput struct {

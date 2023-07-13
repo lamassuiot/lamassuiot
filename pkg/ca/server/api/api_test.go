@@ -86,6 +86,7 @@ func TestCreateCA(t *testing.T) {
 		{
 			name: "DuplicateCA",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -95,9 +96,9 @@ func TestCreateCA(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 
 				if err != nil {
@@ -226,6 +227,7 @@ func TestGetCAByName(t *testing.T) {
 		{
 			name: "ActiveCA",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -235,9 +237,9 @@ func TestGetCAByName(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 
 				if err != nil {
@@ -299,6 +301,7 @@ func TestGetCAByName(t *testing.T) {
 		{
 			name: "RevokedCA",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -308,9 +311,9 @@ func TestGetCAByName(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 
 				if err != nil {
@@ -382,6 +385,7 @@ func TestGetCAByName(t *testing.T) {
 		{
 			name: "ExpiredCA",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -391,9 +395,9 @@ func TestGetCAByName(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Second * 5),
-					IssuanceExpiration: time.Now().Add(time.Second * 3),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Second * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 
 				if err != nil {
@@ -502,6 +506,7 @@ func TestGetCAs(t *testing.T) {
 		{
 			name: "PKI:OneCA",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -511,9 +516,9 @@ func TestGetCAs(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 
 				if err != nil {
@@ -578,6 +583,7 @@ func TestGetCAs(t *testing.T) {
 		{
 			name: "PKI:OneExpiredCA",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(2)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -587,9 +593,9 @@ func TestGetCAs(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Second * 6),
-					IssuanceExpiration: time.Now().Add(time.Second * 2),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Second * 6),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 
 				if err != nil {
@@ -656,6 +662,7 @@ func TestGetCAs(t *testing.T) {
 			name: "PKI:10CAsWithBasicQueryParameters",
 			serviceInitialization: func(svc *service.Service) {
 				for i := 0; i < 10; i++ {
+					issuanceExpiration := time.Duration(3600)
 					_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 						CAType: api.CATypePKI,
 						Subject: api.Subject{
@@ -665,9 +672,9 @@ func TestGetCAs(t *testing.T) {
 							KeyType: api.RSA,
 							KeyBits: 4096,
 						},
-						ExpirationType:     api.ExpirationTypeDuration,
-						CAExpiration:       time.Now().Add(time.Hour * 5),
-						IssuanceExpiration: time.Now().Add(time.Hour),
+						IssuanceExpirationType:     api.ExpirationTypeDuration,
+						CAExpiration:               time.Now().Add(time.Hour * 5),
+						IssuanceExpirationDuration: &issuanceExpiration,
 					})
 
 					if err != nil {
@@ -712,6 +719,7 @@ func TestGetCAs(t *testing.T) {
 				caSets := []string{"set1", "set2"}
 				for _, caSet := range caSets {
 					for i := 0; i < 5; i++ {
+						issuanceExpiration := time.Duration(3600)
 						_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 							CAType: api.CATypePKI,
 							Subject: api.Subject{
@@ -721,9 +729,9 @@ func TestGetCAs(t *testing.T) {
 								KeyType: api.RSA,
 								KeyBits: 4096,
 							},
-							ExpirationType:     api.ExpirationTypeDuration,
-							CAExpiration:       time.Now().Add(time.Hour * 5),
-							IssuanceExpiration: time.Now().Add(time.Hour),
+							IssuanceExpirationType:     api.ExpirationTypeDuration,
+							CAExpiration:               time.Now().Add(time.Hour * 5),
+							IssuanceExpirationDuration: &issuanceExpiration,
 						})
 
 						if err != nil {
@@ -769,6 +777,7 @@ func TestGetCAs(t *testing.T) {
 				caSets := []string{"set1", "set2"}
 				for _, caSet := range caSets {
 					for i := 0; i < 5; i++ {
+						issuanceExpiration := time.Duration(3600)
 						_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 							CAType: api.CATypePKI,
 							Subject: api.Subject{
@@ -778,9 +787,9 @@ func TestGetCAs(t *testing.T) {
 								KeyType: api.RSA,
 								KeyBits: 4096,
 							},
-							ExpirationType:     api.ExpirationTypeDuration,
-							CAExpiration:       time.Now().Add(time.Hour * 5),
-							IssuanceExpiration: time.Now().Add(time.Hour),
+							IssuanceExpirationType:     api.ExpirationTypeDuration,
+							CAExpiration:               time.Now().Add(time.Hour * 5),
+							IssuanceExpirationDuration: &issuanceExpiration,
 						})
 
 						if err != nil {
@@ -826,6 +835,7 @@ func TestGetCAs(t *testing.T) {
 				caSets := []string{"set1", "set2"}
 				for _, caSet := range caSets {
 					for i := 0; i < 4; i++ {
+						issuanceExpiration := time.Duration(3600)
 						_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 							CAType: api.CATypePKI,
 							Subject: api.Subject{
@@ -835,9 +845,9 @@ func TestGetCAs(t *testing.T) {
 								KeyType: api.RSA,
 								KeyBits: 4096,
 							},
-							ExpirationType:     api.ExpirationTypeDuration,
-							CAExpiration:       time.Now().Add(time.Hour * 5),
-							IssuanceExpiration: time.Now().Add(time.Hour),
+							IssuanceExpirationType:     api.ExpirationTypeDuration,
+							CAExpiration:               time.Now().Add(time.Hour * 5),
+							IssuanceExpirationDuration: &issuanceExpiration,
 						})
 
 						if err != nil {
@@ -920,6 +930,7 @@ func TestRevokeCA(t *testing.T) {
 		{
 			name: "ShouldRevokeCA",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -929,9 +940,9 @@ func TestRevokeCA(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 2048,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 
 				if err != nil {
@@ -969,6 +980,7 @@ func TestRevokeCA(t *testing.T) {
 		{
 			name: "ShouldRevokeCAAndIssuedCertificates",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -978,9 +990,9 @@ func TestRevokeCA(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 2048,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 
 				if err != nil {
@@ -1060,6 +1072,7 @@ func TestRevokeCA(t *testing.T) {
 		{
 			name: "Validation:ContainsRevocationReason",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -1069,9 +1082,9 @@ func TestRevokeCA(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 2048,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 
 				if err != nil {
@@ -1088,6 +1101,7 @@ func TestRevokeCA(t *testing.T) {
 		{
 			name: "Validation:ContainsRevocationReasonNonEmpty",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -1097,9 +1111,9 @@ func TestRevokeCA(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 2048,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 
 				if err != nil {
@@ -1161,6 +1175,7 @@ func TestSignCertificateRequest(t *testing.T) {
 		{
 			name: "ShouldSignVerbatim",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -1170,9 +1185,9 @@ func TestSignCertificateRequest(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 
 				if err != nil {
@@ -1228,6 +1243,7 @@ func TestSignCertificateRequest(t *testing.T) {
 		{
 			name: "ShouldSignWithProvidedCommonName",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -1237,9 +1253,9 @@ func TestSignCertificateRequest(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 
 				if err != nil {
@@ -1391,6 +1407,7 @@ func TestRevokeCertificate(t *testing.T) {
 		{
 			name: "EmptyCertificate",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -1400,9 +1417,9 @@ func TestRevokeCertificate(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 
 				if err != nil {
@@ -1419,6 +1436,7 @@ func TestRevokeCertificate(t *testing.T) {
 		{
 			name: "ShouldRevokeCertificate",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -1428,9 +1446,9 @@ func TestRevokeCertificate(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 				if err != nil {
 					t.Errorf("%s", err)
@@ -1558,6 +1576,7 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 		{
 			name: "EmptyCA",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -1567,9 +1586,9 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 				if err != nil {
 					t.Errorf("%s", err)
@@ -1584,6 +1603,7 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 		{
 			name: "ShouldGetCertificate",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -1593,9 +1613,9 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 				if err != nil {
 					t.Errorf("%s", err)
@@ -1660,6 +1680,7 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 		{
 			name: "ShouldGetRevokedCertificate",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -1669,9 +1690,9 @@ func TestGetCertificateBySerialNumber(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Second * 3),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 				if err != nil {
 					t.Errorf("%s", err)
@@ -1779,6 +1800,7 @@ func TestGetCertificates(t *testing.T) {
 		{
 			name: "PKI:EmptyList",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -1788,9 +1810,9 @@ func TestGetCertificates(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 				if err != nil {
 					t.Errorf("%s", err)
@@ -1811,6 +1833,7 @@ func TestGetCertificates(t *testing.T) {
 		{
 			name: "PKI:OneCertificate",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -1820,9 +1843,9 @@ func TestGetCertificates(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 
 				if err != nil {
@@ -1926,6 +1949,7 @@ func TestGetCertificates(t *testing.T) {
 		{
 			name: "10CertificatesWithBasicQueryParameters",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -1935,9 +1959,9 @@ func TestGetCertificates(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 				if err != nil {
 					t.Errorf("%s", err)
@@ -1991,6 +2015,7 @@ func TestGetCertificates(t *testing.T) {
 		{
 			name: "10ExpiredCertificatesWithBasicQueryParameters",
 			serviceInitialization: func(svc *service.Service) {
+				issuanceExpiration := time.Duration(10800)
 				_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 					CAType: api.CATypePKI,
 					Subject: api.Subject{
@@ -2000,9 +2025,9 @@ func TestGetCertificates(t *testing.T) {
 						KeyType: api.RSA,
 						KeyBits: 4096,
 					},
-					ExpirationType:     api.ExpirationTypeDuration,
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour * 3),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 				if err != nil {
 					t.Errorf("%s", err)
@@ -2106,6 +2131,7 @@ func TestStats(t *testing.T) {
 				totalCertificatesPerCA := 5
 
 				for i := 0; i < totlaCAs; i++ {
+					issuanceExpiration := time.Duration(3600)
 					_, err := (*svc).CreateCA(context.Background(), &api.CreateCAInput{
 						CAType: api.CATypePKI,
 						Subject: api.Subject{
@@ -2115,9 +2141,9 @@ func TestStats(t *testing.T) {
 							KeyType: api.RSA,
 							KeyBits: 4096,
 						},
-						ExpirationType:     api.ExpirationTypeDuration,
-						CAExpiration:       time.Now().Add(time.Hour * 5),
-						IssuanceExpiration: time.Now().Add(time.Hour),
+						IssuanceExpirationType:     api.ExpirationTypeDuration,
+						CAExpiration:               time.Now().Add(time.Hour * 5),
+						IssuanceExpirationDuration: &issuanceExpiration,
 					})
 					if err != nil {
 						t.Errorf("%s", err)

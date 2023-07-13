@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
@@ -51,9 +52,17 @@ func (mw *validationMiddleware) CreateCA(ctx context.Context, input *api.CreateC
 				sl.ReportError(input.KeyMetadata.KeyBits, "KeyBits", "KeyBits", "InvalidRSAKeyBits", "")
 			}
 		}
-		if input.CAExpiration.Before(input.IssuanceExpiration) {
-			sl.ReportError(input.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
+		if input.IssuanceExpirationType == api.ExpirationTypeDate {
+			if input.CAExpiration.Before(*input.IssuanceExpirationDate) {
+				sl.ReportError(input.IssuanceExpirationDate, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
+			}
+		} else {
+			expiration := time.Now().Add(*input.IssuanceExpirationDuration*time.Second)
+			if input.CAExpiration.Before(expiration) {
+				sl.ReportError(input.IssuanceExpirationDuration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
+			}
 		}
+
 	}
 	validate := validator.New()
 	validate.RegisterStructValidation(validatorFunc, api.CreateCAInput{})

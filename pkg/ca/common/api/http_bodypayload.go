@@ -15,11 +15,11 @@ type CreacteCAKeyMetadataSubject struct {
 }
 
 type CreateCAPayload struct {
-	Subject            CreateCASubjectPayload      `json:"subject"`
-	KeyMetadata        CreacteCAKeyMetadataSubject `json:"key_metadata"`
-	ExpirationType     string                      `json:"expiration_type" validate:"required"`
-	CAExpiration       string                      `json:"ca_expiration" validate:"required"`
-	IssuanceExpiration string                      `json:"issuance_expiration" validate:"required"`
+	Subject                CreateCASubjectPayload      `json:"subject"`
+	KeyMetadata            CreacteCAKeyMetadataSubject `json:"key_metadata"`
+	CAExpiration           string                      `json:"ca_expiration" validate:"required"`
+	IssuanceExpiration     string                      `json:"issuance_expiration" validate:"required"`
+	IssuanceExpirationType string                      `json:"expiration_type" validate:"required"`
 }
 
 // -------------------------------------------------------------
