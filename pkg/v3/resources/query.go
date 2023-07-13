@@ -26,7 +26,24 @@ type SortOptions struct {
 	SortField string
 }
 
+var FilterOperation string
+var (
+	Equal              = "eq"
+	NotEqual           = "ne"
+	LessThan           = "lt"
+	GreaterThan        = "gt"
+	LessThanOrEqual    = "lte"
+	GreaterThanOrEqual = "gte"
+)
+
+type FilterOption struct {
+	Field           string
+	FilterOperation string
+	Arg             string
+}
+
 type QueryParameters struct {
 	Sort       SortOptions
 	Pagination PaginationOptions
+	Filters    []FilterOption
 }

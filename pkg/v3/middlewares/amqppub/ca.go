@@ -61,10 +61,18 @@ func (mw amqpEventPublisher) GetCAs(input services.GetCAsInput) (string, error) 
 func (mw amqpEventPublisher) UpdateCAStatus(input services.UpdateCAStatusInput) (output *models.CACertificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.publishEvent("ca.update", caSource, output)
+			mw.publishEvent("ca.update.status", caSource, output)
 		}
 	}()
 	return mw.next.UpdateCAStatus(input)
+}
+func (mw amqpEventPublisher) UpdateCAMetadata(input services.UpdateCAMetadataInput) (output *models.CACertificate, err error) {
+	defer func() {
+		if err == nil {
+			mw.publishEvent("ca.update.metadata", caSource, output)
+		}
+	}()
+	return mw.next.UpdateCAMetadata(input)
 }
 
 func (mw amqpEventPublisher) DeleteCA(input services.DeleteCAInput) (err error) {
@@ -104,8 +112,17 @@ func (mw amqpEventPublisher) GetCertificatesByExpirationDate(input services.GetC
 func (mw amqpEventPublisher) UpdateCertificateStatus(input services.UpdateCertificateStatusInput) (output *models.Certificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.publishEvent("certificate.update", caSource, output)
+			mw.publishEvent("certificate.update.status", caSource, output)
 		}
 	}()
 	return mw.next.UpdateCertificateStatus(input)
+}
+
+func (mw amqpEventPublisher) UpdateCertificateMetadata(input services.UpdateCertificateMetadataInput) (output *models.Certificate, err error) {
+	defer func() {
+		if err == nil {
+			mw.publishEvent("certificate.update.metadata", caSource, output)
+		}
+	}()
+	return mw.next.UpdateCertificateMetadata(input)
 }

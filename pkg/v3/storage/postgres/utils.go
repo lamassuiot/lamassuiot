@@ -1,7 +1,10 @@
 package postgres
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"reflect"
 
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
@@ -10,6 +13,7 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"gorm.io/gorm/schema"
 )
 
 func CreatePostgresDBConnection(cfg config.PostgresPSEConfig, database string) (*gorm.DB, error) {
@@ -29,6 +33,8 @@ func CreatePostgresDBConnection(cfg config.PostgresPSEConfig, database string) (
 }
 
 func CheckAndCreateTable[E any](db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*postgresDBQuerier[E], error) {
+	schema.RegisterSerializer("json", JSONSerializer{})
+
 	err := db.Table(tableName).AutoMigrate(model)
 	if err != nil {
 		return nil, err
@@ -63,9 +69,20 @@ func (db *postgresDBQuerier[E]) Count() (int, error) {
 	return int(count), nil
 }
 
-func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, extraOpts *map[string]interface{}, exhaustiveRun bool, applyFunc func(elem *E)) (string, error) {
+type gormWhereParams struct {
+	query     interface{}
+	extraArgs []interface{}
+}
+
+func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, extraOpts []gormWhereParams, exhaustiveRun bool, applyFunc func(elem *E)) (string, error) {
 	var elems []E
-	db.Table(db.tableName).FindInBatches(&elems, 100, func(tx *gorm.DB, batch int) error {
+	tx := db.Table(db.tableName)
+
+	for _, whereQuery := range extraOpts {
+		tx = tx.Where(whereQuery.query, whereQuery.extraArgs...)
+	}
+
+	tx.FindInBatches(&elems, 100, func(tx *gorm.DB, batch int) error {
 		for _, elem := range elems {
 			// batch processing found records
 			applyFunc(&elem)
@@ -82,9 +99,6 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 
 func (db *postgresDBQuerier[E]) SelectByID(id string) (*E, error) {
 	var elem E
-	fmt.Println("---------------------")
-	fmt.Println("=====================")
-	fmt.Println("---------------------")
 	tx := db.First(&elem, fmt.Sprintf("%s = ?", db.primaryKeyColumn), id)
 	if err := tx.Error; err != nil {
 		return nil, err
@@ -125,13 +139,33 @@ func (db *postgresDBQuerier[E]) Update(elem E, elemID string) (*E, error) {
 	return db.SelectByID(elemID)
 }
 
-func getElements[E any](db *gorm.DB, page int, pageSize int, filters map[string]interface{}) ([]E, error) {
-	var elems []E
+// JSONSerializer json serializer
+type JSONSerializer struct {
+}
 
-	tx := db.Offset(page * pageSize).Limit(pageSize).Find(&elems)
-	if err := tx.Error; err != nil {
-		return nil, err
+// Scan implements serializer interface
+func (JSONSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue interface{}) (err error) {
+	fieldValue := reflect.New(field.FieldType)
+	var decodeVal string
+	switch dbValue.(type) {
+	case string:
+		decodeVal = dbValue.(string)
+	default:
+		return fmt.Errorf("invalid value type")
 	}
 
-	return elems, nil
+	err = json.Unmarshal([]byte(decodeVal), fieldValue.Interface())
+	if err != nil {
+		return err
+	}
+
+	field.ReflectValueOf(ctx, dst).Set(fieldValue.Elem())
+	return
 }
+
+// Value implements serializer interface
+func (JSONSerializer) Value(ctx context.Context, field *schema.Field, dst reflect.Value, fieldValue interface{}) (interface{}, error) {
+	return json.Marshal(fieldValue)
+}
+
+func GenerateBookmark(offset int, limit int)

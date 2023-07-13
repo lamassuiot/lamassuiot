@@ -13,20 +13,22 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
 )
 
-type caClient struct {
+type CAClient services.CAService
+
+type httpCAClient struct {
 	httpClient *http.Client
 	baseUrl    string
 }
 
-func NewCAClient(client *http.Client, url string) services.CAService {
+func NewhttpCAClient(client *http.Client, url string) services.CAService {
 	baseURL := url
-	return &caClient{
+	return &httpCAClient{
 		httpClient: client,
 		baseUrl:    baseURL,
 	}
 }
 
-func (cli *caClient) GetCryptoEngineProvider() (*models.EngineProvider, error) {
+func (cli *httpCAClient) GetCryptoEngineProvider() (*models.EngineProvider, error) {
 	engine, err := Get[models.EngineProvider](context.Background(), cli.httpClient, cli.baseUrl+"/v1/engines", nil)
 	if err != nil {
 		return nil, err
@@ -35,7 +37,7 @@ func (cli *caClient) GetCryptoEngineProvider() (*models.EngineProvider, error) {
 	return &engine, nil
 }
 
-func (cli *caClient) Sign(input services.SignInput) ([]byte, error) {
+func (cli *httpCAClient) Sign(input services.SignInput) ([]byte, error) {
 	response, err := Post[*resources.SignResponse](context.Background(), cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/sign", resources.SignBody{
 		Message:            base64.StdEncoding.EncodeToString(input.Message),
 		MessageType:        input.MessageType,
@@ -48,7 +50,7 @@ func (cli *caClient) Sign(input services.SignInput) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(response.SignedData)
 }
 
-func (cli *caClient) VerifySignature(input services.VerifySignatureInput) (bool, error) {
+func (cli *httpCAClient) VerifySignature(input services.VerifySignatureInput) (bool, error) {
 	response, err := Post[*resources.VerifyResponse](context.Background(), cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/verify", resources.VerifyBody{
 		Message:            base64.StdEncoding.EncodeToString(input.Message),
 		MessageType:        input.MessageType,
@@ -62,7 +64,7 @@ func (cli *caClient) VerifySignature(input services.VerifySignatureInput) (bool,
 	return response.Valid, nil
 }
 
-func (cli *caClient) GetCAs(input services.GetCAsInput) (string, error) {
+func (cli *httpCAClient) GetCAs(input services.GetCAsInput) (string, error) {
 	url := cli.baseUrl + "/v1/cas"
 
 	if input.ExhaustiveRun {
@@ -75,7 +77,7 @@ func (cli *caClient) GetCAs(input services.GetCAsInput) (string, error) {
 
 }
 
-func (cli *caClient) GetCAByID(input services.GetCAByIDInput) (*models.CACertificate, error) {
+func (cli *httpCAClient) GetCAByID(input services.GetCAByIDInput) (*models.CACertificate, error) {
 	response, err := Get[models.CACertificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID, nil)
 	if err != nil {
 		return nil, err
@@ -84,13 +86,13 @@ func (cli *caClient) GetCAByID(input services.GetCAByIDInput) (*models.CACertifi
 	return &response, nil
 }
 
-func (cli *caClient) CreateCA(input services.CreateCAInput) (*models.CACertificate, error) {
+func (cli *httpCAClient) CreateCA(input services.CreateCAInput) (*models.CACertificate, error) {
 	response, err := Post[*models.CACertificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/cas", resources.CreateCABody{
 		Subject:            input.Subject,
 		KeyMetadata:        input.KeyMetadata,
 		CAType:             models.CAType(input.CAType),
-		IssuanceDuration:   models.TimeDuration(input.IssuanceDuration),
-		CAVailidtyDurarion: models.TimeDuration(input.CADuration),
+		IssuanceExpiration: input.IssuanceExpiration,
+		CAExpitration:      input.CAExpitration,
 	})
 	if err != nil {
 		return nil, err
@@ -99,7 +101,7 @@ func (cli *caClient) CreateCA(input services.CreateCAInput) (*models.CACertifica
 	return response, nil
 }
 
-func (cli *caClient) ImportCA(input services.ImportCAInput) (*models.CACertificate, error) {
+func (cli *httpCAClient) ImportCA(input services.ImportCAInput) (*models.CACertificate, error) {
 	var privKey string
 	if input.KeyType == models.KeyType(x509.RSA) {
 		rsaBytes := x509.MarshalPKCS1PrivateKey(input.CARSAKey)
@@ -119,11 +121,11 @@ func (cli *caClient) ImportCA(input services.ImportCAInput) (*models.CACertifica
 	}
 
 	response, err := Post[*models.CACertificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/cas/import", resources.ImportCABody{
-		CAType:           models.CAType(input.CAType),
-		IssuanceDuration: models.TimeDuration(input.IssuanceDuration),
-		CACertificate:    input.CACertificate,
-		CAChain:          input.CAChain,
-		CAPrivateKey:     privKey,
+		CAType:             models.CAType(input.CAType),
+		IssuanceExpiration: input.IssuanceExpiration,
+		CACertificate:      input.CACertificate,
+		CAChain:            input.CAChain,
+		CAPrivateKey:       privKey,
 	})
 	if err != nil {
 		return nil, err
@@ -132,7 +134,7 @@ func (cli *caClient) ImportCA(input services.ImportCAInput) (*models.CACertifica
 	return response, nil
 }
 
-func (cli *caClient) SignCertificate(input services.SignCertificateInput) (*models.Certificate, error) {
+func (cli *httpCAClient) SignCertificate(input services.SignCertificateInput) (*models.Certificate, error) {
 	response, err := Post[*models.Certificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/sign-cert", resources.SignCertificateBody{
 		SignVerbatim: input.SignVerbatim,
 		CertRequest:  input.CertRequest,
@@ -145,15 +147,26 @@ func (cli *caClient) SignCertificate(input services.SignCertificateInput) (*mode
 	return response, nil
 }
 
-func (cli *caClient) UpdateCAStatus(input services.UpdateCAStatusInput) (*models.CACertificate, error) {
+func (cli *httpCAClient) UpdateCAStatus(input services.UpdateCAStatusInput) (*models.CACertificate, error) {
 	return nil, fmt.Errorf("TODO")
 }
 
-func (cli *caClient) DeleteCA(input services.DeleteCAInput) error {
+func (cli *httpCAClient) UpdateCAMetadata(input services.UpdateCAMetadataInput) (*models.CACertificate, error) {
+	response, err := Post[*models.CACertificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/metadata", resources.UpdateCAMetadataBody{
+		Metadata: input.Metadata,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (cli *httpCAClient) DeleteCA(input services.DeleteCAInput) error {
 	return fmt.Errorf("TODO")
 }
 
-func (cli *caClient) GetCertificateBySerialNumber(input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
+func (cli *httpCAClient) GetCertificateBySerialNumber(input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
 	response, err := Get[*models.Certificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/certificates/"+input.SerialNumber, nil)
 	if err != nil {
 		return nil, err
@@ -162,19 +175,19 @@ func (cli *caClient) GetCertificateBySerialNumber(input services.GetCertificates
 	return response, nil
 }
 
-func (cli *caClient) GetCertificates(input services.GetCertificatesInput) (string, error) {
+func (cli *httpCAClient) GetCertificates(input services.GetCertificatesInput) (string, error) {
 	return "", fmt.Errorf("TODO")
 }
 
-func (cli *caClient) GetCertificatesByCA(input services.GetCertificatesByCAInput) (string, error) {
+func (cli *httpCAClient) GetCertificatesByCA(input services.GetCertificatesByCAInput) (string, error) {
 	return "", fmt.Errorf("TODO")
 }
 
-func (cli *caClient) GetCertificatesByExpirationDate(input services.GetCertificatesByExpirationDateInput) (string, error) {
+func (cli *httpCAClient) GetCertificatesByExpirationDate(input services.GetCertificatesByExpirationDateInput) (string, error) {
 	return "", fmt.Errorf("TODO")
 }
 
-func (cli *caClient) UpdateCertificateStatus(input services.UpdateCertificateStatusInput) (*models.Certificate, error) {
+func (cli *httpCAClient) UpdateCertificateStatus(input services.UpdateCertificateStatusInput) (*models.Certificate, error) {
 	response, err := Post[*models.Certificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/certificates/"+input.SerialNumber+"/status", resources.UpdateCertificateStatusBody{
 		NewStatus: input.NewStatus,
 	})
@@ -184,4 +197,15 @@ func (cli *caClient) UpdateCertificateStatus(input services.UpdateCertificateSta
 
 	return response, nil
 
+}
+
+func (cli *httpCAClient) UpdateCertificateMetadata(input services.UpdateCertificateMetadataInput) (*models.Certificate, error) {
+	response, err := Post[*models.Certificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/certificates/"+input.SerialNumber+"/metadata", resources.UpdateCertificateMetadataBody{
+		Metadata: input.Metadata,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
 }

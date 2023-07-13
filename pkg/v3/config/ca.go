@@ -45,6 +45,7 @@ type HashicorpVaultCryptoEngineConfig struct {
 	SecretID           string                 `mapstructure:"secret_id"`
 	AutoUnsealEnabled  bool                   `mapstructure:"auto_unseal_enabled"`
 	AutoUnsealKeysFile string                 `mapstructure:"auto_unseal_keys_file"`
+	MountPath          string                 `mapstructure:"mount_path"`
 	HTTPConnection     `mapstructure:",squash"`
 }
 

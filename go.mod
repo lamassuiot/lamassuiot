@@ -21,7 +21,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/hashicorp/consul/api v1.14.0
 	github.com/hashicorp/go-cleanhttp v0.5.2
-	github.com/hashicorp/vault/api v1.4.1
+	github.com/hashicorp/vault/api v1.9.2
 	github.com/jakehl/goid v1.1.0
 	github.com/jinzhu/copier v0.3.5
 	github.com/kelseyhightower/envconfig v1.4.0
@@ -91,6 +91,7 @@ require (
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
+	github.com/go-jose/go-jose/v3 v3.0.0 // indirect
 	github.com/go-kivik/kivik v2.0.0+incompatible // indirect
 	github.com/go-kivik/kiviktest v2.0.0+incompatible // indirect
 	github.com/go-logr/logr v1.2.3 // indirect

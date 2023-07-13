@@ -57,9 +57,9 @@ func (db *CouchDBCAStorage) Select(ctx context.Context, id string) (*models.CACe
 }
 
 func (db *CouchDBCAStorage) Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Insert(*caCertificate, caCertificate.Metadata.Name)
+	return db.querier.Insert(*caCertificate, caCertificate.CARef.Name)
 }
 
 func (db *CouchDBCAStorage) Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Update(*caCertificate, caCertificate.Metadata.Name)
+	return db.querier.Update(*caCertificate, caCertificate.CARef.Name)
 }

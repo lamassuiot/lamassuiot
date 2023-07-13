@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage"
@@ -36,10 +35,10 @@ func (db *PostgresCertificateStorage) Count(ctx context.Context) (int, error) {
 }
 
 func (db *PostgresCertificateStorage) SelectByType(ctx context.Context, CAType models.CAType, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
-	opts := map[string]interface{}{
-		"type": CAType,
+	opts := []gormWhereParams{
+		{query: "ca_meta_type = ?", extraArgs: []any{CAType}},
 	}
-	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
 }
 
 func (db *PostgresCertificateStorage) Exists(ctx context.Context, sn string) (bool, error) {
@@ -47,15 +46,7 @@ func (db *PostgresCertificateStorage) Exists(ctx context.Context, sn string) (bo
 }
 
 func (db *PostgresCertificateStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
-	opts := map[string]interface{}{
-		"selector": map[string]interface{}{
-			"serial_number": map[string]string{
-				"$ne": "",
-			},
-		},
-	}
-
-	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(queryParams, []gormWhereParams{}, exhaustiveRun, applyFunc)
 }
 
 func (db *PostgresCertificateStorage) Select(ctx context.Context, id string) (*models.Certificate, error) {
@@ -71,46 +62,21 @@ func (db *PostgresCertificateStorage) Update(ctx context.Context, certificate *m
 }
 
 func (db *PostgresCertificateStorage) SelectByCA(ctx context.Context, caID string, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
-	opts := map[string]interface{}{
-		"selector": map[string]interface{}{
-			"issuer_metadata.ca_name": map[string]string{
-				"$eq": caID,
-			},
-		},
+	opts := []gormWhereParams{
+		{query: "issuer_metadata_meta_id = ?", extraArgs: []any{caID}},
 	}
-
-	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
 }
 
 func (db *PostgresCertificateStorage) SelectByExpirationDate(ctx context.Context, beforeExpirationDate time.Time, afterExpirationDate time.Time, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
-	opts := map[string]interface{}{
-		"selector": map[string]interface{}{
-			"$and": []map[string]interface{}{
-				{
-					"valid_to": map[string]interface{}{
-						"$gt": afterExpirationDate.Format(time.RFC3339),
-					},
-				},
-				{
-					"valid_to": map[string]interface{}{
-						"$lt": beforeExpirationDate.Format(time.RFC3339),
-					},
-				},
-				{
-					"status": map[string]interface{}{
-						"$ne": models.StatusExpired,
-					},
-				},
-				{
-					"status": map[string]interface{}{
-						"$ne": models.StatusRevoked,
-					},
-				},
-			},
-		},
+	opts := []gormWhereParams{
+		{query: "valid_to > ?", extraArgs: []any{afterExpirationDate}},
+		{query: "valid_to < ?", extraArgs: []any{beforeExpirationDate}},
+		{query: "status != ?", extraArgs: []any{models.StatusExpired}},
+		{query: "status != ?", extraArgs: []any{models.StatusRevoked}},
 	}
 
-	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
 }
 
 func (db *PostgresCertificateStorage) CountByCA(ctx context.Context, caID string) (int, error) {

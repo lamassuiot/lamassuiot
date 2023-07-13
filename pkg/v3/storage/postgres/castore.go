@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 
-	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage"
@@ -38,14 +37,14 @@ func (db *PostgresCAStore) Count(ctx context.Context) (int, error) {
 }
 
 func (db *PostgresCAStore) SelectByType(ctx context.Context, CAType models.CAType, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
-	opts := map[string]interface{}{
-		"type": CAType,
+	opts := []gormWhereParams{
+		{query: "ca_meta_type = ?", extraArgs: []any{CAType}},
 	}
-	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
 }
 
 func (db *PostgresCAStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
-	return db.querier.SelectAll(queryParams, &extraOpts, exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(queryParams, []gormWhereParams{}, exhaustiveRun, applyFunc)
 }
 
 func (db *PostgresCAStore) Select(ctx context.Context, id string) (*models.CACertificate, error) {
@@ -53,9 +52,9 @@ func (db *PostgresCAStore) Select(ctx context.Context, id string) (*models.CACer
 }
 
 func (db *PostgresCAStore) Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Insert(*caCertificate, caCertificate.Metadata.Name)
+	return db.querier.Insert(*caCertificate, caCertificate.CARef.Name)
 }
 
 func (db *PostgresCAStore) Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Update(*caCertificate, caCertificate.Metadata.Name)
+	return db.querier.Update(*caCertificate, caCertificate.CARef.Name)
 }

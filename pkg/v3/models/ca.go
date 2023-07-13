@@ -14,14 +14,22 @@ import (
 type CAType string
 
 const (
-	CATypeInternal CAType = "INTERNAL"
-	CATypePKI      CAType = "PKI"
+	CATypeManaged  CAType = "MANAGED"
+	CATypeImported CAType = "IMPORTED"
+	CATypeExternal CAType = "EXTERNAL"
 )
 
 type InternalCA string
 
 const (
-	CALocalRA InternalCA = "lms-lra"
+	CALocalRA InternalCA = "_lms-lra"
+)
+
+type ExpirationTimeRef string
+
+var (
+	Duration ExpirationTimeRef = "Duration"
+	Time     ExpirationTimeRef = "Time"
 )
 
 type CertificateStatus string
@@ -35,22 +43,28 @@ const (
 )
 
 type Certificate struct {
-	// Metadata            map[string]interface{} `json:"metadata"`
-	IssuerCAMetadata    IssuerCAMetadata    `json:"issuer_metadata"  gorm:"embedded;embeddedPrefix:issuer_meta_"`
-	Status              CertificateStatus   `json:"status"`
-	Fingerprint         string              `json:"fingerprint"`
-	Certificate         *X509Certificate    `json:"certificate"`
-	SerialNumber        string              `json:"serial_number"`
-	KeyMetadata         KeyStrengthMetadata `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_strength_meta_"`
-	Subject             Subject             `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
-	ValidFrom           time.Time           `json:"valid_from"`
-	ValidTo             time.Time           `json:"valid_to"`
-	RevocationTimestamp time.Time           `json:"revocation_timestamp"`
+	Metadata            map[string]interface{} `json:"metadata" gorm:"serializer:json"`
+	IssuerCAMetadata    IssuerCAMetadata       `json:"issuer_metadata"  gorm:"embedded;embeddedPrefix:issuer_meta_"`
+	Status              CertificateStatus      `json:"status"`
+	Fingerprint         string                 `json:"fingerprint"`
+	Certificate         *X509Certificate       `json:"certificate"`
+	SerialNumber        string                 `json:"serial_number"`
+	KeyMetadata         KeyStrengthMetadata    `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_strength_meta_"`
+	Subject             Subject                `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
+	ValidFrom           time.Time              `json:"valid_from"`
+	ValidTo             time.Time              `json:"valid_to"`
+	RevocationTimestamp time.Time              `json:"revocation_timestamp"`
 }
 
 type CAMetadata struct {
 	Name string `json:"name"`
 	Type CAType `json:"type"`
+}
+
+type Expiration struct {
+	Type     ExpirationTimeRef `json:"type"`
+	Duration *TimeDuration     `json:"duration"`
+	Time     *time.Time        `json:"time"`
 }
 
 type IssuerCAMetadata struct {
@@ -60,10 +74,11 @@ type IssuerCAMetadata struct {
 
 type CACertificate struct {
 	Certificate
-	ID               string       `json:"id" gorm:"primaryKey"`
-	IssuanceDuration TimeDuration `json:"issuance_duration"`
-	Metadata         CAMetadata   `json:"metadata" gorm:"embedded;embeddedPrefix:ca_meta_"`
-	CreationTS       time.Time    `json:"creation_ts"`
+	ID                    string                 `json:"id" gorm:"primaryKey"`
+	Metadata              map[string]interface{} `json:"metadata" gorm:"serializer:json"`
+	IssuanceExpirationRef Expiration             `json:"issuance_expiration" gorm:"serializer:json"`
+	CARef                 CAMetadata             `json:"ca_ref" gorm:"embedded;embeddedPrefix:ca_ref_"`
+	CreationTS            time.Time              `json:"creation_ts"`
 }
 
 type CAStats struct {

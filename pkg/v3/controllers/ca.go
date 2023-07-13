@@ -4,7 +4,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"encoding/base64"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
@@ -42,11 +41,11 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 	}
 
 	ca, err := r.svc.CreateCA(services.CreateCAInput{
-		KeyMetadata:      requestBody.KeyMetadata,
-		Subject:          requestBody.Subject,
-		IssuanceDuration: requestBody.IssuanceDuration,
-		CADuration:       requestBody.CAVailidtyDurarion,
-		CAType:           requestBody.CAType,
+		KeyMetadata:        requestBody.KeyMetadata,
+		Subject:            requestBody.Subject,
+		CAType:             requestBody.CAType,
+		CAExpitration:      requestBody.CAExpitration,
+		IssuanceExpiration: requestBody.CAExpitration,
 	})
 	if err != nil {
 		HandleControllerError(ctx, err)
@@ -87,13 +86,13 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 	}
 
 	ca, err := r.svc.ImportCA(services.ImportCAInput{
-		IssuanceDuration: time.Duration(requestBody.IssuanceDuration),
-		CAType:           requestBody.CAType,
-		CAChain:          requestBody.CAChain,
-		CACertificate:    requestBody.CACertificate,
-		KeyType:          keyType,
-		CARSAKey:         rsaKey,
-		CAECKey:          ecKey,
+		IssuanceExpiration: requestBody.IssuanceExpiration,
+		CAType:             requestBody.CAType,
+		CAChain:            requestBody.CAChain,
+		CACertificate:      requestBody.CACertificate,
+		KeyType:            keyType,
+		CARSAKey:           rsaKey,
+		CAECKey:            ecKey,
 	})
 	if err != nil {
 		HandleControllerError(ctx, err)
