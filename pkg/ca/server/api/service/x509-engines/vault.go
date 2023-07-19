@@ -153,12 +153,18 @@ func (v Vaultx509Engine) CreateCA(input api.CreateCAInput) (*x509.Certificate, e
 	} else if input.KeyMetadata.KeyType == api.ECDSA {
 		input.KeyMetadata.KeyType = "ec"
 	}
-	err := v.initPkiSecret(input.CAType, input.Subject.CommonName, fmt.Sprint(input.IssuanceExpiration.Hour()))
+	var enrollerTTL string
+	if input.IssuanceExpirationType == "DATE" {
+		enrollerTTL = fmt.Sprint(input.IssuanceExpirationDate.Hour())
+	} else {
+		enrollerTTL = fmt.Sprint(time.Now().Add(*input.IssuanceExpirationDuration * time.Second).Hour())
+	}
+	err := v.initPkiSecret(input.CAType, input.Subject.CommonName, enrollerTTL)
 	if err != nil {
 		return nil, err
 	}
 	tuneOptions := map[string]interface{}{
-		"max_lease_ttl": fmt.Sprint(input.IssuanceExpiration.Hour()) + "h",
+		"max_lease_ttl": enrollerTTL + "h",
 	}
 	_, err = v.client.Logical().Write("/sys/mounts/"+v.pkiPath+api.ToVaultPath(string(input.CAType))+input.Subject.CommonName+"/tune", tuneOptions)
 
@@ -176,7 +182,7 @@ func (v Vaultx509Engine) CreateCA(input api.CreateCAInput) (*x509.Certificate, e
 		"organization":      input.Subject.Organization,
 		"organization_unit": input.Subject.OrganizationUnit,
 		"common_name":       input.Subject.CommonName,
-		"ttl":               fmt.Sprint(input.IssuanceExpiration.Hour()) + "h",
+		"ttl":               enrollerTTL + "h",
 	}
 	_, err = v.client.Logical().Write(v.pkiPath+api.ToVaultPath(string(input.CAType))+input.Subject.CommonName+"/root/generate/internal", options)
 

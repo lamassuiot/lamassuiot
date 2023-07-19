@@ -120,12 +120,12 @@ func (c *lamassuCaClientConfig) IterateCAsWithPredicate(ctx context.Context, inp
 func (c *lamassuCaClientConfig) CreateCA(ctx context.Context, input *api.CreateCAInput) (*api.CreateCAOutput, error) {
 	//TODO: To Refact with new synta. Check GetCAByName and GetCAs
 	var caExpiration, issuanceExpiration string
-	if input.ExpirationType == api.ExpirationTypeDate {
+	if input.IssuanceExpirationType == api.ExpirationTypeDate {
 		caExpiration = fmt.Sprintf("%d%02d%02dT%02d%02d%dZ", input.CAExpiration.Year(), input.CAExpiration.Month(), input.CAExpiration.Day(), input.CAExpiration.Hour(), input.CAExpiration.Minute(), input.CAExpiration.Second())
-		issuanceExpiration = fmt.Sprintf("%d%02d%02dT%02d%02d%dZ", input.IssuanceExpiration.Year(), input.IssuanceExpiration.Month(), input.IssuanceExpiration.Day(), input.IssuanceExpiration.Hour(), input.IssuanceExpiration.Minute(), input.IssuanceExpiration.Second())
+		issuanceExpiration = fmt.Sprintf("%d%02d%02dT%02d%02d%dZ", input.IssuanceExpirationDate.Year(), input.IssuanceExpirationDate.Month(), input.IssuanceExpirationDate.Day(), input.IssuanceExpirationDate.Hour(), input.IssuanceExpirationDate.Minute(), input.IssuanceExpirationDate.Second())
 	} else {
 		caExpiration = fmt.Sprintf("%d", input.CAExpiration.Unix()-time.Now().Unix())
-		issuanceExpiration = fmt.Sprintf("%d", input.IssuanceExpiration.Unix()-time.Now().Unix())
+		issuanceExpiration = fmt.Sprintf("%d", int64(*input.IssuanceExpirationDuration))
 	}
 	body := api.CreateCAPayload{
 		KeyMetadata: api.CreacteCAKeyMetadataSubject{
@@ -140,9 +140,9 @@ func (c *lamassuCaClientConfig) CreateCA(ctx context.Context, input *api.CreateC
 			Organization:     input.Subject.Organization,
 			OrganizationUnit: input.Subject.OrganizationUnit,
 		},
-		ExpirationType:     string(input.ExpirationType),
-		CAExpiration:       caExpiration,
-		IssuanceExpiration: issuanceExpiration,
+		IssuanceExpirationType: string(input.IssuanceExpirationType),
+		CAExpiration:           caExpiration,
+		IssuanceExpiration:     issuanceExpiration,
 	}
 
 	req, err := c.client.NewRequest(ctx, "POST", "v1/pki", body)

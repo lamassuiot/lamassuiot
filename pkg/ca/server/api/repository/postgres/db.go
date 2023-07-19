@@ -37,7 +37,9 @@ func (CertificateDAO) TableName() string {
 
 type CertificateAuthorityDAO struct {
 	CertificateDAO
-	IssuanceDuration int
+	IssuanceDuration *time.Duration
+	IssuanceDate     *time.Time
+	IssuanceType     string
 }
 
 func (c *CertificateAuthorityDAO) toCertificate() (api.CACertificate, error) {
@@ -84,7 +86,9 @@ func (c *CertificateAuthorityDAO) toCertificate() (api.CACertificate, error) {
 			ValidTo:             c.Expiration,
 			RevocationTimestamp: c.Revocation,
 		},
-		IssuanceDuration: time.Duration(c.IssuanceDuration * int(time.Second)),
+		IssuanceDuration: c.IssuanceDuration,
+		IssuanceDate:     c.IssuanceDate,
+		IssuanceType:     c.IssuanceType,
 	}
 
 	if c.Revocation.Valid {
@@ -342,7 +346,7 @@ func (db PostgresDBContext) UpdateCAStatus(ctx context.Context, CAType api.CATyp
 	return nil
 }
 
-func (db PostgresDBContext) InsertCA(ctx context.Context, CAType api.CAType, certificate *x509.Certificate, issuanceExpiration time.Time) error {
+func (db PostgresDBContext) InsertCA(ctx context.Context, CAType api.CAType, certificate *x509.Certificate, issuanceExpirationDate *time.Time, issuanceExpirationDuration *time.Duration, issuanceType string) error {
 	pemCert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certificate.Raw})
 	enc := make([]byte, base64.StdEncoding.EncodedLen(len(pemCert)))
 	base64.StdEncoding.Encode(enc, pemCert)
@@ -359,7 +363,9 @@ func (db PostgresDBContext) InsertCA(ctx context.Context, CAType api.CAType, cer
 			Revocation:       pq.NullTime{},
 			RevocationReason: "",
 		},
-		IssuanceDuration: int(issuanceExpiration.Unix() - time.Now().Unix()),
+		IssuanceDuration: issuanceExpirationDuration,
+		IssuanceDate:     issuanceExpirationDate,
+		IssuanceType:     issuanceType,
 	})
 	if tx.Error != nil {
 		return tx.Error

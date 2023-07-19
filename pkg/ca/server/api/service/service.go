@@ -78,6 +78,7 @@ func NewCAService(engine x509engines.X509Engine, certificateRepository repositor
 	}
 
 	if !exists {
+		issuanceDuration := time.Now().Add(time.Hour * 24 * 365 * 3)
 		log.Info("Generating LAMASSU-DMS-MANAGER CA")
 		svc.CreateCA(context.Background(), &api.CreateCAInput{
 			CAType: api.CATypeDMSEnroller,
@@ -89,8 +90,9 @@ func NewCAService(engine x509engines.X509Engine, certificateRepository repositor
 				KeyType: api.KeyType(engine.GetEngineConfig().SupportedKeyTypes[0].Type),
 				KeyBits: engine.GetEngineConfig().SupportedKeyTypes[0].MaximumSize,
 			},
-			CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
-			IssuanceExpiration: time.Now().Add(time.Hour * 24 * 365 * 3),
+			CAExpiration:           time.Now().Add(time.Hour * 24 * 365 * 5),
+			IssuanceExpirationDate: &issuanceDuration,
+			IssuanceExpirationType: "DATE",
 		})
 	} else {
 		log.Info("LAMASSU-DMS-MANAGER CA already provisioned")
@@ -308,7 +310,12 @@ func (s *CAService) CreateCA(ctx context.Context, input *api.CreateCAInput) (*ap
 		return nil, err
 	}
 
-	err = s.certificateRepository.InsertCA(ctx, input.CAType, caCertificate, input.IssuanceExpiration)
+	if input.IssuanceExpirationType == api.ExpirationTypeDate {
+		input.IssuanceExpirationDuration = nil
+	} else {
+		input.IssuanceExpirationDate = nil
+	}
+	err = s.certificateRepository.InsertCA(ctx, input.CAType, caCertificate, input.IssuanceExpirationDate, input.IssuanceExpirationDuration, string(input.IssuanceExpirationType))
 	if err != nil {
 		log.Error(err)
 		return &api.CreateCAOutput{}, err
@@ -605,13 +612,10 @@ func (s *CAService) SignCertificateRequest(ctx context.Context, input *api.SignC
 		return &api.SignCertificateRequestOutput{}, errors.New("CA is expired or revoked")
 	}
 	var certificateExpiration time.Time
-	if input.ExpirationType != "" {
-		if caOutput.ValidTo.Before(input.CertificateExpiration) {
-			return &api.SignCertificateRequestOutput{}, errors.New("Certificate Expiration Greater Than CA Expiration")
-		}
-		certificateExpiration = input.CertificateExpiration
+	if caOutput.CACertificate.IssuanceType == "DATE" {
+		certificateExpiration = *caOutput.CACertificate.IssuanceDate
 	} else {
-		certificateExpiration = time.Now().Add(caOutput.IssuanceDuration)
+		certificateExpiration = time.Now().Add(*caOutput.CACertificate.IssuanceDuration * time.Second)
 	}
 	certificate, err := s.engine.SignCertificateRequest(caOutput.Certificate.Certificate, certificateExpiration, input)
 	if err != nil {
