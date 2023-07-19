@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"time"
@@ -27,6 +28,9 @@ type Service interface {
 	GetCAs(ctx context.Context, input *api.GetCAsInput) (*api.GetCAsOutput, error)
 	GetCAByName(ctx context.Context, input *api.GetCAByNameInput) (*api.GetCAByNameOutput, error)
 	// ImportCA(ctx context.Context, input *api.ImportCAInput) (*api.ImportCAOutput, error)
+
+	Verify(ctx context.Context, input *api.VerifyInput) (*api.VerifyOutput, error)
+	Sign(ctx context.Context, input *api.SignInput) (*api.SignOutput, error)
 
 	UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (*api.UpdateCAStatusOutput, error)
 	RevokeCA(ctx context.Context, input *api.RevokeCAInput) (*api.RevokeCAOutput, error)
@@ -655,6 +659,45 @@ func (s *CAService) GetExpiredAndOutOfSyncCertificates(ctx context.Context, inpu
 	return &api.GetExpiredAndOutOfSyncCertificatesOutput{
 		Certificates:      certs,
 		TotalCertificates: totalExpiredCertificates,
+	}, nil
+}
+
+func (s *CAService) Sign(ctx context.Context, input *api.SignInput) (*api.SignOutput, error) {
+	ca, err := s.service.GetCAByName(ctx, &api.GetCAByNameInput{
+		CAType: api.CATypePKI,
+		CAName: input.CaName,
+	})
+	if err != nil {
+		return &api.SignOutput{}, err
+	}
+
+	signature, err := s.engine.Sign(ca.CACertificate.Certificate, input.Message, string(input.MessageType), string(input.SigningAlgorithm))
+	if err != nil {
+		return &api.SignOutput{}, err
+	}
+
+	return &api.SignOutput{
+		Signature:        base64.StdEncoding.EncodeToString(signature),
+		SigningAlgorithm: input.SigningAlgorithm,
+	}, nil
+}
+
+func (s *CAService) Verify(ctx context.Context, input *api.VerifyInput) (*api.VerifyOutput, error) {
+	ca, err := s.service.GetCAByName(ctx, &api.GetCAByNameInput{
+		CAType: api.CATypePKI,
+		CAName: input.CaName,
+	})
+
+	if err != nil {
+		return &api.VerifyOutput{}, err
+	}
+
+	verification, err := s.engine.Verify(ca.CACertificate.Certificate, input.Signature, input.Message, string(input.MessageType), string(input.SigningAlgorithm))
+	if err != nil {
+		return &api.VerifyOutput{}, err
+	}
+	return &api.VerifyOutput{
+		VerificationResult: verification,
 	}, nil
 }
 

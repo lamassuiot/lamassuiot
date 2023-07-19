@@ -308,6 +308,16 @@ func (c *lamassuCaClientConfig) ScanAboutToExpireCertificates(ctx context.Contex
 	return &api.ScanAboutToExpireCertificatesOutput{}, nil
 }
 
+func (c *lamassuCaClientConfig) Verify(ctx context.Context, input *api.VerifyInput) (*api.VerifyOutput, error) {
+	// TODO: To implement
+	return &api.VerifyOutput{}, nil
+}
+
+func (c *lamassuCaClientConfig) Sign(ctx context.Context, input *api.SignInput) (*api.SignOutput, error) {
+	// TODO: To implement
+	return &api.SignOutput{}, nil
+}
+
 func (c *lamassuCaClientConfig) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (*api.ScanExpiredAndOutOfSyncCertificatesOutput, error) {
 	// TODO: To implement
 	return &api.ScanExpiredAndOutOfSyncCertificatesOutput{}, nil

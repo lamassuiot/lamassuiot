@@ -40,6 +40,21 @@ type RevokeCAPayload struct {
 
 // -------------------------------------------------------------
 
+type SignRequestPayload struct {
+	Message          string `json:"message" validate:"required"`
+	MessageType      string `json:"message_type" validate:"required"`
+	SigningAlgorithm string `json:"signing_algorithm" validate:"required"`
+}
+
+type VerifyRequestPayload struct {
+	Message          string `json:"message" validate:"required"`
+	MessageType      string `json:"message_type" validate:"required"`
+	SigningAlgorithm string `json:"signing_algorithm" validate:"required"`
+	Signature        string `json:"signature" validate:"required"`
+}
+
+// -------------------------------------------------------------
+
 type RevokeCertificatePayload struct {
 	RevocationReason string `json:"revocation_reason"`
 }

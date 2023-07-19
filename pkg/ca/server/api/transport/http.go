@@ -205,6 +205,28 @@ func MakeHTTPHandler(s service.Service) http.Handler {
 		),
 	)
 
+	r.Methods("POST").Path("/ca/{caName}/signature/sign").Handler(
+		httptransport.NewServer(
+			e.SignEndpoint,
+			decodeSignRequest,
+			encodeSignResponse,
+			append(
+				options,
+			)...,
+		),
+	)
+
+	r.Methods("POST").Path("/ca/{caName}/signature/verify").Handler(
+		httptransport.NewServer(
+			e.VerifyEndpoint,
+			decodeVerifyRequest,
+			encodeVerifyResponse,
+			append(
+				options,
+			)...,
+		),
+	)
+
 	return r
 }
 
@@ -440,6 +462,59 @@ func decodeRevokeCertificateRequest(ctx context.Context, r *http.Request) (reque
 	}, nil
 }
 
+func decodeSignRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	CAName := vars["caName"]
+
+	var body api.SignRequestPayload
+
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+
+	message, err := base64.StdEncoding.DecodeString(body.Message)
+	if err != nil {
+		return nil, err
+	}
+	return api.SignInput{
+		Message:          message,
+		MessageType:      api.ParseMsgType(body.MessageType),
+		SigningAlgorithm: api.ParseSigningAlgType(body.SigningAlgorithm),
+		CaName:           CAName,
+	}, nil
+}
+
+func decodeVerifyRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	CAName := vars["caName"]
+
+	var body api.VerifyRequestPayload
+
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+
+	message, err := base64.StdEncoding.DecodeString(body.Message)
+	if err != nil {
+		return nil, err
+	}
+
+	signature, err := base64.StdEncoding.DecodeString(body.Signature)
+	if err != nil {
+		return nil, err
+	}
+
+	return api.VerifyInput{
+		Message:          message,
+		MessageType:      api.ParseMsgType(body.MessageType),
+		SigningAlgorithm: api.ParseSigningAlgType(body.SigningAlgorithm),
+		Signature:        signature,
+		CaName:           CAName,
+	}, nil
+}
+
 func encodeHealthResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if e, ok := response.(errorer); ok && e.error() != nil {
 		encodeError(ctx, e.error(), w)
@@ -573,6 +648,32 @@ func encodeRevokeCertificateResponse(ctx context.Context, w http.ResponseWriter,
 	}
 
 	castedResponse := response.(*api.RevokeCertificateOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func encodeSignResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.SignOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func encodeVerifyResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.VerifyOutput)
 	serializedResponse := castedResponse.Serialize()
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

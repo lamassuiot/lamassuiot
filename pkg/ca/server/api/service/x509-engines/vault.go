@@ -321,6 +321,19 @@ func (v Vaultx509Engine) SignCertificateRequest(caCertificate *x509.Certificate,
 	return certificate, nil
 }
 
+func (v Vaultx509Engine) Sign(ca api.Certificate, message []byte, messageType string, signing_algorithm string) ([]byte, error) {
+	// data, err := v.client.Logical().Read("secret/" + v.pkiPath + api.ToVaultPath(string(ca.CAType)) + ca.CAName)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	return nil, nil
+}
+
+func (v Vaultx509Engine) Verify(ca api.Certificate, signature []byte, message []byte, messageType string, signing_algorithm string) (bool, error) {
+	return false, nil
+}
+
 func DecodeCert(cert []byte) (x509.Certificate, error) {
 	pemBlock, _ := pem.Decode(cert)
 	if pemBlock == nil {

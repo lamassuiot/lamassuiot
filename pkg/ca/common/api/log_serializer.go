@@ -129,6 +129,32 @@ func (o *GetCAsOutput) ToSerializedLog() GetCAsOutputLogSerialized {
 }
 
 // -------------------------------------------------------------
+
+type SignOutputLogSerialized struct {
+	Signature        string         `json:"signature"`
+	SigningAlgorithm SigningAlgType `json:"signing_algorithm"`
+}
+
+func (o *SignOutput) ToSerializedLog() SignOutputLogSerialized {
+	serializer := SignOutputLogSerialized{
+		Signature:        o.Signature,
+		SigningAlgorithm: o.SigningAlgorithm,
+	}
+	return serializer
+}
+
+type VerifyOutputLogSerialized struct {
+	VerificationResult bool `json:"verification"`
+}
+
+func (o *VerifyOutput) ToSerializedLog() VerifyOutputLogSerialized {
+	serializer := VerifyOutputLogSerialized{
+		VerificationResult: o.VerificationResult,
+	}
+	return serializer
+}
+
+// -------------------------------------------------------------
 type GetCAByNameOutputLogSerialized struct {
 	CACertificateLogSerialized
 }

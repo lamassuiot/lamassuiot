@@ -174,3 +174,11 @@ func (mw *amqpMiddleware) ScanAboutToExpireCertificates(ctx context.Context, inp
 func (mw *amqpMiddleware) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (*api.ScanExpiredAndOutOfSyncCertificatesOutput, error) {
 	return mw.next.ScanExpiredAndOutOfSyncCertificates(ctx, input)
 }
+
+func (mw *amqpMiddleware) Verify(ctx context.Context, input *api.VerifyInput) (*api.VerifyOutput, error) {
+	return mw.next.Verify(ctx, input)
+}
+
+func (mw *amqpMiddleware) Sign(ctx context.Context, input *api.SignInput) (*api.SignOutput, error) {
+	return mw.next.Sign(ctx, input)
+}

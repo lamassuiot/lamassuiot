@@ -323,6 +323,41 @@ func (o *GetCAByNameOutputSerialized) Deserialize() GetCAByNameOutput {
 	}
 }
 
+type SignOutputSerialized struct {
+	Signature        string         `json:"signature"`
+	SigningAlgorithm SigningAlgType `json:"signing_algorithm"`
+}
+
+func (o *SignOutput) Serialize() SignOutputSerialized {
+	return SignOutputSerialized{
+		Signature:        o.Signature,
+		SigningAlgorithm: o.SigningAlgorithm,
+	}
+}
+
+func (o *SignOutputSerialized) Deserialize() SignOutput {
+	return SignOutput{
+		Signature:        o.Signature,
+		SigningAlgorithm: o.SigningAlgorithm,
+	}
+}
+
+type VerifyOutputSerialized struct {
+	VerificationResult bool `json:"verification"`
+}
+
+func (o *VerifyOutput) Serialize() VerifyOutputSerialized {
+	return VerifyOutputSerialized{
+		VerificationResult: o.VerificationResult,
+	}
+}
+
+func (o *VerifyOutputSerialized) Deserialize() VerifyOutput {
+	return VerifyOutput{
+		VerificationResult: o.VerificationResult,
+	}
+}
+
 // -------------------------------------------------------------
 type RevokeCAOutputSerialized struct {
 	CACertificateSerialized

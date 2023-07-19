@@ -246,3 +246,27 @@ func (mw *validationMiddleware) ScanExpiredAndOutOfSyncCertificates(ctx context.
 	}
 	return mw.next.ScanExpiredAndOutOfSyncCertificates(ctx, input)
 }
+
+func (mw *validationMiddleware) Verify(ctx context.Context, input *api.VerifyInput) (output *api.VerifyOutput, err error) {
+	validate := validator.New()
+	err = validate.Struct(input)
+	if err != nil {
+		valError := errors.ValidationError{
+			Msg: err.Error(),
+		}
+		return nil, &valError
+	}
+	return mw.next.Verify(ctx, input)
+}
+
+func (mw *validationMiddleware) Sign(ctx context.Context, input *api.SignInput) (output *api.SignOutput, err error) {
+	validate := validator.New()
+	err = validate.Struct(input)
+	if err != nil {
+		valError := errors.ValidationError{
+			Msg: err.Error(),
+		}
+		return nil, &valError
+	}
+	return mw.next.Sign(ctx, input)
+}

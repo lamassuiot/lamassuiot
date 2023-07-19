@@ -6,10 +6,14 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/sha512"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"errors"
+	"hash"
 	"math/big"
+	"strings"
 	"time"
 
 	caerrors "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/errors"
@@ -158,4 +162,170 @@ func (s StandardX509Engine) SignCertificateRequest(caCertificate *x509.Certifica
 	}
 
 	return certificate, nil
+}
+
+func (s StandardX509Engine) Sign(ca api.Certificate, message []byte, messageType string, signing_algorithm string) ([]byte, error) {
+	privkey, err := s.cryptoEngine.GetPrivateKeyByID(ca.CAName)
+	if err != nil {
+		return nil, err
+	}
+	if ca.KeyMetadata.KeyType == api.ECDSA {
+		var hasher []byte
+		var hashFunc crypto.Hash
+		var h hash.Hash
+		if signing_algorithm == "ECDSA_SHA_256" {
+			h = sha256.New()
+			hashFunc = crypto.SHA256
+		} else if signing_algorithm == "ECDSA_SHA_384" {
+			h = sha512.New384()
+			hashFunc = crypto.SHA384
+		} else if signing_algorithm == "ECDSA_SHA_512" {
+			h = sha512.New()
+			hashFunc = crypto.SHA512
+		} else {
+			return nil, errors.New("Signing Algorithm not supported")
+		}
+		if messageType == "RAW" {
+			h.Write(message)
+			hasher = h.Sum(nil)
+
+		} else {
+			hasher = message
+		}
+		signature, err := privkey.Sign(rand.Reader, hasher, hashFunc)
+		if err != nil {
+			return nil, err
+		}
+		return signature, nil
+	} else {
+		var hasher []byte
+		var hashFunc crypto.Hash
+		var h hash.Hash
+		if signing_algorithm == "RSASSA_PSS_SHA_256" || signing_algorithm == "RSASSA_PKCS1_V1_5_SHA_256" {
+			h = sha256.New()
+			hashFunc = crypto.SHA256
+		} else if signing_algorithm == "RSASSA_PSS_SHA_384" || signing_algorithm == "RSASSA_PKCS1_V1_5_SHA_384" {
+			h = sha512.New384()
+			hashFunc = crypto.SHA384
+		} else if signing_algorithm == "RSASSA_PSS_SHA_512" || signing_algorithm == "RSASSA_PKCS1_V1_5_SHA_512" {
+			h = sha512.New()
+			hashFunc = crypto.SHA512
+		} else {
+			return nil, errors.New("Signing Algorithm not supported")
+		}
+		if messageType == "RAW" {
+			h.Write(message)
+			hasher = h.Sum(nil)
+		} else {
+			hasher = message
+		}
+
+		sigAlg := strings.Split(signing_algorithm, "_")
+		if sigAlg[1] == "PSS" {
+			var saltLength int
+			switch hashFunc {
+			case crypto.SHA256:
+				saltLength = 32
+			case crypto.SHA384:
+				saltLength = 48
+			case crypto.SHA512:
+				saltLength = 64
+			}
+			signature, err := privkey.Sign(rand.Reader, hasher, &rsa.PSSOptions{
+				SaltLength: saltLength,
+				Hash:       hashFunc,
+			})
+			if err != nil {
+				return nil, err
+			}
+			return signature, nil
+		} else {
+			signature, err := privkey.Sign(rand.Reader, hasher, hashFunc)
+			if err != nil {
+				return nil, err
+			}
+			return signature, nil
+		}
+	}
+}
+
+func (s StandardX509Engine) Verify(ca api.Certificate, signature []byte, message []byte, messageType string, signing_algorithm string) (bool, error) {
+	privkey, err := s.cryptoEngine.GetPrivateKeyByID(ca.CAName)
+	if err != nil {
+		return false, err
+	}
+
+	if ca.KeyMetadata.KeyType == api.ECDSA {
+		var hasher []byte
+		var h hash.Hash
+		if signing_algorithm == "ECDSA_SHA_256" {
+			h = sha256.New()
+		} else if signing_algorithm == "ECDSA_SHA_384" {
+			h = sha512.New384()
+		} else if signing_algorithm == "ECDSA_SHA_512" {
+			h = sha512.New()
+		} else {
+			return false, errors.New("Signing Algorithm not supported")
+		}
+		if messageType == "RAW" {
+			h.Write(message)
+			hasher = h.Sum(nil)
+		} else {
+			hasher = message
+		}
+		pubKey := privkey.Public()
+		ecdsaKey, _ := pubKey.(*ecdsa.PublicKey)
+		return ecdsa.VerifyASN1(ecdsaKey, hasher, signature), nil
+	} else {
+		var hasher []byte
+		var hashFunc crypto.Hash
+		var h hash.Hash
+		if signing_algorithm == "RSASSA_PSS_SHA_256" || signing_algorithm == "RSASSA_PKCS1_V1_5_SHA_256" {
+			h = sha256.New()
+			hashFunc = crypto.SHA256
+		} else if signing_algorithm == "RSASSA_PSS_SHA_384" || signing_algorithm == "RSASSA_PKCS1_V1_5_SHA_384" {
+			h = sha512.New384()
+			hashFunc = crypto.SHA384
+		} else if signing_algorithm == "RSASSA_PSS_SHA_512" || signing_algorithm == "RSASSA_PKCS1_V1_5_SHA_512" {
+			h = sha512.New()
+			hashFunc = crypto.SHA512
+		} else {
+			return false, errors.New("Signing Algorithm not supported")
+		}
+		if messageType == "RAW" {
+			h.Write(message)
+			hasher = h.Sum(nil)
+
+		} else {
+			hasher = message
+		}
+		pubKey := privkey.Public()
+		rsaKey, _ := pubKey.(*rsa.PublicKey)
+		sigAlg := strings.Split(signing_algorithm, "_")
+		if sigAlg[1] == "PSS" {
+			var saltLength int
+			switch hashFunc {
+			case crypto.SHA256:
+				saltLength = 32
+			case crypto.SHA384:
+				saltLength = 48
+			case crypto.SHA512:
+				saltLength = 64
+			}
+			err = rsa.VerifyPSS(rsaKey, hashFunc, hasher, signature, &rsa.PSSOptions{
+				SaltLength: saltLength,
+				Hash:       hashFunc,
+			})
+			if err != nil {
+				return false, err
+			}
+			return true, nil
+		} else {
+			err = rsa.VerifyPKCS1v15(rsaKey, hashFunc, hasher, signature)
+			if err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+	}
 }

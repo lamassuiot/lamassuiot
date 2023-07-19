@@ -50,6 +50,63 @@ func ParseExpirationType(t string) ExpirationType {
 	}
 }
 
+type MsgType string
+
+const (
+	MsgTypeHash MsgType = "HASH"
+	MsgTypeRaw  MsgType = "RAW"
+)
+
+func ParseMsgType(t string) MsgType {
+	switch t {
+	case "HASH":
+		return MsgTypeHash
+	case "RAW":
+		return MsgTypeRaw
+	default:
+		return ""
+	}
+}
+
+type SigningAlgType string
+
+const (
+	RSASSA_PSS_SHA_256        SigningAlgType = "RSASSA_PSS_SHA_256"
+	RSASSA_PSS_SHA_384        SigningAlgType = "RSASSA_PSS_SHA_384"
+	RSASSA_PSS_SHA_512        SigningAlgType = "RSASSA_PSS_SHA_512"
+	RSASSA_PKCS1_V1_5_SHA_256 SigningAlgType = "RSASSA_PKCS1_V1_5_SHA_256"
+	RSASSA_PKCS1_V1_5_SHA_384 SigningAlgType = "RSASSA_PKCS1_V1_5_SHA_384"
+	RSASSA_PKCS1_V1_5_SHA_512 SigningAlgType = "RSASSA_PKCS1_V1_5_SHA_512"
+	ECDSA_SHA_256             SigningAlgType = "ECDSA_SHA_256"
+	ECDSA_SHA_384             SigningAlgType = "ECDSA_SHA_384"
+	ECDSA_SHA_512             SigningAlgType = "ECDSA_SHA_512"
+)
+
+func ParseSigningAlgType(t string) SigningAlgType {
+	switch t {
+	case "RSASSA_PSS_SHA_256":
+		return RSASSA_PSS_SHA_256
+	case "RSASSA_PSS_SHA_384":
+		return RSASSA_PSS_SHA_384
+	case "RSASSA_PSS_SHA_512":
+		return RSASSA_PSS_SHA_512
+	case "RSASSA_PKCS1_V1_5_SHA_256":
+		return RSASSA_PKCS1_V1_5_SHA_256
+	case "RSASSA_PKCS1_V1_5_SHA_384":
+		return RSASSA_PKCS1_V1_5_SHA_384
+	case "RSASSA_PKCS1_V1_5_SHA_512":
+		return RSASSA_PKCS1_V1_5_SHA_512
+	case "ECDSA_SHA_256":
+		return ECDSA_SHA_256
+	case "ECDSA_SHA_384":
+		return ECDSA_SHA_384
+	case "ECDSA_SHA_512":
+		return ECDSA_SHA_512
+	default:
+		return ""
+	}
+}
+
 type CAType string
 
 const (
@@ -228,6 +285,32 @@ type CreateCAInput struct {
 
 type CreateCAOutput struct {
 	CACertificate
+}
+
+// ---------------------------------------------------------------------
+type SignInput struct {
+	Message          []byte         `validate:"required"`
+	MessageType      MsgType        `validate:"required"`
+	SigningAlgorithm SigningAlgType `validate:"required"`
+	CaName           string         `validate:"required"`
+}
+
+type SignOutput struct {
+	Signature        string
+	SigningAlgorithm SigningAlgType
+}
+
+// ---------------------------------------------------------------------
+type VerifyInput struct {
+	Message          []byte         `validate:"required"`
+	Signature        []byte         `validate:"required"`
+	MessageType      MsgType        `validate:"required"`
+	SigningAlgorithm SigningAlgType `validate:"required"`
+	CaName           string         `validate:"required"`
+}
+
+type VerifyOutput struct {
+	VerificationResult bool
 }
 
 // ---------------------------------------------------------------------
