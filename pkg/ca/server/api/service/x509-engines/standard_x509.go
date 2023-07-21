@@ -10,6 +10,7 @@ import (
 	"crypto/sha512"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"errors"
 	"hash"
 	"math/big"
@@ -179,18 +180,27 @@ func (s StandardX509Engine) Sign(ca api.Certificate, message []byte, messageType
 			h = sha512.New()
 			hashFunc = crypto.SHA512
 		} else {
-			return nil, errors.New("Signing Algorithm not supported")
+			return nil, &caerrors.GenericError{
+				StatusCode: 404,
+				Message:    "Signing Algorithm not supported",
+			}
 		}
 		if messageType == "RAW" {
 			h.Write(message)
 			hasher = h.Sum(nil)
 
 		} else {
-			hasher = message
+			hasher, err = hex.DecodeString(string(message))
+			if err != nil {
+				return nil, err
+			}
 		}
 		signature, err := privkey.Sign(rand.Reader, hasher, hashFunc)
 		if err != nil {
-			return nil, err
+			return nil, &caerrors.GenericError{
+				StatusCode: 400,
+				Message:    "Inconsistency between hashed message and signature algorithm",
+			}
 		}
 		return signature, nil
 	} else {
@@ -207,13 +217,19 @@ func (s StandardX509Engine) Sign(ca api.Certificate, message []byte, messageType
 			h = sha512.New()
 			hashFunc = crypto.SHA512
 		} else {
-			return nil, errors.New("Signing Algorithm not supported")
+			return nil, &caerrors.GenericError{
+				StatusCode: 404,
+				Message:    "Signing Algorithm not supported",
+			}
 		}
 		if messageType == "RAW" {
 			h.Write(message)
 			hasher = h.Sum(nil)
 		} else {
-			hasher = message
+			hasher, err = hex.DecodeString(string(message))
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		sigAlg := strings.Split(signing_algorithm, "_")
@@ -232,7 +248,10 @@ func (s StandardX509Engine) Sign(ca api.Certificate, message []byte, messageType
 				Hash:       hashFunc,
 			})
 			if err != nil {
-				return nil, err
+				return nil, &caerrors.GenericError{
+					StatusCode: 400,
+					Message:    "Inconsistency between hashed message and signature algorithm",
+				}
 			}
 			return signature, nil
 		} else {
@@ -267,7 +286,10 @@ func (s StandardX509Engine) Verify(ca api.Certificate, signature []byte, message
 			h.Write(message)
 			hasher = h.Sum(nil)
 		} else {
-			hasher = message
+			hasher, err = hex.DecodeString(string(message))
+			if err != nil {
+				return false, err
+			}
 		}
 		pubKey := privkey.Public()
 		ecdsaKey, _ := pubKey.(*ecdsa.PublicKey)
@@ -286,6 +308,7 @@ func (s StandardX509Engine) Verify(ca api.Certificate, signature []byte, message
 			h = sha512.New()
 			hashFunc = crypto.SHA512
 		} else {
+
 			return false, errors.New("Signing Algorithm not supported")
 		}
 		if messageType == "RAW" {
@@ -293,7 +316,10 @@ func (s StandardX509Engine) Verify(ca api.Certificate, signature []byte, message
 			hasher = h.Sum(nil)
 
 		} else {
-			hasher = message
+			hasher, err = hex.DecodeString(string(message))
+			if err != nil {
+				return false, err
+			}
 		}
 		pubKey := privkey.Public()
 		rsaKey, _ := pubKey.(*rsa.PublicKey)
