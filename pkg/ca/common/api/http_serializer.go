@@ -211,9 +211,10 @@ func (o *CertificateSerialized) Deserialize() Certificate {
 
 type CACertificateSerialized struct {
 	CertificateSerialized
+	WithPrivateKey   bool           `json:"with_private_key"`
 	IssuanceDate     *time.Time     `json:"issuance_date,omitempty"`
 	IssuanceDuration *time.Duration `json:"issuance_duration,omitempty"`
-	IssuanceType     string         `json:"issuance_type"`
+	IssuanceType     string         `json:"issuance_type,omitempty"`
 }
 
 func (o *CACertificate) Serialize() CACertificateSerialized {
@@ -222,6 +223,7 @@ func (o *CACertificate) Serialize() CACertificateSerialized {
 			CertificateSerialized: o.Certificate.Serialize(),
 			IssuanceDuration:      o.IssuanceDuration,
 			IssuanceType:          o.IssuanceType,
+			WithPrivateKey:        o.WithPrivateKey,
 		}
 		return serializer
 	} else {
@@ -229,6 +231,7 @@ func (o *CACertificate) Serialize() CACertificateSerialized {
 			CertificateSerialized: o.Certificate.Serialize(),
 			IssuanceDate:          o.IssuanceDate,
 			IssuanceType:          o.IssuanceType,
+			WithPrivateKey:        o.WithPrivateKey,
 		}
 		return serializer
 	}
@@ -240,6 +243,7 @@ func (o *CACertificateSerialized) Deserialize() CACertificate {
 		Certificate:      o.CertificateSerialized.Deserialize(),
 		IssuanceDuration: o.IssuanceDuration,
 		IssuanceType:     o.IssuanceType,
+		WithPrivateKey:   o.WithPrivateKey,
 		IssuanceDate:     o.IssuanceDate,
 	}
 	return serializer
