@@ -115,6 +115,19 @@ func (o *CreateCAOutput) ToSerializedLog() CreateCAOutputLogSerialized {
 
 // -------------------------------------------------------------
 
+type ImportCAOutputLogSerialized struct {
+	CACertificateLogSerialized
+}
+
+func (o *ImportCAOutput) ToSerializedLog() ImportCAOutputLogSerialized {
+	serializer := ImportCAOutputLogSerialized{
+		CACertificateLogSerialized: o.CACertificate.ToSerializedLog(),
+	}
+	return serializer
+}
+
+// -------------------------------------------------------------
+
 type GetCAsOutputLogSerialized struct {
 	TotalCAs  int `json:"total_cas"`
 	OutputCAs int `json:"output_cas"`

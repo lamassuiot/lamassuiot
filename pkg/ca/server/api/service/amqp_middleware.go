@@ -93,6 +93,10 @@ func (mw *amqpMiddleware) CreateCA(ctx context.Context, input *api.CreateCAInput
 	return mw.next.CreateCA(ctx, input)
 }
 
+func (mw amqpMiddleware) ImportCA(ctx context.Context, input *api.ImportCAInput) (output *api.ImportCAOutput, err error) {
+	return mw.next.ImportCA(ctx, input)
+}
+
 func (mw *amqpMiddleware) GetCAs(ctx context.Context, input *api.GetCAsInput) (output *api.GetCAsOutput, err error) {
 	return mw.next.GetCAs(ctx, input)
 }

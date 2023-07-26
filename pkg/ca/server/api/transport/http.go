@@ -134,16 +134,16 @@ func MakeHTTPHandler(s service.Service) http.Handler {
 	)
 
 	// Import existing crt and key
-	// r.Methods("POST").Path("/pki/import/{caName}").Handler(httptransport.NewServer(
-	// 	e.ImportCAEndpoint,
-	// 	decodeImportCARequest,
-	// 	encodeResponse,
-	// 	append(
-	// 		options,
-	// 		httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "ImportCA", logger)),
-	// 		httptransport.ServerBefore(HTTPToContext(logger)),
-	// 	)...,
-	// ))
+	r.Methods("POST").Path("/{caType}/import").Handler(
+		httptransport.NewServer(
+			e.ImportCAEndpoint,
+			decodeImportCARequest,
+			encodeImportCAResponse,
+			append(
+				options,
+			)...,
+		),
+	)
 
 	// Revoke CA
 	r.Methods("DELETE").Path("/{caType}/{caName}").Handler(
@@ -347,20 +347,82 @@ func decodeCreateCARequest(ctx context.Context, r *http.Request) (request interf
 	return input, nil
 }
 
-// func decodeImportCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-// 	vars := mux.Vars(r)
-// 	var importCaRequest endpoint.ImportCARequest
-// 	err = json.NewDecoder(r.Body).Decode(&importCaRequest.CaPayload)
-// 	if err != nil {
-// 		return nil, InvalidJsonFormat()
-// 	}
-// 	caName, _ := vars["caName"]
+func decodeImportCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	var body api.ImportCAPayload
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+	CATypeString := vars["caType"]
 
-// 	importCaRequest.CaName = caName
-// 	importCaRequest.CaType = "pki"
+	crtByte, err := base64.StdEncoding.DecodeString(body.Crt)
+	if err != nil {
+		return nil, err
+	}
 
-// 	return importCaRequest, nil
-// }
+	b, _ := pem.Decode(crtByte)
+	crt, err := x509.ParseCertificate(b.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	if body.WithPrivateKey {
+		var privateKey interface{}
+		var keyType api.KeyType
+		keyByte, err := base64.StdEncoding.DecodeString(body.PrivateKey)
+		if err != nil {
+			return nil, err
+		}
+		key, _ := pem.Decode(keyByte)
+
+		privateKey, err = x509.ParseECPrivateKey(key.Bytes)
+		keyType = api.ECDSA
+		if err != nil {
+			privateKey, err = x509.ParsePKCS1PrivateKey(key.Bytes)
+			if err != nil {
+				return nil, err
+			}
+			keyType = api.RSA
+		}
+		var IssuanceExpirationDuration time.Duration
+		var IssuanceExpirationDate time.Time
+		var IssuanceexpirationType api.ExpirationType
+
+		switch api.ParseExpirationType(body.IssuanceExpirationType) {
+		case api.ExpirationTypeDuration:
+			IssuanceExpiration, _ := strconv.Atoi(body.IssuanceExpiration)
+			IssuanceExpirationDuration = time.Duration(IssuanceExpiration)
+			IssuanceexpirationType = api.ExpirationTypeDuration
+		case api.ExpirationTypeDate:
+			IssuanceExpirationDate, err = time.Parse("20060102T150405Z", body.IssuanceExpiration)
+			if err != nil {
+				return nil, err
+			}
+			IssuanceexpirationType = api.ExpirationTypeDate
+		default:
+			return nil, InvalidExpirationType()
+		}
+		return api.ImportCAInput{
+			CAType:         api.ParseCAType(CATypeString),
+			WithPrivateKey: body.WithPrivateKey,
+			Certificate:    crt,
+			PrivateKey: &api.PrivateKey{
+				Key:     privateKey,
+				KeyType: keyType,
+			},
+			IssuanceExpirationDate:     &IssuanceExpirationDate,
+			IssuanceExpirationDuration: &IssuanceExpirationDuration,
+			IssuanceExpirationType:     IssuanceexpirationType,
+		}, nil
+	}
+
+	return api.ImportCAInput{
+		CAType:         api.ParseCAType(CATypeString),
+		WithPrivateKey: body.WithPrivateKey,
+		Certificate:    crt,
+	}, nil
+}
 
 func decodeRevokeCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
@@ -588,6 +650,19 @@ func encodeCreateCAResponse(ctx context.Context, w http.ResponseWriter, response
 	}
 
 	castedResponse := response.(*api.CreateCAOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func encodeImportCAResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.ImportCAOutput)
 	serializedResponse := castedResponse.Serialize()
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

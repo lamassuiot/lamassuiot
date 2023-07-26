@@ -57,7 +57,7 @@ func (mw *validationMiddleware) CreateCA(ctx context.Context, input *api.CreateC
 				sl.ReportError(input.IssuanceExpirationDate, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
 			}
 		} else {
-			expiration := time.Now().Add(*input.IssuanceExpirationDuration*time.Second)
+			expiration := time.Now().Add(*input.IssuanceExpirationDuration * time.Second)
 			if input.CAExpiration.Before(expiration) {
 				sl.ReportError(input.IssuanceExpirationDuration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
 			}
@@ -75,6 +75,35 @@ func (mw *validationMiddleware) CreateCA(ctx context.Context, input *api.CreateC
 	}
 
 	return mw.next.CreateCA(ctx, input)
+}
+
+func (mw *validationMiddleware) ImportCA(ctx context.Context, input *api.ImportCAInput) (output *api.ImportCAOutput, err error) {
+	validatorFunc := func(sl validator.StructLevel) {
+		input := sl.Current().Interface().(api.ImportCAInput)
+		if input.WithPrivateKey {
+			if input.IssuanceExpirationType == api.ExpirationTypeDate {
+				if input.Certificate.NotAfter.Before(*input.IssuanceExpirationDate) {
+					sl.ReportError(input.IssuanceExpirationDate, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
+				}
+			} else {
+				expiration := time.Now().Add(*input.IssuanceExpirationDuration * time.Second)
+				if input.Certificate.NotAfter.Before(expiration) {
+					sl.ReportError(input.IssuanceExpirationDuration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
+				}
+			}
+		}
+
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(validatorFunc, api.ImportCAInput{})
+	err = validate.Struct(input)
+	if err != nil {
+		valError := errors.ValidationError{
+			Msg: err.Error(),
+		}
+		return nil, &valError
+	}
+	return mw.next.ImportCA(ctx, input)
 }
 
 func (mw *validationMiddleware) GetCAs(ctx context.Context, input *api.GetCAsInput) (output *api.GetCAsOutput, err error) {

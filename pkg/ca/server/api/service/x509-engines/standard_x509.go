@@ -39,6 +39,13 @@ func (s StandardX509Engine) GetEngineConfig() api.EngineProviderInfo {
 	return s.cryptoEngine.GetEngineConfig()
 }
 
+func (s StandardX509Engine) ImportCA(input api.PrivateKey, caName string) error {
+	err := s.cryptoEngine.ImportCAPrivateKey(input, caName)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 func (s StandardX509Engine) CreateCA(input api.CreateCAInput) (*x509.Certificate, error) {
 	var signer crypto.Signer
 	var derBytes []byte

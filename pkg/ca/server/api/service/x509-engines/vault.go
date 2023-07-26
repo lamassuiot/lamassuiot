@@ -327,6 +327,10 @@ func (v Vaultx509Engine) SignCertificateRequest(caCertificate *x509.Certificate,
 	return certificate, nil
 }
 
+func (v Vaultx509Engine) ImportCA(input api.PrivateKey, caName string) error {
+	return nil
+}
+
 func (v Vaultx509Engine) Sign(ca api.Certificate, message []byte, messageType string, signing_algorithm string) ([]byte, error) {
 	// data, err := v.client.Logical().Read("secret/" + v.pkiPath + api.ToVaultPath(string(ca.CAType)) + ca.CAName)
 	// if err != nil {

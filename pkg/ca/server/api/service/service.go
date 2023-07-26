@@ -27,7 +27,7 @@ type Service interface {
 	CreateCA(ctx context.Context, input *api.CreateCAInput) (*api.CreateCAOutput, error)
 	GetCAs(ctx context.Context, input *api.GetCAsInput) (*api.GetCAsOutput, error)
 	GetCAByName(ctx context.Context, input *api.GetCAByNameInput) (*api.GetCAByNameOutput, error)
-	// ImportCA(ctx context.Context, input *api.ImportCAInput) (*api.ImportCAOutput, error)
+	ImportCA(ctx context.Context, input *api.ImportCAInput) (*api.ImportCAOutput, error)
 
 	Verify(ctx context.Context, input *api.VerifyInput) (*api.VerifyOutput, error)
 	Sign(ctx context.Context, input *api.SignInput) (*api.SignOutput, error)
@@ -315,7 +315,7 @@ func (s *CAService) CreateCA(ctx context.Context, input *api.CreateCAInput) (*ap
 	} else {
 		input.IssuanceExpirationDate = nil
 	}
-	err = s.certificateRepository.InsertCA(ctx, input.CAType, caCertificate, input.IssuanceExpirationDate, input.IssuanceExpirationDuration, string(input.IssuanceExpirationType))
+	err = s.certificateRepository.InsertCA(ctx, input.CAType, caCertificate, input.IssuanceExpirationDate, input.IssuanceExpirationDuration, string(input.IssuanceExpirationType), true)
 	if err != nil {
 		log.Error(err)
 		return &api.CreateCAOutput{}, err
@@ -339,9 +339,57 @@ func (s *CAService) CreateCA(ctx context.Context, input *api.CreateCAInput) (*ap
 	}, nil
 }
 
-// func (s *CAService) ImportCA(ctx context.Context, input *api.ImportCAInput) (*api.ImportCAOutput, error) {
-// 	return s.service.secrets.ImportCA(input)
-// }
+func (s *CAService) ImportCA(ctx context.Context, input *api.ImportCAInput) (*api.ImportCAOutput, error) {
+	exits, _, err := s.certificateRepository.SelectCAByName(ctx, input.CAType, input.Certificate.Subject.CommonName)
+	if err != nil {
+		return nil, err
+	}
+
+	if exits {
+		return nil, &caerrors.DuplicateResourceError{
+			ResourceType: "CA",
+			ResourceId:   input.Certificate.Subject.CommonName,
+		}
+	}
+	if !input.WithPrivateKey {
+		err = s.certificateRepository.InsertCA(ctx, input.CAType, input.Certificate, nil, nil, "", input.WithPrivateKey)
+		if err != nil {
+			log.Error(err)
+			return &api.ImportCAOutput{}, err
+		}
+	} else {
+		if input.IssuanceExpirationType == api.ExpirationTypeDate {
+			input.IssuanceExpirationDuration = nil
+		} else {
+			input.IssuanceExpirationDate = nil
+		}
+		err = s.engine.ImportCA(*input.PrivateKey, input.Certificate.Subject.CommonName)
+		if err != nil {
+			log.Error(err)
+			return &api.ImportCAOutput{}, err
+		}
+		err = s.certificateRepository.InsertCA(ctx, input.CAType, input.Certificate, input.IssuanceExpirationDate, input.IssuanceExpirationDuration, string(input.IssuanceExpirationType), input.WithPrivateKey)
+		if err != nil {
+			log.Error(err)
+			return &api.ImportCAOutput{}, err
+		}
+	}
+	_, ca, err := s.certificateRepository.SelectCAByName(ctx, input.CAType, input.Certificate.Subject.CommonName)
+	if err != nil {
+		log.Error(err)
+		return &api.ImportCAOutput{}, err
+	}
+
+	keyType, keySize, keyStrength := getPublicKeyInfo(ca.Certificate.Certificate)
+	ca.KeyMetadata = api.KeyStrengthMetadata{
+		KeyType:     keyType,
+		KeyBits:     keySize,
+		KeyStrength: keyStrength,
+	}
+	return &api.ImportCAOutput{
+		CACertificate: ca,
+	}, nil
+}
 
 func (s *CAService) UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (*api.UpdateCAStatusOutput, error) {
 	exits, _, err := s.certificateRepository.SelectCAByName(ctx, input.CAType, input.CAName)

@@ -259,6 +259,7 @@ type Certificate struct {
 
 type CACertificate struct {
 	Certificate
+	WithPrivateKey   bool
 	IssuanceDuration *time.Duration
 	IssuanceDate     *time.Time
 	IssuanceType     string
@@ -340,10 +341,13 @@ type GetCAByNameOutput struct {
 // ---------------------------------------------------------------------
 
 type ImportCAInput struct {
-	CAType           CAType            `validate:"required"`
-	Certificate      *x509.Certificate `validate:"required"`
-	PrivateKey       *PrivateKey       `validate:"required"`
-	IssuanceDuration time.Duration     `validate:"required"`
+	CAType                     CAType            `validate:"required"`
+	Certificate                *x509.Certificate `validate:"required"`
+	WithPrivateKey             bool
+	PrivateKey                 *PrivateKey
+	IssuanceExpirationDate     *time.Time
+	IssuanceExpirationDuration *time.Duration
+	IssuanceExpirationType     ExpirationType
 }
 
 type ImportCAOutput struct {

@@ -76,6 +76,22 @@ func (mw loggingMiddleware) CreateCA(ctx context.Context, input *api.CreateCAInp
 	return mw.next.CreateCA(ctx, input)
 }
 
+func (mw loggingMiddleware) ImportCA(ctx context.Context, input *api.ImportCAInput) (output *api.ImportCAOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "ImportCA"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output.ToSerializedLog()))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.ImportCA(ctx, input)
+}
+
 func (mw loggingMiddleware) GetCAs(ctx context.Context, input *api.GetCAsInput) (output *api.GetCAsOutput, err error) {
 	defer func(begin time.Time) {
 		var logMsg = map[string]interface{}{}

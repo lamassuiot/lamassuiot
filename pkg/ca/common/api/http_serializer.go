@@ -292,6 +292,26 @@ func (o *CreateCAOutputSerialized) Deserialize() CreateCAOutput {
 
 // -------------------------------------------------------------
 
+type ImportCAOutputSerialized struct {
+	CACertificateSerialized
+}
+
+func (o *ImportCAOutput) Serialize() ImportCAOutputSerialized {
+	serializer := ImportCAOutputSerialized{
+		CACertificateSerialized: o.CACertificate.Serialize(),
+	}
+	return serializer
+}
+
+func (o *ImportCAOutputSerialized) Deserialize() ImportCAOutput {
+	serializer := ImportCAOutput{
+		CACertificate: o.CACertificateSerialized.Deserialize(),
+	}
+	return serializer
+}
+
+// -------------------------------------------------------------
+
 type GetCAsOutputSerialized struct {
 	TotalCAs int                       `json:"total_cas"`
 	CAs      []CACertificateSerialized `json:"cas"`

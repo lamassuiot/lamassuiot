@@ -2,6 +2,7 @@ package cryptoengines
 
 import (
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -97,6 +98,42 @@ func (p *pemProviderContext) GetPrivateKeyByID(keyID string) (crypto.Signer, err
 	return priv, nil
 }
 
+func (p *pemProviderContext) ImportCAPrivateKey(privateKey api.PrivateKey, keyID string) error {
+	if privateKey.KeyType == api.ECDSA {
+		ecdsaKey, _ := privateKey.Key.(*ecdsa.PrivateKey)
+		if _, err := os.Stat(p.storageDirectory); os.IsNotExist(err) {
+			log.Warn(fmt.Sprintf("PEM directory [%s] does not exist. Will create such directory", p.storageDirectory))
+			os.MkdirAll(p.storageDirectory, 0755)
+		}
+
+		ecdsaBytes, err := x509.MarshalECPrivateKey(ecdsaKey)
+		if err != nil {
+			return err
+		}
+		err = ioutil.WriteFile(p.storageDirectory+"/"+keyID, pem.EncodeToMemory(&pem.Block{
+			Bytes: ecdsaBytes,
+		}), 0644)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+	} else {
+		rsaKey, _ := privateKey.Key.(*rsa.PrivateKey)
+
+		if _, err := os.Stat(p.storageDirectory); os.IsNotExist(err) {
+			log.Warn(fmt.Sprintf("PEM directory [%s] does not exist. Will create such directory", p.storageDirectory))
+			os.MkdirAll(p.storageDirectory, 0755)
+		}
+		err := ioutil.WriteFile(p.storageDirectory+"/"+keyID, pem.EncodeToMemory(&pem.Block{
+			Bytes: x509.MarshalPKCS1PrivateKey(rsaKey),
+		}), 0644)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+	}
+	return nil
+}
 func (p *pemProviderContext) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
 	hsmKey, err := p.GetPrivateKeyByID(keyID)
 	if hsmKey != nil {

@@ -118,6 +118,23 @@ func (engine *AWSSecretsManagerCryptoEngine) GetPrivateKeyByID(keyID string) (cr
 
 }
 
+func (engine *AWSSecretsManagerCryptoEngine) ImportCAPrivateKey(privateKey api.PrivateKey, keyID string) error {
+	if privateKey.KeyType == api.ECDSA {
+		ecdsaKey, _ := privateKey.Key.(*ecdsa.PrivateKey)
+		_, err := engine.ImportECDSAPrivateKey(ecdsaKey, keyID)
+		if err != nil {
+			return err
+		}
+	} else {
+		rsaKey, _ := privateKey.Key.(*rsa.PrivateKey)
+		_, err := engine.ImportRSAPrivateKey(rsaKey, keyID)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (engine *AWSSecretsManagerCryptoEngine) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
 	key, err := rsa.GenerateKey(rand.Reader, keySize)
 	if err != nil {

@@ -58,3 +58,11 @@ type VerifyRequestPayload struct {
 type RevokeCertificatePayload struct {
 	RevocationReason string `json:"revocation_reason"`
 }
+
+type ImportCAPayload struct {
+	Crt                    string `json:"certificate" validate:"required"`
+	WithPrivateKey         bool   `json:"with_private_key" validate:"required"`
+	PrivateKey             string `json:"private_key"`
+	IssuanceExpiration     string `json:"issuance_expiration"`
+	IssuanceExpirationType string `json:"expiration_type"`
+}

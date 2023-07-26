@@ -33,6 +33,7 @@ func MakeServerEndpoints(s service.Service) Endpoints {
 	var getCAsEndpoint = MakeGetCAsEndpoint(s)
 	var getCAByName = MakeGetCAByNameEndpoint(s)
 	var createCAEndpoint = MakeCreateCAEndpoint(s)
+	var importCAEndpoint = MakeImportCAEndpoint(s)
 
 	// var importCAEndpoint endpoint.Endpoint
 	// {
@@ -62,7 +63,7 @@ func MakeServerEndpoints(s service.Service) Endpoints {
 		SignCertEndpoint:        signCertificateEndpoint,
 		SignEndpoint:            signEndpoint,
 		VerifyEndpoint:          verifyEndpoint,
-		// ImportCAEndpoint:       importCAEndpoint,
+		ImportCAEndpoint:        importCAEndpoint,
 	}
 }
 
@@ -120,13 +121,13 @@ func MakeRevokeCAEndpoint(s service.Service) endpoint.Endpoint {
 	}
 }
 
-// func MakeImportCAEndpoint(s service.Service) endpoint.Endpoint {
-// 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-// 		req := request.(api.ImportCAInput)
-// 		ca, err := s.ImportCA(ctx, caType, req.CaName, *crt, privKey, req.CaPayload.EnrollerTTL)
-// 		return ca, err
-// 	}
-// }
+func MakeImportCAEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		req := request.(api.ImportCAInput)
+		output, err := s.ImportCA(ctx, &req)
+		return output, err
+	}
+}
 
 func MakeGetCertificatesEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {

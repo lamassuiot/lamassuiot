@@ -170,35 +170,36 @@ func (c *lamassuCaClientConfig) CreateCA(ctx context.Context, input *api.CreateC
 	return &deserializedOutput, nil
 }
 
-// func (c *lamassuCaClientConfig) ImportCA(ctx context.Context, input *api.ImportCAInput) (*api.ImportCAOutput, error) {
-// 	crtBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: input.Certificate.Raw})
-// 	base64CrtContent := base64.StdEncoding.EncodeToString(crtBytes)
-// 	privKeyString, _ := input.PrivateKey.GetPEMString()
-// 	base64CKeyContent := base64.StdEncoding.EncodeToString([]byte(privKeyString))
+func (c *lamassuCaClientConfig) ImportCA(ctx context.Context, input *api.ImportCAInput) (*api.ImportCAOutput, error) {
+	// 	crtBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: input.Certificate.Raw})
+	// 	base64CrtContent := base64.StdEncoding.EncodeToString(crtBytes)
+	// 	privKeyString, _ := input.PrivateKey.GetPEMString()
+	// 	base64CKeyContent := base64.StdEncoding.EncodeToString([]byte(privKeyString))
 
-// 	body := struct {
-// 		IssuanceDuration int    `json:"issuance_duration"`
-// 		Certificate      string `json:"certificate"`
-// 		PrivateKey       string `json:"private_key"`
-// 	}{
-// 		Certificate:      base64CrtContent,
-// 		PrivateKey:       base64CKeyContent,
-// 		IssuanceDuration: int(input.IssuanceDuration.Hours()),
-// 	}
+	// 	body := struct {
+	// 		IssuanceDuration int    `json:"issuance_duration"`
+	// 		Certificate      string `json:"certificate"`
+	// 		PrivateKey       string `json:"private_key"`
+	// 	}{
+	// 		Certificate:      base64CrtContent,
+	// 		PrivateKey:       base64CKeyContent,
+	// 		IssuanceDuration: int(input.IssuanceDuration.Hours()),
+	// 	}
 
-// 	req, err := c.client.NewRequest(ctx, "POST", "v1/"+string(input.CAType)+"/import/"+string(input.Certificate.Subject.CommonName), body)
-// 	if err != nil {
-// 		return &api.ImportCAOutput{}, err
-// 	}
+	// 	req, err := c.client.NewRequest(ctx, "POST", "v1/"+string(input.CAType)+"/import/"+string(input.Certificate.Subject.CommonName), body)
+	// 	if err != nil {
+	// 		return &api.ImportCAOutput{}, err
+	// 	}
 
-// 	var output api.ImportCAOutput
-// 	_, err = c.client.Do(req, &output)
-// 	if err != nil {
-// 		return &output, err
-// 	}
+	// 	var output api.ImportCAOutput
+	// 	_, err = c.client.Do(req, &output)
+	// 	if err != nil {
+	// 		return &output, err
+	// 	}
 
-// 	return &output, err
-// }
+	// return &output, err
+	return &api.ImportCAOutput{}, nil
+}
 
 func (c *lamassuCaClientConfig) RevokeCA(ctx context.Context, input *api.RevokeCAInput) (*api.RevokeCAOutput, error) {
 	//TODO: To Refact with new synta. Check GetCAByName and GetCAs

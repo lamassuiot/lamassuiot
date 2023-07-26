@@ -20,7 +20,7 @@ type Certificates interface {
 	InsertCertificate(ctx context.Context, CAType api.CAType, CAName string, cert *x509.Certificate) error
 
 	SelectCAByName(ctx context.Context, CAType api.CAType, CAName string) (bool, api.CACertificate, error)
-	InsertCA(ctx context.Context, CAType api.CAType, certificate *x509.Certificate, issuanceExpirationDate *time.Time, issuanceExpirationDuration *time.Duration, issuanceType string) error
+	InsertCA(ctx context.Context, CAType api.CAType, certificate *x509.Certificate, issuanceExpirationDate *time.Time, issuanceExpirationDuration *time.Duration, issuanceType string, withPrivateKey bool) error
 	SelectCAs(ctx context.Context, CAType api.CAType, queryParameters common.QueryParameters) (int, []api.CACertificate, error)
 	UpdateCAStatus(ctx context.Context, CAType api.CAType, CAName string, status api.CertificateStatus, revocationReason string) error
 }

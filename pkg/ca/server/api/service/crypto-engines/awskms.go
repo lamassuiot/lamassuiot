@@ -136,6 +136,9 @@ func (p *AWSKMSProviderContext) GetPrivateKeyByID(keyAlias string) (crypto.Signe
 	return awskms.NewSigner(context.Background(), p.kmscli, keyID)
 }
 
+func (p *AWSKMSProviderContext) ImportCAPrivateKey(privateKey api.PrivateKey, keyID string) error {
+	return errors.New("not implemented")
+}
 func (p *AWSKMSProviderContext) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
 	key, err := p.kmscli.CreateKey(&kms.CreateKeyInput{
 		KeyUsage: aws.String("SIGN_VERIFY"),

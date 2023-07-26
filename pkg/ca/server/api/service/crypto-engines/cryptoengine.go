@@ -14,4 +14,5 @@ type CryptoEngine interface {
 	GetPrivateKeyByID(string) (crypto.Signer, error)
 	CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error)
 	CreateECDSAPrivateKey(curve elliptic.Curve, keyID string) (crypto.Signer, error)
+	ImportCAPrivateKey(privateKey api.PrivateKey, keyID string) error
 }

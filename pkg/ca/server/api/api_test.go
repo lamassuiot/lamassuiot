@@ -1880,7 +1880,6 @@ func TestGetCertificates(t *testing.T) {
 				}
 			},
 			testRestEndpoint: func(e *httpexpect.Expect) {
-				//issuanceDuration := time.Duration(time.Hour)
 
 				obj := e.GET("/v1/pki/ca-name-1/certificates").
 					Expect().
@@ -1907,15 +1906,6 @@ func TestGetCertificates(t *testing.T) {
 					},
 				})
 
-				/*intValidTo := certObj.Object().Value("valid_to").Number().Raw()
-				intValidFrom := certObj.Object().Value("valid_from").Number().Raw()
-
-				validTo := time.UnixMilli(int64(intValidTo))
-				validFrom := time.UnixMilli(int64(intValidFrom))
-
-				if validTo.Sub(validFrom).Seconds() != issuanceDuration.Seconds() {
-					t.Errorf("Expected Certificate duration to be %f seconds, got %f", issuanceDuration.Seconds(), validTo.Sub(validFrom).Seconds())
-				}*/
 
 				stringCACertificate := certObj.Object().Value("certificate").String().Raw()
 				decodedCertBytes, err := base64.StdEncoding.DecodeString(stringCACertificate)
