@@ -41,15 +41,17 @@ type SlotDAO struct {
 }
 
 type DeviceDAO struct {
-	ID                string `gorm:"primaryKey"`
-	Alias             string
-	Status            api.DeviceStatus
-	Slots             []SlotDAO      `gorm:"foreignKey:DeviceID"`
-	Tags              pq.StringArray `gorm:"type:text[]"`
-	Description       string
-	IconName          string
-	IconColor         string
-	CreationTimestamp time.Time
+	ID                 string `gorm:"primaryKey"`
+	Alias              string
+	DmsName            string
+	Status             api.DeviceStatus
+	AllowNewEnrollment bool
+	Slots              []SlotDAO      `gorm:"foreignKey:DeviceID"`
+	Tags               pq.StringArray `gorm:"type:text[]"`
+	Description        string
+	IconName           string
+	IconColor          string
+	CreationTimestamp  time.Time
 }
 
 func (DeviceDAO) TableName() string {
@@ -71,15 +73,17 @@ func toDeviceDAO(d *api.Device) DeviceDAO {
 	}
 
 	return DeviceDAO{
-		ID:                d.ID,
-		Alias:             d.Alias,
-		Status:            d.Status,
-		Tags:              d.Tags,
-		IconName:          d.IconName,
-		IconColor:         d.IconColor,
-		Description:       d.Description,
-		Slots:             slots,
-		CreationTimestamp: d.CreationTimestamp,
+		ID:                 d.ID,
+		DmsName:            d.DmsName,
+		Alias:              d.Alias,
+		Status:             d.Status,
+		AllowNewEnrollment: d.AllowNewEnrollment,
+		Tags:               d.Tags,
+		IconName:           d.IconName,
+		IconColor:          d.IconColor,
+		Description:        d.Description,
+		Slots:              slots,
+		CreationTimestamp:  d.CreationTimestamp,
 	}
 }
 
@@ -91,15 +95,17 @@ func (d DeviceDAO) toDevice() *api.Device {
 	}
 
 	return &api.Device{
-		ID:                d.ID,
-		Alias:             d.Alias,
-		Status:            d.Status,
-		Tags:              d.Tags,
-		Slots:             slots,
-		Description:       d.Description,
-		IconName:          d.IconName,
-		IconColor:         d.IconColor,
-		CreationTimestamp: d.CreationTimestamp,
+		ID:                 d.ID,
+		DmsName:            d.DmsName,
+		Alias:              d.Alias,
+		Status:             d.Status,
+		AllowNewEnrollment: d.AllowNewEnrollment,
+		Tags:               d.Tags,
+		Slots:              slots,
+		Description:        d.Description,
+		IconName:           d.IconName,
+		IconColor:          d.IconColor,
+		CreationTimestamp:  d.CreationTimestamp,
 	}
 }
 
@@ -368,6 +374,32 @@ func (db *postgresDBContext) SelectDeviceById(ctx context.Context, id string) (b
 	}
 
 	return true, parsedDevice, nil
+}
+
+func (db *postgresDBContext) SelectDevicesByDmsName(ctx context.Context, dmsName string, queryParameters common.QueryParameters) (int, []*api.Device, error) {
+	var totalDevices int64
+	if err := db.WithContext(ctx).Model(&DeviceDAO{}).Where("dms_name = ?", dmsName).Count(&totalDevices).Error; err != nil {
+		return 0, []*api.Device{}, err
+	}
+
+	var devicesDAO []DeviceDAO
+	tx := db.WithContext(ctx).Model(&DeviceDAO{}).Where("dms_name = ?", dmsName)
+	tx = filters.ApplyQueryParametersFilters(tx, queryParameters)
+	if err := tx.Find(&devicesDAO).Error; err != nil {
+		return 0, []*api.Device{}, err
+	}
+
+	var devices []*api.Device
+	for _, v := range devicesDAO {
+		_, dev, err := db.SelectDeviceById(ctx, v.ID)
+		if err != nil {
+			continue
+		}
+
+		devices = append(devices, dev)
+	}
+
+	return int(totalDevices), devices, nil
 }
 
 func (db *postgresDBContext) UpdateDevice(ctx context.Context, device api.Device) error {

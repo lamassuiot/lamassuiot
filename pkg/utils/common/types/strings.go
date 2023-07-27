@@ -28,7 +28,7 @@ func ParseStringsOperator(s string) StringOperatorType {
 }
 
 type StringFilterField struct {
-	baseFilter
+	BaseFilter
 	Operator    StringOperatorType
 	CompareWith string
 }

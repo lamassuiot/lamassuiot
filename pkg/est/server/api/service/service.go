@@ -21,7 +21,7 @@ type ESTService interface {
 
 	// Reenroll requests renewal/rekey of an existing certificate. See RFC7030
 	// 4.2.
-	Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate) (*x509.Certificate, error)
+	Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, error)
 	// ServerKeyGen requests a new certificate and a private key. The key must
 	// be returned as a DER-encoded PKCS8 PrivateKeyInfo structure if additional
 	// encryption is not being employed, or returned inside a CMS SignedData

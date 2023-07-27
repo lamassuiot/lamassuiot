@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"io/ioutil"
+	"os"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/repository"
@@ -11,7 +13,6 @@ import (
 	"github.com/ohler55/ojg/oj"
 	"github.com/xeipuuv/gojsonschema"
 
-	//"github.com/xeipuuv/gojsonschema"
 	"github.com/oliveagle/jsonpath"
 )
 
@@ -42,7 +43,7 @@ type AlertsService struct {
 }
 
 func NewAlertsService(alertsRepository repository.AlertsRepository, templateDataFilePath string, smtpServer outputchannels.SMTPOutputService) (Service, error) {
-	file, err := ioutil.ReadFile(templateDataFilePath)
+	file, err := os.ReadFile(templateDataFilePath)
 	if err != nil {
 		return nil, err
 	}
@@ -111,8 +112,7 @@ func (s *AlertsService) HandleEvent(ctx context.Context, input *api.HandleEventI
 
 	fullfiledSubs := []api.Subscription{}
 
-	documentLoader := gojsonschema.NewStringLoader(string(jsonData))
-	_, err = oj.ParseString(string(jsonData))
+	jsonEventObj, err := oj.ParseString(string(jsonData))
 	if err != nil {
 		return nil, err
 	}
@@ -128,11 +128,13 @@ func (s *AlertsService) HandleEvent(ctx context.Context, input *api.HandleEventI
 			//Check if JSONPath or JsonSchema
 			switch sub.ConditionType {
 			case api.JSONSchema:
+				documentLoader := gojsonschema.NewStringLoader(string(jsonData))
 				schemaLoader := gojsonschema.NewStringLoader(condition)
 				result, err := gojsonschema.Validate(schemaLoader, documentLoader)
 
 				if err != nil {
-					return nil, err
+					log.Error("could not validate incoming event with json schema validator:", err)
+					continue
 				}
 
 				if result.Valid() {
@@ -141,14 +143,10 @@ func (s *AlertsService) HandleEvent(ctx context.Context, input *api.HandleEventI
 
 			case api.JSONPath:
 
-				/*json_condition, err := jp.ParseString(condition)
+				res, err := jsonpath.JsonPathLookup(jsonEventObj, condition)
 				if err != nil {
-					return nil, err
-				}*/
-
-				res, err := jsonpath.JsonPathLookup(eventData, condition)
-				if err != nil {
-					return nil, err
+					log.Error("could not validate incoming event with json path validator:", err)
+					continue
 				}
 
 				if res != nil {

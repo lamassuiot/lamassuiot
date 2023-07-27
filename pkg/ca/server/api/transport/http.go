@@ -33,6 +33,13 @@ func InvalidJsonFormat() error {
 	}
 }
 
+func InvalidExpirationType() error {
+	return &lamassuErrors.GenericError{
+		Message:    "Invalid Expiration Type",
+		StatusCode: 400,
+	}
+}
+
 func InvalidCaType() error {
 	return &lamassuErrors.GenericError{
 		Message:    "Invalid CA Type",
@@ -127,16 +134,16 @@ func MakeHTTPHandler(s service.Service) http.Handler {
 	)
 
 	// Import existing crt and key
-	// r.Methods("POST").Path("/pki/import/{caName}").Handler(httptransport.NewServer(
-	// 	e.ImportCAEndpoint,
-	// 	decodeImportCARequest,
-	// 	encodeResponse,
-	// 	append(
-	// 		options,
-	// 		httptransport.ServerBefore(opentracing.HTTPToContext(otTracer, "ImportCA", logger)),
-	// 		httptransport.ServerBefore(HTTPToContext(logger)),
-	// 	)...,
-	// ))
+	r.Methods("POST").Path("/{caType}/import").Handler(
+		httptransport.NewServer(
+			e.ImportCAEndpoint,
+			decodeImportCARequest,
+			encodeImportCAResponse,
+			append(
+				options,
+			)...,
+		),
+	)
 
 	// Revoke CA
 	r.Methods("DELETE").Path("/{caType}/{caName}").Handler(
@@ -192,6 +199,28 @@ func MakeHTTPHandler(s service.Service) http.Handler {
 			e.RevokeCertEndpoint,
 			decodeRevokeCertificateRequest,
 			encodeRevokeCertificateResponse,
+			append(
+				options,
+			)...,
+		),
+	)
+
+	r.Methods("POST").Path("/ca/{caName}/signature/sign").Handler(
+		httptransport.NewServer(
+			e.SignEndpoint,
+			decodeSignRequest,
+			encodeSignResponse,
+			append(
+				options,
+			)...,
+		),
+	)
+
+	r.Methods("POST").Path("/ca/{caName}/signature/verify").Handler(
+		httptransport.NewServer(
+			e.VerifyEndpoint,
+			decodeVerifyRequest,
+			encodeVerifyResponse,
 			append(
 				options,
 			)...,
@@ -268,9 +297,31 @@ func decodeCreateCARequest(ctx context.Context, r *http.Request) (request interf
 	if err != nil {
 		return nil, InvalidJsonFormat()
 	}
+	var CAExpiration time.Time
+	var IssuanceExpirationDuration time.Duration
+	var IssuanceExpirationDate time.Time
+	var IssuanceexpirationType api.ExpirationType
 
-	var CADuration time.Duration = time.Duration(body.CADuration * int(time.Second))
-	var IssuanceDuration time.Duration = time.Duration(body.IssuanceDuration * int(time.Second))
+	switch api.ParseExpirationType(body.IssuanceExpirationType) {
+	case api.ExpirationTypeDuration:
+		IssuanceExpiration, _ := strconv.Atoi(body.IssuanceExpiration)
+		IssuanceExpirationDuration = time.Duration(IssuanceExpiration)
+		caExpiration, _ := strconv.Atoi(body.CAExpiration)
+		CAExpiration = time.Now().Add(time.Duration(caExpiration * int(time.Second)))
+		IssuanceexpirationType = api.ExpirationTypeDuration
+	case api.ExpirationTypeDate:
+		IssuanceExpirationDate, err = time.Parse("20060102T150405Z", body.IssuanceExpiration)
+		if err != nil {
+			return nil, err
+		}
+		CAExpiration, err = time.Parse("20060102T150405Z", body.CAExpiration)
+		if err != nil {
+			return nil, err
+		}
+		IssuanceexpirationType = api.ExpirationTypeDate
+	default:
+		return nil, InvalidExpirationType()
+	}
 
 	input = api.CreateCAInput{
 		CAType: api.CATypePKI,
@@ -286,27 +337,92 @@ func decodeCreateCARequest(ctx context.Context, r *http.Request) (request interf
 			KeyType: api.ParseKeyType(body.KeyMetadata.KeyType),
 			KeyBits: body.KeyMetadata.KeyBits,
 		},
-		CADuration:       CADuration,
-		IssuanceDuration: IssuanceDuration,
+		CAExpiration: CAExpiration,
+
+		IssuanceExpirationDate:     &IssuanceExpirationDate,
+		IssuanceExpirationDuration: &IssuanceExpirationDuration,
+		IssuanceExpirationType:     IssuanceexpirationType,
 	}
 
 	return input, nil
 }
 
-// func decodeImportCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
-// 	vars := mux.Vars(r)
-// 	var importCaRequest endpoint.ImportCARequest
-// 	err = json.NewDecoder(r.Body).Decode(&importCaRequest.CaPayload)
-// 	if err != nil {
-// 		return nil, InvalidJsonFormat()
-// 	}
-// 	caName, _ := vars["caName"]
+func decodeImportCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	var body api.ImportCAPayload
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+	CATypeString := vars["caType"]
 
-// 	importCaRequest.CaName = caName
-// 	importCaRequest.CaType = "pki"
+	crtByte, err := base64.StdEncoding.DecodeString(body.Crt)
+	if err != nil {
+		return nil, err
+	}
 
-// 	return importCaRequest, nil
-// }
+	b, _ := pem.Decode(crtByte)
+	crt, err := x509.ParseCertificate(b.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	if body.WithPrivateKey {
+		var privateKey interface{}
+		var keyType api.KeyType
+		keyByte, err := base64.StdEncoding.DecodeString(body.PrivateKey)
+		if err != nil {
+			return nil, err
+		}
+		key, _ := pem.Decode(keyByte)
+
+		privateKey, err = x509.ParseECPrivateKey(key.Bytes)
+		keyType = api.ECDSA
+		if err != nil {
+			privateKey, err = x509.ParsePKCS1PrivateKey(key.Bytes)
+			if err != nil {
+				return nil, err
+			}
+			keyType = api.RSA
+		}
+		var IssuanceExpirationDuration time.Duration
+		var IssuanceExpirationDate time.Time
+		var IssuanceexpirationType api.ExpirationType
+
+		switch api.ParseExpirationType(body.IssuanceExpirationType) {
+		case api.ExpirationTypeDuration:
+			IssuanceExpiration, _ := strconv.Atoi(body.IssuanceExpiration)
+			IssuanceExpirationDuration = time.Duration(IssuanceExpiration)
+			IssuanceexpirationType = api.ExpirationTypeDuration
+		case api.ExpirationTypeDate:
+			IssuanceExpirationDate, err = time.Parse("20060102T150405Z", body.IssuanceExpiration)
+			if err != nil {
+				return nil, err
+			}
+			IssuanceexpirationType = api.ExpirationTypeDate
+		default:
+			return nil, InvalidExpirationType()
+		}
+		return api.ImportCAInput{
+			CAType:         api.ParseCAType(CATypeString),
+			WithPrivateKey: body.WithPrivateKey,
+			Certificate:    crt,
+			PrivateKey: &api.PrivateKey{
+				Key:     privateKey,
+				KeyType: keyType,
+			},
+			IssuanceExpirationDate:     &IssuanceExpirationDate,
+			IssuanceExpirationDuration: &IssuanceExpirationDuration,
+			IssuanceExpirationType:     IssuanceexpirationType,
+		}, nil
+	}
+
+	return api.ImportCAInput{
+		CAType:         api.ParseCAType(CATypeString),
+		WithPrivateKey: body.WithPrivateKey,
+		Certificate:    crt,
+	}, nil
+}
 
 func decodeRevokeCARequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	vars := mux.Vars(r)
@@ -351,6 +467,20 @@ func decodeSignCertificateRequest(ctx context.Context, r *http.Request) (request
 	if err != nil {
 		return nil, InvalidJsonFormat()
 	}
+	var certificateExpiration time.Time
+	var expirationType api.ExpirationType
+	switch api.ParseExpirationType(body.ExpirationType) {
+	case api.ExpirationTypeDuration:
+		duration, _ := strconv.Atoi(body.CertificateExpiration)
+		certificateExpiration = time.Now().Add(time.Duration(duration * int(time.Second)))
+		expirationType = api.ExpirationTypeDuration
+	case api.ExpirationTypeDate:
+		certificateExpiration, err = time.Parse("20060102T150405Z", body.CertificateExpiration)
+		if err != nil {
+			return nil, err
+		}
+		expirationType = api.ExpirationTypeDate
+	}
 
 	decodedCert, err := base64.StdEncoding.DecodeString(body.CertificateRequest)
 	// decodedCert = strings.Trim(decodedCert, "\n")
@@ -373,6 +503,8 @@ func decodeSignCertificateRequest(ctx context.Context, r *http.Request) (request
 		CertificateSigningRequest: certRequest,
 		CommonName:                body.CommonName,
 		SignVerbatim:              body.SignVerbatim,
+		CertificateExpiration:     certificateExpiration,
+		ExpirationType:            expirationType,
 	}, nil
 }
 
@@ -394,6 +526,59 @@ func decodeRevokeCertificateRequest(ctx context.Context, r *http.Request) (reque
 		CAName:                  CAName,
 		CertificateSerialNumber: serialNumber,
 		RevocationReason:        body.RevocationReason,
+	}, nil
+}
+
+func decodeSignRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	CAName := vars["caName"]
+
+	var body api.SignRequestPayload
+
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+
+	message, err := base64.StdEncoding.DecodeString(body.Message)
+	if err != nil {
+		return nil, err
+	}
+	return api.SignInput{
+		Message:          message,
+		MessageType:      api.ParseMsgType(body.MessageType),
+		SigningAlgorithm: api.ParseSigningAlgType(body.SigningAlgorithm),
+		CaName:           CAName,
+	}, nil
+}
+
+func decodeVerifyRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	CAName := vars["caName"]
+
+	var body api.VerifyRequestPayload
+
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+
+	message, err := base64.StdEncoding.DecodeString(body.Message)
+	if err != nil {
+		return nil, err
+	}
+
+	signature, err := base64.StdEncoding.DecodeString(body.Signature)
+	if err != nil {
+		return nil, err
+	}
+
+	return api.VerifyInput{
+		Message:          message,
+		MessageType:      api.ParseMsgType(body.MessageType),
+		SigningAlgorithm: api.ParseSigningAlgType(body.SigningAlgorithm),
+		Signature:        signature,
+		CaName:           CAName,
 	}, nil
 }
 
@@ -471,6 +656,19 @@ func encodeCreateCAResponse(ctx context.Context, w http.ResponseWriter, response
 	return json.NewEncoder(w).Encode(serializedResponse)
 }
 
+func encodeImportCAResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.ImportCAOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
 func encodeRevokeCAResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	if e, ok := response.(errorer); ok && e.error() != nil {
 		encodeError(ctx, e.error(), w)
@@ -530,6 +728,32 @@ func encodeRevokeCertificateResponse(ctx context.Context, w http.ResponseWriter,
 	}
 
 	castedResponse := response.(*api.RevokeCertificateOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func encodeSignResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.SignOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func encodeVerifyResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+
+	castedResponse := response.(*api.VerifyOutput)
 	serializedResponse := castedResponse.Serialize()
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

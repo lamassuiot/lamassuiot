@@ -193,15 +193,17 @@ func (s *SlotSerialized) Deserialize() Slot {
 }
 
 type DeviceSerialized struct {
-	ID                string           `json:"id"`
-	Alias             string           `json:"alias"`
-	Status            DeviceStatus     `json:"status"`
-	Slots             []SlotSerialized `json:"slots"`
-	Description       string           `json:"description"`
-	Tags              []string         `json:"tags"`
-	IconName          string           `json:"icon_name"`
-	IconColor         string           `json:"icon_color"`
-	CreationTimestamp int              `json:"creation_timestamp"`
+	ID                 string           `json:"id"`
+	Alias              string           `json:"alias"`
+	DmsName            string           `json:"dms_name"`
+	Status             DeviceStatus     `json:"status"`
+	Slots              []SlotSerialized `json:"slots"`
+	AllowNewEnrollment bool             `json:"allow_new_enrollment"`
+	Description        string           `json:"description"`
+	Tags               []string         `json:"tags"`
+	IconName           string           `json:"icon_name"`
+	IconColor          string           `json:"icon_color"`
+	CreationTimestamp  int              `json:"creation_timestamp"`
 }
 
 func (s *Device) Serialize() DeviceSerialized {
@@ -211,15 +213,17 @@ func (s *Device) Serialize() DeviceSerialized {
 		slots = append(slots, serializedSlot)
 	}
 	return DeviceSerialized{
-		ID:                s.ID,
-		Alias:             s.Alias,
-		Status:            s.Status,
-		Slots:             slots,
-		Description:       s.Description,
-		Tags:              s.Tags,
-		IconName:          s.IconName,
-		IconColor:         s.IconColor,
-		CreationTimestamp: int(s.CreationTimestamp.UnixMilli()),
+		ID:                 s.ID,
+		DmsName:            s.DmsName,
+		Alias:              s.Alias,
+		Status:             s.Status,
+		AllowNewEnrollment: s.AllowNewEnrollment,
+		Slots:              slots,
+		Description:        s.Description,
+		Tags:               s.Tags,
+		IconName:           s.IconName,
+		IconColor:          s.IconColor,
+		CreationTimestamp:  int(s.CreationTimestamp.UnixMilli()),
 	}
 }
 
@@ -231,15 +235,17 @@ func (s *DeviceSerialized) Deserialize() Device {
 	}
 
 	return Device{
-		ID:                s.ID,
-		Alias:             s.Alias,
-		Status:            s.Status,
-		Slots:             slots,
-		Description:       s.Description,
-		Tags:              s.Tags,
-		IconName:          s.IconName,
-		IconColor:         s.IconColor,
-		CreationTimestamp: time.UnixMilli(int64(s.CreationTimestamp)),
+		ID:                 s.ID,
+		DmsName:            s.DmsName,
+		Alias:              s.Alias,
+		Status:             s.Status,
+		AllowNewEnrollment: s.AllowNewEnrollment,
+		Slots:              slots,
+		Description:        s.Description,
+		Tags:               s.Tags,
+		IconName:           s.IconName,
+		IconColor:          s.IconColor,
+		CreationTimestamp:  time.UnixMilli(int64(s.CreationTimestamp)),
 	}
 }
 
@@ -398,6 +404,36 @@ func (s *GetDevicesOutputSerialized) Deserialize() GetDevicesOutput {
 	}
 
 	return GetDevicesOutput{
+		TotalDevices: s.TotalDevices,
+		Devices:      devices,
+	}
+}
+
+type GetDevicesByDMSOutputSerialized struct {
+	TotalDevices int                `json:"total_devices"`
+	Devices      []DeviceSerialized `json:"devices"`
+}
+
+func (s *GetDevicesByDMSOutput) Serialize() GetDevicesByDMSOutputSerialized {
+	devices := []DeviceSerialized{}
+	for _, device := range s.Devices {
+		devices = append(devices, device.Serialize())
+	}
+
+	return GetDevicesByDMSOutputSerialized{
+		TotalDevices: s.TotalDevices,
+		Devices:      devices,
+	}
+}
+
+func (s *GetDevicesByDMSOutputSerialized) Deserialize() GetDevicesByDMSOutput {
+	var devices []Device
+	for _, device := range s.Devices {
+		deserializedDevice := device.Deserialize()
+		devices = append(devices, deserializedDevice)
+	}
+
+	return GetDevicesByDMSOutput{
 		TotalDevices: s.TotalDevices,
 		Devices:      devices,
 	}

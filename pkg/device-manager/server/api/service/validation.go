@@ -86,6 +86,18 @@ func (mw *validationMiddleware) GetDevices(ctx context.Context, input *api.GetDe
 	return mw.next.GetDevices(ctx, input)
 }
 
+func (mw *validationMiddleware) GetDevicesByDMS(ctx context.Context, input *api.GetDevicesByDMSInput) (*api.GetDevicesByDMSOutput, error) {
+	validate := validator.New()
+	err := validate.Struct(input)
+	if err != nil {
+		valError := errors.ValidationError{
+			Msg: err.Error(),
+		}
+		return nil, &valError
+	}
+	return mw.next.GetDevicesByDMS(ctx, input)
+}
+
 func (mw *validationMiddleware) GetDeviceById(ctx context.Context, input *api.GetDeviceByIdInput) (*api.GetDeviceByIdOutput, error) {
 	validate := validator.New()
 	err := validate.Struct(input)
@@ -108,6 +120,18 @@ func (mw *validationMiddleware) AddDeviceSlot(ctx context.Context, input *api.Ad
 		return nil, &valError
 	}
 	return mw.next.AddDeviceSlot(ctx, input)
+}
+
+func (mw *validationMiddleware) ImportDeviceCert(ctx context.Context, input *api.ImportDeviceCertInput) (*api.ImportDeviceCertOutput, error) {
+	validate := validator.New()
+	err := validate.Struct(input)
+	if err != nil {
+		valError := errors.ValidationError{
+			Msg: err.Error(),
+		}
+		return nil, &valError
+	}
+	return mw.next.ImportDeviceCert(ctx, input)
 }
 
 func (mw *validationMiddleware) UpdateActiveCertificateStatus(ctx context.Context, input *api.UpdateActiveCertificateStatusInput) (*api.UpdateActiveCertificateStatusOutput, error) {
@@ -190,8 +214,8 @@ func (mw *validationMiddleware) Enroll(ctx context.Context, csr *x509.Certificat
 	return mw.next.Enroll(ctx, csr, clientCertificate, aps)
 }
 
-func (mw *validationMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate) (*x509.Certificate, error) {
-	return mw.next.Reenroll(ctx, csr, cert)
+func (mw *validationMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, error) {
+	return mw.next.Reenroll(ctx, csr, cert, aps)
 }
 
 func (mw *validationMiddleware) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, *rsa.PrivateKey, error) {

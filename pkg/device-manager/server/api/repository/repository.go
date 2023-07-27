@@ -15,6 +15,7 @@ type Devices interface {
 	SelectDevicesByStatus(ctx context.Context, status api.DeviceStatus, queryParameters common.QueryParameters) (int, []*api.Device, error)
 	SelectDeviceById(ctx context.Context, id string) (bool, *api.Device, error)
 	UpdateDevice(ctx context.Context, device api.Device) error
+	SelectDevicesByDmsName(ctx context.Context, dmsName string, queryParameters common.QueryParameters) (int, []*api.Device, error)
 
 	InsertSlot(ctx context.Context, deviceID string, slot api.Slot) error
 	SelectSlots(ctx context.Context, deviceID string) ([]*api.Slot, error)

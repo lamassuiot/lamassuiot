@@ -41,18 +41,6 @@ func (mw *validationMiddleware) CreateDMS(ctx context.Context, input *api.Create
 	return mw.next.CreateDMS(ctx, input)
 }
 
-func (mw *validationMiddleware) CreateDMSWithCertificateRequest(ctx context.Context, input *api.CreateDMSWithCertificateRequestInput) (*api.CreateDMSWithCertificateRequestOutput, error) {
-	validate := validator.New()
-	err := validate.Struct(input)
-	if err != nil {
-		valError := errors.ValidationError{
-			Msg: err.Error(),
-		}
-		return nil, &valError
-	}
-	return mw.next.CreateDMSWithCertificateRequest(ctx, input)
-}
-
 func (mw *validationMiddleware) UpdateDMSStatus(ctx context.Context, input *api.UpdateDMSStatusInput) (*api.UpdateDMSStatusOutput, error) {
 	validate := validator.New()
 	err := validate.Struct(input)
@@ -63,6 +51,17 @@ func (mw *validationMiddleware) UpdateDMSStatus(ctx context.Context, input *api.
 		return nil, &valError
 	}
 	return mw.next.UpdateDMSStatus(ctx, input)
+}
+func (mw *validationMiddleware) UpdateDMS(ctx context.Context, input *api.UpdateDMSInput) (*api.UpdateDMSOutput, error) {
+	validate := validator.New()
+	err := validate.Struct(input)
+	if err != nil {
+		valError := errors.ValidationError{
+			Msg: err.Error(),
+		}
+		return nil, &valError
+	}
+	return mw.next.UpdateDMS(ctx, input)
 }
 
 func (mw *validationMiddleware) UpdateDMSAuthorizedCAs(ctx context.Context, input *api.UpdateDMSAuthorizedCAsInput) (*api.UpdateDMSAuthorizedCAsOutput, error) {
@@ -109,8 +108,8 @@ func (mw *validationMiddleware) Enroll(ctx context.Context, csr *x509.Certificat
 	return mw.next.Enroll(ctx, csr, clientCertificate, aps)
 }
 
-func (mw *validationMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate) (*x509.Certificate, error) {
-	return mw.next.Reenroll(ctx, csr, cert)
+func (mw *validationMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, error) {
+	return mw.next.Reenroll(ctx, csr, cert, aps)
 }
 
 func (mw *validationMiddleware) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, *rsa.PrivateKey, error) {

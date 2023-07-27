@@ -61,6 +61,14 @@ func main() {
 
 		engine = x509engines.NewStandardx509Engine(awskmsEngine, config.OcspUrl)
 
+	case "awsSecretManager":
+		awsSecretManagerEngine, err := cryptoengines.NewAWSSecretManagerEngine(config.AWSAccessKeyID, config.AWSSecretAccessKey, config.AWSDefaultRegion)
+		if err != nil {
+			log.Fatal("Could not initialize AWS KMS engine: ", err)
+		}
+
+		engine = x509engines.NewStandardx509Engine(awsSecretManagerEngine, config.OcspUrl)
+
 	case "vault":
 		engine, err = x509engines.NewVaultx509Engine(config.VaultAddress, config.VaultPkiCaPath, config.VaultRoleID, config.VaultSecretID, config.VaultCA, config.VaultAutoUnsealEnabled, config.VaultUnsealKeysFile, config.OcspUrl)
 		if err != nil {

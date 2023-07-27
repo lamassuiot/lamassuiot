@@ -34,8 +34,9 @@ func filtrableDeviceModelFields() map[string]types.Filter {
 	fieldFiltersMap["description"] = &types.StringFilterField{}
 	fieldFiltersMap["alias"] = &types.StringFilterField{}
 	fieldFiltersMap["status"] = &types.StringFilterField{}
-	fieldFiltersMap["dms_id"] = &types.StringFilterField{}
-	fieldFiltersMap["creation_ts"] = &types.DatesFilterField{}
+	fieldFiltersMap["dms_name"] = &types.StringFilterField{}
+	fieldFiltersMap["creation_timestamp"] = &types.DatesFilterField{}
+	fieldFiltersMap["tags"] = &types.EnumFilterField{}
 	return fieldFiltersMap
 }
 
@@ -101,6 +102,17 @@ func MakeHTTPHandler(s service.Service) http.Handler {
 		),
 	)
 
+	r.Methods("GET").Path("/devices/dms/{dmsName}").Handler(
+		httptransport.NewServer(
+			e.GetDevicesByDmsEndpoint,
+			decodeGetDeviceByDmsRequest,
+			encodeGetDeviceByDmsResponse,
+			append(
+				options,
+			)...,
+		),
+	)
+
 	r.Methods("PUT").Path("/devices/{deviceID}").Handler(
 		httptransport.NewServer(
 			e.UpdateDeviceMetadataEndpoint,
@@ -156,6 +168,16 @@ func MakeHTTPHandler(s service.Service) http.Handler {
 		),
 	)
 
+	r.Methods("POST").Path("/devices/{deviceID}/slots/{slotID}").Handler(
+		httptransport.NewServer(
+			e.ImportDeviceCertEndpoint,
+			decodeImportDeviceCertRequest,
+			encodeImportDeviceCertResponse,
+			append(
+				options,
+			)...,
+		),
+	)
 	return r
 }
 
@@ -201,6 +223,7 @@ func encodeGetStatsResponse(ctx context.Context, w http.ResponseWriter, response
 func decodeCreateDeviceRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	type CreateDevicePayload struct {
 		DeviceID    string   `json:"id"`
+		DmsName     string   `json:"dms_name"`
 		Alias       string   `json:"alias"`
 		Tags        []string `json:"tags"`
 		Description string   `json:"description"`
@@ -218,6 +241,7 @@ func decodeCreateDeviceRequest(ctx context.Context, r *http.Request) (request in
 
 	input = api.CreateDeviceInput{
 		DeviceID:    body.DeviceID,
+		DmsName:     body.DmsName,
 		Alias:       body.Alias,
 		Tags:        body.Tags,
 		Description: body.Description,
@@ -241,11 +265,12 @@ func encodeCreateDeviceResponse(ctx context.Context, w http.ResponseWriter, resp
 
 func decodeUpdateDeviceMetadataRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
 	type UpdateDeviceMetadataPayload struct {
-		Alias       string   `json:"alias"`
-		Tags        []string `json:"tags"`
-		Description string   `json:"description"`
-		IconColor   string   `json:"icon_color"`
-		IconName    string   `json:"icon_name"`
+		Alias              string   `json:"alias"`
+		Tags               []string `json:"tags"`
+		AllowNewEnrollment bool     `json:"allow_new_enrollment"`
+		Description        string   `json:"description"`
+		IconColor          string   `json:"icon_color"`
+		IconName           string   `json:"icon_name"`
 	}
 
 	var input api.UpdateDeviceMetadataInput
@@ -260,12 +285,13 @@ func decodeUpdateDeviceMetadataRequest(ctx context.Context, r *http.Request) (re
 	deviceID := vars["deviceID"]
 
 	input = api.UpdateDeviceMetadataInput{
-		DeviceID:    deviceID,
-		Alias:       body.Alias,
-		Tags:        body.Tags,
-		Description: body.Description,
-		IconColor:   body.IconColor,
-		IconName:    body.IconName,
+		DeviceID:           deviceID,
+		Alias:              body.Alias,
+		AllowNewEnrollment: body.AllowNewEnrollment,
+		Tags:               body.Tags,
+		Description:        body.Description,
+		IconColor:          body.IconColor,
+		IconName:           body.IconName,
 	}
 
 	return input, nil
@@ -334,6 +360,27 @@ func encodeGetDeviceByIdResponse(ctx context.Context, w http.ResponseWriter, res
 		return nil
 	}
 	castedResponse := response.(*api.GetDeviceByIdOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func decodeGetDeviceByDmsRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	dmsName := vars["dmsName"]
+
+	return api.GetDevicesByDMSInput{
+		DmsName:         dmsName,
+		QueryParameters: filters.FilterQuery(r, filtrableDeviceModelFields()),
+	}, nil
+}
+func encodeGetDeviceByDmsResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+	castedResponse := response.(*api.GetDevicesByDMSOutput)
 	serializedResponse := castedResponse.Serialize()
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -420,6 +467,42 @@ func encodeGetDeviceLogsResponse(ctx context.Context, w http.ResponseWriter, res
 		return nil
 	}
 	castedResponse := response.(*api.GetDeviceLogsOutput)
+	serializedResponse := castedResponse.Serialize()
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	return json.NewEncoder(w).Encode(serializedResponse)
+}
+
+func decodeImportDeviceCertRequest(ctx context.Context, r *http.Request) (request interface{}, err error) {
+	vars := mux.Vars(r)
+	deviceID := vars["deviceID"]
+	slotId := vars["slotID"]
+
+	type ImportDeviceCertPayload struct {
+		SerialNumber string `json:"serial_number"`
+		CaName       string `json:"ca_name"`
+	}
+
+	var body ImportDeviceCertPayload
+
+	err = json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		return nil, InvalidJsonFormat()
+	}
+
+	return api.ImportDeviceCertInput{
+		DeviceID:     deviceID,
+		SlotID:       slotId,
+		SerialNumber: body.SerialNumber,
+		CaName:       body.CaName,
+	}, nil
+}
+func encodeImportDeviceCertResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+	if e, ok := response.(errorer); ok && e.error() != nil {
+		encodeError(ctx, e.error(), w)
+		return nil
+	}
+	castedResponse := response.(*api.ImportDeviceCertOutput)
 	serializedResponse := castedResponse.Serialize()
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

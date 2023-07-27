@@ -121,15 +121,17 @@ type Slot struct {
 }
 
 type Device struct {
-	ID                string
-	Alias             string
-	Status            DeviceStatus
-	Slots             []*Slot
-	Description       string
-	Tags              []string
-	IconName          string
-	IconColor         string
-	CreationTimestamp time.Time
+	ID                 string
+	DmsName            string
+	Alias              string
+	Status             DeviceStatus
+	Slots              []*Slot
+	AllowNewEnrollment bool
+	Description        string
+	Tags               []string
+	IconName           string
+	IconColor          string
+	CreationTimestamp  time.Time
 }
 
 type LogType string
@@ -169,6 +171,7 @@ type GetStatsOutput struct {
 
 type CreateDeviceInput struct {
 	DeviceID    string
+	DmsName     string
 	Alias       string
 	Tags        []string
 	IconColor   string
@@ -183,12 +186,13 @@ type CreateDeviceOutput struct {
 // ---------------------------------------------------------------------
 
 type UpdateDeviceMetadataInput struct {
-	DeviceID    string
-	Alias       string
-	Tags        []string
-	Description string
-	IconColor   string
-	IconName    string
+	DeviceID           string
+	Alias              string
+	Tags               []string
+	Description        string
+	AllowNewEnrollment bool
+	IconColor          string
+	IconName           string
 }
 
 type UpdateDeviceMetadataOutput struct {
@@ -206,7 +210,23 @@ type GetDevicesOutput struct {
 	Devices      []Device
 }
 
+type GetDevicesByDMSInput struct {
+	DmsName         string
+	QueryParameters common.QueryParameters
+}
+
+type GetDevicesByDMSOutput struct {
+	TotalDevices int
+	Devices      []Device
+}
+
 // ---------------------------------------------------------------------
+type IterateDevicesByDMSWithPredicateInput struct {
+	DmsName       string          `validate:"required"`
+	PredicateFunc func(d *Device) `validate:"required"`
+}
+
+type IterateDevicesByDMSWithPredicateOutput struct{}
 
 type GetDeviceByIdInput struct {
 	DeviceID string
@@ -330,3 +350,18 @@ type ForceReenrollOtput struct {
 	ForceReenroll bool
 	Crt           *x509.Certificate
 }
+
+// ---------------------------------------------------------------------
+
+type ImportDeviceCertInput struct {
+	DeviceID     string
+	SlotID       string
+	SerialNumber string
+	CaName       string
+}
+
+type ImportDeviceCertOutput struct {
+	Slot
+}
+
+// ---------------------------------------------------------------------

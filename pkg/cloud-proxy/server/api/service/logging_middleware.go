@@ -179,6 +179,22 @@ func (mw loggingMiddleware) HandleReenrollEvent(ctx context.Context, input *api.
 	return mw.next.HandleReenrollEvent(ctx, input)
 }
 
+func (mw loggingMiddleware) HandleUpdateDMSCaCerts(ctx context.Context, input *api.HandleUpdateDMSCaCertsInput) (output *api.HandleUpdateDMSCaCertsOutput, err error) {
+	defer func(begin time.Time) {
+		var logMsg = map[string]interface{}{}
+		logMsg["method"] = "HandleUpdateDMSCaCerts"
+		logMsg["took"] = time.Since(begin)
+		logMsg["input"] = input
+
+		if err == nil {
+			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", output))
+		} else {
+			log.WithFields(logMsg).Error(err)
+		}
+	}(time.Now())
+	return mw.next.HandleUpdateDMSCaCerts(ctx, input)
+}
+
 func (mw loggingMiddleware) UpdateDeviceCertificateStatus(ctx context.Context, input *api.UpdateDeviceCertificateStatusInput) (output *api.UpdateDeviceCertificateStatusOutput, err error) {
 	defer func(begin time.Time) {
 		var logMsg = map[string]interface{}{}

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
@@ -51,9 +52,17 @@ func (mw *validationMiddleware) CreateCA(ctx context.Context, input *api.CreateC
 				sl.ReportError(input.KeyMetadata.KeyBits, "KeyBits", "KeyBits", "InvalidRSAKeyBits", "")
 			}
 		}
-		if input.IssuanceDuration >= input.CADuration {
-			sl.ReportError(input.IssuanceDuration, "IssuanceDuration", "IssuanceDuration", "IssuanceDurationGreaterThanCADuration", "")
+		if input.IssuanceExpirationType == api.ExpirationTypeDate {
+			if input.CAExpiration.Before(*input.IssuanceExpirationDate) {
+				sl.ReportError(input.IssuanceExpirationDate, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
+			}
+		} else {
+			expiration := time.Now().Add(*input.IssuanceExpirationDuration * time.Second)
+			if input.CAExpiration.Before(expiration) {
+				sl.ReportError(input.IssuanceExpirationDuration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
+			}
 		}
+
 	}
 	validate := validator.New()
 	validate.RegisterStructValidation(validatorFunc, api.CreateCAInput{})
@@ -66,6 +75,35 @@ func (mw *validationMiddleware) CreateCA(ctx context.Context, input *api.CreateC
 	}
 
 	return mw.next.CreateCA(ctx, input)
+}
+
+func (mw *validationMiddleware) ImportCA(ctx context.Context, input *api.ImportCAInput) (output *api.ImportCAOutput, err error) {
+	validatorFunc := func(sl validator.StructLevel) {
+		input := sl.Current().Interface().(api.ImportCAInput)
+		if input.WithPrivateKey {
+			if input.IssuanceExpirationType == api.ExpirationTypeDate {
+				if input.Certificate.NotAfter.Before(*input.IssuanceExpirationDate) {
+					sl.ReportError(input.IssuanceExpirationDate, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
+				}
+			} else {
+				expiration := time.Now().Add(*input.IssuanceExpirationDuration * time.Second)
+				if input.Certificate.NotAfter.Before(expiration) {
+					sl.ReportError(input.IssuanceExpirationDuration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
+				}
+			}
+		}
+
+	}
+	validate := validator.New()
+	validate.RegisterStructValidation(validatorFunc, api.ImportCAInput{})
+	err = validate.Struct(input)
+	if err != nil {
+		valError := errors.ValidationError{
+			Msg: err.Error(),
+		}
+		return nil, &valError
+	}
+	return mw.next.ImportCA(ctx, input)
 }
 
 func (mw *validationMiddleware) GetCAs(ctx context.Context, input *api.GetCAsInput) (output *api.GetCAsOutput, err error) {
@@ -245,4 +283,28 @@ func (mw *validationMiddleware) ScanExpiredAndOutOfSyncCertificates(ctx context.
 		return nil, &valError
 	}
 	return mw.next.ScanExpiredAndOutOfSyncCertificates(ctx, input)
+}
+
+func (mw *validationMiddleware) Verify(ctx context.Context, input *api.VerifyInput) (output *api.VerifyOutput, err error) {
+	validate := validator.New()
+	err = validate.Struct(input)
+	if err != nil {
+		valError := errors.ValidationError{
+			Msg: err.Error(),
+		}
+		return nil, &valError
+	}
+	return mw.next.Verify(ctx, input)
+}
+
+func (mw *validationMiddleware) Sign(ctx context.Context, input *api.SignInput) (output *api.SignOutput, err error) {
+	validate := validator.New()
+	err = validate.Struct(input)
+	if err != nil {
+		valError := errors.ValidationError{
+			Msg: err.Error(),
+		}
+		return nil, &valError
+	}
+	return mw.next.Sign(ctx, input)
 }

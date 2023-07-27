@@ -13,9 +13,9 @@ import (
 type Endpoints struct {
 	HealthEndpoint                 endpoint.Endpoint
 	CreateDMSEndpoint              endpoint.Endpoint
-	CreateDMSWithCSREndpoint       endpoint.Endpoint
 	UpdateDMSStatusEndpoint        endpoint.Endpoint
 	UpdateDMSAuthorizedCAsEndpoint endpoint.Endpoint
+	UpdateDMSEndpoint              endpoint.Endpoint
 	GetDMSsEndpoint                endpoint.Endpoint
 	GetDMSByNameEndpoint           endpoint.Endpoint
 }
@@ -23,20 +23,20 @@ type Endpoints struct {
 func MakeServerEndpoints(s service.Service) Endpoints {
 	var healthEndpoint = MakeHealthEndpoint(s)
 	var createDMSEndpoint = MakeCreateDMSEndpoint(s)
-	var createDMSWithCertificateRequest = MakeCreateDMSWithCertificateRequestEndpoint(s)
 	var getDMSsEndpoint = MakeGetDMSsEndpoint(s)
 	var getDMSByNameEndpoint = MakeGetDMSByNameEndpoint(s)
 	var updateDMSStatusEndpoint = MakeUpdateDMSStatusEndpoint(s)
 	var updateDMSAuthorizedCAsEndpointEndpoint = MakeUpdateDMSAuthorizedCAsEndpoint(s)
+	var updateDMSEndpoint = MakeUpdateDMSEndpoint(s)
 
 	return Endpoints{
 		HealthEndpoint:                 healthEndpoint,
 		CreateDMSEndpoint:              createDMSEndpoint,
-		CreateDMSWithCSREndpoint:       createDMSWithCertificateRequest,
 		UpdateDMSStatusEndpoint:        updateDMSStatusEndpoint,
 		UpdateDMSAuthorizedCAsEndpoint: updateDMSAuthorizedCAsEndpointEndpoint,
 		GetDMSsEndpoint:                getDMSsEndpoint,
 		GetDMSByNameEndpoint:           getDMSByNameEndpoint,
+		UpdateDMSEndpoint:              updateDMSEndpoint,
 	}
 }
 
@@ -50,18 +50,24 @@ func MakeHealthEndpoint(s service.Service) endpoint.Endpoint {
 func ValidateCreateDMS(request api.CreateDMSInput) error {
 	CreateDMSStructLevelValidation := func(sl validator.StructLevel) {
 		input := sl.Current().Interface().(api.CreateDMSInput)
-		if input.Subject.CommonName == "" {
-			sl.ReportError(input.Subject.CommonName, "CommonName", "CommonName", "CommonNameIsEmpty", "")
+
+		if input.Name == "" {
+			sl.ReportError(input.Name, "Name", "Name", "NameIsEmpty", "")
 		}
 
-		if input.KeyMetadata.KeyType == api.RSA {
-			if input.KeyMetadata.KeyBits%1024 != 0 || input.KeyMetadata.KeyBits == 0 {
-				sl.ReportError(input.KeyMetadata.KeyBits, "KeyBits", "KeyBits", "InvalidRSAKeyBits", "")
+		if input.CloudDMS {
+			if len(input.IdentityProfile.EnrollmentSettings.BootstrapCAs) == 0 {
+				sl.ReportError(input.IdentityProfile.EnrollmentSettings.BootstrapCAs, "BootstrapCAs", "BootstrapCAs", "BootstrapCAsIsEmpty", "")
 			}
-		}
-		if input.HostCloudDMS {
-			if len(input.BootstrapCAs) == 0 {
-				sl.ReportError(input.BootstrapCAs, "BootstrapCAs", "BootstrapCAs", "BootstrapCAsIsEmpty", "")
+		} else {
+			if input.Name != input.RemoteAccessIdentity.Subject.CommonName {
+				sl.ReportError(input.Name, "CommonName", "CommonName", "CommonNameAndNameMissmatch", "")
+			}
+
+			if input.RemoteAccessIdentity.KeyMetadata.KeyType == api.RSA {
+				if input.RemoteAccessIdentity.KeyMetadata.KeyBits%1024 != 0 || input.RemoteAccessIdentity.KeyMetadata.KeyBits == 0 {
+					sl.ReportError(input.RemoteAccessIdentity.KeyMetadata.KeyBits, "KeyBits", "KeyBits", "InvalidRSAKeyBits", "")
+				}
 			}
 		}
 	}
@@ -82,31 +88,6 @@ func MakeCreateDMSEndpoint(s service.Service) endpoint.Endpoint {
 			return nil, &valError
 		}
 		output, err := s.CreateDMS(ctx, &input)
-		return output, err
-	}
-}
-
-func ValidateCreateDMSWithCertificateRequest(request api.CreateDMSWithCertificateRequestInput) error {
-	CreateDMSWithCertificateRequestStructLevelValidation := func(sl validator.StructLevel) {
-		_ = sl.Current().Interface().(api.CreateDMSWithCertificateRequestInput)
-	}
-
-	validate := validator.New()
-	validate.RegisterStructValidation(CreateDMSWithCertificateRequestStructLevelValidation, api.CreateDMSWithCertificateRequestInput{})
-	return validate.Struct(request)
-}
-
-func MakeCreateDMSWithCertificateRequestEndpoint(s service.Service) endpoint.Endpoint {
-	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		input := request.(api.CreateDMSWithCertificateRequestInput)
-		err = ValidateCreateDMSWithCertificateRequest(input)
-		if err != nil {
-			valError := dmsenrrors.ValidationError{
-				Msg: err.Error(),
-			}
-			return nil, &valError
-		}
-		output, err := s.CreateDMSWithCertificateRequest(ctx, &input)
 		return output, err
 	}
 }
@@ -187,12 +168,12 @@ func MakeUpdateDMSStatusEndpoint(s service.Service) endpoint.Endpoint {
 }
 
 func ValidateUpdateDMSAuthorizedCAs(request api.UpdateDMSAuthorizedCAsInput) error {
-	UpdateDMSAuthorizedCAsStructLevelValidation := func(sl validator.StructLevel) {
+	UpdateDMSAuthCAsStructLevelValidation := func(sl validator.StructLevel) {
 		_ = sl.Current().Interface().(api.UpdateDMSAuthorizedCAsInput)
 	}
 
 	validate := validator.New()
-	validate.RegisterStructValidation(UpdateDMSAuthorizedCAsStructLevelValidation, api.UpdateDMSAuthorizedCAsInput{})
+	validate.RegisterStructValidation(UpdateDMSAuthCAsStructLevelValidation, api.UpdateDMSAuthorizedCAsInput{})
 	return validate.Struct(request)
 }
 
@@ -207,6 +188,30 @@ func MakeUpdateDMSAuthorizedCAsEndpoint(s service.Service) endpoint.Endpoint {
 			return nil, &valError
 		}
 		output, err := s.UpdateDMSAuthorizedCAs(ctx, &input)
+		return output, err
+	}
+}
+func ValidateUpdateDMS(request api.UpdateDMSInput) error {
+	UpdateDMSStructLevelValidation := func(sl validator.StructLevel) {
+		_ = sl.Current().Interface().(api.UpdateDMSInput)
+	}
+
+	validate := validator.New()
+	validate.RegisterStructValidation(UpdateDMSStructLevelValidation, api.UpdateDMSInput{})
+	return validate.Struct(request)
+}
+
+func MakeUpdateDMSEndpoint(s service.Service) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
+		input := request.(api.UpdateDMSInput)
+		err = ValidateUpdateDMS(input)
+		if err != nil {
+			valError := dmsenrrors.ValidationError{
+				Msg: err.Error(),
+			}
+			return nil, &valError
+		}
+		output, err := s.UpdateDMS(ctx, &input)
 		return output, err
 	}
 }

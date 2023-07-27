@@ -32,6 +32,81 @@ type Subject struct {
 	Locality         string
 }
 
+type ExpirationType string
+
+const (
+	ExpirationTypeDate     ExpirationType = "DATE"
+	ExpirationTypeDuration ExpirationType = "DURATION"
+)
+
+func ParseExpirationType(t string) ExpirationType {
+	switch t {
+	case "DATE":
+		return ExpirationTypeDate
+	case "DURATION":
+		return ExpirationTypeDuration
+	default:
+		return ""
+	}
+}
+
+type MsgType string
+
+const (
+	MsgTypeHash MsgType = "HASH"
+	MsgTypeRaw  MsgType = "RAW"
+)
+
+func ParseMsgType(t string) MsgType {
+	switch t {
+	case "HASH":
+		return MsgTypeHash
+	case "RAW":
+		return MsgTypeRaw
+	default:
+		return ""
+	}
+}
+
+type SigningAlgType string
+
+const (
+	RSASSA_PSS_SHA_256        SigningAlgType = "RSASSA_PSS_SHA_256"
+	RSASSA_PSS_SHA_384        SigningAlgType = "RSASSA_PSS_SHA_384"
+	RSASSA_PSS_SHA_512        SigningAlgType = "RSASSA_PSS_SHA_512"
+	RSASSA_PKCS1_V1_5_SHA_256 SigningAlgType = "RSASSA_PKCS1_V1_5_SHA_256"
+	RSASSA_PKCS1_V1_5_SHA_384 SigningAlgType = "RSASSA_PKCS1_V1_5_SHA_384"
+	RSASSA_PKCS1_V1_5_SHA_512 SigningAlgType = "RSASSA_PKCS1_V1_5_SHA_512"
+	ECDSA_SHA_256             SigningAlgType = "ECDSA_SHA_256"
+	ECDSA_SHA_384             SigningAlgType = "ECDSA_SHA_384"
+	ECDSA_SHA_512             SigningAlgType = "ECDSA_SHA_512"
+)
+
+func ParseSigningAlgType(t string) SigningAlgType {
+	switch t {
+	case "RSASSA_PSS_SHA_256":
+		return RSASSA_PSS_SHA_256
+	case "RSASSA_PSS_SHA_384":
+		return RSASSA_PSS_SHA_384
+	case "RSASSA_PSS_SHA_512":
+		return RSASSA_PSS_SHA_512
+	case "RSASSA_PKCS1_V1_5_SHA_256":
+		return RSASSA_PKCS1_V1_5_SHA_256
+	case "RSASSA_PKCS1_V1_5_SHA_384":
+		return RSASSA_PKCS1_V1_5_SHA_384
+	case "RSASSA_PKCS1_V1_5_SHA_512":
+		return RSASSA_PKCS1_V1_5_SHA_512
+	case "ECDSA_SHA_256":
+		return ECDSA_SHA_256
+	case "ECDSA_SHA_384":
+		return ECDSA_SHA_384
+	case "ECDSA_SHA_512":
+		return ECDSA_SHA_512
+	default:
+		return ""
+	}
+}
+
 type CAType string
 
 const (
@@ -184,7 +259,10 @@ type Certificate struct {
 
 type CACertificate struct {
 	Certificate
-	IssuanceDuration time.Duration
+	WithPrivateKey   bool
+	IssuanceDuration *time.Duration
+	IssuanceDate     *time.Time
+	IssuanceType     string
 }
 
 // ---------------------------------------------------------------------
@@ -200,15 +278,43 @@ type GetStatsOutput struct {
 
 // ---------------------------------------------------------------------
 type CreateCAInput struct {
-	CAType           CAType        `validate:"required"`
-	Subject          Subject       `validate:"required"`
-	KeyMetadata      KeyMetadata   `validate:"required"`
-	CADuration       time.Duration `validate:"required"`
-	IssuanceDuration time.Duration `validate:"required"`
+	CAType                     CAType         `validate:"required"`
+	Subject                    Subject        `validate:"required"`
+	KeyMetadata                KeyMetadata    `validate:"required"`
+	IssuanceExpirationType     ExpirationType `validate:"required"`
+	CAExpiration               time.Time      `validate:"required"`
+	IssuanceExpirationDate     *time.Time
+	IssuanceExpirationDuration *time.Duration
 }
 
 type CreateCAOutput struct {
 	CACertificate
+}
+
+// ---------------------------------------------------------------------
+type SignInput struct {
+	Message          []byte         `validate:"required"`
+	MessageType      MsgType        `validate:"required"`
+	SigningAlgorithm SigningAlgType `validate:"required"`
+	CaName           string         `validate:"required"`
+}
+
+type SignOutput struct {
+	Signature        string
+	SigningAlgorithm SigningAlgType
+}
+
+// ---------------------------------------------------------------------
+type VerifyInput struct {
+	Message          []byte         `validate:"required"`
+	Signature        []byte         `validate:"required"`
+	MessageType      MsgType        `validate:"required"`
+	SigningAlgorithm SigningAlgType `validate:"required"`
+	CaName           string         `validate:"required"`
+}
+
+type VerifyOutput struct {
+	VerificationResult bool
 }
 
 // ---------------------------------------------------------------------
@@ -235,10 +341,13 @@ type GetCAByNameOutput struct {
 // ---------------------------------------------------------------------
 
 type ImportCAInput struct {
-	CAType           CAType            `validate:"required"`
-	Certificate      *x509.Certificate `validate:"required"`
-	PrivateKey       *PrivateKey       `validate:"required"`
-	IssuanceDuration time.Duration     `validate:"required"`
+	CAType                     CAType            `validate:"required"`
+	Certificate                *x509.Certificate `validate:"required"`
+	WithPrivateKey             bool
+	PrivateKey                 *PrivateKey
+	IssuanceExpirationDate     *time.Time
+	IssuanceExpirationDuration *time.Duration
+	IssuanceExpirationType     ExpirationType
 }
 
 type ImportCAOutput struct {
@@ -277,6 +386,8 @@ type SignCertificateRequestInput struct {
 	CertificateSigningRequest *x509.CertificateRequest `validate:"required"`
 	SignVerbatim              bool
 	CommonName                string
+	ExpirationType            ExpirationType
+	CertificateExpiration     time.Time
 }
 
 type SignCertificateRequestOutput struct {

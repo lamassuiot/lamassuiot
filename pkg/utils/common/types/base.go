@@ -1,6 +1,6 @@
 package types
 
-type baseFilter struct {
+type BaseFilter struct {
 	FieldName string
 }
 

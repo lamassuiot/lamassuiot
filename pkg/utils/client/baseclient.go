@@ -68,6 +68,7 @@ func NewBaseClient(config BaseClientConfigurationuration) (BaseClient, error) {
 		if err != nil {
 			return nil, err
 		}
+		tr.TLSClientConfig.InsecureSkipVerify = true
 		tr.TLSClientConfig.Certificates = []tls.Certificate{cert}
 	} else if config.AuthMethod == AuthMethodJWT {
 		authConfig, ok := config.AuthMethodConfig.(*JWTConfig)

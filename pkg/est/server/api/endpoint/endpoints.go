@@ -44,8 +44,9 @@ func MakeHealthEndpoint(s service.ESTService) endpoint.Endpoint {
 
 func MakeGetCAsEndpoint(s service.ESTService) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (response interface{}, err error) {
-		cas, err := s.CACerts(ctx, "")
-		return GetCasResponse{Certs: cas}, err
+		req := request.(CACertsRequest)
+		cas, err := s.CACerts(ctx, req.Aps)
+		return GetCasResponse{Certs: cas, PemResponse: req.PemResponse}, err
 	}
 }
 
@@ -59,6 +60,8 @@ func MakeEnrollEndpoint(s service.ESTService) endpoint.Endpoint {
 			}
 			return nil, &valError
 		}
+
+		ctx = context.WithValue(ctx, "dmsName", req.DmsName)
 		crt, err := s.Enroll(ctx, req.Csr, req.Crt, req.Aps)
 		return EnrollReenrollResponse{Cert: crt, PemResponse: req.PemResponse}, err
 	}
@@ -74,7 +77,7 @@ func MakeReenrollEndpoint(s service.ESTService) endpoint.Endpoint {
 			}
 			return nil, &valError
 		}
-		crt, err := s.Reenroll(ctx, req.Csr, req.Crt)
+		crt, err := s.Reenroll(ctx, req.Csr, req.Crt, req.Aps)
 		return EnrollReenrollResponse{Cert: crt, PemResponse: req.PemResponse}, err
 	}
 }
@@ -89,6 +92,7 @@ func MakeServerKeyGenEndpoint(s service.ESTService) endpoint.Endpoint {
 			}
 			return nil, &valError
 		}
+		ctx = context.WithValue(ctx, "dmsName", req.DmsName)
 		crt, key, err := s.ServerKeyGen(ctx, req.Csr, req.Crt, req.Aps)
 		return ServerKeyGenResponse{Cert: crt, Key: key}, err
 	}
@@ -97,9 +101,15 @@ func MakeServerKeyGenEndpoint(s service.ESTService) endpoint.Endpoint {
 type EmptyRequest struct{}
 
 type EnrollRequest struct {
-	Csr         *x509.CertificateRequest `validate:"required"`
 	Aps         string                   `validate:"required"`
+	Csr         *x509.CertificateRequest `validate:"required"`
 	Crt         *x509.Certificate        `validate:"required"`
+	DmsName     string
+	PemResponse bool
+}
+
+type CACertsRequest struct {
+	Aps         string
 	PemResponse bool
 }
 
@@ -109,6 +119,7 @@ func ValidatetEnrollRequest(request EnrollRequest) error {
 }
 
 type ReenrollRequest struct {
+	Aps         string
 	Csr         *x509.CertificateRequest `validate:"required"`
 	Crt         *x509.Certificate        `validate:"required"`
 	PemResponse bool
@@ -120,9 +131,10 @@ func ValidatetReenrollRequest(request ReenrollRequest) error {
 }
 
 type ServerKeyGenRequest struct {
-	Csr *x509.CertificateRequest `validate:"required"`
-	Aps string                   `validate:"required"`
-	Crt *x509.Certificate        `validate:"required"`
+	Csr     *x509.CertificateRequest `validate:"required"`
+	Aps     string                   `validate:"required"`
+	Crt     *x509.Certificate        `validate:"required"`
+	DmsName string
 }
 
 func ValidateServerKeyGenRequest(request ServerKeyGenRequest) error {
@@ -136,8 +148,10 @@ type HealthResponse struct {
 }
 
 type GetCasResponse struct {
-	Certs []*x509.Certificate
+	Certs       []*x509.Certificate
+	PemResponse bool
 }
+
 type EnrollReenrollResponse struct {
 	Cert        *x509.Certificate
 	CaCert      *x509.Certificate

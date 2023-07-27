@@ -109,6 +109,10 @@ func (mw *amqpMiddleware) DecommisionDevice(ctx context.Context, input *api.Deco
 	return mw.next.DecommisionDevice(ctx, input)
 }
 
+func (mw *amqpMiddleware) GetDevicesByDMS(ctx context.Context, input *api.GetDevicesByDMSInput) (output *api.GetDevicesByDMSOutput, err error) {
+	return mw.next.GetDevicesByDMS(ctx, input)
+}
+
 func (mw *amqpMiddleware) GetDevices(ctx context.Context, input *api.GetDevicesInput) (*api.GetDevicesOutput, error) {
 	return mw.next.GetDevices(ctx, input)
 }
@@ -143,6 +147,10 @@ func (mw *amqpMiddleware) RevokeActiveCertificate(ctx context.Context, input *ap
 	return mw.next.RevokeActiveCertificate(ctx, input)
 }
 
+func (mw *amqpMiddleware) ImportDeviceCert(ctx context.Context, input *api.ImportDeviceCertInput) (output *api.ImportDeviceCertOutput, err error) {
+	return mw.next.ImportDeviceCert(ctx, input)
+}
+
 func (mw *amqpMiddleware) GetDeviceLogs(ctx context.Context, input *api.GetDeviceLogsInput) (*api.GetDeviceLogsOutput, error) {
 	return mw.next.GetDeviceLogs(ctx, input)
 }
@@ -169,7 +177,7 @@ func (mw *amqpMiddleware) Enroll(ctx context.Context, csr *x509.CertificateReque
 	return mw.next.Enroll(ctx, csr, cert, aps)
 }
 
-func (mw *amqpMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate) (output *x509.Certificate, err error) {
+func (mw *amqpMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (output *x509.Certificate, err error) {
 	defer func() {
 		type ReEnrollLog struct {
 			Certificate string `json:"certificate"`
@@ -181,7 +189,7 @@ func (mw *amqpMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateReq
 		}
 
 	}()
-	return mw.next.Reenroll(ctx, csr, cert)
+	return mw.next.Reenroll(ctx, csr, cert, aps)
 }
 
 func (mw *amqpMiddleware) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, *rsa.PrivateKey, error) {

@@ -132,6 +132,18 @@ func (mw *validationMiddleware) HandleReenrollEvent(ctx context.Context, input *
 	return mw.next.HandleReenrollEvent(ctx, input)
 }
 
+func (mw *validationMiddleware) HandleUpdateDMSCaCerts(ctx context.Context, input *api.HandleUpdateDMSCaCertsInput) (*api.HandleUpdateDMSCaCertsOutput, error) {
+	validate := validator.New()
+	err := validate.Struct(input)
+	if err != nil {
+		valError := errors.ValidationError{
+			Msg: err.Error(),
+		}
+		return nil, &valError
+	}
+	return mw.next.HandleUpdateDMSCaCerts(ctx, input)
+}
+
 func (mw *validationMiddleware) UpdateDeviceCertificateStatus(ctx context.Context, input *api.UpdateDeviceCertificateStatusInput) (*api.UpdateDeviceCertificateStatusOutput, error) {
 	validate := validator.New()
 	err := validate.Struct(input)

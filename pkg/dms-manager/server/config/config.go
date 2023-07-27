@@ -4,6 +4,7 @@ import "github.com/lamassuiot/lamassuiot/pkg/utils/server"
 
 type DMSManagerConfig struct {
 	server.BaseConfiguration
+	DownstreamCACert string `required:"true" split_words:"true"`
 
 	PostgresPassword string `required:"true" split_words:"true"`
 	PostgresUsername string `required:"true" split_words:"true"`
@@ -11,10 +12,10 @@ type DMSManagerConfig struct {
 	PostgresHostname string `required:"true" split_words:"true"`
 	PostgresPort     string `required:"true" split_words:"true"`
 
-	LamassuCAAddress            string `required:"true" split_words:"true"`
-	LamassuDeviceManagerAddress string `required:"true" split_words:"true"`
-	LamassuCACertFile           string `split_words:"true"`
-	DownstreamCert              string `required:"true" split_words:"true"`
+	LamassuCAAddress             string `required:"true" split_words:"true"`
+	LamassuCACertFile            string `split_words:"true"`
+	LamassuDeviceManagerAddress  string `required:"true" split_words:"true"`
+	LamassuDeviceManagerCertFile string `split_words:"true"`
 }
 
 func NewDMSManagerConfig() *DMSManagerConfig {

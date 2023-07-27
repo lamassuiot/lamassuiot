@@ -211,21 +211,40 @@ func (o *CertificateSerialized) Deserialize() Certificate {
 
 type CACertificateSerialized struct {
 	CertificateSerialized
-	IssuanceDuration int `json:"issuance_duration"`
+	WithPrivateKey   bool           `json:"with_private_key"`
+	IssuanceDate     *time.Time     `json:"issuance_date,omitempty"`
+	IssuanceDuration *time.Duration `json:"issuance_duration,omitempty"`
+	IssuanceType     string         `json:"issuance_type,omitempty"`
 }
 
 func (o *CACertificate) Serialize() CACertificateSerialized {
-	serializer := CACertificateSerialized{
-		CertificateSerialized: o.Certificate.Serialize(),
-		IssuanceDuration:      int(o.IssuanceDuration.Seconds()),
+	if o.IssuanceDate == nil {
+		serializer := CACertificateSerialized{
+			CertificateSerialized: o.Certificate.Serialize(),
+			IssuanceDuration:      o.IssuanceDuration,
+			IssuanceType:          o.IssuanceType,
+			WithPrivateKey:        o.WithPrivateKey,
+		}
+		return serializer
+	} else {
+		serializer := CACertificateSerialized{
+			CertificateSerialized: o.Certificate.Serialize(),
+			IssuanceDate:          o.IssuanceDate,
+			IssuanceType:          o.IssuanceType,
+			WithPrivateKey:        o.WithPrivateKey,
+		}
+		return serializer
 	}
-	return serializer
+
 }
 
 func (o *CACertificateSerialized) Deserialize() CACertificate {
 	serializer := CACertificate{
 		Certificate:      o.CertificateSerialized.Deserialize(),
-		IssuanceDuration: time.Duration(o.IssuanceDuration * int(time.Second)),
+		IssuanceDuration: o.IssuanceDuration,
+		IssuanceType:     o.IssuanceType,
+		WithPrivateKey:   o.WithPrivateKey,
+		IssuanceDate:     o.IssuanceDate,
 	}
 	return serializer
 }
@@ -277,6 +296,26 @@ func (o *CreateCAOutputSerialized) Deserialize() CreateCAOutput {
 
 // -------------------------------------------------------------
 
+type ImportCAOutputSerialized struct {
+	CACertificateSerialized
+}
+
+func (o *ImportCAOutput) Serialize() ImportCAOutputSerialized {
+	serializer := ImportCAOutputSerialized{
+		CACertificateSerialized: o.CACertificate.Serialize(),
+	}
+	return serializer
+}
+
+func (o *ImportCAOutputSerialized) Deserialize() ImportCAOutput {
+	serializer := ImportCAOutput{
+		CACertificate: o.CACertificateSerialized.Deserialize(),
+	}
+	return serializer
+}
+
+// -------------------------------------------------------------
+
 type GetCAsOutputSerialized struct {
 	TotalCAs int                       `json:"total_cas"`
 	CAs      []CACertificateSerialized `json:"cas"`
@@ -320,6 +359,41 @@ func (o *GetCAByNameOutput) Serialize() GetCAByNameOutputSerialized {
 func (o *GetCAByNameOutputSerialized) Deserialize() GetCAByNameOutput {
 	return GetCAByNameOutput{
 		CACertificate: o.CACertificateSerialized.Deserialize(),
+	}
+}
+
+type SignOutputSerialized struct {
+	Signature        string         `json:"signature"`
+	SigningAlgorithm SigningAlgType `json:"signing_algorithm"`
+}
+
+func (o *SignOutput) Serialize() SignOutputSerialized {
+	return SignOutputSerialized{
+		Signature:        o.Signature,
+		SigningAlgorithm: o.SigningAlgorithm,
+	}
+}
+
+func (o *SignOutputSerialized) Deserialize() SignOutput {
+	return SignOutput{
+		Signature:        o.Signature,
+		SigningAlgorithm: o.SigningAlgorithm,
+	}
+}
+
+type VerifyOutputSerialized struct {
+	VerificationResult bool `json:"verification"`
+}
+
+func (o *VerifyOutput) Serialize() VerifyOutputSerialized {
+	return VerifyOutputSerialized{
+		VerificationResult: o.VerificationResult,
+	}
+}
+
+func (o *VerifyOutputSerialized) Deserialize() VerifyOutput {
+	return VerifyOutput{
+		VerificationResult: o.VerificationResult,
 	}
 }
 

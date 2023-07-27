@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"math/big"
+	"strings"
+	"time"
 )
 
 func InsertNth(s string, n int) string {
@@ -24,4 +26,15 @@ func InsertNth(s string, n int) string {
 
 func ToHexInt(n *big.Int) string {
 	return fmt.Sprintf("%x", n) // or %X or upper case
+}
+
+func ShortDuration(d time.Duration) string {
+	s := d.String()
+	if strings.HasSuffix(s, "m0s") {
+		s = s[:len(s)-2]
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = s[:len(s)-2]
+	}
+	return s
 }

@@ -123,7 +123,27 @@ func (s *Server) AddAmqpConsumer(queuName string, routingKeys []string, subscrib
 }
 
 func (s *Server) AddHttpHandler(path string, handler http.Handler) {
-	http.Handle(path, accessControl(handler))
+	WithLogging := func(h http.Handler) http.Handler {
+		logFn := func(rw http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+
+			uri := r.RequestURI
+			method := r.Method
+			h.ServeHTTP(rw, r) // serve the original request
+
+			duration := time.Since(start)
+
+			// log request details
+			log.Debug(log.WithFields(log.Fields{
+				"uri":      uri,
+				"method":   method,
+				"duration": duration,
+			}))
+		}
+		return http.HandlerFunc(logFn)
+	}
+
+	http.Handle(path, WithLogging(accessControl(handler)))
 }
 
 func (s *Server) AddHttpFuncHandler(path string, handler func(http.ResponseWriter, *http.Request)) {
@@ -133,7 +153,6 @@ func (s *Server) AddHttpFuncHandler(path string, handler func(http.ResponseWrite
 func (s *Server) Run() {
 	go func() {
 		err := s.buildAMQPConnection()
-
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -239,8 +258,8 @@ func (s *Server) Run() {
 					}
 
 					tlsConfig := &tls.Config{
-						ClientCAs:  mTlsCertPool,
-						ClientAuth: tls.RequireAndVerifyClientCert,
+						// ClientCAs:  mTlsCertPool,
+						ClientAuth: tls.RequireAnyClientCert,
 					}
 
 					http := &http.Server{
@@ -316,31 +335,31 @@ func (s *Server) buildAMQPConnection() error {
 
 		amqpCA, err := ioutil.ReadFile(s.cfg.AmqpServerCACert)
 		if err != nil {
-			log.Error("msg", "Could not read AMQP CA certificate: ", err)
-			os.Exit(1)
+			log.Error("Could not read AMQP CA certificate: ", err)
 		}
 
 		amq_cfg.RootCAs.AppendCertsFromPEM(amqpCA)
 		cert, err := tls.LoadX509KeyPair(s.cfg.CertFile, s.cfg.KeyFile)
 
 		if err != nil {
-			log.Error("msg", "Could not load AMQP TLS certificate: ", err)
-			os.Exit(1)
+			log.Error("Could not load AMQP TLS certificate: ", err)
 		}
 
 		amq_cfg.Certificates = append(amq_cfg.Certificates, cert)
 
-		amqpConn, err = amqp.DialTLS(fmt.Sprintf("amqps://%s%s:%s", userPassUrlPrefix, s.cfg.AmqpServerHost, s.cfg.AmqpServerPort), &amq_cfg)
+		amqpURI := fmt.Sprintf("amqps://%s%s:%s", userPassUrlPrefix, s.cfg.AmqpServerHost, s.cfg.AmqpServerPort)
+		log.Debug("connecting to ", amqpURI)
+		amqpConn, err = amqp.DialTLS(amqpURI, &amq_cfg)
 
 		if err != nil {
-			log.Error("msg", "Failed to connect to AMQP with TLS: ", err)
+			log.Error("Failed to connect to AMQP with TLS: ", err)
 			return err
 		}
 		s.amqpConn = amqpConn
 	} else {
 		amqpConn, err := amqp.Dial(fmt.Sprintf("amqp://%s%s:%s", userPassUrlPrefix, s.cfg.AmqpServerHost, s.cfg.AmqpServerPort))
 		if err != nil {
-			log.Error("msg", "Failed to connect to AMQP: ", err)
+			log.Error("Failed to connect to AMQP: ", err)
 			return err
 		}
 		s.amqpConn = amqpConn

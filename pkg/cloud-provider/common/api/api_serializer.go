@@ -119,3 +119,14 @@ func (o *UpdateDeviceDigitalTwinReenrollmentStatusOutput) Serialize() UpdateDevi
 }
 
 //------------------------------------------------------
+
+type UpdateDMSCaCertsOutputSerialized struct {
+}
+
+func (o *UpdateDMSCaCertsOutput) Serialize() UpdateDMSCaCertsOutputSerialized {
+	return UpdateDMSCaCertsOutputSerialized{}
+}
+
+func (o *UpdateDMSCaCertsOutputSerialized) Deserialize() UpdateDMSCaCertsOutput {
+	return UpdateDMSCaCertsOutput{}
+}

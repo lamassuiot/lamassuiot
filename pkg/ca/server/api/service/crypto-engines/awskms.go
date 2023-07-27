@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto"
 	"crypto/elliptic"
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"net/http"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -22,9 +24,18 @@ type AWSKMSProviderContext struct {
 }
 
 func NewAWSKMSEngine(accessKeyID string, secretAccessKey string, region string) (CryptoEngine, error) {
+	httpCli := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
+
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(region),
 		Credentials: credentials.NewStaticCredentials(accessKeyID, secretAccessKey, ""),
+		HTTPClient:  httpCli,
 	}))
 	kmscli := kms.New(sess)
 
@@ -39,7 +50,7 @@ func NewAWSKMSEngine(accessKeyID string, secretAccessKey string, region string) 
 	pkcs11ProviderSupportedKeyTypes = append(pkcs11ProviderSupportedKeyTypes, api.SupportedKeyTypeInfo{
 		Type:        api.ECDSA,
 		MinimumSize: 256,
-		MaximumSize: 512,
+		MaximumSize: 521,
 	})
 
 	return &AWSKMSProviderContext{
@@ -125,6 +136,9 @@ func (p *AWSKMSProviderContext) GetPrivateKeyByID(keyAlias string) (crypto.Signe
 	return awskms.NewSigner(context.Background(), p.kmscli, keyID)
 }
 
+func (p *AWSKMSProviderContext) ImportCAPrivateKey(privateKey api.PrivateKey, keyID string) error {
+	return errors.New("not implemented")
+}
 func (p *AWSKMSProviderContext) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
 	key, err := p.kmscli.CreateKey(&kms.CreateKeyInput{
 		KeyUsage: aws.String("SIGN_VERIFY"),

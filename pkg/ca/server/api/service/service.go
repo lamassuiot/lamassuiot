@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"time"
@@ -26,7 +27,10 @@ type Service interface {
 	CreateCA(ctx context.Context, input *api.CreateCAInput) (*api.CreateCAOutput, error)
 	GetCAs(ctx context.Context, input *api.GetCAsInput) (*api.GetCAsOutput, error)
 	GetCAByName(ctx context.Context, input *api.GetCAByNameInput) (*api.GetCAByNameOutput, error)
-	// ImportCA(ctx context.Context, input *api.ImportCAInput) (*api.ImportCAOutput, error)
+	ImportCA(ctx context.Context, input *api.ImportCAInput) (*api.ImportCAOutput, error)
+
+	Verify(ctx context.Context, input *api.VerifyInput) (*api.VerifyOutput, error)
+	Sign(ctx context.Context, input *api.SignInput) (*api.SignOutput, error)
 
 	UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (*api.UpdateCAStatusOutput, error)
 	RevokeCA(ctx context.Context, input *api.RevokeCAInput) (*api.RevokeCAOutput, error)
@@ -74,6 +78,7 @@ func NewCAService(engine x509engines.X509Engine, certificateRepository repositor
 	}
 
 	if !exists {
+		issuanceDuration := time.Now().Add(time.Hour * 24 * 365 * 3)
 		log.Info("Generating LAMASSU-DMS-MANAGER CA")
 		svc.CreateCA(context.Background(), &api.CreateCAInput{
 			CAType: api.CATypeDMSEnroller,
@@ -85,8 +90,9 @@ func NewCAService(engine x509engines.X509Engine, certificateRepository repositor
 				KeyType: api.KeyType(engine.GetEngineConfig().SupportedKeyTypes[0].Type),
 				KeyBits: engine.GetEngineConfig().SupportedKeyTypes[0].MaximumSize,
 			},
-			CADuration:       time.Hour * 24 * 365 * 5,
-			IssuanceDuration: time.Hour * 24 * 365 * 3,
+			CAExpiration:           time.Now().Add(time.Hour * 24 * 365 * 5),
+			IssuanceExpirationDate: &issuanceDuration,
+			IssuanceExpirationType: "DATE",
 		})
 	} else {
 		log.Info("LAMASSU-DMS-MANAGER CA already provisioned")
@@ -304,7 +310,12 @@ func (s *CAService) CreateCA(ctx context.Context, input *api.CreateCAInput) (*ap
 		return nil, err
 	}
 
-	err = s.certificateRepository.InsertCA(ctx, input.CAType, caCertificate, input.IssuanceDuration)
+	if input.IssuanceExpirationType == api.ExpirationTypeDate {
+		input.IssuanceExpirationDuration = nil
+	} else {
+		input.IssuanceExpirationDate = nil
+	}
+	err = s.certificateRepository.InsertCA(ctx, input.CAType, caCertificate, input.IssuanceExpirationDate, input.IssuanceExpirationDuration, string(input.IssuanceExpirationType), true)
 	if err != nil {
 		log.Error(err)
 		return &api.CreateCAOutput{}, err
@@ -328,9 +339,57 @@ func (s *CAService) CreateCA(ctx context.Context, input *api.CreateCAInput) (*ap
 	}, nil
 }
 
-// func (s *CAService) ImportCA(ctx context.Context, input *api.ImportCAInput) (*api.ImportCAOutput, error) {
-// 	return s.service.secrets.ImportCA(input)
-// }
+func (s *CAService) ImportCA(ctx context.Context, input *api.ImportCAInput) (*api.ImportCAOutput, error) {
+	exits, _, err := s.certificateRepository.SelectCAByName(ctx, input.CAType, input.Certificate.Subject.CommonName)
+	if err != nil {
+		return nil, err
+	}
+
+	if exits {
+		return nil, &caerrors.DuplicateResourceError{
+			ResourceType: "CA",
+			ResourceId:   input.Certificate.Subject.CommonName,
+		}
+	}
+	if !input.WithPrivateKey {
+		err = s.certificateRepository.InsertCA(ctx, input.CAType, input.Certificate, nil, nil, "", input.WithPrivateKey)
+		if err != nil {
+			log.Error(err)
+			return &api.ImportCAOutput{}, err
+		}
+	} else {
+		if input.IssuanceExpirationType == api.ExpirationTypeDate {
+			input.IssuanceExpirationDuration = nil
+		} else {
+			input.IssuanceExpirationDate = nil
+		}
+		err = s.engine.ImportCA(*input.PrivateKey, input.Certificate.Subject.CommonName)
+		if err != nil {
+			log.Error(err)
+			return &api.ImportCAOutput{}, err
+		}
+		err = s.certificateRepository.InsertCA(ctx, input.CAType, input.Certificate, input.IssuanceExpirationDate, input.IssuanceExpirationDuration, string(input.IssuanceExpirationType), input.WithPrivateKey)
+		if err != nil {
+			log.Error(err)
+			return &api.ImportCAOutput{}, err
+		}
+	}
+	_, ca, err := s.certificateRepository.SelectCAByName(ctx, input.CAType, input.Certificate.Subject.CommonName)
+	if err != nil {
+		log.Error(err)
+		return &api.ImportCAOutput{}, err
+	}
+
+	keyType, keySize, keyStrength := getPublicKeyInfo(ca.Certificate.Certificate)
+	ca.KeyMetadata = api.KeyStrengthMetadata{
+		KeyType:     keyType,
+		KeyBits:     keySize,
+		KeyStrength: keyStrength,
+	}
+	return &api.ImportCAOutput{
+		CACertificate: ca,
+	}, nil
+}
 
 func (s *CAService) UpdateCAStatus(ctx context.Context, input *api.UpdateCAStatusInput) (*api.UpdateCAStatusOutput, error) {
 	exits, _, err := s.certificateRepository.SelectCAByName(ctx, input.CAType, input.CAName)
@@ -600,8 +659,13 @@ func (s *CAService) SignCertificateRequest(ctx context.Context, input *api.SignC
 	if caOutput.Status == api.StatusExpired || caOutput.Status == api.StatusRevoked {
 		return &api.SignCertificateRequestOutput{}, errors.New("CA is expired or revoked")
 	}
-
-	certificate, err := s.engine.SignCertificateRequest(caOutput.Certificate.Certificate, caOutput.IssuanceDuration, input)
+	var certificateExpiration time.Time
+	if caOutput.CACertificate.IssuanceType == "DATE" {
+		certificateExpiration = *caOutput.CACertificate.IssuanceDate
+	} else {
+		certificateExpiration = time.Now().Add(*caOutput.CACertificate.IssuanceDuration * time.Second)
+	}
+	certificate, err := s.engine.SignCertificateRequest(caOutput.Certificate.Certificate, certificateExpiration, input)
 	if err != nil {
 		log.Error("Could not sign certificate request: ", err)
 		return &api.SignCertificateRequestOutput{}, err
@@ -647,6 +711,45 @@ func (s *CAService) GetExpiredAndOutOfSyncCertificates(ctx context.Context, inpu
 	return &api.GetExpiredAndOutOfSyncCertificatesOutput{
 		Certificates:      certs,
 		TotalCertificates: totalExpiredCertificates,
+	}, nil
+}
+
+func (s *CAService) Sign(ctx context.Context, input *api.SignInput) (*api.SignOutput, error) {
+	ca, err := s.service.GetCAByName(ctx, &api.GetCAByNameInput{
+		CAType: api.CATypePKI,
+		CAName: input.CaName,
+	})
+	if err != nil {
+		return &api.SignOutput{}, err
+	}
+
+	signature, err := s.engine.Sign(ca.CACertificate.Certificate, input.Message, string(input.MessageType), string(input.SigningAlgorithm))
+	if err != nil {
+		return &api.SignOutput{}, err
+	}
+
+	return &api.SignOutput{
+		Signature:        base64.StdEncoding.EncodeToString(signature),
+		SigningAlgorithm: input.SigningAlgorithm,
+	}, nil
+}
+
+func (s *CAService) Verify(ctx context.Context, input *api.VerifyInput) (*api.VerifyOutput, error) {
+	ca, err := s.service.GetCAByName(ctx, &api.GetCAByNameInput{
+		CAType: api.CATypePKI,
+		CAName: input.CaName,
+	})
+
+	if err != nil {
+		return &api.VerifyOutput{}, err
+	}
+
+	verification, err := s.engine.Verify(ca.CACertificate.Certificate, input.Signature, input.Message, string(input.MessageType), string(input.SigningAlgorithm))
+	if err != nil {
+		return &api.VerifyOutput{}, err
+	}
+	return &api.VerifyOutput{
+		VerificationResult: verification,
 	}, nil
 }
 

@@ -93,6 +93,10 @@ func (mw *amqpMiddleware) CreateCA(ctx context.Context, input *api.CreateCAInput
 	return mw.next.CreateCA(ctx, input)
 }
 
+func (mw amqpMiddleware) ImportCA(ctx context.Context, input *api.ImportCAInput) (output *api.ImportCAOutput, err error) {
+	return mw.next.ImportCA(ctx, input)
+}
+
 func (mw *amqpMiddleware) GetCAs(ctx context.Context, input *api.GetCAsInput) (output *api.GetCAsOutput, err error) {
 	return mw.next.GetCAs(ctx, input)
 }
@@ -173,4 +177,12 @@ func (mw *amqpMiddleware) ScanAboutToExpireCertificates(ctx context.Context, inp
 
 func (mw *amqpMiddleware) ScanExpiredAndOutOfSyncCertificates(ctx context.Context, input *api.ScanExpiredAndOutOfSyncCertificatesInput) (*api.ScanExpiredAndOutOfSyncCertificatesOutput, error) {
 	return mw.next.ScanExpiredAndOutOfSyncCertificates(ctx, input)
+}
+
+func (mw *amqpMiddleware) Verify(ctx context.Context, input *api.VerifyInput) (*api.VerifyOutput, error) {
+	return mw.next.Verify(ctx, input)
+}
+
+func (mw *amqpMiddleware) Sign(ctx context.Context, input *api.SignInput) (*api.SignOutput, error) {
+	return mw.next.Sign(ctx, input)
 }

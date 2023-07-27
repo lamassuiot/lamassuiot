@@ -72,9 +72,9 @@ func TestSubscribe(t *testing.T) {
 						"name":   "",
 						"type":   "",
 					},
-					"conditions": nil,
-					"event_type": "io.lamassuiot.ca.create",
-					"user_id":    "",
+					"conditions":     nil,
+					"event_type":     "io.lamassuiot.ca.create",
+					"user_id":        "",
 					"condition_type": nil,
 				})
 
@@ -100,9 +100,9 @@ func TestSubscribe(t *testing.T) {
 						"name":   "",
 						"type":   "",
 					},
-					"conditions": nil,
-					"event_type": "io.lamassuiot.ca.create",
-					"user_id":    "",
+					"conditions":     nil,
+					"event_type":     "io.lamassuiot.ca.create",
+					"user_id":        "",
 					"condition_type": "data.name",
 				})
 
@@ -383,8 +383,8 @@ func TestGetEvents(t *testing.T) {
 						KeyType: caApi.RSA,
 						KeyBits: 4096,
 					},
-					CADuration:       time.Hour * 5,
-					IssuanceDuration: time.Hour,
+					CAExpiration:       time.Now().Add(time.Hour * 5),
+					IssuanceExpiration: time.Now().Add(time.Hour),
 				})
 
 				if err != nil {

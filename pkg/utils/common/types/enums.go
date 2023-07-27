@@ -24,7 +24,7 @@ func ParseEnumOperator(s string) EnumOperatorType {
 }
 
 type EnumFilterField struct {
-	baseFilter
+	BaseFilter
 	Operator   EnumOperatorType
 	Collection []string
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
+	lamassudevmanager "github.com/lamassuiot/lamassuiot/pkg/device-manager/client"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/transport"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/config"
@@ -74,12 +75,44 @@ func main() {
 			log.Fatal("Could not create LamassuCA client: ", err)
 		}
 	}
-	certContent, _ := ioutil.ReadFile(config.CertFile)
-	cpb, _ := pem.Decode(certContent)
 
-	upstreamCert, err := x509.ParseCertificate(cpb.Bytes)
+	var devManagerClient lamassudevmanager.LamassuDeviceManagerClient
+	parsedLamassuDevManagerURL, err := url.Parse(config.LamassuDeviceManagerAddress)
 	if err != nil {
-		log.Fatal("Could not parse upstream Cert: ", err)
+		log.Fatal("Could not parse Device Manager URL: ", err)
+	}
+
+	if strings.HasPrefix(config.LamassuDeviceManagerAddress, "https") {
+		devManagerClient, err = lamassudevmanager.NewLamassuDeviceManagerClient(clientUtils.BaseClientConfigurationuration{
+			URL:        parsedLamassuDevManagerURL,
+			AuthMethod: clientUtils.AuthMethodMutualTLS,
+			AuthMethodConfig: &clientUtils.MutualTLSConfig{
+				ClientCert: config.CertFile,
+				ClientKey:  config.KeyFile,
+			},
+			CACertificate: config.LamassuDeviceManagerCertFile,
+		})
+		if err != nil {
+			log.Fatal("Could not create Device Manager client: ", err)
+		}
+	} else {
+		devManagerClient, err = lamassudevmanager.NewLamassuDeviceManagerClient(clientUtils.BaseClientConfigurationuration{
+			URL:        parsedLamassuDevManagerURL,
+			AuthMethod: clientUtils.AuthMethodNone,
+		})
+		if err != nil {
+			log.Fatal("Could not create Device Manager client: ", err)
+		}
+	}
+
+	caCert, err := readCertificarteFille(config.DownstreamCACert)
+	if err != nil {
+		log.Fatal("Could not parse downsrteam CA certificate: ", err)
+	}
+
+	upstreamCert, err := readCertificarteFille(config.CertFile)
+	if err != nil {
+		log.Fatal("Could not parse upstream certificate: ", err)
 	}
 
 	key, _ := ioutil.ReadFile(config.KeyFile)
@@ -89,11 +122,14 @@ func main() {
 	if err != nil {
 		upstreamKey, err = x509.ParseECPrivateKey(block.Bytes)
 		if err != nil {
-			log.Fatal("Could not parse upstream Key: ", err)
+			upstreamKey, err = x509.ParsePKCS8PrivateKey(block.Bytes)
+			if err != nil {
+				log.Fatal("Could not parse upstream Key: ", err)
+			}
 		}
 	}
 
-	svc := service.NewDMSManagerService(dmsRepo, &caClient, upstreamCert, upstreamKey, config.LamassuDeviceManagerAddress)
+	svc := service.NewDMSManagerService(dmsRepo, &caClient, &devManagerClient, caCert, upstreamCert, upstreamKey, config.LamassuDeviceManagerAddress)
 	dmsSvc := svc.(*service.DMSManagerService)
 
 	svc = service.LoggingMiddleware()(svc)
@@ -108,4 +144,20 @@ func main() {
 	mainServer.Run()
 	forever := make(chan struct{})
 	<-forever
+}
+
+func readCertificarteFille(path string) (*x509.Certificate, error) {
+	certContent, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	cpb, _ := pem.Decode(certContent)
+
+	cert, err := x509.ParseCertificate(cpb.Bytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return cert, nil
 }

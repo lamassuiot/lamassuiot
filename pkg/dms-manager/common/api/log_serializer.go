@@ -21,11 +21,8 @@ type DeviceManufacturingServiceLogSerialized struct {
 
 func (o *DeviceManufacturingService) ToSerializedLog() DeviceManufacturingServiceLogSerialized {
 	serializer := DeviceManufacturingServiceLogSerialized{
-		Name:          o.Name,
-		Status:        o.Status,
-		SerialNumber:  o.SerialNumber,
-		Subject:       o.Subject.ToSerializedLog(),
-		AuthorizedCAs: o.AuthorizedCAs,
+		Name:   o.Name,
+		Status: o.Status,
 	}
 
 	return serializer
@@ -53,19 +50,6 @@ type GetDMSsOutputLogSerialized struct {
 func (o *GetDMSsOutput) ToSerializedLog() GetDMSsOutputLogSerialized {
 	serializer := GetDMSsOutputLogSerialized{
 		TotalDMSs: o.TotalDMSs,
-	}
-	return serializer
-}
-
-// ----------------------------------------------
-
-type CreateDMSWithCertificateRequestOutputlOGSerialized struct {
-	DeviceManufacturingServiceLogSerialized
-}
-
-func (o *CreateDMSWithCertificateRequestOutput) ToSerializedLog() CreateDMSWithCertificateRequestOutputlOGSerialized {
-	serializer := CreateDMSWithCertificateRequestOutputlOGSerialized{
-		DeviceManufacturingServiceLogSerialized: o.DeviceManufacturingService.ToSerializedLog(),
 	}
 	return serializer
 }

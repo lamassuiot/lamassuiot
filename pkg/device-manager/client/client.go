@@ -2,9 +2,14 @@ package lamassudevmanager
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
+	clientFilers "github.com/lamassuiot/lamassuiot/pkg/utils/client/filters"
+	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
+	filtersTypes "github.com/lamassuiot/lamassuiot/pkg/utils/common/types"
 )
 
 // import (
@@ -20,9 +25,10 @@ import (
 // )
 
 type LamassuDeviceManagerClient interface {
-	// 	CreateDevice(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
+	IterateDevicesbyDMSWithPredicate(ctx context.Context, input *api.IterateDevicesByDMSWithPredicateInput) (*api.IterateDevicesByDMSWithPredicateOutput, error)
+	CreateDevice(ctx context.Context, alias string, deviceID string, dmsName string, description string, tags []string, iconName string, iconColor string) (*api.Device, error)
 	// 	UpdateDeviceById(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error)
-	// 	GetDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error)
+	GetDevices(ctx context.Context, input *api.GetDevicesInput) (*api.GetDevicesOutput, error)
 	GetDeviceById(ctx context.Context, deviceId string) (*api.GetDeviceByIdOutput, error)
 	// 	GetDevicesByDMS(ctx context.Context, dmsId string, queryParameters filters.QueryParameters) (dto.GetDevicesResponse, error)
 	// 	DeleteDevice(ctx context.Context, id string) error
@@ -55,29 +61,77 @@ func NewLamassuDeviceManagerClient(config clientUtils.BaseClientConfigurationura
 	}, nil
 }
 
-// func (c *LamassuDeviceManagerClientConfig) CreateDevice(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error) {
-// 	body := dto.CreateDeviceRequest{
-// 		DeviceID:    deviceID,
-// 		Alias:       alias,
-// 		Description: description,
-// 		Tags:        tags,
-// 		IconName:    iconName,
-// 		IconColor:   iconColor,
-// 		DmsId:       dmsID,
-// 	}
-// 	req, err := c.client.NewRequest(ctx, "POST", "v1/devices", body)
-// 	if err != nil {
-// 		return dto.Device{}, err
-// 	}
-// 	respBody, _, err := c.client.Do(req)
-// 	if err != nil {
-// 		return dto.Device{}, err
-// 	}
-// 	var device dto.Device
-// 	jsonString, _ := json.Marshal(respBody)
-// 	json.Unmarshal(jsonString, &device)
-// 	return device, nil
-// }
+func (c *LamassuDeviceManagerClientConfig) CreateDevice(ctx context.Context, alias string, deviceID string, dmsName string, description string, tags []string, iconName string, iconColor string) (*api.Device, error) {
+	body := struct {
+		DeviceID    string   `json:"id"`
+		Alias       string   `json:"alias"`
+		DmsName     string   `json:"dms_name"`
+		Tags        []string `json:"tags"`
+		Description string   `json:"description"`
+		IconColor   string   `json:"icon_color"`
+		IconName    string   `json:"icon_name"`
+	}{
+		DeviceID:    deviceID,
+		Alias:       alias,
+		DmsName:     dmsName,
+		Tags:        tags,
+		Description: description,
+		IconColor:   iconColor,
+		IconName:    iconName,
+	}
+
+	req, err := c.client.NewRequest(ctx, "POST", "v1/devices", body)
+	if err != nil {
+		return nil, err
+	}
+	respBody, err := c.client.Do2(req)
+	if err != nil {
+		return nil, err
+	}
+	var device api.Device
+	jsonString, _ := json.Marshal(respBody)
+	json.Unmarshal(jsonString, &device)
+	return &device, nil
+}
+
+func (c *LamassuDeviceManagerClientConfig) IterateDevicesbyDMSWithPredicate(ctx context.Context, input *api.IterateDevicesByDMSWithPredicateInput) (*api.IterateDevicesByDMSWithPredicateOutput, error) {
+	limit := 100
+	i := 0
+
+	var devices []api.Device = make([]api.Device, 0)
+	for {
+		getDevicessOutput, err := c.GetDevicesByDMS(
+			ctx,
+			&api.GetDevicesByDMSInput{
+				DmsName: input.DmsName,
+				QueryParameters: common.QueryParameters{
+					Filters: []filtersTypes.Filter{},
+					Sort:    common.SortOptions{},
+					Pagination: common.PaginationOptions{
+						Limit:  i,
+						Offset: i * limit,
+					},
+				},
+			},
+		)
+		if err != nil {
+			return &api.IterateDevicesByDMSWithPredicateOutput{}, errors.New("could not get Devices")
+		}
+
+		if len(getDevicessOutput.Devices) == 0 {
+			break
+		}
+
+		devices = append(devices, getDevicessOutput.Devices...)
+		i++
+	}
+	for _, device := range devices {
+		input.PredicateFunc(&device)
+	}
+
+	return &api.IterateDevicesByDMSWithPredicateOutput{}, nil
+}
+
 // func (c *LamassuDeviceManagerClientConfig) UpdateDeviceById(ctx context.Context, alias string, deviceID string, dmsID string, description string, tags []string, iconName string, iconColor string) (dto.Device, error) {
 // 	body := dto.UpdateDevicesByIdRequest{
 // 		DeviceID:    deviceID,
@@ -101,35 +155,43 @@ func NewLamassuDeviceManagerClient(config clientUtils.BaseClientConfigurationura
 // 	json.Unmarshal(jsonString, &device)
 // 	return device, nil
 // }
-// func (c *LamassuDeviceManagerClientConfig) GetDevices(ctx context.Context, queryParameters filters.QueryParameters) ([]dto.Device, int, error) {
-// 	var newParams string
-// 	req, err := c.client.NewRequest(ctx, "GET", "v1/devices", nil)
-// 	if err != nil {
-// 		return []dto.Device{}, 0, err
-// 	}
 
-// 	newParams = clientFilters.GenerateHttpQueryParams(queryParameters)
+func (c *LamassuDeviceManagerClientConfig) GetDevices(ctx context.Context, input *api.GetDevicesInput) (*api.GetDevicesOutput, error) {
+	urlParams := clientFilers.GenerateHttpQueryParams(input.QueryParameters)
+	req, err := c.client.NewRequest(ctx, "GET", "v1/devices", nil)
+	if err != nil {
+		return &api.GetDevicesOutput{}, err
+	}
 
-// 	req.URL.RawQuery = newParams
-// 	respBody, _, err := c.client.Do(req)
-// 	if err != nil {
-// 		return []dto.Device{}, 0, err
-// 	}
+	req.URL.RawQuery = urlParams
+	var output api.GetDevicesOutputSerialized
+	_, err = c.client.Do(req, &output)
+	if err != nil {
+		return &api.GetDevicesOutput{}, err
+	}
+	deserialized := output.Deserialize()
 
-// 	var resp dto.GetDevicesResponse
+	return &deserialized, nil
+}
 
-// 	jsonString, _ := json.Marshal(respBody)
-// 	json.Unmarshal(jsonString, &resp)
+func (c *LamassuDeviceManagerClientConfig) GetDevicesByDMS(ctx context.Context, input *api.GetDevicesByDMSInput) (*api.GetDevicesByDMSOutput, error) {
+	urlParams := clientFilers.GenerateHttpQueryParams(input.QueryParameters)
+	req, err := c.client.NewRequest(ctx, "GET", "v1/devices/dms/"+input.DmsName, nil)
+	if err != nil {
+		return &api.GetDevicesByDMSOutput{}, err
+	}
 
-//		var devices []dto.Device
-//		for _, item := range resp.Devices {
-//			device := dto.Device{}
-//			jsonString, _ := json.Marshal(item)
-//			json.Unmarshal(jsonString, &device)
-//			devices = append(devices, device)
-//		}
-//		return devices, len(devices), nil
-//	}
+	req.URL.RawQuery = urlParams
+	var output api.GetDevicesByDMSOutputSerialized
+	_, err = c.client.Do(req, &output)
+	if err != nil {
+		return &api.GetDevicesByDMSOutput{}, err
+	}
+	deserialized := output.Deserialize()
+
+	return &deserialized, nil
+}
+
 func (c *LamassuDeviceManagerClientConfig) GetDeviceById(ctx context.Context, deviceId string) (*api.GetDeviceByIdOutput, error) {
 	req, err := c.client.NewRequest(ctx, "GET", "v1/devices/"+deviceId, nil)
 	if err != nil {

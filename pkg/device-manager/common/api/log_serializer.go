@@ -172,6 +172,17 @@ func (s *GetDevicesOutput) ToSerializedLog() GetDevicesOutputLogSerialized {
 	}
 }
 
+type GetDevicesByDMSOutputLogSerialized struct {
+	TotalDevices int `json:"total_devices"`
+}
+
+func (s *GetDevicesByDMSOutput) ToSerializedLog() GetDevicesByDMSOutputLogSerialized {
+
+	return GetDevicesByDMSOutputLogSerialized{
+		TotalDevices: s.TotalDevices,
+	}
+}
+
 // ---------------------------------------------------------------------
 
 type GetDeviceByIdOutputLogSerialized struct {

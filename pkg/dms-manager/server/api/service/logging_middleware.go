@@ -59,10 +59,10 @@ func (mw loggingMiddleware) CreateDMS(ctx context.Context, input *api.CreateDMSI
 	return mw.next.CreateDMS(ctx, input)
 }
 
-func (mw loggingMiddleware) CreateDMSWithCertificateRequest(ctx context.Context, input *api.CreateDMSWithCertificateRequestInput) (output *api.CreateDMSWithCertificateRequestOutput, err error) {
+func (mw loggingMiddleware) UpdateDMS(ctx context.Context, input *api.UpdateDMSInput) (output *api.UpdateDMSOutput, err error) {
 	defer func(begin time.Time) {
 		var logMsg = map[string]interface{}{}
-		logMsg["method"] = "CreateDMSWithCertificateRequest"
+		logMsg["method"] = "UpdateDMS"
 		logMsg["took"] = time.Since(begin)
 		logMsg["input"] = input
 
@@ -72,7 +72,7 @@ func (mw loggingMiddleware) CreateDMSWithCertificateRequest(ctx context.Context,
 			log.WithFields(logMsg).Error(err)
 		}
 	}(time.Now())
-	return mw.next.CreateDMSWithCertificateRequest(ctx, input)
+	return mw.next.UpdateDMS(ctx, input)
 }
 
 func (mw loggingMiddleware) UpdateDMSStatus(ctx context.Context, input *api.UpdateDMSStatusInput) (output *api.UpdateDMSStatusOutput, err error) {
@@ -164,10 +164,9 @@ func (mw loggingMiddleware) Enroll(ctx context.Context, csr *x509.CertificateReq
 		logMsg["took"] = time.Since(begin)
 		logMsg["aps"] = aps
 		logMsg["csr_cn"] = csr.Subject.CommonName
-		logMsg["crt_cn"] = cert.Subject.CommonName
-		logMsg["crt_sn"] = utils.InsertNth(utils.ToHexInt(cert.SerialNumber), 2)
-
 		if err == nil {
+			logMsg["crt_cn"] = cert.Subject.CommonName
+			logMsg["crt_sn"] = utils.InsertNth(utils.ToHexInt(cert.SerialNumber), 2)
 			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", utils.InsertNth(utils.ToHexInt(crt.SerialNumber), 2)))
 		} else {
 			log.WithFields(logMsg).Error(err)
@@ -176,7 +175,7 @@ func (mw loggingMiddleware) Enroll(ctx context.Context, csr *x509.CertificateReq
 	return mw.next.Enroll(ctx, csr, cert, aps)
 }
 
-func (mw loggingMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate) (crt *x509.Certificate, err error) {
+func (mw loggingMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (crt *x509.Certificate, err error) {
 	defer func(begin time.Time) {
 		var logMsg = map[string]interface{}{}
 		logMsg["method"] = "Reenroll"
@@ -191,7 +190,7 @@ func (mw loggingMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateR
 			log.WithFields(logMsg).Error(err)
 		}
 	}(time.Now())
-	return mw.next.Reenroll(ctx, csr, cert)
+	return mw.next.Reenroll(ctx, csr, cert, aps)
 }
 
 func (mw loggingMiddleware) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (crt *x509.Certificate, key *rsa.PrivateKey, err error) {

@@ -3,10 +3,10 @@ package postgres
 import (
 	"context"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
@@ -19,106 +19,271 @@ import (
 )
 
 type DeviceManufacturingServiceDAO struct {
-	Name                      string `gorm:"primaryKey"`
-	SerialNumber              string
-	Status                    api.DMSStatus
-	X509Asset                 string
-	AuthorizedCAs             pq.StringArray `gorm:"type:text[]"`
-	BootstrapCAs              pq.StringArray `gorm:"type:text[]"`
-	IsCloudHostedDMS          bool
-	CreationTimestamp         pq.NullTime
-	LastStatusUpdateTimestamp pq.NullTime
+	Name                 string `gorm:"primaryKey"`
+	Status               api.DMSStatus
+	IsCloudDMS           bool
+	ShadowType           api.ShadowType
+	CreationTimestamp    time.Time
+	IdentityProfile      IdentityProfileDAO      `gorm:"foreignKey:DMSName"`
+	RemoteAccessIdentity RemoteAccessIdentityDAO `gorm:"foreignKey:DMSName"`
 }
 
-func (d *DeviceManufacturingServiceDAO) toDeviceManufacturingService() (api.DeviceManufacturingService, error) {
-	var x509Asset api.X509Asset
-	var x509AssetSubject pkix.Name
+type RemoteAccessIdentityDAO struct {
+	DMSName               string `gorm:"primaryKey"`
+	ExternalKeyGeneration bool
+	AuthorizedCAs         pq.StringArray `gorm:"type:text[]"`
+	SerialNumber          string
+	Certificate           string
+	CertificateRequest    string
+}
 
-	decodedCert, err := base64.StdEncoding.DecodeString(d.X509Asset)
-	if err != nil {
-		return api.DeviceManufacturingService{}, errors.New("corrupted db: could not decode b64 x509 asset")
+type IdentityProfileDAO struct {
+	DMSName                    string `gorm:"primaryKey"`
+	EnrollmentMode             string
+	AuthenticationMode         string
+	BootstrapCAs               pq.StringArray `gorm:"type:text[]"`
+	AuthorizedCA               string
+	Icon                       string
+	Color                      string
+	Tags                       pq.StringArray `gorm:"type:text[]"`
+	PreventiveRenewalInterval  string
+	AllowNewAutoEnrollment     bool
+	AllowExpiredRenewal        bool
+	IncludeAuthorizedCA        bool
+	IncludeBootstrapCAs        bool
+	IncludeLamassuDownstreamCA bool
+	ManagedCAs                 pq.StringArray `gorm:"type:text[]"`
+	StaticCAs                  []StaticCADAO  `gorm:"foreignKey:DMSName;References:DMSName"`
+	PublishToAWS               bool
+}
+
+type StaticCADAO struct {
+	DMSName     string `gorm:"primaryKey"`
+	ID          string `gorm:"primaryKey"`
+	Certificate string
+}
+
+func (d *RemoteAccessIdentityDAO) toRemoteAccessIdentity() *api.RemoteAccessIdentity {
+	rai := api.RemoteAccessIdentity{
+		ExternalKeyGeneration:    d.ExternalKeyGeneration,
+		AuthorizedCAs:            d.AuthorizedCAs,
+		SerialNumber:             d.SerialNumber,
+		CertificateString:        d.Certificate,
+		CertificateRequestString: d.CertificateRequest,
 	}
 
-	certBlock, _ := pem.Decode([]byte(decodedCert))
-	if d.Status == api.DMSStatusPendingApproval || d.Status == api.DMSStatusRejected {
-		certReq, err := x509.ParseCertificateRequest(certBlock.Bytes)
-		if err != nil {
-			return api.DeviceManufacturingService{}, errors.New("corrupted db: could not inflate certificate request")
+	if rai.CertificateString != "" {
+		decodedBytes, err := base64.StdEncoding.DecodeString(rai.CertificateString)
+		if err == nil {
+			certBlock, _ := pem.Decode([]byte(decodedBytes))
+			cert, _ := x509.ParseCertificate(certBlock.Bytes)
+			rai.Certificate = cert
+		}
+	}
+
+	if rai.CertificateRequestString != "" {
+		decodedBytes, err := base64.StdEncoding.DecodeString(rai.CertificateRequestString)
+		if err == nil {
+			certBlock, _ := pem.Decode([]byte(decodedBytes))
+			csr, _ := x509.ParseCertificateRequest(certBlock.Bytes)
+			rai.CertificateRequest = csr
+		}
+	}
+
+	if rai.Certificate != nil {
+		rai.Subject = api.Subject{
+			CommonName:       rai.Certificate.Subject.CommonName,
+			Organization:     strings.Join(rai.Certificate.Subject.Organization, ","),
+			OrganizationUnit: strings.Join(rai.Certificate.Subject.OrganizationalUnit, ","),
+			Country:          strings.Join(rai.Certificate.Subject.Country, ","),
+			State:            strings.Join(rai.Certificate.Subject.Province, ","),
+			Locality:         strings.Join(rai.Certificate.Subject.Locality, ","),
+		}
+	} else if rai.CertificateRequest != nil {
+		rai.Subject = api.Subject{
+			CommonName:       rai.CertificateRequest.Subject.CommonName,
+			Organization:     strings.Join(rai.CertificateRequest.Subject.Organization, ","),
+			OrganizationUnit: strings.Join(rai.CertificateRequest.Subject.OrganizationalUnit, ","),
+			Country:          strings.Join(rai.CertificateRequest.Subject.Country, ","),
+			State:            strings.Join(rai.CertificateRequest.Subject.Province, ","),
+			Locality:         strings.Join(rai.CertificateRequest.Subject.Locality, ","),
 		}
 
-		x509AssetSubject = certReq.Subject
+	}
 
-		x509Asset = api.X509Asset{
-			IsCertificate:      false,
-			Certificate:        nil,
-			CertificateRequest: certReq,
+	return &rai
+}
+func toRemoteAccessIdentityDAO(dmsName string, d api.RemoteAccessIdentity) RemoteAccessIdentityDAO {
+	rai := RemoteAccessIdentityDAO{
+		DMSName:               dmsName,
+		ExternalKeyGeneration: d.ExternalKeyGeneration,
+		AuthorizedCAs:         d.AuthorizedCAs,
+		SerialNumber:          d.SerialNumber,
+	}
+
+	if d.Certificate != nil {
+		pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: d.Certificate.Raw})
+		pemEncoded := base64.StdEncoding.EncodeToString(pemBytes)
+		rai.Certificate = pemEncoded
+	}
+
+	if d.CertificateRequest != nil {
+		pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: d.CertificateRequest.Raw})
+		pemEncoded := base64.StdEncoding.EncodeToString(pemBytes)
+		rai.CertificateRequest = pemEncoded
+	}
+
+	return rai
+}
+
+func (d *StaticCADAO) toStaticCA() api.StaticCA {
+	decodedBytes, err := base64.StdEncoding.DecodeString(d.Certificate)
+	if err == nil {
+		certBlock, _ := pem.Decode([]byte(decodedBytes))
+		cert, _ := x509.ParseCertificate(certBlock.Bytes)
+		return api.StaticCA{
+			ID:          d.ID,
+			Certificate: cert,
 		}
+	}
+
+	return api.StaticCA{
+		ID: d.ID,
+	}
+}
+
+func toStaticCADAO(dmsName string, d api.StaticCA) StaticCADAO {
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: d.Certificate.Raw})
+	pemEncoded := base64.StdEncoding.EncodeToString(pemBytes)
+
+	return StaticCADAO{
+		DMSName:     dmsName,
+		ID:          d.ID,
+		Certificate: pemEncoded,
+	}
+}
+
+func (d *IdentityProfileDAO) toIdentityProfile() *api.IdentityProfile {
+	duration := time.Duration(-1 * time.Second)
+	duration, _ = time.ParseDuration(d.PreventiveRenewalInterval)
+
+	cas := []api.StaticCA{}
+	for _, ca := range d.StaticCAs {
+		cas = append(cas, ca.toStaticCA())
+	}
+
+	return &api.IdentityProfile{
+		GeneralSettings: api.IdentityProfileGeneralSettings{
+			EnrollmentMode: api.EnrollmentMode(d.EnrollmentMode),
+		},
+		EnrollmentSettings: api.IdentityProfileEnrollmentSettings{
+			AuthenticationMode:     api.ESTAuthenticationMode(d.AuthenticationMode),
+			Tags:                   d.Tags,
+			Icon:                   d.Icon,
+			Color:                  d.Color,
+			AuthorizedCA:           d.AuthorizedCA,
+			AllowNewAutoEnrollment: d.AllowNewAutoEnrollment,
+			BootstrapCAs:           d.BootstrapCAs,
+		},
+		ReerollmentSettings: api.IdentityProfileReenrollmentSettings{
+			AllowExpiredRenewal:       d.AllowExpiredRenewal,
+			PreventiveRenewalInterval: duration,
+		},
+		CADistributionSettings: api.IdentityProfileCADistributionSettings{
+			IncludeAuthorizedCA:        d.IncludeAuthorizedCA,
+			IncludeBootstrapCAs:        d.IncludeBootstrapCAs,
+			IncludeLamassuDownstreamCA: d.IncludeLamassuDownstreamCA,
+			ManagedCAs:                 d.ManagedCAs,
+			StaticCAs:                  cas,
+		},
+		PublishToAWS: d.PublishToAWS,
+	}
+}
+
+func toIdentityProfileDAO(dmsName string, d api.IdentityProfile) IdentityProfileDAO {
+	cas := []StaticCADAO{}
+	for _, ca := range d.CADistributionSettings.StaticCAs {
+		cas = append(cas, toStaticCADAO(dmsName, ca))
+	}
+
+	return IdentityProfileDAO{
+		DMSName:                    dmsName,
+		EnrollmentMode:             string(d.GeneralSettings.EnrollmentMode),
+		AuthenticationMode:         string(d.EnrollmentSettings.AuthenticationMode),
+		BootstrapCAs:               d.EnrollmentSettings.BootstrapCAs,
+		AuthorizedCA:               d.EnrollmentSettings.AuthorizedCA,
+		Icon:                       d.EnrollmentSettings.Icon,
+		Color:                      d.EnrollmentSettings.Color,
+		Tags:                       d.EnrollmentSettings.Tags,
+		AllowNewAutoEnrollment:     d.EnrollmentSettings.AllowNewAutoEnrollment,
+		AllowExpiredRenewal:        d.ReerollmentSettings.AllowExpiredRenewal,
+		PreventiveRenewalInterval:  d.ReerollmentSettings.PreventiveRenewalInterval.String(),
+		IncludeAuthorizedCA:        d.CADistributionSettings.IncludeAuthorizedCA,
+		IncludeBootstrapCAs:        d.CADistributionSettings.IncludeBootstrapCAs,
+		IncludeLamassuDownstreamCA: d.CADistributionSettings.IncludeLamassuDownstreamCA,
+		ManagedCAs:                 d.CADistributionSettings.ManagedCAs,
+		StaticCAs:                  cas,
+		PublishToAWS:               d.PublishToAWS,
+	}
+}
+
+func (d *DeviceManufacturingServiceDAO) toDeviceManufacturingService() api.DeviceManufacturingService {
+	dms := api.DeviceManufacturingService{
+		Name:                 d.Name,
+		Status:               d.Status,
+		CreationTimestamp:    d.CreationTimestamp,
+		CloudDMS:             d.IsCloudDMS,
+		Aws:                  api.AwsSpecification{ShadowType: d.ShadowType},
+		IdentityProfile:      nil,
+		RemoteAccessIdentity: nil,
+	}
+
+	if d.IsCloudDMS {
+		dms.IdentityProfile = d.IdentityProfile.toIdentityProfile()
 	} else {
-		cert, err := x509.ParseCertificate(certBlock.Bytes)
-		if err != nil {
-			return api.DeviceManufacturingService{}, errors.New("corrupted db: could not inflate certificate")
-		}
-
-		x509AssetSubject = cert.Subject
-
-		x509Asset = api.X509Asset{
-			IsCertificate:      true,
-			Certificate:        cert,
-			CertificateRequest: nil,
-		}
+		dms.RemoteAccessIdentity = d.RemoteAccessIdentity.toRemoteAccessIdentity()
 	}
 
-	subject := api.Subject{
-		CommonName: x509AssetSubject.CommonName,
+	return dms
+}
+func toDeviceManufacturingServiceDAO(d api.DeviceManufacturingService) DeviceManufacturingServiceDAO {
+	dms := DeviceManufacturingServiceDAO{
+		Name:              d.Name,
+		Status:            d.Status,
+		CreationTimestamp: d.CreationTimestamp,
+		IsCloudDMS:        d.CloudDMS,
+		ShadowType:        d.Aws.ShadowType,
 	}
 
-	if len(x509AssetSubject.Country) > 0 {
-		subject.Country = x509AssetSubject.Country[0]
-	}
-	if len(x509AssetSubject.Organization) > 0 {
-		subject.Organization = x509AssetSubject.Organization[0]
-	}
-	if len(x509AssetSubject.OrganizationalUnit) > 0 {
-		subject.OrganizationUnit = x509AssetSubject.OrganizationalUnit[0]
-	}
-	if len(x509AssetSubject.Locality) > 0 {
-		subject.Locality = x509AssetSubject.Locality[0]
-	}
-	if len(x509AssetSubject.Province) > 0 {
-		subject.State = x509AssetSubject.Province[0]
+	if d.CloudDMS {
+		dms.IdentityProfile = toIdentityProfileDAO(d.Name, *d.IdentityProfile)
+	} else {
+		dms.RemoteAccessIdentity = toRemoteAccessIdentityDAO(d.Name, *d.RemoteAccessIdentity)
 	}
 
-	authorizedCAs := make([]string, 0)
-	if len(d.AuthorizedCAs) > 0 {
-		authorizedCAs = d.AuthorizedCAs
-	}
-	hostcloudDMS := false
-	bootstrapCAs := make([]string, 0)
-	if len(d.BootstrapCAs) > 0 {
-		bootstrapCAs = d.BootstrapCAs
-		hostcloudDMS = true
-
-	}
-
-	return api.DeviceManufacturingService{
-		Name:                      d.Name,
-		Status:                    d.Status,
-		SerialNumber:              d.SerialNumber,
-		X509Asset:                 x509Asset,
-		Subject:                   subject,
-		AuthorizedCAs:             authorizedCAs,
-		BootstrapCAs:              bootstrapCAs,
-		HostCloudDMS:              hostcloudDMS,
-		CreationTimestamp:         d.CreationTimestamp,
-		LastStatusUpdateTimestamp: d.LastStatusUpdateTimestamp,
-	}, nil
+	return dms
 }
 
 func (DeviceManufacturingServiceDAO) TableName() string {
 	return "dms"
 }
 
+func (IdentityProfileDAO) TableName() string {
+	return "identity_profile"
+}
+
+func (RemoteAccessIdentityDAO) TableName() string {
+	return "remote_access_identity"
+}
+
+func (StaticCADAO) TableName() string {
+	return "static_cas"
+}
+
 func NewPostgresDB(db *gorm.DB) repository.DeviceManufacturingServiceRepository {
+	db.AutoMigrate(&StaticCADAO{})
+	db.AutoMigrate(&IdentityProfileDAO{})
+	db.AutoMigrate(&RemoteAccessIdentityDAO{})
 	db.AutoMigrate(&DeviceManufacturingServiceDAO{})
 
 	return &PostgresDBContext{db}
@@ -128,30 +293,11 @@ type PostgresDBContext struct {
 	*gorm.DB
 }
 
-func (db *PostgresDBContext) Insert(ctx context.Context, input *api.CreateDMSWithCertificateRequestInput) error {
-	now := time.Now()
+func (db *PostgresDBContext) Insert(ctx context.Context, dms api.DeviceManufacturingService) error {
+	dmsDAO := toDeviceManufacturingServiceDAO(dms)
+	dmsDAO.CreationTimestamp = time.Now()
 
-	pemCert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: input.CertificateRequest.Raw})
-	certificateEnc := make([]byte, base64.StdEncoding.EncodedLen(len(pemCert)))
-	base64.StdEncoding.Encode(certificateEnc, pemCert)
-	hostCloudDMS := false
-	bootstrapCAs := make([]string, 0)
-	if len(input.BootstrapCAs) != 0 {
-		hostCloudDMS = true
-		bootstrapCAs = input.BootstrapCAs
-	}
-	dms := DeviceManufacturingServiceDAO{
-		Name:                      input.CertificateRequest.Subject.CommonName,
-		Status:                    api.DMSStatusPendingApproval,
-		AuthorizedCAs:             []string{},
-		BootstrapCAs:              bootstrapCAs,
-		IsCloudHostedDMS:          hostCloudDMS,
-		CreationTimestamp:         pq.NullTime{Valid: true, Time: now},
-		LastStatusUpdateTimestamp: pq.NullTime{Valid: true, Time: now},
-		X509Asset:                 string(certificateEnc),
-	}
-
-	if err := db.WithContext(ctx).Model(&DeviceManufacturingServiceDAO{}).Create(&dms).Error; err != nil {
+	if err := db.WithContext(ctx).Model(&DeviceManufacturingServiceDAO{}).Create(&dmsDAO).Error; err != nil {
 		duplicationErr := &dmserrors.DuplicateResourceError{
 			ResourceType: "DMS",
 			ResourceId:   dms.Name,
@@ -175,7 +321,22 @@ func (db *PostgresDBContext) SelectByName(ctx context.Context, name string) (api
 			return api.DeviceManufacturingService{}, err
 		}
 	}
-	return dms.toDeviceManufacturingService()
+
+	var idProfileDAO IdentityProfileDAO
+	db.WithContext(ctx).Model(&dms).Association("IdentityProfile").Find(&idProfileDAO)
+
+	var staticCAsDAO []StaticCADAO
+	db.WithContext(ctx).Model(&idProfileDAO).Association("StaticCAs").Find(&staticCAsDAO)
+
+	var rai RemoteAccessIdentityDAO
+	db.WithContext(ctx).Model(&dms).Association("RemoteAccessIdentity").Find(&rai)
+
+	idProfileDAO.StaticCAs = staticCAsDAO
+
+	dms.IdentityProfile = idProfileDAO
+	dms.RemoteAccessIdentity = rai
+
+	return dms.toDeviceManufacturingService(), nil
 }
 
 func (db *PostgresDBContext) SelectAll(ctx context.Context, queryParameters common.QueryParameters) (int, []api.DeviceManufacturingService, error) {
@@ -193,7 +354,7 @@ func (db *PostgresDBContext) SelectAll(ctx context.Context, queryParameters comm
 
 	var parsedDMSs []api.DeviceManufacturingService
 	for _, v := range dmss {
-		dms, err := v.toDeviceManufacturingService()
+		dms, err := db.SelectByName(ctx, v.Name)
 		if err != nil {
 			continue
 		}
@@ -203,75 +364,25 @@ func (db *PostgresDBContext) SelectAll(ctx context.Context, queryParameters comm
 	return int(totalDMSs), parsedDMSs, nil
 }
 
-func (db *PostgresDBContext) UpdateStatus(ctx context.Context, name string, status api.DMSStatus) error {
-	var dms DeviceManufacturingServiceDAO
-	if err := db.WithContext(ctx).Model(&DeviceManufacturingServiceDAO{}).Where("name = ?", name).First(&dms).Error; err != nil {
-		return err
-	}
-
-	dms.Status = status
-	dms.LastStatusUpdateTimestamp = pq.NullTime{Valid: true, Time: time.Now()}
-
-	if err := db.Save(&dms).Error; err != nil {
-		return err
-	}
-	return nil
-}
-
-func (db *PostgresDBContext) UpdateAuthorizedCAs(ctx context.Context, name string, authorizedCAs []string) error {
-	var dms DeviceManufacturingServiceDAO
-	if err := db.WithContext(ctx).Model(&DeviceManufacturingServiceDAO{}).Where("name = ?", name).First(&dms).Error; err != nil {
-		return err
-	}
-
-	dms.AuthorizedCAs = authorizedCAs
-	dms.LastStatusUpdateTimestamp = pq.NullTime{Valid: true, Time: time.Now()}
-
-	if err := db.Save(&dms).Error; err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (db *PostgresDBContext) UpdateDMS(ctx context.Context, dms api.DeviceManufacturingService) error {
 	var dmsToUpdate DeviceManufacturingServiceDAO
 	if err := db.WithContext(ctx).Model(&DeviceManufacturingServiceDAO{}).Where("name = ?", dms.Name).First(&dmsToUpdate).Error; err != nil {
 		return err
 	}
 
-	newUpdateTimestamp := dms.LastStatusUpdateTimestamp
-	if dmsToUpdate.Status != dms.Status {
-		newUpdateTimestamp = pq.NullTime{Valid: true, Time: time.Now()}
-	}
+	dmsDAO := toDeviceManufacturingServiceDAO(dms)
 
-	asset := ""
-	var pemBytes []byte
-	if dms.X509Asset.IsCertificate {
-		if dms.X509Asset.Certificate != nil {
-			pemBytes = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: dms.X509Asset.Certificate.Raw})
+	if dms.CloudDMS {
+		if err := db.Save(&dmsDAO.IdentityProfile).Error; err != nil {
+			return err
 		}
 	} else {
-		if dms.X509Asset.CertificateRequest != nil {
-			pemBytes = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: dms.X509Asset.CertificateRequest.Raw})
+		if err := db.Save(&dmsDAO.RemoteAccessIdentity).Error; err != nil {
+			return err
 		}
 	}
-	pemEncoded := base64.StdEncoding.EncodeToString(pemBytes)
-	asset = string(pemEncoded)
 
-	dmsToUpdate = DeviceManufacturingServiceDAO{
-		Name:                      dms.Name,
-		Status:                    dms.Status,
-		SerialNumber:              dms.SerialNumber,
-		AuthorizedCAs:             dms.AuthorizedCAs,
-		BootstrapCAs:              dms.BootstrapCAs,
-		IsCloudHostedDMS:          dms.HostCloudDMS,
-		CreationTimestamp:         dms.CreationTimestamp,
-		LastStatusUpdateTimestamp: newUpdateTimestamp,
-		X509Asset:                 asset,
-	}
-
-	if err := db.Save(&dmsToUpdate).Error; err != nil {
+	if err := db.Save(&dmsDAO).Error; err != nil {
 		return err
 	}
 

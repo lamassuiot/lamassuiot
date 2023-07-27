@@ -2,6 +2,7 @@ package api
 
 import (
 	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
+	dmsApi "github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
 )
 
 type CAConfiguration struct {
@@ -74,5 +75,13 @@ type UpdateDeviceDigitalTwinReenrollmentStatusInput struct {
 }
 
 type UpdateDeviceDigitalTwinReenrollmentStatusOutput struct{}
+
+//------------------------------------------------------
+
+type UpdateDMSCaCertsInput struct {
+	dmsApi.DeviceManufacturingService
+}
+
+type UpdateDMSCaCertsOutput struct{}
 
 //------------------------------------------------------

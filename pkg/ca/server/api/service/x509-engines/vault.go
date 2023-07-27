@@ -153,12 +153,18 @@ func (v Vaultx509Engine) CreateCA(input api.CreateCAInput) (*x509.Certificate, e
 	} else if input.KeyMetadata.KeyType == api.ECDSA {
 		input.KeyMetadata.KeyType = "ec"
 	}
-	err := v.initPkiSecret(input.CAType, input.Subject.CommonName, fmt.Sprint(input.IssuanceDuration.Hours()))
+	var enrollerTTL string
+	if input.IssuanceExpirationType == "DATE" {
+		enrollerTTL = fmt.Sprint(input.IssuanceExpirationDate.Hour())
+	} else {
+		enrollerTTL = fmt.Sprint(time.Now().Add(*input.IssuanceExpirationDuration * time.Second).Hour())
+	}
+	err := v.initPkiSecret(input.CAType, input.Subject.CommonName, enrollerTTL)
 	if err != nil {
 		return nil, err
 	}
 	tuneOptions := map[string]interface{}{
-		"max_lease_ttl": fmt.Sprint(input.CADuration.Hours()) + "h",
+		"max_lease_ttl": enrollerTTL + "h",
 	}
 	_, err = v.client.Logical().Write("/sys/mounts/"+v.pkiPath+api.ToVaultPath(string(input.CAType))+input.Subject.CommonName+"/tune", tuneOptions)
 
@@ -176,7 +182,7 @@ func (v Vaultx509Engine) CreateCA(input api.CreateCAInput) (*x509.Certificate, e
 		"organization":      input.Subject.Organization,
 		"organization_unit": input.Subject.OrganizationUnit,
 		"common_name":       input.Subject.CommonName,
-		"ttl":               fmt.Sprint(input.CADuration.Hours()) + "h",
+		"ttl":               enrollerTTL + "h",
 	}
 	_, err = v.client.Logical().Write(v.pkiPath+api.ToVaultPath(string(input.CAType))+input.Subject.CommonName+"/root/generate/internal", options)
 
@@ -273,7 +279,7 @@ func (v Vaultx509Engine) initPkiSecret(caType api.CAType, CAName string, enrolle
 }
 
 // falta meter el CACertificates en output + insert en BD
-func (v Vaultx509Engine) SignCertificateRequest(caCertificate *x509.Certificate, issuanceDuration time.Duration, input *api.SignCertificateRequestInput) (*x509.Certificate, error) {
+func (v Vaultx509Engine) SignCertificateRequest(caCertificate *x509.Certificate, certificateExpiration time.Time, input *api.SignCertificateRequestInput) (*x509.Certificate, error) {
 	var err error
 
 	csrBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: input.CertificateSigningRequest.Raw})
@@ -319,6 +325,23 @@ func (v Vaultx509Engine) SignCertificateRequest(caCertificate *x509.Certificate,
 	}
 
 	return certificate, nil
+}
+
+func (v Vaultx509Engine) ImportCA(input api.PrivateKey, caName string) error {
+	return nil
+}
+
+func (v Vaultx509Engine) Sign(ca api.Certificate, message []byte, messageType string, signing_algorithm string) ([]byte, error) {
+	// data, err := v.client.Logical().Read("secret/" + v.pkiPath + api.ToVaultPath(string(ca.CAType)) + ca.CAName)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	return nil, nil
+}
+
+func (v Vaultx509Engine) Verify(ca api.Certificate, signature []byte, message []byte, messageType string, signing_algorithm string) (bool, error) {
+	return false, nil
 }
 
 func DecodeCert(cert []byte) (x509.Certificate, error) {

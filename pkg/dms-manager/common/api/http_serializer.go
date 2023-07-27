@@ -8,7 +8,7 @@ import (
 	"encoding/pem"
 	"time"
 
-	"github.com/lib/pq"
+	"github.com/lamassuiot/lamassuiot/pkg/utils"
 )
 
 type SubjectSerialized struct {
@@ -68,21 +68,20 @@ func (o *KeyStrengthMetadataSerialized) Deserialize() KeyStrengthMetadata {
 	return serializer
 }
 
-type X509AssetSerialized struct {
-	Certificate        string `json:"certificate,omitempty"`
-	CertificateRequest string `json:"certificate_request,omitempty"`
-}
-
-func (o *X509Asset) Serialize() string {
-	if o.Certificate != nil {
-		pemCert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: o.Certificate.Raw})
+func SerializeCRT(crt *x509.Certificate) string {
+	if crt != nil {
+		pemCert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: crt.Raw})
 		certEnc := make([]byte, base64.StdEncoding.EncodedLen(len(pemCert)))
 		base64.StdEncoding.Encode(certEnc, pemCert)
 		return string(certEnc)
 	}
 
-	if o.CertificateRequest != nil {
-		pemCertRequest := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: o.CertificateRequest.Raw})
+	return ""
+}
+
+func SerializeCSR(csr *x509.CertificateRequest) string {
+	if csr != nil {
+		pemCertRequest := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr.Raw})
 		certRequestEnc := make([]byte, base64.StdEncoding.EncodedLen(len(pemCertRequest)))
 		base64.StdEncoding.Encode(certRequestEnc, pemCertRequest)
 		return string(certRequestEnc)
@@ -91,21 +90,9 @@ func (o *X509Asset) Serialize() string {
 	return ""
 }
 
-func DeserializeX509Asset(certificateAsset string, certificateRequestAsset string) X509Asset {
-	var certificate *x509.Certificate = nil
-	decodedCert, err := base64.StdEncoding.DecodeString(certificateAsset)
-	if err == nil {
-		certBlock, _ := pem.Decode([]byte(decodedCert))
-		if certBlock != nil {
-			crt, err := x509.ParseCertificate(certBlock.Bytes)
-			if err == nil {
-				certificate = crt
-			}
-		}
-	}
-
+func DeserializeCSR(certificateRequestString string) *x509.CertificateRequest {
 	var certificateRequest *x509.CertificateRequest = nil
-	decodedCertRequest, err := base64.StdEncoding.DecodeString(certificateRequestAsset)
+	decodedCertRequest, err := base64.StdEncoding.DecodeString(certificateRequestString)
 	if err == nil {
 		certRequestBlock, _ := pem.Decode([]byte(decodedCertRequest))
 		if certRequestBlock != nil {
@@ -116,91 +103,283 @@ func DeserializeX509Asset(certificateAsset string, certificateRequestAsset strin
 		}
 	}
 
-	serializer := X509Asset{
-		IsCertificate:      certificate != nil,
-		Certificate:        certificate,
-		CertificateRequest: certificateRequest,
+	return certificateRequest
+}
+
+func DeserializeCRT(certificateString string) *x509.Certificate {
+	var certificate *x509.Certificate = nil
+	decodedCert, err := base64.StdEncoding.DecodeString(certificateString)
+	if err == nil {
+		certBlock, _ := pem.Decode([]byte(decodedCert))
+		if certBlock != nil {
+			crt, err := x509.ParseCertificate(certBlock.Bytes)
+			if err == nil {
+				certificate = crt
+			}
+		}
+	}
+
+	return certificate
+}
+
+type RemoteAccessIdentitySerialized struct {
+	SerialNumber          string                        `json:"serial_number"`
+	KeyMetadata           KeyStrengthMetadataSerialized `json:"key_metadata"`
+	Subject               SubjectSerialized             `json:"subject"`
+	AuthorizedCAs         []string                      `json:"authorized_cas"`
+	ExternalKeyGeneration bool                          `json:"external_key_generation"`
+	Certificate           string                        `json:"certificate,omitempty"`
+	CertificateRequest    string                        `json:"certificate_request,omitempty"`
+}
+
+func (o *RemoteAccessIdentity) Serialize() RemoteAccessIdentitySerialized {
+	return RemoteAccessIdentitySerialized{
+		ExternalKeyGeneration: o.ExternalKeyGeneration,
+		SerialNumber:          o.SerialNumber,
+		KeyMetadata:           o.KeyMetadata.Serialize(),
+		Subject:               o.Subject.Serialize(),
+		AuthorizedCAs:         o.AuthorizedCAs,
+		Certificate:           SerializeCRT(o.Certificate),
+		CertificateRequest:    SerializeCSR(o.CertificateRequest),
+	}
+}
+
+func (o RemoteAccessIdentitySerialized) Deserialize() *RemoteAccessIdentity {
+	return &RemoteAccessIdentity{
+		ExternalKeyGeneration: o.ExternalKeyGeneration,
+		SerialNumber:          o.SerialNumber,
+		KeyMetadata:           o.KeyMetadata.Deserialize(),
+		Subject:               o.Subject.Deserialize(),
+		AuthorizedCAs:         o.AuthorizedCAs,
+		Certificate:           DeserializeCRT(o.Certificate),
+		CertificateRequest:    DeserializeCSR(o.CertificateRequest),
+	}
+}
+
+type IdentityProfileGeneralSettingsSerialized struct {
+	EnrollmentMode EnrollmentMode `json:"enrollment_mode"`
+}
+
+func (o *IdentityProfileGeneralSettings) Serialize() IdentityProfileGeneralSettingsSerialized {
+	return IdentityProfileGeneralSettingsSerialized{
+		EnrollmentMode: o.EnrollmentMode,
+	}
+}
+
+func (o *IdentityProfileGeneralSettingsSerialized) Deserialize() IdentityProfileGeneralSettings {
+	return IdentityProfileGeneralSettings{
+		EnrollmentMode: o.EnrollmentMode,
+	}
+}
+
+type IdentityProfileEnrollmentSettingsSerialized struct {
+	AuthenticationMode     ESTAuthenticationMode `json:"authentication_mode"`
+	AllowNewAutoEnrollment bool                  `json:"allow_new_auto_enrollment"`
+	Tags                   []string              `json:"tags"`
+	Icon                   string                `json:"icon"`
+	Color                  string                `json:"color"`
+	AuthorizedCA           string                `json:"authorized_ca"`
+	BootstrapCAs           []string              `json:"bootstrap_cas"`
+}
+
+func (o *IdentityProfileEnrollmentSettings) Serialize() IdentityProfileEnrollmentSettingsSerialized {
+	return IdentityProfileEnrollmentSettingsSerialized{
+		AuthenticationMode:     o.AuthenticationMode,
+		AllowNewAutoEnrollment: o.AllowNewAutoEnrollment,
+		Tags:                   o.Tags,
+		Icon:                   o.Icon,
+		Color:                  o.Color,
+		AuthorizedCA:           o.AuthorizedCA,
+		BootstrapCAs:           o.BootstrapCAs,
+	}
+}
+
+func (o *IdentityProfileEnrollmentSettingsSerialized) Deserialize() IdentityProfileEnrollmentSettings {
+	return IdentityProfileEnrollmentSettings{
+		AuthenticationMode:     o.AuthenticationMode,
+		AllowNewAutoEnrollment: o.AllowNewAutoEnrollment,
+		Tags:                   o.Tags,
+		Icon:                   o.Icon,
+		Color:                  o.Color,
+		AuthorizedCA:           o.AuthorizedCA,
+		BootstrapCAs:           o.BootstrapCAs,
+	}
+}
+
+type IdentityProfileReenrollmentSettingsSerialized struct {
+	AllowExpiredRenewal       bool   `json:"allow_expired_renewal"`
+	PreventiveRenewalInterval string `json:"preventive_renewal_interval"`
+}
+
+func (o *IdentityProfileReenrollmentSettings) Serialize() IdentityProfileReenrollmentSettingsSerialized {
+	return IdentityProfileReenrollmentSettingsSerialized{
+		AllowExpiredRenewal:       o.AllowExpiredRenewal,
+		PreventiveRenewalInterval: utils.ShortDuration(o.PreventiveRenewalInterval),
+	}
+}
+
+func (o IdentityProfileReenrollmentSettingsSerialized) Deserialize() IdentityProfileReenrollmentSettings {
+	duration := time.Duration(-1 * time.Second)
+	duration, _ = time.ParseDuration(o.PreventiveRenewalInterval)
+
+	return IdentityProfileReenrollmentSettings{
+		AllowExpiredRenewal:       o.AllowExpiredRenewal,
+		PreventiveRenewalInterval: duration,
+	}
+}
+
+type AwsSpecificationSerialized struct {
+	ShadowType string `json:"shadow_type"`
+}
+
+func (o *AwsSpecification) Serialize() AwsSpecificationSerialized {
+	serializer := AwsSpecificationSerialized{
+		ShadowType: string(o.ShadowType),
 	}
 	return serializer
 }
 
+func (o *AwsSpecificationSerialized) Deserialize() AwsSpecification {
+	serializer := AwsSpecification{
+		ShadowType: ParseShadowType(o.ShadowType),
+	}
+	return serializer
+}
+
+type StaticCASerialized struct {
+	ID          string `json:"id"`
+	Certificate string `json:"certificate"`
+}
+
+func (o *StaticCA) Serialize() StaticCASerialized {
+	return StaticCASerialized{
+		ID:          o.ID,
+		Certificate: SerializeCRT(o.Certificate),
+	}
+}
+
+func (o StaticCASerialized) Deserialize() StaticCA {
+	return StaticCA{
+		ID:          o.ID,
+		Certificate: DeserializeCRT(o.Certificate),
+	}
+}
+
+type IdentityProfileCADistributionSettingsSerialized struct {
+	IncludeAuthorizedCA        bool                 `json:"include_authorized_ca"`
+	IncludeBootstrapCAs        bool                 `json:"include_bootstrap_cas"`
+	IncludeLamassuDownstreamCA bool                 `json:"include_lamassu_downstream_ca"`
+	ManagedCAs                 []string             `json:"managed_cas"`
+	StaticCAs                  []StaticCASerialized `json:"static_cas"`
+}
+
+func (o *IdentityProfileCADistributionSettings) Serialize() IdentityProfileCADistributionSettingsSerialized {
+	cas := []StaticCASerialized{}
+	for _, ca := range o.StaticCAs {
+		cas = append(cas, ca.Serialize())
+	}
+
+	return IdentityProfileCADistributionSettingsSerialized{
+		IncludeAuthorizedCA:        o.IncludeAuthorizedCA,
+		IncludeBootstrapCAs:        o.IncludeBootstrapCAs,
+		IncludeLamassuDownstreamCA: o.IncludeLamassuDownstreamCA,
+		ManagedCAs:                 o.ManagedCAs,
+		StaticCAs:                  cas,
+	}
+}
+
+func (o IdentityProfileCADistributionSettingsSerialized) Deserialize() IdentityProfileCADistributionSettings {
+	cas := []StaticCA{}
+	for _, ca := range o.StaticCAs {
+		cas = append(cas, ca.Deserialize())
+	}
+
+	return IdentityProfileCADistributionSettings{
+		IncludeAuthorizedCA:        o.IncludeAuthorizedCA,
+		IncludeBootstrapCAs:        o.IncludeBootstrapCAs,
+		IncludeLamassuDownstreamCA: o.IncludeLamassuDownstreamCA,
+		ManagedCAs:                 o.ManagedCAs,
+		StaticCAs:                  cas,
+	}
+}
+
+type IdentityProfileSerialized struct {
+	GeneralSettings        IdentityProfileGeneralSettingsSerialized        `json:"general_setting"`
+	EnrollmentSettings     IdentityProfileEnrollmentSettingsSerialized     `json:"enrollment_settings"`
+	ReerollmentSettings    IdentityProfileReenrollmentSettingsSerialized   `json:"reenrollment_settings"`
+	CADistributionSettings IdentityProfileCADistributionSettingsSerialized `json:"ca_distribution_settings"`
+	PublishToAWS           bool                                            `json:"aws_iotcore_publish"`
+}
+
+func (o *IdentityProfile) Serialize() IdentityProfileSerialized {
+	return IdentityProfileSerialized{
+		GeneralSettings:        o.GeneralSettings.Serialize(),
+		EnrollmentSettings:     o.EnrollmentSettings.Serialize(),
+		ReerollmentSettings:    o.ReerollmentSettings.Serialize(),
+		CADistributionSettings: o.CADistributionSettings.Serialize(),
+		PublishToAWS:           o.PublishToAWS,
+	}
+}
+
+func (o IdentityProfileSerialized) Deserialize() *IdentityProfile {
+	return &IdentityProfile{
+		GeneralSettings:        o.GeneralSettings.Deserialize(),
+		EnrollmentSettings:     o.EnrollmentSettings.Deserialize(),
+		ReerollmentSettings:    o.ReerollmentSettings.Deserialize(),
+		CADistributionSettings: o.CADistributionSettings.Deserialize(),
+		PublishToAWS:           o.PublishToAWS,
+	}
+}
+
 type DeviceManufacturingServiceSerialized struct {
-	Name                      string                        `json:"name"`
-	Status                    DMSStatus                     `json:"status"`
-	SerialNumber              string                        `json:"serial_number"`
-	KeyMetadata               KeyStrengthMetadataSerialized `json:"key_metadata"`
-	Subject                   SubjectSerialized             `json:"subject"`
-	AuthorizedCAs             []string                      `json:"authorized_cas"`
-	HostCloudDMS              bool                          `json:"host_cloud_dms"`
-	BootstrapCAs              []string                      `json:"bootstrap_cas"`
-	CreationTimestamp         int                           `json:"creation_timestamp"`
-	LastStatusUpdateTimestamp int                           `json:"last_status_update_timestamp"`
-	Certificate               string                        `json:"certificate,omitempty"`
-	CertificateRequest        string                        `json:"certificate_request,omitempty"`
+	Name                 string                          `json:"name"`
+	Status               DMSStatus                       `json:"status"`
+	CloudDMS             bool                            `json:"cloud_dms"`
+	Aws                  AwsSpecificationSerialized      `json:"aws"`
+	CreationTimestamp    int                             `json:"creation_timestamp"`
+	RemoteAccessIdentity *RemoteAccessIdentitySerialized `json:"remote_access_identity,omitempty"`
+	IdentityProfile      *IdentityProfileSerialized      `json:"identity_profile,omitempty"`
 }
 
 func (o *DeviceManufacturingService) Serialize() DeviceManufacturingServiceSerialized {
 	serializer := DeviceManufacturingServiceSerialized{
-		Name:          o.Name,
-		Status:        o.Status,
-		SerialNumber:  o.SerialNumber,
-		KeyMetadata:   o.KeyMetadata.Serialize(),
-		Subject:       o.Subject.Serialize(),
-		AuthorizedCAs: o.AuthorizedCAs,
-		BootstrapCAs:  o.BootstrapCAs,
-		HostCloudDMS:  o.HostCloudDMS,
+		Name:              o.Name,
+		Status:            o.Status,
+		CloudDMS:          o.CloudDMS,
+		Aws:               o.Aws.Serialize(),
+		CreationTimestamp: int(o.CreationTimestamp.UnixMilli()),
 	}
 
-	if o.X509Asset.IsCertificate {
-		serializer.Certificate = o.X509Asset.Serialize()
-	} else {
-		serializer.CertificateRequest = o.X509Asset.Serialize()
+	if o.RemoteAccessIdentity != nil {
+		rais := o.RemoteAccessIdentity.Serialize()
+		serializer.RemoteAccessIdentity = &rais
 	}
 
-	if o.CreationTimestamp.Valid {
-		serializer.CreationTimestamp = int(o.CreationTimestamp.Time.UnixMilli())
+	if o.IdentityProfile != nil {
+		ids := o.IdentityProfile.Serialize()
+		serializer.IdentityProfile = &ids
 	}
 
-	if o.CreationTimestamp.Valid {
-		serializer.LastStatusUpdateTimestamp = int(o.LastStatusUpdateTimestamp.Time.UnixMilli())
-	}
 	return serializer
 }
 
 func (o *DeviceManufacturingServiceSerialized) Deserialize() DeviceManufacturingService {
 	serializer := DeviceManufacturingService{
-		Name:          o.Name,
-		Status:        o.Status,
-		SerialNumber:  o.SerialNumber,
-		KeyMetadata:   o.KeyMetadata.Deserialize(),
-		Subject:       o.Subject.Deserialize(),
-		AuthorizedCAs: o.AuthorizedCAs,
-		BootstrapCAs:  o.BootstrapCAs,
-		HostCloudDMS:  o.HostCloudDMS,
-		X509Asset:     DeserializeX509Asset(o.Certificate, o.CertificateRequest),
+		Name:              o.Name,
+		Status:            o.Status,
+		CloudDMS:          o.CloudDMS,
+		Aws:               o.Aws.Deserialize(),
+		CreationTimestamp: time.UnixMilli(int64(o.CreationTimestamp)),
 	}
 
-	if o.CreationTimestamp > 0 {
-		serializer.CreationTimestamp = pq.NullTime{
-			Time:  time.UnixMilli(int64(o.CreationTimestamp)),
-			Valid: true,
-		}
-	} else {
-		serializer.CreationTimestamp = pq.NullTime{
-			Valid: false,
-		}
+	if o.RemoteAccessIdentity != nil {
+		serializer.RemoteAccessIdentity = o.RemoteAccessIdentity.Deserialize()
 	}
 
-	if o.LastStatusUpdateTimestamp > 0 {
-		serializer.LastStatusUpdateTimestamp = pq.NullTime{
-			Time:  time.UnixMilli(int64(o.LastStatusUpdateTimestamp)),
-			Valid: true,
-		}
-	} else {
-		serializer.LastStatusUpdateTimestamp = pq.NullTime{
-			Valid: false,
-		}
+	if o.IdentityProfile != nil {
+		serializer.IdentityProfile = o.IdentityProfile.Deserialize()
 	}
+
 	return serializer
 }
 
@@ -255,47 +434,29 @@ func (o *GetDMSsOutputSerialized) Deserialize() GetDMSsOutput {
 
 // ----------------------------------------------
 
-type CreateDMSWithCertificateRequestOutputSerialized struct {
-	DeviceManufacturingServiceSerialized
-}
-
-func (o *CreateDMSWithCertificateRequestOutput) Serialize() CreateDMSWithCertificateRequestOutputSerialized {
-	serializer := CreateDMSWithCertificateRequestOutputSerialized{
-		DeviceManufacturingServiceSerialized: o.DeviceManufacturingService.Serialize(),
-	}
-	return serializer
-}
-
-func (o *CreateDMSWithCertificateRequestOutputSerialized) Deserialize() CreateDMSWithCertificateRequestOutput {
-	serializer := CreateDMSWithCertificateRequestOutput{
-		DeviceManufacturingService: o.DeviceManufacturingServiceSerialized.Deserialize(),
-	}
-	return serializer
-}
-
-// ----------------------------------------------
-
 type CreateDMSOutputSerialized struct {
 	DMS        DeviceManufacturingServiceSerialized `json:"dms"`
-	PrivateKey string                               `json:"private_key"`
+	PrivateKey string                               `json:"private_key,omitempty"`
 }
 
 func (o *CreateDMSOutput) Serialize() CreateDMSOutputSerialized {
 	key := ""
-	if o.DMS.KeyMetadata.KeyType == RSA {
-		if rsaKey, ok := o.PrivateKey.(*rsa.PrivateKey); ok {
-			rsaBytes := x509.MarshalPKCS1PrivateKey(rsaKey)
-			pemEncodedKey := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: rsaBytes})
-			b64PemEncodedKey := base64.StdEncoding.EncodeToString(pemEncodedKey)
-			key = b64PemEncodedKey
-		}
-	} else if o.DMS.KeyMetadata.KeyType == ECDSA {
-		if ecdsaKey, ok := o.PrivateKey.(*ecdsa.PrivateKey); ok {
-			ecdsaBytes, err := x509.MarshalECPrivateKey(ecdsaKey)
-			if err == nil {
-				pemEncodedKey := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: ecdsaBytes})
+	if !o.DMS.CloudDMS {
+		if o.DMS.RemoteAccessIdentity.KeyMetadata.KeyType == RSA {
+			if rsaKey, ok := o.PrivateKey.(*rsa.PrivateKey); ok {
+				rsaBytes := x509.MarshalPKCS1PrivateKey(rsaKey)
+				pemEncodedKey := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: rsaBytes})
 				b64PemEncodedKey := base64.StdEncoding.EncodeToString(pemEncodedKey)
 				key = b64PemEncodedKey
+			}
+		} else if o.DMS.RemoteAccessIdentity.KeyMetadata.KeyType == ECDSA {
+			if ecdsaKey, ok := o.PrivateKey.(*ecdsa.PrivateKey); ok {
+				ecdsaBytes, err := x509.MarshalECPrivateKey(ecdsaKey)
+				if err == nil {
+					pemEncodedKey := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: ecdsaBytes})
+					b64PemEncodedKey := base64.StdEncoding.EncodeToString(pemEncodedKey)
+					key = b64PemEncodedKey
+				}
 			}
 		}
 	}

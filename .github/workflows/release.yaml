@@ -17,170 +17,35 @@ jobs:
   unit_testing_device_manager:
     name: DeviceManager Unit Testing
     uses: ./.github/workflows/device-manager-develop.yaml
-
-  build_ca_dev_docker_image:
-      name: CA - Release DEV docker images
-      needs:
+    
+  build_dev_docker_image:
+    strategy:
+      matrix:
+        service: [ca, device-manager, dms-manager, ocsp, alerts, cloud-proxy, db]
+    name: ${{ matrix.service }} - Release DEV docker images
+    needs:
       - unit_testing_ca
       - unit_testing_dms_manager
       - unit_testing_device_manager
       # runs-on: self-hosted
-      runs-on: ubuntu-latest
-      steps:        
-      - name: Login to DockerHub
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to Github Registry
         uses: docker/login-action@v1 
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      
-      - name: Build CA DEV docker image
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build ${{ matrix.service }} DEV docker image
         uses: docker/build-push-action@v2
         with:
-          file: ci/ca.dockerfile
+          file: ci/${{ matrix.service }}.dockerfile
           build-args: |
             BASE_IMAGE=alpine:3.14
           tags: |
-            lamassuiot/lamassu-ca-dev:${{ github.sha }}
-            lamassuiot/lamassu-ca-dev:latest
-          push: true
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: lamassuiot/lamassu-ca-dev:${{ github.sha }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v1
-        with:
-          sarif_file: 'trivy-results.sarif'
-
-  build_device_manager_dev_docker_image:
-      name: Device Manager - Release DEV docker images
-      needs:
-      - unit_testing_ca
-      - unit_testing_dms_manager
-      - unit_testing_device_manager
-      # runs-on: self-hosted
-      runs-on: ubuntu-latest
-      steps:
-      - name: Login to DockerHub
-        uses: docker/login-action@v1 
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build Device Manager DEV docker image
-        uses: docker/build-push-action@v2
-        with:
-          file: ci/device-manager.dockerfile 
-          build-args: |
-            BASE_IMAGE=alpine:3.14
-          tags: |
-            lamassuiot/lamassu-device-manager-dev:${{ github.sha }}
-            lamassuiot/lamassu-device-manager-dev:latest
-          push: true
-
-  build_dms_manager_dev_docker_image:
-      name: DMS Manager - Release DEV docker images
-      needs:
-      - unit_testing_ca
-      - unit_testing_dms_manager
-      - unit_testing_device_manager
-      # runs-on: self-hosted
-      runs-on: ubuntu-latest
-      steps:
-      - name: Login to DockerHub
-        uses: docker/login-action@v1 
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build DMS Managwer DEV docker image
-        uses: docker/build-push-action@v2
-        with:
-          file: ci/dms-manager.dockerfile
-          build-args: |
-            BASE_IMAGE=alpine:3.14
-          tags: |
-            lamassuiot/lamassu-dms-manager-dev:${{ github.sha }}
-            lamassuiot/lamassu-dms-manager-dev:latest
-          push: true
-
-  build_ocsp_dev_docker_image:
-      name: OCSP - Release DEV docker images
-      needs:
-      - unit_testing_ca
-      - unit_testing_dms_manager
-      - unit_testing_device_manager
-      # runs-on: self-hosted
-      runs-on: ubuntu-latest
-      steps:
-      - name: Login to DockerHub
-        uses: docker/login-action@v1 
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build OCSP DEV docker image
-        uses: docker/build-push-action@v2
-        with:
-          file: ci/ocsp.dockerfile
-          build-args: |
-            BASE_IMAGE=alpine:3.14
-          tags: |
-            lamassuiot/lamassu-ocsp-dev:${{ github.sha }}
-            lamassuiot/lamassu-ocsp-dev:latest
-          push: true
-
-  build_cloud_proxy_dev_docker_image:
-      name: Cloud Proxy - Release DEV docker images
-      needs:
-      - unit_testing_ca
-      - unit_testing_dms_manager
-      - unit_testing_device_manager
-      # runs-on: self-hosted
-      runs-on: ubuntu-latest
-      steps:
-      - name: Login to DockerHub
-        uses: docker/login-action@v1 
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build Cloud Proxy DEV docker image
-        uses: docker/build-push-action@v2
-        with:
-          file: ci/cloud-proxy.dockerfile 
-          build-args: |
-            BASE_IMAGE=alpine:3.14
-          tags: |
-            lamassuiot/lamassu-cloud-proxy-dev:${{ github.sha }}
-            lamassuiot/lamassu-cloud-proxy-dev:latest
-          push: true
-
-  build_lamassu_db_dev_docker_image:
-      name: DB - Release DEV docker images
-      needs:
-      - unit_testing_ca
-      - unit_testing_dms_manager
-      - unit_testing_device_manager
-      # runs-on: self-hosted
-      runs-on: ubuntu-latest
-      steps:
-      - name: Login to DockerHub
-        uses: docker/login-action@v1 
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Build DB DEV docker image
-        uses: docker/build-push-action@v2
-        with:
-          file: ci/database.dockerfile 
-          tags: |
-            lamassuiot/lamassu-db-dev:${{ github.sha }}
-            lamassuiot/lamassu-db-dev:latest
+            ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:${{ github.sha }}
+            ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:dev
           push: true
 
   create_dev_server_env:
@@ -188,6 +53,7 @@ jobs:
     needs:
     - build_ca_dev_docker_image
     - build_cloud_proxy_dev_docker_image
+    - build_alerts_dev_docker_image
     - build_device_manager_dev_docker_image
     - build_dms_manager_dev_docker_image
     - build_ocsp_dev_docker_image

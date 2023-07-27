@@ -37,7 +37,7 @@ func ParseNumberOperator(s string) NumberOperatorType {
 }
 
 type NumberFilterField struct {
-	baseFilter
+	BaseFilter
 	Operator    NumberOperatorType
 	CompareWith int
 }
