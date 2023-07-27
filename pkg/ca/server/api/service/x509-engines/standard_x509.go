@@ -272,11 +272,7 @@ func (s StandardX509Engine) Sign(ca api.Certificate, message []byte, messageType
 }
 
 func (s StandardX509Engine) Verify(ca api.Certificate, signature []byte, message []byte, messageType string, signing_algorithm string) (bool, error) {
-	privkey, err := s.cryptoEngine.GetPrivateKeyByID(ca.CAName)
-	if err != nil {
-		return false, err
-	}
-
+	var err error
 	if ca.KeyMetadata.KeyType == api.ECDSA {
 		var hasher []byte
 		var h hash.Hash
@@ -298,8 +294,9 @@ func (s StandardX509Engine) Verify(ca api.Certificate, signature []byte, message
 				return false, err
 			}
 		}
-		pubKey := privkey.Public()
-		ecdsaKey, _ := pubKey.(*ecdsa.PublicKey)
+		pubK := ca.Certificate.PublicKey
+		ecdsaKey, _ := pubK.(*ecdsa.PublicKey)
+
 		return ecdsa.VerifyASN1(ecdsaKey, hasher, signature), nil
 	} else {
 		var hasher []byte
@@ -321,15 +318,16 @@ func (s StandardX509Engine) Verify(ca api.Certificate, signature []byte, message
 		if messageType == "RAW" {
 			h.Write(message)
 			hasher = h.Sum(nil)
-
 		} else {
 			hasher, err = hex.DecodeString(string(message))
 			if err != nil {
 				return false, err
 			}
 		}
-		pubKey := privkey.Public()
-		rsaKey, _ := pubKey.(*rsa.PublicKey)
+
+		pubK := ca.Certificate.PublicKey
+		rsaKey, _ := pubK.(*rsa.PublicKey)
+
 		sigAlg := strings.Split(signing_algorithm, "_")
 		if sigAlg[1] == "PSS" {
 			var saltLength int

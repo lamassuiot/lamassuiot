@@ -526,7 +526,7 @@ func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateReq
 
 	if verify == len(dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.BootstrapCAs) {
 		return nil, &estErrors.GenericError{
-			Message:    "client certificate is not valid: " + err.Error(),
+			Message:    "client certificate is not valid",
 			StatusCode: 401,
 		}
 	}
@@ -651,14 +651,16 @@ func (s *DMSManagerService) verifyCertificate(clientCertificate *x509.Certificat
 		Roots:     clientCAs,
 		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
-	cert, _ := s.lamassuCAClient.GetCertificateBySerialNumber(context.Background(), &lamassuCAApi.GetCertificateBySerialNumberInput{
+	cert, certErr := s.lamassuCAClient.GetCertificateBySerialNumber(context.Background(), &lamassuCAApi.GetCertificateBySerialNumberInput{
 		CAType:                  lamassuCAApi.CATypePKI,
 		CAName:                  caCertificate.Subject.CommonName,
 		CertificateSerialNumber: utils.InsertNth(utils.ToHexInt(clientCertificate.SerialNumber), 2),
 	})
 	_, err := clientCertificate.Verify(opts)
 	if err != nil {
-		if cert.Status == lamassuCAApi.StatusExpired && !allowExpiredRenewal {
+		if certErr != nil {
+			return errors.New("could not verify client certificate: " + err.Error())
+		} else if cert.Certificate.Status == lamassuCAApi.StatusExpired && !allowExpiredRenewal {
 			return errors.New("could not verify client certificate: " + err.Error())
 		}
 
