@@ -1482,8 +1482,9 @@ func runTests(t *testing.T, tc TestCase) {
 	if err != nil {
 		t.Fatalf("%s", err)
 	}*/
-
+	issuanceExpiration := time.Duration(2160000)
 	_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
+
 		CAType: caApi.CATypePKI,
 		Subject: caApi.Subject{
 			CommonName: "RPI-CA",
@@ -1492,14 +1493,14 @@ func runTests(t *testing.T, tc TestCase) {
 			KeyType: "RSA",
 			KeyBits: 4096,
 		},
-		ExpirationType:     caApi.ExpirationTypeDuration,
-		CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
-		IssuanceExpiration: time.Now().Add(time.Hour * 24 * 25),
+		IssuanceExpirationType:     caApi.ExpirationTypeDuration,
+		CAExpiration:               time.Now().Add(time.Hour * 24 * 365 * 5),
+		IssuanceExpirationDuration: &issuanceExpiration,
 	})
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
-
+	issuanceExpiration = time.Duration(157680000)
 	_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
 		CAType: caApi.CATypePKI,
 		Subject: caApi.Subject{
@@ -1509,14 +1510,14 @@ func runTests(t *testing.T, tc TestCase) {
 			KeyType: "RSA",
 			KeyBits: 4096,
 		},
-		ExpirationType:     caApi.ExpirationTypeDuration,
-		CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
-		IssuanceExpiration: time.Now().Add(time.Hour * 24 * 365 * 3),
+		IssuanceExpirationType:     caApi.ExpirationTypeDuration,
+		CAExpiration:               time.Now().Add(time.Hour * 24 * 365 * 5),
+		IssuanceExpirationDuration: &issuanceExpiration,
 	})
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
-
+	issuanceExpiration = time.Duration(3)
 	_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
 		CAType: caApi.CATypePKI,
 		Subject: caApi.Subject{
@@ -1526,9 +1527,9 @@ func runTests(t *testing.T, tc TestCase) {
 			KeyType: "RSA",
 			KeyBits: 4096,
 		},
-		ExpirationType:     caApi.ExpirationTypeDuration,
-		CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
-		IssuanceExpiration: time.Now().Add(time.Second * 3),
+		IssuanceExpirationType:     caApi.ExpirationTypeDuration,
+		CAExpiration:               time.Now().Add(time.Hour * 24 * 365 * 5),
+		IssuanceExpirationDuration: &issuanceExpiration,
 	})
 	if err != nil {
 		t.Fatalf("%s", err)

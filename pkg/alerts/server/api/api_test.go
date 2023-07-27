@@ -363,6 +363,7 @@ func TestGetEvents(t *testing.T) {
 		{
 			name: "GetEvents_CreateCA",
 			serviceInitialization: func(ctx context.Context, svc *service.Service, svcCA *caService.Service) context.Context {
+				issuanceExpiration := time.Duration(3600)
 				_, err := (*svc).SubscribedEvent(ctx, &api.SubscribeEventInput{
 					EventType:  "io.lamassuiot.ca.create",
 					Conditions: nil,
@@ -383,8 +384,9 @@ func TestGetEvents(t *testing.T) {
 						KeyType: caApi.RSA,
 						KeyBits: 4096,
 					},
-					CAExpiration:       time.Now().Add(time.Hour * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour),
+					IssuanceExpirationType:     caApi.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 
 				if err != nil {
