@@ -739,7 +739,7 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 		}
 	} else {
 		device := getDevice
-		if !dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.AllowNewAutoEnrollment {
+		if dms.DeviceManufacturingService.IdentityProfile != nil && !dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.AllowNewAutoEnrollment {
 			if device.Status == api.DeviceStatusDecommissioned {
 				return nil, &estErrors.GenericError{
 					Message:    "device is decommissioned",
@@ -769,7 +769,7 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 		return nil, err
 	}
 
-	if dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.AllowNewAutoEnrollment && getDevice.Status == api.DeviceStatusFullyProvisioned {
+	if dms.DeviceManufacturingService.IdentityProfile != nil && dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.AllowNewAutoEnrollment && getDevice.Status == api.DeviceStatusFullyProvisioned {
 		s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeInfo, "Auto Enrollment process", "Active Slot Enrollment")
 		_, err = s.service.RotateActiveCertificate(ctx, &api.RotateActiveCertificateInput{
 			DeviceID:       deviceID,
@@ -779,37 +779,6 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 		if err != nil {
 			return nil, err
 		}
-		// slot := &api.Slot{
-		// 	ID: slotID,
-		// 	ActiveCertificate: &api.Certificate{
-		// 		CAName:       signOutput.Certificate.Issuer.CommonName,
-		// 		SerialNumber: utils.InsertNth(utils.ToHexInt(signOutput.Certificate.SerialNumber), 2),
-		// 		Certificate:  signOutput.Certificate,
-		// 		Status:       caApi.StatusActive,
-		// 		RevocationTimestamp: pq.NullTime{
-		// 			Valid: false,
-		// 			Time:  time.Time{},
-		// 		},
-		// 	},
-		// 	ArchiveCertificates: []*api.Certificate{},
-		// }
-		// err = s.devicesRepo.UpdateSlot(ctx, getDevice.ID, *slot)
-		// if err != nil {
-		// 	return nil, err
-		// }
-
-		// _, err = s.service.UpdateDeviceMetadata(ctx, &api.UpdateDeviceMetadataInput{
-		// 	DeviceID:           deviceID,
-		// 	Alias:              getDevice.Alias,
-		// 	Tags:               getDevice.Tags,
-		// 	Description:        getDevice.Description,
-		// 	AllowNewEnrollment: false,
-		// 	IconColor:          getDevice.IconColor,
-		// 	IconName:           getDevice.IconName,
-		// })
-		// if err != nil {
-		// 	return nil, err
-		// }
 
 	} else {
 		_, err = s.service.AddDeviceSlot(ctx, &api.AddDeviceSlotInput{
