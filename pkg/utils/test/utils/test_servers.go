@@ -281,7 +281,7 @@ func BuildMailTestServer(jsonTemplate string, smtpConfig outputchannels.SMTPOutp
 	handler := alertsTransport.MakeHTTPHandler(svc)
 
 	mux := http.NewServeMux()
-	mux.Handle("/", handler)
+	mux.Handle("/v1/", http.StripPrefix("/v1", handler))
 	server := httptest.NewUnstartedServer(mux)
 
 	return server, &svc, nil
