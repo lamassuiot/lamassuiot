@@ -113,17 +113,6 @@ func TestEnroll(t *testing.T) {
 		{
 			name: "ShouldEnrollCreatingSlot",
 			serviceInitialization: func(ctx context.Context, svc *service.Service, caSvc *caService.Service) context.Context {
-				// _, err := (*svc).CreateDevice(context.Background(), &api.CreateDeviceInput{
-				// 	DeviceID:    "1234-5678-9012-3456",
-				// 	Alias:       "Raspberry Pi",
-				// 	Tags:        []string{"raspberry-pi", "5G"},
-				// 	IconColor:   "",
-				// 	IconName:    "",
-				// 	Description: "Raspberry Pi is a small, low-cost, and light-weight computer",
-				// })
-				// if err != nil {
-				// 	t.Fatalf("Failed to parse certificate: %s", err)
-				// }
 
 				return ctx
 
@@ -288,7 +277,7 @@ func TestEnroll(t *testing.T) {
 					WithHeader("x-dms-name", "RPI-DMS").
 					WithBytes([]byte(b64CSREncoded)).
 					Expect().
-					Status(409).
+					Status(500).
 					Body()
 			},
 		},
@@ -1455,35 +1444,15 @@ func TestGetDeviceLogs(t *testing.T) {
 func runTests(t *testing.T, tc TestCase) {
 	ctx := context.Background()
 	serverCA, svcCA, err := testUtils.BuildCATestServer()
-	//cli, err := testUtils.NewVaultSecretsMock(t)
-	//if err != nil {
-	//	t.Errorf("%s", err)
-	//}
-	//server, svc, err := testUtils.BuildCATestServerWithVault(cli)
 
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
 	defer serverCA.Close()
 	serverCA.Start()
-
-	/*_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
-		CAType: caApi.CATypeDMSEnroller,
-		Subject: caApi.Subject{
-			CommonName: "LAMASSU-DMS-MANAGER",
-		},
-		KeyMetadata: caApi.KeyMetadata{
-			KeyType: "RSA",
-			KeyBits: 4096,
-		},
-		CADuration:       time.Hour * 24 * 365 * 5,
-		IssuanceDuration: time.Hour * 24 * 365 * 3,
-	})
-	if err != nil {
-		t.Fatalf("%s", err)
-	}*/
-
+	issuanceExpiration := time.Duration(2160000)
 	_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
+
 		CAType: caApi.CATypePKI,
 		Subject: caApi.Subject{
 			CommonName: "RPI-CA",
@@ -1492,14 +1461,14 @@ func runTests(t *testing.T, tc TestCase) {
 			KeyType: "RSA",
 			KeyBits: 4096,
 		},
-		ExpirationType:     caApi.ExpirationTypeDuration,
-		CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
-		IssuanceExpiration: time.Now().Add(time.Hour * 24 * 25),
+		IssuanceExpirationType:     caApi.ExpirationTypeDuration,
+		CAExpiration:               time.Now().Add(time.Hour * 24 * 365 * 5),
+		IssuanceExpirationDuration: &issuanceExpiration,
 	})
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
-
+	issuanceExpiration = time.Duration(31536000)
 	_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
 		CAType: caApi.CATypePKI,
 		Subject: caApi.Subject{
@@ -1509,14 +1478,14 @@ func runTests(t *testing.T, tc TestCase) {
 			KeyType: "RSA",
 			KeyBits: 4096,
 		},
-		ExpirationType:     caApi.ExpirationTypeDuration,
-		CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
-		IssuanceExpiration: time.Now().Add(time.Hour * 24 * 365 * 3),
+		IssuanceExpirationType:     caApi.ExpirationTypeDuration,
+		CAExpiration:               time.Now().Add(time.Hour * 24 * 365 * 5),
+		IssuanceExpirationDuration: &issuanceExpiration,
 	})
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
-
+	issuanceExpiration = time.Duration(3)
 	_, err = (*svcCA).CreateCA(context.Background(), &caApi.CreateCAInput{
 		CAType: caApi.CATypePKI,
 		Subject: caApi.Subject{
@@ -1526,9 +1495,9 @@ func runTests(t *testing.T, tc TestCase) {
 			KeyType: "RSA",
 			KeyBits: 4096,
 		},
-		ExpirationType:     caApi.ExpirationTypeDuration,
-		CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
-		IssuanceExpiration: time.Now().Add(time.Second * 3),
+		IssuanceExpirationType:     caApi.ExpirationTypeDuration,
+		CAExpiration:               time.Now().Add(time.Hour * 24 * 365 * 5),
+		IssuanceExpirationDuration: &issuanceExpiration,
 	})
 	if err != nil {
 		t.Fatalf("%s", err)

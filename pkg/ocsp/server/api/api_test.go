@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gavv/httpexpect/v2"
+	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	caService "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
@@ -41,6 +42,7 @@ func TestOCSPVerify(t *testing.T) {
 		{
 			name: "OCSPVerifyGet",
 			serviceInitialization: func(ctx context.Context, caSvc *caService.Service) context.Context {
+				issuanceExpiration := time.Duration(2160000)
 				_, err := (*caSvc).CreateCA(context.Background(), &caApi.CreateCAInput{
 					CAType: caApi.CATypePKI,
 					Subject: caApi.Subject{
@@ -50,8 +52,9 @@ func TestOCSPVerify(t *testing.T) {
 						KeyType: "RSA",
 						KeyBits: 4096,
 					},
-					CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour * 24 * 25),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 24 * 365 * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 				if err != nil {
 					t.Fatalf("%s", err)
@@ -107,6 +110,7 @@ func TestOCSPVerify(t *testing.T) {
 		{
 			name: "OCSPVerifyPostGood",
 			serviceInitialization: func(ctx context.Context, caSvc *caService.Service) context.Context {
+				issuanceExpiration := time.Duration(2160000)
 				_, err := (*caSvc).CreateCA(context.Background(), &caApi.CreateCAInput{
 					CAType: caApi.CATypePKI,
 					Subject: caApi.Subject{
@@ -116,8 +120,9 @@ func TestOCSPVerify(t *testing.T) {
 						KeyType: "RSA",
 						KeyBits: 4096,
 					},
-					CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour * 24 * 25),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 24 * 365 * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 				if err != nil {
 					t.Fatalf("%s", err)
@@ -172,6 +177,7 @@ func TestOCSPVerify(t *testing.T) {
 		{
 			name: "OCSPVerifyPostRevoked",
 			serviceInitialization: func(ctx context.Context, caSvc *caService.Service) context.Context {
+				issuanceExpiration := time.Duration(2160000)
 				_, err := (*caSvc).CreateCA(context.Background(), &caApi.CreateCAInput{
 					CAType: caApi.CATypePKI,
 					Subject: caApi.Subject{
@@ -181,8 +187,9 @@ func TestOCSPVerify(t *testing.T) {
 						KeyType: "RSA",
 						KeyBits: 4096,
 					},
-					CAExpiration:       time.Now().Add(time.Hour * 24 * 365 * 5),
-					IssuanceExpiration: time.Now().Add(time.Hour * 24 * 25),
+					IssuanceExpirationType:     api.ExpirationTypeDuration,
+					CAExpiration:               time.Now().Add(time.Hour * 24 * 365 * 5),
+					IssuanceExpirationDuration: &issuanceExpiration,
 				})
 				if err != nil {
 					t.Fatalf("%s", err)
