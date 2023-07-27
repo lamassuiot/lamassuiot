@@ -11,7 +11,7 @@ jobs:
   build_dev_docker_image:
     strategy:
       matrix:
-        service: [ca, device-manager, dms-manager, ocsp, alerts, cloud-proxy]
+        service: [ca, devmanager, dmsmanager, ocsp, alerts, cloud-proxy]
     name: ${{ matrix.service }} - Release docker images
     runs-on: ubuntu-latest
     steps:
