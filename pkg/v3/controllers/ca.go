@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/errs"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
@@ -25,14 +26,27 @@ func NewCAHttpRoutes(svc services.CAService) *caHttpRoutes {
 func (r *caHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
 	engine, err := r.svc.GetCryptoEngineProvider()
 	if err != nil {
-		if err != nil {
-			HandleControllerError(ctx, err)
-			return
+		switch err {
+		default:
+			ctx.JSON(500, gin.H{"err": err})
 		}
+
+		return
 	}
+
 	ctx.JSON(200, engine)
 }
 
+// @Summary Create CA
+// @Description Create CA
+// @Accept json
+// @Produce json
+// @Security OAuth2Password
+// @Param message body resources.CreateCABody true "CA Info"
+// @Success 201 {object} models.CACertificate
+// @Failure 400 {string} string "Struct Validation error || CA type inconsistent || Issuance expiration greater than CA expiration || Incompatible expiration time ref"
+// @Failure 500
+// @Router /cas [post]
 func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 	var requestBody resources.CreateCABody
 	if err := ctx.BindJSON(&requestBody); err != nil {
@@ -48,13 +62,33 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 		IssuanceExpiration: requestBody.CAExpitration,
 	})
 	if err != nil {
-		HandleControllerError(ctx, err)
+		switch err {
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err})
+		case errs.ErrCAType:
+			ctx.JSON(400, gin.H{"err": err})
+		case errs.ErrCAIssuanceExpiration:
+			ctx.JSON(400, gin.H{"err": err})
+		case errs.ErrCAIncompatibleExpirationTimeRef:
+			ctx.JSON(400, gin.H{"err": err})
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
 		return
 	}
-
 	ctx.JSON(201, ca)
 }
 
+// @Summary Import CA
+// @Description Import CA
+// @Accept json
+// @Produce json
+// @Security OAuth2Password
+// @Param message body resources.ImportCABody true "CA Info"
+// @Success 201 {object} models.CACertificate
+// @Failure 400 {string} string "Struct Validation error || CA type inconsistent || Issuance expiration greater than CA expiration || Incompatible expiration time ref || CA and the provided key dont match"
+// @Failure 500
+// @Router /cas/import [post]
 func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 	var requestBody resources.ImportCABody
 	if err := ctx.BindJSON(&requestBody); err != nil {
@@ -68,10 +102,13 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		return
 	}
 
-	key, err := helpers.ParsePrivateKey(decodedKey)
-	if err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
+	var key any
+	if len(requestBody.CAPrivateKey) > 0 {
+		key, err = helpers.ParsePrivateKey(decodedKey)
+		if err != nil {
+			ctx.JSON(400, gin.H{"err": err.Error()})
+			return
+		}
 	}
 
 	var keyType models.KeyType
@@ -95,13 +132,81 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		CAECKey:            ecKey,
 	})
 	if err != nil {
-		HandleControllerError(ctx, err)
+		switch err {
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err})
+		case errs.ErrCAType:
+			ctx.JSON(400, gin.H{"err": err})
+		case errs.ErrCAIssuanceExpiration:
+			ctx.JSON(400, gin.H{"err": err})
+		case errs.ErrCAIncompatibleExpirationTimeRef:
+			ctx.JSON(400, gin.H{"err": err})
+		case errs.ErrCAValidCertAndPrivKey:
+			ctx.JSON(400, gin.H{"err": err})
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
+
 		return
 	}
-
 	ctx.JSON(201, ca)
 }
 
+// @Summary Update CA Metadata
+// @Description Update CA Metadata
+// @Accept json
+// @Produce json
+// @Security OAuth2Password
+// @Param message body resources.UpdateCAMetadataBody true "Update CA Metadata Info"
+// @Success 200 {object} models.CACertificate
+// @Failure 404 {string} string "CA not found"
+// @Failure 400 {string} string "Struct Validation error"
+// @Failure 500
+// @Router /cas/{id}/metadata [put]
+func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
+	var requestBody resources.UpdateCAMetadataBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err})
+		return
+	}
+
+	ca, err := r.svc.UpdateCAMetadata(services.UpdateCAMetadataInput{
+		CAID:     params.ID,
+		Metadata: requestBody.Metadata,
+	})
+	if err != nil {
+		switch err {
+		case errs.ErrCANotFound:
+			ctx.JSON(404, gin.H{"err": err})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err})
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
+
+		return
+	}
+	ctx.JSON(200, ca)
+}
+
+// @Summary Get All CAs
+// @Description Get All CAs
+// @Accept json
+// @Produce json
+// @Security OAuth2Password
+// @Success 200 {array} models.CACertificate
+// @Failure 500
+// @Router /cas [get]
 func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request)
 
@@ -115,7 +220,11 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		HandleControllerError(ctx, err)
+		switch err {
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
+
 		return
 	}
 
@@ -127,6 +236,16 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 	})
 }
 
+// @Summary Get CA By ID
+// @Description Get CA By ID
+// @Accept json
+// @Produce json
+// @Security OAuth2Password
+// @Success 200 {object} models.CACertificate
+// @Failure 404 {string} string "CA not found"
+// @Failure 400 {string} string "Struct Validation error"
+// @Failure 500
+// @Router /cas/{id} [get]
 func (r *caHttpRoutes) GetCAByID(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
@@ -143,26 +262,65 @@ func (r *caHttpRoutes) GetCAByID(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		HandleControllerError(ctx, err)
+		switch err {
+		case errs.ErrCANotFound:
+			ctx.JSON(404, gin.H{"err": err})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err})
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
+
 		return
 	}
 
 	ctx.JSON(200, ca)
 }
 
+// @Summary Delete CA
+// @Description Delete CA
+// @Accept json
+// @Produce json
+// @Security OAuth2Password
+// @Success 201
+// @Failure 404 {string} string "CA not found"
+// @Failure 400 {string} string "Struct Validation error || CA Status inconsistent"
+// @Failure 500
+// @Router /cas/{id} [delete]
 func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 	err := r.svc.DeleteCA(services.DeleteCAInput{
 		CAID: "",
 	})
 
 	if err != nil {
-		HandleControllerError(ctx, err)
+		switch err {
+		case errs.ErrCANotFound:
+			ctx.JSON(404, gin.H{"err": err})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err})
+		case errs.ErrCAStatus:
+			ctx.JSON(400, gin.H{"err": err})
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
+
 		return
 	}
 
 	ctx.JSON(201, gin.H{})
 }
 
+// @Summary Revoke CA
+// @Description Revoke CA
+// @Accept json
+// @Produce json
+// @Security OAuth2Password
+// @Param message body resources.SignCertificateBody true "Revoke CA"
+// @Success 201
+// @Failure 404 {string} string "CA not found"
+// @Failure 400 {string} string "Struct Validation error || CA already revoked"
+// @Failure 500
+// @Router /cas/{id}/revoke [post]
 func (r *caHttpRoutes) RevokeCA(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
@@ -184,14 +342,35 @@ func (r *caHttpRoutes) RevokeCA(ctx *gin.Context) {
 		CAID:   params.ID,
 		Status: models.StatusRevoked,
 	})
+
 	if err != nil {
-		HandleControllerError(ctx, err)
+		switch err {
+		case errs.ErrCANotFound:
+			ctx.JSON(404, gin.H{"err": err})
+		case errs.ErrCAAlreadyRevoked:
+			ctx.JSON(400, gin.H{"err": err})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err})
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
+
 		return
 	}
 
 	ctx.JSON(201, ca)
 }
 
+// @Summary Get Certificate by Serial Number
+// @Description Get Certificate by Serial Number
+// @Accept json
+// @Produce json
+// @Security OAuth2Password
+// @Success 200 {object} models.Certificate
+// @Failure 404 {string} string "Certificate not found"
+// @Failure 400 {string} string "Struct Validation error"
+// @Failure 500
+// @Router /cas/{id}/certificates/{sn} [get]
 func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 	type uriParams struct {
 		SerialNumber string `uri:"sn" binding:"required"`
@@ -208,13 +387,29 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		HandleControllerError(ctx, err)
+		switch err {
+		case errs.ErrCertificateNotFound:
+			ctx.JSON(404, gin.H{"err": err})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err})
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
+
 		return
 	}
-
 	ctx.JSON(200, cert)
 }
 
+// @Summary Get Certificates
+// @Description Update CA Metadata
+// @Accept json
+// @Produce json
+// @Security OAuth2Password
+// @Param message body resources.UpdateCAMetadataBody true "Update CA Metadata Info"
+// @Success 200 {array} models.Certificate
+// @Failure 500
+// @Router /certificates [get]
 func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request)
 
@@ -230,7 +425,11 @@ func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		HandleControllerError(ctx, err)
+		switch err {
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
+
 		return
 	}
 
@@ -242,6 +441,16 @@ func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
 	})
 }
 
+// @Summary Get Certificates by CA
+// @Description Get Certificates by CA
+// @Accept json
+// @Produce json
+// @Security OAuth2Password
+// @Success 200 {array} models.Certificate
+// @Failure 404 {string} string "CA not found"
+// @Failure 400 {string} string "Struct Validation error"
+// @Failure 500
+// @Router /cas/{id}/certificates [get]
 func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request)
 
@@ -267,7 +476,15 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 		},
 	})
 	if err != nil {
-		HandleControllerError(ctx, err)
+		switch err {
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err})
+		case errs.ErrCANotFound:
+			ctx.JSON(404, gin.H{"err": err})
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
+
 		return
 	}
 
@@ -279,6 +496,17 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 	})
 }
 
+// @Summary Sign Certificate
+// @Description Sign Certificate
+// @Accept json
+// @Produce json
+// @Security OAuth2Password
+// @Param message body resources.SignCertificateBody true "Sign Certificate Info"
+// @Success 200 {object} models.Certificate
+// @Failure 404 {string} string "CA not found"
+// @Failure 400 {string} string "Struct Validation error || CA Status inconsistent"
+// @Failure 500
+// @Router /cas/{id}/certificates/sign [post]
 func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
@@ -303,98 +531,34 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 		SignVerbatim: requestBody.SignVerbatim,
 	})
 	if err != nil {
-		HandleControllerError(ctx, err)
+		switch err {
+		case errs.ErrCANotFound:
+			ctx.JSON(404, gin.H{"err": err})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err})
+		case errs.ErrCAStatus:
+			ctx.JSON(400, gin.H{"err": err})
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
+
 		return
 	}
 
 	ctx.JSON(201, ca)
 }
 
-func (r *caHttpRoutes) Sign(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
-	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
-		return
-	}
-
-	var requestBody resources.SignBody
-	if err := ctx.BindJSON(&requestBody); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	decodedDigest, err := base64.StdEncoding.DecodeString(requestBody.Message)
-	if err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	signedBytes, err := r.svc.Sign(services.SignInput{
-		CAID:               params.ID,
-		Message:            decodedDigest,
-		MessageType:        requestBody.MessageType,
-		SignatureAlgorithm: requestBody.SignatureAlgorithm,
-	})
-	if err != nil {
-		HandleControllerError(ctx, err)
-		return
-	}
-
-	ctx.JSON(200, resources.SignResponse{
-		SignedData: base64.StdEncoding.EncodeToString(signedBytes),
-	})
-}
-
-func (r *caHttpRoutes) Verify(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
-	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
-		return
-	}
-
-	var requestBody resources.VerifyBody
-	if err := ctx.BindJSON(&requestBody); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	decodedDigest, err := base64.StdEncoding.DecodeString(requestBody.Message)
-	if err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	decodedSignature, err := base64.StdEncoding.DecodeString(requestBody.Signature)
-	if err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	valid, err := r.svc.VerifySignature(services.VerifySignatureInput{
-		CAID:               params.ID,
-		Message:            decodedDigest,
-		MessageType:        requestBody.MessageType,
-		SignatureAlgorithm: requestBody.SignatureAlgorithm,
-		Signature:          decodedSignature,
-	})
-	if err != nil {
-		HandleControllerError(ctx, err)
-		return
-	}
-
-	ctx.JSON(200, resources.VerifyResponse{
-		Valid: valid,
-	})
-}
-
+// @Summary Update Certificate Status
+// @Description Update Certificate Status
+// @Accept json
+// @Produce json
+// @Security OAuth2Password
+// @Param message body resources.UpdateCertificateStatusBody true "Update Certificate status"
+// @Success 200 {object} models.Certificate
+// @Failure 404 {string} string "Certificate not found"
+// @Failure 400 {string} string "Struct Validation error || New status transition not allowed for certificate"
+// @Failure 500
+// @Router /certificates/{sn}/status [put]
 func (r *caHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
 	type uriParams struct {
 		SerialNumber string `uri:"sn" binding:"required"`
@@ -418,9 +582,18 @@ func (r *caHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		HandleControllerError(ctx, err)
+		switch err {
+		case errs.ErrCertificateNotFound:
+			ctx.JSON(404, gin.H{"err": err})
+		case errs.ErrCertificateStatusTransitionNotAllowed:
+			ctx.JSON(400, gin.H{"err": err})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err})
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
+
 		return
 	}
-
 	ctx.JSON(200, cert)
 }

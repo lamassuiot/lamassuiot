@@ -17,58 +17,66 @@ import (
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
-
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
+var lAWSSM *logrus.Entry
+
 type AWSSecretsManagerCryptoEngine struct {
-	config    models.CryptoEngineProvider
+	config    models.CryptoEngineInfo
 	smngerCli *secretsmanager.SecretsManager
 }
 
-func NewAWSSecretManagerEngine(accessKeyID string, secretAccessKey string, region string) (CryptoEngine, error) {
-	httpCli, err := helpers.BuildHTTPClientWithloggger(&http.Client{}, fmt.Sprintf("AWS SecretsManager - %s", accessKeyID))
+func NewAWSSecretManagerEngine(logger *logrus.Entry, conf config.AWSSDKConfig) (CryptoEngine, error) {
+	lAWSSM = logger.WithField("subsystem-provider", "AWS-SecretsManger")
+
+	httpCli, err := helpers.BuildHTTPClientWithloggger(http.DefaultClient, lAWSSM)
 	if err != nil {
 		return nil, err
 	}
 
 	sess := session.Must(session.NewSession(&aws.Config{
-		Region:      aws.String(region),
-		Credentials: credentials.NewStaticCredentials(accessKeyID, secretAccessKey, ""),
+		Region:      aws.String(conf.Region),
+		Credentials: credentials.NewStaticCredentials(conf.AccessKeyID, conf.SecretAccessKey, ""),
 		HTTPClient:  httpCli,
 	}))
+
 	smngerCli := secretsmanager.New(sess)
-
-	pkcs11ProviderSupportedKeyTypes := []models.SupportedKeyTypeInfo{}
-
-	pkcs11ProviderSupportedKeyTypes = append(pkcs11ProviderSupportedKeyTypes, models.SupportedKeyTypeInfo{
-		Type:        models.KeyType(x509.RSA),
-		MinimumSize: 2048,
-		MaximumSize: 4096,
-	})
-
-	pkcs11ProviderSupportedKeyTypes = append(pkcs11ProviderSupportedKeyTypes, models.SupportedKeyTypeInfo{
-		Type:        models.KeyType(x509.ECDSA),
-		MinimumSize: 256,
-		MaximumSize: 512,
-	})
 
 	return &AWSSecretsManagerCryptoEngine{
 		smngerCli: smngerCli,
-		config: models.CryptoEngineProvider{
-			Type:              models.AWSSecretsManager,
-			SecurityLevel:     models.SL1,
-			Provider:          "Amazon Web Services",
-			Manufacturer:      "AWS",
-			Model:             "Secrets Manager",
-			SupportedKeyTypes: pkcs11ProviderSupportedKeyTypes,
+		config: models.CryptoEngineInfo{
+			Type:          models.AWSSecretsManager,
+			SecurityLevel: models.SL1,
+			Provider:      "Amazon Web Services",
+			Name:          "Secrets Manager",
+			Metadata:      conf.Metadata,
+			SupportedKeyTypes: []models.SupportedKeyTypeInfo{
+				{
+					Type: models.KeyType(x509.RSA),
+					Sizes: []int{
+						2048,
+						3072,
+						4096,
+					},
+				},
+				{
+					Type: models.KeyType(x509.ECDSA),
+					Sizes: []int{
+						224,
+						256,
+						512,
+					},
+				},
+			},
 		},
 	}, nil
 }
 
-func (engine *AWSSecretsManagerCryptoEngine) GetEngineConfig() models.CryptoEngineProvider {
+func (engine *AWSSecretsManagerCryptoEngine) GetEngineConfig() models.CryptoEngineInfo {
 	return engine.config
 }
 
@@ -120,7 +128,7 @@ func (engine *AWSSecretsManagerCryptoEngine) GetPrivateKeyByID(keyID string) (cr
 func (engine *AWSSecretsManagerCryptoEngine) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
 	key, err := rsa.GenerateKey(rand.Reader, keySize)
 	if err != nil {
-		log.Error("Could not create RSA private key: ", err)
+		lAWSSM.Error("Could not create RSA private key: ", err)
 		return nil, err
 	}
 
@@ -146,7 +154,7 @@ func (engine *AWSSecretsManagerCryptoEngine) ImportRSAPrivateKey(key *rsa.Privat
 	keyVal := `{"key": "` + b64Key + `"}`
 
 	_, err := engine.smngerCli.CreateSecret(&secretsmanager.CreateSecretInput{
-		Name:         &keyID,
+		Name:         aws.String(keyID),
 		SecretString: aws.String(keyVal),
 	})
 

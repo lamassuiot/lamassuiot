@@ -6,6 +6,7 @@ const (
 	Info  LogLevel = "info"
 	Debug LogLevel = "debug"
 	Trace LogLevel = "trace"
+	None  LogLevel = "none"
 )
 
 type HTTPProtocol string

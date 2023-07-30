@@ -12,6 +12,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 )
@@ -100,7 +101,7 @@ func BuildHTTPClient(cfg config.HTTPClient, clientName string) (*http.Client, er
 		}
 	}
 
-	return helpers.BuildHTTPClientWithloggger(client, clientName)
+	return helpers.BuildHTTPClientWithloggger(client, logrus.WithField("subsystem", fmt.Sprintf("LMS SDK - %s", clientName)))
 }
 
 func Post[T any](ctx context.Context, client *http.Client, url string, data any) (T, error) {
@@ -109,7 +110,6 @@ func Post[T any](ctx context.Context, client *http.Client, url string, data any)
 	if err != nil {
 		return m, err
 	}
-	fmt.Println(string(b))
 
 	byteReader := bytes.NewReader(b)
 	r, err := http.NewRequestWithContext(ctx, "POST", url, byteReader)

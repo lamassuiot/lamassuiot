@@ -18,7 +18,7 @@ type PostgresCertificateStorage struct {
 	querier *postgresDBQuerier[models.Certificate]
 }
 
-func NewPostgresCertificateRepository(db *gorm.DB) (storage.CertificatesRepo, error) {
+func NewCertificateRepository(db *gorm.DB) (storage.CertificatesRepo, error) {
 	querier, err := CheckAndCreateTable(db, certDBName, "serial_number", models.Certificate{})
 	if err != nil {
 		return nil, err
@@ -41,16 +41,12 @@ func (db *PostgresCertificateStorage) SelectByType(ctx context.Context, CAType m
 	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
 }
 
-func (db *PostgresCertificateStorage) Exists(ctx context.Context, sn string) (bool, error) {
-	return db.querier.Exists(sn)
-}
-
 func (db *PostgresCertificateStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	return db.querier.SelectAll(queryParams, []gormWhereParams{}, exhaustiveRun, applyFunc)
 }
 
-func (db *PostgresCertificateStorage) Select(ctx context.Context, id string) (*models.Certificate, error) {
-	return db.querier.SelectByID(id)
+func (db *PostgresCertificateStorage) SelectExists(ctx context.Context, id string) (bool, *models.Certificate, error) {
+	return db.querier.SelectExists(id)
 }
 
 func (db *PostgresCertificateStorage) Insert(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error) {

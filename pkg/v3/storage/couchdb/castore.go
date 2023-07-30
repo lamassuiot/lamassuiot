@@ -33,10 +33,6 @@ func NewCouchCARepository(client *kivik.Client) (storage.CACertificatesRepo, err
 	}, nil
 }
 
-func (db *CouchDBCAStorage) Exists(ctx context.Context, caID string) (bool, error) {
-	return db.querier.Exists(caID)
-}
-
 func (db *CouchDBCAStorage) Count(ctx context.Context) (int, error) {
 	return db.querier.Count()
 }
@@ -52,14 +48,14 @@ func (db *CouchDBCAStorage) SelectAll(ctx context.Context, exhaustiveRun bool, a
 	return db.querier.SelectAll(queryParams, &extraOpts, exhaustiveRun, applyFunc)
 }
 
-func (db *CouchDBCAStorage) Select(ctx context.Context, id string) (*models.CACertificate, error) {
-	return db.querier.SelectByID(id)
+func (db *CouchDBCAStorage) SelectExists(ctx context.Context, id string) (bool, *models.CACertificate, error) {
+	return db.querier.SelectExists(id)
 }
 
 func (db *CouchDBCAStorage) Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Insert(*caCertificate, caCertificate.CARef.Name)
+	return db.querier.Insert(*caCertificate, caCertificate.IssuerCAMetadata.CAID)
 }
 
 func (db *CouchDBCAStorage) Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Update(*caCertificate, caCertificate.CARef.Name)
+	return db.querier.Update(*caCertificate, caCertificate.IssuerCAMetadata.CAID)
 }

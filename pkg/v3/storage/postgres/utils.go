@@ -12,19 +12,18 @@ import (
 	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gorm_logger "gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
 )
 
-func CreatePostgresDBConnection(cfg config.PostgresPSEConfig, database string) (*gorm.DB, error) {
-	dbLogrus := logger.Default.LogMode(logger.Silent)
-	if log.GetLevel() >= log.DebugLevel {
+func CreatePostgresDBConnection(logger *log.Entry, cfg config.PostgresPSEConfig, database string) (*gorm.DB, error) {
+	dbLogrus := gorm_logger.Default.LogMode(gorm_logger.Error)
+	if logger.Level >= log.DebugLevel {
 		dbLogrus = gorm_logrus.New()
-		dbLogrus.LogMode(logger.Info)
+		dbLogrus.LogMode(gorm_logger.Info)
 	}
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable", cfg.Hostname, cfg.Username, cfg.Password, database, cfg.Port)
-	fmt.Println(dsn)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: dbLogrus,
 	})
@@ -97,28 +96,18 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 	return "nil", nil
 }
 
-func (db *postgresDBQuerier[E]) SelectByID(id string) (*E, error) {
-	var elem E
-	tx := db.First(&elem, fmt.Sprintf("%s = ?", db.primaryKeyColumn), id)
-	if err := tx.Error; err != nil {
-		return nil, err
-	}
-
-	return &elem, nil
-}
-
-func (db *postgresDBQuerier[E]) Exists(elemID string) (bool, error) {
+func (db *postgresDBQuerier[E]) SelectExists(elemID string) (bool, *E, error) {
 	var elem E
 	tx := db.First(&elem, fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID)
 	if err := tx.Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return false, nil
+			return false, nil, nil
 		}
 
-		return false, err
+		return false, nil, err
 	}
 
-	return true, nil
+	return true, &elem, nil
 }
 
 func (db *postgresDBQuerier[E]) Insert(elem E, elemID string) (*E, error) {
@@ -127,7 +116,8 @@ func (db *postgresDBQuerier[E]) Insert(elem E, elemID string) (*E, error) {
 		return nil, err
 	}
 
-	return db.SelectByID(elemID)
+	_, newElem, err := db.SelectExists(elemID)
+	return newElem, err
 }
 
 func (db *postgresDBQuerier[E]) Update(elem E, elemID string) (*E, error) {
@@ -136,7 +126,8 @@ func (db *postgresDBQuerier[E]) Update(elem E, elemID string) (*E, error) {
 		return nil, err
 	}
 
-	return db.SelectByID(elemID)
+	_, newElem, err := db.SelectExists(elemID)
+	return newElem, err
 }
 
 // JSONSerializer json serializer
@@ -168,4 +159,4 @@ func (JSONSerializer) Value(ctx context.Context, field *schema.Field, dst reflec
 	return json.Marshal(fieldValue)
 }
 
-func GenerateBookmark(offset int, limit int)
+func GenerateBookmark(offset int, limit int) {}

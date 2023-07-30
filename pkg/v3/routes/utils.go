@@ -13,10 +13,10 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/controllers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
-func newHttpRouter(routerEngine *gin.Engine, httpServerCfg config.HttpServer, apiInfo models.APIServiceInfo) error {
+func newHttpRouter(logger *logrus.Entry, routerEngine *gin.Engine, httpServerCfg config.HttpServer, apiInfo models.APIServiceInfo) error {
 	corsConfig := cors.DefaultConfig()
 	corsConfig.AllowAllOrigins = true
 	corsConfig.AllowHeaders = []string{"*"}
@@ -55,17 +55,17 @@ func newHttpRouter(routerEngine *gin.Engine, httpServerCfg config.HttpServer, ap
 				clientAuth = tls.RequireAndVerifyClientCert
 				srvExtraLog = srvExtraLog + " using 'strict' validation mode"
 			} else if httpServerCfg.Authentication.MutualTLS.ValidationMode == "" {
-				log.Warnf("mutual TLS validation mode is empty. Defaulting to 'strict' validation")
+				logger.Warnf("mutual TLS validation mode is empty. Defaulting to 'strict' validation")
 				srvExtraLog = srvExtraLog + " using 'strict' validation mode"
 				clientAuth = tls.RequireAndVerifyClientCert
 			} else {
-				log.Warnf("mutual TLS validation mode not recognized. Defaulting to 'strict' validation")
+				logger.Warnf("mutual TLS validation mode not recognized. Defaulting to 'strict' validation")
 				clientAuth = tls.RequireAndVerifyClientCert
 				srvExtraLog = srvExtraLog + " using 'strict' validation mode"
 			}
 
 			if clientAuth == tls.RequireAndVerifyClientCert {
-				log.Debugf("mTLS requests will be accepted when client presents a certificate issued by CA with subject '%s'", vaCert.Subject.String())
+				logger.Debugf("mTLS requests will be accepted when client presents a certificate issued by CA with subject '%s'", vaCert.Subject.String())
 			}
 
 			server.TLSConfig = &tls.Config{
@@ -74,11 +74,11 @@ func newHttpRouter(routerEngine *gin.Engine, httpServerCfg config.HttpServer, ap
 			}
 		}
 
-		log.Infof("HTTPS server listening on %s %s", addr, srvExtraLog)
+		logger.Infof("HTTPS server listening on %s %s", addr, srvExtraLog)
 		err := server.ListenAndServeTLS(httpServerCfg.CertFile, httpServerCfg.KeyFile)
 		return err
 	} else {
-		log.Infof("HTTP server listening on %s", addr)
+		logger.Infof("HTTP server listening on %s", addr)
 		err := server.ListenAndServe()
 		return err
 	}
@@ -92,16 +92,4 @@ type bodyLogWriter struct {
 func (w bodyLogWriter) Write(b []byte) (int, error) {
 	w.body.Write(b)
 	return w.ResponseWriter.Write(b)
-}
-
-func ginResponseErorrLogger(c *gin.Context) {
-	blw := &bodyLogWriter{body: bytes.NewBufferString(""), ResponseWriter: c.Writer}
-	c.Writer = blw
-	c.Next()
-	statusCode := c.Writer.Status()
-	if statusCode >= 400 {
-		//ok this is an request with error, let's make a record for it
-		// now print body (or log in your preferred way)
-		log.Errorf("HTTP response error: " + blw.body.String())
-	}
 }

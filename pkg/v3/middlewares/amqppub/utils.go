@@ -12,9 +12,11 @@ import (
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
+
+var log *logrus.Entry
 
 type AmqpPublishMessage struct {
 	Exchange  string
@@ -32,7 +34,9 @@ type amqpHandler struct {
 	amqpConfig          config.AMQPConnection
 }
 
-func SetupAMQPConnection(config config.AMQPConnection) (*amqpHandler, error) {
+func SetupAMQPConnection(logger *logrus.Entry, config config.AMQPConnection) (*amqpHandler, error) {
+	log = logger
+
 	handler := &amqpHandler{
 		amqpConfig: config,
 	}

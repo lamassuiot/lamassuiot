@@ -46,10 +46,6 @@ func (db *CouchDBCertificateStorage) SelectByType(ctx context.Context, CAType mo
 	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
-func (db *CouchDBCertificateStorage) Exists(ctx context.Context, sn string) (bool, error) {
-	return db.querier.Exists(sn)
-}
-
 func (db *CouchDBCertificateStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
@@ -62,8 +58,8 @@ func (db *CouchDBCertificateStorage) SelectAll(ctx context.Context, exhaustiveRu
 	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
-func (db *CouchDBCertificateStorage) Select(ctx context.Context, id string) (*models.Certificate, error) {
-	return db.querier.SelectByID(id)
+func (db *CouchDBCertificateStorage) SelectExists(ctx context.Context, id string) (bool, *models.Certificate, error) {
+	return db.querier.SelectExists(id)
 }
 
 func (db *CouchDBCertificateStorage) Insert(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error) {

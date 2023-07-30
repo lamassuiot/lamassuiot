@@ -28,40 +28,13 @@ func NewhttpCAClient(client *http.Client, url string) services.CAService {
 	}
 }
 
-func (cli *httpCAClient) GetCryptoEngineProvider() (*models.EngineProvider, error) {
-	engine, err := Get[models.EngineProvider](context.Background(), cli.httpClient, cli.baseUrl+"/v1/engines", nil)
+func (cli *httpCAClient) GetCryptoEngineProvider() ([]*models.CryptoEngineProvider, error) {
+	engine, err := Get[[]*models.CryptoEngineProvider](context.Background(), cli.httpClient, cli.baseUrl+"/v1/engines", nil)
 	if err != nil {
 		return nil, err
 	}
 
-	return &engine, nil
-}
-
-func (cli *httpCAClient) Sign(input services.SignInput) ([]byte, error) {
-	response, err := Post[*resources.SignResponse](context.Background(), cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/sign", resources.SignBody{
-		Message:            base64.StdEncoding.EncodeToString(input.Message),
-		MessageType:        input.MessageType,
-		SignatureAlgorithm: input.SignatureAlgorithm,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return base64.StdEncoding.DecodeString(response.SignedData)
-}
-
-func (cli *httpCAClient) VerifySignature(input services.VerifySignatureInput) (bool, error) {
-	response, err := Post[*resources.VerifyResponse](context.Background(), cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/verify", resources.VerifyBody{
-		Message:            base64.StdEncoding.EncodeToString(input.Message),
-		MessageType:        input.MessageType,
-		SignatureAlgorithm: input.SignatureAlgorithm,
-		Signature:          base64.StdEncoding.EncodeToString(input.Signature),
-	})
-	if err != nil {
-		return false, err
-	}
-
-	return response.Valid, nil
+	return engine, nil
 }
 
 func (cli *httpCAClient) GetCAs(input services.GetCAsInput) (string, error) {
@@ -135,7 +108,7 @@ func (cli *httpCAClient) ImportCA(input services.ImportCAInput) (*models.CACerti
 }
 
 func (cli *httpCAClient) SignCertificate(input services.SignCertificateInput) (*models.Certificate, error) {
-	response, err := Post[*models.Certificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/sign-cert", resources.SignCertificateBody{
+	response, err := Post[*models.Certificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/certificates/sign", resources.SignCertificateBody{
 		SignVerbatim: input.SignVerbatim,
 		CertRequest:  input.CertRequest,
 		Subject:      input.Subject,

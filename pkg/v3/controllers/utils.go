@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/errs"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 )
 
@@ -51,20 +49,4 @@ func FilterQuery(r *http.Request) *resources.QueryParameters {
 		}
 	}
 	return &queryParams
-}
-
-func HandleControllerError(c *gin.Context, err error) {
-	var sentinelError *errs.SentinelAPIError
-	if castedErr, ok := err.(errs.SentinelAPIError); ok {
-		sentinelError = &castedErr
-	}
-
-	if sentinelError != nil {
-		c.JSON(sentinelError.Status, gin.H{"err": sentinelError.Msg})
-	} else {
-		if err != nil {
-			msg := err.Error()
-			c.JSON(http.StatusInternalServerError, gin.H{"err": msg})
-		}
-	}
 }

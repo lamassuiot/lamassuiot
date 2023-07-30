@@ -10,7 +10,7 @@ import (
 )
 
 type CryptoEngine interface {
-	GetEngineConfig() models.CryptoEngineProvider
+	GetEngineConfig() models.CryptoEngineInfo
 
 	GetPrivateKeyByID(keyID string) (crypto.Signer, error)
 

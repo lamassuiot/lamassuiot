@@ -21,7 +21,7 @@ func NewCAAmqpEventPublisher(amqpPublisher chan *AmqpPublishMessage) services.CA
 	}
 }
 
-func (mw amqpEventPublisher) GetCryptoEngineProvider() (*models.EngineProvider, error) {
+func (mw amqpEventPublisher) GetCryptoEngineProvider() ([]*models.CryptoEngineProvider, error) {
 	return mw.next.GetCryptoEngineProvider()
 }
 
@@ -32,13 +32,6 @@ func (mw amqpEventPublisher) CreateCA(input services.CreateCAInput) (output *mod
 		}
 	}()
 	return mw.next.CreateCA(input)
-}
-
-func (mw amqpEventPublisher) Sign(input services.SignInput) (output []byte, err error) {
-	return mw.next.Sign(input)
-}
-func (mw amqpEventPublisher) VerifySignature(input services.VerifySignatureInput) (bool, error) {
-	return mw.next.VerifySignature(input)
 }
 
 func (mw amqpEventPublisher) ImportCA(input services.ImportCAInput) (output *models.CACertificate, err error) {

@@ -28,10 +28,6 @@ func NewCAPostgresRepository(db *gorm.DB) (storage.CACertificatesRepo, error) {
 	}, nil
 }
 
-func (db *PostgresCAStore) Exists(ctx context.Context, caID string) (bool, error) {
-	return db.querier.Exists(caID)
-}
-
 func (db *PostgresCAStore) Count(ctx context.Context) (int, error) {
 	return db.querier.Count()
 }
@@ -47,14 +43,14 @@ func (db *PostgresCAStore) SelectAll(ctx context.Context, exhaustiveRun bool, ap
 	return db.querier.SelectAll(queryParams, []gormWhereParams{}, exhaustiveRun, applyFunc)
 }
 
-func (db *PostgresCAStore) Select(ctx context.Context, id string) (*models.CACertificate, error) {
-	return db.querier.SelectByID(id)
+func (db *PostgresCAStore) SelectExists(ctx context.Context, id string) (bool, *models.CACertificate, error) {
+	return db.querier.SelectExists(id)
 }
 
 func (db *PostgresCAStore) Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Insert(*caCertificate, caCertificate.CARef.Name)
+	return db.querier.Insert(*caCertificate, caCertificate.IssuerCAMetadata.CAID)
 }
 
 func (db *PostgresCAStore) Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Update(*caCertificate, caCertificate.CARef.Name)
+	return db.querier.Update(*caCertificate, caCertificate.IssuerCAMetadata.CAID)
 }

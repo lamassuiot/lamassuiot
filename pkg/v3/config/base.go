@@ -9,24 +9,36 @@ import (
 )
 
 type BaseConfig struct {
+	// Defines logging options
 	Logs struct {
-		Level            LogLevel `mapstructure:"level"`
-		IncludeHealthLog bool     `mapstructure:"include_health"`
+		// General log level to be used. Individual subsystems can be controlled and will override this option. Valid options are `info`, `debug`, `trace`
+		Level LogLevel `mapstructure:"level"`
+		// Select if health requests should be logged.
+		SubystemLogging struct {
+			Service         LogLevel `mapstructure:"service"`
+			CryotoEngine    LogLevel `mapstructure:"crypto_engine"`
+			StorageEngine   LogLevel `mapstructure:"storage_engine"`
+			HttpTransport   LogLevel `mapstructure:"http"`
+			MessagingEngine LogLevel `mapstructure:"messaging_engine"`
+		} `mapstructure:"subsystems"`
 	} `mapstructure:"logs"`
 
+	// Http server configuration options
 	Server HttpServer `mapstructure:"server"`
 
+	// AMQP config options.
 	AMQPEventPublisher AMQPConnection `mapstructure:"amqp_event_publisher"`
 }
 
 type HttpServer struct {
-	DebugMode      bool         `mapstructure:"debug_mode"`
-	ListenAddress  string       `mapstructure:"listen_address"`
-	Port           int          `mapstructure:"port"`
-	Protocol       HTTPProtocol `mapstructure:"protocol"`
-	CertFile       string       `mapstructure:"cert_file"`
-	KeyFile        string       `mapstructure:"key_file"`
-	Authentication struct {
+	DebugMode          bool         `mapstructure:"debug_mode"`
+	HealthCheckLogging bool         `mapstructure:"health_check"`
+	ListenAddress      string       `mapstructure:"listen_address"`
+	Port               int          `mapstructure:"port"`
+	Protocol           HTTPProtocol `mapstructure:"protocol"`
+	CertFile           string       `mapstructure:"cert_file"`
+	KeyFile            string       `mapstructure:"key_file"`
+	Authentication     struct {
 		MutualTLS struct {
 			Enabled           bool          `mapstructure:"enabled"`
 			ValidationMode    MutualTLSMode `mapstructure:"validation_mode"`
@@ -44,13 +56,15 @@ const (
 
 type PluggableStorageEngine struct {
 	Provider StorageProvider `mapstructure:"provider"`
-	CouchDB  struct {
-		Protocol       HTTPProtocol `mapstructure:"protocol"`
-		HTTPConnection `mapstructure:",squash"`
-		Username       string `mapstructure:"username"`
-		Password       string `mapstructure:"password"`
-	} `mapstructure:"couch_db"`
+
+	CouchDB  CouchDBPSEConfig  `mapstructure:"couch_db"`
 	Postgres PostgresPSEConfig `mapstructure:"postgres"`
+}
+
+type CouchDBPSEConfig struct {
+	HTTPConnection `mapstructure:",squash"`
+	Username       string `mapstructure:"username"`
+	Password       string `mapstructure:"password"`
 }
 
 type PostgresPSEConfig struct {
