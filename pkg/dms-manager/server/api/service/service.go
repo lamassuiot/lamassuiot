@@ -508,7 +508,7 @@ func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateReq
 		}
 	}
 
-	verify := 0
+	verified := false
 	for _, ca := range dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.BootstrapCAs {
 		cacert, err := s.lamassuCAClient.GetCAByName(ctx, &lamassuCAApi.GetCAByNameInput{
 			CAType: lamassuCAApi.CATypePKI,
@@ -519,12 +519,12 @@ func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateReq
 		}
 		err = s.verifyCertificate(clientCertificate, cacert.CACertificate.Certificate.Certificate, false)
 		if err == nil {
+			verified = true
 			break
 		}
-		verify = verify + 1
 	}
 
-	if verify == len(dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.BootstrapCAs) {
+	if !verified {
 		return nil, &estErrors.GenericError{
 			Message:    "client certificate is not valid",
 			StatusCode: 401,
