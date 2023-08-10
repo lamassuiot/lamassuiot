@@ -34,7 +34,7 @@ type AWSKMSCryptoEngine struct {
 func NewAWSKMSEngine(logger *logrus.Entry, conf config.AWSSDKConfig) (CryptoEngine, error) {
 	lAWSKMS = logger.WithField("subsystem-provider", "AWS-KMS")
 
-	httpCli, err := helpers.BuildHTTPClientWithloggger(&http.Client{}, lAWSKMS)
+	httpCli, err := helpers.BuildHTTPClientWithTracerLogger(&http.Client{}, lAWSKMS)
 	if err != nil {
 		return nil, err
 	}
@@ -172,13 +172,13 @@ func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, keyID s
 }
 
 func (p *AWSKMSCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) (crypto.Signer, error) {
-	lAWSKMS.Warnf("KMS does not support asymetric key import. See https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys.html")
-	return nil, fmt.Errorf("KMS does not support asymetric key import")
+	lAWSKMS.Warnf("KMS does not support asymmetric key import. See https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys.html")
+	return nil, fmt.Errorf("KMS does not support asymmetric key import")
 }
 
 func (p *AWSKMSCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID string) (crypto.Signer, error) {
-	lAWSKMS.Warnf("KMS does not support asymetric key import. See https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys.html")
-	return nil, fmt.Errorf("KMS does not support asymetric key import")
+	lAWSKMS.Warnf("KMS does not support asymmetric key import. See https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys.html")
+	return nil, fmt.Errorf("KMS does not support asymmetric key import")
 }
 
 func (p *AWSKMSCryptoEngine) DeleteKey(keyID string) error {

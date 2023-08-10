@@ -21,7 +21,7 @@ func BuildURL(cfg config.HTTPClient) string {
 	return fmt.Sprintf("%s://%s:%d%s", cfg.Protocol, cfg.Hostname, cfg.Port, cfg.BasePath)
 }
 
-func BuildHTTPClient(cfg config.HTTPClient, clientName string) (*http.Client, error) {
+func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client, error) {
 	client := &http.Client{}
 
 	caPool := helpers.LoadSytemCACertPool()
@@ -59,7 +59,7 @@ func BuildHTTPClient(cfg config.HTTPClient, clientName string) (*http.Client, er
 		authHttpCli, err := BuildHTTPClient(config.HTTPClient{
 			AuthMode:       config.NoAuth,
 			HTTPConnection: cfg.HTTPConnection,
-		}, fmt.Sprintf("%s-JWT", clientName))
+		}, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -73,7 +73,7 @@ func BuildHTTPClient(cfg config.HTTPClient, clientName string) (*http.Client, er
 			RevocationURL string `json:"revocation_endpoint"`
 		}
 
-		wellKnown, err := Get[ODICDiscoveryJSON](context.Background(), authHttpCli, cfg.AuthJWTOptions.OIDCWellKnownURL, &resources.QueryParameters{})
+		wellKnown, err := Get[ODICDiscoveryJSON](context.Background(), authHttpCli, cfg.AuthJWTOptions.OIDCWellKnownURL, &resources.QueryParameters{}, map[int][]error{})
 		if err != nil {
 			return nil, err
 		}
@@ -101,10 +101,18 @@ func BuildHTTPClient(cfg config.HTTPClient, clientName string) (*http.Client, er
 		}
 	}
 
-	return helpers.BuildHTTPClientWithloggger(client, logrus.WithField("subsystem", fmt.Sprintf("LMS SDK - %s", clientName)))
+	return helpers.BuildHTTPClientWithTracerLogger(client, logger)
 }
 
-func Post[T any](ctx context.Context, client *http.Client, url string, data any) (T, error) {
+func Post[T any](ctx context.Context, client *http.Client, url string, data any, knownErrors map[int][]error) (T, error) {
+	return requestWithBody[T](ctx, client, "POST", url, data, knownErrors)
+}
+
+func Put[T any](ctx context.Context, client *http.Client, url string, data any, knownErrors map[int][]error) (T, error) {
+	return requestWithBody[T](ctx, client, "PUT", url, data, knownErrors)
+}
+
+func requestWithBody[T any](ctx context.Context, client *http.Client, method string, url string, data any, knownErrors map[int][]error) (T, error) {
 	var m T
 	b, err := toJSON(data)
 	if err != nil {
@@ -112,7 +120,7 @@ func Post[T any](ctx context.Context, client *http.Client, url string, data any)
 	}
 
 	byteReader := bytes.NewReader(b)
-	r, err := http.NewRequestWithContext(ctx, "POST", url, byteReader)
+	r, err := http.NewRequestWithContext(ctx, method, url, byteReader)
 	if err != nil {
 		return m, err
 	}
@@ -129,15 +137,14 @@ func Post[T any](ctx context.Context, client *http.Client, url string, data any)
 	}
 
 	if res.StatusCode != 200 && res.StatusCode != 201 {
-		return m, fmt.Errorf("unexpected status code %d. Body msg: %s", res.StatusCode, string(body))
+		return m, nonOKResponseToError(res.StatusCode, body, knownErrors)
 	}
 
 	return parseJSON[T](body)
 }
 
-func Get[T any](ctx context.Context, client *http.Client, url string, queryParams *resources.QueryParameters) (T, error) {
+func Get[T any](ctx context.Context, client *http.Client, url string, queryParams *resources.QueryParameters, knownErrors map[int][]error) (T, error) {
 	var m T
-
 	r, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return m, err
@@ -164,13 +171,13 @@ func Get[T any](ctx context.Context, client *http.Client, url string, queryParam
 	}
 
 	if res.StatusCode != 200 {
-		return m, fmt.Errorf("unexpected status code %d. Body msg: %s", res.StatusCode, string(body))
+		return m, nonOKResponseToError(res.StatusCode, body, knownErrors)
 	}
 
 	return parseJSON[T](body)
 }
 
-func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.Client, url string, queryParams *resources.QueryParameters, applyFunc func(*E)) error {
+func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.Client, url string, queryParams *resources.QueryParameters, applyFunc func(*E), knownErrors map[int][]error) error {
 	continueIter := true
 	if queryParams == nil {
 		queryParams = &resources.QueryParameters{}
@@ -179,7 +186,7 @@ func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.C
 	queryParams.Pagination.NextBookmark = ""
 
 	for continueIter {
-		response, err := Get[T](context.Background(), client, url, queryParams)
+		response, err := Get[T](context.Background(), client, url, queryParams, knownErrors)
 		if err != nil {
 			return err
 		}
@@ -210,4 +217,24 @@ func parseJSON[T any](s []byte) (T, error) {
 
 func toJSON(T any) ([]byte, error) {
 	return json.Marshal(T)
+}
+
+func nonOKResponseToError(resStatusCode int, resBody []byte, knownErrors map[int][]error) error {
+	type errJson struct {
+		Err string `json:"err"`
+	}
+
+	decodedErr, err := parseJSON[errJson](resBody)
+	if err != nil {
+		return fmt.Errorf("unexpected status code %d. Body err msg could not be decoded: %s", resStatusCode, string(resBody))
+	}
+
+	errsInStatusCode := knownErrors[resStatusCode]
+	for _, errInSC := range errsInStatusCode {
+		if errInSC.Error() == decodedErr.Err {
+			return errInSC
+		}
+	}
+
+	return fmt.Errorf("unexpected status code %d. No expected error matching found: %s", resStatusCode, string(resBody))
 }

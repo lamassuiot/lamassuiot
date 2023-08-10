@@ -14,9 +14,9 @@ type BaseConfig struct {
 		// General log level to be used. Individual subsystems can be controlled and will override this option. Valid options are `info`, `debug`, `trace`
 		Level LogLevel `mapstructure:"level"`
 		// Select if health requests should be logged.
-		SubystemLogging struct {
+		SubsystemLogging struct {
 			Service         LogLevel `mapstructure:"service"`
-			CryotoEngine    LogLevel `mapstructure:"crypto_engine"`
+			CryptoEngine    LogLevel `mapstructure:"crypto_engine"`
 			StorageEngine   LogLevel `mapstructure:"storage_engine"`
 			HttpTransport   LogLevel `mapstructure:"http"`
 			MessagingEngine LogLevel `mapstructure:"messaging_engine"`
@@ -50,8 +50,9 @@ type HttpServer struct {
 type MutualTLSMode string
 
 const (
-	Strict MutualTLSMode = "strict"
-	Any    MutualTLSMode = "any"
+	Strict  MutualTLSMode = "strict"
+	Request MutualTLSMode = "request"
+	Any     MutualTLSMode = "any"
 )
 
 type PluggableStorageEngine struct {
@@ -111,6 +112,7 @@ type HTTPClient struct {
 	AuthMode        HTTPClientAuthMethod `mapstructure:"auth_mode"`
 	AuthJWTOptions  AuthJWTOptions       `mapstructure:"jwt_options"`
 	AuthMTLSOptions AuthMTLSOptions      `mapstructure:"mtls_options"`
+	Level           LogLevel             `mapstructure:"level"`
 	HTTPConnection  `mapstructure:",squash"`
 }
 

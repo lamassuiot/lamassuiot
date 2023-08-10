@@ -80,10 +80,28 @@ func (mw amqpEventPublisher) DeleteCA(input services.DeleteCAInput) (err error) 
 func (mw amqpEventPublisher) SignCertificate(input services.SignCertificateInput) (output *models.Certificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.publishEvent("ca.sign-certificate", caSource, output)
+			mw.publishEvent("ca.certificate.sign", caSource, output)
 		}
 	}()
 	return mw.next.SignCertificate(input)
+}
+
+func (mw amqpEventPublisher) SignatureSign(input services.SignatureSignInput) (output []byte, err error) {
+	defer func() {
+		if err == nil {
+			mw.publishEvent("ca.signature.sign", caSource, output)
+		}
+	}()
+	return mw.next.SignatureSign(input)
+}
+
+func (mw amqpEventPublisher) SignatureVerify(input services.SignatureVerifyInput) (output bool, err error) {
+	defer func() {
+		if err == nil {
+			mw.publishEvent("ca.signature.verify", caSource, output)
+		}
+	}()
+	return mw.next.SignatureVerify(input)
 }
 
 func (mw amqpEventPublisher) GetCertificateBySerialNumber(input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {

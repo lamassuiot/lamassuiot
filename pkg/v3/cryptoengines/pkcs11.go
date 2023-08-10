@@ -64,7 +64,7 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.PKCS11EngineConfig) (Cryp
 
 	pkcs11ProviderInfo, err := pkcs11ProviderContext.GetInfo()
 	if err != nil {
-		lPkcs11.Errorf("could not get rovider info: %s", err)
+		lPkcs11.Errorf("could not get provider info: %s", err)
 		return nil, fmt.Errorf("could not get info")
 	}
 

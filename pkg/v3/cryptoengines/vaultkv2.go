@@ -45,7 +45,7 @@ func NewVaultKV2Engine(logger *logrus.Entry, conf config.HashicorpVaultCryptoEng
 		return nil, err
 	}
 
-	httpClient, err = helpers.BuildHTTPClientWithloggger(httpClient, lVault)
+	httpClient, err = helpers.BuildHTTPClientWithTracerLogger(httpClient, lVault)
 	if err != nil {
 		return nil, err
 	}

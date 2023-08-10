@@ -23,17 +23,11 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var (
-	log = logrus.WithField("subsystem", "Service")
-)
-
 type CAMiddleware func(CAService) CAService
 
 type CAService interface {
 	// GetStats() models.CAStats
 	GetCryptoEngineProvider() ([]*models.CryptoEngineProvider, error)
-
-	//returns a singnature in bytes
 
 	CreateCA(input CreateCAInput) (*models.CACertificate, error)
 	ImportCA(input ImportCAInput) (*models.CACertificate, error)
@@ -42,6 +36,9 @@ type CAService interface {
 	UpdateCAStatus(input UpdateCAStatusInput) (*models.CACertificate, error)
 	UpdateCAMetadata(input UpdateCAMetadataInput) (*models.CACertificate, error)
 	DeleteCA(input DeleteCAInput) error
+
+	SignatureSign(input SignatureSignInput) ([]byte, error)
+	SignatureVerify(input SignatureVerifyInput) (bool, error)
 
 	SignCertificate(input SignCertificateInput) (*models.Certificate, error)
 	GetCertificateBySerialNumber(input GetCertificatesBySerialNumberInput) (*models.Certificate, error)
@@ -136,7 +133,7 @@ func NeCAService(builder CAServiceBuilder) (CAService, error) {
 					Organization:     "LAMASSU",
 					OrganizationUnit: "INTERNAL CA",
 				},
-				CAExpitration: models.Expiration{
+				CAExpiration: models.Expiration{
 					Type:     models.Duration,
 					Duration: (*models.TimeDuration)(&caDur),
 				},
@@ -316,15 +313,15 @@ func (svc *CAServiceImpl) GetCryptoEngineProvider() ([]*models.CryptoEngineProvi
 type SignInput struct {
 	CAID               string
 	Message            []byte
-	MessageType        models.SigningMessageType
-	SignatureAlgorithm models.SigningAlgorithm
+	MessageType        models.SignMessageType
+	SignatureAlgorithm string
 }
 
 type issueCAInput struct {
-	KeyMetadata   models.KeyMetadata `validate:"required"`
-	Subject       models.Subject     `validate:"required"`
-	CAType        models.CAType      `validate:"required"`
-	CAExpitration models.Expiration
+	KeyMetadata  models.KeyMetadata `validate:"required"`
+	Subject      models.Subject     `validate:"required"`
+	CAType       models.CAType      `validate:"required"`
+	CAExpiration models.Expiration
 }
 
 type issueCAOutput struct {
@@ -338,10 +335,10 @@ func (svc *CAServiceImpl) issueCA(input issueCAInput) (*issueCAOutput, error) {
 
 	var caCert *x509.Certificate
 	expiration := time.Now()
-	if input.CAExpitration.Type == models.Duration {
-		expiration = expiration.Add(time.Duration(*input.CAExpitration.Duration))
+	if input.CAExpiration.Type == models.Duration {
+		expiration = expiration.Add(time.Duration(*input.CAExpiration.Duration))
 	} else {
-		expiration = *input.CAExpitration.Time
+		expiration = *input.CAExpiration.Time
 	}
 
 	caCert, err = x509Engine.CreateRootCA(input.KeyMetadata, input.Subject, expiration)
@@ -457,7 +454,7 @@ type CreateCAInput struct {
 	KeyMetadata        models.KeyMetadata `validate:"required"`
 	Subject            models.Subject     `validate:"required"`
 	IssuanceExpiration models.Expiration  `validate:"required"`
-	CAExpitration      models.Expiration  `validate:"required"`
+	CAExpiration       models.Expiration  `validate:"required"`
 }
 
 // Returned Error Codes:
@@ -479,15 +476,15 @@ func (svc *CAServiceImpl) CreateCA(input CreateCAInput) (*models.CACertificate, 
 		return nil, errs.ErrCAType
 	}
 
-	if !helpers.ValidateExpirationTimeRef(input.IssuanceExpiration) || !helpers.ValidateExpirationTimeRef(input.CAExpitration) {
+	if !helpers.ValidateExpirationTimeRef(input.IssuanceExpiration) || !helpers.ValidateExpirationTimeRef(input.CAExpiration) {
 		return nil, errs.ErrCAIncompatibleExpirationTimeRef
 	}
 
 	expiration := time.Now()
-	if input.CAExpitration.Type == models.Duration {
-		expiration = expiration.Add(time.Duration(*input.CAExpitration.Duration))
+	if input.CAExpiration.Type == models.Duration {
+		expiration = expiration.Add(time.Duration(*input.CAExpiration.Duration))
 	} else {
-		expiration = *input.CAExpitration.Time
+		expiration = *input.CAExpiration.Time
 	}
 
 	if !helpers.ValidateCAExpiration(input.IssuanceExpiration, expiration) {
@@ -495,10 +492,10 @@ func (svc *CAServiceImpl) CreateCA(input CreateCAInput) (*models.CACertificate, 
 	}
 
 	issuedCA, err := svc.issueCA(issueCAInput{
-		KeyMetadata:   input.KeyMetadata,
-		Subject:       input.Subject,
-		CAType:        input.CAType,
-		CAExpitration: input.CAExpitration,
+		KeyMetadata:  input.KeyMetadata,
+		Subject:      input.Subject,
+		CAType:       input.CAType,
+		CAExpiration: input.CAExpiration,
 	})
 	if err != nil {
 		return nil, err
@@ -714,7 +711,7 @@ func (svc *CAServiceImpl) DeleteCA(input DeleteCAInput) error {
 type SignCertificateInput struct {
 	CAID         string                         `validate:"required"`
 	CertRequest  *models.X509CertificateRequest `validate:"required"`
-	Subject      models.Subject
+	Subject      *models.Subject
 	SignVerbatim bool
 }
 
@@ -789,6 +786,52 @@ func (svc *CAServiceImpl) SignCertificate(input SignCertificateInput) (*models.C
 	}
 
 	return svc.certStorage.Insert(context.Background(), &cert)
+}
+
+type SignatureSignInput struct {
+	CAID             string                 `validate:"required"`
+	Message          []byte                 `validate:"required"`
+	MessageType      models.SignMessageType `validate:"required"`
+	SigningAlgorithm string                 `validate:"required"`
+}
+
+func (svc *CAServiceImpl) SignatureSign(input SignatureSignInput) ([]byte, error) {
+	exists, ca, err := svc.caStorage.SelectExists(context.Background(), input.CAID)
+	if err != nil {
+		return []byte{}, err
+	}
+
+	if !exists {
+		return []byte{}, errs.ErrCANotFound
+	}
+
+	signature, err := x509engines.NewX509Engine(svc.defaultCryptoEngine, "").Sign((*x509.Certificate)(ca.Certificate.Certificate), input.Message, input.MessageType, input.SigningAlgorithm)
+	if err != nil {
+		return nil, err
+	}
+
+	return signature, nil
+}
+
+type SignatureVerifyInput struct {
+	CAID             string                 `validate:"required"`
+	Signature        []byte                 `validate:"required"`
+	Message          []byte                 `validate:"required"`
+	MessageType      models.SignMessageType `validate:"required"`
+	SigningAlgorithm string                 `validate:"required"`
+}
+
+func (svc *CAServiceImpl) SignatureVerify(input SignatureVerifyInput) (bool, error) {
+	exists, ca, err := svc.caStorage.SelectExists(context.Background(), input.CAID)
+	if err != nil {
+		return false, err
+	}
+
+	if !exists {
+		return false, errs.ErrCANotFound
+	}
+
+	return x509engines.NewX509Engine(svc.defaultCryptoEngine, "").Verify((*x509.Certificate)(ca.Certificate.Certificate), input.Signature, input.Message, input.MessageType, input.SigningAlgorithm)
 }
 
 type GetCertificatesBySerialNumberInput struct {

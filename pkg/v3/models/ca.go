@@ -51,8 +51,8 @@ type Certificate struct {
 
 type Expiration struct {
 	Type     ExpirationTimeRef `json:"type"`
-	Duration *TimeDuration     `json:"duration"`
-	Time     *time.Time        `json:"time"`
+	Duration *TimeDuration     `json:"duration,omitempty"`
+	Time     *time.Time        `json:"time,omitempty"`
 }
 
 type IssuerCAMetadata struct {
@@ -81,24 +81,3 @@ type CAStats struct {
 		CertificateStatus            map[CertificateStatus]int `json:"status_distribution"`
 	} `json:"certificates"`
 }
-
-type SigningMessageType string
-
-const (
-	Digest SigningMessageType = "DIGEST"
-	RAW    SigningMessageType = "RAW"
-)
-
-type SigningAlgorithm string
-
-const (
-	RSASSA_PSS_SHA_256        SigningAlgorithm = "RSASSA_PSS_SHA_256"
-	RSASSA_PSS_SHA_384        SigningAlgorithm = "RSASSA_PSS_SHA_384"
-	RSASSA_PSS_SHA_512        SigningAlgorithm = "RSASSA_PSS_SHA_512"
-	RSASSA_PKCS1_V1_5_SHA_256 SigningAlgorithm = "RSASSA_PKCS1_V1_5_SHA_256"
-	RSASSA_PKCS1_V1_5_SHA_384 SigningAlgorithm = "RSASSA_PKCS1_V1_5_SHA_384"
-	RSASSA_PKCS1_V1_5_SHA_512 SigningAlgorithm = "RSASSA_PKCS1_V1_5_SHA_512"
-	ECDSA_SHA_256             SigningAlgorithm = "ECDSA_SHA_256"
-	ECDSA_SHA_384             SigningAlgorithm = "ECDSA_SHA_384"
-	ECDSA_SHA_512             SigningAlgorithm = "ECDSA_SHA_512"
-)

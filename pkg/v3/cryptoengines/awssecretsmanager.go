@@ -33,7 +33,7 @@ type AWSSecretsManagerCryptoEngine struct {
 func NewAWSSecretManagerEngine(logger *logrus.Entry, conf config.AWSSDKConfig) (CryptoEngine, error) {
 	lAWSSM = logger.WithField("subsystem-provider", "AWS-SecretsManger")
 
-	httpCli, err := helpers.BuildHTTPClientWithloggger(http.DefaultClient, lAWSSM)
+	httpCli, err := helpers.BuildHTTPClientWithTracerLogger(http.DefaultClient, lAWSSM)
 	if err != nil {
 		return nil, err
 	}

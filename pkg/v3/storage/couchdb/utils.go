@@ -26,9 +26,9 @@ func CreateCouchDBConnection(logger *logrus.Entry, cfg config.CouchDBPSEConfig) 
 	if err != nil {
 		return nil, err
 	}
-	lCouch = logger.WithField("subsystem-provider", "CouchDB")
 
-	httpCli, err = helpers.BuildHTTPClientWithloggger(httpCli, lCouch)
+	lCouch = logger.WithField("subsystem-provider", "CouchDB")
+	httpCli, err = helpers.BuildHTTPClientWithTracerLogger(httpCli, lCouch)
 	if err != nil {
 		return nil, err
 	}

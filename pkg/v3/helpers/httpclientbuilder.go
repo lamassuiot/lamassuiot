@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	gindump "github.com/haritzsaiz/gin-dump"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/sirupsen/logrus"
 )
@@ -34,38 +35,36 @@ func BuildHTTPClientWithTLSOptions(cli *http.Client, cfg config.TLSConfig) (*htt
 	return cli, nil
 }
 
-func BuildHTTPClientWithloggger(cli *http.Client, logger *logrus.Entry) (*http.Client, error) {
+func BuildHTTPClientWithTracerLogger(cli *http.Client, logger *logrus.Entry) (*http.Client, error) {
 	transport := http.DefaultTransport
 	if cli.Transport != nil {
 		transport = cli.Transport
 	}
 
 	cli.Transport = loggingRoundTripper{
-		proxied: transport,
-		logger:  logger,
+		transport: transport,
+		logger:    logger,
 	}
 
 	return cli, nil
 }
 
 type loggingRoundTripper struct {
-	proxied http.RoundTripper
-	logger  *logrus.Entry
+	transport http.RoundTripper
+	logger    *logrus.Entry
 }
 
 func (lrt loggingRoundTripper) RoundTrip(req *http.Request) (res *http.Response, err error) {
 	start := time.Now()
 	// Send the request, get the response (or the error)
-	res, err = lrt.proxied.RoundTrip(req)
-
-	// Handle the result.
-	log := lrt.logger.WithField("response", fmt.Sprintf("%s %d: %s", req.Method, res.StatusCode, time.Since(start)))
-
+	dReq := gindump.DumpRequest(req, true, true)
+	res, err = lrt.transport.RoundTrip(req)
 	if err != nil {
-		log = log.WithField("error", err.Error())
-		log.Errorf(req.URL.String())
+		lrt.logger.Errorf("%s: %s", req.URL.String(), err)
 	} else {
-		log.Tracef(req.URL.String())
+		log := lrt.logger.WithField("response", fmt.Sprintf("%s %d: %s", req.Method, res.StatusCode, time.Since(start)))
+		log.Debugf(req.URL.String())
+		log.Tracef("%s\n%s", dReq, gindump.DumpResponse(res, true, true))
 	}
 
 	return

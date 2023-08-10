@@ -7,7 +7,7 @@ type CAConfig struct {
 	CryptoEngines struct {
 		DefaultEngine             string                             `mapstructure:"default_id"`
 		PKCS11Provider            []PKCS11EngineConfig               `mapstructure:"pkcs11"`
-		HashicorpVaultKV2Provider []HashicorpVaultCryptoEngineConfig `mapstructure:"hashicrorp_vault"`
+		HashicorpVaultKV2Provider []HashicorpVaultCryptoEngineConfig `mapstructure:"hashicorp_vault"`
 		AWSKMSProvider            []AWSSDKConfig                     `mapstructure:"aws_kms"`
 		AWSSecretsManagerProvider []AWSSDKConfig                     `mapstructure:"aws_secrets_manager"`
 		GolangProvider            []GolangEngineConfig               `mapstructure:"golang"`

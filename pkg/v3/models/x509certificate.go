@@ -14,6 +14,15 @@ import (
 // --------------------------------------------
 type X509Certificate x509.Certificate
 
+func (c *X509Certificate) String() string {
+	res, err := c.MarshalJSON()
+	if err != nil {
+		return ""
+	}
+
+	return string(res)
+}
+
 func (c *X509Certificate) MarshalJSON() ([]byte, error) {
 	data := []byte{}
 

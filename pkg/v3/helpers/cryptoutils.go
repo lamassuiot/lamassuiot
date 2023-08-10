@@ -1,7 +1,6 @@
 package helpers
 
 import (
-	"crypto"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
@@ -145,29 +144,4 @@ func ValidateCertAndPrivKey(cert *x509.Certificate, rsaKey *rsa.PrivateKey, ecKe
 	}
 
 	return false, fmt.Errorf("both keys are nil")
-}
-
-func GetSigningAlgorithmFromPublicKey(pubKey crypto.PublicKey, hashFunction crypto.Hash) (models.SigningAlgorithm, error) {
-	switch pubKey.(type) {
-	case *rsa.PublicKey:
-		switch hashFunction {
-		case crypto.SHA256:
-			return models.RSASSA_PSS_SHA_256, nil
-		case crypto.SHA384:
-			return models.RSASSA_PSS_SHA_384, nil
-		case crypto.SHA512:
-			return models.RSASSA_PSS_SHA_512, nil
-		}
-	case *ecdsa.PublicKey:
-		switch hashFunction {
-		case crypto.SHA256:
-			return models.ECDSA_SHA_256, nil
-		case crypto.SHA384:
-			return models.ECDSA_SHA_384, nil
-		case crypto.SHA512:
-			return models.ECDSA_SHA_512, nil
-		}
-	}
-
-	return "", fmt.Errorf("could not determine signing algorithm")
 }
