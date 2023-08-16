@@ -28,7 +28,7 @@ func (s *caSignerImpl) Public() crypto.PublicKey {
 func (s *caSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
 	signAlg := "RSASSA_PKCS1_V1_5_SHA_256"
 	caKeyAlg := s.ca.Certificate.Certificate.PublicKeyAlgorithm
-	if opts.HashFunc().Size() == 256 {
+	if opts.HashFunc().Size()*8 == 256 {
 		if caKeyAlg == x509.ECDSA {
 			signAlg = "ECDSA_SHA_256"
 		} else if caKeyAlg == x509.RSA {

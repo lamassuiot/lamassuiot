@@ -33,6 +33,8 @@ type CAService interface {
 	ImportCA(input ImportCAInput) (*models.CACertificate, error)
 	GetCAByID(input GetCAByIDInput) (*models.CACertificate, error)
 	GetCAs(input GetCAsInput) (string, error)
+	GetCABySerialNumber(input GetCABySerialNumberInput) (*models.CACertificate, error)
+	GetCAsByCommonName(input GetCAsByCommonNameInput) (string, error)
 	UpdateCAStatus(input UpdateCAStatusInput) (*models.CACertificate, error)
 	UpdateCAMetadata(input UpdateCAMetadataInput) (*models.CACertificate, error)
 	DeleteCA(input DeleteCAInput) error
@@ -45,6 +47,9 @@ type CAService interface {
 	GetCertificates(input GetCertificatesInput) (string, error)
 	GetCertificatesByCA(input GetCertificatesByCAInput) (string, error)
 	GetCertificatesByExpirationDate(input GetCertificatesByExpirationDateInput) (string, error)
+	// GetCertificatesByExpirationDateAndCA(input GetCertificatesByExpirationDateInput) (string, error)
+	// GetCertificatesByStatus(input GetCertificatesByExpirationDateInput) (string, error)
+	// GetCertificatesByStatusAndCA(input GetCertificatesByExpirationDateInput) (string, error)
 	UpdateCertificateStatus(input UpdateCertificateStatusInput) (*models.Certificate, error)
 	UpdateCertificateMetadata(input UpdateCertificateMetadataInput) (*models.Certificate, error)
 }
@@ -94,7 +99,7 @@ func NeCAService(builder CAServiceBuilder) (CAService, error) {
 	}
 
 	if defaultCryptoEngine == nil {
-		return nil, fmt.Errorf("could not find the default cryptoengine")
+		return nil, fmt.Errorf("could not find the default crypto engine")
 	}
 
 	svc := CAServiceImpl{
@@ -109,58 +114,12 @@ func NeCAService(builder CAServiceBuilder) (CAService, error) {
 
 	svc.service = &svc
 
-	internalCAs := []models.InternalCA{
-		models.CALocalRA,
-	}
-
-	for _, internalCA := range internalCAs {
-		exists, _, err := svc.caStorage.SelectExists(context.Background(), string(internalCA))
-		if err != nil {
-			lCA.Panicf("could not initialize service: could not check if internal CA '%s' exists: %s", internalCA, err)
-		}
-
-		if !exists {
-			caDur, _ := models.ParseDuration("50y")
-			issuanceDur, _ := models.ParseDuration("3y")
-			_, err := svc.service.CreateCA(CreateCAInput{
-				CAType: models.CATypeManaged,
-				KeyMetadata: models.KeyMetadata{
-					Type: models.KeyType(x509.ECDSA),
-					Bits: 256,
-				},
-				Subject: models.Subject{
-					CommonName:       string(internalCA),
-					Organization:     "LAMASSU",
-					OrganizationUnit: "INTERNAL CA",
-				},
-				CAExpiration: models.Expiration{
-					Type:     models.Duration,
-					Duration: (*models.TimeDuration)(&caDur),
-				},
-				IssuanceExpiration: models.Expiration{
-					Type:     models.Duration,
-					Duration: (*models.TimeDuration)(&issuanceDur),
-				},
-			})
-
-			if err != nil {
-				lCA.Panicf("could not initialize service: could not create internal CA '%s': %s", internalCA, err)
-			}
-		}
-	}
-
 	cryptoMonitor := func() {
 		//TODO
 		criticalDelta, err := models.ParseDuration(svc.cryptoMonitorConfig.StatusMachineDeltas.CriticalExpiration)
 		if err != nil {
 			criticalDelta = time.Duration(time.Hour * 24 * 3)
 			lCA.Warnf("could not parse StatusMachineDeltas.CriticalExpiration. Using default [%s]: %s", models.DurationToString(criticalDelta), err)
-		}
-
-		nearExpDelta, err := models.ParseDuration(svc.cryptoMonitorConfig.StatusMachineDeltas.NearExpiration)
-		if err != nil {
-			nearExpDelta = time.Duration(time.Hour * 24 * 7)
-			lCA.Warnf("could not parse StatusMachineDeltas.NearExpiration. Using default [%s]: %s", models.DurationToString(criticalDelta), err)
 		}
 
 		if svc.cryptoMonitorConfig.AutomaticCARotation.Enabled {
@@ -244,37 +203,6 @@ func NeCAService(builder CAServiceBuilder) (CAService, error) {
 			ExpiresAfter:  time.Time{},
 			ExpiresBefore: now,
 		})
-		svc.service.GetCertificatesByExpirationDate(GetCertificatesByExpirationDateInput{
-			ListInput: ListInput[models.Certificate]{
-				QueryParameters: nil,
-				ExhaustiveRun:   true,
-				ApplyFunc: func(cert *models.Certificate) {
-					lCA.Debugf("updating certificate status from cert with sn '%s' to status '%s'", cert.SerialNumber, models.StatusCriticalExpiration)
-					svc.service.UpdateCertificateStatus(UpdateCertificateStatusInput{
-						SerialNumber: cert.SerialNumber,
-						NewStatus:    models.StatusCriticalExpiration,
-					})
-				},
-			},
-			ExpiresAfter:  now,
-			ExpiresBefore: now.Add(criticalDelta),
-		})
-		svc.service.GetCertificatesByExpirationDate(GetCertificatesByExpirationDateInput{
-			ListInput: ListInput[models.Certificate]{
-				QueryParameters: nil,
-				ExhaustiveRun:   true,
-				ApplyFunc: func(cert *models.Certificate) {
-					lCA.Debugf("updating certificate status from cert with sn '%s' to status '%s'", cert.SerialNumber, models.StatusNearingExpiration)
-					svc.service.UpdateCertificateStatus(UpdateCertificateStatusInput{
-						SerialNumber: cert.SerialNumber,
-						NewStatus:    models.StatusNearingExpiration,
-					})
-				},
-			},
-			ExpiresAfter:  now.Add(criticalDelta).Add(time.Microsecond),
-			ExpiresBefore: now.Add(nearExpDelta),
-		})
-
 	}
 
 	cryptoMonitor()
@@ -560,7 +488,7 @@ func (svc *CAServiceImpl) GetCAByID(input GetCAByIDInput) (*models.CACertificate
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	exists, ca, err := svc.caStorage.SelectExists(context.Background(), input.CAID)
+	exists, ca, err := svc.caStorage.SelectExistsByID(context.Background(), input.CAID)
 	if err != nil {
 		return nil, err
 	}
@@ -588,6 +516,40 @@ func (svc *CAServiceImpl) GetCAs(input GetCAsInput) (string, error) {
 	return nextBookmark, err
 }
 
+type GetCABySerialNumberInput struct {
+	SerialNumber string
+}
+
+func (svc *CAServiceImpl) GetCABySerialNumber(input GetCABySerialNumberInput) (*models.CACertificate, error) {
+	exists, ca, err := svc.caStorage.SelectExistsBySerialNumber(context.Background(), input.SerialNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	if !exists {
+		return nil, errs.ErrCANotFound
+	}
+
+	return ca, nil
+}
+
+type GetCAsByCommonNameInput struct {
+	CommonName string
+
+	QueryParameters *resources.QueryParameters
+	ExhaustiveRun   bool //wether to iter all elems
+	ApplyFunc       func(cert *models.CACertificate)
+}
+
+func (svc *CAServiceImpl) GetCAsByCommonName(input GetCAsByCommonNameInput) (string, error) {
+	nextBookmark, err := svc.caStorage.SelectByCommonName(context.Background(), input.CommonName, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
+	if err != nil {
+		return "", err
+	}
+
+	return nextBookmark, err
+}
+
 type UpdateCAStatusInput struct {
 	CAID   string                   `validate:"required"`
 	Status models.CertificateStatus `validate:"required"`
@@ -606,7 +568,7 @@ func (svc *CAServiceImpl) UpdateCAStatus(input UpdateCAStatusInput) (*models.CAC
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	exists, ca, err := svc.caStorage.SelectExists(context.Background(), input.CAID)
+	exists, ca, err := svc.caStorage.SelectExistsByID(context.Background(), input.CAID)
 	if err != nil {
 		return nil, err
 	}
@@ -660,7 +622,7 @@ func (svc *CAServiceImpl) UpdateCAMetadata(input UpdateCAMetadataInput) (*models
 	if err != nil {
 		return nil, errs.ErrValidateBadRequest
 	}
-	exists, ca, err := svc.caStorage.SelectExists(context.Background(), input.CAID)
+	exists, ca, err := svc.caStorage.SelectExistsByID(context.Background(), input.CAID)
 	if err != nil {
 		return nil, err
 	}
@@ -691,7 +653,7 @@ func (svc *CAServiceImpl) DeleteCA(input DeleteCAInput) error {
 		return errs.ErrValidateBadRequest
 	}
 
-	exists, ca, err := svc.caStorage.SelectExists(context.Background(), input.CAID)
+	exists, ca, err := svc.caStorage.SelectExistsByID(context.Background(), input.CAID)
 	if err != nil {
 		return err
 	}
@@ -728,7 +690,7 @@ func (svc *CAServiceImpl) SignCertificate(input SignCertificateInput) (*models.C
 		return nil, errs.ErrCANotFound
 	}
 
-	exists, ca, err := svc.caStorage.SelectExists(context.Background(), input.CAID)
+	exists, ca, err := svc.caStorage.SelectExistsByID(context.Background(), input.CAID)
 	if err != nil {
 		return nil, err
 	}
@@ -796,7 +758,7 @@ type SignatureSignInput struct {
 }
 
 func (svc *CAServiceImpl) SignatureSign(input SignatureSignInput) ([]byte, error) {
-	exists, ca, err := svc.caStorage.SelectExists(context.Background(), input.CAID)
+	exists, ca, err := svc.caStorage.SelectExistsByID(context.Background(), input.CAID)
 	if err != nil {
 		return []byte{}, err
 	}
@@ -822,7 +784,7 @@ type SignatureVerifyInput struct {
 }
 
 func (svc *CAServiceImpl) SignatureVerify(input SignatureVerifyInput) (bool, error) {
-	exists, ca, err := svc.caStorage.SelectExists(context.Background(), input.CAID)
+	exists, ca, err := svc.caStorage.SelectExistsByID(context.Background(), input.CAID)
 	if err != nil {
 		return false, err
 	}
@@ -849,7 +811,7 @@ func (svc *CAServiceImpl) GetCertificateBySerialNumber(input GetCertificatesBySe
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	exists, cert, err := svc.certStorage.SelectExists(context.Background(), input.SerialNumber)
+	exists, cert, err := svc.certStorage.SelectExistsBySerialNumber(context.Background(), input.SerialNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -885,7 +847,7 @@ func (svc *CAServiceImpl) GetCertificatesByCA(input GetCertificatesByCAInput) (s
 		return "", errs.ErrValidateBadRequest
 	}
 
-	exists, _, err := svc.caStorage.SelectExists(context.Background(), input.CAID)
+	exists, _, err := svc.caStorage.SelectExistsByID(context.Background(), input.CAID)
 	if err != nil {
 		return "", err
 	}
@@ -926,7 +888,7 @@ func (svc *CAServiceImpl) UpdateCertificateStatus(input UpdateCertificateStatusI
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	exsits, cert, err := svc.certStorage.SelectExists(context.Background(), input.SerialNumber)
+	exsits, cert, err := svc.certStorage.SelectExistsBySerialNumber(context.Background(), input.SerialNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -939,7 +901,7 @@ func (svc *CAServiceImpl) UpdateCertificateStatus(input UpdateCertificateStatusI
 		return cert, nil
 	} else if cert.Status == models.StatusExpired || cert.Status == models.StatusRevoked {
 		return nil, errs.ErrCertificateStatusTransitionNotAllowed
-	} else if cert.Status == models.StatusNearingExpiration && input.NewStatus == models.StatusActive {
+	} else if input.NewStatus == models.StatusActive {
 		return nil, errs.ErrCertificateStatusTransitionNotAllowed
 	}
 
@@ -968,7 +930,7 @@ func (svc *CAServiceImpl) UpdateCertificateMetadata(input UpdateCertificateMetad
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	exists, cert, err := svc.certStorage.SelectExists(context.Background(), input.SerialNumber)
+	exists, cert, err := svc.certStorage.SelectExistsBySerialNumber(context.Background(), input.SerialNumber)
 	if err != nil {
 		return nil, err
 	}

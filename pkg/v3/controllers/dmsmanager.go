@@ -37,7 +37,7 @@ func (r *dmsManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, resources.GetDMSsResponse{
-		IterbaleList: resources.IterbaleList[models.DMS]{
+		IterableList: resources.IterableList[models.DMS]{
 			NextBookmark: nextBookmark,
 			List:         dmss,
 		},

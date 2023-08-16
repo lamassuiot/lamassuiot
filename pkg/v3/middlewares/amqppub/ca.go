@@ -1,22 +1,23 @@
 package amqppub
 
 import (
+	"github.com/lamassuiot/lamassuiot/pkg/v3/messaging"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
 )
 
 type amqpEventPublisher struct {
-	next          services.CAService
-	amqpPublisher chan *AmqpPublishMessage
+	next           services.CAService
+	eventPublisher *messaging.AMQPEventPublisher
 }
 
 const caSource = "lamassuiot.ca"
 
-func NewCAAmqpEventPublisher(amqpPublisher chan *AmqpPublishMessage) services.CAMiddleware {
+func NewCAAmqpEventPublisher(amqpPublisher *messaging.AMQPEventPublisher) services.CAMiddleware {
 	return func(next services.CAService) services.CAService {
 		return &amqpEventPublisher{
-			next:          next,
-			amqpPublisher: amqpPublisher,
+			next:           next,
+			eventPublisher: amqpPublisher,
 		}
 	}
 }
@@ -28,7 +29,7 @@ func (mw amqpEventPublisher) GetCryptoEngineProvider() ([]*models.CryptoEnginePr
 func (mw amqpEventPublisher) CreateCA(input services.CreateCAInput) (output *models.CACertificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.publishEvent("ca.create", caSource, output)
+			mw.eventPublisher.PublishCloudEvent("ca.create", caSource, output)
 		}
 	}()
 	return mw.next.CreateCA(input)
@@ -37,7 +38,7 @@ func (mw amqpEventPublisher) CreateCA(input services.CreateCAInput) (output *mod
 func (mw amqpEventPublisher) ImportCA(input services.ImportCAInput) (output *models.CACertificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.publishEvent("ca.import", caSource, output)
+			mw.eventPublisher.PublishCloudEvent("ca.import", caSource, output)
 		}
 	}()
 	return mw.next.ImportCA(input)
@@ -51,10 +52,18 @@ func (mw amqpEventPublisher) GetCAs(input services.GetCAsInput) (string, error) 
 	return mw.next.GetCAs(input)
 }
 
+func (mw amqpEventPublisher) GetCAsByCommonName(input services.GetCAsByCommonNameInput) (string, error) {
+	return mw.next.GetCAsByCommonName(input)
+}
+
+func (mw amqpEventPublisher) GetCABySerialNumber(input services.GetCABySerialNumberInput) (*models.CACertificate, error) {
+	return mw.next.GetCABySerialNumber(input)
+}
+
 func (mw amqpEventPublisher) UpdateCAStatus(input services.UpdateCAStatusInput) (output *models.CACertificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.publishEvent("ca.update.status", caSource, output)
+			mw.eventPublisher.PublishCloudEvent("ca.update.status", caSource, output)
 		}
 	}()
 	return mw.next.UpdateCAStatus(input)
@@ -62,7 +71,7 @@ func (mw amqpEventPublisher) UpdateCAStatus(input services.UpdateCAStatusInput) 
 func (mw amqpEventPublisher) UpdateCAMetadata(input services.UpdateCAMetadataInput) (output *models.CACertificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.publishEvent("ca.update.metadata", caSource, output)
+			mw.eventPublisher.PublishCloudEvent("ca.update.metadata", caSource, output)
 		}
 	}()
 	return mw.next.UpdateCAMetadata(input)
@@ -71,7 +80,7 @@ func (mw amqpEventPublisher) UpdateCAMetadata(input services.UpdateCAMetadataInp
 func (mw amqpEventPublisher) DeleteCA(input services.DeleteCAInput) (err error) {
 	defer func() {
 		if err == nil {
-			mw.publishEvent("ca.delete", caSource, input)
+			mw.eventPublisher.PublishCloudEvent("ca.delete", caSource, input)
 		}
 	}()
 	return mw.next.DeleteCA(input)
@@ -80,7 +89,7 @@ func (mw amqpEventPublisher) DeleteCA(input services.DeleteCAInput) (err error) 
 func (mw amqpEventPublisher) SignCertificate(input services.SignCertificateInput) (output *models.Certificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.publishEvent("ca.certificate.sign", caSource, output)
+			mw.eventPublisher.PublishCloudEvent("ca.certificate.sign", caSource, output)
 		}
 	}()
 	return mw.next.SignCertificate(input)
@@ -89,7 +98,7 @@ func (mw amqpEventPublisher) SignCertificate(input services.SignCertificateInput
 func (mw amqpEventPublisher) SignatureSign(input services.SignatureSignInput) (output []byte, err error) {
 	defer func() {
 		if err == nil {
-			mw.publishEvent("ca.signature.sign", caSource, output)
+			mw.eventPublisher.PublishCloudEvent("ca.signature.sign", caSource, output)
 		}
 	}()
 	return mw.next.SignatureSign(input)
@@ -98,7 +107,7 @@ func (mw amqpEventPublisher) SignatureSign(input services.SignatureSignInput) (o
 func (mw amqpEventPublisher) SignatureVerify(input services.SignatureVerifyInput) (output bool, err error) {
 	defer func() {
 		if err == nil {
-			mw.publishEvent("ca.signature.verify", caSource, output)
+			mw.eventPublisher.PublishCloudEvent("ca.signature.verify", caSource, output)
 		}
 	}()
 	return mw.next.SignatureVerify(input)
@@ -123,7 +132,7 @@ func (mw amqpEventPublisher) GetCertificatesByExpirationDate(input services.GetC
 func (mw amqpEventPublisher) UpdateCertificateStatus(input services.UpdateCertificateStatusInput) (output *models.Certificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.publishEvent("certificate.update.status", caSource, output)
+			mw.eventPublisher.PublishCloudEvent("certificate.update.status", caSource, output)
 		}
 	}()
 	return mw.next.UpdateCertificateStatus(input)
@@ -132,7 +141,7 @@ func (mw amqpEventPublisher) UpdateCertificateStatus(input services.UpdateCertif
 func (mw amqpEventPublisher) UpdateCertificateMetadata(input services.UpdateCertificateMetadataInput) (output *models.Certificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.publishEvent("certificate.update.metadata", caSource, output)
+			mw.eventPublisher.PublishCloudEvent("certificate.update.metadata", caSource, output)
 		}
 	}()
 	return mw.next.UpdateCertificateMetadata(input)

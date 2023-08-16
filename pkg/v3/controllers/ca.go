@@ -199,6 +199,75 @@ func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 	ctx.JSON(200, ca)
 }
 
+func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
+	queryParams := FilterQuery(ctx.Request)
+
+	type uriParams struct {
+		CommonName string `uri:"cn" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err})
+		return
+	}
+
+	cas := []*models.CACertificate{}
+	nextBookmark, err := r.svc.GetCAsByCommonName(services.GetCAsByCommonNameInput{
+		CommonName:      params.CommonName,
+		QueryParameters: queryParams,
+		ExhaustiveRun:   false,
+		ApplyFunc: func(ca *models.CACertificate) {
+			cas = append(cas, ca)
+		},
+	})
+
+	if err != nil {
+		switch err {
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
+
+		return
+	}
+
+	ctx.JSON(200, resources.GetCAsResponse{
+		IterableList: resources.IterableList[models.CACertificate]{
+			NextBookmark: nextBookmark,
+			List:         cas,
+		},
+	})
+}
+
+func (r *caHttpRoutes) GetCABySerialNumber(ctx *gin.Context) {
+	type uriParams struct {
+		SerialNumber string `uri:"sn" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err})
+		return
+	}
+
+	ca, err := r.svc.GetCABySerialNumber(services.GetCABySerialNumberInput{
+		SerialNumber: params.SerialNumber,
+	})
+
+	if err != nil {
+		switch err {
+		case errs.ErrCANotFound:
+			ctx.JSON(404, gin.H{"err": err})
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
+
+		return
+	}
+
+	ctx.JSON(200, ca)
+}
+
 // @Summary Get All CAs
 // @Description Get All CAs
 // @Accept json
@@ -229,7 +298,7 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, resources.GetCAsResponse{
-		IterbaleList: resources.IterbaleList[models.CACertificate]{
+		IterableList: resources.IterableList[models.CACertificate]{
 			NextBookmark: nextBookmark,
 			List:         cas,
 		},
@@ -434,7 +503,46 @@ func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, resources.GetCertsResponse{
-		IterbaleList: resources.IterbaleList[models.Certificate]{
+		IterableList: resources.IterableList[models.Certificate]{
+			NextBookmark: nextBookmark,
+			List:         certs,
+		},
+	})
+}
+
+func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
+	var expirationQueryParams resources.GetCertificatesByExpirationDateQueryParams
+	if err := ctx.BindQuery(&expirationQueryParams); err != nil {
+		ctx.JSON(400, gin.H{"err": err})
+		return
+	}
+
+	queryParams := FilterQuery(ctx.Request)
+
+	certs := []*models.Certificate{}
+	nextBookmark, err := r.svc.GetCertificatesByExpirationDate(services.GetCertificatesByExpirationDateInput{
+		ExpiresAfter:  expirationQueryParams.ExpiresAfter,
+		ExpiresBefore: expirationQueryParams.ExpiresBefore,
+		ListInput: services.ListInput[models.Certificate]{
+			QueryParameters: queryParams,
+			ExhaustiveRun:   false,
+			ApplyFunc: func(cert *models.Certificate) {
+				certs = append(certs, cert)
+			},
+		},
+	})
+
+	if err != nil {
+		switch err {
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
+
+		return
+	}
+
+	ctx.JSON(200, resources.GetCertsResponse{
+		IterableList: resources.IterableList[models.Certificate]{
 			NextBookmark: nextBookmark,
 			List:         certs,
 		},
@@ -489,7 +597,7 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, resources.GetCertsResponse{
-		IterbaleList: resources.IterbaleList[models.Certificate]{
+		IterableList: resources.IterableList[models.Certificate]{
 			NextBookmark: nextBookmark,
 			List:         certs,
 		},

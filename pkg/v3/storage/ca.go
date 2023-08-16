@@ -15,7 +15,7 @@ type CertificatesRepo interface {
 
 	Count(ctx context.Context) (int, error)
 	SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
-	SelectExists(ctx context.Context, serialNumber string) (bool, *models.Certificate, error)
+	SelectExistsBySerialNumber(ctx context.Context, serialNumber string) (bool, *models.Certificate, error)
 	Update(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error)
 	Insert(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error)
 }
@@ -28,8 +28,11 @@ type CACertificatesRepo interface {
 	// SelectExistsByID(ctx context.Context, id string) (bool, *models.CACertificate, error)
 	// //Currently, the Floating ID refers to multiple fields: ID, SerialNumber, Fingerprint
 	// SelectExistsByFloatingID(ctx context.Context, floatingID string) (bool, *models.CACertificate, error)
-	SelectExists(ctx context.Context, serialNumber string) (bool, *models.CACertificate, error)
+	SelectExistsByID(ctx context.Context, id string) (bool, *models.CACertificate, error)
+	SelectExistsBySerialNumber(ctx context.Context, serialNumber string) (bool, *models.CACertificate, error)
+	SelectByCommonName(ctx context.Context, commonName string, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
 
 	Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error)
 	Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error)
+	Delete(ctx context.Context, caID string) error
 }

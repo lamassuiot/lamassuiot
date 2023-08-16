@@ -5,14 +5,14 @@ type Iterator[E any] interface {
 	GetNextBookmark() string
 }
 
-type IterbaleList[E any] struct {
+type IterableList[E any] struct {
 	NextBookmark string `json:"next"`
 	List         []*E   `json:"list"`
 }
 
-func (itr *IterbaleList[E]) GetList() []*E {
+func (itr *IterableList[E]) GetList() []*E {
 	return itr.List
 }
-func (itr *IterbaleList[E]) GetNextBookmark() string {
+func (itr *IterableList[E]) GetNextBookmark() string {
 	return itr.NextBookmark
 }

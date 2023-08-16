@@ -43,8 +43,19 @@ func (db *PostgresCAStore) SelectAll(ctx context.Context, exhaustiveRun bool, ap
 	return db.querier.SelectAll(queryParams, []gormWhereParams{}, exhaustiveRun, applyFunc)
 }
 
-func (db *PostgresCAStore) SelectExists(ctx context.Context, id string) (bool, *models.CACertificate, error) {
-	return db.querier.SelectExists(id)
+func (db *PostgresCAStore) SelectByCommonName(ctx context.Context, commonName string, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+	return db.querier.SelectAll(queryParams, []gormWhereParams{
+		{query: "subject.common_name = ? ", extraArgs: []any{commonName}},
+	}, exhaustiveRun, applyFunc)
+}
+
+func (db *PostgresCAStore) SelectExistsBySerialNumber(ctx context.Context, serialNumber string) (bool, *models.CACertificate, error) {
+	queryCol := "serial_number"
+	return db.querier.SelectExists(serialNumber, &queryCol)
+}
+
+func (db *PostgresCAStore) SelectExistsByID(ctx context.Context, id string) (bool, *models.CACertificate, error) {
+	return db.querier.SelectExists(id, nil)
 }
 
 func (db *PostgresCAStore) Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
@@ -53,4 +64,8 @@ func (db *PostgresCAStore) Insert(ctx context.Context, caCertificate *models.CAC
 
 func (db *PostgresCAStore) Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
 	return db.querier.Update(*caCertificate, caCertificate.IssuerCAMetadata.CAID)
+}
+
+func (db *PostgresCAStore) Delete(ctx context.Context, id string) error {
+	return db.querier.Delete(id)
 }

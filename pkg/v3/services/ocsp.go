@@ -53,7 +53,7 @@ func (svc ocspResponder) Verify(req *ocsp.Request) (*ocsp.Response, error) {
 		if crt.Status == models.StatusRevoked {
 			status = ocsp.Revoked
 			revokedAt = crt.RevocationTimestamp
-		} else if crt.Status == models.StatusActive || crt.Status == models.StatusNearingExpiration {
+		} else if crt.Status == models.StatusActive {
 			status = ocsp.Good
 		}
 	}

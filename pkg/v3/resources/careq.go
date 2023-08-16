@@ -1,6 +1,8 @@
 package resources
 
 import (
+	"time"
+
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 )
 
@@ -49,4 +51,9 @@ type UpdateCertificateStatusBody struct {
 
 type UpdateCertificateMetadataBody struct {
 	Metadata map[string]interface{} `json:"metadata"`
+}
+
+type GetCertificatesByExpirationDateQueryParams struct {
+	ExpiresAfter  time.Time `form:"expires_after"`
+	ExpiresBefore time.Time `form:"expires_before"`
 }

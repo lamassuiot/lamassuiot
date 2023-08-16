@@ -38,7 +38,7 @@ func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, resources.GetDevicesResponse{
-		IterbaleList: resources.IterbaleList[models.Device]{
+		IterableList: resources.IterableList[models.Device]{
 			NextBookmark: nextBookmark,
 			List:         devices,
 		},

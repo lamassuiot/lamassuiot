@@ -58,7 +58,7 @@ func (db *CouchDBCertificateStorage) SelectAll(ctx context.Context, exhaustiveRu
 	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
-func (db *CouchDBCertificateStorage) SelectExists(ctx context.Context, id string) (bool, *models.Certificate, error) {
+func (db *CouchDBCertificateStorage) SelectExistsBySerialNumber(ctx context.Context, id string) (bool, *models.Certificate, error) {
 	return db.querier.SelectExists(id)
 }
 

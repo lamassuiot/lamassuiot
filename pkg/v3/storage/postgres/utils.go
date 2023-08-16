@@ -96,9 +96,16 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 	return "nil", nil
 }
 
-func (db *postgresDBQuerier[E]) SelectExists(elemID string) (bool, *E, error) {
+// Selects first element from DB. if queryCol is empty or nil, the primary key column
+// defined in the creation process, is used.
+func (db *postgresDBQuerier[E]) SelectExists(queryID string, queryCol *string) (bool, *E, error) {
+	searchCol := db.primaryKeyColumn
+	if queryCol != nil && *queryCol != "" {
+		searchCol = *queryCol
+	}
+
 	var elem E
-	tx := db.First(&elem, fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID)
+	tx := db.First(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
 	if err := tx.Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return false, nil, nil
@@ -116,7 +123,7 @@ func (db *postgresDBQuerier[E]) Insert(elem E, elemID string) (*E, error) {
 		return nil, err
 	}
 
-	_, newElem, err := db.SelectExists(elemID)
+	_, newElem, err := db.SelectExists(elemID, nil)
 	return newElem, err
 }
 
@@ -126,8 +133,26 @@ func (db *postgresDBQuerier[E]) Update(elem E, elemID string) (*E, error) {
 		return nil, err
 	}
 
-	_, newElem, err := db.SelectExists(elemID)
+	_, newElem, err := db.SelectExists(elemID, nil)
 	return newElem, err
+}
+
+func (db *postgresDBQuerier[E]) Delete(elemID string) error {
+	exists, elem, err := db.SelectExists(elemID, nil)
+	if err != nil {
+		return err
+	}
+
+	if !exists {
+		return gorm.ErrRecordNotFound
+	}
+
+	tx := db.DB.Delete(&elem)
+	if err := tx.Error; err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // JSONSerializer json serializer

@@ -59,6 +59,26 @@ func (cli *httpCAClient) GetCAByID(input services.GetCAByIDInput) (*models.CACer
 	return &response, nil
 }
 
+func (cli *httpCAClient) GetCAsByCommonName(input services.GetCAsByCommonNameInput) (string, error) {
+	url := cli.baseUrl + "/v1/cas/cn/" + input.CommonName
+
+	if input.ExhaustiveRun {
+		err := IterGet[models.CACertificate, *resources.GetCAsResponse](context.Background(), cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
+		return "", err
+	} else {
+		resp, err := Get[resources.GetCAsResponse](context.Background(), cli.httpClient, url, input.QueryParameters, map[int][]error{})
+		return resp.NextBookmark, err
+	}
+
+}
+
+func (cli *httpCAClient) GetCABySerialNumber(input services.GetCABySerialNumberInput) (*models.CACertificate, error) {
+	url := cli.baseUrl + "/v1/cas/sn/" + input.SerialNumber
+
+	resp, err := Get[models.CACertificate](context.Background(), cli.httpClient, url, nil, map[int][]error{})
+	return &resp, err
+}
+
 func (cli *httpCAClient) CreateCA(input services.CreateCAInput) (*models.CACertificate, error) {
 	response, err := Post[*models.CACertificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/cas", resources.CreateCABody{
 		Subject:            input.Subject,
@@ -192,7 +212,15 @@ func (cli *httpCAClient) GetCertificatesByCA(input services.GetCertificatesByCAI
 }
 
 func (cli *httpCAClient) GetCertificatesByExpirationDate(input services.GetCertificatesByExpirationDateInput) (string, error) {
-	return "", fmt.Errorf("TODO")
+	url := fmt.Sprintf("%s/v1/certificates/expiration?expires_after=%s&expires_before=%s", cli.baseUrl, input.ExpiresAfter.UTC().Format("2006-01-02T15:04:05Z07:00"), input.ExpiresBefore.UTC().Format("2006-01-02T15:04:05Z07:00"))
+
+	if input.ExhaustiveRun {
+		err := IterGet[models.Certificate, *resources.GetCertsResponse](context.Background(), cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
+		return "", err
+	} else {
+		resp, err := Get[resources.GetCAsResponse](context.Background(), cli.httpClient, url, input.QueryParameters, map[int][]error{})
+		return resp.NextBookmark, err
+	}
 }
 
 func (cli *httpCAClient) UpdateCertificateStatus(input services.UpdateCertificateStatusInput) (*models.Certificate, error) {

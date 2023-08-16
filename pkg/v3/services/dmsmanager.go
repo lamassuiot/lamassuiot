@@ -14,6 +14,7 @@ import (
 )
 
 var lDMS *logrus.Entry
+var localRegAuthCA = "lms.lra"
 
 type DMSManagerService interface {
 	ESTService
@@ -41,11 +42,54 @@ type DMSManagerBuilder struct {
 func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
 	lDMS = builder.Logger
 
-	return &DmsManagerServiceImpl{
+	svc := &DmsManagerServiceImpl{
 		dmsStorage:       builder.DMSStorage,
 		caClient:         builder.CAClient,
 		deviceManagerCli: builder.DevManagerCli,
 	}
+
+	caExists := false
+	_, err := svc.caClient.GetCAsByCommonName(GetCAsByCommonNameInput{
+		CommonName:    localRegAuthCA,
+		ExhaustiveRun: false,
+		ApplyFunc: func(cert *models.CACertificate) {
+			caExists = true
+		},
+	})
+	if err != nil {
+		lDMS.Panicf("could not initialize service: could not check if internal CA '%s' exists: %s", localRegAuthCA, err)
+	}
+
+	if !caExists {
+		caDur, _ := models.ParseDuration("50y")
+		issuanceDur, _ := models.ParseDuration("3y")
+		_, err := svc.caClient.CreateCA(CreateCAInput{
+			CAType: models.CATypeManaged,
+			KeyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.ECDSA),
+				Bits: 256,
+			},
+			Subject: models.Subject{
+				CommonName:       string(localRegAuthCA),
+				Organization:     "LAMASSU",
+				OrganizationUnit: "INTERNAL CA",
+			},
+			CAExpiration: models.Expiration{
+				Type:     models.Duration,
+				Duration: (*models.TimeDuration)(&caDur),
+			},
+			IssuanceExpiration: models.Expiration{
+				Type:     models.Duration,
+				Duration: (*models.TimeDuration)(&issuanceDur),
+			},
+		})
+
+		if err != nil {
+			lDMS.Panicf("could not initialize service: could not create internal CA '%s': %s", localRegAuthCA, err)
+		}
+	}
+
+	return svc
 }
 
 func (svc *DmsManagerServiceImpl) SetService(service DMSManagerService) {

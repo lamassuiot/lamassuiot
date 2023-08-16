@@ -243,6 +243,26 @@ func (db *couchDBQuerier[E]) Update(elem E, elemID string) (*E, error) {
 	return newUpdatedElem, err
 }
 
+func (db *couchDBQuerier[E]) Delete(elemID string) error {
+	rs := db.Get(context.Background(), elemID)
+	if rs.Err() != nil {
+		return rs.Err()
+	}
+
+	rs.Next()
+	var prevElem map[string]interface{}
+	if err := rs.ScanDoc(&prevElem); err != nil {
+		return err
+	}
+
+	_, err := db.DB.Delete(context.Background(), elemID, prevElem["_rev"].(string))
+	if err != nil {
+		return err
+	}
+
+	return err
+}
+
 func getElements[E any](db *kivik.DB, bookmark string, opts map[string]interface{}) (string, []E, error) {
 	ctx := context.Background()
 

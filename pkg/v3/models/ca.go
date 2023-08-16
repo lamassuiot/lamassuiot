@@ -12,12 +12,6 @@ const (
 	CATypeExternal CAType = "EXTERNAL"
 )
 
-type InternalCA string
-
-const (
-	CALocalRA InternalCA = "lms.lra"
-)
-
 type ExpirationTimeRef string
 
 var (
@@ -28,11 +22,9 @@ var (
 type CertificateStatus string
 
 const (
-	StatusActive             CertificateStatus = "ACTIVE"
-	StatusExpired            CertificateStatus = "EXPIRED"
-	StatusRevoked            CertificateStatus = "REVOKED"
-	StatusNearingExpiration  CertificateStatus = "NEARING_EXPIRATION"
-	StatusCriticalExpiration CertificateStatus = "CRITICAL_EXPIRATION"
+	StatusActive  CertificateStatus = "ACTIVE"
+	StatusExpired CertificateStatus = "EXPIRED"
+	StatusRevoked CertificateStatus = "REVOKED"
 )
 
 type Certificate struct {
@@ -57,7 +49,7 @@ type Expiration struct {
 
 type IssuerCAMetadata struct {
 	SerialNumber string `json:"serial_number"`
-	CAID         string `json:"ca_name"`
+	CAID         string `json:"ca_id"`
 }
 
 type CACertificate struct {

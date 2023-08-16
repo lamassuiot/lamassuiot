@@ -45,8 +45,8 @@ func (db *PostgresCertificateStorage) SelectAll(ctx context.Context, exhaustiveR
 	return db.querier.SelectAll(queryParams, []gormWhereParams{}, exhaustiveRun, applyFunc)
 }
 
-func (db *PostgresCertificateStorage) SelectExists(ctx context.Context, id string) (bool, *models.Certificate, error) {
-	return db.querier.SelectExists(id)
+func (db *PostgresCertificateStorage) SelectExistsBySerialNumber(ctx context.Context, id string) (bool, *models.Certificate, error) {
+	return db.querier.SelectExists(id, nil)
 }
 
 func (db *PostgresCertificateStorage) Insert(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error) {

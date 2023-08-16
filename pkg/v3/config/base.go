@@ -27,7 +27,7 @@ type BaseConfig struct {
 	Server HttpServer `mapstructure:"server"`
 
 	// AMQP config options.
-	AMQPEventPublisher AMQPConnection `mapstructure:"amqp_event_publisher"`
+	AMQPConnection AMQPConnection `mapstructure:"amqp_event_publisher"`
 }
 
 type HttpServer struct {
@@ -94,18 +94,19 @@ type HTTPConnection struct {
 
 type AMQPConnection struct {
 	BasicConnection `mapstructure:",squash"`
-	Enabled         bool         `mapstructure:"enabled"`
-	Protocol        AMQPProtocol `mapstructure:"protocol"`
-	BasicAuth       struct {
-		Enabled  bool   `mapstructure:"enabled"`
-		Username string `mapstructure:"username"`
-		Password string `mapstructure:"password"`
-	} `mapstructure:"basic_auth"`
-	ClientTLSAuth struct {
+	Enabled         bool                    `mapstructure:"enabled"`
+	Protocol        AMQPProtocol            `mapstructure:"protocol"`
+	BasicAuth       AMQPConnectionBasicAuth `mapstructure:"basic_auth"`
+	ClientTLSAuth   struct {
 		Enabled  bool   `mapstructure:"enabled"`
 		CertFile string `mapstructure:"cert_file"`
 		KeyFile  string `mapstructure:"key_file"`
 	} `mapstructure:"client_tls_auth"`
+}
+type AMQPConnectionBasicAuth struct {
+	Enabled  bool   `mapstructure:"enabled"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
 }
 
 type HTTPClient struct {
