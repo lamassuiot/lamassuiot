@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -18,7 +19,7 @@ import (
 )
 
 type IotAWSService interface {
-	GetAccountInfo() *models.IotAWSAccountInfo
+	IoTService[models.IotAWSAccountInfo, models.IotAWSAccountInfo]
 
 	GetRegisteredCAs(input GetRegisteredCAsInput) ([]*models.CACertificate, error)
 	RegisterCA(input RegisterCAInput) error
@@ -94,19 +95,23 @@ func NewIotAWS(builder IotAWSServiceBuilder) (IotAWSService, error) {
 	}, nil
 }
 
-func (svc *iotAWSServiceImpl) GetAccountInfo() *models.IotAWSAccountInfo {
+func (svc *iotAWSServiceImpl) GetCloudProviderConfig() (*models.IotAWSAccountInfo, error) {
 	descEndOut, err := svc.iotSDK.DescribeEndpoint(context.Background(), &iot.DescribeEndpointInput{
 		EndpointType: aws.String("iot:Data-ATS"),
 	})
 	if err != nil {
 		svc.logger.Errorf("could not describe iot:Data-ATS endpoint: %s", err)
-		return nil
+		return nil, fmt.Errorf("could not describe iot:Data-ATS endpoint")
 	}
 
 	return &models.IotAWSAccountInfo{
 		AccountID:       svc.accountID,
 		IotMQTTEndpoint: *descEndOut.EndpointAddress,
-	}
+	}, nil
+}
+
+func (svc *iotAWSServiceImpl) GetDeviceConfiguration(input *GetDeviceConfigurationInput) (*models.IotAWSAccountInfo, error) {
+	return nil, fmt.Errorf("TODO")
 }
 
 type RegisterCAInput struct {
@@ -209,7 +214,7 @@ func (svc *iotAWSServiceImpl) GetRegisteredCAs(input GetRegisteredCAsInput) ([]*
 
 		lmsCA, err := svc.caSDK.GetCABySerialNumber(GetCABySerialNumberInput{SerialNumber: helpers.SerialNumberToString(descCrt.SerialNumber)})
 		if err != nil {
-			svc.logger.Errorf("skipping CA with ID '%s' which has SN '%s'. Could not get CA from CA service '%s': %s", *caMeta.CertificateId, helpers.SerialNumberToString(descCrt.SerialNumber), err)
+			svc.logger.Errorf("skipping CA with ID '%s' which has SN '%s'. Could not get CA from CA service: %s", *caMeta.CertificateId, helpers.SerialNumberToString(descCrt.SerialNumber), err)
 			continue
 		}
 

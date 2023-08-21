@@ -5,6 +5,7 @@ import (
 
 	_ "github.com/go-kivik/couchdb/v4" // The CouchDB driver
 	kivik "github.com/go-kivik/kivik/v4"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage"
@@ -42,6 +43,18 @@ func (db *CouchDBDeviceStorage) SelectAll(ctx context.Context, exhaustiveRun boo
 
 func (db *CouchDBDeviceStorage) SelectExists(ctx context.Context, ID string) (bool, *models.Device, error) {
 	return db.querier.SelectExists(ID)
+}
+
+func (db *CouchDBDeviceStorage) SelectByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(*models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+	opts := map[string]interface{}{
+		"selector": map[string]interface{}{
+			"dms_owner": map[string]string{
+				"$eq": dmsID,
+			},
+		},
+	}
+
+	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
 func (db *CouchDBDeviceStorage) Update(ctx context.Context, device *models.Device) (*models.Device, error) {

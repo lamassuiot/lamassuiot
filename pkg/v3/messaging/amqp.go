@@ -26,16 +26,29 @@ type AmqpPublishMessage struct {
 	Msg        amqp.Publishing
 }
 
-func SetupAMQPConnection(logger *logrus.Entry, config config.AMQPConnection) (*amqp.Connection, *amqp.Channel, error) {
+type subscribesInfo struct {
+	serviceName string
+	routingKeys []string
+}
+
+type AMQPSetup struct {
+	Channel        *amqp.Channel
+	publisherChan  chan *AmqpPublishMessage
+	Msgs           <-chan amqp.Delivery
+	subscribesInfo []subscribesInfo
+}
+
+func SetupAMQPConnection(logger *logrus.Entry, config config.AMQPConnection) (*AMQPSetup, error) {
 	log = logger
 	amqpCloseChan := make(chan *amqp.Error) //error channel
 
 	var connection *amqp.Connection
-	var channel *amqp.Channel
 
-	connection, channel, err := buildAMQPConnection(config)
+	amqpEventPub := &AMQPSetup{}
+
+	connection, err := amqpEventPub.buildAMQPConnection(config)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	connection.NotifyClose(amqpCloseChan)
@@ -45,27 +58,33 @@ func SetupAMQPConnection(logger *logrus.Entry, config config.AMQPConnection) (*a
 			select { //check connection
 			case err = <-amqpCloseChan:
 				//work with error
-				log.Errorf("disconnected from AMQP: %s", err)
-				for {
-					connection, channel, err = buildAMQPConnection(config)
-					connection.NotifyClose(amqpCloseChan)
+				if err != nil {
+					log.Errorf("disconnected from AMQP: %s", err)
+					for {
+						connection, err = amqpEventPub.buildAMQPConnection(config)
 
-					if err != nil {
-						log.Errorf("failed to reconnect. Sleeping for 5 secodns: %s", err)
-						time.Sleep(5 * time.Second)
-					} else {
-						break
+						if err != nil {
+							log.Errorf("failed to reconnect. Sleeping for 5 seconds: %s", err)
+							time.Sleep(5 * time.Second)
+						} else {
+							for _, subs := range amqpEventPub.subscribesInfo {
+								amqpEventPub.SetupAMQPEventSubscriber(subs.serviceName, subs.routingKeys)
+							}
+							amqpCloseChan = make(chan *amqp.Error)
+							connection.NotifyClose(amqpCloseChan)
+							break
+						}
 					}
+					log.Info("AMQP reconnection success")
 				}
-				log.Info("AMQP reconnection success")
 			}
 		}
 	}()
 
-	return connection, channel, nil
+	return amqpEventPub, nil
 }
 
-func buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Connection, *amqp.Channel, error) {
+func (aPub *AMQPSetup) buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Connection, error) {
 	userPassUrlPrefix := ""
 	if cfg.BasicAuth.Enabled {
 		log.Debugf("basic auth enabled")
@@ -73,7 +92,7 @@ func buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Connection, *amqp.Cha
 	}
 
 	amqpTlsConfig := tls.Config{}
-	certPool := helpers.LoadSytemCACertPoolWithExtraCAsFromFiles([]string{cfg.CACertificateFile})
+	certPool := helpers.LoadSystemCACertPoolWithExtraCAsFromFiles([]string{cfg.CACertificateFile})
 	amqpTlsConfig.RootCAs = certPool
 
 	if cfg.InsecureSkipVerify {
@@ -85,25 +104,25 @@ func buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Connection, *amqp.Cha
 		log.Debugf("tls loading mTLS client auth")
 		clientTLSCerts, err := tls.LoadX509KeyPair(cfg.ClientTLSAuth.CertFile, cfg.ClientTLSAuth.KeyFile)
 		if err != nil {
-			log.Error("could not load AMQP client TLS certificate or key: ", err)
-			return nil, nil, err
+			log.Errorf("could not load AMQP client TLS certificate or key: %s", err)
+			return nil, err
 		}
 
 		amqpTlsConfig.Certificates = append(amqpTlsConfig.Certificates, clientTLSCerts)
 	}
 
 	amqpURL := fmt.Sprintf("%s://%s%s:%d", cfg.Protocol, userPassUrlPrefix, cfg.Hostname, cfg.Port)
-	log.Debug(amqpURL)
+	log.Debugf("AMQP Broker URL: %s", amqpURL)
 	amqpConn, err := amqp.DialTLS(amqpURL, &amqpTlsConfig)
 	if err != nil {
-		log.Error("failed to connect to AMQP broker: ", err)
-		return nil, nil, err
+		log.Errorf("failed to connect to AMQP broker: %s", err)
+		return nil, err
 	}
 
 	amqpChannel, err := amqpConn.Channel()
 	if err != nil {
 		log.Errorf("could not create AMQP channel: %s", err)
-		return nil, nil, err
+		return nil, err
 	}
 	log.Debugf("channel created")
 
@@ -118,27 +137,23 @@ func buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Connection, *amqp.Cha
 	)
 	if err != nil {
 		log.Errorf("could not create AMQP exchange: %s", err)
-		return nil, nil, err
+		return nil, err
 	}
-
+	aPub.Channel = amqpChannel
+	aPub.setupAMQPEventPublisher()
 	log.Debugf("exchange created")
-	return amqpConn, amqpChannel, nil
+	return amqpConn, nil
 
 }
 
-type AMQPEventPublisher struct {
-	channel       *amqp.Channel
-	publisherChan chan *AmqpPublishMessage
-}
-
-func SetupAMQPEventPublisher(channel *amqp.Channel) *AMQPEventPublisher {
+func (aPub *AMQPSetup) setupAMQPEventPublisher() {
 	publisherChan := make(chan *AmqpPublishMessage, 100)
 	go func() {
 		for {
 			select {
 			case amqpMessage := <-publisherChan:
 				//TODO: When an error is obtained whiel publishing, retry/enque message
-				amqpErr := channel.Publish(
+				amqpErr := aPub.Channel.Publish(
 					Exchange,
 					amqpMessage.RoutingKey,
 					amqpMessage.Mandatory,
@@ -151,14 +166,10 @@ func SetupAMQPEventPublisher(channel *amqp.Channel) *AMQPEventPublisher {
 			}
 		}
 	}()
-
-	return &AMQPEventPublisher{
-		channel:       channel,
-		publisherChan: publisherChan,
-	}
+	aPub.publisherChan = publisherChan
 }
 
-func (aPub AMQPEventPublisher) PublishCloudEvent(eventType string, eventSource string, payload interface{}) {
+func (aPub *AMQPSetup) PublishCloudEvent(eventType string, eventSource string, payload interface{}) {
 	event := buildCloudEvent(eventType, eventSource, payload)
 	eventBytes, marshalErr := json.Marshal(event)
 	if marshalErr != nil {
@@ -191,21 +202,24 @@ func buildCloudEvent(eventType string, eventSource string, payload interface{}) 
 	return event
 }
 
-func SetupAMQPEventSubscriber(channel *amqp.Channel, serviceName string, routingKeys []string) (<-chan amqp.Delivery, error) {
-	q, err := channel.QueueDeclare(
+func (aPub *AMQPSetup) SetupAMQPEventSubscriber(serviceName string, routingKeys []string) error {
+	if !serviceNameExist(aPub.subscribesInfo, serviceName) {
+		aPub.subscribesInfo = append(aPub.subscribesInfo, subscribesInfo{serviceName: serviceName, routingKeys: routingKeys})
+	}
+	q, err := aPub.Channel.QueueDeclare(
 		serviceName, // name
 		false,       // durable
 		false,       // delete when unused
-		true,        // exclusive
+		false,       // exclusive
 		false,       // no-wait
 		nil,         // arguments
 	)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	for _, rKey := range routingKeys {
-		err = channel.QueueBind(
+		err = aPub.Channel.QueueBind(
 			q.Name,   // queue name
 			rKey,     // routing key
 			Exchange, // exchange
@@ -213,11 +227,11 @@ func SetupAMQPEventSubscriber(channel *amqp.Channel, serviceName string, routing
 			nil,
 		)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	msgs, err := channel.Consume(
+	msgs, err := aPub.Channel.Consume(
 		q.Name, // queue
 		"",     // consumer
 		true,   // auto ack
@@ -227,10 +241,10 @@ func SetupAMQPEventSubscriber(channel *amqp.Channel, serviceName string, routing
 		nil,    // args
 	)
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	return msgs, nil
+	aPub.Msgs = msgs
+	return nil
 }
 
 func ParseCloudEvent(msg []byte) (*event.Event, error) {
@@ -241,4 +255,13 @@ func ParseCloudEvent(msg []byte) (*event.Event, error) {
 	}
 
 	return &event, nil
+}
+
+func serviceNameExist(subscribeInfo []subscribesInfo, serviceName string) bool {
+	for _, info := range subscribeInfo {
+		if info.serviceName == serviceName {
+			return true
+		}
+	}
+	return false
 }

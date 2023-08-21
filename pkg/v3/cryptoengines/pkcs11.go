@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/ThalesIgnite/crypto11"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
@@ -30,6 +31,11 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.PKCS11EngineConfig) (Cryp
 		Path:       conf.ModulePath,
 		Pin:        conf.TokenPin,
 		TokenLabel: conf.TokenLabel,
+	}
+
+	for envKey, envVal := range conf.ModuleExtraOptions.Env {
+		lPkcs11.Debugf("setting env variable %s=%s", envKey, envVal)
+		os.Setenv(envKey, envVal)
 	}
 
 	lPkcs11.Debugf("configuring pkcs11 module")
@@ -73,11 +79,8 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.PKCS11EngineConfig) (Cryp
 	rsaMechanismInfo, err := pkcs11ProviderContext.GetMechanismInfo(pkcs11ProviderSlots[0], []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_RSA_PKCS, nil)})
 	if err == nil {
 		pkcs11SupporedKeys = append(pkcs11SupporedKeys, models.SupportedKeyTypeInfo{
-			Type: models.KeyType(x509.ECDSA),
-			Sizes: []int{
-				int(rsaMechanismInfo.MaxKeySize),
-				int(rsaMechanismInfo.MaxKeySize),
-			},
+			Type:  models.KeyType(x509.RSA),
+			Sizes: helpers.CalculateRSAKeySizes(int(rsaMechanismInfo.MinKeySize), int(rsaMechanismInfo.MaxKeySize)),
 		})
 		lPkcs11.Debugf("provider supports RSA keys with sizes %d - %d", rsaMechanismInfo.MinKeySize, rsaMechanismInfo.MaxKeySize)
 	} else {
@@ -87,11 +90,8 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.PKCS11EngineConfig) (Cryp
 	ecdsaMechanismInfo, err := pkcs11ProviderContext.GetMechanismInfo(pkcs11ProviderSlots[0], []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_ECDSA, nil)})
 	if err == nil {
 		pkcs11SupporedKeys = append(pkcs11SupporedKeys, models.SupportedKeyTypeInfo{
-			Type: models.KeyType(x509.ECDSA),
-			Sizes: []int{
-				int(ecdsaMechanismInfo.MinKeySize),
-				int(ecdsaMechanismInfo.MaxKeySize),
-			},
+			Type:  models.KeyType(x509.ECDSA),
+			Sizes: helpers.CalculateECDSAKeySizes(int(ecdsaMechanismInfo.MinKeySize), int(ecdsaMechanismInfo.MaxKeySize)),
 		})
 		lPkcs11.Debugf("provider supports ECDSA keys with sizes %d - %d", ecdsaMechanismInfo.MinKeySize, ecdsaMechanismInfo.MaxKeySize)
 	} else {
@@ -140,6 +140,7 @@ func (hsmContext *pkcs11EngineContext) GetPrivateKeys() []crypto.Signer {
 }
 
 func (hsmContext *pkcs11EngineContext) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
+	lPkcs11.Debugf("reading %s Key", keyID)
 	hsmKey, err := hsmContext.instance.FindKeyPair([]byte(keyID), nil)
 	if err != nil {
 		lPkcs11.Errorf("could not get private key %s from provider: %s", keyID, err)
@@ -150,6 +151,7 @@ func (hsmContext *pkcs11EngineContext) GetPrivateKeyByID(keyID string) (crypto.S
 }
 
 func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
+	lPkcs11.Debugf("creating RSA %d key for keyID: %s", keySize, keyID)
 	newSigner, err := hsmContext.instance.GenerateRSAKeyPair([]byte(keyID), keySize)
 	if err != nil {
 		lPkcs11.Errorf("could not create '%s' RSA Private Key: %s", keyID, err)
@@ -160,6 +162,7 @@ func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(keySize int, keyID st
 }
 
 func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(curve elliptic.Curve, keyID string) (crypto.Signer, error) {
+	lPkcs11.Debugf("creating ECDSA %d key for keyID: %s", curve.Params().BitSize, keyID)
 	newSigner, err := hsmContext.instance.GenerateECDSAKeyPair([]byte(keyID), curve)
 	if err != nil {
 		lPkcs11.Errorf("could not create '%s' ECDSA Private Key: %s", keyID, err)

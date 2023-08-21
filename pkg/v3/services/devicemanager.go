@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/errs"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage"
@@ -11,11 +12,13 @@ import (
 )
 
 var lDevice *logrus.Entry
+var deviceValidate *validator.Validate
 
 type DeviceManagerService interface {
 	CreateDevice(input CreateDeviceInput) (*models.Device, error)
 	GetDeviceByID(input GetDeviceByIDInput) (*models.Device, error)
 	GetDevices(input GetDevicesInput) (string, error)
+	GetDeviceByDMS(input GetDevicesByDMSInput) (string, error)
 	UpdateDeviceStatus(input UpdateDeviceStatusInput) (*models.Device, error)
 	UpdateIdentitySlot(input UpdateIdentitySlotInput) (*models.Device, error)
 }
@@ -33,8 +36,9 @@ type DeviceManagerBuilder struct {
 }
 
 func NewDeviceManagerService(builder DeviceManagerBuilder) DeviceManagerService {
-	lDevice = builder.Logger
 
+	lDevice = builder.Logger
+	deviceValidate = validator.New()
 	return &DeviceManagerServiceImpl{
 		caClient:       builder.CAClient,
 		devicesStorage: builder.DevicesStorage,
@@ -46,16 +50,22 @@ func (svc *DeviceManagerServiceImpl) SetService(service DeviceManagerService) {
 }
 
 type CreateDeviceInput struct {
-	ID        string
+	ID        string `validate:"required"`
 	Alias     string
 	Tags      []string
 	Metadata  map[string]string
-	DMSID     string
+	DMSID     string `validate:"required"`
 	Icon      string
 	IconColor string
 }
 
 func (svc DeviceManagerServiceImpl) CreateDevice(input CreateDeviceInput) (*models.Device, error) {
+	err := deviceValidate.Struct(input)
+	if err != nil {
+		lDevice.Errorf("struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+	lDevice.Debugf("creating %s device", input.ID)
 	now := time.Now()
 
 	device := &models.Device{
@@ -78,12 +88,17 @@ func (svc DeviceManagerServiceImpl) CreateDevice(input CreateDeviceInput) (*mode
 		},
 	}
 
-	return svc.devicesStorage.Insert(context.Background(), device)
+	dev, err := svc.devicesStorage.Insert(context.Background(), device)
+	if err != nil {
+		lDevice.Errorf("could not insert device %s in storage engine: %s", input.ID, err)
+		return nil, err
+	}
+	return dev, nil
 }
 
 type ProvisionDeviceSlotInput struct {
-	ID     string
-	SlotID string
+	ID     string `validate:"required"`
+	SlotID string `validate:"required"`
 }
 
 type GetDevicesInput struct {
@@ -91,18 +106,38 @@ type GetDevicesInput struct {
 }
 
 func (svc DeviceManagerServiceImpl) GetDevices(input GetDevicesInput) (string, error) {
+	lDevice.Debugf("getting all devices")
 	return svc.devicesStorage.SelectAll(context.Background(), input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
 }
 
+type GetDevicesByDMSInput struct {
+	DMSID string
+	ListInput[models.Device]
+}
+
+func (svc DeviceManagerServiceImpl) GetDeviceByDMS(input GetDevicesByDMSInput) (string, error) {
+	lDevice.Debugf("getting all devices owned by DMS with ID=%s", input.DMSID)
+	return svc.devicesStorage.SelectByDMS(context.Background(), input.DMSID, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
+}
+
 type GetDeviceByIDInput struct {
-	ID string
+	ID string `validate:"required"`
 }
 
 func (svc DeviceManagerServiceImpl) GetDeviceByID(input GetDeviceByIDInput) (*models.Device, error) {
+
+	err := deviceValidate.Struct(input)
+	if err != nil {
+		lDevice.Errorf("struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+	lDevice.Debugf("checking if device '%s' exists", input.ID)
 	exists, device, err := svc.devicesStorage.SelectExists(context.Background(), input.ID)
 	if err != nil {
+		lDevice.Errorf("something went wrong while checking if device '%s' exists in storage engine: %s", input.ID, err)
 		return nil, err
 	} else if !exists {
+		lDevice.Errorf("device %s can not be found in storage engine", input.ID)
 		return nil, errs.ErrDeviceNotFound
 	}
 
@@ -110,15 +145,23 @@ func (svc DeviceManagerServiceImpl) GetDeviceByID(input GetDeviceByIDInput) (*mo
 }
 
 type UpdateDeviceStatusInput struct {
-	ID        string
-	NewStatus models.DeviceStatus
+	ID        string              `validate:"required"`
+	NewStatus models.DeviceStatus `validate:"required"`
 }
 
 func (svc DeviceManagerServiceImpl) UpdateDeviceStatus(input UpdateDeviceStatusInput) (*models.Device, error) {
+	err := deviceValidate.Struct(input)
+	if err != nil {
+		lDevice.Errorf("struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+	lDevice.Debugf("checking if device '%s' exists", input.ID)
 	exists, device, err := svc.devicesStorage.SelectExists(context.Background(), input.ID)
 	if err != nil {
+		lDevice.Errorf("something went wrong while checking if device '%s' exists in storage engine: %s", input.ID, err)
 		return nil, err
 	} else if !exists {
+		lDevice.Errorf("device %s can not be found in storage engine", input.ID)
 		return nil, errs.ErrDeviceNotFound
 	}
 
@@ -136,33 +179,43 @@ func (svc DeviceManagerServiceImpl) UpdateDeviceStatus(input UpdateDeviceStatusI
 				Slot: *slot,
 			})
 			if err != nil {
-				lDevice.Errorf("error while updating %s device status. Could not update identity slot: %s", device.ID, err)
+				lDevice.Errorf("error while updating %s device status. could not update identity slot: %s", device.ID, err)
 				return nil, err
 			}
 		}
 	}
 
 	device.Status = input.NewStatus
-
+	lDevice.Debugf("updating %s device status to %s", input.ID, input.NewStatus)
 	device, err = svc.devicesStorage.Update(context.Background(), device)
 	if err != nil {
-		lDevice.Errorf("error while updating %s device status. Could not update DB: %s", device.ID, err)
+		lDevice.Errorf("error while updating %s device status. could not update DB: %s", device.ID, err)
 		return nil, err
 	}
 
+	lDevice.Debugf("device %s status updated. new status: %s", input.ID, input.NewStatus)
 	return device, nil
 }
 
 type UpdateIdentitySlotInput struct {
-	ID   string
-	Slot models.Slot[models.Certificate]
+	ID   string                          `validate:"required"`
+	Slot models.Slot[models.Certificate] `validate:"required"`
 }
 
 func (svc DeviceManagerServiceImpl) UpdateIdentitySlot(input UpdateIdentitySlotInput) (*models.Device, error) {
+
+	err := deviceValidate.Struct(input)
+	if err != nil {
+		lDevice.Errorf("struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+	lDevice.Debugf("checking if device '%s' exists", input.ID)
 	exists, device, err := svc.devicesStorage.SelectExists(context.Background(), input.ID)
 	if err != nil {
+		lDevice.Errorf("something went wrong while checking if device '%s' exists in storage engine: %s", input.ID, err)
 		return nil, err
 	} else if !exists {
+		lDevice.Errorf("device %s can not be found in storage engine", input.ID)
 		return nil, errs.ErrDeviceNotFound
 	}
 
@@ -175,7 +228,7 @@ func (svc DeviceManagerServiceImpl) UpdateIdentitySlot(input UpdateIdentitySlotI
 			NewStatus:    models.StatusRevoked,
 		})
 		if err != nil {
-			lDevice.Errorf("could not revoke IdentitySlot for device %s: %s", input.ID, err)
+			lDevice.Errorf("could not revoke identity slot for device %s: %s", input.ID, err)
 			return nil, err
 		}
 		newSlot.Secrets[newSlot.ActiveVersion] = *revokedCert
@@ -187,5 +240,6 @@ func (svc DeviceManagerServiceImpl) UpdateIdentitySlot(input UpdateIdentitySlotI
 		return nil, err
 	}
 
+	lDevice.Debugf("updating %s device identity slot", input.ID)
 	return svc.devicesStorage.Update(context.Background(), device)
 }

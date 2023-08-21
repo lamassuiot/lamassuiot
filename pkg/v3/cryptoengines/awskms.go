@@ -58,6 +58,7 @@ func NewAWSKMSEngine(logger *logrus.Entry, conf config.AWSSDKConfig) (CryptoEngi
 				{
 					Type: models.KeyType(x509.RSA),
 					Sizes: []int{
+						1024,
 						2048,
 						3072,
 						4096,
@@ -68,6 +69,7 @@ func NewAWSKMSEngine(logger *logrus.Entry, conf config.AWSSDKConfig) (CryptoEngi
 					Sizes: []int{
 						224,
 						256,
+						384,
 						512,
 					},
 				},
@@ -81,12 +83,14 @@ func (p *AWSKMSCryptoEngine) GetEngineConfig() models.CryptoEngineInfo {
 }
 
 func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, error) {
+	lAWSKMS.Debugf("Getting the private key with Alias: %s", keyAlias)
 	var keyID = ""
 	keys, err := p.kmscli.ListKeys(&kms.ListKeysInput{
 		Limit: aws.Int64(100),
 	})
 
 	if err != nil {
+		lAWSKMS.Errorf("could not get key list: %s", err)
 		return nil, err
 	}
 
@@ -95,6 +99,7 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, 
 			KeyId: key.KeyId,
 		})
 		if err != nil {
+			lAWSKMS.Errorf("could not get aliases list: %s", err)
 			continue
 		}
 
@@ -112,6 +117,7 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, 
 	}
 
 	if keyID == "" {
+		lAWSKMS.Errorf("kms key not found")
 		return nil, errors.New("kms key not found")
 	}
 
@@ -119,16 +125,18 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, 
 }
 
 func (p *AWSKMSCryptoEngine) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
+	lAWSKMS.Debugf("Creating RSA key with ID: %s", keyID)
 	key, err := p.kmscli.CreateKey(&kms.CreateKeyInput{
 		KeyUsage: aws.String("SIGN_VERIFY"),
 		KeySpec:  aws.String(fmt.Sprintf("RSA_%d", keySize)),
 	})
 
 	if err != nil {
+		lAWSKMS.Errorf("could not create '%s' RSA Private Key: %s", keyID, err)
 		return nil, err
 	}
 
-	lAWSKMS.Debug(fmt.Sprintf("RSA key created with ARN [%s]", *key.KeyMetadata.Arn))
+	lAWSKMS.Debugf("RSA key created with ARN [%s]", *key.KeyMetadata.Arn)
 
 	_, err = p.kmscli.CreateAlias(&kms.CreateAliasInput{
 		AliasName:   aws.String(fmt.Sprintf("alias/%s", keyID)),
@@ -136,28 +144,25 @@ func (p *AWSKMSCryptoEngine) CreateRSAPrivateKey(keySize int, keyID string) (cry
 	})
 
 	if err != nil {
-		lAWSKMS.Warn(fmt.Sprintf("Could not create alias for key ARN [%s]: ", *key.KeyMetadata.Arn), err)
+		lAWSKMS.Warnf("Could not create alias for key ARN [%s]: %s", *key.KeyMetadata.Arn, err)
 	}
 
 	return p.GetPrivateKeyByID(keyID)
 }
 
 func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, keyID string) (crypto.Signer, error) {
-	lAWSKMS.Warn("Creating ECDSA key with ", curve.Params().BitSize)
+	lAWSKMS.Debugf("Creating ECDSA key with ID: %s", keyID)
 	key, err := p.kmscli.CreateKey(&kms.CreateKeyInput{
 		KeyUsage: aws.String("SIGN_VERIFY"),
 		KeySpec:  aws.String(fmt.Sprintf("ECC_NIST_P%d", curve.Params().BitSize)),
 	})
 
 	if err != nil {
+		lAWSKMS.Errorf("could not create '%s' ECDSA Private Key: %s", keyID, err)
 		return nil, err
 	}
 
-	if err != nil {
-		return nil, err
-	}
-
-	lAWSKMS.Debug(fmt.Sprintf("ECDSA key created with ARN [%s]", *key.KeyMetadata.Arn))
+	lAWSKMS.Debugf("ECDSA key created with ARN [%s]", *key.KeyMetadata.Arn)
 
 	_, err = p.kmscli.CreateAlias(&kms.CreateAliasInput{
 		AliasName:   aws.String(fmt.Sprintf("alias/%s", keyID)),
@@ -165,7 +170,7 @@ func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, keyID s
 	})
 
 	if err != nil {
-		lAWSKMS.Warn(fmt.Sprintf("Could not create alias for key ARN [%s]: ", *key.KeyMetadata.Arn), err)
+		lAWSKMS.Warnf("Could not create alias for key ARN [%s]: %s", *key.KeyMetadata.Arn, err)
 	}
 
 	return p.GetPrivateKeyByID(keyID)

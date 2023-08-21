@@ -57,6 +57,7 @@ type EnrollmentOptionsESTRFC7030 struct {
 }
 
 type ReEnrollmentSettings struct {
+	AdditionalValidationCAs     []string     `json:"additional_validation_cas"`
 	AllowedReenrollmentDelta    TimeDuration `json:"allowed_reenrollment_detlta"`
 	AllowExpiredRenewal         bool         `json:"allow_expired_renewal"`
 	PreventiveReenrollmentDelta TimeDuration `json:"preventive_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll

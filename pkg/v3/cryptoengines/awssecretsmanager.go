@@ -81,12 +81,14 @@ func (engine *AWSSecretsManagerCryptoEngine) GetEngineConfig() models.CryptoEngi
 }
 
 func (engine *AWSSecretsManagerCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
+	lAWSSM.Debugf("Getting the private key with ID: %s", keyID)
 	input := &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(keyID),
 	}
 
 	result, err := engine.smngerCli.GetSecretValue(input)
 	if err != nil {
+		lAWSSM.Errorf("could not get Secret Value: %s", err)
 		return nil, err
 	}
 
@@ -101,6 +103,7 @@ func (engine *AWSSecretsManagerCryptoEngine) GetPrivateKeyByID(keyID string) (cr
 
 	b64Key, ok := keyMap["key"]
 	if !ok {
+		lAWSSM.Errorf("'key' variable not found in secret")
 		return nil, fmt.Errorf("'key' not found in secret")
 	}
 
@@ -126,6 +129,7 @@ func (engine *AWSSecretsManagerCryptoEngine) GetPrivateKeyByID(keyID string) (cr
 }
 
 func (engine *AWSSecretsManagerCryptoEngine) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
+	lAWSSM.Debugf("Creating RSA key with ID %s", keyID)
 	key, err := rsa.GenerateKey(rand.Reader, keySize)
 	if err != nil {
 		lAWSSM.Error("Could not create RSA private key: ", err)
@@ -136,8 +140,10 @@ func (engine *AWSSecretsManagerCryptoEngine) CreateRSAPrivateKey(keySize int, ke
 }
 
 func (engine *AWSSecretsManagerCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, keyID string) (crypto.Signer, error) {
+	lAWSSM.Debugf("Creating ECDSA key with ID %s", keyID)
 	key, err := ecdsa.GenerateKey(curve, rand.Reader)
 	if err != nil {
+		lAWSSM.Error("Could not create ECDSA private key: ", err)
 		return nil, err
 	}
 
@@ -145,6 +151,7 @@ func (engine *AWSSecretsManagerCryptoEngine) CreateECDSAPrivateKey(curve ellipti
 }
 
 func (engine *AWSSecretsManagerCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) (crypto.Signer, error) {
+	lAWSSM.Debugf("Import RSA key with ID: %s", keyID)
 	keyBytes := pem.EncodeToMemory(&pem.Block{
 		Bytes: x509.MarshalPKCS1PrivateKey(key),
 		Type:  "RSA PRIVATE KEY",
@@ -159,6 +166,7 @@ func (engine *AWSSecretsManagerCryptoEngine) ImportRSAPrivateKey(key *rsa.Privat
 	})
 
 	if err != nil {
+		lAWSSM.Error("Could not import RSA private key: ", err)
 		return nil, err
 	}
 
@@ -166,6 +174,7 @@ func (engine *AWSSecretsManagerCryptoEngine) ImportRSAPrivateKey(key *rsa.Privat
 }
 
 func (engine *AWSSecretsManagerCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID string) (crypto.Signer, error) {
+	lAWSSM.Debugf("Import ECDSA key with ID: %s", keyID)
 	keyBytes, err := x509.MarshalECPrivateKey(key)
 	if err != nil {
 		return nil, err
@@ -185,6 +194,7 @@ func (engine *AWSSecretsManagerCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.Pr
 	})
 
 	if err != nil {
+		lAWSSM.Error("Could not import ECDSA private key: ", err)
 		return nil, err
 	}
 

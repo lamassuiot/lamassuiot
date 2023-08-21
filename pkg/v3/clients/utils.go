@@ -177,6 +177,32 @@ func Get[T any](ctx context.Context, client *http.Client, url string, queryParam
 	return parseJSON[T](body)
 }
 
+func Delete(ctx context.Context, client *http.Client, url string, knownErrors map[int][]error) error {
+	r, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+	if err != nil {
+		return err
+	}
+
+	// Important to set
+	r.Header.Add("Content-Type", "application/json")
+	res, err := client.Do(r)
+	if err != nil {
+		return err
+	}
+
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return err
+	}
+
+	if res.StatusCode != 200 {
+		return nonOKResponseToError(res.StatusCode, body, knownErrors)
+	}
+
+	return nil
+}
+
 func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.Client, url string, queryParams *resources.QueryParameters, applyFunc func(*E), knownErrors map[int][]error) error {
 	continueIter := true
 	if queryParams == nil {

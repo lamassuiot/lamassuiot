@@ -35,11 +35,16 @@ type GolangEngineConfig struct {
 }
 
 type PKCS11EngineConfig struct {
-	ID         string                 `mapstructure:"id"`
-	Metadata   map[string]interface{} `mapstructure:"metadata"`
-	TokenLabel string                 `mapstructure:"token"`
-	TokenPin   string                 `mapstructure:"pin"`
-	ModulePath string                 `mapstructure:"module_path"`
+	ID                 string                   `mapstructure:"id"`
+	Metadata           map[string]interface{}   `mapstructure:"metadata"`
+	TokenLabel         string                   `mapstructure:"token"`
+	TokenPin           string                   `mapstructure:"pin"`
+	ModulePath         string                   `mapstructure:"module_path"`
+	ModuleExtraOptions PKCS11ModuleExtraOptions `mapstructure:"module_extra_options"`
+}
+
+type PKCS11ModuleExtraOptions struct {
+	Env map[string]string `mapstructure:"env"`
 }
 
 type AWSSDKConfig struct {

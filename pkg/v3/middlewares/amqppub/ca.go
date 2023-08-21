@@ -8,12 +8,12 @@ import (
 
 type amqpEventPublisher struct {
 	next           services.CAService
-	eventPublisher *messaging.AMQPEventPublisher
+	eventPublisher *messaging.AMQPSetup
 }
 
 const caSource = "lamassuiot.ca"
 
-func NewCAAmqpEventPublisher(amqpPublisher *messaging.AMQPEventPublisher) services.CAMiddleware {
+func NewCAAmqpEventPublisher(amqpPublisher *messaging.AMQPSetup) services.CAMiddleware {
 	return func(next services.CAService) services.CAService {
 		return &amqpEventPublisher{
 			next:           next,

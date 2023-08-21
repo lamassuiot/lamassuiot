@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"crypto/x509/pkix"
+	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 )
@@ -68,4 +69,8 @@ func PkixNameToSubject(pkixName pkix.Name) models.Subject {
 	}
 
 	return subject
+}
+
+func PkixNameToString(subject pkix.Name) string {
+	return fmt.Sprintf("C=%v/ST=%v/L=%v/O=%v/OU=%v/CN=%s", subject.Country, subject.Province, subject.Locality, subject.Organization, subject.OrganizationalUnit, subject.CommonName)
 }

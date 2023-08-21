@@ -45,6 +45,7 @@ func NewGolangPEMEngine(logger *logrus.Entry, conf config.GolangEngineConfig) Cr
 				{
 					Type: models.KeyType(x509.RSA),
 					Sizes: []int{
+						1024,
 						2048,
 						3072,
 						4096,
@@ -55,6 +56,7 @@ func NewGolangPEMEngine(logger *logrus.Entry, conf config.GolangEngineConfig) Cr
 					Sizes: []int{
 						224,
 						256,
+						384,
 						512,
 					},
 				},
@@ -133,6 +135,7 @@ func (p *GoCryptoEngine) DeleteKey(keyID string) error {
 }
 
 func (p *GoCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) (crypto.Signer, error) {
+	lGo.Debugf("importing RSA %d key for keyID: %s", key.Size(), keyID)
 	p.checkAndCreateStorageDir()
 
 	err := ioutil.WriteFile(p.storageDirectory+"/"+keyID, pem.EncodeToMemory(&pem.Block{
@@ -148,6 +151,7 @@ func (p *GoCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) 
 }
 
 func (p *GoCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID string) (crypto.Signer, error) {
+	lGo.Debugf("importing ECDSA %d key for keyID: %s", key.Params().BitSize, keyID)
 	p.checkAndCreateStorageDir()
 
 	b, err := x509.MarshalECPrivateKey(key)

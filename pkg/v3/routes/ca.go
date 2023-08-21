@@ -30,8 +30,10 @@ func NewCAHTTPLayer(logger *logrus.Entry, svc services.CAService, httpServerCfg 
 	rv1.POST("/cas/import", routes.ImportCA)
 
 	rv1.GET("/cas/:id", routes.GetCAByID)
-	rv1.GET("/cas/cn/:cn", routes.GetCAsByCommonName)
 	rv1.GET("/cas/sn/:sn", routes.GetCABySerialNumber)
+
+	rv1.GET("/cas", routes.GetAllCAs)
+
 	rv1.PUT("/cas/:id/metadata", routes.UpdateCAMetadata)
 	rv1.POST("/cas/:id/revoke", routes.RevokeCA)
 	rv1.GET("/cas/:id/certificates", routes.GetCertificatesByCA)

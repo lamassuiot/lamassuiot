@@ -141,7 +141,11 @@ func (cli *httpCAClient) SignCertificate(input services.SignCertificateInput) (*
 }
 
 func (cli *httpCAClient) UpdateCAStatus(input services.UpdateCAStatusInput) (*models.CACertificate, error) {
-	return nil, fmt.Errorf("TODO")
+	response, err := Post[*models.CACertificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/revoke", resources.SignCertificateBody{}, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
 }
 
 func (cli *httpCAClient) UpdateCAMetadata(input services.UpdateCAMetadataInput) (*models.CACertificate, error) {
@@ -156,7 +160,12 @@ func (cli *httpCAClient) UpdateCAMetadata(input services.UpdateCAMetadataInput) 
 }
 
 func (cli *httpCAClient) DeleteCA(input services.DeleteCAInput) error {
-	return fmt.Errorf("TODO")
+	err := Delete(context.Background(), cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID, map[int][]error{})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (cli *httpCAClient) SignatureSign(input services.SignatureSignInput) ([]byte, error) {
@@ -196,7 +205,15 @@ func (cli *httpCAClient) GetCertificateBySerialNumber(input services.GetCertific
 }
 
 func (cli *httpCAClient) GetCertificates(input services.GetCertificatesInput) (string, error) {
-	return "", fmt.Errorf("TODO")
+	url := cli.baseUrl + "/v1/certificates"
+
+	if input.ExhaustiveRun {
+		err := IterGet[models.Certificate, *resources.GetCertsResponse](context.Background(), cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
+		return "", err
+	} else {
+		resp, err := Get[resources.GetCertsResponse](context.Background(), cli.httpClient, url, input.QueryParameters, map[int][]error{})
+		return resp.NextBookmark, err
+	}
 }
 
 func (cli *httpCAClient) GetCertificatesByCA(input services.GetCertificatesByCAInput) (string, error) {

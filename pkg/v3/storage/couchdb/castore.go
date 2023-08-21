@@ -87,11 +87,11 @@ func (db *CouchDBCAStorage) SelectExistsBySerialNumber(ctx context.Context, seri
 }
 
 func (db *CouchDBCAStorage) Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Insert(*caCertificate, caCertificate.IssuerCAMetadata.CAID)
+	return db.querier.Insert(*caCertificate, caCertificate.ID)
 }
 
 func (db *CouchDBCAStorage) Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Update(*caCertificate, caCertificate.IssuerCAMetadata.CAID)
+	return db.querier.Update(*caCertificate, caCertificate.ID)
 }
 
 func (db *CouchDBCAStorage) Delete(ctx context.Context, id string) error {

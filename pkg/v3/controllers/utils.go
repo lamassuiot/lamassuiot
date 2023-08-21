@@ -48,5 +48,6 @@ func FilterQuery(r *http.Request) *resources.QueryParameters {
 			}
 		}
 	}
+
 	return &queryParams
 }

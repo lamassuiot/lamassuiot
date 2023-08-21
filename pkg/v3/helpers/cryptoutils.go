@@ -76,7 +76,7 @@ func LoadSytemCACertPool() *x509.CertPool {
 	return certPool
 }
 
-func LoadSytemCACertPoolWithExtraCAsFromFiles(casToAdd []string) *x509.CertPool {
+func LoadSystemCACertPoolWithExtraCAsFromFiles(casToAdd []string) *x509.CertPool {
 	certPool := x509.NewCertPool()
 	systemCertPool, err := x509.SystemCertPool()
 	if err == nil {
@@ -144,4 +144,48 @@ func ValidateCertAndPrivKey(cert *x509.Certificate, rsaKey *rsa.PrivateKey, ecKe
 	}
 
 	return false, fmt.Errorf("both keys are nil")
+}
+
+func CalculateRSAKeySizes(keyMin int, KeyMax int) []int {
+	var keySizes []int
+	key := keyMin
+	for {
+		if key%128 == 0 {
+			keySizes = append(keySizes, key)
+			key = key + 128
+		}
+		if key%1024 == 0 {
+			break
+		}
+	}
+	for {
+		if key%1024 == 0 {
+			keySizes = append(keySizes, key)
+			if key == KeyMax {
+				break
+			}
+			key = key + 1024
+		} else {
+			break
+		}
+	}
+	return keySizes
+}
+
+func CalculateECDSAKeySizes(keyMin int, KeyMax int) []int {
+	var keySizes []int
+	keySizes = append(keySizes, keyMin)
+	if keyMin < 224 && KeyMax > 224 {
+		keySizes = append(keySizes, 224)
+	}
+	if keyMin < 256 && KeyMax > 256 {
+		keySizes = append(keySizes, 256)
+	}
+	if keyMin < 384 && KeyMax > 384 {
+		keySizes = append(keySizes, 384)
+	}
+	if keyMin < 512 && KeyMax >= 512 {
+		keySizes = append(keySizes, 512)
+	}
+	return keySizes
 }

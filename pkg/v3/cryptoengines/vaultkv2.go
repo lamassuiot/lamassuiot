@@ -38,6 +38,8 @@ func NewVaultKV2Engine(logger *logrus.Entry, conf config.HashicorpVaultCryptoEng
 	lVault = logger.WithField("subsystem-provider", "Vault-KV2")
 	address := fmt.Sprintf("%s://%s:%d", conf.Protocol, conf.Hostname, conf.Port)
 
+	lVault.Debugf("configuring VaultKV2 Engine")
+
 	vaultClientConf := api.DefaultConfig()
 	httpClient, err := helpers.BuildHTTPClientWithTLSOptions(&http.Client{}, conf.TLSConfig)
 
@@ -55,18 +57,21 @@ func NewVaultKV2Engine(logger *logrus.Entry, conf config.HashicorpVaultCryptoEng
 	vaultClient, err := api.NewClient(vaultClientConf)
 
 	if err != nil {
+		lVault.Errorf("could not create Vault API client: %s", err)
 		return nil, errors.New("could not create Vault API client: " + err.Error())
 	}
 
 	if conf.AutoUnsealEnabled {
 		err = Unseal(vaultClient, conf.AutoUnsealKeysFile)
 		if err != nil {
+			lVault.Errorf("could not unseal Vault: %s", err)
 			return nil, errors.New("could not unseal Vault: " + err.Error())
 		}
 	}
 
 	err = Login(vaultClient, conf.RoleID, conf.SecretID)
 	if err != nil {
+		lVault.Errorf("could not login into Vault: %s", err)
 		return nil, errors.New("could not login into Vault: " + err.Error())
 	}
 
@@ -129,13 +134,13 @@ func (vaultCli *VaultKV2Engine) GetEngineConfig() models.CryptoEngineInfo {
 }
 
 func (vaultCli *VaultKV2Engine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
-	lVault.Debugf("[cryptoengine.vaultkv2] requesting private key with ID [%s]", keyID)
+	lVault.Debugf("requesting private key with ID [%s]", keyID)
 	key, err := vaultCli.kvv2Client.Get(context.Background(), keyID)
 	if err != nil {
-		lVault.Errorf("[cryptoengine.vaultkv2] could not get private key: %s", err)
+		lVault.Errorf("could not get private key: %s", err)
 		return nil, errors.New("could not get private key")
 	}
-	lVault.Debugf("[cryptoengine.vaultkv2] successfully retrieved private key")
+	lVault.Debugf("successfully retrieved private key")
 
 	var b64Key string
 	mapValue, ok := key.Data["key"]
@@ -168,10 +173,10 @@ func (vaultCli *VaultKV2Engine) GetPrivateKeyByID(keyID string) (crypto.Signer, 
 }
 
 func (vaultCli *VaultKV2Engine) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
-	lVault.Debugf("[cryptoengine.vaultkv2] creating RSA private key of size [%d] with ID [%s]", keySize, keyID)
+	lVault.Debugf("creating RSA private key of size [%d] with ID [%s]", keySize, keyID)
 	key, err := vaultCli.GetPrivateKeyByID(keyID)
 	if key != nil {
-		lVault.Warnf("[cryptoengine.vaultkv2] RSA private key already exists and will be overwritten: ", err)
+		lVault.Warnf("RSA private key already exists and will be overwritten: ", err)
 		err = vaultCli.DeleteKey(keyID)
 		if err != nil {
 			return nil, err
@@ -180,7 +185,7 @@ func (vaultCli *VaultKV2Engine) CreateRSAPrivateKey(keySize int, keyID string) (
 
 	rsaKey, err := rsa.GenerateKey(rand.Reader, keySize)
 	if err != nil {
-		lVault.Errorf("[cryptoengine.vaultkv2] could not create RSA private key: %s", err)
+		lVault.Errorf("could not create RSA private key: %s", err)
 		return nil, err
 	}
 
@@ -197,25 +202,26 @@ func (vaultCli *VaultKV2Engine) CreateRSAPrivateKey(keySize int, keyID string) (
 
 	_, err = vaultCli.kvv2Client.Put(context.Background(), keyID, keyMap)
 	if err != nil {
-		lVault.Errorf("[cryptoengine.vaultkv2] could not create RSA key: %s", err)
+		lVault.Errorf("could not create RSA key: %s", err)
 		return nil, err
 	}
 
-	lVault.Debugf("[cryptoengine.vaultkv2] RSA key successfully generated")
+	lVault.Debugf("RSA key successfully generated")
 	return key, nil
 }
 
 func (vaultCli *VaultKV2Engine) CreateECDSAPrivateKey(c elliptic.Curve, keyID string) (crypto.Signer, error) {
+	lVault.Debugf("creating ECDSA private key of size [%d] with ID [%s]", c.Params().BitSize, keyID)
 	key, err := ecdsa.GenerateKey(c, rand.Reader)
 
 	if err != nil {
-		lVault.Error("Could not create RSA private key: ", err)
+		lVault.Errorf("Could not create RSA private key: %s", err)
 		return nil, err
 	}
 	keyBytes, err := x509.MarshalECPrivateKey(key)
 
 	if err != nil {
-		lVault.Error("Could not create RSA private key: ", err)
+		lVault.Errorf("Could not create RSA private key: %s", err)
 		return nil, err
 	}
 
