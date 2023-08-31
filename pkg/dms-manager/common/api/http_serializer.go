@@ -207,14 +207,16 @@ func (o *IdentityProfileEnrollmentSettingsSerialized) Deserialize() IdentityProf
 }
 
 type IdentityProfileReenrollmentSettingsSerialized struct {
-	AllowExpiredRenewal       bool   `json:"allow_expired_renewal"`
-	PreventiveRenewalInterval string `json:"preventive_renewal_interval"`
+	AllowExpiredRenewal       bool     `json:"allow_expired_renewal"`
+	PreventiveRenewalInterval string   `json:"preventive_renewal_interval"`
+	ValidationCAs             []string `json:"validation_cas"`
 }
 
 func (o *IdentityProfileReenrollmentSettings) Serialize() IdentityProfileReenrollmentSettingsSerialized {
 	return IdentityProfileReenrollmentSettingsSerialized{
 		AllowExpiredRenewal:       o.AllowExpiredRenewal,
 		PreventiveRenewalInterval: utils.ShortDuration(o.PreventiveRenewalInterval),
+		ValidationCAs:             o.ValidationCAs,
 	}
 }
 
@@ -225,6 +227,7 @@ func (o IdentityProfileReenrollmentSettingsSerialized) Deserialize() IdentityPro
 	return IdentityProfileReenrollmentSettings{
 		AllowExpiredRenewal:       o.AllowExpiredRenewal,
 		PreventiveRenewalInterval: duration,
+		ValidationCAs:             o.ValidationCAs,
 	}
 }
 

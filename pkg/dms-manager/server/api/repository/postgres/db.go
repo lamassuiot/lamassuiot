@@ -47,6 +47,7 @@ type IdentityProfileDAO struct {
 	Color                      string
 	Tags                       pq.StringArray `gorm:"type:text[]"`
 	PreventiveRenewalInterval  string
+	ValidationCAs              pq.StringArray `gorm:"type:text[]"`
 	AllowNewAutoEnrollment     bool
 	AllowExpiredRenewal        bool
 	IncludeAuthorizedCA        bool
@@ -188,6 +189,7 @@ func (d *IdentityProfileDAO) toIdentityProfile() *api.IdentityProfile {
 		ReerollmentSettings: api.IdentityProfileReenrollmentSettings{
 			AllowExpiredRenewal:       d.AllowExpiredRenewal,
 			PreventiveRenewalInterval: duration,
+			ValidationCAs:             d.ValidationCAs,
 		},
 		CADistributionSettings: api.IdentityProfileCADistributionSettings{
 			IncludeAuthorizedCA:        d.IncludeAuthorizedCA,
@@ -217,6 +219,7 @@ func toIdentityProfileDAO(dmsName string, d api.IdentityProfile) IdentityProfile
 		Tags:                       d.EnrollmentSettings.Tags,
 		AllowNewAutoEnrollment:     d.EnrollmentSettings.AllowNewAutoEnrollment,
 		AllowExpiredRenewal:        d.ReerollmentSettings.AllowExpiredRenewal,
+		ValidationCAs:              d.ReerollmentSettings.ValidationCAs,
 		PreventiveRenewalInterval:  d.ReerollmentSettings.PreventiveRenewalInterval.String(),
 		IncludeAuthorizedCA:        d.CADistributionSettings.IncludeAuthorizedCA,
 		IncludeBootstrapCAs:        d.CADistributionSettings.IncludeBootstrapCAs,

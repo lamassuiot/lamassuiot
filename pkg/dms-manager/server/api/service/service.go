@@ -580,12 +580,6 @@ func (s *DMSManagerService) Reenroll(ctx context.Context, csr *x509.CertificateR
 		if err != nil {
 			return nil, err
 		}
-		if device.Device.DmsName != dms.DeviceManufacturingService.Name {
-			return nil, &estErrors.GenericError{
-				StatusCode: http.StatusUnauthorized,
-				Message:    "The DMS does not have the device provisioned.",
-			}
-		}
 	} else {
 		dms, err = s.GetDMSByName(ctx, &api.GetDMSByNameInput{
 			Name: device.DmsName,
@@ -611,7 +605,21 @@ func (s *DMSManagerService) Reenroll(ctx context.Context, csr *x509.CertificateR
 
 	err = s.verifyCertificate(cert, caCert.CACertificate.Certificate.Certificate, dms.DeviceManufacturingService.IdentityProfile.ReerollmentSettings.AllowExpiredRenewal)
 	if err != nil {
-		return nil, err
+		verifyCount := 0
+		for _, validationca := range dms.IdentityProfile.ReerollmentSettings.ValidationCAs {
+			valCaCert, _ := s.lamassuCAClient.GetCAByName(ctx, &lamassuCAApi.GetCAByNameInput{
+				CAType: lamassuCAApi.CATypePKI,
+				CAName: validationca,
+			})
+			err = s.verifyCertificate(cert, valCaCert.CACertificate.Certificate.Certificate, dms.DeviceManufacturingService.IdentityProfile.ReerollmentSettings.AllowExpiredRenewal)
+			if err == nil {
+				break
+			}
+			verifyCount = verifyCount + 1
+		}
+		if verifyCount == len(dms.IdentityProfile.ReerollmentSettings.ValidationCAs) || len(dms.IdentityProfile.ReerollmentSettings.ValidationCAs) == 0 {
+			return nil, err
+		}
 	}
 
 	estURL, err := url.Parse(s.DevManagerAddr)
@@ -626,7 +634,7 @@ func (s *DMSManagerService) Reenroll(ctx context.Context, csr *x509.CertificateR
 	}
 
 	ctx = context.WithValue(ctx, "dmsName", dms.DeviceManufacturingService.Name)
-	deviceNewCert, err := estClient.Reenroll(ctx, csr)
+	deviceNewCert, err := estClient.Reenroll(ctx, csr, aps)
 
 	if err != nil {
 		return nil, err

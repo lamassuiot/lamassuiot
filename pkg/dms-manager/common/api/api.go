@@ -194,6 +194,7 @@ type IdentityProfileEnrollmentSettings struct {
 type IdentityProfileReenrollmentSettings struct {
 	AllowExpiredRenewal       bool
 	PreventiveRenewalInterval time.Duration
+	ValidationCAs             []string
 }
 
 type StaticCA struct {
