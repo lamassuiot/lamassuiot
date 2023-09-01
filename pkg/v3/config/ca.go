@@ -18,14 +18,14 @@ type CAConfig struct {
 }
 
 type HashicorpVaultCryptoEngineConfig struct {
-	ID                 string                 `mapstructure:"id"`
-	Metadata           map[string]interface{} `mapstructure:"metadata"`
-	RoleID             string                 `mapstructure:"role_id"`
-	SecretID           string                 `mapstructure:"secret_id"`
-	AutoUnsealEnabled  bool                   `mapstructure:"auto_unseal_enabled"`
-	AutoUnsealKeysFile string                 `mapstructure:"auto_unseal_keys_file"`
-	MountPath          string                 `mapstructure:"mount_path"`
-	HTTPConnection     `mapstructure:",squash"`
+	ID                string                 `mapstructure:"id"`
+	Metadata          map[string]interface{} `mapstructure:"metadata"`
+	RoleID            string                 `mapstructure:"role_id"`
+	SecretID          string                 `mapstructure:"secret_id"`
+	AutoUnsealEnabled bool                   `mapstructure:"auto_unseal_enabled"`
+	AutoUnsealKeys    []string               `mapstructure:"auto_unseal_keys"`
+	MountPath         string                 `mapstructure:"mount_path"`
+	HTTPConnection    `mapstructure:",squash"`
 }
 
 type GolangEngineConfig struct {

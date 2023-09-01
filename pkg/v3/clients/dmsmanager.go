@@ -69,14 +69,14 @@ func (cli *dmsManagerClient) CACerts(aps string) ([]*x509.Certificate, error) {
 	return nil, fmt.Errorf("not supported, use the estCli instead")
 }
 
-func (cli *dmsManagerClient) Enroll(authMode models.ESTAuthMode, authOptions interface{}, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+func (cli *dmsManagerClient) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	return nil, fmt.Errorf("not supported, use the estCli instead")
 }
 
-func (cli *dmsManagerClient) Reenroll(authMode models.ESTAuthMode, authOptions interface{}, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+func (cli *dmsManagerClient) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	return nil, fmt.Errorf("not supported, use the estCli instead")
 }
 
-func (cli *dmsManagerClient) ServerKeyGen(authMode models.ESTAuthMode, authOptions interface{}, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
+func (cli *dmsManagerClient) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
 	return nil, nil, fmt.Errorf("not supported, use the estCli instead")
 }

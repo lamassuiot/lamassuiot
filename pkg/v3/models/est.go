@@ -5,10 +5,8 @@ import "crypto/x509"
 type ESTAuthMode string
 
 const (
-	NoAuth    ESTAuthMode = "NO_AUTH"
-	JWT       ESTAuthMode = "JWT"
-	PSK       ESTAuthMode = "PSK"
-	MutualTLS ESTAuthMode = "MUTUAL_TLS"
+	ESTAuthModeJWT       ESTAuthMode = "JWT"
+	ESTAuthModeMutualTLS ESTAuthMode = "MUTUAL_TLS"
 )
 
 type ESTServerAuthOptionsMutualTLS struct {

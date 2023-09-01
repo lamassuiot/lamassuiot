@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -77,7 +76,7 @@ func (r *estHttpRoutes) GetCACerts(ctx *gin.Context) {
 	ctx.Writer.Write(body)
 }
 
-func (r *estHttpRoutes) Enroll(ctx *gin.Context) {
+func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 	var params aps
 	ctx.ShouldBindUri(&params)
 
@@ -87,7 +86,7 @@ func (r *estHttpRoutes) Enroll(ctx *gin.Context) {
 		return
 	}
 
-	data, err := ioutil.ReadAll(ctx.Request.Body)
+	data, err := io.ReadAll(ctx.Request.Body)
 	if err != nil {
 		ctx.JSON(400, gin.H{"err": fmt.Sprintf("could not read the body payload: %s", err)})
 		return
@@ -105,63 +104,22 @@ func (r *estHttpRoutes) Enroll(ctx *gin.Context) {
 		return
 	}
 
-	var authMode models.ESTAuthMode
-	var crt *x509.Certificate
-	//check if certificate is in X-Forwarded-Client-Cert header
-	lEst.Debug("detecting auth mode in order: MTLS -> PSK -> JWT -> NoAuth")
-	lEst.Debug("checking if MTLS used")
-
-	lEst.Trace("checking if certificate is present in 'X-Forwarded-Client-Cert' header")
-	if crt, err = getCertificateFromHeader(ctx.Request.Header); err != nil {
-		if err != ErrorMissingClientCertificate {
-			lEst.Trace("something went wrong while processing X-Forwarded-Client-Cert header: %s", err)
-		}
-
-		//no (valid) certificate in the header. check if a certificate can be obtained from client TLS connection
-		if len(ctx.Request.TLS.PeerCertificates) > 0 {
-			lEst.Trace("Using certificate presented in peer connection")
-			crt = ctx.Request.TLS.PeerCertificates[0]
-		} else {
-			lEst.Trace("No certificate presented in peer connection")
-		}
+	authExtractors := []httpAuthReqExtractor{
+		ClientCertificateExtractor{},
+		JWTExtractor{},
 	}
 
-	var estAuthOptions any
+	authCtx := context.Background()
+	for _, authExtractor := range authExtractors {
+		authCtx = authExtractor.ExtractAuthentication(authCtx, *ctx.Request)
+	}
 
-	if crt != nil {
-		authMode = models.MutualTLS
-		estAuthOptions = models.ESTServerAuthOptionsMutualTLS{
-			ClientCertificate: crt,
-		}
+	var signedCrt *x509.Certificate
+	if strings.Contains(ctx.Request.URL.Path, "simplereenroll") {
+		signedCrt, err = r.svc.Reenroll(authCtx, csr, params.APS)
 	} else {
-		lEst.Debug("MTLS NOT used. No client certificate presented")
-		lEst.Debug("checking if PSK used")
-		lEst.Trace("checking if PSK is present in 'X-Psk-Key' header")
-		pskHeader := ctx.Request.Header.Get("X-Psk-Key")
-		if pskHeader != "" {
-			authMode = models.PSK
-			estAuthOptions = pskHeader
-		} else {
-			lEst.Trace("PSK NOT used. no PSK value provided")
-			lEst.Debug("checking if JWT used")
-			lEst.Trace("checking if JWT is present in 'Authorization' header")
-			authHeader := ctx.Request.Header.Get("Authorization")
-			if authHeader != "" {
-				authMode = models.JWT
-				authHeader = strings.ToLower(authHeader)
-				if !strings.HasSuffix(authHeader, "bearer ") {
-					ctx.JSON(400, gin.H{"err": "the 'Authorization' was set but no valid token found"})
-					return
-				}
-				jwt := strings.Replace("bearer ", authHeader, "", 1)
-				estAuthOptions = jwt
-			} else {
-				authMode = models.NoAuth
-			}
-		}
+		signedCrt, err = r.svc.Enroll(authCtx, csr, params.APS)
 	}
-
-	signedCrt, err := r.svc.Enroll(authMode, estAuthOptions, csr, params.APS)
 	if err != nil {
 		ctx.JSON(500, err)
 		return
@@ -179,6 +137,54 @@ func (r *estHttpRoutes) Enroll(ctx *gin.Context) {
 	ctx.Writer.Header().Set("Content-Transfer-Encoding", "base64")
 	ctx.Writer.WriteHeader(http.StatusOK)
 	ctx.Writer.Write(body)
+}
+
+type httpAuthReqExtractor interface {
+	ExtractAuthentication(ctx context.Context, req http.Request) context.Context
+}
+
+type ClientCertificateExtractor struct{}
+
+func (ClientCertificateExtractor) ExtractAuthentication(ctx context.Context, req http.Request) context.Context {
+	var crt *x509.Certificate
+	var err error
+
+	if crt, err = getCertificateFromHeader(req.Header); err != nil {
+		if err != ErrorMissingClientCertificate {
+			lEst.Tracef("something went wrong while processing X-Forwarded-Client-Cert header: %s", err)
+		}
+
+		//no (valid) certificate in the header. check if a certificate can be obtained from client TLS connection
+		if len(req.TLS.PeerCertificates) > 0 {
+			lEst.Trace("Using certificate presented in peer connection")
+			crt = req.TLS.PeerCertificates[0]
+		} else {
+			lEst.Trace("No certificate presented in peer connection")
+		}
+	}
+
+	if crt != nil {
+		ctx = context.WithValue(ctx, models.ESTAuthModeMutualTLS, crt)
+	}
+
+	return ctx
+}
+
+type JWTExtractor struct{}
+
+func (JWTExtractor) ExtractAuthentication(ctx context.Context, req http.Request) context.Context {
+	authHeader := req.Header.Get("Authorization")
+	if authHeader != "" {
+		authHeader = strings.ToLower(authHeader)
+		if !strings.HasSuffix(authHeader, "bearer ") {
+			lEst.Warnf("not a valid JWT authentication header. Has no 'bearer' suffix. Got header: %s", authHeader)
+		}
+
+		jwt := strings.Replace("bearer ", authHeader, "", 1)
+		ctx = context.WithValue(ctx, models.ESTAuthModeJWT, jwt)
+	}
+
+	return ctx
 }
 
 func getCertificateFromHeader(h http.Header) (*x509.Certificate, error) {
@@ -234,7 +240,7 @@ func base64Decode(src []byte) ([]byte, error) {
 	return dec[:n], nil
 }
 func ReadAllBase64Response(r io.Reader) ([]byte, error) {
-	b, err := ioutil.ReadAll(r)
+	b, err := io.ReadAll(r)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read HTTP response body: %w", err)
 	}

@@ -18,6 +18,7 @@ func NewDeviceManagerHTTPLayer(logger *logrus.Entry, svc services.DeviceManagerS
 	rv1.GET("/devices/:id", routes.GetDeviceByID)
 	rv1.PUT("/devices/:id/idslot", routes.UpdateIdentitySlot)
 	rv1.POST("/devices/:id/decommission", routes.DecommissionDevice)
+	rv1.PUT("/devices/dms/:id", routes.GetAllDevices)
 
 	return newHttpRouter(logger, router, httpServerCfg, apiInfo)
 }

@@ -15,11 +15,11 @@ func NewESTHttpRoutes(logger *logrus.Entry, router *gin.Engine, svc services.EST
 	est.GET("/cacerts", routes.GetCACerts)
 	est.GET("/:aps/cacerts", routes.GetCACerts)
 
-	est.POST("/simpleenroll", routes.Enroll)
-	est.POST("/:aps/simpleenroll", routes.Enroll)
+	est.POST("/simpleenroll", routes.EnrollReenroll)
+	est.POST("/:aps/simpleenroll", routes.EnrollReenroll)
 
-	// est.POST("/simplereenroll", routes.Reenroll)
-	// est.POST("/:aps/simplereenroll", routes.ReenrollWithAPS)
+	est.POST("/simplereenroll", routes.EnrollReenroll)
+	est.POST("/:aps/simplereenroll", routes.EnrollReenroll)
 
 	// est.POST("/serverkeygen", routes.ServerKeygen)
 	// est.POST("/:aps/serverkeygen", routes.ServerKeygenWithAPS)

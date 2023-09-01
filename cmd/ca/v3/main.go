@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
-	"io"
 
-	formatter "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/messaging"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/middlewares/amqppub"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/routes"
@@ -23,15 +23,8 @@ var (
 	buildTime string = "devTS" // when the executable was built
 )
 
-var logFormatter = &formatter.Formatter{
-	TimestampFormat: "2006-01-02 15:04:05",
-	HideKeys:        true,
-	FieldsOrder:     []string{"subsystem", "subsystem-provider", "req"},
-}
-
 func main() {
-	log.SetFormatter(logFormatter)
-
+	log.SetFormatter(helpers.LogFormatter)
 	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
 
 	conf, err := config.LoadConfig[config.CAConfig]()
@@ -45,15 +38,16 @@ func main() {
 		globalLogLevel = log.InfoLevel
 	}
 	log.SetLevel(globalLogLevel)
+
 	log.Infof("global log level set to '%s'", globalLogLevel)
 
-	lCryprtoEng := configureLogger(globalLogLevel, conf.Logs.SubystemLogging.CryotoEngine, "CryptoEngine")
-	lSvc := configureLogger(globalLogLevel, conf.Logs.SubystemLogging.Service, "Service")
-	lHttp := configureLogger(globalLogLevel, conf.Logs.SubystemLogging.HttpTransport, "HTTP Server")
-	lMessage := configureLogger(globalLogLevel, conf.Logs.SubystemLogging.MessagingEngine, "Messaging")
-	lStorage := configureLogger(globalLogLevel, conf.Logs.SubystemLogging.StorageEngine, "Storage")
+	lCryptoEng := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.CryptoEngine, "CryptoEngine")
+	lSvc := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.Service, "Service")
+	lHttp := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.HttpTransport, "HTTP Server")
+	lMessage := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.MessagingEngine, "Messaging")
+	lStorage := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.StorageEngine, "Storage")
 
-	engines, err := createCryptoEngines(lCryprtoEng, *conf)
+	engines, err := createCryptoEngines(lCryptoEng, *conf)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,13 +79,14 @@ func main() {
 
 	caSvc := svc.(*services.CAServiceImpl)
 
-	if conf.AMQPEventPublisher.Enabled {
-		amqpHander, err := amqppub.SetupAMQPConnection(lMessage, conf.AMQPEventPublisher)
+	if conf.AMQPConnection.Enabled {
+		log.Infof("AMQP event publisher enabled")
+		amqpEventPub, err := messaging.SetupAMQPConnection(lMessage, conf.AMQPConnection)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		svc = amqppub.NewCAAmqpEventPublisher(amqpHander.PublisherChan)(svc)
+		svc = amqppub.NewCAAmqpEventPublisher(amqpEventPub)(svc)
 	}
 
 	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
@@ -120,12 +115,12 @@ func createStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine
 
 		caStore, err := postgres.NewCAPostgresRepository(psqlCli)
 		if err != nil {
-			log.Panicf("could not initialize postgres ca client: %s", err)
+			log.Panicf("could not initialize postgres CA client: %s", err)
 		}
 
 		certStore, err := postgres.NewCertificateRepository(psqlCli)
 		if err != nil {
-			log.Panicf("could not initialize postgres cert client: %s", err)
+			log.Panicf("could not initialize postgres Cert client: %s", err)
 		}
 
 		return caStore, certStore, nil
@@ -137,12 +132,12 @@ func createStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine
 
 		caStore, err := couchdb.NewCouchCARepository(couchdbClient)
 		if err != nil {
-			log.Panicf("could not initialize couchdb ca client: %s", err)
+			log.Panicf("could not initialize couchdb CA client: %s", err)
 		}
 
 		certStore, err := couchdb.NewCouchCertificateRepository(couchdbClient)
 		if err != nil {
-			log.Panicf("could not initialize couchdb cert client: %s", err)
+			log.Panicf("could not initialize couchdb Cert client: %s", err)
 		}
 
 		return caStore, certStore, nil
@@ -210,31 +205,4 @@ func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*s
 	}
 
 	return engines, nil
-}
-
-func configureLogger(defaultLevel log.Level, currentLevel config.LogLevel, subsystem string) *log.Entry {
-	var err error
-	logger := log.New()
-	logger.SetFormatter(logFormatter)
-	lSubystem := logger.WithField("subsystem", subsystem)
-
-	if currentLevel == config.None {
-		lSubystem.Infof("subsystem logging will be disabled")
-		lSubystem.Logger.SetOutput(io.Discard)
-	} else {
-		level := defaultLevel
-
-		if currentLevel != "" {
-			level, err = log.ParseLevel(string(currentLevel))
-			if err != nil {
-				log.Warnf("'%s' invalid '%s' log level. Defaulting to global log level", subsystem, currentLevel)
-			}
-		} else {
-			log.Warnf("'%s' log level not set. Defaulting to global log level", subsystem)
-		}
-
-		lSubystem.Logger.SetLevel(level)
-	}
-	lSubystem.Infof("log level set to '%s'", lSubystem.Logger.GetLevel())
-	return lSubystem
 }

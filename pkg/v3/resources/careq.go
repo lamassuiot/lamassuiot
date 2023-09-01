@@ -7,18 +7,18 @@ import (
 )
 
 type CreateCABody struct {
-	Subject            models.Subject     `json:"subject"`
-	KeyMetadata        models.KeyMetadata `json:"key_metadata"`
-	CAType             models.CAType      `json:"ca_type"`
-	CAExpiration       models.Expiration  `json:"ca_expiration"`
-	IssuanceExpiration models.Expiration  `json:"issuance_expiration"`
+	Subject            models.Subject         `json:"subject"`
+	KeyMetadata        models.KeyMetadata     `json:"key_metadata"`
+	CAType             models.CertificateType `json:"ca_type"`
+	CAExpiration       models.Expiration      `json:"ca_expiration"`
+	IssuanceExpiration models.Expiration      `json:"issuance_expiration"`
 }
 
 type ImportCABody struct {
 	CAPrivateKey       string                    `json:"private_key"` //b64 from PEM
 	CACertificate      *models.X509Certificate   `json:"ca"`
 	CAChain            []*models.X509Certificate `json:"ca_chain"`
-	CAType             models.CAType             `json:"ca_type"`
+	CAType             models.CertificateType    `json:"ca_type"`
 	IssuanceExpiration models.Expiration         `json:"issuance_expiration"`
 }
 

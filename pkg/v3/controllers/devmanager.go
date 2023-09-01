@@ -45,6 +45,43 @@ func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
 	})
 }
 
+func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
+	queryParams := FilterQuery(ctx.Request)
+	type uriParams struct {
+		DMSID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err})
+		return
+	}
+
+	devices := []*models.Device{}
+	nextBookmark, err := r.svc.GetDeviceByDMS(services.GetDevicesByDMSInput{
+		DMSID: params.DMSID,
+		ListInput: services.ListInput[models.Device]{
+			QueryParameters: queryParams,
+			ExhaustiveRun:   false,
+			ApplyFunc: func(dev *models.Device) {
+				devices = append(devices, dev)
+			},
+		},
+	})
+
+	if err != nil {
+		ctx.JSON(500, err)
+		return
+	}
+
+	ctx.JSON(200, resources.GetDevicesResponse{
+		IterableList: resources.IterableList[models.Device]{
+			NextBookmark: nextBookmark,
+			List:         devices,
+		},
+	})
+}
+
 func (r *devManagerHttpRoutes) GetDeviceByID(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
@@ -59,13 +96,15 @@ func (r *devManagerHttpRoutes) GetDeviceByID(ctx *gin.Context) {
 	dms, err := r.svc.GetDeviceByID(services.GetDeviceByIDInput{
 		ID: params.ID,
 	})
-	switch err {
-	case errs.ErrDeviceNotFound:
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	default:
-		ctx.JSON(500, gin.H{"err": err})
-		return
+	if err != nil {
+		switch err {
+		case errs.ErrDeviceNotFound:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+			return
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+			return
+		}
 	}
 
 	ctx.JSON(200, dms)

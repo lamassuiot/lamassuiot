@@ -10,13 +10,10 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	b64 "encoding/base64"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
@@ -62,7 +59,7 @@ func NewVaultKV2Engine(logger *logrus.Entry, conf config.HashicorpVaultCryptoEng
 	}
 
 	if conf.AutoUnsealEnabled {
-		err = Unseal(vaultClient, conf.AutoUnsealKeysFile)
+		err = Unseal(vaultClient, conf.AutoUnsealKeys)
 		if err != nil {
 			lVault.Errorf("could not unseal Vault: %s", err)
 			return nil, errors.New("could not unseal Vault: " + err.Error())
@@ -260,25 +257,13 @@ func CreateVaultSdkClient(httpClient *http.Client, vaultAddress string) (*api.Cl
 	return api.NewClient(conf)
 }
 
-func Unseal(client *api.Client, unsealFile string) error {
-	usnealJsonFile, err := os.Open(unsealFile)
-	if err != nil {
-		return err
-	}
-
-	unsealFileByteValue, _ := ioutil.ReadAll(usnealJsonFile)
-	var unsealKeys []interface{}
-
-	err = json.Unmarshal(unsealFileByteValue, &unsealKeys)
-	if err != nil {
-		return err
-	}
+func Unseal(client *api.Client, unsealKeys []string) error {
 
 	providedSharesCount := 0
 	sealed := true
 
 	for sealed {
-		unsealStatusProgress, err := client.Sys().Unseal(unsealKeys[providedSharesCount].(string))
+		unsealStatusProgress, err := client.Sys().Unseal(unsealKeys[providedSharesCount])
 		if err != nil {
 			lVault.Error("Error while unsealing vault: ", err)
 			return err

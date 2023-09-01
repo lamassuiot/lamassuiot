@@ -15,6 +15,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage"
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 )
 
 var lDMS *logrus.Entry
@@ -73,7 +74,7 @@ func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
 		caDur, _ := models.ParseDuration("50y")
 		issuanceDur, _ := models.ParseDuration("3y")
 		_, err := svc.caClient.CreateCA(CreateCAInput{
-			CAType: models.CATypeManaged,
+			CAType: models.CertificateTypeManaged,
 			KeyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.ECDSA),
 				Bits: 256,
@@ -291,7 +292,7 @@ func (svc DmsManagerServiceImpl) CACerts(aps string) ([]*x509.Certificate, error
 // Validation:
 //   - Cert:
 //     Only Bootstrap cert (CA issued By Lamassu)
-func (svc DmsManagerServiceImpl) Enroll(authMode models.ESTAuthMode, authOptions interface{}, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+func (svc DmsManagerServiceImpl) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	lDMS.Debugf("checking if DMS '%s' exists", aps)
 	dms, err := svc.GetDMSByID(GetDMSByIDInput{
 		ID: aps,
@@ -307,22 +308,10 @@ func (svc DmsManagerServiceImpl) Enroll(authMode models.ESTAuthMode, authOptions
 	}
 
 	estAuthOptions := dms.IdentityProfile.EnrollmentSettings.EnrollmentOptionsESTRFC7030
-	if estAuthOptions.AuthMode != authMode {
-		lDMS.Errorf("aborting enrollment process for device '%s'. DMS '%s' doesn't support '%s' authentication mechanism. Should use '%s' instead", csr.Subject.CommonName, dms.ID, authMode, estAuthOptions.AuthMode)
-		return nil, errs.ErrDMSInvalidAuthMode
-	}
-
-	if authMode != models.MutualTLS {
-		lDMS.Errorf("aborting enrollment process for device '%s'. currently only mTLS auth mode is allowed. DMS '%s' is configured with '%s'", csr.Subject.CommonName, dms.ID, estAuthOptions.AuthMode)
+	clientCert, hasValue := ctx.Value(models.ESTAuthModeMutualTLS).(*x509.Certificate)
+	if !hasValue {
+		lDMS.Errorf("aborting enrollment process for device '%s'. Currently only mTLS auth mode is allowed. DMS '%s' is configured with '%s'. No client certificate was presented", csr.Subject.CommonName, dms.ID, estAuthOptions.AuthMode)
 		return nil, errs.ErrDMSAuthModeNotSupported
-	}
-
-	var clientCert *x509.Certificate
-	switch t := authOptions.(type) {
-	case models.ESTServerAuthOptionsMutualTLS:
-		clientCert = t.ClientCertificate
-	default:
-		return nil, fmt.Errorf("unsupported auth mode. Provided auth options are of type %s", t)
 	}
 
 	lDMS.Debugf("presented client certificate has CommonName '%s' and SerialNumber '%s' issued by CA with CommonName '%s'", clientCert.Subject.CommonName, helpers.SerialNumberToString(clientCert.SerialNumber), clientCert.Issuer.CommonName)
@@ -447,7 +436,7 @@ func (svc DmsManagerServiceImpl) Enroll(authMode models.ESTAuthMode, authOptions
 	return (*x509.Certificate)(crt.Certificate), nil
 
 }
-func (svc DmsManagerServiceImpl) Reenroll(authMode models.ESTAuthMode, authOptions interface{}, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+func (svc DmsManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	lDMS.Debugf("checking if DMS '%s' exists", aps)
 	dms, err := svc.GetDMSByID(GetDMSByIDInput{
 		ID: aps,
@@ -463,22 +452,10 @@ func (svc DmsManagerServiceImpl) Reenroll(authMode models.ESTAuthMode, authOptio
 	}
 
 	estAuthOptions := dms.IdentityProfile.EnrollmentSettings.EnrollmentOptionsESTRFC7030
-	if estAuthOptions.AuthMode != authMode {
-		lDMS.Errorf("aborting reenrollment process for device '%s'. DMS '%s' doesn't support '%s' authentication mechanism. Should use '%s' instead", csr.Subject.CommonName, dms.ID, authMode, estAuthOptions.AuthMode)
-		return nil, errs.ErrDMSInvalidAuthMode
-	}
-
-	if authMode != models.MutualTLS {
-		lDMS.Errorf("aborting reenrollment process for device '%s'. Currently only mTLS auth mode is allowed. DMS '%s' is configured with '%s'", csr.Subject.CommonName, dms.ID, estAuthOptions.AuthMode)
+	clientCert, hasValue := ctx.Value(models.ESTAuthModeMutualTLS).(*x509.Certificate)
+	if !hasValue {
+		lDMS.Errorf("aborting enrollment process for device '%s'. currently only mTLS auth mode is allowed. DMS '%s' is configured with '%s'. No client certificate was presented", csr.Subject.CommonName, dms.ID, estAuthOptions.AuthMode)
 		return nil, errs.ErrDMSAuthModeNotSupported
-	}
-
-	var clientCert *x509.Certificate
-	switch t := authOptions.(type) {
-	case models.ESTServerAuthOptionsMutualTLS:
-		clientCert = t.ClientCertificate
-	default:
-		return nil, fmt.Errorf("unsupported auth mode. Provided auth options are of type %s", t)
 	}
 
 	lDMS.Debugf("presented client certificate has CN=%s and SN=%s issued by CA with CommonName '%s'", clientCert.Subject.CommonName, helpers.SerialNumberToString(clientCert.SerialNumber), clientCert.Issuer.CommonName)
@@ -494,7 +471,7 @@ func (svc DmsManagerServiceImpl) Reenroll(authMode models.ESTAuthMode, authOptio
 
 	validCertificate := false
 	//check if certificate is a certificate issued by Enroll CA
-	lDMS.Debugf("validating client certificate using EST Enrollment CA witch has ID=%s CN=%s SN=%s")
+	lDMS.Debugf("validating client certificate using EST Enrollment CA witch has ID=%s CN=%s SN=%s", enrollCAID, enrollCA.Certificate.Subject.CommonName, enrollCA.SerialNumber)
 	err = helpers.ValidateCertificate((*x509.Certificate)(enrollCA.Certificate.Certificate), *clientCert)
 	if err != nil {
 		lDMS.Warnf("invalid validation using enroll CA")
@@ -550,6 +527,31 @@ func (svc DmsManagerServiceImpl) Reenroll(authMode models.ESTAuthMode, authOptio
 		lDMS.Debugf("device '%s' does exist", csr.Subject.CommonName)
 	}
 
+	currentDeviceCert := device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion].Certificate
+	lDMS.Debugf("device %s ActiveVersion=%d for IdentitySlot is certificate with SN=%s", device.ID, device.IdentitySlot.ActiveVersion, helpers.SerialNumberToString(currentDeviceCert.SerialNumber))
+
+	lDMS.Debugf("checking CSR has same RawSubject as the previous enrollment at byte level. DeviceID=%s ActiveVersion=%d", device.ID, device.IdentitySlot.ActiveVersion)
+	if slices.Compare[byte](device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion].Certificate.RawSubject, csr.RawSubject) != 0 {
+		lDMS.Errorf("incoming CSR for device %s has different RawSubject compared with previous enrollment with ActiveVersion=%d", device.ID, device.IdentitySlot.ActiveVersion)
+		return nil, fmt.Errorf("invalid RawSubject bytes")
+	}
+
+	now := time.Now()
+	lDMS.Debugf("checking if DMS allows enrollment at current delta for device %s", device.ID)
+
+	comparisonTimeThreshold := currentDeviceCert.NotAfter.Add(time.Duration(dms.IdentityProfile.ReEnrollmentSettings.AllowedReenrollmentDelta))
+	lDMS.Debugf("current device certificate expires at %s. DMS has a allowance reenroll delta of %s. Current device expiration + allowance delta is %s (delta=%s)", currentDeviceCert.NotAfter.UTC().Format("2006-01-02T15:04:05Z07:00"), dms.IdentityProfile.ReEnrollmentSettings.AllowedReenrollmentDelta.String(), comparisonTimeThreshold.UTC().Format("2006-01-02T15:04:05Z07:00"), models.TimeDuration(now.Sub(comparisonTimeThreshold)).String())
+
+	//Check if current cert is REVOKED
+
+	//Check if Not in DMS ReEnroll Window
+	if !comparisonTimeThreshold.After(now) {
+		lDMS.Debugf("aborting reenrollment. Device has a valid certificate and DMS reenrollment window does not allow reenrolling with %s delta. Update DMS or wait until the reenrollment window is open", models.TimeDuration(now.Sub(comparisonTimeThreshold)).String())
+		return nil, fmt.Errorf("invalid reenroll window")
+	}
+
+	//Check if EXPIRED
+
 	crt, err := svc.caClient.SignCertificate(SignCertificateInput{
 		CAID:         dms.IdentityProfile.EnrollmentSettings.AuthorizedCA,
 		CertRequest:  (*models.X509CertificateRequest)(csr),
@@ -582,9 +584,8 @@ func (svc DmsManagerServiceImpl) Reenroll(authMode models.ESTAuthMode, authOptio
 	}
 
 	return (*x509.Certificate)(crt.Certificate), nil
-
 }
 
-func (svc DmsManagerServiceImpl) ServerKeyGen(authMode models.ESTAuthMode, authOptions interface{}, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
+func (svc DmsManagerServiceImpl) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
 	return nil, nil, fmt.Errorf("TODO")
 }

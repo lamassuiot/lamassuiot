@@ -63,7 +63,7 @@ func (cli *deviceManagerClient) GetDevices(input services.GetDevicesInput) (stri
 	}
 }
 func (cli *deviceManagerClient) GetDeviceByDMS(input services.GetDevicesByDMSInput) (string, error) {
-	url := cli.baseUrl + "/v1/dms/" + input.DMSID
+	url := cli.baseUrl + "/v1/devices/dms/" + input.DMSID
 
 	if input.ExhaustiveRun {
 		err := IterGet[models.Device, *resources.GetDevicesResponse](context.Background(), cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})

@@ -43,10 +43,14 @@ type CAService interface {
 	SignatureVerify(input SignatureVerifyInput) (bool, error)
 
 	SignCertificate(input SignCertificateInput) (*models.Certificate, error)
+	CreateCertificate(input CreateCertificateInput) (*models.Certificate, error)
+	ImportCertificate(input ImportCertificateInput) (*models.Certificate, error)
+
 	GetCertificateBySerialNumber(input GetCertificatesBySerialNumberInput) (*models.Certificate, error)
 	GetCertificates(input GetCertificatesInput) (string, error)
 	GetCertificatesByCA(input GetCertificatesByCAInput) (string, error)
 	GetCertificatesByExpirationDate(input GetCertificatesByExpirationDateInput) (string, error)
+	GetCertificatesByCaAndStatus(input GetCertificatesByCaAndStatusInput) (string, error)
 	// GetCertificatesByExpirationDateAndCA(input GetCertificatesByExpirationDateInput) (string, error)
 	// GetCertificatesByStatus(input GetCertificatesByExpirationDateInput) (string, error)
 	// GetCertificatesByStatusAndCA(input GetCertificatesByExpirationDateInput) (string, error)
@@ -246,9 +250,9 @@ type SignInput struct {
 }
 
 type issueCAInput struct {
-	KeyMetadata  models.KeyMetadata `validate:"required"`
-	Subject      models.Subject     `validate:"required"`
-	CAType       models.CAType      `validate:"required"`
+	KeyMetadata  models.KeyMetadata     `validate:"required"`
+	Subject      models.Subject         `validate:"required"`
+	CAType       models.CertificateType `validate:"required"`
 	CAExpiration models.Expiration
 }
 
@@ -281,7 +285,7 @@ func (svc *CAServiceImpl) issueCA(input issueCAInput) (*issueCAOutput, error) {
 }
 
 type ImportCAInput struct {
-	CAType             models.CAType             `validate:"required,ne=MANAGED"`
+	CAType             models.CertificateType    `validate:"required,ne=MANAGED"`
 	IssuanceExpiration models.Expiration         `validate:"required"`
 	CACertificate      *models.X509Certificate   `validate:"required"`
 	CAChain            []*models.X509Certificate //Parent CAs. They MUST be sorted as follows. 0: Root-CA; 1: Subordinate CA from Root-CA; ...
@@ -312,10 +316,10 @@ func (svc *CAServiceImpl) ImportCA(input ImportCAInput) (*models.CACertificate, 
 
 	caCert := input.CACertificate
 
-	if input.CAType != models.CATypeExternal {
+	if input.CAType != models.CertificateTypeExternal {
 		lCA.Debugf("importing CA %s private key. CA type: %s", input.CACertificate.Subject.CommonName, input.CAType)
 		engine := *svc.defaultCryptoEngine
-		if input.CAType != models.CATypeExternal {
+		if input.CAType != models.CertificateTypeExternal {
 			if input.CARSAKey != nil {
 				_, err = engine.ImportRSAPrivateKey(input.CARSAKey, input.CACertificate.Subject.CommonName)
 			} else if input.CAECKey != nil {
@@ -343,7 +347,6 @@ func (svc *CAServiceImpl) ImportCA(input ImportCAInput) (*models.CACertificate, 
 		IssuanceExpirationRef: input.IssuanceExpiration,
 		CreationTS:            time.Now(),
 		Certificate: models.Certificate{
-			Fingerprint:         helpers.X509CertFingerprint(x509.Certificate(*input.CACertificate)),
 			Certificate:         input.CACertificate,
 			Status:              models.StatusActive,
 			SerialNumber:        helpers.SerialNumberToString(caCert.SerialNumber),
@@ -370,11 +373,11 @@ func (svc *CAServiceImpl) ImportCA(input ImportCAInput) (*models.CACertificate, 
 }
 
 type CreateCAInput struct {
-	CAType             models.CAType      `validate:"required,eq=MANAGED"`
-	KeyMetadata        models.KeyMetadata `validate:"required"`
-	Subject            models.Subject     `validate:"required"`
-	IssuanceExpiration models.Expiration  `validate:"required"`
-	CAExpiration       models.Expiration  `validate:"required"`
+	CAType             models.CertificateType `validate:"required,eq=MANAGED"`
+	KeyMetadata        models.KeyMetadata     `validate:"required"`
+	Subject            models.Subject         `validate:"required"`
+	IssuanceExpiration models.Expiration      `validate:"required"`
+	CAExpiration       models.Expiration      `validate:"required"`
 }
 
 // Returned Error Codes:
@@ -418,7 +421,6 @@ func (svc *CAServiceImpl) CreateCA(input CreateCAInput) (*models.CACertificate, 
 		Type:                  input.CAType,
 		CreationTS:            time.Now(),
 		Certificate: models.Certificate{
-			Fingerprint:  helpers.X509CertFingerprint(*caCert),
 			Certificate:  (*models.X509Certificate)(caCert),
 			Status:       models.StatusActive,
 			SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
@@ -488,7 +490,7 @@ type GetCAsInput struct {
 	QueryParameters *resources.QueryParameters
 
 	ExhaustiveRun bool //wether to iter all elems
-	ApplyFunc     func(cert *models.CACertificate)
+	ApplyFunc     func(ca *models.CACertificate)
 }
 
 func (svc *CAServiceImpl) GetCAs(input GetCAsInput) (string, error) {
@@ -753,8 +755,9 @@ func (svc *CAServiceImpl) SignCertificate(input SignCertificateInput) (*models.C
 	}
 
 	cert := models.Certificate{
+		Metadata:    map[string]interface{}{},
+		Type:        models.CertificateTypeExternal,
 		Certificate: (*models.X509Certificate)(x509Cert),
-		Fingerprint: helpers.X509CertFingerprint(*x509Cert),
 		IssuerCAMetadata: models.IssuerCAMetadata{
 			SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
 			CAID:         ca.ID,
@@ -769,6 +772,22 @@ func (svc *CAServiceImpl) SignCertificate(input SignCertificateInput) (*models.C
 	}
 	lCA.Debugf("insert Certificate %s in storage engine", cert.SerialNumber)
 	return svc.certStorage.Insert(context.Background(), &cert)
+}
+
+type CreateCertificateInput struct {
+	KeyMetadata models.KeyMetadata `validate:"required"`
+	Subject     models.Subject     `validate:"required"`
+}
+
+func (svc *CAServiceImpl) CreateCertificate(input CreateCertificateInput) (*models.Certificate, error) {
+	return nil, nil
+}
+
+type ImportCertificateInput struct {
+}
+
+func (svc *CAServiceImpl) ImportCertificate(input ImportCertificateInput) (*models.Certificate, error) {
+	return nil, nil
 }
 
 type SignatureSignInput struct {
@@ -921,6 +940,16 @@ func (svc *CAServiceImpl) GetCertificatesByExpirationDate(input GetCertificatesB
 	return svc.certStorage.SelectByExpirationDate(context.Background(), input.ExpiresBefore, input.ExpiresAfter, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, map[string]interface{}{})
 }
 
+type GetCertificatesByCaAndStatusInput struct {
+	CAID   string
+	Status models.CertificateStatus
+	ListInput[models.Certificate]
+}
+
+func (svc *CAServiceImpl) GetCertificatesByCaAndStatus(input GetCertificatesByCaAndStatusInput) (string, error) {
+	return "", fmt.Errorf("TODO")
+}
+
 type UpdateCertificateStatusInput struct {
 	SerialNumber string                   `validate:"required"`
 	NewStatus    models.CertificateStatus `validate:"required"`
@@ -1039,7 +1068,7 @@ func importCAValidation(sl validator.StructLevel) {
 		sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
 	}
 
-	if ca.CAType != models.CATypeExternal {
+	if ca.CAType != models.CertificateTypeExternal {
 		lCA.Debugf("CA Type: %s", ca.CAType)
 		if !helpers.ValidateExpirationTimeRef(ca.IssuanceExpiration) {
 			lCA.Errorf("expiration time ref is incompatible with the selected variable")

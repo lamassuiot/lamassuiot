@@ -83,7 +83,7 @@ func (cli *httpCAClient) CreateCA(input services.CreateCAInput) (*models.CACerti
 	response, err := Post[*models.CACertificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/cas", resources.CreateCABody{
 		Subject:            input.Subject,
 		KeyMetadata:        input.KeyMetadata,
-		CAType:             models.CAType(input.CAType),
+		CAType:             models.CertificateType(input.CAType),
 		IssuanceExpiration: input.IssuanceExpiration,
 		CAExpiration:       input.CAExpiration,
 	}, map[int][]error{})
@@ -114,7 +114,7 @@ func (cli *httpCAClient) ImportCA(input services.ImportCAInput) (*models.CACerti
 	}
 
 	response, err := Post[*models.CACertificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/cas/import", resources.ImportCABody{
-		CAType:             models.CAType(input.CAType),
+		CAType:             models.CertificateType(input.CAType),
 		IssuanceExpiration: input.IssuanceExpiration,
 		CACertificate:      input.CACertificate,
 		CAChain:            input.CAChain,
@@ -138,6 +138,14 @@ func (cli *httpCAClient) SignCertificate(input services.SignCertificateInput) (*
 	}
 
 	return response, nil
+}
+
+func (cli *httpCAClient) CreateCertificate(input services.CreateCertificateInput) (*models.Certificate, error) {
+	return nil, fmt.Errorf("TODO")
+}
+
+func (cli *httpCAClient) ImportCertificate(input services.ImportCertificateInput) (*models.Certificate, error) {
+	return nil, fmt.Errorf("TODO")
 }
 
 func (cli *httpCAClient) UpdateCAStatus(input services.UpdateCAStatusInput) (*models.CACertificate, error) {
@@ -238,6 +246,9 @@ func (cli *httpCAClient) GetCertificatesByExpirationDate(input services.GetCerti
 		resp, err := Get[resources.GetCAsResponse](context.Background(), cli.httpClient, url, input.QueryParameters, map[int][]error{})
 		return resp.NextBookmark, err
 	}
+}
+func (cli *httpCAClient) GetCertificatesByCaAndStatus(input services.GetCertificatesByCaAndStatusInput) (string, error) {
+	return "", fmt.Errorf("TODO")
 }
 
 func (cli *httpCAClient) UpdateCertificateStatus(input services.UpdateCertificateStatusInput) (*models.Certificate, error) {

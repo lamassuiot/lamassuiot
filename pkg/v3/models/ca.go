@@ -4,12 +4,12 @@ import (
 	"time"
 )
 
-type CAType string
+type CertificateType string
 
 const (
-	CATypeManaged  CAType = "MANAGED"
-	CATypeImported CAType = "IMPORTED"
-	CATypeExternal CAType = "EXTERNAL"
+	CertificateTypeManaged  CertificateType = "MANAGED"
+	CertificateTypeImported CertificateType = "IMPORTED"
+	CertificateTypeExternal CertificateType = "EXTERNAL"
 )
 
 type ExpirationTimeRef string
@@ -28,17 +28,17 @@ const (
 )
 
 type Certificate struct {
+	SerialNumber        string                 `json:"serial_number"`
 	Metadata            map[string]interface{} `json:"metadata" gorm:"serializer:json"`
 	IssuerCAMetadata    IssuerCAMetadata       `json:"issuer_metadata"  gorm:"embedded;embeddedPrefix:issuer_meta_"`
 	Status              CertificateStatus      `json:"status"`
-	Fingerprint         string                 `json:"fingerprint"`
 	Certificate         *X509Certificate       `json:"certificate"`
-	SerialNumber        string                 `json:"serial_number"`
 	KeyMetadata         KeyStrengthMetadata    `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_strength_meta_"`
 	Subject             Subject                `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
 	ValidFrom           time.Time              `json:"valid_from"`
 	ValidTo             time.Time              `json:"valid_to"`
 	RevocationTimestamp time.Time              `json:"revocation_timestamp"`
+	Type                CertificateType        `json:"type"`
 }
 
 type Expiration struct {
@@ -57,7 +57,7 @@ type CACertificate struct {
 	ID                    string                 `json:"id" gorm:"primaryKey"`
 	Metadata              map[string]interface{} `json:"metadata" gorm:"serializer:json"`
 	IssuanceExpirationRef Expiration             `json:"issuance_expiration" gorm:"serializer:json"`
-	Type                  CAType                 `json:"type"`
+	Type                  CertificateType        `json:"type"`
 	CreationTS            time.Time              `json:"creation_ts"`
 }
 

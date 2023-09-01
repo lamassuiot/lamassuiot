@@ -104,6 +104,7 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.PKCS11EngineConfig) (Cryp
 		"lamassu.io/cryptoengine/pkcs11/manufacturer":     pkcs11ProviderInfo.ManufacturerID,
 		"lamassu.io/cryptoengine/pkcs11/model":            tokenInfo.Model,
 	}
+
 	meta := helpers.MergeMaps[interface{}](&defaultMeta, &conf.Metadata)
 
 	return &pkcs11EngineContext{

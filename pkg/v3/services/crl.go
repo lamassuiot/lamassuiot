@@ -50,8 +50,9 @@ func (svc crlServiceImpl) GetCRL(input GetCRLInput) ([]byte, error) {
 
 	certList := []pkix.RevokedCertificate{}
 	svc.logger.Debugf("reading CA %s certificates", input.CAID)
-	_, err = svc.caSDK.GetCertificatesByCA(GetCertificatesByCAInput{
-		CAID: input.CAID,
+	_, err = svc.caSDK.GetCertificatesByCaAndStatus(GetCertificatesByCaAndStatusInput{
+		CAID:   input.CAID,
+		Status: models.StatusRevoked,
 		ListInput: ListInput[models.Certificate]{
 			ExhaustiveRun: true,
 			ApplyFunc: func(cert *models.Certificate) {
