@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -23,6 +22,9 @@ import (
 	"github.com/hashicorp/vault/vault"
 	"github.com/jakehl/goid"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/clients"
+	configV3 "github.com/lamassuiot/lamassuiot/pkg/v3/config"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"
@@ -30,7 +32,6 @@ import (
 	alertsRepository "github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/repository/postgres"
 	alertsService "github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/service"
 
-	caClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	caRepository "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/repository/postgres"
 	caService "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service"
 	cryptoEngines "github.com/lamassuiot/lamassuiot/pkg/ca/server/api/service/crypto-engines"
@@ -49,7 +50,6 @@ import (
 
 	vaultapi "github.com/hashicorp/vault/api"
 	vaulthttp "github.com/hashicorp/vault/http"
-	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	estTransport "github.com/lamassuiot/lamassuiot/pkg/est/server/api/transport"
 	ocspService "github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/service"
 	ocspTransport "github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/transport"
@@ -134,18 +134,20 @@ func BuildDMSManagerTestServer(CATestServer *httptest.Server) (*httptest.Server,
 
 	dmsRepository := dmsRepository.NewPostgresDB(db)
 
-	CATestServerURL, err := url.Parse(CATestServer.URL)
+	clientConf := configV3.HTTPClient{
+		AuthMode: configV3.NoAuth,
+		HTTPConnection: configV3.HTTPConnection{
+			Protocol: configV3.HTTP,
+		},
+	}
+
+	caHttpClient, err := clients.BuildHTTPClient(clientConf, "CA")
 	if err != nil {
 		return nil, nil, err
 	}
 
-	lamassuCAClient, err := caClient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
-		URL:        CATestServerURL,
-		AuthMethod: clientUtils.AuthMethodNone,
-	})
-	if err != nil {
-		return nil, nil, err
-	}
+	caClient := clients.NewhttpCAClient(caHttpClient, CATestServer.URL)
+
 	parsedLamassuDevManagerURL, err := url.Parse("http://localhost")
 	devClient, err := devClient.NewLamassuDeviceManagerClient(clientUtils.BaseClientConfigurationuration{
 		URL:        parsedLamassuDevManagerURL,
@@ -156,7 +158,7 @@ func BuildDMSManagerTestServer(CATestServer *httptest.Server) (*httptest.Server,
 	}
 	var upstreamKey interface{}
 	var svc dmsService.Service
-	svc = dmsService.NewDMSManagerService(dmsRepository, &lamassuCAClient, &devClient, nil, nil, upstreamKey, "")
+	svc = dmsService.NewDMSManagerService(dmsRepository, caClient, &devClient, nil, nil, upstreamKey, "")
 	svc = dmsService.NewInputValudationMiddleware()(svc)
 
 	handler := dmsTransport.MakeHTTPHandler(svc)
@@ -179,18 +181,19 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 
 	deviceRepository := postgresRepository.NewDevicesPostgresDB(db)
 
-	CATestServerURL, err := url.Parse(CATestServer.URL)
+	clientConf := configV3.HTTPClient{
+		AuthMode: configV3.NoAuth,
+		HTTPConnection: configV3.HTTPConnection{
+			Protocol: configV3.HTTP,
+		},
+	}
+
+	caHttpClient, err := clients.BuildHTTPClient(clientConf, "CA")
 	if err != nil {
 		return nil, nil, err
 	}
 
-	lamassuCAClient, err := caClient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
-		URL:        CATestServerURL,
-		AuthMethod: clientUtils.AuthMethodNone,
-	})
-	if err != nil {
-		return nil, nil, err
-	}
+	caClient := clients.NewhttpCAClient(caHttpClient, CATestServer.URL)
 
 	DMSTestServerURL, err := url.Parse(DMSTestServer.URL)
 	if err != nil {
@@ -203,9 +206,8 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 	if err != nil {
 		return nil, nil, err
 	}
-	outGetCA, err := lamassuCAClient.GetCAByName(context.Background(), &caApi.GetCAByNameInput{
-		CAType: caApi.CATypeDMSEnroller,
-		CAName: "LAMASSU-DMS-MANAGER",
+	outGetCA, err := caClient.GetCAByID(services.GetCAByIDInput{
+		CAID: "LAMASSU-DMS-MANAGER",
 	})
 	statsRepo, err := deviceStatsRepository.NewStatisticsDBInMemory()
 	if err != nil {
@@ -215,7 +217,7 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 	if err != nil {
 		return nil, nil, err
 	}
-	svc := deviceService.NewDeviceManagerService(outGetCA.Certificate.Certificate, deviceRepository, logsRepo, statsRepo, 30, lamassuCAClient, lamassuDMSClient)
+	svc := deviceService.NewDeviceManagerService((*x509.Certificate)(outGetCA.Certificate.Certificate), deviceRepository, logsRepo, statsRepo, 30, caClient, lamassuDMSClient)
 	svc = deviceService.NewInputValudationMiddleware()(svc)
 
 	handler := deviceTransport.MakeHTTPHandler(svc)
@@ -230,18 +232,19 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 }
 
 func BuildOCSPTestServer(CATestServer *httptest.Server) (*httptest.Server, error) {
-	CATestServerURL, err := url.Parse(CATestServer.URL)
-	if err != nil {
-		return nil, err
+	clientConf := configV3.HTTPClient{
+		AuthMode: configV3.NoAuth,
+		HTTPConnection: configV3.HTTPConnection{
+			Protocol: configV3.HTTP,
+		},
 	}
 
-	lamassuCAClient, err := caClient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
-		URL:        CATestServerURL,
-		AuthMethod: clientUtils.AuthMethodNone,
-	})
+	caHttpClient, err := clients.BuildHTTPClient(clientConf, "CA")
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
+
+	caClient := clients.NewhttpCAClient(caHttpClient, CATestServer.URL)
 
 	ocspSigner, _ := rsa.GenerateKey(rand.Reader, 2048)
 	template := x509.Certificate{
@@ -264,7 +267,7 @@ func BuildOCSPTestServer(CATestServer *httptest.Server) (*httptest.Server, error
 		panic(err)
 	}
 
-	svc := ocspService.NewOCSPService(lamassuCAClient, ocspSigner, ocspCertificate)
+	svc := ocspService.NewOCSPService(caClient, ocspSigner, ocspCertificate)
 
 	handler := ocspTransport.MakeHTTPHandler(svc, false)
 

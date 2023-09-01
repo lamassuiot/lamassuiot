@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	caClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	deviceErrors "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
@@ -22,6 +21,9 @@ import (
 	estserver "github.com/lamassuiot/lamassuiot/pkg/est/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
+	serviceV3 "github.com/lamassuiot/lamassuiot/pkg/v3/services"
 	"github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
@@ -54,13 +56,13 @@ type DevicesService struct {
 	devicesRepo             repository.Devices
 	logsRepo                repository.DeviceLogs
 	statsRepo               repository.Statistics
-	caClient                caClient.LamassuCAClient
+	caClient                serviceV3.CAService
 	dmsManagerClient        dmsManagerClient.LamassuDMSManagerClient
 	minimumReenrollmentDays int
 	upstreamCACert          *x509.Certificate
 }
 
-func NewDeviceManagerService(upstreamCACert *x509.Certificate, devicesRepo repository.Devices, deviceLogsRep repository.DeviceLogs, statsRepo repository.Statistics, minimumReenrollmentDays int, caClient caClient.LamassuCAClient, dmsManagerClient dmsManagerClient.LamassuDMSManagerClient) Service {
+func NewDeviceManagerService(upstreamCACert *x509.Certificate, devicesRepo repository.Devices, deviceLogsRep repository.DeviceLogs, statsRepo repository.Statistics, minimumReenrollmentDays int, caClient serviceV3.CAService, dmsManagerClient dmsManagerClient.LamassuDMSManagerClient) Service {
 	svc := &DevicesService{
 		devicesRepo:             devicesRepo,
 		logsRepo:                deviceLogsRep,
@@ -482,11 +484,9 @@ func (s *DevicesService) RevokeActiveCertificate(ctx context.Context, input *api
 	if cert.Status == caApi.StatusRevoked {
 		return &api.RevokeActiveCertificateOutput{}, errors.New("certificate is already revoked")
 	} else {
-		revokeOutput, err := s.caClient.RevokeCertificate(ctx, &caApi.RevokeCertificateInput{
-			CAType:                  caApi.CATypePKI,
-			CAName:                  slot.ActiveCertificate.CAName,
-			CertificateSerialNumber: slot.ActiveCertificate.SerialNumber,
-			RevocationReason:        input.RevocationReason,
+		revokeOutput, err := s.caClient.UpdateCertificateStatus(serviceV3.UpdateCertificateStatusInput{
+			SerialNumber: slot.ActiveCertificate.SerialNumber,
+			NewStatus:    models.StatusRevoked,
 		})
 
 		if err != nil {
@@ -497,7 +497,10 @@ func (s *DevicesService) RevokeActiveCertificate(ctx context.Context, input *api
 
 		slot.ActiveCertificate.Status = caApi.StatusRevoked
 		slot.ActiveCertificate.RevocationReason = input.RevocationReason
-		slot.ActiveCertificate.RevocationTimestamp = revokeOutput.RevocationTimestamp
+		slot.ActiveCertificate.RevocationTimestamp = pq.NullTime{
+			Valid: true,
+			Time:  revokeOutput.RevocationTimestamp,
+		}
 
 		err = s.devicesRepo.UpdateSlot(ctx, input.DeviceID, *slot)
 		if err != nil {
@@ -572,10 +575,8 @@ func (s *DevicesService) IsDMSAuthorizedToEnroll(ctx context.Context, input *api
 }
 
 func (s *DevicesService) ImportDeviceCert(ctx context.Context, input *api.ImportDeviceCertInput) (*api.ImportDeviceCertOutput, error) {
-	deviceCert, err := s.caClient.GetCertificateBySerialNumber(ctx, &caApi.GetCertificateBySerialNumberInput{
-		CAType:                  caApi.CATypePKI,
-		CAName:                  input.CaName,
-		CertificateSerialNumber: input.SerialNumber,
+	deviceCert, err := s.caClient.GetCertificateBySerialNumber(serviceV3.GetCertificatesBySerialNumberInput{
+		SerialNumber: input.SerialNumber,
 	})
 	if err != nil {
 		return &api.ImportDeviceCertOutput{}, err
@@ -612,7 +613,7 @@ func (s *DevicesService) ImportDeviceCert(ctx context.Context, input *api.Import
 	slot, err := s.service.AddDeviceSlot(ctx, &api.AddDeviceSlotInput{
 		DeviceID:          input.DeviceID,
 		SlotID:            input.SlotID,
-		ActiveCertificate: deviceCert.Certificate.Certificate,
+		ActiveCertificate: (*x509.Certificate)(deviceCert.Certificate),
 	})
 	if err != nil {
 		return &api.ImportDeviceCertOutput{}, err
@@ -629,19 +630,19 @@ func (s *DevicesService) ImportDeviceCert(ctx context.Context, input *api.Import
 
 func (s *DevicesService) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
 	cas := make([]*x509.Certificate, 0)
-	s.caClient.IterateCAsWithPredicate(ctx, &caApi.IterateCAsWithPredicateInput{
-		CAType: caApi.CATypePKI,
-		PredicateFunc: func(c *caApi.CACertificate) {
-			cas = append(cas, c.Certificate.Certificate)
+	s.caClient.GetCAs(serviceV3.GetCAsInput{
+		QueryParameters: &resources.QueryParameters{},
+		ExhaustiveRun:   true,
+		ApplyFunc: func(c *models.CACertificate) {
+			cas = append(cas, (*x509.Certificate)(c.Certificate.Certificate))
 		},
 	})
 	return cas, nil
 }
 
 func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateRequest, clientCertificate *x509.Certificate, aps string) (*x509.Certificate, error) {
-	outGetCA, err := s.caClient.GetCAByName(ctx, &caApi.GetCAByNameInput{
-		CAType: caApi.CATypeDMSEnroller,
-		CAName: "LAMASSU-DMS-MANAGER",
+	outGetCA, err := s.caClient.GetCAByID(serviceV3.GetCAByIDInput{
+		CAID: "LAMASSU-DMS-MANAGER",
 	})
 	if err != nil {
 		return nil, &estErrors.GenericError{
@@ -667,7 +668,7 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 			}
 		}
 	} else {
-		err = s.verifyCertificate(clientCertificate, outGetCA.Certificate.Certificate, false)
+		err = s.verifyCertificate(clientCertificate, (*x509.Certificate)(outGetCA.Certificate.Certificate), false)
 		if err != nil {
 			log.Debug("the presented client certificate was not issued by LAMASSU-DMS-MANAGER.")
 			return nil, &estErrors.GenericError{
@@ -759,12 +760,13 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 
 	}
 
-	signOutput, err := s.caClient.SignCertificateRequest(ctx, &caApi.SignCertificateRequestInput{
-		CAType:                    caApi.CATypePKI,
-		CertificateSigningRequest: csr,
-		CAName:                    aps,
-		SignVerbatim:              true,
+	signOutput, err := s.caClient.SignCertificate(serviceV3.SignCertificateInput{
+		CAID:         aps,
+		CertRequest:  (*models.X509CertificateRequest)(csr),
+		Subject:      models.Subject{},
+		SignVerbatim: true,
 	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -774,7 +776,7 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 		_, err = s.service.RotateActiveCertificate(ctx, &api.RotateActiveCertificateInput{
 			DeviceID:       deviceID,
 			SlotID:         slotID,
-			NewCertificate: signOutput.Certificate,
+			NewCertificate: (*x509.Certificate)(signOutput.Certificate),
 		})
 		if err != nil {
 			return nil, err
@@ -784,14 +786,14 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 		_, err = s.service.AddDeviceSlot(ctx, &api.AddDeviceSlotInput{
 			DeviceID:          deviceID,
 			SlotID:            slotID,
-			ActiveCertificate: signOutput.Certificate,
+			ActiveCertificate: (*x509.Certificate)(signOutput.Certificate),
 		})
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	return signOutput.Certificate, nil
+	return (*x509.Certificate)(signOutput.Certificate), nil
 }
 
 func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, error) {
@@ -849,10 +851,10 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 		}
 	}
 
-	outGetCA, err := s.caClient.GetCAByName(ctx, &caApi.GetCAByNameInput{
-		CAType: caApi.CATypePKI,
-		CAName: aps,
+	outGetCA, err := s.caClient.GetCAByID(serviceV3.GetCAByIDInput{
+		CAID: aps,
 	})
+
 	if err != nil {
 		s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeCritical, "Slot Reneweal process Failed", fmt.Sprintf("Could not retrive siging CA %s", aps))
 		return nil, &estErrors.GenericError{
@@ -870,7 +872,7 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 			}
 		}
 	} else {
-		err = s.verifyCertificate(cert, outGetCA.Certificate.Certificate, false)
+		err = s.verifyCertificate(cert, (*x509.Certificate)(outGetCA.Certificate.Certificate), false)
 		if err != nil {
 			s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeCritical, "Slot Reneweal process Failed", "Client certificate is not valid")
 			return nil, &estErrors.GenericError{
@@ -888,11 +890,11 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 		}
 	}
 
-	signOutput, err := s.caClient.SignCertificateRequest(ctx, &caApi.SignCertificateRequestInput{
-		CAType:                    caApi.CATypePKI,
-		CertificateSigningRequest: csr,
-		CAName:                    aps,
-		SignVerbatim:              true,
+	signOutput, err := s.caClient.SignCertificate(serviceV3.SignCertificateInput{
+		CAID:         aps,
+		CertRequest:  (*models.X509CertificateRequest)(csr),
+		Subject:      models.Subject{},
+		SignVerbatim: true,
 	})
 	if err != nil {
 		return nil, err
@@ -901,13 +903,13 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 	_, err = s.service.RotateActiveCertificate(ctx, &api.RotateActiveCertificateInput{
 		DeviceID:       deviceID,
 		SlotID:         slotID,
-		NewCertificate: signOutput.Certificate,
+		NewCertificate: (*x509.Certificate)(signOutput.Certificate),
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return signOutput.Certificate, nil
+	return (*x509.Certificate)(signOutput.Certificate), nil
 }
 
 func (s *DevicesService) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, *rsa.PrivateKey, error) {
@@ -941,21 +943,19 @@ func (s *DevicesService) verifyCertificate(clientCertificate *x509.Certificate, 
 		Roots:     clientCAs,
 		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
-	cert, _ := s.caClient.GetCertificateBySerialNumber(context.Background(), &caApi.GetCertificateBySerialNumberInput{
-		CAType:                  caApi.CATypePKI,
-		CAName:                  caCertificate.Subject.CommonName,
-		CertificateSerialNumber: utils.InsertNth(utils.ToHexInt(clientCertificate.SerialNumber), 2),
+	cert, _ := s.caClient.GetCertificateBySerialNumber(serviceV3.GetCertificatesBySerialNumberInput{
+		SerialNumber: utils.InsertNth(utils.ToHexInt(clientCertificate.SerialNumber), 2),
 	})
 	_, err := clientCertificate.Verify(opts)
 	if err != nil {
-		if cert.Status != caApi.StatusExpired && !allowExpiredRenewal {
+		if cert.Status != models.StatusExpired && !allowExpiredRenewal {
 			return errors.New("could not verify client certificate: " + err.Error())
-		} else if cert.Status == caApi.StatusExpired && !allowExpiredRenewal {
+		} else if cert.Status == models.StatusExpired && !allowExpiredRenewal {
 			return errors.New("could not verify client certificate: " + err.Error())
 		}
 	}
 
-	if cert.Status == caApi.StatusRevoked {
+	if cert.Status == models.StatusRevoked {
 		return errors.New("certificate status is: " + string(cert.Status))
 	}
 

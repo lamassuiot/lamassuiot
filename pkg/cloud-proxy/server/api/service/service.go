@@ -9,13 +9,13 @@ import (
 	"golang.org/x/exp/slices"
 
 	consul "github.com/hashicorp/consul/api"
-	lamassuCAClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	cloudProviderClient "github.com/lamassuiot/lamassuiot/pkg/cloud-provider/client"
 	cloudProvider "github.com/lamassuiot/lamassuiot/pkg/cloud-provider/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/common/api"
 	cProxyErrors "github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/repository"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
+	serviceV3 "github.com/lamassuiot/lamassuiot/pkg/v3/services"
 )
 
 type Service interface {
@@ -39,12 +39,12 @@ type Service interface {
 type CloudProxyService struct {
 	service             Service
 	ConsulClient        *consul.Client
-	LamassuCAClient     lamassuCAClient.LamassuCAClient
+	LamassuCAClient     serviceV3.CAService
 	CloudProxyDB        repository.CloudProxyRepository
 	ConnectorBaseConfig clientUtils.BaseClientConfigurationuration
 }
 
-func NewCloudPorxyService(consulClient *consul.Client, cloudProxyDatabase repository.CloudProxyRepository, lamassuCAClient lamassuCAClient.LamassuCAClient, clientBaseConfig clientUtils.BaseClientConfigurationuration) Service {
+func NewCloudPorxyService(consulClient *consul.Client, cloudProxyDatabase repository.CloudProxyRepository, lamassuCAClient serviceV3.CAService, clientBaseConfig clientUtils.BaseClientConfigurationuration) Service {
 	svc := CloudProxyService{
 		ConsulClient:        consulClient,
 		LamassuCAClient:     lamassuCAClient,

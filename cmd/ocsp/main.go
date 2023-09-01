@@ -3,16 +3,15 @@ package main
 import (
 	"crypto/x509"
 	"encoding/pem"
-	"net/url"
 	"os"
 	"strings"
 
-	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/api/transport"
 	"github.com/lamassuiot/lamassuiot/pkg/ocsp/server/config"
-	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/clients"
+	configV3 "github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 )
@@ -25,34 +24,47 @@ func main() {
 
 	mainServer := server.NewServer(config)
 
-	var lamassuCAClient lamassucaclient.LamassuCAClient
-	parsedLamassuCAURL, err := url.Parse(config.LamassuCAAddress)
-	if err != nil {
-		log.Fatal("Could not parse CA URL: ", err)
-	}
-
+	var clientConf configV3.HTTPClient
 	if strings.HasPrefix(config.LamassuCAAddress, "https") {
-		lamassuCAClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
-			URL:        parsedLamassuCAURL,
-			AuthMethod: clientUtils.AuthMethodMutualTLS,
-			AuthMethodConfig: &clientUtils.MutualTLSConfig{
-				ClientCert: config.CertFile,
-				ClientKey:  config.KeyFile,
+		clientConf = configV3.HTTPClient{
+			AuthMode: configV3.MTLS,
+			AuthMTLSOptions: configV3.AuthMTLSOptions{
+				CertFile: config.CertFile,
+				KeyFile:  config.KeyFile,
 			},
-			CACertificate: config.LamassuCACertFile,
-		})
-		if err != nil {
-			log.Fatal("Could not create LamassuCA client: ", err)
+			HTTPConnection: configV3.HTTPConnection{
+				Protocol: configV3.HTTPS,
+				BasePath: "",
+				BasicConnection: configV3.BasicConnection{
+					TLSConfig: configV3.TLSConfig{
+						InsecureSkipVerify: true,
+						CACertificateFile:  config.LamassuCACertFile,
+					},
+				},
+			},
 		}
 	} else {
-		lamassuCAClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
-			URL:        parsedLamassuCAURL,
-			AuthMethod: clientUtils.AuthMethodNone,
-		})
-		if err != nil {
-			log.Fatal("Could not create LamassuCA client: ", err)
+		clientConf = configV3.HTTPClient{
+			AuthMode: configV3.NoAuth,
+			HTTPConnection: configV3.HTTPConnection{
+				Protocol: configV3.HTTP,
+				BasePath: "",
+				BasicConnection: configV3.BasicConnection{
+					TLSConfig: configV3.TLSConfig{
+						InsecureSkipVerify: true,
+						CACertificateFile:  config.LamassuCACertFile,
+					},
+				},
+			},
 		}
 	}
+
+	caHttpClient, err := clients.BuildHTTPClient(clientConf, "CA")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	caClient := clients.NewhttpCAClient(caHttpClient, config.LamassuCAAddress)
 
 	certBytes, err := os.ReadFile(config.SignerCert)
 	if err != nil {
@@ -75,10 +87,10 @@ func main() {
 	ecdsaKey, ecdsaerr := x509.ParseECPrivateKey(block.Bytes)
 	var svc service.Service
 	if rsaerr == nil {
-		svc = service.NewOCSPService(lamassuCAClient, rsaKey, cert)
+		svc = service.NewOCSPService(caClient, rsaKey, cert)
 		log.Trace("RSA TYPE")
 	} else if ecdsaerr == nil {
-		svc = service.NewOCSPService(lamassuCAClient, ecdsaKey, cert)
+		svc = service.NewOCSPService(caClient, ecdsaKey, cert)
 		log.Trace("ECDSA TYPE")
 	} else {
 		log.Fatal("Could not parse key file: ", err)

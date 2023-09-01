@@ -10,9 +10,10 @@ import (
 	"errors"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/pkg/ca/client"
-	"github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
+	serviceV3 "github.com/lamassuiot/lamassuiot/pkg/v3/services"
 	"golang.org/x/crypto/ocsp"
 )
 
@@ -22,12 +23,12 @@ type Service interface {
 }
 
 type OCSPResponder struct {
-	lamassuCAClient      client.LamassuCAClient
+	lamassuCAClient      serviceV3.CAService
 	responderSigner      crypto.Signer
 	responderCertificate *x509.Certificate
 }
 
-func NewOCSPService(lamassuCAClient client.LamassuCAClient, responseKeySigner crypto.Signer, responseCertificate *x509.Certificate) Service {
+func NewOCSPService(lamassuCAClient serviceV3.CAService, responseKeySigner crypto.Signer, responseCertificate *x509.Certificate) Service {
 	responder := &OCSPResponder{
 		lamassuCAClient:      lamassuCAClient,
 		responderSigner:      responseKeySigner,
@@ -67,7 +68,7 @@ func (o *OCSPResponder) Health(ctx context.Context) bool {
 }
 
 func (o *OCSPResponder) Verify(ctx context.Context, msg []byte) ([]byte, error) {
-	var issuerCA *api.CACertificate
+	var issuerCA *models.CACertificate
 
 	var status int
 	var revokedAt time.Time
@@ -75,10 +76,11 @@ func (o *OCSPResponder) Verify(ctx context.Context, msg []byte) ([]byte, error) 
 	// parse the request
 	req, err := ocsp.ParseRequest(msg)
 
-	_, err = o.lamassuCAClient.IterateCAsWithPredicate(ctx, &api.IterateCAsWithPredicateInput{
-		CAType: api.CATypePKI,
-		PredicateFunc: func(ca *api.CACertificate) {
-			err = o.verifyIssuer(req, ca.Certificate.Certificate)
+	_, err = o.lamassuCAClient.GetCAs(serviceV3.GetCAsInput{
+		QueryParameters: &resources.QueryParameters{},
+		ExhaustiveRun:   true,
+		ApplyFunc: func(ca *models.CACertificate) {
+			err = o.verifyIssuer(req, (*x509.Certificate)(ca.Certificate.Certificate))
 			if err == nil {
 				issuerCA = ca
 			}
@@ -92,14 +94,12 @@ func (o *OCSPResponder) Verify(ctx context.Context, msg []byte) ([]byte, error) 
 		return nil, errors.New("Issuer CA not found")
 	}
 
-	if issuerCA.Status == api.StatusExpired || issuerCA.Status == api.StatusRevoked {
+	if issuerCA.Status == models.StatusExpired || issuerCA.Status == models.StatusRevoked {
 		return nil, errors.New("Issuing CA is not valid")
 	}
 
-	cert, err := o.lamassuCAClient.GetCertificateBySerialNumber(ctx, &api.GetCertificateBySerialNumberInput{
-		CAType:                  api.CATypePKI,
-		CAName:                  issuerCA.CAName,
-		CertificateSerialNumber: utils.InsertNth(utils.ToHexInt(req.SerialNumber), 2),
+	cert, err := o.lamassuCAClient.GetCertificateBySerialNumber(serviceV3.GetCertificatesBySerialNumberInput{
+		SerialNumber: utils.InsertNth(utils.ToHexInt(req.SerialNumber), 2),
 	})
 
 	if err != nil {
@@ -109,10 +109,10 @@ func (o *OCSPResponder) Verify(ctx context.Context, msg []byte) ([]byte, error) 
 	if err != nil {
 		status = ocsp.Unknown
 	} else {
-		if cert.Status == api.StatusRevoked {
+		if cert.Status == models.StatusRevoked {
 			status = ocsp.Revoked
-			revokedAt = cert.RevocationTimestamp.Time
-		} else if cert.Status == api.StatusActive || cert.Status == api.StatusAboutToExpire {
+			revokedAt = cert.RevocationTimestamp
+		} else if cert.Status == models.StatusActive || cert.Status == models.StatusNearingExpiration {
 			status = ocsp.Good
 		}
 	}
@@ -131,7 +131,7 @@ func (o *OCSPResponder) Verify(ctx context.Context, msg []byte) ([]byte, error) 
 	}
 
 	// make a response to return
-	resp, err := ocsp.CreateResponse(issuerCA.Certificate.Certificate, o.responderCertificate, rtemplate, o.responderSigner)
+	resp, err := ocsp.CreateResponse((*x509.Certificate)(issuerCA.Certificate.Certificate), o.responderCertificate, rtemplate, o.responderSigner)
 	if err != nil {
 		return nil, err
 	}

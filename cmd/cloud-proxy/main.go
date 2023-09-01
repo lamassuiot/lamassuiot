@@ -3,16 +3,16 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/hashicorp/consul/api"
-	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/transport"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/config"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/clients"
+	configV3 "github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	gorm_logrus "github.com/onrik/gorm-logrus"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
@@ -44,34 +44,47 @@ func main() {
 	cloudProxyRepo := postgresRepository.NewPostgresDB(db)
 	consulClient := initializeConsulClient(config.ConsulProtocol, config.ConsulHost, config.ConsulPort, config.ConsulCA)
 
-	var lamassuCAClient lamassucaclient.LamassuCAClient
-	parsedLamassuCAURL, err := url.Parse(config.LamassuCAAddress)
-	if err != nil {
-		log.Fatal("Could not parse CA URL: ", err)
-	}
-
+	var clientConf configV3.HTTPClient
 	if strings.HasPrefix(config.LamassuCAAddress, "https") {
-		lamassuCAClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
-			URL:        parsedLamassuCAURL,
-			AuthMethod: clientUtils.AuthMethodMutualTLS,
-			AuthMethodConfig: &clientUtils.MutualTLSConfig{
-				ClientCert: config.CertFile,
-				ClientKey:  config.KeyFile,
+		clientConf = configV3.HTTPClient{
+			AuthMode: configV3.MTLS,
+			AuthMTLSOptions: configV3.AuthMTLSOptions{
+				CertFile: config.CertFile,
+				KeyFile:  config.KeyFile,
 			},
-			CACertificate: config.LamassuCACertFile,
-		})
-		if err != nil {
-			log.Fatal("Could not create LamassuCA client: ", err)
+			HTTPConnection: configV3.HTTPConnection{
+				Protocol: configV3.HTTPS,
+				BasePath: "",
+				BasicConnection: configV3.BasicConnection{
+					TLSConfig: configV3.TLSConfig{
+						InsecureSkipVerify: true,
+						CACertificateFile:  config.LamassuCACertFile,
+					},
+				},
+			},
 		}
 	} else {
-		lamassuCAClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
-			URL:        parsedLamassuCAURL,
-			AuthMethod: clientUtils.AuthMethodNone,
-		})
-		if err != nil {
-			log.Fatal("Could not create LamassuCA client: ", err)
+		clientConf = configV3.HTTPClient{
+			AuthMode: configV3.NoAuth,
+			HTTPConnection: configV3.HTTPConnection{
+				Protocol: configV3.HTTP,
+				BasePath: "",
+				BasicConnection: configV3.BasicConnection{
+					TLSConfig: configV3.TLSConfig{
+						InsecureSkipVerify: true,
+						CACertificateFile:  config.LamassuCACertFile,
+					},
+				},
+			},
 		}
 	}
+
+	caHttpClient, err := clients.BuildHTTPClient(clientConf, "CA")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	caClient := clients.NewhttpCAClient(caHttpClient, config.LamassuCAAddress)
 
 	clientBaseConfig := clientUtils.BaseClientConfigurationuration{
 		AuthMethod: clientUtils.AuthMethodNone,
@@ -90,7 +103,7 @@ func main() {
 		}
 	}
 
-	svc := service.NewCloudPorxyService(consulClient, cloudProxyRepo, lamassuCAClient, clientBaseConfig)
+	svc := service.NewCloudPorxyService(consulClient, cloudProxyRepo, caClient, clientBaseConfig)
 	cpSvc := svc.(*service.CloudProxyService)
 
 	svc = service.LoggingMiddleware()(svc)
