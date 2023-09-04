@@ -207,7 +207,7 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 		return nil, nil, err
 	}
 	outGetCA, err := caClient.GetCAByID(services.GetCAByIDInput{
-		CAID: "LAMASSU-DMS-MANAGER",
+		CAID: "lms-lra",
 	})
 	statsRepo, err := deviceStatsRepository.NewStatisticsDBInMemory()
 	if err != nil {

@@ -226,7 +226,7 @@ func (s *DMSManagerService) UpdateDMSStatus(ctx context.Context, input *api.Upda
 		dms.Status = api.DMSStatusApproved
 		if !dms.CloudDMS {
 			signOutput, err := s.lamassuCAClient.SignCertificate(serviceV3.SignCertificateInput{
-				CAID:        "LAMASSU-DMS-MANAGER",
+				CAID:        "lms-lra",
 				CertRequest: (*models.X509CertificateRequest)(dms.RemoteAccessIdentity.CertificateRequest),
 				Subject:     models.Subject{},
 			})

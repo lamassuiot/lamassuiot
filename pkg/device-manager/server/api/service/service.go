@@ -642,7 +642,7 @@ func (s *DevicesService) CACerts(ctx context.Context, aps string) ([]*x509.Certi
 
 func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateRequest, clientCertificate *x509.Certificate, aps string) (*x509.Certificate, error) {
 	outGetCA, err := s.caClient.GetCAByID(serviceV3.GetCAByIDInput{
-		CAID: "LAMASSU-DMS-MANAGER",
+		CAID: "lms-lra",
 	})
 	if err != nil {
 		return nil, &estErrors.GenericError{
@@ -661,7 +661,7 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 	if dms.DeviceManufacturingService.CloudDMS {
 		err = s.verifyCertificate(clientCertificate, s.upstreamCACert, false)
 		if err != nil {
-			log.Debug("the presented client certificate was not issued by LAMASSU-DMS-MANAGER nor by the Upstream CA")
+			log.Debug("the presented client certificate was not issued by lms-lra nor by the Upstream CA")
 			return nil, &estErrors.GenericError{
 				Message:    "client certificate is not valid: " + err.Error(),
 				StatusCode: 403,
@@ -670,7 +670,7 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 	} else {
 		err = s.verifyCertificate(clientCertificate, (*x509.Certificate)(outGetCA.Certificate.Certificate), false)
 		if err != nil {
-			log.Debug("the presented client certificate was not issued by LAMASSU-DMS-MANAGER.")
+			log.Debug("the presented client certificate was not issued by lms-lra.")
 			return nil, &estErrors.GenericError{
 				Message:    "client certificate is not valid: " + err.Error(),
 				StatusCode: 403,

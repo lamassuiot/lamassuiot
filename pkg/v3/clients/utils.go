@@ -135,6 +135,38 @@ func Post[T any](ctx context.Context, client *http.Client, url string, data any)
 	return parseJSON[T](body)
 }
 
+func Put[T any](ctx context.Context, client *http.Client, url string, data any) (T, error) {
+	var m T
+	b, err := toJSON(data)
+	if err != nil {
+		return m, err
+	}
+	fmt.Println(string(b))
+
+	byteReader := bytes.NewReader(b)
+	r, err := http.NewRequestWithContext(ctx, "PUT", url, byteReader)
+	if err != nil {
+		return m, err
+	}
+	// Important to set
+	r.Header.Add("Content-Type", "application/json")
+	res, err := client.Do(r)
+	if err != nil {
+		return m, err
+	}
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return m, err
+	}
+
+	if res.StatusCode != 200 && res.StatusCode != 201 {
+		return m, fmt.Errorf("unexpected status code %d. Body msg: %s", res.StatusCode, string(body))
+	}
+
+	return parseJSON[T](body)
+}
+
 func Get[T any](ctx context.Context, client *http.Client, url string, queryParams *resources.QueryParameters) (T, error) {
 	var m T
 

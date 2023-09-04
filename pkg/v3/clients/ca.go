@@ -141,7 +141,7 @@ func (cli *httpCAClient) SignCertificate(input services.SignCertificateInput) (*
 		Subject:      input.Subject,
 	})
 	if err != nil {
-		return nil, err
+		return &models.Certificate{}, err
 	}
 
 	return response, nil
@@ -156,7 +156,7 @@ func (cli *httpCAClient) UpdateCAMetadata(input services.UpdateCAMetadataInput) 
 		Metadata: input.Metadata,
 	})
 	if err != nil {
-		return nil, err
+		return &models.CACertificate{}, err
 	}
 
 	return response, nil
@@ -169,7 +169,7 @@ func (cli *httpCAClient) DeleteCA(input services.DeleteCAInput) error {
 func (cli *httpCAClient) GetCertificateBySerialNumber(input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
 	response, err := Get[*models.Certificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/certificates/"+input.SerialNumber, nil)
 	if err != nil {
-		return nil, err
+		return &models.Certificate{}, err
 	}
 
 	return response, nil
@@ -188,11 +188,11 @@ func (cli *httpCAClient) GetCertificatesByExpirationDate(input services.GetCerti
 }
 
 func (cli *httpCAClient) UpdateCertificateStatus(input services.UpdateCertificateStatusInput) (*models.Certificate, error) {
-	response, err := Post[*models.Certificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/certificates/"+input.SerialNumber+"/status", resources.UpdateCertificateStatusBody{
+	response, err := Put[*models.Certificate](context.Background(), cli.httpClient, cli.baseUrl+"/v1/certificates/"+input.SerialNumber+"/status", resources.UpdateCertificateStatusBody{
 		NewStatus: input.NewStatus,
 	})
 	if err != nil {
-		return nil, err
+		return &models.Certificate{}, err
 	}
 
 	return response, nil
@@ -204,7 +204,7 @@ func (cli *httpCAClient) UpdateCertificateMetadata(input services.UpdateCertific
 		Metadata: input.Metadata,
 	})
 	if err != nil {
-		return nil, err
+		return &models.Certificate{}, err
 	}
 
 	return response, nil
