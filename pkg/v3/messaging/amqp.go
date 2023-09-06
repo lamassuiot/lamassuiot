@@ -33,7 +33,7 @@ type subscribesInfo struct {
 
 type AMQPSetup struct {
 	Channel        *amqp.Channel
-	publisherChan  chan *AmqpPublishMessage
+	PublisherChan  chan *AmqpPublishMessage
 	Msgs           <-chan amqp.Delivery
 	subscribesInfo []subscribesInfo
 }
@@ -166,7 +166,7 @@ func (aPub *AMQPSetup) setupAMQPEventPublisher() {
 			}
 		}
 	}()
-	aPub.publisherChan = publisherChan
+	aPub.PublisherChan = publisherChan
 }
 
 func (aPub *AMQPSetup) PublishCloudEvent(eventType string, eventSource string, payload interface{}) {
@@ -179,7 +179,7 @@ func (aPub *AMQPSetup) PublishCloudEvent(eventType string, eventSource string, p
 
 	log.Tracef("publishing event: Type=%s Source=%s \n%s", eventType, eventSource, string(eventBytes))
 
-	aPub.publisherChan <- &AmqpPublishMessage{
+	aPub.PublisherChan <- &AmqpPublishMessage{
 		RoutingKey: event.Type(),
 		Mandatory:  false,
 		Immediate:  false,
