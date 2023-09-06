@@ -57,3 +57,11 @@ type GetCertificatesByExpirationDateQueryParams struct {
 	ExpiresAfter  time.Time `form:"expires_after"`
 	ExpiresBefore time.Time `form:"expires_before"`
 }
+
+// La estructura necesaria para la llamada
+
+type GetCertificateStatus struct {
+	CAID      string                   `json:"CAID"`
+	Status    models.CertificateStatus `json:"status"`
+	ListInput []models.Certificate     `json:"lostCertificates"`
+}

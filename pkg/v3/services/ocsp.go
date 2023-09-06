@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"crypto/x509"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 )
 
 type OCSPService interface {
-	Verify(req *ocsp.Request) (*ocsp.Response, error)
+	Verify(ctx context.Context, req *ocsp.Request) (*ocsp.Response, error)
 }
 
 type ocspResponder struct {
@@ -31,16 +32,16 @@ func NewOCSPService(builder OCSPServiceBuilder) OCSPService {
 	}
 }
 
-func (svc ocspResponder) Verify(req *ocsp.Request) (*ocsp.Response, error) {
+func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) (*ocsp.Response, error) {
 	ocspCrtSN := helpers.SerialNumberToString(req.SerialNumber)
-	crt, err := svc.caSDK.GetCertificateBySerialNumber(GetCertificatesBySerialNumberInput{
+	crt, err := svc.caSDK.GetCertificateBySerialNumber(ctx, GetCertificatesBySerialNumberInput{
 		SerialNumber: ocspCrtSN,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	ca, err := svc.caSDK.GetCAByID(GetCAByIDInput{
+	ca, err := svc.caSDK.GetCAByID(ctx, GetCAByIDInput{
 		CAID: crt.IssuerCAMetadata.CAID,
 	})
 	if err != nil {

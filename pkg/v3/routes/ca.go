@@ -36,6 +36,7 @@ func NewCAHTTPLayer(logger *logrus.Entry, svc services.CAService, httpServerCfg 
 	rv1.PUT("/cas/:id/metadata", routes.UpdateCAMetadata)
 	rv1.POST("/cas/:id/revoke", routes.RevokeCA)
 	rv1.GET("/cas/:id/certificates", routes.GetCertificatesByCA)
+	rv1.GET("/cas/:id/certificates/status/:status", routes.GetCertificatesByStatus)
 	rv1.POST("/cas/:id/certificates/sign", routes.SignCertificate)
 	rv1.POST("/cas/:id/signature/sign", routes.SignatureSign)
 	rv1.POST("/cas/:id/signature/verify", routes.SignatureVerify)

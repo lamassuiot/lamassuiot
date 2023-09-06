@@ -71,7 +71,7 @@ func (p *GoCryptoEngine) GetEngineConfig() models.CryptoEngineInfo {
 
 func (p *GoCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
 	lGo.Debugf("reading %s Key", keyID)
-	privatePEM, err := ioutil.ReadFile(p.storageDirectory + "/" + keyID)
+	privatePEM, err := os.ReadFile(p.storageDirectory + "/" + keyID)
 	if err != nil {
 		lGo.Errorf("Could not read %s Key: %s", keyID, err)
 		return nil, err

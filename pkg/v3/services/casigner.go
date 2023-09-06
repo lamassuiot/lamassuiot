@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"crypto"
 	"crypto/x509"
 	"io"
@@ -38,7 +39,7 @@ func (s *caSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpt
 		logrus.Warnf("using default %s sing alg for client. '%s' no match", signAlg, caKeyAlg)
 	}
 
-	return s.sdk.SignatureSign(SignatureSignInput{
+	return s.sdk.SignatureSign(context.Background(), SignatureSignInput{
 		CAID:             s.ca.ID,
 		Message:          digest,
 		MessageType:      models.Hashed,

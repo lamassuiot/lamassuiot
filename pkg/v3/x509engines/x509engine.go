@@ -240,7 +240,7 @@ func (engine X509EngineProvider) Sign(caCertificate *x509.Certificate, message [
 	log.Debugf("successfully retrieved CA signer object")
 
 	if caCertificate.PublicKeyAlgorithm == x509.ECDSA {
-		var hasher []byte
+		var digest []byte
 		var hashFunc crypto.Hash
 		var h hash.Hash
 		if signingAlgorithm == "ECDSA_SHA_256" {
@@ -257,21 +257,21 @@ func (engine X509EngineProvider) Sign(caCertificate *x509.Certificate, message [
 		}
 		if messageType == models.Raw {
 			h.Write(message)
-			hasher = h.Sum(nil)
+			digest = h.Sum(nil)
 
 		} else {
-			hasher = message
+			digest = message
 			if err != nil {
 				return nil, err
 			}
 		}
-		signature, err := privkey.Sign(rand.Reader, hasher, hashFunc)
+		signature, err := privkey.Sign(rand.Reader, digest, hashFunc)
 		if err != nil {
 			return nil, errs.ErrEngineHashAlgInconsistency
 		}
 		return signature, nil
 	} else if caCertificate.PublicKeyAlgorithm == x509.RSA {
-		var hasher []byte
+		var digest []byte
 		var hashFunc crypto.Hash
 		var h hash.Hash
 		if signingAlgorithm == "RSASSA_PSS_SHA_256" || signingAlgorithm == "RSASSA_PKCS1_V1_5_SHA_256" {
@@ -288,9 +288,9 @@ func (engine X509EngineProvider) Sign(caCertificate *x509.Certificate, message [
 		}
 		if messageType == models.Raw {
 			h.Write(message)
-			hasher = h.Sum(nil)
+			digest = h.Sum(nil)
 		} else {
-			hasher = message
+			digest = message
 			if err != nil {
 				return nil, err
 			}
@@ -307,7 +307,7 @@ func (engine X509EngineProvider) Sign(caCertificate *x509.Certificate, message [
 			case crypto.SHA512:
 				saltLength = 64
 			}
-			signature, err := privkey.Sign(rand.Reader, hasher, &rsa.PSSOptions{
+			signature, err := privkey.Sign(rand.Reader, digest, &rsa.PSSOptions{
 				SaltLength: saltLength,
 				Hash:       hashFunc,
 			})
@@ -316,7 +316,7 @@ func (engine X509EngineProvider) Sign(caCertificate *x509.Certificate, message [
 			}
 			return signature, nil
 		} else {
-			signature, err := privkey.Sign(rand.Reader, hasher, hashFunc)
+			signature, err := privkey.Sign(rand.Reader, digest, hashFunc)
 			if err != nil {
 				return nil, err
 			}

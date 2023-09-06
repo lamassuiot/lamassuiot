@@ -51,6 +51,9 @@ func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
 	lDMS = builder.Logger
 	dmsValidate = validator.New()
 
+	ctx := context.Background()
+	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lDMS)
+
 	svc := &DmsManagerServiceImpl{
 		dmsStorage:       builder.DMSStorage,
 		caClient:         builder.CAClient,
@@ -59,7 +62,7 @@ func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
 	}
 
 	caExists := false
-	_, err := svc.caClient.GetCAsByCommonName(GetCAsByCommonNameInput{
+	_, err := svc.caClient.GetCAsByCommonName(ctx, GetCAsByCommonNameInput{
 		CommonName:    localRegAuthCA,
 		ExhaustiveRun: false,
 		ApplyFunc: func(cert *models.CACertificate) {
@@ -67,13 +70,13 @@ func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
 		},
 	})
 	if err != nil {
-		lDMS.Panicf("could not initialize service: could not check if internal CA '%s' exists: %s", localRegAuthCA, err)
+		lFunc.Panicf("could not initialize service: could not check if internal CA '%s' exists: %s", localRegAuthCA, err)
 	}
 
 	if !caExists {
 		caDur, _ := models.ParseDuration("50y")
 		issuanceDur, _ := models.ParseDuration("3y")
-		_, err := svc.caClient.CreateCA(CreateCAInput{
+		_, err := svc.caClient.CreateCA(ctx, CreateCAInput{
 			CAType: models.CertificateTypeManaged,
 			KeyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.ECDSA),
@@ -95,7 +98,7 @@ func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
 		})
 
 		if err != nil {
-			lDMS.Panicf("could not initialize service: could not create internal CA '%s': %s", localRegAuthCA, err)
+			lFunc.Panicf("could not initialize service: could not create internal CA '%s': %s", localRegAuthCA, err)
 		}
 	}
 
@@ -274,7 +277,7 @@ func (svc DmsManagerServiceImpl) CACerts(aps string) ([]*x509.Certificate, error
 
 	for _, ca := range reqCAs {
 		lDMS.Debugf("Reading CA %s Certificate", ca)
-		caResponse, err := svc.caClient.GetCAByID(GetCAByIDInput{
+		caResponse, err := svc.caClient.GetCAByID(context.Background(), GetCAByIDInput{
 			CAID: ca,
 		})
 		if err != nil {
@@ -320,7 +323,7 @@ func (svc DmsManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 	validCertificate := false
 	estEnrollOpts := dms.IdentityProfile.EnrollmentSettings.EnrollmentOptionsESTRFC7030
 	for _, caID := range estEnrollOpts.AuthOptionsMTLS.ValidationCAs {
-		ca, err := svc.caClient.GetCAByID(GetCAByIDInput{CAID: caID})
+		ca, err := svc.caClient.GetCAByID(context.Background(), GetCAByIDInput{CAID: caID})
 		if err != nil {
 			lDMS.Warnf("could not obtain lamassu CA '%s'. Skipping to next validation CA: %s", caID, err)
 			continue
@@ -390,7 +393,7 @@ func (svc DmsManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 		lDMS.Debugf("device '%s' is preregistered. continuing enrollment process", device.ID)
 	}
 
-	crt, err := svc.caClient.SignCertificate(SignCertificateInput{
+	crt, err := svc.caClient.SignCertificate(context.Background(), SignCertificateInput{
 		CAID:         dms.IdentityProfile.EnrollmentSettings.AuthorizedCA,
 		CertRequest:  (*models.X509CertificateRequest)(csr),
 		Subject:      nil,
@@ -461,7 +464,7 @@ func (svc DmsManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 	lDMS.Debugf("presented client certificate has CN=%s and SN=%s issued by CA with CommonName '%s'", clientCert.Subject.CommonName, helpers.SerialNumberToString(clientCert.SerialNumber), clientCert.Issuer.CommonName)
 
 	enrollCAID := dms.IdentityProfile.EnrollmentSettings.AuthorizedCA
-	enrollCA, err := svc.caClient.GetCAByID(GetCAByIDInput{
+	enrollCA, err := svc.caClient.GetCAByID(context.Background(), GetCAByIDInput{
 		CAID: enrollCAID,
 	})
 	if err != nil {
@@ -489,7 +492,7 @@ func (svc DmsManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 
 		for idx, caID := range estReEnrollOpts.AdditionalValidationCAs {
 			lDMS.Debugf("[%d/%d] obtainig validation with ID %s", idx, aValCAsCtr, caID)
-			ca, err := svc.caClient.GetCAByID(GetCAByIDInput{CAID: caID})
+			ca, err := svc.caClient.GetCAByID(context.Background(), GetCAByIDInput{CAID: caID})
 			if err != nil {
 				lDMS.Warnf("[%d/%d] could not obtain lamassu CA with ID %s. Skipping to next validation CA: %s", idx, aValCAsCtr, caID, err)
 				continue
@@ -552,7 +555,7 @@ func (svc DmsManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 
 	//Check if EXPIRED
 
-	crt, err := svc.caClient.SignCertificate(SignCertificateInput{
+	crt, err := svc.caClient.SignCertificate(context.Background(), SignCertificateInput{
 		CAID:         dms.IdentityProfile.EnrollmentSettings.AuthorizedCA,
 		CertRequest:  (*models.X509CertificateRequest)(csr),
 		Subject:      nil,

@@ -223,7 +223,7 @@ func (svc DeviceManagerServiceImpl) UpdateIdentitySlot(input UpdateIdentitySlotI
 
 	switch input.Slot.Status {
 	case models.SlotRevoke:
-		revokedCert, err := svc.caClient.UpdateCertificateStatus(UpdateCertificateStatusInput{
+		revokedCert, err := svc.caClient.UpdateCertificateStatus(context.Background(), UpdateCertificateStatusInput{
 			SerialNumber: device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion].SerialNumber,
 			NewStatus:    models.StatusRevoked,
 		})

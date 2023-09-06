@@ -131,14 +131,13 @@ type AuthMTLSOptions struct {
 func readConfig[E any](configFilePath string) (*E, error) {
 	vp := viper.New()
 	vp.SetConfigFile(configFilePath)
-
 	if err := vp.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file not found; ignore error if desired
 			return nil, fmt.Errorf("config file not found: %s", err)
 		} else {
 			// Config file was found but another error was produced
-			return nil, fmt.Errorf("error while procesing config file: %w", err)
+			return nil, fmt.Errorf("error while processing config file: %w", err)
 		}
 	}
 

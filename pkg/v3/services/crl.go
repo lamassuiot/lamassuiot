@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -16,7 +17,7 @@ import (
 var crlValidate *validator.Validate
 
 type CRLService interface {
-	GetCRL(input GetCRLInput) ([]byte, error)
+	GetCRL(ctx context.Context, input GetCRLInput) ([]byte, error)
 }
 
 type crlServiceImpl struct {
@@ -41,7 +42,7 @@ type GetCRLInput struct {
 	CAID string `validate:"required"`
 }
 
-func (svc crlServiceImpl) GetCRL(input GetCRLInput) ([]byte, error) {
+func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte, error) {
 	err := crlValidate.Struct(input)
 	if err != nil {
 		svc.logger.Errorf("struct validation error: %s", err)
@@ -50,7 +51,7 @@ func (svc crlServiceImpl) GetCRL(input GetCRLInput) ([]byte, error) {
 
 	certList := []pkix.RevokedCertificate{}
 	svc.logger.Debugf("reading CA %s certificates", input.CAID)
-	_, err = svc.caSDK.GetCertificatesByCaAndStatus(GetCertificatesByCaAndStatusInput{
+	_, err = svc.caSDK.GetCertificatesByCaAndStatus(ctx, GetCertificatesByCaAndStatusInput{
 		CAID:   input.CAID,
 		Status: models.StatusRevoked,
 		ListInput: ListInput[models.Certificate]{
@@ -69,7 +70,7 @@ func (svc crlServiceImpl) GetCRL(input GetCRLInput) ([]byte, error) {
 		return nil, err
 	}
 
-	ca, err := svc.caSDK.GetCAByID(GetCAByIDInput{
+	ca, err := svc.caSDK.GetCAByID(ctx, GetCAByIDInput{
 		CAID: input.CAID,
 	})
 	if err != nil {

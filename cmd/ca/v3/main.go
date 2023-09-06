@@ -15,6 +15,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage/couchdb"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage/postgres"
 	log "github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -40,6 +41,14 @@ func main() {
 	log.SetLevel(globalLogLevel)
 
 	log.Infof("global log level set to '%s'", globalLogLevel)
+
+	confBytes, err := yaml.Marshal(conf)
+	if err != nil {
+		log.Fatalf("could not dump yaml config: %s", err)
+	}
+	log.Debugf("===================================================")
+	log.Debugf("%s", confBytes)
+	log.Debugf("===================================================")
 
 	lCryptoEng := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.CryptoEngine, "CryptoEngine")
 	lSvc := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.Service, "Service")

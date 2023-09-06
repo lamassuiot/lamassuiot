@@ -1,12 +1,15 @@
 package helpers
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"path"
 	"runtime"
 
 	formatter "github.com/antonfisher/nested-logrus-formatter"
+	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/sirupsen/logrus"
 )
@@ -14,7 +17,7 @@ import (
 var LogFormatter = &formatter.Formatter{
 	TimestampFormat: "2006-01-02 15:04:05",
 	HideKeys:        true,
-	FieldsOrder:     []string{"subsystem", "subsystem-provider", "req"},
+	FieldsOrder:     []string{"subsystem", "subsystem-provider", "req-id"},
 	CallerFirst:     true,
 	CustomCallerFormatter: func(f *runtime.Frame) string {
 		filename := path.Base(f.File)
@@ -48,4 +51,28 @@ func ConfigureLogger(defaultLevel logrus.Level, currentLevel config.LogLevel, su
 
 	lSubsystem.Infof("log level set to '%s'", lSubsystem.Logger.GetLevel())
 	return lSubsystem
+}
+
+var HTTPRequestID = "HTTPRequestID"
+
+func ConfigureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
+	if logger.Level != logrus.TraceLevel {
+		return logger
+	}
+
+	reqCtx := ctx.Value(HTTPRequestID)
+	if reqID, ok := reqCtx.(string); ok {
+		return logger.WithField("req-id", reqID)
+	}
+
+	return logger.WithField("req-id", fmt.Sprintf("internal.%s", goid.NewV4UUID()))
+}
+
+func ConfigureContextWithRequestID(ctx context.Context, headers http.Header) context.Context {
+	reqID := headers.Get("x-request-id")
+	if reqID != "" {
+		return context.WithValue(ctx, HTTPRequestID, reqID)
+	}
+
+	return ctx
 }
