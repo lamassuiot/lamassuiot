@@ -12,6 +12,7 @@ type CreateCABody struct {
 	CAType             models.CertificateType `json:"ca_type"`
 	CAExpiration       models.Expiration      `json:"ca_expiration"`
 	IssuanceExpiration models.Expiration      `json:"issuance_expiration"`
+	EngineID           string                 `json:"engine_id"`
 }
 
 type ImportCABody struct {
@@ -20,6 +21,7 @@ type ImportCABody struct {
 	CAChain            []*models.X509Certificate `json:"ca_chain"`
 	CAType             models.CertificateType    `json:"ca_type"`
 	IssuanceExpiration models.Expiration         `json:"issuance_expiration"`
+	EngineID           string                    `json:"engine_id"`
 }
 
 type UpdateCAMetadataBody struct {

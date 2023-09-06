@@ -64,6 +64,7 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 		CAType:             requestBody.CAType,
 		CAExpiration:       requestBody.CAExpiration,
 		IssuanceExpiration: requestBody.IssuanceExpiration,
+		EngineID:           requestBody.EngineID,
 	})
 	if err != nil {
 		switch err {
@@ -135,6 +136,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		KeyType:            keyType,
 		CARSAKey:           rsaKey,
 		CAECKey:            ecKey,
+		EngineID:           requestBody.EngineID,
 	})
 	if err != nil {
 		switch err {
