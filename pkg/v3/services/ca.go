@@ -257,6 +257,7 @@ type issueCAInput struct {
 	Subject      models.Subject         `validate:"required"`
 	CAType       models.CertificateType `validate:"required"`
 	CAExpiration models.Expiration
+	EngineID     string
 }
 
 type issueCAOutput struct {
@@ -267,8 +268,15 @@ func (svc *CAServiceImpl) issueCA(ctx context.Context, input issueCAInput) (*iss
 	var err error
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
-	x509Engine := x509engines.NewX509Engine(svc.defaultCryptoEngine, "")
-
+	var x509Engine x509engines.X509Engine
+	if input.EngineID == "" {
+		x509Engine = x509engines.NewX509Engine(svc.defaultCryptoEngine, "")
+		lFunc.Infof("creating CA %s with %s crypto engine", input.Subject.CommonName, x509Engine.GetEngineConfig().Provider)
+	} else {
+		engine := svc.cryptoEngines[input.EngineID]
+		x509Engine = x509engines.NewX509Engine(engine, "")
+		lFunc.Infof("creating CA %s with %s crypto engine", input.Subject.CommonName, x509Engine.GetEngineConfig().Provider)
+	}
 	var caCert *x509.Certificate
 	expiration := time.Now()
 	if input.CAExpiration.Type == models.Duration {
@@ -296,6 +304,7 @@ type ImportCAInput struct {
 	CARSAKey           *rsa.PrivateKey
 	KeyType            models.KeyType
 	CAECKey            *ecdsa.PrivateKey
+	EngineID           string
 }
 
 // Returned Error Codes:
@@ -324,10 +333,19 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 	}
 
 	caCert := input.CACertificate
-
+	var engineID string
 	if input.CAType != models.CertificateTypeExternal {
 		lFunc.Debugf("importing CA %s private key. CA type: %s", input.CACertificate.Subject.CommonName, input.CAType)
-		engine := *svc.defaultCryptoEngine
+		var engine cryptoengines.CryptoEngine
+		if input.EngineID == "" {
+			engine = *svc.defaultCryptoEngine
+			engineID = svc.defaultCryptoEngineID
+			lFunc.Infof("importing CA %s with %s crypto engine", input.CACertificate.Subject.CommonName, engine.GetEngineConfig().Provider)
+		} else {
+			engine = *svc.cryptoEngines[input.EngineID]
+			engineID = input.EngineID
+			lFunc.Infof("importing CA %s with %s crypto engine", input.CACertificate.Subject.CommonName, engine.GetEngineConfig().Provider)
+		}
 		if input.CAType != models.CertificateTypeExternal {
 			if input.CARSAKey != nil {
 				_, err = engine.ImportRSAPrivateKey(input.CARSAKey, input.CACertificate.Subject.CommonName)
@@ -368,6 +386,7 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 				CAID:         caID,
 				SerialNumber: helpers.SerialNumberToString(input.CACertificate.SerialNumber),
 			},
+			EngineID: engineID,
 		},
 	}
 	lFunc.Debugf("insert CA %s certificate %s in storage engine", ca.ID, ca.Certificate.SerialNumber)
@@ -387,6 +406,7 @@ type CreateCAInput struct {
 	Subject            models.Subject         `validate:"required"`
 	IssuanceExpiration models.Expiration      `validate:"required"`
 	CAExpiration       models.Expiration      `validate:"required"`
+	EngineID           string
 }
 
 // Returned Error Codes:
@@ -415,12 +435,19 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 		Subject:      input.Subject,
 		CAType:       input.CAType,
 		CAExpiration: input.CAExpiration,
+		EngineID:     input.EngineID,
 	})
 	if err != nil {
 		lFunc.Errorf("could not create CA %s certificate: %s", input.Subject.CommonName, err)
 		return nil, err
 	}
+	var engineID string
+	if input.EngineID == "" {
+		engineID = svc.defaultCryptoEngineID
 
+	} else {
+		engineID = input.EngineID
+	}
 	caCert := issuedCA.Certificate
 	caID := goid.NewV4UUID().String()
 	ca := models.CACertificate{
@@ -448,6 +475,7 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 				SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
 				CAID:         caID,
 			},
+			EngineID: engineID,
 		},
 	}
 
@@ -745,8 +773,9 @@ func (svc *CAServiceImpl) SignCertificate(ctx context.Context, input SignCertifi
 		lFunc.Errorf("%s CA is not active", ca.ID)
 		return nil, errs.ErrCAStatus
 	}
+	engine := svc.cryptoEngines[ca.Certificate.EngineID]
 
-	x509Engine := x509engines.NewX509Engine(svc.defaultCryptoEngine, "")
+	x509Engine := x509engines.NewX509Engine(engine, "")
 
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
 	csr := (*x509.CertificateRequest)(input.CertRequest)
@@ -768,7 +797,7 @@ func (svc *CAServiceImpl) SignCertificate(ctx context.Context, input SignCertifi
 	} else {
 		expiration = *ca.IssuanceExpirationRef.Time
 	}
-	lFunc.Debugf("sign certificate request with %s CA", input.CAID)
+	lFunc.Debugf("sign certificate request with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
 	x509Cert, err := x509Engine.SignCertificateRequest(caCert, csr, expiration)
 	if err != nil {
 		lFunc.Errorf("could not sign certificate request with %s CA", caCert.Subject.CommonName)
@@ -838,8 +867,10 @@ func (svc *CAServiceImpl) SignatureSign(ctx context.Context, input SignatureSign
 		return nil, errs.ErrCANotFound
 	}
 
-	lFunc.Debugf("sign signature with %s CA", input.CAID)
-	signature, err := x509engines.NewX509Engine(svc.defaultCryptoEngine, "").Sign((*x509.Certificate)(ca.Certificate.Certificate), input.Message, input.MessageType, input.SigningAlgorithm)
+	engine := svc.cryptoEngines[ca.Certificate.EngineID]
+	x509Engine := x509engines.NewX509Engine(engine, "")
+	lFunc.Debugf("sign signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
+	signature, err := x509Engine.Sign((*x509.Certificate)(ca.Certificate.Certificate), input.Message, input.MessageType, input.SigningAlgorithm)
 	if err != nil {
 		return nil, err
 	}
@@ -874,8 +905,10 @@ func (svc *CAServiceImpl) SignatureVerify(ctx context.Context, input SignatureVe
 		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
 		return false, errs.ErrCANotFound
 	}
-	lFunc.Debugf("verify signature with %s CA", input.CAID)
-	return x509engines.NewX509Engine(svc.defaultCryptoEngine, "").Verify((*x509.Certificate)(ca.Certificate.Certificate), input.Signature, input.Message, input.MessageType, input.SigningAlgorithm)
+	engine := svc.cryptoEngines[ca.Certificate.EngineID]
+	x509Engine := x509engines.NewX509Engine(engine, "")
+	lFunc.Debugf("verify signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
+	return x509Engine.Verify((*x509.Certificate)(ca.Certificate.Certificate), input.Signature, input.Message, input.MessageType, input.SigningAlgorithm)
 }
 
 type GetCertificatesBySerialNumberInput struct {
