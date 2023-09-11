@@ -11,6 +11,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/errs"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 	"github.com/sirupsen/logrus"
 )
 
@@ -56,6 +57,11 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte
 		Status: models.StatusRevoked,
 		ListInput: ListInput[models.Certificate]{
 			ExhaustiveRun: true,
+			QueryParameters: &resources.QueryParameters{
+				Pagination: resources.PaginationOptions{
+					PageSize: 5,
+				},
+			},
 			ApplyFunc: func(cert *models.Certificate) {
 				certList = append(certList, pkix.RevokedCertificate{
 					SerialNumber:   cert.Certificate.SerialNumber,

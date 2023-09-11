@@ -113,7 +113,7 @@ type HTTPClient struct {
 	AuthMode        HTTPClientAuthMethod `mapstructure:"auth_mode"`
 	AuthJWTOptions  AuthJWTOptions       `mapstructure:"jwt_options"`
 	AuthMTLSOptions AuthMTLSOptions      `mapstructure:"mtls_options"`
-	Level           LogLevel             `mapstructure:"level"`
+	LogLevel        LogLevel             `mapstructure:"log_level"`
 	HTTPConnection  `mapstructure:",squash"`
 }
 

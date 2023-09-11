@@ -2,6 +2,8 @@ package resources
 
 type PaginationOptions struct {
 	NextBookmark string
+	PageSize     int
+	Offset       int
 }
 
 type SortMode string

@@ -45,6 +45,9 @@ func (cli *httpCAClient) GetCAs(ctx context.Context, input services.GetCAsInput)
 		return "", err
 	} else {
 		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
+		for _, elem := range resp.IterableList.List {
+			input.ApplyFunc(elem)
+		}
 		return resp.NextBookmark, err
 	}
 
@@ -67,6 +70,9 @@ func (cli *httpCAClient) GetCAsByCommonName(ctx context.Context, input services.
 		return "", err
 	} else {
 		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
+		for _, elem := range resp.IterableList.List {
+			input.ApplyFunc(elem)
+		}
 		return resp.NextBookmark, err
 	}
 
@@ -220,6 +226,9 @@ func (cli *httpCAClient) GetCertificates(ctx context.Context, input services.Get
 		return "", err
 	} else {
 		resp, err := Get[resources.GetCertsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
+		for _, elem := range resp.IterableList.List {
+			input.ApplyFunc(elem)
+		}
 		return resp.NextBookmark, err
 	}
 }
@@ -232,6 +241,9 @@ func (cli *httpCAClient) GetCertificatesByCA(ctx context.Context, input services
 		return "", err
 	} else {
 		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
+		for _, elem := range resp.IterableList.List {
+			input.ApplyFunc(&elem.Certificate)
+		}
 		return resp.NextBookmark, err
 	}
 }
@@ -244,19 +256,25 @@ func (cli *httpCAClient) GetCertificatesByExpirationDate(ctx context.Context, in
 		return "", err
 	} else {
 		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
+		for _, elem := range resp.IterableList.List {
+			input.ApplyFunc(&elem.Certificate)
+		}
 		return resp.NextBookmark, err
 	}
 }
 func (cli *httpCAClient) GetCertificatesByCaAndStatus(ctx context.Context, input services.GetCertificatesByCaAndStatusInput) (string, error) {
 	url := fmt.Sprintf("%s/v1/cas/%s/certificates/status/%s", cli.baseUrl, input.CAID, input.Status)
+
 	if input.ExhaustiveRun {
-		err := IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
+		err := IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 		return "", err
 	} else {
 		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
+		for _, elem := range resp.IterableList.List {
+			input.ApplyFunc(&elem.Certificate)
+		}
 		return resp.NextBookmark, err
 	}
-
 }
 
 func (cli *httpCAClient) UpdateCertificateStatus(ctx context.Context, input services.UpdateCertificateStatusInput) (*models.Certificate, error) {
@@ -266,9 +284,7 @@ func (cli *httpCAClient) UpdateCertificateStatus(ctx context.Context, input serv
 	if err != nil {
 		return nil, err
 	}
-
 	return response, nil
-
 }
 
 func (cli *httpCAClient) UpdateCertificateMetadata(ctx context.Context, input services.UpdateCertificateMetadataInput) (*models.Certificate, error) {
@@ -278,6 +294,5 @@ func (cli *httpCAClient) UpdateCertificateMetadata(ctx context.Context, input se
 	if err != nil {
 		return nil, err
 	}
-
 	return response, nil
 }

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -80,6 +81,9 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 	for _, whereQuery := range extraOpts {
 		tx = tx.Where(whereQuery.query, whereQuery.extraArgs...)
 	}
+	//tx.Offset(queryParams.Pagination.Offset)
+	//tx.Limit(queryParams.Pagination.PageSize)
+	//tx.Order(queryParams.Sort.SortField + " " + string(queryParams.Sort.SortMode))
 
 	tx.FindInBatches(&elems, 100, func(tx *gorm.DB, batch int) error {
 		for _, elem := range elems {
@@ -92,8 +96,15 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 		// returns error will stop future batches
 		return nil
 	})
+	var bookmark = ""
+	if queryParams != nil {
+		if queryParams.Pagination.PageSize > 0 {
+			bookmark = bookmark + fmt.Sprintf("offset:%d", queryParams.Pagination.PageSize)
+		}
+	}
+	//bookmark = "offset:1"
 
-	return "nil", nil
+	return base64.StdEncoding.EncodeToString([]byte(bookmark)), nil
 }
 
 // Selects first element from DB. if queryCol is empty or nil, the primary key column

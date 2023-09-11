@@ -122,11 +122,15 @@ func (db *CouchDBCertificateStorage) SelectByCAIDAndStatus(ctx context.Context, 
 						"$eq": status,
 					},
 				},
+				{
+					"issuer_metadata.ca_id": map[string]interface{}{
+						"$eq": CAID,
+					},
+				},
 			},
 		},
 	}
 	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
-
 }
 
 func (db *CouchDBCertificateStorage) CountByCA(ctx context.Context, caID string) (int, error) {

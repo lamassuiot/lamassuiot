@@ -76,7 +76,12 @@ func (db *PostgresCertificateStorage) SelectByExpirationDate(ctx context.Context
 }
 
 func (db *PostgresCertificateStorage) SelectByCAIDAndStatus(ctx context.Context, CAID string, status models.CertificateStatus, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
-	return "", fmt.Errorf("TODO")
+	opts := []gormWhereParams{
+		{query: "status == ?", extraArgs: []any{status}},
+		{query: "issuer_metadata.ca_id == ?", extraArgs: []any{CAID}},
+	}
+	fmt.Println(queryParams.Pagination.NextBookmark)
+	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
 }
 
 func (db *PostgresCertificateStorage) CountByCA(ctx context.Context, caID string) (int, error) {

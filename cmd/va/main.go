@@ -46,7 +46,7 @@ func main() {
 	lSvc := configureLogger(globalLogLevel, conf.Logs.SubsystemLogging.Service, "Service")
 	lHttp := configureLogger(globalLogLevel, conf.Logs.SubsystemLogging.HttpTransport, "HTTP Server")
 
-	lCAClient := configureLogger(globalLogLevel, conf.CAClient.Level, "LMS SDK - CA Client")
+	lCAClient := configureLogger(globalLogLevel, conf.CAClient.LogLevel, "LMS SDK - CA Client")
 
 	caHttpCli, err := clients.BuildHTTPClient(conf.CAClient.HTTPClient, lCAClient)
 	if err != nil {

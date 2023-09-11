@@ -151,11 +151,16 @@ func Get[T any](ctx context.Context, client *http.Client, url string, queryParam
 	}
 
 	if queryParams != nil {
+		query := r.URL.Query()
 		if queryParams.Pagination.NextBookmark != "" {
-			query := r.URL.Query()
 			query.Add("bookmark", queryParams.Pagination.NextBookmark)
-			r.URL.RawQuery = query.Encode()
 		}
+
+		if queryParams.Pagination.PageSize > 0 {
+			query.Add("page_size", fmt.Sprintf("%d", queryParams.Pagination.PageSize))
+		}
+
+		r.URL.RawQuery = query.Encode()
 	}
 	// Important to set
 	r.Header.Add("Content-Type", "application/json")
