@@ -47,6 +47,7 @@ type EnrollmentSettings struct {
 	AuthorizedCA                string                      `json:"authorized_ca"`
 	AllowNewEnrollment          bool                        `json:"allow_new_enrollment"` //switch-like option that enables enrolling, already enrolled devices
 	JustInTime                  bool                        `json:"jit"`
+	PreRegistryEnrollment       bool                        `json: "pre_registry_enrollment"`
 }
 
 type EnrollmentOptionsESTRFC7030 struct {

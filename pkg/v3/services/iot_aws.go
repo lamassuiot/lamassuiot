@@ -74,19 +74,19 @@ func NewIotAWS(builder IotAWSServiceBuilder) (IotAWSService, error) {
 	iotClient := iot.New(iot.Options{
 		HTTPClient:  iotHttpCli,
 		Region:      builder.Conf.Region,
-		Credentials: aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(builder.Conf.AccessKeyID, builder.Conf.SecretAccessKey, "")),
+		Credentials: aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(builder.Conf.AccessKeyID, string(builder.Conf.SecretAccessKey), "")),
 	})
 
 	iotdataplaneClient := iotdataplane.New(iotdataplane.Options{
 		HTTPClient:  iotdataplaneHttpCli,
 		Region:      builder.Conf.Region,
-		Credentials: aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(builder.Conf.AccessKeyID, builder.Conf.SecretAccessKey, "")),
+		Credentials: aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(builder.Conf.AccessKeyID, string(builder.Conf.SecretAccessKey), "")),
 	})
 
 	stsCli := sts.New(sts.Options{
 		HTTPClient:  stsHttpCli,
 		Region:      builder.Conf.Region,
-		Credentials: aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(builder.Conf.AccessKeyID, builder.Conf.SecretAccessKey, "")),
+		Credentials: aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(builder.Conf.AccessKeyID, string(builder.Conf.SecretAccessKey), "")),
 	})
 
 	callIDOutput, err := stsCli.GetCallerIdentity(context.Background(), &sts.GetCallerIdentityInput{})

@@ -59,6 +59,7 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 
 	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
 	ca, err := r.svc.CreateCA(funCtx, services.CreateCAInput{
+		ID:                 requestBody.ID,
 		KeyMetadata:        requestBody.KeyMetadata,
 		Subject:            requestBody.Subject,
 		CAType:             requestBody.CAType,
@@ -129,6 +130,8 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 
 	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
 	ca, err := r.svc.ImportCA(funCtx, services.ImportCAInput{
+		ID:                 requestBody.ID,
+		EngineID:           requestBody.EngineID,
 		IssuanceExpiration: requestBody.IssuanceExpiration,
 		CAType:             requestBody.CAType,
 		CAChain:            requestBody.CAChain,
@@ -136,7 +139,6 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		KeyType:            keyType,
 		CARSAKey:           rsaKey,
 		CAECKey:            ecKey,
-		EngineID:           requestBody.EngineID,
 	})
 	if err != nil {
 		switch err {
@@ -297,7 +299,8 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 		QueryParameters: queryParams,
 		ExhaustiveRun:   false,
 		ApplyFunc: func(ca *models.CACertificate) {
-			cas = append(cas, ca)
+			derefCA := *ca
+			cas = append(cas, &derefCA)
 		},
 	})
 

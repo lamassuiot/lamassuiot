@@ -343,6 +343,7 @@ func (svc DmsManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 		lDMS.Errorf("invalid enrollment. used certificate not authorized for this DMS. certificate has SerialNumber %s issued by CA %s", helpers.SerialNumberToString(clientCert.SerialNumber), clientCert.Issuer.CommonName)
 		return nil, errs.ErrDMSEnrollInvalidCert
 	}
+	//
 
 	var device *models.Device
 	device, err = svc.deviceManagerCli.GetDeviceByID(GetDeviceByIDInput{
@@ -392,6 +393,17 @@ func (svc DmsManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 	} else {
 		lDMS.Debugf("device '%s' is preregistered. continuing enrollment process", device.ID)
 	}
+
+	// if dms.IdentityProfile.EnrollmentSettings.PreRegistryEnrollment {
+	// 	if device != nil {
+	// 		lDMS.Debugf("DMS '%s' is configured with preregistry Enrollment", dms.ID)
+
+	// 		device, err = svc.deviceManagerCli.GetDeviceByID()
+	// 		//LLenarlo con el ID del device
+	// 		//Hacer un else de en el caso de que el booleano falso se haga el enroll de todos los dispositivos
+
+	// 	}
+	// }
 
 	crt, err := svc.caClient.SignCertificate(context.Background(), SignCertificateInput{
 		CAID:         dms.IdentityProfile.EnrollmentSettings.AuthorizedCA,

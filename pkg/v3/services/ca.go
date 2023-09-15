@@ -297,6 +297,8 @@ func (svc *CAServiceImpl) issueCA(ctx context.Context, input issueCAInput) (*iss
 }
 
 type ImportCAInput struct {
+	ID                 string
+	EngineID           string
 	CAType             models.CertificateType    `validate:"required,ne=MANAGED"`
 	IssuanceExpiration models.Expiration         `validate:"required"`
 	CACertificate      *models.X509Certificate   `validate:"required"`
@@ -304,7 +306,6 @@ type ImportCAInput struct {
 	CARSAKey           *rsa.PrivateKey
 	KeyType            models.KeyType
 	CAECKey            *ecdsa.PrivateKey
-	EngineID           string
 }
 
 // Returned Error Codes:
@@ -364,7 +365,11 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 
 	}
 
-	caID := goid.NewV4UUID().String()
+	caID := input.ID
+	if caID == "" {
+		caID = goid.NewV4UUID().String()
+	}
+
 	ca := &models.CACertificate{
 		ID:   caID,
 		Type: input.CAType,
@@ -392,7 +397,7 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 	lFunc.Debugf("insert CA %s certificate %s in storage engine", ca.ID, ca.Certificate.SerialNumber)
 	_, err = svc.certStorage.Insert(ctx, &ca.Certificate)
 	if err != nil {
-		lFunc.Errorf("Could not insert CA %s certificate %s in storage engine: %s", ca.ID, ca.Certificate.SerialNumber, err)
+		lFunc.Errorf("could not insert CA %s certificate %s in storage engine: %s", ca.ID, ca.Certificate.SerialNumber, err)
 		return nil, err
 	}
 
@@ -401,12 +406,13 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 }
 
 type CreateCAInput struct {
+	ID                 string
+	EngineID           string
 	CAType             models.CertificateType `validate:"required,eq=MANAGED"`
 	KeyMetadata        models.KeyMetadata     `validate:"required"`
 	Subject            models.Subject         `validate:"required"`
 	IssuanceExpiration models.Expiration      `validate:"required"`
 	CAExpiration       models.Expiration      `validate:"required"`
-	EngineID           string
 }
 
 // Returned Error Codes:
@@ -449,7 +455,11 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 		engineID = input.EngineID
 	}
 	caCert := issuedCA.Certificate
-	caID := goid.NewV4UUID().String()
+	caID := input.ID
+	if caID == "" {
+		caID = goid.NewV4UUID().String()
+	}
+
 	ca := models.CACertificate{
 		ID: caID,
 		Metadata: map[string]interface{}{
