@@ -189,13 +189,13 @@ type IdentityProfileEnrollmentSettings struct {
 	Color                  string
 	AuthorizedCA           string
 	BootstrapCAs           []string
-	RecursivityLevel       int
+	ChainValidationLevel   int
 }
 
 type IdentityProfileReenrollmentSettings struct {
 	AllowExpiredRenewal       bool
 	PreventiveRenewalInterval time.Duration
-	ValidationCAs             []string
+	AdditionaValidationCAs    []string
 }
 
 type StaticCA struct {

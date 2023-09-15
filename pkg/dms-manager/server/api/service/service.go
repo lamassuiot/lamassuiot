@@ -500,10 +500,10 @@ func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateReq
 		}
 	}
 	var checkCaLevel int
-	if dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.RecursivityLevel == -1 {
+	if dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.ChainValidationLevel == -1 {
 		checkCaLevel = len(clientCertificateChain)
 	} else {
-		checkCaLevel = dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.RecursivityLevel
+		checkCaLevel = dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.ChainValidationLevel
 	}
 
 	verified := false
@@ -613,7 +613,7 @@ func (s *DMSManagerService) Reenroll(ctx context.Context, csr *x509.CertificateR
 	err = s.verifyCertificate(cert, (*x509.Certificate)(caCert.Certificate.Certificate), dms.DeviceManufacturingService.IdentityProfile.ReerollmentSettings.AllowExpiredRenewal)
 	if err != nil {
 		verifyCount := 0
-		for _, validationca := range dms.IdentityProfile.ReerollmentSettings.ValidationCAs {
+		for _, validationca := range dms.IdentityProfile.ReerollmentSettings.AdditionaValidationCAs {
 			valCaCert, _ := s.lamassuCAClient.GetCAByID(serviceV3.GetCAByIDInput{
 				CAID: validationca,
 			})
@@ -623,7 +623,7 @@ func (s *DMSManagerService) Reenroll(ctx context.Context, csr *x509.CertificateR
 			}
 			verifyCount = verifyCount + 1
 		}
-		if verifyCount == len(dms.IdentityProfile.ReerollmentSettings.ValidationCAs) || len(dms.IdentityProfile.ReerollmentSettings.ValidationCAs) == 0 {
+		if verifyCount == len(dms.IdentityProfile.ReerollmentSettings.AdditionaValidationCAs) || len(dms.IdentityProfile.ReerollmentSettings.AdditionaValidationCAs) == 0 {
 			return nil, err
 		}
 	}
