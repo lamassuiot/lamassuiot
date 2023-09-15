@@ -62,7 +62,7 @@ func MakeEnrollEndpoint(s service.ESTService) endpoint.Endpoint {
 		}
 
 		ctx = context.WithValue(ctx, "dmsName", req.DmsName)
-		crt, err := s.Enroll(ctx, req.Csr, req.Crt, req.Aps)
+		crt, err := s.Enroll(ctx, req.Csr, req.CrtChain, req.Aps)
 		return EnrollReenrollResponse{Cert: crt, PemResponse: req.PemResponse}, err
 	}
 }
@@ -103,7 +103,7 @@ type EmptyRequest struct{}
 type EnrollRequest struct {
 	Aps         string                   `validate:"required"`
 	Csr         *x509.CertificateRequest `validate:"required"`
-	Crt         *x509.Certificate        `validate:"required"`
+	CrtChain    []*x509.Certificate      `validate:"required"`
 	DmsName     string
 	PemResponse bool
 }

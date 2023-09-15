@@ -56,6 +56,7 @@ type IdentityProfileDAO struct {
 	ManagedCAs                 pq.StringArray `gorm:"type:text[]"`
 	StaticCAs                  []StaticCADAO  `gorm:"foreignKey:DMSName;References:DMSName"`
 	PublishToAWS               bool
+	RecursivityLevel           int
 }
 
 type StaticCADAO struct {
@@ -185,6 +186,7 @@ func (d *IdentityProfileDAO) toIdentityProfile() *api.IdentityProfile {
 			AuthorizedCA:           d.AuthorizedCA,
 			AllowNewAutoEnrollment: d.AllowNewAutoEnrollment,
 			BootstrapCAs:           d.BootstrapCAs,
+			RecursivityLevel:       d.RecursivityLevel,
 		},
 		ReerollmentSettings: api.IdentityProfileReenrollmentSettings{
 			AllowExpiredRenewal:       d.AllowExpiredRenewal,
@@ -217,6 +219,7 @@ func toIdentityProfileDAO(dmsName string, d api.IdentityProfile) IdentityProfile
 		Icon:                       d.EnrollmentSettings.Icon,
 		Color:                      d.EnrollmentSettings.Color,
 		Tags:                       d.EnrollmentSettings.Tags,
+		RecursivityLevel:           d.EnrollmentSettings.RecursivityLevel,
 		AllowNewAutoEnrollment:     d.EnrollmentSettings.AllowNewAutoEnrollment,
 		AllowExpiredRenewal:        d.ReerollmentSettings.AllowExpiredRenewal,
 		ValidationCAs:              d.ReerollmentSettings.ValidationCAs,

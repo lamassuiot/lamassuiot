@@ -103,7 +103,7 @@ func main() {
 		log.Fatal("Could not parse LamassuDMS url: ", err)
 	}
 
-	if strings.HasPrefix(config.LamassuCAAddress, "https") {
+	if strings.HasPrefix(config.LamassuDMSManagerAddress, "https") {
 		dmsClient, err = lamassudmsclient.NewLamassuDMSManagerClientConfig(clientUtils.BaseClientConfigurationuration{
 			URL:        parsedLamassuDMSURL,
 			AuthMethod: clientUtils.AuthMethodMutualTLS,
@@ -111,7 +111,7 @@ func main() {
 				ClientCert: config.CertFile,
 				ClientKey:  config.KeyFile,
 			},
-			CACertificate: config.LamassuCACertFile,
+			CACertificate: config.LamassuDMSManagerCertFile,
 		})
 		if err != nil {
 			log.Fatal("Could not create LamassuDMS client: ", err)

@@ -278,15 +278,15 @@ func (mw loggingMiddleware) CACerts(ctx context.Context, aps string) (cas []*x50
 	return mw.next.CACerts(ctx, aps)
 }
 
-func (mw loggingMiddleware) Enroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (crt *x509.Certificate, err error) {
+func (mw loggingMiddleware) Enroll(ctx context.Context, csr *x509.CertificateRequest, certChain []*x509.Certificate, aps string) (crt *x509.Certificate, err error) {
 	defer func(begin time.Time) {
 		var logMsg = map[string]interface{}{}
 		logMsg["method"] = "Enroll"
 		logMsg["took"] = time.Since(begin)
 		logMsg["aps"] = aps
 		logMsg["csr_cn"] = csr.Subject.CommonName
-		logMsg["crt_cn"] = cert.Subject.CommonName
-		logMsg["crt_sn"] = utils.InsertNth(utils.ToHexInt(cert.SerialNumber), 2)
+		logMsg["crt_cn"] = certChain[0].Subject.CommonName
+		logMsg["crt_sn"] = utils.InsertNth(utils.ToHexInt(certChain[0].SerialNumber), 2)
 
 		if err == nil {
 			log.WithFields(logMsg).Trace(fmt.Sprintf("output: %v", utils.InsertNth(utils.ToHexInt(crt.SerialNumber), 2)))
@@ -294,7 +294,7 @@ func (mw loggingMiddleware) Enroll(ctx context.Context, csr *x509.CertificateReq
 			log.WithFields(logMsg).Error(err)
 		}
 	}(time.Now())
-	return mw.next.Enroll(ctx, csr, cert, aps)
+	return mw.next.Enroll(ctx, csr, certChain, aps)
 }
 
 func (mw loggingMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (crt *x509.Certificate, err error) {

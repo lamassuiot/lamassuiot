@@ -24,6 +24,7 @@ import (
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/clients"
 	configV3 "github.com/lamassuiot/lamassuiot/pkg/v3/config"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -207,7 +208,7 @@ func BuildDeviceManagerTestServer(CATestServer *httptest.Server, DMSTestServer *
 		return nil, nil, err
 	}
 	outGetCA, err := caClient.GetCAByID(services.GetCAByIDInput{
-		CAID: "lms-lra",
+		CAID: string(models.CALocalRA),
 	})
 	statsRepo, err := deviceStatsRepository.NewStatisticsDBInMemory()
 	if err != nil {

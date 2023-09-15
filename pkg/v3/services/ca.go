@@ -79,7 +79,7 @@ type CAServiceBuilder struct {
 	CryptoMonitoringConf config.CryptoMonitoring
 }
 
-func NeCAService(builder CAServiceBuilder) CAService {
+func NewCAService(builder CAServiceBuilder) CAService {
 	validate = validator.New()
 
 	svc := CAServiceImpl{
@@ -390,9 +390,9 @@ func (svc *CAServiceImpl) ImportCA(input ImportCAInput) (*models.CACertificate, 
 	engine := svc.cryptoEngine
 	if input.CAType != models.CATypeExternal {
 		if input.CARSAKey != nil {
-			_, err = engine.ImportRSAPrivateKey(input.CARSAKey, input.CACertificate.Subject.CommonName)
+			_, err = engine.ImportRSAPrivateKey(input.CARSAKey, helpers.SerialNumberToString(caCert.SerialNumber))
 		} else if input.CAECKey != nil {
-			_, err = engine.ImportECDSAPrivateKey(input.CAECKey, input.CACertificate.Subject.CommonName)
+			_, err = engine.ImportECDSAPrivateKey(input.CAECKey, helpers.SerialNumberToString(caCert.SerialNumber))
 		} else {
 			return nil, fmt.Errorf("KeyType not supported")
 		}
@@ -414,7 +414,7 @@ func (svc *CAServiceImpl) ImportCA(input ImportCAInput) (*models.CACertificate, 
 		CreationTS:            caCert.NotBefore,
 		Certificate: models.Certificate{
 			Fingerprint:         helpers.X509CertFingerprint(x509.Certificate(*input.CACertificate)),
-			Certificate:         input.CACertificate,
+			Certificate:         caCert,
 			Status:              models.StatusActive,
 			SerialNumber:        helpers.SerialNumberToString(caCert.SerialNumber),
 			KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate((*x509.Certificate)(caCert)),
@@ -423,9 +423,14 @@ func (svc *CAServiceImpl) ImportCA(input ImportCAInput) (*models.CACertificate, 
 			ValidTo:             caCert.NotAfter,
 			RevocationTimestamp: time.Time{},
 			IssuerCAMetadata: models.IssuerCAMetadata{
-				CAID: caID,
+				SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
+				CAID:         caID,
 			},
 		},
+	}
+	_, err = svc.certStorage.Insert(context.Background(), &ca.Certificate)
+	if err != nil {
+		return nil, err
 	}
 
 	return svc.caStorage.Insert(context.Background(), ca)

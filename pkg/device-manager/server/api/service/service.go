@@ -640,9 +640,9 @@ func (s *DevicesService) CACerts(ctx context.Context, aps string) ([]*x509.Certi
 	return cas, nil
 }
 
-func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateRequest, clientCertificate *x509.Certificate, aps string) (*x509.Certificate, error) {
+func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateRequest, clientCertificateChain []*x509.Certificate, aps string) (*x509.Certificate, error) {
 	outGetCA, err := s.caClient.GetCAByID(serviceV3.GetCAByIDInput{
-		CAID: "lms-lra",
+		CAID: string(models.CALocalRA),
 	})
 	if err != nil {
 		return nil, &estErrors.GenericError{
@@ -659,7 +659,7 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 	}
 
 	if dms.DeviceManufacturingService.CloudDMS {
-		err = s.verifyCertificate(clientCertificate, s.upstreamCACert, false)
+		err = s.verifyCertificate(clientCertificateChain[0], s.upstreamCACert, false)
 		if err != nil {
 			log.Debug("the presented client certificate was not issued by lms-lra nor by the Upstream CA")
 			return nil, &estErrors.GenericError{
@@ -668,7 +668,7 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 			}
 		}
 	} else {
-		err = s.verifyCertificate(clientCertificate, (*x509.Certificate)(outGetCA.Certificate.Certificate), false)
+		err = s.verifyCertificate(clientCertificateChain[0], (*x509.Certificate)(outGetCA.Certificate.Certificate), false)
 		if err != nil {
 			log.Debug("the presented client certificate was not issued by lms-lra.")
 			return nil, &estErrors.GenericError{
@@ -727,7 +727,7 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 			DeviceID: deviceID,
 			Alias:    deviceID,
 			Tags: []string{
-				clientCertificate.Subject.CommonName,
+				clientCertificateChain[0].Subject.CommonName,
 				aps,
 			},
 			DmsName:     dms.DeviceManufacturingService.Name,
@@ -923,7 +923,7 @@ func (s *DevicesService) ServerKeyGen(ctx context.Context, csr *x509.Certificate
 		return nil, nil, err
 	}
 
-	crt, err := s.service.Enroll(ctx, csr, cert, aps)
+	crt, err := s.service.Enroll(ctx, csr, []*x509.Certificate{cert}, aps)
 	if err != nil {
 		return nil, nil, err
 	}

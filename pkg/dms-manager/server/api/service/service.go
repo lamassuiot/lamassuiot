@@ -226,7 +226,7 @@ func (s *DMSManagerService) UpdateDMSStatus(ctx context.Context, input *api.Upda
 		dms.Status = api.DMSStatusApproved
 		if !dms.CloudDMS {
 			signOutput, err := s.lamassuCAClient.SignCertificate(serviceV3.SignCertificateInput{
-				CAID:        "lms-lra",
+				CAID:        string(models.CALocalRA),
 				CertRequest: (*models.X509CertificateRequest)(dms.RemoteAccessIdentity.CertificateRequest),
 				Subject:     models.Subject{},
 			})
@@ -478,7 +478,7 @@ func (s *DMSManagerService) CACerts(ctx context.Context, aps string) ([]*x509.Ce
 	return cas, nil
 }
 
-func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateRequest, clientCertificate *x509.Certificate, aps string) (*x509.Certificate, error) {
+func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateRequest, clientCertificateChain []*x509.Certificate, aps string) (*x509.Certificate, error) {
 	dms, err := s.service.GetDMSByName(ctx, &api.GetDMSByNameInput{
 		Name: aps,
 	})
@@ -499,6 +499,12 @@ func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateReq
 			StatusCode: 403,
 		}
 	}
+	var checkCaLevel int
+	if dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.RecursivityLevel == -1 {
+		checkCaLevel = len(clientCertificateChain)
+	} else {
+		checkCaLevel = dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.RecursivityLevel
+	}
 
 	verified := false
 	for _, ca := range dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.BootstrapCAs {
@@ -508,19 +514,30 @@ func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateReq
 		if err != nil {
 			return nil, err
 		}
-		err = s.verifyCertificate(clientCertificate, (*x509.Certificate)(cacert.Certificate.Certificate), false)
+		err = s.verifyCertificate(clientCertificateChain[len(clientCertificateChain)-1], (*x509.Certificate)(cacert.Certificate.Certificate), false)
 		if err == nil {
 			verified = true
 			break
 		}
 	}
-
 	if !verified {
 		return nil, &estErrors.GenericError{
-			Message:    "client certificate is not valid",
+			Message:    "client certificate " + clientCertificateChain[len(clientCertificateChain)-1].Subject.CommonName + " is not valid",
 			StatusCode: 401,
 		}
 	}
+	verificationCACert := clientCertificateChain[len(clientCertificateChain)-1]
+	for i := 2; i <= checkCaLevel; i++ {
+		err = s.verifyCertificate(clientCertificateChain[len(clientCertificateChain)-i], verificationCACert, false)
+		if err != nil {
+			return nil, &estErrors.GenericError{
+				Message:    "client certificate " + clientCertificateChain[len(clientCertificateChain)-i].Subject.CommonName + " is not valid",
+				StatusCode: 401,
+			}
+		}
+		verificationCACert = clientCertificateChain[len(clientCertificateChain)-i]
+	}
+
 	_, err = s.lamassuDevManagerClient.GetDeviceById(ctx, csr.Subject.CommonName)
 	if err != nil {
 		_, err = s.lamassuDevManagerClient.CreateDevice(ctx, csr.Subject.CommonName, csr.Subject.CommonName, aps, "-", dms.IdentityProfile.EnrollmentSettings.Tags, dms.IdentityProfile.EnrollmentSettings.Icon, dms.IdentityProfile.EnrollmentSettings.Color)
@@ -536,7 +553,7 @@ func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateReq
 		return nil, err
 	}
 
-	estClient, err := lamassuEstClient.NewESTClient(nil, estURL, s.UpstreamCert, s.UpstreamKey, nil, true)
+	estClient, err := lamassuEstClient.NewESTClient(nil, estURL, []*x509.Certificate{s.UpstreamCert}, s.UpstreamKey, nil, true)
 	if err != nil {
 		return nil, err
 	}
@@ -617,7 +634,7 @@ func (s *DMSManagerService) Reenroll(ctx context.Context, csr *x509.CertificateR
 		return nil, err
 	}
 
-	estClient, err := lamassuEstClient.NewESTClient(nil, estURL, s.UpstreamCert, s.UpstreamKey, nil, true)
+	estClient, err := lamassuEstClient.NewESTClient(nil, estURL, []*x509.Certificate{s.UpstreamCert}, s.UpstreamKey, nil, true)
 	if err != nil {
 		return nil, err
 	}

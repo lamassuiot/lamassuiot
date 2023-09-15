@@ -180,6 +180,7 @@ type IdentityProfileEnrollmentSettingsSerialized struct {
 	Color                  string                `json:"color"`
 	AuthorizedCA           string                `json:"authorized_ca"`
 	BootstrapCAs           []string              `json:"bootstrap_cas"`
+	RecursivityLevel       int                   `json:"recursivity_level"`
 }
 
 func (o *IdentityProfileEnrollmentSettings) Serialize() IdentityProfileEnrollmentSettingsSerialized {
@@ -191,6 +192,7 @@ func (o *IdentityProfileEnrollmentSettings) Serialize() IdentityProfileEnrollmen
 		Color:                  o.Color,
 		AuthorizedCA:           o.AuthorizedCA,
 		BootstrapCAs:           o.BootstrapCAs,
+		RecursivityLevel:       o.RecursivityLevel,
 	}
 }
 
@@ -203,6 +205,7 @@ func (o *IdentityProfileEnrollmentSettingsSerialized) Deserialize() IdentityProf
 		Color:                  o.Color,
 		AuthorizedCA:           o.AuthorizedCA,
 		BootstrapCAs:           o.BootstrapCAs,
+		RecursivityLevel:       o.RecursivityLevel,
 	}
 }
 

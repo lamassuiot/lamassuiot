@@ -168,4 +168,4 @@ func (JSONSerializer) Value(ctx context.Context, field *schema.Field, dst reflec
 	return json.Marshal(fieldValue)
 }
 
-func GenerateBookmark(offset int, limit int)
+func GenerateBookmark(offset int, limit int) {}

@@ -189,6 +189,7 @@ type IdentityProfileEnrollmentSettings struct {
 	Color                  string
 	AuthorizedCA           string
 	BootstrapCAs           []string
+	RecursivityLevel       int
 }
 
 type IdentityProfileReenrollmentSettings struct {
