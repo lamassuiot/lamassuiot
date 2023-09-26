@@ -1,0 +1,79 @@
+Certificate Revocation List (CRL):
+        Version 2 (0x1)
+        Signature Algorithm: sha256WithRSAEncryption
+        Issuer: C = , ST = , L = , O = , OU = , CN = test-ca
+        Last Update: Sep 14 09:23:00 2023 GMT
+        Next Update: Sep 16 09:23:00 2023 GMT
+        CRL extensions:
+            X509v3 Authority Key Identifier: 
+                keyid:90:C0:7A:58:D0:F1:03:8C:38:83:5E:05:62:3B:CE:43:DB:77:49:E5
+
+            X509v3 CRL Number: 
+                5
+Revoked Certificates:
+    Serial Number: 3A4D6D2A4405F582CC4C13E15FABA5C9788AE49D
+        Revocation Date: Sep 14 09:22:29 2023 GMT
+    Serial Number: 3A4D6D2A4405F582CC4C13E15FABA5C9788AE49D
+        Revocation Date: Sep 14 09:22:29 2023 GMT
+    Serial Number: 3A4D6D2A4405F582CC4C13E15FABA5C9788AE49D
+        Revocation Date: Sep 14 09:22:29 2023 GMT
+    Serial Number: 3A4D6D2A4405F582CC4C13E15FABA5C9788AE49D
+        Revocation Date: Sep 14 09:22:29 2023 GMT
+    Serial Number: 3A4D6D2A4405F582CC4C13E15FABA5C9788AE49D
+        Revocation Date: Sep 14 09:22:29 2023 GMT
+    Serial Number: 61299657D5E62B315AFF76CEF5578E3B24513CB3
+        Revocation Date: Sep 14 09:22:35 2023 GMT
+    Serial Number: 61299657D5E62B315AFF76CEF5578E3B24513CB3
+        Revocation Date: Sep 14 09:22:35 2023 GMT
+    Serial Number: 61299657D5E62B315AFF76CEF5578E3B24513CB3
+        Revocation Date: Sep 14 09:22:35 2023 GMT
+    Serial Number: 61299657D5E62B315AFF76CEF5578E3B24513CB3
+        Revocation Date: Sep 14 09:22:35 2023 GMT
+    Serial Number: 61299657D5E62B315AFF76CEF5578E3B24513CB3
+        Revocation Date: Sep 14 09:22:35 2023 GMT
+    Serial Number: 843B8C0FB125C762CB65E1B3C50085A46D5CDEB2
+        Revocation Date: Sep 14 09:22:47 2023 GMT
+    Serial Number: 843B8C0FB125C762CB65E1B3C50085A46D5CDEB2
+        Revocation Date: Sep 14 09:22:47 2023 GMT
+    Serial Number: 843B8C0FB125C762CB65E1B3C50085A46D5CDEB2
+        Revocation Date: Sep 14 09:22:47 2023 GMT
+    Serial Number: 843B8C0FB125C762CB65E1B3C50085A46D5CDEB2
+        Revocation Date: Sep 14 09:22:47 2023 GMT
+    Serial Number: 843B8C0FB125C762CB65E1B3C50085A46D5CDEB2
+        Revocation Date: Sep 14 09:22:47 2023 GMT
+    Serial Number: AB73C961866E55B67EA9EA5C077EA83DEFC21E30
+        Revocation Date: Sep 14 09:22:52 2023 GMT
+    Serial Number: AB73C961866E55B67EA9EA5C077EA83DEFC21E30
+        Revocation Date: Sep 14 09:22:52 2023 GMT
+    Serial Number: AB73C961866E55B67EA9EA5C077EA83DEFC21E30
+        Revocation Date: Sep 14 09:22:52 2023 GMT
+    Serial Number: AB73C961866E55B67EA9EA5C077EA83DEFC21E30
+        Revocation Date: Sep 14 09:22:52 2023 GMT
+    Serial Number: AB73C961866E55B67EA9EA5C077EA83DEFC21E30
+        Revocation Date: Sep 14 09:22:52 2023 GMT
+    Serial Number: F1D2D4F7EA815778099E11FA48926B94CE01E9A8
+        Revocation Date: Sep 14 09:22:55 2023 GMT
+    Serial Number: F1D2D4F7EA815778099E11FA48926B94CE01E9A8
+        Revocation Date: Sep 14 09:22:55 2023 GMT
+    Serial Number: F1D2D4F7EA815778099E11FA48926B94CE01E9A8
+        Revocation Date: Sep 14 09:22:55 2023 GMT
+    Serial Number: F1D2D4F7EA815778099E11FA48926B94CE01E9A8
+        Revocation Date: Sep 14 09:22:55 2023 GMT
+    Serial Number: F1D2D4F7EA815778099E11FA48926B94CE01E9A8
+        Revocation Date: Sep 14 09:22:55 2023 GMT
+    Signature Algorithm: sha256WithRSAEncryption
+         73:e7:7f:0b:ac:18:56:f7:a2:7b:4b:69:26:fc:9c:db:91:b6:
+         66:63:9b:cd:61:3c:3b:93:95:42:97:b6:cf:ea:cc:6d:6d:30:
+         fa:1b:f3:88:13:18:c1:dd:06:3d:09:60:f9:42:c5:5f:29:bb:
+         52:db:e6:83:a6:ea:cc:6e:28:82:63:da:fa:36:18:9d:86:7a:
+         35:e9:22:d2:be:51:d9:5d:1f:3c:05:50:3c:32:fa:79:ce:65:
+         de:13:2e:d2:86:ab:e8:de:90:c9:bc:0a:dd:a7:d0:a6:ba:8c:
+         e0:8b:e4:81:7e:0a:c1:dd:c6:62:42:5d:dc:b8:7b:0c:0b:10:
+         ca:a7:fc:c9:d9:a9:d3:6c:84:d0:66:93:38:8f:97:39:c1:c0:
+         21:44:e7:03:7a:57:06:4b:90:61:c8:86:b3:48:c5:9d:44:18:
+         a5:e8:f7:bc:5c:15:bb:a4:3c:16:63:f1:24:eb:25:b7:2d:5d:
+         fe:fc:9d:16:d6:a8:89:8e:28:f7:2a:c9:74:04:89:d0:60:c9:
+         0d:70:b1:51:56:af:21:dd:66:84:fb:62:f2:82:c0:53:ee:6b:
+         3b:2b:83:1b:13:6c:99:a1:ca:c9:de:94:bf:75:e9:d6:0f:9c:
+         f9:69:19:ea:d7:ee:ab:0f:4f:2a:ac:77:e5:27:ca:33:0e:00:
+         d0:73:dd:77

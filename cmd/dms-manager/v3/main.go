@@ -104,12 +104,12 @@ func createStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine
 	case config.CouchDB:
 		couchdbClient, err := couchdb.CreateCouchDBConnection(logger, conf.CouchDB)
 		if err != nil {
-			log.Panicf("could not create couchdb client: %s", err)
+			log.Fatalf("could not create couchdb client: %s", err)
 		}
 
 		dmsStore, err := couchdb.NewCouchDMSRepository(couchdbClient)
 		if err != nil {
-			log.Panicf("could not initialize couchdb DMS client: %s", err)
+			log.Fatalf("could not initialize couchdb DMS client: %s", err)
 		}
 
 		return dmsStore, nil
