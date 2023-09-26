@@ -292,42 +292,58 @@ func (svc *iotAWSServiceImpl) GetRegisteredCAs(input GetRegisteredCAsInput) ([]*
 	lFunc := svc.logger
 
 	cas := []*models.CACertificate{}
+
 	lmsCAs := 0
 	totalAWSRegCAs := 0
 
 	lFunc.Debugf("listing CA certificates in AWS IoT")
-	res, err := svc.iotSDK.ListCACertificates(context.Background(), &iot.ListCACertificatesInput{})
-	if err != nil {
-		lFunc.Errorf("something went wrong while listing CA certificates from AWS IoT: %s", err)
-		return cas, err
-	}
+	nextMarker := ""
 
-	for _, caMeta := range res.Certificates {
-		totalAWSRegCAs++
+	continueIter := true
+	for continueIter {
+		res, err := svc.iotSDK.ListCACertificates(context.Background(), &iot.ListCACertificatesInput{
+			PageSize: aws.Int32(2),
+			Marker:   &nextMarker,
+		})
 
-		descRes, err := svc.iotSDK.DescribeCACertificate(context.Background(), &iot.DescribeCACertificateInput{CertificateId: caMeta.CertificateId})
 		if err != nil {
-			lFunc.Errorf("something went wrong while describing '%s' CA certificate from AWS IoT: %s", *caMeta.CertificateId, err)
+			lFunc.Errorf("something went wrong while listing CA certificates from AWS IoT: %s", err)
 			return cas, err
 		}
 
-		descCrt, err := helpers.ParseCertificate(*descRes.CertificateDescription.CertificatePem)
-		if err != nil {
-			lFunc.Errorf("something went wrong while parsing PEM from CA certificate '%s': %s", *caMeta.CertificateId, err)
-			return cas, err
+		for _, caMeta := range res.Certificates {
+			totalAWSRegCAs++
+
+			descRes, err := svc.iotSDK.DescribeCACertificate(context.Background(), &iot.DescribeCACertificateInput{CertificateId: caMeta.CertificateId})
+			if err != nil {
+				lFunc.Errorf("something went wrong while describing '%s' CA certificate from AWS IoT: %s", *caMeta.CertificateId, err)
+				return cas, err
+			}
+
+			descCrt, err := helpers.ParseCertificate(*descRes.CertificateDescription.CertificatePem)
+			if err != nil {
+				lFunc.Errorf("something went wrong while parsing PEM from CA certificate '%s': %s", *caMeta.CertificateId, err)
+				return cas, err
+			}
+
+			lFunc.Debugf("requesting CA with ID '%s' which has SN '%s' to CA service", *caMeta.CertificateId, helpers.SerialNumberToString(descCrt.SerialNumber))
+
+			lmsCA, err := svc.caSDK.GetCABySerialNumber(context.Background(), GetCABySerialNumberInput{SerialNumber: helpers.SerialNumberToString(descCrt.SerialNumber)})
+			if err != nil {
+				lFunc.Errorf("skipping CA with ID '%s' which has SN '%s'. Could not get CA from CA service: %s", *caMeta.CertificateId, helpers.SerialNumberToString(descCrt.SerialNumber), err)
+				continue
+			}
+			lmsCAs++
+
+			cas = append(cas, lmsCA)
+			if *res.NextMarker != "" {
+				lFunc.Debugf("Next marker: %s", *res.NextMarker)
+				nextMarker = *res.NextMarker
+			} else {
+				lFunc.Debugf("No marker")
+				continueIter = false
+			}
 		}
-
-		lFunc.Debugf("requesting CA with ID '%s' which has SN '%s' to CA service", *caMeta.CertificateId, helpers.SerialNumberToString(descCrt.SerialNumber))
-
-		lmsCA, err := svc.caSDK.GetCABySerialNumber(context.Background(), GetCABySerialNumberInput{SerialNumber: helpers.SerialNumberToString(descCrt.SerialNumber)})
-		if err != nil {
-			lFunc.Errorf("skipping CA with ID '%s' which has SN '%s'. Could not get CA from CA service: %s", *caMeta.CertificateId, helpers.SerialNumberToString(descCrt.SerialNumber), err)
-			continue
-		}
-
-		lmsCAs++
-
-		cas = append(cas, lmsCA)
 	}
 
 	return cas, nil

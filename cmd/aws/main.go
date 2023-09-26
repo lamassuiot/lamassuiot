@@ -181,7 +181,10 @@ func eventHandler(logger *logrus.Entry, connectorID string, cloudEvent *event.Ev
 			return
 		}
 
-		//check if JITP template already exists. If so, update it if required
+		//check if JITP template already exists.
+
+		//If JITP exists, update it if required
+		//Else create JITP.
 
 	}
 }
