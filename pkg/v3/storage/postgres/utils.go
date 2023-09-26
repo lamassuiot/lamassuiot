@@ -58,10 +58,14 @@ func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn
 	}
 }
 
-func (db *postgresDBQuerier[E]) Count() (int, error) {
+func (db *postgresDBQuerier[E]) Count(extraOpts []gormWhereParams) (int, error) {
 	var count int64
+	tx := db.Table(db.tableName)
+	for _, whereQuery := range extraOpts {
+		tx = tx.Where(whereQuery.query, whereQuery.extraArgs...)
+	}
 
-	tx := db.Table(db.tableName).Count(&count)
+	tx.Count(&count)
 	if err := tx.Error; err != nil {
 		return -1, err
 	}

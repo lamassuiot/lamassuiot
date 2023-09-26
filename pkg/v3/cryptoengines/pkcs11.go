@@ -38,11 +38,11 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.PKCS11EngineConfig) (Cryp
 		os.Setenv(envKey, envVal)
 	}
 
-	lPkcs11.Debugf("configuring pkcs11 module")
+	lPkcs11.Debugf("configuring pkcs11 module: \n	- ModulePath: %s\n	- TokenLabel: %s\n	- Pin: ******\n", config.Path, conf.TokenLabel)
 	instance, err := crypto11.Configure(config)
 	if err != nil {
 		lPkcs11.Errorf("could not configure pkcs11 module: %s", err)
-		return nil, errors.New("could not get private key")
+		return nil, errors.New("could not configure driver")
 	}
 
 	pkcs11ProviderContext := pkcs11.New(conf.ModulePath)

@@ -83,7 +83,7 @@ func main() {
 		CryptoMonitoringConf: conf.CryptoMonitoring,
 	})
 	if err != nil {
-		log.Panicf("could not create CA service: %v", err)
+		log.Fatalf("could not create CA service: %v", err)
 	}
 
 	caSvc := svc.(*services.CAServiceImpl)
@@ -119,34 +119,34 @@ func createStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine
 	case config.Postgres:
 		psqlCli, err := postgres.CreatePostgresDBConnection(logger, conf.Postgres, "ca")
 		if err != nil {
-			log.Panicf("could not create postgres client: %s", err)
+			log.Fatalf("could not create postgres client: %s", err)
 		}
 
 		caStore, err := postgres.NewCAPostgresRepository(psqlCli)
 		if err != nil {
-			log.Panicf("could not initialize postgres CA client: %s", err)
+			log.Fatalf("could not initialize postgres CA client: %s", err)
 		}
 
 		certStore, err := postgres.NewCertificateRepository(psqlCli)
 		if err != nil {
-			log.Panicf("could not initialize postgres Cert client: %s", err)
+			log.Fatalf("could not initialize postgres Cert client: %s", err)
 		}
 
 		return caStore, certStore, nil
 	case config.CouchDB:
 		couchdbClient, err := couchdb.CreateCouchDBConnection(logger, conf.CouchDB)
 		if err != nil {
-			log.Panicf("could not create couchdb client: %s", err)
+			log.Fatalf("could not create couchdb client: %s", err)
 		}
 
 		caStore, err := couchdb.NewCouchCARepository(couchdbClient)
 		if err != nil {
-			log.Panicf("could not initialize couchdb CA client: %s", err)
+			log.Fatalf("could not initialize couchdb CA client: %s", err)
 		}
 
 		certStore, err := couchdb.NewCouchCertificateRepository(couchdbClient)
 		if err != nil {
-			log.Panicf("could not initialize couchdb Cert client: %s", err)
+			log.Fatalf("could not initialize couchdb Cert client: %s", err)
 		}
 
 		return caStore, certStore, nil
