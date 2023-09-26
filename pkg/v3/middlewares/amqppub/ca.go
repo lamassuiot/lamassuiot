@@ -24,6 +24,9 @@ func NewCAAmqpEventPublisher(amqpPublisher *messaging.AMQPSetup) services.CAMidd
 	}
 }
 
+func (mw amqpEventPublisher) GetStats(ctx context.Context) (*models.CAStats, error) {
+	return mw.next.GetStats(ctx)
+}
 func (mw amqpEventPublisher) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
 	return mw.next.GetCryptoEngineProvider(ctx)
 }

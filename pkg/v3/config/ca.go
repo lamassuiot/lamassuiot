@@ -51,7 +51,7 @@ type AWSSDKConfig struct {
 	ID              string                 `mapstructure:"id"`
 	Metadata        map[string]interface{} `mapstructure:"metadata"`
 	AccessKeyID     string                 `mapstructure:"access_key_id"`
-	SecretAccessKey string                 `mapstructure:"secret_access_key"`
+	SecretAccessKey Password               `mapstructure:"secret_access_key"`
 	Region          string                 `mapstructure:"region"`
 }
 

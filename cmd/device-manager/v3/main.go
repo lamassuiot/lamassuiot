@@ -93,12 +93,12 @@ func createStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine
 	case config.CouchDB:
 		couchdbClient, err := couchdb.CreateCouchDBConnection(logger, conf.CouchDB)
 		if err != nil {
-			log.Panicf("could not create couchdb client: %s", err)
+			log.Fatalf("could not create couchdb client: %s", err)
 		}
 
 		deviceStore, err := couchdb.NewCouchDeviceRepository(couchdbClient)
 		if err != nil {
-			log.Panicf("could not initialize couchdb Device client: %s", err)
+			log.Fatalf("could not initialize couchdb Device client: %s", err)
 		}
 
 		return deviceStore, nil

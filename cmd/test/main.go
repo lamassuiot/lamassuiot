@@ -55,7 +55,7 @@ func main() {
 	caDur, _ := models.ParseDuration("20y")
 	caTDur := models.TimeDuration(caDur)
 
-	caBoot, err := caCli.CreateCA(services.CreateCAInput{
+	caBoot, err := caCli.CreateCA(context.Background(), services.CreateCAInput{
 		CAType:      models.CertificateTypeManaged,
 		KeyMetadata: models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:     models.Subject{CommonName: "test-ca"},
@@ -73,7 +73,7 @@ func main() {
 	}
 	log.Infof("CA Boot with ID %s, CommonName %s, SerialNumber %s", caBoot.ID, caBoot.Subject.CommonName, caBoot.SerialNumber)
 
-	caEnroll, err := caCli.CreateCA(services.CreateCAInput{
+	caEnroll, err := caCli.CreateCA(context.Background(), services.CreateCAInput{
 		CAType:      models.CertificateTypeManaged,
 		KeyMetadata: models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:     models.Subject{CommonName: "test-ca"},
@@ -134,7 +134,7 @@ func main() {
 
 	key, _ := helpers.GenerateRSAKey(2048)
 	csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "myboot", Country: "ES"}, key)
-	bootCrt, err := caCli.SignCertificate(services.SignCertificateInput{
+	bootCrt, err := caCli.SignCertificate(context.Background(), services.SignCertificateInput{
 		CAID:         caBoot.ID,
 		CertRequest:  (*models.X509CertificateRequest)(csr),
 		SignVerbatim: true,
