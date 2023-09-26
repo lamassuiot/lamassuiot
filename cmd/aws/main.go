@@ -51,7 +51,7 @@ func main() {
 
 	lSvc := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.Service, "Service")
 	lMessage := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.MessagingEngine, "MESSAGING")
-	lCAClient := helpers.ConfigureLogger(globalLogLevel, conf.CAClient.Level, "LMS SDK - CA Client")
+	lCAClient := helpers.ConfigureLogger(globalLogLevel, conf.CAClient.LogLevel, "LMS SDK - CA Client")
 
 	caHttpCli, err := clients.BuildHTTPClient(conf.CAClient.HTTPClient, lCAClient)
 	if err != nil {
@@ -181,7 +181,10 @@ func eventHandler(logger *logrus.Entry, connectorID string, cloudEvent *event.Ev
 			return
 		}
 
-		//check if JITP template already exists. If so, update it if required
+		//check if JITP template already exists.
+
+		//If JITP exists, update it if required
+		//Else create JITP.
 
 	}
 }

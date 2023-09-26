@@ -12,6 +12,7 @@ import (
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
@@ -169,8 +170,8 @@ func (aPub *AMQPSetup) setupAMQPEventPublisher() {
 	aPub.PublisherChan = publisherChan
 }
 
-func (aPub *AMQPSetup) PublishCloudEvent(eventType string, eventSource string, payload interface{}) {
-	event := buildCloudEvent(eventType, eventSource, payload)
+func (aPub *AMQPSetup) PublishCloudEvent(eventType models.EventType, eventSource string, payload interface{}) {
+	event := buildCloudEvent(string(eventType), eventSource, payload)
 	eventBytes, marshalErr := json.Marshal(event)
 	if marshalErr != nil {
 		log.Errorf("error while serializing event: %s", marshalErr)
