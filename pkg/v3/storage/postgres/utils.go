@@ -175,10 +175,6 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 			applyFunc(&elem)
 		}
 		logrus.Tracef("iterating batch %d. Number of records in batch: %d", batch, tx.RowsAffected)
-
-		// returns error will stop future batches
-		return nil
-	})
 	if result.RowsAffected == 0 {
 		nextBookmark = ""
 	}

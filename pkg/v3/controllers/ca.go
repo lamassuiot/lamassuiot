@@ -623,20 +623,13 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 				derefCert := *cert
 				certs = append(certs, &derefCert)
 			},
-		},
-	})
-	if err != nil {
 		switch err {
 		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err})
 		case errs.ErrCANotFound:
 			ctx.JSON(404, gin.H{"err": err})
 		default:
 			ctx.JSON(500, gin.H{"err": err})
 		}
-
-		return
-	}
 
 	ctx.JSON(200, resources.GetCertsResponse{
 		IterableList: resources.IterableList[models.Certificate]{

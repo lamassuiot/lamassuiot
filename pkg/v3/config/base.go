@@ -123,11 +123,8 @@ type AMQPConnectionBasicAuth struct {
 
 type HTTPClient struct {
 	AuthMode        HTTPClientAuthMethod `mapstructure:"auth_mode"`
-	AuthJWTOptions  AuthJWTOptions       `mapstructure:"jwt_options"`
 	AuthMTLSOptions AuthMTLSOptions      `mapstructure:"mtls_options"`
 	LogLevel        LogLevel             `mapstructure:"log_level"`
-	HTTPConnection  `mapstructure:",squash"`
-}
 
 type AuthJWTOptions struct {
 	ClientID         string `mapstructure:"oidc_client_id"`

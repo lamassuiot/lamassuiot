@@ -210,8 +210,8 @@ func (mw *validationMiddleware) CACerts(ctx context.Context, aps string) ([]*x50
 	return mw.next.CACerts(ctx, aps)
 }
 
-func (mw *validationMiddleware) Enroll(ctx context.Context, csr *x509.CertificateRequest, clientCertificate *x509.Certificate, aps string) (*x509.Certificate, error) {
-	return mw.next.Enroll(ctx, csr, clientCertificate, aps)
+func (mw *validationMiddleware) Enroll(ctx context.Context, csr *x509.CertificateRequest, certChain []*x509.Certificate, aps string) (*x509.Certificate, error) {
+	return mw.next.Enroll(ctx, csr, certChain, aps)
 }
 
 func (mw *validationMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, error) {

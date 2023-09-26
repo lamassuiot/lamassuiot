@@ -484,7 +484,7 @@ func (s *DevicesService) RevokeActiveCertificate(ctx context.Context, input *api
 	if cert.Status == caApi.StatusRevoked {
 		return &api.RevokeActiveCertificateOutput{}, errors.New("certificate is already revoked")
 	} else {
-		revokeOutput, err := s.caClient.UpdateCertificateStatus(ctx, serviceV3.UpdateCertificateStatusInput{
+		revokeOutput, err := s.caClient.UpdateCertificateStatus(serviceV3.UpdateCertificateStatusInput{
 			SerialNumber: slot.ActiveCertificate.SerialNumber,
 			NewStatus:    models.StatusRevoked,
 		})
@@ -575,7 +575,7 @@ func (s *DevicesService) IsDMSAuthorizedToEnroll(ctx context.Context, input *api
 }
 
 func (s *DevicesService) ImportDeviceCert(ctx context.Context, input *api.ImportDeviceCertInput) (*api.ImportDeviceCertOutput, error) {
-	deviceCert, err := s.caClient.GetCertificateBySerialNumber(ctx, serviceV3.GetCertificatesBySerialNumberInput{
+	deviceCert, err := s.caClient.GetCertificateBySerialNumber(serviceV3.GetCertificatesBySerialNumberInput{
 		SerialNumber: input.SerialNumber,
 	})
 	if err != nil {
@@ -630,7 +630,7 @@ func (s *DevicesService) ImportDeviceCert(ctx context.Context, input *api.Import
 
 func (s *DevicesService) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
 	cas := make([]*x509.Certificate, 0)
-	s.caClient.GetCAs(ctx, serviceV3.GetCAsInput{
+	s.caClient.GetCAs(serviceV3.GetCAsInput{
 		QueryParameters: &resources.QueryParameters{},
 		ExhaustiveRun:   true,
 		ApplyFunc: func(c *models.CACertificate) {
@@ -640,9 +640,9 @@ func (s *DevicesService) CACerts(ctx context.Context, aps string) ([]*x509.Certi
 	return cas, nil
 }
 
-func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateRequest, clientCertificate *x509.Certificate, aps string) (*x509.Certificate, error) {
-	outGetCA, err := s.caClient.GetCAByID(ctx, serviceV3.GetCAByIDInput{
-		CAID: "lms-lra",
+func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateRequest, clientCertificateChain []*x509.Certificate, aps string) (*x509.Certificate, error) {
+	outGetCA, err := s.caClient.GetCAByID(serviceV3.GetCAByIDInput{
+		CAID: string(models.CALocalRA),
 	})
 	if err != nil {
 		return nil, &estErrors.GenericError{
@@ -659,7 +659,7 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 	}
 
 	if dms.DeviceManufacturingService.CloudDMS {
-		err = s.verifyCertificate(clientCertificate, s.upstreamCACert, false)
+		err = s.verifyCertificate(clientCertificateChain[0], s.upstreamCACert, false)
 		if err != nil {
 			log.Debug("the presented client certificate was not issued by lms-lra nor by the Upstream CA")
 			return nil, &estErrors.GenericError{
@@ -668,7 +668,7 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 			}
 		}
 	} else {
-		err = s.verifyCertificate(clientCertificate, (*x509.Certificate)(outGetCA.Certificate.Certificate), false)
+		err = s.verifyCertificate(clientCertificateChain[0], (*x509.Certificate)(outGetCA.Certificate.Certificate), false)
 		if err != nil {
 			log.Debug("the presented client certificate was not issued by lms-lra.")
 			return nil, &estErrors.GenericError{
@@ -727,7 +727,7 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 			DeviceID: deviceID,
 			Alias:    deviceID,
 			Tags: []string{
-				clientCertificate.Subject.CommonName,
+				clientCertificateChain[0].Subject.CommonName,
 				aps,
 			},
 			DmsName:     dms.DeviceManufacturingService.Name,
@@ -760,10 +760,10 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 
 	}
 
-	signOutput, err := s.caClient.SignCertificate(ctx, serviceV3.SignCertificateInput{
+	signOutput, err := s.caClient.SignCertificate(serviceV3.SignCertificateInput{
 		CAID:         aps,
 		CertRequest:  (*models.X509CertificateRequest)(csr),
-		Subject:      &models.Subject{},
+		Subject:      models.Subject{},
 		SignVerbatim: true,
 	})
 
@@ -851,7 +851,7 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 		}
 	}
 
-	outGetCA, err := s.caClient.GetCAByID(ctx, serviceV3.GetCAByIDInput{
+	outGetCA, err := s.caClient.GetCAByID(serviceV3.GetCAByIDInput{
 		CAID: aps,
 	})
 
@@ -890,10 +890,10 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 		}
 	}
 
-	signOutput, err := s.caClient.SignCertificate(ctx, serviceV3.SignCertificateInput{
+	signOutput, err := s.caClient.SignCertificate(serviceV3.SignCertificateInput{
 		CAID:         aps,
 		CertRequest:  (*models.X509CertificateRequest)(csr),
-		Subject:      &models.Subject{},
+		Subject:      models.Subject{},
 		SignVerbatim: true,
 	})
 	if err != nil {
@@ -923,7 +923,7 @@ func (s *DevicesService) ServerKeyGen(ctx context.Context, csr *x509.Certificate
 		return nil, nil, err
 	}
 
-	crt, err := s.service.Enroll(ctx, csr, cert, aps)
+	crt, err := s.service.Enroll(ctx, csr, []*x509.Certificate{cert}, aps)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -943,7 +943,7 @@ func (s *DevicesService) verifyCertificate(clientCertificate *x509.Certificate, 
 		Roots:     clientCAs,
 		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
-	cert, _ := s.caClient.GetCertificateBySerialNumber(context.Background(), serviceV3.GetCertificatesBySerialNumberInput{
+	cert, _ := s.caClient.GetCertificateBySerialNumber(serviceV3.GetCertificatesBySerialNumberInput{
 		SerialNumber: utils.InsertNth(utils.ToHexInt(clientCertificate.SerialNumber), 2),
 	})
 	_, err := clientCertificate.Verify(opts)

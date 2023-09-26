@@ -50,7 +50,6 @@ func NewAWSKMSEngine(logger *logrus.Entry, conf config.AWSSDKConfig) (CryptoEngi
 		kmscli: kmscli,
 		config: models.CryptoEngineInfo{
 			Type:          models.AWSKMS,
-			SecurityLevel: models.SL2,
 			Provider:      "Amazon Web Services",
 			Name:          "KMS",
 			Metadata:      conf.Metadata,
@@ -74,11 +73,6 @@ func NewAWSKMSEngine(logger *logrus.Entry, conf config.AWSSDKConfig) (CryptoEngi
 					},
 				},
 			},
-		},
-	}, nil
-}
-
-func (p *AWSKMSCryptoEngine) GetEngineConfig() models.CryptoEngineInfo {
 	return p.config
 }
 

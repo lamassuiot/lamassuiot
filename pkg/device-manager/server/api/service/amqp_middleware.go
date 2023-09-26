@@ -163,7 +163,7 @@ func (mw *amqpMiddleware) CACerts(ctx context.Context, aps string) ([]*x509.Cert
 	return mw.next.CACerts(ctx, aps)
 }
 
-func (mw *amqpMiddleware) Enroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (output *x509.Certificate, err error) {
+func (mw *amqpMiddleware) Enroll(ctx context.Context, csr *x509.CertificateRequest, certChain []*x509.Certificate, aps string) (output *x509.Certificate, err error) {
 	defer func() {
 		type EnrollLog struct {
 			Certificate string `json:"certificate"`
@@ -174,7 +174,7 @@ func (mw *amqpMiddleware) Enroll(ctx context.Context, csr *x509.CertificateReque
 			mw.sendAMQPMessage(fmt.Sprintf("%s.device.enroll", EventPrefix), &EnrollLog{Certificate: crtB64})
 		}
 	}()
-	return mw.next.Enroll(ctx, csr, cert, aps)
+	return mw.next.Enroll(ctx, csr, certChain, aps)
 }
 
 func (mw *amqpMiddleware) Reenroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (output *x509.Certificate, err error) {

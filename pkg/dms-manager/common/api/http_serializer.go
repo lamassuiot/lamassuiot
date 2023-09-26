@@ -180,6 +180,7 @@ type IdentityProfileEnrollmentSettingsSerialized struct {
 	Color                  string                `json:"color"`
 	AuthorizedCA           string                `json:"authorized_ca"`
 	BootstrapCAs           []string              `json:"bootstrap_cas"`
+	ChainValidationLevel   int                   `json:"chain_validation_level"`
 }
 
 func (o *IdentityProfileEnrollmentSettings) Serialize() IdentityProfileEnrollmentSettingsSerialized {
@@ -191,6 +192,7 @@ func (o *IdentityProfileEnrollmentSettings) Serialize() IdentityProfileEnrollmen
 		Color:                  o.Color,
 		AuthorizedCA:           o.AuthorizedCA,
 		BootstrapCAs:           o.BootstrapCAs,
+		ChainValidationLevel:   o.ChainValidationLevel,
 	}
 }
 
@@ -203,20 +205,21 @@ func (o *IdentityProfileEnrollmentSettingsSerialized) Deserialize() IdentityProf
 		Color:                  o.Color,
 		AuthorizedCA:           o.AuthorizedCA,
 		BootstrapCAs:           o.BootstrapCAs,
+		ChainValidationLevel:   o.ChainValidationLevel,
 	}
 }
 
 type IdentityProfileReenrollmentSettingsSerialized struct {
 	AllowExpiredRenewal       bool     `json:"allow_expired_renewal"`
 	PreventiveRenewalInterval string   `json:"preventive_renewal_interval"`
-	ValidationCAs             []string `json:"validation_cas"`
+	AdditionaValidationCAs    []string `json:"additional_validation_cas"`
 }
 
 func (o *IdentityProfileReenrollmentSettings) Serialize() IdentityProfileReenrollmentSettingsSerialized {
 	return IdentityProfileReenrollmentSettingsSerialized{
 		AllowExpiredRenewal:       o.AllowExpiredRenewal,
 		PreventiveRenewalInterval: utils.ShortDuration(o.PreventiveRenewalInterval),
-		ValidationCAs:             o.ValidationCAs,
+		AdditionaValidationCAs:    o.AdditionaValidationCAs,
 	}
 }
 
@@ -227,7 +230,7 @@ func (o IdentityProfileReenrollmentSettingsSerialized) Deserialize() IdentityPro
 	return IdentityProfileReenrollmentSettings{
 		AllowExpiredRenewal:       o.AllowExpiredRenewal,
 		PreventiveRenewalInterval: duration,
-		ValidationCAs:             o.ValidationCAs,
+		AdditionaValidationCAs:    o.AdditionaValidationCAs,
 	}
 }
 

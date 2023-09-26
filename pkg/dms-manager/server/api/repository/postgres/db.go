@@ -47,7 +47,7 @@ type IdentityProfileDAO struct {
 	Color                      string
 	Tags                       pq.StringArray `gorm:"type:text[]"`
 	PreventiveRenewalInterval  string
-	ValidationCAs              pq.StringArray `gorm:"type:text[]"`
+	AdditionalValidationCAs    pq.StringArray `gorm:"type:text[]"`
 	AllowNewAutoEnrollment     bool
 	AllowExpiredRenewal        bool
 	IncludeAuthorizedCA        bool
@@ -56,6 +56,7 @@ type IdentityProfileDAO struct {
 	ManagedCAs                 pq.StringArray `gorm:"type:text[]"`
 	StaticCAs                  []StaticCADAO  `gorm:"foreignKey:DMSName;References:DMSName"`
 	PublishToAWS               bool
+	ChainValidationLevel       int
 }
 
 type StaticCADAO struct {
@@ -185,11 +186,12 @@ func (d *IdentityProfileDAO) toIdentityProfile() *api.IdentityProfile {
 			AuthorizedCA:           d.AuthorizedCA,
 			AllowNewAutoEnrollment: d.AllowNewAutoEnrollment,
 			BootstrapCAs:           d.BootstrapCAs,
+			ChainValidationLevel:   d.ChainValidationLevel,
 		},
 		ReerollmentSettings: api.IdentityProfileReenrollmentSettings{
 			AllowExpiredRenewal:       d.AllowExpiredRenewal,
 			PreventiveRenewalInterval: duration,
-			ValidationCAs:             d.ValidationCAs,
+			AdditionaValidationCAs:    d.AdditionalValidationCAs,
 		},
 		CADistributionSettings: api.IdentityProfileCADistributionSettings{
 			IncludeAuthorizedCA:        d.IncludeAuthorizedCA,
@@ -217,9 +219,10 @@ func toIdentityProfileDAO(dmsName string, d api.IdentityProfile) IdentityProfile
 		Icon:                       d.EnrollmentSettings.Icon,
 		Color:                      d.EnrollmentSettings.Color,
 		Tags:                       d.EnrollmentSettings.Tags,
+		ChainValidationLevel:       d.EnrollmentSettings.ChainValidationLevel,
 		AllowNewAutoEnrollment:     d.EnrollmentSettings.AllowNewAutoEnrollment,
 		AllowExpiredRenewal:        d.ReerollmentSettings.AllowExpiredRenewal,
-		ValidationCAs:              d.ReerollmentSettings.ValidationCAs,
+		AdditionalValidationCAs:    d.ReerollmentSettings.AdditionaValidationCAs,
 		PreventiveRenewalInterval:  d.ReerollmentSettings.PreventiveRenewalInterval.String(),
 		IncludeAuthorizedCA:        d.CADistributionSettings.IncludeAuthorizedCA,
 		IncludeBootstrapCAs:        d.CADistributionSettings.IncludeBootstrapCAs,

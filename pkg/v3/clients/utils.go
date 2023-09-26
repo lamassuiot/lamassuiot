@@ -168,7 +168,6 @@ func Get[T any](ctx context.Context, client *http.Client, url string, queryParam
 	if err != nil {
 		return m, err
 	}
-
 	body, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
