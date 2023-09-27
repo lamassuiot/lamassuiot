@@ -8,18 +8,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-type Password string
-
-func (p Password) MarshalText() ([]byte, error) {
-	return []byte("*************"), nil
-}
-
-func (p *Password) UnmarshalText(text []byte) (err error) {
-	pw := string(text)
-	p = (*Password)(&pw)
-	return nil
-}
-
 type BaseConfig struct {
 	// Defines logging options
 	Logs struct {
@@ -76,15 +64,15 @@ type PluggableStorageEngine struct {
 
 type CouchDBPSEConfig struct {
 	HTTPConnection `mapstructure:",squash"`
-	Username       string   `mapstructure:"username"`
-	Password       Password `mapstructure:"password"`
+	Username       string `mapstructure:"username"`
+	Password       string `mapstructure:"password"`
 }
 
 type PostgresPSEConfig struct {
-	Hostname string   `mapstructure:"hostname"`
-	Port     int      `mapstructure:"port"`
-	Username string   `mapstructure:"username"`
-	Password Password `mapstructure:"password"`
+	Hostname string `mapstructure:"hostname"`
+	Port     int    `mapstructure:"port"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
 }
 
 type TLSConfig struct {
@@ -123,8 +111,11 @@ type AMQPConnectionBasicAuth struct {
 
 type HTTPClient struct {
 	AuthMode        HTTPClientAuthMethod `mapstructure:"auth_mode"`
+	AuthJWTOptions  AuthJWTOptions       `mapstructure:"jwt_options"`
 	AuthMTLSOptions AuthMTLSOptions      `mapstructure:"mtls_options"`
 	LogLevel        LogLevel             `mapstructure:"log_level"`
+	HTTPConnection  `mapstructure:",squash"`
+}
 
 type AuthJWTOptions struct {
 	ClientID         string `mapstructure:"oidc_client_id"`

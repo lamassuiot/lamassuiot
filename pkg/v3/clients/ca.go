@@ -28,15 +28,6 @@ func NewHttpCAClient(client *http.Client, url string) services.CAService {
 	}
 }
 
-func (cli *httpCAClient) GetStats(ctx context.Context) (*models.CAStats, error) {
-	stats, err := Get[*models.CAStats](ctx, cli.httpClient, cli.baseUrl+"/v1/stats", nil, map[int][]error{})
-	if err != nil {
-		return nil, err
-	}
-
-	return stats, nil
-}
-
 func (cli *httpCAClient) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
 	engine, err := Get[[]*models.CryptoEngineProvider](ctx, cli.httpClient, cli.baseUrl+"/v1/engines", nil, map[int][]error{})
 	if err != nil {
@@ -98,11 +89,8 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas", resources.CreateCABody{
 		Subject:            input.Subject,
 		KeyMetadata:        input.KeyMetadata,
-		CAType:             models.CertificateType(input.CAType),
 		IssuanceExpiration: input.IssuanceExpiration,
 		CAExpiration:       input.CAExpiration,
-		ID:                 input.EngineID,
-		EngineID:           input.EngineID,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err
@@ -134,6 +122,7 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 		CAType:             models.CertificateType(input.CAType),
 		IssuanceExpiration: input.IssuanceExpiration,
 		CACertificate:      input.CACertificate,
+		CAChain:            input.CAChain,
 		CAPrivateKey:       privKey,
 	}, map[int][]error{})
 	if err != nil {

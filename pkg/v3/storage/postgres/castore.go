@@ -29,19 +29,7 @@ func NewCAPostgresRepository(db *gorm.DB) (storage.CACertificatesRepo, error) {
 }
 
 func (db *PostgresCAStore) Count(ctx context.Context) (int, error) {
-	return db.querier.Count([]gormWhereParams{})
-}
-
-func (db *PostgresCAStore) CountByEngine(ctx context.Context, engineID string) (int, error) {
-	return db.querier.Count([]gormWhereParams{
-		{query: "engine_id = ?", extraArgs: []any{engineID}},
-	})
-}
-
-func (db *PostgresCAStore) CountByStatus(ctx context.Context, status models.CertificateStatus) (int, error) {
-	return db.querier.Count([]gormWhereParams{
-		{query: "status = ?", extraArgs: []any{status}},
-	})
+	return db.querier.Count()
 }
 
 func (db *PostgresCAStore) SelectByType(ctx context.Context, CAType models.CertificateType, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {

@@ -49,7 +49,7 @@ func TestCount(t *testing.T) {
 				t.Errorf("could not create CA store: %s", err)
 			}
 
-			count, err := querier.Count([]gormWhereParams{})
+			count, err := querier.Count()
 			if err != nil {
 				t.Errorf("could not count CAs: %s", err)
 			}

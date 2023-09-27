@@ -58,7 +58,9 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte
 		ListInput: ListInput[models.Certificate]{
 			ExhaustiveRun: true,
 			QueryParameters: &resources.QueryParameters{
-				PageSize: 15,
+				Pagination: resources.PaginationOptions{
+					PageSize: 5,
+				},
 			},
 			ApplyFunc: func(cert *models.Certificate) {
 				certList = append(certList, pkix.RevokedCertificate{

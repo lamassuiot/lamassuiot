@@ -40,7 +40,7 @@ func NewAWSSecretManagerEngine(logger *logrus.Entry, conf config.AWSSDKConfig) (
 
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(conf.Region),
-		Credentials: credentials.NewStaticCredentials(conf.AccessKeyID, string(conf.SecretAccessKey), ""),
+		Credentials: credentials.NewStaticCredentials(conf.AccessKeyID, conf.SecretAccessKey, ""),
 		HTTPClient:  httpCli,
 	}))
 

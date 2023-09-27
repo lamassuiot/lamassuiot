@@ -4,14 +4,14 @@ import (
 	"crypto/x509"
 	"time"
 
-	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lib/pq"
 )
 
 type DevicesManagerStats struct {
 	DevicesStats map[DeviceStatus]int
-	SlotsStats   map[caApi.CertificateStatus]int
+	SlotsStats   map[models.CertificateStatus]int
 }
 
 type KeyType string
@@ -105,7 +105,7 @@ type Certificate struct {
 	CAName              string
 	SerialNumber        string
 	Certificate         *x509.Certificate
-	Status              caApi.CertificateStatus
+	Status              models.CertificateStatus
 	KeyMetadata         KeyStrengthMetadata
 	Subject             Subject
 	ValidFrom           time.Time
@@ -298,7 +298,7 @@ type AddDeviceSlotOutput struct {
 type UpdateActiveCertificateStatusInput struct {
 	DeviceID         string
 	SlotID           string
-	Status           caApi.CertificateStatus
+	Status           models.CertificateStatus
 	RevocationReason string
 	CertSerialNumber string
 }

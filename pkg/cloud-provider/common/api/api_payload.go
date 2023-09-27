@@ -1,8 +1,8 @@
 package api
 
 import (
-	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	dmsApi "github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 )
 
 type UpdateDeviceCertificateStatusPayload struct {
@@ -12,7 +12,7 @@ type UpdateDeviceCertificateStatusPayload struct {
 }
 
 type RegisterCAPayload struct {
-	caApi.CACertificateSerialized
+	models.CACertificate
 }
 
 type UpdateDeviceDigitalTwinReenrollmentStatusPayload struct {

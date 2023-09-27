@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	deviceErrors "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/repository"
@@ -292,7 +291,7 @@ func (s *DevicesService) AddDeviceSlot(ctx context.Context, input *api.AddDevice
 			CAName:       input.ActiveCertificate.Issuer.CommonName,
 			SerialNumber: utils.InsertNth(utils.ToHexInt(input.ActiveCertificate.SerialNumber), 2),
 			Certificate:  input.ActiveCertificate,
-			Status:       caApi.StatusActive,
+			Status:       models.StatusActive,
 			RevocationTimestamp: pq.NullTime{
 				Valid: false,
 				Time:  time.Time{},
@@ -350,13 +349,13 @@ func (s *DevicesService) UpdateActiveCertificateStatus(ctx context.Context, inpu
 	// }
 
 	// updateDevice := false
-	// if input.Status == caApi.StatusRevoked || input.Status == caApi.StatusExpired {
+	// if input.Status == models.StatusRevoked || input.Status == models.StatusExpired {
 	// 	slot.ActiveCertificate.Status = input.Status
 	// 	device.Status = api.DeviceStatusProvisionedWithWarnings
 	// 	updateDevice = true
 	// } else {
 	// 	slot.ActiveCertificate.Status = input.Status
-	// 	if input.Status == caApi.StatusAboutToExpire {
+	// 	if input.Status == models.StatusAboutToExpire {
 	// 		device.Status = api.DeviceStatusRequiresAction
 	// 		updateDevice = true
 	// 	}
@@ -407,7 +406,7 @@ func (s *DevicesService) RotateActiveCertificate(ctx context.Context, input *api
 		CAName:       input.NewCertificate.Issuer.CommonName,
 		SerialNumber: utils.InsertNth(utils.ToHexInt(input.NewCertificate.SerialNumber), 2),
 		Certificate:  input.NewCertificate,
-		Status:       caApi.StatusActive,
+		Status:       models.StatusActive,
 		RevocationTimestamp: pq.NullTime{
 			Valid: false,
 			Time:  time.Time{},
@@ -468,11 +467,11 @@ func (s *DevicesService) RevokeActiveCertificate(ctx context.Context, input *api
 	if input.CertSerialNumber == "" {
 		input.CertSerialNumber = slot.ActiveCertificate.SerialNumber
 	}
-	if slot.ActiveCertificate.Status == caApi.StatusRevoked {
+	if slot.ActiveCertificate.Status == models.StatusRevoked {
 		return &api.RevokeActiveCertificateOutput{}, errors.New("certificate is already revoked")
 	}
 
-	if slot.ActiveCertificate.Status == caApi.StatusExpired {
+	if slot.ActiveCertificate.Status == models.StatusExpired {
 		return &api.RevokeActiveCertificateOutput{}, errors.New("certificate is expired")
 	}
 	var cert api.Certificate
@@ -481,10 +480,10 @@ func (s *DevicesService) RevokeActiveCertificate(ctx context.Context, input *api
 			cert = *slot.ArchiveCertificates[i]
 		}
 	}
-	if cert.Status == caApi.StatusRevoked {
+	if cert.Status == models.StatusRevoked {
 		return &api.RevokeActiveCertificateOutput{}, errors.New("certificate is already revoked")
 	} else {
-		revokeOutput, err := s.caClient.UpdateCertificateStatus(serviceV3.UpdateCertificateStatusInput{
+		revokeOutput, err := s.caClient.UpdateCertificateStatus(ctx, serviceV3.UpdateCertificateStatusInput{
 			SerialNumber: slot.ActiveCertificate.SerialNumber,
 			NewStatus:    models.StatusRevoked,
 		})
@@ -495,7 +494,7 @@ func (s *DevicesService) RevokeActiveCertificate(ctx context.Context, input *api
 
 		revokedCertificateSerialNumber := slot.ActiveCertificate.SerialNumber
 
-		slot.ActiveCertificate.Status = caApi.StatusRevoked
+		slot.ActiveCertificate.Status = models.StatusRevoked
 		slot.ActiveCertificate.RevocationReason = input.RevocationReason
 		slot.ActiveCertificate.RevocationTimestamp = pq.NullTime{
 			Valid: true,
@@ -575,7 +574,7 @@ func (s *DevicesService) IsDMSAuthorizedToEnroll(ctx context.Context, input *api
 }
 
 func (s *DevicesService) ImportDeviceCert(ctx context.Context, input *api.ImportDeviceCertInput) (*api.ImportDeviceCertOutput, error) {
-	deviceCert, err := s.caClient.GetCertificateBySerialNumber(serviceV3.GetCertificatesBySerialNumberInput{
+	deviceCert, err := s.caClient.GetCertificateBySerialNumber(ctx, serviceV3.GetCertificatesBySerialNumberInput{
 		SerialNumber: input.SerialNumber,
 	})
 	if err != nil {
@@ -630,7 +629,7 @@ func (s *DevicesService) ImportDeviceCert(ctx context.Context, input *api.Import
 
 func (s *DevicesService) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
 	cas := make([]*x509.Certificate, 0)
-	s.caClient.GetCAs(serviceV3.GetCAsInput{
+	s.caClient.GetCAs(ctx, serviceV3.GetCAsInput{
 		QueryParameters: &resources.QueryParameters{},
 		ExhaustiveRun:   true,
 		ApplyFunc: func(c *models.CACertificate) {
@@ -641,7 +640,7 @@ func (s *DevicesService) CACerts(ctx context.Context, aps string) ([]*x509.Certi
 }
 
 func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateRequest, clientCertificateChain []*x509.Certificate, aps string) (*x509.Certificate, error) {
-	outGetCA, err := s.caClient.GetCAByID(serviceV3.GetCAByIDInput{
+	outGetCA, err := s.caClient.GetCAByID(ctx, serviceV3.GetCAByIDInput{
 		CAID: string(models.CALocalRA),
 	})
 	if err != nil {
@@ -760,10 +759,10 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 
 	}
 
-	signOutput, err := s.caClient.SignCertificate(serviceV3.SignCertificateInput{
+	signOutput, err := s.caClient.SignCertificate(ctx, serviceV3.SignCertificateInput{
 		CAID:         aps,
 		CertRequest:  (*models.X509CertificateRequest)(csr),
-		Subject:      models.Subject{},
+		Subject:      nil,
 		SignVerbatim: true,
 	})
 
@@ -851,7 +850,7 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 		}
 	}
 
-	outGetCA, err := s.caClient.GetCAByID(serviceV3.GetCAByIDInput{
+	outGetCA, err := s.caClient.GetCAByID(ctx, serviceV3.GetCAByIDInput{
 		CAID: aps,
 	})
 
@@ -890,10 +889,10 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 		}
 	}
 
-	signOutput, err := s.caClient.SignCertificate(serviceV3.SignCertificateInput{
+	signOutput, err := s.caClient.SignCertificate(ctx, serviceV3.SignCertificateInput{
 		CAID:         aps,
 		CertRequest:  (*models.X509CertificateRequest)(csr),
-		Subject:      models.Subject{},
+		Subject:      nil,
 		SignVerbatim: true,
 	})
 	if err != nil {
@@ -943,7 +942,7 @@ func (s *DevicesService) verifyCertificate(clientCertificate *x509.Certificate, 
 		Roots:     clientCAs,
 		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
-	cert, _ := s.caClient.GetCertificateBySerialNumber(serviceV3.GetCertificatesBySerialNumberInput{
+	cert, _ := s.caClient.GetCertificateBySerialNumber(context.Background(), serviceV3.GetCertificatesBySerialNumberInput{
 		SerialNumber: utils.InsertNth(utils.ToHexInt(clientCertificate.SerialNumber), 2),
 	})
 	_, err := clientCertificate.Verify(opts)
@@ -984,7 +983,7 @@ func (s *DevicesService) ScanDevicesAndUpdateStatistics() {
 	t0 := time.Now()
 	log.Info("Starting devices scan...")
 	deviceStats := map[api.DeviceStatus]int{}
-	slotStatus := map[caApi.CertificateStatus]int{}
+	slotStatus := map[models.CertificateStatus]int{}
 
 	deviceStatusList := []api.DeviceStatus{
 		api.DeviceStatusPendingProvisioning,
@@ -1003,11 +1002,10 @@ func (s *DevicesService) ScanDevicesAndUpdateStatistics() {
 		deviceStats[status] = total
 	}
 
-	slotStatusList := []caApi.CertificateStatus{
-		caApi.StatusActive,
-		caApi.StatusExpired,
-		caApi.StatusRevoked,
-		caApi.StatusAboutToExpire,
+	slotStatusList := []models.CertificateStatus{
+		models.StatusActive,
+		models.StatusExpired,
+		models.StatusRevoked,
 	}
 
 	for _, status := range slotStatusList {

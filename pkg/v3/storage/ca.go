@@ -25,9 +25,6 @@ type CACertificatesRepo interface {
 	SelectByType(ctx context.Context, CAType models.CertificateType, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
 
 	Count(ctx context.Context) (int, error)
-	CountByEngine(ctx context.Context, engineID string) (int, error)
-	CountByStatus(ctx context.Context, status models.CertificateStatus) (int, error)
-
 	SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
 	// SelectExistsByID(ctx context.Context, id string) (bool, *models.CACertificate, error)
 	// //Currently, the Floating ID refers to multiple fields: ID, SerialNumber, Fingerprint

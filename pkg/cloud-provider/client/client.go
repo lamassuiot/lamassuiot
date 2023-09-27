@@ -36,8 +36,7 @@ func NewCloudProviderClient(config clientUtils.BaseClientConfigurationuration) (
 
 func (c *cloudProviderConfig) RegisterCA(ctx context.Context, input *api.RegisterCAInput) (*api.RegisterCAOutput, error) {
 	var output api.GetConfigurationOutputSerialized
-
-	req, err := c.client.NewRequest(ctx, "POST", "v1/ca", input.CACertificate.Serialize())
+	req, err := c.client.NewRequest(ctx, "POST", "v1/ca", input.CACertificate)
 	if err != nil {
 		return &api.RegisterCAOutput{}, err
 	}

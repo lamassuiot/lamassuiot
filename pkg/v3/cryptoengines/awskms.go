@@ -41,7 +41,7 @@ func NewAWSKMSEngine(logger *logrus.Entry, conf config.AWSSDKConfig) (CryptoEngi
 
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(conf.Region),
-		Credentials: credentials.NewStaticCredentials(conf.AccessKeyID, string(conf.SecretAccessKey), ""),
+		Credentials: credentials.NewStaticCredentials(conf.AccessKeyID, conf.SecretAccessKey, ""),
 		HTTPClient:  httpCli,
 	}))
 	kmscli := kms.New(sess)
@@ -50,6 +50,7 @@ func NewAWSKMSEngine(logger *logrus.Entry, conf config.AWSSDKConfig) (CryptoEngi
 		kmscli: kmscli,
 		config: models.CryptoEngineInfo{
 			Type:          models.AWSKMS,
+			SecurityLevel: models.SL2,
 			Provider:      "Amazon Web Services",
 			Name:          "KMS",
 			Metadata:      conf.Metadata,
@@ -73,6 +74,11 @@ func NewAWSKMSEngine(logger *logrus.Entry, conf config.AWSSDKConfig) (CryptoEngi
 					},
 				},
 			},
+		},
+	}, nil
+}
+
+func (p *AWSKMSCryptoEngine) GetEngineConfig() models.CryptoEngineInfo {
 	return p.config
 }
 

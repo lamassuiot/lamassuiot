@@ -1,8 +1,8 @@
 package api
 
 import (
-	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	dmsApi "github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 )
 
 type CAConfiguration struct {
@@ -42,7 +42,7 @@ type GetDeviceConfigurationOutput struct {
 //------------------------------------------------------
 
 type RegisterCAInput struct {
-	caApi.CACertificate
+	models.CACertificate
 }
 
 type RegisterCAOutput struct{}

@@ -7,10 +7,10 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 
-	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
+	lamassuSDK "github.com/lamassuiot/lamassuiot/pkg/v3/clients"
+
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/transport"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/config"
@@ -55,34 +55,10 @@ func main() {
 	deviceRepo := postgresRepository.NewDevicesPostgresDB(db)
 	logsRepo := postgresRepository.NewLogsPostgresDB(db)
 
-	var caClient lamassucaclient.LamassuCAClient
-	parsedLamassuCAURL, err := url.Parse(config.LamassuCAAddress)
+	var lamassuCAClient lamassuSDK.CAClient
+	lamassuCAClient = lamassuSDK.NewHttpCAClient(http.DefaultClient, config.LamassuCAAddress)
 	if err != nil {
-		log.Fatal("Could not parse CA URL")
-		os.Exit(1)
-	}
-
-	if strings.HasPrefix(config.LamassuCAAddress, "https") {
-		caClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
-			URL:        parsedLamassuCAURL,
-			AuthMethod: clientUtils.AuthMethodMutualTLS,
-			AuthMethodConfig: &clientUtils.MutualTLSConfig{
-				ClientCert: config.CertFile,
-				ClientKey:  config.KeyFile,
-			},
-			CACertificate: config.LamassuCACertFile,
-		})
-		if err != nil {
-			log.Fatal("Could not create LamassuCA client: ", err)
-		}
-	} else {
-		caClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
-			URL:        parsedLamassuCAURL,
-			AuthMethod: clientUtils.AuthMethodNone,
-		})
-		if err != nil {
-			log.Fatal("Could not create LamassuCA client: ", err)
-		}
+		log.Fatal("Could not create LamassuCA client: ", err)
 	}
 
 	var dmsClient lamassudmsclient.LamassuDMSManagerClient
@@ -119,7 +95,7 @@ func main() {
 		log.Fatal("Could not read CA certificate: ", err)
 	}
 
-	svc := service.NewDeviceManagerService(upstreamCA, deviceRepo, logsRepo, statsRepo, config.MinimumReenrollDays, caClient, dmsClient)
+	svc := service.NewDeviceManagerService(upstreamCA, deviceRepo, logsRepo, statsRepo, config.MinimumReenrollDays, lamassuCAClient, dmsClient)
 	dmSvc := svc.(*service.DevicesService)
 
 	svc = service.LoggingMiddleware()(svc)

@@ -1,0 +1,79 @@
+logs:
+  level: "info" #info | debug | trace | none
+  subsystems: 
+    service: "info"
+    crypto_engine: "info"
+    storage_engine: "info"
+    http: "info"
+    messaging_engine: "info"
+
+server:
+  listen_address: "0.0.0.0"
+  port: 8085
+  protocol: "http" #http | https
+  cert_file: ""
+  key_file: ""
+  authentication:
+    mutual_tls:
+      enabled: false
+      ca_cert_file: ""
+
+amqp_event_publisher:
+  enabled: true
+  protocol: amqp #amqp | amqps
+  hostname: "127.0.0.1"
+  port: 5672
+  insecure_skip_verify: false
+  ca_cert_file: ""
+  basic_auth: 
+    enabled: false
+    username: ""
+    password: ""
+  client_tls_auth:
+    enabled: false
+    cert_file: ""
+    key_file: ""
+
+storage:
+  provider: "couch_db" #couch_db | postgres | dynamo_db
+  couch_db: 
+    hostname: "127.0.0.1"
+    port: 5984
+    protocol: http
+    insecure_skip_verify: true
+    base_path: ""
+    username: ""
+    password: ""
+  postgres: 
+    hostname: "127.0.0.1"
+    port: 5432 
+    username: ""
+    password: ""
+
+ca_client:
+  level: "info"
+  auth_mode: "noauth"
+  jwt_options: 
+  mtls_options: 
+  protocol: "http"
+  hostname: ""
+  port: 8085
+  base_path: ""
+  insecure_skip_verify: false
+  ca_cert_file: ""
+
+device_manager_client:
+  level: "info"
+  auth_mode: "noauth"
+  jwt_options: 
+  mtls_options: 
+  protocol: "http"
+  hostname: ""
+  port: 8085
+  base_path: ""
+  insecure_skip_verify: false
+  ca_cert_file: ""
+
+device_monitoring:
+  enabled: true
+  frequency: "* * * * *"

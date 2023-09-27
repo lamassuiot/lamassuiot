@@ -1,5 +1,6 @@
 package api
 
+/*
 import (
 	"context"
 	"crypto/rand"
@@ -1685,3 +1686,4 @@ func generateBase64EncodedCertificateRequestAndKey(commonName string) (*rsa.Priv
 	csrBase64 := base64.StdEncoding.EncodeToString(csr.Raw)
 	return key, csrBase64
 }
+*/

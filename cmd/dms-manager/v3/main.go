@@ -49,8 +49,8 @@ func main() {
 	lHttp := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.HttpTransport, "HTTP Server")
 	lStorage := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.StorageEngine, "Storage")
 
-	lCAClient := helpers.ConfigureLogger(globalLogLevel, conf.CAClient.Level, "LMS SDK - CA Client")
-	lDeviceClient := helpers.ConfigureLogger(globalLogLevel, conf.DevManagerClient.Level, "LMS SDK - Device Client")
+	lCAClient := helpers.ConfigureLogger(globalLogLevel, conf.CAClient.LogLevel, "LMS SDK - CA Client")
+	lDeviceClient := helpers.ConfigureLogger(globalLogLevel, conf.DevManagerClient.LogLevel, "LMS SDK - Device Client")
 
 	devStorage, err := createStorageInstance(lStorage, conf.Storage)
 	if err != nil {

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	dmsApi "github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 )
 
 type ConsistencyStatus string
@@ -119,7 +119,7 @@ type UpdateCloudProviderConfigurationOutput struct {
 // ---------------------------------------------------
 
 type HandleCreateCAEventInput struct {
-	caApi.CACertificate
+	models.CACertificate
 }
 
 type HandleCreateCAEventOutput struct {
@@ -128,7 +128,7 @@ type HandleCreateCAEventOutput struct {
 // ---------------------------------------------------
 
 type HandleUpdateCAStatusEventInput struct {
-	caApi.CACertificate
+	models.CACertificate
 }
 
 type HandleUpdateCAStatusEventOutput struct {
@@ -137,7 +137,7 @@ type HandleUpdateCAStatusEventOutput struct {
 // ---------------------------------------------------
 
 type HandleUpdateCertificateStatusEventInput struct {
-	caApi.Certificate
+	models.Certificate
 }
 
 type HandleUpdateCertificateStatusEventOutput struct {

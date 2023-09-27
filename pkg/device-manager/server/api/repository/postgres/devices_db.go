@@ -11,12 +11,12 @@ import (
 	"sort"
 	"time"
 
-	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	devicesErrors "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/repository"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lib/pq"
 
 	"gorm.io/gorm"
@@ -28,7 +28,7 @@ type CertificateDAO struct {
 	SerialNumber        string `gorm:"primaryKey"`
 	CAName              string
 	Certificate         string
-	Status              caApi.CertificateStatus
+	Status              models.CertificateStatus
 	IsActiveCertificate bool
 	RevocationTimestamp pq.NullTime
 	RevocationReason    string
@@ -447,7 +447,7 @@ func (db *postgresDBContext) SelectSlots(ctx context.Context, deviceID string) (
 
 	return slotsList, nil
 }
-func (db *postgresDBContext) CountActiveCertificatesByStatus(ctx context.Context, status caApi.CertificateStatus) (int, error) {
+func (db *postgresDBContext) CountActiveCertificatesByStatus(ctx context.Context, status models.CertificateStatus) (int, error) {
 	var totalCertificates int64
 	if err := db.WithContext(ctx).Model(&CertificateDAO{}).Where("is_active_certificate = ?", true).Where("status = ?", status).Count(&totalCertificates).Error; err != nil {
 		return 0, err

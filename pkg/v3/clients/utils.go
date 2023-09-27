@@ -152,12 +152,12 @@ func Get[T any](ctx context.Context, client *http.Client, url string, queryParam
 
 	if queryParams != nil {
 		query := r.URL.Query()
-		if queryParams.NextBookmark != "" {
-			query.Add("bookmark", queryParams.NextBookmark)
+		if queryParams.Pagination.NextBookmark != "" {
+			query.Add("bookmark", queryParams.Pagination.NextBookmark)
 		}
 
-		if queryParams.PageSize > 0 {
-			query.Add("page_size", fmt.Sprintf("%d", queryParams.PageSize))
+		if queryParams.Pagination.PageSize > 0 {
+			query.Add("page_size", fmt.Sprintf("%d", queryParams.Pagination.PageSize))
 		}
 
 		r.URL.RawQuery = query.Encode()
@@ -168,6 +168,7 @@ func Get[T any](ctx context.Context, client *http.Client, url string, queryParam
 	if err != nil {
 		return m, err
 	}
+
 	body, err := io.ReadAll(res.Body)
 	res.Body.Close()
 	if err != nil {
@@ -213,7 +214,7 @@ func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.C
 		queryParams = &resources.QueryParameters{}
 	}
 
-	queryParams.NextBookmark = ""
+	queryParams.Pagination.NextBookmark = ""
 
 	for continueIter {
 		response, err := Get[T](context.Background(), client, url, queryParams, knownErrors)
@@ -224,7 +225,7 @@ func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.C
 		if response.GetNextBookmark() == "" {
 			continueIter = false
 		} else {
-			queryParams.NextBookmark = response.GetNextBookmark()
+			queryParams.Pagination.NextBookmark = response.GetNextBookmark()
 		}
 
 		for _, item := range response.GetList() {

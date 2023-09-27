@@ -296,9 +296,9 @@ func (cps *CloudProxyService) HandleCreateCAEvent(ctx context.Context, input *ap
 
 	for _, connector := range connectorsOutput.CloudConnectors {
 		for _, syncCA := range connector.SynchronizedCAs {
-			if syncCA.ConsistencyStatus != api.ConsistencyStatusDisabled && syncCA.CAName == input.CAName {
+			if syncCA.ConsistencyStatus != api.ConsistencyStatusDisabled && syncCA.CAName == input.ID {
 				fmt.Println(fmt.Sprintf("	[%s](%s) %s  --->  %s:%d", connector.Status, connector.CloudProvider, connector.ID, connector.IP, connector.Port))
-				err := cps.CloudProxyDB.UpdateCABindingSerialNumber(ctx, connector.ID, input.CAName, input.SerialNumber)
+				err := cps.CloudProxyDB.UpdateCABindingSerialNumber(ctx, connector.ID, input.ID, input.SerialNumber)
 				if err != nil {
 					log.Warn(err)
 					continue
@@ -332,9 +332,9 @@ func (cps *CloudProxyService) HandleUpdateCAStatusEvent(ctx context.Context, inp
 
 	for _, connector := range connectorsOutput.CloudConnectors {
 		for _, syncCA := range connector.SynchronizedCAs {
-			if syncCA.ConsistencyStatus != api.ConsistencyStatusDisabled && syncCA.CAName == input.CAName {
+			if syncCA.ConsistencyStatus != api.ConsistencyStatusDisabled && syncCA.CAName == input.ID {
 				fmt.Println(fmt.Sprintf("	[%s](%s) %s  --->  %s:%d", connector.Status, connector.CloudProvider, connector.ID, connector.IP, connector.Port))
-				err := cps.CloudProxyDB.UpdateCABindingSerialNumber(ctx, connector.ID, input.CAName, input.SerialNumber)
+				err := cps.CloudProxyDB.UpdateCABindingSerialNumber(ctx, connector.ID, input.ID, input.SerialNumber)
 				if err != nil {
 					log.Warn(err)
 					continue
@@ -347,7 +347,7 @@ func (cps *CloudProxyService) HandleUpdateCAStatusEvent(ctx context.Context, inp
 				}
 
 				_, err = connectorClient.UpdateCAStatus(ctx, &cloudProvider.UpdateCAStatusInput{
-					CAName: input.CAName,
+					CAName: input.ID,
 					Status: string(input.Status),
 				})
 				if err != nil {
@@ -368,9 +368,9 @@ func (cps *CloudProxyService) HandleUpdateCertificateStatusEvent(ctx context.Con
 
 	for _, connector := range connectorsOutput.CloudConnectors {
 		for _, syncCA := range connector.SynchronizedCAs {
-			if syncCA.ConsistencyStatus != api.ConsistencyStatusDisabled && syncCA.CAName == input.CAName {
+			if syncCA.ConsistencyStatus != api.ConsistencyStatusDisabled && syncCA.CAName == input.IssuerCAMetadata.CAID {
 				fmt.Println(fmt.Sprintf("	[%s](%s) %s  --->  %s:%d", connector.Status, connector.CloudProvider, connector.ID, connector.IP, connector.Port))
-				err := cps.CloudProxyDB.UpdateCABindingSerialNumber(ctx, connector.ID, input.CAName, input.SerialNumber)
+				err := cps.CloudProxyDB.UpdateCABindingSerialNumber(ctx, connector.ID, input.IssuerCAMetadata.CAID, input.SerialNumber)
 				if err != nil {
 					log.Warn(err)
 					continue
@@ -379,7 +379,7 @@ func (cps *CloudProxyService) HandleUpdateCertificateStatusEvent(ctx context.Con
 				cps.service.UpdateDeviceCertificateStatus(ctx, &api.UpdateDeviceCertificateStatusInput{
 					ConnectorID:  connector.ID,
 					DeviceID:     input.Certificate.Subject.CommonName,
-					CAName:       input.CAName,
+					CAName:       input.IssuerCAMetadata.CAID,
 					Status:       string(input.Status),
 					SerialNumber: input.SerialNumber,
 				})

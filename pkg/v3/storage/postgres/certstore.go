@@ -31,7 +31,7 @@ func NewCertificateRepository(db *gorm.DB) (storage.CertificatesRepo, error) {
 }
 
 func (db *PostgresCertificateStorage) Count(ctx context.Context) (int, error) {
-	return db.querier.Count([]gormWhereParams{})
+	return db.querier.Count()
 }
 
 func (db *PostgresCertificateStorage) SelectByType(ctx context.Context, CAType models.CertificateType, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
@@ -59,7 +59,7 @@ func (db *PostgresCertificateStorage) Update(ctx context.Context, certificate *m
 
 func (db *PostgresCertificateStorage) SelectByCA(ctx context.Context, caID string, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := []gormWhereParams{
-		{query: "issuer_meta_ca_id = ?", extraArgs: []any{caID}},
+		{query: "issuer_metadata_meta_id = ?", extraArgs: []any{caID}},
 	}
 	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
 }
@@ -77,10 +77,10 @@ func (db *PostgresCertificateStorage) SelectByExpirationDate(ctx context.Context
 
 func (db *PostgresCertificateStorage) SelectByCAIDAndStatus(ctx context.Context, CAID string, status models.CertificateStatus, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := []gormWhereParams{
-		{query: "status = ?", extraArgs: []any{status}},
-		{query: "issuer_meta_ca_id = ?", extraArgs: []any{CAID}},
+		{query: "status == ?", extraArgs: []any{status}},
+		{query: "issuer_metadata.ca_id == ?", extraArgs: []any{CAID}},
 	}
-	fmt.Println(queryParams.NextBookmark)
+	fmt.Println(queryParams.Pagination.NextBookmark)
 	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
 }
 

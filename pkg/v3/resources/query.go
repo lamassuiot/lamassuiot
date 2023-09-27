@@ -1,5 +1,11 @@
 package resources
 
+type PaginationOptions struct {
+	NextBookmark string
+	PageSize     int
+	Offset       int
+}
+
 type SortMode string
 
 const (
@@ -39,8 +45,7 @@ type FilterOption struct {
 }
 
 type QueryParameters struct {
-	NextBookmark string
-	Sort         SortOptions
-	PageSize     int
-	Filters      []FilterOption
+	Sort       SortOptions
+	Pagination PaginationOptions
+	Filters    []FilterOption
 }

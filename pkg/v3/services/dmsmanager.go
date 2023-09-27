@@ -70,14 +70,13 @@ func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
 		},
 	})
 	if err != nil {
-		lFunc.Fatalf("could not initialize service: could not check if internal CA '%s' exists: %s", localRegAuthCA, err)
+		lFunc.Panicf("could not initialize service: could not check if internal CA '%s' exists: %s", localRegAuthCA, err)
 	}
 
 	if !caExists {
 		caDur, _ := models.ParseDuration("50y")
 		issuanceDur, _ := models.ParseDuration("3y")
 		_, err := svc.caClient.CreateCA(ctx, CreateCAInput{
-			CAType: models.CertificateTypeManaged,
 			KeyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.ECDSA),
 				Bits: 256,
@@ -98,7 +97,7 @@ func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
 		})
 
 		if err != nil {
-			lFunc.Fatalf("could not initialize service: could not create internal CA '%s': %s", localRegAuthCA, err)
+			lFunc.Panicf("could not initialize service: could not create internal CA '%s': %s", localRegAuthCA, err)
 		}
 	}
 
@@ -343,7 +342,6 @@ func (svc DmsManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 		lDMS.Errorf("invalid enrollment. used certificate not authorized for this DMS. certificate has SerialNumber %s issued by CA %s", helpers.SerialNumberToString(clientCert.SerialNumber), clientCert.Issuer.CommonName)
 		return nil, errs.ErrDMSEnrollInvalidCert
 	}
-	//
 
 	var device *models.Device
 	device, err = svc.deviceManagerCli.GetDeviceByID(GetDeviceByIDInput{
@@ -393,17 +391,6 @@ func (svc DmsManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 	} else {
 		lDMS.Debugf("device '%s' is preregistered. continuing enrollment process", device.ID)
 	}
-
-	// if dms.IdentityProfile.EnrollmentSettings.PreRegistryEnrollment {
-	// 	if device != nil {
-	// 		lDMS.Debugf("DMS '%s' is configured with preregistry Enrollment", dms.ID)
-
-	// 		device, err = svc.deviceManagerCli.GetDeviceByID()
-	// 		//LLenarlo con el ID del device
-	// 		//Hacer un else de en el caso de que el booleano falso se haga el enroll de todos los dispositivos
-
-	// 	}
-	// }
 
 	crt, err := svc.caClient.SignCertificate(context.Background(), SignCertificateInput{
 		CAID:         dms.IdentityProfile.EnrollmentSettings.AuthorizedCA,

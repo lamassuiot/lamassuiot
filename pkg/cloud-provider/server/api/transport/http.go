@@ -260,7 +260,7 @@ func decodeRegisterCARequest(ctx context.Context, r *http.Request) (request inte
 	}
 
 	return api.RegisterCAInput{
-		CACertificate: body.Deserialize(),
+		CACertificate: body.CACertificate,
 	}, nil
 }
 

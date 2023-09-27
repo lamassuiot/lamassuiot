@@ -225,10 +225,10 @@ func (s *DMSManagerService) UpdateDMSStatus(ctx context.Context, input *api.Upda
 	case api.DMSStatusApproved:
 		dms.Status = api.DMSStatusApproved
 		if !dms.CloudDMS {
-			signOutput, err := s.lamassuCAClient.SignCertificate(serviceV3.SignCertificateInput{
+			signOutput, err := s.lamassuCAClient.SignCertificate(ctx, serviceV3.SignCertificateInput{
 				CAID:        string(models.CALocalRA),
 				CertRequest: (*models.X509CertificateRequest)(dms.RemoteAccessIdentity.CertificateRequest),
-				Subject:     models.Subject{},
+				Subject:     nil,
 			})
 			if err != nil {
 				return &api.UpdateDMSStatusOutput{}, err
@@ -248,7 +248,7 @@ func (s *DMSManagerService) UpdateDMSStatus(ctx context.Context, input *api.Upda
 
 	case api.DMSStatusRevoked:
 		if !dms.CloudDMS {
-			_, err = s.lamassuCAClient.UpdateCertificateStatus(serviceV3.UpdateCertificateStatusInput{
+			_, err = s.lamassuCAClient.UpdateCertificateStatus(ctx, serviceV3.UpdateCertificateStatusInput{
 				SerialNumber: dms.RemoteAccessIdentity.SerialNumber,
 				NewStatus:    models.StatusRevoked,
 			})
@@ -359,7 +359,7 @@ func (s *DMSManagerService) GetDMSByName(ctx context.Context, input *api.GetDMSB
 
 	if !dms.CloudDMS {
 		if dms.Status != api.DMSStatusPendingApproval && dms.Status != api.DMSStatusRejected {
-			caOutput, err := s.lamassuCAClient.GetCertificateBySerialNumber(serviceV3.GetCertificatesBySerialNumberInput{
+			caOutput, err := s.lamassuCAClient.GetCertificateBySerialNumber(ctx, serviceV3.GetCertificatesBySerialNumberInput{
 				SerialNumber: dms.RemoteAccessIdentity.SerialNumber,
 			})
 			if err != nil {
@@ -437,7 +437,7 @@ func (s *DMSManagerService) CACerts(ctx context.Context, aps string) ([]*x509.Ce
 	}
 
 	if dms.IdentityProfile.CADistributionSettings.IncludeAuthorizedCA {
-		cacert, err := s.lamassuCAClient.GetCAByID(serviceV3.GetCAByIDInput{
+		cacert, err := s.lamassuCAClient.GetCAByID(ctx, serviceV3.GetCAByIDInput{
 			CAID: dms.IdentityProfile.EnrollmentSettings.AuthorizedCA,
 		})
 		if err != nil {
@@ -449,7 +449,7 @@ func (s *DMSManagerService) CACerts(ctx context.Context, aps string) ([]*x509.Ce
 
 	if dms.IdentityProfile.CADistributionSettings.IncludeBootstrapCAs {
 		for _, bootstrapCA := range dms.IdentityProfile.EnrollmentSettings.BootstrapCAs {
-			cacert, err := s.lamassuCAClient.GetCAByID(serviceV3.GetCAByIDInput{
+			cacert, err := s.lamassuCAClient.GetCAByID(ctx, serviceV3.GetCAByIDInput{
 				CAID: bootstrapCA,
 			})
 			if err != nil {
@@ -461,7 +461,7 @@ func (s *DMSManagerService) CACerts(ctx context.Context, aps string) ([]*x509.Ce
 	}
 
 	for _, ca := range dms.IdentityProfile.CADistributionSettings.ManagedCAs {
-		cacert, err := s.lamassuCAClient.GetCAByID(serviceV3.GetCAByIDInput{
+		cacert, err := s.lamassuCAClient.GetCAByID(ctx, serviceV3.GetCAByIDInput{
 			CAID: ca,
 		})
 		if err != nil {
@@ -508,7 +508,7 @@ func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateReq
 
 	verified := false
 	for _, ca := range dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.BootstrapCAs {
-		cacert, err := s.lamassuCAClient.GetCAByID(serviceV3.GetCAByIDInput{
+		cacert, err := s.lamassuCAClient.GetCAByID(ctx, serviceV3.GetCAByIDInput{
 			CAID: ca,
 		})
 		if err != nil {
@@ -603,7 +603,7 @@ func (s *DMSManagerService) Reenroll(ctx context.Context, csr *x509.CertificateR
 			Message:    "invalid dms mode: use cloud dms",
 		}
 	}
-	caCert, err := s.lamassuCAClient.GetCAByID(serviceV3.GetCAByIDInput{
+	caCert, err := s.lamassuCAClient.GetCAByID(ctx, serviceV3.GetCAByIDInput{
 		CAID: dms.DeviceManufacturingService.IdentityProfile.EnrollmentSettings.AuthorizedCA,
 	})
 	if err != nil {
@@ -614,7 +614,7 @@ func (s *DMSManagerService) Reenroll(ctx context.Context, csr *x509.CertificateR
 	if err != nil {
 		verifyCount := 0
 		for _, validationca := range dms.IdentityProfile.ReerollmentSettings.AdditionaValidationCAs {
-			valCaCert, _ := s.lamassuCAClient.GetCAByID(serviceV3.GetCAByIDInput{
+			valCaCert, _ := s.lamassuCAClient.GetCAByID(ctx, serviceV3.GetCAByIDInput{
 				CAID: validationca,
 			})
 			err = s.verifyCertificate(cert, (*x509.Certificate)(valCaCert.Certificate.Certificate), dms.DeviceManufacturingService.IdentityProfile.ReerollmentSettings.AllowExpiredRenewal)
@@ -665,7 +665,7 @@ func (s *DMSManagerService) verifyCertificate(clientCertificate *x509.Certificat
 		Roots:     clientCAs,
 		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
-	cert, certErr := s.lamassuCAClient.GetCertificateBySerialNumber(serviceV3.GetCertificatesBySerialNumberInput{
+	cert, certErr := s.lamassuCAClient.GetCertificateBySerialNumber(context.Background(), serviceV3.GetCertificatesBySerialNumberInput{
 		SerialNumber: utils.InsertNth(utils.ToHexInt(clientCertificate.SerialNumber), 2),
 	})
 

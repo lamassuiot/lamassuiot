@@ -25,9 +25,8 @@ require (
 	github.com/go-kivik/kivik/v4 v4.0.0-20221214110802-0ad92c6bcd46
 	github.com/go-playground/validator/v10 v10.14.0
 	github.com/gorilla/mux v1.8.0
-	github.com/haritzsaiz/gin-dump v0.1.0
+	github.com/haritzsaiz/gin-dump v0.2.0
 	github.com/hashicorp/consul/api v1.23.0
-	github.com/hashicorp/go-cleanhttp v0.5.2
 	github.com/hashicorp/vault/api v1.9.2
 	github.com/jakehl/goid v1.1.0
 	github.com/jinzhu/copier v0.4.0
@@ -107,6 +106,7 @@ require (
 	github.com/google/flatbuffers v23.1.21+incompatible // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-msgpack v1.1.5 // indirect
 	github.com/hashicorp/go-version v1.6.0 // indirect
