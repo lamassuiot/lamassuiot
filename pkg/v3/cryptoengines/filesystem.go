@@ -172,13 +172,15 @@ func (p *GoCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID stri
 }
 
 func (p *GoCryptoEngine) checkAndCreateStorageDir() error {
-	if _, err := os.Stat(p.storageDirectory); os.IsNotExist(err) {
+	var err error
+	if _, err = os.Stat(p.storageDirectory); os.IsNotExist(err) {
 		lGo.Warnf("storage directory %s does not exist. Will create such directory", p.storageDirectory)
 		err = os.MkdirAll(p.storageDirectory, 0755)
 		if err != nil {
 			lGo.Errorf("something went wrong while creating storage path: %s", err)
 		}
-	} else {
+		return err
+	} else if err != nil {
 		lGo.Errorf("something went wrong while checking storage: %s", err)
 		return err
 	}

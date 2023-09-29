@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -33,11 +34,35 @@ func (p *RevocationReason) UnmarshalText(text []byte) (err error) {
 	pw := string(text)
 
 	for k, v := range revocationReasonMap {
-		if strings.EqualFold(v, pw) {
-			p = (*RevocationReason)(&k)
+		if strings.EqualFold(strings.ToLower(v), strings.ToLower(pw)) {
+			*p = RevocationReason(k)
 			return nil
 		}
 	}
 
 	return fmt.Errorf("unsupported revocation code")
+}
+
+func (c RevocationReason) String() string {
+	r, err := c.MarshalText()
+	if err != nil {
+		return "-"
+	}
+
+	return string(r)
+}
+
+func (c RevocationReason) MarshalJSON() ([]byte, error) {
+	r, err := c.MarshalText()
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(string(r))
+}
+
+func (c *RevocationReason) UnmarshalJSON(data []byte) error {
+	var rStr string
+	json.Unmarshal(data, &rStr)
+
+	return c.UnmarshalText([]byte(rStr))
 }

@@ -70,7 +70,7 @@ func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
 		},
 	})
 	if err != nil {
-		lFunc.Panicf("could not initialize service: could not check if internal CA '%s' exists: %s", localRegAuthCA, err)
+		lFunc.Faltaf("could not initialize service: could not check if internal CA '%s' exists: %s", localRegAuthCA, err)
 	}
 
 	if !caExists {
@@ -97,7 +97,7 @@ func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
 		})
 
 		if err != nil {
-			lFunc.Panicf("could not initialize service: could not create internal CA '%s': %s", localRegAuthCA, err)
+			lFunc.Faltaf("could not initialize service: could not create internal CA '%s': %s", localRegAuthCA, err)
 		}
 	}
 

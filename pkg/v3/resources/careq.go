@@ -7,6 +7,7 @@ import (
 )
 
 type CreateCABody struct {
+	ID                 string             `json:"id"`
 	Subject            models.Subject     `json:"subject"`
 	KeyMetadata        models.KeyMetadata `json:"key_metadata"`
 	CAExpiration       models.Expiration  `json:"ca_expiration"`

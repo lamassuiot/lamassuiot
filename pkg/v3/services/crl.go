@@ -58,16 +58,14 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte
 		ListInput: ListInput[models.Certificate]{
 			ExhaustiveRun: true,
 			QueryParameters: &resources.QueryParameters{
-				Pagination: resources.PaginationOptions{
-					PageSize: 5,
-				},
+				PageSize: 15,
 			},
 			ApplyFunc: func(cert *models.Certificate) {
 				certList = append(certList, x509.RevocationListEntry{
-					ReasonCode:     int(cert.RevocationReason),
 					SerialNumber:   cert.Certificate.SerialNumber,
 					RevocationTime: time.Now(),
 					Extensions:     []pkix.Extension{},
+					ReasonCode:     int(cert.RevocationReason),
 				})
 			},
 		},
@@ -90,10 +88,10 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte
 	svc.logger.Debugf("creating revocation list. CA %s", input.CAID)
 	now := time.Now()
 	crl, err := x509.CreateRevocationList(rand.Reader, &x509.RevocationList{
+		RevokedCertificateEntries: certList,
 		Number:                    big.NewInt(5),
 		ThisUpdate:                now,
 		NextUpdate:                now.Add(time.Hour * 48),
-		RevokedCertificateEntries: certList,
 	}, caCert, caSigner)
 	if err != nil {
 		svc.logger.Errorf("something went wrong while creating revocation list: %s", err)

@@ -130,12 +130,12 @@ func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, e
 			}
 		}
 
-		if queryParams.Pagination.NextBookmark != "" {
-			nextBookmark = queryParams.Pagination.NextBookmark
+		if queryParams.NextBookmark != "" {
+			nextBookmark = queryParams.NextBookmark
 		}
 
-		if queryParams.Pagination.PageSize > 0 {
-			opts["limit"] = queryParams.Pagination.PageSize
+		if queryParams.PageSize > 0 {
+			opts["limit"] = queryParams.PageSize
 		}
 	}
 

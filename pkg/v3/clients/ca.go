@@ -37,6 +37,15 @@ func (cli *httpCAClient) GetCryptoEngineProvider(ctx context.Context) ([]*models
 	return engine, nil
 }
 
+func (cli *httpCAClient) GetStats(ctx context.Context) (*models.CAStats, error) {
+	stats, err := Get[*models.CAStats](ctx, cli.httpClient, cli.baseUrl+"/v1/stats", nil, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return stats, nil
+}
+
 func (cli *httpCAClient) GetCAs(ctx context.Context, input services.GetCAsInput) (string, error) {
 	url := cli.baseUrl + "/v1/cas"
 
@@ -91,6 +100,7 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 		KeyMetadata:        input.KeyMetadata,
 		IssuanceExpiration: input.IssuanceExpiration,
 		CAExpiration:       input.CAExpiration,
+		EngineID:           input.EngineID,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err
@@ -124,6 +134,7 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 		CACertificate:      input.CACertificate,
 		CAChain:            input.CAChain,
 		CAPrivateKey:       privKey,
+		EngineID:           input.EngineID,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err
@@ -154,7 +165,10 @@ func (cli *httpCAClient) ImportCertificate(ctx context.Context, input services.I
 }
 
 func (cli *httpCAClient) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (*models.CACertificate, error) {
-	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/revoke", resources.SignCertificateBody{}, map[int][]error{})
+	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/status", resources.UpdateCertificateStatusBody{
+		NewStatus:        input.Status,
+		RevocationReason: input.RevocationReason,
+	}, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +292,8 @@ func (cli *httpCAClient) GetCertificatesByCaAndStatus(ctx context.Context, input
 
 func (cli *httpCAClient) UpdateCertificateStatus(ctx context.Context, input services.UpdateCertificateStatusInput) (*models.Certificate, error) {
 	response, err := Put[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/certificates/"+input.SerialNumber+"/status", resources.UpdateCertificateStatusBody{
-		NewStatus: input.NewStatus,
+		NewStatus:        input.NewStatus,
+		RevocationReason: input.RevocationReason,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err

@@ -59,6 +59,7 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 
 	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
 	ca, err := r.svc.CreateCA(funCtx, services.CreateCAInput{
+		ID:                 requestBody.ID,
 		KeyMetadata:        requestBody.KeyMetadata,
 		Subject:            requestBody.Subject,
 		CAExpiration:       requestBody.CAExpiration,
@@ -81,6 +82,21 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(201, ca)
+}
+
+func (r *caHttpRoutes) GetStats(ctx *gin.Context) {
+	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	stats, err := r.svc.GetStats(funCtx)
+	if err != nil {
+		switch err {
+		default:
+			ctx.JSON(500, gin.H{"err": err})
+		}
+
+		return
+	}
+
+	ctx.JSON(200, stats)
 }
 
 // @Summary Import CA
@@ -130,7 +146,6 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 	ca, err := r.svc.ImportCA(funCtx, services.ImportCAInput{
 		IssuanceExpiration: requestBody.IssuanceExpiration,
 		CAType:             requestBody.CAType,
-		CAChain:            requestBody.CAChain,
 		CACertificate:      requestBody.CACertificate,
 		KeyType:            keyType,
 		CARSAKey:           rsaKey,
@@ -227,8 +242,8 @@ func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 		QueryParameters: queryParams,
 		ExhaustiveRun:   false,
 		ApplyFunc: func(ca *models.CACertificate) {
-			derefCA := &ca
-			cas = append(cas, *derefCA)
+			derefCA := *ca
+			cas = append(cas, &derefCA)
 		},
 	})
 
@@ -297,8 +312,8 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 		QueryParameters: queryParams,
 		ExhaustiveRun:   false,
 		ApplyFunc: func(ca *models.CACertificate) {
-			derefCA := &ca
-			cas = append(cas, *derefCA)
+			derefCA := *ca
+			cas = append(cas, &derefCA)
 		},
 	})
 
@@ -395,18 +410,7 @@ func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 	ctx.JSON(201, gin.H{})
 }
 
-// @Summary Revoke CA
-// @Description Revoke CA
-// @Accept json
-// @Produce json
-// @Security OAuth2Password
-// @Param message body resources.SignCertificateBody true "Revoke CA"
-// @Success 201
-// @Failure 404 {string} string "CA not found"
-// @Failure 400 {string} string "Struct Validation error || CA already revoked"
-// @Failure 500
-// @Router /cas/{id}/revoke [post]
-func (r *caHttpRoutes) RevokeCA(ctx *gin.Context) {
+func (r *caHttpRoutes) UpdateCAStatus(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -417,7 +421,7 @@ func (r *caHttpRoutes) RevokeCA(ctx *gin.Context) {
 		return
 	}
 
-	var requestBody resources.SignCertificateBody
+	var requestBody resources.UpdateCertificateStatusBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -425,8 +429,9 @@ func (r *caHttpRoutes) RevokeCA(ctx *gin.Context) {
 
 	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
 	ca, err := r.svc.UpdateCAStatus(funCtx, services.UpdateCAStatusInput{
-		CAID:   params.ID,
-		Status: models.StatusRevoked,
+		CAID:             params.ID,
+		Status:           requestBody.NewStatus,
+		RevocationReason: requestBody.RevocationReason,
 	})
 
 	if err != nil {
@@ -508,8 +513,8 @@ func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert *models.Certificate) {
-				derefCert := &cert
-				certs = append(certs, *derefCert)
+				derefCert := *cert
+				certs = append(certs, &derefCert)
 			},
 		},
 	})
@@ -550,8 +555,8 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert *models.Certificate) {
-				derefCert := &cert
-				certs = append(certs, *derefCert)
+				derefCert := *cert
+				certs = append(certs, &derefCert)
 			},
 		},
 	})
@@ -605,8 +610,8 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert *models.Certificate) {
-				derefCert := &cert
-				certs = append(certs, *derefCert)
+				derefCert := *cert
+				certs = append(certs, &derefCert)
 			},
 		},
 	})
@@ -807,8 +812,8 @@ func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert *models.Certificate) {
-				derefCert := &cert
-				certs = append(certs, *derefCert)
+				derefCert := *cert
+				certs = append(certs, &derefCert)
 			},
 		},
 	})

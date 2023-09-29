@@ -28,7 +28,7 @@ const (
 )
 
 type Certificate struct {
-	SerialNumber        string                 `json:"serial_number"`
+	SerialNumber        string                 `json:"serial_number" gorm:"primaryKey"`
 	Metadata            map[string]interface{} `json:"metadata" gorm:"serializer:json"`
 	IssuerCAMetadata    IssuerCAMetadata       `json:"issuer_metadata"  gorm:"embedded;embeddedPrefix:issuer_meta_"`
 	Status              CertificateStatus      `json:"status"`
@@ -64,14 +64,16 @@ type CACertificate struct {
 }
 
 type CAStats struct {
-	CACertificatesStats struct {
-		TotalCAs                 int                       `json:"total"`
-		CAsDistributionPerEngine map[string]int            `json:"engine_distribution"`
-		CAsStatus                map[CertificateStatus]int `json:"status_distribution"`
-	} `json:"cas"`
-	CertificatesStats struct {
-		TotalCertificates            int                       `json:"total"`
-		CertificateDistributionPerCA map[string]int            `json:"ca_distribution"`
-		CertificateStatus            map[CertificateStatus]int `json:"status_distribution"`
-	} `json:"certificates"`
+	CACertificatesStats CACertificatesStats `json:"cas"`
+	CertificatesStats   CertificatesStats   `json:"certificates"`
+}
+type CACertificatesStats struct {
+	TotalCAs                 int                       `json:"total"`
+	CAsDistributionPerEngine map[string]int            `json:"engine_distribution"`
+	CAsStatus                map[CertificateStatus]int `json:"status_distribution"`
+}
+type CertificatesStats struct {
+	TotalCertificates            int                       `json:"total"`
+	CertificateDistributionPerCA map[string]int            `json:"ca_distribution"`
+	CertificateStatus            map[CertificateStatus]int `json:"status_distribution"`
 }
