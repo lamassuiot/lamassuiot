@@ -71,7 +71,7 @@ func SetupAMQPConnection(config config.AMQPConnection) (*amqpHandler, error) {
 func (h *amqpHandler) buildAMQPConnection(cfg config.AMQPConnection) error {
 	userPassUrlPrefix := ""
 	if cfg.BasicAuth.Enabled {
-		userPassUrlPrefix = fmt.Sprintf("%s:%s@", url.PathEscape(cfg.BasicAuth.Username), url.PathEscape(cfg.BasicAuth.Password))
+		userPassUrlPrefix = fmt.Sprintf("%s:%s@", url.PathEscape(cfg.BasicAuth.Username), url.PathEscape(string(cfg.BasicAuth.Password)))
 	}
 
 	amqpTlsConfig := tls.Config{}

@@ -47,7 +47,8 @@ type SignatureVerifyBody struct {
 }
 
 type UpdateCertificateStatusBody struct {
-	NewStatus models.CertificateStatus `json:"status"`
+	NewStatus        models.CertificateStatus `json:"status"`
+	RevocationReason models.RevocationReason  `json:"revocation_reason"`
 }
 
 type UpdateCertificateMetadataBody struct {

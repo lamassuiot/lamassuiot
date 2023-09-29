@@ -227,7 +227,8 @@ func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 		QueryParameters: queryParams,
 		ExhaustiveRun:   false,
 		ApplyFunc: func(ca *models.CACertificate) {
-			cas = append(cas, ca)
+			derefCA := &ca
+			cas = append(cas, *derefCA)
 		},
 	})
 
@@ -296,7 +297,8 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 		QueryParameters: queryParams,
 		ExhaustiveRun:   false,
 		ApplyFunc: func(ca *models.CACertificate) {
-			cas = append(cas, ca)
+			derefCA := &ca
+			cas = append(cas, *derefCA)
 		},
 	})
 
@@ -506,7 +508,8 @@ func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert *models.Certificate) {
-				certs = append(certs, cert)
+				derefCert := &cert
+				certs = append(certs, *derefCert)
 			},
 		},
 	})
@@ -547,7 +550,8 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert *models.Certificate) {
-				certs = append(certs, cert)
+				derefCert := &cert
+				certs = append(certs, *derefCert)
 			},
 		},
 	})
@@ -601,7 +605,8 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert *models.Certificate) {
-				certs = append(certs, cert)
+				derefCert := &cert
+				certs = append(certs, *derefCert)
 			},
 		},
 	})
@@ -802,7 +807,8 @@ func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert *models.Certificate) {
-				certs = append(certs, cert)
+				derefCert := &cert
+				certs = append(certs, *derefCert)
 			},
 		},
 	})
@@ -860,8 +866,9 @@ func (r *caHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
 
 	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
 	cert, err := r.svc.UpdateCertificateStatus(funCtx, services.UpdateCertificateStatusInput{
-		SerialNumber: params.SerialNumber,
-		NewStatus:    requestBody.NewStatus,
+		SerialNumber:     params.SerialNumber,
+		NewStatus:        requestBody.NewStatus,
+		RevocationReason: requestBody.RevocationReason,
 	})
 
 	if err != nil {

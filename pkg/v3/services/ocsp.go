@@ -64,7 +64,7 @@ func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) (*ocsp.R
 		Status:           status,
 		SerialNumber:     req.SerialNumber,
 		Certificate:      (*x509.Certificate)(ca.Certificate.Certificate),
-		RevocationReason: ocsp.Unspecified,
+		RevocationReason: int(crt.RevocationReason),
 		IssuerHash:       req.HashAlgorithm,
 		RevokedAt:        revokedAt,
 		ThisUpdate:       time.Now().AddDate(0, 0, -1).UTC(),

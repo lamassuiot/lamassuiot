@@ -29,7 +29,7 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.PKCS11EngineConfig) (Cryp
 	lPkcs11 = logger.WithField("subsystem-provider", "PKCS11")
 	config := &crypto11.Config{
 		Path:       conf.ModulePath,
-		Pin:        conf.TokenPin,
+		Pin:        string(conf.TokenPin),
 		TokenLabel: conf.TokenLabel,
 	}
 

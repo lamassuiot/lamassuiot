@@ -89,7 +89,7 @@ func (aPub *AMQPSetup) buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Con
 	userPassUrlPrefix := ""
 	if cfg.BasicAuth.Enabled {
 		log.Debugf("basic auth enabled")
-		userPassUrlPrefix = fmt.Sprintf("%s:%s@", url.PathEscape(cfg.BasicAuth.Username), url.PathEscape(cfg.BasicAuth.Password))
+		userPassUrlPrefix = fmt.Sprintf("%s:%s@", url.PathEscape(cfg.BasicAuth.Username), url.PathEscape(string(cfg.BasicAuth.Password)))
 	}
 
 	amqpTlsConfig := tls.Config{}

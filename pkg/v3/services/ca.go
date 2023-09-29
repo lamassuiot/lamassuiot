@@ -21,6 +21,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/x509engines"
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/crypto/ocsp"
 )
 
 type CAMiddleware func(CAService) CAService
@@ -606,8 +607,9 @@ func (svc *CAServiceImpl) GetCAsByCommonName(ctx context.Context, input GetCAsBy
 }
 
 type UpdateCAStatusInput struct {
-	CAID   string                   `validate:"required"`
-	Status models.CertificateStatus `validate:"required"`
+	CAID             string                   `validate:"required"`
+	Status           models.CertificateStatus `validate:"required"`
+	RevocationReason models.RevocationReason
 }
 
 // Returned Error Codes:
@@ -642,7 +644,13 @@ func (svc *CAServiceImpl) UpdateCAStatus(ctx context.Context, input UpdateCAStat
 		lFunc.Errorf("CA %s already revoked", input.CAID)
 		return nil, errs.ErrCAAlreadyRevoked
 	}
+
 	ca.Status = input.Status
+	if ca.Status == models.StatusRevoked {
+		rrb, _ := input.RevocationReason.MarshalText()
+		lFunc.Infof("CA %s is being revoked with revocation reason %d - %s", input.CAID, input.RevocationReason, string(rrb))
+		ca.RevocationReason = input.RevocationReason
+	}
 
 	lFunc.Debugf("updating the status of CA %s to %s", input.CAID, input.Status)
 	ca, err = svc.caStorage.Update(ctx, ca)
@@ -654,8 +662,9 @@ func (svc *CAServiceImpl) UpdateCAStatus(ctx context.Context, input UpdateCAStat
 	if input.Status == models.StatusRevoked {
 		revokeCertFunc := func(c *models.Certificate) {
 			_, err := svc.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
-				SerialNumber: c.SerialNumber,
-				NewStatus:    models.StatusRevoked,
+				SerialNumber:     c.SerialNumber,
+				NewStatus:        models.StatusRevoked,
+				RevocationReason: ocsp.CessationOfOperation,
 			})
 			if err != nil {
 				lFunc.Errorf("could not revoke certificate %s issued by CA %s", c.SerialNumber, c.IssuerCAMetadata.CAID)
@@ -1025,9 +1034,9 @@ func (svc *CAServiceImpl) GetCertificatesByCaAndStatus(ctx context.Context, inpu
 }
 
 type UpdateCertificateStatusInput struct {
-	SerialNumber string                   `validate:"required"`
-	NewStatus    models.CertificateStatus `validate:"required"`
-	// RevocationReason models.RevocationReasonRFC5280
+	SerialNumber     string                   `validate:"required"`
+	NewStatus        models.CertificateStatus `validate:"required"`
+	RevocationReason models.RevocationReason
 }
 
 // Returned Error Codes:
@@ -1068,9 +1077,11 @@ func (svc *CAServiceImpl) UpdateCertificateStatus(ctx context.Context, input Upd
 
 	cert.Status = input.NewStatus
 
-	// if input.NewStatus == models.StatusRevoked {
-	// 	cert.RevocationReason = input.RevocationReason
-	// }
+	if input.NewStatus == models.StatusRevoked {
+		rrb, _ := input.RevocationReason.MarshalText()
+		lFunc.Infof("certificate with SN %s issued by CA with ID %s and CN %s is being revoked with revocation reason %d - %s", input.SerialNumber, cert.IssuerCAMetadata.CAID, cert.Certificate.Issuer.CommonName, input.RevocationReason, string(rrb))
+		cert.RevocationReason = input.RevocationReason
+	}
 	lFunc.Debugf("updating %s certificate status to %s", input.SerialNumber, input.NewStatus)
 	return svc.certStorage.Update(ctx, cert)
 }

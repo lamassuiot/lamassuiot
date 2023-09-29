@@ -25,6 +25,7 @@ import (
 	serviceV3 "github.com/lamassuiot/lamassuiot/pkg/v3/services"
 	"github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/crypto/ocsp"
 	"golang.org/x/exp/slices"
 )
 
@@ -484,8 +485,9 @@ func (s *DevicesService) RevokeActiveCertificate(ctx context.Context, input *api
 		return &api.RevokeActiveCertificateOutput{}, errors.New("certificate is already revoked")
 	} else {
 		revokeOutput, err := s.caClient.UpdateCertificateStatus(ctx, serviceV3.UpdateCertificateStatusInput{
-			SerialNumber: slot.ActiveCertificate.SerialNumber,
-			NewStatus:    models.StatusRevoked,
+			SerialNumber:     slot.ActiveCertificate.SerialNumber,
+			NewStatus:        models.StatusRevoked,
+			RevocationReason: ocsp.Superseded,
 		})
 
 		if err != nil {

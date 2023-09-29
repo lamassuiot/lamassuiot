@@ -80,7 +80,7 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 
 		clientConfig := clientcredentials.Config{
 			ClientID:     cfg.AuthJWTOptions.ClientID,
-			ClientSecret: cfg.AuthJWTOptions.ClientSecret,
+			ClientSecret: string(cfg.AuthJWTOptions.ClientSecret),
 			TokenURL:     fmt.Sprintf(wellKnown.TokenURL),
 			// EndpointParams: url.Values{
 			// 	"grant_type": {"urn:ietf:params:oauth:grant-type:uma-ticket"},

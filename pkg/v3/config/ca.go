@@ -21,9 +21,9 @@ type HashicorpVaultCryptoEngineConfig struct {
 	ID                string                 `mapstructure:"id"`
 	Metadata          map[string]interface{} `mapstructure:"metadata"`
 	RoleID            string                 `mapstructure:"role_id"`
-	SecretID          string                 `mapstructure:"secret_id"`
+	SecretID          Password               `mapstructure:"secret_id"`
 	AutoUnsealEnabled bool                   `mapstructure:"auto_unseal_enabled"`
-	AutoUnsealKeys    []string               `mapstructure:"auto_unseal_keys"`
+	AutoUnsealKeys    []Password             `mapstructure:"auto_unseal_keys"`
 	MountPath         string                 `mapstructure:"mount_path"`
 	HTTPConnection    `mapstructure:",squash"`
 }
@@ -38,7 +38,7 @@ type PKCS11EngineConfig struct {
 	ID                 string                   `mapstructure:"id"`
 	Metadata           map[string]interface{}   `mapstructure:"metadata"`
 	TokenLabel         string                   `mapstructure:"token"`
-	TokenPin           string                   `mapstructure:"pin"`
+	TokenPin           Password                 `mapstructure:"pin"`
 	ModulePath         string                   `mapstructure:"module_path"`
 	ModuleExtraOptions PKCS11ModuleExtraOptions `mapstructure:"module_extra_options"`
 }
@@ -51,7 +51,7 @@ type AWSSDKConfig struct {
 	ID              string                 `mapstructure:"id"`
 	Metadata        map[string]interface{} `mapstructure:"metadata"`
 	AccessKeyID     string                 `mapstructure:"access_key_id"`
-	SecretAccessKey string                 `mapstructure:"secret_access_key"`
+	SecretAccessKey Password               `mapstructure:"secret_access_key"`
 	Region          string                 `mapstructure:"region"`
 }
 

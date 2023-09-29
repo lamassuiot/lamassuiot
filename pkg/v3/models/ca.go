@@ -38,6 +38,7 @@ type Certificate struct {
 	ValidFrom           time.Time              `json:"valid_from"`
 	ValidTo             time.Time              `json:"valid_to"`
 	RevocationTimestamp time.Time              `json:"revocation_timestamp"`
+	RevocationReason    RevocationReason       `json:"revocation_reason"`
 	Type                CertificateType        `json:"type"`
 	EngineID            string                 `json:"engine_id"`
 }
