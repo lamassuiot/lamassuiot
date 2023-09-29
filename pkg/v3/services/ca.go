@@ -87,7 +87,7 @@ type CAServiceBuilder struct {
 	CryptoMonitoringConf config.CryptoMonitoring
 }
 
-func NeCAService(builder CAServiceBuilder) (CAService, error) {
+func NewCAService(builder CAServiceBuilder) (CAService, error) {
 	validate = validator.New()
 
 	lCA = builder.Logger

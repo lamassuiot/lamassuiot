@@ -64,7 +64,8 @@ func main() {
 		CAClient: caCli,
 	})
 
-	err = routes.NewValidationRoutes(lHttp, ocsp, crl, conf.Server, models.APIServiceInfo{
+	router := routes.NewValidationRoutes(lHttp, ocsp, crl)
+	err = routes.RunHttpRouter(lHttp, router, conf.Server, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,

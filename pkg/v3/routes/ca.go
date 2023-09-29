@@ -1,24 +1,22 @@
 package routes
 
 import (
-	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
+	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/controllers"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
-	docs "github.com/lamassuiot/lamassuiot/pkg/v3/swagger/ca"
 	"github.com/sirupsen/logrus"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-func NewCAHTTPLayer(logger *logrus.Entry, svc services.CAService, httpServerCfg config.HttpServer, apiInfo models.APIServiceInfo) error {
-	docs.SwaggerInfo.Title = "Lamassu CA Service API"
-	docs.SwaggerInfo.Description = "These are the endpoints available in the Lamassu CA Service."
-	docs.SwaggerInfo.Version = "1.0"
-	docs.SwaggerInfo.BasePath = "/v1"
-	docs.SwaggerInfo.InfoInstanceName = "Lamassu CA"
-	docs.SwaggerInfo.Host = httpServerCfg.ListenAddress
-	docs.SwaggerInfo.Schemes = []string{string(httpServerCfg.Protocol)}
+func NewCAHTTPLayer(logger *logrus.Entry, svc services.CAService) *gin.Engine {
+	// docs.SwaggerInfo.Title = "Lamassu CA Service API"
+	// docs.SwaggerInfo.Description = "These are the endpoints available in the Lamassu CA Service."
+	// docs.SwaggerInfo.Version = "1.0"
+	// docs.SwaggerInfo.BasePath = "/v1"
+	// docs.SwaggerInfo.InfoInstanceName = "Lamassu CA"
+	// docs.SwaggerInfo.Host = httpServerCfg.ListenAddress
+	// docs.SwaggerInfo.Schemes = []string{string(httpServerCfg.Protocol)}
 
 	routes := controllers.NewCAHttpRoutes(svc)
 
@@ -52,5 +50,5 @@ func NewCAHTTPLayer(logger *logrus.Entry, svc services.CAService, httpServerCfg 
 	rv1.GET("/stats", routes.GetStats)
 
 	rv1.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	return newHttpRouter(logger, router, httpServerCfg, apiInfo)
+	return router
 }

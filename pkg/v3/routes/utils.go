@@ -51,7 +51,7 @@ func newGinEngine(logger *logrus.Entry) *gin.Engine {
 	return router
 }
 
-func newHttpRouter(logger *logrus.Entry, routerEngine *gin.Engine, httpServerCfg config.HttpServer, apiInfo models.APIServiceInfo) error {
+func RunHttpRouter(logger *logrus.Entry, routerEngine *gin.Engine, httpServerCfg config.HttpServer, apiInfo models.APIServiceInfo) error {
 	hCheckRoute := controllers.NewHealthCheckRoute(apiInfo)
 	routerEngine.GET("/health", hCheckRoute.HealthCheck)
 
