@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 )
 
 type KeyMetadata struct {
@@ -194,7 +195,7 @@ type IdentityProfileEnrollmentSettings struct {
 
 type IdentityProfileReenrollmentSettings struct {
 	AllowExpiredRenewal       bool
-	PreventiveRenewalInterval time.Duration
+	PreventiveRenewalInterval models.TimeDuration
 	AdditionaValidationCAs    []string
 }
 

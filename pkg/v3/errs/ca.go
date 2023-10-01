@@ -6,6 +6,7 @@ var (
 	ErrCryptoEngineNotFound error = errors.New("crypto engine not found")
 
 	ErrCANotFound                      error = errors.New("CA not found")
+	ErrCAAlreadyExists                 error = errors.New("CA already exists")
 	ErrCAStatusTransitionNotAllowed    error = errors.New("status transition not allowed for CA")
 	ErrCAStatus                        error = errors.New("CA Status inconsistent")
 	ErrCAAlreadyRevoked                error = errors.New("CA already revoked")

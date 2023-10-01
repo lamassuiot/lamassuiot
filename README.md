@@ -15,9 +15,10 @@ Each service has its own set of unit tests. To run them, you can use the followi
 go install github.com/haveyoudebuggedit/gotestfmt/v2/cmd/gotestfmt@v2.3.1
 
 ```bash
-go test -json -v  -coverprofile cover.out -coverpkg=./... ./pkg/v3/...
+go test -coverprofile cover.out -coverpkg=./... ./pkg/v3/... | awk '{if ($1 != "?") print $5; else print "0.0";}' | sed 's/\%//g' | awk '{s+=$1} END {printf "%.2f\n", s}' | bash .github/coverage-badge.sh
 go-cover-treemap -coverprofile cover.out > out.svg
-go tool cover -func cover2.out -html=coverage.out | grep total
+go tool cover -html=cover.out -o cover-report.html
+go tool cover -func cover.out  | grep total
 ```
 
 ```bash

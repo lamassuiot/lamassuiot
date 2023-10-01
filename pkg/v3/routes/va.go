@@ -12,7 +12,7 @@ func NewValidationRoutes(logger *logrus.Entry, ocsp services.OCSPService, crl se
 	vaRoutes := controllers.NewVAHttpRoutes(logger, ocsp, crl)
 
 	rv1 := router.Group("/v1")
-	rv1.GET("/ocsp", vaRoutes.Verify)
+	rv1.GET("/ocsp/:ocsp_request", vaRoutes.Verify)
 	rv1.POST("/ocsp", vaRoutes.Verify)
 	rv1.GET("/crl/:id", vaRoutes.CRL)
 

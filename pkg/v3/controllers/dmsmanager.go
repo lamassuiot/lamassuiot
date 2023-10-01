@@ -51,7 +51,7 @@ func (r *dmsManagerHttpRoutes) GetDMSByID(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -97,7 +97,7 @@ func (r *dmsManagerHttpRoutes) UpdateIdentityProfile(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 

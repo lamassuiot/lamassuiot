@@ -14,6 +14,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/repository"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server/filters"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
@@ -167,7 +168,7 @@ func toStaticCADAO(dmsName string, d api.StaticCA) StaticCADAO {
 
 func (d *IdentityProfileDAO) toIdentityProfile() *api.IdentityProfile {
 	duration := time.Duration(-1 * time.Second)
-	duration, _ = time.ParseDuration(d.PreventiveRenewalInterval)
+	duration, _ = models.ParseDuration(d.PreventiveRenewalInterval)
 
 	cas := []api.StaticCA{}
 	for _, ca := range d.StaticCAs {
@@ -190,7 +191,7 @@ func (d *IdentityProfileDAO) toIdentityProfile() *api.IdentityProfile {
 		},
 		ReerollmentSettings: api.IdentityProfileReenrollmentSettings{
 			AllowExpiredRenewal:       d.AllowExpiredRenewal,
-			PreventiveRenewalInterval: duration,
+			PreventiveRenewalInterval: models.TimeDuration(duration),
 			AdditionaValidationCAs:    d.AdditionalValidationCAs,
 		},
 		CADistributionSettings: api.IdentityProfileCADistributionSettings{

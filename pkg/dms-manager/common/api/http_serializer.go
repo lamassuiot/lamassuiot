@@ -8,7 +8,7 @@ import (
 	"encoding/pem"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 )
 
 type SubjectSerialized struct {
@@ -210,26 +210,23 @@ func (o *IdentityProfileEnrollmentSettingsSerialized) Deserialize() IdentityProf
 }
 
 type IdentityProfileReenrollmentSettingsSerialized struct {
-	AllowExpiredRenewal       bool     `json:"allow_expired_renewal"`
-	PreventiveRenewalInterval string   `json:"preventive_renewal_interval"`
-	AdditionaValidationCAs    []string `json:"additional_validation_cas"`
+	AllowExpiredRenewal       bool                `json:"allow_expired_renewal"`
+	PreventiveRenewalInterval models.TimeDuration `json:"preventive_renewal_interval"`
+	AdditionaValidationCAs    []string            `json:"additional_validation_cas"`
 }
 
 func (o *IdentityProfileReenrollmentSettings) Serialize() IdentityProfileReenrollmentSettingsSerialized {
 	return IdentityProfileReenrollmentSettingsSerialized{
 		AllowExpiredRenewal:       o.AllowExpiredRenewal,
-		PreventiveRenewalInterval: utils.ShortDuration(o.PreventiveRenewalInterval),
+		PreventiveRenewalInterval: o.PreventiveRenewalInterval,
 		AdditionaValidationCAs:    o.AdditionaValidationCAs,
 	}
 }
 
 func (o IdentityProfileReenrollmentSettingsSerialized) Deserialize() IdentityProfileReenrollmentSettings {
-	duration := time.Duration(-1 * time.Second)
-	duration, _ = time.ParseDuration(o.PreventiveRenewalInterval)
-
 	return IdentityProfileReenrollmentSettings{
 		AllowExpiredRenewal:       o.AllowExpiredRenewal,
-		PreventiveRenewalInterval: duration,
+		PreventiveRenewalInterval: o.PreventiveRenewalInterval,
 		AdditionaValidationCAs:    o.AdditionaValidationCAs,
 	}
 }
