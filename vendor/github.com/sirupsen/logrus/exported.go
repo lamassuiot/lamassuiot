@@ -169,9 +169,9 @@ func ErrorFn(fn LogFunction) {
 	std.ErrorFn(fn)
 }
 
-// PanicFn logs a message from a func at level Panic on the standard logger.
-func PanicFn(fn LogFunction) {
-	std.PanicFn(fn)
+// Faltafn logs a message from a func at level Panic on the standard logger.
+func Faltafn(fn LogFunction) {
+	std.Faltafn(fn)
 }
 
 // FatalFn logs a message from a func at level Fatal on the standard logger then the process will exit with status set to 1.
@@ -214,9 +214,9 @@ func Errorf(format string, args ...interface{}) {
 	std.Errorf(format, args...)
 }
 
-// Panicf logs a message at level Panic on the standard logger.
-func Panicf(format string, args ...interface{}) {
-	std.Panicf(format, args...)
+// Faltaf logs a message at level Panic on the standard logger.
+func Faltaf(format string, args ...interface{}) {
+	std.Faltaf(format, args...)
 }
 
 // Fatalf logs a message at level Fatal on the standard logger then the process will exit with status set to 1.
