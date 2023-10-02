@@ -5,6 +5,7 @@ import (
 	"log"
 	"strconv"
 
+	"github.com/hashicorp/vault/api"
 	vaultApi "github.com/hashicorp/vault/api"
 
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
@@ -69,39 +70,50 @@ func SetupVaultWithDocker() (func(), config.HashicorpVaultSDK) {
 		}
 	}
 
-	// Create AppRole
 	client.SetToken(rootToken)
-	s, err := client.Logical().Write("auth/approle/role/lamassu-ca-client", map[string]interface{}{
-		"backend":                 "approle",
-		"role_name":               "lamassu-ca",
-		"token_policies":          []string{"lamassu-ca"},
-		"token_no_default_policy": "true",
-		"bind_secret_id":          "true",
-		"token_period":            "0",
-	})
-	if err != nil {
-		chk(err)
-	}
 
-	fmt.Println(s)
-	secret, err := client.Logical().Write("auth/approle/role/lamassu-ca-client/secret-id", map[string]interface{}{
-		"secret_id": "secret_id_value",
+	// Enable approle
+	err = client.Sys().EnableAuthWithOptions("approle", &api.EnableAuthOptions{
+		Type: "approle",
 	})
-	if err != nil {
-		chk(err)
-	}
+	chk(err)
 
-	secretID := secret.Data["secret_id"].(string)
-	fmt.Println(secretID)
-	_, err = client.Logical().Write("auth/approle/role/lamassu-ca-client/role-id", map[string]interface{}{
-		"role_id": "role_id_value",
+	mountPath := "lamassu-pki-kvv2"
+	policyContent := fmt.Sprintf(`
+	path "%s/*" {
+		capabilities = [ "read", "create" ]
+	}  
+	
+	path "sys/mounts/%s" {
+		capabilities = [ "read", "create", "update" ]
+	}  
+	
+	path "sys/mounts" {
+	   capabilities = [ "read" ]
+	}
+	`, mountPath, mountPath)
+	err = client.Sys().PutPolicy("pki-kv", policyContent)
+	chk(err)
+
+	_, err = client.Logical().Write(fmt.Sprintf("auth/approle/role/%s", "lamassu-ca-client"), map[string]interface{}{
+		"policies": []string{"pki-kv"},
 	})
-	if err != nil {
-		chk(err)
-	}
+	chk(err)
 
-	// container is ready, return *gorm.Db for testing
+	roleIDRaw, err := client.Logical().Read(fmt.Sprintf("auth/approle/role/%s/role-id", "lamassu-ca-client"))
+	chk(err)
+
+	roleID := roleIDRaw.Data["role_id"].(string)
+
+	secretIDRAW, err := client.Logical().Write(fmt.Sprintf("auth/approle/role/%s/secret-id", "lamassu-ca-client"), nil)
+	chk(err)
+
+	secretID := secretIDRAW.Data["secret_id"].(string)
+
 	return fnCleanup, config.HashicorpVaultSDK{
+		RoleID:    roleID,
+		SecretID:  config.Password(secretID),
+		MountPath: mountPath,
 		HTTPConnection: config.HTTPConnection{
 			Protocol: config.HTTP,
 			BasePath: "",

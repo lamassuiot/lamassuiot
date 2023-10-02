@@ -590,13 +590,22 @@ func (s *DMSManagerService) Enroll(ctx context.Context, csr *x509.CertificateReq
 		}
 	}
 
-	_, err = s.lamassuDevManagerClient.GetDeviceById(ctx, csr.Subject.CommonName)
-	if err != nil {
+	if dms.IdentityProfile.EnrollmentSettings.RegistrationMode == api.JITP {
+		log.Debugf("DMS is configured with JustInTime registration. will create device with ID %s", csr.Subject.CommonName)
 		_, err = s.lamassuDevManagerClient.CreateDevice(ctx, csr.Subject.CommonName, csr.Subject.CommonName, aps, "-", dms.IdentityProfile.EnrollmentSettings.Tags, dms.IdentityProfile.EnrollmentSettings.Icon, dms.IdentityProfile.EnrollmentSettings.Color)
 		if err != nil {
-			log.Error(fmt.Sprintf("something went while registering the device: %s", err))
+			log.Error(fmt.Sprintf("something went wrong while registering the device: %s", err))
 			return nil, err
 		}
+		log.Debugf("device registered")
+	} else if dms.IdentityProfile.EnrollmentSettings.RegistrationMode == api.PreRegistration {
+		log.Debugf("DMS is configured with PreRegistration. will check device with ID %s", csr.Subject.CommonName)
+		_, err := s.lamassuDevManagerClient.GetDeviceById(ctx, csr.Subject.CommonName)
+		if err != nil {
+			log.Error(fmt.Sprintf("something went wrong while checking device: %s", err))
+			return nil, err
+		}
+		log.Debugf("device exists")
 	}
 
 	estURL, err := url.Parse(s.DevManagerAddr)

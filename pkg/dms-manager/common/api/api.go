@@ -182,7 +182,15 @@ const (
 	BootstrapMutualTLS ESTAuthenticationMode = "BOOTSTRAP_MTLS"
 )
 
+type RegistrationMode string
+
+const (
+	JITP            RegistrationMode = "JITP"
+	PreRegistration RegistrationMode = "PreRegister"
+)
+
 type IdentityProfileEnrollmentSettings struct {
+	RegistrationMode       RegistrationMode
 	AuthenticationMode     ESTAuthenticationMode
 	AllowNewAutoEnrollment bool
 	Tags                   []string

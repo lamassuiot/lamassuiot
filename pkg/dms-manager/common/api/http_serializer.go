@@ -173,6 +173,7 @@ func (o *IdentityProfileGeneralSettingsSerialized) Deserialize() IdentityProfile
 }
 
 type IdentityProfileEnrollmentSettingsSerialized struct {
+	RegistrationMode       RegistrationMode      `json:"registration_mode"`
 	AuthenticationMode     ESTAuthenticationMode `json:"authentication_mode"`
 	AllowNewAutoEnrollment bool                  `json:"allow_new_auto_enrollment"`
 	Tags                   []string              `json:"tags"`
@@ -186,6 +187,7 @@ type IdentityProfileEnrollmentSettingsSerialized struct {
 func (o *IdentityProfileEnrollmentSettings) Serialize() IdentityProfileEnrollmentSettingsSerialized {
 	return IdentityProfileEnrollmentSettingsSerialized{
 		AuthenticationMode:     o.AuthenticationMode,
+		RegistrationMode:       o.RegistrationMode,
 		AllowNewAutoEnrollment: o.AllowNewAutoEnrollment,
 		Tags:                   o.Tags,
 		Icon:                   o.Icon,
@@ -199,6 +201,7 @@ func (o *IdentityProfileEnrollmentSettings) Serialize() IdentityProfileEnrollmen
 func (o *IdentityProfileEnrollmentSettingsSerialized) Deserialize() IdentityProfileEnrollmentSettings {
 	return IdentityProfileEnrollmentSettings{
 		AuthenticationMode:     o.AuthenticationMode,
+		RegistrationMode:       o.RegistrationMode,
 		AllowNewAutoEnrollment: o.AllowNewAutoEnrollment,
 		Tags:                   o.Tags,
 		Icon:                   o.Icon,

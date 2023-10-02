@@ -23,6 +23,53 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+func TestCryptoEngines(t *testing.T) {
+	t.Parallel()
+
+	var testcases = []struct {
+		name        string
+		resultCheck func(engines []*models.CryptoEngineProvider, err error) error
+	}{
+		{
+			name: "OK/Got-2-Engines",
+			resultCheck: func(engines []*models.CryptoEngineProvider, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error, but got one: %s", err)
+				}
+
+				if len(engines) != 2 {
+					return fmt.Errorf("should've got two engines, but got %d", len(engines))
+				}
+
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			// t.Parallel()
+			// err := postgres_test.BeforeEach()
+			// fmt.Errorf("Error while running BeforeEach job: %s", err)
+
+			caTest, err := BuildCATestServer()
+			if err != nil {
+				t.Fatalf("could not create CA test server")
+			}
+			caTest.HttpServer.Start()
+
+			caSDK := clients.NewHttpCAClient(http.DefaultClient, caTest.HttpServer.URL)
+			err = tc.resultCheck(caSDK.GetCryptoEngineProvider(context.Background()))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+
+		})
+		postgres_test.AfterSuite()
+	}
+}
 func TestCreateCA(t *testing.T) {
 	t.Parallel()
 
@@ -167,6 +214,87 @@ func TestCreateCA(t *testing.T) {
 				t.Fatalf("could not create CA test server")
 			}
 			caTest.HttpServer.Start()
+
+			caSDK := clients.NewHttpCAClient(http.DefaultClient, caTest.HttpServer.URL)
+			err = tc.before(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running 'before' func in test case: %s", err)
+			}
+
+			err = tc.resultCheck(tc.run(caSDK))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+
+		})
+		postgres_test.AfterSuite()
+	}
+}
+func TestGetCAsByCommonName(t *testing.T) {
+	t.Parallel()
+
+	caCN := "MyCA"
+
+	var testcases = []struct {
+		name        string
+		before      func(svc services.CAService) error
+		run         func(caSDK services.CAService) ([]*models.CACertificate, error)
+		resultCheck func([]*models.CACertificate, error) error
+	}{
+		{
+			name:   "OK/1-CA",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) ([]*models.CACertificate, error) {
+				cas := []*models.CACertificate{}
+				_, err := caSDK.GetCAsByCommonName(context.Background(), services.GetCAsByCommonNameInput{
+					CommonName: caCN,
+					ApplyFunc: func(cert *models.CACertificate) {
+						deref := *cert
+						cas = append(cas, &deref)
+					},
+				})
+				return cas, err
+			},
+			resultCheck: func(cas []*models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got CAs without error, but got error: %s", err)
+				}
+
+				if len(cas) != 1 {
+					return fmt.Errorf("should've got 1 CA but got %d", len(cas))
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			// t.Parallel()
+			// err := postgres_test.BeforeEach()
+			// fmt.Errorf("Error while running BeforeEach job: %s", err)
+
+			caTest, err := BuildCATestServer()
+			if err != nil {
+				t.Fatalf("could not create CA test server")
+			}
+			caTest.HttpServer.Start()
+
+			//Init CA Server with 1 CA
+			caDUr := models.TimeDuration(time.Hour * 24)
+			issuanceDur := models.TimeDuration(time.Hour * 12)
+			_, err = caTest.Service.CreateCA(context.Background(), services.CreateCAInput{
+				ID:                 DefaultCAID,
+				KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+				Subject:            models.Subject{CommonName: caCN},
+				CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
+				IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+			})
+			if err != nil {
+				t.Fatalf("failed running creating CA: %s", err)
+			}
 
 			caSDK := clients.NewHttpCAClient(http.DefaultClient, caTest.HttpServer.URL)
 			err = tc.before(caTest.Service)

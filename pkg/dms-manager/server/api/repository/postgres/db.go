@@ -41,6 +41,7 @@ type RemoteAccessIdentityDAO struct {
 type IdentityProfileDAO struct {
 	DMSName                    string `gorm:"primaryKey"`
 	EnrollmentMode             string
+	RegistrationMode           string
 	AuthenticationMode         string
 	BootstrapCAs               pq.StringArray `gorm:"type:text[]"`
 	AuthorizedCA               string
@@ -180,6 +181,7 @@ func (d *IdentityProfileDAO) toIdentityProfile() *api.IdentityProfile {
 			EnrollmentMode: api.EnrollmentMode(d.EnrollmentMode),
 		},
 		EnrollmentSettings: api.IdentityProfileEnrollmentSettings{
+			RegistrationMode:       api.RegistrationMode(d.RegistrationMode),
 			AuthenticationMode:     api.ESTAuthenticationMode(d.AuthenticationMode),
 			Tags:                   d.Tags,
 			Icon:                   d.Icon,
@@ -213,6 +215,7 @@ func toIdentityProfileDAO(dmsName string, d api.IdentityProfile) IdentityProfile
 
 	return IdentityProfileDAO{
 		DMSName:                    dmsName,
+		RegistrationMode:           string(d.EnrollmentSettings.RegistrationMode),
 		EnrollmentMode:             string(d.GeneralSettings.EnrollmentMode),
 		AuthenticationMode:         string(d.EnrollmentSettings.AuthenticationMode),
 		BootstrapCAs:               d.EnrollmentSettings.BootstrapCAs,
