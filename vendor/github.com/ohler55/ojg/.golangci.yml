@@ -161,6 +161,7 @@ linters-settings:
     # Which checks should be disabled; can't be combined with 'enabled-checks'; default is empty
     disabled-checks:
       #- regexpMust
+      - appendAssign
 
     # Enable multiple checks by tags, run `GL_DEBUG=gocritic golangci-lint` run to see all tags and checks.
     # Empty list by default. See https://github.com/go-critic/go-critic#usage -> section "Tags".
@@ -206,19 +207,16 @@ linters-settings:
 
 linters:
   enable:
-    - deadcode
     - errcheck
     - gocritic
     - gofmt
     - goimports
-    - revive
     - ineffassign
     - lll
     - megacheck
     - misspell
     - typecheck
     - unconvert
-    - varcheck
   enable-all: false
   disable:
     - govet
@@ -246,6 +244,11 @@ linters:
     - unparam # not ready for go1.18 yet
     - unused # not ready for go1.18 yet
     - asasalint # stupid rule that makes no sense
+    - varcheck # deprecated
+    - deadcode # deprecated
+    - reassign # removed because it makes no sense to flag an assignment of a public variable as an error.
+    - revive # complains about unexported return, calling it annoying
+    - musttag # absolutely not wanted as it insists on JSON annotation on any public struct that is unmarshalled
 
   disable-all: false
   presets:
@@ -272,16 +275,6 @@ issues:
         - lll
         - goconst
         - noctx
-
-    - path: doc.go
-      linters:
-        - gofmt
-        - goimports
-    - path: sen/mongo.go
-      linters:
-        - gofmt # gofmt does not match the doc comment description
-        - goimports
-
 
     # Exclude known linters from partially hard-vendored code,
     # which is impossible to exclude via "nolint" comments.

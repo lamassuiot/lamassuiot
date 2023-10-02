@@ -13,14 +13,22 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
-func CreateCouchDBConnection(cfg config.HTTPConnection, username, password string) (*kivik.Client, error) {
-	address := fmt.Sprintf("%s://%s:%s@%s:%d%s", cfg.Protocol, username, password, cfg.Hostname, cfg.Port, cfg.BasePath)
+var (
+	lCouch *logrus.Entry
+)
 
+func CreateCouchDBConnection(logger *logrus.Entry, cfg config.CouchDBPSEConfig) (*kivik.Client, error) {
+	address := fmt.Sprintf("%s://%s:%s@%s:%d%s", cfg.Protocol, cfg.Username, cfg.Password, cfg.Hostname, cfg.Port, cfg.BasePath)
 	httpCli, err := helpers.BuildHTTPClientWithTLSOptions(&http.Client{}, cfg.TLSConfig)
-	httpCli, err = helpers.BuildHTTPClientWithloggger(httpCli, "CouchDB")
+	if err != nil {
+		return nil, err
+	}
+
+	lCouch = logger.WithField("subsystem-provider", "CouchDB")
+	httpCli, err = helpers.BuildHTTPClientWithTracerLogger(httpCli, lCouch)
 	if err != nil {
 		return nil, err
 	}
@@ -48,9 +56,9 @@ func CreateCouchDBConnection(cfg config.HTTPConnection, username, password strin
 
 func CheckAndCreateDB(client *kivik.Client, db string) error {
 	if exists, err := client.DBExists(context.TODO(), db); err == nil && !exists {
-		log.Infof("db does not exist. Creating db: %s", db)
+		lCouch.Infof("db does not exist. Creating db: %s", db)
 		if err := client.CreateDB(context.TODO(), db); err != nil {
-			log.Error(fmt.Sprintf("could not create db %s: %s", db, err))
+			lCouch.Error(fmt.Sprintf("could not create db %s: %s", db, err))
 			return err
 		}
 	}
@@ -122,8 +130,12 @@ func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, e
 			}
 		}
 
-		if queryParams.Pagination.NextBookmark != "" {
-			nextBookmark = queryParams.Pagination.NextBookmark
+		if queryParams.NextBookmark != "" {
+			nextBookmark = queryParams.NextBookmark
+		}
+
+		if queryParams.PageSize > 0 {
+			opts["limit"] = queryParams.PageSize
 		}
 	}
 
@@ -166,40 +178,30 @@ func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, e
 	return nextBookmark, nil
 }
 
-func (db *couchDBQuerier[E]) SelectByID(elemID string) (*E, error) {
+func (db *couchDBQuerier[E]) SelectExists(elemID string) (bool, *E, error) {
 	rs := db.Get(context.Background(), elemID)
-	if rs.Err() != nil {
-		return nil, rs.Err()
+	err := rs.Err()
+	if err != nil {
+		switch err.(type) {
+		case *chttp.HTTPError:
+			resp := err.(*chttp.HTTPError)
+			if resp.Response.StatusCode == http.StatusNotFound {
+				return false, nil, nil
+			} else {
+				return false, nil, err
+			}
+		default:
+			return false, nil, err
+		}
 	}
 
 	rs.Next()
 	var elem E
 	if err := rs.ScanDoc(&elem); err != nil {
-		return nil, err
+		return false, nil, err
 	}
 
-	return &elem, nil
-}
-
-func (db *couchDBQuerier[E]) Exists(elemID string) (bool, error) {
-	rs := db.Get(context.Background(), elemID)
-	err := rs.Err()
-	if err != nil {
-		switch t := err.(type) {
-		case *chttp.HTTPError:
-			resp := err.(*chttp.HTTPError)
-			if resp.Response.StatusCode == http.StatusNotFound {
-				return false, nil
-			} else {
-				return false, err
-			}
-		default:
-			fmt.Println(t)
-			return false, err
-		}
-	}
-
-	return rs.Next(), nil
+	return true, &elem, nil
 }
 
 func (db *couchDBQuerier[E]) Insert(elem E, elemID string) (*E, error) {
@@ -208,7 +210,8 @@ func (db *couchDBQuerier[E]) Insert(elem E, elemID string) (*E, error) {
 		return nil, err
 	}
 
-	return db.SelectByID(elemID)
+	_, newElem, err := db.SelectExists(elemID)
+	return newElem, err
 }
 
 func (db *couchDBQuerier[E]) Update(elem E, elemID string) (*E, error) {
@@ -240,7 +243,28 @@ func (db *couchDBQuerier[E]) Update(elem E, elemID string) (*E, error) {
 		return nil, err
 	}
 
-	return db.SelectByID(elemID)
+	_, newUpdatedElem, err := db.SelectExists(elemID)
+	return newUpdatedElem, err
+}
+
+func (db *couchDBQuerier[E]) Delete(elemID string) error {
+	rs := db.Get(context.Background(), elemID)
+	if rs.Err() != nil {
+		return rs.Err()
+	}
+
+	rs.Next()
+	var prevElem map[string]interface{}
+	if err := rs.ScanDoc(&prevElem); err != nil {
+		return err
+	}
+
+	_, err := db.DB.Delete(context.Background(), elemID, prevElem["_rev"].(string))
+	if err != nil {
+		return err
+	}
+
+	return err
 }
 
 func getElements[E any](db *kivik.DB, bookmark string, opts map[string]interface{}) (string, []E, error) {
@@ -260,7 +284,7 @@ func getElements[E any](db *kivik.DB, bookmark string, opts map[string]interface
 	for rs.Next() {
 		var element E
 		if err := rs.ScanDoc(&element); err != nil {
-			log.Warnf("error while processing element in result set:", err)
+			lCouch.Warnf("error while processing element in result set:", err)
 			continue
 		}
 		elements = append(elements, element)

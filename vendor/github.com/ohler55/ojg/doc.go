@@ -12,13 +12,13 @@ types.
 	float64
 	string
 	time.Time
-	[]interface{}
-	map[string]interface{}
+	[]any
+	map[string]any
 
 # Oj
 
 Package oj contains functions and types for parsing JSON as well as support
-for building building simple types. Included in the oj package are:
+for building simple types. Included in the oj package are:
 
 	Parser for parsing JSON strings and streams into simple types.
 
@@ -41,7 +41,7 @@ types are:
 	Time
 
 The collection types are Array and Object. All the types implement the Node
-interface which is relatively simple interface defined primarily to restrict
+interface which is a relatively simple interface defined primarily to restrict
 what can be in the collection types. The Node interface should not be used to
 define new generic types.
 
@@ -60,7 +60,7 @@ to follow a path.
 The alt package contains functions and types for altering values. It includes functions for:
 
 	Decompose() a value into simple types of bool, int64, float64, string,
-		time.Time, []interface{} and map[string]interface{}.
+		time.Time, []any and map[string]any.
 
 	Recompose() takes simple data type and converts it back into a complex type.
 
@@ -71,7 +71,7 @@ The alt package contains functions and types for altering values. It includes fu
 # Asm
 
 The asm package provides a means of building JSON or the corresponding simple
-types bases on a JSON script represented by the Plan type.
+types based on a JSON script represented by the Plan type.
 
 # Cmd oj
 

@@ -2,30 +2,24 @@ package controllers
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 
-	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/errs"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 )
 
 func FilterQuery(r *http.Request) *resources.QueryParameters {
 	queryParams := resources.QueryParameters{
-		Sort: resources.SortOptions{
-			SortMode:  resources.SortModeAsc,
-			SortField: "",
-		},
-		Pagination: resources.PaginationOptions{
-			NextBookmark: "",
-		},
+		NextBookmark: "",
 	}
 
 	if len(r.URL.RawQuery) > 0 {
 		values := r.URL.Query()
 		for k, v := range values {
+			value := v[len(v)-1]
 			switch k {
 			case "sort_by":
-				sortQueryParam := v[len(v)-1]
+				sortQueryParam := value
 				sortField := strings.Trim(sortQueryParam, " ")
 
 				// if _, ok := fieldFiltersMap[sortField]; !ok { //prevent sorting by fields that are not in the filter map
@@ -33,8 +27,9 @@ func FilterQuery(r *http.Request) *resources.QueryParameters {
 				// }
 
 				queryParams.Sort.SortField = sortField
+
 			case "sort_mode":
-				sortQueryParam := v[len(v)-1]
+				sortQueryParam := value
 				sortMode := resources.SortModeAsc
 
 				if sortQueryParam == "desc" {
@@ -42,29 +37,18 @@ func FilterQuery(r *http.Request) *resources.QueryParameters {
 				}
 
 				queryParams.Sort.SortMode = sortMode
-			case "bookmark":
-				offestQueryParam := v[len(v)-1]
-				queryParams.Pagination.NextBookmark = offestQueryParam
-			default:
 
+			case "page_size":
+				pageS, err := strconv.Atoi(value)
+				if err == nil {
+					queryParams.PageSize = pageS
+				}
+
+			case "bookmark":
+				queryParams.NextBookmark = value
 			}
 		}
 	}
+
 	return &queryParams
-}
-
-func HandleControllerError(c *gin.Context, err error) {
-	var sentinelError *errs.SentinelAPIError
-	if castedErr, ok := err.(errs.SentinelAPIError); ok {
-		sentinelError = &castedErr
-	}
-
-	if sentinelError != nil {
-		c.JSON(sentinelError.Status, gin.H{"err": sentinelError.Msg})
-	} else {
-		if err != nil {
-			msg := err.Error()
-			c.JSON(http.StatusInternalServerError, gin.H{"err": msg})
-		}
-	}
 }

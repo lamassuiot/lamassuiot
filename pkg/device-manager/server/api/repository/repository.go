@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 )
 
 type Devices interface {
@@ -22,7 +22,7 @@ type Devices interface {
 	SelectSlotByID(ctx context.Context, deviceID string, id string) (*api.Slot, error)
 	UpdateSlot(ctx context.Context, deviceID string, slot api.Slot) error
 
-	CountActiveCertificatesByStatus(ctx context.Context, status caApi.CertificateStatus) (int, error)
+	CountActiveCertificatesByStatus(ctx context.Context, status models.CertificateStatus) (int, error)
 	InsertCertificate(ctx context.Context, deviceID string, slotID string, certificate api.Certificate, isActiveCertificate bool) error
 	SelectCertificates(ctx context.Context, deviceID string, slotID string) ([]*api.Certificate, error)
 	SelectCertificateBySerialNumber(ctx context.Context, deviceID string, slotID string, serialNumber string) (*api.Certificate, error)

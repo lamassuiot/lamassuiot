@@ -9,13 +9,13 @@ import (
 	"golang.org/x/exp/slices"
 
 	consul "github.com/hashicorp/consul/api"
-	lamassuCAClient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	cloudProviderClient "github.com/lamassuiot/lamassuiot/pkg/cloud-provider/client"
 	cloudProvider "github.com/lamassuiot/lamassuiot/pkg/cloud-provider/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/common/api"
 	cProxyErrors "github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/errors"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/repository"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
+	serviceV3 "github.com/lamassuiot/lamassuiot/pkg/v3/services"
 )
 
 type Service interface {
@@ -39,12 +39,12 @@ type Service interface {
 type CloudProxyService struct {
 	service             Service
 	ConsulClient        *consul.Client
-	LamassuCAClient     lamassuCAClient.LamassuCAClient
+	LamassuCAClient     serviceV3.CAService
 	CloudProxyDB        repository.CloudProxyRepository
 	ConnectorBaseConfig clientUtils.BaseClientConfigurationuration
 }
 
-func NewCloudPorxyService(consulClient *consul.Client, cloudProxyDatabase repository.CloudProxyRepository, lamassuCAClient lamassuCAClient.LamassuCAClient, clientBaseConfig clientUtils.BaseClientConfigurationuration) Service {
+func NewCloudPorxyService(consulClient *consul.Client, cloudProxyDatabase repository.CloudProxyRepository, lamassuCAClient serviceV3.CAService, clientBaseConfig clientUtils.BaseClientConfigurationuration) Service {
 	svc := CloudProxyService{
 		ConsulClient:        consulClient,
 		LamassuCAClient:     lamassuCAClient,
@@ -296,9 +296,9 @@ func (cps *CloudProxyService) HandleCreateCAEvent(ctx context.Context, input *ap
 
 	for _, connector := range connectorsOutput.CloudConnectors {
 		for _, syncCA := range connector.SynchronizedCAs {
-			if syncCA.ConsistencyStatus != api.ConsistencyStatusDisabled && syncCA.CAName == input.CAName {
+			if syncCA.ConsistencyStatus != api.ConsistencyStatusDisabled && syncCA.CAName == input.ID {
 				fmt.Println(fmt.Sprintf("	[%s](%s) %s  --->  %s:%d", connector.Status, connector.CloudProvider, connector.ID, connector.IP, connector.Port))
-				err := cps.CloudProxyDB.UpdateCABindingSerialNumber(ctx, connector.ID, input.CAName, input.SerialNumber)
+				err := cps.CloudProxyDB.UpdateCABindingSerialNumber(ctx, connector.ID, input.ID, input.SerialNumber)
 				if err != nil {
 					log.Warn(err)
 					continue
@@ -332,9 +332,9 @@ func (cps *CloudProxyService) HandleUpdateCAStatusEvent(ctx context.Context, inp
 
 	for _, connector := range connectorsOutput.CloudConnectors {
 		for _, syncCA := range connector.SynchronizedCAs {
-			if syncCA.ConsistencyStatus != api.ConsistencyStatusDisabled && syncCA.CAName == input.CAName {
+			if syncCA.ConsistencyStatus != api.ConsistencyStatusDisabled && syncCA.CAName == input.ID {
 				fmt.Println(fmt.Sprintf("	[%s](%s) %s  --->  %s:%d", connector.Status, connector.CloudProvider, connector.ID, connector.IP, connector.Port))
-				err := cps.CloudProxyDB.UpdateCABindingSerialNumber(ctx, connector.ID, input.CAName, input.SerialNumber)
+				err := cps.CloudProxyDB.UpdateCABindingSerialNumber(ctx, connector.ID, input.ID, input.SerialNumber)
 				if err != nil {
 					log.Warn(err)
 					continue
@@ -347,7 +347,7 @@ func (cps *CloudProxyService) HandleUpdateCAStatusEvent(ctx context.Context, inp
 				}
 
 				_, err = connectorClient.UpdateCAStatus(ctx, &cloudProvider.UpdateCAStatusInput{
-					CAName: input.CAName,
+					CAName: input.ID,
 					Status: string(input.Status),
 				})
 				if err != nil {
@@ -368,9 +368,9 @@ func (cps *CloudProxyService) HandleUpdateCertificateStatusEvent(ctx context.Con
 
 	for _, connector := range connectorsOutput.CloudConnectors {
 		for _, syncCA := range connector.SynchronizedCAs {
-			if syncCA.ConsistencyStatus != api.ConsistencyStatusDisabled && syncCA.CAName == input.CAName {
+			if syncCA.ConsistencyStatus != api.ConsistencyStatusDisabled && syncCA.CAName == input.IssuerCAMetadata.CAID {
 				fmt.Println(fmt.Sprintf("	[%s](%s) %s  --->  %s:%d", connector.Status, connector.CloudProvider, connector.ID, connector.IP, connector.Port))
-				err := cps.CloudProxyDB.UpdateCABindingSerialNumber(ctx, connector.ID, input.CAName, input.SerialNumber)
+				err := cps.CloudProxyDB.UpdateCABindingSerialNumber(ctx, connector.ID, input.IssuerCAMetadata.CAID, input.SerialNumber)
 				if err != nil {
 					log.Warn(err)
 					continue
@@ -379,7 +379,7 @@ func (cps *CloudProxyService) HandleUpdateCertificateStatusEvent(ctx context.Con
 				cps.service.UpdateDeviceCertificateStatus(ctx, &api.UpdateDeviceCertificateStatusInput{
 					ConnectorID:  connector.ID,
 					DeviceID:     input.Certificate.Subject.CommonName,
-					CAName:       input.CAName,
+					CAName:       input.IssuerCAMetadata.CAID,
 					Status:       string(input.Status),
 					SerialNumber: input.SerialNumber,
 				})

@@ -6,13 +6,13 @@ import (
 	"encoding/pem"
 	"time"
 
-	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lib/pq"
 )
 
 type DevicesManagerStatsSerialized struct {
-	DevicesStats map[DeviceStatus]int            `json:"devices_stats"`
-	SlotsStats   map[caApi.CertificateStatus]int `json:"slots_stats"`
+	DevicesStats map[DeviceStatus]int             `json:"devices_stats"`
+	SlotsStats   map[models.CertificateStatus]int `json:"slots_stats"`
 }
 
 func (s *DevicesManagerStats) Serialize() DevicesManagerStatsSerialized {
@@ -86,7 +86,7 @@ type CertificateSerialized struct {
 	CAName              string                        `json:"ca_name"`
 	SerialNumber        string                        `json:"serial_number"`
 	Certificate         string                        `json:"certificate"`
-	Status              caApi.CertificateStatus       `json:"status"`
+	Status              models.CertificateStatus      `json:"status"`
 	KeyMetadata         KeyStrengthMetadataSerialized `json:"key_metadata"`
 	Subject             SubjectSerialized             `json:"subject"`
 	ValidFrom           int                           `json:"valid_from"`

@@ -9,14 +9,10 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
-	b64 "encoding/base64"
-	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
@@ -24,17 +20,21 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
+
+var lVault *logrus.Entry
 
 type VaultKV2Engine struct {
 	kvv2Client *api.KVv2
 }
 
-func NewVaultKV2Engine(conf config.HashicorpVaultCryptoEngineConfig) (CryptoEngine, error) {
+func NewVaultKV2Engine(logger *logrus.Entry, conf config.HashicorpVaultCryptoEngineConfig) (CryptoEngine, error) {
 	var err error
-
+	lVault = logger.WithField("subsystem-provider", "Vault-KV2")
 	address := fmt.Sprintf("%s://%s:%d", conf.Protocol, conf.Hostname, conf.Port)
+
+	lVault.Debugf("configuring VaultKV2 Engine")
 
 	vaultClientConf := api.DefaultConfig()
 	httpClient, err := helpers.BuildHTTPClientWithTLSOptions(&http.Client{}, conf.TLSConfig)
@@ -43,7 +43,7 @@ func NewVaultKV2Engine(conf config.HashicorpVaultCryptoEngineConfig) (CryptoEngi
 		return nil, err
 	}
 
-	httpClient, err = helpers.BuildHTTPClientWithloggger(httpClient, "Vault KV-V2")
+	httpClient, err = helpers.BuildHTTPClientWithTracerLogger(httpClient, lVault)
 	if err != nil {
 		return nil, err
 	}
@@ -53,18 +53,21 @@ func NewVaultKV2Engine(conf config.HashicorpVaultCryptoEngineConfig) (CryptoEngi
 	vaultClient, err := api.NewClient(vaultClientConf)
 
 	if err != nil {
+		lVault.Errorf("could not create Vault API client: %s", err)
 		return nil, errors.New("could not create Vault API client: " + err.Error())
 	}
 
 	if conf.AutoUnsealEnabled {
-		err = Unseal(vaultClient, conf.AutoUnsealKeysFile)
+		err = Unseal(vaultClient, conf.AutoUnsealKeys)
 		if err != nil {
+			lVault.Errorf("could not unseal Vault: %s", err)
 			return nil, errors.New("could not unseal Vault: " + err.Error())
 		}
 	}
 
-	err = Login(vaultClient, conf.RoleID, conf.SecretID)
+	err = Login(vaultClient, conf.RoleID, string(conf.SecretID))
 	if err != nil {
+		lVault.Errorf("could not login into Vault: %s", err)
 		return nil, errors.New("could not login into Vault: " + err.Error())
 	}
 
@@ -98,38 +101,42 @@ func NewVaultKV2Engine(conf config.HashicorpVaultCryptoEngineConfig) (CryptoEngi
 	}, nil
 }
 
-func (vaultCli *VaultKV2Engine) GetEngineConfig() models.CryptoEngineProvider {
-	supportedKeyTypes := []models.SupportedKeyTypeInfo{}
-
-	supportedKeyTypes = append(supportedKeyTypes, models.SupportedKeyTypeInfo{
-		Type:        models.KeyType(x509.RSA),
-		MinimumSize: 1024,
-		MaximumSize: 4096,
-	})
-
-	supportedKeyTypes = append(supportedKeyTypes, models.SupportedKeyTypeInfo{
-		Type:        models.KeyType(x509.ECDSA),
-		MinimumSize: 256,
-		MaximumSize: 512,
-	})
-	return models.CryptoEngineProvider{
-		Type:              models.VaultKV2,
-		SecurityLevel:     models.SL1,
-		Provider:          "Hashicorp",
-		Manufacturer:      "Hashicorp",
-		Model:             "",
-		SupportedKeyTypes: supportedKeyTypes,
+func (vaultCli *VaultKV2Engine) GetEngineConfig() models.CryptoEngineInfo {
+	return models.CryptoEngineInfo{
+		Type:          models.VaultKV2,
+		SecurityLevel: models.SL1,
+		Provider:      "Hashicorp",
+		Name:          "Key Value - V2",
+		Metadata:      map[string]any{},
+		SupportedKeyTypes: []models.SupportedKeyTypeInfo{
+			{
+				Type: models.KeyType(x509.RSA),
+				Sizes: []int{
+					2048,
+					3072,
+					4096,
+				},
+			},
+			{
+				Type: models.KeyType(x509.ECDSA),
+				Sizes: []int{
+					224,
+					256,
+					512,
+				},
+			},
+		},
 	}
 }
 
 func (vaultCli *VaultKV2Engine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
-	log.Debugf("[cryptoengine.vaultkv2] requesting private key with ID [%s]", keyID)
+	lVault.Debugf("requesting private key with ID [%s]", keyID)
 	key, err := vaultCli.kvv2Client.Get(context.Background(), keyID)
 	if err != nil {
-		log.Errorf("[cryptoengine.vaultkv2] could not get private key: %s", err)
+		lVault.Errorf("could not get private key: %s", err)
 		return nil, errors.New("could not get private key")
 	}
-	log.Debugf("[cryptoengine.vaultkv2] successfully retrieved private key")
+	lVault.Debugf("successfully retrieved private key")
 
 	var b64Key string
 	mapValue, ok := key.Data["key"]
@@ -162,10 +169,10 @@ func (vaultCli *VaultKV2Engine) GetPrivateKeyByID(keyID string) (crypto.Signer, 
 }
 
 func (vaultCli *VaultKV2Engine) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
-	log.Debugf("[cryptoengine.vaultkv2] creating RSA private key of size [%d] with ID [%s]", keySize, keyID)
+	lVault.Debugf("creating RSA private key of size [%d] with ID [%s]", keySize, keyID)
 	key, err := vaultCli.GetPrivateKeyByID(keyID)
 	if key != nil {
-		log.Warnf("[cryptoengine.vaultkv2] RSA private key already exists and will be overwritten: ", err)
+		lVault.Warnf("RSA private key already exists and will be overwritten: ", err)
 		err = vaultCli.DeleteKey(keyID)
 		if err != nil {
 			return nil, err
@@ -174,7 +181,7 @@ func (vaultCli *VaultKV2Engine) CreateRSAPrivateKey(keySize int, keyID string) (
 
 	rsaKey, err := rsa.GenerateKey(rand.Reader, keySize)
 	if err != nil {
-		log.Errorf("[cryptoengine.vaultkv2] could not create RSA private key: %s", err)
+		lVault.Errorf("could not create RSA private key: %s", err)
 		return nil, err
 	}
 
@@ -183,7 +190,7 @@ func (vaultCli *VaultKV2Engine) CreateRSAPrivateKey(keySize int, keyID string) (
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(rsaKey),
 	})
-	keyBase64 := b64.StdEncoding.EncodeToString([]byte(keyPem))
+	keyBase64 := base64.StdEncoding.EncodeToString([]byte(keyPem))
 
 	var keyMap = map[string]interface{}{
 		"key": keyBase64,
@@ -191,33 +198,32 @@ func (vaultCli *VaultKV2Engine) CreateRSAPrivateKey(keySize int, keyID string) (
 
 	_, err = vaultCli.kvv2Client.Put(context.Background(), keyID, keyMap)
 	if err != nil {
-		log.Errorf("[cryptoengine.vaultkv2] could not create RSA key: %s", err)
+		lVault.Errorf("could not create RSA key: %s", err)
 		return nil, err
 	}
 
-	log.Debugf("[cryptoengine.vaultkv2] RSA key successfully generated")
+	lVault.Debugf("RSA key successfully generated")
 	return key, nil
 }
 
 func (vaultCli *VaultKV2Engine) CreateECDSAPrivateKey(c elliptic.Curve, keyID string) (crypto.Signer, error) {
+	lVault.Debugf("creating ECDSA private key of size [%d] with ID [%s]", c.Params().BitSize, keyID)
 	key, err := ecdsa.GenerateKey(c, rand.Reader)
 
 	if err != nil {
-		log.Error("Could not create RSA private key: ", err)
+		lVault.Errorf("Could not create RSA private key: %s", err)
 		return nil, err
 	}
 	keyBytes, err := x509.MarshalECPrivateKey(key)
 
 	if err != nil {
-		log.Error("Could not create RSA private key: ", err)
+		lVault.Errorf("Could not create RSA private key: %s", err)
 		return nil, err
 	}
 
 	keyPem := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
 
-	keyBase64 := b64.StdEncoding.EncodeToString([]byte(keyPem))
-	fmt.Println("curva elipticaaa")
-	fmt.Println(keyBase64)
+	keyBase64 := base64.StdEncoding.EncodeToString([]byte(keyPem))
 
 	var keyMap = map[string]interface{}{
 		"key": keyBase64,
@@ -250,34 +256,22 @@ func CreateVaultSdkClient(httpClient *http.Client, vaultAddress string) (*api.Cl
 	return api.NewClient(conf)
 }
 
-func Unseal(client *api.Client, unsealFile string) error {
-	usnealJsonFile, err := os.Open(unsealFile)
-	if err != nil {
-		return err
-	}
-
-	unsealFileByteValue, _ := ioutil.ReadAll(usnealJsonFile)
-	var unsealKeys []interface{}
-
-	err = json.Unmarshal(unsealFileByteValue, &unsealKeys)
-	if err != nil {
-		return err
-	}
+func Unseal(client *api.Client, unsealKeys []config.Password) error {
 
 	providedSharesCount := 0
 	sealed := true
 
 	for sealed {
-		unsealStatusProgress, err := client.Sys().Unseal(unsealKeys[providedSharesCount].(string))
+		unsealStatusProgress, err := client.Sys().Unseal(string(unsealKeys[providedSharesCount]))
 		if err != nil {
-			log.Error("Error while unsealing vault: ", err)
+			lVault.Error("Error while unsealing vault: ", err)
 			return err
 		}
-		log.Info("Unseal progress shares=" + strconv.Itoa(unsealStatusProgress.N) + " threshold=" + strconv.Itoa(unsealStatusProgress.T) + " remaining_shares=" + strconv.Itoa(unsealStatusProgress.Progress))
+		lVault.Info("Unseal progress shares=" + strconv.Itoa(unsealStatusProgress.N) + " threshold=" + strconv.Itoa(unsealStatusProgress.T) + " remaining_shares=" + strconv.Itoa(unsealStatusProgress.Progress))
 
 		providedSharesCount++
 		if !unsealStatusProgress.Sealed {
-			log.Info("Vault is unsealed")
+			lVault.Info("Vault is unsealed")
 			sealed = false
 		}
 	}

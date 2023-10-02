@@ -16,10 +16,12 @@ import (
 // optional default then that second default value is returned. This approach
 // keeps the return as a single value and gives the caller the choice of how
 // to indicate a bad value.
-func String(v interface{}, defaults ...string) (s string) {
+func String(v any, defaults ...string) (s string) {
 	switch ts := v.(type) {
 	case string:
 		s = ts
+	case []byte:
+		s = string(ts)
 	case gen.String:
 		s = string(ts)
 	default:

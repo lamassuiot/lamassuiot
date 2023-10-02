@@ -14,6 +14,17 @@ import (
 // --------------------------------------------
 type X509Certificate x509.Certificate
 
+func (c *X509Certificate) String() string {
+	res, err := c.MarshalJSON()
+	if err != nil {
+		return ""
+	}
+
+	certString := strings.ReplaceAll(string(res), "\"", "")
+
+	return string(certString)
+}
+
 func (c *X509Certificate) MarshalJSON() ([]byte, error) {
 	data := []byte{}
 
@@ -109,11 +120,5 @@ func (c *X509Certificate) Scan(value interface{}) error {
 
 // Value return json value, implement driver.Valuer interface
 func (c X509Certificate) Value() (driver.Value, error) {
-	b, err := c.MarshalJSON()
-	if err != nil {
-		return nil, err
-	}
-
-	certString := strings.ReplaceAll(string(b), "\"", "")
-	return certString, err
+	return c.String(), nil
 }

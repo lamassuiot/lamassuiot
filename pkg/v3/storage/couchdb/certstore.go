@@ -39,15 +39,11 @@ func (db *CouchDBCertificateStorage) Count(ctx context.Context) (int, error) {
 	return db.querier.Count()
 }
 
-func (db *CouchDBCertificateStorage) SelectByType(ctx context.Context, CAType models.CAType, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCertificateStorage) SelectByType(ctx context.Context, CAType models.CertificateType, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := map[string]interface{}{
 		"type": CAType,
 	}
 	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
-}
-
-func (db *CouchDBCertificateStorage) Exists(ctx context.Context, sn string) (bool, error) {
-	return db.querier.Exists(sn)
 }
 
 func (db *CouchDBCertificateStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
@@ -62,8 +58,8 @@ func (db *CouchDBCertificateStorage) SelectAll(ctx context.Context, exhaustiveRu
 	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
-func (db *CouchDBCertificateStorage) Select(ctx context.Context, id string) (*models.Certificate, error) {
-	return db.querier.SelectByID(id)
+func (db *CouchDBCertificateStorage) SelectExistsBySerialNumber(ctx context.Context, id string) (bool, *models.Certificate, error) {
+	return db.querier.SelectExists(id)
 }
 
 func (db *CouchDBCertificateStorage) Insert(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error) {
@@ -114,6 +110,26 @@ func (db *CouchDBCertificateStorage) SelectByExpirationDate(ctx context.Context,
 		},
 	}
 
+	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+}
+
+func (db *CouchDBCertificateStorage) SelectByCAIDAndStatus(ctx context.Context, CAID string, status models.CertificateStatus, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+	opts := map[string]interface{}{
+		"selector": map[string]interface{}{
+			"$and": []map[string]interface{}{
+				{
+					"status": map[string]interface{}{
+						"$eq": status,
+					},
+				},
+				{
+					"issuer_metadata.ca_id": map[string]interface{}{
+						"$eq": CAID,
+					},
+				},
+			},
+		},
+	}
 	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 

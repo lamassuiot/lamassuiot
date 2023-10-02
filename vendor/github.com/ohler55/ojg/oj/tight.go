@@ -13,7 +13,7 @@ import (
 	"github.com/ohler55/ojg/alt"
 )
 
-func tightDefault(wr *Writer, data interface{}, _ int) {
+func tightDefault(wr *Writer, data any, _ int) {
 	switch {
 	case !wr.NoReflect:
 		rv := reflect.ValueOf(data)
@@ -45,7 +45,7 @@ func tightDefault(wr *Writer, data interface{}, _ int) {
 	}
 }
 
-func tightArray(wr *Writer, n []interface{}, _ int) {
+func tightArray(wr *Writer, n []any, _ int) {
 	if 0 < len(n) {
 		wr.buf = append(wr.buf, '[')
 		for _, m := range n {
@@ -58,12 +58,27 @@ func tightArray(wr *Writer, n []interface{}, _ int) {
 	}
 }
 
-func tightObject(wr *Writer, n map[string]interface{}, _ int) {
+func tightObject(wr *Writer, n map[string]any, _ int) {
 	comma := false
 	wr.buf = append(wr.buf, '{')
 	for k, m := range n {
-		if m == nil && wr.OmitNil {
-			continue
+		switch tm := m.(type) {
+		case nil:
+			if wr.OmitNil {
+				continue
+			}
+		case string:
+			if wr.OmitEmpty && len(tm) == 0 {
+				continue
+			}
+		case map[string]any:
+			if wr.OmitEmpty && len(tm) == 0 {
+				continue
+			}
+		case []any:
+			if wr.OmitEmpty && len(tm) == 0 {
+				continue
+			}
 		}
 		wr.buf = ojg.AppendJSONString(wr.buf, k, !wr.HTMLUnsafe)
 		wr.buf = append(wr.buf, ':')
@@ -78,7 +93,7 @@ func tightObject(wr *Writer, n map[string]interface{}, _ int) {
 	}
 }
 
-func tightSortObject(wr *Writer, n map[string]interface{}, _ int) {
+func tightSortObject(wr *Writer, n map[string]any, _ int) {
 	comma := false
 	wr.buf = append(wr.buf, '{')
 	keys := make([]string, 0, len(n))
@@ -88,8 +103,23 @@ func tightSortObject(wr *Writer, n map[string]interface{}, _ int) {
 	sort.Strings(keys)
 	for _, k := range keys {
 		m := n[k]
-		if m == nil && wr.OmitNil {
-			continue
+		switch tm := m.(type) {
+		case nil:
+			if wr.OmitNil {
+				continue
+			}
+		case string:
+			if wr.OmitEmpty && len(tm) == 0 {
+				continue
+			}
+		case map[string]any:
+			if wr.OmitEmpty && len(tm) == 0 {
+				continue
+			}
+		case []any:
+			if wr.OmitEmpty && len(tm) == 0 {
+				continue
+			}
 		}
 		wr.buf = ojg.AppendJSONString(wr.buf, k, !wr.HTMLUnsafe)
 		wr.buf = append(wr.buf, ':')
@@ -106,11 +136,11 @@ func tightSortObject(wr *Writer, n map[string]interface{}, _ int) {
 
 func (wr *Writer) tightStruct(rv reflect.Value, si *sinfo) {
 	if si == nil {
-		si = getSinfo(rv.Interface())
+		si = getSinfo(rv.Interface(), wr.OmitEmpty)
 	}
 	fields := si.fields[wr.findex]
 	wr.buf = append(wr.buf, '{')
-	var v interface{}
+	var v any
 	comma := false
 	if 0 < len(wr.CreateKey) {
 		wr.buf = wr.appendString(wr.buf, wr.CreateKey, !wr.HTMLUnsafe)
@@ -253,19 +283,26 @@ func (wr *Writer) tightMap(rv reflect.Value, si *sinfo) {
 			wr.buf = append(wr.buf, ':')
 			wr.tightStruct(rm, si)
 		case reflect.Slice, reflect.Array:
-			if wr.OmitNil && rm.Len() == 0 {
+			if (wr.OmitNil || wr.OmitEmpty) && rm.Len() == 0 {
 				continue
 			}
 			wr.buf = ojg.AppendJSONString(wr.buf, kv.String(), !wr.HTMLUnsafe)
 			wr.buf = append(wr.buf, ':')
 			wr.tightSlice(rm, si)
 		case reflect.Map:
-			if wr.OmitNil && rm.Len() == 0 {
+			if (wr.OmitNil || wr.OmitEmpty) && rm.Len() == 0 {
 				continue
 			}
 			wr.buf = ojg.AppendJSONString(wr.buf, kv.String(), !wr.HTMLUnsafe)
 			wr.buf = append(wr.buf, ':')
 			wr.tightMap(rm, si)
+		case reflect.String:
+			if (wr.OmitNil || wr.OmitEmpty) && rm.Len() == 0 {
+				continue
+			}
+			wr.buf = ojg.AppendJSONString(wr.buf, kv.String(), !wr.HTMLUnsafe)
+			wr.buf = append(wr.buf, ':')
+			wr.appendJSON(rm.Interface(), 0)
 		default:
 			wr.buf = ojg.AppendJSONString(wr.buf, kv.String(), !wr.HTMLUnsafe)
 			wr.buf = append(wr.buf, ':')

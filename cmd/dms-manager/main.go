@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"strings"
 
-	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
 	lamassudevmanager "github.com/lamassuiot/lamassuiot/pkg/device-manager/client"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/dms-manager/server/api/transport"
@@ -17,6 +16,7 @@ import (
 	esttransport "github.com/lamassuiot/lamassuiot/pkg/est/server/api/transport"
 	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
 	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
+	lamassuSDK "github.com/lamassuiot/lamassuiot/pkg/v3/clients"
 	gorm_logrus "github.com/onrik/gorm-logrus"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
@@ -47,33 +47,10 @@ func main() {
 
 	dmsRepo := postgresRepository.NewPostgresDB(db)
 
-	var caClient lamassucaclient.LamassuCAClient
-	parsedLamassuCAURL, err := url.Parse(config.LamassuCAAddress)
+	var lamassuCAClient lamassuSDK.CAClient
+	lamassuCAClient = lamassuSDK.NewHttpCAClient(http.DefaultClient, config.LamassuCAAddress)
 	if err != nil {
-		log.Fatal("Could not parse CA URL: ", err)
-	}
-
-	if strings.HasPrefix(config.LamassuCAAddress, "https") {
-		caClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
-			URL:        parsedLamassuCAURL,
-			AuthMethod: clientUtils.AuthMethodMutualTLS,
-			AuthMethodConfig: &clientUtils.MutualTLSConfig{
-				ClientCert: config.CertFile,
-				ClientKey:  config.KeyFile,
-			},
-			CACertificate: config.LamassuCACertFile,
-		})
-		if err != nil {
-			log.Fatal("Could not create LamassuCA client: ", err)
-		}
-	} else {
-		caClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
-			URL:        parsedLamassuCAURL,
-			AuthMethod: clientUtils.AuthMethodNone,
-		})
-		if err != nil {
-			log.Fatal("Could not create LamassuCA client: ", err)
-		}
+		log.Fatal("Could not create LamassuCA client: ", err)
 	}
 
 	var devManagerClient lamassudevmanager.LamassuDeviceManagerClient
@@ -129,7 +106,7 @@ func main() {
 		}
 	}
 
-	svc := service.NewDMSManagerService(dmsRepo, &caClient, &devManagerClient, caCert, upstreamCert, upstreamKey, config.LamassuDeviceManagerAddress)
+	svc := service.NewDMSManagerService(dmsRepo, lamassuCAClient, &devManagerClient, caCert, upstreamCert, upstreamKey, config.LamassuDeviceManagerAddress)
 	dmsSvc := svc.(*service.DMSManagerService)
 
 	svc = service.LoggingMiddleware()(svc)

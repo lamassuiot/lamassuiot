@@ -32,12 +32,12 @@ func (n Time) String() string {
 }
 
 // Alter returns the backing time.Time value of the Node.
-func (n Time) Alter() interface{} {
+func (n Time) Alter() any {
 	return time.Time(n)
 }
 
 // Simplify returns the backing time.Time value of the Node.
-func (n Time) Simplify() interface{} {
+func (n Time) Simplify() any {
 	return time.Time(n)
 }
 
@@ -66,9 +66,9 @@ func (n Time) buildString(b *strings.Builder) {
 		nano := time.Time(n).UnixNano()
 		secs := nano / int64(time.Second)
 		if 0 < nano {
-			b.WriteString(fmt.Sprintf("%d.%09d", secs, nano-(secs*int64(time.Second))))
+			_, _ = fmt.Fprintf(b, "%d.%09d", secs, nano-(secs*int64(time.Second)))
 		} else {
-			b.WriteString(fmt.Sprintf("%d.%09d", secs, -nano+(secs*int64(time.Second))))
+			_, _ = fmt.Fprintf(b, "%d.%09d", secs, -nano+(secs*int64(time.Second)))
 		}
 	default:
 		b.WriteString(`"`)

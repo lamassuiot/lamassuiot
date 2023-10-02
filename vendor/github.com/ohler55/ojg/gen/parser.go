@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"unicode/utf8"
 )
 
@@ -26,7 +25,7 @@ type Parser struct {
 	stack      []Node
 	starts     []int
 	maps       []Object
-	cb         func(Node) bool
+	cb         func(Node)
 	resultChan chan Node
 	line       int
 	noff       int // Offset of last newline from start of buf. Can be negative when using a reader.
@@ -47,13 +46,16 @@ type Parser struct {
 }
 
 // Parse a JSON string in to simple types. An error is returned if not valid JSON.
-func (p *Parser) Parse(buf []byte, args ...interface{}) (Node, error) {
+func (p *Parser) Parse(buf []byte, args ...any) (Node, error) {
 	p.cb = nil
 	p.resultChan = nil
 	p.OnlyOne = true
 	for _, a := range args {
 		switch ta := a.(type) {
 		case func(Node) bool:
+			p.cb = func(x Node) { _ = ta(x) }
+			p.OnlyOne = false
+		case func(Node):
 			p.cb = ta
 			p.OnlyOne = false
 		case chan Node:
@@ -100,13 +102,16 @@ func (p *Parser) Parse(buf []byte, args ...interface{}) (Node, error) {
 }
 
 // ParseReader a JSON io.Reader. An error is returned if not valid JSON.
-func (p *Parser) ParseReader(r io.Reader, args ...interface{}) (data Node, err error) {
+func (p *Parser) ParseReader(r io.Reader, args ...any) (data Node, err error) {
 	p.cb = nil
 	p.resultChan = nil
 	p.OnlyOne = true
 	for _, a := range args {
 		switch ta := a.(type) {
 		case func(Node) bool:
+			p.cb = func(x Node) { _ = ta(x) }
+			p.OnlyOne = false
+		case func(Node):
 			p.cb = ta
 			p.OnlyOne = false
 		case chan Node:
@@ -323,11 +328,12 @@ func (p *Parser) parseBuffer(buf []byte, last bool) error {
 				if digitMap[b] != numDigit {
 					break
 				}
-				p.num.I = p.num.I*10 + uint64(b-'0')
-				if math.MaxInt64 < p.num.I {
+				if BigLimit <= p.num.I {
 					p.num.FillBig()
+					p.num.AddDigit(b)
 					break
 				}
+				p.num.I = p.num.I*10 + uint64(b-'0')
 			}
 			if digitMap[b] == numDigit {
 				off++
@@ -406,7 +412,7 @@ func (p *Parser) parseBuffer(buf []byte, last bool) error {
 				}
 				p.num.Frac = p.num.Frac*10 + uint64(b-'0')
 				p.num.Div *= 10.0
-				if math.MaxInt64 < p.num.Frac {
+				if BigLimit <= p.num.Div {
 					p.num.FillBig()
 					break
 				}
@@ -568,7 +574,7 @@ func (p *Parser) add(n Node) {
 	p.stack = append(p.stack, n)
 }
 
-func (p *Parser) newError(off int, format string, args ...interface{}) error {
+func (p *Parser) newError(off int, format string, args ...any) error {
 	return &ParseError{
 		Message: fmt.Sprintf(format, args...),
 		Line:    p.line,

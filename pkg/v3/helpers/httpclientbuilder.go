@@ -2,11 +2,13 @@ package helpers
 
 import (
 	"crypto/tls"
+	"fmt"
 	"net/http"
 	"time"
 
+	gindump "github.com/haritzsaiz/gin-dump"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 func BuildHTTPClientWithTLSOptions(cli *http.Client, cfg config.TLSConfig) (*http.Client, error) {
@@ -33,42 +35,37 @@ func BuildHTTPClientWithTLSOptions(cli *http.Client, cfg config.TLSConfig) (*htt
 	return cli, nil
 }
 
-func BuildHTTPClientWithloggger(cli *http.Client, clientName string) (*http.Client, error) {
+func BuildHTTPClientWithTracerLogger(cli *http.Client, logger *logrus.Entry) (*http.Client, error) {
+	transport := http.DefaultTransport
+	if cli.Transport != nil {
+		transport = cli.Transport
+	}
+
 	cli.Transport = loggingRoundTripper{
-		Proxied:    cli.Transport,
-		ClientName: clientName,
+		transport: transport,
+		logger:    logger,
 	}
 
 	return cli, nil
 }
 
 type loggingRoundTripper struct {
-	Proxied    http.RoundTripper
-	ClientName string
+	transport http.RoundTripper
+	logger    *logrus.Entry
 }
 
 func (lrt loggingRoundTripper) RoundTrip(req *http.Request) (res *http.Response, err error) {
 	start := time.Now()
 	// Send the request, get the response (or the error)
-	res, err = lrt.Proxied.RoundTrip(req)
-
-	httpLogger := *log.StandardLogger()
-	// Handle the result.
+	dReq := gindump.DumpRequest(req, true, true)
+	res, err = lrt.transport.RoundTrip(req)
 	if err != nil {
-		httpLogger.Tracef("[%s] %s %s - error:%q - %v", lrt.ClientName, req.Method, req.URL.String(), err.Error(), time.Since(start))
+		lrt.logger.Errorf("%s: %s", req.URL.String(), err)
 	} else {
-		httpLogger.Tracef("[%s] %s %s - %s - %v", lrt.ClientName, req.Method, req.URL.String(), res.Status, time.Since(start))
+		log := lrt.logger.WithField("response", fmt.Sprintf("%s %d: %s", req.Method, res.StatusCode, time.Since(start)))
+		log.Debugf(req.URL.String())
+		log.Tracef("%s\n%s", dReq, gindump.DumpResponse(res, true, true))
 	}
 
 	return
-}
-
-type customLogger struct {
-	defaultField string
-	formatter    log.Formatter
-}
-
-func (l customLogger) Format(entry *log.Entry) ([]byte, error) {
-	entry.Data["field_name"] = l.defaultField
-	return l.formatter.Format(entry)
 }

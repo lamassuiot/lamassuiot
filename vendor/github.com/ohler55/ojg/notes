@@ -1,9 +1,20 @@
 
 
- - delete and set with filter, union, and slice
+
+- script.go
+ - API to add functions
+  - RegisterUnaryFunction(name string, get bool, f func(arg any) any)
+  - RegisterBinaryFunction(name string, getLeft, getRight bool, f func(left, right any) any)
+   - handle in EvalWithRoot
+   - get indicates using get and not first in eval of args
+   - no override of existing
+   - convert to lower case and validate
+   - how to indicate with stack
+
+ - @.foo without a comparison indicates existance
 
 - parse
- - add discover option
+ - add discover option to find JSON or SEN in a string or file
   - 3 states
    - DiscoverOff
    - DiscoverAny
@@ -13,6 +24,10 @@
     - if number then cb and drop
   - errors don't panic but close off current (if whole) and then back to discover maps
  - implement on all parsers
+
+
+- jp.GetPaths() and jp.FirstPath() - discussion #59
+ - returns paths that match or maybe pairs of path and value
 
 - embedded struct pointer encoding issue
 - json.Unmarshaler
@@ -34,19 +49,6 @@
   - check added condition of whether keys should be checked. If too high then copy code
  - or separate stack in func for key maps along with dip code
 
-- regex op =~
-  - /^xyz&/
- - in addition to parse callback support chan for results
- - cmd/oj
-  - read args from file (SEN format)
-   - also check ~/.oj.fin or ~/.oj - graphql emacs mode works well
-  - palette in cfg file
-  - build or restructure json
-   - use a template based approach along with JSONPath
-- advanced ops
- - in - a in [1,2,3]
- - exists, empty, or has
- - size or length - [?(@.x size > 3)] or [?(size @.x > 3)]
 -------------
 
 - Match a JavaScript regular expression. For example, [?(@.description =~ /cat.*/i)]

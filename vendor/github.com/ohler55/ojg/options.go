@@ -108,6 +108,7 @@ var (
 		CreateKey:    "",
 		FullTypePath: false,
 		OmitNil:      false,
+		OmitEmpty:    false,
 		UseTags:      true,
 		KeyExact:     true,
 		NestEmbed:    false,
@@ -146,6 +147,11 @@ type Options struct {
 
 	// OmitNil skips the writing of nil values in an object.
 	OmitNil bool
+
+	// OmitEmpty skips the writing of empty string, slices, maps, and zero
+	// values although maps with all empty members will not be skipped on
+	// writing but will be with alt.Decompose and alter.
+	OmitEmpty bool
 
 	// InitSize is the initial buffer size.
 	InitSize int
@@ -300,7 +306,7 @@ func (o *Options) AppendTime(buf []byte, t time.Time, sen bool) []byte {
 
 // DecomposeTime encodes time in the format specified by the settings of the
 // options.
-func (o *Options) DecomposeTime(t time.Time) (v interface{}) {
+func (o *Options) DecomposeTime(t time.Time) (v any) {
 	switch o.TimeFormat {
 	case "time":
 		v = t
@@ -313,12 +319,12 @@ func (o *Options) DecomposeTime(t time.Time) (v interface{}) {
 	}
 	if o.TimeMap {
 		if o.FullTypePath {
-			v = map[string]interface{}{o.CreateKey: "time/Time", "value": v}
+			v = map[string]any{o.CreateKey: "time/Time", "value": v}
 		} else {
-			v = map[string]interface{}{o.CreateKey: "Time", "value": v}
+			v = map[string]any{o.CreateKey: "Time", "value": v}
 		}
 	} else if 0 < len(o.TimeWrap) {
-		v = map[string]interface{}{o.TimeWrap: v}
+		v = map[string]any{o.TimeWrap: v}
 	}
 	return
 }

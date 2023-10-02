@@ -8,25 +8,49 @@ import (
 	"github.com/spf13/viper"
 )
 
+type Password string
+
+func (p Password) MarshalText() ([]byte, error) {
+	return []byte("*************"), nil
+}
+
+func (p *Password) UnmarshalText(text []byte) (err error) {
+	pw := string(text)
+	p = (*Password)(&pw)
+	return nil
+}
+
 type BaseConfig struct {
+	// Defines logging options
 	Logs struct {
-		Level            LogLevel `mapstructure:"level"`
-		IncludeHealthLog bool     `mapstructure:"include_health"`
+		// General log level to be used. Individual subsystems can be controlled and will override this option. Valid options are `info`, `debug`, `trace`
+		Level LogLevel `mapstructure:"level"`
+		// Select if health requests should be logged.
+		SubsystemLogging struct {
+			Service         LogLevel `mapstructure:"service"`
+			CryptoEngine    LogLevel `mapstructure:"crypto_engine"`
+			StorageEngine   LogLevel `mapstructure:"storage_engine"`
+			HttpTransport   LogLevel `mapstructure:"http"`
+			MessagingEngine LogLevel `mapstructure:"messaging_engine"`
+		} `mapstructure:"subsystems"`
 	} `mapstructure:"logs"`
 
+	// Http server configuration options
 	Server HttpServer `mapstructure:"server"`
 
-	AMQPEventPublisher AMQPConnection `mapstructure:"amqp_event_publisher"`
+	// AMQP config options.
+	AMQPConnection AMQPConnection `mapstructure:"amqp_event_publisher"`
 }
 
 type HttpServer struct {
-	DebugMode      bool         `mapstructure:"debug_mode"`
-	ListenAddress  string       `mapstructure:"listen_address"`
-	Port           int          `mapstructure:"port"`
-	Protocol       HTTPProtocol `mapstructure:"protocol"`
-	CertFile       string       `mapstructure:"cert_file"`
-	KeyFile        string       `mapstructure:"key_file"`
-	Authentication struct {
+	DebugMode          bool         `mapstructure:"debug_mode"`
+	HealthCheckLogging bool         `mapstructure:"health_check"`
+	ListenAddress      string       `mapstructure:"listen_address"`
+	Port               int          `mapstructure:"port"`
+	Protocol           HTTPProtocol `mapstructure:"protocol"`
+	CertFile           string       `mapstructure:"cert_file"`
+	KeyFile            string       `mapstructure:"key_file"`
+	Authentication     struct {
 		MutualTLS struct {
 			Enabled           bool          `mapstructure:"enabled"`
 			ValidationMode    MutualTLSMode `mapstructure:"validation_mode"`
@@ -38,26 +62,29 @@ type HttpServer struct {
 type MutualTLSMode string
 
 const (
-	Strict MutualTLSMode = "strict"
-	Any    MutualTLSMode = "any"
+	Strict  MutualTLSMode = "strict"
+	Request MutualTLSMode = "request"
+	Any     MutualTLSMode = "any"
 )
 
 type PluggableStorageEngine struct {
 	Provider StorageProvider `mapstructure:"provider"`
-	CouchDB  struct {
-		Protocol       HTTPProtocol `mapstructure:"protocol"`
-		HTTPConnection `mapstructure:",squash"`
-		Username       string `mapstructure:"username"`
-		Password       string `mapstructure:"password"`
-	} `mapstructure:"couch_db"`
+
+	CouchDB  CouchDBPSEConfig  `mapstructure:"couch_db"`
 	Postgres PostgresPSEConfig `mapstructure:"postgres"`
 }
 
+type CouchDBPSEConfig struct {
+	HTTPConnection `mapstructure:",squash"`
+	Username       string   `mapstructure:"username"`
+	Password       Password `mapstructure:"password"`
+}
+
 type PostgresPSEConfig struct {
-	Hostname string `mapstructure:"hostname"`
-	Port     int    `mapstructure:"port"`
-	Username string `mapstructure:"username"`
-	Password string `mapstructure:"password"`
+	Hostname string   `mapstructure:"hostname"`
+	Port     int      `mapstructure:"port"`
+	Username string   `mapstructure:"username"`
+	Password Password `mapstructure:"password"`
 }
 
 type TLSConfig struct {
@@ -79,31 +106,33 @@ type HTTPConnection struct {
 
 type AMQPConnection struct {
 	BasicConnection `mapstructure:",squash"`
-	Enabled         bool         `mapstructure:"enabled"`
-	Protocol        AMQPProtocol `mapstructure:"protocol"`
-	BasicAuth       struct {
-		Enabled  bool   `mapstructure:"enabled"`
-		Username string `mapstructure:"username"`
-		Password string `mapstructure:"password"`
-	} `mapstructure:"basic_auth"`
-	ClientTLSAuth struct {
+	Enabled         bool                    `mapstructure:"enabled"`
+	Protocol        AMQPProtocol            `mapstructure:"protocol"`
+	BasicAuth       AMQPConnectionBasicAuth `mapstructure:"basic_auth"`
+	ClientTLSAuth   struct {
 		Enabled  bool   `mapstructure:"enabled"`
 		CertFile string `mapstructure:"cert_file"`
 		KeyFile  string `mapstructure:"key_file"`
 	} `mapstructure:"client_tls_auth"`
+}
+type AMQPConnectionBasicAuth struct {
+	Enabled  bool     `mapstructure:"enabled"`
+	Username string   `mapstructure:"username"`
+	Password Password `mapstructure:"password"`
 }
 
 type HTTPClient struct {
 	AuthMode        HTTPClientAuthMethod `mapstructure:"auth_mode"`
 	AuthJWTOptions  AuthJWTOptions       `mapstructure:"jwt_options"`
 	AuthMTLSOptions AuthMTLSOptions      `mapstructure:"mtls_options"`
+	LogLevel        LogLevel             `mapstructure:"log_level"`
 	HTTPConnection  `mapstructure:",squash"`
 }
 
 type AuthJWTOptions struct {
-	ClientID         string `mapstructure:"oidc_client_id"`
-	ClientSecret     string `mapstructure:"oidc_client_secret"`
-	OIDCWellKnownURL string `mapstructure:"oidc_well_known"`
+	ClientID         string   `mapstructure:"oidc_client_id"`
+	ClientSecret     Password `mapstructure:"oidc_client_secret"`
+	OIDCWellKnownURL string   `mapstructure:"oidc_well_known"`
 }
 
 type AuthMTLSOptions struct {
@@ -114,14 +143,13 @@ type AuthMTLSOptions struct {
 func readConfig[E any](configFilePath string) (*E, error) {
 	vp := viper.New()
 	vp.SetConfigFile(configFilePath)
-
 	if err := vp.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file not found; ignore error if desired
 			return nil, fmt.Errorf("config file not found: %s", err)
 		} else {
 			// Config file was found but another error was produced
-			return nil, fmt.Errorf("error while procesing config file: %w", err)
+			return nil, fmt.Errorf("error while processing config file: %w", err)
 		}
 	}
 

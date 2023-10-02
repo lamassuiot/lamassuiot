@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/pkg/utils/common"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 )
 
 type KeyMetadata struct {
@@ -181,7 +182,15 @@ const (
 	BootstrapMutualTLS ESTAuthenticationMode = "BOOTSTRAP_MTLS"
 )
 
+type RegistrationMode string
+
+const (
+	JITP            RegistrationMode = "JITP"
+	PreRegistration RegistrationMode = "PreRegister"
+)
+
 type IdentityProfileEnrollmentSettings struct {
+	RegistrationMode       RegistrationMode
 	AuthenticationMode     ESTAuthenticationMode
 	AllowNewAutoEnrollment bool
 	Tags                   []string
@@ -189,11 +198,13 @@ type IdentityProfileEnrollmentSettings struct {
 	Color                  string
 	AuthorizedCA           string
 	BootstrapCAs           []string
+	ChainValidationLevel   int
 }
 
 type IdentityProfileReenrollmentSettings struct {
 	AllowExpiredRenewal       bool
-	PreventiveRenewalInterval time.Duration
+	PreventiveRenewalInterval models.TimeDuration
+	AdditionaValidationCAs    []string
 }
 
 type StaticCA struct {

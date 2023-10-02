@@ -16,7 +16,7 @@ import (
 type ESTClientConfig struct {
 	logger             log.Logger
 	address            *url.URL
-	certificate        *x509.Certificate
+	certificate        []*x509.Certificate
 	privateKey         interface{}
 	caCertPool         *x509.CertPool
 	insecureSkipVerify bool
@@ -31,11 +31,11 @@ var (
 type ESTClient interface {
 	CACerts(ctx context.Context) ([]*x509.Certificate, error)
 	Enroll(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, error)
-	Reenroll(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error)
+	Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error)
 	ServerKeyGen(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, interface{}, error)
 }
 
-func NewESTClient(logger log.Logger, url *url.URL, clientCert *x509.Certificate, key interface{}, caCertificate *x509.Certificate, insecureSkipVerify bool) (ESTClient, error) {
+func NewESTClient(logger log.Logger, url *url.URL, clientCert []*x509.Certificate, key interface{}, caCertificate *x509.Certificate, insecureSkipVerify bool) (ESTClient, error) {
 	_, ecOK := key.(*ecdsa.PrivateKey)
 	_, rsaOK := key.(*rsa.PrivateKey)
 	if !(rsaOK || ecOK) {
@@ -68,8 +68,8 @@ func (c *ESTClientConfig) Enroll(ctx context.Context, aps string, csr *x509.Cert
 	return c.makeESTClient(ctx, aps).Enroll(ctx, csr)
 }
 
-func (c *ESTClientConfig) Reenroll(ctx context.Context, csr *x509.CertificateRequest) (*x509.Certificate, error) {
-	return c.makeESTClient(ctx, "").Reenroll(ctx, csr)
+func (c *ESTClientConfig) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+	return c.makeESTClient(ctx, aps).Reenroll(ctx, csr)
 }
 
 func (c *ESTClientConfig) ServerKeyGen(ctx context.Context, aps string, csr *x509.CertificateRequest) (*x509.Certificate, interface{}, error) {
@@ -83,7 +83,7 @@ func (c *ESTClientConfig) ServerKeyGen(ctx context.Context, aps string, csr *x50
 }
 
 func (c *ESTClientConfig) makeESTClient(ctx context.Context, aps string) *est.Client {
-	certs := []*x509.Certificate{c.certificate}
+	certs := c.certificate
 
 	dmsName := ctx.Value("dmsName").(string)
 	additionalHeaders := map[string]string{}

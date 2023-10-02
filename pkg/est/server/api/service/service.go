@@ -17,7 +17,7 @@ type ESTService interface {
 	//CSRAttrs(ctx context.Context, aps string, r *http.Request) (CSRAttrs, error)
 
 	// Enroll requests a new certificate. See RFC7030 4.2.
-	Enroll(ctx context.Context, csr *x509.CertificateRequest, cert *x509.Certificate, aps string) (*x509.Certificate, error)
+	Enroll(ctx context.Context, csr *x509.CertificateRequest, certChain []*x509.Certificate, aps string) (*x509.Certificate, error)
 
 	// Reenroll requests renewal/rekey of an existing certificate. See RFC7030
 	// 4.2.

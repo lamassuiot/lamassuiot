@@ -8,7 +8,7 @@ import (
 	"encoding/pem"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/pkg/utils"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 )
 
 type SubjectSerialized struct {
@@ -173,6 +173,7 @@ func (o *IdentityProfileGeneralSettingsSerialized) Deserialize() IdentityProfile
 }
 
 type IdentityProfileEnrollmentSettingsSerialized struct {
+	RegistrationMode       RegistrationMode      `json:"registration_mode"`
 	AuthenticationMode     ESTAuthenticationMode `json:"authentication_mode"`
 	AllowNewAutoEnrollment bool                  `json:"allow_new_auto_enrollment"`
 	Tags                   []string              `json:"tags"`
@@ -180,51 +181,56 @@ type IdentityProfileEnrollmentSettingsSerialized struct {
 	Color                  string                `json:"color"`
 	AuthorizedCA           string                `json:"authorized_ca"`
 	BootstrapCAs           []string              `json:"bootstrap_cas"`
+	ChainValidationLevel   int                   `json:"chain_validation_level"`
 }
 
 func (o *IdentityProfileEnrollmentSettings) Serialize() IdentityProfileEnrollmentSettingsSerialized {
 	return IdentityProfileEnrollmentSettingsSerialized{
 		AuthenticationMode:     o.AuthenticationMode,
+		RegistrationMode:       o.RegistrationMode,
 		AllowNewAutoEnrollment: o.AllowNewAutoEnrollment,
 		Tags:                   o.Tags,
 		Icon:                   o.Icon,
 		Color:                  o.Color,
 		AuthorizedCA:           o.AuthorizedCA,
 		BootstrapCAs:           o.BootstrapCAs,
+		ChainValidationLevel:   o.ChainValidationLevel,
 	}
 }
 
 func (o *IdentityProfileEnrollmentSettingsSerialized) Deserialize() IdentityProfileEnrollmentSettings {
 	return IdentityProfileEnrollmentSettings{
 		AuthenticationMode:     o.AuthenticationMode,
+		RegistrationMode:       o.RegistrationMode,
 		AllowNewAutoEnrollment: o.AllowNewAutoEnrollment,
 		Tags:                   o.Tags,
 		Icon:                   o.Icon,
 		Color:                  o.Color,
 		AuthorizedCA:           o.AuthorizedCA,
 		BootstrapCAs:           o.BootstrapCAs,
+		ChainValidationLevel:   o.ChainValidationLevel,
 	}
 }
 
 type IdentityProfileReenrollmentSettingsSerialized struct {
-	AllowExpiredRenewal       bool   `json:"allow_expired_renewal"`
-	PreventiveRenewalInterval string `json:"preventive_renewal_interval"`
+	AllowExpiredRenewal       bool                `json:"allow_expired_renewal"`
+	PreventiveRenewalInterval models.TimeDuration `json:"preventive_renewal_interval"`
+	AdditionaValidationCAs    []string            `json:"additional_validation_cas"`
 }
 
 func (o *IdentityProfileReenrollmentSettings) Serialize() IdentityProfileReenrollmentSettingsSerialized {
 	return IdentityProfileReenrollmentSettingsSerialized{
 		AllowExpiredRenewal:       o.AllowExpiredRenewal,
-		PreventiveRenewalInterval: utils.ShortDuration(o.PreventiveRenewalInterval),
+		PreventiveRenewalInterval: o.PreventiveRenewalInterval,
+		AdditionaValidationCAs:    o.AdditionaValidationCAs,
 	}
 }
 
 func (o IdentityProfileReenrollmentSettingsSerialized) Deserialize() IdentityProfileReenrollmentSettings {
-	duration := time.Duration(-1 * time.Second)
-	duration, _ = time.ParseDuration(o.PreventiveRenewalInterval)
-
 	return IdentityProfileReenrollmentSettings{
 		AllowExpiredRenewal:       o.AllowExpiredRenewal,
-		PreventiveRenewalInterval: duration,
+		PreventiveRenewalInterval: o.PreventiveRenewalInterval,
+		AdditionaValidationCAs:    o.AdditionaValidationCAs,
 	}
 }
 

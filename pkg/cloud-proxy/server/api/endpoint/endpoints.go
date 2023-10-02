@@ -6,11 +6,11 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/go-kit/kit/endpoint"
-	caApi "github.com/lamassuiot/lamassuiot/pkg/ca/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/common/api"
 	"github.com/lamassuiot/lamassuiot/pkg/cloud-proxy/server/api/service"
 	devApi "github.com/lamassuiot/lamassuiot/pkg/device-manager/common/api"
 	dmsApi "github.com/lamassuiot/lamassuiot/pkg/dms-manager/common/api"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 )
 
 type Endpoints struct {
@@ -114,11 +114,11 @@ func MakeEventHandlerEndpoint(s service.Service) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		event := request.(cloudevents.Event)
 		switch event.Type() {
-		case "io.lamassuiot.ca.create":
-			var data caApi.CreateCAOutputSerialized
+		case string(models.EventCreateCA):
+			var data models.CACertificate
 			json.Unmarshal(event.Data(), &data)
 			_, err := s.HandleCreateCAEvent(ctx, &api.HandleCreateCAEventInput{
-				CACertificate: data.CACertificateSerialized.Deserialize(),
+				CACertificate: data,
 			})
 			return nil, err
 
@@ -129,11 +129,11 @@ func MakeEventHandlerEndpoint(s service.Service) endpoint.Endpoint {
 		// 	err := s.HandleCreateCAEvent(ctx, data.CaName, data.SerialNumber, data.CaCert)
 		// 	return nil, err
 
-		case "io.lamassuiot.ca.update":
-			var data caApi.UpdateCAStatusOutputSerialized
+		case string(models.EventUpdateCAStatus):
+			var data models.CACertificate
 			json.Unmarshal(event.Data(), &data)
 			_, err := s.HandleUpdateCAStatusEvent(ctx, &api.HandleUpdateCAStatusEventInput{
-				CACertificate: data.CACertificateSerialized.Deserialize(),
+				CACertificate: data,
 			})
 			return nil, err
 
@@ -152,11 +152,11 @@ func MakeEventHandlerEndpoint(s service.Service) endpoint.Endpoint {
 				DeviceManufacturingService: data.Deserialize(),
 			})
 			return nil, err
-		case "io.lamassuiot.certificate.update":
-			var data caApi.UpdateCertificateStatusOutputSerialized
+		case string(models.EventUpdateCertificateStatus):
+			var data models.Certificate
 			json.Unmarshal(event.Data(), &data)
 			_, err := s.HandleUpdateCertificateStatusEvent(ctx, &api.HandleUpdateCertificateStatusEventInput{
-				Certificate: data.CertificateSerialized.Deserialize(),
+				Certificate: data,
 			})
 			return nil, err
 		case "io.lamassuiot.device.forceReenroll":

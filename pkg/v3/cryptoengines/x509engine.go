@@ -23,7 +23,7 @@ type X509EngineProvider struct {
 }
 
 type X509Engine interface {
-	GetEngineConfig() models.CryptoEngineProvider
+	GetEngineConfig() models.CryptoEngineInfo
 	GetCACryptoSigner(caCertificate *x509.Certificate) (crypto.Signer, error)
 	CreateRootCA(keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error)
 	CreateSubordinateCA(parentCACertificate *x509.Certificate, parentCASigner crypto.Signer, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error)
@@ -37,7 +37,7 @@ func NewX509Engine(cryptoEngine CryptoEngine, ocspURL string) X509Engine {
 	}
 }
 
-func (s X509EngineProvider) GetEngineConfig() models.CryptoEngineProvider {
+func (s X509EngineProvider) GetEngineConfig() models.CryptoEngineInfo {
 	return s.cryptoEngine.GetEngineConfig()
 }
 

@@ -18,7 +18,7 @@ type PostgresCertificateStorage struct {
 	querier *postgresDBQuerier[models.Certificate]
 }
 
-func NewPostgresCertificateRepository(db *gorm.DB) (storage.CertificatesRepo, error) {
+func NewCertificateRepository(db *gorm.DB) (storage.CertificatesRepo, error) {
 	querier, err := CheckAndCreateTable(db, certDBName, "serial_number", models.Certificate{})
 	if err != nil {
 		return nil, err
@@ -31,26 +31,22 @@ func NewPostgresCertificateRepository(db *gorm.DB) (storage.CertificatesRepo, er
 }
 
 func (db *PostgresCertificateStorage) Count(ctx context.Context) (int, error) {
-	return db.querier.Count()
+	return db.querier.Count([]gormWhereParams{})
 }
 
-func (db *PostgresCertificateStorage) SelectByType(ctx context.Context, CAType models.CAType, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *PostgresCertificateStorage) SelectByType(ctx context.Context, CAType models.CertificateType, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := []gormWhereParams{
 		{query: "ca_meta_type = ?", extraArgs: []any{CAType}},
 	}
 	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
 }
 
-func (db *PostgresCertificateStorage) Exists(ctx context.Context, sn string) (bool, error) {
-	return db.querier.Exists(sn)
-}
-
 func (db *PostgresCertificateStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	return db.querier.SelectAll(queryParams, []gormWhereParams{}, exhaustiveRun, applyFunc)
 }
 
-func (db *PostgresCertificateStorage) Select(ctx context.Context, id string) (*models.Certificate, error) {
-	return db.querier.SelectByID(id)
+func (db *PostgresCertificateStorage) SelectExistsBySerialNumber(ctx context.Context, id string) (bool, *models.Certificate, error) {
+	return db.querier.SelectExists(id, nil)
 }
 
 func (db *PostgresCertificateStorage) Insert(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error) {
@@ -63,7 +59,7 @@ func (db *PostgresCertificateStorage) Update(ctx context.Context, certificate *m
 
 func (db *PostgresCertificateStorage) SelectByCA(ctx context.Context, caID string, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := []gormWhereParams{
-		{query: "issuer_metadata_meta_id = ?", extraArgs: []any{caID}},
+		{query: "issuer_meta_ca_id = ?", extraArgs: []any{caID}},
 	}
 	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
 }
@@ -74,6 +70,15 @@ func (db *PostgresCertificateStorage) SelectByExpirationDate(ctx context.Context
 		{query: "valid_to < ?", extraArgs: []any{beforeExpirationDate}},
 		{query: "status != ?", extraArgs: []any{models.StatusExpired}},
 		{query: "status != ?", extraArgs: []any{models.StatusRevoked}},
+	}
+
+	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
+}
+
+func (db *PostgresCertificateStorage) SelectByCAIDAndStatus(ctx context.Context, CAID string, status models.CertificateStatus, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+	opts := []gormWhereParams{
+		{query: "status = ?", extraArgs: []any{status}},
+		{query: "issuer_meta_ca_id = ?", extraArgs: []any{CAID}},
 	}
 
 	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)

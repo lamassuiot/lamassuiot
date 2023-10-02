@@ -28,15 +28,23 @@ func NewCAPostgresRepository(db *gorm.DB) (storage.CACertificatesRepo, error) {
 	}, nil
 }
 
-func (db *PostgresCAStore) Exists(ctx context.Context, caID string) (bool, error) {
-	return db.querier.Exists(caID)
-}
-
 func (db *PostgresCAStore) Count(ctx context.Context) (int, error) {
-	return db.querier.Count()
+	return db.querier.Count([]gormWhereParams{})
 }
 
-func (db *PostgresCAStore) SelectByType(ctx context.Context, CAType models.CAType, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *PostgresCAStore) CountByEngine(ctx context.Context, engineID string) (int, error) {
+	return db.querier.Count([]gormWhereParams{
+		{query: "engine_id = ?", extraArgs: []any{engineID}},
+	})
+}
+
+func (db *PostgresCAStore) CountByStatus(ctx context.Context, status models.CertificateStatus) (int, error) {
+	return db.querier.Count([]gormWhereParams{
+		{query: "status = ?", extraArgs: []any{status}},
+	})
+}
+
+func (db *PostgresCAStore) SelectByType(ctx context.Context, CAType models.CertificateType, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := []gormWhereParams{
 		{query: "ca_meta_type = ?", extraArgs: []any{CAType}},
 	}
@@ -47,14 +55,29 @@ func (db *PostgresCAStore) SelectAll(ctx context.Context, exhaustiveRun bool, ap
 	return db.querier.SelectAll(queryParams, []gormWhereParams{}, exhaustiveRun, applyFunc)
 }
 
-func (db *PostgresCAStore) Select(ctx context.Context, id string) (*models.CACertificate, error) {
-	return db.querier.SelectByID(id)
+func (db *PostgresCAStore) SelectByCommonName(ctx context.Context, commonName string, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+	return db.querier.SelectAll(queryParams, []gormWhereParams{
+		{query: "subject_common_name = ? ", extraArgs: []any{commonName}},
+	}, exhaustiveRun, applyFunc)
+}
+
+func (db *PostgresCAStore) SelectExistsBySerialNumber(ctx context.Context, serialNumber string) (bool, *models.CACertificate, error) {
+	queryCol := "serial_number"
+	return db.querier.SelectExists(serialNumber, &queryCol)
+}
+
+func (db *PostgresCAStore) SelectExistsByID(ctx context.Context, id string) (bool, *models.CACertificate, error) {
+	return db.querier.SelectExists(id, nil)
 }
 
 func (db *PostgresCAStore) Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Insert(*caCertificate, caCertificate.CARef.Name)
+	return db.querier.Insert(*caCertificate, caCertificate.IssuerCAMetadata.CAID)
 }
 
 func (db *PostgresCAStore) Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Update(*caCertificate, caCertificate.CARef.Name)
+	return db.querier.Update(*caCertificate, caCertificate.IssuerCAMetadata.CAID)
+}
+
+func (db *PostgresCAStore) Delete(ctx context.Context, id string) error {
+	return db.querier.Delete(id)
 }

@@ -1,7 +1,6 @@
 package helpers
 
 import (
-	"crypto"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
@@ -77,7 +76,7 @@ func LoadSytemCACertPool() *x509.CertPool {
 	return certPool
 }
 
-func LoadSytemCACertPoolWithExtraCAsFromFiles(casToAdd []string) *x509.CertPool {
+func LoadSystemCACertPoolWithExtraCAsFromFiles(casToAdd []string) *x509.CertPool {
 	certPool := x509.NewCertPool()
 	systemCertPool, err := x509.SystemCertPool()
 	if err == nil {
@@ -147,27 +146,46 @@ func ValidateCertAndPrivKey(cert *x509.Certificate, rsaKey *rsa.PrivateKey, ecKe
 	return false, fmt.Errorf("both keys are nil")
 }
 
-func GetSigningAlgorithmFromPublicKey(pubKey crypto.PublicKey, hashFunction crypto.Hash) (models.SigningAlgorithm, error) {
-	switch pubKey.(type) {
-	case *rsa.PublicKey:
-		switch hashFunction {
-		case crypto.SHA256:
-			return models.RSASSA_PSS_SHA_256, nil
-		case crypto.SHA384:
-			return models.RSASSA_PSS_SHA_384, nil
-		case crypto.SHA512:
-			return models.RSASSA_PSS_SHA_512, nil
+func CalculateRSAKeySizes(keyMin int, KeyMax int) []int {
+	var keySizes []int
+	key := keyMin
+	for {
+		if key%128 == 0 {
+			keySizes = append(keySizes, key)
+			key = key + 128
 		}
-	case *ecdsa.PublicKey:
-		switch hashFunction {
-		case crypto.SHA256:
-			return models.ECDSA_SHA_256, nil
-		case crypto.SHA384:
-			return models.ECDSA_SHA_384, nil
-		case crypto.SHA512:
-			return models.ECDSA_SHA_512, nil
+		if key%1024 == 0 {
+			break
 		}
 	}
+	for {
+		if key%1024 == 0 {
+			keySizes = append(keySizes, key)
+			if key == KeyMax {
+				break
+			}
+			key = key + 1024
+		} else {
+			break
+		}
+	}
+	return keySizes
+}
 
-	return "", fmt.Errorf("could not determine signing algorithm")
+func CalculateECDSAKeySizes(keyMin int, KeyMax int) []int {
+	var keySizes []int
+	keySizes = append(keySizes, keyMin)
+	if keyMin < 224 && KeyMax > 224 {
+		keySizes = append(keySizes, 224)
+	}
+	if keyMin < 256 && KeyMax > 256 {
+		keySizes = append(keySizes, 256)
+	}
+	if keyMin < 384 && KeyMax > 384 {
+		keySizes = append(keySizes, 384)
+	}
+	if keyMin < 512 && KeyMax >= 512 {
+		keySizes = append(keySizes, 512)
+	}
+	return keySizes
 }

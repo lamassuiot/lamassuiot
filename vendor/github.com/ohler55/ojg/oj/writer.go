@@ -33,14 +33,14 @@ type Writer struct {
 	w             io.Writer
 	findex        byte
 	strict        bool
-	appendArray   func(wr *Writer, data []interface{}, depth int)
-	appendObject  func(wr *Writer, data map[string]interface{}, depth int)
-	appendDefault func(wr *Writer, data interface{}, depth int)
+	appendArray   func(wr *Writer, data []any, depth int)
+	appendObject  func(wr *Writer, data map[string]any, depth int)
+	appendDefault func(wr *Writer, data any, depth int)
 	appendString  func(buf []byte, s string, htmlSafe bool) []byte
 }
 
 // JSON writes data, JSON encoded. On error, an empty string is returned.
-func (wr *Writer) JSON(data interface{}) string {
+func (wr *Writer) JSON(data any) string {
 	defer func() {
 		if r := recover(); r != nil {
 			wr.buf = wr.buf[:0]
@@ -54,7 +54,7 @@ func (wr *Writer) JSON(data interface{}) string {
 // buffer is the Writer buffer and is reused on the next call to write. If
 // returned value is to be preserved past a second invocation then the buffer
 // should be copied.
-func (wr *Writer) MustJSON(data interface{}) []byte {
+func (wr *Writer) MustJSON(data any) []byte {
 	wr.w = nil
 	if wr.InitSize <= 0 {
 		wr.InitSize = 256
@@ -92,7 +92,7 @@ func (wr *Writer) MustJSON(data interface{}) []byte {
 }
 
 // Write a JSON string for the data provided.
-func (wr *Writer) Write(w io.Writer, data interface{}) (err error) {
+func (wr *Writer) Write(w io.Writer, data any) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			wr.buf = wr.buf[:0]
@@ -105,7 +105,7 @@ func (wr *Writer) Write(w io.Writer, data interface{}) (err error) {
 
 // MustWrite a JSON string for the data provided. If an error occurs panic is
 // called with the error.
-func (wr *Writer) MustWrite(w io.Writer, data interface{}) {
+func (wr *Writer) MustWrite(w io.Writer, data any) {
 	wr.w = w
 	if wr.InitSize <= 0 {
 		wr.InitSize = 256
@@ -164,7 +164,7 @@ func (wr *Writer) calcFieldsIndex() {
 	}
 }
 
-func (wr *Writer) appendJSON(data interface{}, depth int) {
+func (wr *Writer) appendJSON(data any, depth int) {
 	switch td := data.(type) {
 	case nil:
 		wr.buf = append(wr.buf, "null"...)
@@ -210,7 +210,7 @@ func (wr *Writer) appendJSON(data interface{}, depth int) {
 		case ojg.BytesAsBase64:
 			wr.buf = wr.appendString(wr.buf, base64.StdEncoding.EncodeToString(td), !wr.HTMLUnsafe)
 		case ojg.BytesAsArray:
-			a := make([]interface{}, len(td))
+			a := make([]any, len(td))
 			for i, m := range td {
 				a[i] = int64(m)
 			}
@@ -222,7 +222,7 @@ func (wr *Writer) appendJSON(data interface{}, depth int) {
 	case time.Time:
 		wr.buf = wr.AppendTime(wr.buf, td, false)
 
-	case []interface{}:
+	case []any:
 		// go marshal treats a nil slice as a special case different from an
 		// empty slice. Seems kind of odd but here is the check.
 		if wr.strict && td == nil {
@@ -231,7 +231,7 @@ func (wr *Writer) appendJSON(data interface{}, depth int) {
 		}
 		wr.appendArray(wr, td, depth)
 
-	case map[string]interface{}:
+	case map[string]any:
 		wr.appendObject(wr, td, depth)
 
 	case alt.Simplifier:
@@ -262,7 +262,7 @@ func (wr *Writer) appendJSON(data interface{}, depth int) {
 	}
 }
 
-func appendDefault(wr *Writer, data interface{}, depth int) {
+func appendDefault(wr *Writer, data any, depth int) {
 	switch {
 	case !wr.NoReflect:
 		rv := reflect.ValueOf(data)
@@ -294,7 +294,7 @@ func appendDefault(wr *Writer, data interface{}, depth int) {
 	}
 }
 
-func appendArray(wr *Writer, n []interface{}, depth int) {
+func appendArray(wr *Writer, n []any, depth int) {
 	var is string
 	var cs string
 	d2 := depth + 1
@@ -336,7 +336,7 @@ func appendArray(wr *Writer, n []interface{}, depth int) {
 	}
 }
 
-func appendObject(wr *Writer, n map[string]interface{}, depth int) {
+func appendObject(wr *Writer, n map[string]any, depth int) {
 	d2 := depth + 1
 	var is string
 	var cs string
@@ -366,8 +366,23 @@ func appendObject(wr *Writer, n map[string]interface{}, depth int) {
 	empty := true
 	wr.buf = append(wr.buf, '{')
 	for k, m := range n {
-		if m == nil && wr.OmitNil {
-			continue
+		switch tm := m.(type) {
+		case nil:
+			if wr.OmitNil {
+				continue
+			}
+		case string:
+			if wr.OmitEmpty && len(tm) == 0 {
+				continue
+			}
+		case map[string]any:
+			if wr.OmitEmpty && len(tm) == 0 {
+				continue
+			}
+		case []any:
+			if wr.OmitEmpty && len(tm) == 0 {
+				continue
+			}
 		}
 		empty = false
 		wr.buf = append(wr.buf, cs...)
@@ -384,7 +399,7 @@ func appendObject(wr *Writer, n map[string]interface{}, depth int) {
 	wr.buf = append(wr.buf, '}')
 }
 
-func appendSortObject(wr *Writer, n map[string]interface{}, depth int) {
+func appendSortObject(wr *Writer, n map[string]any, depth int) {
 	d2 := depth + 1
 	var is string
 	var cs string
@@ -420,8 +435,23 @@ func appendSortObject(wr *Writer, n map[string]interface{}, depth int) {
 	wr.buf = append(wr.buf, '{')
 	for _, k := range keys {
 		m := n[k]
-		if m == nil && wr.OmitNil {
-			continue
+		switch tm := m.(type) {
+		case nil:
+			if wr.OmitNil {
+				continue
+			}
+		case string:
+			if wr.OmitEmpty && len(tm) == 0 {
+				continue
+			}
+		case map[string]any:
+			if wr.OmitEmpty && len(tm) == 0 {
+				continue
+			}
+		case []any:
+			if wr.OmitEmpty && len(tm) == 0 {
+				continue
+			}
 		}
 		empty = false
 		wr.buf = append(wr.buf, cs...)
@@ -440,13 +470,13 @@ func appendSortObject(wr *Writer, n map[string]interface{}, depth int) {
 
 func (wr *Writer) appendStruct(rv reflect.Value, depth int, si *sinfo) {
 	if si == nil {
-		si = getSinfo(rv.Interface())
+		si = getSinfo(rv.Interface(), wr.OmitEmpty)
 	}
 	d2 := depth + 1
 	fields := si.fields[wr.findex]
 	wr.buf = append(wr.buf, '{')
 	empty := true
-	var v interface{}
+	var v any
 	indented := false
 	var is string
 	var cs string
@@ -632,6 +662,10 @@ func (wr *Writer) appendSlice(rv reflect.Value, depth int, si *sinfo) {
 }
 
 func (wr *Writer) appendMap(rv reflect.Value, depth int, si *sinfo) {
+	keys := rv.MapKeys()
+	if wr.Sort {
+		sort.Slice(keys, func(i, j int) bool { return 0 > strings.Compare(keys[i].String(), keys[j].String()) })
+	}
 	d2 := depth + 1
 	var is string
 	var cs string
@@ -658,10 +692,6 @@ func (wr *Writer) appendMap(rv reflect.Value, depth int, si *sinfo) {
 		}
 		cs = spaces[0:x]
 	}
-	keys := rv.MapKeys()
-	if wr.Sort {
-		sort.Slice(keys, func(i, j int) bool { return 0 > strings.Compare(keys[i].String(), keys[j].String()) })
-	}
 	empty := true
 	wr.buf = append(wr.buf, '{')
 	for _, kv := range keys {
@@ -682,7 +712,7 @@ func (wr *Writer) appendMap(rv reflect.Value, depth int, si *sinfo) {
 			wr.buf = append(wr.buf, ": "...)
 			wr.appendStruct(rm, d2, si)
 		case reflect.Slice, reflect.Array:
-			if wr.OmitNil && rm.Len() == 0 {
+			if (wr.OmitNil || wr.OmitEmpty) && rm.Len() == 0 {
 				continue
 			}
 			wr.buf = append(wr.buf, cs...)
@@ -690,13 +720,21 @@ func (wr *Writer) appendMap(rv reflect.Value, depth int, si *sinfo) {
 			wr.buf = append(wr.buf, ": "...)
 			wr.appendSlice(rm, d2, si)
 		case reflect.Map:
-			if wr.OmitNil && rm.Len() == 0 {
+			if (wr.OmitNil || wr.OmitEmpty) && rm.Len() == 0 {
 				continue
 			}
 			wr.buf = append(wr.buf, cs...)
 			wr.buf = wr.appendString(wr.buf, kv.String(), !wr.HTMLUnsafe)
 			wr.buf = append(wr.buf, ": "...)
 			wr.appendMap(rm, d2, si)
+		case reflect.String:
+			if (wr.OmitEmpty) && rm.Len() == 0 {
+				continue
+			}
+			wr.buf = append(wr.buf, cs...)
+			wr.buf = wr.appendString(wr.buf, kv.String(), !wr.HTMLUnsafe)
+			wr.buf = append(wr.buf, ": "...)
+			wr.appendJSON(rm.Interface(), d2)
 		default:
 			wr.buf = append(wr.buf, cs...)
 			wr.buf = wr.appendString(wr.buf, kv.String(), !wr.HTMLUnsafe)

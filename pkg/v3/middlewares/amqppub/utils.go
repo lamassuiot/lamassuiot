@@ -12,6 +12,7 @@ import (
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/messaging"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
@@ -70,11 +71,11 @@ func SetupAMQPConnection(config config.AMQPConnection) (*amqpHandler, error) {
 func (h *amqpHandler) buildAMQPConnection(cfg config.AMQPConnection) error {
 	userPassUrlPrefix := ""
 	if cfg.BasicAuth.Enabled {
-		userPassUrlPrefix = fmt.Sprintf("%s:%s@", url.PathEscape(cfg.BasicAuth.Username), url.PathEscape(cfg.BasicAuth.Password))
+		userPassUrlPrefix = fmt.Sprintf("%s:%s@", url.PathEscape(cfg.BasicAuth.Username), url.PathEscape(string(cfg.BasicAuth.Password)))
 	}
 
 	amqpTlsConfig := tls.Config{}
-	certPool := helpers.LoadSytemCACertPoolWithExtraCAsFromFiles([]string{cfg.CACertificateFile})
+	certPool := helpers.LoadSystemCACertPoolWithExtraCAsFromFiles([]string{cfg.CACertificateFile})
 	amqpTlsConfig.RootCAs = certPool
 
 	if cfg.InsecureSkipVerify {
@@ -146,17 +147,15 @@ func (mw amqpEventPublisher) publishEvent(eventType string, eventSource string, 
 		return
 	}
 
-	mw.amqpPublisher <- &AmqpPublishMessage{
-		Exchange:  "lamassu",
-		Key:       event.Type(),
-		Mandatory: false,
-		Immediate: false,
+	mw.eventPublisher.PublisherChan <- &messaging.AmqpPublishMessage{
+		RoutingKey: event.Type(),
+		Mandatory:  false,
+		Immediate:  false,
 		Msg: amqp.Publishing{
 			ContentType: "text/json",
 			Body:        []byte(eventBytes),
 		},
 	}
-
 }
 
 func buildCloudEvent(eventType string, eventSource string, payload interface{}) event.Event {

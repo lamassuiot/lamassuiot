@@ -7,10 +7,13 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 
-	lamassucaclient "github.com/lamassuiot/lamassuiot/pkg/ca/client"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/clients"
+	lamassuSDK "github.com/lamassuiot/lamassuiot/pkg/v3/clients"
+	configV3 "github.com/lamassuiot/lamassuiot/pkg/v3/config"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
+
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/transport"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/config"
@@ -55,34 +58,17 @@ func main() {
 	deviceRepo := postgresRepository.NewDevicesPostgresDB(db)
 	logsRepo := postgresRepository.NewLogsPostgresDB(db)
 
-	var caClient lamassucaclient.LamassuCAClient
-	parsedLamassuCAURL, err := url.Parse(config.LamassuCAAddress)
-	if err != nil {
-		log.Fatal("Could not parse CA URL")
-		os.Exit(1)
-	}
+	var lamassuCAClient lamassuSDK.CAClient
 
-	if strings.HasPrefix(config.LamassuCAAddress, "https") {
-		caClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
-			URL:        parsedLamassuCAURL,
-			AuthMethod: clientUtils.AuthMethodMutualTLS,
-			AuthMethodConfig: &clientUtils.MutualTLSConfig{
-				ClientCert: config.CertFile,
-				ClientKey:  config.KeyFile,
-			},
-			CACertificate: config.LamassuCACertFile,
-		})
-		if err != nil {
-			log.Fatal("Could not create LamassuCA client: ", err)
-		}
-	} else {
-		caClient, err = lamassucaclient.NewLamassuCAClient(clientUtils.BaseClientConfigurationuration{
-			URL:        parsedLamassuCAURL,
-			AuthMethod: clientUtils.AuthMethodNone,
-		})
-		if err != nil {
-			log.Fatal("Could not create LamassuCA client: ", err)
-		}
+	lCAClient := helpers.ConfigureLogger(log.TraceLevel, configV3.Trace, "LMS SDK - CA Client")
+
+	caHttpCli, err := clients.BuildHTTPClient(configV3.HTTPClient{}, lCAClient)
+	if err != nil {
+		log.Fatalf("could not build HTTP CA Client: %s", err)
+	}
+	lamassuCAClient = lamassuSDK.NewHttpCAClient(caHttpCli, config.LamassuCAAddress)
+	if err != nil {
+		log.Fatal("Could not create LamassuCA client: ", err)
 	}
 
 	var dmsClient lamassudmsclient.LamassuDMSManagerClient
@@ -91,7 +77,7 @@ func main() {
 		log.Fatal("Could not parse LamassuDMS url: ", err)
 	}
 
-	if strings.HasPrefix(config.LamassuCAAddress, "https") {
+	if strings.HasPrefix(config.LamassuDMSManagerAddress, "https") {
 		dmsClient, err = lamassudmsclient.NewLamassuDMSManagerClientConfig(clientUtils.BaseClientConfigurationuration{
 			URL:        parsedLamassuDMSURL,
 			AuthMethod: clientUtils.AuthMethodMutualTLS,
@@ -99,7 +85,7 @@ func main() {
 				ClientCert: config.CertFile,
 				ClientKey:  config.KeyFile,
 			},
-			CACertificate: config.LamassuCACertFile,
+			CACertificate: config.LamassuDMSManagerCertFile,
 		})
 		if err != nil {
 			log.Fatal("Could not create LamassuDMS client: ", err)
@@ -119,7 +105,7 @@ func main() {
 		log.Fatal("Could not read CA certificate: ", err)
 	}
 
-	svc := service.NewDeviceManagerService(upstreamCA, deviceRepo, logsRepo, statsRepo, config.MinimumReenrollDays, caClient, dmsClient)
+	svc := service.NewDeviceManagerService(upstreamCA, deviceRepo, logsRepo, statsRepo, config.MinimumReenrollDays, lamassuCAClient, dmsClient)
 	dmSvc := svc.(*service.DevicesService)
 
 	svc = service.LoggingMiddleware()(svc)

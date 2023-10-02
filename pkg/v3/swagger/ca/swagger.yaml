@@ -1,0 +1,993 @@
+definitions:
+  big.Int:
+    type: object
+  models.CACertificate:
+    properties:
+      certificate:
+        $ref: '#/definitions/models.X509Certificate'
+      creation_ts:
+        type: string
+      fingerprint:
+        type: string
+      id:
+        type: string
+      issuance_expiration:
+        $ref: '#/definitions/models.Expiration'
+      issuer_metadata:
+        $ref: '#/definitions/models.IssuerCAMetadata'
+      key_metadata:
+        $ref: '#/definitions/models.KeyStrengthMetadata'
+      metadata:
+        additionalProperties: true
+        type: object
+      revocation_timestamp:
+        type: string
+      serial_number:
+        type: string
+      status:
+        $ref: '#/definitions/models.CertificateStatus'
+      subject:
+        $ref: '#/definitions/models.Subject'
+      type:
+        $ref: '#/definitions/models.CAType'
+      valid_from:
+        type: string
+      valid_to:
+        type: string
+    type: object
+  models.CAType:
+    enum:
+    - MANAGED
+    - IMPORTED
+    - EXTERNAL
+    type: string
+    x-enum-varnames:
+    - CATypeManaged
+    - CATypeImported
+    - CATypeExternal
+  models.Certificate:
+    properties:
+      certificate:
+        $ref: '#/definitions/models.X509Certificate'
+      fingerprint:
+        type: string
+      issuer_metadata:
+        $ref: '#/definitions/models.IssuerCAMetadata'
+      key_metadata:
+        $ref: '#/definitions/models.KeyStrengthMetadata'
+      metadata:
+        additionalProperties: true
+        type: object
+      revocation_timestamp:
+        type: string
+      serial_number:
+        type: string
+      status:
+        $ref: '#/definitions/models.CertificateStatus'
+      subject:
+        $ref: '#/definitions/models.Subject'
+      valid_from:
+        type: string
+      valid_to:
+        type: string
+    type: object
+  models.CertificateStatus:
+    enum:
+    - ACTIVE
+    - EXPIRED
+    - REVOKED
+    - NEARING_EXPIRATION
+    - CRITICAL_EXPIRATION
+    type: string
+    x-enum-varnames:
+    - StatusActive
+    - StatusExpired
+    - StatusRevoked
+    - StatusNearingExpiration
+    - StatusCriticalExpiration
+  models.Expiration:
+    properties:
+      duration:
+        $ref: '#/definitions/models.TimeDuration'
+      time:
+        type: string
+      type:
+        type: string
+    type: object
+  models.IssuerCAMetadata:
+    properties:
+      ca_name:
+        type: string
+      serial_number:
+        type: string
+    type: object
+  models.KeyMetadata:
+    properties:
+      bits:
+        type: integer
+      type:
+        type: integer
+    type: object
+  models.KeyStrength:
+    enum:
+    - HIGH
+    - MEDIUM
+    - LOW
+    type: string
+    x-enum-varnames:
+    - KeyStrengthHigh
+    - KeyStrengthMedium
+    - KeyStrengthLow
+  models.KeyStrengthMetadata:
+    properties:
+      bits:
+        type: integer
+      strength:
+        $ref: '#/definitions/models.KeyStrength'
+      type:
+        type: integer
+    type: object
+  models.Subject:
+    properties:
+      common_name:
+        type: string
+      country:
+        type: string
+      locality:
+        type: string
+      organization:
+        type: string
+      organization_unit:
+        type: string
+      state:
+        type: string
+    type: object
+  models.TimeDuration:
+    enum:
+    - -9223372036854775808
+    - 9223372036854775807
+    - 1
+    - 1000
+    - 1000000
+    - 1000000000
+    - 60000000000
+    - 3600000000000
+    - -9223372036854775808
+    - 9223372036854775807
+    - 1
+    - 1000
+    - 1000000
+    - 1000000000
+    - 60000000000
+    - 3600000000000
+    - -9223372036854775808
+    - 9223372036854775807
+    - 1
+    - 1000
+    - 1000000
+    - 1000000000
+    - 60000000000
+    - 3600000000000
+    type: integer
+    x-enum-varnames:
+    - minDuration
+    - maxDuration
+    - Nanosecond
+    - Microsecond
+    - Millisecond
+    - Second
+    - Minute
+    - Hour
+    - minDuration
+    - maxDuration
+    - Nanosecond
+    - Microsecond
+    - Millisecond
+    - Second
+    - Minute
+    - Hour
+    - minDuration
+    - maxDuration
+    - Nanosecond
+    - Microsecond
+    - Millisecond
+    - Second
+    - Minute
+    - Hour
+  models.X509Certificate:
+    properties:
+      authorityKeyId:
+        items:
+          type: integer
+        type: array
+      basicConstraintsValid:
+        description: |-
+          BasicConstraintsValid indicates whether IsCA, MaxPathLen,
+          and MaxPathLenZero are valid.
+        type: boolean
+      crldistributionPoints:
+        description: CRL Distribution Points
+        items:
+          type: string
+        type: array
+      dnsnames:
+        description: |-
+          Subject Alternate Name values. (Note that these values may not be valid
+          if invalid values were contained within a parsed certificate. For
+          example, an element of DNSNames may not be a valid DNS domain name.)
+        items:
+          type: string
+        type: array
+      emailAddresses:
+        items:
+          type: string
+        type: array
+      excludedDNSDomains:
+        items:
+          type: string
+        type: array
+      excludedEmailAddresses:
+        items:
+          type: string
+        type: array
+      excludedIPRanges:
+        items:
+          $ref: '#/definitions/net.IPNet'
+        type: array
+      excludedURIDomains:
+        items:
+          type: string
+        type: array
+      extKeyUsage:
+        description: Sequence of extended key usages.
+        items:
+          type: integer
+        type: array
+      extensions:
+        description: |-
+          Extensions contains raw X.509 extensions. When parsing certificates,
+          this can be used to extract non-critical extensions that are not
+          parsed by this package. When marshaling certificates, the Extensions
+          field is ignored, see ExtraExtensions.
+        items:
+          $ref: '#/definitions/pkix.Extension'
+        type: array
+      extraExtensions:
+        description: |-
+          ExtraExtensions contains extensions to be copied, raw, into any
+          marshaled certificates. Values override any extensions that would
+          otherwise be produced based on the other fields. The ExtraExtensions
+          field is not populated when parsing certificates, see Extensions.
+        items:
+          $ref: '#/definitions/pkix.Extension'
+        type: array
+      ipaddresses:
+        items:
+          items:
+            type: integer
+          type: array
+        type: array
+      isCA:
+        type: boolean
+      issuer:
+        $ref: '#/definitions/pkix.Name'
+      issuingCertificateURL:
+        items:
+          type: string
+        type: array
+      keyUsage:
+        type: integer
+      maxPathLen:
+        description: |-
+          MaxPathLen and MaxPathLenZero indicate the presence and
+          value of the BasicConstraints' "pathLenConstraint".
+
+          When parsing a certificate, a positive non-zero MaxPathLen
+          means that the field was specified, -1 means it was unset,
+          and MaxPathLenZero being true mean that the field was
+          explicitly set to zero. The case of MaxPathLen==0 with MaxPathLenZero==false
+          should be treated equivalent to -1 (unset).
+
+          When generating a certificate, an unset pathLenConstraint
+          can be requested with either MaxPathLen == -1 or using the
+          zero value for both MaxPathLen and MaxPathLenZero.
+        type: integer
+      maxPathLenZero:
+        description: |-
+          MaxPathLenZero indicates that BasicConstraintsValid==true
+          and MaxPathLen==0 should be interpreted as an actual
+          maximum path length of zero. Otherwise, that combination is
+          interpreted as MaxPathLen not being set.
+        type: boolean
+      notBefore:
+        description: Validity bounds.
+        type: string
+      ocspserver:
+        description: RFC 5280, 4.2.2.1 (Authority Information Access)
+        items:
+          type: string
+        type: array
+      permittedDNSDomains:
+        items:
+          type: string
+        type: array
+      permittedDNSDomainsCritical:
+        description: Name constraints
+        type: boolean
+      permittedEmailAddresses:
+        items:
+          type: string
+        type: array
+      permittedIPRanges:
+        items:
+          $ref: '#/definitions/net.IPNet'
+        type: array
+      permittedURIDomains:
+        items:
+          type: string
+        type: array
+      policyIdentifiers:
+        items:
+          items:
+            type: integer
+          type: array
+        type: array
+      publicKey: {}
+      publicKeyAlgorithm:
+        type: integer
+      raw:
+        description: Complete ASN.1 DER content (certificate, signature algorithm
+          and signature).
+        items:
+          type: integer
+        type: array
+      rawIssuer:
+        description: DER encoded Issuer
+        items:
+          type: integer
+        type: array
+      rawSubject:
+        description: DER encoded Subject
+        items:
+          type: integer
+        type: array
+      rawSubjectPublicKeyInfo:
+        description: DER encoded SubjectPublicKeyInfo.
+        items:
+          type: integer
+        type: array
+      rawTBSCertificate:
+        description: Certificate part of raw ASN.1 DER content.
+        items:
+          type: integer
+        type: array
+      serialNumber:
+        $ref: '#/definitions/big.Int'
+      signature:
+        items:
+          type: integer
+        type: array
+      signatureAlgorithm:
+        type: integer
+      subject:
+        $ref: '#/definitions/pkix.Name'
+      subjectKeyId:
+        items:
+          type: integer
+        type: array
+      unhandledCriticalExtensions:
+        description: |-
+          UnhandledCriticalExtensions contains a list of extension IDs that
+          were not (fully) processed when parsing. Verify will fail if this
+          slice is non-empty, unless verification is delegated to an OS
+          library which understands all the critical extensions.
+
+          Users can access these extensions using Extensions and can remove
+          elements from this slice if they believe that they have been
+          handled.
+        items:
+          items:
+            type: integer
+          type: array
+        type: array
+      unknownExtKeyUsage:
+        description: Encountered extended key usages unknown to this package.
+        items:
+          items:
+            type: integer
+          type: array
+        type: array
+      uris:
+        items:
+          $ref: '#/definitions/url.URL'
+        type: array
+      version:
+        type: integer
+    type: object
+  models.X509CertificateRequest:
+    properties:
+      attributes:
+        description: |-
+          Attributes contains the CSR attributes that can parse as
+          pkix.AttributeTypeAndValueSET.
+
+          Deprecated: Use Extensions and ExtraExtensions instead for parsing and
+          generating the requestedExtensions attribute.
+        items:
+          $ref: '#/definitions/pkix.AttributeTypeAndValueSET'
+        type: array
+      dnsnames:
+        description: Subject Alternate Name values.
+        items:
+          type: string
+        type: array
+      emailAddresses:
+        items:
+          type: string
+        type: array
+      extensions:
+        description: |-
+          Extensions contains all requested extensions, in raw form. When parsing
+          CSRs, this can be used to extract extensions that are not parsed by this
+          package.
+        items:
+          $ref: '#/definitions/pkix.Extension'
+        type: array
+      extraExtensions:
+        description: |-
+          ExtraExtensions contains extensions to be copied, raw, into any CSR
+          marshaled by CreateCertificateRequest. Values override any extensions
+          that would otherwise be produced based on the other fields but are
+          overridden by any extensions specified in Attributes.
+
+          The ExtraExtensions field is not populated by ParseCertificateRequest,
+          see Extensions instead.
+        items:
+          $ref: '#/definitions/pkix.Extension'
+        type: array
+      ipaddresses:
+        items:
+          items:
+            type: integer
+          type: array
+        type: array
+      publicKey: {}
+      publicKeyAlgorithm:
+        type: integer
+      raw:
+        description: Complete ASN.1 DER content (CSR, signature algorithm and signature).
+        items:
+          type: integer
+        type: array
+      rawSubject:
+        description: DER encoded Subject.
+        items:
+          type: integer
+        type: array
+      rawSubjectPublicKeyInfo:
+        description: DER encoded SubjectPublicKeyInfo.
+        items:
+          type: integer
+        type: array
+      rawTBSCertificateRequest:
+        description: Certificate request info part of raw ASN.1 DER content.
+        items:
+          type: integer
+        type: array
+      signature:
+        items:
+          type: integer
+        type: array
+      signatureAlgorithm:
+        type: integer
+      subject:
+        $ref: '#/definitions/pkix.Name'
+      uris:
+        items:
+          $ref: '#/definitions/url.URL'
+        type: array
+      version:
+        type: integer
+    type: object
+  net.IPNet:
+    properties:
+      ip:
+        description: network number
+        items:
+          type: integer
+        type: array
+      mask:
+        description: network mask
+        items:
+          type: integer
+        type: array
+    type: object
+  pkix.AttributeTypeAndValue:
+    properties:
+      type:
+        items:
+          type: integer
+        type: array
+      value: {}
+    type: object
+  pkix.AttributeTypeAndValueSET:
+    properties:
+      type:
+        items:
+          type: integer
+        type: array
+      value:
+        items:
+          items:
+            $ref: '#/definitions/pkix.AttributeTypeAndValue'
+          type: array
+        type: array
+    type: object
+  pkix.Extension:
+    properties:
+      critical:
+        type: boolean
+      id:
+        items:
+          type: integer
+        type: array
+      value:
+        items:
+          type: integer
+        type: array
+    type: object
+  pkix.Name:
+    properties:
+      country:
+        items:
+          type: string
+        type: array
+      extraNames:
+        description: |-
+          ExtraNames contains attributes to be copied, raw, into any marshaled
+          distinguished names. Values override any attributes with the same OID.
+          The ExtraNames field is not populated when parsing, see Names.
+        items:
+          $ref: '#/definitions/pkix.AttributeTypeAndValue'
+        type: array
+      locality:
+        items:
+          type: string
+        type: array
+      names:
+        description: |-
+          Names contains all parsed attributes. When parsing distinguished names,
+          this can be used to extract non-standard attributes that are not parsed
+          by this package. When marshaling to RDNSequences, the Names field is
+          ignored, see ExtraNames.
+        items:
+          $ref: '#/definitions/pkix.AttributeTypeAndValue'
+        type: array
+      serialNumber:
+        type: string
+      streetAddress:
+        items:
+          type: string
+        type: array
+    type: object
+  resources.CreateCABody:
+    properties:
+      ca_expiration:
+        $ref: '#/definitions/models.Expiration'
+      ca_type:
+        $ref: '#/definitions/models.CAType'
+      issuance_expiration:
+        $ref: '#/definitions/models.Expiration'
+      key_metadata:
+        $ref: '#/definitions/models.KeyMetadata'
+      subject:
+        $ref: '#/definitions/models.Subject'
+    type: object
+  resources.ImportCABody:
+    properties:
+      ca:
+        $ref: '#/definitions/models.X509Certificate'
+      ca_chain:
+        items:
+          $ref: '#/definitions/models.X509Certificate'
+        type: array
+      ca_type:
+        $ref: '#/definitions/models.CAType'
+      issuance_expiration:
+        $ref: '#/definitions/models.Expiration'
+      private_key:
+        description: b64 from PEM
+        type: string
+    type: object
+  resources.SignCertificateBody:
+    properties:
+      csr:
+        $ref: '#/definitions/models.X509CertificateRequest'
+      sign_verbatim:
+        type: boolean
+      subject:
+        $ref: '#/definitions/models.Subject'
+    type: object
+  resources.UpdateCAMetadataBody:
+    properties:
+      metadata:
+        additionalProperties: true
+        type: object
+    type: object
+  resources.UpdateCertificateStatusBody:
+    properties:
+      status:
+        $ref: '#/definitions/models.CertificateStatus'
+    type: object
+  url.URL:
+    properties:
+      forceQuery:
+        description: append a query ('?') even if RawQuery is empty
+        type: boolean
+      fragment:
+        description: fragment for references, without '#'
+        type: string
+      host:
+        description: host or host:port
+        type: string
+      omitHost:
+        description: do not emit empty host (authority)
+        type: boolean
+      opaque:
+        description: encoded opaque data
+        type: string
+      path:
+        description: path (relative paths may omit leading slash)
+        type: string
+      rawFragment:
+        description: encoded fragment hint (see EscapedFragment method)
+        type: string
+      rawPath:
+        description: encoded path hint (see EscapedPath method)
+        type: string
+      rawQuery:
+        description: encoded query values, without '?'
+        type: string
+      scheme:
+        type: string
+      user:
+        allOf:
+        - $ref: '#/definitions/url.Userinfo'
+        description: username and password information
+    type: object
+  url.Userinfo:
+    type: object
+info:
+  contact: {}
+paths:
+  /cas:
+    get:
+      consumes:
+      - application/json
+      description: Get All CAs
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.CACertificate'
+            type: array
+        "500":
+          description: Internal Server Error
+      security:
+      - OAuth2Password: []
+      summary: Get All CAs
+    post:
+      consumes:
+      - application/json
+      description: Create CA
+      parameters:
+      - description: CA Info
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/resources.CreateCABody'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.CACertificate'
+        "400":
+          description: Struct Validation error || CA type inconsistent || Issuance
+            expiration greater than CA expiration || Incompatible expiration time
+            ref
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+      security:
+      - OAuth2Password: []
+      summary: Create CA
+  /cas/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete CA
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+        "400":
+          description: Struct Validation error || CA Status inconsistent
+          schema:
+            type: string
+        "404":
+          description: CA not found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+      security:
+      - OAuth2Password: []
+      summary: Delete CA
+    get:
+      consumes:
+      - application/json
+      description: Get CA By ID
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.CACertificate'
+        "400":
+          description: Struct Validation error
+          schema:
+            type: string
+        "404":
+          description: CA not found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+      security:
+      - OAuth2Password: []
+      summary: Get CA By ID
+  /cas/{id}/certificates:
+    get:
+      consumes:
+      - application/json
+      description: Get Certificates by CA
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Certificate'
+            type: array
+        "400":
+          description: Struct Validation error
+          schema:
+            type: string
+        "404":
+          description: CA not found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+      security:
+      - OAuth2Password: []
+      summary: Get Certificates by CA
+  /cas/{id}/certificates/{sn}:
+    get:
+      consumes:
+      - application/json
+      description: Get Certificate by Serial Number
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Certificate'
+        "400":
+          description: Struct Validation error
+          schema:
+            type: string
+        "404":
+          description: Certificate not found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+      security:
+      - OAuth2Password: []
+      summary: Get Certificate by Serial Number
+  /cas/{id}/certificates/sign:
+    post:
+      consumes:
+      - application/json
+      description: Sign Certificate
+      parameters:
+      - description: Sign Certificate Info
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/resources.SignCertificateBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Certificate'
+        "400":
+          description: Struct Validation error || CA Status inconsistent
+          schema:
+            type: string
+        "404":
+          description: CA not found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+      security:
+      - OAuth2Password: []
+      summary: Sign Certificate
+  /cas/{id}/metadata:
+    put:
+      consumes:
+      - application/json
+      description: Update CA Metadata
+      parameters:
+      - description: Update CA Metadata Info
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/resources.UpdateCAMetadataBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.CACertificate'
+        "400":
+          description: Struct Validation error
+          schema:
+            type: string
+        "404":
+          description: CA not found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+      security:
+      - OAuth2Password: []
+      summary: Update CA Metadata
+  /cas/{id}/revoke:
+    post:
+      consumes:
+      - application/json
+      description: Revoke CA
+      parameters:
+      - description: Revoke CA
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/resources.SignCertificateBody'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+        "400":
+          description: Struct Validation error || CA already revoked
+          schema:
+            type: string
+        "404":
+          description: CA not found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+      security:
+      - OAuth2Password: []
+      summary: Revoke CA
+  /cas/import:
+    post:
+      consumes:
+      - application/json
+      description: Import CA
+      parameters:
+      - description: CA Info
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/resources.ImportCABody'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.CACertificate'
+        "400":
+          description: Struct Validation error || CA type inconsistent || Issuance
+            expiration greater than CA expiration || Incompatible expiration time
+            ref || CA and the provided key dont match
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+      security:
+      - OAuth2Password: []
+      summary: Import CA
+  /certificates:
+    get:
+      consumes:
+      - application/json
+      description: Update CA Metadata
+      parameters:
+      - description: Update CA Metadata Info
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/resources.UpdateCAMetadataBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Certificate'
+            type: array
+        "500":
+          description: Internal Server Error
+      security:
+      - OAuth2Password: []
+      summary: Get Certificates
+  /certificates/{sn}/status:
+    put:
+      consumes:
+      - application/json
+      description: Update Certificate Status
+      parameters:
+      - description: Update Certificate status
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/resources.UpdateCertificateStatusBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Certificate'
+        "400":
+          description: Struct Validation error || New status transition not allowed
+            for certificate
+          schema:
+            type: string
+        "404":
+          description: Certificate not found
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+      security:
+      - OAuth2Password: []
+      summary: Update Certificate Status
+swagger: "2.0"

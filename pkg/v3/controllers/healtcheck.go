@@ -15,7 +15,7 @@ func NewHealthCheckRoute(info models.APIServiceInfo) *hcheckRoute {
 	}
 }
 
-func (r *hcheckRoute) HealtCheck(ctx *gin.Context) {
+func (r *hcheckRoute) HealthCheck(ctx *gin.Context) {
 	ctx.JSON(200, gin.H{
 		"health":     true,
 		"version":    r.info.Version,

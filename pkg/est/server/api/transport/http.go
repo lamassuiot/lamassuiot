@@ -185,23 +185,22 @@ func decodeEnrollRequest(ctx context.Context, r *http.Request) (request interfac
 	ClientCert := r.Header.Get("X-Forwarded-Client-Cert")
 
 	if len(ClientCert) != 0 {
-		certificate, err := getCertificateFromHeader(r.Header)
+		certificates, err := getCertificateFromHeader(r.Header)
 		if err != nil {
 			return nil, err
 		}
 		return endpoint.EnrollRequest{
 			Csr:         csr,
-			Crt:         certificate,
+			CrtChain:    certificates,
 			Aps:         aps,
 			DmsName:     dmsName,
 			PemResponse: pemMode,
 		}, nil
 
 	} else if len(r.TLS.PeerCertificates) != 0 {
-		cert := r.TLS.PeerCertificates[0]
 		return endpoint.EnrollRequest{
 			Csr:         csr,
-			Crt:         cert,
+			CrtChain:    r.TLS.PeerCertificates,
 			Aps:         aps,
 			DmsName:     dmsName,
 			PemResponse: pemMode,
@@ -243,14 +242,14 @@ func decodeReenrollRequest(ctx context.Context, r *http.Request) (request interf
 
 	ClientCert := r.Header.Get("X-Forwarded-Client-Cert")
 	if len(ClientCert) != 0 {
-		certificate, err := getCertificateFromHeader(r.Header)
+		certificates, err := getCertificateFromHeader(r.Header)
 		if err != nil {
 			return nil, err
 		}
 		return endpoint.ReenrollRequest{
 			Aps:         aps,
 			Csr:         csr,
-			Crt:         certificate,
+			Crt:         certificates[0],
 			PemResponse: pemMode,
 		}, nil
 	} else if len(r.TLS.PeerCertificates) != 0 {
@@ -298,14 +297,14 @@ func decodeServerkeygenRequest(ctx context.Context, r *http.Request) (request in
 	dmsName := r.Header.Get("x-dms-name")
 	clientCert := r.Header.Get("X-Forwarded-Client-Cert")
 	if len(clientCert) != 0 {
-		certificate, err := getCertificateFromHeader(r.Header)
+		certificates, err := getCertificateFromHeader(r.Header)
 		if err != nil {
 			return nil, err
 		}
 
 		return endpoint.ServerKeyGenRequest{
 			Csr:     csr,
-			Crt:     certificate,
+			Crt:     certificates[0],
 			Aps:     aps,
 			DmsName: dmsName,
 		}, nil
@@ -468,7 +467,7 @@ func codeFrom(err error) int {
 	}
 }
 
-func getCertificateFromHeader(h http.Header) (*x509.Certificate, error) {
+func getCertificateFromHeader(h http.Header) ([]*x509.Certificate, error) {
 	forwardedClientCertificate := h.Get("X-Forwarded-Client-Cert")
 	if len(forwardedClientCertificate) != 0 {
 		splits := strings.Split(forwardedClientCertificate, ";")
@@ -477,16 +476,25 @@ func getCertificateFromHeader(h http.Header) (*x509.Certificate, error) {
 			if len(splitedKeyVal) == 2 {
 				key := splitedKeyVal[0]
 				val := splitedKeyVal[1]
-				if key == "Cert" {
+				if key == "Chain" {
 					cert := strings.Replace(val, "\"", "", -1)
 					decodedCert, _ := url.QueryUnescape(cert)
-					block, _ := pem.Decode([]byte(decodedCert))
-					certificate, err := x509.ParseCertificate(block.Bytes)
+					var certs []byte
+					restBytes := []byte(decodedCert)
+					var block *pem.Block
+					for {
+						block, restBytes = pem.Decode(restBytes)
+						certs = append(certs, block.Bytes...)
+						if len(restBytes) == 0 {
+							break
+						}
+					}
+					certificates, err := x509.ParseCertificates(certs)
 					if err != nil {
 						return nil, ErrMalformedCert()
 					}
 
-					return certificate, nil
+					return certificates, nil
 				}
 			}
 		}
