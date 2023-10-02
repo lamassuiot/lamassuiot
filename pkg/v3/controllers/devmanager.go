@@ -53,7 +53,7 @@ func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -89,7 +89,7 @@ func (r *devManagerHttpRoutes) GetDeviceByID(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -102,7 +102,7 @@ func (r *devManagerHttpRoutes) GetDeviceByID(ctx *gin.Context) {
 			ctx.JSON(400, gin.H{"err": err.Error()})
 			return
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 			return
 		}
 	}
@@ -142,7 +142,7 @@ func (r *devManagerHttpRoutes) UpdateIdentitySlot(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -172,7 +172,7 @@ func (r *devManagerHttpRoutes) DecommissionDevice(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 

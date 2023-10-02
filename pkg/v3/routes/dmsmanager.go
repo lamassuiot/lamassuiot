@@ -22,5 +22,5 @@ func NewDMSManagerHTTPLayer(logger *logrus.Entry, svc services.DMSManagerService
 	rv1.GET("/dms/:id", routes.GetDMSByID)
 	rv1.PUT("/dms/:id/id-profile", routes.UpdateIdentityProfile)
 
-	return newHttpRouter(logger, router, httpServerCfg, apiInfo)
+	return nil
 }

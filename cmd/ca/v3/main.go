@@ -75,7 +75,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	svc, err := services.NeCAService(services.CAServiceBuilder{
+	svc, err := services.NewCAService(services.CAServiceBuilder{
 		Logger:               lSvc,
 		CryptoEngines:        engines,
 		CAStorage:            caStorage,
@@ -101,7 +101,8 @@ func main() {
 	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
 	caSvc.SetService(svc)
 
-	err = routes.NewCAHTTPLayer(lHttp, svc, conf.Server, models.APIServiceInfo{
+	router := routes.NewCAHTTPLayer(lHttp, svc)
+	routes.RunHttpRouter(lHttp, router, conf.Server, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,

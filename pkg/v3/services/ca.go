@@ -87,7 +87,7 @@ type CAServiceBuilder struct {
 	CryptoMonitoringConf config.CryptoMonitoring
 }
 
-func NeCAService(builder CAServiceBuilder) (CAService, error) {
+func NewCAService(builder CAServiceBuilder) (CAService, error) {
 	validate = validator.New()
 
 	lCA = builder.Logger
@@ -507,12 +507,6 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 			EngineID: engineID,
 		},
 	}
-	lFunc.Debugf("insert CA %s certificate %s in storage engine", ca.ID, ca.Certificate.SerialNumber)
-	_, err = svc.certStorage.Insert(ctx, &ca.Certificate)
-	if err != nil {
-		lFunc.Errorf("Could not insert CA %s certificate %s in storage engine: %s", ca.ID, ca.Certificate.SerialNumber, err)
-		return nil, err
-	}
 
 	lFunc.Debugf("insert CA %s in storage engine", caID)
 	return svc.caStorage.Insert(ctx, ca)
@@ -547,6 +541,22 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 		return nil, errs.ErrValidateBadRequest
 	}
 
+	caID := input.ID
+	if caID == "" {
+		caID = goid.NewV4UUID().String()
+	}
+
+	exists, _, err := svc.caStorage.SelectExistsByID(ctx, caID)
+	if err != nil {
+		lFunc.Errorf("could not check if CA %s exists: %s", caID, err)
+		return nil, err
+	}
+
+	if exists {
+		lFunc.Errorf("cannot create duplicate CA. CA with ID '%s' already exists:", caID)
+		return nil, errs.ErrCAAlreadyExists
+	}
+
 	lFunc.Debugf("creating CA with common name: %s", input.Subject.CommonName)
 	issuedCA, err := svc.issueCA(ctx, issueCAInput{
 		KeyMetadata:  input.KeyMetadata,
@@ -566,12 +576,8 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 	} else {
 		engineID = input.EngineID
 	}
-	caCert := issuedCA.Certificate
 
-	caID := input.ID
-	if caID == "" {
-		caID = goid.NewV4UUID().String()
-	}
+	caCert := issuedCA.Certificate
 
 	ca := models.CACertificate{
 		ID: caID,
@@ -1267,10 +1273,6 @@ func createCAValidation(sl validator.StructLevel) {
 func importCAValidation(sl validator.StructLevel) {
 	ca := sl.Current().Interface().(ImportCAInput)
 	caCert := ca.CACertificate
-	if !helpers.ValidateCAExpiration(ca.IssuanceExpiration, caCert.NotAfter) {
-		// lFunc.Errorf("issuance expiration is greater than the CA expiration")
-		sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
-	}
 
 	if ca.CAType != models.CertificateTypeExternal {
 		if !helpers.ValidateCAExpiration(ca.IssuanceExpiration, caCert.NotAfter) {

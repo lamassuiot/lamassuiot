@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/lamassuiot/lamassuiot/pkg/v3/errs"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
@@ -96,12 +97,21 @@ func (cli *httpCAClient) GetCABySerialNumber(ctx context.Context, input services
 
 func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas", resources.CreateCABody{
+		ID:                 input.ID,
 		Subject:            input.Subject,
 		KeyMetadata:        input.KeyMetadata,
 		IssuanceExpiration: input.IssuanceExpiration,
 		CAExpiration:       input.CAExpiration,
 		EngineID:           input.EngineID,
-	}, map[int][]error{})
+	}, map[int][]error{
+		400: {
+			errs.ErrCAIncompatibleExpirationTimeRef,
+			errs.ErrCAIssuanceExpiration,
+		},
+		409: {
+			errs.ErrCAAlreadyExists,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}

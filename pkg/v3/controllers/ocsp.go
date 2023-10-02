@@ -37,7 +37,17 @@ func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 	var err error
 	switch ctx.Request.Method {
 	case "GET":
-		base64Request, err := url.QueryUnescape(ctx.Request.URL.Path)
+		type uriParams struct {
+			OCSPRequest string `uri:"ocsp_request" binding:"required"`
+		}
+
+		var params uriParams
+		if err := ctx.ShouldBindUri(&params); err != nil {
+			ctx.JSON(400, gin.H{"err": err.Error()})
+			return
+		}
+
+		base64Request, err := url.QueryUnescape(params.OCSPRequest)
 		if err != nil {
 			r.logger.Errorf("could not parse and unescape url: %s", err)
 			ctx.AbortWithError(400, err)
@@ -109,7 +119,7 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 

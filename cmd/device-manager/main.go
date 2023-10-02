@@ -9,7 +9,10 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/lamassuiot/lamassuiot/pkg/v3/clients"
 	lamassuSDK "github.com/lamassuiot/lamassuiot/pkg/v3/clients"
+	configV3 "github.com/lamassuiot/lamassuiot/pkg/v3/config"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
 	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/transport"
@@ -56,7 +59,14 @@ func main() {
 	logsRepo := postgresRepository.NewLogsPostgresDB(db)
 
 	var lamassuCAClient lamassuSDK.CAClient
-	lamassuCAClient = lamassuSDK.NewHttpCAClient(http.DefaultClient, config.LamassuCAAddress)
+
+	lCAClient := helpers.ConfigureLogger(log.TraceLevel, configV3.Trace, "LMS SDK - CA Client")
+
+	caHttpCli, err := clients.BuildHTTPClient(configV3.HTTPClient{}, lCAClient)
+	if err != nil {
+		log.Fatalf("could not build HTTP CA Client: %s", err)
+	}
+	lamassuCAClient = lamassuSDK.NewHttpCAClient(caHttpCli, config.LamassuCAAddress)
 	if err != nil {
 		log.Fatal("Could not create LamassuCA client: ", err)
 	}
@@ -67,7 +77,7 @@ func main() {
 		log.Fatal("Could not parse LamassuDMS url: ", err)
 	}
 
-	if strings.HasPrefix(config.LamassuCAAddress, "https") {
+	if strings.HasPrefix(config.LamassuDMSManagerAddress, "https") {
 		dmsClient, err = lamassudmsclient.NewLamassuDMSManagerClientConfig(clientUtils.BaseClientConfigurationuration{
 			URL:        parsedLamassuDMSURL,
 			AuthMethod: clientUtils.AuthMethodMutualTLS,
@@ -75,7 +85,7 @@ func main() {
 				ClientCert: config.CertFile,
 				ClientKey:  config.KeyFile,
 			},
-			CACertificate: config.LamassuCACertFile,
+			CACertificate: config.LamassuDMSManagerCertFile,
 		})
 		if err != nil {
 			log.Fatal("Could not create LamassuDMS client: ", err)

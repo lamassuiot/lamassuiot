@@ -9,7 +9,6 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
-	b64 "encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -191,7 +190,7 @@ func (vaultCli *VaultKV2Engine) CreateRSAPrivateKey(keySize int, keyID string) (
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(rsaKey),
 	})
-	keyBase64 := b64.StdEncoding.EncodeToString([]byte(keyPem))
+	keyBase64 := base64.StdEncoding.EncodeToString([]byte(keyPem))
 
 	var keyMap = map[string]interface{}{
 		"key": keyBase64,
@@ -224,7 +223,7 @@ func (vaultCli *VaultKV2Engine) CreateECDSAPrivateKey(c elliptic.Curve, keyID st
 
 	keyPem := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
 
-	keyBase64 := b64.StdEncoding.EncodeToString([]byte(keyPem))
+	keyBase64 := base64.StdEncoding.EncodeToString([]byte(keyPem))
 
 	var keyMap = map[string]interface{}{
 		"key": keyBase64,

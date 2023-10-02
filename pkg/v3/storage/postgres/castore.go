@@ -57,7 +57,7 @@ func (db *PostgresCAStore) SelectAll(ctx context.Context, exhaustiveRun bool, ap
 
 func (db *PostgresCAStore) SelectByCommonName(ctx context.Context, commonName string, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	return db.querier.SelectAll(queryParams, []gormWhereParams{
-		{query: "subject.common_name = ? ", extraArgs: []any{commonName}},
+		{query: "subject_common_name = ? ", extraArgs: []any{commonName}},
 	}, exhaustiveRun, applyFunc)
 }
 

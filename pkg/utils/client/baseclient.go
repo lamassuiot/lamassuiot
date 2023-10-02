@@ -9,11 +9,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 
+	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -43,11 +44,13 @@ func NewBaseClient(config BaseClientConfigurationuration) (BaseClient, error) {
 	if config.URL.Scheme == "https" {
 		certPool := x509.NewCertPool()
 		if !config.Insecure {
-			caPem, err := ioutil.ReadFile(config.CACertificate)
+			caPem, err := os.ReadFile(config.CACertificate)
 			if err != nil {
+				logrus.Errorf("could not load val CA")
 				return nil, err
 			}
 
+			logrus.Debug("read TLS Val CA")
 			certPool.AppendCertsFromPEM(caPem)
 		}
 
@@ -60,12 +63,14 @@ func NewBaseClient(config BaseClientConfigurationuration) (BaseClient, error) {
 	var httpClient *http.Client
 
 	if config.AuthMethod == AuthMethodMutualTLS {
+		logrus.Debug("configuring mTLS")
 		authConfig, ok := config.AuthMethodConfig.(*MutualTLSConfig)
 		if !ok {
 			return nil, errors.New("invalid client configuration, missing AuthMethodConfig")
 		}
 		cert, err := tls.LoadX509KeyPair(authConfig.ClientCert, authConfig.ClientKey)
 		if err != nil {
+			logrus.Errorf("could not load mTLS keys")
 			return nil, err
 		}
 		tr.TLSClientConfig.InsecureSkipVerify = true
@@ -78,7 +83,7 @@ func NewBaseClient(config BaseClientConfigurationuration) (BaseClient, error) {
 
 		authCertPool := x509.NewCertPool()
 		if !authConfig.Insecure {
-			authCAPem, err := ioutil.ReadFile(config.CACertificate)
+			authCAPem, err := os.ReadFile(config.CACertificate)
 			if err != nil {
 				return nil, err
 			}

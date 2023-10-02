@@ -642,12 +642,18 @@ func (s *DevicesService) CACerts(ctx context.Context, aps string) ([]*x509.Certi
 }
 
 func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateRequest, clientCertificateChain []*x509.Certificate, aps string) (*x509.Certificate, error) {
-	outGetCA, err := s.caClient.GetCAByID(ctx, serviceV3.GetCAByIDInput{
-		CAID: string(models.CALocalRA),
+	lras := []*models.CACertificate{}
+	_, err := s.caClient.GetCAsByCommonName(ctx, serviceV3.GetCAsByCommonNameInput{
+		CommonName:    string(models.CALocalRA),
+		ExhaustiveRun: false,
+		ApplyFunc: func(cert *models.CACertificate) {
+			derefCA := *cert
+			lras = append(lras, &derefCA)
+		},
 	})
 	if err != nil {
 		return nil, &estErrors.GenericError{
-			Message:    "CA not found",
+			Message:    "Local Registration CA not found",
 			StatusCode: 404,
 		}
 	}
@@ -660,8 +666,8 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 	}
 
 	if dms.DeviceManufacturingService.CloudDMS {
-		err = s.verifyCertificate(clientCertificateChain[0], s.upstreamCACert, false)
-		if err != nil {
+		valid := verifyChain([]*x509.Certificate{clientCertificateChain[0], s.upstreamCACert})
+		if !valid {
 			log.Debug("the presented client certificate was not issued by lms-lra nor by the Upstream CA")
 			return nil, &estErrors.GenericError{
 				Message:    "client certificate is not valid: " + err.Error(),
@@ -669,8 +675,15 @@ func (s *DevicesService) Enroll(ctx context.Context, csr *x509.CertificateReques
 			}
 		}
 	} else {
-		err = s.verifyCertificate(clientCertificateChain[0], (*x509.Certificate)(outGetCA.Certificate.Certificate), false)
-		if err != nil {
+		if len(lras) == 0 {
+			return nil, &estErrors.GenericError{
+				Message:    "no LRAs. Contact admin",
+				StatusCode: 500,
+			}
+		}
+
+		valid := verifyChain([]*x509.Certificate{clientCertificateChain[0], (*x509.Certificate)(lras[0].Certificate.Certificate)})
+		if !valid {
 			log.Debug("the presented client certificate was not issued by lms-lra.")
 			return nil, &estErrors.GenericError{
 				Message:    "client certificate is not valid: " + err.Error(),
@@ -864,8 +877,8 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 		}
 	}
 	if dms.DeviceManufacturingService.CloudDMS {
-		err = s.verifyCertificate(cert, s.upstreamCACert, false)
-		if err != nil {
+		valid := verifyChain([]*x509.Certificate{cert, s.upstreamCACert})
+		if !valid {
 			s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeCritical, "Slot Reneweal process Failed", "Client certificate is not valid")
 			return nil, &estErrors.GenericError{
 				Message:    "client certificate is not valid: " + err.Error(),
@@ -873,8 +886,8 @@ func (s *DevicesService) Reenroll(ctx context.Context, csr *x509.CertificateRequ
 			}
 		}
 	} else {
-		err = s.verifyCertificate(cert, (*x509.Certificate)(outGetCA.Certificate.Certificate), false)
-		if err != nil {
+		valid := verifyChain([]*x509.Certificate{cert, (*x509.Certificate)(outGetCA.Certificate.Certificate)})
+		if !valid {
 			s.logsRepo.InsertSlotLog(ctx, deviceID, slotID, api.LogTypeCritical, "Slot Reneweal process Failed", "Client certificate is not valid")
 			return nil, &estErrors.GenericError{
 				Message:    "client certificate is not valid: " + err.Error(),
@@ -936,31 +949,30 @@ func (s *DevicesService) ServerKeyGen(ctx context.Context, csr *x509.Certificate
 // 													UTILS
 // -------------------------------------------------------------------------------------------------------------------
 
-func (s *DevicesService) verifyCertificate(clientCertificate *x509.Certificate, caCertificate *x509.Certificate, allowExpiredRenewal bool) error {
-	clientCAs := x509.NewCertPool()
-	clientCAs.AddCert(caCertificate)
+func verifyChain(chain []*x509.Certificate) bool {
+	lFunc := log.WithField("svc", "Verify Chain")
 
-	opts := x509.VerifyOptions{
-		Roots:     clientCAs,
-		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-	}
-	cert, _ := s.caClient.GetCertificateBySerialNumber(context.Background(), serviceV3.GetCertificatesBySerialNumberInput{
-		SerialNumber: utils.InsertNth(utils.ToHexInt(clientCertificate.SerialNumber), 2),
-	})
-	_, err := clientCertificate.Verify(opts)
-	if err != nil {
-		if cert.Status != models.StatusExpired && !allowExpiredRenewal {
-			return errors.New("could not verify client certificate: " + err.Error())
-		} else if cert.Status == models.StatusExpired && !allowExpiredRenewal {
-			return errors.New("could not verify client certificate: " + err.Error())
+	for i := 0; i < len(chain)-1; i++ {
+		lFunc.Debugf("chain validation round %d/%d", i+1, len(chain)-1)
+		roots := x509.NewCertPool()
+		roots.AddCert(chain[i+1])
+
+		lFunc.Debugf("root certificate has CN %s and issuer CN %s", chain[i+1].Subject.CommonName, chain[i+1].Issuer.CommonName)
+		lFunc.Debugf("certificate has CN %s and issuer CN %s", chain[i].Subject.CommonName, chain[i].Issuer.CommonName)
+
+		leaf := chain[i]
+
+		opts := x509.VerifyOptions{
+			Roots: roots,
+		}
+
+		if _, err := leaf.Verify(opts); err != nil {
+			log.Debugf("chain validation err: %s", err)
+			return false
 		}
 	}
 
-	if cert.Status == models.StatusRevoked {
-		return errors.New("certificate status is: " + string(cert.Status))
-	}
-
-	return nil
+	return true
 }
 
 func (s *DevicesService) generateCSR(csr *x509.CertificateRequest, key interface{}) (*x509.CertificateRequest, error) {

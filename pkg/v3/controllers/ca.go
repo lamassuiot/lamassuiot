@@ -31,7 +31,7 @@ func (r *caHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -69,15 +69,17 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAType:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAIssuanceExpiration:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAIncompatibleExpirationTimeRef:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrCAAlreadyExists:
+			ctx.JSON(409, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 		return
 	}
@@ -90,7 +92,7 @@ func (r *caHttpRoutes) GetStats(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -144,6 +146,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 
 	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
 	ca, err := r.svc.ImportCA(funCtx, services.ImportCAInput{
+		ID:                 requestBody.ID,
 		IssuanceExpiration: requestBody.IssuanceExpiration,
 		CAType:             requestBody.CAType,
 		CACertificate:      requestBody.CACertificate,
@@ -155,17 +158,17 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAType:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAIssuanceExpiration:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAIncompatibleExpirationTimeRef:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAValidCertAndPrivKey:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -197,7 +200,7 @@ func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -209,11 +212,11 @@ func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err})
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -230,7 +233,7 @@ func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -250,7 +253,7 @@ func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -271,7 +274,7 @@ func (r *caHttpRoutes) GetCABySerialNumber(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -283,9 +286,9 @@ func (r *caHttpRoutes) GetCABySerialNumber(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err})
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -320,7 +323,7 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -351,7 +354,7 @@ func (r *caHttpRoutes) GetCAByID(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -363,11 +366,11 @@ func (r *caHttpRoutes) GetCAByID(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err})
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -395,13 +398,13 @@ func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err})
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAStatus:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -417,7 +420,7 @@ func (r *caHttpRoutes) UpdateCAStatus(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -437,13 +440,13 @@ func (r *caHttpRoutes) UpdateCAStatus(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err})
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrCAAlreadyRevoked:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -469,7 +472,7 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -481,11 +484,11 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		case errs.ErrCertificateNotFound:
-			ctx.JSON(404, gin.H{"err": err})
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -522,7 +525,7 @@ func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -539,7 +542,7 @@ func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
 func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 	var expirationQueryParams resources.GetCertificatesByExpirationDateQueryParams
 	if err := ctx.BindQuery(&expirationQueryParams); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -564,7 +567,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -597,7 +600,7 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -618,11 +621,11 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err})
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -654,7 +657,7 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -674,13 +677,13 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err})
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAStatus:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -696,7 +699,7 @@ func (r *caHttpRoutes) SignatureSign(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -722,9 +725,9 @@ func (r *caHttpRoutes) SignatureSign(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err})
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -742,7 +745,7 @@ func (r *caHttpRoutes) SignatureVerify(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -775,9 +778,9 @@ func (r *caHttpRoutes) SignatureVerify(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err})
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -798,7 +801,7 @@ func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -821,13 +824,13 @@ func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		case errs.ErrCertificateNotFound:
-			ctx.JSON(404, gin.H{"err": err})
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrCertificateStatusTransitionNotAllowed:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
@@ -859,7 +862,7 @@ func (r *caHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -879,13 +882,13 @@ func (r *caHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		case errs.ErrCertificateNotFound:
-			ctx.JSON(404, gin.H{"err": err})
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrCertificateStatusTransitionNotAllowed:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err})
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
-			ctx.JSON(500, gin.H{"err": err})
+			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
 
 		return
