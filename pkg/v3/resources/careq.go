@@ -7,6 +7,7 @@ import (
 )
 
 type CreateCABody struct {
+	ID                 string             `json:"id"`
 	Subject            models.Subject     `json:"subject"`
 	KeyMetadata        models.KeyMetadata `json:"key_metadata"`
 	CAExpiration       models.Expiration  `json:"ca_expiration"`
@@ -47,7 +48,8 @@ type SignatureVerifyBody struct {
 }
 
 type UpdateCertificateStatusBody struct {
-	NewStatus models.CertificateStatus `json:"status"`
+	NewStatus        models.CertificateStatus `json:"status"`
+	RevocationReason models.RevocationReason  `json:"revocation_reason"`
 }
 
 type UpdateCertificateMetadataBody struct {

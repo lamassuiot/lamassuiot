@@ -34,7 +34,7 @@ func NewCAHTTPLayer(logger *logrus.Entry, svc services.CAService, httpServerCfg 
 	rv1.GET("/cas/cn/:cn", routes.GetCAsByCommonName)
 
 	rv1.PUT("/cas/:id/metadata", routes.UpdateCAMetadata)
-	rv1.POST("/cas/:id/revoke", routes.RevokeCA)
+	rv1.POST("/cas/:id/status", routes.UpdateCAStatus)
 	rv1.GET("/cas/:id/certificates", routes.GetCertificatesByCA)
 	rv1.GET("/cas/:id/certificates/status/:status", routes.GetCertificatesByStatus)
 	rv1.POST("/cas/:id/certificates/sign", routes.SignCertificate)
@@ -49,7 +49,7 @@ func NewCAHTTPLayer(logger *logrus.Entry, svc services.CAService, httpServerCfg 
 	rv1.PUT("/certificates/:sn/status", routes.UpdateCertificateStatus)
 
 	rv1.GET("/engines", routes.GetCryptoEngineProvider)
-	rv1.GET("/stats", routes.GetCryptoEngineProvider)
+	rv1.GET("/stats", routes.GetStats)
 
 	rv1.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	return newHttpRouter(logger, router, httpServerCfg, apiInfo)

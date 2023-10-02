@@ -8,6 +8,18 @@ import (
 	"github.com/spf13/viper"
 )
 
+type Password string
+
+func (p Password) MarshalText() ([]byte, error) {
+	return []byte("*************"), nil
+}
+
+func (p *Password) UnmarshalText(text []byte) (err error) {
+	pw := string(text)
+	p = (*Password)(&pw)
+	return nil
+}
+
 type BaseConfig struct {
 	// Defines logging options
 	Logs struct {
@@ -64,15 +76,15 @@ type PluggableStorageEngine struct {
 
 type CouchDBPSEConfig struct {
 	HTTPConnection `mapstructure:",squash"`
-	Username       string `mapstructure:"username"`
-	Password       string `mapstructure:"password"`
+	Username       string   `mapstructure:"username"`
+	Password       Password `mapstructure:"password"`
 }
 
 type PostgresPSEConfig struct {
-	Hostname string `mapstructure:"hostname"`
-	Port     int    `mapstructure:"port"`
-	Username string `mapstructure:"username"`
-	Password string `mapstructure:"password"`
+	Hostname string   `mapstructure:"hostname"`
+	Port     int      `mapstructure:"port"`
+	Username string   `mapstructure:"username"`
+	Password Password `mapstructure:"password"`
 }
 
 type TLSConfig struct {
@@ -104,9 +116,9 @@ type AMQPConnection struct {
 	} `mapstructure:"client_tls_auth"`
 }
 type AMQPConnectionBasicAuth struct {
-	Enabled  bool   `mapstructure:"enabled"`
-	Username string `mapstructure:"username"`
-	Password string `mapstructure:"password"`
+	Enabled  bool     `mapstructure:"enabled"`
+	Username string   `mapstructure:"username"`
+	Password Password `mapstructure:"password"`
 }
 
 type HTTPClient struct {
@@ -118,9 +130,9 @@ type HTTPClient struct {
 }
 
 type AuthJWTOptions struct {
-	ClientID         string `mapstructure:"oidc_client_id"`
-	ClientSecret     string `mapstructure:"oidc_client_secret"`
-	OIDCWellKnownURL string `mapstructure:"oidc_well_known"`
+	ClientID         string   `mapstructure:"oidc_client_id"`
+	ClientSecret     Password `mapstructure:"oidc_client_secret"`
+	OIDCWellKnownURL string   `mapstructure:"oidc_well_known"`
 }
 
 type AuthMTLSOptions struct {

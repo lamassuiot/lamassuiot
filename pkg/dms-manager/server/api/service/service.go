@@ -26,6 +26,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/utils"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	serviceV3 "github.com/lamassuiot/lamassuiot/pkg/v3/services"
+	"golang.org/x/crypto/ocsp"
 	"golang.org/x/exp/slices"
 )
 
@@ -249,8 +250,9 @@ func (s *DMSManagerService) UpdateDMSStatus(ctx context.Context, input *api.Upda
 	case api.DMSStatusRevoked:
 		if !dms.CloudDMS {
 			_, err = s.lamassuCAClient.UpdateCertificateStatus(ctx, serviceV3.UpdateCertificateStatusInput{
-				SerialNumber: dms.RemoteAccessIdentity.SerialNumber,
-				NewStatus:    models.StatusRevoked,
+				SerialNumber:     dms.RemoteAccessIdentity.SerialNumber,
+				NewStatus:        models.StatusRevoked,
+				RevocationReason: ocsp.CessationOfOperation,
 			})
 			if err != nil {
 				return &api.UpdateDMSStatusOutput{}, err

@@ -9,6 +9,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/crypto/ocsp"
 )
 
 var lDevice *logrus.Entry
@@ -224,8 +225,9 @@ func (svc DeviceManagerServiceImpl) UpdateIdentitySlot(input UpdateIdentitySlotI
 	switch input.Slot.Status {
 	case models.SlotRevoke:
 		revokedCert, err := svc.caClient.UpdateCertificateStatus(context.Background(), UpdateCertificateStatusInput{
-			SerialNumber: device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion].SerialNumber,
-			NewStatus:    models.StatusRevoked,
+			SerialNumber:     device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion].SerialNumber,
+			NewStatus:        models.StatusRevoked,
+			RevocationReason: ocsp.Unspecified,
 		})
 		if err != nil {
 			lDevice.Errorf("could not revoke identity slot for device %s: %s", input.ID, err)

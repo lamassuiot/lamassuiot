@@ -21,12 +21,13 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/x509engines"
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/crypto/ocsp"
 )
 
 type CAMiddleware func(CAService) CAService
 
 type CAService interface {
-	// GetStats() models.CAStats
+	GetStats(ctx context.Context) (*models.CAStats, error)
 	GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error)
 
 	CreateCA(ctx context.Context, input CreateCAInput) (*models.CACertificate, error)
@@ -118,21 +119,51 @@ func NeCAService(builder CAServiceBuilder) (CAService, error) {
 
 	svc.service = &svc
 
+	casLRa := []*models.CACertificate{}
 	//--BEGIN TO BE REMOVED: to be removed when refactoring DMS Manager in 2.4
-	cas, err := svc.GetCAsByCommonName(context.Background(), GetCAsByCommonNameInput{
+	_, err := svc.GetCAsByCommonName(context.Background(), GetCAsByCommonNameInput{
 		CommonName:      models.CALocalRA,
 		QueryParameters: nil,
-		ExhaustiveRun:   true,
+		ExhaustiveRun:   false,
+		ApplyFunc: func(ca *models.CACertificate) {
+			derefCA := *ca
+			casLRa = append(casLRa, &derefCA)
+		},
 	})
 	if err != nil {
-		lCA.Errorf("could not get Local RA CA: %s", err)
-		return nil, fmt.Errorf("could not get Local RA CA")
+		return nil, fmt.Errorf("could not get Local RA CA: %s", err)
 	}
 
-	if len(cas) == 0 {
-		svc.CreateCA(context.Background(), CreateCAInput{})
-	}
+	if len(casLRa) == 0 {
+		expTime := time.Date(9999, 12, 31, 23, 59, 59, 0, time.Local)
+		defaultEngine := *svc.defaultCryptoEngine
+		supportedKeys := defaultEngine.GetEngineConfig().SupportedKeyTypes
+		if len(supportedKeys) == 0 {
+			return nil, fmt.Errorf("default engine does not support any key type")
+		}
+		if len(supportedKeys[0].Sizes) == 0 {
+			return nil, fmt.Errorf("default engine does not support any key size for type %s", supportedKeys[0].Type.String())
+		}
 
+		lraCA, err := svc.CreateCA(context.Background(), CreateCAInput{
+			KeyMetadata: models.KeyMetadata{Type: supportedKeys[0].Type, Bits: supportedKeys[0].Sizes[0]},
+			Subject:     models.Subject{CommonName: models.CALocalRA},
+			EngineID:    defaultCryptoEngineID,
+			CAExpiration: models.Expiration{
+				Type: models.Time,
+				Time: &expTime,
+			},
+			IssuanceExpiration: models.Expiration{
+				Type: models.Time,
+				Time: &expTime,
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("could not create Local RA CA: %s", err)
+		}
+
+		lCA.Info("created Local RA CA with ID: %s", lraCA.ID)
+	}
 	//--END TO BE REMOVED
 
 	cryptoMonitor := func() {
@@ -246,6 +277,70 @@ func (svc *CAServiceImpl) SetService(service CAService) {
 	svc.service = service
 }
 
+func (svc *CAServiceImpl) GetStats(ctx context.Context) (*models.CAStats, error) {
+	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+
+	engines, err := svc.GetCryptoEngineProvider(ctx)
+	if err != nil {
+		lFunc.Errorf("could not get engines: %s", err)
+		return nil, err
+	}
+
+	lFunc.Debugf("got %d engines", err)
+
+	casDistributionPerEngine := map[string]int{}
+	for _, engine := range engines {
+		lFunc.Debugf("counting CAs controlled by %s engins", engine.ID)
+		ctr, err := svc.caStorage.CountByEngine(ctx, engine.ID)
+		if err != nil {
+			lFunc.Errorf("could not get CAs for engine %s: %s", engine.ID, err)
+			return nil, err
+		}
+		lFunc.Debugf("got %d CAs", ctr)
+		casDistributionPerEngine[engine.ID] = ctr
+	}
+
+	casStatus := map[models.CertificateStatus]int{}
+	for _, status := range []models.CertificateStatus{models.StatusActive, models.StatusExpired, models.StatusRevoked} {
+		lFunc.Debugf("counting certificates in %s status", status)
+		ctr, err := svc.caStorage.CountByStatus(ctx, status)
+		if err != nil {
+			lFunc.Errorf("could not count certificates in %s status: %s", status, err)
+			return nil, err
+		}
+		lFunc.Debugf("got %d certificates", ctr)
+
+		casStatus[status] = ctr
+	}
+
+	lFunc.Debugf("counting total number of CAs")
+	totalCAs, err := svc.caStorage.Count(ctx)
+	if err != nil {
+		lFunc.Errorf("could not count total number of CAs: %s", err)
+		return nil, err
+	}
+
+	lFunc.Debugf("counting total number of certificates")
+	totalCerts, err := svc.certStorage.Count(ctx)
+	if err != nil {
+		lFunc.Errorf("could not count total number of certificates: %s", err)
+		return nil, err
+	}
+
+	return &models.CAStats{
+		CACertificatesStats: models.CACertificatesStats{
+			TotalCAs:                 totalCAs,
+			CAsDistributionPerEngine: casDistributionPerEngine,
+			CAsStatus:                casStatus,
+		},
+		CertificatesStats: models.CertificatesStats{
+			TotalCertificates:            totalCerts,
+			CertificateDistributionPerCA: map[string]int{},
+			CertificateStatus:            map[models.CertificateStatus]int{},
+		},
+	}, nil
+}
+
 func (svc *CAServiceImpl) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
 	info := []*models.CryptoEngineProvider{}
 	for engineID, engine := range svc.cryptoEngines {
@@ -313,6 +408,7 @@ func (svc *CAServiceImpl) issueCA(ctx context.Context, input issueCAInput) (*iss
 }
 
 type ImportCAInput struct {
+	ID                 string
 	CAType             models.CertificateType    `validate:"required,ne=MANAGED"`
 	IssuanceExpiration models.Expiration         `validate:"required"`
 	CACertificate      *models.X509Certificate   `validate:"required"`
@@ -380,7 +476,11 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 
 	}
 
-	caID := goid.NewV4UUID().String()
+	caID := input.ID
+	if caID == "" {
+		caID = goid.NewV4UUID().String()
+	}
+
 	ca := &models.CACertificate{
 		ID:   caID,
 		Type: input.CAType,
@@ -398,6 +498,8 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 			ValidFrom:           caCert.NotBefore,
 			ValidTo:             caCert.NotAfter,
 			RevocationTimestamp: time.Time{},
+			Metadata:            map[string]interface{}{},
+			Type:                input.CAType,
 			IssuerCAMetadata: models.IssuerCAMetadata{
 				CAID:         caID,
 				SerialNumber: helpers.SerialNumberToString(input.CACertificate.SerialNumber),
@@ -417,6 +519,7 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 }
 
 type CreateCAInput struct {
+	ID                 string
 	KeyMetadata        models.KeyMetadata `validate:"required"`
 	Subject            models.Subject     `validate:"required"`
 	IssuanceExpiration models.Expiration  `validate:"required"`
@@ -464,12 +567,18 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 		engineID = input.EngineID
 	}
 	caCert := issuedCA.Certificate
-	caID := goid.NewV4UUID().String()
+
+	caID := input.ID
+	if caID == "" {
+		caID = goid.NewV4UUID().String()
+	}
+
 	ca := models.CACertificate{
 		ID: caID,
 		Metadata: map[string]interface{}{
 			"lamassu.io/name": caCert.Subject.CommonName,
 		},
+		Type:                  models.CertificateTypeManaged,
 		IssuanceExpirationRef: input.IssuanceExpiration,
 		CreationTS:            time.Now(),
 		Certificate: models.Certificate{
@@ -489,17 +598,12 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 				SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
 				CAID:         caID,
 			},
+			Metadata: map[string]interface{}{},
+			Type:     models.CertificateTypeManaged,
 			EngineID: engineID,
 		},
 	}
 
-	//Store a copy of the certificate, otherwise when rotated, the cert is lost
-	lFunc.Debugf("insert CA %s certificate %s in storage engine", ca.ID, ca.Certificate.SerialNumber)
-	_, err = svc.certStorage.Insert(ctx, &ca.Certificate)
-	if err != nil {
-		lFunc.Errorf("could not insert CA %s certificate %s in storage engine: %s", ca.ID, ca.Certificate.SerialNumber, err)
-		return nil, err
-	}
 	lFunc.Debugf("insert CA %s in storage engine", caID)
 	return svc.caStorage.Insert(ctx, &ca)
 }
@@ -606,8 +710,9 @@ func (svc *CAServiceImpl) GetCAsByCommonName(ctx context.Context, input GetCAsBy
 }
 
 type UpdateCAStatusInput struct {
-	CAID   string                   `validate:"required"`
-	Status models.CertificateStatus `validate:"required"`
+	CAID             string                   `validate:"required"`
+	Status           models.CertificateStatus `validate:"required"`
+	RevocationReason models.RevocationReason
 }
 
 // Returned Error Codes:
@@ -638,11 +743,23 @@ func (svc *CAServiceImpl) UpdateCAStatus(ctx context.Context, input UpdateCAStat
 		return nil, errs.ErrCANotFound
 	}
 
-	if ca.Status == models.StatusRevoked {
-		lFunc.Errorf("CA %s already revoked", input.CAID)
-		return nil, errs.ErrCAAlreadyRevoked
+	if ca.Status == models.StatusExpired {
+		lFunc.Errorf("cannot update an expired CA certificate")
+		return nil, errs.ErrCertificateStatusTransitionNotAllowed
 	}
+
+	if ca.Status == models.StatusRevoked && ca.RevocationReason != ocsp.CertificateHold {
+		lFunc.Errorf("cannot update a revoke CA certificate in %s status. Only a revoked CA certificate with reason '6 - CertificateHold' can be unrevoked", ca.RevocationReason.String())
+		return nil, errs.ErrCertificateStatusTransitionNotAllowed
+	}
+
 	ca.Status = input.Status
+	if ca.Status == models.StatusRevoked {
+		rrb, _ := input.RevocationReason.MarshalText()
+		lFunc.Infof("CA %s is being revoked with revocation reason %d - %s", input.CAID, input.RevocationReason, string(rrb))
+		ca.RevocationReason = input.RevocationReason
+		ca.RevocationTimestamp = time.Now()
+	}
 
 	lFunc.Debugf("updating the status of CA %s to %s", input.CAID, input.Status)
 	ca, err = svc.caStorage.Update(ctx, ca)
@@ -654,8 +771,9 @@ func (svc *CAServiceImpl) UpdateCAStatus(ctx context.Context, input UpdateCAStat
 	if input.Status == models.StatusRevoked {
 		revokeCertFunc := func(c *models.Certificate) {
 			_, err := svc.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
-				SerialNumber: c.SerialNumber,
-				NewStatus:    models.StatusRevoked,
+				SerialNumber:     c.SerialNumber,
+				NewStatus:        models.StatusRevoked,
+				RevocationReason: ocsp.CessationOfOperation,
 			})
 			if err != nil {
 				lFunc.Errorf("could not revoke certificate %s issued by CA %s", c.SerialNumber, c.IssuerCAMetadata.CAID)
@@ -833,6 +951,7 @@ func (svc *CAServiceImpl) SignCertificate(ctx context.Context, input SignCertifi
 		ValidFrom:           x509Cert.NotBefore,
 		ValidTo:             x509Cert.NotAfter,
 		RevocationTimestamp: time.Time{},
+		EngineID:            ca.EngineID,
 	}
 	lFunc.Debugf("insert Certificate %s in storage engine", cert.SerialNumber)
 	return svc.certStorage.Insert(ctx, &cert)
@@ -844,14 +963,14 @@ type CreateCertificateInput struct {
 }
 
 func (svc *CAServiceImpl) CreateCertificate(ctx context.Context, input CreateCertificateInput) (*models.Certificate, error) {
-	return nil, nil
+	return nil, fmt.Errorf("TODO")
 }
 
 type ImportCertificateInput struct {
 }
 
 func (svc *CAServiceImpl) ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error) {
-	return nil, nil
+	return nil, fmt.Errorf("TODO")
 }
 
 type SignatureSignInput struct {
@@ -1025,9 +1144,9 @@ func (svc *CAServiceImpl) GetCertificatesByCaAndStatus(ctx context.Context, inpu
 }
 
 type UpdateCertificateStatusInput struct {
-	SerialNumber string                   `validate:"required"`
-	NewStatus    models.CertificateStatus `validate:"required"`
-	// RevocationReason models.RevocationReasonRFC5280
+	SerialNumber     string                   `validate:"required"`
+	NewStatus        models.CertificateStatus `validate:"required"`
+	RevocationReason models.RevocationReason
 }
 
 // Returned Error Codes:
@@ -1058,19 +1177,28 @@ func (svc *CAServiceImpl) UpdateCertificateStatus(ctx context.Context, input Upd
 		return nil, errs.ErrCertificateNotFound
 	}
 
-	if cert.Status == input.NewStatus {
-		return cert, nil
-	} else if cert.Status == models.StatusExpired || cert.Status == models.StatusRevoked {
+	if cert.Status == models.StatusExpired {
+		lFunc.Errorf("cannot update an expired certificate")
 		return nil, errs.ErrCertificateStatusTransitionNotAllowed
-	} else if input.NewStatus == models.StatusActive {
+	}
+
+	if cert.Status == models.StatusRevoked && cert.RevocationReason != ocsp.CertificateHold {
+		lFunc.Errorf("cannot update a revoke certificate in %s status. Only a revoked certificate with reason '6 - CertificateHold' can be unrevoked", cert.RevocationReason.String())
 		return nil, errs.ErrCertificateStatusTransitionNotAllowed
 	}
 
 	cert.Status = input.NewStatus
 
-	// if input.NewStatus == models.StatusRevoked {
-	// 	cert.RevocationReason = input.RevocationReason
-	// }
+	if input.NewStatus == models.StatusRevoked {
+		rrb, _ := input.RevocationReason.MarshalText()
+		lFunc.Infof("certificate with SN %s issued by CA with ID %s and CN %s is being revoked with revocation reason %d - %s", input.SerialNumber, cert.IssuerCAMetadata.CAID, cert.Certificate.Issuer.CommonName, input.RevocationReason, string(rrb))
+		cert.RevocationReason = input.RevocationReason
+		cert.RevocationTimestamp = time.Now()
+	} else {
+		//Make sure to reset revocation TS in case of reactivation
+		cert.RevocationTimestamp = time.Time{}
+	}
+
 	lFunc.Debugf("updating %s certificate status to %s", input.SerialNumber, input.NewStatus)
 	return svc.certStorage.Update(ctx, cert)
 }
@@ -1145,6 +1273,10 @@ func importCAValidation(sl validator.StructLevel) {
 	}
 
 	if ca.CAType != models.CertificateTypeExternal {
+		if !helpers.ValidateCAExpiration(ca.IssuanceExpiration, caCert.NotAfter) {
+			// lFunc.Errorf("issuance expiration is greater than the CA expiration")
+			sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
+		}
 		// lFunc.Debugf("CA Type: %s", ca.CAType)
 		if !helpers.ValidateExpirationTimeRef(ca.IssuanceExpiration) {
 			// lFunc.Errorf("expiration time ref is incompatible with the selected variable")

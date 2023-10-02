@@ -41,7 +41,7 @@ func NewAWSKMSEngine(logger *logrus.Entry, conf config.AWSSDKConfig) (CryptoEngi
 
 	sess := session.Must(session.NewSession(&aws.Config{
 		Region:      aws.String(conf.Region),
-		Credentials: credentials.NewStaticCredentials(conf.AccessKeyID, conf.SecretAccessKey, ""),
+		Credentials: credentials.NewStaticCredentials(conf.AccessKeyID, string(conf.SecretAccessKey), ""),
 		HTTPClient:  httpCli,
 	}))
 	kmscli := kms.New(sess)

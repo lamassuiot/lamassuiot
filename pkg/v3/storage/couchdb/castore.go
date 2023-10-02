@@ -2,6 +2,7 @@ package couchdb
 
 import (
 	"context"
+	"fmt"
 
 	_ "github.com/go-kivik/couchdb/v4" // The CouchDB driver
 	kivik "github.com/go-kivik/kivik/v4"
@@ -35,6 +36,14 @@ func NewCouchCARepository(client *kivik.Client) (storage.CACertificatesRepo, err
 
 func (db *CouchDBCAStorage) Count(ctx context.Context) (int, error) {
 	return db.querier.Count()
+}
+
+func (db *CouchDBCAStorage) CountByEngine(ctx context.Context, engineID string) (int, error) {
+	return -1, fmt.Errorf("TODO")
+}
+
+func (db *CouchDBCAStorage) CountByStatus(ctx context.Context, status models.CertificateStatus) (int, error) {
+	return -1, fmt.Errorf("TODO")
 }
 
 func (db *CouchDBCAStorage) SelectByType(ctx context.Context, CAType models.CertificateType, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
