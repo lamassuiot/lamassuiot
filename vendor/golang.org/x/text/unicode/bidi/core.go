@@ -736,7 +736,7 @@ loop:
 				continue loop
 			}
 		}
-		log.Faltaf("invalid bidi code %v present in assertOnly at position %d", t, s.indexes[i])
+		log.Panicf("invalid bidi code %v present in assertOnly at position %d", t, s.indexes[i])
 	}
 }
 

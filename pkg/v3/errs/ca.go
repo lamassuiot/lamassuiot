@@ -14,11 +14,11 @@ var (
 	ErrCAIncompatibleExpirationTimeRef error = errors.New("incompatible expiration time ref")
 	ErrCAIssuanceExpiration            error = errors.New("issuance expiration greater than CA expiration")
 	ErrCAType                          error = errors.New("CA type inconsistent")
-	ErrCAValidCertAndPrivKey           error = errors.New("CA and the provided key dont match")
+	ErrCAValidCertAndPrivKey           error = errors.New("CA and the provided key don't match")
 
-	ErrValidateBadRequest error = errors.New("Struct Validation error")
+	ErrValidateBadRequest error = errors.New("struct validation error")
 
 	ErrCertificateNotFound                   error = errors.New("certificate not found")
-	ErrCertificateAlreadyRevoked             error = errors.New("cerificate already revoked")
+	ErrCertificateAlreadyRevoked             error = errors.New("certificate already revoked")
 	ErrCertificateStatusTransitionNotAllowed error = errors.New("new status transition not allowed for certificate")
 )

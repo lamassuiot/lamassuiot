@@ -383,7 +383,7 @@ func (entry *Entry) Fatalf(format string, args ...interface{}) {
 	entry.Logger.Exit(1)
 }
 
-func (entry *Entry) Faltaf(format string, args ...interface{}) {
+func (entry *Entry) Panicf(format string, args ...interface{}) {
 	entry.Logf(PanicLevel, format, args...)
 }
 

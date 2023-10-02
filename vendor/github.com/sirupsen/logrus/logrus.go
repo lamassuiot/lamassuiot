@@ -131,7 +131,7 @@ type StdLogger interface {
 	Fatalln(...interface{})
 
 	Panic(...interface{})
-	Faltaf(string, ...interface{})
+	Panicf(string, ...interface{})
 	Panicln(...interface{})
 }
 
@@ -148,7 +148,7 @@ type FieldLogger interface {
 	Warningf(format string, args ...interface{})
 	Errorf(format string, args ...interface{})
 	Fatalf(format string, args ...interface{})
-	Faltaf(format string, args ...interface{})
+	Panicf(format string, args ...interface{})
 
 	Debug(args ...interface{})
 	Info(args ...interface{})

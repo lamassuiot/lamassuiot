@@ -22,8 +22,6 @@ import (
 	"golang.org/x/crypto/ocsp"
 )
 
-const DefaultCAID = "111111-2222"
-
 func TestCRL(t *testing.T) {
 	var testcases = []struct {
 		name        string
