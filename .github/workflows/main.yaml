@@ -1,4 +1,4 @@
-name: Docker Releaser Workflow
+name: "PROD: Docker Releaser Workflow"
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ jobs:
   build_dev_docker_image:
     strategy:
       matrix:
-        service: [ca, device-manager, dms-manager, ocsp, alerts, cloud-proxy, db]
+        service: [ca, devmanager, dmsmanager, va, alerts, cloud-proxy]
     name: ${{ matrix.service }} - Release docker images
     runs-on: ubuntu-latest
     steps:
