@@ -865,11 +865,17 @@ func (svc *CAServiceImpl) DeleteCA(ctx context.Context, input DeleteCAInput) err
 	}
 
 	if ca.Status != models.StatusExpired && ca.Status != models.StatusRevoked {
+		lFunc.Errorf("CA %s can not be deleted while in status %s", input.CAID, ca.Status)
 		return errs.ErrCAStatus
 	}
 
 	//TODO missing implementation
-	return fmt.Errorf("TODO missing implementation")
+	err = svc.caStorage.Delete(context.Background(), input.CAID)
+	if err != nil {
+		lFunc.Errorf("something went wrong while deleting the CA %s %s", input.CAID, err)
+		return err
+	}
+	return err
 }
 
 type SignCertificateInput struct {
@@ -1066,8 +1072,8 @@ func (svc *CAServiceImpl) GetCertificateBySerialNumber(ctx context.Context, inpu
 	if err != nil {
 		lFunc.Errorf("GetCertificatesBySerialNumberInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
+		lFunc.Debugf("checking if Certificate '%s' exists", input.SerialNumber)
 	}
-	lFunc.Debugf("checking if Certificate '%s' exists", input.SerialNumber)
 	exists, cert, err := svc.certStorage.SelectExistsBySerialNumber(ctx, input.SerialNumber)
 	if err != nil {
 		lFunc.Errorf("something went wrong while checking if Certificate '%s' exists in storage engine: %s", input.SerialNumber, err)

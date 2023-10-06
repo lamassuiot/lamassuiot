@@ -391,8 +391,18 @@ func (r *caHttpRoutes) GetCAByID(ctx *gin.Context) {
 // @Router /cas/{id} [delete]
 func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	type uriParams struct {
+		CAId string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
 	err := r.svc.DeleteCA(funCtx, services.DeleteCAInput{
-		CAID: "",
+		CAID: params.CAId,
 	})
 
 	if err != nil {
@@ -410,7 +420,7 @@ func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(201, gin.H{})
+	ctx.JSON(200, gin.H{})
 }
 
 func (r *caHttpRoutes) UpdateCAStatus(ctx *gin.Context) {

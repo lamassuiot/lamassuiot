@@ -13,20 +13,28 @@ import (
 	"github.com/ory/dockertest/v3/docker"
 )
 
-var cleanupDocker func()
-
-func BeforeSuite() config.HashicorpVaultSDK {
-	// setup *gorm.Db with docker
-	var conf config.HashicorpVaultSDK
-	cleanupDocker, conf = SetupVaultWithDocker()
-	return conf
+type VaultDockerTest struct {
+	CleanupDocker func() error
+	Config        config.HashicorpVaultSDK
 }
 
-func AfterSuite() {
-	cleanupDocker()
+func NewVaultDockerTest() *VaultDockerTest {
+	cleanupDocker, conf := SetupVaultWithDocker()
+	return &VaultDockerTest{
+		CleanupDocker: cleanupDocker,
+		Config:        conf,
+	}
 }
 
-func SetupVaultWithDocker() (func(), config.HashicorpVaultSDK) {
+func (t *VaultDockerTest) AfterSuite() error {
+	return t.CleanupDocker()
+}
+
+func (t *VaultDockerTest) BeforeEach() error {
+	return nil
+}
+
+func SetupVaultWithDocker() (func() error, config.HashicorpVaultSDK) {
 	pool, err := dockertest.NewPool("")
 	chk(err)
 
@@ -49,9 +57,8 @@ func SetupVaultWithDocker() (func(), config.HashicorpVaultSDK) {
 	resource, err := pool.RunWithOptions(runDockerOpt, fnConfig)
 	chk(err)
 	// call clean up function to release resource
-	fnCleanup := func() {
-		err := resource.Close()
-		chk(err)
+	fnCleanup := func() error {
+		return resource.Close()
 	}
 
 	p, _ := strconv.Atoi(resource.GetPort("8200/tcp"))

@@ -438,8 +438,8 @@ type VATestServer struct {
 	OcspService services.OCSPService
 	CrlService  services.CRLService
 	HttpServer  *httptest.Server
-
-	CaSDK services.CAService
+	CaSDK       services.CAService
+	BeforeEach  func() error
 }
 
 func BuildVATestServer() (*VATestServer, error) {
@@ -483,5 +483,14 @@ func BuildVATestServer() (*VATestServer, error) {
 		CrlService:  crlService,
 		HttpServer:  vaServer,
 		CaSDK:       caSDK,
+		BeforeEach: func() error {
+			err := caServer.BeforeEach()
+			if err != nil {
+				return fmt.Errorf("could not run CATestServer BeforeEach: %s", err)
+			}
+			return nil
+		},
 	}, nil
 }
+
+//Hacer la función de test de getCRL

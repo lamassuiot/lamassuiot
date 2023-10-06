@@ -197,7 +197,14 @@ func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.Up
 }
 
 func (cli *httpCAClient) DeleteCA(ctx context.Context, input services.DeleteCAInput) error {
-	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID, map[int][]error{})
+	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID, map[int][]error{
+		404: {
+			errs.ErrCANotFound,
+		},
+		400: {
+			errs.ErrCAStatus,
+		},
+	})
 	if err != nil {
 		return err
 	}

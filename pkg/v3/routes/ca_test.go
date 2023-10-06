@@ -2,9 +2,15 @@ package routes
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -24,6 +30,7 @@ import (
 	postgres_test "github.com/lamassuiot/lamassuiot/pkg/v3/test/storage/postgres"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
+	"gorm.io/gorm"
 )
 
 const DefaultCAID = "111111-2222"
@@ -31,6 +38,14 @@ const DefaultCACN = "MyCA"
 
 func TestCryptoEngines(t *testing.T) {
 	t.Parallel()
+	caTest, err := BuildCATestServer()
+	if err != nil {
+		t.Fatalf("could not create CA test server")
+	}
+	caTest.HttpServer.Start()
+	defer func() {
+		caTest.AfterSuite()
+	}()
 
 	var testcases = []struct {
 		name        string
@@ -60,11 +75,10 @@ func TestCryptoEngines(t *testing.T) {
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
-			caTest, err := BuildCATestServer()
+			err = caTest.BeforeEach()
 			if err != nil {
-				t.Fatalf("could not create CA test server")
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
-			caTest.HttpServer.Start()
 
 			caSDK := clients.NewHttpCAClient(http.DefaultClient, caTest.HttpServer.URL)
 			err = tc.resultCheck(caSDK.GetCryptoEngineProvider(context.Background()))
@@ -73,11 +87,19 @@ func TestCryptoEngines(t *testing.T) {
 			}
 
 		})
-		postgres_test.AfterSuite()
 	}
 }
 func TestCreateCA(t *testing.T) {
 	t.Parallel()
+
+	caTest, err := BuildCATestServer()
+	if err != nil {
+		t.Fatalf("could not create CA test server")
+	}
+	caTest.HttpServer.Start()
+	defer func() {
+		caTest.AfterSuite()
+	}()
 
 	caID := "12345-11111"
 	caDUr := models.TimeDuration(time.Hour * 24)
@@ -215,11 +237,10 @@ func TestCreateCA(t *testing.T) {
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
-			caTest, err := BuildCATestServer()
+			err = caTest.BeforeEach()
 			if err != nil {
-				t.Fatalf("could not create CA test server")
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
-			caTest.HttpServer.Start()
 
 			caSDK := clients.NewHttpCAClient(http.DefaultClient, caTest.HttpServer.URL)
 			err = tc.before(caTest.Service)
@@ -233,12 +254,160 @@ func TestCreateCA(t *testing.T) {
 			}
 
 		})
-		postgres_test.AfterSuite()
+	}
+}
+func TestGetCertificatesByCaAndStatus(t *testing.T) {
+	t.Parallel()
+	caTest, err := BuildCATestServer()
+	if err != nil {
+		t.Fatalf("could not create CA test server")
+	}
+	caTest.HttpServer.Start()
+	defer func() {
+		caTest.AfterSuite()
+	}()
+
+	var testcases = []struct {
+		name        string
+		before      func(svc services.CAService) error
+		run         func(caSDK services.CAService) ([]*models.Certificate, error)
+		resultCheck func(certs []*models.Certificate, err error) error
+	}{
+		{
+			name: "OK/Pagination-with-100-certificates",
+			before: func(svc services.CAService) error {
+				certsToIssue := 100
+				for i := 0; i < certsToIssue; i++ {
+					key, err := helpers.GenerateRSAKey(2048)
+					if err != nil {
+						return fmt.Errorf("Error creating the private key: %s", err)
+					}
+					csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", i)}, key)
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					if err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+			run: func(caSDK services.CAService) ([]*models.Certificate, error) {
+				issuedCerts := []*models.Certificate{}
+				_, err := caSDK.GetCertificatesByCaAndStatus(context.Background(), services.GetCertificatesByCaAndStatusInput{
+					CAID:   DefaultCAID,
+					Status: models.StatusActive,
+					ListInput: services.ListInput[models.Certificate]{
+						ExhaustiveRun: true,
+						QueryParameters: &resources.QueryParameters{
+							PageSize: 20,
+						},
+						ApplyFunc: func(elem *models.Certificate) {
+							derefCert := *elem
+							issuedCerts = append(issuedCerts, &derefCert)
+						},
+					},
+				})
+
+				return issuedCerts, err
+			},
+			resultCheck: func(certs []*models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error, but got error: %s", err)
+				}
+
+				if len(certs) != 100 {
+					return fmt.Errorf("The function get certificate by ca and status does not return the correct count of the certificates %d", len(certs))
+				} else {
+
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/PaginationWithoutExhaustuveRun",
+			before: func(svc services.CAService) error {
+				certsToIssue := 100
+				for i := 0; i < certsToIssue; i++ {
+					key, _ := helpers.GenerateRSAKey(2048)
+					csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", i)}, key)
+					_, err := svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					if err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+			run: func(caSDK services.CAService) ([]*models.Certificate, error) {
+				issuedCerts := []*models.Certificate{}
+				_, err := caSDK.GetCertificatesByCaAndStatus(context.Background(), services.GetCertificatesByCaAndStatusInput{
+					CAID:   DefaultCAID,
+					Status: models.StatusActive,
+					ListInput: services.ListInput[models.Certificate]{
+						ExhaustiveRun: false,
+						QueryParameters: &resources.QueryParameters{
+							PageSize: 20,
+						},
+						ApplyFunc: func(elem *models.Certificate) {
+							derefCert := *elem
+							issuedCerts = append(issuedCerts, &derefCert)
+						},
+					},
+				})
+
+				return issuedCerts, err
+			},
+			resultCheck: func(certs []*models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error, but got error: %s", err)
+				}
+
+				if len(certs) != 20 {
+					return fmt.Errorf("The exhaustive run fuctionality of the function get certificate by ca and status is not working correctly  %d", len(certs))
+				}
+
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			// t.Parallel()
+			err = caTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
+			}
+
+			_, err = initCA(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running 'initCA' func in test case: %s", err)
+			}
+
+			caSDK := clients.NewHttpCAClient(http.DefaultClient, caTest.HttpServer.URL)
+			err = tc.before(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running 'before' func in test case: %s", err)
+			}
+
+			err = tc.resultCheck(tc.run(caSDK))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+
+		})
 	}
 }
 func TestRevokeCA(t *testing.T) {
 	t.Parallel()
-
+	caTest, err := BuildCATestServer()
+	if err != nil {
+		t.Fatalf("could not create CA test server")
+	}
+	caTest.HttpServer.Start()
+	defer func() {
+		caTest.AfterSuite()
+	}()
 	var testcases = []struct {
 		name        string
 		run         func(caSDK services.CAService) (*models.CACertificate, error)
@@ -329,11 +498,10 @@ func TestRevokeCA(t *testing.T) {
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
-			caTest, err := BuildCATestServer()
+			err = caTest.BeforeEach()
 			if err != nil {
-				t.Fatalf("could not create CA test server")
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
-			caTest.HttpServer.Start()
 
 			caSDK := clients.NewHttpCAClient(http.DefaultClient, caTest.HttpServer.URL)
 
@@ -366,12 +534,18 @@ func TestRevokeCA(t *testing.T) {
 			}
 
 		})
-		postgres_test.AfterSuite()
 	}
 }
 func TestGetCAsByCommonName(t *testing.T) {
 	t.Parallel()
-
+	caTest, err := BuildCATestServer()
+	if err != nil {
+		t.Fatalf("could not create CA test server")
+	}
+	caTest.HttpServer.Start()
+	defer func() {
+		caTest.AfterSuite()
+	}()
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
@@ -379,7 +553,7 @@ func TestGetCAsByCommonName(t *testing.T) {
 		resultCheck func([]*models.CACertificate, error) error
 	}{
 		{
-			name:   "OK/1-CA",
+			name:   "OK/CAsCommonName",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) ([]*models.CACertificate, error) {
 				cas := []*models.CACertificate{}
@@ -413,11 +587,10 @@ func TestGetCAsByCommonName(t *testing.T) {
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
-			caTest, err := BuildCATestServer()
+			err = caTest.BeforeEach()
 			if err != nil {
-				t.Fatalf("could not create CA test server")
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
-			caTest.HttpServer.Start()
 
 			//Init CA Server with 1 CA
 			_, err = initCA(caTest.Service)
@@ -437,13 +610,485 @@ func TestGetCAsByCommonName(t *testing.T) {
 			}
 
 		})
-		postgres_test.AfterSuite()
+	}
+}
+
+func TestGetStats(t *testing.T) {
+	caTest, err := BuildCATestServer()
+	if err != nil {
+		t.Fatalf("could not create CA test server")
+	}
+	caTest.HttpServer.Start()
+	defer func() {
+		caTest.AfterSuite()
+	}()
+	var testcases = []struct {
+		name        string
+		before      func(svc services.CAService) error
+		run         func(caSDK services.CAService) (*models.CAStats, error)
+		resultCheck func(*models.CAStats, error) error
+	}{
+		{
+			name:   "OK/GetsStatsCA",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CAStats, error) {
+				//cas := []*models.CACertificate{}
+				res, err := caSDK.GetStats(context.Background())
+				return res, err
+			},
+			resultCheck: func(cas *models.CAStats, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got CAs without error, but got error: %s", err)
+				}
+				//Figure it out, which is the purpose of this
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			// t.Parallel()
+			// err := postgres_test.BeforeEach()
+			// fmt.Errorf("Error while running BeforeEach job: %s", err)
+
+			err = caTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
+			}
+
+			//Init CA Server with 1 CA
+			_, err = initCA(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running initCA: %s", err)
+			}
+
+			caSDK := clients.NewHttpCAClient(http.DefaultClient, caTest.HttpServer.URL)
+			err = tc.before(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running 'before' func in test case: %s", err)
+			}
+
+			err = tc.resultCheck(tc.run(caSDK))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+		})
+	}
+}
+
+func TestImportCA(t *testing.T) {
+	t.Parallel()
+	caTest, err := BuildCATestServer()
+	if err != nil {
+		t.Fatalf("could not create CA test server")
+	}
+	caTest.HttpServer.Start()
+	defer func() {
+		caTest.AfterSuite()
+	}()
+
+	generateSelfSignedCA := func(keyType x509.PublicKeyAlgorithm) (*x509.Certificate, any, error) {
+		var err error
+		var key any
+		var pubKey any
+
+		switch keyType {
+		case x509.RSA:
+			rsaKey, err := helpers.GenerateRSAKey(2048)
+			if err != nil {
+				return nil, nil, err
+			}
+			key = rsaKey
+			pubKey = &rsaKey.PublicKey
+		case x509.ECDSA:
+			eccKey, err := helpers.GenerateECDSAKey(elliptic.P224())
+			if err != nil {
+				return nil, nil, err
+			}
+			key = eccKey
+			pubKey = &eccKey.PublicKey
+		}
+
+		if err != nil {
+			return nil, nil, err
+		}
+
+		sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
+		template := x509.Certificate{
+			SerialNumber: sn,
+			Subject: pkix.Name{
+				CommonName: "Test-CA-External",
+			},
+			NotBefore:             time.Now(),
+			NotAfter:              time.Now().Add(time.Hour * 5),
+			KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsage(x509.ExtKeyUsageOCSPSigning),
+			ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+			BasicConstraintsValid: true,
+		}
+
+		derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, pubKey, key)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		cert, err := x509.ParseCertificate(derBytes)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		return cert, key, nil
+
+	}
+	var testcases = []struct {
+		name        string
+		before      func(svc services.CAService) error
+		run         func(caSDK services.CAService) (*models.CAStats, error)
+		resultCheck func(*models.CAStats, error) error
+	}{
+		{
+			name:   "OK/ImportingExternalCA",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CAStats, error) {
+				ca, _, err := generateSelfSignedCA(x509.RSA)
+				var duration time.Duration = 100
+				if err != nil {
+					fmt.Errorf("Failed creating the certificate %s", err)
+				}
+				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6abf45b4d24e0bf7d8adef322c06987baca",
+					CAType: models.CertificateTypeExternal,
+					IssuanceExpiration: models.Expiration{
+						Type:     models.Duration,
+						Duration: (*models.TimeDuration)(&duration),
+					},
+					CACertificate: (*models.X509Certificate)(ca),
+
+					//Here are missing a lot of parameterss
+				})
+				if err != nil {
+					fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
+				}
+				return nil, err
+			},
+			resultCheck: func(cas *models.CAStats, err error) error {
+				if err != nil {
+					return fmt.Errorf("should have gone correct, but got an error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/ImportingImportedCA",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CAStats, error) {
+				ca, key, err := generateSelfSignedCA(x509.RSA)
+				var duration time.Duration = 100
+				if err != nil {
+					fmt.Errorf("Failed creating the certificate %s", err)
+				}
+				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6a4e0bf7d8adef322c06987baca",
+					CAType: models.CertificateTypeImported,
+					IssuanceExpiration: models.Expiration{
+						Type:     models.Duration,
+						Duration: (*models.TimeDuration)(&duration),
+					},
+					CACertificate: (*models.X509Certificate)(ca),
+					CARSAKey:      (key).(*rsa.PrivateKey),
+					KeyType:       models.KeyType(x509.RSA),
+					//Here are missing a lot of parameterss
+				})
+				if err != nil {
+					fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
+				}
+				return nil, err
+			},
+			resultCheck: func(cas *models.CAStats, err error) error {
+				if err != nil {
+					return fmt.Errorf("should have gone correct, but got an error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "Err_InputVal/ImportingImporteEngineIDNotEmptydCA",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CAStats, error) {
+				ca, key, err := generateSelfSignedCA(x509.RSA)
+				var duration time.Duration = 100
+				if err != nil {
+					fmt.Errorf("Failed creating the certificate %s", err)
+				}
+				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
+
+				fmt.Println(engines)
+				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6a4e0bf7d8adef322c06987baca",
+					CAType: models.CertificateTypeImported,
+					IssuanceExpiration: models.Expiration{
+						Type:     models.Duration,
+						Duration: (*models.TimeDuration)(&duration),
+					},
+					CACertificate: (*models.X509Certificate)(ca),
+					CARSAKey:      (key).(*rsa.PrivateKey),
+					KeyType:       models.KeyType(x509.RSA),
+					EngineID:      engines[0].ID,
+					//Here are missing a lot of parameterss
+				})
+				if err != nil {
+					fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
+				}
+				return nil, err
+			},
+			resultCheck: func(cas *models.CAStats, err error) error {
+				if err != nil {
+					return fmt.Errorf("should have gone correct, but got an error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/ImportingImportedECDSACA",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CAStats, error) {
+				ca, key, err := generateSelfSignedCA(x509.ECDSA)
+				var duration time.Duration = 100
+				if err != nil {
+					fmt.Errorf("Failed creating the certificate %s", err)
+				}
+				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:     "c1acdb823dd8ac113d2b0a1aaa0adef322c06987baca",
+					CAType: models.CertificateTypeImported,
+					IssuanceExpiration: models.Expiration{
+						Type:     models.Duration,
+						Duration: (*models.TimeDuration)(&duration),
+					},
+					CACertificate: (*models.X509Certificate)(ca),
+					CAECKey:       (key).(*ecdsa.PrivateKey),
+					KeyType:       models.KeyType(x509.ECDSA),
+					//Here are missing a lot of parameterss
+				})
+				if err != nil {
+					fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
+				}
+				return nil, err
+			},
+			resultCheck: func(cas *models.CAStats, err error) error {
+				if err != nil {
+					return fmt.Errorf("should have gone correct, but got an error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/ImportingImportedCAWithoutId",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CAStats, error) {
+				ca, key, err := generateSelfSignedCA(x509.RSA)
+				var duration time.Duration = 100
+				if err != nil {
+					fmt.Errorf("Failed creating the certificate %s", err)
+				}
+				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					CAType: models.CertificateTypeImported,
+					IssuanceExpiration: models.Expiration{
+						Type:     models.Duration,
+						Duration: (*models.TimeDuration)(&duration),
+					},
+					CACertificate: (*models.X509Certificate)(ca),
+					CARSAKey:      (key).(*rsa.PrivateKey),
+					KeyType:       models.KeyType(x509.RSA),
+					//Here are missing a lot of parameterss
+				})
+				if err != nil {
+					fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
+				}
+				return nil, err
+			},
+			resultCheck: func(cas *models.CAStats, err error) error {
+				if err != nil {
+					return fmt.Errorf("should have gone correct, but got an error: %s", err)
+				}
+				return nil
+			},
+		},
+	}
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			// t.Parallel()
+			// err := postgres_test.BeforeEach()
+			// fmt.Errorf("Error while running BeforeEach job: %s", err)
+
+			err = caTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
+			}
+
+			//Init CA Server with 1 CA
+			_, err = initCA(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running initCA: %s", err)
+			}
+
+			caSDK := clients.NewHttpCAClient(http.DefaultClient, caTest.HttpServer.URL)
+			err = tc.before(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running 'before' func in test case: %s", err)
+			}
+
+			err = tc.resultCheck(tc.run(caSDK))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+
+		})
+	}
+}
+
+func TestDeleteCA(t *testing.T) {
+
+	caTest, err := BuildCATestServer()
+	if err != nil {
+		t.Fatalf("could not create CA test server")
+	}
+	caTest.HttpServer.Start()
+	defer func() {
+		caTest.AfterSuite()
+	}()
+	var testcases = []struct {
+		name        string
+		before      func(svc services.CAService) error
+		run         func(caSDK services.CAService) error
+		resultCheck func(error) error
+	}{
+		{
+			name: "Err/CADoesNotExist",
+			before: func(svc services.CAService) error {
+
+				return nil
+			},
+			run: func(caSDK services.CAService) error {
+				//cas := []*models.CACertificate{}
+				err := caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
+					CAID: "DefaulasdadtCAID",
+				})
+				return err
+			},
+			resultCheck: func(err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrCANotFound) {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name: "Err/CAExistCore",
+			before: func(svc services.CAService) error {
+
+				_, err = svc.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+					CAID:             DefaultCAID,
+					Status:           models.StatusRevoked,
+					RevocationReason: models.RevocationReason(1),
+				})
+
+				if err != nil {
+					return fmt.Errorf("Error updating the CA status to expired")
+				}
+				return err
+
+			},
+			run: func(caSDK services.CAService) error {
+				//cas := []*models.CACertificate{}
+				err := caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
+					CAID: DefaultCAID,
+				})
+				return err
+			},
+			resultCheck: func(err error) error {
+				if err != nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name: "Err/CAStatusActive",
+			before: func(svc services.CAService) error {
+
+				_, err = svc.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+					CAID:             DefaultCAID,
+					Status:           models.StatusActive,
+					RevocationReason: models.RevocationReason(1),
+				})
+
+				if err != nil {
+					return fmt.Errorf("Error updating the CA status to expired")
+				}
+				return err
+
+			},
+			run: func(caSDK services.CAService) error {
+				//cas := []*models.CACertificate{}
+				err := caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
+					CAID: DefaultCAID,
+				})
+
+				return err
+			},
+			resultCheck: func(err error) error {
+				if !errors.Is(err, errs.ErrCAStatus) {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+
+			err = caTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
+			}
+
+			//Init CA Server with 1 CA
+			_, err = initCA(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running initCA: %s", err)
+			}
+
+			caSDK := clients.NewHttpCAClient(http.DefaultClient, caTest.HttpServer.URL)
+			err = tc.before(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running 'before' func in test case: %s", err)
+			}
+
+			err = tc.resultCheck(tc.run(caSDK))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+		})
 	}
 }
 
 type CATestServer struct {
 	Service    services.CAService
 	HttpServer *httptest.Server
+	BeforeEach func() error
+	AfterSuite func() error
 }
 
 func initCA(caSDK services.CAService) (*models.CACertificate, error) {
@@ -462,9 +1107,9 @@ func initCA(caSDK services.CAService) (*models.CACertificate, error) {
 
 func BuildCATestServer() (*CATestServer, error) {
 	lgr := logrus.StandardLogger().WithField("", "")
-	vaultCfg := vault_test.BeforeSuite()
+	vaultDocker := vault_test.NewVaultDockerTest()
 	vaultEngine, err := cryptoengines.NewVaultKV2Engine(lgr, config.HashicorpVaultCryptoEngineConfig{
-		HashicorpVaultSDK: vaultCfg,
+		HashicorpVaultSDK: vaultDocker.Config,
 		ID:                "hCorp-vault",
 		Metadata: map[string]interface{}{
 			"deploy": "docker-test",
@@ -474,9 +1119,9 @@ func BuildCATestServer() (*CATestServer, error) {
 		return nil, fmt.Errorf("could not create Vault Crypto Engine")
 	}
 
-	pConfig := postgres_test.BeforeSuite("ca_test")
+	postgresTest := postgres_test.NewPostgresDockerTest("ca_test")
 
-	dbCli, err := postgres.CreatePostgresDBConnection(logrus.NewEntry(logrus.StandardLogger()), pConfig, "ca_test")
+	dbCli, err := postgres.CreatePostgresDBConnection(logrus.NewEntry(logrus.StandardLogger()), postgresTest.Config, "ca_test")
 	if err != nil {
 		return nil, fmt.Errorf("could not create CouchDB In-Memory DB: %s", err)
 	}
@@ -515,12 +1160,50 @@ func BuildCATestServer() (*CATestServer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not create CA Service: %s", err)
 	}
-
+	//AVeriguate it why the testig procedure is different
 	router := NewCAHTTPLayer(lgr, caSvc)
 	caServer := httptest.NewUnstartedServer(router)
 
 	return &CATestServer{
 		Service:    caSvc,
 		HttpServer: caServer,
+		BeforeEach: func() error {
+			err := postgresTest.BeforeEach(func(db *gorm.DB) error {
+				_, err := postgres.NewCAPostgresRepository(dbCli)
+				if err != nil {
+					return fmt.Errorf("could not create CA store: %s", err)
+				}
+
+				_, err = postgres.NewCertificateRepository(dbCli)
+				if err != nil {
+					return fmt.Errorf("could not create cert store: %s", err)
+				}
+
+				return nil
+			})
+			if err != nil {
+				return fmt.Errorf("could not run postgres BeforeEach: %s", err)
+			}
+
+			err = vaultDocker.BeforeEach()
+			if err != nil {
+				return fmt.Errorf("could not run vault BeforeEach: %s", err)
+			}
+
+			return nil
+		},
+		AfterSuite: func() error {
+			err := postgresTest.AfterSuite()
+			if err != nil {
+				return fmt.Errorf("could not run postgres AfterSuite: %s", err)
+			}
+
+			err = vaultDocker.AfterSuite()
+			if err != nil {
+				return fmt.Errorf("could not run vault AfterSuite: %s", err)
+			}
+
+			return nil
+		},
 	}, nil
 }
