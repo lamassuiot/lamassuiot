@@ -12,26 +12,26 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/kms"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/sirupsen/logrus"
 
-	"github.com/lstoll/awskms"
+	sigstoreAWS "github.com/sigstore/sigstore/pkg/signature/kms/aws"
 )
 
 var lAWSKMS *logrus.Entry
 
 type AWSKMSCryptoEngine struct {
-	config models.CryptoEngineInfo
-	kmscli *kms.KMS
+	config    models.CryptoEngineInfo
+	kmscli    *kms.Client
+	kmsConfig aws.Config
 }
 
-func NewAWSKMSEngine(logger *logrus.Entry, conf config.AWSSDKConfig) (CryptoEngine, error) {
+func NewAWSKMSEngine(logger *logrus.Entry, awsConf aws.Config, metadata map[string]any) (CryptoEngine, error) {
 	lAWSKMS = logger.WithField("subsystem-provider", "AWS-KMS")
 
 	httpCli, err := helpers.BuildHTTPClientWithTracerLogger(&http.Client{}, lAWSKMS)
@@ -39,21 +39,18 @@ func NewAWSKMSEngine(logger *logrus.Entry, conf config.AWSSDKConfig) (CryptoEngi
 		return nil, err
 	}
 
-	sess := session.Must(session.NewSession(&aws.Config{
-		Region:      aws.String(conf.Region),
-		Credentials: credentials.NewStaticCredentials(conf.AccessKeyID, string(conf.SecretAccessKey), ""),
-		HTTPClient:  httpCli,
-	}))
-	kmscli := kms.New(sess)
+	awsConf.HTTPClient = httpCli
+	kmscli := kms.NewFromConfig(awsConf)
 
 	return &AWSKMSCryptoEngine{
-		kmscli: kmscli,
+		kmscli:    kmscli,
+		kmsConfig: awsConf,
 		config: models.CryptoEngineInfo{
 			Type:          models.AWSKMS,
 			SecurityLevel: models.SL2,
 			Provider:      "Amazon Web Services",
 			Name:          "KMS",
-			Metadata:      conf.Metadata,
+			Metadata:      metadata,
 			SupportedKeyTypes: []models.SupportedKeyTypeInfo{
 				{
 					Type: models.KeyType(x509.RSA),
@@ -67,7 +64,6 @@ func NewAWSKMSEngine(logger *logrus.Entry, conf config.AWSSDKConfig) (CryptoEngi
 				{
 					Type: models.KeyType(x509.ECDSA),
 					Sizes: []int{
-						224,
 						256,
 						384,
 						512,
@@ -85,8 +81,8 @@ func (p *AWSKMSCryptoEngine) GetEngineConfig() models.CryptoEngineInfo {
 func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, error) {
 	lAWSKMS.Debugf("Getting the private key with Alias: %s", keyAlias)
 	var keyID = ""
-	keys, err := p.kmscli.ListKeys(&kms.ListKeysInput{
-		Limit: aws.Int64(100),
+	keys, err := p.kmscli.ListKeys(context.Background(), &kms.ListKeysInput{
+		Limit: aws.Int32(100),
 	})
 
 	if err != nil {
@@ -95,7 +91,7 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, 
 	}
 
 	for _, key := range keys.Keys {
-		aliases, err := p.kmscli.ListAliases(&kms.ListAliasesInput{
+		aliases, err := p.kmscli.ListAliases(context.Background(), &kms.ListAliasesInput{
 			KeyId: key.KeyId,
 		})
 		if err != nil {
@@ -121,14 +117,46 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, 
 		return nil, errors.New("kms key not found")
 	}
 
-	return awskms.NewSigner(context.Background(), p.kmscli, keyID)
+	kmsSinger, err := sigstoreAWS.LoadSignerVerifier(context.Background(), keyID, func(lo *config.LoadOptions) error {
+		lo.Credentials = p.kmsConfig.Credentials
+		lo.HTTPClient = p.kmsConfig.HTTPClient
+		lo.Region = p.kmsConfig.Region
+		return nil
+	})
+
+	if err != nil {
+		lAWSKMS.Errorf("could not create KMS Signer: %s", err)
+		return nil, err
+	}
+
+	signer, _, err := kmsSinger.CryptoSigner(context.Background(), func(err error) {
+		lAWSKMS.Errorf("could not create Signer: %s", err)
+	})
+
+	return signer, err
 }
 
 func (p *AWSKMSCryptoEngine) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
 	lAWSKMS.Debugf("Creating RSA key with ID: %s", keyID)
-	key, err := p.kmscli.CreateKey(&kms.CreateKeyInput{
-		KeyUsage: aws.String("SIGN_VERIFY"),
-		KeySpec:  aws.String(fmt.Sprintf("RSA_%d", keySize)),
+
+	var keySpec types.KeySpec
+
+	switch keySize {
+	case 2048:
+		keySpec = types.KeySpecRsa2048
+	case 3072:
+		keySpec = types.KeySpecRsa3072
+	case 4096:
+		keySpec = types.KeySpecRsa4096
+	default:
+		err := fmt.Errorf("key curve not supported")
+		lAWSKMS.Error(err)
+		return nil, err
+	}
+
+	key, err := p.kmscli.CreateKey(context.Background(), &kms.CreateKeyInput{
+		KeyUsage: types.KeyUsageTypeSignVerify,
+		KeySpec:  keySpec,
 	})
 
 	if err != nil {
@@ -138,7 +166,7 @@ func (p *AWSKMSCryptoEngine) CreateRSAPrivateKey(keySize int, keyID string) (cry
 
 	lAWSKMS.Debugf("RSA key created with ARN [%s]", *key.KeyMetadata.Arn)
 
-	_, err = p.kmscli.CreateAlias(&kms.CreateAliasInput{
+	_, err = p.kmscli.CreateAlias(context.Background(), &kms.CreateAliasInput{
 		AliasName:   aws.String(fmt.Sprintf("alias/%s", keyID)),
 		TargetKeyId: key.KeyMetadata.Arn,
 	})
@@ -151,10 +179,26 @@ func (p *AWSKMSCryptoEngine) CreateRSAPrivateKey(keySize int, keyID string) (cry
 }
 
 func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, keyID string) (crypto.Signer, error) {
-	lAWSKMS.Debugf("Creating ECDSA key with ID: %s", keyID)
-	key, err := p.kmscli.CreateKey(&kms.CreateKeyInput{
-		KeyUsage: aws.String("SIGN_VERIFY"),
-		KeySpec:  aws.String(fmt.Sprintf("ECC_NIST_P%d", curve.Params().BitSize)),
+	lAWSKMS.Debugf("Creating ECDSA key with ID: %s and curve %s", keyID, curve.Params().Name)
+
+	var keySpec types.KeySpec
+
+	switch curve.Params().Name {
+	case "P-256":
+		keySpec = types.KeySpecEccNistP256
+	case "P-384":
+		keySpec = types.KeySpecEccNistP384
+	case "P-512":
+		keySpec = types.KeySpecEccNistP521
+	default:
+		err := fmt.Errorf("key curve not supported")
+		lAWSKMS.Error(err)
+		return nil, err
+	}
+
+	key, err := p.kmscli.CreateKey(context.Background(), &kms.CreateKeyInput{
+		KeyUsage: types.KeyUsageTypeSignVerify,
+		KeySpec:  keySpec,
 	})
 
 	if err != nil {
@@ -164,7 +208,7 @@ func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, keyID s
 
 	lAWSKMS.Debugf("ECDSA key created with ARN [%s]", *key.KeyMetadata.Arn)
 
-	_, err = p.kmscli.CreateAlias(&kms.CreateAliasInput{
+	_, err = p.kmscli.CreateAlias(context.Background(), &kms.CreateAliasInput{
 		AliasName:   aws.String(fmt.Sprintf("alias/%s", keyID)),
 		TargetKeyId: key.KeyMetadata.Arn,
 	})
