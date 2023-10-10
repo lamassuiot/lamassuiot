@@ -91,7 +91,11 @@ func (cli *httpCAClient) GetCAsByCommonName(ctx context.Context, input services.
 func (cli *httpCAClient) GetCABySerialNumber(ctx context.Context, input services.GetCABySerialNumberInput) (*models.CACertificate, error) {
 	url := cli.baseUrl + "/v1/cas/sn/" + input.SerialNumber
 
-	resp, err := Get[models.CACertificate](ctx, cli.httpClient, url, nil, map[int][]error{})
+	resp, err := Get[models.CACertificate](ctx, cli.httpClient, url, nil, map[int][]error{
+		404: {
+			errs.ErrCANotFound,
+		},
+	})
 	return &resp, err
 }
 
@@ -186,9 +190,13 @@ func (cli *httpCAClient) UpdateCAStatus(ctx context.Context, input services.Upda
 }
 
 func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (*models.CACertificate, error) {
-	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/metadata", resources.UpdateCAMetadataBody{
+	response, err := Put[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/metadata", resources.UpdateCAMetadataBody{
 		Metadata: input.Metadata,
-	}, map[int][]error{})
+	}, map[int][]error{
+		404: {
+			errs.ErrCANotFound,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
