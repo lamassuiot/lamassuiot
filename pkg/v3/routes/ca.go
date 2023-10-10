@@ -45,10 +45,10 @@ func NewCAHTTPLayer(logger *logrus.Entry, svc services.CAService) *gin.Engine {
 	rv1.GET("/certificates/expiration", routes.GetCertificatesByExpirationDate)
 	rv1.GET("/certificates/:sn", routes.GetCertificateBySerialNumber)
 	rv1.PUT("/certificates/:sn/status", routes.UpdateCertificateStatus)
+	rv1.PUT("/certificates/:sn/metadata", routes.UpdateCertificateMetadata)
 
 	rv1.GET("/engines", routes.GetCryptoEngineProvider)
 	rv1.GET("/stats", routes.GetStats)
-
 	rv1.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	return router
 }

@@ -329,7 +329,15 @@ func (cli *httpCAClient) UpdateCertificateStatus(ctx context.Context, input serv
 func (cli *httpCAClient) UpdateCertificateMetadata(ctx context.Context, input services.UpdateCertificateMetadataInput) (*models.Certificate, error) {
 	response, err := Put[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/certificates/"+input.SerialNumber+"/metadata", resources.UpdateCertificateMetadataBody{
 		Metadata: input.Metadata,
-	}, map[int][]error{})
+	}, map[int][]error{
+		404: {
+			errs.ErrCertificateNotFound,
+		},
+
+		400: {
+			errs.ErrValidateBadRequest,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}

@@ -905,3 +905,42 @@ func (r *caHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
 	}
 	ctx.JSON(200, cert)
 }
+
+func (r *caHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
+	type uriParams struct {
+		SerialNumber string `uri:"sn" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody resources.UpdateCertificateMetadataBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	cert, err := r.svc.UpdateCertificateMetadata(funCtx, services.UpdateCertificateMetadataInput{
+		SerialNumber: params.SerialNumber,
+		Metadata:     requestBody.Metadata,
+	})
+
+	if err != nil {
+		switch err {
+		case errs.ErrCertificateNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrCertificateStatusTransitionNotAllowed:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+	ctx.JSON(200, cert)
+}

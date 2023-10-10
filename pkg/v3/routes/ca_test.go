@@ -6,8 +6,10 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"math/big"
@@ -398,7 +400,6 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 	}
 }
 func TestRevokeCA(t *testing.T) {
-
 	caTest, err := BuildCATestServer()
 	if err != nil {
 		t.Fatalf("could not create CA test server")
@@ -535,6 +536,110 @@ func TestRevokeCA(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateCAMetadata(t *testing.T) {
+	caTest, err := BuildCATestServer()
+	if err != nil {
+		t.Fatalf("could not create CA test server")
+	}
+	caTest.HttpServer.Start()
+	defer func() {
+		caTest.AfterSuite()
+	}()
+	var testcases = []struct {
+		name        string
+		before      func(svc services.CAService) error
+		run         func(caSDK services.CAService) error
+		resultCheck func(err error) error
+	}{
+		{
+			name:   "OK/UpdateCAMetadata",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) error {
+
+				ud := make(map[string]interface{})
+				ud["userName"] = "noob"
+				//cas := []*models.CACertificate{}
+				_, err := caSDK.UpdateCAMetadata(context.Background(), services.UpdateCAMetadataInput{
+					CAID:     DefaultCAID,
+					Metadata: ud,
+				})
+				if err != nil {
+					t.Errorf("failed updating the metadata of the CA: %s", err)
+				}
+				return err
+			},
+			resultCheck: func(err error) error {
+				if err != nil {
+					return fmt.Errorf("should've changed the metadata without error, but it occurs an error: %s", err)
+				}
+				//Figure it out, which is the purpose of this
+				return nil
+			},
+		},
+		{
+			name:   "Err/UpdateCAMetadataCANotExist",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) error {
+
+				ud := make(map[string]interface{})
+				ud["userName"] = "noob"
+				//cas := []*models.CACertificate{}
+				_, err := caSDK.UpdateCAMetadata(context.Background(), services.UpdateCAMetadataInput{
+					CAID:     "sdfsfgsd",
+					Metadata: ud,
+				})
+				if err != nil {
+					t.Logf("failed updating the metadata of the CA: %s", err)
+					fmt.Println("ads")
+				}
+				return err
+			},
+			resultCheck: func(err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrCANotFound) {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			//
+			// err := postgres_test.BeforeEach()
+			// fmt.Errorf("Error while running BeforeEach job: %s", err)
+
+			err = caTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
+			}
+
+			//Init CA Server with 1 CA
+			_, err = initCA(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running initCA: %s", err)
+			}
+
+			caSDK := clients.NewHttpCAClient(http.DefaultClient, caTest.HttpServer.URL)
+			err = tc.before(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running 'before' func in test case: %s", err)
+			}
+
+			err = tc.resultCheck(tc.run(caSDK))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+		})
+	}
+}
 func TestGetCAsByCommonName(t *testing.T) {
 
 	caTest, err := BuildCATestServer()
@@ -573,6 +678,138 @@ func TestGetCAsByCommonName(t *testing.T) {
 				if len(cas) != 1 {
 					return fmt.Errorf("should've got 1 CA but got %d", len(cas))
 				}
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			//
+			// err := postgres_test.BeforeEach()
+			// fmt.Errorf("Error while running BeforeEach job: %s", err)
+
+			err = caTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
+			}
+
+			//Init CA Server with 1 CA
+			_, err = initCA(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running initCA: %s", err)
+			}
+
+			caSDK := clients.NewHttpCAClient(http.DefaultClient, caTest.HttpServer.URL)
+			err = tc.before(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running 'before' func in test case: %s", err)
+			}
+
+			err = tc.resultCheck(tc.run(caSDK))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+
+		})
+	}
+}
+
+func TestUpdateCertificateMetadata(t *testing.T) {
+
+	caTest, err := BuildCATestServer()
+	if err != nil {
+		t.Fatalf("could not create CA test server")
+	}
+	caTest.HttpServer.Start()
+	defer func() {
+		caTest.AfterSuite()
+	}()
+	var testcases = []struct {
+		name        string
+		before      func(svc services.CAService) error
+		run         func(caSDK services.CAService) error
+		resultCheck func(error) error
+	}{
+		{
+			name:   "OK/UpdateCertificateMetadata",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) error {
+
+				key, err := helpers.GenerateRSAKey(2048)
+				if err != nil {
+					return fmt.Errorf("Error creating the private key: %s", err)
+				}
+
+				csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
+				cert, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+				if err != nil {
+					return err
+				}
+				ud := make(map[string]interface{})
+				ud["userName"] = "noob"
+				_, err = caSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
+					SerialNumber: cert.SerialNumber,
+					Metadata:     ud,
+				})
+				return err
+			},
+			resultCheck: func(err error) error {
+				if err != nil {
+					return fmt.Errorf("should've update without error, but got error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "Err/UpdateCertificateMetadata",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) error {
+
+				ud := make(map[string]interface{})
+				ud["userName"] = "noob"
+				_, err = caSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
+					SerialNumber: "dadaafgsdtw",
+					Metadata:     ud,
+				})
+				return err
+			},
+			resultCheck: func(err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrCertificateNotFound) {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "Err/UpdateCertificateErrorStructureWithNil",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) error {
+
+				ud := make(map[string]interface{})
+				ud["userName"] = "noob"
+				_, err = caSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
+					SerialNumber: "dadaafgsdtw",
+					Metadata:     nil,
+				})
+				return err
+			},
+			resultCheck: func(err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrValidateBadRequest) {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+
 				return nil
 			},
 		},
@@ -1084,80 +1321,7 @@ func TestDeleteCA(t *testing.T) {
 	}
 }
 
-/*
-	func TestSignatureVerify(t *testing.T) {
-		caTest, err := BuildCATestServer()
-		if err != nil {
-			t.Fatalf("could not create CA test server")
-		}
-		caTest.HttpServer.Start()
-		defer func() {
-			caTest.AfterSuite()
-		}()
-		var testcases = []struct {
-			name        string
-			before      func(svc services.CAService) error
-			run         func(caSDK services.CAService) (*models.CAStats, error)
-			resultCheck func(*models.CAStats, error) error
-		}{
-			{
-				name:   "OK/TestSignatureVerify",
-				before: func(svc services.CAService) error { return nil },
-				run: func(caSDK services.CAService) (*models.CAStats, error) {
-
-					//cas := []*models.CACertificate{}
-					res, err := caSDK.SignatureVerify(context.Background(), services.SignatureVerifyInput{
-						CAID: DefaultCAID,
-						Signature: ,
-						SigningAlgorithm: "RSASSA_PSS_SHA_512",
-					})
-					return res, err
-				},
-				resultCheck: func(cas *models.CAStats, err error) error {
-					if err != nil {
-						return fmt.Errorf("should've got CAs without error, but got error: %s", err)
-					}
-					//Figure it out, which is the purpose of this
-					return nil
-				},
-			},
-		}
-
-		for _, tc := range testcases {
-			tc := tc
-
-			t.Run(tc.name, func(t *testing.T) {
-				//
-				// err := postgres_test.BeforeEach()
-				// fmt.Errorf("Error while running BeforeEach job: %s", err)
-
-				err = caTest.BeforeEach()
-				if err != nil {
-					t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
-				}
-
-				//Init CA Server with 1 CA
-				_, err = initCA(caTest.Service)
-				if err != nil {
-					t.Fatalf("failed running initCA: %s", err)
-				}
-
-				caSDK := clients.NewHttpCAClient(http.DefaultClient, caTest.HttpServer.URL)
-				err = tc.before(caTest.Service)
-				if err != nil {
-					t.Fatalf("failed running 'before' func in test case: %s", err)
-				}
-
-				err = tc.resultCheck(tc.run(caSDK))
-				if err != nil {
-					t.Fatalf("unexpected result in test case: %s", err)
-				}
-			})
-		}
-	}
-*/
-
-func TestUpdateCAMetadata(t *testing.T) {
+func TestSignatureVerify(t *testing.T) {
 	caTest, err := BuildCATestServer()
 	if err != nil {
 		t.Fatalf("could not create CA test server")
@@ -1169,58 +1333,72 @@ func TestUpdateCAMetadata(t *testing.T) {
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
-		run         func(caSDK services.CAService) error
-		resultCheck func(err error) error
+		run         func(caSDK services.CAService) (bool, error)
+		resultCheck func(bool, error) error
 	}{
 		{
-			name:   "OK/UpdateCAMetadata",
+			name:   "OK/TestSignatureVerifyPlainMes",
 			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) error {
+			run: func(caSDK services.CAService) (bool, error) {
 
-				ud := make(map[string]interface{})
-				ud["userName"] = "noob"
-				//cas := []*models.CACertificate{}
-				_, err := caSDK.UpdateCAMetadata(context.Background(), services.UpdateCAMetadataInput{
-					CAID:     DefaultCAID,
-					Metadata: ud,
+				mess := "manex"
+				messB := []byte(mess)
+				messba64 := base64.StdEncoding.EncodeToString(messB)
+				sign, err := caSDK.SignatureSign(context.Background(), services.SignatureSignInput{
+					CAID:             DefaultCAID,
+					Message:          []byte(messba64),
+					MessageType:      models.Raw,
+					SigningAlgorithm: "RSASSA_PSS_SHA_256",
 				})
-				if err != nil {
-					t.Errorf("failed updating the metadata of the CA: %s", err)
-				}
-				return err
+
+				//cas := []*models.CACertificate{}
+				res, err := caSDK.SignatureVerify(context.Background(), services.SignatureVerifyInput{
+					CAID:             DefaultCAID,
+					Signature:        sign,
+					SigningAlgorithm: "RSASSA_PSS_SHA_512",
+					MessageType:      models.Raw,
+					Message:          []byte(messba64),
+				})
+				return res, err
 			},
-			resultCheck: func(err error) error {
-				if err != nil {
-					return fmt.Errorf("should've changed the metadata without error, but it occurs an error: %s", err)
+			resultCheck: func(bol bool, err error) error {
+				fmt.Println(bol)
+				if !errors.Is(err, errs.ErrCAStatus) {
+					return fmt.Errorf("got unexpected error: %s", err)
 				}
-				//Figure it out, which is the purpose of this
 				return nil
 			},
 		},
 		{
-			name:   "Err/UpdateCAMetadataCANotExist",
+			name:   "OK/TestSignatureVerifyHashMes",
 			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) error {
-
-				ud := make(map[string]interface{})
-				ud["userName"] = "noob"
-				//cas := []*models.CACertificate{}
-				_, err := caSDK.UpdateCAMetadata(context.Background(), services.UpdateCAMetadataInput{
-					CAID:     "sdfsfgsd",
-					Metadata: ud,
+			run: func(caSDK services.CAService) (bool, error) {
+				h := sha256.New()
+				mess := "manex"
+				messB := []byte(mess)
+				h.Write([]byte(messB))
+				messH := h.Sum(nil)
+				messba64 := base64.StdEncoding.EncodeToString(messH)
+				sign, err := caSDK.SignatureSign(context.Background(), services.SignatureSignInput{
+					CAID:             DefaultCAID,
+					Message:          []byte(messba64),
+					MessageType:      models.Raw,
+					SigningAlgorithm: "RSASSA_PSS_SHA_256",
 				})
-				if err != nil {
-					t.Logf("failed updating the metadata of the CA: %s", err)
-					fmt.Println("ads")
-				}
-				return err
-			},
-			resultCheck: func(err error) error {
-				if err == nil {
-					return fmt.Errorf("should've got error. Got none")
-				}
 
-				if !errors.Is(err, errs.ErrCANotFound) {
+				//cas := []*models.CACertificate{}
+				res, err := caSDK.SignatureVerify(context.Background(), services.SignatureVerifyInput{
+					CAID:             DefaultCAID,
+					Signature:        sign,
+					SigningAlgorithm: "RSASSA_PSS_SHA_512",
+					MessageType:      models.Raw,
+					Message:          []byte(messba64),
+				})
+				return res, err
+			},
+			resultCheck: func(bol bool, err error) error {
+				fmt.Println(bol)
+				if !errors.Is(err, errs.ErrCAStatus) {
 					return fmt.Errorf("got unexpected error: %s", err)
 				}
 				return nil
