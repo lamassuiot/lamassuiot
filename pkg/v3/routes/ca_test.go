@@ -850,6 +850,156 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 	}
 }
 
+func TestUpdateCAStatus(t *testing.T) {
+	caTest, err := BuildCATestServer()
+	if err != nil {
+		t.Fatalf("could not create CA test server")
+	}
+	caTest.HttpServer.Start()
+	defer func() {
+		caTest.AfterSuite()
+	}()
+	var testcases = []struct {
+		name        string
+		before      func(svc services.CAService) error
+		run         func(caSDK services.CAService) (*models.CACertificate, error)
+		resultCheck func(*models.CACertificate, error) error
+	}{
+		{
+			name:   "OK/UpdateCAStatusExp",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				caStatus := models.StatusExpired
+				res, err := caSDK.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+					CAID:             DefaultCAID,
+					Status:           caStatus,
+					RevocationReason: models.RevocationReason(2),
+				})
+
+				if err != nil {
+					return nil, fmt.Errorf("Got error while updating the status of the CA %s", err)
+				}
+
+				ca, err := caSDK.GetCAByID(context.Background(), services.GetCAByIDInput{
+					CAID: DefaultCAID,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("Got error while checking the status of the CA %s", err)
+				}
+				if ca.Status != caStatus {
+					return nil, fmt.Errorf("The updating process does not gone well")
+				}
+				return res, err
+			},
+			resultCheck: func(cas *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got the process without error, but got error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/UpdateCAStatusCANotExist",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				caStatus := models.StatusExpired
+				res, err := caSDK.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+					CAID:             "sdadaad",
+					Status:           caStatus,
+					RevocationReason: models.RevocationReason(2),
+				})
+
+				if err != nil {
+					return nil, fmt.Errorf("Got error while updating the status of the CA %s", err)
+				}
+
+				ca, err := caSDK.GetCAByID(context.Background(), services.GetCAByIDInput{
+					CAID: DefaultCAID,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("Got error while checking the status of the CA %s", err)
+				}
+				if ca.Status != caStatus {
+					return nil, fmt.Errorf("The updating process does not gone well")
+				}
+				return res, err
+			},
+			resultCheck: func(cas *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got the process with error, but did not get error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/UpdateCAStatusRevo",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				caStatus := models.StatusRevoked
+				//cas := []*models.CACertificate{}
+				res, err := caSDK.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+					CAID:             DefaultCAID,
+					Status:           caStatus,
+					RevocationReason: models.RevocationReason(2),
+				})
+
+				if err != nil {
+					return nil, fmt.Errorf("Got error while updating the status of the CA %s", err)
+				}
+
+				ca, err := caSDK.GetCAByID(context.Background(), services.GetCAByIDInput{
+					CAID: DefaultCAID,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("Got error while checking the status of the CA %s", err)
+				}
+				if ca.Status != caStatus {
+					return nil, fmt.Errorf("The updating process does not gone well")
+				}
+				return res, err
+			},
+			resultCheck: func(cas *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got the process without error, but got error: %s", err)
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			//
+			// err := postgres_test.BeforeEach()
+			// fmt.Errorf("Error while running BeforeEach job: %s", err)
+
+			err = caTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
+			}
+
+			//Init CA Server with 1 CA
+			_, err = initCA(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running initCA: %s", err)
+			}
+
+			caSDK := clients.NewHttpCAClient(http.DefaultClient, caTest.HttpServer.URL)
+			err = tc.before(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running 'before' func in test case: %s", err)
+			}
+
+			err = tc.resultCheck(tc.run(caSDK))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+		})
+	}
+}
+
 func TestGetStats(t *testing.T) {
 	caTest, err := BuildCATestServer()
 	if err != nil {
@@ -1885,119 +2035,143 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
-		run         func(caSDK services.CAService) ([]*models.CACertificate, error)
-		resultCheck func([]*models.CACertificate, error) error
+		run         func(caSDK services.CAService) ([]*models.Certificate, error)
+		resultCheck func([]*models.Certificate, error) error
 	}{
 		{
 			name: "Err/GetCAGertByExpDate",
 			before: func(svc services.CAService) error {
+				for i := 0; i < 20; i++ {
+					key, err := helpers.GenerateRSAKey(2048)
+					if err != nil {
+						return fmt.Errorf("Error creating the private key: %s", err)
+					}
 
+					csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					if err != nil {
+						return err
+					}
+				}
 				return nil
 			},
-			run: func(caSDK services.CAService) ([]*models.CACertificate, error) {
-				cas := []*models.CACertificate{}
+			run: func(caSDK services.CAService) ([]*models.Certificate, error) {
+				cas := []*models.Certificate{}
 				res, err := caSDK.GetCertificatesByExpirationDate(context.Background(), services.GetCertificatesByExpirationDateInput{
-					ExpiresAfter: <-time.After(time.Duration()),
+					ExpiresAfter:  time.Now(),
+					ExpiresBefore: time.Date(2025, 0, 0, 0, 0, 0, 0, time.UTC),
+					ListInput: services.ListInput[models.Certificate]{
+						ExhaustiveRun: true,
+						QueryParameters: &resources.QueryParameters{
+							PageSize: 2,
+						},
+						ApplyFunc: func(elem *models.Certificate) {
+							derefCert := *elem
+							cas = append(cas, &derefCert)
+						},
+					},
 				})
 				fmt.Println(res)
 				return cas, err
 			},
-			resultCheck: func(cas []*models.CACertificate, err error) error {
+			resultCheck: func(cas []*models.Certificate, err error) error {
 				if err != nil {
 					return fmt.Errorf("should've gone correctly, but got error.")
 				}
-				if len(cas) != 1 {
+				if len(cas) != 20 {
 					return fmt.Errorf("should've got only one CA and the received quantity is different.")
 				}
 				return nil
 			},
 		},
 		{
-			name: "Err/GetCAsExRunFalse",
+			name: "Err/GetCAGertByExpDateExhaustiveRun",
 			before: func(svc services.CAService) error {
-				var caName string
-				caDUr := models.TimeDuration(time.Hour * 24)
-				issuanceDur := models.TimeDuration(time.Hour * 12)
-				for i := 0; i < 5; i++ {
-					caName = DefaultCAID + strconv.Itoa(i)
-					res, _ := svc.CreateCA(context.Background(), services.CreateCAInput{
-						ID:                 caName,
-						KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-						Subject:            models.Subject{CommonName: DefaultCACN},
-						CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
-						IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
-					})
-					fmt.Println(res)
-				}
+				for i := 0; i < 20; i++ {
+					key, err := helpers.GenerateRSAKey(2048)
+					if err != nil {
+						return fmt.Errorf("Error creating the private key: %s", err)
+					}
 
+					csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					if err != nil {
+						return err
+					}
+				}
 				return nil
 			},
-			run: func(caSDK services.CAService) ([]*models.CACertificate, error) {
-				cas := []*models.CACertificate{}
-				res, err := caSDK.GetCAs(context.Background(), services.GetCAsInput{
-					ExhaustiveRun: false,
-					ApplyFunc: func(elem *models.CACertificate) {
-						derefCert := *elem
-						cas = append(cas, &derefCert)
-					},
-					QueryParameters: &resources.QueryParameters{
-						PageSize: 2,
+			run: func(caSDK services.CAService) ([]*models.Certificate, error) {
+				cas := []*models.Certificate{}
+				res, err := caSDK.GetCertificatesByExpirationDate(context.Background(), services.GetCertificatesByExpirationDateInput{
+					ExpiresAfter:  time.Now(),
+					ExpiresBefore: time.Date(2025, 0, 0, 0, 0, 0, 0, time.UTC),
+					ListInput: services.ListInput[models.Certificate]{
+						ExhaustiveRun: false,
+						QueryParameters: &resources.QueryParameters{
+							PageSize: 2,
+						},
+						ApplyFunc: func(elem *models.Certificate) {
+							derefCert := *elem
+							cas = append(cas, &derefCert)
+						},
 					},
 				})
 				fmt.Println(res)
 				return cas, err
 			},
-			resultCheck: func(cas []*models.CACertificate, err error) error {
+			resultCheck: func(cas []*models.Certificate, err error) error {
 				if err != nil {
 					return fmt.Errorf("should've gone correctly, but got error.")
 				}
 				if len(cas) != 2 {
-					return fmt.Errorf("should've got only two CAS, but got %d.", len(cas))
+					return fmt.Errorf("should've got only one CA and the received quantity is different.")
 				}
 				return nil
 			},
 		},
 		{
-			name: "Err/GetCAsExRunTrue",
+			name: "Err/GetCAGertByExpDateIncDate",
 			before: func(svc services.CAService) error {
-				var caName string
-				caDUr := models.TimeDuration(time.Hour * 24)
-				issuanceDur := models.TimeDuration(time.Hour * 12)
-				for i := 0; i < 5; i++ {
-					caName = DefaultCAID + strconv.Itoa(i)
-					res, _ := svc.CreateCA(context.Background(), services.CreateCAInput{
-						ID:                 caName,
-						KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-						Subject:            models.Subject{CommonName: DefaultCACN},
-						CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
-						IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
-					})
-					fmt.Println(res)
-				}
+				for i := 0; i < 20; i++ {
+					key, err := helpers.GenerateRSAKey(2048)
+					if err != nil {
+						return fmt.Errorf("Error creating the private key: %s", err)
+					}
 
+					csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					if err != nil {
+						return err
+					}
+				}
 				return nil
 			},
-			run: func(caSDK services.CAService) ([]*models.CACertificate, error) {
-				cas := []*models.CACertificate{}
-				res, err := caSDK.GetCAs(context.Background(), services.GetCAsInput{
-					ExhaustiveRun: true,
-					ApplyFunc: func(elem *models.CACertificate) {
-						derefCert := *elem
-						cas = append(cas, &derefCert)
-					},
-					QueryParameters: &resources.QueryParameters{
-						PageSize: 2,
+			run: func(caSDK services.CAService) ([]*models.Certificate, error) {
+				cas := []*models.Certificate{}
+				res, err := caSDK.GetCertificatesByExpirationDate(context.Background(), services.GetCertificatesByExpirationDateInput{
+					ExpiresAfter:  time.Now(),
+					ExpiresBefore: time.Date(2010, 0, 0, 0, 0, 0, 0, time.UTC),
+					ListInput: services.ListInput[models.Certificate]{
+						ExhaustiveRun: true,
+						QueryParameters: &resources.QueryParameters{
+							PageSize: 2,
+						},
+						ApplyFunc: func(elem *models.Certificate) {
+							derefCert := *elem
+							cas = append(cas, &derefCert)
+						},
 					},
 				})
 				fmt.Println(res)
 				return cas, err
 			},
-			resultCheck: func(cas []*models.CACertificate, err error) error {
+			resultCheck: func(cas []*models.Certificate, err error) error {
 				if err != nil {
 					return fmt.Errorf("should've gone correctly, but got error.")
 				}
-				if len(cas) != 6 {
-					return fmt.Errorf("should've got six CAS, but got %d.", len(cas))
+				if len(cas) != 0 {
+					return fmt.Errorf("should've got only one CA and the received quantity is different.")
 				}
 				return nil
 			},
