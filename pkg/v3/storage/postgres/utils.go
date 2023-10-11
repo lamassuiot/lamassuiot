@@ -192,7 +192,7 @@ func (db *postgresDBQuerier[E]) SelectExists(queryID string, queryCol *string) (
 	}
 
 	var elem E
-	tx := db.First(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
+	tx := db.Table(db.tableName).First(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
 	if err := tx.Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return false, nil, nil
@@ -205,7 +205,7 @@ func (db *postgresDBQuerier[E]) SelectExists(queryID string, queryCol *string) (
 }
 
 func (db *postgresDBQuerier[E]) Insert(elem E, elemID string) (*E, error) {
-	tx := db.Create(elem)
+	tx := db.Table(db.tableName).Create(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
@@ -216,7 +216,7 @@ func (db *postgresDBQuerier[E]) Insert(elem E, elemID string) (*E, error) {
 
 func (db *postgresDBQuerier[E]) Update(elem E, elemID string) (*E, error) {
 	_, newElem, err := db.SelectExists(elemID, nil)
-	tx := db.Save(&elem)
+	tx := db.Table(db.tableName).Save(&elem)
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
