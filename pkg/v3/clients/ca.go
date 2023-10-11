@@ -275,10 +275,18 @@ func (cli *httpCAClient) GetCertificatesByCA(ctx context.Context, input services
 	url := cli.baseUrl + "/v1/cas/" + input.CAID + "/certificates"
 
 	if input.ExhaustiveRun {
-		err := IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
+		err := IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{
+			404: {
+				errs.ErrCANotFound,
+			},
+		})
 		return "", err
 	} else {
-		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
+		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{
+			404: {
+				errs.ErrCANotFound,
+			},
+		})
 		for _, elem := range resp.IterableList.List {
 			input.ApplyFunc(&elem.Certificate)
 		}

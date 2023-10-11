@@ -1125,7 +1125,7 @@ func (svc *CAServiceImpl) GetCertificatesByCA(ctx context.Context, input GetCert
 
 	if !exists {
 		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
-		return "", errs.ErrCertificateNotFound
+		return "", errs.ErrCANotFound
 	}
 
 	lFunc.Debugf("reading certificates by %s CA", input.CAID)
