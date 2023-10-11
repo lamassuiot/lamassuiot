@@ -1,11 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 
 	formatter "github.com/antonfisher/nested-logrus-formatter"
@@ -15,7 +15,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/messaging"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
+	iotplatform "github.com/lamassuiot/lamassuiot/pkg/v3/services/iot/platform"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
 )
@@ -70,17 +70,18 @@ func main() {
 		panic(err)
 	}
 
-	svc, err := services.NewIotAWS(services.IotAWSServiceBuilder{
+	svc, err := iotplatform.NewAWSIotPlatformService(iotplatform.AWSIotPlatformServiceBuilder{
 		Conf:           conf.AWSSDKConfig,
 		Logger:         lSvc,
 		BaseHttpClient: http.DefaultClient,
 		CACli:          caCli,
+		ConnectorID:    conf.ID,
 	})
 	if err != nil {
 		panic(err)
 	}
 
-	info, err := svc.GetCloudProviderConfig()
+	info, err := svc.GetCloudConfiguration(context.Background())
 	if err != nil {
 		log.Panic(err)
 	}
@@ -101,10 +102,12 @@ func main() {
 	}
 }
 
-func eventHandler(logger *logrus.Entry, connectorID string, cloudEvent *event.Event, svc services.IotAWSService) {
+func eventHandler(logger *logrus.Entry, connectorID string, cloudEvent *event.Event, svc iotplatform.IotPlatformService) {
 	logError := func(eventID string, eventType string, modelObject string, err error) {
 		logger.Errorf("could not decode event '%s' into model '%s' object. Skipping event with ID %s: %s", eventType, modelObject, eventID, err)
 	}
+
+	logger.Tracef("incoming cloud event of type: %s", cloudEvent.Type())
 
 	switch cloudEvent.Type() {
 	case "ca.create", "ca.import", "ca.update.metadata":
@@ -114,38 +117,27 @@ func eventHandler(logger *logrus.Entry, connectorID string, cloudEvent *event.Ev
 			return
 		}
 
-		var meta interface{}
+		var registerCA bool
 		var ok bool
-		if meta, ok = ca.Metadata[connectorID]; !ok {
+		meta, ok := ca.Metadata[fmt.Sprintf("lamassu.io/iot-platform-connector/aws/%s/register", connectorID)]
+		if !ok {
 			logger.Debugf("skipping event of type %s with ID %s. Metadata didn't include key %s", cloudEvent.Type(), cloudEvent.ID(), connectorID)
 			return
 		}
 
-		metaBytes, err := json.Marshal(meta)
-		if err != nil {
+		if registerCA, ok = meta.(bool); !ok {
 			logger.Errorf("skipping event of type %s with ID %s. Invalid metadata content. Got metadata \n%s\n error is: %s", cloudEvent.Type(), cloudEvent.ID(), meta, err)
 			return
 		}
 
-		unquoteMeta, err := strconv.Unquote(string(metaBytes))
-		if err != nil {
-			logger.Warnf("event of type %s with ID %s. metadata is not quoted. continuing", cloudEvent.Type(), cloudEvent.ID())
-		}
-		metaBytes = []byte(unquoteMeta)
-
-		var metaCAReg models.CAIoTAWSRegistration
-		if err = json.Unmarshal(metaBytes, &metaCAReg); err != nil {
-			logger.Errorf("skipping event of type %s with ID %s. Invalid metadata format. Got metadata \n%s\n error is: %s", cloudEvent.Type(), cloudEvent.ID(), meta, err)
-			return
-		}
-
-		if !metaCAReg.Register {
+		if !registerCA {
+			// TODO if register CA is false, check if it was already registered. If so, remove registration
 			logger.Warnf("skipping event of type %s with ID %s. Register attribute should be true. Got metadata \n%s", cloudEvent.Type(), cloudEvent.ID(), meta)
 			return
 		}
 
 		//check if CA already registered in AWS
-		cas, err := svc.GetRegisteredCAs(services.GetRegisteredCAsInput{})
+		cas, err := svc.GetRegisteredCAs(context.Background())
 		if err != nil {
 			logger.Errorf("skipping event of type %s with ID %s. Could not get AWS Registered CAs", cloudEvent.Type(), cloudEvent.ID())
 			return
@@ -165,8 +157,8 @@ func eventHandler(logger *logrus.Entry, connectorID string, cloudEvent *event.Ev
 		}
 
 		if !alreadyRegistered {
-			logger.Debugf("registering CA with SN '%s'", ca.SerialNumber)
-			err := svc.RegisterCA(services.RegisterCAInput{CACertificate: ca})
+			logger.Infof("registering CA with SN '%s'", ca.SerialNumber)
+			ca, err := svc.RegisterCA(context.Background(), iotplatform.RegisterCAInput{CACertificate: *ca})
 			if err != nil {
 				logger.Errorf("something went wrong while registering CA with SN '%s' in AWS IoT. Skipping event handling: %s", ca.SerialNumber, err)
 				return
@@ -174,18 +166,6 @@ func eventHandler(logger *logrus.Entry, connectorID string, cloudEvent *event.Ev
 		} else {
 			logger.Warnf("CA with SN '%s' is already registered in AWS IoT. Skipping registration process", ca.SerialNumber)
 		}
-
-		//once CA is registered, check if JITP is required
-		if !metaCAReg.JITP {
-			logger.Warnf("event of type %s with ID %s. No JITP Template will be created/updated. Got metadata \n%s", cloudEvent.Type(), cloudEvent.ID(), meta)
-			return
-		}
-
-		//check if JITP template already exists.
-
-		//If JITP exists, update it if required
-		//Else create JITP.
-
 	}
 }
 

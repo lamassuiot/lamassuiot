@@ -2,7 +2,7 @@ package iot
 
 import "time"
 
-type IotService[E any] interface {
+type IotDeviceLifeCycleAutomationService[E any] interface {
 	UpdateDigitalTwin(input DigitalTwinIdentityState) error
 	GetRemediateTrackers() ([]*RemediateTracker, error)
 }

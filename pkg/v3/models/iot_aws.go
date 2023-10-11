@@ -13,3 +13,10 @@ type CAIoTAWSRegistration struct {
 	JITPInlinePolicy          string   `json:"jitp_inline_policy,omitempty"`
 	JITPExternalPoliciesNames []string `json:"jitp_external_policy_names,omitempty"`
 }
+
+type PlatformConnectorAWSCAMetadata struct {
+	Account       string `json:"account"`
+	Region        string `json:"region"`
+	ARN           string `json:"arn"`
+	CertificateID string `json:"certificate_id"`
+}

@@ -1,16 +1,17 @@
-package iot
+package iotplatform
 
-type IotPlatformService[E any] interface {
-	UpdateDigitalTwin(input DigitalTwinIdentity) error
+import (
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
+	"golang.org/x/net/context"
+)
+
+type IotPlatformService interface {
+	GetCloudConfiguration(context.Context) (any, error)
+	GetRegisteredCAs(context.Context) ([]*models.CACertificate, error)
+	RegisterCA(context.Context, RegisterCAInput) (*models.CACertificate, error)
 }
 
-type DigitalTwinIdentity struct {
-	Actions struct {
-		ReEnrol    bool
-		CARotation bool
-	}
-	LamassuConfiguration struct {
-		URL   string
-		DMSID string
-	}
+type RegisterCAInput struct {
+	models.CACertificate
+	RegisterConfiguration any
 }

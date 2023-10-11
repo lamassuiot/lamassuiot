@@ -8,5 +8,5 @@ type IoTAWSConfig struct {
 		HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"ca_client"`
 
-	AWSSDKConfig AWSSDKConfig `mapstructure:"aws_iot"`
+	AWSSDKConfig AWSSDKConfig `mapstructure:"aws"`
 }
