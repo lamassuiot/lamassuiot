@@ -102,7 +102,7 @@ func main() {
 	caSvc.SetService(svc)
 
 	router := routes.NewCAHTTPLayer(lHttp, svc)
-	routes.RunHttpRouter(lHttp, router, conf.Server, models.APIServiceInfo{
+	err = routes.RunHttpRouter(lHttp, router, conf.Server, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,

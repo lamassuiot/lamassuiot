@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -104,30 +105,58 @@ func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 		return
 	}
 
-	authExtractors := []httpAuthReqExtractor{
-		ClientCertificateExtractor{},
-		JWTExtractor{},
+	authCtx := context.Background()
+
+	if bitSize := ctx.GetHeader("Bit-Size"); bitSize != "" {
+		lEst.Debugf("Bit-Size header present with value %s", bitSize)
+		bitSizeInt, err := strconv.Atoi(bitSize)
+		if err != nil {
+			lEst.Warnf("Bit-Size header with non numerical value")
+		} else {
+			authCtx = context.WithValue(authCtx, models.ESTServerKeyGenBitSize, bitSizeInt)
+		}
 	}
 
-	authCtx := context.Background()
+	if keyType := ctx.GetHeader("Key-Type"); keyType != "" {
+		lEst.Debugf("Key-Type header present with value %s", keyType)
+		switch keyType {
+		case x509.RSA.String():
+			lEst.Debugf("valid Key-Type header")
+			authCtx = context.WithValue(authCtx, models.ESTServerKeyGenBitSize, x509.RSA)
+		case x509.ECDSA.String():
+			lEst.Debugf("valid Key-Type header")
+			authCtx = context.WithValue(authCtx, models.ESTServerKeyGenBitSize, x509.ECDSA)
+		default:
+			lEst.Warnf("invalid Key-Type header")
+		}
+	}
+
+	authExtractors := []httpAuthReqExtractor{
+		ClientCertificateExtractor{},
+	}
+
 	for _, authExtractor := range authExtractors {
 		authCtx = authExtractor.ExtractAuthentication(authCtx, *ctx.Request)
 	}
 
+	var key any
 	var signedCrt *x509.Certificate
-	if strings.Contains(ctx.Request.URL.Path, "simplereenroll") {
+	if strings.Contains(ctx.Request.URL.Path, "serverkeygen") {
+		signedCrt, key, err = r.svc.ServerKeyGen(authCtx, csr, params.APS)
+		fmt.Println(key)
+	} else if strings.Contains(ctx.Request.URL.Path, "simplereenroll") {
 		signedCrt, err = r.svc.Reenroll(authCtx, csr, params.APS)
 	} else {
 		signedCrt, err = r.svc.Enroll(authCtx, csr, params.APS)
 	}
 	if err != nil {
-		ctx.JSON(500, err)
+		ctx.JSON(500, gin.H{"err": err})
 		return
 	}
 
 	body, err := pkcs7.DegenerateCertificate(signedCrt.Raw)
 	if err != nil {
-		ctx.JSON(500, err)
+		ctx.JSON(500, gin.H{"err": err})
 		return
 	}
 
@@ -165,23 +194,6 @@ func (ClientCertificateExtractor) ExtractAuthentication(ctx context.Context, req
 
 	if crt != nil {
 		ctx = context.WithValue(ctx, models.ESTAuthModeMutualTLS, crt)
-	}
-
-	return ctx
-}
-
-type JWTExtractor struct{}
-
-func (JWTExtractor) ExtractAuthentication(ctx context.Context, req http.Request) context.Context {
-	authHeader := req.Header.Get("Authorization")
-	if authHeader != "" {
-		authHeader = strings.ToLower(authHeader)
-		if !strings.HasSuffix(authHeader, "bearer ") {
-			lEst.Warnf("not a valid JWT authentication header. Has no 'bearer' suffix. Got header: %s", authHeader)
-		}
-
-		jwt := strings.Replace("bearer ", authHeader, "", 1)
-		ctx = context.WithValue(ctx, models.ESTAuthModeJWT, jwt)
 	}
 
 	return ctx

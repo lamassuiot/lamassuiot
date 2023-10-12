@@ -1,14 +1,13 @@
 package routes
 
 import (
-	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
+	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/controllers"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
 	"github.com/sirupsen/logrus"
 )
 
-func NewDMSManagerHTTPLayer(logger *logrus.Entry, svc services.DMSManagerService, httpServerCfg config.HttpServer, apiInfo models.APIServiceInfo) error {
+func NewDMSManagerHTTPLayer(logger *logrus.Entry, svc services.DMSManagerService) *gin.Engine {
 	router := newGinEngine(logger)
 
 	routes := controllers.NewDMSManagerHttpRoutes(svc)
@@ -20,7 +19,7 @@ func NewDMSManagerHTTPLayer(logger *logrus.Entry, svc services.DMSManagerService
 	rv1.GET("/dms", routes.GetAllDMSs)
 	rv1.POST("/dms", routes.CreateDMS)
 	rv1.GET("/dms/:id", routes.GetDMSByID)
-	rv1.PUT("/dms/:id/id-profile", routes.UpdateIdentityProfile)
+	rv1.PUT("/dms/:id/settings", routes.UpdateIdentityProfile)
 
-	return nil
+	return router
 }

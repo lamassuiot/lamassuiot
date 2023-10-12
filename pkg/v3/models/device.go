@@ -26,19 +26,18 @@ const (
 )
 
 type Device struct {
-	ID           string       `json:"id"`
-	Alias        string       `json:"alias"`
-	Tags         []string     `json:"tags"`
-	Status       DeviceStatus `json:"status"`
-	Icon         string       `json:"icon"`
-	IconColor    string       `json:"icon_color"`
-	CreationDate time.Time    `json:"creation_ts"`
-	//Metadata set by DMS or end users
-	Metadata     map[string]string     `json:"metadata"`
+	ID           string                `json:"id" gorm:"primaryKey"`
+	Alias        string                `json:"alias"`
+	Tags         []string              `json:"tags" gorm:"serializer:json"`
+	Status       DeviceStatus          `json:"status"`
+	Icon         string                `json:"icon"`
+	IconColor    string                `json:"icon_color"`
+	CreationDate time.Time             `json:"creation_ts"`
+	Metadata     map[string]any        `json:"metadata" gorm:"serializer:json"`
 	DMSOwnerID   string                `json:"dms_owner"`
-	IdentitySlot *Slot[Certificate]    `json:"identity,omitempty"`
-	ExtraSlots   map[string]*Slot[any] `json:"slots"`
-	Logs         map[time.Time]LogMsg  `json:"logs"`
+	IdentitySlot *Slot[Certificate]    `json:"identity,omitempty" gorm:"serializer:json"`
+	ExtraSlots   map[string]*Slot[any] `json:"slots" gorm:"serializer:json"`
+	Logs         map[time.Time]LogMsg  `json:"logs" gorm:"serializer:json"`
 }
 
 type Slot[E any] struct {

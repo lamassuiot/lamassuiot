@@ -1,14 +1,13 @@
 package routes
 
 import (
-	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
+	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/controllers"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
 	"github.com/sirupsen/logrus"
 )
 
-func NewDeviceManagerHTTPLayer(logger *logrus.Entry, svc services.DeviceManagerService, httpServerCfg config.HttpServer, apiInfo models.APIServiceInfo) error {
+func NewDeviceManagerHTTPLayer(logger *logrus.Entry, svc services.DeviceManagerService) *gin.Engine {
 	router := newGinEngine(logger)
 	routes := controllers.NewDeviceManagerHttpRoutes(svc)
 
@@ -20,5 +19,5 @@ func NewDeviceManagerHTTPLayer(logger *logrus.Entry, svc services.DeviceManagerS
 	rv1.POST("/devices/:id/decommission", routes.DecommissionDevice)
 	rv1.PUT("/devices/dms/:id", routes.GetAllDevices)
 
-	return nil
+	return router
 }

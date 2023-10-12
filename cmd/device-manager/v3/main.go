@@ -12,6 +12,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage/couchdb"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/storage/postgres"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -73,11 +74,16 @@ func main() {
 	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
 	deviceSvc.SetService(svc)
 
-	err = routes.NewDeviceManagerHTTPLayer(lHttp, svc, conf.Server, models.APIServiceInfo{
+	router := routes.NewDeviceManagerHTTPLayer(lHttp, svc)
+	err = routes.RunHttpRouter(lHttp, router, conf.Server, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -89,7 +95,17 @@ func main() {
 func createStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine) (storage.DeviceManagerRepo, error) {
 	switch conf.Provider {
 	case config.Postgres:
-		return nil, fmt.Errorf("TODO")
+		psqlCli, err := postgres.CreatePostgresDBConnection(logger, conf.Postgres, "devicemanager")
+		if err != nil {
+			log.Fatalf("could not create postgres client: %s", err)
+		}
+
+		deviceStore, err := postgres.NewDeviceManagerRepository(psqlCli)
+		if err != nil {
+			log.Fatalf("could not initialize postgres Device client: %s", err)
+		}
+
+		return deviceStore, nil
 	case config.CouchDB:
 		couchdbClient, err := couchdb.CreateCouchDBConnection(logger, conf.CouchDB)
 		if err != nil {
