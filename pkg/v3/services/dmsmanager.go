@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/errs"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
@@ -40,11 +39,10 @@ type DMSManagerServiceImpl struct {
 }
 
 type DMSManagerBuilder struct {
-	Logger              *logrus.Entry
-	DevManagerCli       DeviceManagerService
-	CAClient            CAService
-	DMSStorage          storage.DMSRepo
-	DeviceMonitorConfig config.DeviceMonitorConfig
+	Logger        *logrus.Entry
+	DevManagerCli DeviceManagerService
+	CAClient      CAService
+	DMSStorage    storage.DMSRepo
 }
 
 func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {

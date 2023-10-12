@@ -13,11 +13,4 @@ type DMSconfig struct {
 	} `mapstructure:"device_manager_client"`
 
 	DownstreamCertificateFile string `mapstructure:"downstream_cert_file"`
-
-	DeviceMonitorConfig `mapstructure:"device_monitoring"`
-}
-
-type DeviceMonitorConfig struct {
-	Enabled   bool   `mapstructure:"enabled"`
-	Frequency string `mapstructure:"frequency"`
 }
