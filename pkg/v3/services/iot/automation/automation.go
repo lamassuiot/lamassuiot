@@ -2,9 +2,13 @@ package iot
 
 import "time"
 
-type IotDeviceLifeCycleAutomationService[E any] interface {
-	UpdateDigitalTwin(input DigitalTwinIdentityState) error
+type IotDeviceLifeCycleAutomationService interface {
+	UpdateDigitalTwin(input UpdateDigitalTwinInput) error
 	GetRemediateTrackers() ([]*RemediateTracker, error)
+}
+type UpdateDigitalTwinInput struct {
+	DeviceID string
+	Action   RemediationActionType
 }
 
 type RemediateTracker struct {
@@ -14,12 +18,12 @@ type RemediateTracker struct {
 }
 
 type DigitalTwinIdentityStateTracker struct {
-	ID           string
-	Remediated   bool
-	CreatedAt    time.Time
-	RemediatedAt time.Time
-	State        DigitalTwinIdentityState
-	// RemediationActions []RemediationAction
+	ID              string
+	Remediated      bool
+	CreatedAt       time.Time
+	RemediatedAt    time.Time
+	State           DigitalTwinIdentityState
+	RemediationType RemediationActionType
 }
 
 type RemediationActionType string
@@ -30,11 +34,6 @@ const (
 )
 
 type DigitalTwinIdentityState struct {
-	ID      string
-	Actions struct {
-		ReEnrol    bool
-		CARotation bool
-	}
 	LamassuConfiguration struct {
 		URL   string
 		DMSID string
