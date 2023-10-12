@@ -184,7 +184,7 @@ func (ClientCertificateExtractor) ExtractAuthentication(ctx context.Context, req
 		}
 
 		//no (valid) certificate in the header. check if a certificate can be obtained from client TLS connection
-		if len(req.TLS.PeerCertificates) > 0 {
+		if req.TLS != nil && len(req.TLS.PeerCertificates) > 0 {
 			lEst.Trace("Using certificate presented in peer connection")
 			crt = req.TLS.PeerCertificates[0]
 		} else {

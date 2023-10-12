@@ -73,11 +73,10 @@ func main() {
 	deviceCli := clients.NewHttpDeviceManagerClient(deviceHttpCli, fmt.Sprintf("%s://%s:%d%s", conf.DevManagerClient.Protocol, conf.DevManagerClient.Hostname, conf.DevManagerClient.Port, conf.DevManagerClient.BasePath))
 
 	svc := services.NewDMSManagerService(services.DMSManagerBuilder{
-		Logger:              lSvc,
-		DMSStorage:          devStorage,
-		DevManagerCli:       deviceCli,
-		CAClient:            caCli,
-		DeviceMonitorConfig: conf.DeviceMonitorConfig,
+		Logger:        lSvc,
+		DMSStorage:    devStorage,
+		DevManagerCli: deviceCli,
+		CAClient:      caCli,
 	})
 
 	deviceSvc := svc.(*services.DmsManagerServiceImpl)
