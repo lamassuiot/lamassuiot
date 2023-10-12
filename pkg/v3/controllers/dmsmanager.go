@@ -74,10 +74,10 @@ func (r *dmsManagerHttpRoutes) CreateDMS(ctx *gin.Context) {
 	}
 
 	input := services.CreateDMSInput{
-		ID:              requestBody.ID,
-		Metadata:        requestBody.Metadata,
-		Name:            requestBody.Name,
-		IdentityProfile: requestBody.IdentityProfile,
+		ID:       requestBody.ID,
+		Metadata: requestBody.Metadata,
+		Name:     requestBody.Name,
+		Settings: requestBody.Settings,
 	}
 
 	dms, err := r.svc.CreateDMS(input)
@@ -101,15 +101,15 @@ func (r *dmsManagerHttpRoutes) UpdateIdentityProfile(ctx *gin.Context) {
 		return
 	}
 
-	var requestBody models.IdentityProfile
+	var requestBody models.DMSSettings
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
-	ca, err := r.svc.UpdateIdentityProfile(services.UpdateIdentityProfileInput{
-		ID:                 params.ID,
-		NewIdentityProfile: requestBody,
+	ca, err := r.svc.UpdateDMSSettings(services.UpdateDMSSettingsInput{
+		ID:             params.ID,
+		NewDMSSettings: requestBody,
 	})
 	if err != nil {
 		ctx.JSON(500, err)

@@ -26,10 +26,10 @@ func NewHttpDMSManagerClient(client *http.Client, url string) services.DMSManage
 
 func (cli *dmsManagerClient) CreateDMS(input services.CreateDMSInput) (*models.DMS, error) {
 	response, err := Post[*models.DMS](context.Background(), cli.httpClient, cli.baseUrl+"/v1/dms", resources.CreateDMSBody{
-		ID:              input.ID,
-		Name:            input.Name,
-		Metadata:        input.Metadata,
-		IdentityProfile: input.IdentityProfile,
+		ID:       input.ID,
+		Name:     input.Name,
+		Metadata: input.Metadata,
+		Settings: input.Settings,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err
@@ -38,8 +38,8 @@ func (cli *dmsManagerClient) CreateDMS(input services.CreateDMSInput) (*models.D
 	return response, nil
 }
 
-func (cli *dmsManagerClient) UpdateIdentityProfile(input services.UpdateIdentityProfileInput) (*models.DMS, error) {
-	response, err := Put[*models.DMS](context.Background(), cli.httpClient, cli.baseUrl+"/v1/dms/"+input.ID+"/id-profile", input.NewIdentityProfile, map[int][]error{})
+func (cli *dmsManagerClient) UpdateDMSSettings(input services.UpdateDMSSettingsInput) (*models.DMS, error) {
+	response, err := Put[*models.DMS](context.Background(), cli.httpClient, cli.baseUrl+"/v1/dms/"+input.ID+"/settings", input.NewDMSSettings, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}

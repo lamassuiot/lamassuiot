@@ -84,6 +84,14 @@ func (db *PostgresCertificateStorage) SelectByCAIDAndStatus(ctx context.Context,
 	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
 }
 
+func (db *PostgresCertificateStorage) SelectByStatus(ctx context.Context, status models.CertificateStatus, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+	opts := []gormWhereParams{
+		{query: "status = ?", extraArgs: []any{status}},
+	}
+
+	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
+}
+
 func (db *PostgresCertificateStorage) CountByCA(ctx context.Context, caID string) (int, error) {
 	return -1, fmt.Errorf("TODO")
 }

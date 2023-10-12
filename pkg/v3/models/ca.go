@@ -77,3 +77,15 @@ type CertificatesStats struct {
 	CertificateDistributionPerCA map[string]int            `json:"ca_distribution"`
 	CertificateStatus            map[CertificateStatus]int `json:"status_distribution"`
 }
+
+type MonitoringExpirationDelta struct {
+	Delta     TimeDuration `json:"delta"`
+	Name      string       `json:"name"`
+	Triggered bool         `json:"triggered"`
+}
+
+const (
+	CAMetadataMonitoringExpirationDeltasKey = "lamassu.io/ca/expiration-deltas"
+)
+
+type CAMetadataMonitoringExpirationDeltas []MonitoringExpirationDelta

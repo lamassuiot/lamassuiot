@@ -54,7 +54,7 @@ type CreateDeviceInput struct {
 	ID        string `validate:"required"`
 	Alias     string
 	Tags      []string
-	Metadata  map[string]string
+	Metadata  map[string]any
 	DMSID     string `validate:"required"`
 	Icon      string
 	IconColor string
