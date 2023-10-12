@@ -3,10 +3,11 @@
 *.csr
 nogit
 .vscode
-*__debug_bin
+__debug_bin*
 *.csv
 *.der
 *.pem
 *.p7
 *.out
 *.html
+cmd/test

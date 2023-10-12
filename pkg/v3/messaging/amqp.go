@@ -207,6 +207,7 @@ func (aPub *AMQPSetup) SetupAMQPEventSubscriber(serviceName string, routingKeys 
 	if !serviceNameExist(aPub.subscribesInfo, serviceName) {
 		aPub.subscribesInfo = append(aPub.subscribesInfo, subscribesInfo{serviceName: serviceName, routingKeys: routingKeys})
 	}
+
 	q, err := aPub.Channel.QueueDeclare(
 		serviceName, // name
 		false,       // durable
@@ -244,6 +245,7 @@ func (aPub *AMQPSetup) SetupAMQPEventSubscriber(serviceName string, routingKeys 
 	if err != nil {
 		return err
 	}
+
 	aPub.Msgs = msgs
 	return nil
 }

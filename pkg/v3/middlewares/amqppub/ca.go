@@ -161,6 +161,10 @@ func (mw amqpEventPublisher) GetCertificatesByCaAndStatus(ctx context.Context, i
 	return mw.next.GetCertificatesByCaAndStatus(ctx, input)
 }
 
+func (mw amqpEventPublisher) GetCertificatesByStatus(ctx context.Context, input services.GetCertificatesByStatusInput) (string, error) {
+	return mw.next.GetCertificatesByStatus(ctx, input)
+}
+
 func (mw amqpEventPublisher) UpdateCertificateMetadata(ctx context.Context, input services.UpdateCertificateMetadataInput) (output *models.Certificate, err error) {
 	defer func() {
 		if err == nil {

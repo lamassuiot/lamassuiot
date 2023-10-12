@@ -133,6 +133,21 @@ func (db *CouchDBCertificateStorage) SelectByCAIDAndStatus(ctx context.Context, 
 	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
+func (db *CouchDBCertificateStorage) SelectByStatus(ctx context.Context, status models.CertificateStatus, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+	opts := map[string]interface{}{
+		"selector": map[string]interface{}{
+			"$and": []map[string]interface{}{
+				{
+					"status": map[string]interface{}{
+						"$eq": status,
+					},
+				},
+			},
+		},
+	}
+	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+}
+
 func (db *CouchDBCertificateStorage) CountByCA(ctx context.Context, caID string) (int, error) {
 	return -1, fmt.Errorf("TODO")
 }

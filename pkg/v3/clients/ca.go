@@ -300,6 +300,21 @@ func (cli *httpCAClient) GetCertificatesByCaAndStatus(ctx context.Context, input
 	}
 }
 
+func (cli *httpCAClient) GetCertificatesByStatus(ctx context.Context, input services.GetCertificatesByStatusInput) (string, error) {
+	url := fmt.Sprintf("%s/v1/certificates/status/%s", cli.baseUrl, input.Status)
+
+	if input.ExhaustiveRun {
+		err := IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+		return "", err
+	} else {
+		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
+		for _, elem := range resp.IterableList.List {
+			input.ApplyFunc(&elem.Certificate)
+		}
+		return resp.NextBookmark, err
+	}
+}
+
 func (cli *httpCAClient) UpdateCertificateStatus(ctx context.Context, input services.UpdateCertificateStatusInput) (*models.Certificate, error) {
 	response, err := Put[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/certificates/"+input.SerialNumber+"/status", resources.UpdateCertificateStatusBody{
 		NewStatus:        input.NewStatus,

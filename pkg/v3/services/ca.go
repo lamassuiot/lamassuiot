@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
+	"golang.org/x/exp/slices"
 )
 
 type CAMiddleware func(CAService) CAService
@@ -53,7 +55,7 @@ type CAService interface {
 	GetCertificatesByExpirationDate(ctx context.Context, input GetCertificatesByExpirationDateInput) (string, error)
 	GetCertificatesByCaAndStatus(ctx context.Context, input GetCertificatesByCaAndStatusInput) (string, error)
 	// GetCertificatesByExpirationDateAndCA(input GetCertificatesByExpirationDateInput) (string, error)
-	// GetCertificatesByStatus(input GetCertificatesByExpirationDateInput) (string, error)
+	GetCertificatesByStatus(ctx context.Context, input GetCertificatesByStatusInput) (string, error)
 	// GetCertificatesByStatusAndCA(input GetCertificatesByExpirationDateInput) (string, error)
 	UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) (*models.Certificate, error)
 	UpdateCertificateMetadata(ctx context.Context, input UpdateCertificateMetadataInput) (*models.Certificate, error)
@@ -162,73 +164,16 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 			return nil, fmt.Errorf("could not create Local RA CA: %s", err)
 		}
 
-		lCA.Info("created Local RA CA with ID: %s", lraCA.ID)
+		lCA.Infof("created Local RA CA with ID: %s", lraCA.ID)
 	}
 	//--END TO BE REMOVED
 
 	cryptoMonitor := func() {
 		ctx := context.Background()
-		lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
-
-		criticalDelta, err := models.ParseDuration(svc.cryptoMonitorConfig.StatusMachineDeltas.CriticalExpiration)
-		if err != nil {
-			criticalDelta = time.Duration(time.Hour * 24 * 3)
-			lCA.Warnf("could not parse StatusMachineDeltas.CriticalExpiration. Using default [%s]: %s", models.DurationToString(criticalDelta), err)
-		}
-
-		if svc.cryptoMonitorConfig.AutomaticCARotation.Enabled {
-			reenrollableCADelta, err := models.ParseDuration(svc.cryptoMonitorConfig.AutomaticCARotation.RenewalDelta)
-			if err != nil {
-				reenrollableCADelta = time.Duration(time.Hour * 24 * 7)
-				lCA.Warnf("could not parse AutomaticCARotation.RenewalDelta. Using default [%s]: %s", models.DurationToString(reenrollableCADelta), err)
-			}
-
-			lFunc.Infof("scheduled run: checking CA status")
-			//Change with specific GetNearingExpiration
-			if err != nil {
-				lFunc.Errorf("error while geting cas: %s", err)
-				return
-			}
-
-			caScanFunc := func(ca *models.CACertificate) {
-				// allowableRotTime := ca.Certificate.Certificate.NotAfter.Add(-time.Duration(ca.IssuanceDuration)).Add(-reenrollableCADelta)
-				// now := time.Now()
-				// if allowableRotTime.After(now) {
-				// 	lFunc.Tracef(
-				// 		"not rotating CA %s. Now is %s. Expiration (minus IssuanceDuration and RenewalDelta) is %s. Delta is %s ",
-				// 		ca.ID,
-				// 		now.Format("2006-01-02 15:04:05"),
-				// 		allowableRotTime.Format("2006-01-02 15:04:05"),
-				// 		models.DurationToString(allowableRotTime.Sub(now)),
-				// 	)
-				// } else {
-				// 	lFunc.Infof(
-				// 		"rotating CA %s. Now is %s. Expiration (minus IssuanceDuration and RenewalDelta) is %s. Delta is %s ",
-				// 		ca.ID,
-				// 		now.Format("2006-01-02 15:04:05"),
-				// 		allowableRotTime.Format("2006-01-02 15:04:05"),
-				// 		models.DurationToString(allowableRotTime.Sub(now)),
-				// 	)
-
-				// 	_, err = svc.service.RotateCA(RotateCAInput{
-				// 		CAID: ca.ID,
-				// 	})
-				// 	if err != nil {
-				// 		lFunc.Errorf("something went wrong while rotating CA: %s", err)
-				// 	}
-				// }
-			}
-
-			svc.service.GetCAs(ctx, GetCAsInput{
-				QueryParameters: nil,
-				ExhaustiveRun:   true,
-				ApplyFunc:       caScanFunc,
-			})
-		}
 
 		now := time.Now()
 		caScanFunc := func(ca *models.CACertificate) {
-			if ca.ValidTo.Before(now) {
+			if ca.ValidTo.Before(now) && ca.Status == models.StatusActive {
 				svc.UpdateCAStatus(ctx, UpdateCAStatusInput{
 					CAID:   ca.ID,
 					Status: models.StatusExpired,
@@ -242,20 +187,68 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 			ApplyFunc:       caScanFunc,
 		})
 
-		svc.service.GetCertificatesByExpirationDate(ctx, GetCertificatesByExpirationDateInput{
+		svc.service.GetCertificatesByStatus(ctx, GetCertificatesByStatusInput{
+			Status: models.StatusActive,
 			ListInput: ListInput[models.Certificate]{
 				QueryParameters: nil,
 				ExhaustiveRun:   true,
 				ApplyFunc: func(cert *models.Certificate) {
-					lFunc.Debugf("updating certificate status from cert with sn '%s' to status '%s'", cert.SerialNumber, models.StatusExpired)
-					svc.service.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
-						SerialNumber: cert.SerialNumber,
-						NewStatus:    models.StatusExpired,
-					})
+					//check if should be updated to expired
+					if cert.ValidTo.Before(time.Now()) {
+						svc.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
+							SerialNumber: cert.SerialNumber,
+							NewStatus:    models.StatusExpired,
+						})
+						return
+					}
+
+					fmt.Printf("Now: %s\n", time.Now())
+					fmt.Printf("Expires At: %s\n", cert.ValidTo)
+					//check if meta contains additional monitoring deltas
+					if additionalDeltasIface, ok := cert.Metadata[models.CAMetadataMonitoringExpirationDeltasKey]; ok {
+						//check if additionalDeltasIface is of type
+						deltasB, err := json.Marshal(additionalDeltasIface)
+						if err != nil {
+							return
+						}
+						var additionalDeltas models.CAMetadataMonitoringExpirationDeltas
+						err = json.Unmarshal(deltasB, &additionalDeltas)
+						if err == nil {
+							orderedDeltas := additionalDeltas
+
+							//order deltas from smallest to biggest
+							slices.SortStableFunc[models.MonitoringExpirationDelta](orderedDeltas, func(a models.MonitoringExpirationDelta, b models.MonitoringExpirationDelta) bool {
+								if a.Delta < b.Delta {
+									return true
+								} else {
+									return false
+								}
+							})
+
+							for idx, additionalDelta := range orderedDeltas {
+								fmt.Printf("Delta %s = %s\n", additionalDelta.Name, additionalDelta.Delta.String())
+								fmt.Printf("After Sub: %s\n", cert.ValidTo.Add(-time.Duration(additionalDelta.Delta)))
+								fmt.Printf("After: %t\n", time.Now().After(cert.ValidTo.Add(-time.Duration(additionalDelta.Delta))))
+								if time.Now().After(cert.ValidTo.Add(-time.Duration(additionalDelta.Delta))) {
+									if !orderedDeltas[idx].Triggered {
+										//switch 'trigger' monitoring delta to
+										orderedDeltas[idx].Triggered = true
+
+										newMeta := cert.Metadata
+										newMeta[models.CAMetadataMonitoringExpirationDeltasKey] = orderedDeltas
+
+										svc.UpdateCertificateMetadata(context.Background(), UpdateCertificateMetadataInput{
+											SerialNumber: cert.SerialNumber,
+											Metadata:     newMeta,
+										})
+										return
+									}
+								}
+							}
+						}
+					}
 				},
 			},
-			ExpiresAfter:  time.Time{},
-			ExpiresBefore: now,
 		})
 	}
 
@@ -1147,6 +1140,15 @@ type GetCertificatesByCaAndStatusInput struct {
 
 func (svc *CAServiceImpl) GetCertificatesByCaAndStatus(ctx context.Context, input GetCertificatesByCaAndStatusInput) (string, error) {
 	return svc.certStorage.SelectByCAIDAndStatus(ctx, input.CAID, input.Status, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, map[string]interface{}{})
+}
+
+type GetCertificatesByStatusInput struct {
+	Status models.CertificateStatus
+	ListInput[models.Certificate]
+}
+
+func (svc *CAServiceImpl) GetCertificatesByStatus(ctx context.Context, input GetCertificatesByStatusInput) (string, error) {
+	return svc.certStorage.SelectByStatus(ctx, input.Status, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, map[string]interface{}{})
 }
 
 type UpdateCertificateStatusInput struct {

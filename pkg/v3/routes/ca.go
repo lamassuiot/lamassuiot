@@ -34,7 +34,7 @@ func NewCAHTTPLayer(logger *logrus.Entry, svc services.CAService) *gin.Engine {
 	rv1.PUT("/cas/:id/metadata", routes.UpdateCAMetadata)
 	rv1.POST("/cas/:id/status", routes.UpdateCAStatus)
 	rv1.GET("/cas/:id/certificates", routes.GetCertificatesByCA)
-	rv1.GET("/cas/:id/certificates/status/:status", routes.GetCertificatesByStatus)
+	rv1.GET("/cas/:id/certificates/status/:status", routes.GetCertificatesByCAAndStatus)
 	rv1.POST("/cas/:id/certificates/sign", routes.SignCertificate)
 	rv1.POST("/cas/:id/signature/sign", routes.SignatureSign)
 	rv1.POST("/cas/:id/signature/verify", routes.SignatureVerify)
@@ -42,9 +42,11 @@ func NewCAHTTPLayer(logger *logrus.Entry, svc services.CAService) *gin.Engine {
 	rv1.DELETE("/cas/:id", routes.DeleteCA)
 
 	rv1.GET("/certificates", routes.GetCertificates)
+	rv1.GET("/certificates/status/:status", routes.GetCertificatesByStatus)
 	rv1.GET("/certificates/expiration", routes.GetCertificatesByExpirationDate)
 	rv1.GET("/certificates/:sn", routes.GetCertificateBySerialNumber)
 	rv1.PUT("/certificates/:sn/status", routes.UpdateCertificateStatus)
+	rv1.PUT("/certificates/:sn/metadata", routes.UpdateCertificateMetadata)
 
 	rv1.GET("/engines", routes.GetCryptoEngineProvider)
 	rv1.GET("/stats", routes.GetStats)

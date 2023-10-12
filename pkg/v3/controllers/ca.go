@@ -791,7 +791,7 @@ func (r *caHttpRoutes) SignatureVerify(ctx *gin.Context) {
 	})
 }
 
-func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
+func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request)
 
 	type uriParams struct {
@@ -827,6 +827,53 @@ func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
 			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrCertificateStatusTransitionNotAllowed:
 			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+
+	ctx.JSON(200, resources.GetCertsResponse{
+		IterableList: resources.IterableList[models.Certificate]{
+			NextBookmark: nextBookmark,
+			List:         certs,
+		},
+	})
+}
+
+func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
+	queryParams := FilterQuery(ctx.Request)
+
+	type uriParams struct {
+		Status string `uri:"status" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	certs := []*models.Certificate{}
+
+	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	nextBookmark, err := r.svc.GetCertificatesByStatus(funCtx, services.GetCertificatesByStatusInput{
+		Status: models.CertificateStatus(params.Status),
+		ListInput: services.ListInput[models.Certificate]{
+			QueryParameters: queryParams,
+			ExhaustiveRun:   false,
+			ApplyFunc: func(cert *models.Certificate) {
+				derefCert := *cert
+				certs = append(certs, &derefCert)
+			},
+		},
+	})
+
+	if err != nil {
+		switch err {
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
@@ -885,6 +932,44 @@ func (r *caHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
 			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrCertificateStatusTransitionNotAllowed:
 			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+	ctx.JSON(200, cert)
+}
+
+func (r *caHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
+	var requestBody resources.UpdateCertificateMetadataBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	type uriParams struct {
+		SerialNumber string `uri:"sn" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	cert, err := r.svc.UpdateCertificateMetadata(funCtx, services.UpdateCertificateMetadataInput{
+		SerialNumber: params.SerialNumber,
+		Metadata:     requestBody.Metadata,
+	})
+
+	if err != nil {
+		switch err {
+		case errs.ErrCertificateNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
