@@ -172,7 +172,7 @@ func (vaultCli *VaultKV2Engine) CreateRSAPrivateKey(keySize int, keyID string) (
 	lVault.Debugf("creating RSA private key of size [%d] with ID [%s]", keySize, keyID)
 	key, err := vaultCli.GetPrivateKeyByID(keyID)
 	if key != nil {
-		lVault.Warnf("RSA private key already exists and will be overwritten: ", err)
+		lVault.Warnf("RSA private key already exists and will be overwritten: %s", err)
 		err = vaultCli.DeleteKey(keyID)
 		if err != nil {
 			return nil, err
