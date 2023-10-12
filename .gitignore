@@ -10,3 +10,4 @@ nogit
 *.p7
 *.out
 *.html
+cmd/test
