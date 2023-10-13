@@ -12,6 +12,10 @@ type CreateDeviceBody struct {
 	IconColor string         `json:"icon_color"`
 }
 
-type UpdateIdentitySlotBody struct {
+type UpdateDeviceMetadataBody struct {
+	Metadata map[string]any `json:"metadata"`
+}
+
+type UpdateDeviceIdentitySlotBody struct {
 	models.Slot[models.Certificate]
 }

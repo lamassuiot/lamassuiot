@@ -135,7 +135,7 @@ func (r *devManagerHttpRoutes) CreateDevice(ctx *gin.Context) {
 	ctx.JSON(201, dev)
 }
 
-func (r *devManagerHttpRoutes) UpdateIdentitySlot(ctx *gin.Context) {
+func (r *devManagerHttpRoutes) UpdateDeviceIdentitySlot(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -146,15 +146,45 @@ func (r *devManagerHttpRoutes) UpdateIdentitySlot(ctx *gin.Context) {
 		return
 	}
 
-	var requestBody resources.UpdateIdentitySlotBody
+	var requestBody resources.UpdateDeviceIdentitySlotBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
-	dev, err := r.svc.UpdateIdentitySlot(services.UpdateIdentitySlotInput{
+	dev, err := r.svc.UpdateDeviceIdentitySlot(services.UpdateDeviceIdentitySlotInput{
 		ID:   params.ID,
 		Slot: requestBody.Slot,
+	})
+
+	if err != nil {
+		ctx.JSON(500, err)
+		return
+	}
+
+	ctx.JSON(200, dev)
+}
+
+func (r *devManagerHttpRoutes) UpdateDeviceMetadata(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody resources.UpdateDeviceMetadataBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	dev, err := r.svc.UpdateDeviceMetadata(services.UpdateDeviceMetadataInput{
+		ID:       params.ID,
+		Metadata: requestBody.Metadata,
 	})
 
 	if err != nil {

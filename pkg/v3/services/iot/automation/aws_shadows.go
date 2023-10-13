@@ -1,44 +1,42 @@
 package iot
 
 import (
-	"fmt"
+	"context"
 
 	"github.com/aws/aws-sdk-go-v2/service/iotdataplane"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/sirupsen/logrus"
 )
 
 type AWSShadowsAutomation struct {
-	deviceSDK       services.DeviceManagerService
-	dmsSDK          services.DMSManagerService
 	iotdataplaneSDK iotdataplane.Client
 }
 
-func NewAWSIotDeviceLifeCycleAutomationService() (IotDeviceLifeCycleAutomationService, error) {
+func NewAWSIotDeviceLifeCycleAutomationService() (IotDeviceLifeCycleAutomationServiceProvider[models.DMSMetadataIotAutomationAWS], error) {
 	return &AWSShadowsAutomation{}, nil
 }
 
-func (svc *AWSShadowsAutomation) UpdateDigitalTwin(input UpdateDigitalTwinInput) error {
-	device, err := svc.deviceSDK.GetDeviceByID(services.GetDeviceByIDInput{
-		ID: input.DeviceID,
-	})
+func (svc *AWSShadowsAutomation) UpdateDeviceDigitalTwin(input UpdateDeviceDigitalTwinInput[models.DMSMetadataIotAutomationAWS]) error {
+	awsUpdateShadow := &iotdataplane.UpdateThingShadowInput{
+		ThingName: &input.DeviceID,
+		Payload:   input.BodyMessage,
+	}
+
+	if input.DMSIoTAutomationConfig.ShadowType == models.AWSIoTShadowNamed {
+		awsUpdateShadow.ShadowName = &input.DMSIoTAutomationConfig.NamedShadowName
+	}
+
+	_, err := svc.iotdataplaneSDK.UpdateThingShadow(context.Background(), awsUpdateShadow)
 	if err != nil {
-		logrus.Errorf("could not get device %s: %s", input.DeviceID, err)
+		logrus.Errorf("could not update AWS shadow for thing %s: %s", input.DeviceID, err)
 		return err
 	}
 
-	dms, err := svc.dmsSDK.GetDMSByID(services.GetDMSByIDInput{
-		ID: device.DMSOwnerID,
-	})
-	if err != nil {
-		logrus.Errorf("could not get device %s: %s", input.DeviceID, err)
-		return err
-	}
+	logrus.Infof("updated AWS shadow for thing %s", input.DeviceID)
 
-	fmt.Println("dms", dms)
 	return nil
 }
 
-func (svc *AWSShadowsAutomation) GetRemediateTrackers() ([]*RemediateTracker, error) {
+func (svc *AWSShadowsAutomation) GetRemediateTrackers() ([]*models.RemediateTracker, error) {
 	return nil, nil
 }

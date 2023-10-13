@@ -71,8 +71,8 @@ const (
 )
 
 type DeviceLog struct {
-	ID          string            `json:"id"`
-	Message     string            `json:"message"`
-	Criticality Criticality       `json:"Criticality"`
-	Metadata    map[string]string `json:"metadata"`
+	ID          string         `json:"id"`
+	Message     string         `json:"message"`
+	Criticality Criticality    `json:"Criticality"`
+	Metadata    map[string]any `json:"metadata"`
 }

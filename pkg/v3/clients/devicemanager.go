@@ -83,8 +83,19 @@ func (cli *deviceManagerClient) UpdateDeviceStatus(input services.UpdateDeviceSt
 	return response, nil
 }
 
-func (cli *deviceManagerClient) UpdateIdentitySlot(input services.UpdateIdentitySlotInput) (*models.Device, error) {
-	response, err := Put[*models.Device](context.Background(), cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/idslot", resources.UpdateIdentitySlotBody{
+func (cli *deviceManagerClient) UpdateDeviceMetadata(input services.UpdateDeviceMetadataInput) (*models.Device, error) {
+	response, err := Post[*models.Device](context.Background(), cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/metadata", resources.UpdateDeviceMetadataBody{
+		Metadata: input.Metadata,
+	}, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (cli *deviceManagerClient) UpdateDeviceIdentitySlot(input services.UpdateDeviceIdentitySlotInput) (*models.Device, error) {
+	response, err := Put[*models.Device](context.Background(), cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/idslot", resources.UpdateDeviceIdentitySlotBody{
 		Slot: input.Slot,
 	}, map[int][]error{})
 	if err != nil {

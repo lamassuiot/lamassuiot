@@ -64,7 +64,7 @@ func (svc *DMSManagerServiceImpl) SetService(service DMSManagerService) {
 type CreateDMSInput struct {
 	ID       string `validate:"required"`
 	Name     string `validate:"required"`
-	Metadata map[string]string
+	Metadata map[string]any
 	Settings models.DMSSettings `validate:"required"`
 }
 
@@ -374,7 +374,7 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 		Criticality: models.InfoCriticality,
 	}
 
-	_, err = svc.deviceManagerCli.UpdateIdentitySlot(UpdateIdentitySlotInput{
+	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(UpdateDeviceIdentitySlotInput{
 		ID:   csr.Subject.CommonName,
 		Slot: idSlot,
 	})
@@ -554,7 +554,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		Criticality: models.InfoCriticality,
 	}
 
-	_, err = svc.deviceManagerCli.UpdateIdentitySlot(UpdateIdentitySlotInput{
+	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(UpdateDeviceIdentitySlotInput{
 		ID:   csr.Subject.CommonName,
 		Slot: idSlot,
 	})

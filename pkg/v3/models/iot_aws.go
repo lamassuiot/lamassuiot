@@ -5,13 +5,27 @@ type IotAWSAccountInfo struct {
 	IotMQTTEndpoint string
 }
 
-type CAIoTAWSRegistration struct {
-	Register                  bool     `json:"register"`
-	JITP                      bool     `json:"jitp"`
-	JITPName                  string   `json:"jitp_name,omitempty"`
-	JITPGroupName             string   `json:"jitp_group_name,omitempty"`
-	JITPInlinePolicy          string   `json:"jitp_inline_policy,omitempty"`
-	JITPExternalPoliciesNames []string `json:"jitp_external_policy_names,omitempty"`
+type DMSMetadataIotPlatformAWS struct {
+	JITPProvisioningTemplate struct {
+		EnableTemplate            bool
+		JITPName                  string   `json:"jitp_name,omitempty"`
+		JITPGroupName             string   `json:"jitp_group_name,omitempty"`
+		JITPInlinePolicies        []string `json:"jitp_inline_policies,omitempty"`
+		JITPExternalPoliciesNames []string `json:"jitp_external_policy_names,omitempty"`
+	}
+}
+
+type ShadowType string
+
+const (
+	AWSIoTShadowClasic ShadowType = "CLASSIC_SHADOW"
+	AWSIoTShadowNamed  ShadowType = "NAMED_SHADOW"
+)
+
+type DMSMetadataIotAutomationAWS struct {
+	DistributeCACertsInRetainedTopic bool
+	ShadowType                       ShadowType
+	NamedShadowName                  string
 }
 
 type PlatformConnectorAWSCAMetadata struct {
