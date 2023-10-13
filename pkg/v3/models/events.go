@@ -12,6 +12,6 @@ const (
 	EventSignatureSign             EventType = "ca.signature.sign"
 	EventCreateCertificate         EventType = "ca.certificate.create"
 	EventImportCertificate         EventType = "ca.certificate.import"
-	EventUpdateCertificateStatus   EventType = "ca.certificate.status"
-	EventUpdateCertificateMetadata EventType = "ca.certificate.metadata"
+	EventUpdateCertificateStatus   EventType = "ca.certificate.update.status"
+	EventUpdateCertificateMetadata EventType = "ca.certificate.update.metadata"
 )

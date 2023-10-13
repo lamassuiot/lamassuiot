@@ -28,8 +28,8 @@ import (
 var log = logrus.WithField("engine", "X509 Engine")
 
 type X509EngineProvider struct {
-	cryptoEngine cryptoengines.CryptoEngine
-	ocspURL      string
+	cryptoEngine           cryptoengines.CryptoEngine
+	validationAuthorityURL string
 }
 
 type X509Engine interface {
@@ -42,10 +42,10 @@ type X509Engine interface {
 	Verify(caCertificate *x509.Certificate, signature []byte, message []byte, messageType models.SignMessageType, signingAlgorithm string) (bool, error)
 }
 
-func NewX509Engine(cryptoEngine *cryptoengines.CryptoEngine, ocspURL string) X509Engine {
+func NewX509Engine(cryptoEngine *cryptoengines.CryptoEngine, validationAuthorityURL string) X509Engine {
 	return &X509EngineProvider{
-		cryptoEngine: *cryptoEngine,
-		ocspURL:      ocspURL,
+		cryptoEngine:           *cryptoEngine,
+		validationAuthorityURL: validationAuthorityURL,
 	}
 }
 
@@ -217,7 +217,12 @@ func (engine X509EngineProvider) genCertTemplateAndPrivateKey(keyMetadata models
 			Organization:       []string{subject.Organization},
 			OrganizationalUnit: []string{subject.OrganizationUnit},
 		},
-		OCSPServer:            []string{engine.ocspURL},
+		OCSPServer: []string{
+			fmt.Sprintf("%s/v1/ocsp", engine.validationAuthorityURL),
+		},
+		CRLDistributionPoints: []string{
+			fmt.Sprintf("%s/v1/crl", engine.validationAuthorityURL),
+		},
 		NotBefore:             now,
 		NotAfter:              expirationTine,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsage(x509.ExtKeyUsageOCSPSigning),

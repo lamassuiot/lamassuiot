@@ -14,6 +14,30 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
 )
 
+var certificateFiltrableFieldMap = map[string]resources.FilterFieldType{
+	"type":                 resources.EnumFilterFieldType,
+	"serial_number":        resources.StringFilterFieldType,
+	"status":               resources.EnumFilterFieldType,
+	"engine_id":            resources.StringFilterFieldType,
+	"valid_to":             resources.DateFilterFieldType,
+	"valid_from":           resources.DateFilterFieldType,
+	"revocation_timestamp": resources.DateFilterFieldType,
+	"revocation_reason":    resources.EnumFilterFieldType,
+}
+
+var caFiltrableFieldMap = map[string]resources.FilterFieldType{
+	"id":                   resources.StringFilterFieldType,
+	"name":                 resources.StringFilterFieldType,
+	"type":                 resources.EnumFilterFieldType,
+	"serial_number":        resources.StringFilterFieldType,
+	"status":               resources.EnumFilterFieldType,
+	"engine_id":            resources.StringFilterFieldType,
+	"valid_to":             resources.DateFilterFieldType,
+	"valid_from":           resources.DateFilterFieldType,
+	"revocation_timestamp": resources.DateFilterFieldType,
+	"revocation_reason":    resources.EnumFilterFieldType,
+}
+
 type caHttpRoutes struct {
 	svc services.CAService
 }
@@ -25,7 +49,6 @@ func NewCAHttpRoutes(svc services.CAService) *caHttpRoutes {
 }
 
 func (r *caHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
-
 	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
 	engine, err := r.svc.GetCryptoEngineProvider(funCtx)
 	if err != nil {
@@ -225,7 +248,7 @@ func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request)
+	queryParams := FilterQuery(ctx.Request, caFiltrableFieldMap)
 
 	type uriParams struct {
 		CommonName string `uri:"cn" binding:"required"`
@@ -306,7 +329,7 @@ func (r *caHttpRoutes) GetCABySerialNumber(ctx *gin.Context) {
 // @Failure 500
 // @Router /cas [get]
 func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request)
+	queryParams := FilterQuery(ctx.Request, caFiltrableFieldMap)
 
 	cas := []*models.CACertificate{}
 
@@ -506,7 +529,7 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 // @Failure 500
 // @Router /certificates [get]
 func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request)
+	queryParams := FilterQuery(ctx.Request, certificateFiltrableFieldMap)
 
 	certs := []*models.Certificate{}
 
@@ -546,7 +569,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 		return
 	}
 
-	queryParams := FilterQuery(ctx.Request)
+	queryParams := FilterQuery(ctx.Request, certificateFiltrableFieldMap)
 
 	certs := []*models.Certificate{}
 
@@ -592,7 +615,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 // @Failure 500
 // @Router /cas/{id}/certificates [get]
 func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request)
+	queryParams := FilterQuery(ctx.Request, certificateFiltrableFieldMap)
 
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
@@ -792,7 +815,7 @@ func (r *caHttpRoutes) SignatureVerify(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request)
+	queryParams := FilterQuery(ctx.Request, certificateFiltrableFieldMap)
 
 	type uriParams struct {
 		CAID   string `uri:"id" binding:"required"`
@@ -845,7 +868,7 @@ func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request)
+	queryParams := FilterQuery(ctx.Request, certificateFiltrableFieldMap)
 
 	type uriParams struct {
 		Status string `uri:"status" binding:"required"`
