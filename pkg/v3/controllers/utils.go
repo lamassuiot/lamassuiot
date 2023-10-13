@@ -8,9 +8,11 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 )
 
-func FilterQuery(r *http.Request) *resources.QueryParameters {
+func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFieldType) *resources.QueryParameters {
 	queryParams := resources.QueryParameters{
 		NextBookmark: "",
+		Filters:      []resources.FilterOption{},
+		PageSize:     25,
 	}
 
 	if len(r.URL.RawQuery) > 0 {
@@ -21,10 +23,6 @@ func FilterQuery(r *http.Request) *resources.QueryParameters {
 			case "sort_by":
 				sortQueryParam := value
 				sortField := strings.Trim(sortQueryParam, " ")
-
-				// if _, ok := fieldFiltersMap[sortField]; !ok { //prevent sorting by fields that are not in the filter map
-				// 	continue
-				// }
 
 				queryParams.Sort.SortField = sortField
 
@@ -46,6 +44,10 @@ func FilterQuery(r *http.Request) *resources.QueryParameters {
 
 			case "bookmark":
 				queryParams.NextBookmark = value
+
+			case "filter":
+				//TODO Regex
+				queryParams.Filters = append(queryParams.Filters, resources.FilterOption{})
 			}
 		}
 	}

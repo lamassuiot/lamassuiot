@@ -4,8 +4,6 @@ import (
 	"time"
 )
 
-const CALocalRA = "_lms.lra"
-
 type DMSStatus string
 
 const (

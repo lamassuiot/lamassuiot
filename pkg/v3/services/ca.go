@@ -71,22 +71,24 @@ type Engine struct {
 }
 
 type CAServiceImpl struct {
-	service               CAService
-	cryptoEngines         map[string]*cryptoengines.CryptoEngine
-	defaultCryptoEngine   *cryptoengines.CryptoEngine
-	defaultCryptoEngineID string
-	caStorage             storage.CACertificatesRepo
-	certStorage           storage.CertificatesRepo
-	cronInstance          *cron.Cron
-	cryptoMonitorConfig   config.CryptoMonitoring
+	service                CAService
+	cryptoEngines          map[string]*cryptoengines.CryptoEngine
+	defaultCryptoEngine    *cryptoengines.CryptoEngine
+	defaultCryptoEngineID  string
+	caStorage              storage.CACertificatesRepo
+	certStorage            storage.CertificatesRepo
+	cronInstance           *cron.Cron
+	cryptoMonitorConfig    config.CryptoMonitoring
+	validationAuthorityURL string
 }
 
 type CAServiceBuilder struct {
-	Logger               *logrus.Entry
-	CryptoEngines        map[string]*Engine
-	CAStorage            storage.CACertificatesRepo
-	CertificateStorage   storage.CertificatesRepo
-	CryptoMonitoringConf config.CryptoMonitoring
+	Logger                 *logrus.Entry
+	CryptoEngines          map[string]*Engine
+	CAStorage              storage.CACertificatesRepo
+	CertificateStorage     storage.CertificatesRepo
+	CryptoMonitoringConf   config.CryptoMonitoring
+	ValidationAuthorityURL string
 }
 
 func NewCAService(builder CAServiceBuilder) (CAService, error) {
@@ -110,63 +112,17 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 	}
 
 	svc := CAServiceImpl{
-		cronInstance:          cron.New(),
-		cryptoEngines:         engines,
-		defaultCryptoEngine:   defaultCryptoEngine,
-		defaultCryptoEngineID: defaultCryptoEngineID,
-		caStorage:             builder.CAStorage,
-		certStorage:           builder.CertificateStorage,
-		cryptoMonitorConfig:   builder.CryptoMonitoringConf,
+		cronInstance:           cron.New(),
+		cryptoEngines:          engines,
+		defaultCryptoEngine:    defaultCryptoEngine,
+		defaultCryptoEngineID:  defaultCryptoEngineID,
+		caStorage:              builder.CAStorage,
+		certStorage:            builder.CertificateStorage,
+		cryptoMonitorConfig:    builder.CryptoMonitoringConf,
+		validationAuthorityURL: builder.ValidationAuthorityURL,
 	}
 
 	svc.service = &svc
-
-	casLRa := []*models.CACertificate{}
-	//--BEGIN TO BE REMOVED: to be removed when refactoring DMS Manager in 2.4
-	_, err := svc.GetCAsByCommonName(context.Background(), GetCAsByCommonNameInput{
-		CommonName:      models.CALocalRA,
-		QueryParameters: nil,
-		ExhaustiveRun:   false,
-		ApplyFunc: func(ca *models.CACertificate) {
-			derefCA := *ca
-			casLRa = append(casLRa, &derefCA)
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("could not get Local RA CA: %s", err)
-	}
-
-	if len(casLRa) == 0 {
-		expTime := time.Date(9999, 12, 31, 23, 59, 59, 0, time.Local)
-		defaultEngine := *svc.defaultCryptoEngine
-		supportedKeys := defaultEngine.GetEngineConfig().SupportedKeyTypes
-		if len(supportedKeys) == 0 {
-			return nil, fmt.Errorf("default engine does not support any key type")
-		}
-		if len(supportedKeys[0].Sizes) == 0 {
-			return nil, fmt.Errorf("default engine does not support any key size for type %s", supportedKeys[0].Type.String())
-		}
-
-		lraCA, err := svc.CreateCA(context.Background(), CreateCAInput{
-			KeyMetadata: models.KeyMetadata{Type: supportedKeys[0].Type, Bits: supportedKeys[0].Sizes[0]},
-			Subject:     models.Subject{CommonName: models.CALocalRA},
-			EngineID:    defaultCryptoEngineID,
-			CAExpiration: models.Expiration{
-				Type: models.Time,
-				Time: &expTime,
-			},
-			IssuanceExpiration: models.Expiration{
-				Type: models.Time,
-				Time: &expTime,
-			},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("could not create Local RA CA: %s", err)
-		}
-
-		lCA.Infof("created Local RA CA with ID: %s", lraCA.ID)
-	}
-	//--END TO BE REMOVED
 
 	cryptoMonitor := func() {
 		ctx := context.Background()
@@ -202,8 +158,8 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 						return
 					}
 
-					fmt.Printf("Now: %s\n", time.Now())
-					fmt.Printf("Expires At: %s\n", cert.ValidTo)
+					// fmt.Printf("Now: %s\n", time.Now())
+					// fmt.Printf("Expires At: %s\n", cert.ValidTo)
 					//check if meta contains additional monitoring deltas
 					if additionalDeltasIface, ok := cert.Metadata[models.CAMetadataMonitoringExpirationDeltasKey]; ok {
 						//check if additionalDeltasIface is of type
@@ -226,9 +182,9 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 							})
 
 							for idx, additionalDelta := range orderedDeltas {
-								fmt.Printf("Delta %s = %s\n", additionalDelta.Name, additionalDelta.Delta.String())
-								fmt.Printf("After Sub: %s\n", cert.ValidTo.Add(-time.Duration(additionalDelta.Delta)))
-								fmt.Printf("After: %t\n", time.Now().After(cert.ValidTo.Add(-time.Duration(additionalDelta.Delta))))
+								// fmt.Printf("Delta %s = %s\n", additionalDelta.Name, additionalDelta.Delta.String())
+								// fmt.Printf("After Sub: %s\n", cert.ValidTo.Add(-time.Duration(additionalDelta.Delta)))
+								// fmt.Printf("After: %t\n", time.Now().After(cert.ValidTo.Add(-time.Duration(additionalDelta.Delta))))
 								if time.Now().After(cert.ValidTo.Add(-time.Duration(additionalDelta.Delta))) {
 									if !orderedDeltas[idx].Triggered {
 										//switch 'trigger' monitoring delta to
@@ -237,7 +193,7 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 										newMeta := cert.Metadata
 										newMeta[models.CAMetadataMonitoringExpirationDeltasKey] = orderedDeltas
 
-										svc.UpdateCertificateMetadata(context.Background(), UpdateCertificateMetadataInput{
+										svc.service.UpdateCertificateMetadata(context.Background(), UpdateCertificateMetadataInput{
 											SerialNumber: cert.SerialNumber,
 											Metadata:     newMeta,
 										})

@@ -95,10 +95,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	forever := make(chan struct{})
 	<-forever
 }

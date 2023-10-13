@@ -7,6 +7,12 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
 )
 
+var dmsFiltrableFieldMap = map[string]resources.FilterFieldType{
+	"id":          resources.StringFilterFieldType,
+	"name":        resources.StringFilterFieldType,
+	"creation_ts": resources.DateFilterFieldType,
+}
+
 type dmsManagerHttpRoutes struct {
 	svc services.DMSManagerService
 }
@@ -18,7 +24,7 @@ func NewDMSManagerHttpRoutes(svc services.DMSManagerService) *dmsManagerHttpRout
 }
 
 func (r *dmsManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request)
+	queryParams := FilterQuery(ctx.Request, dmsFiltrableFieldMap)
 
 	dmss := []*models.DMS{}
 	nextBookmark, err := r.svc.GetAll(services.GetAllInput{
