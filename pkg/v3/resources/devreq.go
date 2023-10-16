@@ -13,5 +13,5 @@ type CreateDeviceBody struct {
 }
 
 type UpdateIdentitySlotBody struct {
-	models.Slot[models.Certificate]
+	models.Slot[string]
 }

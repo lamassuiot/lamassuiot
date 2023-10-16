@@ -35,7 +35,7 @@ type Device struct {
 	CreationDate time.Time             `json:"creation_ts"`
 	Metadata     map[string]any        `json:"metadata" gorm:"serializer:json"`
 	DMSOwnerID   string                `json:"dms_owner"`
-	IdentitySlot *Slot[Certificate]    `json:"identity,omitempty" gorm:"serializer:json"`
+	IdentitySlot *Slot[string]         `json:"identity,omitempty" gorm:"serializer:json"`
 	ExtraSlots   map[string]*Slot[any] `json:"slots" gorm:"serializer:json"`
 	Logs         map[time.Time]LogMsg  `json:"logs" gorm:"serializer:json"`
 }

@@ -351,14 +351,14 @@ func (svc DmsManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 		return nil, err
 	}
 
-	var idSlot models.Slot[models.Certificate]
+	var idSlot models.Slot[string]
 	if device.IdentitySlot == nil {
-		idSlot = models.Slot[models.Certificate]{
+		idSlot = models.Slot[string]{
 			Status:        models.SlotActive,
 			ActiveVersion: 0,
 			SecretType:    models.X509SlotProfileType,
-			Secrets: map[int]models.Certificate{
-				0: *crt,
+			Secrets: map[int]string{
+				0: crt.SerialNumber,
 			},
 			Logs: map[time.Time]models.LogMsg{},
 		}
@@ -366,7 +366,7 @@ func (svc DmsManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 		idSlot = *device.IdentitySlot
 		idSlot.ActiveVersion = idSlot.ActiveVersion + 1
 		idSlot.Status = models.SlotActive
-		idSlot.Secrets[idSlot.ActiveVersion] = *crt
+		idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
 	}
 
 	idSlot.Logs[time.Now()] = models.LogMsg{
@@ -476,11 +476,19 @@ func (svc DmsManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		lDMS.Debugf("device '%s' does exist", csr.Subject.CommonName)
 	}
 
-	currentDeviceCert := device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion].Certificate
-	lDMS.Debugf("device %s ActiveVersion=%d for IdentitySlot is certificate with SN=%s", device.ID, device.IdentitySlot.ActiveVersion, helpers.SerialNumberToString(currentDeviceCert.SerialNumber))
+	currentDeviceCertSN := device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion]
+	currentDeviceCert, err := svc.caClient.GetCertificateBySerialNumber(ctx, GetCertificatesBySerialNumberInput{
+		SerialNumber: currentDeviceCertSN,
+	})
+	if err != nil {
+		lDMS.Errorf("could not get device certificate '%s' from CA service : %s", currentDeviceCertSN, err)
+
+	}
+
+	lDMS.Debugf("device %s ActiveVersion=%d for IdentitySlot is certificate with SN=%s", device.ID, device.IdentitySlot.ActiveVersion, currentDeviceCert)
 
 	lDMS.Debugf("checking CSR has same RawSubject as the previous enrollment at byte level. DeviceID=%s ActiveVersion=%d", device.ID, device.IdentitySlot.ActiveVersion)
-	if slices.Compare[byte](device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion].Certificate.RawSubject, csr.RawSubject) != 0 {
+	if slices.Compare[byte](currentDeviceCert.Certificate.RawSubject, csr.RawSubject) != 0 {
 		lDMS.Errorf("incoming CSR for device %s has different RawSubject compared with previous enrollment with ActiveVersion=%d", device.ID, device.IdentitySlot.ActiveVersion)
 		return nil, fmt.Errorf("invalid RawSubject bytes")
 	}
@@ -488,8 +496,8 @@ func (svc DmsManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 	now := time.Now()
 	lDMS.Debugf("checking if DMS allows enrollment at current delta for device %s", device.ID)
 
-	comparisonTimeThreshold := currentDeviceCert.NotAfter.Add(-time.Duration(dms.Settings.ReEnrollmentSettings.ReEnrollmentDelta))
-	lDMS.Debugf("current device certificate expires at %s. DMS has a allowance reenroll delta of %s. Current device expiration + allowance delta is %s (delta=%s)", currentDeviceCert.NotAfter.UTC().Format("2006-01-02T15:04:05Z07:00"), dms.Settings.ReEnrollmentSettings.ReEnrollmentDelta.String(), comparisonTimeThreshold.UTC().Format("2006-01-02T15:04:05Z07:00"), models.TimeDuration(now.Sub(comparisonTimeThreshold)).String())
+	comparisonTimeThreshold := currentDeviceCert.Certificate.NotAfter.Add(-time.Duration(dms.Settings.ReEnrollmentSettings.ReEnrollmentDelta))
+	lDMS.Debugf("current device certificate expires at %s. DMS has a allowance reenroll delta of %s. Current device expiration + allowance delta is %s (delta=%s)", currentDeviceCert.Certificate.NotAfter.UTC().Format("2006-01-02T15:04:05Z07:00"), dms.Settings.ReEnrollmentSettings.ReEnrollmentDelta.String(), comparisonTimeThreshold.UTC().Format("2006-01-02T15:04:05Z07:00"), models.TimeDuration(now.Sub(comparisonTimeThreshold)).String())
 
 	//Check if current cert is REVOKED
 
@@ -543,11 +551,11 @@ func (svc DmsManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		return nil, err
 	}
 
-	var idSlot models.Slot[models.Certificate]
+	var idSlot models.Slot[string]
 	idSlot = *device.IdentitySlot
 	idSlot.ActiveVersion = idSlot.ActiveVersion + 1
 	idSlot.Status = models.SlotActive
-	idSlot.Secrets[idSlot.ActiveVersion] = *crt
+	idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
 
 	idSlot.Logs[time.Now()] = models.LogMsg{
 		Msg:         fmt.Sprintf("Re Enrolled Device with Certificate with Serial Number %s", crt.SerialNumber),

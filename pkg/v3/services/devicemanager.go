@@ -199,8 +199,8 @@ func (svc DeviceManagerServiceImpl) UpdateDeviceStatus(input UpdateDeviceStatusI
 }
 
 type UpdateIdentitySlotInput struct {
-	ID   string                          `validate:"required"`
-	Slot models.Slot[models.Certificate] `validate:"required"`
+	ID   string              `validate:"required"`
+	Slot models.Slot[string] `validate:"required"`
 }
 
 func (svc DeviceManagerServiceImpl) UpdateIdentitySlot(input UpdateIdentitySlotInput) (*models.Device, error) {
@@ -225,7 +225,7 @@ func (svc DeviceManagerServiceImpl) UpdateIdentitySlot(input UpdateIdentitySlotI
 	switch input.Slot.Status {
 	case models.SlotRevoke:
 		revokedCert, err := svc.caClient.UpdateCertificateStatus(context.Background(), UpdateCertificateStatusInput{
-			SerialNumber:     device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion].SerialNumber,
+			SerialNumber:     device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion],
 			NewStatus:        models.StatusRevoked,
 			RevocationReason: ocsp.Unspecified,
 		})
@@ -233,7 +233,7 @@ func (svc DeviceManagerServiceImpl) UpdateIdentitySlot(input UpdateIdentitySlotI
 			lDevice.Errorf("could not revoke identity slot for device %s: %s", input.ID, err)
 			return nil, err
 		}
-		newSlot.Secrets[newSlot.ActiveVersion] = *revokedCert
+		newSlot.Secrets[newSlot.ActiveVersion] = revokedCert.SerialNumber
 	}
 
 	device.IdentitySlot = &newSlot
