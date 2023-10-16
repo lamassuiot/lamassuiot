@@ -47,7 +47,7 @@ const (
 type FilterOperation int
 
 const (
-	UnspecifiedFilter FilterFieldType = iota
+	UnspecifiedFilter FilterOperation = iota
 
 	StringEqual
 	StringNotEqual

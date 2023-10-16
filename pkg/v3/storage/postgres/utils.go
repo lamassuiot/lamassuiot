@@ -118,6 +118,11 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 				tx = tx.Order(sortBy + " " + sortMode)
 			}
 
+			for _, filter := range queryParams.Filters {
+				tx = FilterOperandToWhereClause(filter, tx)
+				nextBookmark = nextBookmark + fmt.Sprintf("filter:%s-%d-%s", base64.StdEncoding.EncodeToString([]byte(filter.Field)), filter.FilterOperation, base64.StdEncoding.EncodeToString([]byte(filter.Value)))
+			}
+
 		} else {
 			nextBookmark = ""
 			decodedBookmark, err := base64.StdEncoding.DecodeString(queryParams.NextBookmark)
@@ -151,6 +156,33 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 					sortBy = queryPart[1]
 					if err != nil {
 						return "", fmt.Errorf("not a valid bookmark")
+					}
+				case "filter":
+					filter := queryPart[1]
+					if err != nil {
+						return "", fmt.Errorf("not a valid bookmark")
+					}
+					filterSplit := strings.Split(filter, "-")
+					if len(filterSplit) == 3 {
+						field, err := base64.StdEncoding.DecodeString(filterSplit[0])
+						if err != nil {
+							continue
+						}
+						value, err := base64.StdEncoding.DecodeString(filterSplit[2])
+						if err != nil {
+							continue
+						}
+
+						operand, err := strconv.Atoi(filterSplit[1])
+						if err != nil {
+							continue
+						}
+
+						tx = FilterOperandToWhereClause(resources.FilterOption{
+							Field:           string(field),
+							FilterOperation: resources.FilterOperation(operand),
+							Value:           string(value),
+						}, tx)
 					}
 				}
 				if sortMode != "" && sortBy != "" {
@@ -241,6 +273,43 @@ func (db *postgresDBQuerier[E]) Delete(elemID string) error {
 	}
 
 	return nil
+}
+
+func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gorm.DB {
+	switch filter.FilterOperation {
+	case resources.StringEqual:
+		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
+	case resources.StringNotEqual:
+		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
+	case resources.StringContains:
+		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+	case resources.StringNotContains:
+		return tx.Where(fmt.Sprintf("%s NOT LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+	case resources.DateEqual:
+		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
+	case resources.DateBefore:
+		return tx.Where(fmt.Sprintf("%s < ?", filter.Field), filter.Value)
+	case resources.DateAfter:
+		return tx.Where(fmt.Sprintf("%s > ?", filter.Field), filter.Value)
+	case resources.NumberEqual:
+		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
+	case resources.NumberNotEqual:
+		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
+	case resources.NumberLessThan:
+		return tx.Where(fmt.Sprintf("%s < ?", filter.Field), filter.Value)
+	case resources.NumberLessOrEqualThan:
+		return tx.Where(fmt.Sprintf("%s <= ?", filter.Field), filter.Value)
+	case resources.NumberGreaterThan:
+		return tx.Where(fmt.Sprintf("%s > ?", filter.Field), filter.Value)
+	case resources.NumberGreaterOrEqualThan:
+		return tx.Where(fmt.Sprintf("%s >= ?", filter.Field), filter.Value)
+	case resources.EnumEqual:
+		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
+	case resources.EnumNotEqual:
+		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
+	default:
+		return tx
+	}
 }
 
 // JSONSerializer json serializer
