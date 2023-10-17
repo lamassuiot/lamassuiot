@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -11,7 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iot/types"
 	"github.com/aws/aws-sdk-go-v2/service/iotdataplane"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
@@ -31,7 +31,7 @@ type AWSIotPlatformService struct {
 
 type AWSIotPlatformServiceBuilder struct {
 	ConnectorID    string
-	Conf           config.AWSSDKConfig
+	Conf           aws.Config
 	Logger         *logrus.Entry
 	BaseHttpClient *http.Client
 	CACli          services.CAService
@@ -247,4 +247,125 @@ func (svc *AWSIotPlatformService) RegisterCA(ctx context.Context, input Register
 	}
 
 	return ca, nil
+}
+
+func (svc *AWSIotPlatformService) RegisterUpdateJITPProvisioner(ctx context.Context, input RegisterJITPProvisionerInput) (map[string]any, error) {
+	lFunc := svc.logger
+	var awsPlatformConfig models.DMSMetadataIotPlatformAWS
+	hasKey, err := helpers.GetMetadataToStruct(input.DMS.Metadata, models.DeviceMetadataIotAutomationKey(svc.connectorID), &awsPlatformConfig)
+	if err != nil {
+		lFunc.Errorf("error while getting key %s from DMS Metadata: %s", models.DeviceMetadataIotAutomationKey(svc.connectorID), err)
+		return nil, err
+	}
+
+	if !hasKey {
+		return nil, fmt.Errorf("DMS does not have %s key. Invalid DMS", models.DeviceMetadataIotAutomationKey(svc.connectorID))
+	}
+
+	policies := []string{}
+	for _, policy := range awsPlatformConfig.JITPProvisioningTemplate.JITPPolicies {
+		//TODO: Create/Update Iot policies
+		policies = append(policies, policy.Name)
+	}
+
+	templateBody := jitpTemplateBuilder(awsPlatformConfig.JITPProvisioningTemplate.JITPGroupNames, policies)
+	fmt.Println(templateBody)
+
+	provRoleARN := fmt.Sprintf("arn:aws:iam::%s:role/JITPRole", svc.accountID)
+	lFunc.Warnf("Make sure %s IAM Role exists", provRoleARN)
+	_, err = svc.iotSDK.CreateProvisioningTemplate(context.Background(), &iot.CreateProvisioningTemplateInput{
+		ProvisioningRoleArn: aws.String(provRoleARN),
+		TemplateBody:        &templateBody,
+		TemplateName:        &input.DMS.ID,
+		Description:         &input.DMS.Name,
+		Enabled:             awsPlatformConfig.JITPProvisioningTemplate.EnableTemplate,
+		PreProvisioningHook: nil,
+		Tags:                []types.Tag{types.Tag{Key: aws.String("created-by"), Value: aws.String("LAMASSU")}},
+		Type:                types.TemplateTypeJitp,
+	})
+	if err != nil {
+		lFunc.Errorf("something went wrong while creating JITP template in AWS: %s", err)
+		return nil, err
+	}
+
+	return nil, nil
+
+}
+
+func jitpTemplateBuilder(thingGroups []string, policyNames []string) string {
+	policiesSection := []string{}
+	for _, policyName := range policyNames {
+		policy := `"policy":{
+			"Type":"AWS::IoT::Policy",
+			"Properties":{
+			   "PolicyName":"` + policyName + `"
+			}
+		 }`
+		policiesSection = append(policiesSection, policy)
+	}
+
+	jitpTemplate := `{
+		"Parameters":{
+			"AWS::IoT::Certificate::Country":{
+			   "Type":"String"
+			},
+			"AWS::IoT::Certificate::Organization":{
+			   "Type":"String"
+			},
+			"AWS::IoT::Certificate::OrganizationalUnit":{
+			   "Type":"String"
+			},
+		   "AWS::IoT::Certificate::DistinguishedNameQualifier":{
+			  "Type":"String"
+		   },
+		   "AWS::IoT::Certificate::StateName":{
+			  "Type":"String"
+		   },
+		   "AWS::IoT::Certificate::CommonName":{
+			  "Type":"String"
+		   },
+		   "AWS::IoT::Certificate::SerialNumber":{
+			  "Type":"String"
+		   },
+		   "AWS::IoT::Certificate::Id":{
+			  "Type":"String"
+		   }
+		},
+		"Resources":{
+		   "thing":{
+			  "Type":"AWS::IoT::Thing",
+				"Properties":{
+				 "ThingName":{
+					"Ref":"AWS::IoT::Certificate::CommonName"
+				 },
+				 "AttributePayload":{
+					"version":"v1",
+					"serialNumber":{
+					   "Ref":"AWS::IoT::Certificate::SerialNumber"
+					}
+				 },
+				 "ThingGroups":[
+					` + strings.Join(thingGroups, ",") + `
+				 ]
+			  },
+			  "OverrideSettings":{
+				 "AttributePayload":"REPLACE",
+				 "ThingTypeName":"REPLACE",
+				 "ThingGroups":"REPLACE"
+			  }
+		   },
+		   "certificate":{
+			  "Type":"AWS::IoT::Certificate",
+			  "Properties":{
+				 "CertificateId":{
+					"Ref":"AWS::IoT::Certificate::Id"
+				 },
+				 "Status":"ACTIVE"
+			  }
+		   },
+		   ` + strings.Join(policiesSection, ",") + `
+		}
+	 }
+	 `
+	return jitpTemplate
 }

@@ -37,9 +37,13 @@ type LamassuConfiguration struct {
 }
 
 func DeviceMetadataIotAutomationKey(connectorID string) string {
-	return fmt.Sprintf("lamassu.io/device/iot-automation/%s", connectorID)
+	return fmt.Sprintf("lamassu.io/iot-automation/%s", connectorID)
 }
 
-func DMSMetadataIotPlatformKey(connectorID string) string {
-	return fmt.Sprintf("lamassu.io/dms/iot-platform/%s", connectorID)
+func DMSMetadataIotAutomationKey(connectorID string) string {
+	return fmt.Sprintf("lamassu.io/iot-automation/%s", connectorID)
+}
+
+func CAMetadataIotAutomationKey(connectorID string) string {
+	return fmt.Sprintf("lamassu.io/iot-automation/%s", connectorID)
 }

@@ -79,7 +79,7 @@ func main() {
 		CAClient:      caCli,
 	})
 
-	deviceSvc := svc.(*services.DmsManagerServiceImpl)
+	deviceSvc := svc.(*services.DMSManagerServiceImpl)
 
 	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
 	deviceSvc.SetService(svc)
