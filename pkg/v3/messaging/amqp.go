@@ -171,7 +171,7 @@ func (aPub *AMQPSetup) setupAMQPEventPublisher() {
 }
 
 func (aPub *AMQPSetup) PublishCloudEvent(eventType models.EventType, eventSource string, payload interface{}) {
-	event := buildCloudEvent(string(eventType), eventSource, payload)
+	event := BuildCloudEvent(string(eventType), eventSource, payload)
 	eventBytes, marshalErr := json.Marshal(event)
 	if marshalErr != nil {
 		log.Errorf("error while serializing event: %s", marshalErr)
@@ -192,7 +192,7 @@ func (aPub *AMQPSetup) PublishCloudEvent(eventType models.EventType, eventSource
 
 }
 
-func buildCloudEvent(eventType string, eventSource string, payload interface{}) event.Event {
+func BuildCloudEvent(eventType string, eventSource string, payload interface{}) event.Event {
 	event := cloudevents.NewEvent()
 	event.SetSpecVersion("1.0")
 	event.SetSource(eventSource)

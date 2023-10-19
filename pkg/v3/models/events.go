@@ -14,4 +14,7 @@ const (
 	EventImportCertificate         EventType = "ca.certificate.import"
 	EventUpdateCertificateStatus   EventType = "ca.certificate.update.status"
 	EventUpdateCertificateMetadata EventType = "ca.certificate.update.metadata"
+
+	EventCreateDMS         EventType = "dms.create"
+	EventUpdateDMSMetadata EventType = "dms.update.metadata"
 )

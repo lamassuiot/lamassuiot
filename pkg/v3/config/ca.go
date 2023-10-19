@@ -8,8 +8,8 @@ type CAConfig struct {
 		DefaultEngine             string                             `mapstructure:"default_id"`
 		PKCS11Provider            []PKCS11EngineConfig               `mapstructure:"pkcs11"`
 		HashicorpVaultKV2Provider []HashicorpVaultCryptoEngineConfig `mapstructure:"hashicorp_vault"`
-		AWSKMSProvider            []AWSSDKConfig                     `mapstructure:"aws_kms"`
-		AWSSecretsManagerProvider []AWSSDKConfig                     `mapstructure:"aws_secrets_manager"`
+		AWSKMSProvider            []AWSCryptoEngine                  `mapstructure:"aws_kms"`
+		AWSSecretsManagerProvider []AWSCryptoEngine                  `mapstructure:"aws_secrets_manager"`
 		GolangProvider            []GolangEngineConfig               `mapstructure:"golang"`
 	} `mapstructure:"crypto_engines"`
 
@@ -18,9 +18,9 @@ type CAConfig struct {
 }
 
 type HashicorpVaultCryptoEngineConfig struct {
-	HashicorpVaultSDK
-	ID       string                 `mapstructure:"id"`
-	Metadata map[string]interface{} `mapstructure:"metadata"`
+	HashicorpVaultSDK `mapstructure:",squash"`
+	ID                string                 `mapstructure:"id"`
+	Metadata          map[string]interface{} `mapstructure:"metadata"`
 }
 type HashicorpVaultSDK struct {
 	RoleID            string     `mapstructure:"role_id"`
@@ -50,12 +50,16 @@ type PKCS11ModuleExtraOptions struct {
 	Env map[string]string `mapstructure:"env"`
 }
 
+type AWSCryptoEngine struct {
+	AWSSDKConfig `mapstructure:",squash"`
+	ID           string                 `mapstructure:"id"`
+	Metadata     map[string]interface{} `mapstructure:"metadata"`
+}
+
 type AWSSDKConfig struct {
-	ID              string                 `mapstructure:"id"`
-	Metadata        map[string]interface{} `mapstructure:"metadata"`
-	AccessKeyID     string                 `mapstructure:"access_key_id"`
-	SecretAccessKey Password               `mapstructure:"secret_access_key"`
-	Region          string                 `mapstructure:"region"`
+	AccessKeyID     string   `mapstructure:"access_key_id"`
+	SecretAccessKey Password `mapstructure:"secret_access_key"`
+	Region          string   `mapstructure:"region"`
 }
 
 type CryptoMonitoring struct {

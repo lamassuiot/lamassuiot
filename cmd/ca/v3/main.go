@@ -171,7 +171,7 @@ func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*s
 	}
 
 	for _, cfg := range conf.CryptoEngines.AWSKMSProvider {
-		awsEngine, err := cryptoengines.NewAWSKMSEngine(logger, config.GetAwsSdkConfig(cfg), cfg.Metadata)
+		awsEngine, err := cryptoengines.NewAWSKMSEngine(logger, config.GetAwsSdkConfig(cfg.AWSSDKConfig), cfg.Metadata)
 		if err != nil {
 			log.Warnf("skipping AWS KMS engine with id %s. could not create Vault engine: %s", cfg.ID, err)
 		} else {
@@ -183,7 +183,7 @@ func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*s
 	}
 
 	for _, cfg := range conf.CryptoEngines.AWSSecretsManagerProvider {
-		awsEngine, err := cryptoengines.NewAWSSecretManagerEngine(logger, config.GetAwsSdkConfig(cfg), cfg.Metadata)
+		awsEngine, err := cryptoengines.NewAWSSecretManagerEngine(logger, config.GetAwsSdkConfig(cfg.AWSSDKConfig), cfg.Metadata)
 		if err != nil {
 			log.Warnf("skipping AWS KMS Secrets Manager with id %s. could not create Vault engine: %s", cfg.ID, err)
 		} else {

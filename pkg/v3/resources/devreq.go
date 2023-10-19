@@ -15,3 +15,7 @@ type CreateDeviceBody struct {
 type UpdateIdentitySlotBody struct {
 	models.Slot[models.Certificate]
 }
+
+type UpdateDeviceMetadataBody struct {
+	Metadata map[string]any `json:"metadata"`
+}

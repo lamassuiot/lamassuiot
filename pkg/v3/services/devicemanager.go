@@ -21,7 +21,8 @@ type DeviceManagerService interface {
 	GetDevices(input GetDevicesInput) (string, error)
 	GetDeviceByDMS(input GetDevicesByDMSInput) (string, error)
 	UpdateDeviceStatus(input UpdateDeviceStatusInput) (*models.Device, error)
-	UpdateIdentitySlot(input UpdateIdentitySlotInput) (*models.Device, error)
+	UpdateDeviceIdentitySlot(input UpdateDeviceIdentitySlotInput) (*models.Device, error)
+	UpdateDeviceMetadata(input UpdateDeviceMetadataInput) (*models.Device, error)
 }
 
 type DeviceManagerServiceImpl struct {
@@ -175,7 +176,7 @@ func (svc DeviceManagerServiceImpl) UpdateDeviceStatus(input UpdateDeviceStatusI
 			slot := device.IdentitySlot
 			slot.Status = models.SlotRevoke
 			lDevice.Debugf("updating identity slot to revoke active certificate")
-			device, err = svc.UpdateIdentitySlot(UpdateIdentitySlotInput{
+			device, err = svc.UpdateDeviceIdentitySlot(UpdateDeviceIdentitySlotInput{
 				ID:   device.ID,
 				Slot: *slot,
 			})
@@ -198,12 +199,43 @@ func (svc DeviceManagerServiceImpl) UpdateDeviceStatus(input UpdateDeviceStatusI
 	return device, nil
 }
 
-type UpdateIdentitySlotInput struct {
+type UpdateDeviceMetadataInput struct {
+	ID       string         `validate:"required"`
+	Metadata map[string]any `validate:"required"`
+}
+
+func (svc DeviceManagerServiceImpl) UpdateDeviceMetadata(input UpdateDeviceMetadataInput) (*models.Device, error) {
+	err := deviceValidate.Struct(input)
+	if err != nil {
+		lDevice.Errorf("UpdateDeviceMetadata struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	lDevice.Debugf("checking if device '%s' exists", input.ID)
+	exists, device, err := svc.devicesStorage.SelectExists(context.Background(), input.ID)
+	if err != nil {
+		lDevice.Errorf("something went wrong while checking if device '%s' exists in storage engine: %s", input.ID, err)
+		return nil, err
+	}
+
+	if !exists {
+		lDevice.Errorf("device %s can not be found in storage engine", input.ID)
+		return nil, err
+	}
+
+	device.Metadata = input.Metadata
+
+	lDevice.Debugf("updating %s device metadata", input.ID)
+	return svc.devicesStorage.Update(context.Background(), device)
+
+}
+
+type UpdateDeviceIdentitySlotInput struct {
 	ID   string                          `validate:"required"`
 	Slot models.Slot[models.Certificate] `validate:"required"`
 }
 
-func (svc DeviceManagerServiceImpl) UpdateIdentitySlot(input UpdateIdentitySlotInput) (*models.Device, error) {
+func (svc DeviceManagerServiceImpl) UpdateDeviceIdentitySlot(input UpdateDeviceIdentitySlotInput) (*models.Device, error) {
 
 	err := deviceValidate.Struct(input)
 	if err != nil {

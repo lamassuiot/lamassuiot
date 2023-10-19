@@ -374,7 +374,7 @@ func (svc DmsManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 		Criticality: models.InfoCriticality,
 	}
 
-	_, err = svc.deviceManagerCli.UpdateIdentitySlot(UpdateIdentitySlotInput{
+	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(UpdateDeviceIdentitySlotInput{
 		ID:   csr.Subject.CommonName,
 		Slot: idSlot,
 	})
@@ -554,7 +554,7 @@ func (svc DmsManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		Criticality: models.InfoCriticality,
 	}
 
-	_, err = svc.deviceManagerCli.UpdateIdentitySlot(UpdateIdentitySlotInput{
+	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(UpdateDeviceIdentitySlotInput{
 		ID:   csr.Subject.CommonName,
 		Slot: idSlot,
 	})

@@ -15,7 +15,8 @@ func NewDeviceManagerHTTPLayer(logger *logrus.Entry, svc services.DeviceManagerS
 	rv1.GET("/devices", routes.GetAllDevices)
 	rv1.POST("/devices", routes.CreateDevice)
 	rv1.GET("/devices/:id", routes.GetDeviceByID)
-	rv1.PUT("/devices/:id/idslot", routes.UpdateIdentitySlot)
+	rv1.PUT("/devices/:id/idslot", routes.UpdateDeviceIdentitySlot)
+	rv1.POST("/devices/:id/metadata", routes.UpdateDeviceMetadata)
 	rv1.POST("/devices/:id/decommission", routes.DecommissionDevice)
 	rv1.PUT("/devices/dms/:id", routes.GetAllDevices)
 
