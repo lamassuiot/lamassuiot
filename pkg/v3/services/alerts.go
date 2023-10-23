@@ -7,6 +7,7 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/google/uuid"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 	outputChannels "github.com/lamassuiot/lamassuiot/pkg/v3/services/alerts/output_channels"
@@ -26,21 +27,24 @@ type AlertsService interface {
 }
 
 type AlertsServiceBackend struct {
-	subsStorage  storage.SubscriptionsRepository
-	eventStorage storage.EventRepository
+	subsStorage      storage.SubscriptionsRepository
+	eventStorage     storage.EventRepository
+	smtpServerConfig config.SMTPServer
 }
 
 type AlertsServiceBuilder struct {
-	SubsStorage  storage.SubscriptionsRepository
-	EventStorage storage.EventRepository
-	Logger       *logrus.Entry
+	SubsStorage      storage.SubscriptionsRepository
+	EventStorage     storage.EventRepository
+	SmtpServerConfig config.SMTPServer
+	Logger           *logrus.Entry
 }
 
 func NewAlertsService(builder AlertsServiceBuilder) AlertsService {
 	lAlerts = builder.Logger
 	return &AlertsServiceBackend{
-		subsStorage:  builder.SubsStorage,
-		eventStorage: builder.EventStorage,
+		subsStorage:      builder.SubsStorage,
+		eventStorage:     builder.EventStorage,
+		smtpServerConfig: builder.SmtpServerConfig,
 	}
 }
 
@@ -94,6 +98,14 @@ func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *HandleE
 				lAlerts.Errorf("cannot get channel config to MSTeamsChannelConfig")
 			}
 			outSvc = outputChannels.NewMSTeamsOutputService(webhookCfg)
+
+		case models.ChannelTypeEmail:
+			var emailConf models.EmailConfig
+			err = json.Unmarshal(chanConfigBytes, &emailConf)
+			if err != nil {
+				lAlerts.Errorf("cannot get channel config to EmailConfig")
+			}
+			outSvc = outputChannels.NewSMTPOutputService(emailConf, svc.smtpServerConfig)
 
 		default:
 			lAlerts.Errorf("unsupported channel type. No implementation for %s", sub.Channel.Type)

@@ -41,18 +41,7 @@ type Channel struct {
 }
 
 type EmailConfig struct {
-	Email      string     `json:"email"`
-	SMTPServer SMTPConfig `json:"smtp_config"`
-}
-
-type SMTPConfig struct {
-	From     string `json:"from"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	SSL      bool   `json:"ssl"`
-	Insecure bool   `json:"insecure"`
+	Email string `json:"email"`
 }
 
 type MSTeamsChannelConfig struct {

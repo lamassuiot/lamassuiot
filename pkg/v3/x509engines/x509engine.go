@@ -35,8 +35,8 @@ type X509EngineProvider struct {
 type X509Engine interface {
 	GetEngineConfig() models.CryptoEngineInfo
 	GetCACryptoSigner(caCertificate *x509.Certificate) (crypto.Signer, error)
-	CreateRootCA(keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error)
-	CreateSubordinateCA(parentCACertificate *x509.Certificate, parentCASigner crypto.Signer, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error)
+	CreateRootCA(caID string, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error)
+	CreateSubordinateCA(caID string, parentCACertificate *x509.Certificate, parentCASigner crypto.Signer, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error)
 	SignCertificateRequest(caCertificate *x509.Certificate, csr *x509.CertificateRequest, expiration time.Time) (*x509.Certificate, error)
 	Sign(caCertificate *x509.Certificate, message []byte, messageType models.SignMessageType, signingAlgorithm string) ([]byte, error)
 	Verify(caCertificate *x509.Certificate, signature []byte, message []byte, messageType models.SignMessageType, signingAlgorithm string) (bool, error)
@@ -58,9 +58,9 @@ func (engine X509EngineProvider) GetCACryptoSigner(caCertificate *x509.Certifica
 	return engine.cryptoEngine.GetPrivateKeyByID(caSn)
 }
 
-func (engine X509EngineProvider) CreateRootCA(keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error) {
+func (engine X509EngineProvider) CreateRootCA(caID string, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error) {
 	log.Debugf("starting root CA generation with key metadata [%v], subject [%v] and expiration time [%s]", keyMetadata, subject, expirationTine)
-	templateCA, signer, err := engine.genCertTemplateAndPrivateKey(keyMetadata, subject, expirationTine)
+	templateCA, signer, err := engine.genCertTemplateAndPrivateKey(keyMetadata, subject, expirationTine, caID)
 	if err != nil {
 		log.Errorf("could not generate root CA: %s", err)
 		return nil, err
@@ -97,8 +97,8 @@ func (engine X509EngineProvider) CreateRootCA(keyMetadata models.KeyMetadata, su
 	return cert, nil
 }
 
-func (engine X509EngineProvider) CreateSubordinateCA(parentCACertificate *x509.Certificate, parentCASigner crypto.Signer, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error) {
-	templateCA, signer, err := engine.genCertTemplateAndPrivateKey(keyMetadata, subject, expirationTine)
+func (engine X509EngineProvider) CreateSubordinateCA(caID string, parentCACertificate *x509.Certificate, parentCASigner crypto.Signer, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error) {
+	templateCA, signer, err := engine.genCertTemplateAndPrivateKey(keyMetadata, subject, expirationTine, caID)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +167,7 @@ func (engine X509EngineProvider) SignCertificateRequest(caCertificate *x509.Cert
 	return certificate, nil
 }
 
-func (engine X509EngineProvider) genCertTemplateAndPrivateKey(keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, crypto.Signer, error) {
+func (engine X509EngineProvider) genCertTemplateAndPrivateKey(keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time, caID string) (*x509.Certificate, crypto.Signer, error) {
 	var err error
 	var signer crypto.Signer
 
@@ -218,10 +218,10 @@ func (engine X509EngineProvider) genCertTemplateAndPrivateKey(keyMetadata models
 			OrganizationalUnit: []string{subject.OrganizationUnit},
 		},
 		OCSPServer: []string{
-			fmt.Sprintf("%s/v1/ocsp", engine.validationAuthorityURL),
+			fmt.Sprintf("%s/ocsp", engine.validationAuthorityURL),
 		},
 		CRLDistributionPoints: []string{
-			fmt.Sprintf("%s/v1/crl", engine.validationAuthorityURL),
+			fmt.Sprintf("%s/crl/%s", engine.validationAuthorityURL, caID),
 		},
 		NotBefore:             now,
 		NotAfter:              expirationTine,

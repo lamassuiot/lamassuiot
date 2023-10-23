@@ -318,6 +318,7 @@ type issueCAInput struct {
 	CAType       models.CertificateType `validate:"required"`
 	CAExpiration models.Expiration
 	EngineID     string
+	CAID         string `validate:"required"`
 }
 
 type issueCAOutput struct {
@@ -345,7 +346,7 @@ func (svc *CAServiceImpl) issueCA(ctx context.Context, input issueCAInput) (*iss
 		expiration = *input.CAExpiration.Time
 	}
 	lFunc.Debugf("creating CA certificate. common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
-	caCert, err = x509Engine.CreateRootCA(input.KeyMetadata, input.Subject, expiration)
+	caCert, err = x509Engine.CreateRootCA(input.CAID, input.KeyMetadata, input.Subject, expiration)
 	if err != nil {
 		lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
 		return nil, err
@@ -513,6 +514,7 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 		CAType:       models.CertificateTypeManaged,
 		CAExpiration: input.CAExpiration,
 		EngineID:     input.EngineID,
+		CAID:         caID,
 	})
 	if err != nil {
 		lFunc.Errorf("could not create CA %s certificate: %s", input.Subject.CommonName, err)

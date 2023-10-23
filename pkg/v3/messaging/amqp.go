@@ -17,7 +17,7 @@ import (
 	"github.com/streadway/amqp"
 )
 
-var Exchange = "lamassu"
+var Exchange = "lamassu-events"
 var log *logrus.Entry
 
 type AmqpPublishMessage struct {

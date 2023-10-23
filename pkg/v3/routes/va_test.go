@@ -118,7 +118,7 @@ func TestCRL(t *testing.T) {
 				t.Fatalf("could not run 'before' function:  %s", err)
 			}
 
-			httpRequest, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/v1/crl/%s", vaTest.HttpServer.URL, DefaultCAID), nil)
+			httpRequest, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/crl/%s", vaTest.HttpServer.URL, DefaultCAID), nil)
 			if err != nil {
 				t.Fatalf("could not generate HTTP CRL request: %s", err)
 			}
@@ -359,7 +359,7 @@ func getOCSPResponsePost(ocspServerURL string, crt *models.Certificate, issuer *
 		return nil, fmt.Errorf("could not generate OCSP request: %s", err)
 	}
 
-	httpRequest, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/v1/ocsp", ocspServerURL), bytes.NewBuffer(buffer))
+	httpRequest, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/ocsp", ocspServerURL), bytes.NewBuffer(buffer))
 	if err != nil {
 		return nil, fmt.Errorf("could not generate HTTP OCSP request: %s", err)
 	}
@@ -401,7 +401,7 @@ func getOCSPResponseGet(ocspServerURL string, crt *models.Certificate, issuer *m
 
 	encOCSPReq := url.QueryEscape(base64.StdEncoding.EncodeToString(buffer))
 
-	httpRequest, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/v1/ocsp/%s", ocspServerURL, encOCSPReq), bytes.NewBuffer(buffer))
+	httpRequest, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/ocsp/%s", ocspServerURL, encOCSPReq), bytes.NewBuffer(buffer))
 	if err != nil {
 		return nil, fmt.Errorf("could not generate HTTP OCSP request: %s", err)
 	}

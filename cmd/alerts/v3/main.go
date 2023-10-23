@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
 
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
@@ -60,9 +59,10 @@ func main() {
 	}
 
 	svc := services.NewAlertsService(services.AlertsServiceBuilder{
-		Logger:       lSvc,
-		SubsStorage:  subStorage,
-		EventStorage: eventStore,
+		Logger:           lSvc,
+		SubsStorage:      subStorage,
+		EventStorage:     eventStore,
+		SmtpServerConfig: conf.SMTPConfig,
 	})
 
 	if conf.AMQPConnection.Enabled {
@@ -94,29 +94,14 @@ func main() {
 		}()
 	}
 
-	svc.Subscribe(context.Background(), &services.SubscribeInput{
-		UserID:     "hsaiz",
-		EventType:  models.EventCreateCA,
-		Conditions: []models.SubscriptionCondition{},
-		Channel: models.Channel{
-			Type: models.ChannelTypeWebhook,
-			Config: models.WebhookChannelConfig{
-				WebhookURL:    "https://webhook.site/3db73401-689d-4750-8c81-753bf5edc068",
-				WebhookMethod: http.MethodPost,
-			},
-		},
-	})
-
 	// svc.Subscribe(context.Background(), &services.SubscribeInput{
 	// 	UserID:     "hsaiz",
-	// 	EventType:  models.EventCreateCA,
+	// 	EventType:  models.EventSignCertificate,
 	// 	Conditions: []models.SubscriptionCondition{},
 	// 	Channel: models.Channel{
 	// 		Type: models.ChannelTypeEmail,
-	// 		Config: models.SMTPConfig{
-	// 			Host: "lamassu-alerts@ikerlan.es",
-	// 			Port: 587,
-	// 			From: "",
+	// 		Config: models.EmailConfig{
+	// 			Email: "hsaiz@ikerlan.es",
 	// 		},
 	// 	},
 	// })

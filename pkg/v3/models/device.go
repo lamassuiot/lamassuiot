@@ -60,19 +60,3 @@ const (
 	ErrorCriticality LogCriticality = "ERROR"
 	WarnCriticality  LogCriticality = "WARN"
 )
-
-type Criticality string
-
-const (
-	CRITICAL Criticality = "CRITICAL"
-	WARN     Criticality = "WARN"
-	INFO     Criticality = "INFO"
-	ERROR    Criticality = "ERROR"
-)
-
-type DeviceLog struct {
-	ID          string            `json:"id"`
-	Message     string            `json:"message"`
-	Criticality Criticality       `json:"Criticality"`
-	Metadata    map[string]string `json:"metadata"`
-}
