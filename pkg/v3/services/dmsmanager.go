@@ -341,6 +341,10 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 			Triggered: false,
 		},
 	}
+	newMeta[models.CAAttachedToDeviceKey] = models.CAAttachedToDevice{
+		RAID:     dms.ID,
+		DeviceID: device.ID,
+	}
 
 	crt, err = svc.caClient.UpdateCertificateMetadata(ctx, UpdateCertificateMetadataInput{
 		SerialNumber: crt.SerialNumber,
@@ -532,6 +536,10 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 			Name:      "Critical",
 			Triggered: false,
 		},
+	}
+	newMeta[models.CAAttachedToDeviceKey] = models.CAAttachedToDevice{
+		RAID:     dms.ID,
+		DeviceID: device.ID,
 	}
 
 	crt, err = svc.caClient.UpdateCertificateMetadata(ctx, UpdateCertificateMetadataInput{

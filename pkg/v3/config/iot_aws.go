@@ -1,6 +1,6 @@
 package config
 
-type IotAutomation struct {
+type IotAWS struct {
 	BaseConfig `mapstructure:",squash"`
 
 	DMSManagerClient struct {
@@ -15,12 +15,8 @@ type IotAutomation struct {
 		HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"ca_client"`
 
-	Providers struct {
-		AWS []struct {
-			ConnectorID  string       `mapstructure:"connector_id"`
-			AWSSDKConfig AWSSDKConfig `mapstructure:",squash"`
-		} `mapstructure:"aws_iot"`
-	} `mapstructure:"automation_providers"`
+	ConnectorID  string       `mapstructure:"connector_id"`
+	AWSSDKConfig AWSSDKConfig `mapstructure:"aws_config"`
 
 	LamassuInstanceURL string `mapstructure:"lamassu_url"`
 }

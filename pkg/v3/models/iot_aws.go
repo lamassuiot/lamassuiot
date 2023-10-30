@@ -36,14 +36,33 @@ type LamassuConfiguration struct {
 	DMSID string `json:"dms_id"`
 }
 
-func DeviceMetadataIotAutomationKey(connectorID string) string {
-	return fmt.Sprintf("lamassu.io/iot-automation/%s", connectorID)
+func AWSIoTMetadataKey(connectorID string) string {
+	return fmt.Sprintf("lamassu.io/iot/%s", connectorID)
 }
 
-func DMSMetadataIotAutomationKey(connectorID string) string {
-	return fmt.Sprintf("lamassu.io/iot-automation/%s", connectorID)
+type IoTAWSCAMetadata struct {
+	Register            bool   `json:"register"`
+	Account             string `json:"account"`
+	Region              string `json:"region"`
+	ARN                 string `json:"arn"`
+	CertificateID       string `json:"certificate_id"`
+	IotCoreMQTTEndpoint string `json:"mqtt_endpoint"`
 }
 
-func CAMetadataIotAutomationKey(connectorID string) string {
-	return fmt.Sprintf("lamassu.io/iot-automation/%s", connectorID)
+type IotAWSDMSMetadata struct {
+	JITPProvisioningTemplate struct {
+		ProvisioningRoleArn string       `json:"provisioning_role_arn"`
+		EnableTemplate      bool         `json:"enable_template"`
+		JITPGroupNames      []string     `json:"jitp_group_names,omitempty"`
+		JITPPolicies        []JITPPolicy `json:"jitp_policies,omitempty"`
+	} `json:"jitp_config,omitempty"`
+	ShadowConfig struct {
+		Enable     bool   `json:"enable"`
+		ShadowName string `json:"shadow_name,omitempty"`
+	} `json:"shadow_config,omitempty"`
+}
+
+type JITPPolicy struct {
+	PolicyName     string `json:"policy_name"`
+	PolicyDocument string `json:"policy_document"`
 }

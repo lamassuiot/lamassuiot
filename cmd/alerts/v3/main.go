@@ -96,7 +96,7 @@ func main() {
 
 	svc.Subscribe(context.Background(), &services.SubscribeInput{
 		UserID:     "hsaiz",
-		EventType:  models.EventCreateCA,
+		EventType:  models.EventCreateCAKey,
 		Conditions: []models.SubscriptionCondition{},
 		Channel: models.Channel{
 			Type: models.ChannelTypeWebhook,
@@ -109,7 +109,7 @@ func main() {
 
 	// svc.Subscribe(context.Background(), &services.SubscribeInput{
 	// 	UserID:     "hsaiz",
-	// 	EventType:  models.EventCreateCA,
+	// 	EventType:  models.EventCreateCAKey,
 	// 	Conditions: []models.SubscriptionCondition{},
 	// 	Channel: models.Channel{
 	// 		Type: models.ChannelTypeEmail,
