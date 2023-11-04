@@ -49,13 +49,13 @@ func main() {
 	log.SetLevel(globalLogLevel)
 	log.Infof("global log level set to '%s'", globalLogLevel)
 
-	lSvc := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.Service, "Service")
+	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Service")
 	// lHttp := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.HttpTransport, "HTTP Server")
-	lMessaging := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.MessagingEngine, "Messaging")
+	lMessaging := helpers.ConfigureLogger(conf.AMQPConnection.LogLevel, "Messaging")
 
-	lDMSClient := helpers.ConfigureLogger(globalLogLevel, conf.DMSManagerClient.LogLevel, "LMS SDK - DMS Client")
-	lDeviceClient := helpers.ConfigureLogger(globalLogLevel, conf.DevManagerClient.LogLevel, "LMS SDK - Device Client")
-	lCAClient := helpers.ConfigureLogger(globalLogLevel, conf.CAClient.LogLevel, "LMS SDK - CA Client")
+	lDMSClient := helpers.ConfigureLogger(conf.DMSManagerClient.LogLevel, "LMS SDK - DMS Client")
+	lDeviceClient := helpers.ConfigureLogger(conf.DevManagerClient.LogLevel, "LMS SDK - Device Client")
+	lCAClient := helpers.ConfigureLogger(conf.CAClient.LogLevel, "LMS SDK - CA Client")
 
 	dmsHttpCli, err := clients.BuildHTTPClient(conf.DMSManagerClient.HTTPClient, lDMSClient)
 	if err != nil {
@@ -84,6 +84,9 @@ func main() {
 		DmsSDK:      dmsSDK,
 		DeviceSDK:   deviceSDK,
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	amqpSetup, err := messaging.SetupAMQPConnection(lMessaging, conf.AMQPConnection)
 	if err != nil {
@@ -92,7 +95,7 @@ func main() {
 
 	err = amqpSetup.SetupAMQPEventSubscriber("cloud-connector", []string{"#"})
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	for {
