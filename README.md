@@ -25,3 +25,7 @@ go tool cover -func cover.out  | grep total
 go test -json -v  -coverprofile cover.out -coverpkg=./... ./pkg/v3/...
 go tool cover -func=cover.out
 ```
+
+## ARM
+
+CGO_ENABLED=1 GOARCH=arm64 go build -ldflags "-X main.sha1ver=`git rev-parse HEAD` -X main.buildTime=$now" -mod=vendor -o ca cmd/ca/v3/main.go 

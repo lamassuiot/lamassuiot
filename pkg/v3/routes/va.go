@@ -7,13 +7,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewValidationRoutes(logger *logrus.Entry, ocsp services.OCSPService, crl services.CRLService) *gin.Engine {
-	router := newGinEngine(logger)
+func NewValidationRoutes(logger *logrus.Entry, httpGrp *gin.RouterGroup, ocsp services.OCSPService, crl services.CRLService) {
 	vaRoutes := controllers.NewVAHttpRoutes(logger, ocsp, crl)
 
-	router.GET("/ocsp/:ocsp_request", vaRoutes.Verify)
-	router.POST("/ocsp", vaRoutes.Verify)
-	router.GET("/crl/:id", vaRoutes.CRL)
-
-	return router
+	httpGrp.GET("/ocsp/:ocsp_request", vaRoutes.Verify)
+	httpGrp.POST("/ocsp", vaRoutes.Verify)
+	httpGrp.GET("/crl/:id", vaRoutes.CRL)
 }

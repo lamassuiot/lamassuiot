@@ -48,15 +48,16 @@ type Slot[E any] struct {
 	Logs          map[time.Time]LogMsg `json:"logs"`
 }
 
-type LogMsg struct {
-	Msg         string         `json:"message"`
-	Criticality LogCriticality `json:"Criticality"`
-}
-
-type LogCriticality string
+type Criticality string
 
 const (
-	InfoCriticality  LogCriticality = "INFO"
-	ErrorCriticality LogCriticality = "ERROR"
-	WarnCriticality  LogCriticality = "WARN"
+	CRITICAL Criticality = "CRITICAL"
+	WARN     Criticality = "WARN"
+	INFO     Criticality = "INFO"
+	ERROR    Criticality = "ERROR"
 )
+
+type LogMsg struct {
+	Message     string      `json:"message"`
+	Criticality Criticality `json:"Criticality"`
+}

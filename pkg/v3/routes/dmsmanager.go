@@ -7,19 +7,17 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewDMSManagerHTTPLayer(logger *logrus.Entry, svc services.DMSManagerService) *gin.Engine {
-	router := newGinEngine(logger)
-
+func NewDMSManagerHTTPLayer(logger *logrus.Entry, httpGrp *gin.RouterGroup, svc services.DMSManagerService) {
 	routes := controllers.NewDMSManagerHttpRoutes(svc)
 
-	NewESTHttpRoutes(logger, router, svc)
+	NewESTHttpRoutes(logger, httpGrp, svc)
 
-	rv1 := router.Group("/v1")
+	rv1 := httpGrp.Group("/v1")
 
 	rv1.GET("/dms", routes.GetAllDMSs)
 	rv1.POST("/dms", routes.CreateDMS)
 	rv1.GET("/dms/:id", routes.GetDMSByID)
 	rv1.PUT("/dms/:id/settings", routes.UpdateIdentityProfile)
 
-	return router
+	return
 }

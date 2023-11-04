@@ -2,15 +2,14 @@ package main
 
 import (
 	"fmt"
-	"io"
 
-	formatter "github.com/antonfisher/nested-logrus-formatter"
+	"github.com/lamassuiot/lamassuiot/pkg/lamassu"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/clients"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/routes"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
 	log "github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -19,15 +18,8 @@ var (
 	buildTime string = "devTS" // when the executable was built
 )
 
-var logFormatter = &formatter.Formatter{
-	TimestampFormat: "2006-01-02 15:04:05",
-	HideKeys:        true,
-	FieldsOrder:     []string{"subsystem", "subsystem-provider", "req"},
-}
-
 func main() {
-	log.SetFormatter(logFormatter)
-
+	log.SetFormatter(helpers.LogFormatter)
 	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
 
 	conf, err := config.LoadConfig[config.VAconfig]()
@@ -41,66 +33,35 @@ func main() {
 		globalLogLevel = log.InfoLevel
 	}
 	log.SetLevel(globalLogLevel)
+
 	log.Infof("global log level set to '%s'", globalLogLevel)
 
-	lSvc := configureLogger(globalLogLevel, conf.Logs.SubsystemLogging.Service, "Service")
-	lHttp := configureLogger(globalLogLevel, conf.Logs.SubsystemLogging.HttpTransport, "HTTP Server")
+	confBytes, err := yaml.Marshal(conf)
+	if err != nil {
+		log.Fatalf("could not dump yaml config: %s", err)
+	}
 
-	lCAClient := configureLogger(globalLogLevel, conf.CAClient.LogLevel, "LMS SDK - CA Client")
+	log.Debugf("===================================================")
+	log.Debugf("%s", confBytes)
+	log.Debugf("===================================================")
 
+	lCAClient := helpers.ConfigureLogger(conf.CAClient.LogLevel, "LMS SDK - CA Client")
 	caHttpCli, err := clients.BuildHTTPClient(conf.CAClient.HTTPClient, lCAClient)
 	if err != nil {
 		log.Fatalf("could not build HTTP CA Client: %s", err)
 	}
 
-	caCli := clients.NewHttpCAClient(caHttpCli, fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath))
+	caCli := clients.NewHttpCAClient(caHttpCli, fmt.Sprintf("%s://%s%s:%d", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.BasePath, conf.CAClient.Port))
 
-	ocsp := services.NewOCSPService(services.OCSPServiceBuilder{
-		Logger:   lSvc,
-		CAClient: caCli,
-	})
-	crl := services.NewCRLService(services.CRLServiceBuilder{
-		Logger:   lSvc,
-		CAClient: caCli,
-	})
-
-	router := routes.NewValidationRoutes(lHttp, ocsp, crl)
-	err = routes.RunHttpRouter(lHttp, router, conf.Server, models.APIServiceInfo{
+	_, _, _, err = lamassu.AssembleVAServiceWithHTTPServer(*conf, caCli, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,
 	})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("could not run VA Server. Exiting: %s", err)
 	}
 
 	forever := make(chan struct{})
 	<-forever
-}
-
-func configureLogger(defaultLevel log.Level, currentLevel config.LogLevel, subsystem string) *log.Entry {
-	var err error
-	logger := log.New()
-	logger.SetFormatter(logFormatter)
-
-	lSubsystem := logger.WithField("subsystem", subsystem)
-	if currentLevel == config.None {
-		lSubsystem.Infof("subsystem logging will be disabled")
-		lSubsystem.Logger.SetOutput(io.Discard)
-	} else {
-		level := defaultLevel
-
-		if currentLevel != "" {
-			level, err = log.ParseLevel(string(currentLevel))
-			if err != nil {
-				log.Warnf("'%s' invalid '%s' log level. Defaulting to global log level", subsystem, currentLevel)
-			}
-		} else {
-			log.Warnf("'%s' log level not set. Defaulting to global log level", subsystem)
-		}
-
-		lSubsystem.Logger.SetLevel(level)
-	}
-	lSubsystem.Infof("log level set to '%s'", lSubsystem.Logger.GetLevel())
-	return lSubsystem
 }

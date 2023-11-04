@@ -21429,20 +21429,20 @@ func awsRestjson1_serializeDocumentExponentialRolloutRate(v *types.ExponentialRo
 		ok.Integer(*v.BaseRatePerMinute)
 	}
 
-	{
+	if v.IncrementFactor != nil {
 		ok := object.Key("incrementFactor")
 		switch {
-		case math.IsNaN(v.IncrementFactor):
+		case math.IsNaN(*v.IncrementFactor):
 			ok.String("NaN")
 
-		case math.IsInf(v.IncrementFactor, 1):
+		case math.IsInf(*v.IncrementFactor, 1):
 			ok.String("Infinity")
 
-		case math.IsInf(v.IncrementFactor, -1):
+		case math.IsInf(*v.IncrementFactor, -1):
 			ok.String("-Infinity")
 
 		default:
-			ok.Double(v.IncrementFactor)
+			ok.Double(*v.IncrementFactor)
 
 		}
 	}
@@ -21832,6 +21832,13 @@ func awsRestjson1_serializeDocumentKafkaAction(v *types.KafkaAction, value smith
 		ok.String(*v.DestinationArn)
 	}
 
+	if v.Headers != nil {
+		ok := object.Key("headers")
+		if err := awsRestjson1_serializeDocumentKafkaHeaders(v.Headers, ok); err != nil {
+			return err
+		}
+	}
+
 	if v.Key != nil {
 		ok := object.Key("key")
 		ok.String(*v.Key)
@@ -21847,6 +21854,36 @@ func awsRestjson1_serializeDocumentKafkaAction(v *types.KafkaAction, value smith
 		ok.String(*v.Topic)
 	}
 
+	return nil
+}
+
+func awsRestjson1_serializeDocumentKafkaActionHeader(v *types.KafkaActionHeader, value smithyjson.Value) error {
+	object := value.Object()
+	defer object.Close()
+
+	if v.Key != nil {
+		ok := object.Key("key")
+		ok.String(*v.Key)
+	}
+
+	if v.Value != nil {
+		ok := object.Key("value")
+		ok.String(*v.Value)
+	}
+
+	return nil
+}
+
+func awsRestjson1_serializeDocumentKafkaHeaders(v []types.KafkaActionHeader, value smithyjson.Value) error {
+	array := value.Array()
+	defer array.Close()
+
+	for i := range v {
+		av := array.Value()
+		if err := awsRestjson1_serializeDocumentKafkaActionHeader(&v[i], av); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -23223,9 +23260,9 @@ func awsRestjson1_serializeDocumentTermsAggregation(v *types.TermsAggregation, v
 	object := value.Object()
 	defer object.Close()
 
-	if v.MaxBuckets != 0 {
+	if v.MaxBuckets != nil {
 		ok := object.Key("maxBuckets")
-		ok.Integer(v.MaxBuckets)
+		ok.Integer(*v.MaxBuckets)
 	}
 
 	return nil

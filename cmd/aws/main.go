@@ -1,12 +1,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"log"
-	"net/http"
-	"strconv"
-	"strings"
 
 	formatter "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/cloudevents/sdk-go/v2/event"
@@ -16,8 +13,16 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/messaging"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/services/iot"
 	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
+)
+
+var (
+	version   string = "v0"    // api version
+	sha1ver   string = "-"     // sha1 revision used to build the program
+	buildTime string = "devTS" // when the executable was built
 )
 
 var logFormatter = &formatter.Formatter{
@@ -27,65 +32,71 @@ var logFormatter = &formatter.Formatter{
 }
 
 func main() {
-	logrus.SetFormatter(logFormatter)
-	logrus.SetLevel(logrus.TraceLevel)
+	log.SetFormatter(logFormatter)
 
-	conf, err := config.LoadConfig[config.IoTAWSConfig]()
+	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
+
+	conf, err := config.LoadConfig[config.IotAWS]()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	globalLogLevel, err := logrus.ParseLevel(string(conf.Logs.Level))
+	globalLogLevel, err := log.ParseLevel(string(conf.Logs.Level))
 	if err != nil {
-		logrus.Warn("unknown log level. defaulting to 'info' log level")
-		globalLogLevel = logrus.InfoLevel
+		log.Warn("unknown log level. defaulting to 'info' log level")
+		globalLogLevel = log.InfoLevel
 	}
-	logrus.SetLevel(globalLogLevel)
-	logrus.Infof("global log level set to '%s'", globalLogLevel)
+	log.SetLevel(globalLogLevel)
+	log.Infof("global log level set to '%s'", globalLogLevel)
 
-	if !strings.HasPrefix(conf.ID, "aws.") {
-		logrus.Fatalf("connector ID must start with 'aws.', got %s", conf.ID)
+	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Service")
+	// lHttp := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.HttpTransport, "HTTP Server")
+	lMessaging := helpers.ConfigureLogger(conf.AMQPConnection.LogLevel, "Messaging")
+
+	lDMSClient := helpers.ConfigureLogger(conf.DMSManagerClient.LogLevel, "LMS SDK - DMS Client")
+	lDeviceClient := helpers.ConfigureLogger(conf.DevManagerClient.LogLevel, "LMS SDK - Device Client")
+	lCAClient := helpers.ConfigureLogger(conf.CAClient.LogLevel, "LMS SDK - CA Client")
+
+	dmsHttpCli, err := clients.BuildHTTPClient(conf.DMSManagerClient.HTTPClient, lDMSClient)
+	if err != nil {
+		log.Fatalf("could not build HTTP DMS Manager Client: %s", err)
 	}
 
-	logrus.Infof("starting connector with ID %s", conf.ID)
-
-	lSvc := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.Service, "Service")
-	lMessage := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.MessagingEngine, "MESSAGING")
-	lCAClient := helpers.ConfigureLogger(globalLogLevel, conf.CAClient.LogLevel, "LMS SDK - CA Client")
+	deviceHttpCli, err := clients.BuildHTTPClient(conf.DevManagerClient.HTTPClient, lDeviceClient)
+	if err != nil {
+		log.Fatalf("could not build HTTP Device Client: %s", err)
+	}
 
 	caHttpCli, err := clients.BuildHTTPClient(conf.CAClient.HTTPClient, lCAClient)
 	if err != nil {
 		log.Fatalf("could not build HTTP CA Client: %s", err)
 	}
 
-	caCli := clients.NewHttpCAClient(caHttpCli, fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath))
+	dmsSDK := clients.NewHttpDMSManagerClient(dmsHttpCli, fmt.Sprintf("%s://%s:%d%s", conf.DMSManagerClient.Protocol, conf.DMSManagerClient.Hostname, conf.DMSManagerClient.Port, conf.DMSManagerClient.BasePath))
+	deviceSDK := clients.NewHttpDeviceManagerClient(deviceHttpCli, fmt.Sprintf("%s://%s:%d%s", conf.DevManagerClient.Protocol, conf.DevManagerClient.Hostname, conf.DevManagerClient.Port, conf.DevManagerClient.BasePath))
+	caSDK := clients.NewHttpCAClient(caHttpCli, fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath))
 
-	amqpSetup, err := messaging.SetupAMQPConnection(lMessage, conf.AMQPConnection)
+	awsConnectorSvc, err := iot.NewAWSCloudConnectorServiceService(iot.AWSCloudConnectorBuilder{
+		Conf:        config.GetAwsSdkConfig(conf.AWSSDKConfig),
+		Logger:      lSvc,
+		ConnectorID: conf.ConnectorID,
+		CaSDK:       caSDK,
+		DmsSDK:      dmsSDK,
+		DeviceSDK:   deviceSDK,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	amqpSetup, err := messaging.SetupAMQPConnection(lMessaging, conf.AMQPConnection)
 	if err != nil {
 		logrus.Fatal(err)
 	}
 
-	err = amqpSetup.SetupAMQPEventSubscriber(conf.ID, []string{"#"})
+	err = amqpSetup.SetupAMQPEventSubscriber("cloud-connector", []string{"#"})
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
-
-	svc, err := services.NewIotAWS(services.IotAWSServiceBuilder{
-		Conf:           conf.AWSSDKConfig,
-		Logger:         lSvc,
-		BaseHttpClient: http.DefaultClient,
-		CACli:          caCli,
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	info, err := svc.GetCloudProviderConfig()
-	if err != nil {
-		log.Panic(err)
-	}
-
-	fmt.Println(info)
 
 	for {
 		select {
@@ -96,96 +107,164 @@ func main() {
 				continue
 			}
 
-			eventHandler(lMessage, conf.ID, event, svc)
+			eventHandler(lMessaging, event, *awsConnectorSvc)
 		}
 	}
+
+	forever := make(chan struct{})
+	<-forever
 }
 
-func eventHandler(logger *logrus.Entry, connectorID string, cloudEvent *event.Event, svc services.IotAWSService) {
-	logError := func(eventID string, eventType string, modelObject string, err error) {
+func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc iot.AWSCloudConnectorService) {
+	logDecodeError := func(eventID string, eventType string, modelObject string, err error) {
 		logger.Errorf("could not decode event '%s' into model '%s' object. Skipping event with ID %s: %s", eventType, modelObject, eventID, err)
 	}
 
+	logger.Tracef("incoming cloud event of type: %s", cloudEvent.Type())
+
 	switch cloudEvent.Type() {
-	case "ca.create", "ca.import", "ca.update.metadata":
-		ca, err := getEventBody[models.CACertificate](cloudEvent)
+	case string(models.EventUpdateCertificateMetadataKey):
+		certUpdate, err := getEventBody[models.UpdateModel[models.Certificate]](cloudEvent)
 		if err != nil {
-			logError(cloudEvent.ID(), cloudEvent.Type(), "CACertificate", err)
+			logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "Certificate", err)
 			return
 		}
 
-		var meta interface{}
-		var ok bool
-		if meta, ok = ca.Metadata[connectorID]; !ok {
-			logger.Debugf("skipping event of type %s with ID %s. Metadata didn't include key %s", cloudEvent.Type(), cloudEvent.ID(), connectorID)
-			return
-		}
+		cert := certUpdate.Updated
 
-		metaBytes, err := json.Marshal(meta)
+		var certExpirationDeltas models.CAMetadataMonitoringExpirationDeltas
+		hasKey, err := helpers.GetMetadataToStruct(cert.Metadata, models.CAMetadataMonitoringExpirationDeltasKey, certExpirationDeltas)
 		if err != nil {
-			logger.Errorf("skipping event of type %s with ID %s. Invalid metadata content. Got metadata \n%s\n error is: %s", cloudEvent.Type(), cloudEvent.ID(), meta, err)
+			logger.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
 			return
 		}
 
-		unquoteMeta, err := strconv.Unquote(string(metaBytes))
-		if err != nil {
-			logger.Warnf("event of type %s with ID %s. metadata is not quoted. continuing", cloudEvent.Type(), cloudEvent.ID())
-		}
-		metaBytes = []byte(unquoteMeta)
-
-		var metaCAReg models.CAIoTAWSRegistration
-		if err = json.Unmarshal(metaBytes, &metaCAReg); err != nil {
-			logger.Errorf("skipping event of type %s with ID %s. Invalid metadata format. Got metadata \n%s\n error is: %s", cloudEvent.Type(), cloudEvent.ID(), meta, err)
+		if !hasKey {
+			logrus.Warnf("skipping event %s, Certificate doesn't have %s key", cloudEvent.Type(), models.CAMetadataMonitoringExpirationDeltasKey)
 			return
 		}
 
-		if !metaCAReg.Register {
-			logger.Warnf("skipping event of type %s with ID %s. Register attribute should be true. Got metadata \n%s", cloudEvent.Type(), cloudEvent.ID(), meta)
-			return
-		}
-
-		//check if CA already registered in AWS
-		cas, err := svc.GetRegisteredCAs(services.GetRegisteredCAsInput{})
-		if err != nil {
-			logger.Errorf("skipping event of type %s with ID %s. Could not get AWS Registered CAs", cloudEvent.Type(), cloudEvent.ID())
-			return
-		}
-
-		alreadyRegistered := false
-		idx := slices.IndexFunc[*models.CACertificate](cas, func(c *models.CACertificate) bool {
-			if c.SerialNumber == ca.SerialNumber {
+		preventiveIdx := slices.IndexFunc[models.MonitoringExpirationDelta](certExpirationDeltas, func(med models.MonitoringExpirationDelta) bool {
+			if med.Name == "Preventive" {
 				return true
-			} else {
-				return false
 			}
+			return false
 		})
 
-		if idx != -1 {
-			alreadyRegistered = true
+		var attachedBy models.CAAttachedToDevice
+		hasKey, err = helpers.GetMetadataToStruct(cert.Metadata, models.CAAttachedToDeviceKey, attachedBy)
+		if err != nil {
+			logger.Errorf("could not decode metadata with key %s: %s", models.CAAttachedToDeviceKey, err)
+			return
 		}
 
-		if !alreadyRegistered {
-			logger.Debugf("registering CA with SN '%s'", ca.SerialNumber)
-			err := svc.RegisterCA(services.RegisterCAInput{CACertificate: ca})
+		if !hasKey {
+			logrus.Warnf("skipping event %s, Certificate doesn't have %s key", cloudEvent.Type(), models.CAAttachedToDeviceKey)
+			return
+		}
+
+		dms, err := awsConnectorSvc.DmsSDK.GetDMSByID(services.GetDMSByIDInput{
+			ID: attachedBy.RAID,
+		})
+		if err != nil {
+			logger.Errorf("could not get DMS %s: %s", attachedBy.RAID, err)
+			return
+		}
+
+		var dmsAWSConf models.IotAWSDMSMetadata
+		hasKey, err = helpers.GetMetadataToStruct(dms.Metadata, models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID), dmsAWSConf)
+		if err != nil {
+			logger.Errorf("could not decode metadata with key %s: %s", models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID), err)
+			return
+		}
+
+		if !hasKey {
+			logrus.Warnf("skipping event %s, DMS doesn't have %s key", cloudEvent.Type(), models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID))
+			return
+		}
+
+		if preventiveIdx >= 0 && certExpirationDeltas[preventiveIdx].Triggered {
+			err = awsConnectorSvc.UpdateDeviceShadow(iot.UpdateDeviceShadowInput{
+				DeviceID:               cert.Subject.CommonName,
+				RemediationActionType:  models.RemediationActionUpdateCertificate,
+				DMSIoTAutomationConfig: dmsAWSConf,
+			})
 			if err != nil {
-				logger.Errorf("something went wrong while registering CA with SN '%s' in AWS IoT. Skipping event handling: %s", ca.SerialNumber, err)
+				logger.Errorf("something went wrong while updating %s Thing Shadow: %s", attachedBy.DeviceID, err)
+				return
+			}
+		}
+
+	case string(models.EventCreateDMSKey), string(models.EventUpdateDMSMetadataKey):
+		var dms *models.DMS
+		var err error
+		if cloudEvent.Type() == string(models.EventCreateDMSKey) {
+			dms, err = getEventBody[models.DMS](cloudEvent)
+			if err != nil {
+				logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "DMS", err)
 				return
 			}
 		} else {
-			logger.Warnf("CA with SN '%s' is already registered in AWS IoT. Skipping registration process", ca.SerialNumber)
+			updatedDMS, err := getEventBody[models.UpdateModel[models.DMS]](cloudEvent)
+			if err != nil {
+				logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "UpdateModel DMS", err)
+				return
+			}
+
+			dms = &updatedDMS.Updated
 		}
 
-		//once CA is registered, check if JITP is required
-		if !metaCAReg.JITP {
-			logger.Warnf("event of type %s with ID %s. No JITP Template will be created/updated. Got metadata \n%s", cloudEvent.Type(), cloudEvent.ID(), meta)
+		var dmsAwsAutomationConfig models.IotAWSDMSMetadata
+		hasKey, err := helpers.GetMetadataToStruct(dms.Metadata, models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID), dmsAwsAutomationConfig)
+		if err != nil {
+			logger.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
 			return
 		}
 
-		//check if JITP template already exists.
+		if !hasKey {
+			logrus.Warnf("skipping event %s, DMS doesn't have %s key", cloudEvent.Type(), models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID))
+			return
+		}
 
-		//If JITP exists, update it if required
-		//Else create JITP.
+		awsConnectorSvc.RegisterUpdateJITPProvisioner(context.Background(), iot.RegisterUpdateJITPProvisionerInput{
+			DMS: dms,
+		})
 
+	case string(models.EventCreateCAKey), string(models.EventImportCAKey), string(models.EventUpdateCAMetadataKey):
+		var ca *models.CACertificate
+		var err error
+		switch cloudEvent.Type() {
+		case string(models.EventUpdateCAMetadataKey):
+			ca, err = getEventBody[models.CACertificate](cloudEvent)
+			if err != nil {
+				logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "CACertificate", err)
+				return
+			}
+		default:
+			updatedCA, err := getEventBody[models.UpdateModel[models.CACertificate]](cloudEvent)
+			if err != nil {
+				logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "UpdateModel CACertificate", err)
+				return
+			}
+
+			ca = &updatedCA.Updated
+		}
+
+		var awsIoTCoreCACfg models.IoTAWSCAMetadata
+		hasKey, err := helpers.GetMetadataToStruct(ca.Metadata, models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID), &awsIoTCoreCACfg)
+		if err != nil {
+			logrus.Errorf("error while getting %s key: %s", models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID), err)
+			return
+		}
+
+		if !hasKey {
+			logrus.Warnf("skipping event %s, CA doesn't have %s key", cloudEvent.Type(), models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID))
+		}
+
+		awsConnectorSvc.RegisterCA(context.Background(), iot.RegisterCAInput{
+			CACertificate:         *ca,
+			RegisterConfiguration: awsIoTCoreCACfg,
+		})
 	}
 }
 

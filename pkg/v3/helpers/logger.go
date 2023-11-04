@@ -25,7 +25,7 @@ var LogFormatter = &formatter.Formatter{
 	},
 }
 
-func ConfigureLogger(defaultLevel logrus.Level, currentLevel config.LogLevel, subsystem string) *logrus.Entry {
+func ConfigureLogger(currentLevel config.LogLevel, subsystem string) *logrus.Entry {
 	var err error
 	logger := logrus.New()
 	logger.SetFormatter(LogFormatter)
@@ -35,7 +35,7 @@ func ConfigureLogger(defaultLevel logrus.Level, currentLevel config.LogLevel, su
 		lSubsystem.Infof("subsystem logging will be disabled")
 		lSubsystem.Logger.SetOutput(io.Discard)
 	} else {
-		level := defaultLevel
+		level := logrus.GetLevel()
 
 		if currentLevel != "" {
 			level, err = logrus.ParseLevel(string(currentLevel))

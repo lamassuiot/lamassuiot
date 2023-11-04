@@ -1,0 +1,16 @@
+from ubuntu:20.04
+
+RUN apt-get update && \
+    apt-get install -y \
+        libssl-dev \
+        libconvert-asn1-perl \
+        libcrypt-openssl-rsa-perl \
+        libcrypt-openssl-x509-perl \
+        libcrypt-openssl-pkcs10-perl \
+        libio-socket-ssl-perl \
+        libwww-perl \
+        git \
+        jq
+
+RUN git clone https://github.com/killabytenow/pest
+WORKDIR pest

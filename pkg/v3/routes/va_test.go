@@ -461,8 +461,10 @@ func BuildVATestServer() (*VATestServer, error) {
 		CAClient: caSDK,
 	})
 
-	router := NewValidationRoutes(lgr, ocspService, crlService)
-	vaServer := httptest.NewUnstartedServer(router)
+	engine := NewGinEngine(lgr)
+	httpGrp := engine.Group("/")
+	NewValidationRoutes(lgr, httpGrp, ocspService, crlService)
+	vaServer := httptest.NewUnstartedServer(engine)
 
 	//Init CA Server with 1 CA
 	caDUr := models.TimeDuration(time.Hour * 24)

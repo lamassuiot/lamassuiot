@@ -14,11 +14,11 @@ const (
 )
 
 type DMS struct {
-	ID           string            `json:"id" gorm:"primaryKey"`
-	Name         string            `json:"name"`
-	Metadata     map[string]string `json:"metadata" gorm:"serializer:json"`
-	CreationDate time.Time         `json:"creation_ts"`
-	Settings     DMSSettings       `json:"dms_settings" gorm:"serializer:json"`
+	ID           string         `json:"id" gorm:"primaryKey"`
+	Name         string         `json:"name"`
+	Metadata     map[string]any `json:"metadata" gorm:"serializer:json"`
+	CreationDate time.Time      `json:"creation_ts"`
+	Settings     DMSSettings    `json:"dms_settings" gorm:"serializer:json"`
 }
 
 type DMSSettings struct {
