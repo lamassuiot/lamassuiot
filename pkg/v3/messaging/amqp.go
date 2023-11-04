@@ -17,7 +17,6 @@ import (
 	"github.com/streadway/amqp"
 )
 
-var Exchange = "lamassu-events"
 var log *logrus.Entry
 
 type AmqpPublishMessage struct {
@@ -33,6 +32,7 @@ type subscribesInfo struct {
 }
 
 type AMQPSetup struct {
+	Exchange       string
 	Channel        *amqp.Channel
 	PublisherChan  chan *AmqpPublishMessage
 	Msgs           <-chan amqp.Delivery
@@ -41,13 +41,17 @@ type AMQPSetup struct {
 
 func SetupAMQPConnection(logger *logrus.Entry, config config.AMQPConnection) (*AMQPSetup, error) {
 	log = logger
+	if config.Exchange == "" {
+		log.Warnf("exchange was configured as empty '', defaulting to 'lamassu-events' ")
+		config.Exchange = "lamassu-events"
+	}
+
 	amqpCloseChan := make(chan *amqp.Error) //error channel
 
 	var connection *amqp.Connection
 
-	amqpEventPub := &AMQPSetup{}
-
-	connection, err := amqpEventPub.buildAMQPConnection(config)
+	amqpHandler := &AMQPSetup{}
+	connection, err := amqpHandler.buildAMQPConnection(config)
 	if err != nil {
 		return nil, err
 	}
@@ -62,14 +66,14 @@ func SetupAMQPConnection(logger *logrus.Entry, config config.AMQPConnection) (*A
 				if err != nil {
 					log.Errorf("disconnected from AMQP: %s", err)
 					for {
-						connection, err = amqpEventPub.buildAMQPConnection(config)
+						connection, err = amqpHandler.buildAMQPConnection(config)
 
 						if err != nil {
 							log.Errorf("failed to reconnect. Sleeping for 5 seconds: %s", err)
 							time.Sleep(5 * time.Second)
 						} else {
-							for _, subs := range amqpEventPub.subscribesInfo {
-								amqpEventPub.SetupAMQPEventSubscriber(subs.serviceName, subs.routingKeys)
+							for _, subs := range amqpHandler.subscribesInfo {
+								amqpHandler.SetupAMQPEventSubscriber(subs.serviceName, subs.routingKeys)
 							}
 							amqpCloseChan = make(chan *amqp.Error)
 							connection.NotifyClose(amqpCloseChan)
@@ -82,10 +86,11 @@ func SetupAMQPConnection(logger *logrus.Entry, config config.AMQPConnection) (*A
 		}
 	}()
 
-	return amqpEventPub, nil
+	return amqpHandler, nil
 }
 
 func (aPub *AMQPSetup) buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Connection, error) {
+	aPub.Exchange = cfg.Exchange
 	userPassUrlPrefix := ""
 	if cfg.BasicAuth.Enabled {
 		log.Debugf("basic auth enabled")
@@ -128,13 +133,13 @@ func (aPub *AMQPSetup) buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Con
 	log.Debugf("channel created")
 
 	err = amqpChannel.ExchangeDeclare(
-		Exchange, // name
-		"topic",  // type
-		true,     // durable
-		false,    // auto-deleted
-		false,    // internal
-		false,    // no-wait
-		nil,      // arguments
+		cfg.Exchange, // name
+		"topic",      // type
+		true,         // durable
+		false,        // auto-deleted
+		false,        // internal
+		false,        // no-wait
+		nil,          // arguments
 	)
 	if err != nil {
 		log.Errorf("could not create AMQP exchange: %s", err)
@@ -155,7 +160,7 @@ func (aPub *AMQPSetup) setupAMQPEventPublisher() {
 			case amqpMessage := <-publisherChan:
 				//TODO: When an error is obtained whiel publishing, retry/enque message
 				amqpErr := aPub.Channel.Publish(
-					Exchange,
+					aPub.Exchange,
 					amqpMessage.RoutingKey,
 					amqpMessage.Mandatory,
 					amqpMessage.Immediate,
@@ -222,9 +227,9 @@ func (aPub *AMQPSetup) SetupAMQPEventSubscriber(serviceName string, routingKeys 
 
 	for _, rKey := range routingKeys {
 		err = aPub.Channel.QueueBind(
-			q.Name,   // queue name
-			rKey,     // routing key
-			Exchange, // exchange
+			q.Name,        // queue name
+			rKey,          // routing key
+			aPub.Exchange, // exchange
 			false,
 			nil,
 		)

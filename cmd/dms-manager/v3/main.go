@@ -3,17 +3,13 @@ package main
 import (
 	"fmt"
 
-	formatter "github.com/antonfisher/nested-logrus-formatter"
+	"github.com/lamassuiot/lamassuiot/pkg/lamassu"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/clients"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/routes"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/storage"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/storage/couchdb"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/storage/postgres"
 	log "github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v2"
 )
 
 var (
@@ -22,15 +18,8 @@ var (
 	buildTime string = "devTS" // when the executable was built
 )
 
-var logFormatter = &formatter.Formatter{
-	TimestampFormat: "2006-01-02 15:04:05",
-	HideKeys:        true,
-	FieldsOrder:     []string{"subsystem", "subsystem-provider", "req"},
-}
-
 func main() {
-	log.SetFormatter(logFormatter)
-
+	log.SetFormatter(helpers.LogFormatter)
 	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
 
 	conf, err := config.LoadConfig[config.DMSconfig]()
@@ -44,87 +33,43 @@ func main() {
 		globalLogLevel = log.InfoLevel
 	}
 	log.SetLevel(globalLogLevel)
+
 	log.Infof("global log level set to '%s'", globalLogLevel)
 
-	lSvc := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.Service, "Service")
-	lHttp := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.HttpTransport, "HTTP Server")
-	lStorage := helpers.ConfigureLogger(globalLogLevel, conf.Logs.SubsystemLogging.StorageEngine, "Storage")
-
-	lCAClient := helpers.ConfigureLogger(globalLogLevel, conf.CAClient.LogLevel, "LMS SDK - CA Client")
-	lDeviceClient := helpers.ConfigureLogger(globalLogLevel, conf.DevManagerClient.LogLevel, "LMS SDK - Device Client")
-
-	devStorage, err := createStorageInstance(lStorage, conf.Storage)
+	confBytes, err := yaml.Marshal(conf)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("could not dump yaml config: %s", err)
 	}
 
+	log.Debugf("===================================================")
+	log.Debugf("%s", confBytes)
+	log.Debugf("===================================================")
+
+	lCAClient := helpers.ConfigureLogger(conf.CAClient.LogLevel, "LMS SDK - CA Client")
 	caHttpCli, err := clients.BuildHTTPClient(conf.CAClient.HTTPClient, lCAClient)
 	if err != nil {
 		log.Fatalf("could not build HTTP CA Client: %s", err)
 	}
 
-	caCli := clients.NewHttpCAClient(caHttpCli, fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath))
+	caCli := clients.NewHttpCAClient(caHttpCli, fmt.Sprintf("%s://%s%s:%d", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.BasePath, conf.CAClient.Port))
 
-	deviceHttpCli, err := clients.BuildHTTPClient(conf.DevManagerClient.HTTPClient, lDeviceClient)
+	lDeviceManagerClient := helpers.ConfigureLogger(conf.CAClient.LogLevel, "LMS SDK - DeviceManager Client")
+	deviceMngrHttpCli, err := clients.BuildHTTPClient(conf.DevManagerClient.HTTPClient, lDeviceManagerClient)
 	if err != nil {
-		log.Fatalf("could not build HTTP Device Client: %s", err)
+		log.Fatalf("could not build HTTP Device Manager Client: %s", err)
 	}
 
-	deviceCli := clients.NewHttpDeviceManagerClient(deviceHttpCli, fmt.Sprintf("%s://%s:%d%s", conf.DevManagerClient.Protocol, conf.DevManagerClient.Hostname, conf.DevManagerClient.Port, conf.DevManagerClient.BasePath))
+	devManagerCli := clients.NewHttpDeviceManagerClient(deviceMngrHttpCli, fmt.Sprintf("%s://%s%s:%d", conf.DevManagerClient.Protocol, conf.DevManagerClient.Hostname, conf.DevManagerClient.BasePath, conf.DevManagerClient.Port))
 
-	svc := services.NewDMSManagerService(services.DMSManagerBuilder{
-		Logger:        lSvc,
-		DMSStorage:    devStorage,
-		DevManagerCli: deviceCli,
-		CAClient:      caCli,
-	})
-
-	deviceSvc := svc.(*services.DmsManagerServiceImpl)
-
-	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
-	deviceSvc.SetService(svc)
-
-	router := routes.NewDMSManagerHTTPLayer(lHttp, svc)
-	routes.RunHttpRouter(lHttp, router, conf.Server, models.APIServiceInfo{
+	_, _, err = lamassu.AssembleDMSManagerServiceWithHTTPServer(*conf, caCli, devManagerCli, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,
 	})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("could not run DMS Manager Server. Exiting: %s", err)
 	}
 
 	forever := make(chan struct{})
 	<-forever
-}
-
-func createStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine) (storage.DMSRepo, error) {
-	switch conf.Provider {
-	case config.Postgres:
-		psqlCli, err := postgres.CreatePostgresDBConnection(logger, conf.Postgres, "dmsmanager")
-		if err != nil {
-			log.Fatalf("could not create postgres client: %s", err)
-		}
-
-		dmsStore, err := postgres.NewDMSManagerRepository(psqlCli)
-		if err != nil {
-			log.Fatalf("could not initialize postgres DMS client: %s", err)
-		}
-
-		return dmsStore, nil
-	case config.CouchDB:
-		couchdbClient, err := couchdb.CreateCouchDBConnection(logger, conf.CouchDB)
-		if err != nil {
-			log.Fatalf("could not create couchdb client: %s", err)
-		}
-
-		dmsStore, err := couchdb.NewCouchDMSRepository(couchdbClient)
-		if err != nil {
-			log.Fatalf("could not initialize couchdb DMS client: %s", err)
-		}
-
-		return dmsStore, nil
-	}
-
-	return nil, fmt.Errorf("no storage engine")
 }

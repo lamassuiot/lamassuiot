@@ -201,8 +201,12 @@ github.com/docker/go-connections/nat
 # github.com/docker/go-units v0.5.0
 ## explicit
 github.com/docker/go-units
+# github.com/elazarl/goproxy v0.0.0-20231031074852-3ec07828be7a
+## explicit
+github.com/elazarl/goproxy
 # github.com/fatih/color v1.15.0
 ## explicit; go 1.17
+github.com/fatih/color
 # github.com/flimzy/diff v0.1.7
 ## explicit
 # github.com/flimzy/testy v0.1.17
@@ -436,6 +440,7 @@ github.com/mailru/easyjson/jlexer
 github.com/mailru/easyjson/jwriter
 # github.com/mattn/go-colorable v0.1.13
 ## explicit; go 1.15
+github.com/mattn/go-colorable
 # github.com/mattn/go-isatty v0.0.19
 ## explicit; go 1.15
 github.com/mattn/go-isatty

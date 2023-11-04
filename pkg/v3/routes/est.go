@@ -7,7 +7,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewESTHttpRoutes(logger *logrus.Entry, router *gin.Engine, svc services.ESTService) *gin.RouterGroup {
+func NewESTHttpRoutes(logger *logrus.Entry, router *gin.RouterGroup, svc services.ESTService) *gin.RouterGroup {
 	routes := controllers.NewESTHttpRoutes(logger, svc)
 
 	est := router.Group("/.well-known/est")

@@ -4,12 +4,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/controllers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
-	"github.com/sirupsen/logrus"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-func NewCAHTTPLayer(logger *logrus.Entry, svc services.CAService) *gin.Engine {
+func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) {
 	// docs.SwaggerInfo.Title = "Lamassu CA Service API"
 	// docs.SwaggerInfo.Description = "These are the endpoints available in the Lamassu CA Service."
 	// docs.SwaggerInfo.Version = "1.0"
@@ -20,7 +19,7 @@ func NewCAHTTPLayer(logger *logrus.Entry, svc services.CAService) *gin.Engine {
 
 	routes := controllers.NewCAHttpRoutes(svc)
 
-	router := newGinEngine(logger)
+	router := parentRouterGroup
 	rv1 := router.Group("/v1")
 
 	rv1.GET("/cas", routes.GetAllCAs)
@@ -52,5 +51,4 @@ func NewCAHTTPLayer(logger *logrus.Entry, svc services.CAService) *gin.Engine {
 	rv1.GET("/stats", routes.GetStats)
 
 	rv1.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	return router
 }

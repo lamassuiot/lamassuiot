@@ -20,8 +20,8 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage/postgres"
-	vault_test "github.com/lamassuiot/lamassuiot/pkg/v3/test/cryptoengines/keyvaultkv2"
-	postgres_test "github.com/lamassuiot/lamassuiot/pkg/v3/test/storage/postgres"
+	vault_test "github.com/lamassuiot/lamassuiot/pkg/v3/test/subsystems/cryptoengines/keyvaultkv2"
+	subsystems "github.com/lamassuiot/lamassuiot/pkg/v3/test/subsystems/storage/postgres"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )
@@ -73,7 +73,7 @@ func TestCryptoEngines(t *testing.T) {
 			}
 
 		})
-		postgres_test.AfterSuite()
+		subsystems.AfterSuite()
 	}
 }
 func TestCreateCA(t *testing.T) {
@@ -233,7 +233,7 @@ func TestCreateCA(t *testing.T) {
 			}
 
 		})
-		postgres_test.AfterSuite()
+		subsystems.AfterSuite()
 	}
 }
 func TestRevokeCA(t *testing.T) {
@@ -366,7 +366,7 @@ func TestRevokeCA(t *testing.T) {
 			}
 
 		})
-		postgres_test.AfterSuite()
+		subsystems.AfterSuite()
 	}
 }
 func TestGetCAsByCommonName(t *testing.T) {
@@ -437,7 +437,7 @@ func TestGetCAsByCommonName(t *testing.T) {
 			}
 
 		})
-		postgres_test.AfterSuite()
+		subsystems.AfterSuite()
 	}
 }
 
@@ -474,7 +474,7 @@ func BuildCATestServer() (*CATestServer, error) {
 		return nil, fmt.Errorf("could not create Vault Crypto Engine")
 	}
 
-	pConfig := postgres_test.BeforeSuite("ca_test")
+	pConfig := subsystems.BeforeSuite("ca_test")
 
 	dbCli, err := postgres.CreatePostgresDBConnection(logrus.NewEntry(logrus.StandardLogger()), pConfig, "ca_test")
 	if err != nil {
@@ -516,8 +516,11 @@ func BuildCATestServer() (*CATestServer, error) {
 		return nil, fmt.Errorf("could not create CA Service: %s", err)
 	}
 
-	router := NewCAHTTPLayer(lgr, caSvc)
-	caServer := httptest.NewUnstartedServer(router)
+	mainEngine := NewGinEngine(lgr)
+	subRoutes := mainEngine.Group("/")
+	NewCAHTTPLayer(subRoutes, caSvc)
+
+	caServer := httptest.NewUnstartedServer(mainEngine)
 
 	return &CATestServer{
 		Service:    caSvc,

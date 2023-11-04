@@ -4,11 +4,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/controllers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
-	"github.com/sirupsen/logrus"
 )
 
-func NewDeviceManagerHTTPLayer(logger *logrus.Entry, svc services.DeviceManagerService) *gin.Engine {
-	router := newGinEngine(logger)
+func NewDeviceManagerHTTPLayer(router *gin.RouterGroup, svc services.DeviceManagerService) {
 	routes := controllers.NewDeviceManagerHttpRoutes(svc)
 
 	rv1 := router.Group("/v1")
@@ -20,5 +18,4 @@ func NewDeviceManagerHTTPLayer(logger *logrus.Entry, svc services.DeviceManagerS
 	rv1.POST("/devices/:id/decommission", routes.DecommissionDevice)
 	rv1.PUT("/devices/dms/:id", routes.GetAllDevices)
 
-	return router
 }

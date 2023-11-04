@@ -20,30 +20,23 @@ func (p *Password) UnmarshalText(text []byte) (err error) {
 	return nil
 }
 
+type BaseConfigLogging struct {
+	Level LogLevel `mapstructure:"level"`
+}
+
 type BaseConfig struct {
 	// Defines logging options
-	Logs struct {
-		// General log level to be used. Individual subsystems can be controlled and will override this option. Valid options are `info`, `debug`, `trace`
-		Level LogLevel `mapstructure:"level"`
-		// Select if health requests should be logged.
-		SubsystemLogging struct {
-			Service         LogLevel `mapstructure:"service"`
-			CryptoEngine    LogLevel `mapstructure:"crypto_engine"`
-			StorageEngine   LogLevel `mapstructure:"storage_engine"`
-			HttpTransport   LogLevel `mapstructure:"http"`
-			MessagingEngine LogLevel `mapstructure:"messaging_engine"`
-		} `mapstructure:"subsystems"`
-	} `mapstructure:"logs"`
+	Logs BaseConfigLogging `mapstructure:"logs"`
 
 	// Http server configuration options
 	Server HttpServer `mapstructure:"server"`
 
 	// AMQP config options.
-	AMQPConnection AMQPConnection `mapstructure:"amqp_event_publisher"`
+	AMQPConnection AMQPConnection `mapstructure:"amqp"`
 }
 
 type HttpServer struct {
-	DebugMode          bool         `mapstructure:"debug_mode"`
+	LogLevel           LogLevel     `mapstructure:"log_level"`
 	HealthCheckLogging bool         `mapstructure:"health_check"`
 	ListenAddress      string       `mapstructure:"listen_address"`
 	Port               int          `mapstructure:"port"`
@@ -68,6 +61,8 @@ const (
 )
 
 type PluggableStorageEngine struct {
+	LogLevel LogLevel `mapstructure:"log_level"`
+
 	Provider StorageProvider `mapstructure:"provider"`
 
 	CouchDB  CouchDBPSEConfig  `mapstructure:"couch_db"`
@@ -105,7 +100,9 @@ type HTTPConnection struct {
 }
 
 type AMQPConnection struct {
+	LogLevel        LogLevel `mapstructure:"log_level"`
 	BasicConnection `mapstructure:",squash"`
+	Exchange        string                  `mapstructure:"exchange"`
 	Enabled         bool                    `mapstructure:"enabled"`
 	Protocol        AMQPProtocol            `mapstructure:"protocol"`
 	BasicAuth       AMQPConnectionBasicAuth `mapstructure:"basic_auth"`
@@ -122,10 +119,10 @@ type AMQPConnectionBasicAuth struct {
 }
 
 type HTTPClient struct {
+	LogLevel        LogLevel             `mapstructure:"log_level"`
 	AuthMode        HTTPClientAuthMethod `mapstructure:"auth_mode"`
 	AuthJWTOptions  AuthJWTOptions       `mapstructure:"jwt_options"`
 	AuthMTLSOptions AuthMTLSOptions      `mapstructure:"mtls_options"`
-	LogLevel        LogLevel             `mapstructure:"log_level"`
 	HTTPConnection  `mapstructure:",squash"`
 }
 
