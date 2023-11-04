@@ -89,3 +89,12 @@ const (
 )
 
 type CAMetadataMonitoringExpirationDeltas []MonitoringExpirationDelta
+
+const (
+	CAAttachedToDeviceKey = "lamassu.io/ca/attached-to"
+)
+
+type CAAttachedToDevice struct {
+	RAID     string
+	DeviceID string
+}

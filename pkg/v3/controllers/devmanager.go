@@ -154,7 +154,7 @@ func (r *devManagerHttpRoutes) UpdateDeviceIdentitySlot(ctx *gin.Context) {
 		return
 	}
 
-	var requestBody resources.UpdateIdentitySlotBody
+	var requestBody resources.UpdateDeviceIdentitySlotBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return

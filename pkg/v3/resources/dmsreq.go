@@ -7,6 +7,6 @@ import (
 type CreateDMSBody struct {
 	ID       string             `json:"id"`
 	Name     string             `json:"name"`
-	Metadata map[string]string  `json:"metadata"`
+	Metadata map[string]any     `json:"metadata"`
 	Settings models.DMSSettings `json:"settings"`
 }
