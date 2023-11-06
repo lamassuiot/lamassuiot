@@ -66,7 +66,7 @@ func NewAWSKMSEngine(logger *logrus.Entry, awsConf aws.Config, metadata map[stri
 					Sizes: []int{
 						256,
 						384,
-						512,
+						521,
 					},
 				},
 			},
@@ -188,7 +188,7 @@ func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, keyID s
 		keySpec = types.KeySpecEccNistP256
 	case "P-384":
 		keySpec = types.KeySpecEccNistP384
-	case "P-512":
+	case "P-521":
 		keySpec = types.KeySpecEccNistP521
 	default:
 		err := fmt.Errorf("key curve not supported")

@@ -32,7 +32,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 					Level: config.Info,
 				},
 				Server: config.HttpServer{
-					LogLevel:           config.Debug,
+					LogLevel:           config.Trace,
 					HealthCheckLogging: true,
 					ListenAddress:      "0.0.0.0",
 					Port:               0,
@@ -134,6 +134,19 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 			return fmt.Errorf("could not assemble DMS Manager Service: %s", err)
 		}
 
+		dmsMngrConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: dmsPort}, Protocol: config.HTTP, BasePath: ""}
+		lDMSMngrClient := helpers.ConfigureLogger(config.Debug, "LMS SDK - DMSManager Client")
+		dmsMngrHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
+			LogLevel:       config.Debug,
+			AuthMode:       config.NoAuth,
+			HTTPConnection: dmsMngrConnection,
+		}, lDMSMngrClient)
+		if err != nil {
+			log.Fatalf("could not build HTTP DMSManager Client: %s", err)
+		}
+
+		dmsMngrCli := clients.NewHttpDMSManagerClient(dmsMngrHttpCli, fmt.Sprintf("%s://%s%s:%d", dmsMngrConnection.Protocol, dmsMngrConnection.Hostname, dmsMngrConnection.BasePath, dmsMngrConnection.Port))
+
 		_, alertsPort, err := lamassu.AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
 			BaseConfig: config.BaseConfig{
 				Logs: config.BaseConfigLogging{
@@ -152,6 +165,22 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 		}, apiInfo)
 		if err != nil {
 			return fmt.Errorf("could not assemble Alerts Service: %s", err)
+		}
+
+		if conf.AWSIoTManager.Enabled {
+			_, err = lamassu.AssembleAWSIoTManagerService(config.IotAWS{
+				BaseConfig: config.BaseConfig{
+					Logs: config.BaseConfigLogging{
+						Level: config.Info,
+					},
+					AMQPConnection: conf.AMQPConnection,
+				},
+				ConnectorID:  conf.AWSIoTManager.ConnectorID,
+				AWSSDKConfig: conf.AWSIoTManager.AWSSDKConfig,
+			}, caCli, dmsMngrCli, devMngrCli)
+			if err != nil {
+				return fmt.Errorf("could not assemble AWS IoT Manager: %s", err)
+			}
 		}
 
 		engine := gin.New()

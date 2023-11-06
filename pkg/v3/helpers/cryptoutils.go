@@ -184,8 +184,8 @@ func CalculateECDSAKeySizes(keyMin int, KeyMax int) []int {
 	if keyMin < 384 && KeyMax > 384 {
 		keySizes = append(keySizes, 384)
 	}
-	if keyMin < 512 && KeyMax >= 512 {
-		keySizes = append(keySizes, 512)
+	if keyMin < 521 && KeyMax >= 521 {
+		keySizes = append(keySizes, 521)
 	}
 	return keySizes
 }

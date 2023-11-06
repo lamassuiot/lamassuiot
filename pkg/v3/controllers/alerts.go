@@ -48,6 +48,23 @@ func (r *alertsHttpRoutes) GetUserSubscriptions(ctx *gin.Context) {
 	ctx.JSON(200, response)
 }
 
+func (r *alertsHttpRoutes) GetLatestEventsPerEventType(ctx *gin.Context) {
+	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+
+	response, err := r.svc.GetLatestEventsPerEventType(funCtx, &services.GetLatestEventsPerEventTypeInput{})
+
+	if err != nil {
+		switch err {
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+
+	ctx.JSON(200, response)
+}
+
 func (r *alertsHttpRoutes) Subscribe(ctx *gin.Context) {
 	var requestBody resources.SubscribeBody
 	if err := ctx.BindJSON(&requestBody); err != nil {

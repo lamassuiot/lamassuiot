@@ -14,6 +14,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage/couchdb"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage/postgres"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/x509engines"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -132,6 +133,8 @@ func createCAStorageInstance(logger *log.Entry, conf config.PluggableStorageEngi
 }
 
 func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*services.Engine, error) {
+	x509engines.SetCryptoEngineLogger(logger) //Important!
+
 	engines := map[string]*services.Engine{}
 	for _, cfg := range conf.CryptoEngines.HashicorpVaultKV2Provider {
 		vaultEngine, err := cryptoengines.NewVaultKV2Engine(logger, cfg)
@@ -146,9 +149,16 @@ func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*s
 	}
 
 	for _, cfg := range conf.CryptoEngines.AWSKMSProvider {
-		awsEngine, err := cryptoengines.NewAWSKMSEngine(logger, config.GetAwsSdkConfig(cfg.AWSSDKConfig), cfg.Metadata)
+		awsCfg, err := config.GetAwsSdkConfig(cfg.AWSSDKConfig)
 		if err != nil {
-			log.Warnf("skipping AWS KMS engine with id %s. could not create Vault engine: %s", cfg.ID, err)
+			log.Warnf("skipping AWS KMS engine with id %s: %s", cfg.ID, err)
+			continue
+		}
+
+		awsEngine, err := cryptoengines.NewAWSKMSEngine(logger, *awsCfg, cfg.Metadata)
+		if err != nil {
+			log.Warnf("skipping AWS KMS engine with id %s. could not create KMS engine: %s", cfg.ID, err)
+			continue
 		} else {
 			engines[cfg.ID] = &services.Engine{
 				Default: cfg.ID == conf.CryptoEngines.DefaultEngine,
@@ -158,9 +168,16 @@ func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*s
 	}
 
 	for _, cfg := range conf.CryptoEngines.AWSSecretsManagerProvider {
-		awsEngine, err := cryptoengines.NewAWSSecretManagerEngine(logger, config.GetAwsSdkConfig(cfg.AWSSDKConfig), cfg.Metadata)
+		awsCfg, err := config.GetAwsSdkConfig(cfg.AWSSDKConfig)
 		if err != nil {
-			log.Warnf("skipping AWS KMS Secrets Manager with id %s. could not create Vault engine: %s", cfg.ID, err)
+			log.Warnf("skipping AWS Secrets Manager engine with id %s: %s", cfg.ID, err)
+			continue
+		}
+
+		awsEngine, err := cryptoengines.NewAWSSecretManagerEngine(logger, *awsCfg, cfg.Metadata)
+		if err != nil {
+			log.Warnf("skipping AWS Secrets Manager with id %s. could not create Secrets Manager engine: %s", cfg.ID, err)
+			continue
 		} else {
 			engines[cfg.ID] = &services.Engine{
 				Default: cfg.ID == conf.CryptoEngines.DefaultEngine,

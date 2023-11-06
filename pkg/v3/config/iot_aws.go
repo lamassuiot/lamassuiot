@@ -17,6 +17,4 @@ type IotAWS struct {
 
 	ConnectorID  string       `mapstructure:"connector_id"`
 	AWSSDKConfig AWSSDKConfig `mapstructure:"aws_config"`
-
-	LamassuInstanceURL string `mapstructure:"lamassu_url"`
 }

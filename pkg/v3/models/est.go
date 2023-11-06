@@ -5,8 +5,8 @@ import "crypto/x509"
 type ESTAuthMode string
 
 const (
-	ESTAuthModeNoAuth    ESTAuthMode = "NO_AUTH"
-	ESTAuthModeMutualTLS ESTAuthMode = "MUTUAL_TLS"
+	ESTAuthModeNoAuth            ESTAuthMode = "NO_AUTH"
+	ESTAuthModeClientCertificate ESTAuthMode = "CLIENT_CERTIFICATE"
 )
 
 const (
@@ -14,7 +14,7 @@ const (
 	ESTServerKeyGenKeyType = "ESTServerKeyGenKeyType"
 )
 
-type ESTServerAuthOptionsMutualTLS struct {
+type ESTServerAuthOptionsClientCertificate struct {
 	ClientCertificate *x509.Certificate
 }
 

@@ -432,11 +432,9 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 	}
 
 	ca := &models.CACertificate{
-		ID:   caID,
-		Type: input.CAType,
-		Metadata: map[string]interface{}{
-			"lamassu.io/name": caCert.Subject.CommonName,
-		},
+		ID:                    caID,
+		Type:                  input.CAType,
+		Metadata:              map[string]interface{}{},
 		IssuanceExpirationRef: input.IssuanceExpiration,
 		CreationTS:            time.Now(),
 		Certificate: models.Certificate{
@@ -531,10 +529,8 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 	caCert := issuedCA.Certificate
 
 	ca := models.CACertificate{
-		ID: caID,
-		Metadata: map[string]interface{}{
-			"lamassu.io/name": caCert.Subject.CommonName,
-		},
+		ID:                    caID,
+		Metadata:              map[string]interface{}{},
 		Type:                  models.CertificateTypeManaged,
 		IssuanceExpirationRef: input.IssuanceExpiration,
 		CreationTS:            time.Now(),

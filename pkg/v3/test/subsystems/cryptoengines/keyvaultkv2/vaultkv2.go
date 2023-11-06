@@ -40,9 +40,8 @@ func RunHashicorpVaultDocker() (func() error, *config.HashicorpVaultSDK, error) 
 
 	healthy := false
 	for !healthy {
-		r, err := client.Sys().Health()
+		_, err := client.Sys().Health()
 		if err == nil {
-			fmt.Println(r)
 			healthy = true
 		}
 	}

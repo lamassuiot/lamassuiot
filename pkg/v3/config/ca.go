@@ -58,6 +58,7 @@ type AWSCryptoEngine struct {
 }
 
 type AWSSDKConfig struct {
+	EndpointURL     string   `mapstructure:"endpoint_url"`
 	AccessKeyID     string   `mapstructure:"access_key_id"`
 	SecretAccessKey Password `mapstructure:"secret_access_key"`
 	Region          string   `mapstructure:"region"`

@@ -8,13 +8,17 @@ import (
 )
 
 func TestSetup(t *testing.T) {
-	cfg := config.AWSSDKConfig(config.AWSSDKConfig{
+	cfg := config.AWSSDKConfig{
 		AccessKeyID:     "test",
 		SecretAccessKey: "test",
 		Region:          "us-east-1",
-	})
+		EndpointURL:     "http://127.0.0.1:4566",
+	}
 
-	sm, err := NewAWSSecretManagerEngine(logrus.WithField("", ""), config.GetAwsSdkConfig(cfg), map[string]any{})
+	awsCfg, err := config.GetAwsSdkConfig(cfg)
+	chk(err)
+
+	sm, err := NewAWSSecretManagerEngine(logrus.WithField("", ""), *awsCfg, map[string]any{})
 	chk(err)
 
 	_, err = sm.CreateRSAPrivateKey(2048, "123")

@@ -57,7 +57,7 @@ func NewGolangPEMEngine(logger *logrus.Entry, conf config.GolangEngineConfig) Cr
 						224,
 						256,
 						384,
-						512,
+						521,
 					},
 				},
 			},

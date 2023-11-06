@@ -37,6 +37,7 @@ const (
 
 type Channel struct {
 	Type   ChannelType `json:"type"`
+	Name   string      `json:"name"`
 	Config any         `json:"config" gorm:"serializer:json"`
 }
 

@@ -193,7 +193,7 @@ func (ClientCertificateExtractor) ExtractAuthentication(ctx context.Context, req
 	}
 
 	if crt != nil {
-		ctx = context.WithValue(ctx, models.ESTAuthModeMutualTLS, crt)
+		ctx = context.WithValue(ctx, models.ESTAuthModeClientCertificate, crt)
 	}
 
 	return ctx

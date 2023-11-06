@@ -79,11 +79,11 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (*AWSC
 
 	iotdpConf := builder.Conf
 	iotdpConf.HTTPClient = idpHttpCli
-	iotdpClient := iotdataplane.NewFromConfig(iotConf)
+	iotdpClient := iotdataplane.NewFromConfig(iotdpConf)
 
 	stsConf := builder.Conf
 	stsConf.HTTPClient = stsHttpCli
-	stsClient := sts.NewFromConfig(iotConf)
+	stsClient := sts.NewFromConfig(stsConf)
 
 	callIDOutput, err := stsClient.GetCallerIdentity(context.Background(), &sts.GetCallerIdentityInput{})
 	if err != nil {
@@ -285,7 +285,7 @@ func (svc *AWSCloudConnectorService) RegisterCA(ctx context.Context, input Regis
 		logrus.Infof("registering CA with SN '%s'", input.SerialNumber)
 	} else {
 		logrus.Warnf("CA with SN '%s' is already registered in AWS IoT. Skipping registration process", input.SerialNumber)
-		return nil, nil
+		return &input.CACertificate, nil
 	}
 
 	regCode, err := svc.iotSDK.GetRegistrationCode(context.Background(), &iot.GetRegistrationCodeInput{})

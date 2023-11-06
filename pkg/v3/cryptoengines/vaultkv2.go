@@ -122,7 +122,7 @@ func (vaultCli *VaultKV2Engine) GetEngineConfig() models.CryptoEngineInfo {
 				Sizes: []int{
 					224,
 					256,
-					512,
+					521,
 				},
 			},
 		},
@@ -203,7 +203,7 @@ func (vaultCli *VaultKV2Engine) CreateRSAPrivateKey(keySize int, keyID string) (
 	}
 
 	lVault.Debugf("RSA key successfully generated")
-	return key, nil
+	return rsaKey, nil
 }
 
 func (vaultCli *VaultKV2Engine) CreateECDSAPrivateKey(c elliptic.Curve, keyID string) (crypto.Signer, error) {
@@ -229,9 +229,9 @@ func (vaultCli *VaultKV2Engine) CreateECDSAPrivateKey(c elliptic.Curve, keyID st
 		"key": keyBase64,
 	}
 
-	_, err = vaultCli.kvv2Client.Put(context.Background(), keyID+"eliptica", keyMap)
+	_, err = vaultCli.kvv2Client.Put(context.Background(), keyID, keyMap)
 
-	return nil, err
+	return key, err
 }
 
 func (vaultCli *VaultKV2Engine) ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) (crypto.Signer, error) {

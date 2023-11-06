@@ -231,8 +231,8 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 	}
 
 	estAuthOptions := dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030
-	if estAuthOptions.AuthMode == models.ESTAuthModeMutualTLS {
-		clientCert, hasValue := ctx.Value(models.ESTAuthModeMutualTLS).(*x509.Certificate)
+	if estAuthOptions.AuthMode == models.ESTAuthModeClientCertificate {
+		clientCert, hasValue := ctx.Value(models.ESTAuthModeClientCertificate).(*x509.Certificate)
 		if !hasValue {
 			lDMS.Errorf("aborting enrollment process for device '%s'. Currently only mTLS auth mode is allowed. DMS '%s' is configured with '%s'. No client certificate was presented", csr.Subject.CommonName, dms.ID, estAuthOptions.AuthMode)
 			return nil, errs.ErrDMSAuthModeNotSupported
@@ -405,7 +405,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		return nil, errs.ErrDMSOnlyEST
 	}
 
-	clientCert, hasValue := ctx.Value(models.ESTAuthModeMutualTLS).(*x509.Certificate)
+	clientCert, hasValue := ctx.Value(models.ESTAuthModeClientCertificate).(*x509.Certificate)
 	if !hasValue {
 		lDMS.Errorf("aborting reenrollment process for device '%s'. No client certificate was presented", csr.Subject.CommonName)
 		return nil, errs.ErrDMSAuthModeNotSupported
@@ -617,7 +617,7 @@ func (svc DMSManagerServiceImpl) ServerKeyGen(ctx context.Context, csr *x509.Cer
 				curve = elliptic.P256()
 			case 384:
 				curve = elliptic.P384()
-			case 512:
+			case 521:
 				curve = elliptic.P521()
 			default:
 				lDMS.Warnf("invalid key size of %d for ECDSA. Defaulting to 256 curve", keySize)

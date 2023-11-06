@@ -18,7 +18,7 @@ type DMS struct {
 	Name         string         `json:"name"`
 	Metadata     map[string]any `json:"metadata" gorm:"serializer:json"`
 	CreationDate time.Time      `json:"creation_ts"`
-	Settings     DMSSettings    `json:"dms_settings" gorm:"serializer:json"`
+	Settings     DMSSettings    `json:"settings" gorm:"serializer:json"`
 }
 
 type DMSSettings struct {
@@ -49,7 +49,7 @@ const (
 
 type EnrollmentSettings struct {
 	EnrollmentProtocol          EnrollmentProto             `json:"protocol"`
-	EnrollmentOptionsESTRFC7030 EnrollmentOptionsESTRFC7030 `json:"est_rfc7030_options"`
+	EnrollmentOptionsESTRFC7030 EnrollmentOptionsESTRFC7030 `json:"est_rfc7030_settings"`
 	DeviceProvisionProfile      DeviceProvisionProfile      `json:"device_provisioning_profile"`
 	EnrollmentCA                string                      `json:"enrollment_ca"`
 	EnableReplaceableEnrollment bool                        `json:"enable_replaceable_enrollment"` //switch-like option that enables enrolling, already enrolled devices
@@ -57,11 +57,11 @@ type EnrollmentSettings struct {
 }
 
 type EnrollmentOptionsESTRFC7030 struct {
-	AuthMode        ESTAuthMode     `json:"auth_mode"`
-	AuthOptionsMTLS AuthOptionsMTLS `json:"mutual_tls_options"`
+	AuthMode        ESTAuthMode                  `json:"auth_mode"`
+	AuthOptionsMTLS AuthOptionsClientCertificate `json:"client_certificate_settings"`
 }
 
-type AuthOptionsMTLS struct {
+type AuthOptionsClientCertificate struct {
 	ValidationCAs        []string `json:"validation_cas"`
 	ChainLevelValidation int      `json:"chain_level_validation"`
 }

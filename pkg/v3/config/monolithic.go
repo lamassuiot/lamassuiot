@@ -18,4 +18,11 @@ type MonolithicConfig struct {
 	Domain           string                        `mapstructure:"domain"`
 	AssemblyMode     LamassuMonolithicAssembleMode `mapstructure:"assembly_mode"`
 	GatewayPort      int                           `mapstructure:"gateway_port"`
+	AWSIoTManager    MonolithicAWSIoTManagerConfig `mapstructure:"aws_iot_manager"`
+}
+
+type MonolithicAWSIoTManagerConfig struct {
+	Enabled      bool         `mapstructure:"enabled"`
+	ConnectorID  string       `mapstructure:"connector_id"`
+	AWSSDKConfig AWSSDKConfig `mapstructure:"aws_config"`
 }
