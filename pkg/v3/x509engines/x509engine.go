@@ -40,7 +40,7 @@ type X509Engine interface {
 	GetEngineConfig() models.CryptoEngineInfo
 	GetCACryptoSigner(caCertificate *x509.Certificate) (crypto.Signer, error)
 	CreateRootCA(caID string, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error)
-	CreateSubordinateCA(caID string, parentCACertificate *x509.Certificate, parentCASigner crypto.Signer, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error)
+	CreateSubordinateCA(caID string, parentCACertificate *x509.Certificate, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error)
 	SignCertificateRequest(caCertificate *x509.Certificate, csr *x509.CertificateRequest, expiration time.Time) (*x509.Certificate, error)
 	Sign(caCertificate *x509.Certificate, message []byte, messageType models.SignMessageType, signingAlgorithm string) ([]byte, error)
 	Verify(caCertificate *x509.Certificate, signature []byte, message []byte, messageType models.SignMessageType, signingAlgorithm string) (bool, error)
@@ -66,7 +66,7 @@ func (engine X509EngineProvider) CreateRootCA(caID string, keyMetadata models.Ke
 	lCEngine.Debugf("starting root CA generation with key metadata [%v], subject [%v] and expiration time [%s]", keyMetadata, subject, expirationTine)
 	templateCA, signer, err := engine.genCertTemplateAndPrivateKey(keyMetadata, subject, expirationTine, caID)
 	if err != nil {
-		lCEngine.Errorf("could not generate root CA: %s", err)
+		lCEngine.Errorf("could not generate root CA Template and Key: %s", err)
 		return nil, err
 	}
 
@@ -101,9 +101,10 @@ func (engine X509EngineProvider) CreateRootCA(caID string, keyMetadata models.Ke
 	return cert, nil
 }
 
-func (engine X509EngineProvider) CreateSubordinateCA(caID string, parentCACertificate *x509.Certificate, parentCASigner crypto.Signer, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error) {
+func (engine X509EngineProvider) CreateSubordinateCA(caID string, parentCACertificate *x509.Certificate, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error) {
 	templateCA, signer, err := engine.genCertTemplateAndPrivateKey(keyMetadata, subject, expirationTine, caID)
 	if err != nil {
+		lCEngine.Errorf("could not generate subordinate CA Template and Key: %s", err)
 		return nil, err
 	}
 
@@ -114,19 +115,27 @@ func (engine X509EngineProvider) CreateSubordinateCA(caID string, parentCACertif
 		pubKey = signer.Public().(*ecdsa.PublicKey)
 	}
 
+	parentSN := helpers.SerialNumberToString(parentCACertificate.SerialNumber)
+	parentCASigner, err := engine.cryptoEngine.GetPrivateKeyByID(parentSN)
+	if err != nil {
+		lCEngine.Errorf("could not get parent signer key '%s': %s", parentSN, err)
+		return nil, err
+	}
+
 	templateCA.IsCA = true
 	certificateBytes, err := x509.CreateCertificate(rand.Reader, templateCA, parentCACertificate, pubKey, parentCASigner)
 	if err != nil {
+		lCEngine.Errorf("could not sign subordinate CA: %s", err)
 		return nil, err
 	}
 
 	certificate, err := x509.ParseCertificate(certificateBytes)
 	if err != nil {
+		lCEngine.Errorf("could not parse subordinate CA: %s", err)
 		return nil, err
 	}
 
 	return certificate, nil
-
 }
 
 func (engine X509EngineProvider) SignCertificateRequest(caCertificate *x509.Certificate, csr *x509.CertificateRequest, expirationDate time.Time) (*x509.Certificate, error) {
@@ -160,11 +169,13 @@ func (engine X509EngineProvider) SignCertificateRequest(caCertificate *x509.Cert
 
 	certificateBytes, err := x509.CreateCertificate(rand.Reader, &certificateTemplate, caCertificate, csr.PublicKey, privkey)
 	if err != nil {
+		lCEngine.Errorf("could not sign certificate: %s", err)
 		return nil, err
 	}
 
 	certificate, err := x509.ParseCertificate(certificateBytes)
 	if err != nil {
+		lCEngine.Errorf("could not parse signed certificate %s", err)
 		return nil, err
 	}
 
@@ -198,7 +209,7 @@ func (engine X509EngineProvider) genCertTemplateAndPrivateKey(keyMetadata models
 		case 521:
 			curve = elliptic.P521()
 		default:
-			return nil, nil, errors.New("unsuported key size for ECDSA key")
+			return nil, nil, errors.New("unsupported key size for ECDSA key")
 		}
 		lCEngine.Debugf("requesting cryptoengine instance for ECDSA key generation")
 		signer, err = engine.cryptoEngine.CreateECDSAPrivateKey(curve, helpers.SerialNumberToString(sn))

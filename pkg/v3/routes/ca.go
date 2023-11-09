@@ -49,6 +49,5 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) 
 
 	rv1.GET("/engines", routes.GetCryptoEngineProvider)
 	rv1.GET("/stats", routes.GetStats)
-
 	rv1.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 }

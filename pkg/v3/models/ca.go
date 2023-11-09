@@ -51,7 +51,8 @@ type Expiration struct {
 
 type IssuerCAMetadata struct {
 	SerialNumber string `json:"serial_number"`
-	CAID         string `json:"ca_id"`
+	ID           string `json:"id"`
+	Level        int    `json:"level"`
 }
 
 type CACertificate struct {
@@ -61,6 +62,7 @@ type CACertificate struct {
 	IssuanceExpirationRef Expiration             `json:"issuance_expiration" gorm:"serializer:json"`
 	Type                  CertificateType        `json:"type"`
 	CreationTS            time.Time              `json:"creation_ts"`
+	Level                 int                    `json:"level"`
 }
 
 type CAStats struct {

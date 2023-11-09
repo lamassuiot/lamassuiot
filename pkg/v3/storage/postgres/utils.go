@@ -82,10 +82,8 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 	var elems []E
 	tx := db.Table(db.tableName)
 
-	//Hay que definir como un patropn para que solo se definan estos parametros a la hora de hacer la consulta a postgresql
-
-	var offset int
-	var limit int
+	offset := 0
+	limit := 25
 	var sortMode string
 	var sortBy string
 
@@ -93,15 +91,11 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 
 	if queryParams != nil {
 		if queryParams.NextBookmark == "" {
-			offset = 0
-			tx = tx.Offset(offset)
-
 			if queryParams.PageSize == 0 {
 				limit = 15
 			} else {
 				limit = queryParams.PageSize
 			}
-			tx = tx.Limit(limit)
 
 			if queryParams.Sort.SortMode == "" {
 				sortMode = string(resources.SortModeAsc)
@@ -109,8 +103,7 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 				sortMode = string(queryParams.Sort.SortMode)
 			}
 
-			offset = limit
-			nextBookmark = fmt.Sprintf("off:%d;lim:%d;", offset, limit)
+			nextBookmark = fmt.Sprintf("off:%d;lim:%d;", limit+offset, limit)
 
 			if queryParams.Sort.SortField != "" {
 				sortBy = queryParams.Sort.SortField
@@ -140,13 +133,11 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 					if err != nil {
 						return "", fmt.Errorf("not a valid bookmark")
 					}
-					tx = tx.Offset(offset)
 				case "lim":
 					limit, err = strconv.Atoi(queryPart[1])
 					if err != nil {
 						return "", fmt.Errorf("not a valid bookmark")
 					}
-					tx = tx.Limit(limit)
 				case "sortM":
 					sortMode = queryPart[1]
 					if err != nil {
@@ -189,8 +180,7 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 					tx = tx.Order(sortBy + " " + sortMode)
 				}
 			}
-			offset += limit
-			nextBookmark = fmt.Sprintf("off:%d;lim:%d;", offset, limit)
+			nextBookmark = fmt.Sprintf("off:%d;lim:%d;", offset+limit, limit)
 			if queryParams.Sort.SortField != "" {
 				sortBy = queryParams.Sort.SortField
 				nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s", sortMode, sortBy)
@@ -201,17 +191,27 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 		tx = tx.Where(whereQuery.query, whereQuery.extraArgs...)
 	}
 
-	result := tx.FindInBatches(&elems, 100, func(tx *gorm.DB, batch int) error {
+	for {
+		tx.Offset(offset)
+		tx.Limit(limit)
+
+		rSet := tx.Find(&elems)
 		for _, elem := range elems {
 			// batch processing found records
 			applyFunc(&elem)
 		}
-		logrus.Tracef("iterating batch %d. Number of records in batch: %d", batch, tx.RowsAffected)
-		return nil
-	})
-	if result.RowsAffected == 0 {
-		nextBookmark = ""
+
+		if rSet.RowsAffected == 0 {
+			return "", nil
+		}
+
+		if !exhaustiveRun {
+			break
+		}
+
+		offset = offset + limit
 	}
+
 	return base64.StdEncoding.EncodeToString([]byte(nextBookmark)), nil
 }
 

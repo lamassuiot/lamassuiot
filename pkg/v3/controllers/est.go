@@ -180,7 +180,7 @@ func (ClientCertificateExtractor) ExtractAuthentication(ctx context.Context, req
 
 	if crt, err = getCertificateFromHeader(req.Header); err != nil {
 		if err != ErrorMissingClientCertificate {
-			lEst.Tracef("something went wrong while processing X-Forwarded-Client-Cert header: %s", err)
+			lEst.Tracef("something went wrong while processing headers: %s", err)
 		}
 
 		//no (valid) certificate in the header. check if a certificate can be obtained from client TLS connection
@@ -200,24 +200,32 @@ func (ClientCertificateExtractor) ExtractAuthentication(ctx context.Context, req
 }
 
 func getCertificateFromHeader(h http.Header) (*x509.Certificate, error) {
-	forwardedClientCertificate := h.Get("X-Forwarded-Client-Cert")
-	if len(forwardedClientCertificate) != 0 {
-		splits := strings.Split(forwardedClientCertificate, ";")
-		for _, split := range splits {
-			splitedKeyVal := strings.Split(split, "=")
-			if len(splitedKeyVal) == 2 {
-				key := splitedKeyVal[0]
-				val := splitedKeyVal[1]
-				if key == "Cert" {
-					cert := strings.Replace(val, "\"", "", -1)
-					decodedCert, _ := url.QueryUnescape(cert)
-					block, _ := pem.Decode([]byte(decodedCert))
-					certificate, err := x509.ParseCertificate(block.Bytes)
-					if err != nil {
-						return nil, ErrorMalformedCertificate
-					}
+	headerNames := []string{
+		"x-forwarded-client-cert", //envoy and regular nginx use this value
+		"ssl-client-cert",
+	}
 
-					return certificate, nil
+	for _, headerName := range headerNames {
+		forwardedClientCertificate := h.Get(headerName)
+		if len(forwardedClientCertificate) != 0 {
+			splits := strings.Split(forwardedClientCertificate, ";")
+			for _, split := range splits {
+				splitedKeyVal := strings.Split(split, "=")
+				if len(splitedKeyVal) == 2 {
+					key := splitedKeyVal[0]
+					val := splitedKeyVal[1]
+					if key == "Cert" {
+						cert := strings.Replace(val, "\"", "", -1)
+						decodedCert, _ := url.QueryUnescape(cert)
+						block, _ := pem.Decode([]byte(decodedCert))
+						certificate, err := x509.ParseCertificate(block.Bytes)
+						if err != nil {
+							lEst.Warnf("request includes header %s but could not decode certificate. Skipping: %s", headerName, err)
+							continue
+						}
+
+						return certificate, nil
+					}
 				}
 			}
 		}

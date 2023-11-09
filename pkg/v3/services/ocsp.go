@@ -12,7 +12,7 @@ import (
 )
 
 type OCSPService interface {
-	Verify(ctx context.Context, req *ocsp.Request) (*ocsp.Response, error)
+	Verify(ctx context.Context, req *ocsp.Request) ([]byte, error)
 }
 
 type ocspResponder struct {
@@ -32,7 +32,7 @@ func NewOCSPService(builder OCSPServiceBuilder) OCSPService {
 	}
 }
 
-func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) (*ocsp.Response, error) {
+func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) ([]byte, error) {
 	ocspCrtSN := helpers.SerialNumberToString(req.SerialNumber)
 	crt, err := svc.caSDK.GetCertificateBySerialNumber(ctx, GetCertificatesBySerialNumberInput{
 		SerialNumber: ocspCrtSN,
@@ -42,7 +42,7 @@ func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) (*ocsp.R
 	}
 
 	ca, err := svc.caSDK.GetCAByID(ctx, GetCAByIDInput{
-		CAID: crt.IssuerCAMetadata.CAID,
+		CAID: crt.IssuerCAMetadata.ID,
 	})
 	if err != nil {
 		return nil, err
@@ -78,10 +78,10 @@ func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) (*ocsp.R
 		return nil, err
 	}
 
-	resp, err := ocsp.ParseResponse(rawResp, (*x509.Certificate)(ca.Certificate.Certificate))
-	if err != nil {
-		return nil, err
-	}
+	// resp, err := ocsp.ParseResponse(rawResp, (*x509.Certificate)(ca.Certificate.Certificate))
+	// if err != nil {
+	// 	return nil, err
+	// }
 
-	return resp, nil
+	return rawResp, nil
 }

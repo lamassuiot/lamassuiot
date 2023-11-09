@@ -313,6 +313,7 @@ type SignInput struct {
 }
 
 type issueCAInput struct {
+	ParentCA     *models.CACertificate
 	KeyMetadata  models.KeyMetadata     `validate:"required"`
 	Subject      models.Subject         `validate:"required"`
 	CAType       models.CertificateType `validate:"required"`
@@ -332,12 +333,18 @@ func (svc *CAServiceImpl) issueCA(ctx context.Context, input issueCAInput) (*iss
 	var x509Engine x509engines.X509Engine
 	if input.EngineID == "" {
 		x509Engine = x509engines.NewX509Engine(svc.defaultCryptoEngine, "")
-		lFunc.Infof("creating CA %s with %s crypto engine", input.Subject.CommonName, x509Engine.GetEngineConfig().Provider)
+		lFunc.Infof("creating CA %s with default engine %s crypto engine", input.Subject.CommonName, x509Engine.GetEngineConfig().Provider)
 	} else {
-		engine := svc.cryptoEngines[input.EngineID]
-		x509Engine = x509engines.NewX509Engine(engine, "")
-		lFunc.Infof("creating CA %s with %s crypto engine", input.Subject.CommonName, x509Engine.GetEngineConfig().Provider)
+		if engine, ok := svc.cryptoEngines[input.EngineID]; ok {
+			x509Engine = x509engines.NewX509Engine(engine, "")
+			lFunc.Infof("creating CA %s with %s crypto engine", input.Subject.CommonName, x509Engine.GetEngineConfig().Provider)
+		} else {
+			errMsg := fmt.Sprintf("engine ID %s not configured", input.EngineID)
+			lFunc.Error(errMsg)
+			return nil, fmt.Errorf(errMsg)
+		}
 	}
+
 	var caCert *x509.Certificate
 	expiration := time.Now()
 	if input.CAExpiration.Type == models.Duration {
@@ -345,11 +352,28 @@ func (svc *CAServiceImpl) issueCA(ctx context.Context, input issueCAInput) (*iss
 	} else {
 		expiration = *input.CAExpiration.Time
 	}
-	lFunc.Debugf("creating CA certificate. common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
-	caCert, err = x509Engine.CreateRootCA(input.CAID, input.KeyMetadata, input.Subject, expiration)
-	if err != nil {
-		lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
-		return nil, err
+
+	if input.ParentCA == nil {
+		lFunc.Debugf("creating ROOT CA certificate. common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
+		caCert, err = x509Engine.CreateRootCA(input.CAID, input.KeyMetadata, input.Subject, expiration)
+		if err != nil {
+			lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
+			return nil, err
+		}
+	} else {
+		if parentEngine, ok := svc.cryptoEngines[input.ParentCA.EngineID]; ok {
+			x509ParentEngine := x509engines.NewX509Engine(parentEngine, "")
+			lFunc.Debugf("creating SUBORDINATE CA certificate.common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
+			caCert, err = x509ParentEngine.CreateSubordinateCA(input.CAID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), input.KeyMetadata, input.Subject, expiration)
+			if err != nil {
+				lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
+				return nil, err
+			}
+		} else {
+			errMsg := fmt.Sprintf("parent engine ID %s not configured", input.ParentCA.EngineID)
+			lFunc.Error(errMsg)
+			return nil, fmt.Errorf(errMsg)
+		}
 	}
 
 	return &issueCAOutput{
@@ -449,7 +473,7 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 			Metadata:            map[string]interface{}{},
 			Type:                input.CAType,
 			IssuerCAMetadata: models.IssuerCAMetadata{
-				CAID:         caID,
+				ID:           caID,
 				SerialNumber: helpers.SerialNumberToString(input.CACertificate.SerialNumber),
 			},
 			EngineID: engineID,
@@ -462,6 +486,7 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 
 type CreateCAInput struct {
 	ID                 string
+	ParentID           string
 	KeyMetadata        models.KeyMetadata `validate:"required"`
 	Subject            models.Subject     `validate:"required"`
 	IssuanceExpiration models.Expiration  `validate:"required"`
@@ -489,6 +514,23 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 		return nil, errs.ErrValidateBadRequest
 	}
 
+	var parentCA *models.CACertificate
+	if input.ParentID != "" {
+		lFunc.Infof("request includes a parent CA id: %s", input.ParentID)
+		exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.ParentID)
+		if err != nil {
+			lFunc.Errorf("could not check if parent CA %s exists: %s", input.ParentID, err)
+			return nil, err
+		}
+
+		if !exists {
+			lFunc.Errorf("parent CA %s does not exist", input.ParentID)
+		}
+
+		lFunc.Debugf("parent CA %s exists", input.ParentID)
+		parentCA = ca
+	}
+
 	caID := input.ID
 	if caID == "" {
 		caID = goid.NewV4UUID().String()
@@ -507,6 +549,7 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 
 	lFunc.Debugf("creating CA with common name: %s", input.Subject.CommonName)
 	issuedCA, err := svc.issueCA(ctx, issueCAInput{
+		ParentCA:     parentCA,
 		KeyMetadata:  input.KeyMetadata,
 		Subject:      input.Subject,
 		CAType:       models.CertificateTypeManaged,
@@ -527,6 +570,21 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 	}
 
 	caCert := issuedCA.Certificate
+	caLevel := 0
+	issuerCAMeta := models.IssuerCAMetadata{
+		SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
+		ID:           caID,
+		Level:        0,
+	}
+
+	if parentCA != nil {
+		caLevel = parentCA.Level + 1
+		issuerCAMeta = models.IssuerCAMetadata{
+			SerialNumber: parentCA.SerialNumber,
+			ID:           parentCA.ID,
+			Level:        parentCA.Level,
+		}
+	}
 
 	ca := models.CACertificate{
 		ID:                    caID,
@@ -534,6 +592,7 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 		Type:                  models.CertificateTypeManaged,
 		IssuanceExpirationRef: input.IssuanceExpiration,
 		CreationTS:            time.Now(),
+		Level:                 caLevel,
 		Certificate: models.Certificate{
 			Certificate:  (*models.X509Certificate)(caCert),
 			Status:       models.StatusActive,
@@ -547,13 +606,10 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 			ValidFrom:           caCert.NotBefore,
 			ValidTo:             caCert.NotAfter,
 			RevocationTimestamp: time.Time{},
-			IssuerCAMetadata: models.IssuerCAMetadata{
-				SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
-				CAID:         caID,
-			},
-			Metadata: map[string]interface{}{},
-			Type:     models.CertificateTypeManaged,
-			EngineID: engineID,
+			IssuerCAMetadata:    issuerCAMeta,
+			Metadata:            map[string]interface{}{},
+			Type:                models.CertificateTypeManaged,
+			EngineID:            engineID,
 		},
 	}
 
@@ -729,11 +785,11 @@ func (svc *CAServiceImpl) UpdateCAStatus(ctx context.Context, input UpdateCAStat
 				RevocationReason: ocsp.CessationOfOperation,
 			})
 			if err != nil {
-				lFunc.Errorf("could not revoke certificate %s issued by CA %s", c.SerialNumber, c.IssuerCAMetadata.CAID)
+				lFunc.Errorf("could not revoke certificate %s issued by CA %s", c.SerialNumber, c.IssuerCAMetadata.ID)
 			}
 		}
 
-		_, err = svc.certStorage.SelectByCA(ctx, ca.IssuerCAMetadata.CAID, true, revokeCertFunc, &resources.QueryParameters{}, map[string]interface{}{})
+		_, err = svc.certStorage.SelectByCA(ctx, ca.IssuerCAMetadata.ID, true, revokeCertFunc, &resources.QueryParameters{}, map[string]interface{}{})
 		if err != nil {
 			return nil, err
 		}
@@ -812,11 +868,17 @@ func (svc *CAServiceImpl) DeleteCA(ctx context.Context, input DeleteCAInput) err
 	}
 
 	if ca.Status != models.StatusExpired && ca.Status != models.StatusRevoked {
+		lFunc.Errorf("CA %s can not be deleted while in status %s", input.CAID, ca.Status)
 		return errs.ErrCAStatus
 	}
 
 	//TODO missing implementation
-	return fmt.Errorf("TODO missing implementation")
+	err = svc.caStorage.Delete(context.Background(), input.CAID)
+	if err != nil {
+		lFunc.Errorf("something went wrong while deleting the CA %s %s", input.CAID, err)
+		return err
+	}
+	return err
 }
 
 type SignCertificateInput struct {
@@ -895,7 +957,7 @@ func (svc *CAServiceImpl) SignCertificate(ctx context.Context, input SignCertifi
 		Certificate: (*models.X509Certificate)(x509Cert),
 		IssuerCAMetadata: models.IssuerCAMetadata{
 			SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
-			CAID:         ca.ID,
+			ID:           ca.ID,
 		},
 		Status:              models.StatusActive,
 		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate(x509Cert),
@@ -1013,8 +1075,8 @@ func (svc *CAServiceImpl) GetCertificateBySerialNumber(ctx context.Context, inpu
 	if err != nil {
 		lFunc.Errorf("GetCertificatesBySerialNumberInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
+		lFunc.Debugf("checking if Certificate '%s' exists", input.SerialNumber)
 	}
-	lFunc.Debugf("checking if Certificate '%s' exists", input.SerialNumber)
 	exists, cert, err := svc.certStorage.SelectExistsBySerialNumber(ctx, input.SerialNumber)
 	if err != nil {
 		lFunc.Errorf("something went wrong while checking if Certificate '%s' exists in storage engine: %s", input.SerialNumber, err)
@@ -1066,7 +1128,7 @@ func (svc *CAServiceImpl) GetCertificatesByCA(ctx context.Context, input GetCert
 
 	if !exists {
 		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
-		return "", errs.ErrCertificateNotFound
+		return "", errs.ErrCANotFound
 	}
 
 	lFunc.Debugf("reading certificates by %s CA", input.CAID)
@@ -1153,7 +1215,7 @@ func (svc *CAServiceImpl) UpdateCertificateStatus(ctx context.Context, input Upd
 
 	if input.NewStatus == models.StatusRevoked {
 		rrb, _ := input.RevocationReason.MarshalText()
-		lFunc.Infof("certificate with SN %s issued by CA with ID %s and CN %s is being revoked with revocation reason %d - %s", input.SerialNumber, cert.IssuerCAMetadata.CAID, cert.Certificate.Issuer.CommonName, input.RevocationReason, string(rrb))
+		lFunc.Infof("certificate with SN %s issued by CA with ID %s and CN %s is being revoked with revocation reason %d - %s", input.SerialNumber, cert.IssuerCAMetadata.ID, cert.Certificate.Issuer.CommonName, input.RevocationReason, string(rrb))
 		cert.RevocationReason = input.RevocationReason
 		cert.RevocationTimestamp = time.Now()
 	} else {

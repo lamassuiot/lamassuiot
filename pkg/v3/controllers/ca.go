@@ -82,6 +82,7 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 
 	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
 	ca, err := r.svc.CreateCA(funCtx, services.CreateCAInput{
+		ParentID:           requestBody.ParentID,
 		ID:                 requestBody.ID,
 		KeyMetadata:        requestBody.KeyMetadata,
 		Subject:            requestBody.Subject,
@@ -414,8 +415,18 @@ func (r *caHttpRoutes) GetCAByID(ctx *gin.Context) {
 // @Router /cas/{id} [delete]
 func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	type uriParams struct {
+		CAId string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
 	err := r.svc.DeleteCA(funCtx, services.DeleteCAInput{
-		CAID: "",
+		CAID: params.CAId,
 	})
 
 	if err != nil {
@@ -433,7 +444,7 @@ func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(201, gin.H{})
+	ctx.JSON(200, gin.H{})
 }
 
 func (r *caHttpRoutes) UpdateCAStatus(ctx *gin.Context) {
@@ -967,18 +978,18 @@ func (r *caHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
-	var requestBody resources.UpdateCertificateMetadataBody
-	if err := ctx.BindJSON(&requestBody); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
 	type uriParams struct {
 		SerialNumber string `uri:"sn" binding:"required"`
 	}
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody resources.UpdateCertificateMetadataBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
@@ -993,12 +1004,13 @@ func (r *caHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
 		switch err {
 		case errs.ErrCertificateNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrCertificateStatusTransitionNotAllowed:
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
-
 		return
 	}
 	ctx.JSON(200, cert)

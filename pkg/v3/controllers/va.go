@@ -108,7 +108,7 @@ func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 		return
 	}
 
-	ctx.Data(200, "application/ocsp-response", response.Raw)
+	ctx.Data(200, "application/ocsp-response", response)
 	return
 }
 

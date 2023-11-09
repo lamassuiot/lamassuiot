@@ -75,9 +75,12 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 
 	addr := fmt.Sprintf("%s:%d", httpServerCfg.ListenAddress, httpServerCfg.Port)
 
+	t := time.Second * 10
 	server := http.Server{
-		Addr:    addr,
-		Handler: mainEngine,
+		Addr:         addr,
+		Handler:      mainEngine,
+		ReadTimeout:  t,
+		WriteTimeout: t,
 	}
 
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", httpServerCfg.ListenAddress, httpServerCfg.Port))
