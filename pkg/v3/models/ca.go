@@ -97,6 +97,8 @@ const (
 )
 
 type CAAttachedToDevice struct {
-	RAID     string
-	DeviceID string
+	AuthorizedBy struct {
+		RAID string `json:"ra_id"`
+	} `json:"authorized_by"`
+	DeviceID string `json:"device_id"`
 }

@@ -53,6 +53,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("could not launch Postgres: %s", err)
 	}
+
+	fmt.Printf(" 	-- postgres port: %d\n", storageConfig.Port)
+	fmt.Printf(" 	-- postgres user: %s\n", storageConfig.Username)
+	fmt.Printf(" 	-- postgres pass: %s\n", storageConfig.Password)
+
 	fmt.Println("Crypto Engines")
 	fmt.Println(">> launching docker: Hashicorp Vault ...")
 	vCleanup, vaultConfig, err := keyvaultkv2_test.RunHashicorpVaultDocker()
@@ -94,16 +99,11 @@ func main() {
 	//capture future panics
 	defer func() {
 		if err := recover(); err != nil {
-			color.Set(color.BgRed)
-			color.Set(color.FgWhite)
-			fmt.Println(" !! Panic !! ")
-			color.Unset()
+			printWColor(" !! Panic !! ", color.FgWhite, color.BgRed)
+			fmt.Println()
 
-			color.Set(color.FgRed)
-			fmt.Println(err)
-			color.Unset()
-			fmt.Println("cleaning up")
-			cleanup()
+			printWColor("cleaning up", color.FgRed, color.BgBlack)
+			fmt.Println()
 		}
 	}()
 
@@ -189,4 +189,11 @@ func main() {
 	forever := make(chan struct{})
 	<-forever
 
+}
+
+func printWColor(str string, fg, bg color.Attribute) {
+	color.Set(fg)
+	color.Set(bg)
+	fmt.Println(str)
+	color.Unset()
 }

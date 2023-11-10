@@ -59,7 +59,7 @@ func (db *PostgresCertificateStorage) Update(ctx context.Context, certificate *m
 
 func (db *PostgresCertificateStorage) SelectByCA(ctx context.Context, caID string, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := []gormWhereParams{
-		{query: "issuer_meta_ca_id = ?", extraArgs: []any{caID}},
+		{query: "issuer_meta_id = ?", extraArgs: []any{caID}},
 	}
 	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
 }
@@ -78,7 +78,7 @@ func (db *PostgresCertificateStorage) SelectByExpirationDate(ctx context.Context
 func (db *PostgresCertificateStorage) SelectByCAIDAndStatus(ctx context.Context, CAID string, status models.CertificateStatus, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := []gormWhereParams{
 		{query: "status = ?", extraArgs: []any{status}},
-		{query: "issuer_meta_ca_id = ?", extraArgs: []any{CAID}},
+		{query: "issuer_meta_id = ?", extraArgs: []any{CAID}},
 	}
 
 	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)

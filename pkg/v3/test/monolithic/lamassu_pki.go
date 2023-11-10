@@ -117,7 +117,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
 			BaseConfig: config.BaseConfig{
 				Logs: config.BaseConfigLogging{
-					Level: config.Info,
+					Level: config.Debug,
 				},
 				Server: config.HttpServer{
 					LogLevel:           config.Debug,

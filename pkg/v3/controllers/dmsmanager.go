@@ -96,7 +96,7 @@ func (r *dmsManagerHttpRoutes) CreateDMS(ctx *gin.Context) {
 	ctx.JSON(201, dms)
 }
 
-func (r *dmsManagerHttpRoutes) UpdateIdentityProfile(ctx *gin.Context) {
+func (r *dmsManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -107,15 +107,14 @@ func (r *dmsManagerHttpRoutes) UpdateIdentityProfile(ctx *gin.Context) {
 		return
 	}
 
-	var requestBody models.DMSSettings
+	var requestBody models.DMS
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
-	ca, err := r.svc.UpdateDMSSettings(services.UpdateDMSSettingsInput{
-		ID:             params.ID,
-		NewDMSSettings: requestBody,
+	ca, err := r.svc.UpdateDMS(services.UpdateDMSInput{
+		DMS: requestBody,
 	})
 	if err != nil {
 		ctx.JSON(500, err)

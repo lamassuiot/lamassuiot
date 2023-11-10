@@ -38,8 +38,8 @@ func (cli *dmsManagerClient) CreateDMS(input services.CreateDMSInput) (*models.D
 	return response, nil
 }
 
-func (cli *dmsManagerClient) UpdateDMSSettings(input services.UpdateDMSSettingsInput) (*models.DMS, error) {
-	response, err := Put[*models.DMS](context.Background(), cli.httpClient, cli.baseUrl+"/v1/dms/"+input.ID+"/settings", input.NewDMSSettings, map[int][]error{})
+func (cli *dmsManagerClient) UpdateDMS(input services.UpdateDMSInput) (*models.DMS, error) {
+	response, err := Put[*models.DMS](context.Background(), cli.httpClient, cli.baseUrl+"/v1/dms/"+input.DMS.ID+"/settings", input.DMS, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}

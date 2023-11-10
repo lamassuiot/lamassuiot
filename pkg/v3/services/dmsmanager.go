@@ -25,7 +25,7 @@ var dmsValidate = validator.New()
 type DMSManagerService interface {
 	ESTService
 	CreateDMS(input CreateDMSInput) (*models.DMS, error)
-	UpdateDMSSettings(input UpdateDMSSettingsInput) (*models.DMS, error)
+	UpdateDMS(input UpdateDMSInput) (*models.DMS, error)
 	GetDMSByID(input GetDMSByIDInput) (*models.DMS, error)
 	GetAll(input GetAllInput) (string, error)
 }
@@ -103,30 +103,31 @@ func (svc DMSManagerServiceImpl) CreateDMS(input CreateDMSInput) (*models.DMS, e
 	return dms, nil
 }
 
-type UpdateDMSSettingsInput struct {
-	ID             string             `validate:"required"`
-	NewDMSSettings models.DMSSettings `validate:"required"`
+type UpdateDMSInput struct {
+	DMS models.DMS `validate:"required"`
 }
 
-func (svc DMSManagerServiceImpl) UpdateDMSSettings(input UpdateDMSSettingsInput) (*models.DMS, error) {
-
+func (svc DMSManagerServiceImpl) UpdateDMS(input UpdateDMSInput) (*models.DMS, error) {
 	err := dmsValidate.Struct(input)
 	if err != nil {
 		lDMS.Errorf("struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
-	lDMS.Debugf("checking if DMS '%s' exists", input.ID)
-	exists, dms, err := svc.dmsStorage.SelectExists(context.Background(), input.ID)
+	lDMS.Debugf("checking if DMS '%s' exists", input.DMS.ID)
+	exists, dms, err := svc.dmsStorage.SelectExists(context.Background(), input.DMS.ID)
 	if err != nil {
-		lDMS.Errorf("something went wrong while checking if DMS '%s' exists in storage engine: %s", input.ID, err)
+		lDMS.Errorf("something went wrong while checking if DMS '%s' exists in storage engine: %s", input.DMS.ID, err)
 		return nil, err
 	} else if !exists {
-		lDMS.Errorf("DMS '%s' does not exist in storage engine", input.ID)
+		lDMS.Errorf("DMS '%s' does not exist in storage engine", input.DMS.ID)
 		return nil, errs.ErrDMSNotFound
 	}
 
-	dms.Settings = input.NewDMSSettings
-	lDMS.Debugf("updating DMS %s identity profile", input.ID)
+	dms.Metadata = input.DMS.Metadata
+	dms.Name = input.DMS.Name
+	dms.Settings = input.DMS.Settings
+
+	lDMS.Debugf("updating DMS %s", input.DMS.ID)
 	return svc.dmsStorage.Update(context.Background(), dms)
 }
 
@@ -342,7 +343,9 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 		},
 	}
 	newMeta[models.CAAttachedToDeviceKey] = models.CAAttachedToDevice{
-		RAID:     dms.ID,
+		AuthorizedBy: struct {
+			RAID string "json:\"ra_id\""
+		}{RAID: dms.ID},
 		DeviceID: device.ID,
 	}
 
@@ -546,7 +549,9 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		},
 	}
 	newMeta[models.CAAttachedToDeviceKey] = models.CAAttachedToDevice{
-		RAID:     dms.ID,
+		AuthorizedBy: struct {
+			RAID string "json:\"ra_id\""
+		}{RAID: dms.ID},
 		DeviceID: device.ID,
 	}
 
