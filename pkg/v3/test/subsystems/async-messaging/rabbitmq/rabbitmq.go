@@ -42,7 +42,7 @@ func RunRabbitMQDocker() (func() error, *config.AMQPConnection, error) {
 			Enabled:   true,
 			Protocol:  config.AMQP,
 			Exchange:  "lamassu",
-		})
+		}, "test-hcheck")
 
 		return err
 	})
@@ -53,7 +53,7 @@ func RunRabbitMQDocker() (func() error, *config.AMQPConnection, error) {
 	}
 
 	return containerCleanup, &config.AMQPConnection{
-		LogLevel: config.Debug,
+		LogLevel: config.Trace,
 		Protocol: config.AMQP,
 		BasicConnection: config.BasicConnection{
 			Hostname:  "127.0.0.1",

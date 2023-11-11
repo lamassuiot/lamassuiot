@@ -51,17 +51,22 @@ func main() {
 		log.Fatalf("could not build HTTP CA Client: %s", err)
 	}
 
-	caCli := clients.NewHttpCAClient(caHttpCli, fmt.Sprintf("%s://%s%s:%d", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.BasePath, conf.CAClient.Port))
-
+	caSDK := clients.NewHttpCAClient(
+		clients.HttpClientWithSourceHeaderInjector(caHttpCli, models.DMSManagerSource),
+		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
+	)
 	lDeviceManagerClient := helpers.ConfigureLogger(conf.CAClient.LogLevel, "LMS SDK - DeviceManager Client")
 	deviceMngrHttpCli, err := clients.BuildHTTPClient(conf.DevManagerClient.HTTPClient, lDeviceManagerClient)
 	if err != nil {
 		log.Fatalf("could not build HTTP Device Manager Client: %s", err)
 	}
 
-	devManagerCli := clients.NewHttpDeviceManagerClient(deviceMngrHttpCli, fmt.Sprintf("%s://%s%s:%d", conf.DevManagerClient.Protocol, conf.DevManagerClient.Hostname, conf.DevManagerClient.BasePath, conf.DevManagerClient.Port))
+	deviceSDK := clients.NewHttpDeviceManagerClient(
+		clients.HttpClientWithSourceHeaderInjector(deviceMngrHttpCli, models.DMSManagerSource),
+		fmt.Sprintf("%s://%s:%d%s", conf.DevManagerClient.Protocol, conf.DevManagerClient.Hostname, conf.DevManagerClient.Port, conf.DevManagerClient.BasePath),
+	)
 
-	_, _, err = lamassu.AssembleDMSManagerServiceWithHTTPServer(*conf, caCli, devManagerCli, models.APIServiceInfo{
+	_, _, err = lamassu.AssembleDMSManagerServiceWithHTTPServer(*conf, caSDK, deviceSDK, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,

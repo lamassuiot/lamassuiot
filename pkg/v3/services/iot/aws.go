@@ -1,6 +1,7 @@
 package iot
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -398,8 +400,17 @@ func (svc *AWSCloudConnectorService) RegisterUpdateJITPProvisioner(ctx context.C
 				return err
 			}
 
+			buffer := new(bytes.Buffer)
+			err := json.Compact(buffer, []byte(policy.PolicyDocument))
+			if err != nil {
+				lFunc.Errorf("got error while compacting %s policy: %s", policy.PolicyName, err)
+				return err
+			}
+
+			policyDoc := buffer.String()
+
 			_, err = svc.iotSDK.CreatePolicy(ctx, &iot.CreatePolicyInput{
-				PolicyDocument: &policy.PolicyDocument,
+				PolicyDocument: &policyDoc,
 				PolicyName:     &policy.PolicyName,
 			})
 			if err != nil {
@@ -407,26 +418,50 @@ func (svc *AWSCloudConnectorService) RegisterUpdateJITPProvisioner(ctx context.C
 				return err
 			}
 		} else {
-			_, err = svc.iotSDK.DeletePolicyVersion(ctx, &iot.DeletePolicyVersionInput{
-				PolicyName:      iotPolicy.PolicyName,
-				PolicyVersionId: iotPolicy.DefaultVersionId,
+			plVersions, err := svc.iotSDK.ListPolicyVersions(ctx, &iot.ListPolicyVersionsInput{
+				PolicyName: iotPolicy.PolicyName,
 			})
 			if err != nil {
-				lFunc.Errorf("got error while deleting default version '%s' from policy %s: %s", *iotPolicy.DefaultVersionId, policy.PolicyName, err)
+				lFunc.Errorf("could not list policy versions for %s policy: %s", policy.PolicyName, err)
 				return err
+			}
+
+			if len(plVersions.PolicyVersions) > 1 {
+				sort.Slice(plVersions.PolicyVersions, func(i, j int) bool {
+					return plVersions.PolicyVersions[i].CreateDate.After(*plVersions.PolicyVersions[j].CreateDate)
+				})
+
+				for _, p := range plVersions.PolicyVersions {
+					if !p.IsDefaultVersion {
+						lFunc.Infof("deleting version '%s' from policy %s", *p.VersionId, policy.PolicyName)
+						_, err = svc.iotSDK.DeletePolicyVersion(ctx, &iot.DeletePolicyVersionInput{
+							PolicyName:      iotPolicy.PolicyName,
+							PolicyVersionId: p.VersionId,
+						})
+						if err != nil {
+							lFunc.Errorf("got error while deleting version '%s' from policy %s: %s", *iotPolicy.DefaultVersionId, policy.PolicyName, err)
+							return err
+						}
+					}
+				}
 			}
 		}
 	}
 
-	templateBody := jitpTemplateBuilder(input.AwsJITPConfig.JITPProvisioningTemplate.JITPGroupNames, policies)
+	templateBody, err := jitpTemplateBuilder(input.AwsJITPConfig.JITPProvisioningTemplate.JITPGroupNames, policies)
+	if err != nil {
+		lFunc.Errorf("got error while generating JITP Template: %s", err)
+		return err
+	}
+
 	lFunc.Debugf("JITP '%s' template json document: \n%s", input.DMS.ID, templateBody)
 
 	provRoleARN := input.AwsJITPConfig.JITPProvisioningTemplate.ProvisioningRoleArn
 	if provRoleARN == "" {
-		provRoleARN := fmt.Sprintf("arn:aws:iam::%s:role/JITPRole", svc.AccountID)
+		provRoleARN = fmt.Sprintf("arn:aws:iam::%s:role/JITPRole", svc.AccountID)
 		lFunc.Warnf("using default provisioning role. Make sure %s IAM Role exists in the %s account", provRoleARN, svc.AccountID)
 	}
-	_, err := svc.iotSDK.CreateProvisioningTemplate(context.Background(), &iot.CreateProvisioningTemplateInput{
+	cpTemplate, err := svc.iotSDK.CreateProvisioningTemplate(context.Background(), &iot.CreateProvisioningTemplateInput{
 		ProvisioningRoleArn: aws.String(provRoleARN),
 		TemplateBody:        &templateBody,
 		TemplateName:        &input.DMS.ID,
@@ -442,10 +477,43 @@ func (svc *AWSCloudConnectorService) RegisterUpdateJITPProvisioner(ctx context.C
 	}
 
 	lFunc.Infof("created JITP '%s' template", templateBody)
+
+	if input.AwsJITPConfig.JITPProvisioningTemplate.AWSCACertificateId != "" {
+		lFunc.Infof("updating AWS CA Certificate %s assigning JITP '%s' template", input.AwsJITPConfig.JITPProvisioningTemplate.AWSCACertificateId, input.DMS.ID)
+		_, err = svc.iotSDK.UpdateCACertificate(context.Background(), &iot.UpdateCACertificateInput{
+			CertificateId:             &input.AwsJITPConfig.JITPProvisioningTemplate.AWSCACertificateId,
+			NewAutoRegistrationStatus: types.AutoRegistrationStatusEnable,
+			NewStatus:                 types.CACertificateStatusActive,
+			RegistrationConfig: &types.RegistrationConfig{
+				TemplateName: &input.DMS.ID,
+			},
+			RemoveAutoRegistration: false,
+		})
+		if err != nil {
+			lFunc.Errorf("something went wrong while updating CA Certificate: %s", err)
+			return err
+		}
+	} else {
+		lFunc.Warnf("not updating any AWS CA Certificate for JITP '%s' template", input.DMS.ID)
+	}
+
+	dms := input.DMS
+	updatedJitpConf := input.AwsJITPConfig
+	updatedJitpConf.JITPProvisioningTemplate.ARN = *cpTemplate.TemplateArn
+	dms.Metadata[models.AWSIoTMetadataKey(svc.ConnectorID)] = updatedJitpConf
+
+	_, err = svc.DmsSDK.UpdateDMS(ctx, services.UpdateDMSInput{
+		DMS: *dms,
+	})
+	if err != nil {
+		lFunc.Errorf("something went wrong while updating DMS metadata: %s", err)
+		return err
+	}
+
 	return nil
 }
 
-func jitpTemplateBuilder(thingGroups []string, policyNames []string) string {
+func jitpTemplateBuilder(thingGroups []string, policyNames []string) (string, error) {
 	policiesSection := []string{}
 	for _, policyName := range policyNames {
 		policy := `"` + policyName + `":{
@@ -455,6 +523,11 @@ func jitpTemplateBuilder(thingGroups []string, policyNames []string) string {
 			}
 		 }`
 		policiesSection = append(policiesSection, policy)
+	}
+
+	thingGroupsStrs := []string{}
+	for _, tg := range thingGroups {
+		thingGroupsStrs = append(thingGroupsStrs, fmt.Sprintf("\"%s\"", tg))
 	}
 
 	jitpTemplate := `{
@@ -498,7 +571,7 @@ func jitpTemplateBuilder(thingGroups []string, policyNames []string) string {
 					}
 				 },
 				 "ThingGroups":[
-					` + strings.Join(thingGroups, ",") + `
+					` + strings.Join(thingGroupsStrs, ",") + `
 				 ]
 			  },
 			  "OverrideSettings":{
@@ -520,5 +593,11 @@ func jitpTemplateBuilder(thingGroups []string, policyNames []string) string {
 		}
 	 }
 	 `
-	return jitpTemplate
+
+	buffer := new(bytes.Buffer)
+	err := json.Compact(buffer, []byte(jitpTemplate))
+	if err != nil {
+		return "", err
+	}
+	return buffer.String(), nil
 }

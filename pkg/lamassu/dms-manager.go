@@ -5,6 +5,8 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/messaging"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/middlewares/amqppub"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/routes"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
@@ -35,7 +37,7 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 
 func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService) (*services.DMSManagerService, error) {
 	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Service")
-	// lMessage := helpers.ConfigureLogger( conf.AMQPConnection.LogLevel, "Messaging")
+	lMessage := helpers.ConfigureLogger(conf.AMQPConnection.LogLevel, "Messaging")
 	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Storage")
 
 	devStorage, err := createDMSStorageInstance(lStorage, conf.Storage)
@@ -50,10 +52,19 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 		DevManagerCli: deviceService,
 	})
 
-	deviceSvc := svc.(*services.DMSManagerServiceImpl)
+	dmsSvc := svc.(*services.DMSManagerServiceImpl)
 
+	if conf.AMQPConnection.Enabled {
+		log.Infof("AMQP event publisher enabled")
+		amqpEventPub, err := messaging.SetupAMQPConnection(lMessage, conf.AMQPConnection, models.DMSManagerSource)
+		if err != nil {
+			return nil, fmt.Errorf("could not setup AMQP connection: %s", err)
+		}
+
+		svc = amqppub.NewDMSAmqpEventPublisher(amqpEventPub)(svc)
+	}
 	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
-	deviceSvc.SetService(svc)
+	dmsSvc.SetService(svc)
 
 	return &svc, nil
 }

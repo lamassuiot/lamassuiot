@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"encoding/base64"
@@ -49,7 +48,7 @@ func NewCAHttpRoutes(svc services.CAService) *caHttpRoutes {
 }
 
 func (r *caHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	engine, err := r.svc.GetCryptoEngineProvider(funCtx)
 	if err != nil {
 		switch err {
@@ -80,7 +79,7 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	ca, err := r.svc.CreateCA(funCtx, services.CreateCAInput{
 		ParentID:           requestBody.ParentID,
 		ID:                 requestBody.ID,
@@ -111,7 +110,7 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetStats(ctx *gin.Context) {
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	stats, err := r.svc.GetStats(funCtx)
 	if err != nil {
 		switch err {
@@ -168,7 +167,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		ecKey = key.(*ecdsa.PrivateKey)
 	}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	ca, err := r.svc.ImportCA(funCtx, services.ImportCAInput{
 		ID:                 requestBody.ID,
 		IssuanceExpiration: requestBody.IssuanceExpiration,
@@ -228,7 +227,7 @@ func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	ca, err := r.svc.UpdateCAMetadata(funCtx, services.UpdateCAMetadataInput{
 		CAID:     params.ID,
 		Metadata: requestBody.Metadata,
@@ -263,7 +262,7 @@ func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 
 	cas := []*models.CACertificate{}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCAsByCommonName(funCtx, services.GetCAsByCommonNameInput{
 		CommonName:      params.CommonName,
 		QueryParameters: queryParams,
@@ -302,7 +301,7 @@ func (r *caHttpRoutes) GetCABySerialNumber(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	ca, err := r.svc.GetCABySerialNumber(funCtx, services.GetCABySerialNumberInput{
 		SerialNumber: params.SerialNumber,
 	})
@@ -334,7 +333,7 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 
 	cas := []*models.CACertificate{}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCAs(funCtx, services.GetCAsInput{
 		QueryParameters: queryParams,
 		ExhaustiveRun:   false,
@@ -382,7 +381,7 @@ func (r *caHttpRoutes) GetCAByID(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	ca, err := r.svc.GetCAByID(funCtx, services.GetCAByIDInput{
 		CAID: params.ID,
 	})
@@ -414,7 +413,7 @@ func (r *caHttpRoutes) GetCAByID(ctx *gin.Context) {
 // @Failure 500
 // @Router /cas/{id} [delete]
 func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	type uriParams struct {
 		CAId string `uri:"id" binding:"required"`
 	}
@@ -464,7 +463,7 @@ func (r *caHttpRoutes) UpdateCAStatus(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	ca, err := r.svc.UpdateCAStatus(funCtx, services.UpdateCAStatusInput{
 		CAID:             params.ID,
 		Status:           requestBody.NewStatus,
@@ -510,7 +509,7 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	cert, err := r.svc.GetCertificateBySerialNumber(funCtx, services.GetCertificatesBySerialNumberInput{
 		SerialNumber: params.SerialNumber,
 	})
@@ -544,7 +543,7 @@ func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
 
 	certs := []*models.Certificate{}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCertificates(funCtx, services.GetCertificatesInput{
 		ListInput: services.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
@@ -584,7 +583,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 
 	certs := []*models.Certificate{}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCertificatesByExpirationDate(funCtx, services.GetCertificatesByExpirationDateInput{
 		ExpiresAfter:  expirationQueryParams.ExpiresAfter,
 		ExpiresBefore: expirationQueryParams.ExpiresBefore,
@@ -640,7 +639,7 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 
 	certs := []*models.Certificate{}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCertificatesByCA(funCtx, services.GetCertificatesByCAInput{
 		CAID: params.ID,
 		ListInput: services.ListInput[models.Certificate]{
@@ -701,7 +700,7 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	ca, err := r.svc.SignCertificate(funCtx, services.SignCertificateInput{
 		CAID:         params.ID,
 		Subject:      requestBody.Subject,
@@ -749,7 +748,7 @@ func (r *caHttpRoutes) SignatureSign(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	signature, err := r.svc.SignatureSign(funCtx, services.SignatureSignInput{
 		CAID:             params.ID,
 		Message:          msgDecoded,
@@ -801,7 +800,7 @@ func (r *caHttpRoutes) SignatureVerify(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	valid, err := r.svc.SignatureVerify(funCtx, services.SignatureVerifyInput{
 		Signature:        signDecoded,
 		CAID:             params.ID,
@@ -841,7 +840,7 @@ func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 
 	certs := []*models.Certificate{}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCertificatesByCaAndStatus(funCtx, services.GetCertificatesByCaAndStatusInput{
 		CAID:   params.CAID,
 		Status: models.CertificateStatus(params.Status),
@@ -893,7 +892,7 @@ func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
 
 	certs := []*models.Certificate{}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCertificatesByStatus(funCtx, services.GetCertificatesByStatusInput{
 		Status: models.CertificateStatus(params.Status),
 		ListInput: services.ListInput[models.Certificate]{
@@ -953,7 +952,7 @@ func (r *caHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	cert, err := r.svc.UpdateCertificateStatus(funCtx, services.UpdateCertificateStatusInput{
 		SerialNumber:     params.SerialNumber,
 		NewStatus:        requestBody.NewStatus,
@@ -994,7 +993,7 @@ func (r *caHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	cert, err := r.svc.UpdateCertificateMetadata(funCtx, services.UpdateCertificateMetadataInput{
 		SerialNumber: params.SerialNumber,
 		Metadata:     requestBody.Metadata,

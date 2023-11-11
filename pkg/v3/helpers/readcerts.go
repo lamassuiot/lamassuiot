@@ -58,3 +58,19 @@ func ParsePrivateKey(privKeyBytes []byte) (interface{}, error) {
 
 	return nil, errors.New("tls: failed to parse private key")
 }
+
+func PrivateKeyToPEM(key any) (string, error) {
+	b, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return "", err
+	}
+
+	pemdata := pem.EncodeToMemory(
+		&pem.Block{
+			Type:  "PRIVATE KEY",
+			Bytes: b,
+		},
+	)
+
+	return string(pemdata), nil
+}

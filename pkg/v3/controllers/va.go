@@ -100,7 +100,7 @@ func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(context.Background(), ctx.Request.Header)
 	response, err := r.ocsp.Verify(funCtx, ocsp)
 	if err != nil {
 		r.logger.Errorf("something went wrong while verifying ocsp request: %s", err)
@@ -123,7 +123,7 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 		return
 	}
 
-	funcCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funcCtx := helpers.ConfigureContextWithRequest(context.Background(), ctx.Request.Header)
 	crl, err := r.crl.GetCRL(funcCtx, services.GetCRLInput{
 		CAID: params.ID,
 	})

@@ -77,7 +77,7 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, error) {
 
 	if conf.AMQPConnection.Enabled {
 		log.Infof("AMQP event publisher enabled")
-		amqpEventPub, err := messaging.SetupAMQPConnection(lMessage, conf.AMQPConnection)
+		amqpEventPub, err := messaging.SetupAMQPConnection(lMessage, conf.AMQPConnection, models.CASource)
 		if err != nil {
 			return nil, fmt.Errorf("could not setup AMQP connection: %s", err)
 		}

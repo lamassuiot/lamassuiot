@@ -11,6 +11,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
@@ -19,6 +20,30 @@ import (
 
 func BuildURL(cfg config.HTTPClient) string {
 	return fmt.Sprintf("%s://%s:%d%s", cfg.Protocol, cfg.Hostname, cfg.Port, cfg.BasePath)
+}
+
+func HttpClientWithSourceHeaderInjector(cli *http.Client, sourceID string) *http.Client {
+	transport := http.DefaultTransport
+	if cli.Transport != nil {
+		transport = cli.Transport
+	}
+
+	cli.Transport = sourceRoundTripper{
+		transport: transport,
+		source:    sourceID,
+	}
+
+	return cli
+}
+
+type sourceRoundTripper struct {
+	transport http.RoundTripper
+	source    string
+}
+
+func (lrt sourceRoundTripper) RoundTrip(req *http.Request) (res *http.Response, err error) {
+	req.Header.Add(models.HttpSourceHeader, lrt.source)
+	return lrt.transport.RoundTrip(req)
 }
 
 func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client, error) {

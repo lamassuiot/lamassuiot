@@ -52,7 +52,7 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 
 	if conf.AMQPConnection.Enabled {
 		log.Infof("AMQP Connection enabled")
-		amqpConnection, err := messaging.SetupAMQPConnection(lMessage, conf.AMQPConnection)
+		amqpConnection, err := messaging.SetupAMQPConnection(lMessage, conf.AMQPConnection, models.AlertsSource)
 		if err != nil {
 			return nil, fmt.Errorf("could not setup amqp connection: %s", err)
 		}
@@ -66,6 +66,7 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 				select {
 				case msg := <-onMessage:
 					lMessage.Trace("new incoming message")
+					lMessage.Trace(msg.Type)
 					event, err := messaging.ParseCloudEvent(msg.Body)
 					if err != nil {
 						lMessage.Errorf("could not decode message into cloud event: %s", err)

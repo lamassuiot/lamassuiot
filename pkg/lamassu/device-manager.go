@@ -35,7 +35,7 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 
 func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService services.CAService) (*services.DeviceManagerService, error) {
 	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Service")
-	// lMessage := helpers.ConfigureLogger( conf.AMQPConnection.LogLevel, "Messaging")
+	// lMessage := helpers.ConfigureLogger(conf.AMQPConnection.LogLevel, "Messaging")
 	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Storage")
 
 	devStorage, err := createDevicesStorageInstance(lStorage, conf.Storage)
@@ -51,7 +51,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 
 	deviceSvc := svc.(*services.DeviceManagerServiceImpl)
 
-	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
+	//this utilizes the middlewares from within the DMS service (if svc.Service.func is uses instead of regular svc.func)
 	deviceSvc.SetService(svc)
 
 	return &svc, nil

@@ -24,8 +24,8 @@ func NewHttpDMSManagerClient(client *http.Client, url string) services.DMSManage
 	}
 }
 
-func (cli *dmsManagerClient) CreateDMS(input services.CreateDMSInput) (*models.DMS, error) {
-	response, err := Post[*models.DMS](context.Background(), cli.httpClient, cli.baseUrl+"/v1/dms", resources.CreateDMSBody{
+func (cli *dmsManagerClient) CreateDMS(ctx context.Context, input services.CreateDMSInput) (*models.DMS, error) {
+	response, err := Post[*models.DMS](ctx, cli.httpClient, cli.baseUrl+"/v1/dms", resources.CreateDMSBody{
 		ID:       input.ID,
 		Name:     input.Name,
 		Metadata: input.Metadata,
@@ -38,8 +38,8 @@ func (cli *dmsManagerClient) CreateDMS(input services.CreateDMSInput) (*models.D
 	return response, nil
 }
 
-func (cli *dmsManagerClient) UpdateDMS(input services.UpdateDMSInput) (*models.DMS, error) {
-	response, err := Put[*models.DMS](context.Background(), cli.httpClient, cli.baseUrl+"/v1/dms/"+input.DMS.ID+"/settings", input.DMS, map[int][]error{})
+func (cli *dmsManagerClient) UpdateDMS(ctx context.Context, input services.UpdateDMSInput) (*models.DMS, error) {
+	response, err := Put[*models.DMS](ctx, cli.httpClient, cli.baseUrl+"/v1/dms/"+input.DMS.ID, input.DMS, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
@@ -47,20 +47,20 @@ func (cli *dmsManagerClient) UpdateDMS(input services.UpdateDMSInput) (*models.D
 	return response, nil
 }
 
-func (cli *dmsManagerClient) GetDMSByID(input services.GetDMSByIDInput) (*models.DMS, error) {
+func (cli *dmsManagerClient) GetDMSByID(ctx context.Context, input services.GetDMSByIDInput) (*models.DMS, error) {
 	url := cli.baseUrl + "/v1/dms/" + input.ID
-	resp, err := Get[models.DMS](context.Background(), cli.httpClient, url, nil, map[int][]error{})
+	resp, err := Get[models.DMS](ctx, cli.httpClient, url, nil, map[int][]error{})
 	return &resp, err
 }
 
-func (cli *dmsManagerClient) GetAll(input services.GetAllInput) (string, error) {
+func (cli *dmsManagerClient) GetAll(ctx context.Context, input services.GetAllInput) (string, error) {
 	url := cli.baseUrl + "/v1/dms"
 
 	if input.ExhaustiveRun {
-		err := IterGet[models.DMS, *resources.GetDMSsResponse](context.Background(), cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
+		err := IterGet[models.DMS, *resources.GetDMSsResponse](ctx, cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
 		return "", err
 	} else {
-		resp, err := Get[resources.GetDMSsResponse](context.Background(), cli.httpClient, url, input.QueryParameters, map[int][]error{})
+		resp, err := Get[resources.GetDMSsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
 		return resp.NextBookmark, err
 	}
 }

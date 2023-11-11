@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -32,14 +33,15 @@ type subscribesInfo struct {
 }
 
 type AMQPSetup struct {
-	Exchange       string
-	Channel        *amqp.Channel
-	PublisherChan  chan *AmqpPublishMessage
-	Msgs           <-chan amqp.Delivery
-	subscribesInfo []subscribesInfo
+	Exchange          string
+	Channel           *amqp.Channel
+	PublisherChan     chan *AmqpPublishMessage
+	Msgs              <-chan amqp.Delivery
+	subscribesInfo    []subscribesInfo
+	serviceIdentifier string
 }
 
-func SetupAMQPConnection(logger *logrus.Entry, config config.AMQPConnection) (*AMQPSetup, error) {
+func SetupAMQPConnection(logger *logrus.Entry, config config.AMQPConnection, serviceIdentifier string) (*AMQPSetup, error) {
 	log = logger
 	if config.Exchange == "" {
 		log.Warnf("exchange was configured as empty '', defaulting to 'lamassu-events' ")
@@ -50,7 +52,9 @@ func SetupAMQPConnection(logger *logrus.Entry, config config.AMQPConnection) (*A
 
 	var connection *amqp.Connection
 
-	amqpHandler := &AMQPSetup{}
+	amqpHandler := &AMQPSetup{
+		serviceIdentifier: serviceIdentifier,
+	}
 	connection, err := amqpHandler.buildAMQPConnection(config)
 	if err != nil {
 		return nil, err
@@ -175,15 +179,23 @@ func (aPub *AMQPSetup) setupAMQPEventPublisher() {
 	aPub.PublisherChan = publisherChan
 }
 
-func (aPub *AMQPSetup) PublishCloudEvent(eventType models.EventType, eventSource string, payload interface{}) {
-	event := BuildCloudEvent(string(eventType), eventSource, payload)
+func (aPub *AMQPSetup) PublishCloudEvent(ctx context.Context, eventType models.EventType, payload interface{}) {
+	src := aPub.serviceIdentifier
+	if ctxSource := ctx.Value(models.ContextSourceKey); ctxSource != nil {
+		ctxSourceStr, ok := ctxSource.(string)
+		if ok {
+			src = ctxSourceStr
+		}
+	}
+
+	event := BuildCloudEvent(string(eventType), src, payload)
 	eventBytes, marshalErr := json.Marshal(event)
 	if marshalErr != nil {
 		log.Errorf("error while serializing event: %s", marshalErr)
 		return
 	}
 
-	log.Tracef("publishing event: Type=%s Source=%s \n%s", eventType, eventSource, string(eventBytes))
+	log.Tracef("publishing event: Type=%s Source=%s \n%s", eventType, src, string(eventBytes))
 
 	aPub.PublisherChan <- &AmqpPublishMessage{
 		RoutingKey: event.Type(),

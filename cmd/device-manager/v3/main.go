@@ -51,9 +51,12 @@ func main() {
 		log.Fatalf("could not build HTTP CA Client: %s", err)
 	}
 
-	caCli := clients.NewHttpCAClient(caHttpCli, fmt.Sprintf("%s://%s%s:%d", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.BasePath, conf.CAClient.Port))
+	caSDK := clients.NewHttpCAClient(
+		clients.HttpClientWithSourceHeaderInjector(caHttpCli, models.DeviceManagerSource),
+		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
+	)
 
-	_, _, err = lamassu.AssembleDeviceManagerServiceWithHTTPServer(*conf, caCli, models.APIServiceInfo{
+	_, _, err = lamassu.AssembleDeviceManagerServiceWithHTTPServer(*conf, caSDK, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,

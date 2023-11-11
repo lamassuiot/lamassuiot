@@ -24,6 +24,7 @@ require (
 	github.com/haritzsaiz/gin-dump v0.2.0
 	github.com/hashicorp/vault/api v1.9.2
 	github.com/jakehl/goid v1.1.0
+	github.com/kuzemkon/aws-iot-device-sdk-go v0.0.0-20200313144654-1a36b3aacf19
 	github.com/miekg/pkcs11 v1.1.1
 	github.com/ory/dockertest/v3 v3.10.0
 	github.com/robfig/cron/v3 v3.0.1
@@ -71,6 +72,7 @@ require (
 	github.com/docker/docker v24.0.5+incompatible // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
+	github.com/eclipse/paho.mqtt.golang v1.1.1 // indirect
 	github.com/flimzy/diff v0.1.7 // indirect
 	github.com/flimzy/testy v0.1.17 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect

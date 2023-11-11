@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/pkg/v3/clients"
@@ -15,7 +16,30 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
 
 	"github.com/haritzsaiz/est"
+	"github.com/kuzemkon/aws-iot-device-sdk-go/device"
 )
+
+const p = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"iot:*\"],\"Resource\":[\"*\"]}]}"
+const awsIotCA = `-----BEGIN CERTIFICATE-----
+MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF
+ADA5MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6
+b24gUm9vdCBDQSAxMB4XDTE1MDUyNjAwMDAwMFoXDTM4MDExNzAwMDAwMFowOTEL
+MAkGA1UEBhMCVVMxDzANBgNVBAoTBkFtYXpvbjEZMBcGA1UEAxMQQW1hem9uIFJv
+b3QgQ0EgMTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALJ4gHHKeNXj
+ca9HgFB0fW7Y14h29Jlo91ghYPl0hAEvrAIthtOgQ3pOsqTQNroBvo3bSMgHFzZM
+9O6II8c+6zf1tRn4SWiw3te5djgdYZ6k/oI2peVKVuRF4fn9tBb6dNqcmzU5L/qw
+IFAGbHrQgLKm+a/sRxmPUDgH3KKHOVj4utWp+UhnMJbulHheb4mjUcAwhmahRWa6
+VOujw5H5SNz/0egwLX0tdHA114gk957EWW67c4cX8jJGKLhD+rcdqsq08p8kDi1L
+93FcXmn/6pUCyziKrlA4b9v7LWIbxcceVOF34GfID5yHI9Y/QCB/IIDEgEw+OyQm
+jgSubJrIqg0CAwEAAaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMC
+AYYwHQYDVR0OBBYEFIQYzIU07LwMlJQuCFmcx7IQTgoIMA0GCSqGSIb3DQEBCwUA
+A4IBAQCY8jdaQZChGsV2USggNiMOruYou6r4lK5IpDB/G/wkjUu0yKGX9rbxenDI
+U5PMCCjjmCXPI6T53iHTfIUJrU6adTrCC2qJeHZERxhlbI1Bjjt/msv0tadQ1wUs
+N+gDS63pYaACbvXy8MWy7Vu33PqUXHeeE6V/Uq2V8viTO96LXFvKWlJbYK8U90vv
+o/ufQJVtMVT8QtPHRh8jrdkPSHCa2XV4cdFyQzR1bldZwgJcJmApzyMZFo6IQ6XU
+5MsI+yMRQ+hDKXJioaldXgjUkK642M4UwtBV8ob2xJNDd2ZhwLnoQdeXeGADbkpy
+rqXRfboQnoZsG4q5WTP468SQvvG5
+-----END CERTIFICATE-----`
 
 func main() {
 	caDur := models.TimeDuration(time.Hour * 25)
@@ -40,10 +64,36 @@ func main() {
 	chk(err)
 
 	dmsClient := clients.NewHttpDMSManagerClient(http.DefaultClient, "http://localhost:8443/api/dmsmanager")
-	dms, err := dmsClient.CreateDMS(services.CreateDMSInput{
-		ID:       fmt.Sprintf("my-dms-%d", time.Now().Unix()),
-		Name:     "My DMS",
-		Metadata: map[string]any{},
+	dms, err := dmsClient.CreateDMS(context.Background(), services.CreateDMSInput{
+		ID:   fmt.Sprintf("my-dms-%d", time.Now().Unix()),
+		Name: "My DMS",
+		Metadata: map[string]any{
+			"lamassu.io/iot/aws.123456789": models.IotAWSDMSMetadata{
+				JITPProvisioningTemplate: struct {
+					ARN                 string              "json:\"arn,omitempty\""
+					AWSCACertificateId  string              "json:\"aws_ca_id,omitempty\""
+					ProvisioningRoleArn string              "json:\"provisioning_role_arn\""
+					EnableTemplate      bool                "json:\"enable_template\""
+					JITPGroupNames      []string            "json:\"jitp_group_names,omitempty\""
+					JITPPolicies        []models.JITPPolicy "json:\"jitp_policies,omitempty\""
+				}{
+					ProvisioningRoleArn: "",
+					EnableTemplate:      true,
+					JITPGroupNames:      []string{"TEST-LMS"},
+					JITPPolicies: []models.JITPPolicy{
+						models.JITPPolicy{PolicyName: "my-p", PolicyDocument: p},
+					},
+					AWSCACertificateId: "",
+				},
+				ShadowConfig: struct {
+					Enable     bool   "json:\"enable\""
+					ShadowName string "json:\"shadow_name,omitempty\""
+				}{
+					Enable:     true,
+					ShadowName: "lms-id",
+				},
+			},
+		},
 		Settings: models.DMSSettings{
 			EnrollmentSettings: models.EnrollmentSettings{
 				EnrollmentProtocol: models.EST,
@@ -55,8 +105,8 @@ func main() {
 					},
 				},
 				DeviceProvisionProfile: models.DeviceProvisionProfile{
-					Icon:      "",
-					IconColor: "",
+					Icon:      "BiSolidCreditCardFront",
+					IconColor: "#25ee32-#222222",
 					Metadata:  map[string]any{},
 					Tags:      []string{"iot", "testdms", "cloud"},
 				},
@@ -120,6 +170,56 @@ func main() {
 	chk(err)
 
 	fmt.Println(crt.SerialNumber)
+
+	keystr, err := helpers.PrivateKeyToPEM(bootKey)
+	chk(err)
+
+	crtstr, err := base64.StdEncoding.DecodeString(sigedCrt.Certificate.String())
+	chk(err)
+
+	err = os.WriteFile("device.key", []byte(keystr), 0644)
+	chk(err)
+	err = os.WriteFile("device.crt", []byte(crtstr), 0644)
+	chk(err)
+	err = os.WriteFile("aws.crt", []byte(awsIotCA), 0644)
+	chk(err)
+
+	time.Sleep(time.Second * 30)
+
+	thing, err := device.NewThing(
+		device.KeyPair{
+			PrivateKeyPath:    "device.key",
+			CertificatePath:   "device.crt",
+			CACertificatePath: "aws.crt",
+		},
+		"a3penyvxwz0v8m-ats.iot.eu-west-1.amazonaws.com", // AWS IoT endpoint
+		device.ThingName(sigedCrt.Subject.CommonName),
+	)
+	chk(err)
+
+	s, err := thing.GetThingShadow()
+	chk(err)
+
+	fmt.Println(s)
+
+	shadowChan, shadowErr, err := thing.SubscribeForThingShadowChanges()
+	chk(err)
+
+	for {
+		select {
+		case s, ok := <-shadowChan:
+			if !ok {
+				panic("failed to read from shadow channel")
+			}
+			fmt.Println(s)
+		case s, ok := <-shadowErr:
+			if !ok {
+				panic("failed to read from shadow err channel")
+			}
+			fmt.Println(s)
+		}
+	}
+
 }
 
 func chk(err error) {

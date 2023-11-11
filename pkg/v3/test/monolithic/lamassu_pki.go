@@ -14,6 +14,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -60,7 +61,12 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 			log.Fatalf("could not build HTTP CA Client: %s", err)
 		}
 
-		caCli := clients.NewHttpCAClient(caHttpCli, fmt.Sprintf("%s://%s%s:%d", caConnection.Protocol, caConnection.Hostname, caConnection.BasePath, caConnection.Port))
+		caSDKBuilder := func(src string) services.CAService {
+			return clients.NewHttpCAClient(
+				clients.HttpClientWithSourceHeaderInjector(caHttpCli, src),
+				fmt.Sprintf("%s://%s%s:%d", caConnection.Protocol, caConnection.Hostname, caConnection.BasePath, caConnection.Port),
+			)
+		}
 
 		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(config.VAconfig{
 			BaseConfig: config.BaseConfig{
@@ -76,7 +82,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 				},
 				AMQPConnection: conf.AMQPConnection,
 			},
-		}, caCli, apiInfo)
+		}, caSDKBuilder(models.VASource), apiInfo)
 		if err != nil {
 			return fmt.Errorf("could not assemble VA Service: %s", err)
 		}
@@ -96,7 +102,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 				AMQPConnection: conf.AMQPConnection,
 			},
 			Storage: conf.Storage,
-		}, caCli, apiInfo)
+		}, caSDKBuilder(models.DeviceManagerSource), apiInfo)
 		if err != nil {
 			return fmt.Errorf("could not assemble Device Manager Service: %s", err)
 		}
@@ -112,8 +118,12 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 			log.Fatalf("could not build HTTP DevManager Client: %s", err)
 		}
 
-		devMngrCli := clients.NewHttpDeviceManagerClient(devMngrHttpCli, fmt.Sprintf("%s://%s%s:%d", devMngrConnection.Protocol, devMngrConnection.Hostname, devMngrConnection.BasePath, devMngrConnection.Port))
-
+		deviceMngrSDKBuilder := func(src string) services.DeviceManagerService {
+			return clients.NewHttpDeviceManagerClient(
+				clients.HttpClientWithSourceHeaderInjector(devMngrHttpCli, src),
+				fmt.Sprintf("%s://%s%s:%d", devMngrConnection.Protocol, devMngrConnection.Hostname, devMngrConnection.BasePath, devMngrConnection.Port),
+			)
+		}
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
 			BaseConfig: config.BaseConfig{
 				Logs: config.BaseConfigLogging{
@@ -129,7 +139,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 				AMQPConnection: conf.AMQPConnection,
 			},
 			Storage: conf.Storage,
-		}, caCli, devMngrCli, apiInfo)
+		}, caSDKBuilder(models.DMSManagerSource), deviceMngrSDKBuilder(models.DMSManagerSource), apiInfo)
 		if err != nil {
 			return fmt.Errorf("could not assemble DMS Manager Service: %s", err)
 		}
@@ -145,8 +155,12 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 			log.Fatalf("could not build HTTP DMSManager Client: %s", err)
 		}
 
-		dmsMngrCli := clients.NewHttpDMSManagerClient(dmsMngrHttpCli, fmt.Sprintf("%s://%s%s:%d", dmsMngrConnection.Protocol, dmsMngrConnection.Hostname, dmsMngrConnection.BasePath, dmsMngrConnection.Port))
-
+		dmsMngrSDKBuilder := func(src string) services.DMSManagerService {
+			return clients.NewHttpDMSManagerClient(
+				clients.HttpClientWithSourceHeaderInjector(dmsMngrHttpCli, src),
+				fmt.Sprintf("%s://%s%s:%d", dmsMngrConnection.Protocol, dmsMngrConnection.Hostname, dmsMngrConnection.BasePath, dmsMngrConnection.Port),
+			)
+		}
 		_, alertsPort, err := lamassu.AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
 			BaseConfig: config.BaseConfig{
 				Logs: config.BaseConfigLogging{
@@ -171,13 +185,13 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 			_, err = lamassu.AssembleAWSIoTManagerService(config.IotAWS{
 				BaseConfig: config.BaseConfig{
 					Logs: config.BaseConfigLogging{
-						Level: config.Info,
+						Level: config.Trace,
 					},
 					AMQPConnection: conf.AMQPConnection,
 				},
 				ConnectorID:  conf.AWSIoTManager.ConnectorID,
 				AWSSDKConfig: conf.AWSIoTManager.AWSSDKConfig,
-			}, caCli, dmsMngrCli, devMngrCli)
+			}, caSDKBuilder(models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)), dmsMngrSDKBuilder(models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)), deviceMngrSDKBuilder(models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)))
 			if err != nil {
 				return fmt.Errorf("could not assemble AWS IoT Manager: %s", err)
 			}

@@ -11,6 +11,7 @@ import (
 	formatter "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/sirupsen/logrus"
 )
 
@@ -68,10 +69,15 @@ func ConfigureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *lo
 	return logger.WithField("req-id", fmt.Sprintf("internal.%s", goid.NewV4UUID()))
 }
 
-func ConfigureContextWithRequestID(ctx context.Context, headers http.Header) context.Context {
+func ConfigureContextWithRequest(ctx context.Context, headers http.Header) context.Context {
 	reqID := headers.Get("x-request-id")
 	if reqID != "" {
-		return context.WithValue(ctx, HTTPRequestID, reqID)
+		ctx = context.WithValue(ctx, HTTPRequestID, reqID)
+	}
+
+	source := headers.Get(models.HttpSourceHeader)
+	if reqID != "" {
+		ctx = context.WithValue(ctx, models.ContextSourceKey, source)
 	}
 
 	return ctx

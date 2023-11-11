@@ -121,7 +121,7 @@ func main() {
 
 	conf := config.MonolithicConfig{
 		BaseConfig: config.BaseConfig{
-			Logs:           config.BaseConfigLogging{Level: config.Debug},
+			Logs:           config.BaseConfigLogging{Level: config.Trace},
 			AMQPConnection: *rmqConfig,
 		},
 		Domain:       "dev.lamassu.test",

@@ -51,6 +51,8 @@ type IoTAWSCAMetadata struct {
 
 type IotAWSDMSMetadata struct {
 	JITPProvisioningTemplate struct {
+		ARN                 string       `json:"arn,omitempty"`
+		AWSCACertificateId  string       `json:"aws_ca_id,omitempty"`
 		ProvisioningRoleArn string       `json:"provisioning_role_arn"`
 		EnableTemplate      bool         `json:"enable_template"`
 		JITPGroupNames      []string     `json:"jitp_group_names,omitempty"`

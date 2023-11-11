@@ -27,7 +27,7 @@ func (r *dmsManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, dmsFiltrableFieldMap)
 
 	dmss := []*models.DMS{}
-	nextBookmark, err := r.svc.GetAll(services.GetAllInput{
+	nextBookmark, err := r.svc.GetAll(ctx, services.GetAllInput{
 		ListInput: services.ListInput[models.DMS]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
@@ -61,7 +61,7 @@ func (r *dmsManagerHttpRoutes) GetDMSByID(ctx *gin.Context) {
 		return
 	}
 
-	dms, err := r.svc.GetDMSByID(services.GetDMSByIDInput{
+	dms, err := r.svc.GetDMSByID(ctx, services.GetDMSByIDInput{
 		ID: params.ID,
 	})
 	if err != nil {
@@ -86,7 +86,7 @@ func (r *dmsManagerHttpRoutes) CreateDMS(ctx *gin.Context) {
 		Settings: requestBody.Settings,
 	}
 
-	dms, err := r.svc.CreateDMS(input)
+	dms, err := r.svc.CreateDMS(ctx, input)
 
 	if err != nil {
 		ctx.AbortWithStatusJSON(500, gin.H{"err": err.Error()})
@@ -113,7 +113,7 @@ func (r *dmsManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
 		return
 	}
 
-	ca, err := r.svc.UpdateDMS(services.UpdateDMSInput{
+	ca, err := r.svc.UpdateDMS(ctx, services.UpdateDMSInput{
 		DMS: requestBody,
 	})
 	if err != nil {

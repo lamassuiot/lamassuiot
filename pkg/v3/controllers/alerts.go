@@ -30,7 +30,7 @@ func (r *alertsHttpRoutes) GetUserSubscriptions(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(context.Background(), ctx.Request.Header)
 
 	response, err := r.svc.GetUserSubscriptions(funCtx, &services.GetUserSubscriptionsInput{
 		UserID: params.UserID,
@@ -49,7 +49,7 @@ func (r *alertsHttpRoutes) GetUserSubscriptions(ctx *gin.Context) {
 }
 
 func (r *alertsHttpRoutes) GetLatestEventsPerEventType(ctx *gin.Context) {
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(context.Background(), ctx.Request.Header)
 
 	response, err := r.svc.GetLatestEventsPerEventType(funCtx, &services.GetLatestEventsPerEventTypeInput{})
 
@@ -82,7 +82,7 @@ func (r *alertsHttpRoutes) Subscribe(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(context.Background(), ctx.Request.Header)
 
 	response, err := r.svc.Subscribe(funCtx, &services.SubscribeInput{
 		UserID:     params.UserID,
@@ -115,7 +115,7 @@ func (r *alertsHttpRoutes) Unsubscribe(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequestID(context.Background(), ctx.Request.Header)
+	funCtx := helpers.ConfigureContextWithRequest(context.Background(), ctx.Request.Header)
 
 	response, err := r.svc.Unsubscribe(funCtx, &services.UnsubscribeInput{
 		UserID:         params.UserID,
