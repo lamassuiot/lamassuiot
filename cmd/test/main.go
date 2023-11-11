@@ -170,16 +170,15 @@ func main() {
 	chk(err)
 
 	fmt.Println(crt.SerialNumber)
+	fmt.Println(crt.Subject.CommonName)
+	fmt.Println(crt.Issuer.CommonName)
 
 	keystr, err := helpers.PrivateKeyToPEM(bootKey)
 	chk(err)
 
-	crtstr, err := base64.StdEncoding.DecodeString(sigedCrt.Certificate.String())
-	chk(err)
-
 	err = os.WriteFile("device.key", []byte(keystr), 0644)
 	chk(err)
-	err = os.WriteFile("device.crt", []byte(crtstr), 0644)
+	err = os.WriteFile("device.crt", []byte(helpers.CertificateToPEM(crt)), 0644)
 	chk(err)
 	err = os.WriteFile("aws.crt", []byte(awsIotCA), 0644)
 	chk(err)
