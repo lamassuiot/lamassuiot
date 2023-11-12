@@ -33,7 +33,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 					Level: config.Info,
 				},
 				Server: config.HttpServer{
-					LogLevel:           config.Trace,
+					LogLevel:           config.Debug,
 					HealthCheckLogging: true,
 					ListenAddress:      "0.0.0.0",
 					Port:               0,
@@ -185,7 +185,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 			_, err = lamassu.AssembleAWSIoTManagerService(config.IotAWS{
 				BaseConfig: config.BaseConfig{
 					Logs: config.BaseConfigLogging{
-						Level: config.Trace,
+						Level: config.Debug,
 					},
 					AMQPConnection: conf.AMQPConnection,
 				},

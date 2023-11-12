@@ -30,11 +30,19 @@ func (db *PostgresDeviceManagerStore) Count(ctx context.Context) (int, error) {
 	return db.querier.Count([]gormWhereParams{})
 }
 
-func (db *PostgresDeviceManagerStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *PostgresDeviceManagerStore) CountByStatus(ctx context.Context, status models.DeviceStatus) (int, error) {
+	return db.querier.Count([]gormWhereParams{
+		gormWhereParams{
+			query: "status = ?", extraArgs: []any{status},
+		},
+	})
+}
+
+func (db *PostgresDeviceManagerStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	return db.querier.SelectAll(queryParams, []gormWhereParams{}, exhaustiveRun, applyFunc)
 }
 
-func (db *PostgresDeviceManagerStore) SelectByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(*models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *PostgresDeviceManagerStore) SelectByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := []gormWhereParams{
 		{query: "dms_owner = ?", extraArgs: []any{dmsID}},
 	}

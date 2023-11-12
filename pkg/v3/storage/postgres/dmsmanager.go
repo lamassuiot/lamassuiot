@@ -30,7 +30,7 @@ func (db *PostgresDMSManagerStore) Count(ctx context.Context) (int, error) {
 	return db.querier.Count([]gormWhereParams{})
 }
 
-func (db *PostgresDMSManagerStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.DMS), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *PostgresDMSManagerStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.DMS), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	return db.querier.SelectAll(queryParams, []gormWhereParams{}, exhaustiveRun, applyFunc)
 }
 

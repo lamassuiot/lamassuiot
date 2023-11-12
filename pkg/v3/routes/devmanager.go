@@ -10,6 +10,7 @@ func NewDeviceManagerHTTPLayer(router *gin.RouterGroup, svc services.DeviceManag
 	routes := controllers.NewDeviceManagerHttpRoutes(svc)
 
 	rv1 := router.Group("/v1")
+	rv1.GET("/stats", routes.GetStats)
 	rv1.GET("/devices", routes.GetAllDevices)
 	rv1.POST("/devices", routes.CreateDevice)
 	rv1.GET("/devices/:id", routes.GetDeviceByID)

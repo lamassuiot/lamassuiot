@@ -232,7 +232,7 @@ func Delete(ctx context.Context, client *http.Client, url string, knownErrors ma
 	return nil
 }
 
-func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.Client, url string, queryParams *resources.QueryParameters, applyFunc func(*E), knownErrors map[int][]error) error {
+func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.Client, url string, queryParams *resources.QueryParameters, applyFunc func(E), knownErrors map[int][]error) error {
 	continueIter := true
 	if queryParams == nil {
 		queryParams = &resources.QueryParameters{}
@@ -253,7 +253,7 @@ func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.C
 		}
 
 		for _, item := range response.GetList() {
-			if item != nil {
+			if &item != nil {
 				applyFunc(item)
 			}
 		}

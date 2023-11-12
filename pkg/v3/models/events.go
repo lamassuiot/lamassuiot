@@ -36,4 +36,6 @@ const (
 
 	EventCreateDMSKey         EventType = "dms.create"
 	EventUpdateDMSMetadataKey EventType = "dms.update.metadata"
+	EventEnrollKey            EventType = "dms.enroll"
+	EventReEnrollKey          EventType = "dms.reenroll"
 )

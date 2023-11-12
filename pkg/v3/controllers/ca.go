@@ -88,6 +88,7 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 		CAExpiration:       requestBody.CAExpiration,
 		IssuanceExpiration: requestBody.IssuanceExpiration,
 		EngineID:           requestBody.EngineID,
+		Metadata:           requestBody.Metadata,
 	})
 	if err != nil {
 		switch err {
@@ -260,16 +261,15 @@ func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 		return
 	}
 
-	cas := []*models.CACertificate{}
+	cas := []models.CACertificate{}
 
 	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCAsByCommonName(funCtx, services.GetCAsByCommonNameInput{
 		CommonName:      params.CommonName,
 		QueryParameters: queryParams,
 		ExhaustiveRun:   false,
-		ApplyFunc: func(ca *models.CACertificate) {
-			derefCA := *ca
-			cas = append(cas, &derefCA)
+		ApplyFunc: func(ca models.CACertificate) {
+			cas = append(cas, ca)
 		},
 	})
 
@@ -290,36 +290,6 @@ func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 	})
 }
 
-func (r *caHttpRoutes) GetCABySerialNumber(ctx *gin.Context) {
-	type uriParams struct {
-		SerialNumber string `uri:"sn" binding:"required"`
-	}
-
-	var params uriParams
-	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
-	ca, err := r.svc.GetCABySerialNumber(funCtx, services.GetCABySerialNumberInput{
-		SerialNumber: params.SerialNumber,
-	})
-
-	if err != nil {
-		switch err {
-		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
-		return
-	}
-
-	ctx.JSON(200, ca)
-}
-
 // @Summary Get All CAs
 // @Description Get All CAs
 // @Accept json
@@ -331,15 +301,14 @@ func (r *caHttpRoutes) GetCABySerialNumber(ctx *gin.Context) {
 func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, caFiltrableFieldMap)
 
-	cas := []*models.CACertificate{}
+	cas := []models.CACertificate{}
 
 	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCAs(funCtx, services.GetCAsInput{
 		QueryParameters: queryParams,
 		ExhaustiveRun:   false,
-		ApplyFunc: func(ca *models.CACertificate) {
-			derefCA := *ca
-			cas = append(cas, &derefCA)
+		ApplyFunc: func(ca models.CACertificate) {
+			cas = append(cas, ca)
 		},
 	})
 
@@ -541,16 +510,15 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, certificateFiltrableFieldMap)
 
-	certs := []*models.Certificate{}
+	certs := []models.Certificate{}
 
 	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCertificates(funCtx, services.GetCertificatesInput{
 		ListInput: services.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
-			ApplyFunc: func(cert *models.Certificate) {
-				derefCert := *cert
-				certs = append(certs, &derefCert)
+			ApplyFunc: func(cert models.Certificate) {
+				certs = append(certs, cert)
 			},
 		},
 	})
@@ -581,7 +549,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 
 	queryParams := FilterQuery(ctx.Request, certificateFiltrableFieldMap)
 
-	certs := []*models.Certificate{}
+	certs := []models.Certificate{}
 
 	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCertificatesByExpirationDate(funCtx, services.GetCertificatesByExpirationDateInput{
@@ -590,9 +558,8 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 		ListInput: services.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
-			ApplyFunc: func(cert *models.Certificate) {
-				derefCert := *cert
-				certs = append(certs, &derefCert)
+			ApplyFunc: func(cert models.Certificate) {
+				certs = append(certs, cert)
 			},
 		},
 	})
@@ -637,7 +604,7 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 		return
 	}
 
-	certs := []*models.Certificate{}
+	certs := []models.Certificate{}
 
 	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCertificatesByCA(funCtx, services.GetCertificatesByCAInput{
@@ -645,9 +612,8 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 		ListInput: services.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
-			ApplyFunc: func(cert *models.Certificate) {
-				derefCert := *cert
-				certs = append(certs, &derefCert)
+			ApplyFunc: func(cert models.Certificate) {
+				certs = append(certs, cert)
 			},
 		},
 	})
@@ -838,7 +804,7 @@ func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 		return
 	}
 
-	certs := []*models.Certificate{}
+	certs := []models.Certificate{}
 
 	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCertificatesByCaAndStatus(funCtx, services.GetCertificatesByCaAndStatusInput{
@@ -847,9 +813,8 @@ func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 		ListInput: services.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
-			ApplyFunc: func(cert *models.Certificate) {
-				derefCert := *cert
-				certs = append(certs, &derefCert)
+			ApplyFunc: func(cert models.Certificate) {
+				certs = append(certs, cert)
 			},
 		},
 	})
@@ -890,7 +855,7 @@ func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
 		return
 	}
 
-	certs := []*models.Certificate{}
+	certs := []models.Certificate{}
 
 	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCertificatesByStatus(funCtx, services.GetCertificatesByStatusInput{
@@ -898,9 +863,8 @@ func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
 		ListInput: services.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
-			ApplyFunc: func(cert *models.Certificate) {
-				derefCert := *cert
-				certs = append(certs, &derefCert)
+			ApplyFunc: func(cert models.Certificate) {
+				certs = append(certs, cert)
 			},
 		},
 	})

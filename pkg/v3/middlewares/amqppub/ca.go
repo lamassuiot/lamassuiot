@@ -61,10 +61,6 @@ func (mw amqpCAEventPublisher) GetCAsByCommonName(ctx context.Context, input ser
 	return mw.next.GetCAsByCommonName(ctx, input)
 }
 
-func (mw amqpCAEventPublisher) GetCABySerialNumber(ctx context.Context, input services.GetCABySerialNumberInput) (*models.CACertificate, error) {
-	return mw.next.GetCABySerialNumber(ctx, input)
-}
-
 func (mw amqpCAEventPublisher) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (output *models.CACertificate, err error) {
 	prev, err := mw.GetCAByID(ctx, services.GetCAByIDInput{
 		CAID: input.CAID,

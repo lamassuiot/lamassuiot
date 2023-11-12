@@ -26,6 +26,10 @@ func NewDMSAmqpEventPublisher(amqpPublisher *messaging.AMQPSetup) services.DMSMa
 	}
 }
 
+func (mw amqpEventPublisher) GetDMSStats(ctx context.Context, input services.GetDMSStatsInput) (*models.DMSStats, error) {
+	return mw.next.GetDMSStats(ctx, input)
+}
+
 func (mw amqpEventPublisher) CreateDMS(ctx context.Context, input services.CreateDMSInput) (output *models.DMS, err error) {
 	defer func() {
 		if err == nil {
@@ -65,11 +69,24 @@ func (mw amqpEventPublisher) CACerts(aps string) ([]*x509.Certificate, error) {
 	return mw.next.CACerts(aps)
 }
 
-func (mw amqpEventPublisher) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+func (mw amqpEventPublisher) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (out *x509.Certificate, err error) {
+	defer func() {
+		if err == nil {
+			mw.eventPublisher.PublishCloudEvent(ctx, models.EventEnrollKey, models.EnrollEvent{
+				Certificate: (*models.X509Certificate)(out),
+				APS:         aps,
+			})
+		}
+	}()
 	return mw.next.Enroll(ctx, csr, aps)
 }
 
-func (mw amqpEventPublisher) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+func (mw amqpEventPublisher) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (out *x509.Certificate, err error) {
+	defer func() {
+		if err == nil {
+			mw.eventPublisher.PublishCloudEvent(ctx, models.EventReEnrollKey, out)
+		}
+	}()
 	return mw.next.Reenroll(ctx, csr, aps)
 }
 

@@ -19,7 +19,7 @@ type SlotStatus string
 
 const (
 	SlotActive             SlotStatus = "ACTIVE"
-	SlotWarnExpiration     SlotStatus = "WARN"
+	SlotWarnExpiration     SlotStatus = "WARN" //PreventiveEnroll
 	SlotCriticalExpiration SlotStatus = "CRITICAL"
 	SlotExpired            SlotStatus = "EXPIRED"
 	SlotRevoke             SlotStatus = "REVOKED"
@@ -60,4 +60,9 @@ const (
 type LogMsg struct {
 	Message     string      `json:"message"`
 	Criticality Criticality `json:"Criticality"`
+}
+
+type DevicesStats struct {
+	TotalDevices  int                  `json:"total"`
+	DevicesStatus map[DeviceStatus]int `json:"status_distribution"`
 }

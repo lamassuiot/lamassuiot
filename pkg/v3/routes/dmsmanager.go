@@ -14,6 +14,7 @@ func NewDMSManagerHTTPLayer(logger *logrus.Entry, httpGrp *gin.RouterGroup, svc 
 
 	rv1 := httpGrp.Group("/v1")
 
+	rv1.GET("/stats", routes.GetStats)
 	rv1.GET("/dms", routes.GetAllDMSs)
 	rv1.POST("/dms", routes.CreateDMS)
 	rv1.GET("/dms/:id", routes.GetDMSByID)

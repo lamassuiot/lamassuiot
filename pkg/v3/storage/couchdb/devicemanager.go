@@ -2,6 +2,7 @@ package couchdb
 
 import (
 	"context"
+	"fmt"
 
 	_ "github.com/go-kivik/couchdb/v4" // The CouchDB driver
 	kivik "github.com/go-kivik/kivik/v4"
@@ -36,8 +37,11 @@ func NewCouchDeviceRepository(client *kivik.Client) (storage.DeviceManagerRepo, 
 func (db *CouchDBDeviceStorage) Count(ctx context.Context) (int, error) {
 	return db.querier.Count()
 }
+func (db *CouchDBDeviceStorage) CountByStatus(ctx context.Context, status models.DeviceStatus) (int, error) {
+	return -1, fmt.Errorf("TODO")
+}
 
-func (db *CouchDBDeviceStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBDeviceStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	return db.querier.SelectAll(queryParams, &extraOpts, exhaustiveRun, applyFunc)
 }
 
@@ -45,7 +49,7 @@ func (db *CouchDBDeviceStorage) SelectExists(ctx context.Context, ID string) (bo
 	return db.querier.SelectExists(ID)
 }
 
-func (db *CouchDBDeviceStorage) SelectByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(*models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBDeviceStorage) SelectByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
 			"dms_owner": map[string]string{

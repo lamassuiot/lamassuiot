@@ -8,10 +8,10 @@ import (
 )
 
 type SubscriptionsRepository interface {
-	GetSubscriptions(ctx context.Context, userID string, exhaustiveRun bool, applyFunc func(*models.Subscription), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
+	GetSubscriptions(ctx context.Context, userID string, exhaustiveRun bool, applyFunc func(models.Subscription), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
 	Subscribe(ctx context.Context, sub *models.Subscription) (*models.Subscription, error)
 	Unsubscribe(ctx context.Context, subscriptionID string) error
-	GetSubscriptionsByEventType(ctx context.Context, eventType string, exhaustiveRun bool, applyFunc func(*models.Subscription), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
+	GetSubscriptionsByEventType(ctx context.Context, eventType string, exhaustiveRun bool, applyFunc func(models.Subscription), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
 }
 
 type EventRepository interface {

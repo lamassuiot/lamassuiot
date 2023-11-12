@@ -43,17 +43,42 @@ rqXRfboQnoZsG4q5WTP468SQvvG5
 
 func main() {
 	caDur := models.TimeDuration(time.Hour * 25)
-	caIss := models.TimeDuration(time.Hour * 10)
+	caIss := models.TimeDuration(time.Minute * 3)
 	caClient := clients.NewHttpCAClient(http.DefaultClient, "http://localhost:8443/api/ca")
 	testEnrollmentCA, err := caClient.CreateCA(context.Background(), services.CreateCAInput{
 		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-		Subject:            models.Subject{CommonName: "TestEnrollmentCA"},
+		Subject:            models.Subject{CommonName: "ShortTTLV2"},
 		CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDur},
 		IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
+		Metadata: map[string]any{
+			"lamassu.io/iot/aws.954121426360": models.IoTAWSCAMetadata{
+				Register: true,
+			},
+		},
 	})
 	chk(err)
 
-	fmt.Println(testEnrollmentCA.ID)
+	childCALvl1, err := caClient.CreateCA(context.Background(), services.CreateCAInput{
+		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+		Subject:            models.Subject{CommonName: "CA Lvl 1"},
+		CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDur},
+		IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
+		ParentID:           testEnrollmentCA.ID,
+		// EngineID:           "dockertest-localstack-smngr",
+	})
+	chk(err)
+
+	childCALvl2, err := caClient.CreateCA(context.Background(), services.CreateCAInput{
+		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+		Subject:            models.Subject{CommonName: "CA Lvl 2"},
+		CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDur},
+		IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
+		ParentID:           childCALvl1.ID,
+		// EngineID:           "dockertest-localstack-smngr",
+	})
+	chk(err)
+
+	fmt.Println(childCALvl2.ID)
 
 	testBootCA, err := caClient.CreateCA(context.Background(), services.CreateCAInput{
 		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
@@ -68,29 +93,27 @@ func main() {
 		ID:   fmt.Sprintf("my-dms-%d", time.Now().Unix()),
 		Name: "My DMS",
 		Metadata: map[string]any{
-			"lamassu.io/iot/aws.123456789": models.IotAWSDMSMetadata{
+			"lamassu.io/iot/aws.954121426360": models.IotAWSDMSMetadata{
+				RegistrationMode: models.AutomaticAWSIoTRegistrationMode,
 				JITPProvisioningTemplate: struct {
-					ARN                 string              "json:\"arn,omitempty\""
-					AWSCACertificateId  string              "json:\"aws_ca_id,omitempty\""
-					ProvisioningRoleArn string              "json:\"provisioning_role_arn\""
-					EnableTemplate      bool                "json:\"enable_template\""
-					JITPGroupNames      []string            "json:\"jitp_group_names,omitempty\""
-					JITPPolicies        []models.JITPPolicy "json:\"jitp_policies,omitempty\""
+					ARN                 string "json:\"arn,omitempty\""
+					AWSCACertificateId  string "json:\"aws_ca_id,omitempty\""
+					ProvisioningRoleArn string "json:\"provisioning_role_arn\""
+					EnableTemplate      bool   "json:\"enable_template\""
 				}{
 					ProvisioningRoleArn: "",
-					EnableTemplate:      true,
-					JITPGroupNames:      []string{"TEST-LMS"},
-					JITPPolicies: []models.JITPPolicy{
-						models.JITPPolicy{PolicyName: "my-p", PolicyDocument: p},
-					},
-					AWSCACertificateId: "",
+					EnableTemplate:      false,
+				},
+				GroupNames: []string{"TEST-LMS"},
+				Policies: []models.AWSIoTPolicy{
+					models.AWSIoTPolicy{PolicyName: "my-p", PolicyDocument: p},
 				},
 				ShadowConfig: struct {
 					Enable     bool   "json:\"enable\""
 					ShadowName string "json:\"shadow_name,omitempty\""
 				}{
 					Enable:     true,
-					ShadowName: "lms-id",
+					ShadowName: "",
 				},
 			},
 		},
@@ -118,8 +141,8 @@ func main() {
 				AdditionalValidationCAs:     []string{},
 				ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 				EnableExpiredRenewal:        true,
-				PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 40),
-				CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 30),
+				PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 2),
+				CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 1),
 			},
 			CADistributionSettings: models.CADistributionSettings{
 				IncludeLamassuSystemCA: true,
@@ -135,7 +158,7 @@ func main() {
 	bootKey, err := helpers.GenerateRSAKey(2048)
 	chk(err)
 
-	deviceCsr, err := helpers.GenerateCertificateRequest(models.Subject{CommonName: "device-1"}, bootKey)
+	deviceCsr, err := helpers.GenerateCertificateRequest(models.Subject{CommonName: "device-3"}, bootKey)
 	chk(err)
 
 	sigedCrt, err := caClient.SignCertificate(context.Background(), services.SignCertificateInput{
@@ -166,12 +189,35 @@ func main() {
 		},
 	}
 
+	time.Sleep(time.Second * 3)
+
+	fmt.Println("first enroll")
 	crt, err := estCli.Enroll(context.Background(), deviceCsr)
+	chk(err)
+
+	time.Sleep(time.Second * 3)
+	fmt.Println("second enroll")
+	crt, err = estCli.Enroll(context.Background(), deviceCsr)
 	chk(err)
 
 	fmt.Println(crt.SerialNumber)
 	fmt.Println(crt.Subject.CommonName)
 	fmt.Println(crt.Issuer.CommonName)
+
+	urlEncodedCrt = url.QueryEscape(string(helpers.CertificateToPEM(crt)))
+	estCli.AdditionalHeaders = map[string]string{
+		"x-forwarded-client-cert": fmt.Sprintf("Cert=%s", urlEncodedCrt),
+	}
+
+	fmt.Println("first ReEnroll")
+	crt, err = estCli.Reenroll(context.Background(), deviceCsr)
+	chk(err)
+
+	time.Sleep(time.Second * 3)
+
+	fmt.Println("second ReEnroll")
+	crt, err = estCli.Reenroll(context.Background(), deviceCsr)
+	chk(err)
 
 	keystr, err := helpers.PrivateKeyToPEM(bootKey)
 	chk(err)
@@ -183,7 +229,7 @@ func main() {
 	err = os.WriteFile("aws.crt", []byte(awsIotCA), 0644)
 	chk(err)
 
-	time.Sleep(time.Second * 30)
+	time.Sleep(time.Second * 3)
 
 	thing, err := device.NewThing(
 		device.KeyPair{

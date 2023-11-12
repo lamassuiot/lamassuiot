@@ -23,6 +23,15 @@ func NewHttpDeviceManagerClient(client *http.Client, url string) services.Device
 	}
 }
 
+func (cli *deviceManagerClient) GetDevicesStats(input services.GetDevicesStatsInput) (*models.DevicesStats, error) {
+	response, err := Get[models.DevicesStats](context.Background(), cli.httpClient, cli.baseUrl+"/v1/stats", nil, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
 func (cli *deviceManagerClient) CreateDevice(input services.CreateDeviceInput) (*models.Device, error) {
 	response, err := Post[*models.Device](context.Background(), cli.httpClient, cli.baseUrl+"/v1/devices", resources.CreateDeviceBody{
 		ID:        input.ID,
@@ -55,7 +64,7 @@ func (cli *deviceManagerClient) GetDevices(input services.GetDevicesInput) (stri
 	url := cli.baseUrl + "/v1/devices"
 
 	if input.ExhaustiveRun {
-		err := IterGet[models.Device, *resources.GetDevicesResponse](context.Background(), cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
+		err := IterGet[models.Device, resources.GetDevicesResponse](context.Background(), cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
 		return "", err
 	} else {
 		resp, err := Get[resources.GetDevicesResponse](context.Background(), cli.httpClient, url, input.QueryParameters, map[int][]error{})

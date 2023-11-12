@@ -49,14 +49,23 @@ type IoTAWSCAMetadata struct {
 	IotCoreMQTTEndpoint string `json:"mqtt_endpoint"`
 }
 
+type AWSIoTRegistrationMode string
+
+const (
+	NoneAWSIoTRegistrationMode      = "none"
+	JitpAWSIoTRegistrationMode      = "jitp"
+	AutomaticAWSIoTRegistrationMode = "auto"
+)
+
 type IotAWSDMSMetadata struct {
+	RegistrationMode         AWSIoTRegistrationMode `json:"registration_mode"`
+	GroupNames               []string               `json:"groups,omitempty"`
+	Policies                 []AWSIoTPolicy         `json:"policies,omitempty"`
 	JITPProvisioningTemplate struct {
-		ARN                 string       `json:"arn,omitempty"`
-		AWSCACertificateId  string       `json:"aws_ca_id,omitempty"`
-		ProvisioningRoleArn string       `json:"provisioning_role_arn"`
-		EnableTemplate      bool         `json:"enable_template"`
-		JITPGroupNames      []string     `json:"jitp_group_names,omitempty"`
-		JITPPolicies        []JITPPolicy `json:"jitp_policies,omitempty"`
+		ARN                 string `json:"arn,omitempty"`
+		AWSCACertificateId  string `json:"aws_ca_id,omitempty"`
+		ProvisioningRoleArn string `json:"provisioning_role_arn"`
+		EnableTemplate      bool   `json:"enable_template"`
 	} `json:"jitp_config,omitempty"`
 	ShadowConfig struct {
 		Enable     bool   `json:"enable"`
@@ -64,7 +73,7 @@ type IotAWSDMSMetadata struct {
 	} `json:"shadow_config,omitempty"`
 }
 
-type JITPPolicy struct {
+type AWSIoTPolicy struct {
 	PolicyName     string `json:"policy_name"`
 	PolicyDocument string `json:"policy_document"`
 }

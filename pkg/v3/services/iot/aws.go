@@ -3,6 +3,7 @@ package iot
 import (
 	"bytes"
 	"context"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -17,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iot"
 	"github.com/aws/aws-sdk-go-v2/service/iot/types"
 	"github.com/aws/aws-sdk-go-v2/service/iotdataplane"
+	iotdataplaneTypes "github.com/aws/aws-sdk-go-v2/service/iotdataplane/types"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
@@ -47,6 +49,12 @@ type AWSCloudConnectorBuilder struct {
 }
 
 type shadowMsg struct {
+	State     shadowState `json:"state"`
+	Timestamp int         `json:"timestamp"`
+	Version   int         `json:"version"`
+}
+
+type shadowState struct {
 	Reported map[string]any `json:"reported"`
 	Desired  map[string]any `json:"desired"`
 }
@@ -121,6 +129,158 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (*AWSC
 	}, nil
 }
 
+type RegisterAndAttachThingInput struct {
+	DeviceID               string
+	EnrollmentEvent        models.EnrollEvent
+	DMSIoTAutomationConfig models.IotAWSDMSMetadata
+}
+
+func (svc *AWSCloudConnectorService) RegisterAndAttachThing(input RegisterAndAttachThingInput) error {
+	err := svc.RegisterUpdatePolicies(context.Background(), RegisterUpdatePoliciesInput{
+		Policies: input.DMSIoTAutomationConfig.Policies,
+	})
+	if err != nil {
+		logrus.Errorf("could not register/update policies: %s", err)
+		return err
+	}
+
+	err = svc.RegisterGroups(context.Background(), RegisterGroupsInput{
+		Groups: input.DMSIoTAutomationConfig.GroupNames,
+	})
+	if err != nil {
+		logrus.Errorf("could not register groups: %s", err)
+		return err
+	}
+
+	_, err = svc.iotSDK.DescribeThing(context.Background(), &iot.DescribeThingInput{
+		ThingName: &input.DeviceID,
+	})
+	if err == nil {
+		//thing was registered, revoke all other attached certs
+		paginator := iot.NewListThingPrincipalsPaginator(&svc.iotSDK, &iot.ListThingPrincipalsInput{
+			ThingName: &input.DeviceID,
+		}, func(ltppo *iot.ListThingPrincipalsPaginatorOptions) {
+			ltppo.Limit = 15
+		})
+		pageNum := 0
+		for paginator.HasMorePages() {
+			output, err := paginator.NextPage(context.TODO())
+			if err != nil {
+				logrus.Warnf("error while iterating principals for thing %s: %s", input.DeviceID, err)
+			}
+
+			for _, value := range output.Principals {
+				//value is an ARN like arn:aws:iot:eu-west-1:XXXXXXX:cert/ea8d99d4fdc37f9a6109614e46183015887cf7366db1bc2b3d62786e5ea0232c
+				//get cerID only
+
+				certIDSplit := strings.Split(value, "/")
+				_, err = svc.iotSDK.UpdateCertificate(context.Background(), &iot.UpdateCertificateInput{
+					CertificateId: aws.String(certIDSplit[1]),
+					NewStatus:     types.CertificateStatusRevoked,
+				})
+				if err != nil {
+					logrus.Warnf("error while revoking AWS certificate-principal %s for thing %s: %s", value, input.DeviceID, err)
+				}
+
+			}
+			pageNum++
+		}
+
+	}
+
+	template := map[string]any{
+		"Parameters": map[string]any{
+			"ThingName": map[string]any{
+				"Type": "String",
+			},
+			"SerialNumber": map[string]any{
+				"Type": "String",
+			},
+			"DMS": map[string]any{
+				"Type": "String",
+			},
+			"LamassuCertificate": map[string]any{
+				"Type": "String",
+			},
+			"LamassuCACertificatePem": map[string]any{
+				"Type": "String",
+			},
+		},
+		"Resources": map[string]any{
+			"thing": map[string]any{
+				"Type": "AWS::IoT::Thing",
+				"Properties": map[string]any{
+					"ThingName": map[string]any{
+						"Ref": "ThingName",
+					},
+					"AttributePayload": map[string]any{},
+					"ThingGroups":      input.DMSIoTAutomationConfig.GroupNames,
+				},
+				"OverrideSettings": map[string]any{
+					"AttributePayload": "REPLACE",
+					"ThingTypeName":    "REPLACE",
+					"ThingGroups":      "REPLACE",
+				},
+			},
+			"certificate": map[string]any{
+				"Type": "AWS::IoT::Certificate",
+				"Properties": map[string]any{
+					"CACertificatePem": map[string]any{
+						"Ref": "LamassuCACertificatePem",
+					},
+					"CertificatePem": map[string]any{
+						"Ref": "LamassuCertificate",
+					},
+				},
+			},
+		},
+	}
+
+	resources := template["Resources"].(map[string]any)
+	for _, policy := range input.DMSIoTAutomationConfig.Policies {
+		resources[policy.PolicyName] = map[string]any{
+			"Type": "AWS::IoT::Policy",
+			"Properties": map[string]any{
+				"PolicyName": policy.PolicyName,
+			},
+		}
+	}
+
+	aki := input.EnrollmentEvent.Certificate.AuthorityKeyId
+	ca, err := svc.CaSDK.GetCAByID(context.Background(), services.GetCAByIDInput{
+		CAID: string(aki),
+	})
+	if err != nil {
+		logrus.Errorf("could not get CA using AKI %s for device %s: Skipping: %s", string(aki), input.DeviceID, err)
+		return err
+	}
+
+	params := map[string]string{
+		"ThingName":               input.DeviceID,
+		"SerialNumber":            helpers.SerialNumberToString(input.EnrollmentEvent.Certificate.SerialNumber),
+		"DMS":                     input.EnrollmentEvent.APS,
+		"LamassuCertificate":      helpers.CertificateToPEM((*x509.Certificate)(input.EnrollmentEvent.Certificate)),
+		"LamassuCACertificatePem": helpers.CertificateToPEM((*x509.Certificate)(ca.Certificate.Certificate)),
+	}
+
+	templateB, err := json.Marshal(template)
+	if err != nil {
+		logrus.Errorf("could not serialize template %s", err)
+		return err
+	}
+
+	_, err = svc.iotSDK.RegisterThing(context.Background(), &iot.RegisterThingInput{
+		TemplateBody: aws.String(string(templateB)),
+		Parameters:   params,
+	})
+	if err != nil {
+		logrus.Errorf("could not register thing: %s", err)
+		return err
+	}
+
+	return nil
+}
+
 type UpdateDeviceShadowInput struct {
 	DeviceID               string
 	RemediationActionType  models.RemediationActionType
@@ -128,7 +288,7 @@ type UpdateDeviceShadowInput struct {
 }
 
 func (svc *AWSCloudConnectorService) UpdateDeviceShadow(input UpdateDeviceShadowInput) error {
-	if input.DMSIoTAutomationConfig.ShadowConfig.Enable {
+	if !input.DMSIoTAutomationConfig.ShadowConfig.Enable {
 		logrus.Warnf("shadow usage is not enabled for DMS associated to device %s. Skipping", input.DeviceID)
 		return nil
 	}
@@ -141,20 +301,30 @@ func (svc *AWSCloudConnectorService) UpdateDeviceShadow(input UpdateDeviceShadow
 		getShadowReq.ShadowName = &input.DMSIoTAutomationConfig.ShadowConfig.ShadowName
 	}
 
-	getShadowOutput, err := svc.iotdataplaneSDK.GetThingShadow(context.Background(), getShadowReq)
-	if err != nil {
-		return fmt.Errorf("could not get device %s shadow: %s", input.DeviceID, err)
+	deviceShadow := shadowMsg{
+		State: shadowState{
+			Reported: map[string]any{},
+			Desired:  map[string]any{},
+		},
+		Version: 0,
 	}
 
-	var deviceShadow shadowMsg
-	err = json.Unmarshal(getShadowOutput.Payload, &deviceShadow)
+	var rnf *iotdataplaneTypes.ResourceNotFoundException
+	getShadowOutput, err := svc.iotdataplaneSDK.GetThingShadow(context.Background(), getShadowReq)
 	if err != nil {
-		return fmt.Errorf("could not unmarshal device %s shadow: %s", input.DeviceID, err)
+		if !errors.As(err, &rnf) {
+			return fmt.Errorf("could not get device %s shadow: %s", input.DeviceID, err)
+		}
+	} else {
+		err = json.Unmarshal(getShadowOutput.Payload, &deviceShadow)
+		if err != nil {
+			return fmt.Errorf("could not unmarshal device %s shadow: %s", input.DeviceID, err)
+		}
 	}
 
 	idShadow := map[string]int{}
 	//check if shadow has "identity_actions" key
-	if idAction, ok := deviceShadow.Desired["identity_actions"]; ok {
+	if idAction, ok := deviceShadow.State.Desired["identity_actions"]; ok {
 		//has key. Decode and update idShadow
 		idActionBytes, err := json.Marshal(idAction)
 		if err != nil {
@@ -168,7 +338,7 @@ func (svc *AWSCloudConnectorService) UpdateDeviceShadow(input UpdateDeviceShadow
 	}
 
 	idShadow[string(input.RemediationActionType)] = int(time.Now().UnixMilli())
-	deviceShadow.Desired["identity_actions"] = idShadow
+	deviceShadow.State.Desired["identity_actions"] = idShadow
 
 	deviceShadowBytes, err := json.Marshal(deviceShadow)
 	if err != nil {
@@ -191,7 +361,13 @@ func (svc *AWSCloudConnectorService) UpdateDeviceShadow(input UpdateDeviceShadow
 		return err
 	}
 
-	logrus.Infof("updated shadow for device with %s", input.DeviceID)
+	actions := []string{}
+
+	for key, _ := range idShadow {
+		actions = append(actions, key)
+	}
+
+	logrus.Infof("updated shadow for device %s with remediation actions '%s'", input.DeviceID, strings.Join(actions, ","))
 
 	return nil
 }
@@ -242,9 +418,9 @@ func (svc *AWSCloudConnectorService) GetRegisteredCAs(context.Context) ([]*model
 				lFunc.Debugf("No marker")
 				continueIter = false
 			}
-			lmsCA, err := svc.CaSDK.GetCABySerialNumber(context.Background(), services.GetCABySerialNumberInput{SerialNumber: helpers.SerialNumberToString(descCrt.SerialNumber)})
+			lmsCA, err := svc.CaSDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: string(descCrt.SubjectKeyId)})
 			if err != nil {
-				lFunc.Warnf("skipping CA with ID '%s' which has SN '%s'. Could not get CA from CA service: %s", *caMeta.CertificateId, helpers.SerialNumberToString(descCrt.SerialNumber), err)
+				lFunc.Warnf("skipping CA with ID AWS '%s' - LAMASSU '%s'. Could not get CA from CA service: %s", *caMeta.CertificateId, string(descCrt.SubjectKeyId), err)
 				continue
 			}
 			lmsCAs++
@@ -350,6 +526,8 @@ func (svc *AWSCloudConnectorService) RegisterCA(ctx context.Context, input Regis
 				Value: &input.Subject.CommonName,
 			},
 		},
+		SetAsActive:           true,
+		AllowAutoRegistration: true,
 	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while registering CA certificate in AWS IoT: %s", err)
@@ -379,17 +557,43 @@ func (svc *AWSCloudConnectorService) RegisterCA(ctx context.Context, input Regis
 	return ca, nil
 }
 
-type RegisterUpdateJITPProvisionerInput struct {
-	DMS           *models.DMS
-	AwsJITPConfig models.IotAWSDMSMetadata
+type RegisterGroupsInput struct {
+	Groups []string
 }
 
-func (svc *AWSCloudConnectorService) RegisterUpdateJITPProvisioner(ctx context.Context, input RegisterUpdateJITPProvisionerInput) error {
-	lFunc := svc.logger
+func (svc *AWSCloudConnectorService) RegisterGroups(ctx context.Context, input RegisterGroupsInput) error {
+	var rae *types.ResourceAlreadyExistsException
+	_, err := svc.iotSDK.CreateThingGroup(ctx, &iot.CreateThingGroupInput{
+		ThingGroupName: aws.String("LAMASSU"),
+	})
+	if err != nil {
+		if !errors.As(err, &rae) {
+			return err
+		}
+	}
 
-	policies := []string{}
-	for _, policy := range input.AwsJITPConfig.JITPProvisioningTemplate.JITPPolicies {
-		policies = append(policies, policy.PolicyName)
+	for _, grp := range input.Groups {
+		_, err = svc.iotSDK.CreateThingGroup(ctx, &iot.CreateThingGroupInput{
+			ThingGroupName:  &grp,
+			ParentGroupName: aws.String("LAMASSU"),
+		})
+		if err != nil {
+			if !errors.As(err, &rae) {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+type RegisterUpdatePoliciesInput struct {
+	Policies []models.AWSIoTPolicy
+}
+
+func (svc *AWSCloudConnectorService) RegisterUpdatePolicies(ctx context.Context, input RegisterUpdatePoliciesInput) error {
+	lFunc := svc.logger
+	for _, policy := range input.Policies {
 		iotPolicy, err := svc.iotSDK.GetPolicy(ctx, &iot.GetPolicyInput{
 			PolicyName: &policy.PolicyName,
 		})
@@ -448,7 +652,39 @@ func (svc *AWSCloudConnectorService) RegisterUpdateJITPProvisioner(ctx context.C
 		}
 	}
 
-	templateBody, err := jitpTemplateBuilder(input.AwsJITPConfig.JITPProvisioningTemplate.JITPGroupNames, policies)
+	return nil
+}
+
+type RegisterUpdateJITPProvisionerInput struct {
+	DMS           *models.DMS
+	AwsJITPConfig models.IotAWSDMSMetadata
+}
+
+func (svc *AWSCloudConnectorService) RegisterUpdateJITPProvisioner(ctx context.Context, input RegisterUpdateJITPProvisionerInput) error {
+	lFunc := svc.logger
+
+	err := svc.RegisterGroups(ctx, RegisterGroupsInput{
+		Groups: input.AwsJITPConfig.GroupNames,
+	})
+	if err != nil {
+		logrus.Errorf("could not register groups: %s", err)
+		return err
+	}
+
+	policies := []string{}
+	for _, policy := range input.AwsJITPConfig.Policies {
+		policies = append(policies, policy.PolicyName)
+	}
+
+	err = svc.RegisterUpdatePolicies(context.Background(), RegisterUpdatePoliciesInput{
+		Policies: input.AwsJITPConfig.Policies,
+	})
+	if err != nil {
+		logrus.Errorf("could not register/update policies: %s", err)
+		return err
+	}
+
+	templateBody, err := jitpTemplateBuilder(input.AwsJITPConfig.GroupNames, policies)
 	if err != nil {
 		lFunc.Errorf("got error while generating JITP Template: %s", err)
 		return err
@@ -514,90 +750,70 @@ func (svc *AWSCloudConnectorService) RegisterUpdateJITPProvisioner(ctx context.C
 }
 
 func jitpTemplateBuilder(thingGroups []string, policyNames []string) (string, error) {
-	policiesSection := []string{}
-	for _, policyName := range policyNames {
-		policy := `"` + policyName + `":{
-			"Type":"AWS::IoT::Policy",
-			"Properties":{
-			   "PolicyName":"` + policyName + `"
-			}
-		 }`
-		policiesSection = append(policiesSection, policy)
-	}
 
-	thingGroupsStrs := []string{}
-	for _, tg := range thingGroups {
-		thingGroupsStrs = append(thingGroupsStrs, fmt.Sprintf("\"%s\"", tg))
-	}
-
-	jitpTemplate := `{
-		"Parameters":{
-			"AWS::IoT::Certificate::Country":{
-			   "Type":"String"
+	jitpTemplate := map[string]any{
+		"Parameters": map[string]any{
+			"AWS::IoT::Certificate::Country": map[string]any{
+				"Type": "String",
 			},
-			"AWS::IoT::Certificate::Organization":{
-			   "Type":"String"
+			"AWS::IoT::Certificate::Organization": map[string]any{
+				"Type": "String",
 			},
-			"AWS::IoT::Certificate::OrganizationalUnit":{
-			   "Type":"String"
+			"AWS::IoT::Certificate::OrganizationalUnit": map[string]any{
+				"Type": "String",
 			},
-		   "AWS::IoT::Certificate::DistinguishedNameQualifier":{
-			  "Type":"String"
-		   },
-		   "AWS::IoT::Certificate::StateName":{
-			  "Type":"String"
-		   },
-		   "AWS::IoT::Certificate::CommonName":{
-			  "Type":"String"
-		   },
-		   "AWS::IoT::Certificate::SerialNumber":{
-			  "Type":"String"
-		   },
-		   "AWS::IoT::Certificate::Id":{
-			  "Type":"String"
-		   }
+			"AWS::IoT::Certificate::DistinguishedNameQualifier": map[string]any{
+				"Type": "String",
+			},
+			"AWS::IoT::Certificate::StateName": map[string]any{
+				"Type": "String",
+			},
+			"AWS::IoT::Certificate::CommonName": map[string]any{
+				"Type": "String",
+			},
 		},
-		"Resources":{
-		   "thing":{
-			  "Type":"AWS::IoT::Thing",
-				"Properties":{
-				 "ThingName":{
-					"Ref":"AWS::IoT::Certificate::CommonName"
-				 },
-				 "AttributePayload":{
-					"version":"v1",
-					"serialNumber":{
-					   "Ref":"AWS::IoT::Certificate::SerialNumber"
-					}
-				 },
-				 "ThingGroups":[
-					` + strings.Join(thingGroupsStrs, ",") + `
-				 ]
-			  },
-			  "OverrideSettings":{
-				 "AttributePayload":"REPLACE",
-				 "ThingTypeName":"REPLACE",
-				 "ThingGroups":"REPLACE"
-			  }
-		   },
-		   "certificate":{
-			  "Type":"AWS::IoT::Certificate",
-			  "Properties":{
-				 "CertificateId":{
-					"Ref":"AWS::IoT::Certificate::Id"
-				 },
-				 "Status":"ACTIVE"
-			  }
-		   },
-		   ` + strings.Join(policiesSection, ",") + `
-		}
-	 }
-	 `
+		"Resources": map[string]any{
+			"thing": map[string]any{
+				"Type": "AWS::IoT::Thing",
+				"Properties": map[string]any{
+					"ThingName": map[string]any{
+						"Ref": "AWS::IoT::Certificate::CommonName",
+					},
+					"AttributePayload": map[string]any{},
+					"ThingGroups":      thingGroups,
+				},
+				"OverrideSettings": map[string]any{
+					"AttributePayload": "REPLACE",
+					"ThingTypeName":    "REPLACE",
+					"ThingGroups":      "REPLACE",
+				},
+			},
+			"certificate": map[string]any{
+				"Type": "AWS::IoT::Certificate",
+				"Properties": map[string]any{
+					"CertificateId": map[string]any{
+						"Ref": "AWS::IoT::Certificate::Id",
+					},
+					"Status": "ACTIVE",
+				},
+			},
+		},
+	}
 
-	buffer := new(bytes.Buffer)
-	err := json.Compact(buffer, []byte(jitpTemplate))
+	resources := jitpTemplate["Resources"].(map[string]any)
+	for _, policyName := range policyNames {
+		resources[policyName] = map[string]any{
+			"Type": "AWS::IoT::Policy",
+			"Properties": map[string]any{
+				"PolicyName": policyName,
+			},
+		}
+	}
+
+	b, err := json.Marshal(jitpTemplate)
 	if err != nil {
 		return "", err
 	}
-	return buffer.String(), nil
+
+	return string(b), nil
 }

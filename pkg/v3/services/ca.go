@@ -36,7 +36,6 @@ type CAService interface {
 	ImportCA(ctx context.Context, input ImportCAInput) (*models.CACertificate, error)
 	GetCAByID(ctx context.Context, input GetCAByIDInput) (*models.CACertificate, error)
 	GetCAs(ctx context.Context, input GetCAsInput) (string, error)
-	GetCABySerialNumber(ctx context.Context, input GetCABySerialNumberInput) (*models.CACertificate, error)
 	GetCAsByCommonName(ctx context.Context, input GetCAsByCommonNameInput) (string, error)
 	UpdateCAStatus(ctx context.Context, input UpdateCAStatusInput) (*models.CACertificate, error)
 	UpdateCAMetadata(ctx context.Context, input UpdateCAMetadataInput) (*models.CACertificate, error)
@@ -128,9 +127,9 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 		ctx := context.Background()
 
 		now := time.Now()
-		caScanFunc := func(ca *models.CACertificate) {
+		caScanFunc := func(ca models.CACertificate) {
 			if ca.ValidTo.Before(now) && ca.Status == models.StatusActive {
-				svc.UpdateCAStatus(ctx, UpdateCAStatusInput{
+				svc.service.UpdateCAStatus(ctx, UpdateCAStatusInput{
 					CAID:   ca.ID,
 					Status: models.StatusExpired,
 				})
@@ -148,10 +147,10 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 			ListInput: ListInput[models.Certificate]{
 				QueryParameters: nil,
 				ExhaustiveRun:   true,
-				ApplyFunc: func(cert *models.Certificate) {
+				ApplyFunc: func(cert models.Certificate) {
 					//check if should be updated to expired
 					if cert.ValidTo.Before(time.Now()) {
-						svc.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
+						svc.service.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
 							SerialNumber: cert.SerialNumber,
 							NewStatus:    models.StatusExpired,
 						})
@@ -181,6 +180,9 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 								}
 							})
 
+							newMeta := cert.Metadata
+							updated := false
+
 							for idx, additionalDelta := range orderedDeltas {
 								// fmt.Printf("Delta %s = %s\n", additionalDelta.Name, additionalDelta.Delta.String())
 								// fmt.Printf("After Sub: %s\n", cert.ValidTo.Add(-time.Duration(additionalDelta.Delta)))
@@ -189,18 +191,19 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 									if !orderedDeltas[idx].Triggered {
 										//switch 'trigger' monitoring delta to
 										orderedDeltas[idx].Triggered = true
-
-										newMeta := cert.Metadata
 										newMeta[models.CAMetadataMonitoringExpirationDeltasKey] = orderedDeltas
-
-										svc.service.UpdateCertificateMetadata(context.Background(), UpdateCertificateMetadataInput{
-											SerialNumber: cert.SerialNumber,
-											Metadata:     newMeta,
-										})
-										return
+										updated = true
 									}
 								}
 							}
+
+							if updated {
+								svc.service.UpdateCertificateMetadata(context.Background(), UpdateCertificateMetadataInput{
+									SerialNumber: cert.SerialNumber,
+									Metadata:     newMeta,
+								})
+							}
+
 						}
 					}
 				},
@@ -364,7 +367,7 @@ func (svc *CAServiceImpl) issueCA(ctx context.Context, input issueCAInput) (*iss
 		if parentEngine, ok := svc.cryptoEngines[input.ParentCA.EngineID]; ok {
 			x509ParentEngine := x509engines.NewX509Engine(parentEngine, "")
 			lFunc.Debugf("creating SUBORDINATE CA certificate.common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
-			caCert, err = x509ParentEngine.CreateSubordinateCA(input.CAID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), input.KeyMetadata, input.Subject, expiration)
+			caCert, err = x509ParentEngine.CreateSubordinateCA(input.ParentCA.ID, input.CAID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), input.KeyMetadata, input.Subject, expiration)
 			if err != nil {
 				lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
 				return nil, err
@@ -492,6 +495,7 @@ type CreateCAInput struct {
 	IssuanceExpiration models.Expiration  `validate:"required"`
 	CAExpiration       models.Expiration  `validate:"required"`
 	EngineID           string
+	Metadata           map[string]any
 }
 
 // Returned Error Codes:
@@ -505,6 +509,9 @@ type CreateCAInput struct {
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*models.CACertificate, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	if input.Metadata == nil {
+		input.Metadata = map[string]any{}
+	}
 
 	var err error
 	validate.RegisterStructValidation(createCAValidation, CreateCAInput{})
@@ -588,7 +595,7 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 
 	ca := models.CACertificate{
 		ID:                    caID,
-		Metadata:              map[string]interface{}{},
+		Metadata:              input.Metadata,
 		Type:                  models.CertificateTypeManaged,
 		IssuanceExpirationRef: input.IssuanceExpiration,
 		CreationTS:            time.Now(),
@@ -654,7 +661,7 @@ type GetCAsInput struct {
 	QueryParameters *resources.QueryParameters
 
 	ExhaustiveRun bool //wether to iter all elems
-	ApplyFunc     func(ca *models.CACertificate)
+	ApplyFunc     func(ca models.CACertificate)
 }
 
 func (svc *CAServiceImpl) GetCAs(ctx context.Context, input GetCAsInput) (string, error) {
@@ -702,7 +709,7 @@ type GetCAsByCommonNameInput struct {
 
 	QueryParameters *resources.QueryParameters
 	ExhaustiveRun   bool //wether to iter all elems
-	ApplyFunc       func(cert *models.CACertificate)
+	ApplyFunc       func(cert models.CACertificate)
 }
 
 func (svc *CAServiceImpl) GetCAsByCommonName(ctx context.Context, input GetCAsByCommonNameInput) (string, error) {
@@ -778,7 +785,7 @@ func (svc *CAServiceImpl) UpdateCAStatus(ctx context.Context, input UpdateCAStat
 	}
 
 	if input.Status == models.StatusRevoked {
-		revokeCertFunc := func(c *models.Certificate) {
+		revokeCertFunc := func(c models.Certificate) {
 			_, err := svc.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
 				SerialNumber:     c.SerialNumber,
 				NewStatus:        models.StatusRevoked,
@@ -1075,8 +1082,9 @@ func (svc *CAServiceImpl) GetCertificateBySerialNumber(ctx context.Context, inpu
 	if err != nil {
 		lFunc.Errorf("GetCertificatesBySerialNumberInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
-		lFunc.Debugf("checking if Certificate '%s' exists", input.SerialNumber)
 	}
+
+	lFunc.Debugf("checking if Certificate '%s' exists", input.SerialNumber)
 	exists, cert, err := svc.certStorage.SelectExistsBySerialNumber(ctx, input.SerialNumber)
 	if err != nil {
 		lFunc.Errorf("something went wrong while checking if Certificate '%s' exists in storage engine: %s", input.SerialNumber, err)
@@ -1088,7 +1096,6 @@ func (svc *CAServiceImpl) GetCertificateBySerialNumber(ctx context.Context, inpu
 		return nil, errs.ErrCertificateNotFound
 	}
 
-	lFunc.Errorf("read certificate %s", cert.SerialNumber)
 	return cert, nil
 }
 

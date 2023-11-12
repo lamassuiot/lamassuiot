@@ -10,6 +10,7 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/cloudevents/sdk-go/v2/event"
+	"github.com/isayme/go-amqp-reconnect/rabbitmq"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
@@ -34,7 +35,7 @@ type subscribesInfo struct {
 
 type AMQPSetup struct {
 	Exchange          string
-	Channel           *amqp.Channel
+	Channel           *rabbitmq.Channel
 	PublisherChan     chan *AmqpPublishMessage
 	Msgs              <-chan amqp.Delivery
 	subscribesInfo    []subscribesInfo
@@ -50,7 +51,8 @@ func SetupAMQPConnection(logger *logrus.Entry, config config.AMQPConnection, ser
 
 	amqpCloseChan := make(chan *amqp.Error) //error channel
 
-	var connection *amqp.Connection
+	var connection *rabbitmq.Connection
+	rabbitmq.Debug = true
 
 	amqpHandler := &AMQPSetup{
 		serviceIdentifier: serviceIdentifier,
@@ -62,38 +64,38 @@ func SetupAMQPConnection(logger *logrus.Entry, config config.AMQPConnection, ser
 
 	connection.NotifyClose(amqpCloseChan)
 
-	go func() {
-		for {
-			select { //check connection
-			case err = <-amqpCloseChan:
-				//work with error
-				if err != nil {
-					log.Errorf("disconnected from AMQP: %s", err)
-					for {
-						connection, err = amqpHandler.buildAMQPConnection(config)
+	// go func() {
+	// 	for {
+	// 		select { //check connection
+	// 		case err = <-amqpCloseChan:
+	// 			//work with error
+	// 			if err != nil {
+	// 				log.Errorf("disconnected from AMQP: %s", err)
+	// 				for {
+	// 					connection, err = amqpHandler.buildAMQPConnection(config)
 
-						if err != nil {
-							log.Errorf("failed to reconnect. Sleeping for 5 seconds: %s", err)
-							time.Sleep(5 * time.Second)
-						} else {
-							for _, subs := range amqpHandler.subscribesInfo {
-								amqpHandler.SetupAMQPEventSubscriber(subs.serviceName, subs.routingKeys)
-							}
-							amqpCloseChan = make(chan *amqp.Error)
-							connection.NotifyClose(amqpCloseChan)
-							break
-						}
-					}
-					log.Info("AMQP reconnection success")
-				}
-			}
-		}
-	}()
+	// 					if err != nil {
+	// 						log.Errorf("failed to reconnect. Sleeping for 5 seconds: %s", err)
+	// 						time.Sleep(5 * time.Second)
+	// 					} else {
+	// 						for _, subs := range amqpHandler.subscribesInfo {
+	// 							amqpHandler.SetupAMQPEventSubscriber(subs.serviceName, subs.routingKeys)
+	// 						}
+	// 						amqpCloseChan = make(chan *amqp.Error)
+	// 						connection.NotifyClose(amqpCloseChan)
+	// 						break
+	// 					}
+	// 				}
+	// 				log.Info("AMQP reconnection success")
+	// 			}
+	// 		}
+	// 	}
+	// }()
 
 	return amqpHandler, nil
 }
 
-func (aPub *AMQPSetup) buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Connection, error) {
+func (aPub *AMQPSetup) buildAMQPConnection(cfg config.AMQPConnection) (*rabbitmq.Connection, error) {
 	aPub.Exchange = cfg.Exchange
 	userPassUrlPrefix := ""
 	if cfg.BasicAuth.Enabled {
@@ -123,7 +125,8 @@ func (aPub *AMQPSetup) buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Con
 
 	amqpURL := fmt.Sprintf("%s://%s%s:%d", cfg.Protocol, userPassUrlPrefix, cfg.Hostname, cfg.Port)
 	log.Debugf("AMQP Broker URL: %s", amqpURL)
-	amqpConn, err := amqp.DialTLS(amqpURL, &amqpTlsConfig)
+	// amqpConn, err := rabbitmq.Dial(amqpURL, &amqpTlsConfig)
+	amqpConn, err := rabbitmq.Dial(amqpURL)
 	if err != nil {
 		log.Errorf("failed to connect to AMQP broker: %s", err)
 		return nil, err

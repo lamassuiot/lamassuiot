@@ -46,18 +46,18 @@ func (db *CouchDBCAStorage) CountByStatus(ctx context.Context, status models.Cer
 	return -1, fmt.Errorf("TODO")
 }
 
-func (db *CouchDBCAStorage) SelectByType(ctx context.Context, CAType models.CertificateType, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCAStorage) SelectByType(ctx context.Context, CAType models.CertificateType, exhaustiveRun bool, applyFunc func(models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := map[string]interface{}{
 		"type": CAType,
 	}
 	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
-func (db *CouchDBCAStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCAStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	return db.querier.SelectAll(queryParams, &extraOpts, exhaustiveRun, applyFunc)
 }
 
-func (db *CouchDBCAStorage) SelectByCommonName(ctx context.Context, commonName string, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCAStorage) SelectByCommonName(ctx context.Context, commonName string, exhaustiveRun bool, applyFunc func(models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
 			"subject.common_name": map[string]string{
@@ -82,8 +82,8 @@ func (db *CouchDBCAStorage) SelectExistsBySerialNumber(ctx context.Context, seri
 	}
 
 	var ca *models.CACertificate
-	_, err := db.querier.SelectAll(&resources.QueryParameters{}, &opts, true, func(elem *models.CACertificate) {
-		ca = elem
+	_, err := db.querier.SelectAll(&resources.QueryParameters{}, &opts, true, func(elem models.CACertificate) {
+		ca = &elem
 	})
 
 	if err != nil {

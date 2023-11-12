@@ -44,18 +44,18 @@ func (db *PostgresCAStore) CountByStatus(ctx context.Context, status models.Cert
 	})
 }
 
-func (db *PostgresCAStore) SelectByType(ctx context.Context, CAType models.CertificateType, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *PostgresCAStore) SelectByType(ctx context.Context, CAType models.CertificateType, exhaustiveRun bool, applyFunc func(models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := []gormWhereParams{
 		{query: "ca_meta_type = ?", extraArgs: []any{CAType}},
 	}
 	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
 }
 
-func (db *PostgresCAStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *PostgresCAStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	return db.querier.SelectAll(queryParams, []gormWhereParams{}, exhaustiveRun, applyFunc)
 }
 
-func (db *PostgresCAStore) SelectByCommonName(ctx context.Context, commonName string, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *PostgresCAStore) SelectByCommonName(ctx context.Context, commonName string, exhaustiveRun bool, applyFunc func(models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	return db.querier.SelectAll(queryParams, []gormWhereParams{
 		{query: "subject_common_name = ? ", extraArgs: []any{commonName}},
 	}, exhaustiveRun, applyFunc)

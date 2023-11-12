@@ -23,6 +23,7 @@ require (
 	github.com/haritzsaiz/est v0.0.0-20231109210631-9e5acef209b1
 	github.com/haritzsaiz/gin-dump v0.2.0
 	github.com/hashicorp/vault/api v1.9.2
+	github.com/isayme/go-amqp-reconnect v0.0.0-20210303120416-fc811b0bcda2
 	github.com/jakehl/goid v1.1.0
 	github.com/kuzemkon/aws-iot-device-sdk-go v0.0.0-20200313144654-1a36b3aacf19
 	github.com/miekg/pkcs11 v1.1.1

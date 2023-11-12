@@ -59,7 +59,7 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 			case amqpMessage := <-amqpSetup.Msgs:
 				event, err := messaging.ParseCloudEvent(amqpMessage.Body)
 				if err != nil {
-					logrus.Errorf("Something went wrong: %s", err)
+					logrus.Errorf("Something went wrong while processing cloud event: %s", err)
 					continue
 				}
 
@@ -85,6 +85,47 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 	}
 
 	switch cloudEvent.Type() {
+	case string(models.EventEnrollKey):
+		enrollEvent, err := getEventBody[models.EnrollEvent](cloudEvent)
+		if err != nil {
+			logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "Certificate", err)
+			return
+		}
+
+		dms, err := awsConnectorSvc.DmsSDK.GetDMSByID(context.Background(), services.GetDMSByIDInput{
+			ID: enrollEvent.APS,
+		})
+		if err != nil {
+			logger.Errorf("could not get dms %s: %s", enrollEvent.APS, err)
+			return
+		}
+
+		var dmsAwsAutomationConfig models.IotAWSDMSMetadata
+		hasKey, err := helpers.GetMetadataToStruct(dms.Metadata, models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID), &dmsAwsAutomationConfig)
+		if err != nil {
+			logger.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
+			return
+		}
+
+		if !hasKey {
+			logrus.Warnf("skipping event %s, DMS doesn't have %s key", cloudEvent.Type(), models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID))
+			return
+		}
+
+		if dmsAwsAutomationConfig.RegistrationMode == models.AutomaticAWSIoTRegistrationMode {
+			thingID := enrollEvent.Certificate.Subject.CommonName
+			logrus.Infof("registering %s device", thingID)
+			err = awsConnectorSvc.RegisterAndAttachThing(iot.RegisterAndAttachThingInput{
+				DeviceID:               thingID,
+				DMSIoTAutomationConfig: dmsAwsAutomationConfig,
+				EnrollmentEvent:        *enrollEvent,
+			})
+			if err != nil {
+				logrus.Errorf("something went wrong while registering device %s: %s", thingID, err)
+				return
+			}
+		}
+
 	case string(models.EventUpdateCertificateMetadataKey):
 		certUpdate, err := getEventBody[models.UpdateModel[models.Certificate]](cloudEvent)
 		if err != nil {
@@ -188,10 +229,16 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 			return
 		}
 
-		awsConnectorSvc.RegisterUpdateJITPProvisioner(context.Background(), iot.RegisterUpdateJITPProvisionerInput{
-			DMS:           dms,
-			AwsJITPConfig: dmsAwsAutomationConfig,
-		})
+		if dmsAwsAutomationConfig.RegistrationMode == models.JitpAWSIoTRegistrationMode {
+			err = awsConnectorSvc.RegisterUpdateJITPProvisioner(context.Background(), iot.RegisterUpdateJITPProvisionerInput{
+				DMS:           dms,
+				AwsJITPConfig: dmsAwsAutomationConfig,
+			})
+			if err != nil {
+				logger.Errorf("something went wrong while registering JITP template for DMS %s: %s", dms.ID, err)
+				return
+			}
+		}
 
 	case string(models.EventCreateCAKey), string(models.EventImportCAKey), string(models.EventUpdateCAMetadataKey):
 		var ca *models.CACertificate

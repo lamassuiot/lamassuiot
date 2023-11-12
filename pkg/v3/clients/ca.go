@@ -107,6 +107,8 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 		IssuanceExpiration: input.IssuanceExpiration,
 		CAExpiration:       input.CAExpiration,
 		EngineID:           input.EngineID,
+		ParentID:           input.ParentID,
+		Metadata:           input.Metadata,
 	}, map[int][]error{
 		400: {
 			errs.ErrCAIncompatibleExpirationTimeRef,
@@ -288,7 +290,7 @@ func (cli *httpCAClient) GetCertificatesByCA(ctx context.Context, input services
 			},
 		})
 		for _, elem := range resp.IterableList.List {
-			input.ApplyFunc(&elem.Certificate)
+			input.ApplyFunc(elem.Certificate)
 		}
 		return resp.NextBookmark, err
 	}
@@ -303,7 +305,7 @@ func (cli *httpCAClient) GetCertificatesByExpirationDate(ctx context.Context, in
 	} else {
 		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
 		for _, elem := range resp.IterableList.List {
-			input.ApplyFunc(&elem.Certificate)
+			input.ApplyFunc(elem.Certificate)
 		}
 		return resp.NextBookmark, err
 	}
@@ -317,7 +319,7 @@ func (cli *httpCAClient) GetCertificatesByCaAndStatus(ctx context.Context, input
 	} else {
 		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
 		for _, elem := range resp.IterableList.List {
-			input.ApplyFunc(&elem.Certificate)
+			input.ApplyFunc(elem.Certificate)
 		}
 		return resp.NextBookmark, err
 	}
@@ -332,7 +334,7 @@ func (cli *httpCAClient) GetCertificatesByStatus(ctx context.Context, input serv
 	} else {
 		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
 		for _, elem := range resp.IterableList.List {
-			input.ApplyFunc(&elem.Certificate)
+			input.ApplyFunc(elem.Certificate)
 		}
 		return resp.NextBookmark, err
 	}

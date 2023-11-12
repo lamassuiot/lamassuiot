@@ -128,7 +128,7 @@ func main() {
 		GatewayPort:  8443,
 		AssemblyMode: config.Http,
 		CryptoEngines: config.CryptoEngines{
-			LogLevel:      config.Trace,
+			LogLevel:      config.Info,
 			DefaultEngine: "dockertest-hcpvault-kvv2",
 			HashicorpVaultKV2Provider: []config.HashicorpVaultCryptoEngineConfig{
 				config.HashicorpVaultCryptoEngineConfig{

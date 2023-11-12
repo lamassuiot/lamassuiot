@@ -60,7 +60,7 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte
 			QueryParameters: &resources.QueryParameters{
 				PageSize: 15,
 			},
-			ApplyFunc: func(cert *models.Certificate) {
+			ApplyFunc: func(cert models.Certificate) {
 				certList = append(certList, x509.RevocationListEntry{
 					SerialNumber:   cert.Certificate.SerialNumber,
 					RevocationTime: time.Now(),

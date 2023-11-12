@@ -78,7 +78,7 @@ type gormWhereParams struct {
 	extraArgs []interface{}
 }
 
-func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, extraOpts []gormWhereParams, exhaustiveRun bool, applyFunc func(elem *E)) (string, error) {
+func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, extraOpts []gormWhereParams, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
 	var elems []E
 	tx := db.Table(db.tableName)
 
@@ -198,7 +198,7 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 		rSet := tx.Find(&elems)
 		for _, elem := range elems {
 			// batch processing found records
-			applyFunc(&elem)
+			applyFunc(elem)
 		}
 
 		if rSet.RowsAffected == 0 {

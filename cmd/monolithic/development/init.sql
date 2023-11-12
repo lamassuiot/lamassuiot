@@ -1,5 +1,0 @@
-CREATE DATABASE ca;
-CREATE DATABASE alerts;
-CREATE DATABASE dmsmanager;
-CREATE DATABASE devicemanager;
-CREATE DATABASE cloudproxy;

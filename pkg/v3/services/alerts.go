@@ -75,7 +75,7 @@ func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *HandleE
 		return err
 	}
 
-	_, err = svc.subsStorage.GetSubscriptionsByEventType(ctx, input.Event.Type(), true, func(sub *models.Subscription) {
+	_, err = svc.subsStorage.GetSubscriptionsByEventType(ctx, input.Event.Type(), true, func(sub models.Subscription) {
 		// Send alert
 		lAlerts.Debugf("sending notification to user %s via %s", sub.UserID, sub.Channel.Type)
 		var outSvc outputChannels.NotificationSenderService
@@ -143,8 +143,8 @@ type GetUserSubscriptionsInput struct {
 
 func (svc *AlertsServiceBackend) GetUserSubscriptions(ctx context.Context, input *GetUserSubscriptionsInput) ([]*models.Subscription, error) {
 	userSubs := []*models.Subscription{}
-	_, err := svc.subsStorage.GetSubscriptions(ctx, input.UserID, true, func(sub *models.Subscription) {
-		derefSub := *sub
+	_, err := svc.subsStorage.GetSubscriptions(ctx, input.UserID, true, func(sub models.Subscription) {
+		derefSub := sub
 		userSubs = append(userSubs, &derefSub)
 	}, &resources.QueryParameters{}, map[string]interface{}{})
 
@@ -193,7 +193,7 @@ type UnsubscribeInput struct {
 func (svc *AlertsServiceBackend) Unsubscribe(ctx context.Context, input *UnsubscribeInput) ([]*models.Subscription, error) {
 	var loopError error
 	userSubs := []*models.Subscription{}
-	_, err := svc.subsStorage.GetSubscriptions(ctx, input.UserID, true, func(sub *models.Subscription) {
+	_, err := svc.subsStorage.GetSubscriptions(ctx, input.UserID, true, func(sub models.Subscription) {
 		if sub.ID == input.SubscriptionID {
 			lAlerts.Infof("unsubscribing user %s from subscription with ID %s over event of type %s", input.UserID, sub.ID, sub.EventType)
 			err := svc.subsStorage.Unsubscribe(ctx, input.SubscriptionID)
@@ -202,7 +202,7 @@ func (svc *AlertsServiceBackend) Unsubscribe(ctx context.Context, input *Unsubsc
 				loopError = err
 			}
 		} else {
-			derefSub := *sub
+			derefSub := sub
 			userSubs = append(userSubs, &derefSub)
 		}
 	}, &resources.QueryParameters{}, map[string]interface{}{})

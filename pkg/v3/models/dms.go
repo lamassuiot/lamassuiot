@@ -79,3 +79,7 @@ type CADistributionSettings struct {
 	IncludeEnrollmentCA    bool     `json:"include_enrollment_ca"`
 	ManagedCAs             []string `json:"managed_cas"`
 }
+
+type DMSStats struct {
+	TotalDMSs int `json:"total"`
+}

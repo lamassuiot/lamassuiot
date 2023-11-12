@@ -23,16 +23,27 @@ func NewDMSManagerHttpRoutes(svc services.DMSManagerService) *dmsManagerHttpRout
 	}
 }
 
+func (r *dmsManagerHttpRoutes) GetStats(ctx *gin.Context) {
+	stats, err := r.svc.GetDMSStats(ctx, services.GetDMSStatsInput{})
+
+	if err != nil {
+		ctx.JSON(500, err)
+		return
+	}
+
+	ctx.JSON(200, stats)
+}
+
 func (r *dmsManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, dmsFiltrableFieldMap)
 
-	dmss := []*models.DMS{}
+	dmss := []models.DMS{}
 	nextBookmark, err := r.svc.GetAll(ctx, services.GetAllInput{
 		ListInput: services.ListInput[models.DMS]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
-			ApplyFunc: func(cert *models.DMS) {
-				dmss = append(dmss, cert)
+			ApplyFunc: func(dms models.DMS) {
+				dmss = append(dmss, dms)
 			},
 		},
 	})

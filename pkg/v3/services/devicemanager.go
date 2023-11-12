@@ -16,6 +16,7 @@ var lDevice *logrus.Entry
 var deviceValidate *validator.Validate
 
 type DeviceManagerService interface {
+	GetDevicesStats(input GetDevicesStatsInput) (*models.DevicesStats, error)
 	CreateDevice(input CreateDeviceInput) (*models.Device, error)
 	GetDeviceByID(input GetDeviceByIDInput) (*models.Device, error)
 	GetDevices(input GetDevicesInput) (string, error)
@@ -51,6 +52,45 @@ func (svc *DeviceManagerServiceImpl) SetService(service DeviceManagerService) {
 	svc.service = service
 }
 
+type GetDevicesStatsInput struct {
+}
+
+func (svc *DeviceManagerServiceImpl) GetDevicesStats(input GetDevicesStatsInput) (*models.DevicesStats, error) {
+	stats := models.DevicesStats{
+		TotalDevices:  -1,
+		DevicesStatus: map[models.DeviceStatus]int{},
+	}
+
+	allStatus := []models.DeviceStatus{
+		models.DeviceNoIdentity,
+		models.DeviceActive,
+		models.DeviceActiveWithWarns,
+		models.DeviceActiveWithCritical,
+		models.DeviceActiveRequiresAction,
+		models.DeviceDecommissioned,
+	}
+
+	for _, status := range allStatus {
+		nmbr, err := svc.devicesStorage.CountByStatus(context.Background(), status)
+		if err != nil {
+			lDevice.Errorf("could not count devices in %s status: %s", status, err)
+			stats.DevicesStatus[status] = -1
+		} else {
+			stats.DevicesStatus[status] = nmbr
+		}
+	}
+
+	nmbr, err := svc.devicesStorage.Count(context.Background())
+	if err != nil {
+		lDevice.Errorf("could not count devices: %s", err)
+		stats.TotalDevices = -1
+	} else {
+		stats.TotalDevices = nmbr
+	}
+
+	return &stats, nil
+}
+
 type CreateDeviceInput struct {
 	ID        string `validate:"required"`
 	Alias     string
@@ -67,6 +107,15 @@ func (svc DeviceManagerServiceImpl) CreateDevice(input CreateDeviceInput) (*mode
 		lDevice.Errorf("struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
+
+	if input.Metadata != nil {
+		input.Metadata = map[string]any{}
+	}
+
+	if input.Tags != nil {
+		input.Tags = []string{}
+	}
+
 	lDevice.Debugf("creating %s device", input.ID)
 	now := time.Now()
 
@@ -176,7 +225,7 @@ func (svc DeviceManagerServiceImpl) UpdateDeviceStatus(input UpdateDeviceStatusI
 			slot := device.IdentitySlot
 			slot.Status = models.SlotRevoke
 			lDevice.Debugf("updating identity slot to revoke active certificate")
-			device, err = svc.UpdateDeviceIdentitySlot(UpdateDeviceIdentitySlotInput{
+			device, err = svc.service.UpdateDeviceIdentitySlot(UpdateDeviceIdentitySlotInput{
 				ID:   device.ID,
 				Slot: *slot,
 			})
@@ -236,7 +285,6 @@ type UpdateDeviceIdentitySlotInput struct {
 }
 
 func (svc DeviceManagerServiceImpl) UpdateDeviceIdentitySlot(input UpdateDeviceIdentitySlotInput) (*models.Device, error) {
-
 	err := deviceValidate.Struct(input)
 	if err != nil {
 		lDevice.Errorf("struct validation error: %s", err)
@@ -265,7 +313,17 @@ func (svc DeviceManagerServiceImpl) UpdateDeviceIdentitySlot(input UpdateDeviceI
 			lDevice.Errorf("could not revoke identity slot for device %s: %s", input.ID, err)
 			return nil, err
 		}
+
 		newSlot.Secrets[newSlot.ActiveVersion] = revokedCert.SerialNumber
+		device.Status = models.DeviceActiveRequiresAction
+	case models.SlotActive:
+		device.Status = models.DeviceActive
+	case models.SlotCriticalExpiration:
+		device.Status = models.DeviceActiveWithCritical
+	case models.SlotExpired:
+		device.Status = models.DeviceActiveRequiresAction
+	case models.SlotWarnExpiration:
+		device.Status = models.DeviceActiveWithWarns
 	}
 
 	device.IdentitySlot = &newSlot
@@ -274,6 +332,6 @@ func (svc DeviceManagerServiceImpl) UpdateDeviceIdentitySlot(input UpdateDeviceI
 		return nil, err
 	}
 
-	lDevice.Debugf("updating %s device identity slot", input.ID)
+	lDevice.Debugf("updating %s device identity slot. New device status %s. ID slot status %s", input.ID, device.Status, device.IdentitySlot.Status)
 	return svc.devicesStorage.Update(context.Background(), device)
 }

@@ -27,6 +27,7 @@ type DMSManagerMiddleware func(DMSManagerService) DMSManagerService
 
 type DMSManagerService interface {
 	ESTService
+	GetDMSStats(ctx context.Context, input GetDMSStatsInput) (*models.DMSStats, error)
 	CreateDMS(ctx context.Context, input CreateDMSInput) (*models.DMS, error)
 	UpdateDMS(ctx context.Context, input UpdateDMSInput) (*models.DMS, error)
 	GetDMSByID(ctx context.Context, input GetDMSByIDInput) (*models.DMS, error)
@@ -62,6 +63,22 @@ func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
 
 func (svc *DMSManagerServiceImpl) SetService(service DMSManagerService) {
 	svc.service = service
+}
+
+type GetDMSStatsInput struct{}
+
+func (svc DMSManagerServiceImpl) GetDMSStats(ctx context.Context, input GetDMSStatsInput) (*models.DMSStats, error) {
+	total, err := svc.dmsStorage.Count(ctx)
+	if err != nil {
+		lDMS.Errorf("could not count dmss: %s", err)
+		return &models.DMSStats{
+			TotalDMSs: -1,
+		}, nil
+	}
+
+	return &models.DMSStats{
+		TotalDMSs: total,
+	}, nil
 }
 
 type CreateDMSInput struct {
@@ -212,7 +229,6 @@ func (svc DMSManagerServiceImpl) CACerts(aps string) ([]*x509.Certificate, error
 		cas = append(cas, (*x509.Certificate)(caResponse.Certificate.Certificate))
 	}
 
-	lDMS.Debugf("Read certificates of the CAs associated with the DMS %s", aps)
 	return cas, nil
 }
 
@@ -288,6 +304,15 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 		lDMS.Debugf("device '%s' does exist", csr.Subject.CommonName)
 		if dms.Settings.EnrollmentSettings.EnableReplaceableEnrollment {
 			lDMS.Debugf("DMS '%s' allows new enrollments. continuing enrollment process for device '%s'", dms.ID, csr.Subject.CommonName)
+			//revoke active certificate
+			defer func() {
+				_, err = svc.caClient.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
+					SerialNumber:     device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion],
+					NewStatus:        models.StatusRevoked,
+					RevocationReason: ocsp.Superseded,
+				})
+				lDMS.Errorf("could not revoke certificate %s: %s", device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion], err)
+			}()
 		} else {
 			lDMS.Debugf("DMS '%s' forbids new enrollments. aborting enrollment process for device '%s'. consider switching NewEnrollment option ON in the DMS", dms.ID, csr.Subject.CommonName)
 			return nil, fmt.Errorf("forbiddenNewEnrollment")
@@ -543,8 +568,9 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		return nil, err
 	}
 
-	//detach certificate from meta and Revoke
+	//detach certificate from meta
 	delete(currentDeviceCert.Metadata, models.CAAttachedToDeviceKey)
+	delete(currentDeviceCert.Metadata, models.CAMetadataMonitoringExpirationDeltasKey)
 	_, err = svc.caClient.UpdateCertificateMetadata(ctx, UpdateCertificateMetadataInput{
 		SerialNumber: currentDeviceCertSN,
 		Metadata:     currentDeviceCert.Metadata,
@@ -554,7 +580,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		return nil, err
 	}
 
-	//detach Revoke superseded cert
+	//revoke superseded cert
 	_, err = svc.caClient.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
 		SerialNumber:     currentDeviceCertSN,
 		NewStatus:        models.StatusRevoked,

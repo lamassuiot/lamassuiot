@@ -26,15 +26,26 @@ func NewDeviceManagerHttpRoutes(svc services.DeviceManagerService) *devManagerHt
 	}
 }
 
+func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
+	stats, err := r.svc.GetDevicesStats(services.GetDevicesStatsInput{})
+
+	if err != nil {
+		ctx.JSON(500, err)
+		return
+	}
+
+	ctx.JSON(200, stats)
+}
+
 func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, deviceFiltrableFieldMap)
 
-	devices := []*models.Device{}
+	devices := []models.Device{}
 	nextBookmark, err := r.svc.GetDevices(services.GetDevicesInput{
 		ListInput: services.ListInput[models.Device]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
-			ApplyFunc: func(dev *models.Device) {
+			ApplyFunc: func(dev models.Device) {
 				devices = append(devices, dev)
 			},
 		},
@@ -65,13 +76,13 @@ func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
 		return
 	}
 
-	devices := []*models.Device{}
+	devices := []models.Device{}
 	nextBookmark, err := r.svc.GetDeviceByDMS(services.GetDevicesByDMSInput{
 		DMSID: params.DMSID,
 		ListInput: services.ListInput[models.Device]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
-			ApplyFunc: func(dev *models.Device) {
+			ApplyFunc: func(dev models.Device) {
 				devices = append(devices, dev)
 			},
 		},

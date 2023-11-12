@@ -14,6 +14,7 @@ type CreateCABody struct {
 	CAExpiration       models.Expiration  `json:"ca_expiration"`
 	IssuanceExpiration models.Expiration  `json:"issuance_expiration"`
 	EngineID           string             `json:"engine_id"`
+	Metadata           map[string]any     `json:"metadata"`
 }
 
 type ImportCABody struct {

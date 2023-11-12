@@ -36,8 +36,8 @@ func (db *PostgresEventsStore) GetLatestEventByEventType(ctx context.Context, ev
 
 func (db *PostgresEventsStore) GetLatestEvents(ctx context.Context) ([]*models.AlertLatestEvent, error) {
 	evs := []*models.AlertLatestEvent{}
-	_, err := db.querier.SelectAll(&resources.QueryParameters{}, []gormWhereParams{}, true, func(elem *models.AlertLatestEvent) {
-		derefElem := *elem
+	_, err := db.querier.SelectAll(&resources.QueryParameters{}, []gormWhereParams{}, true, func(elem models.AlertLatestEvent) {
+		derefElem := elem
 		evs = append(evs, &derefElem)
 	})
 

@@ -39,14 +39,14 @@ func (db *CouchDBCertificateStorage) Count(ctx context.Context) (int, error) {
 	return db.querier.Count()
 }
 
-func (db *CouchDBCertificateStorage) SelectByType(ctx context.Context, CAType models.CertificateType, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCertificateStorage) SelectByType(ctx context.Context, CAType models.CertificateType, exhaustiveRun bool, applyFunc func(models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := map[string]interface{}{
 		"type": CAType,
 	}
 	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
-func (db *CouchDBCertificateStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCertificateStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
 			"serial_number": map[string]string{
@@ -70,7 +70,7 @@ func (db *CouchDBCertificateStorage) Update(ctx context.Context, certificate *mo
 	return db.querier.Update(*certificate, certificate.SerialNumber)
 }
 
-func (db *CouchDBCertificateStorage) SelectByCA(ctx context.Context, caID string, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCertificateStorage) SelectByCA(ctx context.Context, caID string, exhaustiveRun bool, applyFunc func(models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
 			"issuer_metadata.ca_name": map[string]string{
@@ -82,7 +82,7 @@ func (db *CouchDBCertificateStorage) SelectByCA(ctx context.Context, caID string
 	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
-func (db *CouchDBCertificateStorage) SelectByExpirationDate(ctx context.Context, beforeExpirationDate time.Time, afterExpirationDate time.Time, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCertificateStorage) SelectByExpirationDate(ctx context.Context, beforeExpirationDate time.Time, afterExpirationDate time.Time, exhaustiveRun bool, applyFunc func(models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
 			"$and": []map[string]interface{}{
@@ -113,7 +113,7 @@ func (db *CouchDBCertificateStorage) SelectByExpirationDate(ctx context.Context,
 	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
-func (db *CouchDBCertificateStorage) SelectByCAIDAndStatus(ctx context.Context, CAID string, status models.CertificateStatus, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCertificateStorage) SelectByCAIDAndStatus(ctx context.Context, CAID string, status models.CertificateStatus, exhaustiveRun bool, applyFunc func(models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
 			"$and": []map[string]interface{}{
@@ -133,7 +133,7 @@ func (db *CouchDBCertificateStorage) SelectByCAIDAndStatus(ctx context.Context, 
 	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
 }
 
-func (db *CouchDBCertificateStorage) SelectByStatus(ctx context.Context, status models.CertificateStatus, exhaustiveRun bool, applyFunc func(*models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCertificateStorage) SelectByStatus(ctx context.Context, status models.CertificateStatus, exhaustiveRun bool, applyFunc func(models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
 			"$and": []map[string]interface{}{
