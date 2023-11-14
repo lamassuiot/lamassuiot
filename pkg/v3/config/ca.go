@@ -38,13 +38,17 @@ type GolangEngineConfig struct {
 	StorageDirectory string                 `mapstructure:"storage_directory"`
 }
 
-type PKCS11EngineConfig struct {
-	ID                 string                   `mapstructure:"id"`
-	Metadata           map[string]interface{}   `mapstructure:"metadata"`
+type PKCS11Config struct {
 	TokenLabel         string                   `mapstructure:"token"`
 	TokenPin           Password                 `mapstructure:"pin"`
 	ModulePath         string                   `mapstructure:"module_path"`
 	ModuleExtraOptions PKCS11ModuleExtraOptions `mapstructure:"module_extra_options"`
+}
+
+type PKCS11EngineConfig struct {
+	PKCS11Config
+	ID       string                 `mapstructure:"id"`
+	Metadata map[string]interface{} `mapstructure:"metadata"`
 }
 
 type PKCS11ModuleExtraOptions struct {

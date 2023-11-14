@@ -1,10 +1,12 @@
 package monolithic
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/fatih/color"
@@ -198,7 +200,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 		}
 
 		engine := gin.New()
-		engine.Use(gin.Recovery())
+		engine.Use(gin.Recovery(), clientCertsToHeaderUsingEnvoyStyle())
 		buildReverseProxyHandler := func(engine *gin.Engine, serviceName, servicePath string, servicePort int) {
 			subpath := servicePath
 			subpath = strings.TrimSuffix(subpath, "/")
@@ -239,10 +241,50 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 		buildReverseProxyHandler(engine, "Alerts", "/api/alerts/", alertsPort)
 
 		go func() {
-			log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", conf.GatewayPort), engine))
+			// log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", conf.GatewayPort), engine))
+			key, _ := helpers.GenerateRSAKey(2048)
+			keyPem, _ := helpers.PrivateKeyToPEM(key)
+			os.WriteFile("proxy.key", []byte(keyPem), 0644)
+
+			crt, err := helpers.GenerateSelfSignedCertificate(key, "proxy-lms-test")
+			if err != nil {
+				panic(fmt.Sprintf("could not create self signed cert: %s", err))
+			}
+
+			crtPem := helpers.CertificateToPEM(crt)
+			os.WriteFile("proxy.crt", []byte(crtPem), 0644)
+
+			server := http.Server{
+				Handler: engine,
+				Addr:    fmt.Sprintf(":%d", conf.GatewayPort),
+				TLSConfig: &tls.Config{
+					ClientAuth: tls.RequestClientCert,
+				},
+			}
+
+			log.Fatal(server.ListenAndServeTLS("proxy.crt", "proxy.key"))
 		}()
 
 	}
 
 	return nil
+}
+
+func clientCertsToHeaderUsingEnvoyStyle() gin.HandlerFunc {
+	return func(c *gin.Context) {
+
+		if c.Request.TLS != nil {
+			if len(c.Request.TLS.PeerCertificates) > 0 {
+				crtChain := []string{}
+				for _, crt := range c.Request.TLS.PeerCertificates {
+					crtPem := helpers.CertificateToPEM(crt)
+					crtURLEnc := url.QueryEscape(crtPem)
+					crtChain = append(crtChain, fmt.Sprintf("Cert=%s", crtURLEnc))
+				}
+				c.Request.Header.Add("x-forwarded-client-cert", strings.Join(crtChain, ";"))
+			}
+		}
+
+		c.Next()
+	}
 }

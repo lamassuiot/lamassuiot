@@ -97,8 +97,8 @@ type CreateDeviceInput struct {
 	Tags      []string
 	Metadata  map[string]any
 	DMSID     string `validate:"required"`
-	Icon      string
-	IconColor string
+	Icon      string `validate:"required"`
+	IconColor string `validate:"required"`
 }
 
 func (svc DeviceManagerServiceImpl) CreateDevice(input CreateDeviceInput) (*models.Device, error) {
@@ -108,11 +108,11 @@ func (svc DeviceManagerServiceImpl) CreateDevice(input CreateDeviceInput) (*mode
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	if input.Metadata != nil {
+	if input.Metadata == nil {
 		input.Metadata = map[string]any{}
 	}
 
-	if input.Tags != nil {
+	if input.Tags == nil {
 		input.Tags = []string{}
 	}
 

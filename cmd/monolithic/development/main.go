@@ -13,6 +13,7 @@ import (
 	rabbitmq_test "github.com/lamassuiot/lamassuiot/pkg/v3/test/subsystems/async-messaging/rabbitmq"
 	awskmssm_test "github.com/lamassuiot/lamassuiot/pkg/v3/test/subsystems/cryptoengines/aws-kms-sm"
 	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/pkg/v3/test/subsystems/cryptoengines/keyvaultkv2"
+	softhsmv2_test "github.com/lamassuiot/lamassuiot/pkg/v3/test/subsystems/cryptoengines/softhsmv2"
 	postgres_test "github.com/lamassuiot/lamassuiot/pkg/v3/test/subsystems/storage/postgres"
 )
 
@@ -28,6 +29,8 @@ ________  _______   ________      ___    ___      _________  ________          _
 `
 
 func main() {
+	hsmModule := flag.String("hsm-module-path", "", "enable HSM support")
+
 	awsIoTManager := flag.Bool("awsiot", false, "enable AWS IoT Manager")
 	awsIoTManagerUser := flag.String("awsiot-keyid", "", "AWS IoT Manager AccessKeyID")
 	awsIoTManagerPass := flag.String("awsiot-keysecret", "", "AWS IoT Manager SecretAccessKey")
@@ -44,6 +47,10 @@ func main() {
 		fmt.Printf("AWS IoT Manager AccessKey: %s\n", *awsIoTManagerUser)
 		fmt.Printf("AWS IoT Manager SecretAccessKey: %s\n", *awsIoTManagerPass)
 		fmt.Printf("AWS IoT Manager Region: %s\n", *awsIoTManagerRegion)
+	}
+
+	if *hsmModule != "" {
+		fmt.Printf("HSM - PKCS11 Module Driver: %s\n", *hsmModule)
 	}
 
 	fmt.Println("========== LAUNCHING AUXILIARY SERVICES ==========")
@@ -70,7 +77,17 @@ func main() {
 		log.Fatalf("could not launch AWS Platform: %s", err)
 	}
 
-	fmt.Println(">> launching docker: SoftHSM ...")
+	hsmModulePath := *hsmModule
+	var softhsmCleanup func() error
+	var pkcs11Cfg *config.PKCS11Config
+	if hsmModulePath != "" {
+		fmt.Println(">> launching docker: SoftHSM ...")
+		softhsmCleanup, pkcs11Cfg, err = softhsmv2_test.RunSoftHsmV2Docker(hsmModulePath)
+		if err != nil {
+			log.Fatalf("could not launch SoftHSM: %s", err)
+		}
+	}
+
 	fmt.Println("Async Messaging Engine")
 	fmt.Println(">> launching docker: RabbitMQ ...")
 	rmqCleanup, rmqConfig, err := rabbitmq_test.RunRabbitMQDocker()
@@ -94,6 +111,9 @@ func main() {
 		svcCleanup("Hashicorp Vault", vCleanup)
 		svcCleanup("RabbitMQ", rmqCleanup)
 		svcCleanup("AWS-LocalStack", awsCleanup)
+		if hsmModulePath != "" {
+			svcCleanup("SoftHSM V2", softhsmCleanup)
+		}
 	}
 
 	//capture future panics
@@ -177,6 +197,14 @@ func main() {
 				Region:          *awsIoTManagerRegion,
 			},
 		},
+	}
+
+	if hsmModulePath != "" {
+		conf.CryptoEngines.PKCS11Provider = append(conf.CryptoEngines.PKCS11Provider, config.PKCS11EngineConfig{
+			PKCS11Config: *pkcs11Cfg,
+			ID:           "softhsm-test",
+			Metadata:     make(map[string]interface{}),
+		})
 	}
 
 	err = monolithic.RunMonolithicLamassuPKI(conf)

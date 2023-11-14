@@ -8,6 +8,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -181,7 +182,6 @@ type GetAllInput struct {
 }
 
 func (svc DMSManagerServiceImpl) GetAll(ctx context.Context, input GetAllInput) (string, error) {
-	lDMS.Debugf("reading all DMSs")
 	bookmark, err := svc.dmsStorage.SelectAll(context.Background(), input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
 	if err != nil {
 		lDMS.Errorf("something went wrong while reading all DMSs from storage engine: %s", err)
@@ -525,15 +525,47 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 	lDMS.Debugf("checking CSR has same RawSubject as the previous enrollment at byte level. DeviceID=%s ActiveVersion=%d", device.ID, device.IdentitySlot.ActiveVersion)
 	//Compare CRT & CSR Subject bytes
 	if slices.Compare[byte](currentDeviceCert.Certificate.RawSubject, csr.RawSubject) != 0 {
-		lDMS.Errorf("incoming CSR for device %s has different RawSubject compared with previous enrollment with ActiveVersion=%d", device.ID, device.IdentitySlot.ActiveVersion)
-		return nil, fmt.Errorf("invalid RawSubject bytes")
+		lDMS.Tracef("current device certificate raw subject (len=%d):\n%v", len(currentDeviceCert.Certificate.RawSubject), currentDeviceCert.Certificate.RawSubject)
+		lDMS.Tracef("incoming csr raw subject (len=%d):\n%v", len(csr.RawSubject), csr.RawSubject)
+		lDMS.Warnf("incoming CSR for device %s has different RawSubject compared with previous enrollment with ActiveVersion=%d. Will try shallow comparison", device.ID, device.IdentitySlot.ActiveVersion)
+
+		type subjectComp struct {
+			claim    string
+			crtClaim string
+			csrClaim string
+		}
+
+		crtSub := currentDeviceCert.Certificate.Subject
+		csrSub := csr.Subject
+		pairsToCompare := []subjectComp{
+			{claim: "CommonName", crtClaim: crtSub.CommonName, csrClaim: csrSub.CommonName},
+			{claim: "OrganizationalUnit", crtClaim: strings.Join(crtSub.OrganizationalUnit, ","), csrClaim: strings.Join(csrSub.OrganizationalUnit, ",")},
+			{claim: "Organization", crtClaim: strings.Join(crtSub.Organization, ","), csrClaim: strings.Join(csrSub.Organization, ",")},
+			{claim: "Locality", crtClaim: strings.Join(crtSub.Locality, ","), csrClaim: strings.Join(csrSub.Locality, ",")},
+			{claim: "Province", crtClaim: strings.Join(crtSub.Province, ","), csrClaim: strings.Join(csrSub.Province, ",")},
+			{claim: "Country", crtClaim: strings.Join(crtSub.Country, ","), csrClaim: strings.Join(csrSub.Country, ",")},
+		}
+		for _, pair2Comp := range pairsToCompare {
+			if pair2Comp.crtClaim != pair2Comp.csrClaim {
+				lDMS.Errorf("current device certificate and csr differ in claim %s. crt got '%s' while csr got '%s'", pair2Comp.claim, pair2Comp.crtClaim, pair2Comp.csrClaim)
+				return nil, fmt.Errorf("invalid RawSubject bytes")
+			}
+		}
+
 	}
 
 	now := time.Now()
 	lDMS.Debugf("checking if DMS allows enrollment at current delta for device %s", device.ID)
 
 	comparisonTimeThreshold := currentDeviceCert.Certificate.NotAfter.Add(-time.Duration(dms.Settings.ReEnrollmentSettings.ReEnrollmentDelta))
-	lDMS.Debugf("current device certificate expires at %s. DMS has a allowance reenroll delta of %s. Current device expiration + allowance delta is %s (delta=%s)", currentDeviceCert.Certificate.NotAfter.UTC().Format("2006-01-02T15:04:05Z07:00"), dms.Settings.ReEnrollmentSettings.ReEnrollmentDelta.String(), comparisonTimeThreshold.UTC().Format("2006-01-02T15:04:05Z07:00"), models.TimeDuration(now.Sub(comparisonTimeThreshold)).String())
+	lDMS.Debugf(
+		"current device certificate expires at %s (%s duration). DMS allows reenrolling %s. Reenroll window opens %s. (delta=%s)",
+		currentDeviceCert.Certificate.NotAfter.UTC().Format("2006-01-02T15:04:05Z07:00"),
+		models.TimeDuration(currentDeviceCert.Certificate.NotAfter.Sub(now)).String(),
+		dms.Settings.ReEnrollmentSettings.ReEnrollmentDelta.String(),
+		comparisonTimeThreshold.UTC().Format("2006-01-02T15:04:05Z07:00"),
+		models.TimeDuration(now.Sub(comparisonTimeThreshold)).String(),
+	)
 
 	//Check if current cert is REVOKED
 	if currentDeviceCert.Status == models.StatusRevoked {
@@ -548,7 +580,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 	}
 
 	//Check if EXPIRED
-	if clientCert.NotBefore.Before(now) {
+	if clientCert.NotBefore.After(now) {
 		if dms.Settings.ReEnrollmentSettings.EnableExpiredRenewal {
 			lDMS.Infof("presented an expired certificate by %s, but DMS allows expired renewals. Continuing", now.Sub(clientCert.NotBefore))
 		} else {

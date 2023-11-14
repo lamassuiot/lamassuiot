@@ -55,8 +55,15 @@ func main() {
 				Register: true,
 			},
 		},
+		ID: "Root",
 	})
 	chk(err)
+
+	fmt.Println("=============================")
+	fmt.Println("CN:" + testEnrollmentCA.Subject.CommonName)
+	fmt.Println("ID:" + testEnrollmentCA.ID)
+	fmt.Println("SN:" + testEnrollmentCA.SerialNumber)
+	fmt.Println("=============================")
 
 	childCALvl1, err := caClient.CreateCA(context.Background(), services.CreateCAInput{
 		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
@@ -64,9 +71,16 @@ func main() {
 		CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDur},
 		IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
 		ParentID:           testEnrollmentCA.ID,
-		// EngineID:           "dockertest-localstack-smngr",
+		EngineID:           "dockertest-localstack-smngr",
+		ID:                 "Lvl1",
 	})
 	chk(err)
+
+	fmt.Println("=============================")
+	fmt.Println("CN:" + childCALvl1.Subject.CommonName)
+	fmt.Println("ID:" + childCALvl1.ID)
+	fmt.Println("SN:" + childCALvl1.SerialNumber)
+	fmt.Println("=============================")
 
 	childCALvl2, err := caClient.CreateCA(context.Background(), services.CreateCAInput{
 		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
@@ -74,7 +88,8 @@ func main() {
 		CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDur},
 		IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
 		ParentID:           childCALvl1.ID,
-		// EngineID:           "dockertest-localstack-smngr",
+		EngineID:           "golang-1",
+		ID:                 "Lvl2",
 	})
 	chk(err)
 

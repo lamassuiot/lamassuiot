@@ -1,13 +1,17 @@
 package helpers
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"math/big"
 	"os"
 )
 
@@ -78,4 +82,18 @@ func PrivateKeyToPEM(key any) (string, error) {
 	)
 
 	return string(pemdata), nil
+}
+
+func GenerateSelfSignedCertificate(key crypto.Signer, cn string) (*x509.Certificate, error) {
+	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
+
+	crt := x509.Certificate{
+		SerialNumber: sn,
+		Subject:      pkix.Name{CommonName: cn},
+	}
+
+	crtB, _ := x509.CreateCertificate(rand.Reader, &crt, &crt, key.Public(), key)
+	crtP, err := x509.ParseCertificate(crtB)
+
+	return crtP, err
 }

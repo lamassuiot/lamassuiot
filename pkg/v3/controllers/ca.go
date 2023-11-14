@@ -26,6 +26,7 @@ var certificateFiltrableFieldMap = map[string]resources.FilterFieldType{
 
 var caFiltrableFieldMap = map[string]resources.FilterFieldType{
 	"id":                   resources.StringFilterFieldType,
+	"level":                resources.NumberFilterFieldType,
 	"name":                 resources.StringFilterFieldType,
 	"type":                 resources.EnumFilterFieldType,
 	"serial_number":        resources.StringFilterFieldType,

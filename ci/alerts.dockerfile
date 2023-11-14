@@ -6,7 +6,7 @@ COPY . .
 WORKDIR /app
 ENV GOSUMDB=off
 RUN now=$(date +'%Y-%m-%d_%T') && \
-    go build -ldflags "-X main.sha1ver=`git rev-parse HEAD` -X main.buildTime=$now" -mod=vendor -o alerts cmd/alerts/v3/main.go 
+    go build -ldflags "-X main.sha1ver=`git rev-parse HEAD` -X main.buildTime=$now" -mod=vendor -o alerts cmd/alerts/main.go 
 
 FROM ubuntu:20.04
 # COPY pkg/alerts/server/resources/email.html /app/templates/email.html

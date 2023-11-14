@@ -231,7 +231,7 @@ func ExtractClientCertFromHeaderEnvoyStyle(headerName, headerString string) []*x
 			val := splitKeyVal[1]
 
 			switch key {
-			case "Cert":
+			case "Cert", "Chain":
 				cert := strings.Replace(val, "\"", "", -1)
 				decodedCert, _ := url.QueryUnescape(cert)
 				block, _ := pem.Decode([]byte(decodedCert))
@@ -243,7 +243,6 @@ func ExtractClientCertFromHeaderEnvoyStyle(headerName, headerString string) []*x
 
 				return []*x509.Certificate{certificate}
 
-			case "Chain":
 			}
 		}
 	}
