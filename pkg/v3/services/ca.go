@@ -535,7 +535,27 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 		}
 
 		lFunc.Debugf("parent CA %s exists", input.ParentID)
+
 		parentCA = ca
+		var caExpiration time.Time
+
+		if input.IssuanceExpiration.Type == models.Duration {
+			caExpiration = time.Now().Add((time.Duration)(*input.CAExpiration.Duration))
+		} else {
+			caExpiration = *input.CAExpiration.Time
+		}
+		fmt.Println("Manexxx")
+		fmt.Println(caExpiration)
+		parentCaExpiration := parentCA.Certificate.ValidTo
+		fmt.Println(parentCaExpiration)
+
+		if parentCaExpiration.Before(caExpiration) {
+			lFunc.Errorf("requested CA would expire after parent CA")
+			return nil, fmt.Errorf("invalid expiration")
+		}
+
+		lFunc.Debugf("subordinated CA  expires before parent CA")
+
 	}
 
 	caID := input.ID

@@ -117,6 +117,9 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 		409: {
 			errs.ErrCAAlreadyExists,
 		},
+		500: {
+			errs.ErrCAIncompatibleExpirationTimeRef,
+		},
 	})
 	if err != nil {
 		return nil, err

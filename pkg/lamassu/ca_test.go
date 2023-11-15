@@ -2243,6 +2243,306 @@ func TestSignatureVerify(t *testing.T) {
 	}
 }
 
+func TestHierarchy(t *testing.T) {
+	caTest, err := BuildCATestServer()
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	t.Cleanup(caTest.AfterSuite)
+	var testcases = []struct {
+		name        string
+		before      func(svc services.CAService) error
+		run         func(caSDK services.CAService) error
+		resultCheck func(error) error
+	}{
+		{
+			name: "OK/TestThreeHierarchy",
+			before: func(svc services.CAService) error {
+
+				return nil
+			},
+			run: func(caSDK services.CAService) error {
+
+				caDurChild1 := models.TimeDuration(time.Hour * 24)
+				caDurChild2 := models.TimeDuration(time.Hour * 23)
+				caIss := models.TimeDuration(time.Minute * 3)
+
+				childCALvl1, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDurChild1},
+					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
+					ParentID:           DefaultCAID,
+					ID:                 "Lvl1",
+				})
+				if err != nil {
+					t.Fatalf("failed creating the first CA child: %s", err)
+				}
+
+				fmt.Println("=============================")
+				fmt.Println("CN:" + childCALvl1.Subject.CommonName)
+				fmt.Println("ID:" + childCALvl1.ID)
+				fmt.Println("SN:" + childCALvl1.SerialNumber)
+				fmt.Println("=============================")
+
+				childCALvl2, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: "CA Lvl 2"},
+					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDurChild2},
+					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
+					ParentID:           childCALvl1.ID,
+					ID:                 "Lvl2",
+				})
+				if err != nil {
+					t.Fatalf("failed creating the second CA child: %s", err)
+				}
+
+				fmt.Println("=============================")
+				fmt.Println("CN:" + childCALvl2.Subject.CommonName)
+				fmt.Println("ID:" + childCALvl2.ID)
+				fmt.Println("SN:" + childCALvl2.SerialNumber)
+				fmt.Println("=============================")
+
+				//cas := []*models.CACertificate{}
+
+				return err
+			},
+			resultCheck: func(err error) error {
+
+				if err != nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name: "ERR/TestLessDurationRootCA",
+			before: func(svc services.CAService) error {
+
+				return nil
+			},
+			run: func(caSDK services.CAService) error {
+
+				caDurChild1 := models.TimeDuration(time.Hour * 26)
+
+				caIss := models.TimeDuration(time.Minute * 3)
+
+				_, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDurChild1},
+					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
+					ParentID:           DefaultCAID,
+					ID:                 "Lvl1",
+				})
+
+				//cas := []*models.CACertificate{}
+
+				return err
+			},
+			resultCheck: func(err error) error {
+
+				if err == nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/TestLimitDateThreeLevels",
+			before: func(svc services.CAService) error {
+
+				return nil
+			},
+			run: func(caSDK services.CAService) error {
+
+				caRDLim := time.Date(2030, 12, 1, 0, 0, 0, 0, time.Local)
+				caCDLim1 := time.Date(2030, 11, 28, 0, 0, 0, 0, time.Local)
+				caCDLim2 := time.Date(2030, 11, 27, 0, 0, 0, 0, time.Local)
+
+				issuanceDur := time.Date(2030, 11, 20, 0, 0, 0, 0, time.Local)
+				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: DefaultCACN},
+					CAExpiration:       models.Expiration{Type: models.Time, Time: &caRDLim},
+					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &issuanceDur},
+				})
+				if err != nil {
+					t.Fatalf("failed creating the first CA child: %s", err)
+				}
+
+				fmt.Println("=============================")
+				fmt.Println("CN:" + ca.Subject.CommonName)
+				fmt.Println("ID:" + ca.ID)
+				fmt.Println("SN:" + ca.SerialNumber)
+				fmt.Println("=============================")
+
+				caIss := time.Date(2030, 11, 20, 0, 0, 0, 0, time.Local)
+
+				childCALvl1, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration:       models.Expiration{Type: models.Time, Time: &caCDLim1},
+					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &caIss},
+					ParentID:           ca.ID,
+				})
+				if err != nil {
+					t.Fatalf("failed creating the first CA child: %s", err)
+				}
+
+				fmt.Println("=============================")
+				fmt.Println("CN:" + childCALvl1.Subject.CommonName)
+				fmt.Println("ID:" + childCALvl1.ID)
+				fmt.Println("SN:" + childCALvl1.SerialNumber)
+				fmt.Println("=============================")
+
+				childCALvl2, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration:       models.Expiration{Type: models.Time, Time: &caCDLim2},
+					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &caIss},
+					ParentID:           childCALvl1.ID,
+				})
+				if err != nil {
+					t.Fatalf("failed creating the first CA child: %s", err)
+				}
+
+				fmt.Println("=============================")
+				fmt.Println("CN:" + childCALvl2.Subject.CommonName)
+				fmt.Println("ID:" + childCALvl2.ID)
+				fmt.Println("SN:" + childCALvl2.SerialNumber)
+				fmt.Println("=============================")
+
+				//cas := []*models.CACertificate{}
+
+				return err
+			},
+			resultCheck: func(err error) error {
+
+				if err != nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "ERR/TestLimitDateTwoLevels",
+			before: func(svc services.CAService) error {
+
+				return nil
+			},
+			run: func(caSDK services.CAService) error {
+
+				caRDLim := time.Date(2030, 12, 1, 0, 0, 0, 0, time.Local)
+				caCDLim1 := time.Date(2030, 12, 2, 0, 0, 0, 0, time.Local)
+
+				caIss := time.Date(2030, 11, 20, 0, 0, 0, 0, time.Local)
+				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: DefaultCACN},
+					CAExpiration:       models.Expiration{Type: models.Time, Time: &caRDLim},
+					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &caIss},
+				})
+
+				_, err = caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration:       models.Expiration{Type: models.Time, Time: &caCDLim1},
+					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &caIss},
+					ParentID:           ca.ID,
+				})
+
+				//cas := []*models.CACertificate{}
+
+				return err
+			},
+			resultCheck: func(err error) error {
+				fmt.Println(err)
+				if err == nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/TestMixedTimeFormats",
+			before: func(svc services.CAService) error {
+
+				return nil
+			},
+			run: func(caSDK services.CAService) error {
+
+				caRDLim := time.Date(2030, 12, 1, 0, 0, 0, 0, time.Local)
+				caDurChild1 := models.TimeDuration(time.Hour * 26)
+
+				caIss := time.Date(2030, 11, 20, 0, 0, 0, 0, time.Local)
+				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: DefaultCACN},
+					CAExpiration:       models.Expiration{Type: models.Time, Time: &caRDLim},
+					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &caIss},
+				})
+
+				caIss2 := models.TimeDuration(time.Minute * 3)
+
+				_, err = caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDurChild1},
+					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss2},
+					ParentID:           ca.ID,
+				})
+
+				//cas := []*models.CACertificate{}
+
+				return err
+			},
+			resultCheck: func(err error) error {
+				if err != nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			//
+			// err := postgres_test.BeforeEach()
+			// fmt.Errorf("Error while running BeforeEach job: %s", err)
+
+			err = caTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
+			}
+
+			//Init CA Server with 1 CA
+			_, err = initCA(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running initCA: %s", err)
+			}
+
+			err = tc.before(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running 'before' func in test case: %s", err)
+			}
+
+			err = tc.resultCheck(tc.run(caTest.HttpCASDK))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+		})
+	}
+}
+
 type CATestServer struct {
 	Service    services.CAService
 	HttpCASDK  services.CAService
@@ -2251,8 +2551,8 @@ type CATestServer struct {
 }
 
 func initCA(caSDK services.CAService) (*models.CACertificate, error) {
-	caDUr := models.TimeDuration(time.Hour * 24)
-	issuanceDur := models.TimeDuration(time.Hour * 12)
+	caDUr := models.TimeDuration(time.Hour * 25)
+	issuanceDur := models.TimeDuration(time.Minute * 12)
 	ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
 		ID:                 DefaultCAID,
 		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
