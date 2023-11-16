@@ -184,7 +184,7 @@ func main() {
 			Frequency: "* * * * *",
 		},
 		Storage: config.PluggableStorageEngine{
-			LogLevel: config.Info,
+			LogLevel: config.Trace,
 			Provider: config.Postgres,
 			Postgres: *storageConfig,
 		},

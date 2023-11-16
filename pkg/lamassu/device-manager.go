@@ -67,7 +67,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 	}
 
 	err = amqpSetup.SetupAMQPEventSubscriber(models.DeviceManagerSource, []string{
-		string(models.EventUpdateCertificateMetadataKey),
+		string(models.EventUpdateCertificateStatusKey),
 		string(models.EventUpdateCertificateMetadataKey),
 	})
 	if err != nil {

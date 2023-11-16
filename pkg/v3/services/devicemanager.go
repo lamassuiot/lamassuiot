@@ -318,12 +318,12 @@ func (svc DeviceManagerServiceImpl) UpdateDeviceIdentitySlot(input UpdateDeviceI
 		device.Status = models.DeviceActiveRequiresAction
 	case models.SlotActive:
 		device.Status = models.DeviceActive
+	case models.SlotWarnExpiration:
+		device.Status = models.DeviceActiveWithWarns
 	case models.SlotCriticalExpiration:
 		device.Status = models.DeviceActiveWithCritical
 	case models.SlotExpired:
 		device.Status = models.DeviceActiveRequiresAction
-	case models.SlotWarnExpiration:
-		device.Status = models.DeviceActiveWithWarns
 	}
 
 	device.IdentitySlot = &newSlot

@@ -226,6 +226,8 @@ func (svc DMSManagerServiceImpl) CACerts(aps string) ([]*x509.Certificate, error
 			return nil, err
 		}
 
+		lDMS.Debugf("got CA %s\n%s", caResponse.ID, helpers.CertificateToPEM((*x509.Certificate)(caResponse.Certificate.Certificate)))
+
 		cas = append(cas, (*x509.Certificate)(caResponse.Certificate.Certificate))
 	}
 
@@ -285,7 +287,7 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 			return nil, errs.ErrDMSEnrollInvalidCert
 		}
 	} else if estAuthOptions.AuthMode == models.ESTAuthModeNoAuth {
-		lDMS.Infof("DMS %s is configured with NoAuth. Allowing enrollment", dms.ID)
+		lDMS.Warnf("DMS %s is configured with NoAuth. Allowing enrollment", dms.ID)
 	}
 
 	var device *models.Device
@@ -436,14 +438,6 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		return nil, errs.ErrDMSOnlyEST
 	}
 
-	clientCert, hasValue := ctx.Value(models.ESTAuthModeClientCertificate).(*x509.Certificate)
-	if !hasValue {
-		lDMS.Errorf("aborting reenrollment process for device '%s'. No client certificate was presented", csr.Subject.CommonName)
-		return nil, errs.ErrDMSAuthModeNotSupported
-	}
-
-	lDMS.Debugf("presented client certificate has CN=%s and SN=%s issued by CA with CommonName '%s'", clientCert.Subject.CommonName, helpers.SerialNumberToString(clientCert.SerialNumber), clientCert.Issuer.CommonName)
-
 	enrollCAID := dms.Settings.EnrollmentSettings.EnrollmentCA
 	enrollCA, err := svc.caClient.GetCAByID(context.Background(), GetCAByIDInput{
 		CAID: enrollCAID,
@@ -453,46 +447,69 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		return nil, err
 	}
 
-	validCertificate := false
-	//check if certificate is a certificate issued by Enroll CA
-	lDMS.Debugf("validating client certificate using EST Enrollment CA witch has ID=%s CN=%s SN=%s", enrollCAID, enrollCA.Certificate.Subject.CommonName, enrollCA.SerialNumber)
-	err = helpers.ValidateCertificate((*x509.Certificate)(enrollCA.Certificate.Certificate), *clientCert, false)
-	if err != nil {
-		lDMS.Warnf("invalid validation using enroll CA: %s", err)
-	} else {
-		lDMS.Debugf("OK validation using enroll")
-		validCertificate = true
-	}
+	if dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode == models.ESTAuthModeClientCertificate {
+		clientCert, hasValue := ctx.Value(models.ESTAuthModeClientCertificate).(*x509.Certificate)
+		if !hasValue {
+			lDMS.Errorf("aborting reenrollment process for device '%s'. No client certificate was presented", csr.Subject.CommonName)
+			return nil, errs.ErrDMSAuthModeNotSupported
+		}
 
-	if !validCertificate {
-		estReEnrollOpts := dms.Settings.ReEnrollmentSettings
-		aValCAsCtr := len(estReEnrollOpts.AdditionalValidationCAs)
-		lDMS.Debugf("could not validate client certificate using enroll CA. Will try validating using Additional Validation CAs")
-		lDMS.Debugf("DMS has %d additonal validation CAs", aValCAsCtr)
-		//check if certificate is a certificate issued by Extra Val CAs
+		lDMS.Debugf("presented client certificate has CN=%s and SN=%s issued by CA with CommonName '%s'", clientCert.Subject.CommonName, helpers.SerialNumberToString(clientCert.SerialNumber), clientCert.Issuer.CommonName)
 
-		for idx, caID := range estReEnrollOpts.AdditionalValidationCAs {
-			lDMS.Debugf("[%d/%d] obtainig validation with ID %s", idx, aValCAsCtr, caID)
-			ca, err := svc.caClient.GetCAByID(context.Background(), GetCAByIDInput{CAID: caID})
-			if err != nil {
-				lDMS.Warnf("[%d/%d] could not obtain lamassu CA with ID %s. Skipping to next validation CA: %s", idx, aValCAsCtr, caID, err)
-				continue
-			}
+		validCertificate := false
+		//check if certificate is a certificate issued by Enroll CA
+		lDMS.Debugf("validating client certificate using EST Enrollment CA witch has ID=%s CN=%s SN=%s", enrollCAID, enrollCA.Certificate.Subject.CommonName, enrollCA.SerialNumber)
+		err = helpers.ValidateCertificate((*x509.Certificate)(enrollCA.Certificate.Certificate), *clientCert, false)
+		if err != nil {
+			lDMS.Warnf("invalid validation using enroll CA: %s", err)
+		} else {
+			lDMS.Debugf("OK validation using enroll")
+			validCertificate = true
+		}
 
-			err = helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), *clientCert, false)
-			if err != nil {
-				lDMS.Debugf("[%d/%d] invalid validation using CA [%s] with CommonName '%s', SerialNumber '%s'", idx, aValCAsCtr, ca.ID, ca.Subject.CommonName, ca.SerialNumber)
-			} else {
-				lDMS.Debugf("[%d/%d] OK validation using CA [%s] with CommonName '%s', SerialNumber '%s'", idx, aValCAsCtr, ca.ID, ca.Subject.CommonName, ca.SerialNumber)
-				validCertificate = true
-				break
+		if !validCertificate {
+			estReEnrollOpts := dms.Settings.ReEnrollmentSettings
+			aValCAsCtr := len(estReEnrollOpts.AdditionalValidationCAs)
+			lDMS.Debugf("could not validate client certificate using enroll CA. Will try validating using Additional Validation CAs")
+			lDMS.Debugf("DMS has %d additonal validation CAs", aValCAsCtr)
+			//check if certificate is a certificate issued by Extra Val CAs
+
+			for idx, caID := range estReEnrollOpts.AdditionalValidationCAs {
+				lDMS.Debugf("[%d/%d] obtainig validation with ID %s", idx, aValCAsCtr, caID)
+				ca, err := svc.caClient.GetCAByID(context.Background(), GetCAByIDInput{CAID: caID})
+				if err != nil {
+					lDMS.Warnf("[%d/%d] could not obtain lamassu CA with ID %s. Skipping to next validation CA: %s", idx, aValCAsCtr, caID, err)
+					continue
+				}
+
+				err = helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), *clientCert, false)
+				if err != nil {
+					lDMS.Debugf("[%d/%d] invalid validation using CA [%s] with CommonName '%s', SerialNumber '%s'", idx, aValCAsCtr, ca.ID, ca.Subject.CommonName, ca.SerialNumber)
+				} else {
+					lDMS.Debugf("[%d/%d] OK validation using CA [%s] with CommonName '%s', SerialNumber '%s'", idx, aValCAsCtr, ca.ID, ca.Subject.CommonName, ca.SerialNumber)
+					validCertificate = true
+					break
+				}
 			}
 		}
-	}
 
-	if !validCertificate {
-		lDMS.Errorf("invalid reenrollment. Used certificate not authorized for this DMS. Certificate has SerialNumber %s issued by CA with CN=%s", helpers.SerialNumberToString(clientCert.SerialNumber), clientCert.Issuer.CommonName)
-		return nil, errs.ErrDMSEnrollInvalidCert
+		if !validCertificate {
+			lDMS.Errorf("invalid reenrollment. Used certificate not authorized for this DMS. Certificate has SerialNumber %s issued by CA with CN=%s", helpers.SerialNumberToString(clientCert.SerialNumber), clientCert.Issuer.CommonName)
+			return nil, errs.ErrDMSEnrollInvalidCert
+		}
+
+		//Check if EXPIRED
+		now := time.Now()
+		if clientCert.NotBefore.After(now) {
+			if dms.Settings.ReEnrollmentSettings.EnableExpiredRenewal {
+				lDMS.Infof("presented an expired certificate by %s, but DMS allows expired renewals. Continuing", now.Sub(clientCert.NotBefore))
+			} else {
+				lDMS.Errorf("aborting reenrollment. Device has a valid but expired certificate")
+				return nil, fmt.Errorf("expired certificate")
+			}
+		}
+	} else {
+		lDMS.Warnf("allowing reenroll: using NO AUTH mode")
 	}
 
 	var device *models.Device
@@ -577,16 +594,6 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 	if comparisonTimeThreshold.After(now) {
 		lDMS.Errorf("aborting reenrollment. Device has a valid certificate but DMS reenrollment window does not allow reenrolling with %s delta. Update DMS or wait until the reenrollment window is open", models.TimeDuration(now.Sub(comparisonTimeThreshold)).String())
 		return nil, fmt.Errorf("invalid reenroll window")
-	}
-
-	//Check if EXPIRED
-	if clientCert.NotBefore.After(now) {
-		if dms.Settings.ReEnrollmentSettings.EnableExpiredRenewal {
-			lDMS.Infof("presented an expired certificate by %s, but DMS allows expired renewals. Continuing", now.Sub(clientCert.NotBefore))
-		} else {
-			lDMS.Errorf("aborting reenrollment. Device has a valid but expired certificate")
-			return nil, fmt.Errorf("expired certificate")
-		}
 	}
 
 	crt, err := svc.caClient.SignCertificate(context.Background(), SignCertificateInput{

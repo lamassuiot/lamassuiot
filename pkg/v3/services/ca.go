@@ -687,7 +687,12 @@ type GetCAsInput struct {
 func (svc *CAServiceImpl) GetCAs(ctx context.Context, input GetCAsInput) (string, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
-	nextBookmark, err := svc.caStorage.SelectAll(ctx, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
+	nextBookmark, err := svc.caStorage.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{
+		ExhaustiveRun: input.ExhaustiveRun,
+		ApplyFunc:     input.ApplyFunc,
+		QueryParams:   input.QueryParameters,
+		ExtraOpts:     nil,
+	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while reading all CAs from storage engine: %s", err)
 		return "", err
@@ -736,7 +741,12 @@ func (svc *CAServiceImpl) GetCAsByCommonName(ctx context.Context, input GetCAsBy
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	lFunc.Debugf("reading CAs by %s common name", input.CommonName)
-	nextBookmark, err := svc.caStorage.SelectByCommonName(ctx, input.CommonName, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
+	nextBookmark, err := svc.caStorage.SelectByCommonName(ctx, input.CommonName, storage.StorageListRequest[models.CACertificate]{
+		ExhaustiveRun: input.ExhaustiveRun,
+		ApplyFunc:     input.ApplyFunc,
+		QueryParams:   input.QueryParameters,
+		ExtraOpts:     nil,
+	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while reading all CAs by Common name %s from storage engine: %s", input.CommonName, err)
 		return "", err
@@ -805,6 +815,27 @@ func (svc *CAServiceImpl) UpdateCAStatus(ctx context.Context, input UpdateCAStat
 	}
 
 	if input.Status == models.StatusRevoked {
+		revokeCAFunc := func(ca models.CACertificate) {
+			_, err := svc.UpdateCAStatus(ctx, UpdateCAStatusInput{
+				CAID:             ca.ID,
+				Status:           models.StatusRevoked,
+				RevocationReason: ocsp.CessationOfOperation,
+			})
+			if err != nil {
+				lFunc.Errorf("could not revoke child CA Certificate %s issued by CA %s", ca.ID, ca.IssuerCAMetadata.ID)
+			}
+		}
+
+		_, err := svc.caStorage.SelectByParentCA(ctx, ca.ID, storage.StorageListRequest[models.CACertificate]{
+			ExhaustiveRun: true,
+			ApplyFunc:     revokeCAFunc,
+			QueryParams:   &resources.QueryParameters{},
+			ExtraOpts:     nil,
+		})
+		if err != nil {
+			return nil, err
+		}
+
 		revokeCertFunc := func(c models.Certificate) {
 			_, err := svc.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
 				SerialNumber:     c.SerialNumber,
@@ -816,7 +847,12 @@ func (svc *CAServiceImpl) UpdateCAStatus(ctx context.Context, input UpdateCAStat
 			}
 		}
 
-		_, err = svc.certStorage.SelectByCA(ctx, ca.IssuerCAMetadata.ID, true, revokeCertFunc, &resources.QueryParameters{}, map[string]interface{}{})
+		_, err = svc.certStorage.SelectByCA(ctx, ca.IssuerCAMetadata.ID, storage.StorageListRequest[models.Certificate]{
+			ExhaustiveRun: true,
+			ApplyFunc:     revokeCertFunc,
+			QueryParams:   &resources.QueryParameters{},
+			ExtraOpts:     map[string]interface{}{},
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -1124,7 +1160,12 @@ type GetCertificatesInput struct {
 }
 
 func (svc *CAServiceImpl) GetCertificates(ctx context.Context, input GetCertificatesInput) (string, error) {
-	return svc.certStorage.SelectAll(ctx, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
+	return svc.certStorage.SelectAll(ctx, storage.StorageListRequest[models.Certificate]{
+		ExhaustiveRun: input.ExhaustiveRun,
+		ApplyFunc:     input.ApplyFunc,
+		QueryParams:   input.QueryParameters,
+		ExtraOpts:     nil,
+	})
 }
 
 type GetCertificatesByCAInput struct {
@@ -1159,7 +1200,12 @@ func (svc *CAServiceImpl) GetCertificatesByCA(ctx context.Context, input GetCert
 	}
 
 	lFunc.Debugf("reading certificates by %s CA", input.CAID)
-	return svc.certStorage.SelectByCA(ctx, input.CAID, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
+	return svc.certStorage.SelectByCA(ctx, input.CAID, storage.StorageListRequest[models.Certificate]{
+		ExhaustiveRun: input.ExhaustiveRun,
+		ApplyFunc:     input.ApplyFunc,
+		QueryParams:   input.QueryParameters,
+		ExtraOpts:     nil,
+	})
 }
 
 type GetCertificatesByExpirationDateInput struct {
@@ -1172,7 +1218,12 @@ func (svc *CAServiceImpl) GetCertificatesByExpirationDate(ctx context.Context, i
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	lFunc.Debugf("reading certificates by expiration date. expiresafter: %s. expiresbefore: %s", input.ExpiresAfter, input.ExpiresBefore)
-	return svc.certStorage.SelectByExpirationDate(ctx, input.ExpiresBefore, input.ExpiresAfter, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, map[string]interface{}{})
+	return svc.certStorage.SelectByExpirationDate(ctx, input.ExpiresBefore, input.ExpiresAfter, storage.StorageListRequest[models.Certificate]{
+		ExhaustiveRun: input.ExhaustiveRun,
+		ApplyFunc:     input.ApplyFunc,
+		QueryParams:   input.QueryParameters,
+		ExtraOpts:     nil,
+	})
 }
 
 type GetCertificatesByCaAndStatusInput struct {
@@ -1182,7 +1233,12 @@ type GetCertificatesByCaAndStatusInput struct {
 }
 
 func (svc *CAServiceImpl) GetCertificatesByCaAndStatus(ctx context.Context, input GetCertificatesByCaAndStatusInput) (string, error) {
-	return svc.certStorage.SelectByCAIDAndStatus(ctx, input.CAID, input.Status, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, map[string]interface{}{})
+	return svc.certStorage.SelectByCAIDAndStatus(ctx, input.CAID, input.Status, storage.StorageListRequest[models.Certificate]{
+		ExhaustiveRun: input.ExhaustiveRun,
+		ApplyFunc:     input.ApplyFunc,
+		QueryParams:   input.QueryParameters,
+		ExtraOpts:     nil,
+	})
 }
 
 type GetCertificatesByStatusInput struct {
@@ -1191,7 +1247,12 @@ type GetCertificatesByStatusInput struct {
 }
 
 func (svc *CAServiceImpl) GetCertificatesByStatus(ctx context.Context, input GetCertificatesByStatusInput) (string, error) {
-	return svc.certStorage.SelectByStatus(ctx, input.Status, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, map[string]interface{}{})
+	return svc.certStorage.SelectByStatus(ctx, input.Status, storage.StorageListRequest[models.Certificate]{
+		ExhaustiveRun: input.ExhaustiveRun,
+		ApplyFunc:     input.ApplyFunc,
+		QueryParams:   input.QueryParameters,
+		ExtraOpts:     nil,
+	})
 }
 
 type UpdateCertificateStatusInput struct {

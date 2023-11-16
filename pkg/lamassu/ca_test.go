@@ -2254,10 +2254,10 @@ func TestHierarchy(t *testing.T) {
 		name        string
 		before      func(svc services.CAService) error
 		run         func(caSDK services.CAService) error
-		resultCheck func(error) error
+		resultCheck func(parentCA, childCA *x509.Certificate, err error) error
 	}{
 		{
-			name: "OK/TestThreeHierarchy",
+			name: "OK/TestThreeLevelHierarchy-UsingDuration",
 			before: func(svc services.CAService) error {
 
 				return nil
@@ -2308,16 +2308,20 @@ func TestHierarchy(t *testing.T) {
 
 				return err
 			},
-			resultCheck: func(err error) error {
-
+			resultCheck: func(parentCA, childCA *x509.Certificate, err error) error {
 				if err != nil {
 					return fmt.Errorf("got unexpected error: %s", err)
 				}
+
+				if parentCA.NotAfter.After(childCA.NotAfter) {
+					return fmt.Errorf("Child CA expires after ParentCA")
+				}
+
 				return nil
 			},
 		},
 		{
-			name: "ERR/TestLessDurationRootCA",
+			name: "ERR/ChildCAExpiresAfterRootCA",
 			before: func(svc services.CAService) error {
 
 				return nil
@@ -2351,18 +2355,17 @@ func TestHierarchy(t *testing.T) {
 			},
 		},
 		{
-			name: "OK/TestLimitDateThreeLevels",
+			name: "OK/ThreeLevelWithFixedDates",
 			before: func(svc services.CAService) error {
 
 				return nil
 			},
 			run: func(caSDK services.CAService) error {
+				caRDLim := time.Date(3000, 12, 1, 0, 0, 0, 0, time.Local)   // expires the 1st of december of 3000
+				caCDLim1 := time.Date(3000, 11, 28, 0, 0, 0, 0, time.Local) // expires the 28th of november of 3000
+				caCDLim2 := time.Date(3000, 11, 27, 0, 0, 0, 0, time.Local) // expires the 27 of november of 3000
 
-				caRDLim := time.Date(2030, 12, 1, 0, 0, 0, 0, time.Local)
-				caCDLim1 := time.Date(2030, 11, 28, 0, 0, 0, 0, time.Local)
-				caCDLim2 := time.Date(2030, 11, 27, 0, 0, 0, 0, time.Local)
-
-				issuanceDur := time.Date(2030, 11, 20, 0, 0, 0, 0, time.Local)
+				issuanceDur := time.Date(3000, 11, 20, 0, 0, 0, 0, time.Local) // fixed issuance: the 20 of november of 3000
 				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:            models.Subject{CommonName: DefaultCACN},
@@ -2429,9 +2432,8 @@ func TestHierarchy(t *testing.T) {
 			},
 		},
 		{
-			name: "ERR/TestLimitDateTwoLevels",
+			name: "ERR/ChildCAExpiresAfterParentCA-UsingFixedDates",
 			before: func(svc services.CAService) error {
-
 				return nil
 			},
 			run: func(caSDK services.CAService) error {
@@ -2469,17 +2471,16 @@ func TestHierarchy(t *testing.T) {
 			},
 		},
 		{
-			name: "OK/TestMixedTimeFormats",
+			name: "OK/TestMixedExpirationFormats",
 			before: func(svc services.CAService) error {
-
 				return nil
 			},
 			run: func(caSDK services.CAService) error {
 
-				caRDLim := time.Date(2030, 12, 1, 0, 0, 0, 0, time.Local)
+				caRDLim := time.Date(3000, 12, 1, 0, 0, 0, 0, time.Local)
 				caDurChild1 := models.TimeDuration(time.Hour * 26)
 
-				caIss := time.Date(2030, 11, 20, 0, 0, 0, 0, time.Local)
+				caIss := time.Date(3000, 11, 20, 0, 0, 0, 0, time.Local)
 				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:            models.Subject{CommonName: DefaultCACN},
