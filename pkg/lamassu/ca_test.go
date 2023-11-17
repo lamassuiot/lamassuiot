@@ -2242,7 +2242,117 @@ func TestSignatureVerify(t *testing.T) {
 		})
 	}
 }
+func TestHierarchyCryptoEngines(t *testing.T) {
+	caTest, err := BuildCATestServer()
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
 
+	t.Cleanup(caTest.AfterSuite)
+	var testcases = []struct {
+		name        string
+		before      func(svc services.CAService) error
+		run         func(caSDK services.CAService) ([]models.CACertificate, error)
+		resultCheck func([]models.CACertificate, error) error
+	}{
+		{
+			name: "OK/TestHighDurationRootCA",
+			before: func(svc services.CAService) error {
+
+				return nil
+			},
+			run: func(caSDK services.CAService) ([]models.CACertificate, error) {
+				var cas []models.CACertificate
+				caDurRootCA := models.TimeDuration(time.Hour * 25)
+				caDurChild1 := models.TimeDuration(time.Hour * 24)
+
+				caIss := models.TimeDuration(time.Minute * 3)
+				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
+
+				fmt.Println(engines[0].ID)
+
+				rootCA, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDurRootCA},
+					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
+					EngineID:           engines[0].ID,
+				})
+
+				if err != nil {
+					t.Fatalf("failed creating the root CA: %s", err)
+				}
+				cas = append(cas, *rootCA)
+
+				childCALvl1, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDurChild1},
+					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
+					ParentID:           rootCA.ID,
+				})
+				if err != nil {
+					t.Fatalf("failed creating the first CA child: %s", err)
+				}
+				cas = append(cas, *childCALvl1)
+				fmt.Println("=============================")
+				fmt.Println("CN:" + childCALvl1.Subject.CommonName)
+				fmt.Println("ID:" + childCALvl1.ID)
+				fmt.Println("SN:" + childCALvl1.SerialNumber)
+				fmt.Println("=============================")
+
+				//cas := []*models.CACertificate{}
+
+				return cas, err
+			},
+			resultCheck: func(cas []models.CACertificate, err error) error {
+
+				rootCa := cas[0]
+				childCa := cas[1]
+
+				if rootCa.Certificate.ValidTo.Before(childCa.Certificate.ValidTo) {
+					return fmt.Errorf("requested CA would expire after parent CA")
+				}
+
+				if err != nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			//
+			// err := postgres_test.BeforeEach()
+			// fmt.Errorf("Error while running BeforeEach job: %s", err)
+
+			err = caTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
+			}
+
+			//Init CA Server with 1 CA
+			_, err = initCA(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running initCA: %s", err)
+			}
+
+			err = tc.before(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running 'before' func in test case: %s", err)
+			}
+
+			err = tc.resultCheck(tc.run(caTest.HttpCASDK))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+		})
+	}
+}
 func TestHierarchy(t *testing.T) {
 	caTest, err := BuildCATestServer()
 	if err != nil {
