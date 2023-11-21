@@ -279,7 +279,7 @@ func (engine X509Engine) Sign(caCertificate *x509.Certificate, message []byte, m
 		}
 		signature, err := privkey.Sign(rand.Reader, digest, hashFunc)
 		if err != nil {
-			return nil, errs.ErrEngineHashAlgInconsistency
+			return nil, err
 		}
 		return signature, nil
 	} else if caCertificate.PublicKeyAlgorithm == x509.RSA {

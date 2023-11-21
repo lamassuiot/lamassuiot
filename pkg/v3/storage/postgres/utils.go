@@ -83,7 +83,8 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 	tx := db.Table(db.tableName)
 
 	offset := 0
-	limit := 25
+	limit := 15
+
 	var sortMode string
 	var sortBy string
 
@@ -91,9 +92,7 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 
 	if queryParams != nil {
 		if queryParams.NextBookmark == "" {
-			if queryParams.PageSize == 0 {
-				limit = 15
-			} else {
+			if queryParams.PageSize > 0 {
 				limit = queryParams.PageSize
 			}
 
@@ -191,28 +190,42 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 		tx = tx.Where(whereQuery.query, whereQuery.extraArgs...)
 	}
 
-	for {
+	if offset > 0 {
+		tx.Offset(offset)
+	}
+
+	if exhaustiveRun {
+		res := tx.FindInBatches(&elems, limit, func(tx *gorm.DB, batch int) error {
+			for _, elem := range elems {
+				applyFunc(elem)
+			}
+
+			return nil
+		})
+		if res.Error != nil {
+			return "", res.Error
+		}
+
+		return "", nil
+	} else {
 		tx.Offset(offset)
 		tx.Limit(limit)
-
-		rSet := tx.Find(&elems)
+		rs := tx.Find(&elems)
 		for _, elem := range elems {
 			// batch processing found records
 			applyFunc(elem)
 		}
 
-		if rSet.RowsAffected == 0 {
+		if rs.Error != nil {
+			return "", rs.Error
+		}
+
+		if rs.RowsAffected == 0 {
 			return "", nil
 		}
 
-		if !exhaustiveRun {
-			break
-		}
-
-		offset = offset + limit
+		return base64.StdEncoding.EncodeToString([]byte(nextBookmark)), nil
 	}
-
-	return base64.StdEncoding.EncodeToString([]byte(nextBookmark)), nil
 }
 
 // Selects first element from DB. if queryCol is empty or nil, the primary key column

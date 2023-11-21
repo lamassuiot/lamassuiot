@@ -30,6 +30,9 @@ func (mw amqpCAEventPublisher) GetCryptoEngineProvider(ctx context.Context) ([]*
 func (mw amqpCAEventPublisher) GetStats(ctx context.Context) (*models.CAStats, error) {
 	return mw.next.GetStats(ctx)
 }
+func (mw amqpCAEventPublisher) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
+	return mw.next.GetStatsByCAID(ctx, input)
+}
 
 func (mw amqpCAEventPublisher) CreateCA(ctx context.Context, input services.CreateCAInput) (output *models.CACertificate, err error) {
 	defer func() {

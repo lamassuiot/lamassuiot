@@ -38,4 +38,9 @@ const (
 	EventUpdateDMSMetadataKey EventType = "dms.update.metadata"
 	EventEnrollKey            EventType = "dms.enroll"
 	EventReEnrollKey          EventType = "dms.reenroll"
+
+	EventCreateDeviceKey         EventType = "device.create"
+	EventUpdateDeviceIDSlotKey   EventType = "device.update.identity"
+	EventUpdateDeviceStatusKey   EventType = "device.update.status"
+	EventUpdateDeviceMetadataKey EventType = "device.update.metadata"
 )

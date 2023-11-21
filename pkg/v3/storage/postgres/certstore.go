@@ -32,6 +32,14 @@ func (db *PostgresCertificateStorage) Count(ctx context.Context) (int, error) {
 	return db.querier.Count([]gormWhereParams{})
 }
 
+func (db *PostgresCertificateStorage) CountByCAIDAndStatus(ctx context.Context, caID string, status models.CertificateStatus) (int, error) {
+	opts := []gormWhereParams{
+		{query: "issuer_meta_id = ?", extraArgs: []any{caID}},
+		{query: "status = ?", extraArgs: []any{status}},
+	}
+	return db.querier.Count(opts)
+}
+
 func (db *PostgresCertificateStorage) SelectByType(ctx context.Context, CAType models.CertificateType, req storage.StorageListRequest[models.Certificate]) (string, error) {
 	opts := []gormWhereParams{
 		{query: "ca_meta_type = ?", extraArgs: []any{CAType}},

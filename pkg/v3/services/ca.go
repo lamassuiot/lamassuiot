@@ -30,6 +30,8 @@ type CAMiddleware func(CAService) CAService
 
 type CAService interface {
 	GetStats(ctx context.Context) (*models.CAStats, error)
+	GetStatsByCAID(ctx context.Context, input GetStatsByCAIDInput) (map[models.CertificateStatus]int, error)
+
 	GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error)
 
 	CreateCA(ctx context.Context, input CreateCAInput) (*models.CACertificate, error)
@@ -291,6 +293,29 @@ func (svc *CAServiceImpl) GetStats(ctx context.Context) (*models.CAStats, error)
 			CertificateStatus:            map[models.CertificateStatus]int{},
 		},
 	}, nil
+}
+
+type GetStatsByCAIDInput struct {
+	CAID string
+}
+
+func (svc *CAServiceImpl) GetStatsByCAID(ctx context.Context, input GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
+	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+
+	stats := map[models.CertificateStatus]int{}
+	for _, status := range []models.CertificateStatus{models.StatusActive, models.StatusExpired, models.StatusRevoked} {
+		lFunc.Debugf("counting certificates in %s status", status)
+		ctr, err := svc.certStorage.CountByCAIDAndStatus(ctx, input.CAID, status)
+		if err != nil {
+			lFunc.Errorf("could not count certificates in %s status: %s", status, err)
+			return nil, err
+		}
+
+		lFunc.Debugf("got %d certificates", ctr)
+		stats[status] = ctr
+	}
+
+	return stats, nil
 }
 
 func (svc *CAServiceImpl) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
@@ -816,7 +841,7 @@ func (svc *CAServiceImpl) UpdateCAStatus(ctx context.Context, input UpdateCAStat
 
 	if input.Status == models.StatusRevoked {
 		revokeCAFunc := func(ca models.CACertificate) {
-			_, err := svc.UpdateCAStatus(ctx, UpdateCAStatusInput{
+			_, err := svc.service.UpdateCAStatus(ctx, UpdateCAStatusInput{
 				CAID:             ca.ID,
 				Status:           models.StatusRevoked,
 				RevocationReason: ocsp.CessationOfOperation,
@@ -836,8 +861,11 @@ func (svc *CAServiceImpl) UpdateCAStatus(ctx context.Context, input UpdateCAStat
 			return nil, err
 		}
 
+		ctr := 0
 		revokeCertFunc := func(c models.Certificate) {
-			_, err := svc.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
+			lCA.Infof("\n\n%d - %s\n\n", ctr, c.SerialNumber)
+			ctr++
+			_, err := svc.service.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
 				SerialNumber:     c.SerialNumber,
 				NewStatus:        models.StatusRevoked,
 				RevocationReason: ocsp.CessationOfOperation,
@@ -847,7 +875,7 @@ func (svc *CAServiceImpl) UpdateCAStatus(ctx context.Context, input UpdateCAStat
 			}
 		}
 
-		_, err = svc.certStorage.SelectByCA(ctx, ca.IssuerCAMetadata.ID, storage.StorageListRequest[models.Certificate]{
+		_, err = svc.certStorage.SelectByCA(ctx, ca.ID, storage.StorageListRequest[models.Certificate]{
 			ExhaustiveRun: true,
 			ApplyFunc:     revokeCertFunc,
 			QueryParams:   &resources.QueryParameters{},
@@ -983,6 +1011,7 @@ func (svc *CAServiceImpl) SignCertificate(ctx context.Context, input SignCertifi
 		lFunc.Errorf("%s CA is not active", ca.ID)
 		return nil, errs.ErrCAStatus
 	}
+
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
 
 	x509Engine := x509engines.NewX509Engine(engine, "")
@@ -1029,7 +1058,6 @@ func (svc *CAServiceImpl) SignCertificate(ctx context.Context, input SignCertifi
 		ValidFrom:           x509Cert.NotBefore,
 		ValidTo:             x509Cert.NotAfter,
 		RevocationTimestamp: time.Time{},
-		EngineID:            ca.EngineID,
 	}
 	lFunc.Debugf("insert Certificate %s in storage engine", cert.SerialNumber)
 	return svc.certStorage.Insert(ctx, &cert)
@@ -1045,10 +1073,50 @@ func (svc *CAServiceImpl) CreateCertificate(ctx context.Context, input CreateCer
 }
 
 type ImportCertificateInput struct {
+	ImportMode  models.CertificateType
+	Certificate *models.X509Certificate
+	CAID        string
 }
 
 func (svc *CAServiceImpl) ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error) {
-	return nil, fmt.Errorf("TODO")
+	status := models.StatusActive
+	if input.Certificate.NotAfter.After(time.Now()) {
+		status = models.StatusExpired
+	}
+
+	newCert := models.Certificate{
+		Metadata:            map[string]interface{}{},
+		Type:                models.CertificateTypeExternal,
+		Certificate:         (*models.X509Certificate)(input.Certificate),
+		Status:              status,
+		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate((*x509.Certificate)(input.Certificate)),
+		Subject:             helpers.PkixNameToSubject(input.Certificate.Subject),
+		SerialNumber:        helpers.SerialNumberToString(input.Certificate.SerialNumber),
+		ValidFrom:           input.Certificate.NotBefore,
+		ValidTo:             input.Certificate.NotAfter,
+		RevocationTimestamp: time.Time{},
+	}
+
+	if input.CAID != "" {
+		ca, err := svc.GetCAByID(ctx, GetCAByIDInput{CAID: input.CAID})
+		if err != nil {
+			return nil, err
+		}
+
+		newCert.IssuerCAMetadata = models.IssuerCAMetadata{
+			SerialNumber: helpers.SerialNumberToString(input.Certificate.SerialNumber),
+			ID:           ca.ID,
+			Level:        ca.Level,
+		}
+	}
+
+	cert, err := svc.certStorage.Insert(ctx, &newCert)
+	if err != nil {
+		lCA.Errorf("could not insert certificate: %s", err)
+		return nil, err
+	}
+
+	return cert, nil
 }
 
 type SignatureSignInput struct {

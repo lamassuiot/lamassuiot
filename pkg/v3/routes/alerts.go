@@ -11,7 +11,7 @@ func NewAlertsHTTPLayer(router *gin.RouterGroup, svc services.AlertsService) {
 
 	rv1 := router.Group("/v1")
 
-	rv1.GET("/events/latest", routes.GetUserSubscriptions)
+	rv1.GET("/events/latest", routes.GetLatestEventsPerEventType)
 
 	rv1.GET("/user/:userId/subscriptions", routes.GetUserSubscriptions)
 	rv1.POST("/user/:userId/subscribe", routes.Subscribe)

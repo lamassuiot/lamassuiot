@@ -125,6 +125,34 @@ func (r *caHttpRoutes) GetStats(ctx *gin.Context) {
 	ctx.JSON(200, stats)
 }
 
+func (r *caHttpRoutes) GetStatsByCAID(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
+	stats, err := r.svc.GetStatsByCAID(funCtx, services.GetStatsByCAIDInput{
+		CAID: params.ID,
+	})
+
+	if err != nil {
+		switch err {
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+
+	ctx.JSON(200, stats)
+}
+
 // @Summary Import CA
 // @Description Import CA
 // @Accept json

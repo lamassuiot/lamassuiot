@@ -9,11 +9,10 @@ import (
 )
 
 var deviceFiltrableFieldMap = map[string]resources.FilterFieldType{
-	"id":          resources.StringFilterFieldType,
-	"alias":       resources.StringFilterFieldType,
-	"dms_owner":   resources.StringFilterFieldType,
-	"creation_ts": resources.DateFilterFieldType,
-	"status":      resources.EnumFilterFieldType,
+	"id":                 resources.StringFilterFieldType,
+	"dms_owner":          resources.StringFilterFieldType,
+	"creation_timestamp": resources.DateFilterFieldType,
+	"status":             resources.EnumFilterFieldType,
 }
 
 type devManagerHttpRoutes struct {

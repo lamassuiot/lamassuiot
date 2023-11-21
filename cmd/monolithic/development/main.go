@@ -141,7 +141,7 @@ func main() {
 
 	conf := config.MonolithicConfig{
 		BaseConfig: config.BaseConfig{
-			Logs:           config.BaseConfigLogging{Level: config.Trace},
+			Logs:           config.BaseConfigLogging{Level: config.Info},
 			AMQPConnection: *rmqConfig,
 		},
 		Domain:       "dev.lamassu.test",
@@ -184,7 +184,7 @@ func main() {
 			Frequency: "* * * * *",
 		},
 		Storage: config.PluggableStorageEngine{
-			LogLevel: config.Trace,
+			LogLevel: config.Info,
 			Provider: config.Postgres,
 			Postgres: *storageConfig,
 		},

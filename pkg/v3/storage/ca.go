@@ -9,6 +9,7 @@ import (
 
 type CertificatesRepo interface {
 	CountByCA(ctx context.Context, caID string) (int, error)
+	CountByCAIDAndStatus(ctx context.Context, caID string, status models.CertificateStatus) (int, error)
 	SelectByCA(ctx context.Context, caID string, req StorageListRequest[models.Certificate]) (string, error)
 	SelectByExpirationDate(ctx context.Context, beforeExpirationDate time.Time, afterExpirationDate time.Time, req StorageListRequest[models.Certificate]) (string, error)
 	SelectByCAIDAndStatus(ctx context.Context, CAID string, status models.CertificateStatus, req StorageListRequest[models.Certificate]) (string, error)

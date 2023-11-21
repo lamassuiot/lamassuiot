@@ -46,6 +46,14 @@ func (cli *httpCAClient) GetStats(ctx context.Context) (*models.CAStats, error) 
 
 	return stats, nil
 }
+func (cli *httpCAClient) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
+	stats, err := Get[map[models.CertificateStatus]int](ctx, cli.httpClient, cli.baseUrl+"/v1/stats/"+input.CAID, nil, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return stats, nil
+}
 
 func (cli *httpCAClient) GetCAs(ctx context.Context, input services.GetCAsInput) (string, error) {
 	url := cli.baseUrl + "/v1/cas"

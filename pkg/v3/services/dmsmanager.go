@@ -397,18 +397,22 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 			Secrets: map[int]string{
 				0: crt.SerialNumber,
 			},
-			Logs: map[time.Time]models.LogMsg{},
+			Events: map[time.Time]models.DeviceEvent{
+				time.Now(): models.DeviceEvent{
+					EvenType: models.DeviceEventTypeProvisioned,
+				},
+			},
 		}
 	} else {
 		idSlot = *device.IdentitySlot
 		idSlot.ActiveVersion = idSlot.ActiveVersion + 1
 		idSlot.Status = models.SlotActive
-		idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
-	}
 
-	idSlot.Logs[time.Now()] = models.LogMsg{
-		Message:     fmt.Sprintf("Enrolled Device with Certificate with Serial Number %s", crt.SerialNumber),
-		Criticality: models.CRITICAL,
+		idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
+		idSlot.Events[time.Now()] = models.DeviceEvent{
+			EvenType:          models.DeviceEventTypeReProvisioned,
+			EventDescriptions: fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion),
+		}
 	}
 
 	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(UpdateDeviceIdentitySlotInput{
@@ -659,15 +663,14 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		return nil, err
 	}
 
-	var idSlot models.Slot[string]
-	idSlot = *device.IdentitySlot
+	idSlot := *device.IdentitySlot
 	idSlot.ActiveVersion = idSlot.ActiveVersion + 1
 	idSlot.Status = models.SlotActive
 	idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
 
-	idSlot.Logs[time.Now()] = models.LogMsg{
-		Message:     fmt.Sprintf("Re Enrolled Device with Certificate with Serial Number %s", crt.SerialNumber),
-		Criticality: models.CRITICAL,
+	idSlot.Events[time.Now()] = models.DeviceEvent{
+		EvenType:          models.DeviceEventTypeRenewed,
+		EventDescriptions: fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion),
 	}
 
 	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(UpdateDeviceIdentitySlotInput{

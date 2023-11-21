@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"os"
 	"slices"
 
 	"github.com/cloudevents/sdk-go/v2/event"
@@ -20,11 +18,8 @@ import (
 )
 
 func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAService, dmsService services.DMSManagerService, deviceService services.DeviceManagerService) (*iot.AWSCloudConnectorService, error) {
-	file, _ := os.OpenFile("aws.logs", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Service")
-	lSvc.Logger.SetOutput(io.MultiWriter(os.Stdout, file))
 	lMessaging := helpers.ConfigureLogger(conf.BaseConfig.AMQPConnection.LogLevel, "Messaging")
-	lMessaging.Logger.SetOutput(io.MultiWriter(os.Stdout, file))
 
 	awsCfg, err := config.GetAwsSdkConfig(conf.AWSSDKConfig)
 	if err != nil {
@@ -126,6 +121,58 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 			}
 		}
 
+	case string(models.EventUpdateDeviceMetadataKey):
+		deviceUpdate, err := getEventBody[models.UpdateModel[models.Device]](cloudEvent)
+		if err != nil {
+			logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "Device", err)
+			return
+		}
+
+		device := deviceUpdate.Updated
+		var deviceMetaAWS models.DeviceAWSMetadata
+		hasKey, err := helpers.GetMetadataToStruct(device.Metadata, models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID), &deviceMetaAWS)
+		if err != nil {
+			logger.Errorf("could not decode metadata with key %s: %s", models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID), err)
+			return
+		}
+
+		if !hasKey {
+			logrus.Warnf("skipping event %s, Device doesn't have %s key", cloudEvent.Type(), models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID))
+			return
+		}
+
+		dms, err := awsConnectorSvc.DmsSDK.GetDMSByID(context.Background(), services.GetDMSByIDInput{
+			ID: device.DMSOwnerID,
+		})
+		if err != nil {
+			logger.Errorf("could not get DMS %s: %s", device.DMSOwnerID, err)
+			return
+		}
+
+		var dmsAWSConf models.IotAWSDMSMetadata
+		hasKey, err = helpers.GetMetadataToStruct(dms.Metadata, models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID), &dmsAWSConf)
+		if err != nil {
+			logger.Errorf("could not decode metadata with key %s: %s", models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID), err)
+			return
+		}
+
+		if !hasKey {
+			logrus.Warnf("skipping event %s, DMS doesn't have %s key", cloudEvent.Type(), models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID))
+			return
+		}
+
+		if len(deviceMetaAWS.Actions) > 0 {
+			err = awsConnectorSvc.UpdateDeviceShadow(iot.UpdateDeviceShadowInput{
+				DeviceID:               device.ID,
+				RemediationActionsType: deviceMetaAWS.Actions,
+				DMSIoTAutomationConfig: dmsAWSConf,
+			})
+			if err != nil {
+				logger.Errorf("something went wrong while updating %s Thing Shadow: %s", device.ID, err)
+				return
+			}
+		}
+
 	case string(models.EventUpdateCertificateMetadataKey):
 		certUpdate, err := getEventBody[models.UpdateModel[models.Certificate]](cloudEvent)
 		if err != nil {
@@ -189,7 +236,7 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 		if preventiveIdx >= 0 && certExpirationDeltas[preventiveIdx].Triggered {
 			err = awsConnectorSvc.UpdateDeviceShadow(iot.UpdateDeviceShadowInput{
 				DeviceID:               cert.Subject.CommonName,
-				RemediationActionType:  models.RemediationActionUpdateCertificate,
+				RemediationActionsType: []models.RemediationActionType{models.RemediationActionUpdateCertificate},
 				DMSIoTAutomationConfig: dmsAWSConf,
 			})
 			if err != nil {

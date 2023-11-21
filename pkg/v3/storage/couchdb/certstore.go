@@ -37,6 +37,9 @@ func NewCouchCertificateRepository(client *kivik.Client) (storage.CertificatesRe
 func (db *CouchDBCertificateStorage) Count(ctx context.Context) (int, error) {
 	return db.querier.Count()
 }
+func (db *CouchDBCertificateStorage) CountByCAIDAndStatus(ctx context.Context, caID string, status models.CertificateStatus) (int, error) {
+	return -1, fmt.Errorf("TODO")
+}
 
 func (db *CouchDBCertificateStorage) SelectByType(ctx context.Context, CAType models.CertificateType, req storage.StorageListRequest[models.Certificate]) (string, error) {
 	opts := map[string]interface{}{
