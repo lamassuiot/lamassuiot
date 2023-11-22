@@ -562,7 +562,6 @@ func TestUpdateCAMetadata(t *testing.T) {
 				})
 				if err != nil {
 					t.Logf("failed updating the metadata of the CA: %s", err)
-					fmt.Println("ads")
 				}
 				return err
 			},
@@ -1061,7 +1060,7 @@ func TestGetCertificates(t *testing.T) {
 						},
 					},
 				})
-				fmt.Println(issuedCerts)
+
 				return issuedCerts, err
 			},
 			resultCheck: func(certs []*models.Certificate, err error) error {
@@ -1107,7 +1106,6 @@ func TestGetCertificates(t *testing.T) {
 						},
 					},
 				})
-				fmt.Println(issuedCerts)
 				return issuedCerts, err
 			},
 			resultCheck: func(certs []*models.Certificate, err error) error {
@@ -1201,7 +1199,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 					},
 					CAID: DefaultCAID,
 				})
-				fmt.Println(issuedCerts)
+
 				return issuedCerts, err
 			},
 			resultCheck: func(certs []*models.Certificate, err error) error {
@@ -1247,7 +1245,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 					},
 					CAID: DefaultCAID,
 				})
-				fmt.Println(issuedCerts)
+
 				return issuedCerts, err
 			},
 			resultCheck: func(certs []*models.Certificate, err error) error {
@@ -1293,7 +1291,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 					},
 					CAID: "manex",
 				})
-				fmt.Println(issuedCerts)
+
 				return issuedCerts, err
 			},
 			resultCheck: func(certs []*models.Certificate, err error) error {
@@ -1340,7 +1338,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 					},
 					CAID: "manex",
 				})
-				fmt.Println(issuedCerts)
+
 				return issuedCerts, err
 			},
 			resultCheck: func(certs []*models.Certificate, err error) error {
@@ -1499,7 +1497,7 @@ func TestImportCA(t *testing.T) {
 				}
 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6a4e0bf7d8adef322c06987baca",
-					CAType: models.CertificateTypeImported,
+					CAType: models.CertificateTypeImportedWithKey,
 					IssuanceExpiration: models.Expiration{
 						Type:     models.Duration,
 						Duration: (*models.TimeDuration)(&duration),
@@ -1535,7 +1533,7 @@ func TestImportCA(t *testing.T) {
 				fmt.Println(engines)
 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6a4e0bf7d8adef322c06987baca",
-					CAType: models.CertificateTypeImported,
+					CAType: models.CertificateTypeImportedWithKey,
 					IssuanceExpiration: models.Expiration{
 						Type:     models.Duration,
 						Duration: (*models.TimeDuration)(&duration),
@@ -1570,7 +1568,7 @@ func TestImportCA(t *testing.T) {
 				}
 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:     "c1acdb823dd8ac113d2b0a1aaa0adef322c06987baca",
-					CAType: models.CertificateTypeImported,
+					CAType: models.CertificateTypeImportedWithKey,
 					IssuanceExpiration: models.Expiration{
 						Type:     models.Duration,
 						Duration: (*models.TimeDuration)(&duration),
@@ -1602,7 +1600,7 @@ func TestImportCA(t *testing.T) {
 					fmt.Errorf("Failed creating the certificate %s", err)
 				}
 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType: models.CertificateTypeImported,
+					CAType: models.CertificateTypeImportedWithKey,
 					IssuanceExpiration: models.Expiration{
 						Type:     models.Duration,
 						Duration: (*models.TimeDuration)(&duration),

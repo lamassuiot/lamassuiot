@@ -71,3 +71,8 @@ type GetCertificateStatus struct {
 	Status    models.CertificateStatus `json:"status"`
 	ListInput []models.Certificate     `json:"lostCertificates"`
 }
+
+type ImportCertificateBody struct {
+	Metadata    map[string]interface{} `json:"metadata"`
+	Certificate models.X509Certificate `json:"certificate"`
+}

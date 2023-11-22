@@ -1006,3 +1006,28 @@ func (r *caHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
 	}
 	ctx.JSON(200, cert)
 }
+
+func (r *caHttpRoutes) ImportCertificate(ctx *gin.Context) {
+	var requestBody resources.ImportCertificateBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
+	cert, err := r.svc.ImportCertificate(funCtx, services.ImportCertificateInput{
+		ImportMode:  models.CertificateTypeExternal,
+		Metadata:    requestBody.Metadata,
+		Certificate: &requestBody.Certificate,
+	})
+
+	if err != nil {
+		switch err {
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ctx.JSON(201, cert)
+}

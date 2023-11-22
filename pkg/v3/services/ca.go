@@ -449,33 +449,31 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 	caCert := input.CACertificate
 	var engineID string
 	if input.CAType != models.CertificateTypeExternal {
-		lFunc.Debugf("importing CA %s private key. CA type: %s", input.CACertificate.Subject.CommonName, input.CAType)
+		lFunc.Debugf("importing CA %s - %s  private key. CA type: %s", helpers.SerialNumberToString(input.CACertificate.SerialNumber), input.CACertificate.Subject.CommonName, input.CAType)
 		var engine cryptoengines.CryptoEngine
 		if input.EngineID == "" {
 			engine = *svc.defaultCryptoEngine
 			engineID = svc.defaultCryptoEngineID
-			lFunc.Infof("importing CA %s with %s crypto engine", input.CACertificate.Subject.CommonName, engine.GetEngineConfig().Provider)
+			lFunc.Infof("importing CA %s - %s  with %s crypto engine", helpers.SerialNumberToString(input.CACertificate.SerialNumber), input.CACertificate.Subject.CommonName, engine.GetEngineConfig().Provider)
 		} else {
 			engine = *svc.cryptoEngines[input.EngineID]
 			engineID = input.EngineID
-			lFunc.Infof("importing CA %s with %s crypto engine", input.CACertificate.Subject.CommonName, engine.GetEngineConfig().Provider)
+			lFunc.Infof("importing CA %s - %s with %s crypto engine", helpers.SerialNumberToString(input.CACertificate.SerialNumber), input.CACertificate.Subject.CommonName, engine.GetEngineConfig().Provider)
 		}
-		if input.CAType != models.CertificateTypeExternal {
-			if input.CARSAKey != nil {
-				_, err = engine.ImportRSAPrivateKey(input.CARSAKey, input.CACertificate.Subject.CommonName)
-			} else if input.CAECKey != nil {
-				_, err = engine.ImportECDSAPrivateKey(input.CAECKey, input.CACertificate.Subject.CommonName)
-			} else {
-				lFunc.Errorf("key type %s not supported", input.KeyType)
-				return nil, fmt.Errorf("KeyType not supported")
-			}
+
+		if input.CARSAKey != nil {
+			_, err = engine.ImportRSAPrivateKey(input.CARSAKey, x509engines.CryptoAssetLRI(x509engines.CertificateAuthority, helpers.SerialNumberToString(input.CACertificate.SerialNumber)))
+		} else if input.CAECKey != nil {
+			_, err = engine.ImportECDSAPrivateKey(input.CAECKey, x509engines.CryptoAssetLRI(x509engines.CertificateAuthority, helpers.SerialNumberToString(input.CACertificate.SerialNumber)))
+		} else {
+			lFunc.Errorf("key type %s not supported", input.KeyType)
+			return nil, fmt.Errorf("KeyType not supported")
 		}
 
 		if err != nil {
-			lFunc.Errorf("could not import CA %s private key: %s", input.CACertificate.Subject.CommonName, err)
+			lFunc.Errorf("could not import CA %s private key: %s", helpers.SerialNumberToString(input.CACertificate.SerialNumber), err)
 			return nil, fmt.Errorf("could not import key: %w", err)
 		}
-
 	}
 
 	caID := input.ID
@@ -569,10 +567,7 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 		} else {
 			caExpiration = *input.CAExpiration.Time
 		}
-		fmt.Println("Manexxx")
-		fmt.Println(caExpiration)
 		parentCaExpiration := parentCA.Certificate.ValidTo
-		fmt.Println(parentCaExpiration)
 
 		if parentCaExpiration.Before(caExpiration) {
 			lFunc.Errorf("requested CA would expire after parent CA")
@@ -1075,7 +1070,7 @@ func (svc *CAServiceImpl) CreateCertificate(ctx context.Context, input CreateCer
 type ImportCertificateInput struct {
 	ImportMode  models.CertificateType
 	Certificate *models.X509Certificate
-	CAID        string
+	Metadata    map[string]any
 }
 
 func (svc *CAServiceImpl) ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error) {
@@ -1085,7 +1080,7 @@ func (svc *CAServiceImpl) ImportCertificate(ctx context.Context, input ImportCer
 	}
 
 	newCert := models.Certificate{
-		Metadata:            map[string]interface{}{},
+		Metadata:            input.Metadata,
 		Type:                models.CertificateTypeExternal,
 		Certificate:         (*models.X509Certificate)(input.Certificate),
 		Status:              status,
@@ -1097,16 +1092,28 @@ func (svc *CAServiceImpl) ImportCertificate(ctx context.Context, input ImportCer
 		RevocationTimestamp: time.Time{},
 	}
 
-	if input.CAID != "" {
-		ca, err := svc.GetCAByID(ctx, GetCAByIDInput{CAID: input.CAID})
-		if err != nil {
-			return nil, err
-		}
+	var parentCA *models.CACertificate
+	svc.caStorage.SelectByCommonName(ctx, input.Certificate.Issuer.CommonName, storage.StorageListRequest[models.CACertificate]{
+		ExhaustiveRun: true,
+		ApplyFunc: func(ca models.CACertificate) {
+			err := helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), x509.Certificate(*input.Certificate), false)
+			if err == nil {
+				parentCA = &ca
+			}
+		},
+	})
 
+	if parentCA != nil {
 		newCert.IssuerCAMetadata = models.IssuerCAMetadata{
-			SerialNumber: helpers.SerialNumberToString(input.Certificate.SerialNumber),
-			ID:           ca.ID,
-			Level:        ca.Level,
+			SerialNumber: parentCA.SerialNumber,
+			ID:           parentCA.ID,
+			Level:        parentCA.Level,
+		}
+	} else {
+		newCert.IssuerCAMetadata = models.IssuerCAMetadata{
+			SerialNumber: "-",
+			ID:           "-",
+			Level:        -1,
 		}
 	}
 
@@ -1149,7 +1156,7 @@ func (svc *CAServiceImpl) SignatureSign(ctx context.Context, input SignatureSign
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
 	x509Engine := x509engines.NewX509Engine(engine, "")
 	lFunc.Debugf("sign signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
-	signature, err := x509Engine.Sign((*x509.Certificate)(ca.Certificate.Certificate), input.Message, input.MessageType, input.SigningAlgorithm)
+	signature, err := x509Engine.Sign(x509engines.CertificateAuthority, (*x509.Certificate)(ca.Certificate.Certificate), input.Message, input.MessageType, input.SigningAlgorithm)
 	if err != nil {
 		return nil, err
 	}

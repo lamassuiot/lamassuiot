@@ -1,13 +1,18 @@
 package main
 
 import (
+	"context"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/fatih/color"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/clients"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/test/monolithic"
 	rabbitmq_test "github.com/lamassuiot/lamassuiot/pkg/v3/test/subsystems/async-messaging/rabbitmq"
@@ -149,7 +154,7 @@ func main() {
 		AssemblyMode: config.Http,
 		CryptoEngines: config.CryptoEngines{
 			LogLevel:      config.Info,
-			DefaultEngine: "dockertest-hcpvault-kvv2",
+			DefaultEngine: "golang-1",
 			HashicorpVaultKV2Provider: []config.HashicorpVaultCryptoEngineConfig{
 				config.HashicorpVaultCryptoEngineConfig{
 					HashicorpVaultSDK: *vaultConfig,
@@ -213,6 +218,25 @@ func main() {
 	}
 
 	fmt.Println(readyToPKI)
+
+	http.DefaultClient.Transport = &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+
+	time.Sleep(3 * time.Second)
+	caCli := clients.NewHttpCAClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/ca", conf.GatewayPort))
+	engines, err := caCli.GetCryptoEngineProvider(context.Background())
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("==================== Available Crypto Engines ==========================")
+	for _, engine := range engines {
+		fmt.Println(engine.ID)
+	}
+	fmt.Println("========================================================================")
 
 	forever := make(chan struct{})
 	<-forever
