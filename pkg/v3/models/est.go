@@ -31,7 +31,7 @@ type ESTClientAuthOptionsMutualTLS struct {
 	PrivateKey  interface{}
 }
 
-type EnrollEvent struct {
+type EnrollReenrollEvent struct {
 	Certificate *X509Certificate `json:"certificate"`
 	APS         string           `json:"aps"`
 }

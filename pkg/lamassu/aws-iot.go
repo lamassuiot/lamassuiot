@@ -80,8 +80,8 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 	}
 
 	switch cloudEvent.Type() {
-	case string(models.EventEnrollKey):
-		enrollEvent, err := getEventBody[models.EnrollEvent](cloudEvent)
+	case string(models.EventEnrollKey), string(models.EventReEnrollKey):
+		enrollEvent, err := getEventBody[models.EnrollReenrollEvent](cloudEvent)
 		if err != nil {
 			logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "Certificate", err)
 			return

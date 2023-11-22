@@ -131,7 +131,7 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (*AWSC
 
 type RegisterAndAttachThingInput struct {
 	DeviceID               string
-	EnrollmentEvent        models.EnrollEvent
+	EnrollmentEvent        models.EnrollReenrollEvent
 	DMSIoTAutomationConfig models.IotAWSDMSMetadata
 }
 
