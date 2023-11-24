@@ -52,6 +52,7 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 		for {
 			select {
 			case amqpMessage := <-amqpSetup.Msgs:
+				lMessaging.Trace(string(amqpMessage.Body))
 				event, err := messaging.ParseCloudEvent(amqpMessage.Body)
 				if err != nil {
 					logrus.Errorf("Something went wrong while processing cloud event: %s", err)

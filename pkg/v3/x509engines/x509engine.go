@@ -440,5 +440,5 @@ const (
 )
 
 func CryptoAssetLRI(cryptoAssetType CryptoAssetType, keyID string) string {
-	return fmt.Sprintf("lms:caservice:%s:keyid:%s", cryptoAssetType, keyID)
+	return fmt.Sprintf("lms-caservice-%s-keyid-%s", cryptoAssetType, keyID)
 }

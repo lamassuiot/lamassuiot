@@ -191,6 +191,8 @@ func (aPub *AMQPSetup) PublishCloudEvent(ctx context.Context, eventType models.E
 		}
 	}
 
+	src = "lrn://internal-service"
+
 	event := BuildCloudEvent(string(eventType), src, payload)
 	eventBytes, marshalErr := json.Marshal(event)
 	if marshalErr != nil {

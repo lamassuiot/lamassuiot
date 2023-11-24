@@ -96,6 +96,7 @@ func main() {
 	fmt.Println("Async Messaging Engine")
 	fmt.Println(">> launching docker: RabbitMQ ...")
 	rmqCleanup, rmqConfig, err := rabbitmq_test.RunRabbitMQDocker()
+	rmqConfig.LogLevel = config.Info
 	if err != nil {
 		log.Fatalf("could not launch RabbitMQ: %s", err)
 	}
@@ -186,7 +187,7 @@ func main() {
 		},
 		CryptoMonitoring: config.CryptoMonitoring{
 			Enabled:   true,
-			Frequency: "* * * * *",
+			Frequency: "0 * * * *",
 		},
 		Storage: config.PluggableStorageEngine{
 			LogLevel: config.Info,
