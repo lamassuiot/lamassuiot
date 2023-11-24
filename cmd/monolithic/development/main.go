@@ -72,10 +72,13 @@ func main() {
 
 	fmt.Println("Crypto Engines")
 	fmt.Println(">> launching docker: Hashicorp Vault ...")
-	vCleanup, vaultConfig, err := keyvaultkv2_test.RunHashicorpVaultDocker()
+	vCleanup, vaultConfig, rootToken, err := keyvaultkv2_test.RunHashicorpVaultDocker()
 	if err != nil {
 		log.Fatalf("could not launch Hashicorp Vault: %s", err)
 	}
+	fmt.Printf(" 	-- vault port: %d\n", vaultConfig.Port)
+	fmt.Printf(" 	-- vault root token: %s\n", rootToken)
+
 	fmt.Println(">> launching docker: AWS Platform (Secrets Manager + KMS) ...")
 	awsCleanup, awsCfg, err := awskmssm_test.RunAWSEmulationLocalStackDocker()
 	if err != nil {

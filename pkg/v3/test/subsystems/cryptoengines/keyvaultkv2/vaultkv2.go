@@ -13,7 +13,7 @@ import (
 	"github.com/ory/dockertest/v3/docker"
 )
 
-func RunHashicorpVaultDocker() (func() error, *config.HashicorpVaultSDK, error) {
+func RunHashicorpVaultDocker() (func() error, *config.HashicorpVaultSDK, string, error) {
 	rootToken := "root-token-dev"
 	containerCleanup, container, _, err := dockerunner.RunDocker(dockertest.RunOptions{
 		Repository: "vault",  // image
@@ -25,7 +25,7 @@ func RunHashicorpVaultDocker() (func() error, *config.HashicorpVaultSDK, error) 
 		},
 	}, func(hc *docker.HostConfig) {})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 
 	p, _ := strconv.Atoi(container.GetPort("8200/tcp"))
@@ -35,7 +35,7 @@ func RunHashicorpVaultDocker() (func() error, *config.HashicorpVaultSDK, error) 
 	client, err := vaultApi.NewClient(conf)
 	if err != nil {
 		containerCleanup()
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 
 	healthy := false
@@ -54,7 +54,7 @@ func RunHashicorpVaultDocker() (func() error, *config.HashicorpVaultSDK, error) 
 	})
 	if err != nil {
 		containerCleanup()
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 
 	mountPath := "lamassu-pki-kvv2"
@@ -74,7 +74,7 @@ func RunHashicorpVaultDocker() (func() error, *config.HashicorpVaultSDK, error) 
 	err = client.Sys().PutPolicy("pki-kv", policyContent)
 	if err != nil {
 		containerCleanup()
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 
 	_, err = client.Logical().Write(fmt.Sprintf("auth/approle/role/%s", "lamassu-ca-client"), map[string]interface{}{
@@ -82,13 +82,13 @@ func RunHashicorpVaultDocker() (func() error, *config.HashicorpVaultSDK, error) 
 	})
 	if err != nil {
 		containerCleanup()
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 
 	roleIDRaw, err := client.Logical().Read(fmt.Sprintf("auth/approle/role/%s/role-id", "lamassu-ca-client"))
 	if err != nil {
 		containerCleanup()
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 
 	roleID := roleIDRaw.Data["role_id"].(string)
@@ -96,7 +96,7 @@ func RunHashicorpVaultDocker() (func() error, *config.HashicorpVaultSDK, error) 
 	secretIDRAW, err := client.Logical().Write(fmt.Sprintf("auth/approle/role/%s/secret-id", "lamassu-ca-client"), nil)
 	if err != nil {
 		containerCleanup()
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 
 	secretID := secretIDRAW.Data["secret_id"].(string)
@@ -114,5 +114,5 @@ func RunHashicorpVaultDocker() (func() error, *config.HashicorpVaultSDK, error) 
 				TLSConfig: config.TLSConfig{},
 			},
 		},
-	}, nil
+	}, rootToken, nil
 }

@@ -389,10 +389,22 @@ func (svc *CAServiceImpl) issueCA(ctx context.Context, input issueCAInput) (*iss
 			return nil, err
 		}
 	} else {
+
 		if parentEngine, ok := svc.cryptoEngines[input.ParentCA.EngineID]; ok {
 			x509ParentEngine := x509engines.NewX509Engine(parentEngine, "")
+			if input.ParentCA.EngineID != input.EngineID {
+				childEngine, ok := svc.cryptoEngines[input.EngineID]
+				if !ok {
+					lFunc.Errorf("something went wrong while doing the cast")
+					return nil, nil
+				}
+				childx509ParentEngine := x509engines.NewX509Engine(childEngine, "")
+				x509Engine = childx509ParentEngine
+			} else {
+				x509Engine = x509ParentEngine
+			}
 			lFunc.Debugf("creating SUBORDINATE CA certificate.common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
-			caCert, err = x509ParentEngine.CreateSubordinateCA(input.ParentCA.ID, input.CAID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), input.KeyMetadata, input.Subject, expiration)
+			caCert, err = x509Engine.CreateSubordinateCA(input.ParentCA.ID, input.CAID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), input.KeyMetadata, input.Subject, expiration, x509ParentEngine)
 			if err != nil {
 				lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
 				return nil, err

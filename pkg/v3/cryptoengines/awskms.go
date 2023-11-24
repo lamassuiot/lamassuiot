@@ -115,6 +115,8 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, 
 	if keyID == "" {
 		lAWSKMS.Errorf("kms key not found")
 		return nil, errors.New("kms key not found")
+	} else {
+		keyID = "awskms:///" + keyID
 	}
 
 	kmsSinger, err := sigstoreAWS.LoadSignerVerifier(context.Background(), keyID, func(lo *config.LoadOptions) error {
