@@ -123,6 +123,7 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, 
 		lo.Credentials = p.kmsConfig.Credentials
 		lo.HTTPClient = p.kmsConfig.HTTPClient
 		lo.Region = p.kmsConfig.Region
+		lo.EndpointResolverWithOptions = p.kmsConfig.EndpointResolverWithOptions
 		return nil
 	})
 
