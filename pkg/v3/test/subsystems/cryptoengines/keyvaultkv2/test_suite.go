@@ -12,7 +12,7 @@ type VaultSuite struct {
 
 func BeforeSuite() (config.HashicorpVaultSDK, VaultSuite) {
 	// setup *gorm.Db with docker
-	cleanup, conf, err := RunHashicorpVaultDocker()
+	cleanup, conf, _, err := RunHashicorpVaultDocker()
 	if err != nil {
 		log.Fatal(err)
 	}

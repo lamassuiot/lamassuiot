@@ -2269,8 +2269,6 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 				caIss := models.TimeDuration(time.Minute * 3)
 				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
 
-				fmt.Println(engines[0].ID)
-
 				rootCA, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:            models.Subject{CommonName: "CA Lvl 1"},
