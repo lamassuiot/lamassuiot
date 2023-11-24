@@ -91,7 +91,7 @@ func (engine X509Engine) CreateRootCA(caID string, keyMetadata models.KeyMetadat
 	return cert, nil
 }
 
-func (engine X509Engine) CreateSubordinateCA(aki string, caID string, parentCACertificate *x509.Certificate, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error) {
+func (engine X509Engine) CreateSubordinateCA(aki string, caID string, parentCACertificate *x509.Certificate, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time, parentEngine X509Engine) (*x509.Certificate, error) {
 	templateCA, signer, err := engine.genCertTemplateAndPrivateKey(keyMetadata, subject, expirationTine, aki, caID)
 	if err != nil {
 		lCEngine.Errorf("could not generate subordinate CA Template and Key: %s", err)
@@ -106,7 +106,7 @@ func (engine X509Engine) CreateSubordinateCA(aki string, caID string, parentCACe
 	}
 
 	parentSN := helpers.SerialNumberToString(parentCACertificate.SerialNumber)
-	parentCASigner, err := engine.cryptoEngine.GetPrivateKeyByID(CryptoAssetLRI(CertificateAuthority, parentSN))
+	parentCASigner, err := parentEngine.cryptoEngine.GetPrivateKeyByID(CryptoAssetLRI(CertificateAuthority, parentSN))
 	if err != nil {
 		lCEngine.Errorf("could not get parent signer key '%s': %s", parentSN, err)
 		return nil, err

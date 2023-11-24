@@ -35,7 +35,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 					Level: config.Info,
 				},
 				Server: config.HttpServer{
-					LogLevel:           config.Debug,
+					LogLevel:           config.Info,
 					HealthCheckLogging: true,
 					ListenAddress:      "0.0.0.0",
 					Port:               0,
@@ -53,9 +53,9 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 		}
 
 		caConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: caPort}, Protocol: config.HTTP, BasePath: ""}
-		lCAClient := helpers.ConfigureLogger(config.Debug, "LMS SDK - CA Client")
+		lCAClient := helpers.ConfigureLogger(config.Info, "LMS SDK - CA Client")
 		caHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
-			LogLevel:       config.Debug,
+			LogLevel:       config.Info,
 			AuthMode:       config.NoAuth,
 			HTTPConnection: caConnection,
 		}, lCAClient)
@@ -76,7 +76,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 					Level: config.Info,
 				},
 				Server: config.HttpServer{
-					LogLevel:           config.Debug,
+					LogLevel:           config.Info,
 					HealthCheckLogging: true,
 					ListenAddress:      "0.0.0.0",
 					Port:               0,
@@ -95,7 +95,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 					Level: config.Info,
 				},
 				Server: config.HttpServer{
-					LogLevel:           config.Debug,
+					LogLevel:           config.Info,
 					HealthCheckLogging: true,
 					ListenAddress:      "0.0.0.0",
 					Port:               0,
@@ -110,9 +110,9 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 		}
 
 		devMngrConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: devPort}, Protocol: config.HTTP, BasePath: ""}
-		lDevMngrClient := helpers.ConfigureLogger(config.Debug, "LMS SDK - DevManager Client")
+		lDevMngrClient := helpers.ConfigureLogger(config.Info, "LMS SDK - DevManager Client")
 		devMngrHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
-			LogLevel:       config.Debug,
+			LogLevel:       config.Info,
 			AuthMode:       config.NoAuth,
 			HTTPConnection: devMngrConnection,
 		}, lDevMngrClient)
@@ -129,10 +129,10 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
 			BaseConfig: config.BaseConfig{
 				Logs: config.BaseConfigLogging{
-					Level: config.Debug,
+					Level: config.Info,
 				},
 				Server: config.HttpServer{
-					LogLevel:           config.Debug,
+					LogLevel:           config.Info,
 					HealthCheckLogging: true,
 					ListenAddress:      "0.0.0.0",
 					Port:               0,
@@ -147,9 +147,9 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 		}
 
 		dmsMngrConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: dmsPort}, Protocol: config.HTTP, BasePath: ""}
-		lDMSMngrClient := helpers.ConfigureLogger(config.Debug, "LMS SDK - DMSManager Client")
+		lDMSMngrClient := helpers.ConfigureLogger(config.Info, "LMS SDK - DMSManager Client")
 		dmsMngrHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
-			LogLevel:       config.Debug,
+			LogLevel:       config.Info,
 			AuthMode:       config.NoAuth,
 			HTTPConnection: dmsMngrConnection,
 		}, lDMSMngrClient)
@@ -169,7 +169,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 					Level: config.Info,
 				},
 				Server: config.HttpServer{
-					LogLevel:           config.Debug,
+					LogLevel:           config.Info,
 					HealthCheckLogging: true,
 					ListenAddress:      "0.0.0.0",
 					Port:               0,
@@ -187,7 +187,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 			_, err = lamassu.AssembleAWSIoTManagerService(config.IotAWS{
 				BaseConfig: config.BaseConfig{
 					Logs: config.BaseConfigLogging{
-						Level: config.Debug,
+						Level: config.Info,
 					},
 					AMQPConnection: conf.AMQPConnection,
 				},
