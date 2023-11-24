@@ -3,6 +3,7 @@ module github.com/lamassuiot/lamassuiot
 go 1.18
 
 require (
+	github.com/AvraamMavridis/randomcolor v0.0.0-20180822172341-208aff70bf2c
 	github.com/ThalesIgnite/crypto11 v1.2.1
 	github.com/antonfisher/nested-logrus-formatter v1.3.1
 	github.com/aws/aws-sdk-go-v2 v1.22.1

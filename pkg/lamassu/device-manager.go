@@ -9,6 +9,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/messaging"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/middlewares/amqppub"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/routes"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
@@ -66,8 +67,12 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 		return nil, err
 	}
 
+	svc = amqppub.NewDeviceAmqpEventPublisher(amqpSetup)(svc)
+
+	deviceSvc.SetService(svc)
+
 	err = amqpSetup.SetupAMQPEventSubscriber(models.DeviceManagerSource, []string{
-		string(models.EventUpdateCertificateMetadataKey),
+		string(models.EventUpdateCertificateStatusKey),
 		string(models.EventUpdateCertificateMetadataKey),
 	})
 	if err != nil {

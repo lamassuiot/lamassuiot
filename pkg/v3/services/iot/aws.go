@@ -131,7 +131,7 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (*AWSC
 
 type RegisterAndAttachThingInput struct {
 	DeviceID               string
-	EnrollmentEvent        models.EnrollEvent
+	EnrollmentEvent        models.EnrollReenrollEvent
 	DMSIoTAutomationConfig models.IotAWSDMSMetadata
 }
 
@@ -278,12 +278,34 @@ func (svc *AWSCloudConnectorService) RegisterAndAttachThing(input RegisterAndAtt
 		return err
 	}
 
+	device, err := svc.DeviceSDK.GetDeviceByID(services.GetDeviceByIDInput{
+		ID: input.DeviceID,
+	})
+	if err != nil {
+		logrus.Errorf("could not get lamassu device: %s", err)
+		return err
+	}
+
+	device.Metadata[models.AWSIoTMetadataKey(svc.ConnectorID)] = models.DeviceAWSMetadata{
+		Registered: true,
+		Actions:    []models.RemediationActionType{},
+	}
+
+	_, err = svc.DeviceSDK.UpdateDeviceMetadata(services.UpdateDeviceMetadataInput{
+		ID:       input.DeviceID,
+		Metadata: device.Metadata,
+	})
+	if err != nil {
+		logrus.Errorf("could not update device metadata: %s", err)
+		return err
+	}
+
 	return nil
 }
 
 type UpdateDeviceShadowInput struct {
 	DeviceID               string
-	RemediationActionType  models.RemediationActionType
+	RemediationActionsType []models.RemediationActionType
 	DMSIoTAutomationConfig models.IotAWSDMSMetadata
 }
 
@@ -337,7 +359,13 @@ func (svc *AWSCloudConnectorService) UpdateDeviceShadow(input UpdateDeviceShadow
 		}
 	}
 
-	idShadow[string(input.RemediationActionType)] = int(time.Now().UnixMilli())
+	addedActions := []string{}
+	ts := int(time.Now().UnixMilli())
+	for _, action := range input.RemediationActionsType {
+		idShadow[string(action)] = ts
+		addedActions = append(addedActions, string(action))
+	}
+
 	deviceShadow.State.Desired["identity_actions"] = idShadow
 
 	deviceShadowBytes, err := json.Marshal(deviceShadow)
@@ -367,8 +395,58 @@ func (svc *AWSCloudConnectorService) UpdateDeviceShadow(input UpdateDeviceShadow
 		actions = append(actions, key)
 	}
 
-	logrus.Infof("updated shadow for device %s with remediation actions '%s'", input.DeviceID, strings.Join(actions, ","))
+	device, err := svc.DeviceSDK.GetDeviceByID(services.GetDeviceByIDInput{
+		ID: input.DeviceID,
+	})
+	if err != nil {
+		logrus.Errorf("could not get lamassu device: %s", err)
+		return err
+	}
 
+	var deviceMetaAWS models.DeviceAWSMetadata
+	hasKey, err := helpers.GetMetadataToStruct(device.Metadata, models.AWSIoTMetadataKey(svc.ConnectorID), &deviceMetaAWS)
+	if err != nil {
+		logrus.Errorf("could not decode metadata with key %s: %s", models.AWSIoTMetadataKey(svc.ConnectorID), err)
+		return err
+	}
+
+	if !hasKey {
+		logrus.Warnf("Device doesn't have %s key", models.AWSIoTMetadataKey(svc.ConnectorID))
+		return nil
+	}
+
+	deviceMetaAWS.Actions = slices.DeleteFunc(deviceMetaAWS.Actions, func(action models.RemediationActionType) bool {
+		return slices.ContainsFunc(input.RemediationActionsType, func(act models.RemediationActionType) bool {
+			return action == act
+		})
+	})
+
+	device.Metadata[models.AWSIoTMetadataKey(svc.ConnectorID)] = deviceMetaAWS
+
+	_, err = svc.DeviceSDK.UpdateDeviceMetadata(services.UpdateDeviceMetadataInput{
+		ID:       input.DeviceID,
+		Metadata: device.Metadata,
+	})
+	if err != nil {
+		logrus.Errorf("could not update device metadata: %s", err)
+		return err
+	}
+
+	device.IdentitySlot.Events[time.Now()] = models.DeviceEvent{
+		EvenType:          models.DeviceEventTypeShadowUpdated,
+		EventDescriptions: fmt.Sprintf("Remediation Actions: %s", strings.Join(addedActions, ", ")),
+	}
+
+	_, err = svc.DeviceSDK.UpdateDeviceIdentitySlot(services.UpdateDeviceIdentitySlotInput{
+		ID:   input.DeviceID,
+		Slot: *device.IdentitySlot,
+	})
+	if err != nil {
+		logrus.Errorf("could not update device metadata: %s", err)
+		return err
+	}
+
+	logrus.Infof("updated shadow for device %s with remediation actions '%s'", input.DeviceID, strings.Join(actions, ","))
 	return nil
 }
 

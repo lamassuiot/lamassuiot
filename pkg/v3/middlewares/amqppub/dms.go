@@ -72,7 +72,7 @@ func (mw amqpEventPublisher) CACerts(aps string) ([]*x509.Certificate, error) {
 func (mw amqpEventPublisher) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (out *x509.Certificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.eventPublisher.PublishCloudEvent(ctx, models.EventEnrollKey, models.EnrollEvent{
+			mw.eventPublisher.PublishCloudEvent(ctx, models.EventEnrollKey, models.EnrollReenrollEvent{
 				Certificate: (*models.X509Certificate)(out),
 				APS:         aps,
 			})
@@ -84,7 +84,10 @@ func (mw amqpEventPublisher) Enroll(ctx context.Context, csr *x509.CertificateRe
 func (mw amqpEventPublisher) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (out *x509.Certificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.eventPublisher.PublishCloudEvent(ctx, models.EventReEnrollKey, out)
+			mw.eventPublisher.PublishCloudEvent(ctx, models.EventReEnrollKey, models.EnrollReenrollEvent{
+				Certificate: (*models.X509Certificate)(out),
+				APS:         aps,
+			})
 		}
 	}()
 	return mw.next.Reenroll(ctx, csr, aps)

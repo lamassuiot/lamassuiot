@@ -23,9 +23,11 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 		return aws.Endpoint{}, &aws.EndpointNotFoundError{}
 	})
 
+	creds := aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(conf.AccessKeyID, string(conf.SecretAccessKey), ""))
+	creds.Invalidate()
 	awsCfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithRegion(conf.Region),
-		config.WithCredentialsProvider(aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(conf.AccessKeyID, string(conf.SecretAccessKey), ""))),
+		config.WithCredentialsProvider(creds),
 		config.WithEndpointResolverWithOptions(customResolver),
 	)
 	if err != nil {

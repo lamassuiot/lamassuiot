@@ -45,8 +45,10 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) 
 	rv1.GET("/certificates/:sn", routes.GetCertificateBySerialNumber)
 	rv1.PUT("/certificates/:sn/status", routes.UpdateCertificateStatus)
 	rv1.PUT("/certificates/:sn/metadata", routes.UpdateCertificateMetadata)
+	rv1.POST("/certificates/import", routes.ImportCertificate)
 
 	rv1.GET("/engines", routes.GetCryptoEngineProvider)
 	rv1.GET("/stats", routes.GetStats)
+	rv1.GET("/stats/:id", routes.GetStatsByCAID)
 	rv1.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 }

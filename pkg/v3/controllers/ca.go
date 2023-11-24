@@ -27,7 +27,6 @@ var certificateFiltrableFieldMap = map[string]resources.FilterFieldType{
 var caFiltrableFieldMap = map[string]resources.FilterFieldType{
 	"id":                   resources.StringFilterFieldType,
 	"level":                resources.NumberFilterFieldType,
-	"name":                 resources.StringFilterFieldType,
 	"type":                 resources.EnumFilterFieldType,
 	"serial_number":        resources.StringFilterFieldType,
 	"status":               resources.EnumFilterFieldType,
@@ -114,6 +113,34 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 func (r *caHttpRoutes) GetStats(ctx *gin.Context) {
 	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	stats, err := r.svc.GetStats(funCtx)
+	if err != nil {
+		switch err {
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+
+	ctx.JSON(200, stats)
+}
+
+func (r *caHttpRoutes) GetStatsByCAID(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
+	stats, err := r.svc.GetStatsByCAID(funCtx, services.GetStatsByCAIDInput{
+		CAID: params.ID,
+	})
+
 	if err != nil {
 		switch err {
 		default:
@@ -978,4 +1005,29 @@ func (r *caHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(200, cert)
+}
+
+func (r *caHttpRoutes) ImportCertificate(ctx *gin.Context) {
+	var requestBody resources.ImportCertificateBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
+	cert, err := r.svc.ImportCertificate(funCtx, services.ImportCertificateInput{
+		ImportMode:  models.CertificateTypeExternal,
+		Metadata:    requestBody.Metadata,
+		Certificate: &requestBody.Certificate,
+	})
+
+	if err != nil {
+		switch err {
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ctx.JSON(201, cert)
 }

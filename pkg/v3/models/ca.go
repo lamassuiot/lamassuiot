@@ -7,9 +7,9 @@ import (
 type CertificateType string
 
 const (
-	CertificateTypeManaged  CertificateType = "MANAGED"
-	CertificateTypeImported CertificateType = "IMPORTED"
-	CertificateTypeExternal CertificateType = "EXTERNAL"
+	CertificateTypeManaged         CertificateType = "MANAGED"
+	CertificateTypeImportedWithKey CertificateType = "IMPORTED"
+	CertificateTypeExternal        CertificateType = "EXTERNAL"
 )
 
 type ExpirationTimeRef string

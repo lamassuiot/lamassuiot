@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -14,6 +15,8 @@ import (
 
 var lDevice *logrus.Entry
 var deviceValidate *validator.Validate
+
+type DeviceMiddleware func(DeviceManagerService) DeviceManagerService
 
 type DeviceManagerService interface {
 	GetDevicesStats(input GetDevicesStatsInput) (*models.DevicesStats, error)
@@ -120,21 +123,20 @@ func (svc DeviceManagerServiceImpl) CreateDevice(input CreateDeviceInput) (*mode
 	now := time.Now()
 
 	device := &models.Device{
-		ID:           input.ID,
-		IdentitySlot: nil,
-		Status:       models.DeviceNoIdentity,
-		ExtraSlots:   map[string]*models.Slot[any]{},
-		Alias:        input.Alias,
-		Tags:         input.Tags,
-		Metadata:     input.Metadata,
-		Icon:         input.Icon,
-		IconColor:    input.IconColor,
-		DMSOwnerID:   input.DMSID,
-		CreationDate: now,
-		Logs: map[time.Time]models.LogMsg{
+		ID:                input.ID,
+		IdentitySlot:      nil,
+		Status:            models.DeviceNoIdentity,
+		ExtraSlots:        map[string]*models.Slot[any]{},
+		Tags:              input.Tags,
+		Metadata:          input.Metadata,
+		Icon:              input.Icon,
+		IconColor:         input.IconColor,
+		DMSOwnerID:        input.DMSID,
+		CreationTimestamp: now,
+		Events: map[time.Time]models.DeviceEvent{
 			now: {
-				Message:     "Device Created. Pending provision",
-				Criticality: models.CRITICAL,
+				EvenType:          models.DeviceEventTypeCreated,
+				EventDescriptions: "",
 			},
 		},
 	}
@@ -216,23 +218,41 @@ func (svc DeviceManagerServiceImpl) UpdateDeviceStatus(input UpdateDeviceStatusI
 		return nil, errs.ErrDeviceNotFound
 	}
 
+	if device.Status == input.NewStatus {
+		lDevice.Warnf("skipping update. Device already in %s status", input.NewStatus)
+		return device, nil
+	} else if device.Status == models.DeviceDecommissioned {
+		lDevice.Warnf("skipping update. Device decommissioned")
+		return device, nil
+	}
+
 	if input.NewStatus == models.DeviceDecommissioned {
 		if device.IdentitySlot.Status == models.SlotExpired {
 			lDevice.Debugf("skipping slot update. Identity slot already expired")
 		} else if device.IdentitySlot.Status == models.SlotRevoke {
 			lDevice.Debugf("skipping slot update. Identity slot already revoked")
 		} else {
+			device.Events[time.Now()] = models.DeviceEvent{
+				EvenType: models.DeviceEventTypeStatusDecommissioned,
+			}
 			slot := device.IdentitySlot
 			slot.Status = models.SlotRevoke
-			lDevice.Debugf("updating identity slot to revoke active certificate")
-			device, err = svc.service.UpdateDeviceIdentitySlot(UpdateDeviceIdentitySlotInput{
-				ID:   device.ID,
-				Slot: *slot,
+			//don't revoke IdSlot, this will be handled by revoking the attached certificate
+			_, err = svc.caClient.UpdateCertificateStatus(context.Background(), UpdateCertificateStatusInput{
+				SerialNumber:     slot.Secrets[slot.ActiveVersion],
+				NewStatus:        models.StatusRevoked,
+				RevocationReason: ocsp.CessationOfOperation,
 			})
+
 			if err != nil {
-				lDevice.Errorf("error while updating %s device status. could not update identity slot: %s", device.ID, err)
+				lDevice.Errorf("error while updating IdentitySlot from device %s to revoked. could not update certificate %s status: %s", device.ID, slot.Secrets[slot.ActiveVersion], err)
 				return nil, err
 			}
+		}
+	} else {
+		device.Events[time.Now()] = models.DeviceEvent{
+			EvenType:          models.DeviceEventTypeStatusUpdated,
+			EventDescriptions: fmt.Sprintf("Status updated from '%s' to '%s'", device.Status, input.NewStatus),
 		}
 	}
 
@@ -300,38 +320,71 @@ func (svc DeviceManagerServiceImpl) UpdateDeviceIdentitySlot(input UpdateDeviceI
 		return nil, errs.ErrDeviceNotFound
 	}
 
-	newSlot := input.Slot
+	if device.Status == models.DeviceDecommissioned {
+		lDevice.Warnf("device is decommissioned", input.ID)
+		return device, nil
+	}
 
+	newSlot := input.Slot
+	var newDevStatus models.DeviceStatus
 	switch input.Slot.Status {
 	case models.SlotRevoke:
-		revokedCert, err := svc.caClient.UpdateCertificateStatus(context.Background(), UpdateCertificateStatusInput{
-			SerialNumber:     device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion],
-			NewStatus:        models.StatusRevoked,
-			RevocationReason: ocsp.Unspecified,
+		sn := device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion]
+		crt, err := svc.caClient.GetCertificateBySerialNumber(context.Background(), GetCertificatesBySerialNumberInput{
+			SerialNumber: sn,
 		})
 		if err != nil {
-			lDevice.Errorf("could not revoke identity slot for device %s: %s", input.ID, err)
+			lDevice.Errorf("could not get identity slot for device %s: %s", input.ID, err)
 			return nil, err
 		}
 
-		newSlot.Secrets[newSlot.ActiveVersion] = revokedCert.SerialNumber
-		device.Status = models.DeviceActiveRequiresAction
+		if crt.Status != models.StatusRevoked {
+			_, err = svc.caClient.UpdateCertificateStatus(context.Background(), UpdateCertificateStatusInput{
+				SerialNumber:     sn,
+				NewStatus:        models.StatusRevoked,
+				RevocationReason: ocsp.Unspecified,
+			})
+			if err != nil {
+				lDevice.Errorf("could not revoke identity slot for device %s: %s", input.ID, err)
+				return nil, err
+			}
+
+		}
+		newDevStatus = models.DeviceActiveRequiresAction
 	case models.SlotActive:
-		device.Status = models.DeviceActive
-	case models.SlotCriticalExpiration:
-		device.Status = models.DeviceActiveWithCritical
-	case models.SlotExpired:
-		device.Status = models.DeviceActiveRequiresAction
+		newDevStatus = models.DeviceActive
 	case models.SlotWarnExpiration:
-		device.Status = models.DeviceActiveWithWarns
+		newDevStatus = models.DeviceActiveWithWarns
+	case models.SlotCriticalExpiration:
+		newDevStatus = models.DeviceActiveWithCritical
+	case models.SlotExpired:
+		newDevStatus = models.DeviceActiveRequiresAction
 	}
 
+	if device.IdentitySlot != nil && newSlot.Status != device.IdentitySlot.Status {
+		newSlot.Events[time.Now()] = models.DeviceEvent{
+			EvenType:          models.DeviceEventTypeStatusUpdated,
+			EventDescriptions: fmt.Sprintf("Identity Slot Status updated from '%s' to '%s'", device.Status, newSlot.Status),
+		}
+	}
 	device.IdentitySlot = &newSlot
 
+	lDevice.Debugf("updating %s device identity slot. New device status %s. ID slot status %s", input.ID, device.Status, device.IdentitySlot.Status)
+	device, err = svc.devicesStorage.Update(context.Background(), device)
 	if err != nil {
 		return nil, err
 	}
 
-	lDevice.Debugf("updating %s device identity slot. New device status %s. ID slot status %s", input.ID, device.Status, device.IdentitySlot.Status)
-	return svc.devicesStorage.Update(context.Background(), device)
+	if device.Status != newDevStatus {
+		device, err = svc.service.UpdateDeviceStatus(UpdateDeviceStatusInput{
+			ID:        device.ID,
+			NewStatus: newDevStatus,
+		})
+		if err != nil {
+			lDevice.Errorf("could not update device %s status to %s: %s", input.ID, newDevStatus, err)
+			return nil, err
+		}
+	}
+
+	return device, nil
 }

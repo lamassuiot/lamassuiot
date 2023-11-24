@@ -9,7 +9,6 @@ import (
 	kivik "github.com/go-kivik/kivik/v4"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage"
 )
 
@@ -38,15 +37,18 @@ func NewCouchCertificateRepository(client *kivik.Client) (storage.CertificatesRe
 func (db *CouchDBCertificateStorage) Count(ctx context.Context) (int, error) {
 	return db.querier.Count()
 }
+func (db *CouchDBCertificateStorage) CountByCAIDAndStatus(ctx context.Context, caID string, status models.CertificateStatus) (int, error) {
+	return -1, fmt.Errorf("TODO")
+}
 
-func (db *CouchDBCertificateStorage) SelectByType(ctx context.Context, CAType models.CertificateType, exhaustiveRun bool, applyFunc func(models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCertificateStorage) SelectByType(ctx context.Context, CAType models.CertificateType, req storage.StorageListRequest[models.Certificate]) (string, error) {
 	opts := map[string]interface{}{
 		"type": CAType,
 	}
-	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(req.QueryParams, helpers.MergeMaps(&req.ExtraOpts, &opts), req.ExhaustiveRun, req.ApplyFunc)
 }
 
-func (db *CouchDBCertificateStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCertificateStorage) SelectAll(ctx context.Context, req storage.StorageListRequest[models.Certificate]) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
 			"serial_number": map[string]string{
@@ -55,7 +57,7 @@ func (db *CouchDBCertificateStorage) SelectAll(ctx context.Context, exhaustiveRu
 		},
 	}
 
-	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(req.QueryParams, helpers.MergeMaps(&req.ExtraOpts, &opts), req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *CouchDBCertificateStorage) SelectExistsBySerialNumber(ctx context.Context, id string) (bool, *models.Certificate, error) {
@@ -70,7 +72,7 @@ func (db *CouchDBCertificateStorage) Update(ctx context.Context, certificate *mo
 	return db.querier.Update(*certificate, certificate.SerialNumber)
 }
 
-func (db *CouchDBCertificateStorage) SelectByCA(ctx context.Context, caID string, exhaustiveRun bool, applyFunc func(models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCertificateStorage) SelectByCA(ctx context.Context, caID string, req storage.StorageListRequest[models.Certificate]) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
 			"issuer_metadata.ca_name": map[string]string{
@@ -79,10 +81,10 @@ func (db *CouchDBCertificateStorage) SelectByCA(ctx context.Context, caID string
 		},
 	}
 
-	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(req.QueryParams, helpers.MergeMaps(&req.ExtraOpts, &opts), req.ExhaustiveRun, req.ApplyFunc)
 }
 
-func (db *CouchDBCertificateStorage) SelectByExpirationDate(ctx context.Context, beforeExpirationDate time.Time, afterExpirationDate time.Time, exhaustiveRun bool, applyFunc func(models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCertificateStorage) SelectByExpirationDate(ctx context.Context, beforeExpirationDate time.Time, afterExpirationDate time.Time, req storage.StorageListRequest[models.Certificate]) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
 			"$and": []map[string]interface{}{
@@ -110,10 +112,10 @@ func (db *CouchDBCertificateStorage) SelectByExpirationDate(ctx context.Context,
 		},
 	}
 
-	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(req.QueryParams, helpers.MergeMaps(&req.ExtraOpts, &opts), req.ExhaustiveRun, req.ApplyFunc)
 }
 
-func (db *CouchDBCertificateStorage) SelectByCAIDAndStatus(ctx context.Context, CAID string, status models.CertificateStatus, exhaustiveRun bool, applyFunc func(models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCertificateStorage) SelectByCAIDAndStatus(ctx context.Context, CAID string, status models.CertificateStatus, req storage.StorageListRequest[models.Certificate]) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
 			"$and": []map[string]interface{}{
@@ -130,10 +132,10 @@ func (db *CouchDBCertificateStorage) SelectByCAIDAndStatus(ctx context.Context, 
 			},
 		},
 	}
-	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(req.QueryParams, helpers.MergeMaps(&req.ExtraOpts, &opts), req.ExhaustiveRun, req.ApplyFunc)
 }
 
-func (db *CouchDBCertificateStorage) SelectByStatus(ctx context.Context, status models.CertificateStatus, exhaustiveRun bool, applyFunc func(models.Certificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCertificateStorage) SelectByStatus(ctx context.Context, status models.CertificateStatus, req storage.StorageListRequest[models.Certificate]) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
 			"$and": []map[string]interface{}{
@@ -145,9 +147,13 @@ func (db *CouchDBCertificateStorage) SelectByStatus(ctx context.Context, status 
 			},
 		},
 	}
-	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(req.QueryParams, helpers.MergeMaps(&req.ExtraOpts, &opts), req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *CouchDBCertificateStorage) CountByCA(ctx context.Context, caID string) (int, error) {
 	return -1, fmt.Errorf("TODO")
+}
+
+func (db *CouchDBCertificateStorage) SelectByParentCA(ctx context.Context, parentCAID string, req storage.StorageListRequest[models.Certificate]) (string, error) {
+	return "", fmt.Errorf("TODO")
 }

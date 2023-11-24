@@ -26,40 +26,42 @@ const (
 )
 
 type Device struct {
-	ID           string                `json:"id" gorm:"primaryKey"`
-	Alias        string                `json:"alias"`
-	Tags         []string              `json:"tags" gorm:"serializer:json"`
-	Status       DeviceStatus          `json:"status"`
-	Icon         string                `json:"icon"`
-	IconColor    string                `json:"icon_color"`
-	CreationDate time.Time             `json:"creation_ts"`
-	Metadata     map[string]any        `json:"metadata" gorm:"serializer:json"`
-	DMSOwnerID   string                `json:"dms_owner"`
-	IdentitySlot *Slot[string]         `json:"identity,omitempty" gorm:"serializer:json"`
-	ExtraSlots   map[string]*Slot[any] `json:"slots" gorm:"serializer:json"`
-	Logs         map[time.Time]LogMsg  `json:"logs" gorm:"serializer:json"`
+	ID                string                    `json:"id" gorm:"primaryKey"`
+	Tags              []string                  `json:"tags" gorm:"serializer:json"`
+	Status            DeviceStatus              `json:"status"`
+	Icon              string                    `json:"icon"`
+	IconColor         string                    `json:"icon_color"`
+	CreationTimestamp time.Time                 `json:"creation_timestamp"`
+	Metadata          map[string]any            `json:"metadata" gorm:"serializer:json"`
+	DMSOwnerID        string                    `json:"dms_owner"`
+	IdentitySlot      *Slot[string]             `json:"identity,omitempty" gorm:"serializer:json"`
+	ExtraSlots        map[string]*Slot[any]     `json:"slots" gorm:"serializer:json"`
+	Events            map[time.Time]DeviceEvent `json:"events" gorm:"serializer:json"`
 }
 
 type Slot[E any] struct {
-	Status        SlotStatus           `json:"status"`
-	ActiveVersion int                  `json:"active_version"`
-	SecretType    CryptoSecretType     `json:"type"`
-	Secrets       map[int]E            `json:"versions"` // version -> secret
-	Logs          map[time.Time]LogMsg `json:"logs"`
+	Status        SlotStatus                `json:"status"`
+	ActiveVersion int                       `json:"active_version"`
+	SecretType    CryptoSecretType          `json:"type"`
+	Secrets       map[int]E                 `json:"versions"` // version -> secret
+	Events        map[time.Time]DeviceEvent `json:"events" gorm:"serializer:json"`
 }
 
-type Criticality string
+type DeviceEventType string
 
 const (
-	CRITICAL Criticality = "CRITICAL"
-	WARN     Criticality = "WARN"
-	INFO     Criticality = "INFO"
-	ERROR    Criticality = "ERROR"
+	DeviceEventTypeCreated              DeviceEventType = "CREATED"
+	DeviceEventTypeProvisioned          DeviceEventType = "PROVISIONED"
+	DeviceEventTypeReProvisioned        DeviceEventType = "RE-PROVISIONED"
+	DeviceEventTypeRenewed              DeviceEventType = "RENEWED"
+	DeviceEventTypeShadowUpdated        DeviceEventType = "SHADOW-UPDATED"
+	DeviceEventTypeStatusUpdated        DeviceEventType = "STATUS-UPDATED"
+	DeviceEventTypeStatusDecommissioned DeviceEventType = "DECOMMISSIONED"
 )
 
-type LogMsg struct {
-	Message     string      `json:"message"`
-	Criticality Criticality `json:"Criticality"`
+type DeviceEvent struct {
+	EvenType          DeviceEventType `json:"type"`
+	EventDescriptions string          `json:"description"`
 }
 
 type DevicesStats struct {
