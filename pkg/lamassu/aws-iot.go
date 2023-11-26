@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/cloudevents/sdk-go/v2/event"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
@@ -60,6 +62,31 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 				}
 
 				eventHandler(lMessaging, event, *awsConnectorSvc)
+			}
+		}
+	}()
+
+	go func() {
+		lSvc.Infof("starting SQS thread")
+		sqsQueueName := fmt.Sprintf("https://sqs.%s.amazonaws.com/%s/%s", awsConnectorSvc.Region, awsConnectorSvc.AccountID, "Lamassu-IoT-SYNC-EventBridgeOutput6A8BBEEC-LaYbNuW753SC")
+
+		for {
+			lSvc.Debugf("reading from queue %s", sqsQueueName)
+			sqsOutput, err := awsConnectorSvc.SqsSDK.ReceiveMessage(context.Background(), &sqs.ReceiveMessageInput{
+				QueueUrl:            aws.String(sqsQueueName),
+				MaxNumberOfMessages: int32(10),
+				WaitTimeSeconds:     int32(20),
+			})
+
+			if err != nil {
+				lSvc.Errorf("could not receive SQS messages: %s", err)
+				return
+			}
+
+			totalInBatch := len(sqsOutput.Messages)
+			lSvc.Tracef("received sqs batch messages of size %d ", totalInBatch)
+			for idx, sqsMessage := range sqsOutput.Messages {
+				lSvc.Tracef("message [%d/%d]: %s", idx+1, totalInBatch, *sqsMessage.Body)
 			}
 		}
 	}()
