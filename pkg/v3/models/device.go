@@ -7,22 +7,23 @@ import (
 type DeviceStatus string
 
 const (
-	DeviceNoIdentity           DeviceStatus = "NO_IDENTITY"
-	DeviceActive               DeviceStatus = "ACTIVE"
-	DeviceActiveWithWarns      DeviceStatus = "ACTIVE_WITH_WARNS"    //A slot should be ReEnrolled
-	DeviceActiveWithCritical   DeviceStatus = "ACTIVE_WITH_CRITICAL" //A slot shas a Critical certificate and should be ReEnrolled
-	DeviceActiveRequiresAction DeviceStatus = "REQUIRES_ACTION"      //A slot is revoked or expired
-	DeviceDecommissioned       DeviceStatus = "DECOMMISSIONED"
+	DeviceNoIdentity     DeviceStatus = "NO_IDENTITY"
+	DeviceActive         DeviceStatus = "ACTIVE"
+	DeviceRenewalWindow  DeviceStatus = "RENEWAL_PENDING" //A slot should be ReEnrolled
+	DeviceAboutToExpire  DeviceStatus = "EXPIRING_SOON"   //A slot has a Critical certificate and should be ReEnrolled
+	DeviceExpired        DeviceStatus = "EXPIRED"
+	DeviceRevoked        DeviceStatus = "REVOKED"
+	DeviceDecommissioned DeviceStatus = "DECOMMISSIONED"
 )
 
 type SlotStatus string
 
 const (
-	SlotActive             SlotStatus = "ACTIVE"
-	SlotWarnExpiration     SlotStatus = "WARN" //PreventiveEnroll
-	SlotCriticalExpiration SlotStatus = "CRITICAL"
-	SlotExpired            SlotStatus = "EXPIRED"
-	SlotRevoke             SlotStatus = "REVOKED"
+	SlotActive        SlotStatus = "ACTIVE"
+	SlotRenewalWindow SlotStatus = "RENEWAL_PENDING" //PreventiveEnroll
+	SlotAboutToExpire SlotStatus = "EXPIRING_SOON"
+	SlotExpired       SlotStatus = "EXPIRED"
+	SlotRevoke        SlotStatus = "REVOKED"
 )
 
 type Device struct {

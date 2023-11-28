@@ -46,9 +46,9 @@ type PKCS11Config struct {
 }
 
 type PKCS11EngineConfig struct {
-	PKCS11Config
-	ID       string                 `mapstructure:"id"`
-	Metadata map[string]interface{} `mapstructure:"metadata"`
+	PKCS11Config `mapstructure:",squash"`
+	ID           string                 `mapstructure:"id"`
+	Metadata     map[string]interface{} `mapstructure:"metadata"`
 }
 
 type PKCS11ModuleExtraOptions struct {
