@@ -47,35 +47,10 @@ type Client struct {
 	// component, e.g. est.server.com:8443
 	Host string
 
-	HttpProtocol string
-
 	// AdditionalPathSegment is an optional label for EST servers to provide
 	// service for multiple CAs. See RFC7030 3.2.2.
 	AdditionalPathSegment string
 
-	// AdditionalHeaders are additional HTTP headers to include with the
-	// request to the EST server.
-	AdditionalHeaders map[string]string
-
-	// HostHeader overrides the default Host header for the HTTP request to the
-	// EST server, and is mostly useful for testing.
-	HostHeader string
-
-	// Username is an optional HTTP Basic Authentication username.
-	Username string
-
-	// Password is an optional HTTP Basic Authentication password.
-	Password string
-
-	// DisableKeepAlives disables HTTP keep-alives if set.
-	DisableKeepAlives bool
-
-	// http client used while performing EST operations. If nil, defaults to
-	// http.DefaultClient.
-	HttpClient *http.Client
-}
-
-type HttpClientBuilder struct {
 	// ExplicitAnchor is the optional Explicit TA database. See RFC7030 3.6.1.
 	ExplicitAnchor *x509.CertPool
 
@@ -95,6 +70,20 @@ type HttpClientBuilder struct {
 	// Trusted Platform Module (TPM) or other hardware device.
 	PrivateKey interface{}
 
+	// AdditionalHeaders are additional HTTP headers to include with the
+	// request to the EST server.
+	AdditionalHeaders map[string]string
+
+	// HostHeader overrides the default Host header for the HTTP request to the
+	// EST server, and is mostly useful for testing.
+	HostHeader string
+
+	// Username is an optional HTTP Basic Authentication username.
+	Username string
+
+	// Password is an optional HTTP Basic Authentication password.
+	Password string
+
 	// DisableKeepAlives disables HTTP keep-alives if set.
 	DisableKeepAlives bool
 
@@ -112,36 +101,8 @@ type HttpClientBuilder struct {
 // Client constants.
 const (
 	estVersion = "v1.0.6"
-	userAgent  = "GlobalSign EST Client " + estVersion + " github.com/haritzsaiz/est"
+	userAgent  = "GlobalSign EST Client " + estVersion + " github.com/globalsign/est"
 )
-
-func NewHttpClient(clientBuilder HttpClientBuilder) *http.Client {
-	var rootCAs *x509.CertPool
-	if clientBuilder.ExplicitAnchor != nil {
-		rootCAs = clientBuilder.ExplicitAnchor
-	} else if clientBuilder.ImplicitAnchor != nil {
-		rootCAs = clientBuilder.ImplicitAnchor
-	}
-
-	var tlsCerts []tls.Certificate
-	if len(clientBuilder.Certificates) > 0 && clientBuilder.PrivateKey != nil {
-		tlsCerts = []tls.Certificate{{PrivateKey: clientBuilder.PrivateKey, Leaf: clientBuilder.Certificates[0]}}
-		for i := range clientBuilder.Certificates {
-			tlsCerts[0].Certificate = append(tlsCerts[0].Certificate, clientBuilder.Certificates[i].Raw)
-		}
-	}
-
-	return &http.Client{
-		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				RootCAs:            rootCAs,
-				Certificates:       tlsCerts,
-				InsecureSkipVerify: clientBuilder.InsecureSkipVerify,
-			},
-			DisableKeepAlives: clientBuilder.DisableKeepAlives,
-		},
-	}
-}
 
 // CACerts requests a copy of the current CA certificates.
 func (c *Client) CACerts(ctx context.Context) ([]*x509.Certificate, error) {
@@ -150,7 +111,7 @@ func (c *Client) CACerts(ctx context.Context) ([]*x509.Certificate, error) {
 		return nil, err
 	}
 
-	resp, err := c.HttpClient.Do(req)
+	resp, err := c.makeHTTPClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute HTTP request: %w", err)
 	}
@@ -174,7 +135,7 @@ func (c *Client) CSRAttrs(ctx context.Context) (CSRAttrs, error) {
 		return CSRAttrs{}, err
 	}
 
-	resp, err := c.HttpClient.Do(req)
+	resp, err := c.makeHTTPClient().Do(req)
 	if err != nil {
 		return CSRAttrs{}, fmt.Errorf("failed to execute HTTP request: %w", err)
 	}
@@ -228,7 +189,7 @@ func (c *Client) enrollCommon(ctx context.Context, r *x509.CertificateRequest, r
 		return nil, err
 	}
 
-	resp, err := c.HttpClient.Do(req)
+	resp, err := c.makeHTTPClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute HTTP request: %w", err)
 	}
@@ -255,7 +216,7 @@ func (c *Client) ServerKeyGen(ctx context.Context, r *x509.CertificateRequest) (
 		return nil, nil, err
 	}
 
-	resp, err := c.HttpClient.Do(req)
+	resp, err := c.makeHTTPClient().Do(req)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to execute HTTP request: %w", err)
 	}
@@ -389,7 +350,7 @@ func (c *Client) TPMEnroll(
 		return nil, nil, nil, err
 	}
 
-	resp, err := c.HttpClient.Do(req)
+	resp, err := c.makeHTTPClient().Do(req)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to execute HTTP request: %w", err)
 	}
@@ -565,7 +526,7 @@ func checkResponseError(r *http.Response) error {
 func (c *Client) uri(endpoint string) string {
 	var builder strings.Builder
 
-	builder.WriteString(fmt.Sprintf("%s://", c.HttpProtocol))
+	builder.WriteString("https://")
 	builder.WriteString(c.Host)
 	builder.WriteString(estPathPrefix)
 
@@ -577,4 +538,34 @@ func (c *Client) uri(endpoint string) string {
 	builder.WriteString(endpoint)
 
 	return builder.String()
+}
+
+// makeHTTPClient makes and configures an HTTP client for connecting to an
+// EST server.
+func (c *Client) makeHTTPClient() *http.Client {
+	var rootCAs *x509.CertPool
+	if c.ExplicitAnchor != nil {
+		rootCAs = c.ExplicitAnchor
+	} else if c.ImplicitAnchor != nil {
+		rootCAs = c.ImplicitAnchor
+	}
+
+	var tlsCerts []tls.Certificate
+	if len(c.Certificates) > 0 && c.PrivateKey != nil {
+		tlsCerts = []tls.Certificate{{PrivateKey: c.PrivateKey, Leaf: c.Certificates[0]}}
+		for i := range c.Certificates {
+			tlsCerts[0].Certificate = append(tlsCerts[0].Certificate, c.Certificates[i].Raw)
+		}
+	}
+
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs:            rootCAs,
+				Certificates:       tlsCerts,
+				InsecureSkipVerify: c.InsecureSkipVerify,
+			},
+			DisableKeepAlives: c.DisableKeepAlives,
+		},
+	}
 }
