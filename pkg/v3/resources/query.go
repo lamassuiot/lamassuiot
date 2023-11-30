@@ -39,6 +39,7 @@ type FilterFieldType int
 
 const (
 	StringFilterFieldType FilterFieldType = iota
+	StringArrayFilterFieldType
 	DateFilterFieldType
 	NumberFilterFieldType
 	EnumFilterFieldType
@@ -53,6 +54,8 @@ const (
 	StringNotEqual
 	StringContains
 	StringNotContains
+
+	StringArrayContains
 
 	DateEqual
 	DateBefore

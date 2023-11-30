@@ -32,14 +32,14 @@ func SetCryptoEngineLogger(lgr *logrus.Entry) {
 }
 
 type X509Engine struct {
-	cryptoEngine           cryptoengines.CryptoEngine
-	validationAuthorityURL string
+	cryptoEngine              cryptoengines.CryptoEngine
+	validationAuthorityDomain string
 }
 
-func NewX509Engine(cryptoEngine *cryptoengines.CryptoEngine, validationAuthorityURL string) X509Engine {
+func NewX509Engine(cryptoEngine *cryptoengines.CryptoEngine, validationAuthorityDomain string) X509Engine {
 	return X509Engine{
-		cryptoEngine:           *cryptoEngine,
-		validationAuthorityURL: validationAuthorityURL,
+		cryptoEngine:              *cryptoEngine,
+		validationAuthorityDomain: validationAuthorityDomain,
 	}
 }
 
@@ -154,7 +154,13 @@ func (engine X509Engine) SignCertificateRequest(caCertificate *x509.Certificate,
 		NotBefore:          now,
 		NotAfter:           expirationDate,
 		KeyUsage:           x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		OCSPServer: []string{
+			fmt.Sprintf("https://%s/api/va/ocsp", engine.validationAuthorityDomain),
+		},
+		CRLDistributionPoints: []string{
+			fmt.Sprintf("https://%s/api/va/crl/%s", engine.validationAuthorityDomain, string(caCertificate.SubjectKeyId)),
+		},
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
 
 	certificateBytes, err := x509.CreateCertificate(rand.Reader, &certificateTemplate, caCertificate, csr.PublicKey, privkey)
@@ -228,10 +234,10 @@ func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata models.KeyMeta
 		AuthorityKeyId: []byte(aki),
 		SubjectKeyId:   []byte(ski),
 		OCSPServer: []string{
-			fmt.Sprintf("%s/ocsp", engine.validationAuthorityURL),
+			fmt.Sprintf("%s/ocsp", engine.validationAuthorityDomain),
 		},
 		CRLDistributionPoints: []string{
-			fmt.Sprintf("%s/crl/%s", engine.validationAuthorityURL, ski),
+			fmt.Sprintf("%s/crl/%s", engine.validationAuthorityDomain, ski),
 		},
 		NotBefore:             now,
 		NotAfter:              expirationTine,

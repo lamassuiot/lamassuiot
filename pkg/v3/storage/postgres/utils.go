@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-gormigrate/gormigrate/v2"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 	"github.com/sirupsen/logrus"
@@ -18,6 +19,43 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
 )
+
+type DBVersion struct {
+	CreationTS    time.Time
+	SchemaVersion string
+}
+
+type DBVersionMigrationNode struct {
+	next       *DBVersionMigrationNode
+	migrations []*gormigrate.Migration
+	id         string
+}
+
+type DBMigrationList struct {
+	head *DBVersionMigrationNode
+}
+
+func (l *DBMigrationList) Insert(id string, migrations []*gormigrate.Migration) {
+	list := &DBVersionMigrationNode{migrations: migrations, id: id, next: nil}
+	if l.head == nil {
+		l.head = list
+	} else {
+		p := l.head
+		for p.next != nil {
+			p = p.next
+		}
+		p.next = list
+	}
+}
+
+func (n *DBVersionMigrationNode) Show() string {
+	l := fmt.Sprintf("-> %s ", n.id)
+	if n.next != nil {
+		l = l + n.next.Show()
+	}
+
+	return l
+}
 
 func CreatePostgresDBConnection(logger *logrus.Entry, cfg config.PostgresPSEConfig, database string) (*gorm.DB, error) {
 	dbLogger := &GormLogger{
@@ -296,6 +334,9 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
 	case resources.StringContains:
 		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+	case resources.StringArrayContains:
+		// return tx.Where(fmt.Sprintf("? = ANY(%s)", filter.Field), filter.Value)
+		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), filter.Value)
 	case resources.StringNotContains:
 		return tx.Where(fmt.Sprintf("%s NOT LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.DateEqual:
@@ -324,6 +365,29 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 		return tx
 	}
 }
+
+// // string_array json serializer
+// type StringArraySerializer struct{}
+
+// func (StringArraySerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue interface{}) (err error) {
+// 	switch dbValue.(type) {
+// 	case []pq.StringArray:
+// 		sarray := dbValue.(pq.StringArray)
+// 		var sa []string = sarray
+// 		src := reflect.ValueOf(sa)
+// 		field.ReflectValueOf(ctx, dst).Set(src)
+// 		return nil
+
+// 	default:
+// 		return fmt.Errorf("invalid value type")
+// 	}
+
+// }
+
+// // Value implements serializer interface
+// func (StringArraySerializer) Value(ctx context.Context, field *schema.Field, dst reflect.Value, fieldValue interface{}) (interface{}, error) {
+// 	return pq.Array(fieldValue), nil
+// }
 
 // JSONSerializer json serializer
 type JSONSerializer struct {

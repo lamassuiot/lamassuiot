@@ -261,7 +261,11 @@ func (cli *httpCAClient) SignatureVerify(ctx context.Context, input services.Sig
 }
 
 func (cli *httpCAClient) GetCertificateBySerialNumber(ctx context.Context, input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
-	response, err := Get[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/certificates/"+input.SerialNumber, nil, map[int][]error{})
+	response, err := Get[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/certificates/"+input.SerialNumber, nil, map[int][]error{
+		404: {
+			errs.ErrCertificateNotFound,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}

@@ -5,7 +5,7 @@ type CAConfig struct {
 	Storage          PluggableStorageEngine `mapstructure:"storage"`
 	CryptoEngines    CryptoEngines          `mapstructure:"crypto_engines"`
 	CryptoMonitoring CryptoMonitoring       `mapstructure:"crypto_monitoring"`
-	VAServerURL      string                 `mapstructure:"va_server_url"`
+	VAServerDomain   string                 `mapstructure:"va_server_domain"`
 }
 
 type CryptoEngines struct {
