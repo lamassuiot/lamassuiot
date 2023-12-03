@@ -188,7 +188,15 @@ func (cli *httpCAClient) CreateCertificate(ctx context.Context, input services.C
 }
 
 func (cli *httpCAClient) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (*models.Certificate, error) {
-	return nil, fmt.Errorf("TODO")
+	response, err := Post[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/certificates/import", resources.ImportCertificateBody{
+		Metadata:    input.Metadata,
+		Certificate: *input.Certificate,
+	}, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
 }
 
 func (cli *httpCAClient) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (*models.CACertificate, error) {
