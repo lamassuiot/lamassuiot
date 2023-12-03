@@ -22,21 +22,22 @@ import (
 
 type DBVersion struct {
 	CreationTS    time.Time
-	SchemaVersion string
+	SchemaVersion int
 }
 
 type DBVersionMigrationNode struct {
 	next       *DBVersionMigrationNode
 	migrations []*gormigrate.Migration
-	id         string
+	label      string
+	id         int
 }
 
 type DBMigrationList struct {
 	head *DBVersionMigrationNode
 }
 
-func (l *DBMigrationList) Insert(id string, migrations []*gormigrate.Migration) {
-	list := &DBVersionMigrationNode{migrations: migrations, id: id, next: nil}
+func (l *DBMigrationList) Insert(id int, label string, migrations []*gormigrate.Migration) {
+	list := &DBVersionMigrationNode{migrations: migrations, id: id, label: label, next: nil}
 	if l.head == nil {
 		l.head = list
 	} else {
@@ -48,13 +49,20 @@ func (l *DBMigrationList) Insert(id string, migrations []*gormigrate.Migration) 
 	}
 }
 
-func (n *DBVersionMigrationNode) Show() string {
-	l := fmt.Sprintf("-> %s ", n.id)
-	if n.next != nil {
-		l = l + n.next.Show()
+func (n *DBVersionMigrationNode) MigrationPlanTo(targetMigration int) []*DBVersionMigrationNode {
+	nodes := []*DBVersionMigrationNode{}
+
+	node := n
+	for {
+		nodes = append(nodes, node)
+		if node.next != nil {
+			node = node.next
+		} else {
+			break
+		}
 	}
 
-	return l
+	return nodes
 }
 
 func CreatePostgresDBConnection(logger *logrus.Entry, cfg config.PostgresPSEConfig, database string) (*gorm.DB, error) {
@@ -327,6 +335,10 @@ func (db *postgresDBQuerier[E]) Delete(elemID string) error {
 }
 
 func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gorm.DB {
+	if strings.Contains(filter.Field, ".") {
+		filter.Field = strings.ReplaceAll(filter.Field, ".", "_")
+	}
+
 	switch filter.FilterOperation {
 	case resources.StringEqual:
 		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
@@ -336,7 +348,7 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.StringArrayContains:
 		// return tx.Where(fmt.Sprintf("? = ANY(%s)", filter.Field), filter.Value)
-		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), filter.Value)
+		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.StringNotContains:
 		return tx.Where(fmt.Sprintf("%s NOT LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.DateEqual:

@@ -34,6 +34,8 @@ type DMSManagerService interface {
 	UpdateDMS(ctx context.Context, input UpdateDMSInput) (*models.DMS, error)
 	GetDMSByID(ctx context.Context, input GetDMSByIDInput) (*models.DMS, error)
 	GetAll(ctx context.Context, input GetAllInput) (string, error)
+
+	BindIdentityToDevice(ctx context.Context, input BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error)
 }
 
 type DMSManagerServiceImpl struct {
@@ -384,74 +386,25 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 		return nil, err
 	}
 
-	newMeta := crt.Metadata
-	newMeta[models.CAMetadataMonitoringExpirationDeltasKey] = models.CAMetadataMonitoringExpirationDeltas{
-		{
-			Delta:     dms.Settings.ReEnrollmentSettings.PreventiveReEnrollmentDelta,
-			Name:      "Preventive",
-			Triggered: false,
-		},
-		{
-			Delta:     dms.Settings.ReEnrollmentSettings.CriticalReEnrollmentDelta,
-			Name:      "Critical",
-			Triggered: false,
-		},
-	}
-	newMeta[models.CAAttachedToDeviceKey] = models.CAAttachedToDevice{
-		AuthorizedBy: struct {
-			RAID string "json:\"ra_id\""
-		}{RAID: dms.ID},
-		DeviceID: device.ID,
-	}
-
-	crt, err = svc.caClient.UpdateCertificateMetadata(ctx, UpdateCertificateMetadataInput{
-		SerialNumber: crt.SerialNumber,
-		Metadata:     newMeta,
-	})
-	if err != nil {
-		lDMS.Errorf("could not update certificate metadata with monitoring deltas for certificate with sn '%s': %s", csr.Subject.SerialNumber, err)
-		return nil, err
-	}
-
-	var idSlot models.Slot[string]
+	bindMode := models.DeviceEventTypeProvisioned
 	if device.IdentitySlot == nil {
-		idSlot = models.Slot[string]{
-			Status:        models.SlotActive,
-			ActiveVersion: 0,
-			SecretType:    models.X509SlotProfileType,
-			Secrets: map[int]string{
-				0: crt.SerialNumber,
-			},
-			Events: map[time.Time]models.DeviceEvent{
-				time.Now(): models.DeviceEvent{
-					EvenType: models.DeviceEventTypeProvisioned,
-				},
-			},
-		}
+		bindMode = models.DeviceEventTypeProvisioned
 	} else {
-		idSlot = *device.IdentitySlot
-		idSlot.ActiveVersion = idSlot.ActiveVersion + 1
-		idSlot.Status = models.SlotActive
-
-		idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
-		idSlot.Events[time.Now()] = models.DeviceEvent{
-			EvenType:          models.DeviceEventTypeReProvisioned,
-			EventDescriptions: fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion),
-		}
+		bindMode = models.DeviceEventTypeReProvisioned
 	}
 
-	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(UpdateDeviceIdentitySlotInput{
-		ID:   csr.Subject.CommonName,
-		Slot: idSlot,
+	_, err = svc.BindIdentityToDevice(ctx, BindIdentityToDeviceInput{
+		DeviceID:                device.ID,
+		CertificateSerialNumber: crt.SerialNumber,
+		BindMode:                bindMode,
 	})
 	if err != nil {
-		lDMS.Errorf("could not update device '%s' identity slot. aborting enrollment process: %s", device.ID, err)
 		return nil, err
 	}
 
 	return (*x509.Certificate)(crt.Certificate), nil
-
 }
+
 func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	lDMS.Debugf("checking if DMS '%s' exists", aps)
 	dms, err := svc.service.GetDMSByID(ctx, GetDMSByIDInput{
@@ -669,51 +622,12 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		return nil, err
 	}
 
-	newMeta := crt.Metadata
-	newMeta[models.CAMetadataMonitoringExpirationDeltasKey] = models.CAMetadataMonitoringExpirationDeltas{
-		{
-			Delta:     dms.Settings.ReEnrollmentSettings.PreventiveReEnrollmentDelta,
-			Name:      "Preventive",
-			Triggered: false,
-		},
-		{
-			Delta:     dms.Settings.ReEnrollmentSettings.CriticalReEnrollmentDelta,
-			Name:      "Critical",
-			Triggered: false,
-		},
-	}
-	newMeta[models.CAAttachedToDeviceKey] = models.CAAttachedToDevice{
-		AuthorizedBy: struct {
-			RAID string "json:\"ra_id\""
-		}{RAID: dms.ID},
-		DeviceID: device.ID,
-	}
-
-	crt, err = svc.caClient.UpdateCertificateMetadata(ctx, UpdateCertificateMetadataInput{
-		SerialNumber: crt.SerialNumber,
-		Metadata:     newMeta,
+	_, err = svc.BindIdentityToDevice(ctx, BindIdentityToDeviceInput{
+		DeviceID:                device.ID,
+		CertificateSerialNumber: crt.SerialNumber,
+		BindMode:                models.DeviceEventTypeRenewed,
 	})
 	if err != nil {
-		lDMS.Errorf("could not update certificate metadata with monitoring deltas for certificate with sn '%s': %s", csr.Subject.SerialNumber, err)
-		return nil, err
-	}
-
-	idSlot := *device.IdentitySlot
-	idSlot.ActiveVersion = idSlot.ActiveVersion + 1
-	idSlot.Status = models.SlotActive
-	idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
-
-	idSlot.Events[time.Now()] = models.DeviceEvent{
-		EvenType:          models.DeviceEventTypeRenewed,
-		EventDescriptions: fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion),
-	}
-
-	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(UpdateDeviceIdentitySlotInput{
-		ID:   csr.Subject.CommonName,
-		Slot: idSlot,
-	})
-	if err != nil {
-		lDMS.Errorf("could not update device '%s' identity slot. Aborting enrollment process: %s", device.ID, err)
 		return nil, err
 	}
 
@@ -850,4 +764,102 @@ func (svc DMSManagerServiceImpl) checkCertificateExpiration(ctx context.Context,
 	} else {
 		return true, nil
 	}
+}
+
+type BindIdentityToDeviceInput struct {
+	DeviceID                string
+	CertificateSerialNumber string
+	BindMode                models.DeviceEventType
+}
+
+func (svc DMSManagerServiceImpl) BindIdentityToDevice(ctx context.Context, input BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error) {
+	crt, err := svc.caClient.GetCertificateBySerialNumber(ctx, GetCertificatesBySerialNumberInput{
+		SerialNumber: input.CertificateSerialNumber,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	device, err := svc.deviceManagerCli.GetDeviceByID(GetDeviceByIDInput{
+		ID: input.DeviceID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	dms, err := svc.GetDMSByID(ctx, GetDMSByIDInput{
+		ID: device.DMSOwnerID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	newMeta := crt.Metadata
+	newMeta[models.CAMetadataMonitoringExpirationDeltasKey] = models.CAMetadataMonitoringExpirationDeltas{
+		{
+			Delta:     dms.Settings.ReEnrollmentSettings.PreventiveReEnrollmentDelta,
+			Name:      "Preventive",
+			Triggered: false,
+		},
+		{
+			Delta:     dms.Settings.ReEnrollmentSettings.CriticalReEnrollmentDelta,
+			Name:      "Critical",
+			Triggered: false,
+		},
+	}
+	newMeta[models.CAAttachedToDeviceKey] = models.CAAttachedToDevice{
+		AuthorizedBy: struct {
+			RAID string "json:\"ra_id\""
+		}{RAID: dms.ID},
+		DeviceID: device.ID,
+	}
+
+	crt, err = svc.caClient.UpdateCertificateMetadata(ctx, UpdateCertificateMetadataInput{
+		SerialNumber: crt.SerialNumber,
+		Metadata:     newMeta,
+	})
+	if err != nil {
+		lDMS.Errorf("could not update certificate metadata with monitoring deltas for certificate with sn '%s': %s", crt.SerialNumber, err)
+		return nil, err
+	}
+
+	idSlot := device.IdentitySlot
+	if idSlot == nil {
+		idSlot = &models.Slot[string]{
+			Status:        models.SlotActive,
+			ActiveVersion: 0,
+			SecretType:    models.X509SlotProfileType,
+			Secrets: map[int]string{
+				0: crt.SerialNumber,
+			},
+			Events: map[time.Time]models.DeviceEvent{
+				time.Now(): models.DeviceEvent{
+					EvenType: models.DeviceEventTypeProvisioned,
+				},
+			},
+		}
+	} else {
+		idSlot.ActiveVersion = idSlot.ActiveVersion + 1
+		idSlot.Status = models.SlotActive
+		idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
+
+		idSlot.Events[time.Now()] = models.DeviceEvent{
+			EvenType:          input.BindMode,
+			EventDescriptions: fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion),
+		}
+	}
+	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(UpdateDeviceIdentitySlotInput{
+		ID:   crt.Subject.CommonName,
+		Slot: *idSlot,
+	})
+	if err != nil {
+		lDMS.Errorf("could not update device '%s' identity slot. Aborting enrollment process: %s", device.ID, err)
+		return nil, err
+	}
+
+	return &models.BindIdentityToDeviceOutput{
+		Certificate: crt,
+		DMS:         dms,
+		Device:      device,
+	}, nil
 }

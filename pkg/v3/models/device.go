@@ -28,7 +28,7 @@ const (
 
 type Device struct {
 	ID                string                    `json:"id" gorm:"primaryKey"`
-	Tags              []string                  `json:"tags" gorm:"serializer:string_array"`
+	Tags              []string                  `json:"tags" gorm:"serializer:json"`
 	Status            DeviceStatus              `json:"status"`
 	Icon              string                    `json:"icon"`
 	IconColor         string                    `json:"icon_color"`

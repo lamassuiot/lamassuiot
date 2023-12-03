@@ -144,7 +144,7 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (*AWSC
 
 type RegisterAndAttachThingInput struct {
 	DeviceID               string
-	EnrollmentEvent        models.EnrollReenrollEvent
+	BindedIdentity         models.BindIdentityToDeviceOutput
 	DMSIoTAutomationConfig models.IotAWSDMSMetadata
 }
 
@@ -259,7 +259,7 @@ func (svc *AWSCloudConnectorService) RegisterAndAttachThing(input RegisterAndAtt
 		}
 	}
 
-	aki := input.EnrollmentEvent.Certificate.AuthorityKeyId
+	aki := input.BindedIdentity.Certificate.Certificate.AuthorityKeyId
 	ca, err := svc.CaSDK.GetCAByID(context.Background(), services.GetCAByIDInput{
 		CAID: string(aki),
 	})
@@ -270,9 +270,9 @@ func (svc *AWSCloudConnectorService) RegisterAndAttachThing(input RegisterAndAtt
 
 	params := map[string]string{
 		"ThingName":               input.DeviceID,
-		"SerialNumber":            helpers.SerialNumberToString(input.EnrollmentEvent.Certificate.SerialNumber),
-		"DMS":                     input.EnrollmentEvent.APS,
-		"LamassuCertificate":      helpers.CertificateToPEM((*x509.Certificate)(input.EnrollmentEvent.Certificate)),
+		"SerialNumber":            helpers.SerialNumberToString(input.BindedIdentity.Certificate.Certificate.SerialNumber),
+		"DMS":                     input.BindedIdentity.DMS.ID,
+		"LamassuCertificate":      helpers.CertificateToPEM((*x509.Certificate)(input.BindedIdentity.Certificate.Certificate)),
 		"LamassuCACertificatePem": helpers.CertificateToPEM((*x509.Certificate)(ca.Certificate.Certificate)),
 	}
 

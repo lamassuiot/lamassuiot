@@ -16,6 +16,8 @@ import (
 var certificateFiltrableFieldMap = map[string]resources.FilterFieldType{
 	"type":                 resources.EnumFilterFieldType,
 	"serial_number":        resources.StringFilterFieldType,
+	"subject.common_name":  resources.StringFilterFieldType,
+	"issuer_meta.id":       resources.StringFilterFieldType,
 	"status":               resources.EnumFilterFieldType,
 	"engine_id":            resources.StringFilterFieldType,
 	"valid_to":             resources.DateFilterFieldType,

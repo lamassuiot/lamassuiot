@@ -10,3 +10,8 @@ type CreateDMSBody struct {
 	Metadata map[string]any     `json:"metadata"`
 	Settings models.DMSSettings `json:"settings"`
 }
+
+type BindIdentityToDeviceBody struct {
+	DeviceID                string `json:"device_id"`
+	CertificateSerialNumber string `json:"certificate_serial_number"`
+}

@@ -55,7 +55,7 @@ func main() {
 		clients.HttpClientWithSourceHeaderInjector(caHttpCli, models.DMSManagerSource),
 		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
 	)
-	lDeviceManagerClient := helpers.ConfigureLogger(conf.CAClient.LogLevel, "LMS SDK - DeviceManager Client")
+	lDeviceManagerClient := helpers.ConfigureLogger(conf.DevManagerClient.LogLevel, "LMS SDK - DeviceManager Client")
 	deviceMngrHttpCli, err := clients.BuildHTTPClient(conf.DevManagerClient.HTTPClient, lDeviceManagerClient)
 	if err != nil {
 		log.Fatalf("could not build HTTP Device Manager Client: %s", err)

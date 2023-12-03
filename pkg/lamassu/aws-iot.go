@@ -108,20 +108,14 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 	}
 
 	switch cloudEvent.Type() {
-	case string(models.EventEnrollKey), string(models.EventReEnrollKey):
-		enrollEvent, err := getEventBody[models.EnrollReenrollEvent](cloudEvent)
+	case string(models.EventBindDeviceIdentityKey):
+		bindEvent, err := getEventBody[models.BindIdentityToDeviceOutput](cloudEvent)
 		if err != nil {
 			logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "Certificate", err)
 			return
 		}
 
-		dms, err := awsConnectorSvc.DmsSDK.GetDMSByID(context.Background(), services.GetDMSByIDInput{
-			ID: enrollEvent.APS,
-		})
-		if err != nil {
-			logger.Errorf("could not get dms %s: %s", enrollEvent.APS, err)
-			return
-		}
+		dms := bindEvent.DMS
 
 		var dmsAwsAutomationConfig models.IotAWSDMSMetadata
 		hasKey, err := helpers.GetMetadataToStruct(dms.Metadata, models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID), &dmsAwsAutomationConfig)
@@ -136,12 +130,12 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 		}
 
 		if dmsAwsAutomationConfig.RegistrationMode == models.AutomaticAWSIoTRegistrationMode {
-			thingID := enrollEvent.Certificate.Subject.CommonName
+			thingID := bindEvent.Certificate.Subject.CommonName
 			logrus.Infof("registering %s device", thingID)
 			err = awsConnectorSvc.RegisterAndAttachThing(iot.RegisterAndAttachThingInput{
 				DeviceID:               thingID,
 				DMSIoTAutomationConfig: dmsAwsAutomationConfig,
-				EnrollmentEvent:        *enrollEvent,
+				BindedIdentity:         *bindEvent,
 			})
 			if err != nil {
 				logrus.Errorf("something went wrong while registering device %s: %s", thingID, err)

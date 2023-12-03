@@ -86,3 +86,12 @@ func (cli *dmsManagerClient) Reenroll(ctx context.Context, csr *x509.Certificate
 func (cli *dmsManagerClient) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
 	return nil, nil, fmt.Errorf("not supported, use the estCli instead")
 }
+
+func (cli *dmsManagerClient) BindIdentityToDevice(ctx context.Context, input services.BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error) {
+	response, err := Post[*models.BindIdentityToDeviceOutput](ctx, cli.httpClient, cli.baseUrl+"/v1/dms/bind-identity", input, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
