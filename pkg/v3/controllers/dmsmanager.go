@@ -145,6 +145,7 @@ func (r *dmsManagerHttpRoutes) BindIdentityToDevice(ctx *gin.Context) {
 	bind, err := r.svc.BindIdentityToDevice(ctx, services.BindIdentityToDeviceInput{
 		DeviceID:                requestBody.DeviceID,
 		CertificateSerialNumber: requestBody.CertificateSerialNumber,
+		BindMode:                models.DeviceEventType(requestBody.BindMode),
 	})
 	if err != nil {
 		ctx.JSON(500, err)

@@ -73,6 +73,6 @@ type GetCertificateStatus struct {
 }
 
 type ImportCertificateBody struct {
-	Metadata    map[string]interface{} `json:"metadata"`
-	Certificate models.X509Certificate `json:"certificate"`
+	Metadata    map[string]interface{}  `json:"metadata"`
+	Certificate *models.X509Certificate `json:"certificate"`
 }

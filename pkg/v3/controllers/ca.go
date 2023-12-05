@@ -1020,7 +1020,7 @@ func (r *caHttpRoutes) ImportCertificate(ctx *gin.Context) {
 	cert, err := r.svc.ImportCertificate(funCtx, services.ImportCertificateInput{
 		ImportMode:  models.CertificateTypeExternal,
 		Metadata:    requestBody.Metadata,
-		Certificate: &requestBody.Certificate,
+		Certificate: requestBody.Certificate,
 	})
 
 	if err != nil {

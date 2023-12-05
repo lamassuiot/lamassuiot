@@ -190,7 +190,7 @@ func (cli *httpCAClient) CreateCertificate(ctx context.Context, input services.C
 func (cli *httpCAClient) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (*models.Certificate, error) {
 	response, err := Post[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/certificates/import", resources.ImportCertificateBody{
 		Metadata:    input.Metadata,
-		Certificate: *input.Certificate,
+		Certificate: input.Certificate,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err

@@ -29,9 +29,6 @@ type CACertificatesRepo interface {
 	CountByStatus(ctx context.Context, status models.CertificateStatus) (int, error)
 	SelectAll(ctx context.Context, req StorageListRequest[models.CACertificate]) (string, error)
 
-	// SelectExistsByID(ctx context.Context, id string) (bool, *models.CACertificate, error)
-	// //Currently, the Floating ID refers to multiple fields: ID, SerialNumber, Fingerprint
-	// SelectExistsByFloatingID(ctx context.Context, floatingID string) (bool, *models.CACertificate, error)
 	SelectExistsByID(ctx context.Context, id string) (bool, *models.CACertificate, error)
 	SelectExistsBySerialNumber(ctx context.Context, serialNumber string) (bool, *models.CACertificate, error)
 	SelectByCommonName(ctx context.Context, commonName string, req StorageListRequest[models.CACertificate]) (string, error)
