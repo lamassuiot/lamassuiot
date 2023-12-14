@@ -1,3 +1,23 @@
+# v1.45.1 (2023-11-20)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.45.0 (2023-11-16)
+
+* **Feature**: GA release the ability to index and search devices based on their GeoLocation data. With GeoQueries you can narrow your search to retrieve devices located in the desired geographic boundary.
+
+# v1.44.1 (2023-11-15)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.44.0 (2023-11-14)
+
+* **Feature**: This release introduces new attributes in API CreateSecurityProfile, UpdateSecurityProfile and DescribeSecurityProfile to support management of Metrics Export for AWS IoT Device Defender Detect.
+
+# v1.43.1 (2023-11-09)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
 # v1.43.0 (2023-11-01)
 
 * **Feature**: Adds support for configured endpoints via environment variables and the AWS shared configuration file.

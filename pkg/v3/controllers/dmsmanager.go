@@ -134,3 +134,22 @@ func (r *dmsManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
 
 	ctx.JSON(200, ca)
 }
+
+func (r *dmsManagerHttpRoutes) BindIdentityToDevice(ctx *gin.Context) {
+	var requestBody resources.BindIdentityToDeviceBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	bind, err := r.svc.BindIdentityToDevice(ctx, services.BindIdentityToDeviceInput{
+		DeviceID:                requestBody.DeviceID,
+		CertificateSerialNumber: requestBody.CertificateSerialNumber,
+	})
+	if err != nil {
+		ctx.JSON(500, err)
+		return
+	}
+
+	ctx.JSON(200, bind)
+}

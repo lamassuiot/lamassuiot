@@ -13,6 +13,7 @@ var deviceFiltrableFieldMap = map[string]resources.FilterFieldType{
 	"dms_owner":          resources.StringFilterFieldType,
 	"creation_timestamp": resources.DateFilterFieldType,
 	"status":             resources.EnumFilterFieldType,
+	"tags":               resources.StringArrayFilterFieldType,
 }
 
 type devManagerHttpRoutes struct {

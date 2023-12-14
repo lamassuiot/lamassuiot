@@ -29,6 +29,18 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 			BuildTime: "-",
 		}
 
+		key, _ := helpers.GenerateRSAKey(2048)
+		keyPem, _ := helpers.PrivateKeyToPEM(key)
+		os.WriteFile("proxy.key", []byte(keyPem), 0644)
+
+		crt, err := helpers.GenerateSelfSignedCertificate(key, "proxy-lms-test")
+		if err != nil {
+			panic(fmt.Sprintf("could not create self signed cert: %s", err))
+		}
+
+		crtPem := helpers.CertificateToPEM(crt)
+		os.WriteFile("proxy.crt", []byte(crtPem), 0644)
+
 		_, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
 			BaseConfig: config.BaseConfig{
 				Logs: config.BaseConfigLogging{
@@ -46,7 +58,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 			Storage:          conf.Storage,
 			CryptoEngines:    conf.CryptoEngines,
 			CryptoMonitoring: conf.CryptoMonitoring,
-			VAServerURL:      fmt.Sprintf("https://%s/api/va", conf.Domain),
+			VAServerDomain:   fmt.Sprintf("https://%s/api/va", conf.Domain),
 		}, apiInfo)
 		if err != nil {
 			return fmt.Errorf("could not assemble CA Service: %s", err)
@@ -140,7 +152,8 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 				},
 				AMQPConnection: conf.AMQPConnection,
 			},
-			Storage: conf.Storage,
+			DownstreamCertificateFile: "proxy.crt",
+			Storage:                   conf.Storage,
 		}, caSDKBuilder(models.DMSManagerSource), deviceMngrSDKBuilder(models.DMSManagerSource), apiInfo)
 		if err != nil {
 			return fmt.Errorf("could not assemble DMS Manager Service: %s", err)
@@ -242,18 +255,6 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 
 		go func() {
 			// log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", conf.GatewayPort), engine))
-			key, _ := helpers.GenerateRSAKey(2048)
-			keyPem, _ := helpers.PrivateKeyToPEM(key)
-			os.WriteFile("proxy.key", []byte(keyPem), 0644)
-
-			crt, err := helpers.GenerateSelfSignedCertificate(key, "proxy-lms-test")
-			if err != nil {
-				panic(fmt.Sprintf("could not create self signed cert: %s", err))
-			}
-
-			crtPem := helpers.CertificateToPEM(crt)
-			os.WriteFile("proxy.crt", []byte(crtPem), 0644)
-
 			server := http.Server{
 				Handler: engine,
 				Addr:    fmt.Sprintf(":%d", conf.GatewayPort),

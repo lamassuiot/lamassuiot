@@ -40,16 +40,22 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 	lMessage := helpers.ConfigureLogger(conf.AMQPConnection.LogLevel, "Messaging")
 	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Storage")
 
+	downCert, err := helpers.ReadCertificateFromFile(conf.DownstreamCertificateFile)
+	if err != nil {
+		return nil, fmt.Errorf("could not read downstream certificate: %s", err)
+	}
+
 	devStorage, err := createDMSStorageInstance(lStorage, conf.Storage)
 	if err != nil {
 		return nil, fmt.Errorf("could not create dms storage instance: %s", err)
 	}
 
 	svc := services.NewDMSManagerService(services.DMSManagerBuilder{
-		Logger:        lSvc,
-		DMSStorage:    devStorage,
-		CAClient:      caService,
-		DevManagerCli: deviceService,
+		Logger:                lSvc,
+		DMSStorage:            devStorage,
+		CAClient:              caService,
+		DevManagerCli:         deviceService,
+		DownstreamCertificate: downCert,
 	})
 
 	dmsSvc := svc.(*services.DMSManagerServiceImpl)

@@ -19,6 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iot/types"
 	"github.com/aws/aws-sdk-go-v2/service/iotdataplane"
 	iotdataplaneTypes "github.com/aws/aws-sdk-go-v2/service/iotdataplane/types"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
@@ -27,9 +28,10 @@ import (
 )
 
 type AWSCloudConnectorService struct {
+	SqsSDK          sqs.Client
 	iotSDK          iot.Client
+	Region          string
 	iotdataplaneSDK iotdataplane.Client
-	region          string
 	logger          *logrus.Entry
 	endpointAddress string
 	ConnectorID     string
@@ -63,8 +65,8 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (*AWSC
 	iotLogger := builder.Logger.WithField("sdk", "AWS IoT Client")
 	idpLogger := builder.Logger.WithField("sdk", "AWS IoT Dataple Client")
 	stsLogger := builder.Logger.WithField("sdk", "AWS STS Client")
+	sqsLogger := builder.Logger.WithField("sdk", "AWS SQS Client")
 
-	// derefIotHttpCli := &builder.BaseHttpClient
 	iotHttpCli, err := helpers.BuildHTTPClientWithTracerLogger(&http.Client{}, iotLogger)
 	if err != nil {
 		builder.Logger.Errorf("could not build IoT http client with tracer: %s", err)
@@ -79,7 +81,13 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (*AWSC
 
 	stsHttpCli, err := helpers.BuildHTTPClientWithTracerLogger(&http.Client{}, stsLogger)
 	if err != nil {
-		builder.Logger.Errorf("could not build IoT http client with tracer: %s", err)
+		builder.Logger.Errorf("could not build STS http client with tracer: %s", err)
+		return nil, err
+	}
+
+	sqsHttpCli, err := helpers.BuildHTTPClientWithTracerLogger(&http.Client{}, sqsLogger)
+	if err != nil {
+		builder.Logger.Errorf("could not build SQS http client with tracer: %s", err)
 		return nil, err
 	}
 
@@ -94,6 +102,10 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (*AWSC
 	stsConf := builder.Conf
 	stsConf.HTTPClient = stsHttpCli
 	stsClient := sts.NewFromConfig(stsConf)
+
+	sqsConf := builder.Conf
+	sqsConf.HTTPClient = sqsHttpCli
+	sqsClient := sqs.NewFromConfig(sqsConf)
 
 	callIDOutput, err := stsClient.GetCallerIdentity(context.Background(), &sts.GetCallerIdentityInput{})
 	if err != nil {
@@ -116,10 +128,11 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (*AWSC
 	builder.Logger.Infof("connector is configured for account '%s', which uses iot:Data-ATS endpoint with uri %s", *callIDOutput.Account, *endpoint.EndpointAddress)
 
 	return &AWSCloudConnectorService{
+		SqsSDK:          *sqsClient,
 		iotSDK:          *iotClient,
 		iotdataplaneSDK: *iotdpClient,
 		logger:          logger,
-		region:          builder.Conf.Region,
+		Region:          builder.Conf.Region,
 		endpointAddress: *endpoint.EndpointAddress,
 		AccountID:       *callIDOutput.Account,
 		ConnectorID:     builder.ConnectorID,
@@ -131,7 +144,7 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (*AWSC
 
 type RegisterAndAttachThingInput struct {
 	DeviceID               string
-	EnrollmentEvent        models.EnrollReenrollEvent
+	BindedIdentity         models.BindIdentityToDeviceOutput
 	DMSIoTAutomationConfig models.IotAWSDMSMetadata
 }
 
@@ -246,7 +259,7 @@ func (svc *AWSCloudConnectorService) RegisterAndAttachThing(input RegisterAndAtt
 		}
 	}
 
-	aki := input.EnrollmentEvent.Certificate.AuthorityKeyId
+	aki := input.BindedIdentity.Certificate.Certificate.AuthorityKeyId
 	ca, err := svc.CaSDK.GetCAByID(context.Background(), services.GetCAByIDInput{
 		CAID: string(aki),
 	})
@@ -257,9 +270,9 @@ func (svc *AWSCloudConnectorService) RegisterAndAttachThing(input RegisterAndAtt
 
 	params := map[string]string{
 		"ThingName":               input.DeviceID,
-		"SerialNumber":            helpers.SerialNumberToString(input.EnrollmentEvent.Certificate.SerialNumber),
-		"DMS":                     input.EnrollmentEvent.APS,
-		"LamassuCertificate":      helpers.CertificateToPEM((*x509.Certificate)(input.EnrollmentEvent.Certificate)),
+		"SerialNumber":            helpers.SerialNumberToString(input.BindedIdentity.Certificate.Certificate.SerialNumber),
+		"DMS":                     input.BindedIdentity.DMS.ID,
+		"LamassuCertificate":      helpers.CertificateToPEM((*x509.Certificate)(input.BindedIdentity.Certificate.Certificate)),
 		"LamassuCACertificatePem": helpers.CertificateToPEM((*x509.Certificate)(ca.Certificate.Certificate)),
 	}
 
@@ -615,7 +628,7 @@ func (svc *AWSCloudConnectorService) RegisterCA(ctx context.Context, input Regis
 	newMeta := input.Metadata
 	newMeta[models.AWSIoTMetadataKey(svc.ConnectorID)] = models.IoTAWSCAMetadata{
 		Account:             svc.AccountID,
-		Region:              svc.region,
+		Region:              svc.Region,
 		ARN:                 *regResponse.CertificateArn,
 		CertificateID:       *regResponse.CertificateId,
 		Register:            true,

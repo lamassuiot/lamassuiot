@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/cloudevents/sdk-go/v2/event"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
@@ -64,6 +66,31 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 		}
 	}()
 
+	go func() {
+		lSvc.Infof("starting SQS thread")
+		sqsQueueName := fmt.Sprintf("https://sqs.%s.amazonaws.com/%s/%s", awsConnectorSvc.Region, awsConnectorSvc.AccountID, "Lamassu-IoT-SYNC-EventBridgeOutput6A8BBEEC-LaYbNuW753SC")
+
+		for {
+			lSvc.Debugf("reading from queue %s", sqsQueueName)
+			sqsOutput, err := awsConnectorSvc.SqsSDK.ReceiveMessage(context.Background(), &sqs.ReceiveMessageInput{
+				QueueUrl:            aws.String(sqsQueueName),
+				MaxNumberOfMessages: int32(10),
+				WaitTimeSeconds:     int32(20),
+			})
+
+			if err != nil {
+				lSvc.Errorf("could not receive SQS messages: %s", err)
+				return
+			}
+
+			totalInBatch := len(sqsOutput.Messages)
+			lSvc.Tracef("received sqs batch messages of size %d ", totalInBatch)
+			for idx, sqsMessage := range sqsOutput.Messages {
+				lSvc.Tracef("message [%d/%d]: %s", idx+1, totalInBatch, *sqsMessage.Body)
+			}
+		}
+	}()
+
 	return awsConnectorSvc, nil
 }
 
@@ -81,20 +108,14 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 	}
 
 	switch cloudEvent.Type() {
-	case string(models.EventEnrollKey), string(models.EventReEnrollKey):
-		enrollEvent, err := getEventBody[models.EnrollReenrollEvent](cloudEvent)
+	case string(models.EventBindDeviceIdentityKey):
+		bindEvent, err := getEventBody[models.BindIdentityToDeviceOutput](cloudEvent)
 		if err != nil {
 			logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "Certificate", err)
 			return
 		}
 
-		dms, err := awsConnectorSvc.DmsSDK.GetDMSByID(context.Background(), services.GetDMSByIDInput{
-			ID: enrollEvent.APS,
-		})
-		if err != nil {
-			logger.Errorf("could not get dms %s: %s", enrollEvent.APS, err)
-			return
-		}
+		dms := bindEvent.DMS
 
 		var dmsAwsAutomationConfig models.IotAWSDMSMetadata
 		hasKey, err := helpers.GetMetadataToStruct(dms.Metadata, models.AWSIoTMetadataKey(awsConnectorSvc.ConnectorID), &dmsAwsAutomationConfig)
@@ -109,12 +130,12 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 		}
 
 		if dmsAwsAutomationConfig.RegistrationMode == models.AutomaticAWSIoTRegistrationMode {
-			thingID := enrollEvent.Certificate.Subject.CommonName
+			thingID := bindEvent.Certificate.Subject.CommonName
 			logrus.Infof("registering %s device", thingID)
 			err = awsConnectorSvc.RegisterAndAttachThing(iot.RegisterAndAttachThingInput{
 				DeviceID:               thingID,
 				DMSIoTAutomationConfig: dmsAwsAutomationConfig,
-				EnrollmentEvent:        *enrollEvent,
+				BindedIdentity:         *bindEvent,
 			})
 			if err != nil {
 				logrus.Errorf("something went wrong while registering device %s: %s", thingID, err)

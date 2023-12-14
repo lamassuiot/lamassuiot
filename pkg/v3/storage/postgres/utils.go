@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-gormigrate/gormigrate/v2"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 	"github.com/sirupsen/logrus"
@@ -18,6 +19,51 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
 )
+
+type DBVersion struct {
+	CreationTS    time.Time
+	SchemaVersion int
+}
+
+type DBVersionMigrationNode struct {
+	next       *DBVersionMigrationNode
+	migrations []*gormigrate.Migration
+	label      string
+	id         int
+}
+
+type DBMigrationList struct {
+	head *DBVersionMigrationNode
+}
+
+func (l *DBMigrationList) Insert(id int, label string, migrations []*gormigrate.Migration) {
+	list := &DBVersionMigrationNode{migrations: migrations, id: id, label: label, next: nil}
+	if l.head == nil {
+		l.head = list
+	} else {
+		p := l.head
+		for p.next != nil {
+			p = p.next
+		}
+		p.next = list
+	}
+}
+
+func (n *DBVersionMigrationNode) MigrationPlanTo(targetMigration int) []*DBVersionMigrationNode {
+	nodes := []*DBVersionMigrationNode{}
+
+	node := n
+	for {
+		nodes = append(nodes, node)
+		if node.next != nil {
+			node = node.next
+		} else {
+			break
+		}
+	}
+
+	return nodes
+}
 
 func CreatePostgresDBConnection(logger *logrus.Entry, cfg config.PostgresPSEConfig, database string) (*gorm.DB, error) {
 	dbLogger := &GormLogger{
@@ -289,12 +335,19 @@ func (db *postgresDBQuerier[E]) Delete(elemID string) error {
 }
 
 func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gorm.DB {
+	if strings.Contains(filter.Field, ".") {
+		filter.Field = strings.ReplaceAll(filter.Field, ".", "_")
+	}
+
 	switch filter.FilterOperation {
 	case resources.StringEqual:
 		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
 	case resources.StringNotEqual:
 		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
 	case resources.StringContains:
+		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+	case resources.StringArrayContains:
+		// return tx.Where(fmt.Sprintf("? = ANY(%s)", filter.Field), filter.Value)
 		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.StringNotContains:
 		return tx.Where(fmt.Sprintf("%s NOT LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
@@ -324,6 +377,29 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 		return tx
 	}
 }
+
+// // string_array json serializer
+// type StringArraySerializer struct{}
+
+// func (StringArraySerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue interface{}) (err error) {
+// 	switch dbValue.(type) {
+// 	case []pq.StringArray:
+// 		sarray := dbValue.(pq.StringArray)
+// 		var sa []string = sarray
+// 		src := reflect.ValueOf(sa)
+// 		field.ReflectValueOf(ctx, dst).Set(src)
+// 		return nil
+
+// 	default:
+// 		return fmt.Errorf("invalid value type")
+// 	}
+
+// }
+
+// // Value implements serializer interface
+// func (StringArraySerializer) Value(ctx context.Context, field *schema.Field, dst reflect.Value, fieldValue interface{}) (interface{}, error) {
+// 	return pq.Array(fieldValue), nil
+// }
 
 // JSONSerializer json serializer
 type JSONSerializer struct {

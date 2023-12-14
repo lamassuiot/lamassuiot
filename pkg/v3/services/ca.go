@@ -72,24 +72,24 @@ type Engine struct {
 }
 
 type CAServiceImpl struct {
-	service                CAService
-	cryptoEngines          map[string]*cryptoengines.CryptoEngine
-	defaultCryptoEngine    *cryptoengines.CryptoEngine
-	defaultCryptoEngineID  string
-	caStorage              storage.CACertificatesRepo
-	certStorage            storage.CertificatesRepo
-	cronInstance           *cron.Cron
-	cryptoMonitorConfig    config.CryptoMonitoring
-	validationAuthorityURL string
+	service               CAService
+	cryptoEngines         map[string]*cryptoengines.CryptoEngine
+	defaultCryptoEngine   *cryptoengines.CryptoEngine
+	defaultCryptoEngineID string
+	caStorage             storage.CACertificatesRepo
+	certStorage           storage.CertificatesRepo
+	cronInstance          *cron.Cron
+	cryptoMonitorConfig   config.CryptoMonitoring
+	vaServerDomain        string
 }
 
 type CAServiceBuilder struct {
-	Logger                 *logrus.Entry
-	CryptoEngines          map[string]*Engine
-	CAStorage              storage.CACertificatesRepo
-	CertificateStorage     storage.CertificatesRepo
-	CryptoMonitoringConf   config.CryptoMonitoring
-	ValidationAuthorityURL string
+	Logger               *logrus.Entry
+	CryptoEngines        map[string]*Engine
+	CAStorage            storage.CACertificatesRepo
+	CertificateStorage   storage.CertificatesRepo
+	CryptoMonitoringConf config.CryptoMonitoring
+	VAServerDomain       string
 }
 
 func NewCAService(builder CAServiceBuilder) (CAService, error) {
@@ -113,14 +113,14 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 	}
 
 	svc := CAServiceImpl{
-		cronInstance:           cron.New(),
-		cryptoEngines:          engines,
-		defaultCryptoEngine:    defaultCryptoEngine,
-		defaultCryptoEngineID:  defaultCryptoEngineID,
-		caStorage:              builder.CAStorage,
-		certStorage:            builder.CertificateStorage,
-		cryptoMonitorConfig:    builder.CryptoMonitoringConf,
-		validationAuthorityURL: builder.ValidationAuthorityURL,
+		cronInstance:          cron.New(),
+		cryptoEngines:         engines,
+		defaultCryptoEngine:   defaultCryptoEngine,
+		defaultCryptoEngineID: defaultCryptoEngineID,
+		caStorage:             builder.CAStorage,
+		certStorage:           builder.CertificateStorage,
+		cryptoMonitorConfig:   builder.CryptoMonitoringConf,
+		vaServerDomain:        builder.VAServerDomain,
 	}
 
 	svc.service = &svc
@@ -360,11 +360,11 @@ func (svc *CAServiceImpl) issueCA(ctx context.Context, input issueCAInput) (*iss
 
 	var x509Engine x509engines.X509Engine
 	if input.EngineID == "" {
-		x509Engine = x509engines.NewX509Engine(svc.defaultCryptoEngine, "")
+		x509Engine = x509engines.NewX509Engine(svc.defaultCryptoEngine, svc.vaServerDomain)
 		lFunc.Infof("creating CA %s with default engine %s crypto engine", input.Subject.CommonName, x509Engine.GetEngineConfig().Provider)
 	} else {
 		if engine, ok := svc.cryptoEngines[input.EngineID]; ok {
-			x509Engine = x509engines.NewX509Engine(engine, "")
+			x509Engine = x509engines.NewX509Engine(engine, svc.vaServerDomain)
 			lFunc.Infof("creating CA %s with %s crypto engine", input.Subject.CommonName, x509Engine.GetEngineConfig().Provider)
 		} else {
 			errMsg := fmt.Sprintf("engine ID %s not configured", input.EngineID)
@@ -389,19 +389,18 @@ func (svc *CAServiceImpl) issueCA(ctx context.Context, input issueCAInput) (*iss
 			return nil, err
 		}
 	} else {
-
 		if parentEngine, ok := svc.cryptoEngines[input.ParentCA.EngineID]; ok {
-			x509ParentEngine := x509engines.NewX509Engine(parentEngine, "")
+			x509ParentEngine := x509engines.NewX509Engine(parentEngine, svc.vaServerDomain)
 			if input.ParentCA.EngineID != input.EngineID {
 				if input.EngineID == "" {
-					x509Engine = x509engines.NewX509Engine(svc.defaultCryptoEngine, "")
+					x509Engine = x509engines.NewX509Engine(svc.defaultCryptoEngine, svc.vaServerDomain)
 				} else {
 					childEngine, ok := svc.cryptoEngines[input.EngineID]
 					if !ok {
 						lFunc.Errorf("something went wrong while doing the cast")
 						return nil, nil
 					}
-					x509Engine = x509engines.NewX509Engine(childEngine, "")
+					x509Engine = x509engines.NewX509Engine(childEngine, svc.vaServerDomain)
 				}
 			} else {
 				x509Engine = x509ParentEngine
@@ -1024,7 +1023,7 @@ func (svc *CAServiceImpl) SignCertificate(ctx context.Context, input SignCertifi
 
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
 
-	x509Engine := x509engines.NewX509Engine(engine, "")
+	x509Engine := x509engines.NewX509Engine(engine, svc.vaServerDomain)
 
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
 	csr := (*x509.CertificateRequest)(input.CertRequest)
@@ -1090,7 +1089,7 @@ type ImportCertificateInput struct {
 
 func (svc *CAServiceImpl) ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error) {
 	status := models.StatusActive
-	if input.Certificate.NotAfter.After(time.Now()) {
+	if input.Certificate.NotAfter.Before(time.Now()) {
 		status = models.StatusExpired
 	}
 
@@ -1169,7 +1168,7 @@ func (svc *CAServiceImpl) SignatureSign(ctx context.Context, input SignatureSign
 	}
 
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
-	x509Engine := x509engines.NewX509Engine(engine, "")
+	x509Engine := x509engines.NewX509Engine(engine, svc.vaServerDomain)
 	lFunc.Debugf("sign signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
 	signature, err := x509Engine.Sign(x509engines.CertificateAuthority, (*x509.Certificate)(ca.Certificate.Certificate), input.Message, input.MessageType, input.SigningAlgorithm)
 	if err != nil {
@@ -1207,7 +1206,7 @@ func (svc *CAServiceImpl) SignatureVerify(ctx context.Context, input SignatureVe
 		return false, errs.ErrCANotFound
 	}
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
-	x509Engine := x509engines.NewX509Engine(engine, "")
+	x509Engine := x509engines.NewX509Engine(engine, svc.vaServerDomain)
 	lFunc.Debugf("verify signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
 	return x509Engine.Verify((*x509.Certificate)(ca.Certificate.Certificate), input.Signature, input.Message, input.MessageType, input.SigningAlgorithm)
 }

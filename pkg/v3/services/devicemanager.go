@@ -67,9 +67,10 @@ func (svc *DeviceManagerServiceImpl) GetDevicesStats(input GetDevicesStatsInput)
 	allStatus := []models.DeviceStatus{
 		models.DeviceNoIdentity,
 		models.DeviceActive,
-		models.DeviceActiveWithWarns,
-		models.DeviceActiveWithCritical,
-		models.DeviceActiveRequiresAction,
+		models.DeviceRenewalWindow,
+		models.DeviceAboutToExpire,
+		models.DeviceExpired,
+		models.DeviceRevoked,
 		models.DeviceDecommissioned,
 	}
 
@@ -350,15 +351,15 @@ func (svc DeviceManagerServiceImpl) UpdateDeviceIdentitySlot(input UpdateDeviceI
 			}
 
 		}
-		newDevStatus = models.DeviceActiveRequiresAction
+		newDevStatus = models.DeviceRevoked
 	case models.SlotActive:
 		newDevStatus = models.DeviceActive
-	case models.SlotWarnExpiration:
-		newDevStatus = models.DeviceActiveWithWarns
-	case models.SlotCriticalExpiration:
-		newDevStatus = models.DeviceActiveWithCritical
+	case models.SlotRenewalWindow:
+		newDevStatus = models.DeviceRenewalWindow
+	case models.SlotAboutToExpire:
+		newDevStatus = models.DeviceAboutToExpire
 	case models.SlotExpired:
-		newDevStatus = models.DeviceActiveRequiresAction
+		newDevStatus = models.DeviceExpired
 	}
 
 	if device.IdentitySlot != nil && newSlot.Status != device.IdentitySlot.Status {

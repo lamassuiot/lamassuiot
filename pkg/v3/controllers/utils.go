@@ -73,6 +73,10 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 							case "nc", "notcontains":
 								filterOperand = resources.StringNotContains
 							}
+
+						case resources.StringArrayFilterFieldType:
+							filterOperand = resources.StringArrayContains
+
 						case resources.DateFilterFieldType:
 							switch operand {
 							case "bf", "before":

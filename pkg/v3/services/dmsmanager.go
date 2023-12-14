@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	external_clients "github.com/lamassuiot/lamassuiot/pkg/v3/clients/external"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/errs"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
@@ -33,6 +34,8 @@ type DMSManagerService interface {
 	UpdateDMS(ctx context.Context, input UpdateDMSInput) (*models.DMS, error)
 	GetDMSByID(ctx context.Context, input GetDMSByIDInput) (*models.DMS, error)
 	GetAll(ctx context.Context, input GetAllInput) (string, error)
+
+	BindIdentityToDevice(ctx context.Context, input BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error)
 }
 
 type DMSManagerServiceImpl struct {
@@ -44,10 +47,11 @@ type DMSManagerServiceImpl struct {
 }
 
 type DMSManagerBuilder struct {
-	Logger        *logrus.Entry
-	DevManagerCli DeviceManagerService
-	CAClient      CAService
-	DMSStorage    storage.DMSRepo
+	Logger                *logrus.Entry
+	DevManagerCli         DeviceManagerService
+	CAClient              CAService
+	DMSStorage            storage.DMSRepo
+	DownstreamCertificate *x509.Certificate
 }
 
 func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
@@ -57,6 +61,7 @@ func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
 		dmsStorage:       builder.DMSStorage,
 		caClient:         builder.CAClient,
 		deviceManagerCli: builder.DevManagerCli,
+		downstreamCert:   builder.DownstreamCertificate,
 	}
 
 	return svc
@@ -206,7 +211,11 @@ func (svc DMSManagerServiceImpl) CACerts(aps string) ([]*x509.Certificate, error
 	caDistribSettings := dms.Settings.CADistributionSettings
 
 	if caDistribSettings.IncludeLamassuSystemCA {
-		cas = append(cas, svc.downstreamCert)
+		if svc.downstreamCert == nil {
+			lDMS.Warnf("downstream certificate is nil. skipping")
+		} else {
+			cas = append(cas, svc.downstreamCert)
+		}
 	}
 
 	reqCAs := []string{}
@@ -264,6 +273,7 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 
 		//check if certificate is a certificate issued by bootstrap CA
 		validCertificate := false
+		var validationCA *models.CACertificate
 		estEnrollOpts := dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030
 		for _, caID := range estEnrollOpts.AuthOptionsMTLS.ValidationCAs {
 			ca, err := svc.caClient.GetCAByID(context.Background(), GetCAByIDInput{CAID: caID})
@@ -278,14 +288,31 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 			} else {
 				lDMS.Debugf("OK validation using CA [%s] with CommonName '%s', SerialNumber '%s'", ca.ID, ca.Subject.CommonName, ca.SerialNumber)
 				validCertificate = true
+				validationCA = ca
 				break
 			}
 		}
 
+		clientSN := helpers.SerialNumberToString(clientCert.SerialNumber)
+
 		if !validCertificate {
-			lDMS.Errorf("invalid enrollment. used certificate not authorized for this DMS. certificate has SerialNumber %s issued by CA %s", helpers.SerialNumberToString(clientCert.SerialNumber), clientCert.Issuer.CommonName)
+			lDMS.Errorf("invalid enrollment. used certificate not authorized for this DMS. certificate has SerialNumber %s issued by CA %s", clientSN, clientCert.Issuer.CommonName)
 			return nil, errs.ErrDMSEnrollInvalidCert
 		}
+
+		//checks against Lamassu, external OCSP or CRL
+		valid, err := svc.checkCertificateExpiration(ctx, clientCert, (*x509.Certificate)(validationCA.Certificate.Certificate))
+		if err != nil {
+			lDMS.Errorf("error while checking certificate revocation status: %s", err)
+			return nil, err
+		}
+
+		if !valid {
+			return nil, fmt.Errorf("certificate is revoked")
+		}
+
+		lDMS.Infof("certificate is not revoked")
+
 	} else if estAuthOptions.AuthMode == models.ESTAuthModeNoAuth {
 		lDMS.Warnf("DMS %s is configured with NoAuth. Allowing enrollment", dms.ID)
 	}
@@ -359,74 +386,25 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 		return nil, err
 	}
 
-	newMeta := crt.Metadata
-	newMeta[models.CAMetadataMonitoringExpirationDeltasKey] = models.CAMetadataMonitoringExpirationDeltas{
-		{
-			Delta:     dms.Settings.ReEnrollmentSettings.PreventiveReEnrollmentDelta,
-			Name:      "Preventive",
-			Triggered: false,
-		},
-		{
-			Delta:     dms.Settings.ReEnrollmentSettings.CriticalReEnrollmentDelta,
-			Name:      "Critical",
-			Triggered: false,
-		},
-	}
-	newMeta[models.CAAttachedToDeviceKey] = models.CAAttachedToDevice{
-		AuthorizedBy: struct {
-			RAID string "json:\"ra_id\""
-		}{RAID: dms.ID},
-		DeviceID: device.ID,
-	}
-
-	crt, err = svc.caClient.UpdateCertificateMetadata(ctx, UpdateCertificateMetadataInput{
-		SerialNumber: crt.SerialNumber,
-		Metadata:     newMeta,
-	})
-	if err != nil {
-		lDMS.Errorf("could not update certificate metadata with monitoring deltas for certificate with sn '%s': %s", csr.Subject.SerialNumber, err)
-		return nil, err
-	}
-
-	var idSlot models.Slot[string]
+	bindMode := models.DeviceEventTypeProvisioned
 	if device.IdentitySlot == nil {
-		idSlot = models.Slot[string]{
-			Status:        models.SlotActive,
-			ActiveVersion: 0,
-			SecretType:    models.X509SlotProfileType,
-			Secrets: map[int]string{
-				0: crt.SerialNumber,
-			},
-			Events: map[time.Time]models.DeviceEvent{
-				time.Now(): models.DeviceEvent{
-					EvenType: models.DeviceEventTypeProvisioned,
-				},
-			},
-		}
+		bindMode = models.DeviceEventTypeProvisioned
 	} else {
-		idSlot = *device.IdentitySlot
-		idSlot.ActiveVersion = idSlot.ActiveVersion + 1
-		idSlot.Status = models.SlotActive
-
-		idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
-		idSlot.Events[time.Now()] = models.DeviceEvent{
-			EvenType:          models.DeviceEventTypeReProvisioned,
-			EventDescriptions: fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion),
-		}
+		bindMode = models.DeviceEventTypeReProvisioned
 	}
 
-	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(UpdateDeviceIdentitySlotInput{
-		ID:   csr.Subject.CommonName,
-		Slot: idSlot,
+	_, err = svc.BindIdentityToDevice(ctx, BindIdentityToDeviceInput{
+		DeviceID:                device.ID,
+		CertificateSerialNumber: crt.SerialNumber,
+		BindMode:                bindMode,
 	})
 	if err != nil {
-		lDMS.Errorf("could not update device '%s' identity slot. aborting enrollment process: %s", device.ID, err)
 		return nil, err
 	}
 
 	return (*x509.Certificate)(crt.Certificate), nil
-
 }
+
 func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	lDMS.Debugf("checking if DMS '%s' exists", aps)
 	dms, err := svc.service.GetDMSByID(ctx, GetDMSByIDInput{
@@ -461,6 +439,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		lDMS.Debugf("presented client certificate has CN=%s and SN=%s issued by CA with CommonName '%s'", clientCert.Subject.CommonName, helpers.SerialNumberToString(clientCert.SerialNumber), clientCert.Issuer.CommonName)
 
 		validCertificate := false
+		var validationCA *x509.Certificate
 		//check if certificate is a certificate issued by Enroll CA
 		lDMS.Debugf("validating client certificate using EST Enrollment CA witch has ID=%s CN=%s SN=%s", enrollCAID, enrollCA.Certificate.Subject.CommonName, enrollCA.SerialNumber)
 		err = helpers.ValidateCertificate((*x509.Certificate)(enrollCA.Certificate.Certificate), *clientCert, false)
@@ -468,6 +447,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 			lDMS.Warnf("invalid validation using enroll CA: %s", err)
 		} else {
 			lDMS.Debugf("OK validation using enroll")
+			validationCA = (*x509.Certificate)(enrollCA.Certificate.Certificate)
 			validCertificate = true
 		}
 
@@ -497,11 +477,6 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 			}
 		}
 
-		if !validCertificate {
-			lDMS.Errorf("invalid reenrollment. Used certificate not authorized for this DMS. Certificate has SerialNumber %s issued by CA with CN=%s", helpers.SerialNumberToString(clientCert.SerialNumber), clientCert.Issuer.CommonName)
-			return nil, errs.ErrDMSEnrollInvalidCert
-		}
-
 		//Check if EXPIRED
 		now := time.Now()
 		if clientCert.NotBefore.After(now) {
@@ -512,6 +487,19 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 				return nil, fmt.Errorf("expired certificate")
 			}
 		}
+
+		//checks against Lamassu, external OCSP or CRL
+		valid, err := svc.checkCertificateExpiration(ctx, clientCert, validationCA)
+		if err != nil {
+			lDMS.Errorf("error while checking certificate revocation status: %s", err)
+			return nil, err
+		}
+
+		if !valid {
+			return nil, fmt.Errorf("certificate is revoked")
+		}
+
+		lDMS.Infof("certificate is not revoked")
 	} else {
 		lDMS.Warnf("allowing reenroll: using NO AUTH mode")
 	}
@@ -634,51 +622,12 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		return nil, err
 	}
 
-	newMeta := crt.Metadata
-	newMeta[models.CAMetadataMonitoringExpirationDeltasKey] = models.CAMetadataMonitoringExpirationDeltas{
-		{
-			Delta:     dms.Settings.ReEnrollmentSettings.PreventiveReEnrollmentDelta,
-			Name:      "Preventive",
-			Triggered: false,
-		},
-		{
-			Delta:     dms.Settings.ReEnrollmentSettings.CriticalReEnrollmentDelta,
-			Name:      "Critical",
-			Triggered: false,
-		},
-	}
-	newMeta[models.CAAttachedToDeviceKey] = models.CAAttachedToDevice{
-		AuthorizedBy: struct {
-			RAID string "json:\"ra_id\""
-		}{RAID: dms.ID},
-		DeviceID: device.ID,
-	}
-
-	crt, err = svc.caClient.UpdateCertificateMetadata(ctx, UpdateCertificateMetadataInput{
-		SerialNumber: crt.SerialNumber,
-		Metadata:     newMeta,
+	_, err = svc.BindIdentityToDevice(ctx, BindIdentityToDeviceInput{
+		DeviceID:                device.ID,
+		CertificateSerialNumber: crt.SerialNumber,
+		BindMode:                models.DeviceEventTypeRenewed,
 	})
 	if err != nil {
-		lDMS.Errorf("could not update certificate metadata with monitoring deltas for certificate with sn '%s': %s", csr.Subject.SerialNumber, err)
-		return nil, err
-	}
-
-	idSlot := *device.IdentitySlot
-	idSlot.ActiveVersion = idSlot.ActiveVersion + 1
-	idSlot.Status = models.SlotActive
-	idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
-
-	idSlot.Events[time.Now()] = models.DeviceEvent{
-		EvenType:          models.DeviceEventTypeRenewed,
-		EventDescriptions: fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion),
-	}
-
-	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(UpdateDeviceIdentitySlotInput{
-		ID:   csr.Subject.CommonName,
-		Slot: idSlot,
-	})
-	if err != nil {
-		lDMS.Errorf("could not update device '%s' identity slot. Aborting enrollment process: %s", device.ID, err)
 		return nil, err
 	}
 
@@ -738,4 +687,179 @@ func (svc DMSManagerServiceImpl) ServerKeyGen(ctx context.Context, csr *x509.Cer
 
 	fmt.Println(privKey, err)
 	return nil, nil, fmt.Errorf("TODO")
+}
+
+func (svc DMSManagerServiceImpl) checkCertificateExpiration(ctx context.Context, cert *x509.Certificate, validationCA *x509.Certificate) (bool, error) {
+	revocationChecked := false
+	clientSN := helpers.SerialNumberToString(cert.SerialNumber)
+	//check if revoked
+	//	If cert is in Lamassu: check status
+	//	If cert NOT in Lamassu (i.e. Issued Offline/Outside Lamassu), check if the certificate has CRL/OCSP in presented CRT.
+	lmsCrt, err := svc.caClient.GetCertificateBySerialNumber(ctx, GetCertificatesBySerialNumberInput{
+		SerialNumber: clientSN,
+	})
+	if err != nil {
+		if err != errs.ErrCertificateNotFound {
+			lDMS.Errorf("got unexpected error while searching certificate %s in Lamassu: %s", clientSN, err)
+			return false, err
+		}
+
+		//Not Stored In lamassu. Check if CRL/OCSP
+		if len(cert.OCSPServer) > 0 {
+			//OCSP first
+			for _, ocspInstance := range cert.OCSPServer {
+				ocspResp, err := external_clients.GetOCSPResponse(ocspInstance, cert, validationCA, nil, true)
+				if err != nil {
+					lDMS.Warnf("could not get or validate ocsp response from server %s specified in the presented client certificate: %s", err, clientSN)
+					lDMS.Warnf("checking with next ocsp server")
+					continue
+				}
+
+				lDMS.Infof("successfully validated OCSP response with external %s OCSP server. Checking OCSP response status for %s certificate", ocspInstance, clientSN)
+				if ocspResp.Status == ocsp.Revoked {
+					lDMS.Warnf("certificate was revoked at %s with %s revocation reason", ocspResp.RevokedAt.String(), models.RevocationReasonMap[ocspResp.RevocationReason])
+					return false, nil
+				} else {
+					lDMS.Infof("certificate is not revoked")
+					revocationChecked = true
+					break
+				}
+			}
+		}
+
+		if !revocationChecked && len(cert.CRLDistributionPoints) > 0 {
+			//Try CRL
+			for _, crlDP := range cert.CRLDistributionPoints {
+				crl, err := external_clients.GetCRLResponse(crlDP, validationCA, nil, true)
+				if err != nil {
+					lDMS.Warnf("could not get or validate crl response from server %s specified in the presented client certificate: %s", err, clientSN)
+					lDMS.Warnf("checking with next crl server")
+					continue
+				}
+
+				idxClientCrt := slices.IndexFunc(crl.RevokedCertificateEntries, func(entry x509.RevocationListEntry) bool {
+					return entry.SerialNumber == cert.SerialNumber
+				})
+
+				if idxClientCrt >= 0 {
+					entry := crl.RevokedCertificateEntries[idxClientCrt]
+					lDMS.Warnf("certificate was revoked at %s with %s revocation reason", entry.RevocationTime.String(), models.RevocationReasonMap[entry.ReasonCode])
+					return false, nil
+				} else {
+					lDMS.Infof("certificate not revoked. Client certificate not in CRL: %s", clientSN)
+					revocationChecked = true
+					break
+				}
+			}
+		}
+	} else {
+		if lmsCrt.Status == models.StatusRevoked {
+			lDMS.Errorf("Client certificate %s is revoked", clientSN)
+			return false, nil
+		}
+	}
+
+	if revocationChecked {
+		return true, nil
+	} else {
+		return true, nil
+	}
+}
+
+type BindIdentityToDeviceInput struct {
+	DeviceID                string
+	CertificateSerialNumber string
+	BindMode                models.DeviceEventType
+}
+
+func (svc DMSManagerServiceImpl) BindIdentityToDevice(ctx context.Context, input BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error) {
+	crt, err := svc.caClient.GetCertificateBySerialNumber(ctx, GetCertificatesBySerialNumberInput{
+		SerialNumber: input.CertificateSerialNumber,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	device, err := svc.deviceManagerCli.GetDeviceByID(GetDeviceByIDInput{
+		ID: input.DeviceID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	dms, err := svc.GetDMSByID(ctx, GetDMSByIDInput{
+		ID: device.DMSOwnerID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	newMeta := crt.Metadata
+	newMeta[models.CAMetadataMonitoringExpirationDeltasKey] = models.CAMetadataMonitoringExpirationDeltas{
+		{
+			Delta:     dms.Settings.ReEnrollmentSettings.PreventiveReEnrollmentDelta,
+			Name:      "Preventive",
+			Triggered: false,
+		},
+		{
+			Delta:     dms.Settings.ReEnrollmentSettings.CriticalReEnrollmentDelta,
+			Name:      "Critical",
+			Triggered: false,
+		},
+	}
+	newMeta[models.CAAttachedToDeviceKey] = models.CAAttachedToDevice{
+		AuthorizedBy: struct {
+			RAID string "json:\"ra_id\""
+		}{RAID: dms.ID},
+		DeviceID: device.ID,
+	}
+
+	crt, err = svc.caClient.UpdateCertificateMetadata(ctx, UpdateCertificateMetadataInput{
+		SerialNumber: crt.SerialNumber,
+		Metadata:     newMeta,
+	})
+	if err != nil {
+		lDMS.Errorf("could not update certificate metadata with monitoring deltas for certificate with sn '%s': %s", crt.SerialNumber, err)
+		return nil, err
+	}
+
+	idSlot := device.IdentitySlot
+	if idSlot == nil {
+		idSlot = &models.Slot[string]{
+			Status:        models.SlotActive,
+			ActiveVersion: 0,
+			SecretType:    models.X509SlotProfileType,
+			Secrets: map[int]string{
+				0: crt.SerialNumber,
+			},
+			Events: map[time.Time]models.DeviceEvent{
+				time.Now(): models.DeviceEvent{
+					EvenType: models.DeviceEventTypeProvisioned,
+				},
+			},
+		}
+	} else {
+		idSlot.ActiveVersion = idSlot.ActiveVersion + 1
+		idSlot.Status = models.SlotActive
+		idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
+
+		idSlot.Events[time.Now()] = models.DeviceEvent{
+			EvenType:          input.BindMode,
+			EventDescriptions: fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion),
+		}
+	}
+	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(UpdateDeviceIdentitySlotInput{
+		ID:   crt.Subject.CommonName,
+		Slot: *idSlot,
+	})
+	if err != nil {
+		lDMS.Errorf("could not update device '%s' identity slot. Aborting enrollment process: %s", device.ID, err)
+		return nil, err
+	}
+
+	return &models.BindIdentityToDeviceOutput{
+		Certificate: crt,
+		DMS:         dms,
+		Device:      device,
+	}, nil
 }

@@ -83,3 +83,9 @@ type CADistributionSettings struct {
 type DMSStats struct {
 	TotalDMSs int `json:"total"`
 }
+
+type BindIdentityToDeviceOutput struct {
+	Certificate *Certificate `json:"certificate"`
+	DMS         *DMS         `json:"dms"`
+	Device      *Device      `json:"device"`
+}

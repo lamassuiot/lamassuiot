@@ -5,7 +5,7 @@ type CAConfig struct {
 	Storage          PluggableStorageEngine `mapstructure:"storage"`
 	CryptoEngines    CryptoEngines          `mapstructure:"crypto_engines"`
 	CryptoMonitoring CryptoMonitoring       `mapstructure:"crypto_monitoring"`
-	VAServerURL      string                 `mapstructure:"va_server_url"`
+	VAServerDomain   string                 `mapstructure:"va_server_domain"`
 }
 
 type CryptoEngines struct {
@@ -46,9 +46,9 @@ type PKCS11Config struct {
 }
 
 type PKCS11EngineConfig struct {
-	PKCS11Config
-	ID       string                 `mapstructure:"id"`
-	Metadata map[string]interface{} `mapstructure:"metadata"`
+	PKCS11Config `mapstructure:",squash"`
+	ID           string                 `mapstructure:"id"`
+	Metadata     map[string]interface{} `mapstructure:"metadata"`
 }
 
 type PKCS11ModuleExtraOptions struct {

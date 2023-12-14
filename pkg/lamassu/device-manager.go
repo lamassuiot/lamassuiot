@@ -196,7 +196,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 						prevCriticalTriggered := checkIfTriggered(certUpdate.Previous, "Critical")
 						if !prevCriticalTriggered {
 							//no update
-							dev.IdentitySlot.Status = models.SlotCriticalExpiration
+							dev.IdentitySlot.Status = models.SlotAboutToExpire
 							_, err = svc.UpdateDeviceIdentitySlot(services.UpdateDeviceIdentitySlotInput{
 								ID:   deviceID,
 								Slot: *dev.IdentitySlot,
@@ -213,7 +213,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 						prevPreventiveTriggered := checkIfTriggered(certUpdate.Previous, "Preventive")
 						if !prevPreventiveTriggered {
 							//no update
-							dev.IdentitySlot.Status = models.SlotWarnExpiration
+							dev.IdentitySlot.Status = models.SlotRenewalWindow
 							_, err = svc.UpdateDeviceIdentitySlot(services.UpdateDeviceIdentitySlotInput{
 								ID:   deviceID,
 								Slot: *dev.IdentitySlot,

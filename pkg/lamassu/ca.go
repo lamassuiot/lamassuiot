@@ -68,6 +68,7 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, error) {
 		CAStorage:            caStorage,
 		CertificateStorage:   certStorage,
 		CryptoMonitoringConf: conf.CryptoMonitoring,
+		VAServerDomain:       conf.VAServerDomain,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("could not create CA service: %v", err)

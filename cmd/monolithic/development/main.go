@@ -129,6 +129,7 @@ func main() {
 	defer func() {
 		if err := recover(); err != nil {
 			printWColor(" !! Panic !! ", color.FgWhite, color.BgRed)
+			fmt.Println(err)
 			fmt.Println()
 
 			printWColor("cleaning up", color.FgRed, color.BgBlack)
@@ -193,7 +194,7 @@ func main() {
 			Frequency: "0 * * * *",
 		},
 		Storage: config.PluggableStorageEngine{
-			LogLevel: config.Info,
+			LogLevel: config.Trace,
 			Provider: config.Postgres,
 			Postgres: *storageConfig,
 		},

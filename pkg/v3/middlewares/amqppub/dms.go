@@ -96,3 +96,12 @@ func (mw amqpEventPublisher) Reenroll(ctx context.Context, csr *x509.Certificate
 func (mw amqpEventPublisher) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
 	return mw.next.ServerKeyGen(ctx, csr, aps)
 }
+
+func (mw amqpEventPublisher) BindIdentityToDevice(ctx context.Context, input services.BindIdentityToDeviceInput) (output *models.BindIdentityToDeviceOutput, err error) {
+	defer func() {
+		if err == nil {
+			mw.eventPublisher.PublishCloudEvent(ctx, models.EventBindDeviceIdentityKey, output)
+		}
+	}()
+	return mw.next.BindIdentityToDevice(ctx, input)
+}
