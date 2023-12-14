@@ -138,7 +138,7 @@ func (p *GoCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) 
 	lGo.Debugf("importing RSA %d key for keyID: %s", key.Size(), keyID)
 	p.checkAndCreateStorageDir()
 
-	err := ioutil.WriteFile(p.storageDirectory+"/"+keyID, pem.EncodeToMemory(&pem.Block{
+	err := os.WriteFile(p.storageDirectory+"/"+keyID, pem.EncodeToMemory(&pem.Block{
 		Bytes: x509.MarshalPKCS1PrivateKey(key),
 		Type:  "RSA PRIVATE KEY",
 	}), 0644)

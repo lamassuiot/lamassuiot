@@ -2761,7 +2761,7 @@ func BuildCATestServer() (*CATestServer, error) {
 		CryptoMonitoring: config.CryptoMonitoring{
 			Enabled: false,
 		},
-		VAServerURL: "http://dev.lamassu.test",
+		VAServerDomain: "http://dev.lamassu.test",
 	}, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
