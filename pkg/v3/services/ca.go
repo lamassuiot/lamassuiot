@@ -393,13 +393,16 @@ func (svc *CAServiceImpl) issueCA(ctx context.Context, input issueCAInput) (*iss
 		if parentEngine, ok := svc.cryptoEngines[input.ParentCA.EngineID]; ok {
 			x509ParentEngine := x509engines.NewX509Engine(parentEngine, "")
 			if input.ParentCA.EngineID != input.EngineID {
-				childEngine, ok := svc.cryptoEngines[input.EngineID]
-				if !ok {
-					lFunc.Errorf("something went wrong while doing the cast")
-					return nil, nil
+				if input.EngineID == "" {
+					x509Engine = x509engines.NewX509Engine(svc.defaultCryptoEngine, "")
+				} else {
+					childEngine, ok := svc.cryptoEngines[input.EngineID]
+					if !ok {
+						lFunc.Errorf("something went wrong while doing the cast")
+						return nil, nil
+					}
+					x509Engine = x509engines.NewX509Engine(childEngine, "")
 				}
-				childx509ParentEngine := x509engines.NewX509Engine(childEngine, "")
-				x509Engine = childx509ParentEngine
 			} else {
 				x509Engine = x509ParentEngine
 			}

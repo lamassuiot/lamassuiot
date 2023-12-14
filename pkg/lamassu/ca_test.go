@@ -2439,10 +2439,6 @@ func TestHierarchy(t *testing.T) {
 					return fmt.Errorf("got unexpected error: %s", err)
 				}
 
-				if parentCA.NotAfter.After(childCA.NotAfter) {
-					return fmt.Errorf("Child CA expires after ParentCA")
-				}
-
 				return nil
 			},
 		},
@@ -2498,7 +2494,8 @@ func TestHierarchy(t *testing.T) {
 
 				return nil
 			},
-			run: func(caSDK services.CAService) error {
+			run: func(caSDK services.CAService) ([]models.CACertificate, error) {
+				var cas []models.CACertificate
 				caRDLim := time.Date(3000, 12, 1, 0, 0, 0, 0, time.Local)   // expires the 1st of december of 3000
 				caCDLim1 := time.Date(3000, 11, 28, 0, 0, 0, 0, time.Local) // expires the 28th of november of 3000
 				caCDLim2 := time.Date(3000, 11, 27, 0, 0, 0, 0, time.Local) // expires the 27 of november of 3000
@@ -2620,8 +2617,8 @@ func TestHierarchy(t *testing.T) {
 			before: func(svc services.CAService) error {
 				return nil
 			},
-			run: func(caSDK services.CAService) error {
-
+			run: func(caSDK services.CAService) ([]models.CACertificate, error) {
+				var cas []models.CACertificate
 				caRDLim := time.Date(3000, 12, 1, 0, 0, 0, 0, time.Local)
 				caDurChild1 := models.TimeDuration(time.Hour * 26)
 
