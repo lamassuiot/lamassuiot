@@ -759,11 +759,7 @@ func (svc DMSManagerServiceImpl) checkCertificateExpiration(ctx context.Context,
 		}
 	}
 
-	if revocationChecked {
-		return true, nil
-	} else {
-		return true, nil
-	}
+	return revocationChecked, nil
 }
 
 type BindIdentityToDeviceInput struct {
