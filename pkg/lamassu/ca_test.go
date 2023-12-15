@@ -1529,8 +1529,14 @@ func TestImportCA(t *testing.T) {
 					fmt.Errorf("Failed creating the certificate %s", err)
 				}
 				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
+				var engine *models.CryptoEngineProvider
 
-				fmt.Println(engines)
+				if !engines[0].Default {
+					engine = engines[0]
+				} else {
+					engine = engines[1]
+				}
+
 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6a4e0bf7d8adef322c06987baca",
 					CAType: models.CertificateTypeImportedWithKey,
@@ -1541,10 +1547,11 @@ func TestImportCA(t *testing.T) {
 					CACertificate: (*models.X509Certificate)(ca),
 					CARSAKey:      (key).(*rsa.PrivateKey),
 					KeyType:       models.KeyType(x509.RSA),
-					EngineID:      engines[0].ID,
+					EngineID:      engine.ID,
 
 					//Here are missing a lot of parameterss
 				})
+
 				if err != nil {
 					fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
 				}
@@ -2741,7 +2748,7 @@ func BuildCATestServer() (*CATestServer, error) {
 			Postgres: pConfig,
 		},
 		CryptoEngines: config.CryptoEngines{
-			LogLevel:      config.Info,
+			LogLevel:      config.Trace,
 			DefaultEngine: "filesystem-1",
 			GolangProvider: []config.GolangEngineConfig{
 				config.GolangEngineConfig{
@@ -2767,6 +2774,8 @@ func BuildCATestServer() (*CATestServer, error) {
 		BuildSHA:  "-",
 		BuildTime: "-",
 	})
+	fmt.Println(vaultSDKConf.Port)
+	fmt.Println(vaultSuite.GetRootToken())
 
 	if err != nil {
 		return nil, fmt.Errorf("could not assemble CA with HTTP server")

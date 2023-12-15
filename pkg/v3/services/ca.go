@@ -476,7 +476,11 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 		}
 
 		if input.CARSAKey != nil {
-			_, err = engine.ImportRSAPrivateKey(input.CARSAKey, x509engines.CryptoAssetLRI(x509engines.CertificateAuthority, helpers.SerialNumberToString(input.CACertificate.SerialNumber)))
+			_, err := engine.ImportRSAPrivateKey(input.CARSAKey, x509engines.CryptoAssetLRI(x509engines.CertificateAuthority, helpers.SerialNumberToString(input.CACertificate.SerialNumber)))
+			if err != nil {
+				lFunc.Errorf("could not imported  %s private key: %s", helpers.SerialNumberToString(input.CACertificate.SerialNumber), err)
+				return nil, fmt.Errorf("could not import key: %w", err)
+			}
 		} else if input.CAECKey != nil {
 			_, err = engine.ImportECDSAPrivateKey(input.CAECKey, x509engines.CryptoAssetLRI(x509engines.CertificateAuthority, helpers.SerialNumberToString(input.CACertificate.SerialNumber)))
 		} else {
