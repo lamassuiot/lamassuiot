@@ -1,3 +1,61 @@
+# v1.45.1 (2023-11-20)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.45.0 (2023-11-16)
+
+* **Feature**: GA release the ability to index and search devices based on their GeoLocation data. With GeoQueries you can narrow your search to retrieve devices located in the desired geographic boundary.
+
+# v1.44.1 (2023-11-15)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.44.0 (2023-11-14)
+
+* **Feature**: This release introduces new attributes in API CreateSecurityProfile, UpdateSecurityProfile and DescribeSecurityProfile to support management of Metrics Export for AWS IoT Device Defender Detect.
+
+# v1.43.1 (2023-11-09)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.43.0 (2023-11-01)
+
+* **Feature**: Adds support for configured endpoints via environment variables and the AWS shared configuration file.
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.42.0 (2023-10-31)
+
+* **Feature**: **BREAKING CHANGE**: Bump minimum go version to 1.19 per the revised [go version support policy](https://aws.amazon.com/blogs/developer/aws-sdk-for-go-aligns-with-go-release-policy-on-supported-runtimes/).
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.41.0 (2023-10-24)
+
+* **Feature**: **BREAKFIX**: Correct nullability and default value representation of various input fields across a large number of services. Calling code that references one or more of the affected fields will need to update usage accordingly. See [2162](https://github.com/aws/aws-sdk-go-v2/issues/2162).
+
+# v1.40.2 (2023-10-12)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.40.1 (2023-10-06)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.40.0 (2023-09-27)
+
+* **Feature**: Added support for IoT Rules Engine Kafka Action Headers
+
+# v1.39.5 (2023-08-21)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.39.4 (2023-08-18)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
+# v1.39.3 (2023-08-17)
+
+* **Dependency Update**: Updated to the latest SDK module versions
+
 # v1.39.2 (2023-08-07)
 
 * **Dependency Update**: Updated to the latest SDK module versions

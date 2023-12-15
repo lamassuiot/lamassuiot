@@ -7,9 +7,9 @@ import (
 type CertificateType string
 
 const (
-	CertificateTypeManaged  CertificateType = "MANAGED"
-	CertificateTypeImported CertificateType = "IMPORTED"
-	CertificateTypeExternal CertificateType = "EXTERNAL"
+	CertificateTypeManaged         CertificateType = "MANAGED"
+	CertificateTypeImportedWithKey CertificateType = "IMPORTED"
+	CertificateTypeExternal        CertificateType = "EXTERNAL"
 )
 
 type ExpirationTimeRef string
@@ -51,7 +51,8 @@ type Expiration struct {
 
 type IssuerCAMetadata struct {
 	SerialNumber string `json:"serial_number"`
-	CAID         string `json:"ca_id"`
+	ID           string `json:"id"`
+	Level        int    `json:"level"`
 }
 
 type CACertificate struct {
@@ -61,6 +62,7 @@ type CACertificate struct {
 	IssuanceExpirationRef Expiration             `json:"issuance_expiration" gorm:"serializer:json"`
 	Type                  CertificateType        `json:"type"`
 	CreationTS            time.Time              `json:"creation_ts"`
+	Level                 int                    `json:"level"`
 }
 
 type CAStats struct {
@@ -76,4 +78,27 @@ type CertificatesStats struct {
 	TotalCertificates            int                       `json:"total"`
 	CertificateDistributionPerCA map[string]int            `json:"ca_distribution"`
 	CertificateStatus            map[CertificateStatus]int `json:"status_distribution"`
+}
+
+type MonitoringExpirationDelta struct {
+	Delta     TimeDuration `json:"delta"`
+	Name      string       `json:"name"`
+	Triggered bool         `json:"triggered"`
+}
+
+const (
+	CAMetadataMonitoringExpirationDeltasKey = "lamassu.io/ca/expiration-deltas"
+)
+
+type CAMetadataMonitoringExpirationDeltas []MonitoringExpirationDelta
+
+const (
+	CAAttachedToDeviceKey = "lamassu.io/ca/attached-to"
+)
+
+type CAAttachedToDevice struct {
+	AuthorizedBy struct {
+		RAID string `json:"ra_id"`
+	} `json:"authorized_by"`
+	DeviceID string `json:"device_id"`
 }

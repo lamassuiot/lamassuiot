@@ -3,7 +3,9 @@ package config
 type VAconfig struct {
 	BaseConfig `mapstructure:",squash"`
 
-	CAClient struct {
-		HTTPClient `mapstructure:",squash"`
-	} `mapstructure:"ca_client"`
+	CAClient CAClient `mapstructure:"ca_client"`
+}
+
+type CAClient struct {
+	HTTPClient `mapstructure:",squash"`
 }

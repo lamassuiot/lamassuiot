@@ -5332,6 +5332,9 @@ func validateExponentialRolloutRate(v *types.ExponentialRolloutRate) error {
 	if v.BaseRatePerMinute == nil {
 		invalidParams.Add(smithy.NewErrParamRequired("BaseRatePerMinute"))
 	}
+	if v.IncrementFactor == nil {
+		invalidParams.Add(smithy.NewErrParamRequired("IncrementFactor"))
+	}
 	if v.RateIncreaseCriteria == nil {
 		invalidParams.Add(smithy.NewErrParamRequired("RateIncreaseCriteria"))
 	}
@@ -5542,6 +5545,46 @@ func validateKafkaAction(v *types.KafkaAction) error {
 	if v.ClientProperties == nil {
 		invalidParams.Add(smithy.NewErrParamRequired("ClientProperties"))
 	}
+	if v.Headers != nil {
+		if err := validateKafkaHeaders(v.Headers); err != nil {
+			invalidParams.AddNested("Headers", err.(smithy.InvalidParamsError))
+		}
+	}
+	if invalidParams.Len() > 0 {
+		return invalidParams
+	} else {
+		return nil
+	}
+}
+
+func validateKafkaActionHeader(v *types.KafkaActionHeader) error {
+	if v == nil {
+		return nil
+	}
+	invalidParams := smithy.InvalidParamsError{Context: "KafkaActionHeader"}
+	if v.Key == nil {
+		invalidParams.Add(smithy.NewErrParamRequired("Key"))
+	}
+	if v.Value == nil {
+		invalidParams.Add(smithy.NewErrParamRequired("Value"))
+	}
+	if invalidParams.Len() > 0 {
+		return invalidParams
+	} else {
+		return nil
+	}
+}
+
+func validateKafkaHeaders(v []types.KafkaActionHeader) error {
+	if v == nil {
+		return nil
+	}
+	invalidParams := smithy.InvalidParamsError{Context: "KafkaHeaders"}
+	for i := range v {
+		if err := validateKafkaActionHeader(&v[i]); err != nil {
+			invalidParams.AddNested(fmt.Sprintf("[%d]", i), err.(smithy.InvalidParamsError))
+		}
+	}
 	if invalidParams.Len() > 0 {
 		return invalidParams
 	} else {
@@ -5716,6 +5759,24 @@ func validateMetricDimension(v *types.MetricDimension) error {
 	invalidParams := smithy.InvalidParamsError{Context: "MetricDimension"}
 	if v.DimensionName == nil {
 		invalidParams.Add(smithy.NewErrParamRequired("DimensionName"))
+	}
+	if invalidParams.Len() > 0 {
+		return invalidParams
+	} else {
+		return nil
+	}
+}
+
+func validateMetricsExportConfig(v *types.MetricsExportConfig) error {
+	if v == nil {
+		return nil
+	}
+	invalidParams := smithy.InvalidParamsError{Context: "MetricsExportConfig"}
+	if v.MqttTopic == nil {
+		invalidParams.Add(smithy.NewErrParamRequired("MqttTopic"))
+	}
+	if v.RoleArn == nil {
+		invalidParams.Add(smithy.NewErrParamRequired("RoleArn"))
 	}
 	if invalidParams.Len() > 0 {
 		return invalidParams
@@ -7210,6 +7271,11 @@ func validateOpCreateSecurityProfileInput(v *CreateSecurityProfileInput) error {
 	if v.Tags != nil {
 		if err := validateTagList(v.Tags); err != nil {
 			invalidParams.AddNested("Tags", err.(smithy.InvalidParamsError))
+		}
+	}
+	if v.MetricsExportConfig != nil {
+		if err := validateMetricsExportConfig(v.MetricsExportConfig); err != nil {
+			invalidParams.AddNested("MetricsExportConfig", err.(smithy.InvalidParamsError))
 		}
 	}
 	if invalidParams.Len() > 0 {
@@ -9757,6 +9823,11 @@ func validateOpUpdateSecurityProfileInput(v *UpdateSecurityProfileInput) error {
 	if v.AdditionalMetricsToRetainV2 != nil {
 		if err := validateAdditionalMetricsToRetainV2List(v.AdditionalMetricsToRetainV2); err != nil {
 			invalidParams.AddNested("AdditionalMetricsToRetainV2", err.(smithy.InvalidParamsError))
+		}
+	}
+	if v.MetricsExportConfig != nil {
+		if err := validateMetricsExportConfig(v.MetricsExportConfig); err != nil {
+			invalidParams.AddNested("MetricsExportConfig", err.(smithy.InvalidParamsError))
 		}
 	}
 	if invalidParams.Len() > 0 {

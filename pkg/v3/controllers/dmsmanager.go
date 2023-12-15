@@ -7,6 +7,12 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
 )
 
+var dmsFiltrableFieldMap = map[string]resources.FilterFieldType{
+	"id":          resources.StringFilterFieldType,
+	"name":        resources.StringFilterFieldType,
+	"creation_ts": resources.DateFilterFieldType,
+}
+
 type dmsManagerHttpRoutes struct {
 	svc services.DMSManagerService
 }
@@ -17,16 +23,27 @@ func NewDMSManagerHttpRoutes(svc services.DMSManagerService) *dmsManagerHttpRout
 	}
 }
 
-func (r *dmsManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request)
+func (r *dmsManagerHttpRoutes) GetStats(ctx *gin.Context) {
+	stats, err := r.svc.GetDMSStats(ctx, services.GetDMSStatsInput{})
 
-	dmss := []*models.DMS{}
-	nextBookmark, err := r.svc.GetAll(services.GetAllInput{
+	if err != nil {
+		ctx.JSON(500, err)
+		return
+	}
+
+	ctx.JSON(200, stats)
+}
+
+func (r *dmsManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
+	queryParams := FilterQuery(ctx.Request, dmsFiltrableFieldMap)
+
+	dmss := []models.DMS{}
+	nextBookmark, err := r.svc.GetAll(ctx, services.GetAllInput{
 		ListInput: services.ListInput[models.DMS]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
-			ApplyFunc: func(cert *models.DMS) {
-				dmss = append(dmss, cert)
+			ApplyFunc: func(dms models.DMS) {
+				dmss = append(dmss, dms)
 			},
 		},
 	})
@@ -55,7 +72,7 @@ func (r *dmsManagerHttpRoutes) GetDMSByID(ctx *gin.Context) {
 		return
 	}
 
-	dms, err := r.svc.GetDMSByID(services.GetDMSByIDInput{
+	dms, err := r.svc.GetDMSByID(ctx, services.GetDMSByIDInput{
 		ID: params.ID,
 	})
 	if err != nil {
@@ -74,13 +91,13 @@ func (r *dmsManagerHttpRoutes) CreateDMS(ctx *gin.Context) {
 	}
 
 	input := services.CreateDMSInput{
-		ID:              requestBody.ID,
-		Metadata:        requestBody.Metadata,
-		Name:            requestBody.Name,
-		IdentityProfile: requestBody.IdentityProfile,
+		ID:       requestBody.ID,
+		Metadata: requestBody.Metadata,
+		Name:     requestBody.Name,
+		Settings: requestBody.Settings,
 	}
 
-	dms, err := r.svc.CreateDMS(input)
+	dms, err := r.svc.CreateDMS(ctx, input)
 
 	if err != nil {
 		ctx.AbortWithStatusJSON(500, gin.H{"err": err.Error()})
@@ -90,7 +107,7 @@ func (r *dmsManagerHttpRoutes) CreateDMS(ctx *gin.Context) {
 	ctx.JSON(201, dms)
 }
 
-func (r *dmsManagerHttpRoutes) UpdateIdentityProfile(ctx *gin.Context) {
+func (r *dmsManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -101,15 +118,14 @@ func (r *dmsManagerHttpRoutes) UpdateIdentityProfile(ctx *gin.Context) {
 		return
 	}
 
-	var requestBody models.IdentityProfile
+	var requestBody models.DMS
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
-	ca, err := r.svc.UpdateIdentityProfile(services.UpdateIdentityProfileInput{
-		ID:                 params.ID,
-		NewIdentityProfile: requestBody,
+	ca, err := r.svc.UpdateDMS(ctx, services.UpdateDMSInput{
+		DMS: requestBody,
 	})
 	if err != nil {
 		ctx.JSON(500, err)
@@ -117,4 +133,24 @@ func (r *dmsManagerHttpRoutes) UpdateIdentityProfile(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, ca)
+}
+
+func (r *dmsManagerHttpRoutes) BindIdentityToDevice(ctx *gin.Context) {
+	var requestBody resources.BindIdentityToDeviceBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	bind, err := r.svc.BindIdentityToDevice(ctx, services.BindIdentityToDeviceInput{
+		DeviceID:                requestBody.DeviceID,
+		CertificateSerialNumber: requestBody.CertificateSerialNumber,
+		BindMode:                models.DeviceEventType(requestBody.BindMode),
+	})
+	if err != nil {
+		ctx.JSON(500, err)
+		return
+	}
+
+	ctx.JSON(200, bind)
 }

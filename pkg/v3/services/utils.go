@@ -16,7 +16,7 @@ import (
 type ListInput[E any] struct {
 	QueryParameters *resources.QueryParameters
 	ExhaustiveRun   bool //wether to iter all elems
-	ApplyFunc       func(elem *E)
+	ApplyFunc       func(elem E)
 }
 
 func insertNth(s string, n int, sep rune) string {

@@ -778,8 +778,12 @@ type Behavior struct {
 	Name *string
 
 	// The criteria that determine if a device is behaving normally in regard to the
-	// metric .
+	// metric . In the IoT console, you can choose to be sent an alert through Amazon
+	// SNS when IoT Device Defender detects that a device is behaving anomalously.
 	Criteria *BehaviorCriteria
+
+	// Value indicates exporting metrics related to the behavior when it is true.
+	ExportMetric *bool
 
 	// What is measured by the behavior.
 	Metric *string
@@ -1579,7 +1583,7 @@ type ExponentialRolloutRate struct {
 	// but not 1.55).
 	//
 	// This member is required.
-	IncrementFactor float64
+	IncrementFactor *float64
 
 	// The criteria to initiate the increase in rate of rollout for a job.
 	//
@@ -1650,6 +1654,21 @@ type FleetMetricNameAndArn struct {
 
 	// The fleet metric name.
 	MetricName *string
+
+	noSmithyDocumentSerde
+}
+
+// A geolocation target that you select to index. Each geolocation target contains
+// a name and order key-value pair that specifies the geolocation target fields.
+type GeoLocationTarget struct {
+
+	// The name of the geolocation target field. If the target field is part of a
+	// named shadow, you must select the named shadow using the namedShadow filter.
+	Name *string
+
+	// The order of the geolocation target field. This field is optional. The default
+	// value is LatLon .
+	Order TargetFieldOrder
 
 	noSmithyDocumentSerde
 }
@@ -1775,11 +1794,25 @@ type ImplicitDeny struct {
 	noSmithyDocumentSerde
 }
 
-// Provides additional filters for specific data sources. Named shadow is the only
-// data source that currently supports and requires a filter. To add named shadows
-// to your fleet indexing configuration, set namedShadowIndexingMode to be ON and
-// specify your shadow names in filter .
+// Provides additional selections for named shadows and geolocation data. To add
+// named shadows to your fleet indexing configuration, set namedShadowIndexingMode
+// to be ON and specify your shadow names in namedShadowNames filter. To add
+// geolocation data to your fleet indexing configuration:
+//   - If you store geolocation data in a class/unnamed shadow, set
+//     thingIndexingMode to be REGISTRY_AND_SHADOW and specify your geolocation data
+//     in geoLocations filter.
+//   - If you store geolocation data in a named shadow, set namedShadowIndexingMode
+//     to be ON , add the shadow name in namedShadowNames filter, and specify your
+//     geolocation data in geoLocations filter. For more information, see Managing
+//     fleet indexing (https://docs.aws.amazon.com/iot/latest/developerguide/managing-fleet-index.html)
+//     .
 type IndexingFilter struct {
+
+	// The list of geolocation targets that you select to index. The default maximum
+	// number of geolocation targets for indexing is 1 . To increase the limit, see
+	// Amazon Web Services IoT Device Management Quotas (https://docs.aws.amazon.com/general/latest/gr/iot_device_management.html#fleet-indexing-limits)
+	// in the Amazon Web Services General Reference.
+	GeoLocations []GeoLocationTarget
 
 	// The shadow names that you select to index. The default maximum number of shadow
 	// names for indexing is 10. To increase the limit, see Amazon Web Services IoT
@@ -1898,7 +1931,7 @@ type Job struct {
 
 	// The package version Amazon Resource Names (ARNs) that are installed on the
 	// device when the job successfully completes. Note:The following Length
-	// Constraints relates to a single string. Up to five strings are allowed.
+	// Constraints relates to a single ARN. Up to 25 package version ARNs are allowed.
 	DestinationPackageVersions []string
 
 	// A key-value map that pairs the patterns that need to be replaced in a managed
@@ -2237,11 +2270,34 @@ type KafkaAction struct {
 	// This member is required.
 	Topic *string
 
+	// The list of Kafka headers that you specify.
+	Headers []KafkaActionHeader
+
 	// The Kafka message key.
 	Key *string
 
 	// The Kafka message partition.
 	Partition *string
+
+	noSmithyDocumentSerde
+}
+
+// Specifies a Kafka header using key-value pairs when you create a Rule’s Kafka
+// Action. You can use these headers to route data from IoT clients to downstream
+// Kafka clusters without modifying your message payload. For more information
+// about Rule's Kafka action, see Apache Kafka (https://docs.aws.amazon.com/iot/latest/developerguide/apache-kafka-rule-action.html)
+// .
+type KafkaActionHeader struct {
+
+	// The key of the Kafka header.
+	//
+	// This member is required.
+	Key *string
+
+	// The value of the Kafka header.
+	//
+	// This member is required.
+	Value *string
 
 	noSmithyDocumentSerde
 }
@@ -2465,6 +2521,24 @@ type MetricDimension struct {
 	noSmithyDocumentSerde
 }
 
+// Set configurations for metrics export.
+type MetricsExportConfig struct {
+
+	// The MQTT topic that Device Defender Detect should publish messages to for
+	// metrics export.
+	//
+	// This member is required.
+	MqttTopic *string
+
+	// This role ARN has permission to publish MQTT messages, after which Device
+	// Defender Detect can assume the role and publish messages on your behalf.
+	//
+	// This member is required.
+	RoleArn *string
+
+	noSmithyDocumentSerde
+}
+
 // The metric you want to retain. Dimensions are optional.
 type MetricToRetain struct {
 
@@ -2472,6 +2546,10 @@ type MetricToRetain struct {
 	//
 	// This member is required.
 	Metric *string
+
+	// Value added in both Behavior and AdditionalMetricsToRetainV2 to indicate if
+	// Device Defender Detect should export the corresponding metrics.
+	ExportMetric *bool
 
 	// The dimension of a metric. This can't be used with custom metrics.
 	MetricDimension *MetricDimension
@@ -2687,7 +2765,8 @@ type OpenSearchAction struct {
 // Describes a file to be associated with an OTA update.
 type OTAUpdateFile struct {
 
-	// A list of name/attribute pairs.
+	// A list of name-attribute pairs. They won't be sent to devices as a part of the
+	// Job document.
 	Attributes map[string]string
 
 	// The code signing method of the file.
@@ -2822,7 +2901,7 @@ type PackageSummary struct {
 	// The date that the package was last updated.
 	LastModifiedDate *time.Time
 
-	// The name for the target package.
+	// The name for the target software package.
 	PackageName *string
 
 	noSmithyDocumentSerde
@@ -3323,7 +3402,9 @@ type SchedulingConfig struct {
 	// current time. The minimum duration between startTime and endTime is thirty
 	// minutes. The maximum duration between startTime and endTime is two years. The
 	// date and time format for the endTime is YYYY-MM-DD for the date and HH:MM for
-	// the time.
+	// the time. For more information on the syntax for endTime when using an API
+	// command or the Command Line Interface, see Timestamp (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters-types.html#parameter-type-timestamp)
+	// .
 	EndTime *string
 
 	// An optional configuration within the SchedulingConfig to setup a recurring
@@ -3335,7 +3416,9 @@ type SchedulingConfig struct {
 	// target group for a job. The startTime can be scheduled up to a year in advance
 	// and must be scheduled a minimum of thirty minutes from the current time. The
 	// date and time format for the startTime is YYYY-MM-DD for the date and HH:MM for
-	// the time.
+	// the time. For more information on the syntax for startTime when using an API
+	// command or the Command Line Interface, see Timestamp (https://docs.aws.amazon.com/cli/latest/userguide/cli-usage-parameters-types.html#parameter-type-timestamp)
+	// .
 	StartTime *string
 
 	noSmithyDocumentSerde
@@ -3707,7 +3790,7 @@ type TaskStatisticsForAuditCheck struct {
 type TermsAggregation struct {
 
 	// The number of buckets to return in the response. Default to 10.
-	MaxBuckets int32
+	MaxBuckets *int32
 
 	noSmithyDocumentSerde
 }
@@ -3824,7 +3907,8 @@ type ThingGroupIndexingConfiguration struct {
 	// Contains fields that are indexed and whose types are already known by the Fleet
 	// Indexing service. This is an optional field. For more information, see Managed
 	// fields (https://docs.aws.amazon.com/iot/latest/developerguide/managing-fleet-index.html#managed-field)
-	// in the Amazon Web Services IoT Core Developer Guide.
+	// in the Amazon Web Services IoT Core Developer Guide. You can't modify managed
+	// fields by updating fleet indexing configuration.
 	ManagedFields []Field
 
 	noSmithyDocumentSerde
@@ -3882,14 +3966,25 @@ type ThingIndexingConfiguration struct {
 	// Detect. (https://docs.aws.amazon.com/iot/latest/developerguide/device-defender-detect.html)
 	DeviceDefenderIndexingMode DeviceDefenderIndexingMode
 
-	// Provides additional filters for specific data sources. Named shadow is the only
-	// data source that currently supports and requires a filter. To add named shadows
-	// to your fleet indexing configuration, set namedShadowIndexingMode to be ON and
-	// specify your shadow names in filter .
+	// Provides additional selections for named shadows and geolocation data. To add
+	// named shadows to your fleet indexing configuration, set namedShadowIndexingMode
+	// to be ON and specify your shadow names in namedShadowNames filter. To add
+	// geolocation data to your fleet indexing configuration:
+	//   - If you store geolocation data in a class/unnamed shadow, set
+	//   thingIndexingMode to be REGISTRY_AND_SHADOW and specify your geolocation data
+	//   in geoLocations filter.
+	//   - If you store geolocation data in a named shadow, set namedShadowIndexingMode
+	//   to be ON , add the shadow name in namedShadowNames filter, and specify your
+	//   geolocation data in geoLocations filter. For more information, see Managing
+	//   fleet indexing (https://docs.aws.amazon.com/iot/latest/developerguide/managing-fleet-index.html)
+	//   .
 	Filter *IndexingFilter
 
 	// Contains fields that are indexed and whose types are already known by the Fleet
-	// Indexing service.
+	// Indexing service. This is an optional field. For more information, see Managed
+	// fields (https://docs.aws.amazon.com/iot/latest/developerguide/managing-fleet-index.html#managed-field)
+	// in the Amazon Web Services IoT Core Developer Guide. You can't modify managed
+	// fields by updating fleet indexing configuration.
 	ManagedFields []Field
 
 	// Named shadow indexing mode. Valid values are:

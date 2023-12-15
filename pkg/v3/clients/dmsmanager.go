@@ -24,12 +24,18 @@ func NewHttpDMSManagerClient(client *http.Client, url string) services.DMSManage
 	}
 }
 
-func (cli *dmsManagerClient) CreateDMS(input services.CreateDMSInput) (*models.DMS, error) {
-	response, err := Post[*models.DMS](context.Background(), cli.httpClient, cli.baseUrl+"/v1/dms", resources.CreateDMSBody{
-		ID:              input.ID,
-		Name:            input.Name,
-		Metadata:        input.Metadata,
-		IdentityProfile: input.IdentityProfile,
+func (cli *dmsManagerClient) GetDMSStats(ctx context.Context, input services.GetDMSStatsInput) (*models.DMSStats, error) {
+	url := cli.baseUrl + "/v1/stats"
+	resp, err := Get[models.DMSStats](ctx, cli.httpClient, url, nil, map[int][]error{})
+	return &resp, err
+}
+
+func (cli *dmsManagerClient) CreateDMS(ctx context.Context, input services.CreateDMSInput) (*models.DMS, error) {
+	response, err := Post[*models.DMS](ctx, cli.httpClient, cli.baseUrl+"/v1/dms", resources.CreateDMSBody{
+		ID:       input.ID,
+		Name:     input.Name,
+		Metadata: input.Metadata,
+		Settings: input.Settings,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err
@@ -38,8 +44,8 @@ func (cli *dmsManagerClient) CreateDMS(input services.CreateDMSInput) (*models.D
 	return response, nil
 }
 
-func (cli *dmsManagerClient) UpdateIdentityProfile(input services.UpdateIdentityProfileInput) (*models.DMS, error) {
-	response, err := Put[*models.DMS](context.Background(), cli.httpClient, cli.baseUrl+"/v1/dms/"+input.ID+"/id-profile", input.NewIdentityProfile, map[int][]error{})
+func (cli *dmsManagerClient) UpdateDMS(ctx context.Context, input services.UpdateDMSInput) (*models.DMS, error) {
+	response, err := Put[*models.DMS](ctx, cli.httpClient, cli.baseUrl+"/v1/dms/"+input.DMS.ID, input.DMS, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
@@ -47,20 +53,20 @@ func (cli *dmsManagerClient) UpdateIdentityProfile(input services.UpdateIdentity
 	return response, nil
 }
 
-func (cli *dmsManagerClient) GetDMSByID(input services.GetDMSByIDInput) (*models.DMS, error) {
+func (cli *dmsManagerClient) GetDMSByID(ctx context.Context, input services.GetDMSByIDInput) (*models.DMS, error) {
 	url := cli.baseUrl + "/v1/dms/" + input.ID
-	resp, err := Get[models.DMS](context.Background(), cli.httpClient, url, nil, map[int][]error{})
+	resp, err := Get[models.DMS](ctx, cli.httpClient, url, nil, map[int][]error{})
 	return &resp, err
 }
 
-func (cli *dmsManagerClient) GetAll(input services.GetAllInput) (string, error) {
+func (cli *dmsManagerClient) GetAll(ctx context.Context, input services.GetAllInput) (string, error) {
 	url := cli.baseUrl + "/v1/dms"
 
 	if input.ExhaustiveRun {
-		err := IterGet[models.DMS, *resources.GetDMSsResponse](context.Background(), cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
+		err := IterGet[models.DMS, resources.GetDMSsResponse](ctx, cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
 		return "", err
 	} else {
-		resp, err := Get[resources.GetDMSsResponse](context.Background(), cli.httpClient, url, input.QueryParameters, map[int][]error{})
+		resp, err := Get[resources.GetDMSsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
 		return resp.NextBookmark, err
 	}
 }
@@ -79,4 +85,17 @@ func (cli *dmsManagerClient) Reenroll(ctx context.Context, csr *x509.Certificate
 
 func (cli *dmsManagerClient) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
 	return nil, nil, fmt.Errorf("not supported, use the estCli instead")
+}
+
+func (cli *dmsManagerClient) BindIdentityToDevice(ctx context.Context, input services.BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error) {
+	response, err := Post[*models.BindIdentityToDeviceOutput](ctx, cli.httpClient, cli.baseUrl+"/v1/dms/bind-identity", resources.BindIdentityToDeviceBody{
+		BindMode:                input.BindMode,
+		DeviceID:                input.DeviceID,
+		CertificateSerialNumber: input.CertificateSerialNumber,
+	}, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
 }

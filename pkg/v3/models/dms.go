@@ -4,8 +4,6 @@ import (
 	"time"
 )
 
-const CALocalRA = "_lms.lra"
-
 type DMSStatus string
 
 const (
@@ -16,14 +14,14 @@ const (
 )
 
 type DMS struct {
-	ID              string            `json:"id"`
-	Name            string            `json:"name"`
-	Metadata        map[string]string `json:"metadata"`
-	CreationDate    time.Time         `json:"creation_ts"`
-	IdentityProfile IdentityProfile   `json:"identity_profile"`
+	ID           string         `json:"id" gorm:"primaryKey"`
+	Name         string         `json:"name"`
+	Metadata     map[string]any `json:"metadata" gorm:"serializer:json"`
+	CreationDate time.Time      `json:"creation_ts"`
+	Settings     DMSSettings    `json:"settings" gorm:"serializer:json"`
 }
 
-type IdentityProfile struct {
+type DMSSettings struct {
 	EnrollmentSettings     EnrollmentSettings     `json:"enrollment_settings"`
 	ReEnrollmentSettings   ReEnrollmentSettings   `json:"reenrollment_settings"`
 	CADistributionSettings CADistributionSettings `json:"ca_distribution_settings"`
@@ -35,45 +33,59 @@ const (
 	EST EnrollmentProto = "EST_RFC7030"
 )
 
-type DeviceProvisionSettings struct {
-	Icon      string            `json:"icon"`
-	IconColor string            `json:"icon_color"`
-	Metadata  map[string]string `json:"metadata"`
-	Tags      []string          `json:"tags"`
+type DeviceProvisionProfile struct {
+	Icon      string         `json:"icon"`
+	IconColor string         `json:"icon_color"`
+	Metadata  map[string]any `json:"metadata"`
+	Tags      []string       `json:"tags"`
 }
+
+type RegistrationMode string
+
+const (
+	JITP            RegistrationMode = "JITP"
+	PreRegistration RegistrationMode = "PRE_REGISTRATION"
+)
 
 type EnrollmentSettings struct {
 	EnrollmentProtocol          EnrollmentProto             `json:"protocol"`
-	EnrollmentOptionsESTRFC7030 EnrollmentOptionsESTRFC7030 `json:"estrfc7030_options"`
-	DeviceProvisionSettings     DeviceProvisionSettings     `json:"device_provisioning"`
-	AuthorizedCA                string                      `json:"authorized_ca"`
-	AllowNewEnrollment          bool                        `json:"allow_new_enrollment"` //switch-like option that enables enrolling, already enrolled devices
-	JustInTime                  bool                        `json:"jit"`
+	EnrollmentOptionsESTRFC7030 EnrollmentOptionsESTRFC7030 `json:"est_rfc7030_settings"`
+	DeviceProvisionProfile      DeviceProvisionProfile      `json:"device_provisioning_profile"`
+	EnrollmentCA                string                      `json:"enrollment_ca"`
+	EnableReplaceableEnrollment bool                        `json:"enable_replaceable_enrollment"` //switch-like option that enables enrolling, already enrolled devices
+	RegistrationMode            RegistrationMode            `json:"registration_mode"`
 }
 
 type EnrollmentOptionsESTRFC7030 struct {
-	AuthMode        ESTAuthMode `json:"auth_mode"`
-	AuthOptionsMTLS struct {
-		ValidationCAs []string `json:"validation_cas"`
-	} `json:"mutual_tls_options"`
+	AuthMode        ESTAuthMode                  `json:"auth_mode"`
+	AuthOptionsMTLS AuthOptionsClientCertificate `json:"client_certificate_settings"`
+}
+
+type AuthOptionsClientCertificate struct {
+	ValidationCAs        []string `json:"validation_cas"`
+	ChainLevelValidation int      `json:"chain_level_validation"`
 }
 
 type ReEnrollmentSettings struct {
 	AdditionalValidationCAs     []string     `json:"additional_validation_cas"`
-	AllowedReenrollmentDelta    TimeDuration `json:"allowed_reenrollment_detlta"`
-	AllowExpiredRenewal         bool         `json:"allow_expired_renewal"`
-	PreventiveReenrollmentDelta TimeDuration `json:"preventive_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
-	CriticalReenrollmentDetla   TimeDuration `json:"critical_delta"`   // (expiration time - delta < time.now) at witch point an event is issued notify critical status
+	ReEnrollmentDelta           TimeDuration `json:"reenrollment_delta"`
+	EnableExpiredRenewal        bool         `json:"enable_expired_renewal"`
+	PreventiveReEnrollmentDelta TimeDuration `json:"preventive_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
+	CriticalReEnrollmentDelta   TimeDuration `json:"critical_delta"`   // (expiration time - delta < time.now) at witch point an event is issued notify critical status
 }
 
 type CADistributionSettings struct {
 	IncludeLamassuSystemCA bool     `json:"include_system_ca"`
-	IncludeAuthorizedCA    bool     `json:"include_authorized_ca"`
+	IncludeEnrollmentCA    bool     `json:"include_enrollment_ca"`
 	ManagedCAs             []string `json:"managed_cas"`
 }
 
-type StaticCA struct {
-	Certificate *X509Certificate `json:"certificate"`
-	Name        string           `json:"name"`
-	UpdateTS    time.Time        `json:"update_ts"`
+type DMSStats struct {
+	TotalDMSs int `json:"total"`
+}
+
+type BindIdentityToDeviceOutput struct {
+	Certificate *Certificate `json:"certificate"`
+	DMS         *DMS         `json:"dms"`
+	Device      *Device      `json:"device"`
 }

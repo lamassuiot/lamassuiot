@@ -1,71 +1,56 @@
 package main
 
 import (
-	"fmt"
-	"net/http"
-
-	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/service"
-	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/service/outputchannels"
-	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/transport"
-	"github.com/lamassuiot/lamassuiot/pkg/alerts/server/config"
-	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
-	gorm_logrus "github.com/onrik/gorm-logrus"
+	"github.com/lamassuiot/lamassuiot/pkg/lamassu"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	log "github.com/sirupsen/logrus"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	gormLogger "gorm.io/gorm/logger"
+	"gopkg.in/yaml.v2"
+)
 
-	postgresRepository "github.com/lamassuiot/lamassuiot/pkg/alerts/server/api/repository/postgres"
+var (
+	version   string = "v0"    // api version
+	sha1ver   string = "-"     // sha1 revision used to build the program
+	buildTime string = "devTS" // when the executable was built
 )
 
 func main() {
-	config := config.NewMailConfig()
+	log.SetFormatter(helpers.LogFormatter)
+	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
 
-	dbLogrus := gormLogger.Default.LogMode(gormLogger.Silent)
-	if config.DebugMode {
-		dbLogrus = gorm_logrus.New()
-		dbLogrus.LogMode(gormLogger.Info)
+	conf, err := config.LoadConfig[config.AlertsConfig]()
+	if err != nil {
+		log.Fatalf("something went wrong while loading config. Exiting: %s", err)
 	}
 
-	mainServer := server.NewServer(config)
+	globalLogLevel, err := log.ParseLevel(string(conf.Logs.Level))
+	if err != nil {
+		log.Warn("unknown log level. defaulting to 'info' log level")
+		globalLogLevel = log.InfoLevel
+	}
+	log.SetLevel(globalLogLevel)
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUsername, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: dbLogrus,
+	log.Infof("global log level set to '%s'", globalLogLevel)
+
+	confBytes, err := yaml.Marshal(conf)
+	if err != nil {
+		log.Fatalf("could not dump yaml config: %s", err)
+	}
+
+	log.Debugf("===================================================")
+	log.Debugf("%s", confBytes)
+	log.Debugf("===================================================")
+
+	_, _, err = lamassu.AssembleAlertsServiceWithHTTPServer(*conf, models.APIServiceInfo{
+		Version:   version,
+		BuildSHA:  sha1ver,
+		BuildTime: buildTime,
 	})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("could not run Alerts Server. Exiting: %s", err)
 	}
 
-	mailRepo := postgresRepository.NewPostgresDB(db)
-
-	smtpConfig := outputchannels.SMTPOutputService{
-		Host:              config.SMTPHost,
-		Port:              config.SMTPPort,
-		Username:          config.SMTPUsername,
-		Password:          config.SMTPPassword,
-		From:              config.SMTPFrom,
-		SSL:               config.SMTPEnableSSL,
-		Insecure:          config.SMTPInsecure,
-		EmailTemplateFile: config.TemplateHTML,
-	}
-
-	var svc service.Service
-	svc, err = service.NewAlertsService(mailRepo, config.TemplateJSON, smtpConfig)
-	if err != nil {
-		log.Fatal("Could not create mail service: ", err)
-	}
-	aSvc := svc.(*service.AlertsService)
-
-	svc = service.NewInputValudationMiddleware()(svc)
-	svc = service.LoggingMiddleware()(svc)
-
-	aSvc.SetService(svc)
-
-	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(svc)))
-	mainServer.AddAmqpConsumer(config.ServiceName, []string{"#"}, transport.MakeAmqpHandler(svc))
-
-	mainServer.Run()
 	forever := make(chan struct{})
 	<-forever
 }

@@ -122,7 +122,7 @@ func (vaultCli *VaultKV2Engine) GetEngineConfig() models.CryptoEngineInfo {
 				Sizes: []int{
 					224,
 					256,
-					512,
+					521,
 				},
 			},
 		},
@@ -172,7 +172,7 @@ func (vaultCli *VaultKV2Engine) CreateRSAPrivateKey(keySize int, keyID string) (
 	lVault.Debugf("creating RSA private key of size [%d] with ID [%s]", keySize, keyID)
 	key, err := vaultCli.GetPrivateKeyByID(keyID)
 	if key != nil {
-		lVault.Warnf("RSA private key already exists and will be overwritten: ", err)
+		lVault.Warnf("RSA private key already exists and will be overwritten: %s", err)
 		err = vaultCli.DeleteKey(keyID)
 		if err != nil {
 			return nil, err
@@ -203,7 +203,7 @@ func (vaultCli *VaultKV2Engine) CreateRSAPrivateKey(keySize int, keyID string) (
 	}
 
 	lVault.Debugf("RSA key successfully generated")
-	return key, nil
+	return rsaKey, nil
 }
 
 func (vaultCli *VaultKV2Engine) CreateECDSAPrivateKey(c elliptic.Curve, keyID string) (crypto.Signer, error) {
@@ -229,17 +229,59 @@ func (vaultCli *VaultKV2Engine) CreateECDSAPrivateKey(c elliptic.Curve, keyID st
 		"key": keyBase64,
 	}
 
-	_, err = vaultCli.kvv2Client.Put(context.Background(), keyID+"eliptica", keyMap)
+	_, err = vaultCli.kvv2Client.Put(context.Background(), keyID, keyMap)
 
-	return nil, err
+	return key, err
 }
 
 func (vaultCli *VaultKV2Engine) ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) (crypto.Signer, error) {
-	return nil, fmt.Errorf("TODO")
+	keyPem := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	})
+	keyBase64 := base64.StdEncoding.EncodeToString([]byte(keyPem))
+
+	var keyMap = map[string]interface{}{
+		"key": keyBase64,
+	}
+
+	_, err := vaultCli.kvv2Client.Put(context.Background(), keyID, keyMap)
+	if err != nil {
+		lVault.Errorf("could not save the private key in vault: %s", err)
+		return nil, err
+	}
+
+	lVault.Debugf("RSA key successfully imported")
+
+	return vaultCli.GetPrivateKeyByID(keyID)
 }
 
 func (vaultCli *VaultKV2Engine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID string) (crypto.Signer, error) {
-	return nil, fmt.Errorf("TODO")
+	keyBytes, err := x509.MarshalECPrivateKey(key)
+
+	if err != nil {
+		lVault.Errorf("Could not create RSA private key: %s", err)
+		return nil, err
+	}
+
+	keyPem := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
+
+	keyBase64 := base64.StdEncoding.EncodeToString([]byte(keyPem))
+
+	var keyMap = map[string]interface{}{
+		"key": keyBase64,
+	}
+
+	_, err = vaultCli.kvv2Client.Put(context.Background(), keyID, keyMap)
+
+	if err != nil {
+		lVault.Errorf("Could not save the private key in vault: %s", err)
+		return nil, err
+	}
+
+	lVault.Debugf("ECDSA key successfully imported")
+
+	return vaultCli.GetPrivateKeyByID(keyID)
 }
 
 func (vaultCli *VaultKV2Engine) DeleteKey(keyID string) error {

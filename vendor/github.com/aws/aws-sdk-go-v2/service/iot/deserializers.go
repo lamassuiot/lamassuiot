@@ -15925,6 +15925,11 @@ func awsRestjson1_deserializeOpDocumentDescribeSecurityProfileOutput(v **Describ
 				}
 			}
 
+		case "metricsExportConfig":
+			if err := awsRestjson1_deserializeDocumentMetricsExportConfig(&sv.MetricsExportConfig, value); err != nil {
+				return err
+			}
+
 		case "securityProfileArn":
 			if value != nil {
 				jtv, ok := value.(string)
@@ -37323,6 +37328,11 @@ func awsRestjson1_deserializeOpDocumentUpdateSecurityProfileOutput(v **UpdateSec
 				}
 			}
 
+		case "metricsExportConfig":
+			if err := awsRestjson1_deserializeDocumentMetricsExportConfig(&sv.MetricsExportConfig, value); err != nil {
+				return err
+			}
+
 		case "securityProfileArn":
 			if value != nil {
 				jtv, ok := value.(string)
@@ -42315,6 +42325,15 @@ func awsRestjson1_deserializeDocumentBehavior(v **types.Behavior, value interfac
 				return err
 			}
 
+		case "exportMetric":
+			if value != nil {
+				jtv, ok := value.(bool)
+				if !ok {
+					return fmt.Errorf("expected ExportMetric to be of type *bool, got %T instead", value)
+				}
+				sv.ExportMetric = ptr.Bool(jtv)
+			}
+
 		case "metric":
 			if value != nil {
 				jtv, ok := value.(string)
@@ -45673,7 +45692,7 @@ func awsRestjson1_deserializeDocumentExponentialRolloutRate(v **types.Exponentia
 					if err != nil {
 						return err
 					}
-					sv.IncrementFactor = f64
+					sv.IncrementFactor = ptr.Float64(f64)
 
 				case string:
 					var f64 float64
@@ -45691,7 +45710,7 @@ func awsRestjson1_deserializeDocumentExponentialRolloutRate(v **types.Exponentia
 						return fmt.Errorf("unknown JSON number value: %s", jtv)
 
 					}
-					sv.IncrementFactor = f64
+					sv.IncrementFactor = ptr.Float64(f64)
 
 				default:
 					return fmt.Errorf("expected IncrementFactor to be a JSON Number, got %T instead", value)
@@ -46020,6 +46039,89 @@ func awsRestjson1_deserializeDocumentFleetMetricNameAndArnList(v *[]types.FleetM
 
 	}
 	*v = cv
+	return nil
+}
+
+func awsRestjson1_deserializeDocumentGeoLocationsFilter(v *[]types.GeoLocationTarget, value interface{}) error {
+	if v == nil {
+		return fmt.Errorf("unexpected nil of type %T", v)
+	}
+	if value == nil {
+		return nil
+	}
+
+	shape, ok := value.([]interface{})
+	if !ok {
+		return fmt.Errorf("unexpected JSON type %v", value)
+	}
+
+	var cv []types.GeoLocationTarget
+	if *v == nil {
+		cv = []types.GeoLocationTarget{}
+	} else {
+		cv = *v
+	}
+
+	for _, value := range shape {
+		var col types.GeoLocationTarget
+		destAddr := &col
+		if err := awsRestjson1_deserializeDocumentGeoLocationTarget(&destAddr, value); err != nil {
+			return err
+		}
+		col = *destAddr
+		cv = append(cv, col)
+
+	}
+	*v = cv
+	return nil
+}
+
+func awsRestjson1_deserializeDocumentGeoLocationTarget(v **types.GeoLocationTarget, value interface{}) error {
+	if v == nil {
+		return fmt.Errorf("unexpected nil of type %T", v)
+	}
+	if value == nil {
+		return nil
+	}
+
+	shape, ok := value.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("unexpected JSON type %v", value)
+	}
+
+	var sv *types.GeoLocationTarget
+	if *v == nil {
+		sv = &types.GeoLocationTarget{}
+	} else {
+		sv = *v
+	}
+
+	for key, value := range shape {
+		switch key {
+		case "name":
+			if value != nil {
+				jtv, ok := value.(string)
+				if !ok {
+					return fmt.Errorf("expected TargetFieldName to be of type string, got %T instead", value)
+				}
+				sv.Name = ptr.String(jtv)
+			}
+
+		case "order":
+			if value != nil {
+				jtv, ok := value.(string)
+				if !ok {
+					return fmt.Errorf("expected TargetFieldOrder to be of type string, got %T instead", value)
+				}
+				sv.Order = types.TargetFieldOrder(jtv)
+			}
+
+		default:
+			_, _ = key, value
+
+		}
+	}
+	*v = sv
 	return nil
 }
 
@@ -46388,6 +46490,11 @@ func awsRestjson1_deserializeDocumentIndexingFilter(v **types.IndexingFilter, va
 
 	for key, value := range shape {
 		switch key {
+		case "geoLocations":
+			if err := awsRestjson1_deserializeDocumentGeoLocationsFilter(&sv.GeoLocations, value); err != nil {
+				return err
+			}
+
 		case "namedShadowNames":
 			if err := awsRestjson1_deserializeDocumentNamedShadowNamesFilter(&sv.NamedShadowNames, value); err != nil {
 				return err
@@ -48307,6 +48414,11 @@ func awsRestjson1_deserializeDocumentKafkaAction(v **types.KafkaAction, value in
 				sv.DestinationArn = ptr.String(jtv)
 			}
 
+		case "headers":
+			if err := awsRestjson1_deserializeDocumentKafkaHeaders(&sv.Headers, value); err != nil {
+				return err
+			}
+
 		case "key":
 			if value != nil {
 				jtv, ok := value.(string)
@@ -48340,6 +48452,89 @@ func awsRestjson1_deserializeDocumentKafkaAction(v **types.KafkaAction, value in
 		}
 	}
 	*v = sv
+	return nil
+}
+
+func awsRestjson1_deserializeDocumentKafkaActionHeader(v **types.KafkaActionHeader, value interface{}) error {
+	if v == nil {
+		return fmt.Errorf("unexpected nil of type %T", v)
+	}
+	if value == nil {
+		return nil
+	}
+
+	shape, ok := value.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("unexpected JSON type %v", value)
+	}
+
+	var sv *types.KafkaActionHeader
+	if *v == nil {
+		sv = &types.KafkaActionHeader{}
+	} else {
+		sv = *v
+	}
+
+	for key, value := range shape {
+		switch key {
+		case "key":
+			if value != nil {
+				jtv, ok := value.(string)
+				if !ok {
+					return fmt.Errorf("expected KafkaHeaderKey to be of type string, got %T instead", value)
+				}
+				sv.Key = ptr.String(jtv)
+			}
+
+		case "value":
+			if value != nil {
+				jtv, ok := value.(string)
+				if !ok {
+					return fmt.Errorf("expected KafkaHeaderValue to be of type string, got %T instead", value)
+				}
+				sv.Value = ptr.String(jtv)
+			}
+
+		default:
+			_, _ = key, value
+
+		}
+	}
+	*v = sv
+	return nil
+}
+
+func awsRestjson1_deserializeDocumentKafkaHeaders(v *[]types.KafkaActionHeader, value interface{}) error {
+	if v == nil {
+		return fmt.Errorf("unexpected nil of type %T", v)
+	}
+	if value == nil {
+		return nil
+	}
+
+	shape, ok := value.([]interface{})
+	if !ok {
+		return fmt.Errorf("unexpected JSON type %v", value)
+	}
+
+	var cv []types.KafkaActionHeader
+	if *v == nil {
+		cv = []types.KafkaActionHeader{}
+	} else {
+		cv = *v
+	}
+
+	for _, value := range shape {
+		var col types.KafkaActionHeader
+		destAddr := &col
+		if err := awsRestjson1_deserializeDocumentKafkaActionHeader(&destAddr, value); err != nil {
+			return err
+		}
+		col = *destAddr
+		cv = append(cv, col)
+
+	}
+	*v = cv
 	return nil
 }
 
@@ -49232,6 +49427,55 @@ func awsRestjson1_deserializeDocumentMetricNames(v *[]string, value interface{})
 	return nil
 }
 
+func awsRestjson1_deserializeDocumentMetricsExportConfig(v **types.MetricsExportConfig, value interface{}) error {
+	if v == nil {
+		return fmt.Errorf("unexpected nil of type %T", v)
+	}
+	if value == nil {
+		return nil
+	}
+
+	shape, ok := value.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("unexpected JSON type %v", value)
+	}
+
+	var sv *types.MetricsExportConfig
+	if *v == nil {
+		sv = &types.MetricsExportConfig{}
+	} else {
+		sv = *v
+	}
+
+	for key, value := range shape {
+		switch key {
+		case "mqttTopic":
+			if value != nil {
+				jtv, ok := value.(string)
+				if !ok {
+					return fmt.Errorf("expected MqttTopic to be of type string, got %T instead", value)
+				}
+				sv.MqttTopic = ptr.String(jtv)
+			}
+
+		case "roleArn":
+			if value != nil {
+				jtv, ok := value.(string)
+				if !ok {
+					return fmt.Errorf("expected RoleArn to be of type string, got %T instead", value)
+				}
+				sv.RoleArn = ptr.String(jtv)
+			}
+
+		default:
+			_, _ = key, value
+
+		}
+	}
+	*v = sv
+	return nil
+}
+
 func awsRestjson1_deserializeDocumentMetricToRetain(v **types.MetricToRetain, value interface{}) error {
 	if v == nil {
 		return fmt.Errorf("unexpected nil of type %T", v)
@@ -49254,6 +49498,15 @@ func awsRestjson1_deserializeDocumentMetricToRetain(v **types.MetricToRetain, va
 
 	for key, value := range shape {
 		switch key {
+		case "exportMetric":
+			if value != nil {
+				jtv, ok := value.(bool)
+				if !ok {
+					return fmt.Errorf("expected ExportMetric to be of type *bool, got %T instead", value)
+				}
+				sv.ExportMetric = ptr.Bool(jtv)
+			}
+
 		case "metric":
 			if value != nil {
 				jtv, ok := value.(string)

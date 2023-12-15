@@ -46,18 +46,18 @@ func (db *CouchDBCAStorage) CountByStatus(ctx context.Context, status models.Cer
 	return -1, fmt.Errorf("TODO")
 }
 
-func (db *CouchDBCAStorage) SelectByType(ctx context.Context, CAType models.CertificateType, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCAStorage) SelectByType(ctx context.Context, CAType models.CertificateType, req storage.StorageListRequest[models.CACertificate]) (string, error) {
 	opts := map[string]interface{}{
 		"type": CAType,
 	}
-	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(req.QueryParams, helpers.MergeMaps(&req.ExtraOpts, &opts), req.ExhaustiveRun, req.ApplyFunc)
 }
 
-func (db *CouchDBCAStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
-	return db.querier.SelectAll(queryParams, &extraOpts, exhaustiveRun, applyFunc)
+func (db *CouchDBCAStorage) SelectAll(ctx context.Context, req storage.StorageListRequest[models.CACertificate]) (string, error) {
+	return db.querier.SelectAll(req.QueryParams, &req.ExtraOpts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
-func (db *CouchDBCAStorage) SelectByCommonName(ctx context.Context, commonName string, exhaustiveRun bool, applyFunc func(*models.CACertificate), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBCAStorage) SelectByCommonName(ctx context.Context, commonName string, req storage.StorageListRequest[models.CACertificate]) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
 			"subject.common_name": map[string]string{
@@ -65,11 +65,15 @@ func (db *CouchDBCAStorage) SelectByCommonName(ctx context.Context, commonName s
 			},
 		},
 	}
-	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(req.QueryParams, helpers.MergeMaps(&req.ExtraOpts, &opts), req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *CouchDBCAStorage) SelectExistsByID(ctx context.Context, id string) (bool, *models.CACertificate, error) {
 	return db.querier.SelectExists(id)
+}
+
+func (db *CouchDBCAStorage) SelectByParentCA(ctx context.Context, parentCAID string, req storage.StorageListRequest[models.CACertificate]) (string, error) {
+	return "", fmt.Errorf("TODO")
 }
 
 func (db *CouchDBCAStorage) SelectExistsBySerialNumber(ctx context.Context, serialNumber string) (bool, *models.CACertificate, error) {
@@ -82,8 +86,8 @@ func (db *CouchDBCAStorage) SelectExistsBySerialNumber(ctx context.Context, seri
 	}
 
 	var ca *models.CACertificate
-	_, err := db.querier.SelectAll(&resources.QueryParameters{}, &opts, true, func(elem *models.CACertificate) {
-		ca = elem
+	_, err := db.querier.SelectAll(&resources.QueryParameters{}, &opts, true, func(elem models.CACertificate) {
+		ca = &elem
 	})
 
 	if err != nil {

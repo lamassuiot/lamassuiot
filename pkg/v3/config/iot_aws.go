@@ -1,12 +1,20 @@
 package config
 
-type IoTAWSConfig struct {
+type IotAWS struct {
 	BaseConfig `mapstructure:",squash"`
-	ID         string `mapstructure:"id"`
+
+	DMSManagerClient struct {
+		HTTPClient `mapstructure:",squash"`
+	} `mapstructure:"dms_manager_client"`
+
+	DevManagerClient struct {
+		HTTPClient `mapstructure:",squash"`
+	} `mapstructure:"device_manager_client"`
 
 	CAClient struct {
 		HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"ca_client"`
 
-	AWSSDKConfig AWSSDKConfig `mapstructure:"aws_iot"`
+	ConnectorID  string       `mapstructure:"connector_id"`
+	AWSSDKConfig AWSSDKConfig `mapstructure:"aws_config"`
 }

@@ -13,9 +13,11 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/services"
 	"github.com/sirupsen/logrus"
@@ -56,7 +58,19 @@ func (r *estHttpRoutes) GetCACerts(ctx *gin.Context) {
 		ctx.JSON(500, err)
 	}
 
-	var cb []byte
+	if ctx.Request.Header.Get("accept") == "application/x-pem-file" {
+		casPEM := []string{}
+
+		for _, cert := range cacerts {
+			casPEM = append(casPEM, helpers.CertificateToPEM(cert))
+		}
+
+		ctx.Writer.Header().Set("Content-Type", "application/x-pem-file")
+		ctx.Writer.Write([]byte(strings.Join(casPEM, "\n")))
+		return
+	}
+
+	cb := []byte{}
 	for _, cert := range cacerts {
 		cb = append(cb, cert.Raw...)
 	}
@@ -104,30 +118,64 @@ func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 		return
 	}
 
-	authExtractors := []httpAuthReqExtractor{
-		ClientCertificateExtractor{},
-		JWTExtractor{},
+	authCtx := context.Background()
+
+	if bitSize := ctx.GetHeader("Bit-Size"); bitSize != "" {
+		lEst.Debugf("Bit-Size header present with value %s", bitSize)
+		bitSizeInt, err := strconv.Atoi(bitSize)
+		if err != nil {
+			lEst.Warnf("Bit-Size header with non numerical value")
+		} else {
+			authCtx = context.WithValue(authCtx, models.ESTServerKeyGenBitSize, bitSizeInt)
+		}
 	}
 
-	authCtx := context.Background()
+	if keyType := ctx.GetHeader("Key-Type"); keyType != "" {
+		lEst.Debugf("Key-Type header present with value %s", keyType)
+		switch keyType {
+		case x509.RSA.String():
+			lEst.Debugf("valid Key-Type header")
+			authCtx = context.WithValue(authCtx, models.ESTServerKeyGenBitSize, x509.RSA)
+		case x509.ECDSA.String():
+			lEst.Debugf("valid Key-Type header")
+			authCtx = context.WithValue(authCtx, models.ESTServerKeyGenBitSize, x509.ECDSA)
+		default:
+			lEst.Warnf("invalid Key-Type header")
+		}
+	}
+
+	authExtractors := []httpAuthReqExtractor{
+		ClientCertificateExtractor{},
+	}
+
 	for _, authExtractor := range authExtractors {
 		authCtx = authExtractor.ExtractAuthentication(authCtx, *ctx.Request)
 	}
 
+	var key any
 	var signedCrt *x509.Certificate
-	if strings.Contains(ctx.Request.URL.Path, "simplereenroll") {
+	if strings.Contains(ctx.Request.URL.Path, "serverkeygen") {
+		signedCrt, key, err = r.svc.ServerKeyGen(authCtx, csr, params.APS)
+		fmt.Println(key)
+	} else if strings.Contains(ctx.Request.URL.Path, "simplereenroll") {
 		signedCrt, err = r.svc.Reenroll(authCtx, csr, params.APS)
 	} else {
 		signedCrt, err = r.svc.Enroll(authCtx, csr, params.APS)
 	}
 	if err != nil {
-		ctx.JSON(500, err)
+		ctx.JSON(500, gin.H{"err": err})
+		return
+	}
+
+	if ctx.Request.Header.Get("accept") == "application/x-pem-file" {
+		ctx.Writer.Header().Set("Content-Type", "application/x-pem-file")
+		ctx.Writer.Write([]byte(helpers.CertificateToPEM(signedCrt)))
 		return
 	}
 
 	body, err := pkcs7.DegenerateCertificate(signedCrt.Raw)
 	if err != nil {
-		ctx.JSON(500, err)
+		ctx.JSON(500, gin.H{"err": err})
 		return
 	}
 
@@ -151,11 +199,11 @@ func (ClientCertificateExtractor) ExtractAuthentication(ctx context.Context, req
 
 	if crt, err = getCertificateFromHeader(req.Header); err != nil {
 		if err != ErrorMissingClientCertificate {
-			lEst.Tracef("something went wrong while processing X-Forwarded-Client-Cert header: %s", err)
+			lEst.Tracef("something went wrong while processing headers: %s", err)
 		}
 
 		//no (valid) certificate in the header. check if a certificate can be obtained from client TLS connection
-		if len(req.TLS.PeerCertificates) > 0 {
+		if req.TLS != nil && len(req.TLS.PeerCertificates) > 0 {
 			lEst.Trace("Using certificate presented in peer connection")
 			crt = req.TLS.PeerCertificates[0]
 		} else {
@@ -164,54 +212,61 @@ func (ClientCertificateExtractor) ExtractAuthentication(ctx context.Context, req
 	}
 
 	if crt != nil {
-		ctx = context.WithValue(ctx, models.ESTAuthModeMutualTLS, crt)
-	}
-
-	return ctx
-}
-
-type JWTExtractor struct{}
-
-func (JWTExtractor) ExtractAuthentication(ctx context.Context, req http.Request) context.Context {
-	authHeader := req.Header.Get("Authorization")
-	if authHeader != "" {
-		authHeader = strings.ToLower(authHeader)
-		if !strings.HasSuffix(authHeader, "bearer ") {
-			lEst.Warnf("not a valid JWT authentication header. Has no 'bearer' suffix. Got header: %s", authHeader)
-		}
-
-		jwt := strings.Replace("bearer ", authHeader, "", 1)
-		ctx = context.WithValue(ctx, models.ESTAuthModeJWT, jwt)
+		ctx = context.WithValue(ctx, models.ESTAuthModeClientCertificate, crt)
 	}
 
 	return ctx
 }
 
 func getCertificateFromHeader(h http.Header) (*x509.Certificate, error) {
-	forwardedClientCertificate := h.Get("X-Forwarded-Client-Cert")
-	if len(forwardedClientCertificate) != 0 {
-		splits := strings.Split(forwardedClientCertificate, ";")
-		for _, split := range splits {
-			splitedKeyVal := strings.Split(split, "=")
-			if len(splitedKeyVal) == 2 {
-				key := splitedKeyVal[0]
-				val := splitedKeyVal[1]
-				if key == "Cert" {
-					cert := strings.Replace(val, "\"", "", -1)
-					decodedCert, _ := url.QueryUnescape(cert)
-					block, _ := pem.Decode([]byte(decodedCert))
-					certificate, err := x509.ParseCertificate(block.Bytes)
-					if err != nil {
-						return nil, ErrorMalformedCertificate
-					}
+	headerNames := []string{
+		"x-forwarded-client-cert", //envoy and regular nginx use this value
+		"ssl-client-cert",
+	}
 
-					return certificate, nil
+	for _, headerName := range headerNames {
+		forwardedClientCertificate := h.Get(headerName)
+		if len(forwardedClientCertificate) != 0 {
+			lEst.Debugf("attempting envoy-style certificate extraction from header %s", headerName)
+			crts := ExtractClientCertFromHeaderEnvoyStyle(headerName, forwardedClientCertificate)
+			if len(crts) == 0 {
+				lEst.Debugf("envoy-style certificate extraction didn't return anything")
+			} else {
+				return crts[0], nil
+			}
+		}
+	}
+	return nil, ErrorMissingClientCertificate
+}
+
+func ExtractClientCertFromHeaderEnvoyStyle(headerName, headerString string) []*x509.Certificate {
+	lEst.Tracef("got header %s with %s", headerName, headerString)
+
+	splits := strings.Split(headerString, ";")
+	for _, split := range splits {
+		splitKeyVal := strings.Split(split, "=")
+		if len(splitKeyVal) == 2 {
+			key := splitKeyVal[0]
+			val := splitKeyVal[1]
+
+			switch key {
+			case "Cert", "Chain":
+				cert := strings.Replace(val, "\"", "", -1)
+				decodedCert, _ := url.QueryUnescape(cert)
+				block, _ := pem.Decode([]byte(decodedCert))
+				certificate, err := x509.ParseCertificate(block.Bytes)
+				if err != nil {
+					lEst.Warnf("request includes header %s but could not decode certificate. Skipping: %s", headerName, err)
+					continue
 				}
+
+				return []*x509.Certificate{certificate}
+
 			}
 		}
 	}
 
-	return nil, ErrorMissingClientCertificate
+	return []*x509.Certificate{}
 }
 
 type MultipartPart struct {

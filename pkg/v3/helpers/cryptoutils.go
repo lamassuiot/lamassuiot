@@ -2,6 +2,7 @@ package helpers
 
 import (
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha512"
@@ -15,7 +16,8 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-func GenerateCertificateRequest(subject models.Subject, key *rsa.PrivateKey) (*x509.CertificateRequest, error) {
+// defined to generate certificates with RSA and ECDSA keys
+func GenerateCertificateRequest(subject models.Subject, key any) (*x509.CertificateRequest, error) {
 
 	template := x509.CertificateRequest{
 		Subject: SubjectToPkixName(subject),
@@ -36,6 +38,16 @@ func GenerateCertificateRequest(subject models.Subject, key *rsa.PrivateKey) (*x
 
 func GenerateRSAKey(bits int) (*rsa.PrivateKey, error) {
 	privkey, err := rsa.GenerateKey(rand.Reader, bits)
+	if err != nil {
+		return nil, err
+	}
+
+	return privkey, nil
+}
+
+func GenerateECDSAKey(curve elliptic.Curve) (*ecdsa.PrivateKey, error) {
+	privkey, err := ecdsa.GenerateKey(curve, rand.Reader)
+
 	if err != nil {
 		return nil, err
 	}
@@ -184,8 +196,8 @@ func CalculateECDSAKeySizes(keyMin int, KeyMax int) []int {
 	if keyMin < 384 && KeyMax > 384 {
 		keySizes = append(keySizes, 384)
 	}
-	if keyMin < 512 && KeyMax >= 512 {
-		keySizes = append(keySizes, 512)
+	if keyMin < 521 && KeyMax >= 521 {
+		keySizes = append(keySizes, 521)
 	}
 	return keySizes
 }

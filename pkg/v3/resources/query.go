@@ -22,20 +22,10 @@ type SortOptions struct {
 	SortField string
 }
 
-var FilterOperation string
-var (
-	Equal              = "eq"
-	NotEqual           = "ne"
-	LessThan           = "lt"
-	GreaterThan        = "gt"
-	LessThanOrEqual    = "lte"
-	GreaterThanOrEqual = "gte"
-)
-
 type FilterOption struct {
 	Field           string
-	FilterOperation string
-	Arg             string
+	FilterOperation FilterOperation
+	Value           string
 }
 
 type QueryParameters struct {
@@ -44,3 +34,40 @@ type QueryParameters struct {
 	PageSize     int
 	Filters      []FilterOption
 }
+
+type FilterFieldType int
+
+const (
+	StringFilterFieldType FilterFieldType = iota
+	StringArrayFilterFieldType
+	DateFilterFieldType
+	NumberFilterFieldType
+	EnumFilterFieldType
+)
+
+type FilterOperation int
+
+const (
+	UnspecifiedFilter FilterOperation = iota
+
+	StringEqual
+	StringNotEqual
+	StringContains
+	StringNotContains
+
+	StringArrayContains
+
+	DateEqual
+	DateBefore
+	DateAfter
+
+	NumberEqual
+	NumberNotEqual
+	NumberLessThan
+	NumberLessOrEqualThan
+	NumberGreaterThan
+	NumberGreaterOrEqualThan
+
+	EnumEqual
+	EnumNotEqual
+)

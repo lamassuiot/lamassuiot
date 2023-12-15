@@ -36,7 +36,7 @@ func (db *CouchDBDMSStorage) Count(ctx context.Context) (int, error) {
 	return db.querier.Count()
 }
 
-func (db *CouchDBDMSStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(*models.DMS), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
+func (db *CouchDBDMSStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.DMS), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	return db.querier.SelectAll(queryParams, &extraOpts, exhaustiveRun, applyFunc)
 }
 

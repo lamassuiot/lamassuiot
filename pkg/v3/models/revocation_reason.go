@@ -8,7 +8,7 @@ import (
 
 type RevocationReason int
 
-var revocationReasonMap = map[int]string{
+var RevocationReasonMap = map[int]string{
 	0: "Unspecified",
 	1: "KeyCompromise",
 	2: "CACompromise",
@@ -23,7 +23,7 @@ var revocationReasonMap = map[int]string{
 }
 
 func (p RevocationReason) MarshalText() ([]byte, error) {
-	if reason, ok := revocationReasonMap[int(p)]; ok {
+	if reason, ok := RevocationReasonMap[int(p)]; ok {
 		return []byte(reason), nil
 	}
 
@@ -33,7 +33,7 @@ func (p RevocationReason) MarshalText() ([]byte, error) {
 func (p *RevocationReason) UnmarshalText(text []byte) (err error) {
 	pw := string(text)
 
-	for k, v := range revocationReasonMap {
+	for k, v := range RevocationReasonMap {
 		if strings.EqualFold(strings.ToLower(v), strings.ToLower(pw)) {
 			*p = RevocationReason(k)
 			return nil

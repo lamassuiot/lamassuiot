@@ -1,6 +1,7 @@
 package messaging
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/cloudevents/sdk-go/v2/event"
+	"github.com/isayme/go-amqp-reconnect/rabbitmq"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
@@ -17,7 +19,6 @@ import (
 	"github.com/streadway/amqp"
 )
 
-var Exchange = "lamassu-events"
 var log *logrus.Entry
 
 type AmqpPublishMessage struct {
@@ -33,59 +34,69 @@ type subscribesInfo struct {
 }
 
 type AMQPSetup struct {
-	Channel        *amqp.Channel
-	PublisherChan  chan *AmqpPublishMessage
-	Msgs           <-chan amqp.Delivery
-	subscribesInfo []subscribesInfo
+	Exchange          string
+	Channel           *rabbitmq.Channel
+	PublisherChan     chan *AmqpPublishMessage
+	Msgs              <-chan amqp.Delivery
+	subscribesInfo    []subscribesInfo
+	serviceIdentifier string
 }
 
-func SetupAMQPConnection(logger *logrus.Entry, config config.AMQPConnection) (*AMQPSetup, error) {
+func SetupAMQPConnection(logger *logrus.Entry, config config.AMQPConnection, serviceIdentifier string) (*AMQPSetup, error) {
 	log = logger
+	if config.Exchange == "" {
+		log.Warnf("exchange was configured as empty '', defaulting to 'lamassu-events' ")
+		config.Exchange = "lamassu-events"
+	}
+
 	amqpCloseChan := make(chan *amqp.Error) //error channel
 
-	var connection *amqp.Connection
+	var connection *rabbitmq.Connection
+	rabbitmq.Debug = true
 
-	amqpEventPub := &AMQPSetup{}
-
-	connection, err := amqpEventPub.buildAMQPConnection(config)
+	amqpHandler := &AMQPSetup{
+		serviceIdentifier: serviceIdentifier,
+	}
+	connection, err := amqpHandler.buildAMQPConnection(config)
 	if err != nil {
 		return nil, err
 	}
 
 	connection.NotifyClose(amqpCloseChan)
 
-	go func() {
-		for {
-			select { //check connection
-			case err = <-amqpCloseChan:
-				//work with error
-				if err != nil {
-					log.Errorf("disconnected from AMQP: %s", err)
-					for {
-						connection, err = amqpEventPub.buildAMQPConnection(config)
+	// go func() {
+	// 	for {
+	// 		select { //check connection
+	// 		case err = <-amqpCloseChan:
+	// 			//work with error
+	// 			if err != nil {
+	// 				log.Errorf("disconnected from AMQP: %s", err)
+	// 				for {
+	// 					connection, err = amqpHandler.buildAMQPConnection(config)
 
-						if err != nil {
-							log.Errorf("failed to reconnect. Sleeping for 5 seconds: %s", err)
-							time.Sleep(5 * time.Second)
-						} else {
-							for _, subs := range amqpEventPub.subscribesInfo {
-								amqpEventPub.SetupAMQPEventSubscriber(subs.serviceName, subs.routingKeys)
-							}
-							amqpCloseChan = make(chan *amqp.Error)
-							connection.NotifyClose(amqpCloseChan)
-							break
-						}
-					}
-					log.Info("AMQP reconnection success")
-				}
-			}
-		}
-	}()
+	// 					if err != nil {
+	// 						log.Errorf("failed to reconnect. Sleeping for 5 seconds: %s", err)
+	// 						time.Sleep(5 * time.Second)
+	// 					} else {
+	// 						for _, subs := range amqpHandler.subscribesInfo {
+	// 							amqpHandler.SetupAMQPEventSubscriber(subs.serviceName, subs.routingKeys)
+	// 						}
+	// 						amqpCloseChan = make(chan *amqp.Error)
+	// 						connection.NotifyClose(amqpCloseChan)
+	// 						break
+	// 					}
+	// 				}
+	// 				log.Info("AMQP reconnection success")
+	// 			}
+	// 		}
+	// 	}
+	// }()
 
-	return amqpEventPub, nil
+	return amqpHandler, nil
 }
 
-func (aPub *AMQPSetup) buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Connection, error) {
+func (aPub *AMQPSetup) buildAMQPConnection(cfg config.AMQPConnection) (*rabbitmq.Connection, error) {
+	aPub.Exchange = cfg.Exchange
 	userPassUrlPrefix := ""
 	if cfg.BasicAuth.Enabled {
 		log.Debugf("basic auth enabled")
@@ -114,7 +125,8 @@ func (aPub *AMQPSetup) buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Con
 
 	amqpURL := fmt.Sprintf("%s://%s%s:%d", cfg.Protocol, userPassUrlPrefix, cfg.Hostname, cfg.Port)
 	log.Debugf("AMQP Broker URL: %s", amqpURL)
-	amqpConn, err := amqp.DialTLS(amqpURL, &amqpTlsConfig)
+	// amqpConn, err := rabbitmq.Dial(amqpURL, &amqpTlsConfig)
+	amqpConn, err := rabbitmq.Dial(amqpURL)
 	if err != nil {
 		log.Errorf("failed to connect to AMQP broker: %s", err)
 		return nil, err
@@ -128,13 +140,13 @@ func (aPub *AMQPSetup) buildAMQPConnection(cfg config.AMQPConnection) (*amqp.Con
 	log.Debugf("channel created")
 
 	err = amqpChannel.ExchangeDeclare(
-		Exchange, // name
-		"topic",  // type
-		true,     // durable
-		false,    // auto-deleted
-		false,    // internal
-		false,    // no-wait
-		nil,      // arguments
+		cfg.Exchange, // name
+		"topic",      // type
+		true,         // durable
+		false,        // auto-deleted
+		false,        // internal
+		false,        // no-wait
+		nil,          // arguments
 	)
 	if err != nil {
 		log.Errorf("could not create AMQP exchange: %s", err)
@@ -155,7 +167,7 @@ func (aPub *AMQPSetup) setupAMQPEventPublisher() {
 			case amqpMessage := <-publisherChan:
 				//TODO: When an error is obtained whiel publishing, retry/enque message
 				amqpErr := aPub.Channel.Publish(
-					Exchange,
+					aPub.Exchange,
 					amqpMessage.RoutingKey,
 					amqpMessage.Mandatory,
 					amqpMessage.Immediate,
@@ -170,15 +182,25 @@ func (aPub *AMQPSetup) setupAMQPEventPublisher() {
 	aPub.PublisherChan = publisherChan
 }
 
-func (aPub *AMQPSetup) PublishCloudEvent(eventType models.EventType, eventSource string, payload interface{}) {
-	event := buildCloudEvent(string(eventType), eventSource, payload)
+func (aPub *AMQPSetup) PublishCloudEvent(ctx context.Context, eventType models.EventType, payload interface{}) {
+	src := aPub.serviceIdentifier
+	if ctxSource := ctx.Value(models.ContextSourceKey); ctxSource != nil {
+		ctxSourceStr, ok := ctxSource.(string)
+		if ok {
+			src = ctxSourceStr
+		}
+	}
+
+	src = "lrn://internal-service"
+
+	event := BuildCloudEvent(string(eventType), src, payload)
 	eventBytes, marshalErr := json.Marshal(event)
 	if marshalErr != nil {
 		log.Errorf("error while serializing event: %s", marshalErr)
 		return
 	}
 
-	log.Tracef("publishing event: Type=%s Source=%s \n%s", eventType, eventSource, string(eventBytes))
+	log.Tracef("publishing event: Type=%s Source=%s \n%s", eventType, src, string(eventBytes))
 
 	aPub.PublisherChan <- &AmqpPublishMessage{
 		RoutingKey: event.Type(),
@@ -192,7 +214,7 @@ func (aPub *AMQPSetup) PublishCloudEvent(eventType models.EventType, eventSource
 
 }
 
-func buildCloudEvent(eventType string, eventSource string, payload interface{}) event.Event {
+func BuildCloudEvent(eventType string, eventSource string, payload interface{}) event.Event {
 	event := cloudevents.NewEvent()
 	event.SetSpecVersion("1.0")
 	event.SetSource(eventSource)
@@ -207,6 +229,7 @@ func (aPub *AMQPSetup) SetupAMQPEventSubscriber(serviceName string, routingKeys 
 	if !serviceNameExist(aPub.subscribesInfo, serviceName) {
 		aPub.subscribesInfo = append(aPub.subscribesInfo, subscribesInfo{serviceName: serviceName, routingKeys: routingKeys})
 	}
+
 	q, err := aPub.Channel.QueueDeclare(
 		serviceName, // name
 		false,       // durable
@@ -221,9 +244,9 @@ func (aPub *AMQPSetup) SetupAMQPEventSubscriber(serviceName string, routingKeys 
 
 	for _, rKey := range routingKeys {
 		err = aPub.Channel.QueueBind(
-			q.Name,   // queue name
-			rKey,     // routing key
-			Exchange, // exchange
+			q.Name,        // queue name
+			rKey,          // routing key
+			aPub.Exchange, // exchange
 			false,
 			nil,
 		)
@@ -244,6 +267,7 @@ func (aPub *AMQPSetup) SetupAMQPEventSubscriber(serviceName string, routingKeys 
 	if err != nil {
 		return err
 	}
+
 	aPub.Msgs = msgs
 	return nil
 }

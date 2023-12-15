@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-gormigrate/gormigrate/v2"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 	"github.com/sirupsen/logrus"
@@ -18,6 +19,51 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
 )
+
+type DBVersion struct {
+	CreationTS    time.Time
+	SchemaVersion int
+}
+
+type DBVersionMigrationNode struct {
+	next       *DBVersionMigrationNode
+	migrations []*gormigrate.Migration
+	label      string
+	id         int
+}
+
+type DBMigrationList struct {
+	head *DBVersionMigrationNode
+}
+
+func (l *DBMigrationList) Insert(id int, label string, migrations []*gormigrate.Migration) {
+	list := &DBVersionMigrationNode{migrations: migrations, id: id, label: label, next: nil}
+	if l.head == nil {
+		l.head = list
+	} else {
+		p := l.head
+		for p.next != nil {
+			p = p.next
+		}
+		p.next = list
+	}
+}
+
+func (n *DBVersionMigrationNode) MigrationPlanTo(targetMigration int) []*DBVersionMigrationNode {
+	nodes := []*DBVersionMigrationNode{}
+
+	node := n
+	for {
+		nodes = append(nodes, node)
+		if node.next != nil {
+			node = node.next
+		} else {
+			break
+		}
+	}
+
+	return nodes
+}
 
 func CreatePostgresDBConnection(logger *logrus.Entry, cfg config.PostgresPSEConfig, database string) (*gorm.DB, error) {
 	dbLogger := &GormLogger{
@@ -78,14 +124,13 @@ type gormWhereParams struct {
 	extraArgs []interface{}
 }
 
-func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, extraOpts []gormWhereParams, exhaustiveRun bool, applyFunc func(elem *E)) (string, error) {
+func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, extraOpts []gormWhereParams, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
 	var elems []E
 	tx := db.Table(db.tableName)
 
-	//Hay que definir como un patropn para que solo se definan estos parametros a la hora de hacer la consulta a postgresql
+	offset := 0
+	limit := 15
 
-	var offset int
-	var limit int
 	var sortMode string
 	var sortBy string
 
@@ -93,15 +138,9 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 
 	if queryParams != nil {
 		if queryParams.NextBookmark == "" {
-			offset = 0
-			tx = tx.Offset(offset)
-
-			if queryParams.PageSize == 0 {
-				limit = 15
-			} else {
+			if queryParams.PageSize > 0 {
 				limit = queryParams.PageSize
 			}
-			tx = tx.Limit(limit)
 
 			if queryParams.Sort.SortMode == "" {
 				sortMode = string(resources.SortModeAsc)
@@ -109,13 +148,17 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 				sortMode = string(queryParams.Sort.SortMode)
 			}
 
-			offset = limit
-			nextBookmark = fmt.Sprintf("off:%d;lim:%d;", offset, limit)
+			nextBookmark = fmt.Sprintf("off:%d;lim:%d;", limit+offset, limit)
 
 			if queryParams.Sort.SortField != "" {
 				sortBy = queryParams.Sort.SortField
 				nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s", sortMode, sortBy)
 				tx = tx.Order(sortBy + " " + sortMode)
+			}
+
+			for _, filter := range queryParams.Filters {
+				tx = FilterOperandToWhereClause(filter, tx)
+				nextBookmark = nextBookmark + fmt.Sprintf("filter:%s-%d-%s", base64.StdEncoding.EncodeToString([]byte(filter.Field)), filter.FilterOperation, base64.StdEncoding.EncodeToString([]byte(filter.Value)))
 			}
 
 		} else {
@@ -135,13 +178,11 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 					if err != nil {
 						return "", fmt.Errorf("not a valid bookmark")
 					}
-					tx = tx.Offset(offset)
 				case "lim":
 					limit, err = strconv.Atoi(queryPart[1])
 					if err != nil {
 						return "", fmt.Errorf("not a valid bookmark")
 					}
-					tx = tx.Limit(limit)
 				case "sortM":
 					sortMode = queryPart[1]
 					if err != nil {
@@ -152,13 +193,39 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 					if err != nil {
 						return "", fmt.Errorf("not a valid bookmark")
 					}
+				case "filter":
+					filter := queryPart[1]
+					if err != nil {
+						return "", fmt.Errorf("not a valid bookmark")
+					}
+					filterSplit := strings.Split(filter, "-")
+					if len(filterSplit) == 3 {
+						field, err := base64.StdEncoding.DecodeString(filterSplit[0])
+						if err != nil {
+							continue
+						}
+						value, err := base64.StdEncoding.DecodeString(filterSplit[2])
+						if err != nil {
+							continue
+						}
+
+						operand, err := strconv.Atoi(filterSplit[1])
+						if err != nil {
+							continue
+						}
+
+						tx = FilterOperandToWhereClause(resources.FilterOption{
+							Field:           string(field),
+							FilterOperation: resources.FilterOperation(operand),
+							Value:           string(value),
+						}, tx)
+					}
 				}
 				if sortMode != "" && sortBy != "" {
 					tx = tx.Order(sortBy + " " + sortMode)
 				}
 			}
-			offset += limit
-			nextBookmark = fmt.Sprintf("off:%d;lim:%d;", offset, limit)
+			nextBookmark = fmt.Sprintf("off:%d;lim:%d;", offset+limit, limit)
 			if queryParams.Sort.SortField != "" {
 				sortBy = queryParams.Sort.SortField
 				nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s", sortMode, sortBy)
@@ -169,18 +236,42 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 		tx = tx.Where(whereQuery.query, whereQuery.extraArgs...)
 	}
 
-	result := tx.FindInBatches(&elems, 100, func(tx *gorm.DB, batch int) error {
+	if offset > 0 {
+		tx.Offset(offset)
+	}
+
+	if exhaustiveRun {
+		res := tx.FindInBatches(&elems, limit, func(tx *gorm.DB, batch int) error {
+			for _, elem := range elems {
+				applyFunc(elem)
+			}
+
+			return nil
+		})
+		if res.Error != nil {
+			return "", res.Error
+		}
+
+		return "", nil
+	} else {
+		tx.Offset(offset)
+		tx.Limit(limit)
+		rs := tx.Find(&elems)
 		for _, elem := range elems {
 			// batch processing found records
-			applyFunc(&elem)
+			applyFunc(elem)
 		}
-		logrus.Tracef("iterating batch %d. Number of records in batch: %d", batch, tx.RowsAffected)
-		return nil
-	})
-	if result.RowsAffected == 0 {
-		nextBookmark = ""
+
+		if rs.Error != nil {
+			return "", rs.Error
+		}
+
+		if rs.RowsAffected == 0 {
+			return "", nil
+		}
+
+		return base64.StdEncoding.EncodeToString([]byte(nextBookmark)), nil
 	}
-	return base64.StdEncoding.EncodeToString([]byte(nextBookmark)), nil
 }
 
 // Selects first element from DB. if queryCol is empty or nil, the primary key column
@@ -192,7 +283,7 @@ func (db *postgresDBQuerier[E]) SelectExists(queryID string, queryCol *string) (
 	}
 
 	var elem E
-	tx := db.First(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
+	tx := db.Table(db.tableName).First(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
 	if err := tx.Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return false, nil, nil
@@ -205,7 +296,7 @@ func (db *postgresDBQuerier[E]) SelectExists(queryID string, queryCol *string) (
 }
 
 func (db *postgresDBQuerier[E]) Insert(elem E, elemID string) (*E, error) {
-	tx := db.Create(elem)
+	tx := db.Table(db.tableName).Create(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
@@ -216,7 +307,7 @@ func (db *postgresDBQuerier[E]) Insert(elem E, elemID string) (*E, error) {
 
 func (db *postgresDBQuerier[E]) Update(elem E, elemID string) (*E, error) {
 	_, newElem, err := db.SelectExists(elemID, nil)
-	tx := db.Save(&elem)
+	tx := db.Table(db.tableName).Save(&elem)
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
@@ -242,6 +333,73 @@ func (db *postgresDBQuerier[E]) Delete(elemID string) error {
 
 	return nil
 }
+
+func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gorm.DB {
+	if strings.Contains(filter.Field, ".") {
+		filter.Field = strings.ReplaceAll(filter.Field, ".", "_")
+	}
+
+	switch filter.FilterOperation {
+	case resources.StringEqual:
+		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
+	case resources.StringNotEqual:
+		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
+	case resources.StringContains:
+		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+	case resources.StringArrayContains:
+		// return tx.Where(fmt.Sprintf("? = ANY(%s)", filter.Field), filter.Value)
+		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+	case resources.StringNotContains:
+		return tx.Where(fmt.Sprintf("%s NOT LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+	case resources.DateEqual:
+		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
+	case resources.DateBefore:
+		return tx.Where(fmt.Sprintf("%s < ?", filter.Field), filter.Value)
+	case resources.DateAfter:
+		return tx.Where(fmt.Sprintf("%s > ?", filter.Field), filter.Value)
+	case resources.NumberEqual:
+		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
+	case resources.NumberNotEqual:
+		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
+	case resources.NumberLessThan:
+		return tx.Where(fmt.Sprintf("%s < ?", filter.Field), filter.Value)
+	case resources.NumberLessOrEqualThan:
+		return tx.Where(fmt.Sprintf("%s <= ?", filter.Field), filter.Value)
+	case resources.NumberGreaterThan:
+		return tx.Where(fmt.Sprintf("%s > ?", filter.Field), filter.Value)
+	case resources.NumberGreaterOrEqualThan:
+		return tx.Where(fmt.Sprintf("%s >= ?", filter.Field), filter.Value)
+	case resources.EnumEqual:
+		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
+	case resources.EnumNotEqual:
+		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
+	default:
+		return tx
+	}
+}
+
+// // string_array json serializer
+// type StringArraySerializer struct{}
+
+// func (StringArraySerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue interface{}) (err error) {
+// 	switch dbValue.(type) {
+// 	case []pq.StringArray:
+// 		sarray := dbValue.(pq.StringArray)
+// 		var sa []string = sarray
+// 		src := reflect.ValueOf(sa)
+// 		field.ReflectValueOf(ctx, dst).Set(src)
+// 		return nil
+
+// 	default:
+// 		return fmt.Errorf("invalid value type")
+// 	}
+
+// }
+
+// // Value implements serializer interface
+// func (StringArraySerializer) Value(ctx context.Context, field *schema.Field, dst reflect.Value, fieldValue interface{}) (interface{}, error) {
+// 	return pq.Array(fieldValue), nil
+// }
 
 // JSONSerializer json serializer
 type JSONSerializer struct {

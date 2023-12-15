@@ -8,11 +8,13 @@ import (
 
 type CreateCABody struct {
 	ID                 string             `json:"id"`
+	ParentID           string             `json:"parent_id"`
 	Subject            models.Subject     `json:"subject"`
 	KeyMetadata        models.KeyMetadata `json:"key_metadata"`
 	CAExpiration       models.Expiration  `json:"ca_expiration"`
 	IssuanceExpiration models.Expiration  `json:"issuance_expiration"`
 	EngineID           string             `json:"engine_id"`
+	Metadata           map[string]any     `json:"metadata"`
 }
 
 type ImportCABody struct {
@@ -68,4 +70,9 @@ type GetCertificateStatus struct {
 	CAID      string                   `json:"CAID"`
 	Status    models.CertificateStatus `json:"status"`
 	ListInput []models.Certificate     `json:"lostCertificates"`
+}
+
+type ImportCertificateBody struct {
+	Metadata    map[string]interface{}  `json:"metadata"`
+	Certificate *models.X509Certificate `json:"certificate"`
 }

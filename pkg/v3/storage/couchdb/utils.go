@@ -113,7 +113,7 @@ func (db *couchDBQuerier[E]) Count() (int, error) {
 
 }
 
-func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, extraOpts *map[string]interface{}, exhaustiveRun bool, applyFunc func(elem *E)) (string, error) {
+func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, extraOpts *map[string]interface{}, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
 	nextBookmark := ""
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
@@ -154,7 +154,7 @@ func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, e
 		}
 
 		for _, elem := range elems {
-			applyFunc(elem)
+			applyFunc(*elem)
 		}
 
 		if !exhaustiveRun {

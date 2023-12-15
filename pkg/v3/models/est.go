@@ -5,11 +5,16 @@ import "crypto/x509"
 type ESTAuthMode string
 
 const (
-	ESTAuthModeJWT       ESTAuthMode = "JWT"
-	ESTAuthModeMutualTLS ESTAuthMode = "MUTUAL_TLS"
+	ESTAuthModeNoAuth            ESTAuthMode = "NO_AUTH"
+	ESTAuthModeClientCertificate ESTAuthMode = "CLIENT_CERTIFICATE"
 )
 
-type ESTServerAuthOptionsMutualTLS struct {
+const (
+	ESTServerKeyGenBitSize = "ESTServerKeyGenBitSize"
+	ESTServerKeyGenKeyType = "ESTServerKeyGenKeyType"
+)
+
+type ESTServerAuthOptionsClientCertificate struct {
 	ClientCertificate *x509.Certificate
 }
 
@@ -24,4 +29,9 @@ type ESTServerAuthOptionPSK struct {
 type ESTClientAuthOptionsMutualTLS struct {
 	Certificate *X509Certificate
 	PrivateKey  interface{}
+}
+
+type EnrollReenrollEvent struct {
+	Certificate *X509Certificate `json:"certificate"`
+	APS         string           `json:"aps"`
 }

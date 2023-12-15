@@ -25,48 +25,42 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var log = logrus.WithField("engine", "X509 Engine")
+var lCEngine *logrus.Entry = logrus.WithField("", "")
 
-type X509EngineProvider struct {
-	cryptoEngine cryptoengines.CryptoEngine
-	ocspURL      string
+func SetCryptoEngineLogger(lgr *logrus.Entry) {
+	lCEngine = lgr
 }
 
-type X509Engine interface {
-	GetEngineConfig() models.CryptoEngineInfo
-	GetCACryptoSigner(caCertificate *x509.Certificate) (crypto.Signer, error)
-	CreateRootCA(keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error)
-	CreateSubordinateCA(parentCACertificate *x509.Certificate, parentCASigner crypto.Signer, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error)
-	SignCertificateRequest(caCertificate *x509.Certificate, csr *x509.CertificateRequest, expiration time.Time) (*x509.Certificate, error)
-	Sign(caCertificate *x509.Certificate, message []byte, messageType models.SignMessageType, signingAlgorithm string) ([]byte, error)
-	Verify(caCertificate *x509.Certificate, signature []byte, message []byte, messageType models.SignMessageType, signingAlgorithm string) (bool, error)
+type X509Engine struct {
+	cryptoEngine              cryptoengines.CryptoEngine
+	validationAuthorityDomain string
 }
 
-func NewX509Engine(cryptoEngine *cryptoengines.CryptoEngine, ocspURL string) X509Engine {
-	return &X509EngineProvider{
-		cryptoEngine: *cryptoEngine,
-		ocspURL:      ocspURL,
+func NewX509Engine(cryptoEngine *cryptoengines.CryptoEngine, validationAuthorityDomain string) X509Engine {
+	return X509Engine{
+		cryptoEngine:              *cryptoEngine,
+		validationAuthorityDomain: validationAuthorityDomain,
 	}
 }
 
-func (engine X509EngineProvider) GetEngineConfig() models.CryptoEngineInfo {
+func (engine X509Engine) GetEngineConfig() models.CryptoEngineInfo {
 	return engine.cryptoEngine.GetEngineConfig()
 }
 
-func (engine X509EngineProvider) GetCACryptoSigner(caCertificate *x509.Certificate) (crypto.Signer, error) {
+func (engine X509Engine) GetCACryptoSigner(caCertificate *x509.Certificate) (crypto.Signer, error) {
 	caSn := helpers.SerialNumberToString(caCertificate.SerialNumber)
 	return engine.cryptoEngine.GetPrivateKeyByID(caSn)
 }
 
-func (engine X509EngineProvider) CreateRootCA(keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error) {
-	log.Debugf("starting root CA generation with key metadata [%v], subject [%v] and expiration time [%s]", keyMetadata, subject, expirationTine)
-	templateCA, signer, err := engine.genCertTemplateAndPrivateKey(keyMetadata, subject, expirationTine)
+func (engine X509Engine) CreateRootCA(caID string, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error) {
+	lCEngine.Debugf("starting root CA generation with key metadata [%v], subject [%v] and expiration time [%s]", keyMetadata, subject, expirationTine)
+	templateCA, signer, err := engine.genCertTemplateAndPrivateKey(keyMetadata, subject, expirationTine, caID, caID)
 	if err != nil {
-		log.Errorf("could not generate root CA: %s", err)
+		lCEngine.Errorf("could not generate root CA Template and Key: %s", err)
 		return nil, err
 	}
 
-	log.Debugf("public-private key successfully generated")
+	lCEngine.Debugf("public-private key successfully generated")
 
 	templateCA.IsCA = true
 
@@ -75,31 +69,32 @@ func (engine X509EngineProvider) CreateRootCA(keyMetadata models.KeyMetadata, su
 		rsaPub := signer.Public().(*rsa.PublicKey)
 		derBytes, err = x509.CreateCertificate(rand.Reader, templateCA, templateCA, rsaPub, signer)
 		if err != nil {
-			log.Errorf("could not sign root CA: %s", err)
+			lCEngine.Errorf("could not sign root CA: %s", err)
 			return nil, err
 		}
 	} else {
 		ecdsaPub := signer.Public().(*ecdsa.PublicKey)
 		derBytes, err = x509.CreateCertificate(rand.Reader, templateCA, templateCA, ecdsaPub, signer)
 		if err != nil {
-			log.Errorf("could not sign root CA: %s", err)
+			lCEngine.Errorf("could not sign root CA: %s", err)
 			return nil, err
 		}
 	}
 
 	cert, err := x509.ParseCertificate(derBytes)
 	if err != nil {
-		log.Errorf("could not parse root CA: %s", err)
+		lCEngine.Errorf("could not parse root CA: %s", err)
 		return nil, err
 	}
 
-	log.Debugf("root CA successfully generated with serial number [%s]", helpers.SerialNumberToString(cert.SerialNumber))
+	lCEngine.Debugf("root CA successfully generated with serial number [%s]", helpers.SerialNumberToString(cert.SerialNumber))
 	return cert, nil
 }
 
-func (engine X509EngineProvider) CreateSubordinateCA(parentCACertificate *x509.Certificate, parentCASigner crypto.Signer, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error) {
-	templateCA, signer, err := engine.genCertTemplateAndPrivateKey(keyMetadata, subject, expirationTine)
+func (engine X509Engine) CreateSubordinateCA(aki string, caID string, parentCACertificate *x509.Certificate, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time, parentEngine X509Engine) (*x509.Certificate, error) {
+	templateCA, signer, err := engine.genCertTemplateAndPrivateKey(keyMetadata, subject, expirationTine, aki, caID)
 	if err != nil {
+		lCEngine.Errorf("could not generate subordinate CA Template and Key: %s", err)
 		return nil, err
 	}
 
@@ -110,32 +105,40 @@ func (engine X509EngineProvider) CreateSubordinateCA(parentCACertificate *x509.C
 		pubKey = signer.Public().(*ecdsa.PublicKey)
 	}
 
+	parentSN := helpers.SerialNumberToString(parentCACertificate.SerialNumber)
+	parentCASigner, err := parentEngine.cryptoEngine.GetPrivateKeyByID(CryptoAssetLRI(CertificateAuthority, parentSN))
+	if err != nil {
+		lCEngine.Errorf("could not get parent signer key '%s': %s", parentSN, err)
+		return nil, err
+	}
+
 	templateCA.IsCA = true
 	certificateBytes, err := x509.CreateCertificate(rand.Reader, templateCA, parentCACertificate, pubKey, parentCASigner)
 	if err != nil {
+		lCEngine.Errorf("could not sign subordinate CA: %s", err)
 		return nil, err
 	}
 
 	certificate, err := x509.ParseCertificate(certificateBytes)
 	if err != nil {
+		lCEngine.Errorf("could not parse subordinate CA: %s", err)
 		return nil, err
 	}
 
 	return certificate, nil
-
 }
 
-func (engine X509EngineProvider) SignCertificateRequest(caCertificate *x509.Certificate, csr *x509.CertificateRequest, expirationDate time.Time) (*x509.Certificate, error) {
-	log.Debugf("starting csr signing with CA [%s]", caCertificate.Subject.CommonName)
-	log.Debugf("csr cn is [%s]", csr.Subject.CommonName)
+func (engine X509Engine) SignCertificateRequest(caCertificate *x509.Certificate, csr *x509.CertificateRequest, expirationDate time.Time) (*x509.Certificate, error) {
+	lCEngine.Debugf("starting csr signing with CA [%s]", caCertificate.Subject.CommonName)
+	lCEngine.Debugf("csr cn is [%s]", csr.Subject.CommonName)
 	caSn := helpers.SerialNumberToString(caCertificate.SerialNumber)
 
-	log.Debugf("requesting CA signer object to crypto engine instance")
-	privkey, err := engine.cryptoEngine.GetPrivateKeyByID(caSn)
+	lCEngine.Debugf("requesting CA signer object to crypto engine instance")
+	privkey, err := engine.cryptoEngine.GetPrivateKeyByID(CryptoAssetLRI(CertificateAuthority, caSn))
 	if err != nil {
 		return nil, err
 	}
-	log.Debugf("successfully retrieved CA signer object")
+	lCEngine.Debugf("successfully retrieved CA signer object")
 
 	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
 
@@ -144,44 +147,54 @@ func (engine X509EngineProvider) SignCertificateRequest(caCertificate *x509.Cert
 	certificateTemplate := x509.Certificate{
 		PublicKeyAlgorithm: csr.PublicKeyAlgorithm,
 		PublicKey:          csr.PublicKey,
-
-		SerialNumber: sn,
-		Issuer:       caCertificate.Subject,
-		Subject:      csr.Subject,
-		NotBefore:    now,
-		NotAfter:     expirationDate,
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		AuthorityKeyId:     caCertificate.SubjectKeyId,
+		SerialNumber:       sn,
+		Issuer:             caCertificate.Subject,
+		Subject:            csr.Subject,
+		NotBefore:          now,
+		NotAfter:           expirationDate,
+		KeyUsage:           x509.KeyUsageDigitalSignature,
+		OCSPServer: []string{
+			fmt.Sprintf("https://%s/api/va/ocsp", engine.validationAuthorityDomain),
+		},
+		CRLDistributionPoints: []string{
+			fmt.Sprintf("https://%s/api/va/crl/%s", engine.validationAuthorityDomain, string(caCertificate.SubjectKeyId)),
+		},
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
 	}
 
 	certificateBytes, err := x509.CreateCertificate(rand.Reader, &certificateTemplate, caCertificate, csr.PublicKey, privkey)
 	if err != nil {
+		lCEngine.Errorf("could not sign certificate: %s", err)
 		return nil, err
 	}
 
 	certificate, err := x509.ParseCertificate(certificateBytes)
 	if err != nil {
+		lCEngine.Errorf("could not parse signed certificate %s", err)
 		return nil, err
 	}
 
 	return certificate, nil
 }
 
-func (engine X509EngineProvider) genCertTemplateAndPrivateKey(keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, crypto.Signer, error) {
+func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time, aki, ski string) (*x509.Certificate, crypto.Signer, error) {
 	var err error
 	var signer crypto.Signer
 
 	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
-	log.Debugf("generates serial number for root CA is [%s]", helpers.SerialNumberToString(sn))
+	lCEngine.Debugf("generates serial number for root CA is [%s]", helpers.SerialNumberToString(sn))
+	lri := CryptoAssetLRI(CertificateAuthority, helpers.SerialNumberToString(sn))
 
 	if models.KeyType(keyMetadata.Type) == models.KeyType(x509.RSA) {
-		log.Debugf("requesting cryptoengine instance for RSA key generation")
-		signer, err = engine.cryptoEngine.CreateRSAPrivateKey(keyMetadata.Bits, helpers.SerialNumberToString(sn))
+		lCEngine.Debugf("requesting cryptoengine instance for RSA key generation: %s", lri)
+
+		signer, err = engine.cryptoEngine.CreateRSAPrivateKey(keyMetadata.Bits, lri)
 		if err != nil {
-			log.Errorf("cryptoengine instance failed while generating RSA key: %s", err)
+			lCEngine.Errorf("cryptoengine instance failed while generating RSA key: %s", err)
 			return nil, nil, err
 		}
-		log.Debugf("cryptoengine successfully generated RSA key")
+		lCEngine.Debugf("cryptoengine successfully generated RSA key")
 	} else {
 		var curve elliptic.Curve
 		switch keyMetadata.Bits {
@@ -194,15 +207,16 @@ func (engine X509EngineProvider) genCertTemplateAndPrivateKey(keyMetadata models
 		case 521:
 			curve = elliptic.P521()
 		default:
-			return nil, nil, errors.New("unsuported key size for ECDSA key")
+			return nil, nil, errors.New("unsupported key size for ECDSA key")
 		}
-		log.Debugf("requesting cryptoengine instance for ECDSA key generation")
-		signer, err = engine.cryptoEngine.CreateECDSAPrivateKey(curve, helpers.SerialNumberToString(sn))
+
+		lCEngine.Debugf("requesting cryptoengine instance for ECDSA key generation: %s", lri)
+		signer, err = engine.cryptoEngine.CreateECDSAPrivateKey(curve, lri)
 		if err != nil {
-			log.Errorf("cryptoengine instance failed while generating ECDSA key: %s", err)
+			lCEngine.Errorf("cryptoengine instance failed while generating ECDSA key: %s", err)
 			return nil, nil, err
 		}
-		log.Debugf("cryptoengine successfully generated ECDSA key")
+		lCEngine.Debugf("cryptoengine successfully generated ECDSA key")
 	}
 
 	now := time.Now()
@@ -217,7 +231,14 @@ func (engine X509EngineProvider) genCertTemplateAndPrivateKey(keyMetadata models
 			Organization:       []string{subject.Organization},
 			OrganizationalUnit: []string{subject.OrganizationUnit},
 		},
-		OCSPServer:            []string{engine.ocspURL},
+		AuthorityKeyId: []byte(aki),
+		SubjectKeyId:   []byte(ski),
+		OCSPServer: []string{
+			fmt.Sprintf("%s/ocsp", engine.validationAuthorityDomain),
+		},
+		CRLDistributionPoints: []string{
+			fmt.Sprintf("%s/crl/%s", engine.validationAuthorityDomain, ski),
+		},
 		NotBefore:             now,
 		NotAfter:              expirationTine,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsage(x509.ExtKeyUsageOCSPSigning),
@@ -228,18 +249,18 @@ func (engine X509EngineProvider) genCertTemplateAndPrivateKey(keyMetadata models
 	return &template, signer, nil
 }
 
-func (engine X509EngineProvider) Sign(caCertificate *x509.Certificate, message []byte, messageType models.SignMessageType, signingAlgorithm string) ([]byte, error) {
-	log.Debugf("starting standard signing with CA [%s]", caCertificate.Subject.CommonName)
-	caSn := helpers.SerialNumberToString(caCertificate.SerialNumber)
+func (engine X509Engine) Sign(cAssetType CryptoAssetType, certificate *x509.Certificate, message []byte, messageType models.SignMessageType, signingAlgorithm string) ([]byte, error) {
+	lCEngine.Debugf("starting standard signing with certificate [%s]", certificate.Subject.CommonName)
+	sn := helpers.SerialNumberToString(certificate.SerialNumber)
 
-	log.Debugf("requesting CA signer object to crypto engine instance")
-	privkey, err := engine.cryptoEngine.GetPrivateKeyByID(caSn)
+	lCEngine.Debugf("requesting signer object to crypto engine instance")
+	privkey, err := engine.cryptoEngine.GetPrivateKeyByID(CryptoAssetLRI(cAssetType, sn))
 	if err != nil {
 		return nil, err
 	}
-	log.Debugf("successfully retrieved CA signer object")
+	lCEngine.Debugf("successfully retrieved certificate signer object")
 
-	if caCertificate.PublicKeyAlgorithm == x509.ECDSA {
+	if certificate.PublicKeyAlgorithm == x509.ECDSA {
 		var digest []byte
 		var hashFunc crypto.Hash
 		var h hash.Hash
@@ -267,10 +288,10 @@ func (engine X509EngineProvider) Sign(caCertificate *x509.Certificate, message [
 		}
 		signature, err := privkey.Sign(rand.Reader, digest, hashFunc)
 		if err != nil {
-			return nil, errs.ErrEngineHashAlgInconsistency
+			return nil, err
 		}
 		return signature, nil
-	} else if caCertificate.PublicKeyAlgorithm == x509.RSA {
+	} else if certificate.PublicKeyAlgorithm == x509.RSA {
 		var digest []byte
 		var hashFunc crypto.Hash
 		var h hash.Hash
@@ -323,11 +344,11 @@ func (engine X509EngineProvider) Sign(caCertificate *x509.Certificate, message [
 			return signature, nil
 		}
 	} else {
-		return nil, fmt.Errorf("CA has unsupported public key algorithm: %s", caCertificate.PublicKeyAlgorithm)
+		return nil, fmt.Errorf("certificate has unsupported public key algorithm: %s", certificate.PublicKeyAlgorithm)
 	}
 }
 
-func (engine X509EngineProvider) Verify(caCertificate *x509.Certificate, signature []byte, message []byte, messageType models.SignMessageType, signingAlgorithm string) (bool, error) {
+func (engine X509Engine) Verify(caCertificate *x509.Certificate, signature []byte, message []byte, messageType models.SignMessageType, signingAlgorithm string) (bool, error) {
 	var err error
 	if caCertificate.PublicKeyAlgorithm == x509.ECDSA {
 		var hasher []byte
@@ -415,4 +436,15 @@ func (engine X509EngineProvider) Verify(caCertificate *x509.Certificate, signatu
 	} else {
 		return false, fmt.Errorf("CA has unsupported public key algorithm: %s", caCertificate.PublicKeyAlgorithm)
 	}
+}
+
+type CryptoAssetType string
+
+const (
+	CertificateAuthority CryptoAssetType = "certauth"
+	Certificate          CryptoAssetType = "cert"
+)
+
+func CryptoAssetLRI(cryptoAssetType CryptoAssetType, keyID string) string {
+	return fmt.Sprintf("lms-caservice-%s-keyid-%s", cryptoAssetType, keyID)
 }

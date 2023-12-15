@@ -1,141 +1,70 @@
 package main
 
 import (
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
-	"io/ioutil"
-	"net/http"
-	"net/url"
-	"strings"
 
+	"github.com/lamassuiot/lamassuiot/pkg/lamassu"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/clients"
-	lamassuSDK "github.com/lamassuiot/lamassuiot/pkg/v3/clients"
-	configV3 "github.com/lamassuiot/lamassuiot/pkg/v3/config"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
-
-	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/service"
-	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/transport"
-	"github.com/lamassuiot/lamassuiot/pkg/device-manager/server/config"
-	lamassudmsclient "github.com/lamassuiot/lamassuiot/pkg/dms-manager/client"
-	esttransport "github.com/lamassuiot/lamassuiot/pkg/est/server/api/transport"
-	clientUtils "github.com/lamassuiot/lamassuiot/pkg/utils/client"
-	"github.com/lamassuiot/lamassuiot/pkg/utils/server"
-	gorm_logrus "github.com/onrik/gorm-logrus"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	log "github.com/sirupsen/logrus"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-	gormLogger "gorm.io/gorm/logger"
+	"gopkg.in/yaml.v2"
+)
 
-	badgerRepository "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/repository/badger"
-	postgresRepository "github.com/lamassuiot/lamassuiot/pkg/device-manager/server/api/repository/postgres"
+var (
+	version   string = "v0"    // api version
+	sha1ver   string = "-"     // sha1 revision used to build the program
+	buildTime string = "devTS" // when the executable was built
 )
 
 func main() {
-	config := config.NewDeviceManagerConfig()
+	log.SetFormatter(helpers.LogFormatter)
+	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
 
-	dbLogrus := gormLogger.Default.LogMode(gormLogger.Silent)
-	if config.DebugMode {
-		dbLogrus = gorm_logrus.New()
-		dbLogrus.LogMode(gormLogger.Info)
-	}
-
-	mainServer := server.NewServer(config)
-
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable", config.PostgresHostname, config.PostgresUsername, config.PostgresPassword, config.PostgresDatabase, config.PostgresPort)
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: dbLogrus,
-	})
+	conf, err := config.LoadConfig[config.DeviceManagerConfig]()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	statsRepo, err := badgerRepository.NewStatisticsDBInMemory()
+	globalLogLevel, err := log.ParseLevel(string(conf.Logs.Level))
 	if err != nil {
-		log.Fatal("Failed to connect to badger: ", err)
+		log.Warn("unknown log level. defaulting to 'info' log level")
+		globalLogLevel = log.InfoLevel
+	}
+	log.SetLevel(globalLogLevel)
+
+	log.Infof("global log level set to '%s'", globalLogLevel)
+
+	confBytes, err := yaml.Marshal(conf)
+	if err != nil {
+		log.Fatalf("could not dump yaml config: %s", err)
 	}
 
-	deviceRepo := postgresRepository.NewDevicesPostgresDB(db)
-	logsRepo := postgresRepository.NewLogsPostgresDB(db)
+	log.Debugf("===================================================")
+	log.Debugf("%s", confBytes)
+	log.Debugf("===================================================")
 
-	var lamassuCAClient lamassuSDK.CAClient
-
-	lCAClient := helpers.ConfigureLogger(log.TraceLevel, configV3.Trace, "LMS SDK - CA Client")
-
-	caHttpCli, err := clients.BuildHTTPClient(configV3.HTTPClient{}, lCAClient)
+	lCAClient := helpers.ConfigureLogger(conf.CAClient.LogLevel, "LMS SDK - CA Client")
+	caHttpCli, err := clients.BuildHTTPClient(conf.CAClient.HTTPClient, lCAClient)
 	if err != nil {
 		log.Fatalf("could not build HTTP CA Client: %s", err)
 	}
-	lamassuCAClient = lamassuSDK.NewHttpCAClient(caHttpCli, config.LamassuCAAddress)
+
+	caSDK := clients.NewHttpCAClient(
+		clients.HttpClientWithSourceHeaderInjector(caHttpCli, models.DeviceManagerSource),
+		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
+	)
+
+	_, _, err = lamassu.AssembleDeviceManagerServiceWithHTTPServer(*conf, caSDK, models.APIServiceInfo{
+		Version:   version,
+		BuildSHA:  sha1ver,
+		BuildTime: buildTime,
+	})
 	if err != nil {
-		log.Fatal("Could not create LamassuCA client: ", err)
+		log.Fatalf("could not run Device Manager Server. Exiting: %s", err)
 	}
 
-	var dmsClient lamassudmsclient.LamassuDMSManagerClient
-	parsedLamassuDMSURL, err := url.Parse(config.LamassuDMSManagerAddress)
-	if err != nil {
-		log.Fatal("Could not parse LamassuDMS url: ", err)
-	}
-
-	if strings.HasPrefix(config.LamassuDMSManagerAddress, "https") {
-		dmsClient, err = lamassudmsclient.NewLamassuDMSManagerClientConfig(clientUtils.BaseClientConfigurationuration{
-			URL:        parsedLamassuDMSURL,
-			AuthMethod: clientUtils.AuthMethodMutualTLS,
-			AuthMethodConfig: &clientUtils.MutualTLSConfig{
-				ClientCert: config.CertFile,
-				ClientKey:  config.KeyFile,
-			},
-			CACertificate: config.LamassuDMSManagerCertFile,
-		})
-		if err != nil {
-			log.Fatal("Could not create LamassuDMS client: ", err)
-		}
-	} else {
-		dmsClient, err = lamassudmsclient.NewLamassuDMSManagerClientConfig(clientUtils.BaseClientConfigurationuration{
-			URL:        parsedLamassuDMSURL,
-			AuthMethod: clientUtils.AuthMethodNone,
-		})
-		if err != nil {
-			log.Fatal("Could not create LamassuDMS client: ", err)
-		}
-	}
-
-	upstreamCA, err := readCertificarteFille(config.CACertFile)
-	if err != nil {
-		log.Fatal("Could not read CA certificate: ", err)
-	}
-
-	svc := service.NewDeviceManagerService(upstreamCA, deviceRepo, logsRepo, statsRepo, config.MinimumReenrollDays, lamassuCAClient, dmsClient)
-	dmSvc := svc.(*service.DevicesService)
-
-	svc = service.LoggingMiddleware()(svc)
-	svc = service.NewAMQPMiddleware(mainServer.AmqpPublisher)(svc)
-	svc = service.NewInputValudationMiddleware()(svc)
-
-	dmSvc.SetService(svc)
-
-	mainServer.AddHttpHandler("/v1/", http.StripPrefix("/v1", transport.MakeHTTPHandler(svc)))
-	mainServer.AddHttpHandler("/.well-known/", esttransport.MakeHTTPHandler(svc))
-
-	mainServer.AddAmqpConsumer(config.ServiceName, []string{"io.lamassuiot.certificate.update", "io.lamassuiot.certificate.revoke"}, transport.MakeAmqpHandler(svc))
-
-	mainServer.Run()
 	forever := make(chan struct{})
 	<-forever
-}
-
-func readCertificarteFille(path string) (*x509.Certificate, error) {
-	certContent, err := ioutil.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-
-	cpb, _ := pem.Decode(certContent)
-
-	cert, err := x509.ParseCertificate(cpb.Bytes)
-	if err != nil {
-		return nil, err
-	}
-
-	return cert, nil
 }

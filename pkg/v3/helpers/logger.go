@@ -11,6 +11,7 @@ import (
 	formatter "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,7 +26,7 @@ var LogFormatter = &formatter.Formatter{
 	},
 }
 
-func ConfigureLogger(defaultLevel logrus.Level, currentLevel config.LogLevel, subsystem string) *logrus.Entry {
+func ConfigureLogger(currentLevel config.LogLevel, subsystem string) *logrus.Entry {
 	var err error
 	logger := logrus.New()
 	logger.SetFormatter(LogFormatter)
@@ -35,7 +36,7 @@ func ConfigureLogger(defaultLevel logrus.Level, currentLevel config.LogLevel, su
 		lSubsystem.Infof("subsystem logging will be disabled")
 		lSubsystem.Logger.SetOutput(io.Discard)
 	} else {
-		level := defaultLevel
+		level := logrus.GetLevel()
 
 		if currentLevel != "" {
 			level, err = logrus.ParseLevel(string(currentLevel))
@@ -68,10 +69,15 @@ func ConfigureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *lo
 	return logger.WithField("req-id", fmt.Sprintf("internal.%s", goid.NewV4UUID()))
 }
 
-func ConfigureContextWithRequestID(ctx context.Context, headers http.Header) context.Context {
+func ConfigureContextWithRequest(ctx context.Context, headers http.Header) context.Context {
 	reqID := headers.Get("x-request-id")
 	if reqID != "" {
-		return context.WithValue(ctx, HTTPRequestID, reqID)
+		ctx = context.WithValue(ctx, HTTPRequestID, reqID)
+	}
+
+	source := headers.Get(models.HttpSourceHeader)
+	if reqID != "" {
+		ctx = context.WithValue(ctx, models.ContextSourceKey, source)
 	}
 
 	return ctx
