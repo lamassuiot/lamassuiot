@@ -392,13 +392,16 @@ func (svc *CAServiceImpl) issueCA(ctx context.Context, input issueCAInput) (*iss
 		if parentEngine, ok := svc.cryptoEngines[input.ParentCA.EngineID]; ok {
 			x509ParentEngine := x509engines.NewX509Engine(parentEngine, svc.vaServerDomain)
 			if input.ParentCA.EngineID != input.EngineID {
-				childEngine, ok := svc.cryptoEngines[input.EngineID]
-				if !ok {
-					lFunc.Errorf("something went wrong while doing the cast")
-					return nil, nil
+				if input.EngineID == "" {
+					x509Engine = x509engines.NewX509Engine(svc.defaultCryptoEngine, svc.vaServerDomain)
+				} else {
+					childEngine, ok := svc.cryptoEngines[input.EngineID]
+					if !ok {
+						lFunc.Errorf("something went wrong while doing the cast")
+						return nil, nil
+					}
+					x509Engine = x509engines.NewX509Engine(childEngine, svc.vaServerDomain)
 				}
-				childx509ParentEngine := x509engines.NewX509Engine(childEngine, svc.vaServerDomain)
-				x509Engine = childx509ParentEngine
 			} else {
 				x509Engine = x509ParentEngine
 			}
@@ -473,7 +476,11 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 		}
 
 		if input.CARSAKey != nil {
-			_, err = engine.ImportRSAPrivateKey(input.CARSAKey, x509engines.CryptoAssetLRI(x509engines.CertificateAuthority, helpers.SerialNumberToString(input.CACertificate.SerialNumber)))
+			_, err := engine.ImportRSAPrivateKey(input.CARSAKey, x509engines.CryptoAssetLRI(x509engines.CertificateAuthority, helpers.SerialNumberToString(input.CACertificate.SerialNumber)))
+			if err != nil {
+				lFunc.Errorf("could not imported  %s private key: %s", helpers.SerialNumberToString(input.CACertificate.SerialNumber), err)
+				return nil, fmt.Errorf("could not import key: %w", err)
+			}
 		} else if input.CAECKey != nil {
 			_, err = engine.ImportECDSAPrivateKey(input.CAECKey, x509engines.CryptoAssetLRI(x509engines.CertificateAuthority, helpers.SerialNumberToString(input.CACertificate.SerialNumber)))
 		} else {

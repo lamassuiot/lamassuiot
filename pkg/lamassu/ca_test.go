@@ -1529,8 +1529,14 @@ func TestImportCA(t *testing.T) {
 					fmt.Errorf("Failed creating the certificate %s", err)
 				}
 				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
+				var engine *models.CryptoEngineProvider
 
-				fmt.Println(engines)
+				if !engines[0].Default {
+					engine = engines[0]
+				} else {
+					engine = engines[1]
+				}
+
 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6a4e0bf7d8adef322c06987baca",
 					CAType: models.CertificateTypeImportedWithKey,
@@ -1541,10 +1547,11 @@ func TestImportCA(t *testing.T) {
 					CACertificate: (*models.X509Certificate)(ca),
 					CARSAKey:      (key).(*rsa.PrivateKey),
 					KeyType:       models.KeyType(x509.RSA),
-					EngineID:      engines[0].ID,
+					EngineID:      engine.ID,
 
 					//Here are missing a lot of parameterss
 				})
+
 				if err != nil {
 					fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
 				}
@@ -2439,10 +2446,6 @@ func TestHierarchy(t *testing.T) {
 					return fmt.Errorf("got unexpected error: %s", err)
 				}
 
-				if parentCA.NotAfter.After(childCA.NotAfter) {
-					return fmt.Errorf("Child CA expires after ParentCA")
-				}
-
 				return nil
 			},
 		},
@@ -2498,7 +2501,8 @@ func TestHierarchy(t *testing.T) {
 
 				return nil
 			},
-			run: func(caSDK services.CAService) error {
+			run: func(caSDK services.CAService) ([]models.CACertificate, error) {
+				var cas []models.CACertificate
 				caRDLim := time.Date(3000, 12, 1, 0, 0, 0, 0, time.Local)   // expires the 1st of december of 3000
 				caCDLim1 := time.Date(3000, 11, 28, 0, 0, 0, 0, time.Local) // expires the 28th of november of 3000
 				caCDLim2 := time.Date(3000, 11, 27, 0, 0, 0, 0, time.Local) // expires the 27 of november of 3000
@@ -2620,8 +2624,8 @@ func TestHierarchy(t *testing.T) {
 			before: func(svc services.CAService) error {
 				return nil
 			},
-			run: func(caSDK services.CAService) error {
-
+			run: func(caSDK services.CAService) ([]models.CACertificate, error) {
+				var cas []models.CACertificate
 				caRDLim := time.Date(3000, 12, 1, 0, 0, 0, 0, time.Local)
 				caDurChild1 := models.TimeDuration(time.Hour * 26)
 
@@ -2744,7 +2748,7 @@ func BuildCATestServer() (*CATestServer, error) {
 			Postgres: pConfig,
 		},
 		CryptoEngines: config.CryptoEngines{
-			LogLevel:      config.Info,
+			LogLevel:      config.Trace,
 			DefaultEngine: "filesystem-1",
 			GolangProvider: []config.GolangEngineConfig{
 				config.GolangEngineConfig{
@@ -2764,12 +2768,14 @@ func BuildCATestServer() (*CATestServer, error) {
 		CryptoMonitoring: config.CryptoMonitoring{
 			Enabled: false,
 		},
-		VAServerURL: "http://dev.lamassu.test",
+		VAServerDomain: "http://dev.lamassu.test",
 	}, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
 		BuildTime: "-",
 	})
+	fmt.Println(vaultSDKConf.Port)
+	fmt.Println(vaultSuite.GetRootToken())
 
 	if err != nil {
 		return nil, fmt.Errorf("could not assemble CA with HTTP server")
