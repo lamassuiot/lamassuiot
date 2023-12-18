@@ -42,7 +42,7 @@ func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
 
 	devices := []models.Device{}
 	nextBookmark, err := r.svc.GetDevices(services.GetDevicesInput{
-		ListInput: services.ListInput[models.Device]{
+		ListInput: resources.ListInput[models.Device]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(dev models.Device) {
@@ -79,7 +79,7 @@ func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
 	devices := []models.Device{}
 	nextBookmark, err := r.svc.GetDeviceByDMS(services.GetDevicesByDMSInput{
 		DMSID: params.DMSID,
-		ListInput: services.ListInput[models.Device]{
+		ListInput: resources.ListInput[models.Device]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(dev models.Device) {

@@ -282,7 +282,7 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 				_, err := caSDK.GetCertificatesByCaAndStatus(context.Background(), services.GetCertificatesByCaAndStatusInput{
 					CAID:   DefaultCAID,
 					Status: models.StatusActive,
-					ListInput: services.ListInput[models.Certificate]{
+					ListInput: resources.ListInput[models.Certificate]{
 						ExhaustiveRun: false,
 						QueryParameters: &resources.QueryParameters{
 							PageSize: 5,
@@ -326,7 +326,7 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 				_, err := caSDK.GetCertificatesByCaAndStatus(context.Background(), services.GetCertificatesByCaAndStatusInput{
 					CAID:   DefaultCAID,
 					Status: models.StatusActive,
-					ListInput: services.ListInput[models.Certificate]{
+					ListInput: resources.ListInput[models.Certificate]{
 						ExhaustiveRun: true,
 						QueryParameters: &resources.QueryParameters{
 							PageSize: 5,
@@ -492,7 +492,7 @@ func TestRevokeCA(t *testing.T) {
 			issuedCerts := []*models.Certificate{}
 			caTest.Service.GetCertificatesByCA(context.Background(), services.GetCertificatesByCAInput{
 				CAID: DefaultCAID,
-				ListInput: services.ListInput[models.Certificate]{
+				ListInput: resources.ListInput[models.Certificate]{
 					QueryParameters: &resources.QueryParameters{},
 					ExhaustiveRun:   true,
 					ApplyFunc: func(elem models.Certificate) {
@@ -1050,7 +1050,7 @@ func TestGetCertificates(t *testing.T) {
 			run: func(caSDK services.CAService) ([]*models.Certificate, error) {
 				issuedCerts := []*models.Certificate{}
 				_, err := caSDK.GetCertificates(context.Background(), services.GetCertificatesInput{
-					ListInput: services.ListInput[models.Certificate]{
+					ListInput: resources.ListInput[models.Certificate]{
 						ExhaustiveRun: true,
 						QueryParameters: &resources.QueryParameters{
 							PageSize: 5,
@@ -1096,7 +1096,7 @@ func TestGetCertificates(t *testing.T) {
 
 				issuedCerts := []*models.Certificate{}
 				_, err := caSDK.GetCertificates(context.Background(), services.GetCertificatesInput{
-					ListInput: services.ListInput[models.Certificate]{
+					ListInput: resources.ListInput[models.Certificate]{
 						ExhaustiveRun: false,
 						QueryParameters: &resources.QueryParameters{
 							PageSize: 5,
@@ -1188,7 +1188,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 			run: func(caSDK services.CAService) ([]*models.Certificate, error) {
 				issuedCerts := []*models.Certificate{}
 				_, err := caSDK.GetCertificatesByCA(context.Background(), services.GetCertificatesByCAInput{
-					ListInput: services.ListInput[models.Certificate]{
+					ListInput: resources.ListInput[models.Certificate]{
 						ExhaustiveRun: false,
 						QueryParameters: &resources.QueryParameters{
 							PageSize: 5,
@@ -1234,7 +1234,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 			run: func(caSDK services.CAService) ([]*models.Certificate, error) {
 				issuedCerts := []*models.Certificate{}
 				_, err := caSDK.GetCertificatesByCA(context.Background(), services.GetCertificatesByCAInput{
-					ListInput: services.ListInput[models.Certificate]{
+					ListInput: resources.ListInput[models.Certificate]{
 						ExhaustiveRun: true,
 						QueryParameters: &resources.QueryParameters{
 							PageSize: 5,
@@ -1280,7 +1280,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 			run: func(caSDK services.CAService) ([]*models.Certificate, error) {
 				issuedCerts := []*models.Certificate{}
 				_, err := caSDK.GetCertificatesByCA(context.Background(), services.GetCertificatesByCAInput{
-					ListInput: services.ListInput[models.Certificate]{
+					ListInput: resources.ListInput[models.Certificate]{
 						ExhaustiveRun: false,
 						QueryParameters: &resources.QueryParameters{
 							PageSize: 5,
@@ -1327,7 +1327,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 			run: func(caSDK services.CAService) ([]*models.Certificate, error) {
 				issuedCerts := []*models.Certificate{}
 				_, err := caSDK.GetCertificatesByCA(context.Background(), services.GetCertificatesByCAInput{
-					ListInput: services.ListInput[models.Certificate]{
+					ListInput: resources.ListInput[models.Certificate]{
 						ExhaustiveRun: true,
 						QueryParameters: &resources.QueryParameters{
 							PageSize: 5,
@@ -1989,7 +1989,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 				res, err := caSDK.GetCertificatesByExpirationDate(context.Background(), services.GetCertificatesByExpirationDateInput{
 					ExpiresAfter:  time.Now(),
 					ExpiresBefore: time.Date(2025, 0, 0, 0, 0, 0, 0, time.UTC),
-					ListInput: services.ListInput[models.Certificate]{
+					ListInput: resources.ListInput[models.Certificate]{
 						ExhaustiveRun: true,
 						QueryParameters: &resources.QueryParameters{
 							PageSize: 2,
@@ -2034,7 +2034,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 				res, err := caSDK.GetCertificatesByExpirationDate(context.Background(), services.GetCertificatesByExpirationDateInput{
 					ExpiresAfter:  time.Now(),
 					ExpiresBefore: time.Date(2025, 0, 0, 0, 0, 0, 0, time.UTC),
-					ListInput: services.ListInput[models.Certificate]{
+					ListInput: resources.ListInput[models.Certificate]{
 						ExhaustiveRun: false,
 						QueryParameters: &resources.QueryParameters{
 							PageSize: 2,
@@ -2079,7 +2079,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 				res, err := caSDK.GetCertificatesByExpirationDate(context.Background(), services.GetCertificatesByExpirationDateInput{
 					ExpiresAfter:  time.Now(),
 					ExpiresBefore: time.Date(2010, 0, 0, 0, 0, 0, 0, time.UTC),
-					ListInput: services.ListInput[models.Certificate]{
+					ListInput: resources.ListInput[models.Certificate]{
 						ExhaustiveRun: true,
 						QueryParameters: &resources.QueryParameters{
 							PageSize: 2,

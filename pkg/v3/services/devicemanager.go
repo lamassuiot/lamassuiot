@@ -8,6 +8,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/errs"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
@@ -156,7 +157,7 @@ type ProvisionDeviceSlotInput struct {
 }
 
 type GetDevicesInput struct {
-	ListInput[models.Device]
+	resources.ListInput[models.Device]
 }
 
 func (svc DeviceManagerServiceImpl) GetDevices(input GetDevicesInput) (string, error) {
@@ -166,7 +167,7 @@ func (svc DeviceManagerServiceImpl) GetDevices(input GetDevicesInput) (string, e
 
 type GetDevicesByDMSInput struct {
 	DMSID string
-	ListInput[models.Device]
+	resources.ListInput[models.Device]
 }
 
 func (svc DeviceManagerServiceImpl) GetDeviceByDMS(input GetDevicesByDMSInput) (string, error) {
