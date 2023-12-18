@@ -10,7 +10,8 @@ RUN now=$(date +'%Y-%m-%d_%T') && \
 
 # cannot use scratch becaue of the ca-certificates & hosntame -i command used by the service
 FROM ubuntu:20.04
-RUN apt-get update && apt-get install -y ca-certificates
+RUN apt-get update && apt-get install -y ca-certificates \
+    && apt-get clean
 
 COPY --from=0 /app/aws /
 CMD ["/aws"]
