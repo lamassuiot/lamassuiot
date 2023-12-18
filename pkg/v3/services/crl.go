@@ -55,7 +55,7 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte
 	_, err = svc.caSDK.GetCertificatesByCaAndStatus(ctx, GetCertificatesByCaAndStatusInput{
 		CAID:   input.CAID,
 		Status: models.StatusRevoked,
-		ListInput: ListInput[models.Certificate]{
+		ListInput: resources.ListInput[models.Certificate]{
 			ExhaustiveRun: true,
 			QueryParameters: &resources.QueryParameters{
 				PageSize: 15,

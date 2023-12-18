@@ -146,7 +146,7 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 
 		svc.service.GetCertificatesByStatus(ctx, GetCertificatesByStatusInput{
 			Status: models.StatusActive,
-			ListInput: ListInput[models.Certificate]{
+			ListInput: resources.ListInput[models.Certificate]{
 				QueryParameters: nil,
 				ExhaustiveRun:   true,
 				ApplyFunc: func(cert models.Certificate) {
@@ -1249,7 +1249,7 @@ func (svc *CAServiceImpl) GetCertificateBySerialNumber(ctx context.Context, inpu
 }
 
 type GetCertificatesInput struct {
-	ListInput[models.Certificate]
+	resources.ListInput[models.Certificate]
 }
 
 func (svc *CAServiceImpl) GetCertificates(ctx context.Context, input GetCertificatesInput) (string, error) {
@@ -1263,7 +1263,7 @@ func (svc *CAServiceImpl) GetCertificates(ctx context.Context, input GetCertific
 
 type GetCertificatesByCAInput struct {
 	CAID string `validate:"required"`
-	ListInput[models.Certificate]
+	resources.ListInput[models.Certificate]
 }
 
 // Returned Error Codes:
@@ -1304,7 +1304,7 @@ func (svc *CAServiceImpl) GetCertificatesByCA(ctx context.Context, input GetCert
 type GetCertificatesByExpirationDateInput struct {
 	ExpiresAfter  time.Time
 	ExpiresBefore time.Time
-	ListInput[models.Certificate]
+	resources.ListInput[models.Certificate]
 }
 
 func (svc *CAServiceImpl) GetCertificatesByExpirationDate(ctx context.Context, input GetCertificatesByExpirationDateInput) (string, error) {
@@ -1322,7 +1322,7 @@ func (svc *CAServiceImpl) GetCertificatesByExpirationDate(ctx context.Context, i
 type GetCertificatesByCaAndStatusInput struct {
 	CAID   string
 	Status models.CertificateStatus
-	ListInput[models.Certificate]
+	resources.ListInput[models.Certificate]
 }
 
 func (svc *CAServiceImpl) GetCertificatesByCaAndStatus(ctx context.Context, input GetCertificatesByCaAndStatusInput) (string, error) {
@@ -1336,7 +1336,7 @@ func (svc *CAServiceImpl) GetCertificatesByCaAndStatus(ctx context.Context, inpu
 
 type GetCertificatesByStatusInput struct {
 	Status models.CertificateStatus
-	ListInput[models.Certificate]
+	resources.ListInput[models.Certificate]
 }
 
 func (svc *CAServiceImpl) GetCertificatesByStatus(ctx context.Context, input GetCertificatesByStatusInput) (string, error) {

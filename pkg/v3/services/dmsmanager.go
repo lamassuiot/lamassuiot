@@ -16,6 +16,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/pkg/v3/errs"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/helpers"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/models"
+	"github.com/lamassuiot/lamassuiot/pkg/v3/resources"
 	"github.com/lamassuiot/lamassuiot/pkg/v3/storage"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
@@ -183,7 +184,7 @@ func (svc DMSManagerServiceImpl) GetDMSByID(ctx context.Context, input GetDMSByI
 }
 
 type GetAllInput struct {
-	ListInput[models.DMS]
+	resources.ListInput[models.DMS]
 }
 
 func (svc DMSManagerServiceImpl) GetAll(ctx context.Context, input GetAllInput) (string, error) {

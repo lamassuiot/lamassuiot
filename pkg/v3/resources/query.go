@@ -71,3 +71,9 @@ const (
 	EnumEqual
 	EnumNotEqual
 )
+
+type ListInput[E any] struct {
+	QueryParameters *QueryParameters
+	ExhaustiveRun   bool //wether to iter all elems
+	ApplyFunc       func(elem E)
+}

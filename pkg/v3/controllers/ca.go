@@ -544,7 +544,7 @@ func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
 
 	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCertificates(funCtx, services.GetCertificatesInput{
-		ListInput: services.ListInput[models.Certificate]{
+		ListInput: resources.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert models.Certificate) {
@@ -585,7 +585,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 	nextBookmark, err := r.svc.GetCertificatesByExpirationDate(funCtx, services.GetCertificatesByExpirationDateInput{
 		ExpiresAfter:  expirationQueryParams.ExpiresAfter,
 		ExpiresBefore: expirationQueryParams.ExpiresBefore,
-		ListInput: services.ListInput[models.Certificate]{
+		ListInput: resources.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert models.Certificate) {
@@ -639,7 +639,7 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCertificatesByCA(funCtx, services.GetCertificatesByCAInput{
 		CAID: params.ID,
-		ListInput: services.ListInput[models.Certificate]{
+		ListInput: resources.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert models.Certificate) {
@@ -840,7 +840,7 @@ func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 	nextBookmark, err := r.svc.GetCertificatesByCaAndStatus(funCtx, services.GetCertificatesByCaAndStatusInput{
 		CAID:   params.CAID,
 		Status: models.CertificateStatus(params.Status),
-		ListInput: services.ListInput[models.Certificate]{
+		ListInput: resources.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert models.Certificate) {
@@ -890,7 +890,7 @@ func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
 	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	nextBookmark, err := r.svc.GetCertificatesByStatus(funCtx, services.GetCertificatesByStatusInput{
 		Status: models.CertificateStatus(params.Status),
-		ListInput: services.ListInput[models.Certificate]{
+		ListInput: resources.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert models.Certificate) {
