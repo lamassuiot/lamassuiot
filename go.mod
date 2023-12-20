@@ -1,4 +1,4 @@
-module github.com/lamassuiot/lamassuiot
+module github.com/lamassuiot/lamassuiot/v2
 
 go 1.18
 

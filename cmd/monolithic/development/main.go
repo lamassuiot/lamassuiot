@@ -12,14 +12,14 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/clients"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/config"
-	"github.com/lamassuiot/lamassuiot/pkg/v3/test/monolithic"
-	rabbitmq_test "github.com/lamassuiot/lamassuiot/pkg/v3/test/subsystems/async-messaging/rabbitmq"
-	awskmssm_test "github.com/lamassuiot/lamassuiot/pkg/v3/test/subsystems/cryptoengines/aws-kms-sm"
-	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/pkg/v3/test/subsystems/cryptoengines/keyvaultkv2"
-	softhsmv2_test "github.com/lamassuiot/lamassuiot/pkg/v3/test/subsystems/cryptoengines/softhsmv2"
-	postgres_test "github.com/lamassuiot/lamassuiot/pkg/v3/test/subsystems/storage/postgres"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/test/monolithic"
+	rabbitmq_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/async-messaging/rabbitmq"
+	awskmssm_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/aws-kms-sm"
+	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/keyvaultkv2"
+	softhsmv2_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/softhsmv2"
+	postgres_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/storage/postgres"
 )
 
 const readyToPKI = ` 
