@@ -80,21 +80,22 @@ jobs:
     name: "Create Go package release"
     needs: [create_release, version_info]
     runs-on: ubuntu-latest
+    environment: release
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           ref: v${{ needs.version_info.outputs.major_version }}
+          token: ${{ secrets.PAT_RELEASER }}
       - run: |
-          git config user.name "GitHub Actions Bot"
+          git config user.name "Lamassu IoT Bot"
           git config user.email "lamassuiot@lamassu.io"
           git fetch
-          git merge origin/main
-          # git commit -s -m "publishing ${{ needs.version_info.outputs.release_version_with_v }} version"
+          git merge origin/main -m "publishing ${{ needs.version_info.outputs.release_version_with_v }} version"
           git push
 
   build_docker_image:
-    needs: [create_release, version_info]
+    needs: [create_release, version_info, create_gopkg_release]
     strategy:
       matrix:
         service: [ca, devmanager, dmsmanager, va, alerts, aws-connector]
@@ -103,22 +104,26 @@ jobs:
     environment: release
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           ref: v${{ needs.version_info.outputs.major_version }}
-          ssh-key: ${{ secrets.PUSH_VX_SSH_KEY }}
+      - run: |
+          echo "SHA1VER=$(git rev-parse HEAD)" >> $GITHUB_ENV
       - name: Login to Github Registry
         uses: docker/login-action@v1 
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - run: echo "ls -alh"
       - name: Build ${{ matrix.service }} DEV docker image
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v5
         with:
           file: ci/${{ matrix.service }}.dockerfile
           build-args: |
             BASE_IMAGE=alpine:3.14
+            SHA1VER=${{ env.SHA1VER }}
+            VERSION=${{ needs.version_info.outputs.release_version }}
           tags: |
             ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:${{ needs.version_info.outputs.release_version }}
             ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:latest
