@@ -98,11 +98,14 @@ func main() {
 
 	fmt.Println("Async Messaging Engine")
 	fmt.Println(">> launching docker: RabbitMQ ...")
-	rmqCleanup, rmqConfig, err := rabbitmq_test.RunRabbitMQDocker()
-	rmqConfig.LogLevel = config.Info
+	rmqCleanup, rmqConfig, adminPort, err := rabbitmq_test.RunRabbitMQDocker()
 	if err != nil {
 		log.Fatalf("could not launch RabbitMQ: %s", err)
 	}
+	fmt.Printf(" 	-- rabbitmq UI port: %d\n", adminPort)
+	fmt.Printf(" 	-- rabbitmq amqp port: %d\n", rmqConfig.Port)
+	fmt.Printf(" 	-- rabbitmq user: %s\n", rmqConfig.BasicAuth.Username)
+	fmt.Printf(" 	-- rabbitmq pass: %s\n", rmqConfig.BasicAuth.Password)
 
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
 
@@ -151,8 +154,13 @@ func main() {
 
 	conf := config.MonolithicConfig{
 		BaseConfig: config.BaseConfig{
-			Logs:           config.BaseConfigLogging{Level: config.Info},
-			AMQPConnection: *rmqConfig,
+			Logs: config.BaseConfigLogging{Level: config.Info},
+			EventBus: config.EventBusEngine{
+				LogLevel: config.Trace,
+				Enabled:  true,
+				Provider: config.Amqp,
+				Amqp:     *rmqConfig,
+			},
 		},
 		Domain:       "dev.lamassu.test",
 		GatewayPort:  8443,
@@ -191,7 +199,7 @@ func main() {
 		},
 		CryptoMonitoring: config.CryptoMonitoring{
 			Enabled:   true,
-			Frequency: "0 * * * *",
+			Frequency: "* * * * *",
 		},
 		Storage: config.PluggableStorageEngine{
 			LogLevel: config.Trace,

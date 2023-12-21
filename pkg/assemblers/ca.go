@@ -7,7 +7,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/messaging"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/amqppub"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
@@ -39,7 +39,7 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, serviceInfo models.AP
 
 func AssembleCAService(conf config.CAConfig) (*services.CAService, error) {
 	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Service")
-	lMessage := helpers.ConfigureLogger(conf.AMQPConnection.LogLevel, "Messaging")
+	lMessage := helpers.ConfigureLogger(conf.EventBus.LogLevel, "Event Bus")
 	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Storage")
 	lCryptoEng := helpers.ConfigureLogger(conf.CryptoEngines.LogLevel, "CryptoEngine")
 
@@ -76,14 +76,14 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, error) {
 
 	caSvc := svc.(*services.CAServiceImpl)
 
-	if conf.AMQPConnection.Enabled {
-		log.Infof("AMQP event publisher enabled")
-		amqpEventPub, err := messaging.SetupAMQPConnection(lMessage, conf.AMQPConnection, models.CASource)
+	if conf.EventBus.Enabled {
+		log.Infof("Event Bus is enabled")
+		eventBus, err := messaging.NewMessagingEngine(lMessage, conf.EventBus, "ca")
 		if err != nil {
-			return nil, fmt.Errorf("could not setup AMQP connection: %s", err)
+			return nil, fmt.Errorf("could not setup event bus: %s", err)
 		}
 
-		svc = amqppub.NewCAAmqpEventPublisher(amqpEventPub)(svc)
+		svc = eventpub.NewCAEventBusPublisher(eventBus)(svc)
 	}
 
 	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)

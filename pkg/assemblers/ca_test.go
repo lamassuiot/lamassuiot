@@ -2738,9 +2738,7 @@ func BuildCATestServer() (*CATestServer, error) {
 				HealthCheckLogging: false,
 				Protocol:           config.HTTP,
 			},
-			AMQPConnection: config.AMQPConnection{
-				Enabled: false,
-			},
+			EventBus: config.EventBusEngine{Enabled: false},
 		},
 		Storage: config.PluggableStorageEngine{
 			LogLevel: config.Info,

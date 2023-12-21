@@ -21,7 +21,7 @@ import (
 
 func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAService, dmsService services.DMSManagerService, deviceService services.DeviceManagerService) (*iot.AWSCloudConnectorService, error) {
 	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Service")
-	lMessaging := helpers.ConfigureLogger(conf.BaseConfig.AMQPConnection.LogLevel, "Messaging")
+	lMessaging := helpers.ConfigureLogger(conf.BaseConfig.EventBus.LogLevel, "Messaging")
 
 	awsCfg, err := config.GetAwsSdkConfig(conf.AWSSDKConfig)
 	if err != nil {
@@ -40,22 +40,19 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 		log.Fatal(err)
 	}
 
-	amqpSetup, err := messaging.SetupAMQPConnection(lMessaging, conf.AMQPConnection, models.AWSIoTSource(conf.ConnectorID))
+	eventBus, err := messaging.NewMessagingEngine(lMessaging, conf.EventBus, "aws-connector")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not setup event bus: %s", err)
 	}
 
-	err = amqpSetup.SetupAMQPEventSubscriber("cloud-connector", []string{"#"})
-	if err != nil {
-		return nil, err
-	}
+	subs, err := eventBus.Subscriber.Subscribe(context.Background(), "#")
 
 	go func() {
 		for {
 			select {
-			case amqpMessage := <-amqpSetup.Msgs:
-				lMessaging.Trace(string(amqpMessage.Body))
-				event, err := messaging.ParseCloudEvent(amqpMessage.Body)
+			case message := <-subs:
+				lMessaging.Trace(string(message.Payload))
+				event, err := messaging.ParseCloudEvent(message.Payload)
 				if err != nil {
 					logrus.Errorf("Something went wrong while processing cloud event: %s", err)
 					continue

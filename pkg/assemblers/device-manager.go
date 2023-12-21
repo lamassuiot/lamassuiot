@@ -1,15 +1,14 @@
 package assemblers
 
 import (
+	"context"
 	"fmt"
-	"io"
-	"os"
 	"slices"
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/messaging"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/amqppub"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
@@ -41,9 +40,7 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService services.CAService) (*services.DeviceManagerService, error) {
 	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Service")
 
-	file, _ := os.OpenFile("device.logs", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
-	lMessaging := helpers.ConfigureLogger(conf.AMQPConnection.LogLevel, "Messaging")
-	lMessaging.Logger.SetOutput(io.MultiWriter(os.Stdout, file))
+	lMessaging := helpers.ConfigureLogger(conf.EventBus.LogLevel, "Messaging")
 	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Storage")
 
 	devStorage, err := createDevicesStorageInstance(lStorage, conf.Storage)
@@ -59,38 +56,26 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 
 	deviceSvc := svc.(*services.DeviceManagerServiceImpl)
 
-	//this utilizes the middlewares from within the DMS service (if svc.Service.func is uses instead of regular svc.func)
-	deviceSvc.SetService(svc)
+	if conf.EventBus.Enabled {
+		log.Infof("Event Bus is enabled")
+		eventBus, err := messaging.NewMessagingEngine(lMessaging, conf.EventBus, "device-manager")
+		if err != nil {
+			return nil, fmt.Errorf("could not setup event bus: %s", err)
+		}
 
-	amqpSetup, err := messaging.SetupAMQPConnection(lMessaging, conf.AMQPConnection, models.DeviceManagerSource)
-	if err != nil {
-		return nil, err
-	}
+		svc = eventpub.NewDeviceEventPublisher(eventBus)(svc)
+		deviceSvc.SetService(svc)
 
-	svc = amqppub.NewDeviceAmqpEventPublisher(amqpSetup)(svc)
-
-	deviceSvc.SetService(svc)
-
-	err = amqpSetup.SetupAMQPEventSubscriber(models.DeviceManagerSource, []string{
-		string(models.EventUpdateCertificateStatusKey),
-		string(models.EventUpdateCertificateMetadataKey),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	go func() {
-		for {
-			select {
-			case amqpMessage := <-amqpSetup.Msgs:
-				event, err := messaging.ParseCloudEvent(amqpMessage.Body)
-				if err != nil {
-					lMessaging.Errorf("something went wrong while processing cloud event: %s", err)
-					continue
-				}
-
-				switch event.Type() {
-				case string(models.EventUpdateCertificateStatusKey):
+		updateCertStatusSub, err := eventBus.Subscriber.Subscribe(context.Background(), string(models.EventUpdateCertificateStatusKey))
+		go func() {
+			for {
+				select {
+				case message := <-updateCertStatusSub:
+					event, err := messaging.ParseCloudEvent(message.Payload)
+					if err != nil {
+						lMessaging.Errorf("something went wrong while processing cloud event: %s", err)
+						continue
+					}
 					cert, err := getEventBody[models.UpdateModel[models.Certificate]](event)
 					if err != nil {
 						lMessaging.Errorf("could not decode cloud event: %s", err)
@@ -143,8 +128,21 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 							continue
 						}
 					}
+				}
+			}
+		}()
 
-				case string(models.EventUpdateCertificateMetadataKey):
+		updateCertMetaSub, err := eventBus.Subscriber.Subscribe(context.Background(), string(models.EventUpdateCertificateMetadataKey))
+		go func() {
+			for {
+				select {
+				case message := <-updateCertMetaSub:
+					event, err := messaging.ParseCloudEvent(message.Payload)
+					if err != nil {
+						lMessaging.Errorf("something went wrong while processing cloud event: %s", err)
+						continue
+					}
+
 					certUpdate, err := getEventBody[models.UpdateModel[models.Certificate]](event)
 					if err != nil {
 						lMessaging.Errorf("could not decode cloud event: %s", err)
@@ -224,12 +222,10 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 							}
 						}
 					}
-
 				}
-
 			}
-		}
-	}()
+		}()
+	}
 
 	return &svc, nil
 }
