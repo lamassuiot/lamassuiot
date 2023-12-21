@@ -20,7 +20,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 # Dependencies for pkcs11-proxy and opensc for pkcs11-tool
 RUN apt-get update && \
-    apt-get install -y  git-core make cmake libssl-dev libseccomp-dev opensc && \
+    apt-get --no-install-recommends install -y git-core libc6-dev gcc make cmake libssl-dev libseccomp-dev opensc ca-certificates && \
     apt-get clean
 
 RUN git clone https://github.com/SUNET/pkcs11-proxy && \
@@ -29,6 +29,10 @@ RUN git clone https://github.com/SUNET/pkcs11-proxy && \
 
 # Clean build artifacts
 RUN rm -rf /pkcs11-proxy
+# Clean compilation dependencies
+RUN apt-get remove -y git-core libc6-dev gcc make cmake libssl-dev libseccomp-dev && \
+    apt-get autoremove -y && \
+    apt-get clean
 
 ARG USERNAME=lamassu
 ARG USER_UID=1000
