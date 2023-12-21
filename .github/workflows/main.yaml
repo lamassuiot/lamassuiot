@@ -62,7 +62,7 @@ jobs:
           prerelease: false
           release_name: $RELEASE_VERSION_WITH_V
           tag_name: $RELEASE_VERSION_WITH_V
-          body_path: CHANGELOG.md
+          # body_path: CHANGELOG.md
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - name: Upload vendor dependencies
@@ -77,7 +77,7 @@ jobs:
 
   create_gopkg_release:
     name: "Create Go package release"
-    needs: [print_version]
+    needs: [create_release]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
