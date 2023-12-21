@@ -53,7 +53,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 					Port:               0,
 					Protocol:           config.HTTP,
 				},
-				AMQPConnection: conf.AMQPConnection,
+				EventBus: conf.EventBus,
 			},
 			Storage:          conf.Storage,
 			CryptoEngines:    conf.CryptoEngines,
@@ -94,7 +94,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 					Port:               0,
 					Protocol:           config.HTTP,
 				},
-				AMQPConnection: conf.AMQPConnection,
+				EventBus: conf.EventBus,
 			},
 		}, caSDKBuilder(models.VASource), apiInfo)
 		if err != nil {
@@ -113,7 +113,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 					Port:               0,
 					Protocol:           config.HTTP,
 				},
-				AMQPConnection: conf.AMQPConnection,
+				EventBus: conf.EventBus,
 			},
 			Storage: conf.Storage,
 		}, caSDKBuilder(models.DeviceManagerSource), apiInfo)
@@ -150,7 +150,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 					Port:               0,
 					Protocol:           config.HTTP,
 				},
-				AMQPConnection: conf.AMQPConnection,
+				EventBus: conf.EventBus,
 			},
 			DownstreamCertificateFile: "proxy.crt",
 			Storage:                   conf.Storage,
@@ -188,7 +188,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 					Port:               0,
 					Protocol:           config.HTTP,
 				},
-				AMQPConnection: conf.AMQPConnection,
+				EventBus: conf.EventBus,
 			},
 			Storage: conf.Storage,
 		}, apiInfo)
@@ -202,7 +202,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 					Logs: config.BaseConfigLogging{
 						Level: config.Info,
 					},
-					AMQPConnection: conf.AMQPConnection,
+					EventBus: conf.EventBus,
 				},
 				ConnectorID:  conf.AWSIoTManager.ConnectorID,
 				AWSSDKConfig: conf.AWSIoTManager.AWSSDKConfig,

@@ -8,13 +8,71 @@ import (
 	"crypto/sha512"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"math/big"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
 )
+
+//Cammbio de la función para definir la longevidad de la expiración de la CA.
+
+func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.Duration) (*x509.Certificate, any, error) {
+	var err error
+	var key any
+	var pubKey any
+
+	switch keyType {
+	case x509.RSA:
+		rsaKey, err := GenerateRSAKey(2048)
+		if err != nil {
+			return nil, nil, err
+		}
+		key = rsaKey
+		pubKey = &rsaKey.PublicKey
+	case x509.ECDSA:
+		eccKey, err := GenerateECDSAKey(elliptic.P224())
+		if err != nil {
+			return nil, nil, err
+		}
+		key = eccKey
+		pubKey = &eccKey.PublicKey
+	}
+
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
+	template := x509.Certificate{
+		SerialNumber: sn,
+		Subject: pkix.Name{
+			CommonName: "Test-CA-External",
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              (time.Now().Add(expirationTime)),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsage(x509.ExtKeyUsageOCSPSigning),
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, pubKey, key)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	cert, err := x509.ParseCertificate(derBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return cert, key, nil
+
+}
 
 // defined to generate certificates with RSA and ECDSA keys
 func GenerateCertificateRequest(subject models.Subject, key any) (*x509.CertificateRequest, error) {
