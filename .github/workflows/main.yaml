@@ -18,8 +18,9 @@ jobs:
     steps:
       - name: Check release version inputs
         run: |
-          # regex obtained from: https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
-          if [[ ${{ github.event.inputs.release_version }} =~ ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$ ]]; then
+          # regex obtained from: https://stackoverflow.com/a/50529645
+          SEMVER_REGEX="^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(\\-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+          if [[ ${{ github.event.inputs.release_version }} =~ $SEMVER_REGEX ]]; then
               echo "match=true" >> $GITHUB_OUTPUT
           else
               echo "Aborting action, invalid version input. Got: ${{ github.event.inputs.release_version }}"
