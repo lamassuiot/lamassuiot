@@ -60,8 +60,8 @@ jobs:
         with:
           draft: false
           prerelease: false
-          release_name: $RELEASE_VERSION_WITH_V
-          tag_name: $RELEASE_VERSION_WITH_V
+          release_name: ${{ env.RELEASE_VERSION_WITH_V }}
+          tag_name: ${{ env.RELEASE_VERSION_WITH_V }}
           # body_path: CHANGELOG.md
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -83,7 +83,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
         with:
-          ref: $MAJOR_VERSION"
+          ref: ${{ env.MAJOR_VERSION }}
       - run: |
           git merge main
           git commit -m "publishing $RELEASE_VERSION_WITH_V version"
@@ -110,6 +110,6 @@ jobs:
           build-args: |
             BASE_IMAGE=alpine:3.14
           tags: |
-            ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:$RELEASE_VERSION
+            ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:${{ env.RELEASE_VERSION }}
             ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:latest
           push: true
