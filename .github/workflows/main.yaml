@@ -7,6 +7,7 @@ on:
         type: string
         description: release version when building docker containers (example; 2.0.0)
 env:
+  MAJOR_VERSION: ''
   RELEASE_VERSION: ''
   RELEASE_VERSION_WITH_V: ''
 
@@ -15,12 +16,26 @@ jobs:
     name: "Version Info"
     runs-on: ubuntu-latest
     steps:
+      - name: Check release version inputs
+        run: |
+          # regex obtained from: https://semver.org/#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
+          if [[ ${{ github.event.inputs.release_version }} =~ ^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?$ ]]; then
+              echo "match=true" >> $GITHUB_OUTPUT
+          elif
+              echo "Aborting action, invalid version input. Got: ${{ github.event.inputs.release_version }}"
+              exit 1
+          fi
+      - name: Change MAJOR_VERSION env variable
+        run: |
+          major=`echo ${{ github.event.inputs.release_version }} | cut -d. -f1`
+          echo "::set-env name=MAJOR_VERSION::$major"
       - name: Change RELEASE_VERSION env variable
         run: echo "::set-env name=RELEASE_VERSION::${{ github.event.inputs.release_version }}"
       - name: Change RELEASE_VERSION_WITH_V env variable
         run: echo "::set-env name=RELEASE_VERSION_WITH_V::v${{ github.event.inputs.release_version }}"
-      - name: Change RELEASE_VERSION_WITH_V env variable
+      - name: Print Info
         run: |
+          echo "MAJOR_VERSION          = $MAJOR_VERSION"
           echo "RELEASE_VERSION        = $RELEASE_VERSION"
           echo "RELEASE_VERSION_WITH_V = $RELEASE_VERSION_WITH_V"
   create_release:
@@ -58,6 +73,21 @@ jobs:
           asset_path: ./vendor.zip
           asset_name: vendor.zip
           asset_content_type: application/zip
+
+  create_gopkg_release:
+    name: "Create Go package release"
+    needs: [print_version]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          ref: $MAJOR_VERSION"
+      - run: |
+          git merge main
+          git commit -m "publishing $RELEASE_VERSION_WITH_V version"
+          git push
+
   build_docker_image:
     needs: [create_release]
     strategy:
