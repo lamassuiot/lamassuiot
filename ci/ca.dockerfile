@@ -4,13 +4,15 @@ WORKDIR /app
 COPY .git .git
 COPY cmd cmd
 COPY pkg pkg
-COPY vendor vendor
 COPY go.mod go.mod
 COPY go.sum go.sum
 
+# Since no vendoring, donwload dependencies
+RUN go mod tidy
+
 ENV GOSUMDB=off
 RUN now=$(date +'%Y-%m-%d_%T') && \ 
-    go build -ldflags "-X main.sha1ver=`git rev-parse HEAD` -X main.buildTime=$now" -mod=vendor -o ca cmd/ca/main.go 
+    go build -ldflags "-X main.sha1ver=`git rev-parse HEAD` -X main.buildTime=$now" -o ca cmd/ca/main.go 
 
 # Alpine and scartch dont work for this image due to non corss compileable HSM library
 FROM ubuntu:20.04

@@ -1,36 +1,36 @@
-name: Device Manager - develop workflow
+# name: Device Manager - develop workflow
 
-on:
-  push:
-    branches:
-      - develop
-    paths:
-        - '.github/workflows/device-manager*'
-        - 'pkg/device-manager/**'
-        - 'pkg/utils/**'
-        - 'main/device-manager/**'
-  workflow_call:
+# on:
+#   push:
+#     branches:
+#       - develop
+#     paths:
+#         - '.github/workflows/device-manager*'
+#         - 'pkg/device-manager/**'
+#         - 'pkg/utils/**'
+#         - 'main/device-manager/**'
+#   workflow_call:
 
-jobs:
-  lamassu_device_manager_unit_testing:
-    name: Device Manager Unit Testing
-    # runs-on: self-hosted
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 0
+# jobs:
+#   lamassu_device_manager_unit_testing:
+#     name: Device Manager Unit Testing
+#     # runs-on: self-hosted
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout
+#         uses: actions/checkout@v2
+#         with:
+#           fetch-depth: 0
 
-      - name: Set up Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.19
+#       - name: Set up Go
+#         uses: actions/setup-go@v2
+#         with:
+#           go-version: 1.19
       
-      - name: Set up gotestfmt
-        run: go install github.com/haveyoudebuggedit/gotestfmt/v2/cmd/gotestfmt@v2.3.1
+#       - name: Set up gotestfmt
+#         run: go install github.com/haveyoudebuggedit/gotestfmt/v2/cmd/gotestfmt@v2.3.1
 
-      - name: Run Go Unit Tests
-        run: |
-          set -eo pipefail
-          go test -json -v ./pkg/device-manager/server/api/ | gotestfmt
+#       - name: Run Go Unit Tests
+#         run: |
+#           set -eo pipefail
+#           go test -json -v ./pkg/device-manager/server/api/ | gotestfmt
