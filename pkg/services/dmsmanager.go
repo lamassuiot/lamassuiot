@@ -534,7 +534,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 
 	lDMS.Debugf("checking CSR has same RawSubject as the previous enrollment at byte level. DeviceID=%s ActiveVersion=%d", device.ID, device.IdentitySlot.ActiveVersion)
 	//Compare CRT & CSR Subject bytes
-	if slices.Compare[byte](currentDeviceCert.Certificate.RawSubject, csr.RawSubject) != 0 {
+	if slices.Compare(currentDeviceCert.Certificate.RawSubject, csr.RawSubject) != 0 {
 		lDMS.Tracef("current device certificate raw subject (len=%d):\n%v", len(currentDeviceCert.Certificate.RawSubject), currentDeviceCert.Certificate.RawSubject)
 		lDMS.Tracef("incoming csr raw subject (len=%d):\n%v", len(csr.RawSubject), csr.RawSubject)
 		lDMS.Warnf("incoming CSR for device %s has different RawSubject compared with previous enrollment with ActiveVersion=%d. Will try shallow comparison", device.ID, device.IdentitySlot.ActiveVersion)
