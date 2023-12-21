@@ -33,4 +33,4 @@ go tool cover -func=cover.out
 
 ## ARM
 
-CGO_ENABLED=1 GOARCH=arm64 go build -ldflags "-X main.sha1ver=`git rev-parse HEAD` -X main.buildTime=$now" -mod=vendor -o ca cmd/ca/main.go 
+CGO_ENABLED=1 GOARCH=arm64 go build -ldflags "-X main.sha1ver=`git rev-parse HEAD` -X main.buildTime=$now" -o ca cmd/ca/main.go 

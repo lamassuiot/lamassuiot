@@ -6,13 +6,15 @@ WORKDIR /app
 COPY .git .git
 COPY cmd cmd
 COPY pkg pkg
-COPY vendor vendor
 COPY go.mod go.mod
 COPY go.sum go.sum
 
+# Since no vendoring, donwload dependencies
+RUN go mod tidy
+
 ENV GOSUMDB=off
 RUN now=$(date +'%Y-%m-%d_%T') && \
-    go build -ldflags "-X main.sha1ver=`git rev-parse HEAD` -X main.buildTime=$now" -mod=vendor -o aws cmd/aws/main.go 
+    go build -ldflags "-X main.sha1ver=`git rev-parse HEAD` -X main.buildTime=$now" -o aws cmd/aws/main.go 
 
 # cannot use scratch becaue of the ca-certificates & hosntame -i command used by the service
 FROM ubuntu:20.04

@@ -1,6 +1,0 @@
-
-.vscode/*
-*.exe
-debug
-debug.test
-go.sum
