@@ -1,18 +1,20 @@
 FROM golang:1.21-bullseye
 WORKDIR /app
 
-COPY .git .git
 COPY cmd cmd
 COPY pkg pkg
 COPY go.mod go.mod
 COPY go.sum go.sum
+
+ARG SHA1VER= # set by build script
+ARG VERSION= # set by build script
 
 # Since no vendoring, donwload dependencies
 RUN go mod tidy
 
 ENV GOSUMDB=off
 RUN now=$(date +'%Y-%m-%d_%T') && \ 
-    go build -ldflags "-X main.sha1ver=`git rev-parse HEAD` -X main.buildTime=$now" -o ca cmd/ca/main.go 
+    go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -o ca cmd/ca/main.go 
 
 # Alpine and scartch dont work for this image due to non corss compileable HSM library
 FROM ubuntu:20.04
