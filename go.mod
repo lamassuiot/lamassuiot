@@ -1,10 +1,12 @@
 module github.com/lamassuiot/lamassuiot/v2
 
-go 1.18
+go 1.21
 
 require (
 	github.com/AvraamMavridis/randomcolor v0.0.0-20180822172341-208aff70bf2c
 	github.com/ThalesIgnite/crypto11 v1.2.1
+	github.com/ThreeDotsLabs/watermill v1.3.5
+	github.com/ThreeDotsLabs/watermill-amqp/v2 v2.1.1
 	github.com/antonfisher/nested-logrus-formatter v1.3.1
 	github.com/aws/aws-sdk-go-v2 v1.23.1
 	github.com/aws/aws-sdk-go-v2/config v1.25.5
@@ -26,17 +28,14 @@ require (
 	github.com/go-playground/validator/v10 v10.14.0
 	github.com/haritzsaiz/gin-dump v0.2.0
 	github.com/hashicorp/vault/api v1.9.2
-	github.com/isayme/go-amqp-reconnect v0.0.0-20210303120416-fc811b0bcda2
 	github.com/jakehl/goid v1.1.0
 	github.com/kuzemkon/aws-iot-device-sdk-go v0.0.0-20200313144654-1a36b3aacf19
 	github.com/miekg/pkcs11 v1.1.1
 	github.com/ory/dockertest/v3 v3.10.0
-	github.com/pquerna/otp v1.4.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sigstore/sigstore/pkg/signature/kms/aws v1.7.3
 	github.com/sirupsen/logrus v1.9.1
 	github.com/spf13/viper v1.7.0
-	github.com/streadway/amqp v1.0.0
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.0
 	github.com/swaggo/swag v1.16.1
@@ -69,7 +68,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.20.1 // indirect
 	github.com/aws/smithy-go v1.17.0 // indirect
 	github.com/benbjohnson/clock v1.3.0 // indirect
-	github.com/boombuler/barcode v1.0.1-0.20190219062509-6c824513bacc // indirect
 	github.com/bytedance/sonic v1.9.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.0 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
@@ -107,16 +105,19 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
 	github.com/letsencrypt/boulder v0.0.0-20221109233200-85aa52084eaf // indirect
 	github.com/lib/pq v1.10.9 // indirect
+	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
 	github.com/magiconair/properties v1.8.1 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/moby/term v0.0.0-20221205130635-1aeaba878587 // indirect
+	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0-rc3 // indirect
 	github.com/opencontainers/runc v1.1.6 // indirect
 	github.com/pelletier/go-toml v1.9.3 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
+	github.com/rabbitmq/amqp091-go v1.9.0 // indirect
 	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	github.com/sigstore/sigstore v1.7.3 // indirect
 	github.com/spf13/afero v1.2.2 // indirect
@@ -149,7 +150,7 @@ require (
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
-	github.com/google/uuid v1.3.0
+	github.com/google/uuid v1.5.0
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-hclog v1.5.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect

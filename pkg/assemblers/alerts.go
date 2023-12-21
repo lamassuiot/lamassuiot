@@ -36,7 +36,7 @@ func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo m
 
 func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, error) {
 	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Service")
-	lMessage := helpers.ConfigureLogger(conf.AMQPConnection.LogLevel, "Messaging")
+	lMessage := helpers.ConfigureLogger(conf.EventBus.LogLevel, "Event Bus")
 	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Storage")
 
 	subStorage, eventStore, err := createAlertsStorageInstance(lStorage, conf.Storage)
@@ -50,36 +50,33 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 		EventStorage: eventStore,
 	})
 
-	if conf.AMQPConnection.Enabled {
-		log.Infof("AMQP Connection enabled")
-		amqpConnection, err := messaging.SetupAMQPConnection(lMessage, conf.AMQPConnection, models.AlertsSource)
+	if conf.EventBus.Enabled {
+		log.Infof("Event Bus is enabled")
+		eventBus, err := messaging.NewMessagingEngine(lMessage, conf.EventBus, "alerts")
 		if err != nil {
-			return nil, fmt.Errorf("could not setup amqp connection: %s", err)
+			return nil, fmt.Errorf("could not setup event bus: %s", err)
 		}
 
-		amqpConnection.SetupAMQPEventSubscriber("alerts-v2", []string{"#"})
-
-		onMessage := amqpConnection.Msgs
+		subs, err := eventBus.Subscriber.Subscribe(context.Background(), "#")
 		go func() {
-			lMessage.Info("ready to receive messages")
 			for {
 				select {
-				case msg := <-onMessage:
-					lMessage.Trace("new incoming message")
-					lMessage.Trace(msg.Type)
-					event, err := messaging.ParseCloudEvent(msg.Body)
+				case message := <-subs:
+					event, err := messaging.ParseCloudEvent(message.Payload)
 					if err != nil {
-						lMessage.Errorf("could not decode message into cloud event: %s", err)
+						lMessage.Errorf("something went wrong while processing cloud event: %s", err)
 						continue
 					}
+
 					svc.HandleEvent(context.Background(), &services.HandleEventInput{
 						Event: *event,
 					})
 				}
+
 			}
 		}()
-	}
 
+	}
 	return &svc, nil
 }
 

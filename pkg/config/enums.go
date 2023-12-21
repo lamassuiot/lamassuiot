@@ -31,6 +31,13 @@ const (
 	AMQPS AMQPProtocol = "amqps"
 )
 
+type EventBusProvider string
+
+const (
+	Amqp      EventBusProvider = "amqp"
+	AWSSqsSns EventBusProvider = "aws_sqs_sns"
+)
+
 type StorageProvider string
 
 const (

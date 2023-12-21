@@ -6,7 +6,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/messaging"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/amqppub"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
@@ -37,7 +37,7 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 
 func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService) (*services.DMSManagerService, error) {
 	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Service")
-	lMessage := helpers.ConfigureLogger(conf.AMQPConnection.LogLevel, "Messaging")
+	lMessage := helpers.ConfigureLogger(conf.EventBus.LogLevel, "Event Bus")
 	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Storage")
 
 	downCert, err := helpers.ReadCertificateFromFile(conf.DownstreamCertificateFile)
@@ -60,16 +60,15 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 
 	dmsSvc := svc.(*services.DMSManagerServiceImpl)
 
-	if conf.AMQPConnection.Enabled {
-		log.Infof("AMQP event publisher enabled")
-		amqpEventPub, err := messaging.SetupAMQPConnection(lMessage, conf.AMQPConnection, models.DMSManagerSource)
+	if conf.EventBus.Enabled {
+		log.Infof("Event Bus is enabled")
+		eventBus, err := messaging.NewMessagingEngine(lMessage, conf.EventBus, "dms-manager")
 		if err != nil {
-			return nil, fmt.Errorf("could not setup AMQP connection: %s", err)
+			return nil, fmt.Errorf("could not setup event bus: %s", err)
 		}
 
-		svc = amqppub.NewDMSAmqpEventPublisher(amqpEventPub)(svc)
-	}
-	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
+		svc = eventpub.NewDMSEventPublisher(eventBus)(svc)
+	} //this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
 	dmsSvc.SetService(svc)
 
 	return &svc, nil

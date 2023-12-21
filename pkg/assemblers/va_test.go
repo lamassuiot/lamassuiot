@@ -445,7 +445,7 @@ func BuildVATestServer() (*VATestServer, error) {
 				HealthCheckLogging: false,
 				Protocol:           config.HTTP,
 			},
-			AMQPConnection: config.AMQPConnection{Enabled: false},
+			EventBus: config.EventBusEngine{Enabled: false},
 		},
 		CAClient: config.CAClient{},
 	}, caServer.HttpCASDK, models.APIServiceInfo{

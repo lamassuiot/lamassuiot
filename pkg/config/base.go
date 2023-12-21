@@ -32,7 +32,7 @@ type BaseConfig struct {
 	Server HttpServer `mapstructure:"server"`
 
 	// AMQP config options.
-	AMQPConnection AMQPConnection `mapstructure:"amqp"`
+	EventBus EventBusEngine `mapstructure:"event_bus"`
 }
 
 type HttpServer struct {
@@ -82,6 +82,16 @@ type PostgresPSEConfig struct {
 	Password Password `mapstructure:"password"`
 }
 
+type EventBusEngine struct {
+	LogLevel LogLevel `mapstructure:"log_level"`
+	Enabled  bool     `mapstructure:"enabled"`
+
+	Provider EventBusProvider `mapstructure:"provider"`
+
+	Amqp      AMQPConnection `mapstructure:"couch_db"`
+	AWSSqsSns AMQPConnection `mapstructure:"aws_sqs_sns"`
+}
+
 type TLSConfig struct {
 	InsecureSkipVerify bool   `mapstructure:"insecure_skip_verify"`
 	CACertificateFile  string `mapstructure:"ca_cert_file"`
@@ -100,10 +110,8 @@ type HTTPConnection struct {
 }
 
 type AMQPConnection struct {
-	LogLevel        LogLevel `mapstructure:"log_level"`
 	BasicConnection `mapstructure:",squash"`
 	Exchange        string                  `mapstructure:"exchange"`
-	Enabled         bool                    `mapstructure:"enabled"`
 	Protocol        AMQPProtocol            `mapstructure:"protocol"`
 	BasicAuth       AMQPConnectionBasicAuth `mapstructure:"basic_auth"`
 	ClientTLSAuth   struct {
