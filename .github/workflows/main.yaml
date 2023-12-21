@@ -29,11 +29,11 @@ jobs:
       - name: Change MAJOR_VERSION env variable
         run: |
           major=`echo ${{ github.event.inputs.release_version }} | cut -d. -f1`
-          echo "::set-env name=MAJOR_VERSION::$major"
+          echo "MAJOR_VERSION=$major" >> "$GITHUB_ENV"
       - name: Change RELEASE_VERSION env variable
-        run: echo "::set-env name=RELEASE_VERSION::${{ github.event.inputs.release_version }}"
+        run: echo "RELEASE_VERSION=${{ github.event.inputs.release_version }}" >> "$GITHUB_ENV"
       - name: Change RELEASE_VERSION_WITH_V env variable
-        run: echo "::set-env name=RELEASE_VERSION_WITH_V::v${{ github.event.inputs.release_version }}"
+        run: echo "RELEASE_VERSION_WITH_V=v${{ github.event.inputs.release_version }}" >> "$GITHUB_ENV"
       - name: Print Info
         run: |
           echo "MAJOR_VERSION          = $MAJOR_VERSION"
