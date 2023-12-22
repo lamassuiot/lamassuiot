@@ -1,7 +1,6 @@
 FROM golang:1.21-bullseye
 WORKDIR /app
 
-COPY .git .git
 COPY cmd cmd
 COPY pkg pkg
 COPY go.mod go.mod
