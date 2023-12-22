@@ -39,14 +39,31 @@ jobs:
       major_version: ${{ env.MAJOR_VERSION }}
       release_version: ${{ env.RELEASE_VERSION }}
       release_version_with_v: ${{ env.RELEASE_VERSION_WITH_V }}
-
-  create_release:
-    name: Create Release
+  create_tag:
+    name: Create Tag
     needs: [version_info]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Create Tag
+        run: |
+          git config user.name "Lamassu IoT Bot"
+          git config user.email "lamassuiot@lamassu.io"
+          git tag ${{ needs.version_info.outputs.release_version_with_v }} -m "Release ${{ needs.version_info.outputs.release_version_with_v }}"
+          git push origin ${{ needs.version_info.outputs.release_version_with_v }}
+
+  create_release:
+    name: Create Release
+    needs: [create_tag, version_info]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version_info.outputs.release_version_with_v }}
       - name: Create Github Release
         uses: actions/create-release@v1
         id: create_release
@@ -78,7 +95,7 @@ jobs:
 
   create_gopkg_release:
     name: "Create Go package release"
-    needs: [create_release, version_info]
+    needs: [create_tag, version_info]
     runs-on: ubuntu-latest
     environment: release
     steps:
@@ -87,6 +104,7 @@ jobs:
         with:
           ref: v${{ needs.version_info.outputs.major_version }}
           token: ${{ secrets.PAT_RELEASER }}
+          fetch-tags: true
       - run: |
           git config user.name "Lamassu IoT Bot"
           git config user.email "lamassuiot@lamassu.io"
@@ -95,7 +113,7 @@ jobs:
           git push
 
   build_docker_image:
-    needs: [create_release, version_info, create_gopkg_release]
+    needs: [create_tag, version_info]
     strategy:
       matrix:
         service: [ca, devmanager, dmsmanager, va, alerts, aws-connector]
@@ -106,19 +124,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: v${{ needs.version_info.outputs.major_version }}
+          ref: ${{ needs.version_info.outputs.release_version_with_v }}
+          fetch-tags: true
       - run: |
           echo "SHA1VER=$(git rev-parse HEAD)" >> $GITHUB_ENV
       - name: Login to Github Registry
-        uses: docker/login-action@v1 
+        uses: docker/login-action@v3 
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - run: echo "ls -alh"
       - name: Build ${{ matrix.service }} DEV docker image
         uses: docker/build-push-action@v5
         with:
+          context: .
           file: ci/${{ matrix.service }}.dockerfile
           build-args: |
             BASE_IMAGE=alpine:3.14
