@@ -1,4 +1,4 @@
-name: "PROD: Docker Releaser Workflow"
+name: "Release Workflow: (create repo release, docker images and go packages)"
 
 on:
   workflow_dispatch:
@@ -6,13 +6,9 @@ on:
       release_version:
         type: string
         description: release version when building docker containers (example; 2.0.0)
-env:
-  MAJOR_VERSION: ''
-  RELEASE_VERSION: ''
-  RELEASE_VERSION_WITH_V: ''
 
 jobs:
-  print_version:
+  version_info:
     name: "Version Info"
     runs-on: ubuntu-latest
     steps:
@@ -39,13 +35,46 @@ jobs:
           echo "MAJOR_VERSION          = $MAJOR_VERSION"
           echo "RELEASE_VERSION        = $RELEASE_VERSION"
           echo "RELEASE_VERSION_WITH_V = $RELEASE_VERSION_WITH_V"
-  create_release:
-    name: Create Release
-    needs: [print_version]
+    outputs:
+      major_version: ${{ env.MAJOR_VERSION }}
+      release_version: ${{ env.RELEASE_VERSION }}
+      release_version_with_v: ${{ env.RELEASE_VERSION_WITH_V }}
+  create_tag:
+    name: Create Tag
+    needs: [version_info]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Create Tag
+        run: |
+          git config user.name "Lamassu IoT Bot"
+          git config user.email "lamassuiot@lamassu.io"
+          git tag ${{ needs.version_info.outputs.release_version_with_v }} -m "Release ${{ needs.version_info.outputs.release_version_with_v }}"
+          git push origin ${{ needs.version_info.outputs.release_version_with_v }}
+
+  create_release:
+    name: Create Release
+    needs: [create_tag, version_info]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version_info.outputs.release_version_with_v }}
+      - name: Create Github Release
+        uses: actions/create-release@v1
+        id: create_release
+        with:
+          draft: false
+          prerelease: false
+          release_name: ${{ needs.version_info.outputs.release_version_with_v }}
+          tag_name: ${{ needs.version_info.outputs.release_version_with_v }}
+          # body_path: CHANGELOG.md
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Setup Go
         uses: actions/setup-go@v4
         with:
@@ -54,17 +83,6 @@ jobs:
         run: |
           go mod vendor
           zip -r vendor.zip vendor
-      - name: Create Github Release
-        uses: actions/create-release@v1
-        id: create_release
-        with:
-          draft: false
-          prerelease: false
-          release_name: ${{ env.RELEASE_VERSION_WITH_V }}
-          tag_name: ${{ env.RELEASE_VERSION_WITH_V }}
-          # body_path: CHANGELOG.md
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
       - name: Upload vendor dependencies
         uses: actions/upload-release-asset@v1
         env:
@@ -77,39 +95,55 @@ jobs:
 
   create_gopkg_release:
     name: "Create Go package release"
-    needs: [create_release]
+    needs: [create_tag, version_info]
     runs-on: ubuntu-latest
+    environment: release
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
-          ref: ${{ env.MAJOR_VERSION }}
+          ref: v${{ needs.version_info.outputs.major_version }}
+          token: ${{ secrets.PAT_RELEASER }}
+          fetch-tags: true
       - run: |
-          git merge main
-          git commit -m "publishing $RELEASE_VERSION_WITH_V version"
+          git config user.name "Lamassu IoT Bot"
+          git config user.email "lamassuiot@lamassu.io"
+          git fetch
+          git merge origin/main -m "publishing ${{ needs.version_info.outputs.release_version_with_v }} version"
           git push
 
   build_docker_image:
-    needs: [create_release]
+    needs: [create_tag, version_info]
     strategy:
       matrix:
         service: [ca, devmanager, dmsmanager, va, alerts, aws-connector]
     name: ${{ matrix.service }} - Release docker images
     runs-on: ubuntu-latest
+    environment: release
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version_info.outputs.release_version_with_v }}
+          fetch-tags: true
+      - run: |
+          echo "SHA1VER=$(git rev-parse HEAD)" >> $GITHUB_ENV
       - name: Login to Github Registry
-        uses: docker/login-action@v1 
+        uses: docker/login-action@v3 
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build ${{ matrix.service }} DEV docker image
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v5
         with:
+          context: .
           file: ci/${{ matrix.service }}.dockerfile
           build-args: |
             BASE_IMAGE=alpine:3.14
+            SHA1VER=${{ env.SHA1VER }}
+            VERSION=${{ needs.version_info.outputs.release_version }}
           tags: |
-            ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:${{ env.RELEASE_VERSION }}
+            ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:${{ needs.version_info.outputs.release_version }}
             ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:latest
           push: true
