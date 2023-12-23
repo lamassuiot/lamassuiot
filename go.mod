@@ -17,6 +17,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.23.3
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.28.2
 	github.com/cloudevents/sdk-go/v2 v2.11.0
+	github.com/eclipse/paho.mqtt.golang v1.1.1
 	github.com/fatih/color v1.15.0
 	github.com/gin-contrib/cors v1.4.0
 	github.com/gin-gonic/gin v1.9.1
@@ -77,7 +78,6 @@ require (
 	github.com/docker/docker v24.0.5+incompatible // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/eclipse/paho.mqtt.golang v1.1.1 // indirect
 	github.com/flimzy/diff v0.1.7 // indirect
 	github.com/flimzy/testy v0.1.17 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect

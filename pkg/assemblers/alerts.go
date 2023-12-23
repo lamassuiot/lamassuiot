@@ -65,12 +65,15 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 					event, err := messaging.ParseCloudEvent(message.Payload)
 					if err != nil {
 						lMessage.Errorf("something went wrong while processing cloud event: %s", err)
+						message.Ack()
 						continue
 					}
 
 					svc.HandleEvent(context.Background(), &services.HandleEventInput{
 						Event: *event,
 					})
+
+					message.Ack()
 				}
 
 			}

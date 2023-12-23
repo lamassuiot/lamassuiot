@@ -44,7 +44,7 @@ func (db *PostgresDeviceManagerStore) SelectAll(ctx context.Context, exhaustiveR
 
 func (db *PostgresDeviceManagerStore) SelectByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := []gormWhereParams{
-		{query: "dms_owner = ?", extraArgs: []any{dmsID}},
+		{query: "dms_owner_id = ?", extraArgs: []any{dmsID}},
 	}
 	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
 }

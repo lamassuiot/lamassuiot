@@ -74,11 +74,13 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 					event, err := messaging.ParseCloudEvent(message.Payload)
 					if err != nil {
 						lMessaging.Errorf("something went wrong while processing cloud event: %s", err)
+						message.Ack()
 						continue
 					}
 					cert, err := getEventBody[models.UpdateModel[models.Certificate]](event)
 					if err != nil {
 						lMessaging.Errorf("could not decode cloud event: %s", err)
+						message.Ack()
 						return
 					}
 
@@ -88,6 +90,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 					})
 					if err != nil {
 						lMessaging.Errorf("could not get device %s: %s", deviceID, err)
+						message.Ack()
 						continue
 					}
 
@@ -95,16 +98,19 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 					hasKey, err := helpers.GetMetadataToStruct(cert.Updated.Metadata, models.CAAttachedToDeviceKey, &attachedBy)
 					if err != nil {
 						lMessaging.Errorf("could not decode metadata with key %s: %s", models.CAAttachedToDeviceKey, err)
+						message.Ack()
 						continue
 					}
 
 					if !hasKey {
 						lMessaging.Tracef("skipping event %s, Certificate doesn't have %s key", event.Type(), models.CAAttachedToDeviceKey)
+						message.Ack()
 						return
 					}
 
 					if dev.IdentitySlot.Secrets[dev.IdentitySlot.ActiveVersion] != cert.Updated.SerialNumber {
 						//event is not for the active certificate. Skip
+						message.Ack()
 						continue
 					}
 
@@ -125,9 +131,12 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 						})
 						if err != nil {
 							lMessaging.Errorf("could not update ID slot to preventive for device %s: %s", deviceID, err)
+							message.Ack()
 							continue
 						}
 					}
+
+					message.Ack()
 				}
 			}
 		}()
@@ -140,12 +149,14 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 					event, err := messaging.ParseCloudEvent(message.Payload)
 					if err != nil {
 						lMessaging.Errorf("something went wrong while processing cloud event: %s", err)
+						message.Ack()
 						continue
 					}
 
 					certUpdate, err := getEventBody[models.UpdateModel[models.Certificate]](event)
 					if err != nil {
 						lMessaging.Errorf("could not decode cloud event: %s", err)
+						message.Ack()
 						return
 					}
 
@@ -155,11 +166,13 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 					})
 					if err != nil {
 						lMessaging.Errorf("could not get device %s: %s", deviceID, err)
+						message.Ack()
 						continue
 					}
 
 					if dev.IdentitySlot != nil && dev.IdentitySlot.Secrets[dev.IdentitySlot.ActiveVersion] != certUpdate.Updated.SerialNumber {
 						//event is not for the active certificate. Skip
+						message.Ack()
 						continue
 					}
 
@@ -201,6 +214,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 							})
 							if err != nil {
 								lMessaging.Errorf("could not update ID slot to critical for device %s: %s", deviceID, err)
+								message.Ack()
 								continue
 							}
 						}
@@ -218,10 +232,12 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 							})
 							if err != nil {
 								lMessaging.Errorf("could not update ID slot to preventive for device %s: %s", deviceID, err)
+								message.Ack()
 								continue
 							}
 						}
 					}
+					message.Ack()
 				}
 			}
 		}()

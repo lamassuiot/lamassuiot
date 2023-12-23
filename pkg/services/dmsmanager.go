@@ -302,17 +302,18 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 		}
 
 		//checks against Lamassu, external OCSP or CRL
-		valid, err := svc.checkCertificateExpiration(ctx, clientCert, (*x509.Certificate)(validationCA.Certificate.Certificate))
+		couldCheckRevocation, isRevoked, err := svc.checkCertificateExpiration(ctx, clientCert, (*x509.Certificate)(validationCA.Certificate.Certificate))
 		if err != nil {
 			lDMS.Errorf("error while checking certificate revocation status: %s", err)
 			return nil, err
 		}
 
-		if !valid {
-			return nil, fmt.Errorf("certificate is revoked")
+		if couldCheckRevocation {
+			if isRevoked {
+				return nil, fmt.Errorf("certificate is revoked")
+			}
+			lDMS.Infof("certificate is not revoked")
 		}
-
-		lDMS.Infof("certificate is not revoked")
 
 	} else if estAuthOptions.AuthMode == models.ESTAuthModeNoAuth {
 		lDMS.Warnf("DMS %s is configured with NoAuth. Allowing enrollment", dms.ID)
@@ -394,7 +395,7 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 		bindMode = models.DeviceEventTypeReProvisioned
 	}
 
-	_, err = svc.BindIdentityToDevice(ctx, BindIdentityToDeviceInput{
+	_, err = svc.service.BindIdentityToDevice(ctx, BindIdentityToDeviceInput{
 		DeviceID:                device.ID,
 		CertificateSerialNumber: crt.SerialNumber,
 		BindMode:                bindMode,
@@ -490,14 +491,16 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		}
 
 		//checks against Lamassu, external OCSP or CRL
-		valid, err := svc.checkCertificateExpiration(ctx, clientCert, validationCA)
+		expirationChecked, expired, err := svc.checkCertificateExpiration(ctx, clientCert, validationCA)
 		if err != nil {
 			lDMS.Errorf("error while checking certificate revocation status: %s", err)
 			return nil, err
 		}
 
-		if !valid {
-			return nil, fmt.Errorf("certificate is revoked")
+		if expirationChecked {
+			if expired {
+				return nil, fmt.Errorf("certificate is revoked")
+			}
 		}
 
 		lDMS.Infof("certificate is not revoked")
@@ -623,7 +626,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		return nil, err
 	}
 
-	_, err = svc.BindIdentityToDevice(ctx, BindIdentityToDeviceInput{
+	_, err = svc.service.BindIdentityToDevice(ctx, BindIdentityToDeviceInput{
 		DeviceID:                device.ID,
 		CertificateSerialNumber: crt.SerialNumber,
 		BindMode:                models.DeviceEventTypeRenewed,
@@ -690,8 +693,10 @@ func (svc DMSManagerServiceImpl) ServerKeyGen(ctx context.Context, csr *x509.Cer
 	return nil, nil, fmt.Errorf("TODO")
 }
 
-func (svc DMSManagerServiceImpl) checkCertificateExpiration(ctx context.Context, cert *x509.Certificate, validationCA *x509.Certificate) (bool, error) {
+// returns if the given certificate COULD BE checked for revocation (true means that it could be checked), and if it is revoked (true) or not (false)
+func (svc DMSManagerServiceImpl) checkCertificateExpiration(ctx context.Context, cert *x509.Certificate, validationCA *x509.Certificate) (bool, bool, error) {
 	revocationChecked := false
+	revoked := true
 	clientSN := helpers.SerialNumberToString(cert.SerialNumber)
 	//check if revoked
 	//	If cert is in Lamassu: check status
@@ -702,7 +707,7 @@ func (svc DMSManagerServiceImpl) checkCertificateExpiration(ctx context.Context,
 	if err != nil {
 		if err != errs.ErrCertificateNotFound {
 			lDMS.Errorf("got unexpected error while searching certificate %s in Lamassu: %s", clientSN, err)
-			return false, err
+			return false, true, err
 		}
 
 		//Not Stored In lamassu. Check if CRL/OCSP
@@ -719,11 +724,10 @@ func (svc DMSManagerServiceImpl) checkCertificateExpiration(ctx context.Context,
 				lDMS.Infof("successfully validated OCSP response with external %s OCSP server. Checking OCSP response status for %s certificate", ocspInstance, clientSN)
 				if ocspResp.Status == ocsp.Revoked {
 					lDMS.Warnf("certificate was revoked at %s with %s revocation reason", ocspResp.RevokedAt.String(), models.RevocationReasonMap[ocspResp.RevocationReason])
-					return false, nil
+					return true, true, nil
 				} else {
 					lDMS.Infof("certificate is not revoked")
-					revocationChecked = true
-					break
+					return true, false, nil
 				}
 			}
 		}
@@ -745,22 +749,25 @@ func (svc DMSManagerServiceImpl) checkCertificateExpiration(ctx context.Context,
 				if idxClientCrt >= 0 {
 					entry := crl.RevokedCertificateEntries[idxClientCrt]
 					lDMS.Warnf("certificate was revoked at %s with %s revocation reason", entry.RevocationTime.String(), models.RevocationReasonMap[entry.ReasonCode])
-					return false, nil
+					return true, true, nil
 				} else {
 					lDMS.Infof("certificate not revoked. Client certificate not in CRL: %s", clientSN)
 					revocationChecked = true
-					break
+					revoked = false
+					//don't return, check other CRLs
 				}
 			}
 		}
 	} else {
 		if lmsCrt.Status == models.StatusRevoked {
 			lDMS.Errorf("Client certificate %s is revoked", clientSN)
-			return false, nil
+			return true, true, nil
+		} else {
+			return true, false, nil
 		}
 	}
 
-	return revocationChecked, nil
+	return revocationChecked, revoked, nil
 }
 
 type BindIdentityToDeviceInput struct {

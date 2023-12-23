@@ -297,6 +297,8 @@ github.com/gorilla/websocket v1.4.2/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/ad
 github.com/grpc-ecosystem/go-grpc-middleware v1.0.0/go.mod h1:FiyG127CGDf3tlThmgyCl78X/SZQqEOJBCDaAfeWzPs=
 github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0/go.mod h1:8NvIoxWQoOIhqOTXgfV/d3M/q6VIi02HzZEHgUlZvzk=
 github.com/grpc-ecosystem/grpc-gateway v1.9.0/go.mod h1:vNeuVxBJEsws4ogUvrchl83t/GYV9WGTSLVdBhOQFDY=
+github.com/haritzsaiz/est v0.0.0-20231109210631-9e5acef209b1 h1:tR/FqXi/kTl3TlzirNlySoAFRrY8JlfZMixvtbEkZqk=
+github.com/haritzsaiz/est v0.0.0-20231109210631-9e5acef209b1/go.mod h1:bH/iQWD6eK5FcE1/0MFYkOJ3O2X6maM2+Fm8Uw2CoLw=
 github.com/haritzsaiz/gin-dump v0.2.0 h1:cYJuUiaIpsP4EyzO90PEaBYFVvogIKdaZR52AUVPCzM=
 github.com/haritzsaiz/gin-dump v0.2.0/go.mod h1:LNQcm9WQ2D4asNMG8KPz3lm/U75CEoxq0onJO2tNvsU=
 github.com/hashicorp/consul/api v1.1.0/go.mod h1:VmuI/Lkw1nC05EYQWNKwWGbkg+FbDBtguAZLlVdkD9Q=
