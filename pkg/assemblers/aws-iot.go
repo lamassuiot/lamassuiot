@@ -11,8 +11,10 @@ import (
 	"github.com/cloudevents/sdk-go/v2/event"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
+	lms_slices "github.com/lamassuiot/lamassuiot/v2/pkg/helpers/slices"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/messaging"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services/iot"
 	"github.com/sirupsen/logrus"
@@ -59,6 +61,8 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 				}
 
 				eventHandler(lMessaging, event, *awsConnectorSvc)
+
+				message.Ack()
 			}
 		}
 	}()
@@ -267,6 +271,10 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 	case string(models.EventCreateDMSKey), string(models.EventUpdateDMSMetadataKey):
 		var dms *models.DMS
 		var err error
+
+		isUpdateEvent := false
+		var updatedDMS *models.UpdateModel[models.DMS]
+
 		if cloudEvent.Type() == string(models.EventCreateDMSKey) {
 			dms, err = getEventBody[models.DMS](cloudEvent)
 			if err != nil {
@@ -274,12 +282,13 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 				return
 			}
 		} else {
-			updatedDMS, err := getEventBody[models.UpdateModel[models.DMS]](cloudEvent)
+			updatedDMS, err = getEventBody[models.UpdateModel[models.DMS]](cloudEvent)
 			if err != nil {
 				logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "UpdateModel DMS", err)
 				return
 			}
 
+			isUpdateEvent = true
 			dms = &updatedDMS.Updated
 		}
 
@@ -303,6 +312,30 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 			if err != nil {
 				logger.Errorf("something went wrong while registering JITP template for DMS %s: %s", dms.ID, err)
 				return
+			}
+		}
+
+		if isUpdateEvent {
+			changedManagedCAs := !lms_slices.UnorderedEqualContent(updatedDMS.Previous.Settings.CADistributionSettings.ManagedCAs, updatedDMS.Updated.Settings.CADistributionSettings.ManagedCAs, func(e1, e2 string) bool { return e1 == e2 })
+			if changedManagedCAs {
+				awsConnectorSvc.DeviceSDK.GetDeviceByDMS(services.GetDevicesByDMSInput{
+					DMSID: dms.ID,
+					ListInput: resources.ListInput[models.Device]{
+						ExhaustiveRun: true,
+						ApplyFunc: func(device models.Device) {
+							err = awsConnectorSvc.UpdateDeviceShadow(iot.UpdateDeviceShadowInput{
+								DeviceID:               device.ID,
+								RemediationActionsType: []models.RemediationActionType{models.RemediationActionUpdateTrustAnchorList},
+								DMSIoTAutomationConfig: dmsAwsAutomationConfig,
+							})
+							if err != nil {
+								logger.Errorf("something went wrong while updating %s Thing Shadow: %s", device.ID, err)
+								return
+							}
+						},
+					},
+				})
+
 			}
 		}
 
