@@ -38,7 +38,7 @@ func RunPostgresDocker(dbs []string) (func() error, *config.PostgresPSEConfig, e
 		Env:        []string{"POSTGRES_PASSWORD=" + passwd},
 	}, func(hc *docker.HostConfig) {
 		hc.Mounts = []docker.HostMount{
-			docker.HostMount{
+			{
 				Type:   "bind",
 				Target: "/docker-entrypoint-initdb.d/init.sql",
 				Source: initScriptFname,

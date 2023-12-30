@@ -2749,14 +2749,14 @@ func BuildCATestServer() (*CATestServer, error) {
 			LogLevel:      config.Trace,
 			DefaultEngine: "filesystem-1",
 			GolangProvider: []config.GolangEngineConfig{
-				config.GolangEngineConfig{
+				{
 					ID:               "filesystem-1",
 					Metadata:         map[string]interface{}{},
 					StorageDirectory: "/tmp/lms-test/",
 				},
 			},
 			HashicorpVaultKV2Provider: []config.HashicorpVaultCryptoEngineConfig{
-				config.HashicorpVaultCryptoEngineConfig{
+				{
 					ID:                "vault-1",
 					HashicorpVaultSDK: vaultSDKConf,
 					Metadata:          map[string]interface{}{},

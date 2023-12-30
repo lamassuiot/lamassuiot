@@ -404,7 +404,7 @@ func (svc *AWSCloudConnectorService) UpdateDeviceShadow(input UpdateDeviceShadow
 
 	actions := []string{}
 
-	for key, _ := range idShadow {
+	for key := range idShadow {
 		actions = append(actions, key)
 	}
 
@@ -795,7 +795,7 @@ func (svc *AWSCloudConnectorService) RegisterUpdateJITPProvisioner(ctx context.C
 		Description:         &input.DMS.Name,
 		Enabled:             input.AwsJITPConfig.JITPProvisioningTemplate.EnableTemplate,
 		PreProvisioningHook: nil,
-		Tags:                []types.Tag{types.Tag{Key: aws.String("created-by"), Value: aws.String("LAMASSU")}},
+		Tags:                []types.Tag{{Key: aws.String("created-by"), Value: aws.String("LAMASSU")}},
 		Type:                types.TemplateTypeJitp,
 	})
 	if err != nil {

@@ -456,7 +456,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 			estReEnrollOpts := dms.Settings.ReEnrollmentSettings
 			aValCAsCtr := len(estReEnrollOpts.AdditionalValidationCAs)
 			lDMS.Debugf("could not validate client certificate using enroll CA. Will try validating using Additional Validation CAs")
-			lDMS.Debugf("DMS has %d additonal validation CAs", aValCAsCtr)
+			lDMS.Debugf("DMS has %d additional validation CAs", aValCAsCtr)
 			//check if certificate is a certificate issued by Extra Val CAs
 
 			for idx, caID := range estReEnrollOpts.AdditionalValidationCAs {
@@ -830,7 +830,7 @@ func (svc DMSManagerServiceImpl) BindIdentityToDevice(ctx context.Context, input
 				0: crt.SerialNumber,
 			},
 			Events: map[time.Time]models.DeviceEvent{
-				time.Now(): models.DeviceEvent{
+				time.Now(): {
 					EvenType: models.DeviceEventTypeProvisioned,
 				},
 			},
