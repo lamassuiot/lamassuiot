@@ -217,7 +217,7 @@ func DurationToString(d time.Duration) string {
 	}
 
 	// Largest time is 15250w1d23h47m16s854ms775us807ns
-	var buf [32]byte
+	var buf [64]byte
 	w := len(buf)
 	var sign string
 
