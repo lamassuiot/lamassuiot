@@ -302,7 +302,7 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 		}
 
 		//checks against Lamassu, external OCSP or CRL
-		couldCheckRevocation, isRevoked, err := svc.checkCertificateExpiration(ctx, clientCert, (*x509.Certificate)(validationCA.Certificate.Certificate))
+		couldCheckRevocation, isRevoked, err := svc.checkCertificateRevocation(ctx, clientCert, (*x509.Certificate)(validationCA.Certificate.Certificate))
 		if err != nil {
 			lDMS.Errorf("error while checking certificate revocation status: %s", err)
 			return nil, err
@@ -694,7 +694,7 @@ func (svc DMSManagerServiceImpl) ServerKeyGen(ctx context.Context, csr *x509.Cer
 }
 
 // returns if the given certificate COULD BE checked for revocation (true means that it could be checked), and if it is revoked (true) or not (false)
-func (svc DMSManagerServiceImpl) checkCertificateExpiration(ctx context.Context, cert *x509.Certificate, validationCA *x509.Certificate) (bool, bool, error) {
+func (svc DMSManagerServiceImpl) checkCertificateRevocation(ctx context.Context, cert *x509.Certificate, validationCA *x509.Certificate) (bool, bool, error) {
 	revocationChecked := false
 	revoked := true
 	clientSN := helpers.SerialNumberToString(cert.SerialNumber)
