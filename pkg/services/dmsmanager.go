@@ -491,7 +491,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		}
 
 		//checks against Lamassu, external OCSP or CRL
-		expirationChecked, expired, err := svc.checkCertificateExpiration(ctx, clientCert, validationCA)
+		expirationChecked, expired, err := svc.checkCertificateRevocation(ctx, clientCert, validationCA)
 		if err != nil {
 			lDMS.Errorf("error while checking certificate revocation status: %s", err)
 			return nil, err
