@@ -323,7 +323,7 @@ func (svc DeviceManagerServiceImpl) UpdateDeviceIdentitySlot(input UpdateDeviceI
 	}
 
 	if device.Status == models.DeviceDecommissioned {
-		lDevice.Warnf("device is decommissioned", input.ID)
+		lDevice.Warnf("device %s is decommissioned", input.ID)
 		return device, nil
 	}
 

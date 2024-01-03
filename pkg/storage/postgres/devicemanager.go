@@ -32,7 +32,7 @@ func (db *PostgresDeviceManagerStore) Count(ctx context.Context) (int, error) {
 
 func (db *PostgresDeviceManagerStore) CountByStatus(ctx context.Context, status models.DeviceStatus) (int, error) {
 	return db.querier.Count([]gormWhereParams{
-		gormWhereParams{
+		{
 			query: "status = ?", extraArgs: []any{status},
 		},
 	})

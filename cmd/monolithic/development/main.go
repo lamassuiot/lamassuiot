@@ -144,7 +144,7 @@ func main() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	go func() {
-		for _ = range c {
+		for range c {
 			// sig is a ^C, handle it
 			fmt.Println("ctrl+c triggered. Cleaning up")
 			cleanup()
@@ -169,28 +169,28 @@ func main() {
 			LogLevel:      config.Info,
 			DefaultEngine: "golang-1",
 			HashicorpVaultKV2Provider: []config.HashicorpVaultCryptoEngineConfig{
-				config.HashicorpVaultCryptoEngineConfig{
+				{
 					HashicorpVaultSDK: *vaultConfig,
 					ID:                "dockertest-hcpvault-kvv2",
 					Metadata:          make(map[string]interface{}),
 				},
 			},
 			AWSKMSProvider: []config.AWSCryptoEngine{
-				config.AWSCryptoEngine{
+				{
 					AWSSDKConfig: *awsCfg,
 					ID:           "dockertest-localstack-kms",
 					Metadata:     make(map[string]interface{}),
 				},
 			},
 			AWSSecretsManagerProvider: []config.AWSCryptoEngine{
-				config.AWSCryptoEngine{
+				{
 					AWSSDKConfig: *awsCfg,
 					ID:           "dockertest-localstack-smngr",
 					Metadata:     make(map[string]interface{}),
 				},
 			},
 			GolangProvider: []config.GolangEngineConfig{
-				config.GolangEngineConfig{
+				{
 					ID:               "golang-1",
 					Metadata:         make(map[string]interface{}),
 					StorageDirectory: "/tmp/gotest",
