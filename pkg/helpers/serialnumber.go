@@ -27,5 +27,5 @@ func toHexInt(n *big.Int) string {
 }
 
 func SerialNumberToString(n *big.Int) string {
-	return insertNth(toHexInt(n), 2, '-')
+	return insertNth(toHexInt(new(big.Int).Abs(n)), 2, '-')
 }
