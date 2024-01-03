@@ -22,4 +22,4 @@ jobs:
 
       - name: Run Tests
         run: |
-          go test -coverprofile=coverage.out -timeout 300s ./pkg/assemblers
+          go run gotest.tools/gotestsum@latest --format github-actions ./pkg/assemblers -timeout 300s
