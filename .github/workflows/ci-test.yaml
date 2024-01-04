@@ -1,7 +1,9 @@
-name: CI Test
+name: CI Launch Tests
 
 on:
-  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 jobs:
   test:
