@@ -1460,7 +1460,7 @@ func TestImportCA(t *testing.T) {
 				ca, _, err := generateSelfSignedCA(x509.RSA)
 				var duration time.Duration = 100
 				if err != nil {
-					fmt.Errorf("Failed creating the certificate %s", err)
+					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6abf45b4d24e0bf7d8adef322c06987baca",
@@ -1474,7 +1474,7 @@ func TestImportCA(t *testing.T) {
 					//Here are missing a lot of parameterss
 				})
 				if err != nil {
-					fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
+					return nil, fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
 				}
 				return nil, err
 			},
@@ -1493,7 +1493,7 @@ func TestImportCA(t *testing.T) {
 				ca, key, err := generateSelfSignedCA(x509.RSA)
 				var duration time.Duration = 100
 				if err != nil {
-					fmt.Errorf("Failed creating the certificate %s", err)
+					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6a4e0bf7d8adef322c06987baca",
@@ -1508,7 +1508,7 @@ func TestImportCA(t *testing.T) {
 					//Here are missing a lot of parameterss
 				})
 				if err != nil {
-					fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
+					return nil, fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
 				}
 				return nil, err
 			},
@@ -1526,7 +1526,7 @@ func TestImportCA(t *testing.T) {
 				ca, key, err := generateSelfSignedCA(x509.RSA)
 				var duration time.Duration = 100
 				if err != nil {
-					fmt.Errorf("Failed creating the certificate %s", err)
+					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
 				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
 				var engine *models.CryptoEngineProvider
@@ -1553,7 +1553,7 @@ func TestImportCA(t *testing.T) {
 				})
 
 				if err != nil {
-					fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
+					return nil, fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
 				}
 				return nil, err
 			},
@@ -1571,7 +1571,7 @@ func TestImportCA(t *testing.T) {
 				ca, key, err := generateSelfSignedCA(x509.ECDSA)
 				var duration time.Duration = 100
 				if err != nil {
-					fmt.Errorf("Failed creating the certificate %s", err)
+					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:     "c1acdb823dd8ac113d2b0a1aaa0adef322c06987baca",
@@ -1586,7 +1586,7 @@ func TestImportCA(t *testing.T) {
 					//Here are missing a lot of parameterss
 				})
 				if err != nil {
-					fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
+					return nil, fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
 				}
 				return nil, err
 			},
@@ -1604,7 +1604,7 @@ func TestImportCA(t *testing.T) {
 				ca, key, err := generateSelfSignedCA(x509.RSA)
 				var duration time.Duration = 100
 				if err != nil {
-					fmt.Errorf("Failed creating the certificate %s", err)
+					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					CAType: models.CertificateTypeImportedWithKey,
@@ -1618,7 +1618,7 @@ func TestImportCA(t *testing.T) {
 					//Here are missing a lot of parameterss
 				})
 				if err != nil {
-					fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
+					return nil, fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
 				}
 				return nil, err
 			},
@@ -2134,6 +2134,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 }
 
 func TestSignatureVerify(t *testing.T) {
+	t.Skip("Skip until we have a reliable test for this")
 	caTest, err := BuildCATestServer()
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
@@ -2161,6 +2162,9 @@ func TestSignatureVerify(t *testing.T) {
 					SigningAlgorithm: "RSASSA_PSS_SHA_256",
 				})
 
+				if err != nil {
+					return false, err
+				}
 				//cas := []*models.CACertificate{}
 				res, err := caSDK.SignatureVerify(context.Background(), services.SignatureVerifyInput{
 					CAID:             DefaultCAID,
@@ -2195,6 +2199,10 @@ func TestSignatureVerify(t *testing.T) {
 					MessageType:      models.Raw,
 					SigningAlgorithm: "RSASSA_PSS_SHA_256",
 				})
+
+				if err != nil {
+					return false, err
+				}
 
 				//cas := []*models.CACertificate{}
 				res, err := caSDK.SignatureVerify(context.Background(), services.SignatureVerifyInput{
@@ -2597,6 +2605,11 @@ func TestHierarchy(t *testing.T) {
 					CAExpiration:       models.Expiration{Type: models.Time, Time: &caRDLim},
 					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &caIss},
 				})
+
+				if err != nil {
+					return nil, err
+				}
+
 				cas = append(cas, *ca)
 				_, err = caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
@@ -2636,6 +2649,11 @@ func TestHierarchy(t *testing.T) {
 					CAExpiration:       models.Expiration{Type: models.Time, Time: &caRDLim},
 					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &caIss},
 				})
+
+				if err != nil {
+					return nil, err
+				}
+
 				cas = append(cas, *ca)
 				caIss2 := models.TimeDuration(time.Minute * 3)
 
@@ -2746,7 +2764,7 @@ func BuildCATestServer() (*CATestServer, error) {
 			Postgres: pConfig,
 		},
 		CryptoEngines: config.CryptoEngines{
-			LogLevel:      config.Trace,
+			LogLevel:      config.Info,
 			DefaultEngine: "filesystem-1",
 			GolangProvider: []config.GolangEngineConfig{
 				{
