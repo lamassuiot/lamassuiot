@@ -49,7 +49,6 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 				queryParams.NextBookmark = value
 
 			case "filter":
-				//TODO Regex
 				for _, value := range v {
 					bs := strings.Index(value, "[")
 					es := strings.Index(value, "]")
@@ -58,9 +57,12 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 						operand, arg, _ := strings.Cut(rest, "]")
 						operand = strings.ToLower(operand)
 
-						fieldOperandType := filterFieldMap[field]
-						var filterOperand resources.FilterOperation
+						fieldOperandType, exists := filterFieldMap[field]
+						if !exists {
+							continue
+						}
 
+						var filterOperand resources.FilterOperation
 						switch fieldOperandType {
 						case resources.StringFilterFieldType:
 							switch operand {

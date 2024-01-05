@@ -313,6 +313,8 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 				return nil, fmt.Errorf("certificate is revoked")
 			}
 			lDMS.Infof("certificate is not revoked")
+		} else {
+			lDMS.Infof("could not verify certificate expiration. Assuming certificate as not-revoked")
 		}
 
 	} else if estAuthOptions.AuthMode == models.ESTAuthModeNoAuth {
@@ -491,19 +493,22 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		}
 
 		//checks against Lamassu, external OCSP or CRL
-		expirationChecked, expired, err := svc.checkCertificateRevocation(ctx, clientCert, validationCA)
+		couldCheckRevocation, isRevoked, err := svc.checkCertificateRevocation(ctx, clientCert, (*x509.Certificate)(validationCA))
 		if err != nil {
 			lDMS.Errorf("error while checking certificate revocation status: %s", err)
 			return nil, err
 		}
 
-		if expirationChecked {
-			if expired {
+		if couldCheckRevocation {
+			lDMS.Warnf("certificate is revoked")
+			if isRevoked {
 				return nil, fmt.Errorf("certificate is revoked")
 			}
+			lDMS.Infof("certificate is not revoked")
+		} else {
+			lDMS.Infof("could not verify certificate expiration. Assuming certificate as not-revoked")
 		}
 
-		lDMS.Infof("certificate is not revoked")
 	} else {
 		lDMS.Warnf("allowing reenroll: using NO AUTH mode")
 	}
@@ -699,8 +704,8 @@ func (svc DMSManagerServiceImpl) checkCertificateRevocation(ctx context.Context,
 	revoked := true
 	clientSN := helpers.SerialNumberToString(cert.SerialNumber)
 	//check if revoked
-	//	If cert is in Lamassu: check status
-	//	If cert NOT in Lamassu (i.e. Issued Offline/Outside Lamassu), check if the certificate has CRL/OCSP in presented CRT.
+	//  If cert is in Lamassu: check status
+	//  If cert NOT in Lamassu (i.e. Issued Offline/Outside Lamassu), check if the certificate has CRL/OCSP in presented CRT.
 	lmsCrt, err := svc.caClient.GetCertificateBySerialNumber(ctx, GetCertificatesBySerialNumberInput{
 		SerialNumber: clientSN,
 	})
