@@ -11,11 +11,11 @@ func insertNth(s string, n int, sep rune) string {
 		s = "0" + s
 	}
 	var buffer bytes.Buffer
-	var n_1 = n - 1
-	var l_1 = len(s) - 1
+	var n1 = n - 1
+	var l1 = len(s) - 1
 	for i, rune := range s {
 		buffer.WriteRune(rune)
-		if i%n == n_1 && i != l_1 {
+		if i%n == n1 && i != l1 {
 			buffer.WriteRune(sep)
 		}
 	}
