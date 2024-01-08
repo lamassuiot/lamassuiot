@@ -161,10 +161,7 @@ func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, e
 			continueIter = false
 		}
 
-		if bookmark == "nil" {
-			nextBookmark = ""
-			continueIter = false
-		} else if bookmark != nextBookmark {
+		if bookmark != "nil" && bookmark != nextBookmark {
 			nextBookmark = bookmark
 		} else {
 			nextBookmark = ""
@@ -182,10 +179,9 @@ func (db *couchDBQuerier[E]) SelectExists(elemID string) (bool, *E, error) {
 	rs := db.Get(context.Background(), elemID)
 	err := rs.Err()
 	if err != nil {
-		switch err.(type) {
+		switch err := err.(type) {
 		case *chttp.HTTPError:
-			resp := err.(*chttp.HTTPError)
-			if resp.Response.StatusCode == http.StatusNotFound {
+			if err.Response.StatusCode == http.StatusNotFound {
 				return false, nil, nil
 			} else {
 				return false, nil, err
@@ -284,7 +280,7 @@ func getElements[E any](db *kivik.DB, bookmark string, opts map[string]interface
 	for rs.Next() {
 		var element E
 		if err := rs.ScanDoc(&element); err != nil {
-			lCouch.Warnf("error while processing element in result set:", err)
+			lCouch.Warnf("error while processing element in result set: %s", err)
 			continue
 		}
 		elements = append(elements, element)
