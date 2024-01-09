@@ -9,7 +9,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"runtime"
 
@@ -141,7 +140,7 @@ func (p *GoCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) 
 	err := os.WriteFile(p.storageDirectory+"/"+keyID, pem.EncodeToMemory(&pem.Block{
 		Bytes: x509.MarshalPKCS1PrivateKey(key),
 		Type:  "RSA PRIVATE KEY",
-	}), 0644)
+	}), 0600)
 	if err != nil {
 		lGo.Errorf("could not save %s RSA key: %s", keyID, err)
 		return nil, err
@@ -159,10 +158,10 @@ func (p *GoCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID stri
 		return nil, err
 	}
 
-	err = ioutil.WriteFile(p.storageDirectory+"/"+keyID, pem.EncodeToMemory(&pem.Block{
+	err = os.WriteFile(p.storageDirectory+"/"+keyID, pem.EncodeToMemory(&pem.Block{
 		Bytes: b,
 		Type:  "EC PRIVATE KEY",
-	}), 0644)
+	}), 0600)
 	if err != nil {
 		lGo.Errorf("could not save %s ECDSA key: %s", keyID, err)
 		return nil, err
@@ -175,7 +174,7 @@ func (p *GoCryptoEngine) checkAndCreateStorageDir() error {
 	var err error
 	if _, err = os.Stat(p.storageDirectory); os.IsNotExist(err) {
 		lGo.Warnf("storage directory %s does not exist. Will create such directory", p.storageDirectory)
-		err = os.MkdirAll(p.storageDirectory, 0755)
+		err = os.MkdirAll(p.storageDirectory, 0750)
 		if err != nil {
 			lGo.Errorf("something went wrong while creating storage path: %s", err)
 		}
