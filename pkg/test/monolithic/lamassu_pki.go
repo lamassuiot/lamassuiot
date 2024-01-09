@@ -31,7 +31,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 
 		key, _ := helpers.GenerateRSAKey(2048)
 		keyPem, _ := helpers.PrivateKeyToPEM(key)
-		os.WriteFile("proxy.key", []byte(keyPem), 0644)
+		os.WriteFile("proxy.key", []byte(keyPem), 0600)
 
 		crt, err := helpers.GenerateSelfSignedCertificate(key, "proxy-lms-test")
 		if err != nil {
@@ -39,7 +39,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 		}
 
 		crtPem := helpers.CertificateToPEM(crt)
-		os.WriteFile("proxy.crt", []byte(crtPem), 0644)
+		os.WriteFile("proxy.crt", []byte(crtPem), 0600)
 
 		_, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
 			BaseConfig: config.BaseConfig{
