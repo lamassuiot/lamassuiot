@@ -33,6 +33,7 @@ require (
 	github.com/sigstore/sigstore/pkg/signature/kms/aws v1.7.6
 	github.com/sirupsen/logrus v1.9.1
 	github.com/spf13/viper v1.7.0
+	github.com/stretchr/testify v1.8.4
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.0
 	github.com/swaggo/swag v1.16.1

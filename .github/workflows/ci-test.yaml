@@ -24,4 +24,4 @@ jobs:
 
       - name: Run Tests
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./pkg/assemblers ./pkg/helpers/... -timeout 600s -coverprofile coverage.out
+          go run gotest.tools/gotestsum@latest --format github-actions ./pkg/... -timeout 600s -coverprofile coverage.out
