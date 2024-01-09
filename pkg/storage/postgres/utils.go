@@ -442,15 +442,15 @@ func (l *GormLogger) LogMode(lvl gormlogger.LogLevel) gormlogger.Interface {
 }
 
 func (l *GormLogger) Info(ctx context.Context, str string, rest ...interface{}) {
-	l.logger.Infof(str, rest)
+	l.logger.Infof(str, rest...)
 }
 
 func (l *GormLogger) Warn(ctx context.Context, str string, rest ...interface{}) {
-	l.logger.Warnf(str, rest)
+	l.logger.Warnf(str, rest...)
 }
 
 func (l *GormLogger) Error(ctx context.Context, str string, rest ...interface{}) {
-	l.logger.Errorf(str, rest)
+	l.logger.Errorf(str, rest...)
 }
 
 func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
