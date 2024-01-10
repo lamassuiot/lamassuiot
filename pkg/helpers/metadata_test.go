@@ -34,3 +34,17 @@ func TestGetMetadataToStruct(t *testing.T) {
 		t.Errorf("GetMetadataToStruct should have returned false for key4")
 	}
 }
+
+func TestGetMetadataToStruct_NonexistentKey(t *testing.T) {
+	metadata := map[string]any{
+		"key1": "value1",
+		"key2": 123,
+		"key3": true,
+	}
+
+	var str string
+	ok, err := GetMetadataToStruct(metadata, "key5", &str)
+	if ok || err != nil {
+		t.Errorf("GetMetadataToStruct should have returned false for key5")
+	}
+}
