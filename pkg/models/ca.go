@@ -35,7 +35,7 @@ type Certificate struct {
 	Certificate         *X509Certificate       `json:"certificate"`
 	KeyMetadata         KeyStrengthMetadata    `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_strength_meta_"`
 	Subject             Subject                `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
-	ValidFrom           time.Time              `json:"valid_from"`
+	ValidFrom           int                    `json:"valid_from"`
 	ValidTo             time.Time              `json:"valid_to"`
 	RevocationTimestamp time.Time              `json:"revocation_timestamp"`
 	RevocationReason    RevocationReason       `json:"revocation_reason"`

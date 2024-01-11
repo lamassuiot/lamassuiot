@@ -15,8 +15,14 @@ type PostgresCAStore struct {
 	querier *postgresDBQuerier[models.CACertificate]
 }
 
-func NewCAPostgresRepository(db *gorm.DB) (storage.CACertificatesRepo, error) {
-	querier, err := CheckAndCreateTable(db, caDBName, "id", models.CACertificate{})
+func NewCAPostgresRepository(db *gorm.DB, appVersion string) (storage.CACertificatesRepo, error) {
+	list := storage.MigrationList{}
+	list.Add("2.4.0", func() error { return nil }, func() error { return nil })
+	list.Add("2.4.1", func() error {
+
+	}, func() error { return nil })
+
+	querier, err := CheckAndCreateTable(db, caDBName, "id", models.CACertificate{}, list, appVersion)
 	if err != nil {
 		return nil, err
 	}

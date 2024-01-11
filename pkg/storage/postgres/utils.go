@@ -13,6 +13,7 @@ import (
 	"github.com/go-gormigrate/gormigrate/v2"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -78,12 +79,17 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg config.PostgresPSEConf
 	return db, err
 }
 
-func CheckAndCreateTable[E any](db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*postgresDBQuerier[E], error) {
+func CheckAndCreateTable[E any](db *gorm.DB, tableName string, primaryKeyColumn string, model E, migrationPlan storage.MigrationList, appVersion string) (*postgresDBQuerier[E], error) {
 	schema.RegisterSerializer("json", JSONSerializer{})
-
-	err := db.Table(tableName).AutoMigrate(model)
-	if err != nil {
-		return nil, err
+	//if no table exists, create it using latest model
+	tableExists := db.Table(tableName).Migrator().HasTable(model)
+	if !tableExists {
+		err := db.Table(tableName).AutoMigrate(model)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		//some table exists. Check table model version and apply migration if needed
 	}
 
 	querier := newPostgresDBQuerier[E](db, tableName, primaryKeyColumn)
