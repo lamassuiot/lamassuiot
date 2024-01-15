@@ -301,35 +301,31 @@ func (db *postgresDBQuerier[E]) Insert(elem E, elemID string) (*E, error) {
 		return nil, err
 	}
 
-	_, newElem, err := db.SelectExists(elemID, nil)
-	return newElem, err
+	return elem, nil
 }
 
 func (db *postgresDBQuerier[E]) Update(elem E, elemID string) (*E, error) {
-	_, newElem, err := db.SelectExists(elemID, nil)
-	tx := db.Table(db.tableName).Save(&elem)
+    tx := db.Table(db.tableName).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID).Updates(&elem)
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
 
-	_, newElem, err = db.SelectExists(elemID, nil)
-	return newElem, err
+    if tx.RowsAffected != 1 {
+        return nil, gorm.ErrRecordNotFound
+    }
+
+	return elem, nil
 }
 
 func (db *postgresDBQuerier[E]) Delete(elemID string) error {
-	exists, elem, err := db.SelectExists(elemID, nil)
-	if err != nil {
-		return err
-	}
-
-	if !exists {
-		return gorm.ErrRecordNotFound
-	}
-
-	tx := db.DB.Delete(&elem)
+	tx := db.Table(db.tableName).Delete(nil, db.Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID))
 	if err := tx.Error; err != nil {
 		return err
 	}
+
+	if tx.RowsAffected != 1 {
+        return gorm.ErrRecordNotFound
+    }
 
 	return nil
 }
