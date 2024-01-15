@@ -24,7 +24,10 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 				sortQueryParam := value
 				sortField := strings.Trim(sortQueryParam, " ")
 
-				queryParams.Sort.SortField = sortField
+				_, exists := filterFieldMap[sortField]
+				if exists {
+					queryParams.Sort.SortField = sortField
+				}
 
 			case "sort_mode":
 				value := v[len(v)-1] //only get last
@@ -111,11 +114,13 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 								filterOperand = resources.EnumNotEqual
 							}
 						}
-						queryParams.Filters = append(queryParams.Filters, resources.FilterOption{
-							Field:           field,
-							Value:           arg,
-							FilterOperation: filterOperand,
-						})
+						if exists {
+							queryParams.Filters = append(queryParams.Filters, resources.FilterOption{
+								Field:           field,
+								Value:           arg,
+								FilterOperation: filterOperand,
+							})
+						}
 					}
 
 				}
