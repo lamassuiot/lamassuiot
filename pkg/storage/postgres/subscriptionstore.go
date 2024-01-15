@@ -34,7 +34,7 @@ func (db *PostgresSubscriptionsStore) GetSubscriptions(ctx context.Context, user
 }
 
 func (db *PostgresSubscriptionsStore) Subscribe(ctx context.Context, sub *models.Subscription) (*models.Subscription, error) {
-	return db.querier.Insert(*sub, sub.ID)
+	return db.querier.Insert(sub, sub.ID)
 }
 
 func (db *PostgresSubscriptionsStore) Unsubscribe(ctx context.Context, subscriptionID string) error {

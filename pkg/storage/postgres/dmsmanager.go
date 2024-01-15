@@ -39,9 +39,9 @@ func (db *PostgresDMSManagerStore) SelectExists(ctx context.Context, ID string) 
 }
 
 func (db *PostgresDMSManagerStore) Update(ctx context.Context, DMS *models.DMS) (*models.DMS, error) {
-	return db.querier.Update(*DMS, DMS.ID)
+	return db.querier.Update(DMS, DMS.ID)
 }
 
 func (db *PostgresDMSManagerStore) Insert(ctx context.Context, DMS *models.DMS) (*models.DMS, error) {
-	return db.querier.Insert(*DMS, DMS.ID)
+	return db.querier.Insert(DMS, DMS.ID)
 }
