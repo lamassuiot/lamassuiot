@@ -27,7 +27,7 @@ func NewEventsPostgresRepository(db *gorm.DB) (storage.EventRepository, error) {
 }
 
 func (db *PostgresEventsStore) InsertUpdateEvent(ctx context.Context, ev *models.AlertLatestEvent) (*models.AlertLatestEvent, error) {
-	return db.querier.Update(*ev, string(ev.EventType))
+	return db.querier.Update(ev, string(ev.EventType))
 }
 
 func (db *PostgresEventsStore) GetLatestEventByEventType(ctx context.Context, eventType models.EventType) (bool, *models.AlertLatestEvent, error) {
