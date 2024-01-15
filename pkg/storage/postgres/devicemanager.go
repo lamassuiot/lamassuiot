@@ -54,9 +54,9 @@ func (db *PostgresDeviceManagerStore) SelectExists(ctx context.Context, ID strin
 }
 
 func (db *PostgresDeviceManagerStore) Update(ctx context.Context, device *models.Device) (*models.Device, error) {
-	return db.querier.Update(*device, device.ID)
+	return db.querier.Update(device, device.ID)
 }
 
 func (db *PostgresDeviceManagerStore) Insert(ctx context.Context, device *models.Device) (*models.Device, error) {
-	return db.querier.Insert(*device, device.ID)
+	return db.querier.Insert(device, device.ID)
 }

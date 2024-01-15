@@ -76,11 +76,11 @@ func (db *PostgresCAStore) SelectExistsByID(ctx context.Context, id string) (boo
 }
 
 func (db *PostgresCAStore) Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Insert(*caCertificate, caCertificate.ID)
+	return db.querier.Insert(caCertificate, caCertificate.ID)
 }
 
 func (db *PostgresCAStore) Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {
-	return db.querier.Update(*caCertificate, caCertificate.ID)
+	return db.querier.Update(caCertificate, caCertificate.ID)
 }
 
 func (db *PostgresCAStore) Delete(ctx context.Context, id string) error {

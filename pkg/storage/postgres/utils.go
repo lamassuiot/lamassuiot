@@ -295,7 +295,7 @@ func (db *postgresDBQuerier[E]) SelectExists(queryID string, queryCol *string) (
 	return true, &elem, nil
 }
 
-func (db *postgresDBQuerier[E]) Insert(elem E, elemID string) (*E, error) {
+func (db *postgresDBQuerier[E]) Insert(elem *E, elemID string) (*E, error) {
 	tx := db.Table(db.tableName).Create(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
@@ -304,15 +304,15 @@ func (db *postgresDBQuerier[E]) Insert(elem E, elemID string) (*E, error) {
 	return elem, nil
 }
 
-func (db *postgresDBQuerier[E]) Update(elem E, elemID string) (*E, error) {
-    tx := db.Table(db.tableName).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID).Updates(&elem)
+func (db *postgresDBQuerier[E]) Update(elem *E, elemID string) (*E, error) {
+	tx := db.Table(db.tableName).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID).Updates(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
 
-    if tx.RowsAffected != 1 {
-        return nil, gorm.ErrRecordNotFound
-    }
+	if tx.RowsAffected != 1 {
+		return nil, gorm.ErrRecordNotFound
+	}
 
 	return elem, nil
 }
@@ -324,8 +324,8 @@ func (db *postgresDBQuerier[E]) Delete(elemID string) error {
 	}
 
 	if tx.RowsAffected != 1 {
-        return gorm.ErrRecordNotFound
-    }
+		return gorm.ErrRecordNotFound
+	}
 
 	return nil
 }

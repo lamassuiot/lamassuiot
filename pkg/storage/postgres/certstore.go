@@ -56,11 +56,11 @@ func (db *PostgresCertificateStorage) SelectExistsBySerialNumber(ctx context.Con
 }
 
 func (db *PostgresCertificateStorage) Insert(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error) {
-	return db.querier.Insert(*certificate, certificate.SerialNumber)
+	return db.querier.Insert(certificate, certificate.SerialNumber)
 }
 
 func (db *PostgresCertificateStorage) Update(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error) {
-	return db.querier.Update(*certificate, certificate.SerialNumber)
+	return db.querier.Update(certificate, certificate.SerialNumber)
 }
 
 func (db *PostgresCertificateStorage) SelectByCA(ctx context.Context, caID string, req storage.StorageListRequest[models.Certificate]) (string, error) {
