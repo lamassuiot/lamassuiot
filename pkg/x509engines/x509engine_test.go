@@ -24,7 +24,7 @@ func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
 	log := helpers.ConfigureLogger(config.Info, "Golang Engine")
 	engine := cryptoengines.NewGolangPEMEngine(log, config.GolangEngineConfig{StorageDirectory: tempDir})
 
-	x509Engine := NewX509Engine(&engine, "")
+	x509Engine := NewX509Engine(&engine, "http://ocsp.lamassu.io")
 
 	return tempDir, engine, x509Engine
 }
@@ -119,6 +119,59 @@ func TestCryptoAssetLRI(t *testing.T) {
 	}
 }
 
+func checkCertificate(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyType, tcExpirationTime time.Time) error {
+	if cert.Subject.CommonName != tcSubject.CommonName {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.Subject.CommonName, tcSubject.CommonName)
+	}
+	if cert.Subject.Organization[0] != tcSubject.Organization {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.Subject.Organization, tcSubject.Organization)
+	}
+	if cert.Subject.OrganizationalUnit[0] != tcSubject.OrganizationUnit {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.Subject.OrganizationalUnit, tcSubject.OrganizationUnit)
+	}
+	if cert.Subject.Country[0] != tcSubject.Country {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.Subject.Country, tcSubject.Country)
+	}
+
+	if cert.Subject.Province[0] != tcSubject.State {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.Subject.Province, tcSubject.State)
+	}
+
+	if cert.Subject.Locality[0] != tcSubject.Locality {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.Subject.Locality, tcSubject.Locality)
+	}
+
+	if models.KeyType(cert.PublicKeyAlgorithm) != tcKeyMetadata {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.PublicKeyAlgorithm, tcKeyMetadata)
+	}
+
+	if !cert.NotAfter.Equal(tcExpirationTime.UTC().Truncate(time.Second)) {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.NotAfter, tcExpirationTime.UTC().Truncate(time.Minute))
+	}
+	return nil
+}
+
+func checkCACertificate(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, tcExpirationTime time.Time) error {
+
+	err := checkCertificate(cert, tcSubject, tcKeyMetadata.Type, tcExpirationTime)
+	if err != nil {
+		return err
+	}
+
+	if cert.IsCA != true {
+		return fmt.Errorf("unexpected result, got: %t, want: %t", cert.IsCA, true)
+	}
+
+	if cert.OCSPServer[0] != "http://ocsp.lamassu.io/ocsp" {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer, "http://ocsp.lamassuiot.com/ocsp")
+	}
+
+	if cert.CRLDistributionPoints[0] != "http://ocsp.lamassu.io/crl/"+string(cert.SubjectKeyId) {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints, "http://crl.lamassuiot.com/crl/"+string(cert.SubjectKeyId))
+	}
+	return nil
+}
+
 func TestCreateRootCA(t *testing.T) {
 
 	tempDir, _, x509Engine := setup(t)
@@ -126,22 +179,28 @@ func TestCreateRootCA(t *testing.T) {
 
 	expirationTime := time.Now().AddDate(1, 0, 0) // Set expiration time to 1 year from now
 
-	checkOk := func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, err error) error {
+	checkOk := func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, tcExpirationTime time.Time, err error) error {
 		if err != nil {
 			return fmt.Errorf("unexpected error: %s", err)
 		}
 
-		if cert.Subject.CommonName != tcSubject.CommonName {
-			return fmt.Errorf("unexpected result, got: %s, want: %s", cert.Subject.CommonName, tcSubject.CommonName)
-		}
-		return nil
+		return checkCACertificate(cert, tcSubject, tcKeyMetadata, tcExpirationTime)
 	}
 
-	checkFail := func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, err error) error {
+	checkFail := func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, tcExpirationTime time.Time, err error) error {
 		if err == nil {
 			return fmt.Errorf("expected error, got nil")
 		}
 		return nil
+	}
+
+	caSubject := models.Subject{
+		CommonName:       "Root CA",
+		Organization:     "Lamassu IoT",
+		OrganizationUnit: "CA",
+		Country:          "ES",
+		State:            "Gipuzkoa",
+		Locality:         "Arrasate",
 	}
 
 	var testcases = []struct {
@@ -150,14 +209,12 @@ func TestCreateRootCA(t *testing.T) {
 		subject        models.Subject
 		keyMetadata    models.KeyMetadata
 		expirationTime time.Time
-		check          func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, err error) error
+		check          func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, expirationTime time.Time, err error) error
 	}{
 		{
-			name: "OK/RSA_2048",
-			caId: "rootCA-RSA2048",
-			subject: models.Subject{
-				CommonName: "Root CA",
-			},
+			name:    "OK/RSA_2048",
+			caId:    "rootCA-RSA2048",
+			subject: caSubject,
 			keyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.RSA),
 				Bits: 2048,
@@ -166,11 +223,9 @@ func TestCreateRootCA(t *testing.T) {
 			check:          checkOk,
 		},
 		{
-			name: "FAIL/RSA_1",
-			caId: "rootCA-RSA1",
-			subject: models.Subject{
-				CommonName: "Root CA",
-			},
+			name:    "FAIL/RSA_1",
+			caId:    "rootCA-RSA1",
+			subject: caSubject,
 			keyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.RSA),
 				Bits: 1,
@@ -179,11 +234,9 @@ func TestCreateRootCA(t *testing.T) {
 			check:          checkFail,
 		},
 		{
-			name: "OK/ECDSA_256",
-			caId: "rootCA-ECDSA_256",
-			subject: models.Subject{
-				CommonName: "Root CA",
-			},
+			name:    "OK/ECDSA_256",
+			caId:    "rootCA-ECDSA_256",
+			subject: caSubject,
 			keyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.ECDSA),
 				Bits: 256,
@@ -192,11 +245,9 @@ func TestCreateRootCA(t *testing.T) {
 			check:          checkOk,
 		},
 		{
-			name: "OK/ECDSA_224",
-			caId: "rootCA-ECDSA_224",
-			subject: models.Subject{
-				CommonName: "Root CA",
-			},
+			name:    "OK/ECDSA_224",
+			caId:    "rootCA-ECDSA_224",
+			subject: caSubject,
 			keyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.ECDSA),
 				Bits: 224,
@@ -205,11 +256,9 @@ func TestCreateRootCA(t *testing.T) {
 			check:          checkOk,
 		},
 		{
-			name: "OK/ECDSA_384",
-			caId: "rootCA-ECDSA_384",
-			subject: models.Subject{
-				CommonName: "Root CA",
-			},
+			name:    "OK/ECDSA_384",
+			caId:    "rootCA-ECDSA_384",
+			subject: caSubject,
 			keyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.ECDSA),
 				Bits: 384,
@@ -218,11 +267,9 @@ func TestCreateRootCA(t *testing.T) {
 			check:          checkOk,
 		},
 		{
-			name: "OK/ECDSA_521",
-			caId: "rootCA-ECDSA_521",
-			subject: models.Subject{
-				CommonName: "Root CA",
-			},
+			name:    "OK/ECDSA_521",
+			caId:    "rootCA-ECDSA_521",
+			subject: caSubject,
 			keyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.ECDSA),
 				Bits: 521,
@@ -231,11 +278,9 @@ func TestCreateRootCA(t *testing.T) {
 			check:          checkOk,
 		},
 		{
-			name: "FAIL/ECDSA_NOT_SUPORTED",
-			caId: "rootCA-ECDSA_FAIL",
-			subject: models.Subject{
-				CommonName: "Root CA",
-			},
+			name:    "FAIL/ECDSA_NOT_SUPORTED",
+			caId:    "rootCA-ECDSA_FAIL",
+			subject: caSubject,
 			keyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.ECDSA),
 				Bits: 1024,
@@ -251,7 +296,7 @@ func TestCreateRootCA(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Call the CreateRootCA method
 			cert, err := x509Engine.CreateRootCA(tc.caId, tc.keyMetadata, tc.subject, tc.expirationTime)
-			err = tc.check(cert, tc.subject, tc.keyMetadata, err)
+			err = tc.check(cert, tc.subject, tc.keyMetadata, tc.expirationTime, err)
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
 
@@ -272,8 +317,14 @@ func TestCreateSubordinateCA(t *testing.T) {
 		Bits: 2048,
 	}
 	subject := models.Subject{
-		CommonName: "Root CA",
+		CommonName:       "Root CA",
+		Organization:     "Lamassu IoT",
+		OrganizationUnit: "CA",
+		Country:          "ES",
+		State:            "Gipuzkoa",
+		Locality:         "Arrasate",
 	}
+
 	expirationTime := time.Now().AddDate(1, 0, 0) // Set expiration time to 1 year from now
 
 	// Call the CreateRootCA method
@@ -295,18 +346,32 @@ func TestCreateSubordinateCA(t *testing.T) {
 		t.Errorf("unexpected error: %s", err)
 	}
 
-	subordinateSubject := models.Subject{
-		CommonName: "Subordinate CA",
+	caCertificateNotImported, _, err := helpers.GenerateSelfSignedCA(x509.ECDSA, 365*24*time.Hour)
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
 	}
 
-	checkOk := func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, err error) error {
+	subordinateSubject := models.Subject{
+		CommonName:       "Subordinate CA",
+		Organization:     "Lamassu IoT",
+		OrganizationUnit: "CA",
+		Country:          "ES",
+		State:            "Gipuzkoa",
+		Locality:         "Arrasate",
+	}
+
+	checkOk := func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, tcExpirationTime time.Time, err error) error {
 		// Verify the result
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
 		}
 
-		if cert.Subject.CommonName != tcSubject.CommonName {
-			t.Errorf("unexpected result, got: %s, want: %s", cert.Subject.CommonName, tcSubject.CommonName)
+		return checkCACertificate(cert, tcSubject, tcKeyMetadata, tcExpirationTime)
+	}
+
+	checkFail := func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, tcExpirationTime time.Time, err error) error {
+		if err == nil {
+			return fmt.Errorf("expected error, got nil")
 		}
 		return nil
 	}
@@ -319,7 +384,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 		subject         models.Subject
 		keyMetadata     models.KeyMetadata
 		expirationTime  time.Time
-		check           func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, err error) error
+		check           func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, tcExpirationTime time.Time, err error) error
 	}{
 		{name: "OK/RSA_RSA",
 			subordinateCAID: "subCA",
@@ -369,6 +434,18 @@ func TestCreateSubordinateCA(t *testing.T) {
 			expirationTime: expirationTime,
 			check:          checkOk,
 		},
+		{name: "FAIL/ROOT_CA_NOT_FOUND",
+			subordinateCAID: "subCA",
+			aki:             "12345",
+			rootCaCert:      caCertificateNotImported,
+			subject:         subordinateSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.ECDSA),
+				Bits: 256,
+			},
+			expirationTime: expirationTime,
+			check:          checkFail,
+		},
 	}
 
 	for _, tc := range testcases {
@@ -378,7 +455,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 
 			// Call the CreateSubordinateCA method
 			cert, err := x509Engine.CreateSubordinateCA(tc.aki, tc.subordinateCAID, tc.rootCaCert, tc.keyMetadata, tc.subject, tc.expirationTime, x509Engine)
-			err = tc.check(cert, tc.subject, tc.keyMetadata, err)
+			err = tc.check(cert, tc.subject, tc.keyMetadata, tc.expirationTime, err)
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
 			}
@@ -397,6 +474,7 @@ func TestSignCertificateRequest(t *testing.T) {
 		Type: models.KeyType(x509.RSA),
 		Bits: 2048,
 	}
+
 	subject := models.Subject{
 		CommonName: "Root CA",
 	}
@@ -424,12 +502,15 @@ func TestSignCertificateRequest(t *testing.T) {
 	}
 
 	csrSubject := models.Subject{
-		CommonName:       "example.com",
-		Organization:     "Acme Inc",
-		OrganizationUnit: "IT",
+		CommonName:       "Subordinate CA",
+		Organization:     "Lamassu IoT",
+		OrganizationUnit: "CA",
+		Country:          "ES",
+		State:            "Gipuzkoa",
+		Locality:         "Arrasate",
 	}
 
-	checkOk := func(cert *x509.Certificate, tcSubject models.Subject, errCsr error, errSign error) error {
+	checkOk := func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr error, errSign error) error {
 
 		if errCsr != nil {
 			return fmt.Errorf("unexpected error: %s", err)
@@ -439,13 +520,18 @@ func TestSignCertificateRequest(t *testing.T) {
 			return fmt.Errorf("unexpected error: %s", err)
 		}
 
+		err := checkCertificate(cert, tcSubject, keyType, expirationTime)
+		if err != nil {
+			return err
+		}
+
 		if cert.Subject.CommonName != tcSubject.CommonName {
 			return fmt.Errorf("unexpected result, got: %s, want: %s", cert.Subject.CommonName, tcSubject.CommonName)
 		}
 		return nil
 	}
 
-	checkFail := func(cert *x509.Certificate, tcSubject models.Subject, errCsr error, errSign error) error {
+	checkFail := func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr error, errSign error) error {
 		if errCsr != nil {
 			return fmt.Errorf("unexpected error: %s", err)
 		}
@@ -459,13 +545,15 @@ func TestSignCertificateRequest(t *testing.T) {
 		name          string
 		caCertificate *x509.Certificate
 		subject       models.Subject
+		keyType       models.KeyType
 		key           func() any
-		check         func(cert *x509.Certificate, tcSubject models.Subject, errCsr error, errSign error) error
+		check         func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr error, errSign error) error
 	}{
 		{
 			name:          "OK/RSA_RSA",
 			caCertificate: caCertificateRSA,
 			subject:       csrSubject,
+			keyType:       models.KeyType(x509.RSA),
 			key: func() any {
 				key, _ := helpers.GenerateRSAKey(2048)
 				return key
@@ -476,6 +564,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			name:          "OK/EC_RSA",
 			caCertificate: caCertificateEC,
 			subject:       csrSubject,
+			keyType:       models.KeyType(x509.RSA),
 			key: func() any {
 				key, _ := helpers.GenerateRSAKey(2048)
 				return key
@@ -486,6 +575,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			name:          "OK/RSA_EC",
 			caCertificate: caCertificateRSA,
 			subject:       csrSubject,
+			keyType:       models.KeyType(x509.ECDSA),
 			key: func() any {
 				key, _ := helpers.GenerateECDSAKey(elliptic.P256())
 				return key
@@ -496,6 +586,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			name:          "OK/EC_EC",
 			caCertificate: caCertificateEC,
 			subject:       csrSubject,
+			keyType:       models.KeyType(x509.ECDSA),
 			key: func() any {
 				key, _ := helpers.GenerateECDSAKey(elliptic.P256())
 				return key
@@ -506,6 +597,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			name:          "FAIL/NOT_EXISTENT_CA",
 			caCertificate: caCertificateNotImported,
 			subject:       csrSubject,
+			keyType:       models.KeyType(x509.ECDSA),
 			key: func() any {
 				key, _ := helpers.GenerateECDSAKey(elliptic.P256())
 				return key
@@ -519,7 +611,10 @@ func TestSignCertificateRequest(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			csr, errCsr := helpers.GenerateCertificateRequest(tc.subject, tc.key())
 			cert, errSing := x509Engine.SignCertificateRequest(tc.caCertificate, csr, expirationTime)
-			tc.check(cert, tc.subject, errCsr, errSing)
+			err := tc.check(cert, tc.subject, tc.keyType, expirationTime, errCsr, errSing)
+			if err != nil {
+				t.Errorf("unexpected result in test case: %s", err)
+			}
 		})
 	}
 }

@@ -10,7 +10,6 @@ import (
 	"crypto/sha512"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash"
@@ -367,7 +366,7 @@ func (engine X509Engine) Verify(caCertificate *x509.Certificate, signature []byt
 			h.Write(message)
 			hasher = h.Sum(nil)
 		} else {
-			hasher, err = hex.DecodeString(string(message))
+			hasher = message
 			if err != nil {
 				return false, err
 			}
