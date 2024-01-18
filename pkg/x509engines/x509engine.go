@@ -10,10 +10,12 @@ import (
 	"crypto/sha512"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"errors"
 	"fmt"
 	"hash"
 	"math/big"
+	"slices"
 	"strings"
 	"time"
 
@@ -143,6 +145,25 @@ func (engine X509Engine) SignCertificateRequest(caCertificate *x509.Certificate,
 
 	now := time.Now()
 
+	allowedExtOIDs := []asn1.ObjectIdentifier{
+		{2, 5, 29, 17}, //SAN OID
+	}
+
+	exts := []pkix.Extension{}
+	for _, csrExt := range csr.Extensions {
+		if slices.ContainsFunc(allowedExtOIDs, func(id asn1.ObjectIdentifier) bool {
+			for _, allowedExt := range allowedExtOIDs {
+				if allowedExt.Equal(csrExt.Id) {
+					return true
+				}
+			}
+
+			return false
+		}) {
+			exts = append(exts, csrExt)
+		}
+	}
+
 	certificateTemplate := x509.Certificate{
 		PublicKeyAlgorithm: csr.PublicKeyAlgorithm,
 		PublicKey:          csr.PublicKey,
@@ -153,13 +174,14 @@ func (engine X509Engine) SignCertificateRequest(caCertificate *x509.Certificate,
 		NotBefore:          now,
 		NotAfter:           expirationDate,
 		KeyUsage:           x509.KeyUsageDigitalSignature,
+		ExtraExtensions:    exts,
 		OCSPServer: []string{
 			fmt.Sprintf("https://%s/api/va/ocsp", engine.validationAuthorityDomain),
 		},
 		CRLDistributionPoints: []string{
 			fmt.Sprintf("https://%s/api/va/crl/%s", engine.validationAuthorityDomain, string(caCertificate.SubjectKeyId)),
 		},
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 	}
 
 	certificateBytes, err := x509.CreateCertificate(rand.Reader, &certificateTemplate, caCertificate, csr.PublicKey, privkey)
@@ -233,10 +255,10 @@ func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata models.KeyMeta
 		AuthorityKeyId: []byte(aki),
 		SubjectKeyId:   []byte(ski),
 		OCSPServer: []string{
-			fmt.Sprintf("%s/ocsp", engine.validationAuthorityDomain),
+			fmt.Sprintf("https://%s/ocsp", engine.validationAuthorityDomain),
 		},
 		CRLDistributionPoints: []string{
-			fmt.Sprintf("%s/crl/%s", engine.validationAuthorityDomain, ski),
+			fmt.Sprintf("https://%s/crl/%s", engine.validationAuthorityDomain, ski),
 		},
 		NotBefore:             now,
 		NotAfter:              expirationTine,

@@ -3,6 +3,7 @@ module github.com/lamassuiot/lamassuiot/v2
 go 1.21
 
 require (
+	github.com/AvraamMavridis/randomcolor v0.0.0-20180822172341-208aff70bf2c
 	github.com/ThalesIgnite/crypto11 v1.2.1
 	github.com/ThreeDotsLabs/watermill v1.3.5
 	github.com/ThreeDotsLabs/watermill-amqp/v2 v2.1.1
@@ -16,9 +17,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.23.3
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.28.2
 	github.com/cloudevents/sdk-go/v2 v2.11.0
+	github.com/eclipse/paho.mqtt.golang v1.4.3
 	github.com/fatih/color v1.15.0
 	github.com/gin-contrib/cors v1.4.0
 	github.com/gin-gonic/gin v1.9.1
+	github.com/globalsign/est v1.0.6
 	github.com/go-gormigrate/gormigrate/v2 v2.1.1
 	github.com/go-kivik/couchdb v2.0.0+incompatible
 	github.com/go-kivik/couchdb/v4 v4.0.0-20220217152009-9380cf8517a0
@@ -27,6 +30,7 @@ require (
 	github.com/haritzsaiz/gin-dump v0.2.0
 	github.com/hashicorp/vault/api v1.9.2
 	github.com/jakehl/goid v1.1.0
+	github.com/kuzemkon/aws-iot-device-sdk-go v0.0.0-20200313144654-1a36b3aacf19
 	github.com/miekg/pkcs11 v1.1.1
 	github.com/ory/dockertest/v3 v3.10.0
 	github.com/robfig/cron/v3 v3.0.1
@@ -79,6 +83,7 @@ require (
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
+	github.com/go-chi/chi v4.1.2+incompatible // indirect
 	github.com/go-jose/go-jose/v3 v3.0.1 // indirect
 	github.com/go-kivik/kivik v2.0.0+incompatible // indirect
 	github.com/go-kivik/kiviktest v2.0.0+incompatible // indirect
@@ -90,7 +95,9 @@ require (
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/go-containerregistry v0.16.1 // indirect
+	github.com/google/go-tpm v0.3.2 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
+	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/imdario/mergo v0.3.15 // indirect
 	github.com/jackc/pgx/v5 v5.3.1 // indirect

@@ -3,6 +3,7 @@ package monolithic
 import (
 	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -20,8 +21,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
-	log.SetLevel(log.DebugLevel)
+func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
+	log.SetLevel(log.PanicLevel)
 	if conf.AssemblyMode == config.Http {
 		apiInfo := models.APIServiceInfo{
 			Version:   "-",
@@ -44,10 +45,10 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 		_, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
 			BaseConfig: config.BaseConfig{
 				Logs: config.BaseConfigLogging{
-					Level: config.Info,
+					Level: conf.Server.LogLevel,
 				},
 				Server: config.HttpServer{
-					LogLevel:           config.Info,
+					LogLevel:           conf.Server.LogLevel,
 					HealthCheckLogging: true,
 					ListenAddress:      "0.0.0.0",
 					Port:               0,
@@ -61,7 +62,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 			VAServerDomain:   fmt.Sprintf("https://%s/api/va", conf.Domain),
 		}, apiInfo)
 		if err != nil {
-			return fmt.Errorf("could not assemble CA Service: %s", err)
+			return -1, fmt.Errorf("could not assemble CA Service: %s", err)
 		}
 
 		caConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: caPort}, Protocol: config.HTTP, BasePath: ""}
@@ -85,7 +86,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(config.VAconfig{
 			BaseConfig: config.BaseConfig{
 				Logs: config.BaseConfigLogging{
-					Level: config.Info,
+					Level: conf.Server.LogLevel,
 				},
 				Server: config.HttpServer{
 					LogLevel:           config.Info,
@@ -98,13 +99,13 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 			},
 		}, caSDKBuilder(models.VASource), apiInfo)
 		if err != nil {
-			return fmt.Errorf("could not assemble VA Service: %s", err)
+			return -1, fmt.Errorf("could not assemble VA Service: %s", err)
 		}
 
 		_, devPort, err := lamassu.AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
 			BaseConfig: config.BaseConfig{
 				Logs: config.BaseConfigLogging{
-					Level: config.Info,
+					Level: conf.Server.LogLevel,
 				},
 				Server: config.HttpServer{
 					LogLevel:           config.Info,
@@ -118,7 +119,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 			Storage: conf.Storage,
 		}, caSDKBuilder(models.DeviceManagerSource), apiInfo)
 		if err != nil {
-			return fmt.Errorf("could not assemble Device Manager Service: %s", err)
+			return -1, fmt.Errorf("could not assemble Device Manager Service: %s", err)
 		}
 
 		devMngrConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: devPort}, Protocol: config.HTTP, BasePath: ""}
@@ -141,7 +142,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
 			BaseConfig: config.BaseConfig{
 				Logs: config.BaseConfigLogging{
-					Level: config.Info,
+					Level: conf.Server.LogLevel,
 				},
 				Server: config.HttpServer{
 					LogLevel:           config.Info,
@@ -156,7 +157,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 			Storage:                   conf.Storage,
 		}, caSDKBuilder(models.DMSManagerSource), deviceMngrSDKBuilder(models.DMSManagerSource), apiInfo)
 		if err != nil {
-			return fmt.Errorf("could not assemble DMS Manager Service: %s", err)
+			return -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
 		}
 
 		dmsMngrConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: dmsPort}, Protocol: config.HTTP, BasePath: ""}
@@ -179,7 +180,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 		_, alertsPort, err := lamassu.AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
 			BaseConfig: config.BaseConfig{
 				Logs: config.BaseConfigLogging{
-					Level: config.Info,
+					Level: conf.Server.LogLevel,
 				},
 				Server: config.HttpServer{
 					LogLevel:           config.Info,
@@ -193,14 +194,14 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 			Storage: conf.Storage,
 		}, apiInfo)
 		if err != nil {
-			return fmt.Errorf("could not assemble Alerts Service: %s", err)
+			return -1, fmt.Errorf("could not assemble Alerts Service: %s", err)
 		}
 
 		if conf.AWSIoTManager.Enabled {
 			_, err = lamassu.AssembleAWSIoTManagerService(config.IotAWS{
 				BaseConfig: config.BaseConfig{
 					Logs: config.BaseConfigLogging{
-						Level: config.Info,
+						Level: conf.Server.LogLevel,
 					},
 					EventBus: conf.EventBus,
 				},
@@ -208,7 +209,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 				AWSSDKConfig: conf.AWSIoTManager.AWSSDKConfig,
 			}, caSDKBuilder(models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)), dmsMngrSDKBuilder(models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)), deviceMngrSDKBuilder(models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)))
 			if err != nil {
-				return fmt.Errorf("could not assemble AWS IoT Manager: %s", err)
+				return -1, fmt.Errorf("could not assemble AWS IoT Manager: %s", err)
 			}
 		}
 
@@ -253,8 +254,16 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 		buildReverseProxyHandler(engine, "VA", "/api/va/", vaPort)
 		buildReverseProxyHandler(engine, "Alerts", "/api/alerts/", alertsPort)
 
+		listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", conf.GatewayPort))
+		if err != nil {
+			log.Fatalf("could not get Gateway net Listener: %s", err)
+		}
+
+		usedPort := listener.Addr().(*net.TCPAddr).Port
+
 		go func() {
 			// log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", conf.GatewayPort), engine))
+
 			server := http.Server{
 				Handler: engine,
 				Addr:    fmt.Sprintf(":%d", conf.GatewayPort),
@@ -263,12 +272,13 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) error {
 				},
 			}
 
-			log.Fatal(server.ListenAndServeTLS("proxy.crt", "proxy.key"))
+			log.Fatal(server.ServeTLS(listener, "proxy.crt", "proxy.key"))
 		}()
 
+		return usedPort, nil
 	}
 
-	return nil
+	return -1, fmt.Errorf("unsupported mode")
 }
 
 func clientCertsToHeaderUsingEnvoyStyle() gin.HandlerFunc {

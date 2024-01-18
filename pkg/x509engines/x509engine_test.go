@@ -4,6 +4,8 @@ import (
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"fmt"
 	"os"
 	"reflect"
@@ -24,7 +26,7 @@ func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
 	log := helpers.ConfigureLogger(config.Info, "Golang Engine")
 	engine := cryptoengines.NewGolangPEMEngine(log, config.GolangEngineConfig{StorageDirectory: tempDir})
 
-	x509Engine := NewX509Engine(&engine, "http://ocsp.lamassu.io")
+	x509Engine := NewX509Engine(&engine, "ocsp.lamassu.io")
 
 	return tempDir, engine, x509Engine
 }
@@ -465,7 +467,6 @@ func TestCreateSubordinateCA(t *testing.T) {
 }
 
 func TestSignCertificateRequest(t *testing.T) {
-
 	tempDir, _, x509Engine := setup(t)
 	defer teardown(tempDir)
 
@@ -541,10 +542,16 @@ func TestSignCertificateRequest(t *testing.T) {
 		return nil
 	}
 
+	//Tag 2 is used for DNS SAN
+	// dnsSanASN1Bytes, _ := asn1.Marshal(asn1.RawValue{Tag: 2, Class: 2, Bytes: []byte("lamassu.io")})
+	//Tag 7 is used for IP SAN
+	ipSanASN1Bytes, _ := asn1.Marshal(asn1.RawValue{Tag: 7, Class: 2, Bytes: []byte("192.168.100.1")})
+
 	var testcases = []struct {
 		name          string
 		caCertificate *x509.Certificate
 		subject       models.Subject
+		extensions    []pkix.Extension
 		keyType       models.KeyType
 		key           func() any
 		check         func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr error, errSign error) error
@@ -553,6 +560,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			name:          "OK/RSA_RSA",
 			caCertificate: caCertificateRSA,
 			subject:       csrSubject,
+			extensions:    []pkix.Extension{},
 			keyType:       models.KeyType(x509.RSA),
 			key: func() any {
 				key, _ := helpers.GenerateRSAKey(2048)
@@ -564,6 +572,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			name:          "OK/EC_RSA",
 			caCertificate: caCertificateEC,
 			subject:       csrSubject,
+			extensions:    []pkix.Extension{},
 			keyType:       models.KeyType(x509.RSA),
 			key: func() any {
 				key, _ := helpers.GenerateRSAKey(2048)
@@ -575,6 +584,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			name:          "OK/RSA_EC",
 			caCertificate: caCertificateRSA,
 			subject:       csrSubject,
+			extensions:    []pkix.Extension{},
 			keyType:       models.KeyType(x509.ECDSA),
 			key: func() any {
 				key, _ := helpers.GenerateECDSAKey(elliptic.P256())
@@ -586,12 +596,45 @@ func TestSignCertificateRequest(t *testing.T) {
 			name:          "OK/EC_EC",
 			caCertificate: caCertificateEC,
 			subject:       csrSubject,
+			extensions:    []pkix.Extension{},
 			keyType:       models.KeyType(x509.ECDSA),
 			key: func() any {
 				key, _ := helpers.GenerateECDSAKey(elliptic.P256())
 				return key
 			},
 			check: checkOk,
+		},
+		{
+			name:          "OK/EXT_SAN",
+			caCertificate: caCertificateEC,
+			subject:       csrSubject,
+			extensions: []pkix.Extension{
+				{
+					Id:       asn1.ObjectIdentifier{2, 5, 29, 17},
+					Critical: false,
+					Value:    ipSanASN1Bytes,
+				},
+			},
+			keyType: models.KeyType(x509.ECDSA),
+			key: func() any {
+				key, _ := helpers.GenerateECDSAKey(elliptic.P256())
+				return key
+			},
+			check: func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr, errSign error) error {
+				if err := checkOk(cert, tcSubject, keyType, expirationTime, errCsr, errSign); err != nil {
+					return nil
+				}
+
+				for _, ext := range cert.Extensions {
+					if ext.Id.Equal(asn1.ObjectIdentifier{2, 5, 29, 17}) { //SAN
+						var a string
+						asn1.Unmarshal(ext.Value, &a)
+						fmt.Println(a)
+					}
+				}
+
+				return nil
+			},
 		},
 		{
 			name:          "FAIL/NOT_EXISTENT_CA",
@@ -609,7 +652,7 @@ func TestSignCertificateRequest(t *testing.T) {
 	for _, tc := range testcases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			csr, errCsr := helpers.GenerateCertificateRequest(tc.subject, tc.key())
+			csr, errCsr := helpers.GenerateCertificateRequestWithExtensions(tc.subject, tc.extensions, tc.key())
 			cert, errSing := x509Engine.SignCertificateRequest(tc.caCertificate, csr, expirationTime)
 			err := tc.check(cert, tc.subject, tc.keyType, expirationTime, errCsr, errSing)
 			if err != nil {
