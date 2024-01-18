@@ -164,12 +164,12 @@ func checkCACertificate(cert *x509.Certificate, tcSubject models.Subject, tcKeyM
 		return fmt.Errorf("unexpected result, got: %t, want: %t", cert.IsCA, true)
 	}
 
-	if cert.OCSPServer[0] != "http://ocsp.lamassu.io/ocsp" {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer, "http://ocsp.lamassuiot.com/ocsp")
+	if cert.OCSPServer[0] != "https://ocsp.lamassu.io/ocsp" {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer, "https://ocsp.lamassuiot.com/ocsp")
 	}
 
-	if cert.CRLDistributionPoints[0] != "http://ocsp.lamassu.io/crl/"+string(cert.SubjectKeyId) {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints, "http://crl.lamassuiot.com/crl/"+string(cert.SubjectKeyId))
+	if cert.CRLDistributionPoints[0] != "https://ocsp.lamassu.io/crl/"+string(cert.SubjectKeyId) {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints, "https://crl.lamassuiot.com/crl/"+string(cert.SubjectKeyId))
 	}
 	return nil
 }
