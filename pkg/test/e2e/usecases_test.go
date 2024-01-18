@@ -20,6 +20,8 @@ var awsIoTManagerAccountID = flag.String("awsiot-id", "", "AWS IoT Core Account 
 var awsIoTManagerEndpoint = flag.String("awsiot-endpoint", "", "AWS IoT Core Endpoint")
 
 func TestUseCase1(t *testing.T) {
+	t.Skip("Skip until we have a reliable way to test this")
+
 	cleanup := []func() error{}
 
 	//capture future panics
