@@ -96,7 +96,7 @@ func TestCRL(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			vaTest, err := BuildVATestServer()
+			vaTest, err := BuildVATestServer(t)
 			if err != nil {
 				t.Fatalf("could not create VA test server")
 			}
@@ -207,7 +207,7 @@ func TestPostOCSP(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			vaTest, err := BuildVATestServer()
+			vaTest, err := BuildVATestServer(t)
 			if err != nil {
 				t.Fatalf("could not create VA test server")
 			}
@@ -238,7 +238,7 @@ func TestPostOCSP(t *testing.T) {
 }
 func TestGetOCSP(t *testing.T) {
 	t.Skip("Skip until we have a reliable way to test this")
-	vaTest, err := BuildVATestServer()
+	vaTest, err := BuildVATestServer(t)
 	if err != nil {
 		t.Fatalf("could not create VA test server")
 	}
@@ -277,7 +277,7 @@ func TestCheckOCSPRevocationCodes(t *testing.T) {
 		ocsp.AACompromise:         "AACompromise",
 	}
 
-	vaTest, err := BuildVATestServer()
+	vaTest, err := BuildVATestServer(t)
 	if err != nil {
 		t.Fatalf("could not create VA test server")
 	}
@@ -430,11 +430,14 @@ type VATestServer struct {
 	BeforeEach    func() error
 }
 
-func BuildVATestServer() (*VATestServer, error) {
-	caServer, err := BuildCATestServer()
+func BuildVATestServer(t *testing.T) (*VATestServer, error) {
+	pConfig, postgresSuite := initPostgres([]string{"ca", "devicemanager"})
+
+	caServer, err := buildCASimpleTestServer(pConfig, postgresSuite)
 	if err != nil {
 		return nil, fmt.Errorf("could not create CA test server: %s", err)
 	}
+	t.Cleanup(caServer.AfterSuite)
 
 	_, _, port, err := AssembleVAServiceWithHTTPServer(config.VAconfig{
 		BaseConfig: config.BaseConfig{

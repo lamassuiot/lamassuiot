@@ -28,8 +28,8 @@ func RunPostgresDocker(dbs []string) (func() error, *config.PostgresPSEConfig, e
 	for _, dbName := range dbs {
 		sqlStatements = sqlStatements + fmt.Sprintf("CREATE DATABASE %s;\n", dbName)
 	}
-
-	initScriptFname := fmt.Sprintf("%s/init.sql", pwd)
+	os.Mkdir(fmt.Sprintf("%s/testdata", pwd), 0755) // #nosec
+	initScriptFname := fmt.Sprintf("%s/testdata/init.sql", pwd)
 	os.WriteFile(initScriptFname, []byte(sqlStatements), 0644) // #nosec
 
 	containerCleanup, container, dockerHost, err := dockerunner.RunDocker(dockertest.RunOptions{

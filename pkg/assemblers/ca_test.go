@@ -2744,7 +2744,7 @@ func initCA(caSDK services.CAService) (*models.CACertificate, error) {
 func BuildCATestServer() (*CATestServer, error) {
 	vaultSDKConf, vaultSuite := vault_test.BeforeSuite()
 
-	pConfig, postgresSuite := postgres_test.BeforeSuite("ca")
+	pConfig, postgresSuite := postgres_test.BeforeSuite([]string{"ca", "devicemanager"})
 
 	svc, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
 		BaseConfig: config.BaseConfig{
@@ -2807,12 +2807,12 @@ func BuildCATestServer() (*CATestServer, error) {
 			}
 
 			//reinitialize tables schemas
-			_, err = postgres.NewCAPostgresRepository(postgresSuite.DB)
+			_, err = postgres.NewCAPostgresRepository(postgresSuite.DB["ca"])
 			if err != nil {
 				return fmt.Errorf("could not run reinitialize CA tables: %s", err)
 			}
 
-			_, err = postgres.NewCertificateRepository(postgresSuite.DB)
+			_, err = postgres.NewCertificateRepository(postgresSuite.DB["ca"])
 			if err != nil {
 				return fmt.Errorf("could not run reinitialize Certificates tables: %s", err)
 			}
