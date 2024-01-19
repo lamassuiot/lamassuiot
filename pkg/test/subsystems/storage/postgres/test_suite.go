@@ -11,33 +11,35 @@ import (
 )
 
 type PostgresSuite struct {
-	dbName        string
-	DB            *gorm.DB
+	dbNames       []string
+	DB            map[string]*gorm.DB
 	cleanupDocker func() error
 }
 
-func BeforeSuite(dbName string) (config.PostgresPSEConfig, PostgresSuite) {
-	cleaner, conf, err := RunPostgresDocker([]string{dbName})
+func BeforeSuite(dbNames []string) (config.PostgresPSEConfig, PostgresSuite) {
+	cleaner, conf, err := RunPostgresDocker(dbNames)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	conStr := fmt.Sprintf("host=%s port=%d user=%s dbname=%s password=%s sslmode=disable",
-		conf.Hostname,
-		conf.Port,
-		conf.Username,
-		dbName,
-		conf.Password,
-	)
-
-	gdb, _ := gorm.Open(postgres.Open(conStr), &gorm.Config{
-		Logger: gormLogger.Discard,
-	})
+	dbMap := make(map[string]*gorm.DB)
+	for _, dbName := range dbNames {
+		conStr := fmt.Sprintf("host=%s port=%d user=%s dbname=%s password=%s sslmode=disable",
+			conf.Hostname,
+			conf.Port,
+			conf.Username,
+			dbName,
+			conf.Password,
+		)
+		dbMap[dbName], _ = gorm.Open(postgres.Open(conStr), &gorm.Config{
+			Logger: gormLogger.Discard,
+		})
+	}
 
 	return *conf, PostgresSuite{
 		cleanupDocker: cleaner,
-		DB:            gdb,
-		dbName:        dbName,
+		DB:            dbMap,
+		dbNames:       dbNames,
 	}
 }
 
@@ -47,16 +49,18 @@ func (st *PostgresSuite) AfterSuite() {
 
 func (st *PostgresSuite) BeforeEach() error {
 	// clear db tables before each test
-	var tables []string
-	if err := st.DB.Table("information_schema.tables").Where("table_schema = ?", "public").Pluck("table_name", &tables).Error; err != nil {
-		panic(err)
-	}
+	for _, dbName := range st.dbNames {
+		var tables []string
+		if err := st.DB[dbName].Table("information_schema.tables").Where("table_schema = ?", "public").Pluck("table_name", &tables).Error; err != nil {
+			panic(err)
+		}
 
-	for _, table := range tables {
-		tx := st.DB.Exec(fmt.Sprintf("TRUNCATE TABLE  %s;", table))
-		err := tx.Error
-		if err != nil {
-			return err
+		for _, table := range tables {
+			tx := st.DB[dbName].Exec(fmt.Sprintf("TRUNCATE TABLE  %s;", table))
+			err := tx.Error
+			if err != nil {
+				return err
+			}
 		}
 	}
 
