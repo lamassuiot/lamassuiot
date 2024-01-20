@@ -12,7 +12,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
-	"net"
 	"time"
 
 	"github.com/google/uuid"
@@ -100,9 +99,8 @@ func GenerateCertificateRequest(subject models.Subject, key any) (*x509.Certific
 // defined to generate certificates with RSA and ECDSA keys
 func GenerateCertificateRequestWithExtensions(subject models.Subject, extensions []pkix.Extension, key any) (*x509.CertificateRequest, error) {
 	template := x509.CertificateRequest{
-		Subject: SubjectToPkixName(subject),
-		// ExtraExtensions: extensions,
-		IPAddresses: []net.IP{net.IPv4(192, 168, 100, 1)},
+		Subject:         SubjectToPkixName(subject),
+		ExtraExtensions: extensions,
 	}
 
 	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &template, key)
