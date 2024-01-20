@@ -13,21 +13,15 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"net/http"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
-	vault_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/keyvaultkv2"
-	postgres_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/storage/postgres"
 	"golang.org/x/crypto/ocsp"
 )
 
@@ -35,12 +29,12 @@ const DefaultCAID = "111111-2222"
 const DefaultCACN = "MyCA"
 
 func TestCryptoEngines(t *testing.T) {
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
-
-	t.Cleanup(caTest.AfterSuite)
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
 	var testcases = []struct {
 		name        string
@@ -67,7 +61,7 @@ func TestCryptoEngines(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -81,12 +75,12 @@ func TestCryptoEngines(t *testing.T) {
 	}
 }
 func TestCreateCA(t *testing.T) {
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
-
-	t.Cleanup(caTest.AfterSuite)
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
 	caID := "12345-11111"
 	caDUr := models.TimeDuration(time.Hour * 24)
@@ -227,7 +221,7 @@ func TestCreateCA(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -246,12 +240,13 @@ func TestCreateCA(t *testing.T) {
 	}
 }
 func TestGetCertificatesByCaAndStatus(t *testing.T) {
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
-	t.Cleanup(caTest.AfterSuite)
 	t.Parallel()
 
 	var testcases = []struct {
@@ -358,7 +353,7 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			//
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -382,12 +377,12 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 	}
 }
 func TestRevokeCA(t *testing.T) {
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
-
-	t.Cleanup(caTest.AfterSuite)
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
 	var testcases = []struct {
 		name        string
@@ -474,7 +469,7 @@ func TestRevokeCA(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -511,12 +506,13 @@ func TestRevokeCA(t *testing.T) {
 }
 
 func TestUpdateCAMetadata(t *testing.T) {
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
-	t.Cleanup(caTest.AfterSuite)
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
@@ -586,7 +582,7 @@ func TestUpdateCAMetadata(t *testing.T) {
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -611,12 +607,12 @@ func TestUpdateCAMetadata(t *testing.T) {
 }
 
 func TestGetCAsByCommonName(t *testing.T) {
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
-
-	t.Cleanup(caTest.AfterSuite)
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
 	var testcases = []struct {
 		name        string
@@ -655,7 +651,7 @@ func TestGetCAsByCommonName(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -681,12 +677,12 @@ func TestGetCAsByCommonName(t *testing.T) {
 }
 
 func TestUpdateCertificateMetadata(t *testing.T) {
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
-
-	t.Cleanup(caTest.AfterSuite)
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
 	var testcases = []struct {
 		name        string
@@ -781,7 +777,7 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
@@ -806,12 +802,13 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 	}
 }
 func TestUpdateCAStatus(t *testing.T) {
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
-	t.Cleanup(caTest.AfterSuite)
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
@@ -928,7 +925,7 @@ func TestUpdateCAStatus(t *testing.T) {
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -953,12 +950,13 @@ func TestUpdateCAStatus(t *testing.T) {
 }
 
 func TestGetStats(t *testing.T) {
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
-	t.Cleanup(caTest.AfterSuite)
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
@@ -991,7 +989,7 @@ func TestGetStats(t *testing.T) {
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -1016,12 +1014,13 @@ func TestGetStats(t *testing.T) {
 }
 
 func TestGetCertificates(t *testing.T) {
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
-	t.Cleanup(caTest.AfterSuite)
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
@@ -1129,7 +1128,7 @@ func TestGetCertificates(t *testing.T) {
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -1154,12 +1153,13 @@ func TestGetCertificates(t *testing.T) {
 }
 
 func TestGetCertificatesByCA(t *testing.T) {
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
-	t.Cleanup(caTest.AfterSuite)
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
@@ -1362,7 +1362,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -1388,12 +1388,12 @@ func TestGetCertificatesByCA(t *testing.T) {
 
 func TestImportCA(t *testing.T) {
 
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
-
-	t.Cleanup(caTest.AfterSuite)
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
 	generateSelfSignedCA := func(keyType x509.PublicKeyAlgorithm) (*x509.Certificate, any, error) {
 		var err error
@@ -1638,7 +1638,7 @@ func TestImportCA(t *testing.T) {
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -1665,10 +1665,12 @@ func TestImportCA(t *testing.T) {
 
 func TestDeleteCA(t *testing.T) {
 
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
 	t.Cleanup(caTest.AfterSuite)
 	var testcases = []struct {
@@ -1769,7 +1771,7 @@ func TestDeleteCA(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -1795,12 +1797,13 @@ func TestDeleteCA(t *testing.T) {
 
 func TestGetCAs(t *testing.T) {
 
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
-	t.Cleanup(caTest.AfterSuite)
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
@@ -1929,7 +1932,7 @@ func TestGetCAs(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -1955,12 +1958,13 @@ func TestGetCAs(t *testing.T) {
 
 func TestGetCertificatesByExpirationDate(t *testing.T) {
 
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
-	t.Cleanup(caTest.AfterSuite)
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
@@ -2109,7 +2113,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -2135,10 +2139,12 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 
 func TestSignatureVerify(t *testing.T) {
 	t.Skip("Skip until we have a reliable test for this")
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
 	t.Cleanup(caTest.AfterSuite)
 	var testcases = []struct {
@@ -2232,7 +2238,7 @@ func TestSignatureVerify(t *testing.T) {
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -2256,12 +2262,13 @@ func TestSignatureVerify(t *testing.T) {
 	}
 }
 func TestHierarchyCryptoEngines(t *testing.T) {
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
-	t.Cleanup(caTest.AfterSuite)
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
@@ -2341,7 +2348,7 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -2365,12 +2372,13 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 	}
 }
 func TestHierarchy(t *testing.T) {
-	caTest, err := BuildCATestServer()
+	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
+	t.Cleanup(serverTest.AfterSuite)
+	caTest := serverTest.CA
 
-	t.Cleanup(caTest.AfterSuite)
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
@@ -2696,7 +2704,7 @@ func TestHierarchy(t *testing.T) {
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
-			err = caTest.BeforeEach()
+			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
 			}
@@ -2720,13 +2728,6 @@ func TestHierarchy(t *testing.T) {
 	}
 }
 
-type CATestServer struct {
-	Service    services.CAService
-	HttpCASDK  services.CAService
-	BeforeEach func() error
-	AfterSuite func()
-}
-
 func initCA(caSDK services.CAService) (*models.CACertificate, error) {
 	caDUr := models.TimeDuration(time.Hour * 25)
 	issuanceDur := models.TimeDuration(time.Minute * 12)
@@ -2741,93 +2742,18 @@ func initCA(caSDK services.CAService) (*models.CACertificate, error) {
 	return ca, err
 }
 
-func BuildCATestServer() (*CATestServer, error) {
-	vaultSDKConf, vaultSuite := vault_test.BeforeSuite()
-
-	pConfig, postgresSuite := postgres_test.BeforeSuite([]string{"ca", "devicemanager"})
-
-	svc, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
-		BaseConfig: config.BaseConfig{
-			Logs: config.BaseConfigLogging{
-				Level: config.Info,
-			},
-			Server: config.HttpServer{
-				LogLevel:           config.Info,
-				HealthCheckLogging: false,
-				Protocol:           config.HTTP,
-			},
-			EventBus: config.EventBusEngine{Enabled: false},
-		},
-		Storage: config.PluggableStorageEngine{
-			LogLevel: config.Info,
-			Provider: config.Postgres,
-			Postgres: pConfig,
-		},
-		CryptoEngines: config.CryptoEngines{
-			LogLevel:      config.Info,
-			DefaultEngine: "filesystem-1",
-			GolangProvider: []config.GolangEngineConfig{
-				{
-					ID:               "filesystem-1",
-					Metadata:         map[string]interface{}{},
-					StorageDirectory: "/tmp/lms-test/",
-				},
-			},
-			HashicorpVaultKV2Provider: []config.HashicorpVaultCryptoEngineConfig{
-				{
-					ID:                "vault-1",
-					HashicorpVaultSDK: vaultSDKConf,
-					Metadata:          map[string]interface{}{},
-				},
-			},
-		},
-		CryptoMonitoring: config.CryptoMonitoring{
-			Enabled: false,
-		},
-		VAServerDomain: "http://dev.lamassu.test",
-	}, models.APIServiceInfo{
-		Version:   "test",
-		BuildSHA:  "-",
-		BuildTime: "-",
-	})
-	fmt.Println(vaultSDKConf.Port)
-	fmt.Println(vaultSuite.GetRootToken())
-
+func StartCAServiceTestServer(t *testing.T) (*TestServer, error) {
+	storageConfig, err := PreparePostgresForTest([]string{"ca"})
 	if err != nil {
-		return nil, fmt.Errorf("could not assemble CA with HTTP server")
+		t.Fatalf("could not prepare Postgres test server: %s", err)
+	}
+	cryptoConfig := PrepareCryptoEnginesForTest([]CryptoEngine{GOLANG, VAULT})
+	testServer, err := AssembleSerices(storageConfig, cryptoConfig, []Service{CA})
+	if err != nil {
+		t.Fatalf("could not assemble Server with HTTP server")
 	}
 
-	return &CATestServer{
-		Service:   *svc,
-		HttpCASDK: clients.NewHttpCAClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
-		BeforeEach: func() error {
-			err := postgresSuite.BeforeEach()
-			if err != nil {
-				return fmt.Errorf("could not run postgres BeforeEach: %s", err)
-			}
+	t.Cleanup(testServer.AfterSuite)
 
-			//reinitialize tables schemas
-			_, err = postgres.NewCAPostgresRepository(postgresSuite.DB["ca"])
-			if err != nil {
-				return fmt.Errorf("could not run reinitialize CA tables: %s", err)
-			}
-
-			_, err = postgres.NewCertificateRepository(postgresSuite.DB["ca"])
-			if err != nil {
-				return fmt.Errorf("could not run reinitialize Certificates tables: %s", err)
-			}
-
-			err = vaultSuite.BeforeEach()
-			if err != nil {
-				return fmt.Errorf("could not run vault BeforeEach: %s", err)
-			}
-
-			return nil
-		},
-		AfterSuite: func() {
-			fmt.Println("TEST CLEANUP")
-			postgresSuite.AfterSuite()
-			vaultSuite.AfterSuite()
-		},
-	}, nil
+	return testServer, nil
 }
