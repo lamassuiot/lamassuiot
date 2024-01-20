@@ -1,174 +1,38 @@
 package assemblers
 
 import (
-	"fmt"
-	"net/http"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
-	postgres_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/storage/postgres"
 )
 
-type DeviceManagerTestServer struct {
-	Service              services.DeviceManagerService
-	HttpDeviceManagerSDK services.DeviceManagerService
-	BeforeEach           func() error
-	AfterSuite           func()
-}
-
-func initPostgres(dbs []string) (config.PostgresPSEConfig, postgres_test.PostgresSuite) {
-	return postgres_test.BeforeSuite(dbs)
-}
-
-func buildCASimpleTestServer(pConfig config.PostgresPSEConfig, postgresSuite postgres_test.PostgresSuite) (*CATestServer, error) {
-
-	svc, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
-		BaseConfig: config.BaseConfig{
-			Logs: config.BaseConfigLogging{
-				Level: config.Info,
-			},
-			Server: config.HttpServer{
-				LogLevel:           config.Info,
-				HealthCheckLogging: false,
-				Protocol:           config.HTTP,
-			},
-			EventBus: config.EventBusEngine{Enabled: false},
-		},
-		Storage: config.PluggableStorageEngine{
-			LogLevel: config.Info,
-			Provider: config.Postgres,
-			Postgres: pConfig,
-		},
-		CryptoEngines: config.CryptoEngines{
-			LogLevel:      config.Info,
-			DefaultEngine: "filesystem-1",
-			GolangProvider: []config.GolangEngineConfig{
-				{
-					ID:               "filesystem-1",
-					Metadata:         map[string]interface{}{},
-					StorageDirectory: "/tmp/lms-test/",
-				},
-			},
-		},
-		CryptoMonitoring: config.CryptoMonitoring{
-			Enabled: false,
-		},
-		VAServerDomain: "http://dev.lamassu.test",
-	}, models.APIServiceInfo{
-		Version:   "test",
-		BuildSHA:  "-",
-		BuildTime: "-",
-	})
-
+func StartDeviceManagerServiceTestServer(t *testing.T) (*DeviceManagerTestServer, error) {
+	storageConfig, err := PreparePostgresForTest([]string{"ca", "devicemanager"})
 	if err != nil {
-		return nil, fmt.Errorf("could not assemble CA with HTTP server")
+		t.Fatalf("could not prepare Postgres test server: %s", err)
+	}
+	cryptoConfig := PrepareCryptoEnginesForTest([]CryptoEngine{GOLANG})
+	testServer, err := AssembleSerices(storageConfig, cryptoConfig, []Service{CA, DEVICE_MANAGER})
+	if err != nil {
+		t.Fatalf("could not assemble Server with HTTP server")
+	}
+	err = testServer.BeforeEach()
+	if err != nil {
+		t.Fatalf("could not run 'BeforeEach' cleanup func in test case: %s", err)
 	}
 
-	return &CATestServer{
-		Service:   *svc,
-		HttpCASDK: clients.NewHttpCAClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
-		BeforeEach: func() error {
-			//reinitialize tables schemas
-			_, err = postgres.NewCAPostgresRepository(postgresSuite.DB["ca"])
-			if err != nil {
-				return fmt.Errorf("could not run reinitialize CA tables: %s", err)
-			}
+	t.Cleanup(testServer.AfterSuite)
 
-			_, err = postgres.NewCertificateRepository(postgresSuite.DB["ca"])
-			if err != nil {
-				return fmt.Errorf("could not run reinitialize Certificates tables: %s", err)
-			}
-
-			return nil
-		},
-		AfterSuite: func() {
-			fmt.Println("TEST CLEANUP CA")
-			postgresSuite.AfterSuite()
-		},
-	}, nil
-}
-
-func BuildDeviceManagerServiceTestServer(t *testing.T) (*DeviceManagerTestServer, error) {
-	pConfig, postgresSuite := initPostgres([]string{"ca", "devicemanager"})
-
-	caTest, err := buildCASimpleTestServer(pConfig, postgresSuite)
-	if err != nil {
-		return nil, fmt.Errorf("could not create CA test server: %s", err)
-	}
-	t.Cleanup(caTest.AfterSuite)
-
-	svc, port, err := AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
-		BaseConfig: config.BaseConfig{
-			Logs: config.BaseConfigLogging{
-				Level: config.Info,
-			},
-			Server: config.HttpServer{
-				LogLevel:           config.Info,
-				HealthCheckLogging: false,
-				Protocol:           config.HTTP,
-			},
-			EventBus: config.EventBusEngine{Enabled: false},
-		},
-		Storage: config.PluggableStorageEngine{
-			LogLevel: config.Info,
-			Provider: config.Postgres,
-			Postgres: pConfig,
-		},
-	}, caTest.Service, models.APIServiceInfo{
-		Version:   "test",
-		BuildSHA:  "-",
-		BuildTime: "-",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("could not assemble Device Manager Service. Exiting: %s", err)
-	}
-
-	return &DeviceManagerTestServer{
-		Service:              *svc,
-		HttpDeviceManagerSDK: clients.NewHttpDeviceManagerClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
-		BeforeEach: func() error {
-			err := postgresSuite.BeforeEach()
-			if err != nil {
-				return fmt.Errorf("could not run postgres BeforeEach: %s", err)
-			}
-
-			err = caTest.BeforeEach()
-			if err != nil {
-				return fmt.Errorf("could not run postgres BeforeEach: %s", err)
-			}
-
-			//reinitialize tables schemas
-			_, err = postgres.NewDeviceManagerRepository(postgresSuite.DB["devicemanager"])
-			if err != nil {
-				return fmt.Errorf("could not run reinitialize Certificates tables: %s", err)
-			}
-
-			return nil
-		},
-		AfterSuite: func() {
-			fmt.Println("TEST CLEANUP DEVICE MANAGER")
-			postgresSuite.AfterSuite()
-		},
-	}, nil
-
+	return testServer.DeviceManager, nil
 }
 
 func TestDuplicateDeviceCreation(t *testing.T) {
-	dmgr, err := BuildDeviceManagerServiceTestServer(t)
+	dmgr, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
-	t.Cleanup(dmgr.AfterSuite)
-	err = dmgr.BeforeEach()
-	if err != nil {
-		t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
-	}
-
 	deviceSample := services.CreateDeviceInput{
 		ID:        "test",
 		Alias:     "test",
@@ -191,14 +55,9 @@ func TestDuplicateDeviceCreation(t *testing.T) {
 }
 
 func TestPagination(t *testing.T) {
-	dmgr, err := BuildDeviceManagerServiceTestServer(t)
+	dmgr, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-	t.Cleanup(dmgr.AfterSuite)
-	err = dmgr.BeforeEach()
-	if err != nil {
-		t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
+		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
 
 	deviceSample := services.CreateDeviceInput{
@@ -401,15 +260,9 @@ func TestPagination(t *testing.T) {
 }
 
 func TestBasicDeviceManager(t *testing.T) {
-	dmgr, err := BuildDeviceManagerServiceTestServer(t)
+	dmgr, err := StartDeviceManagerServiceTestServer(t)
 	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-
-	t.Cleanup(dmgr.AfterSuite)
-	err = dmgr.BeforeEach()
-	if err != nil {
-		t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
+		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
 
 	deviceSample := services.CreateDeviceInput{

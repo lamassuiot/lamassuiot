@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
@@ -96,22 +95,22 @@ func TestCRL(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			vaTest, err := BuildVATestServer(t)
+			serverTest, err := StartVAServiceTestServer(t)
 			if err != nil {
 				t.Fatalf("could not create VA test server")
 			}
 
-			issuerCA, err := vaTest.CaSDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+			issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
 			if err != nil {
 				t.Fatalf("could not get issuer CA: %s", err)
 			}
 
-			crts, err := tc.before(vaTest.CaSDK)
+			crts, err := tc.before(serverTest.CA.Service)
 			if err != nil {
 				t.Fatalf("could not run 'before' function:  %s", err)
 			}
 
-			httpRequest, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/crl/%s", vaTest.HttpServerURL, DefaultCAID), nil)
+			httpRequest, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, DefaultCAID), nil)
 			if err != nil {
 				t.Fatalf("could not generate HTTP CRL request: %s", err)
 			}
@@ -207,27 +206,27 @@ func TestPostOCSP(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			vaTest, err := BuildVATestServer(t)
+			serverTest, err := StartVAServiceTestServer(t)
 			if err != nil {
 				t.Fatalf("could not create VA test server")
 			}
 
-			crt, err := generateCertificate(vaTest.CaSDK)
+			crt, err := generateCertificate(serverTest.CA.Service)
 			if err != nil {
 				t.Fatalf("failed generating crt in test case: %s", err)
 			}
 
-			issuerCA, err := vaTest.CaSDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+			issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
 			if err != nil {
 				t.Fatalf("could not get issuer CA: %s", err)
 			}
 
-			err = tc.before(vaTest.CaSDK, crt)
+			err = tc.before(serverTest.CA.Service, crt)
 			if err != nil {
 				t.Fatalf("could not run before OCSP Request-Response: %s", err)
 			}
 
-			response, err := getOCSPResponsePost(vaTest.HttpServerURL, crt, issuerCA)
+			response, err := getOCSPResponsePost(serverTest.VA.HttpServerURL, crt, issuerCA)
 
 			err = tc.resultCheck(crt, issuerCA, response, err)
 			if err != nil {
@@ -238,22 +237,22 @@ func TestPostOCSP(t *testing.T) {
 }
 func TestGetOCSP(t *testing.T) {
 	t.Skip("Skip until we have a reliable way to test this")
-	vaTest, err := BuildVATestServer(t)
+	serverTest, err := StartVAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create VA test server")
 	}
 
-	issuerCA, err := vaTest.CaSDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+	issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
 	if err != nil {
 		t.Fatalf("could not get issuer CA: %s", err)
 	}
 
-	crt, err := generateCertificate(vaTest.CaSDK)
+	crt, err := generateCertificate(serverTest.CA.Service)
 	if err != nil {
 		t.Fatalf("failed generating crt in test case: %s", err)
 	}
 
-	response, err := getOCSPResponseGet(vaTest.HttpServerURL, crt, issuerCA)
+	response, err := getOCSPResponseGet(serverTest.VA.HttpServerURL, crt, issuerCA)
 	if err != nil {
 		t.Fatalf("failed getting OCSP response: %s", err)
 	}
@@ -277,24 +276,24 @@ func TestCheckOCSPRevocationCodes(t *testing.T) {
 		ocsp.AACompromise:         "AACompromise",
 	}
 
-	vaTest, err := BuildVATestServer(t)
+	serverTest, err := StartVAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create VA test server")
 	}
 
-	issuerCA, err := vaTest.CaSDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+	issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
 	if err != nil {
 		t.Fatalf("could not get issuer CA: %s", err)
 	}
 
 	for reason, reasonName := range testcases {
 		t.Run(fmt.Sprintf("Revocation-%s", reasonName), func(t *testing.T) {
-			crt, err := generateCertificate(vaTest.CaSDK)
+			crt, err := generateCertificate(serverTest.CA.Service)
 			if err != nil {
 				t.Fatalf("failed generating crt in test case: %s", err)
 			}
 
-			_, err = vaTest.CaSDK.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
+			_, err = serverTest.CA.Service.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
 				SerialNumber:     crt.SerialNumber,
 				NewStatus:        models.StatusRevoked,
 				RevocationReason: models.RevocationReason(reason),
@@ -303,7 +302,7 @@ func TestCheckOCSPRevocationCodes(t *testing.T) {
 				t.Fatalf("failed revoking certificate: %s", err)
 			}
 
-			response, err := getOCSPResponsePost(vaTest.HttpServerURL, crt, issuerCA)
+			response, err := getOCSPResponsePost(serverTest.VA.HttpServerURL, crt, issuerCA)
 			if err != nil {
 				t.Fatalf("failed getting OCSP response: %s", err)
 			}
@@ -424,47 +423,23 @@ func getOCSPResponseGet(ocspServerURL string, crt *models.Certificate, issuer *m
 	return response, nil
 }
 
-type VATestServer struct {
-	HttpServerURL string
-	CaSDK         services.CAService
-	BeforeEach    func() error
-}
-
-func BuildVATestServer(t *testing.T) (*VATestServer, error) {
-	pConfig, postgresSuite := initPostgres([]string{"ca", "devicemanager"})
-
-	caServer, err := buildCASimpleTestServer(pConfig, postgresSuite)
+func StartVAServiceTestServer(t *testing.T) (*TestServer, error) {
+	storageConfig, err := PreparePostgresForTest([]string{"ca"})
 	if err != nil {
-		return nil, fmt.Errorf("could not create CA test server: %s", err)
+		t.Fatalf("could not prepare Postgres test server: %s", err)
 	}
-	t.Cleanup(caServer.AfterSuite)
-
-	_, _, port, err := AssembleVAServiceWithHTTPServer(config.VAconfig{
-		BaseConfig: config.BaseConfig{
-			Logs: config.BaseConfigLogging{
-				Level: config.Info,
-			},
-			Server: config.HttpServer{
-				LogLevel:           config.Info,
-				HealthCheckLogging: false,
-				Protocol:           config.HTTP,
-			},
-			EventBus: config.EventBusEngine{Enabled: false},
-		},
-		CAClient: config.CAClient{},
-	}, caServer.HttpCASDK, models.APIServiceInfo{
-		Version:   "test",
-		BuildSHA:  "-",
-		BuildTime: "-",
-	})
+	cryptoConfig := PrepareCryptoEnginesForTest([]CryptoEngine{GOLANG})
+	testServer, err := AssembleSerices(storageConfig, cryptoConfig, []Service{CA, VA})
 	if err != nil {
-		return nil, err
+		t.Fatalf("could not assemble Server with HTTP server")
 	}
+
+	t.Cleanup(testServer.AfterSuite)
 
 	//Init CA Server with 1 CA
 	caDUr := models.TimeDuration(time.Hour * 24)
 	issuanceDur := models.TimeDuration(time.Hour * 12)
-	_, err = caServer.Service.CreateCA(context.Background(), services.CreateCAInput{
+	_, err = testServer.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
 		ID:                 DefaultCAID,
 		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:            models.Subject{CommonName: "TestCA"},
@@ -475,17 +450,7 @@ func BuildVATestServer(t *testing.T) (*VATestServer, error) {
 		return nil, err
 	}
 
-	return &VATestServer{
-		HttpServerURL: fmt.Sprintf("http://127.0.0.1:%d", port),
-		CaSDK:         caServer.HttpCASDK,
-		BeforeEach: func() error {
-			err := caServer.BeforeEach()
-			if err != nil {
-				return fmt.Errorf("could not run CATestServer BeforeEach: %s", err)
-			}
-			return nil
-		},
-	}, nil
+	return testServer, nil
 }
 
 //Hacer la función de test de getCRL
