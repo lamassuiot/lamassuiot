@@ -4,9 +4,13 @@ import (
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"fmt"
+	"net"
 	"os"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -24,7 +28,7 @@ func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
 	log := helpers.ConfigureLogger(config.Info, "Golang Engine")
 	engine := cryptoengines.NewGolangPEMEngine(log, config.GolangEngineConfig{StorageDirectory: tempDir})
 
-	x509Engine := NewX509Engine(&engine, "http://ocsp.lamassu.io")
+	x509Engine := NewX509Engine(&engine, "ocsp.lamassu.io")
 
 	return tempDir, engine, x509Engine
 }
@@ -162,12 +166,12 @@ func checkCACertificate(cert *x509.Certificate, tcSubject models.Subject, tcKeyM
 		return fmt.Errorf("unexpected result, got: %t, want: %t", cert.IsCA, true)
 	}
 
-	if cert.OCSPServer[0] != "http://ocsp.lamassu.io/ocsp" {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer, "http://ocsp.lamassuiot.com/ocsp")
+	if cert.OCSPServer[0] != "https://ocsp.lamassu.io/ocsp" {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer, "https://ocsp.lamassuiot.com/ocsp")
 	}
 
-	if cert.CRLDistributionPoints[0] != "http://ocsp.lamassu.io/crl/"+string(cert.SubjectKeyId) {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints, "http://crl.lamassuiot.com/crl/"+string(cert.SubjectKeyId))
+	if cert.CRLDistributionPoints[0] != "https://ocsp.lamassu.io/crl/"+string(cert.SubjectKeyId) {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints, "https://crl.lamassuiot.com/crl/"+string(cert.SubjectKeyId))
 	}
 	return nil
 }
@@ -465,7 +469,6 @@ func TestCreateSubordinateCA(t *testing.T) {
 }
 
 func TestSignCertificateRequest(t *testing.T) {
-
 	tempDir, _, x509Engine := setup(t)
 	defer teardown(tempDir)
 
@@ -545,6 +548,7 @@ func TestSignCertificateRequest(t *testing.T) {
 		name          string
 		caCertificate *x509.Certificate
 		subject       models.Subject
+		extensions    func() []pkix.Extension
 		keyType       models.KeyType
 		key           func() any
 		check         func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr error, errSign error) error
@@ -553,6 +557,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			name:          "OK/RSA_RSA",
 			caCertificate: caCertificateRSA,
 			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
 			keyType:       models.KeyType(x509.RSA),
 			key: func() any {
 				key, _ := helpers.GenerateRSAKey(2048)
@@ -564,6 +569,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			name:          "OK/EC_RSA",
 			caCertificate: caCertificateEC,
 			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
 			keyType:       models.KeyType(x509.RSA),
 			key: func() any {
 				key, _ := helpers.GenerateRSAKey(2048)
@@ -575,6 +581,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			name:          "OK/RSA_EC",
 			caCertificate: caCertificateRSA,
 			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
 			keyType:       models.KeyType(x509.ECDSA),
 			key: func() any {
 				key, _ := helpers.GenerateECDSAKey(elliptic.P256())
@@ -586,6 +593,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			name:          "OK/EC_EC",
 			caCertificate: caCertificateEC,
 			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
 			keyType:       models.KeyType(x509.ECDSA),
 			key: func() any {
 				key, _ := helpers.GenerateECDSAKey(elliptic.P256())
@@ -594,10 +602,91 @@ func TestSignCertificateRequest(t *testing.T) {
 			check: checkOk,
 		},
 		{
+			name:          "OK/EXT_SAN",
+			caCertificate: caCertificateEC,
+			subject:       csrSubject,
+			extensions: func() []pkix.Extension {
+				rawValues := []asn1.RawValue{}
+				// nameTypeEmail = 1
+				// nameTypeURI = 6
+				nameTypeDNS := 2 //RFC 5280 > Section 4.2.1.6 https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.6
+				nameTypeIP := 7
+
+				ip := net.IP{192, 168, 10, 1}
+				rawValues = append(rawValues, asn1.RawValue{Tag: nameTypeDNS, Class: 2, Bytes: []byte("dev.lamassu.io")})
+				rawValues = append(rawValues, asn1.RawValue{Tag: nameTypeIP, Class: 2, Bytes: ip.To4()})
+				val, _ := asn1.Marshal(rawValues)
+
+				return []pkix.Extension{{
+					Id:    asn1.ObjectIdentifier{2, 5, 29, 17}, // Subject Alternative Name OID
+					Value: val,
+				}}
+			},
+			keyType: models.KeyType(x509.ECDSA),
+			key: func() any {
+				key, _ := helpers.GenerateECDSAKey(elliptic.P256())
+				return key
+			},
+			check: func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr, errSign error) error {
+				if err := checkOk(cert, tcSubject, keyType, expirationTime, errCsr, errSign); err != nil {
+					return nil
+				}
+
+				if len(cert.IPAddresses) != 1 {
+					return fmt.Errorf("expected 1 SAN IP address, got %d", len(cert.IPAddresses))
+				}
+
+				expectedIP := net.IP{192, 168, 10, 1}
+				if !cert.IPAddresses[0].Equal(expectedIP) {
+					return fmt.Errorf("IP address mismatch. Expected %s, got %s", cert.IPAddresses[0].String(), expectedIP.String())
+				}
+
+				if len(cert.DNSNames) != 1 {
+					return fmt.Errorf("expected 1 SAN DNS name, got %d", len(cert.DNSNames))
+				}
+
+				if cert.DNSNames[0] != "dev.lamassu.io" {
+					return fmt.Errorf("DNS name mismatch. Expected dev.lamassu.io, got %s", cert.DNSNames[0])
+				}
+
+				return nil
+			},
+		},
+		{
+			name:          "OK/KEY_USAGE",
+			caCertificate: caCertificateEC,
+			subject:       csrSubject,
+			keyType:       models.KeyType(x509.ECDSA),
+			key: func() any {
+				key, _ := helpers.GenerateECDSAKey(elliptic.P256())
+				return key
+			},
+			extensions: func() []pkix.Extension { return []pkix.Extension{} },
+			check: func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr, errSign error) error {
+				if err := checkOk(cert, tcSubject, keyType, expirationTime, errCsr, errSign); err != nil {
+					return nil
+				}
+
+				if cert.KeyUsage != x509.KeyUsageDigitalSignature {
+					return fmt.Errorf("missing key 'KeyUsageDigitalSignature' usage")
+				}
+
+				expectedKeyUsages := []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}
+				for _, expectedKeyUsage := range expectedKeyUsages {
+					if contains := slices.Contains(cert.ExtKeyUsage, expectedKeyUsage); !contains {
+						return fmt.Errorf("missing key usage %d in signed cert", expectedKeyUsage)
+					}
+				}
+
+				return nil
+			},
+		},
+		{
 			name:          "FAIL/NOT_EXISTENT_CA",
 			caCertificate: caCertificateNotImported,
 			subject:       csrSubject,
 			keyType:       models.KeyType(x509.ECDSA),
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
 			key: func() any {
 				key, _ := helpers.GenerateECDSAKey(elliptic.P256())
 				return key
@@ -609,7 +698,7 @@ func TestSignCertificateRequest(t *testing.T) {
 	for _, tc := range testcases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			csr, errCsr := helpers.GenerateCertificateRequest(tc.subject, tc.key())
+			csr, errCsr := helpers.GenerateCertificateRequestWithExtensions(tc.subject, tc.extensions(), tc.key())
 			cert, errSing := x509Engine.SignCertificateRequest(tc.caCertificate, csr, expirationTime)
 			err := tc.check(cert, tc.subject, tc.keyType, expirationTime, errCsr, errSing)
 			if err != nil {

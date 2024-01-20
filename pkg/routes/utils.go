@@ -122,7 +122,7 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 					srvExtraLog = srvExtraLog + " using 'strict' validation mode"
 				} else if httpServerCfg.Authentication.MutualTLS.ValidationMode == config.Request {
 					clientAuth = tls.RequestClientCert
-					srvExtraLog = srvExtraLog + " using 'request' validation mode (client certificate will be request altgouh not mandatory to be sent. Behaves like optional mTLS)"
+					srvExtraLog = srvExtraLog + " using 'request' validation mode (client certificate will be request although not mandatory to be sent. Behaves like optional mTLS)"
 				} else if httpServerCfg.Authentication.MutualTLS.ValidationMode == "" {
 					logger.Warnf("mutual TLS validation mode is empty. Defaulting to 'strict' validation")
 					srvExtraLog = srvExtraLog + " using 'strict' validation mode"

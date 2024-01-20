@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
@@ -58,6 +59,8 @@ func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.D
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsage(x509.ExtKeyUsageOCSPSigning),
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
+		SubjectKeyId:          []byte(uuid.NewString()),
+		IsCA:                  true,
 	}
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, pubKey, key)
@@ -76,9 +79,28 @@ func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.D
 
 // defined to generate certificates with RSA and ECDSA keys
 func GenerateCertificateRequest(subject models.Subject, key any) (*x509.CertificateRequest, error) {
-
 	template := x509.CertificateRequest{
 		Subject: SubjectToPkixName(subject),
+	}
+
+	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &template, key)
+	if err != nil {
+		return nil, err
+	}
+
+	csr, err := x509.ParseCertificateRequest(csrBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return csr, err
+}
+
+// defined to generate certificates with RSA and ECDSA keys
+func GenerateCertificateRequestWithExtensions(subject models.Subject, extensions []pkix.Extension, key any) (*x509.CertificateRequest, error) {
+	template := x509.CertificateRequest{
+		Subject:         SubjectToPkixName(subject),
+		ExtraExtensions: extensions,
 	}
 
 	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &template, key)

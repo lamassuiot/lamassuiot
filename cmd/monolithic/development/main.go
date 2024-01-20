@@ -208,7 +208,7 @@ func main() {
 		},
 		AWSIoTManager: config.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
-			ConnectorID: *awsIoTManagerID,
+			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
 			AWSSDKConfig: config.AWSSDKConfig{
 				AccessKeyID:     *awsIoTManagerUser,
 				SecretAccessKey: config.Password(*awsIoTManagerPass),
@@ -225,7 +225,7 @@ func main() {
 		})
 	}
 
-	err = monolithic.RunMonolithicLamassuPKI(conf)
+	_, err = monolithic.RunMonolithicLamassuPKI(conf)
 	if err != nil {
 		panic(err)
 	}

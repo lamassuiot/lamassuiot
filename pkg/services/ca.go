@@ -495,7 +495,9 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 	}
 
 	caID := input.ID
-	if caID == "" {
+	if string(input.CACertificate.SubjectKeyId) != "" {
+		caID = string(input.CACertificate.SubjectKeyId)
+	} else if caID == "" {
 		caID = goid.NewV4UUID().String()
 	}
 
