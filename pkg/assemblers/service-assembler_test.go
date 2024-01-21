@@ -74,11 +74,11 @@ type TestServer struct {
 	AfterSuite    func()
 }
 
-func PreparePostgresForTest(dbs []string) (TestStorageEngineConfig, error) {
+func PreparePostgresForTest(dbs []string) (*TestStorageEngineConfig, error) {
 
 	pConfig, postgresEngine := postgres_test.BeforeSuite(dbs)
 
-	return TestStorageEngineConfig{
+	return &TestStorageEngineConfig{
 		config: config.PluggableStorageEngine{LogLevel: config.Info, Provider: config.Postgres, Postgres: pConfig},
 		BeforeEach: func() error {
 			for _, dbName := range dbs {
@@ -109,7 +109,7 @@ func PreparePostgresForTest(dbs []string) (TestStorageEngineConfig, error) {
 	}, nil
 }
 
-func PrepareCryptoEnginesForTest(engines []CryptoEngine) TestCryptoEngineConfig {
+func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig {
 
 	beforeEachActions := []func() error{}
 	afterSuiteActions := []func(){}
@@ -160,7 +160,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) TestCryptoEngineConfig 
 		}
 	}
 
-	return TestCryptoEngineConfig{
+	return &TestCryptoEngineConfig{
 		config:     cryptoEngineConf,
 		BeforeEach: beforeEach,
 		AfterSuite: afterSuite,
@@ -176,7 +176,7 @@ func contains[T comparable](slice []T, value T) bool {
 	return false
 }
 
-func BuildCATestServer(storageEngine TestStorageEngineConfig, criptoEngines TestCryptoEngineConfig) (*CATestServer, error) {
+func BuildCATestServer(storageEngine *TestStorageEngineConfig, criptoEngines *TestCryptoEngineConfig) (*CATestServer, error) {
 
 	svc, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
 		BaseConfig: config.BaseConfig{
@@ -210,24 +210,15 @@ func BuildCATestServer(storageEngine TestStorageEngineConfig, criptoEngines Test
 		Service:   *svc,
 		HttpCASDK: clients.NewHttpCAClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
-			err := storageEngine.BeforeEach()
-			if err != nil {
-				return err
-			}
-			err = criptoEngines.BeforeEach()
-			if err != nil {
-				return err
-			}
 			return nil
 		},
 		AfterSuite: func() {
-			storageEngine.AfterSuite()
-			criptoEngines.AfterSuite()
+			fmt.Println("TEST CLEANUP CA")
 		},
 	}, nil
 }
 
-func BuildDeviceManagerServiceTestServer(storageEngine TestStorageEngineConfig, caCATestServer CATestServer) (*DeviceManagerTestServer, error) {
+func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig, caCATestServer *CATestServer) (*DeviceManagerTestServer, error) {
 	svc, port, err := AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
 		BaseConfig: config.BaseConfig{
 			Logs: config.BaseConfigLogging{
@@ -254,10 +245,6 @@ func BuildDeviceManagerServiceTestServer(storageEngine TestStorageEngineConfig, 
 		Service:              *svc,
 		HttpDeviceManagerSDK: clients.NewHttpDeviceManagerClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
-			err := storageEngine.BeforeEach()
-			if err != nil {
-				return err
-			}
 			return nil
 		},
 		AfterSuite: func() {
@@ -266,7 +253,7 @@ func BuildDeviceManagerServiceTestServer(storageEngine TestStorageEngineConfig, 
 	}, nil
 }
 
-func BuildVATestServer(caCATestServer CATestServer) (*VATestServer, error) {
+func BuildVATestServer(caCATestServer *CATestServer) (*VATestServer, error) {
 	_, _, port, err := AssembleVAServiceWithHTTPServer(config.VAconfig{
 		BaseConfig: config.BaseConfig{
 			Logs: config.BaseConfigLogging{
@@ -293,20 +280,35 @@ func BuildVATestServer(caCATestServer CATestServer) (*VATestServer, error) {
 		HttpServerURL: fmt.Sprintf("http://127.0.0.1:%d", port),
 		CaSDK:         caCATestServer.HttpCASDK,
 		BeforeEach: func() error {
-			err := caCATestServer.BeforeEach()
-			if err != nil {
-				return fmt.Errorf("could not run CATestServer BeforeEach: %s", err)
-			}
 			return nil
+		},
+		AfterSuite: func() {
+			fmt.Println("TEST CLEANUP VA")
 		},
 	}, nil
 }
 
-func AssembleSerices(storageEngine TestStorageEngineConfig, criptoEngines TestCryptoEngineConfig, services []Service) (*TestServer, error) {
+func AssembleSerices(storageEngine *TestStorageEngineConfig, criptoEngines *TestCryptoEngineConfig, services []Service) (*TestServer, error) {
 	servicesMap := make(map[Service]interface{})
 
 	beforeEachActions := []func() error{}
 	afterSuiteActions := []func(){}
+
+	if storageEngine.BeforeEach != nil {
+		beforeEachActions = append(beforeEachActions, storageEngine.BeforeEach)
+	}
+	if storageEngine.AfterSuite != nil {
+		afterSuiteActions = append(afterSuiteActions, storageEngine.AfterSuite)
+	}
+
+	if criptoEngines != nil {
+		if criptoEngines.BeforeEach != nil {
+			beforeEachActions = append(beforeEachActions, criptoEngines.BeforeEach)
+		}
+		if criptoEngines.AfterSuite != nil {
+			afterSuiteActions = append(afterSuiteActions, criptoEngines.AfterSuite)
+		}
+	}
 
 	caCATestServer, err := BuildCATestServer(storageEngine, criptoEngines)
 	servicesMap[CA] = caCATestServer
@@ -318,7 +320,7 @@ func AssembleSerices(storageEngine TestStorageEngineConfig, criptoEngines TestCr
 	afterSuiteActions = append(afterSuiteActions, caCATestServer.AfterSuite)
 
 	if contains(services, DEVICE_MANAGER) {
-		deviceManagerTestServer, err := BuildDeviceManagerServiceTestServer(storageEngine, *caCATestServer)
+		deviceManagerTestServer, err := BuildDeviceManagerServiceTestServer(storageEngine, caCATestServer)
 		if err != nil {
 			return nil, fmt.Errorf("could not build DeviceManagerTestServer: %s", err)
 		}
@@ -328,7 +330,7 @@ func AssembleSerices(storageEngine TestStorageEngineConfig, criptoEngines TestCr
 	}
 
 	if contains(services, VA) {
-		vaTestServer, err := BuildVATestServer(*caCATestServer)
+		vaTestServer, err := BuildVATestServer(caCATestServer)
 		if err != nil {
 			return nil, fmt.Errorf("could not build VATestServer: %s", err)
 		}

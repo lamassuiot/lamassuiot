@@ -20,6 +20,11 @@ import (
 )
 
 func TestCRL(t *testing.T) {
+	serverTest, err := StartVAServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create VA test server")
+	}
+
 	var testcases = []struct {
 		name        string
 		before      func(services.CAService) ([]*models.Certificate, error)
@@ -95,11 +100,11 @@ func TestCRL(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			serverTest, err := StartVAServiceTestServer(t)
+			serverTest.BeforeEach()
+			err := initCAForVA(serverTest)
 			if err != nil {
-				t.Fatalf("could not create VA test server")
+				t.Fatalf("could not init CA for VA: %s", err)
 			}
-
 			issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
 			if err != nil {
 				t.Fatalf("could not get issuer CA: %s", err)
@@ -135,6 +140,17 @@ func TestCRL(t *testing.T) {
 
 func TestPostOCSP(t *testing.T) {
 	t.Parallel()
+
+	serverTest, err := StartVAServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create VA test server")
+	}
+
+	serverTest.BeforeEach()
+	err = initCAForVA(serverTest)
+	if err != nil {
+		t.Fatalf("could not init CA for VA: %s", err)
+	}
 
 	var testcases = []struct {
 		name        string
@@ -206,10 +222,6 @@ func TestPostOCSP(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			serverTest, err := StartVAServiceTestServer(t)
-			if err != nil {
-				t.Fatalf("could not create VA test server")
-			}
 
 			crt, err := generateCertificate(serverTest.CA.Service)
 			if err != nil {
@@ -236,10 +248,15 @@ func TestPostOCSP(t *testing.T) {
 	}
 }
 func TestGetOCSP(t *testing.T) {
-	t.Skip("Skip until we have a reliable way to test this")
+	t.Skip("Skipping test for now")
 	serverTest, err := StartVAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create VA test server")
+	}
+	serverTest.BeforeEach()
+	err = initCAForVA(serverTest)
+	if err != nil {
+		t.Fatalf("could not init CA for VA: %s", err)
 	}
 
 	issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
@@ -279,6 +296,11 @@ func TestCheckOCSPRevocationCodes(t *testing.T) {
 	serverTest, err := StartVAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create VA test server")
+	}
+	serverTest.BeforeEach()
+	err = initCAForVA(serverTest)
+	if err != nil {
+		t.Fatalf("could not init CA for VA: %s", err)
 	}
 
 	issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
@@ -436,10 +458,14 @@ func StartVAServiceTestServer(t *testing.T) (*TestServer, error) {
 
 	t.Cleanup(testServer.AfterSuite)
 
+	return testServer, nil
+}
+
+func initCAForVA(testServer *TestServer) error {
 	//Init CA Server with 1 CA
 	caDUr := models.TimeDuration(time.Hour * 24)
 	issuanceDur := models.TimeDuration(time.Hour * 12)
-	_, err = testServer.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+	_, err := testServer.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
 		ID:                 DefaultCAID,
 		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:            models.Subject{CommonName: "TestCA"},
@@ -447,10 +473,9 @@ func StartVAServiceTestServer(t *testing.T) (*TestServer, error) {
 		IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	return testServer, nil
+	return nil
 }
 
 //Hacer la función de test de getCRL
