@@ -88,7 +88,7 @@ type EventBusEngine struct {
 
 	Provider EventBusProvider `mapstructure:"provider"`
 
-	Amqp      AMQPConnection `mapstructure:"couch_db"`
+	Amqp      AMQPConnection `mapstructure:"amqp"`
 	AWSSqsSns AMQPConnection `mapstructure:"aws_sqs_sns"`
 }
 
