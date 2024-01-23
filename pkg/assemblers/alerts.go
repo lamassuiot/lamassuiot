@@ -75,30 +75,9 @@ func createAlertsStorageInstance(logger *log.Entry, conf config.PluggableStorage
 		return nil, nil, fmt.Errorf("could not get subscriptions storage: %s", err)
 	}
 
-<<<<<<< HEAD
 	eventsStore, err := engine.GetEnventsStorage()
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not get event storage: %s", err)
-=======
-		return subStore, eventsStore, nil
-	case config.CouchDB:
-		couchdbClient, err := couchdb.CreateCouchDBConnection(logger, conf.CouchDB)
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not create couchdb client: %s", err)
-		}
-
-		subStore, err := couchdb.NewSubscriptionsCouchRepository(couchdbClient)
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not initialize couchdb Alerts client: %s", err)
-		}
-
-		eventsStore, err := couchdb.NewEventsCouchRepository(couchdbClient)
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not initialize couchdb Alerts client: %s", err)
-		}
-
-		return subStore, eventsStore, nil
->>>>>>> implemented all Repository interfaces using CouchDB
 	}
 
 	return subStore, eventsStore, nil
