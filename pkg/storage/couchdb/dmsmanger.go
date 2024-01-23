@@ -36,7 +36,7 @@ func NewCouchDMSRepository(client *kivik.Client) (storage.DMSRepo, error) {
 }
 
 func (db *CouchDBDMSStorage) Count(ctx context.Context) (int, error) {
-	return db.querier.Count()
+	return db.querier.Count(nil)
 }
 
 func (db *CouchDBDMSStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.DMS), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {

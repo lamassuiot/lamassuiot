@@ -5,11 +5,9 @@ package couchdb
 
 import (
 	"context"
-	"fmt"
 
 	_ "github.com/go-kivik/couchdb/v4" // The CouchDB driver
 	kivik "github.com/go-kivik/kivik/v4"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
@@ -38,10 +36,20 @@ func NewCouchDeviceRepository(client *kivik.Client) (storage.DeviceManagerRepo, 
 }
 
 func (db *CouchDBDeviceStorage) Count(ctx context.Context) (int, error) {
-	return db.querier.Count()
+	return db.querier.Count(nil)
 }
+
 func (db *CouchDBDeviceStorage) CountByStatus(ctx context.Context, status models.DeviceStatus) (int, error) {
-	return -1, fmt.Errorf("TODO")
+	opts := map[string]interface{}{
+		"selector": map[string]interface{}{
+			"status": map[string]interface{}{
+				"$eq": status,
+			},
+		},
+		"fields": []string{"_id"},
+	}
+
+	return db.querier.Count(&opts)
 }
 
 func (db *CouchDBDeviceStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
@@ -60,8 +68,7 @@ func (db *CouchDBDeviceStorage) SelectByDMS(ctx context.Context, dmsID string, e
 			},
 		},
 	}
-
-	return db.querier.SelectAll(queryParams, helpers.MergeMaps(&extraOpts, &opts), exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(queryParams, &opts, exhaustiveRun, applyFunc)
 }
 
 func (db *CouchDBDeviceStorage) Update(ctx context.Context, device *models.Device) (*models.Device, error) {
