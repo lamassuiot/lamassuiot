@@ -29,6 +29,11 @@ func NewCouchDeviceRepository(client *kivik.Client) (storage.DeviceManagerRepo, 
 	querier := newCouchDBQuerier[models.Device](client.DB(deviceDBName))
 	querier.CreateBasicCounterView()
 
+	//Check if indexes exist, and create them if not
+	for field := range resources.DeviceFiltrableFields {
+		querier.EnsureIndexExists(field)
+	}
+
 	return &CouchDBDeviceStorage{
 		client:  client,
 		querier: &querier,

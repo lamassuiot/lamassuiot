@@ -9,6 +9,7 @@ import (
 	_ "github.com/go-kivik/couchdb/v4" // The CouchDB driver
 	kivik "github.com/go-kivik/kivik/v4"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
 )
 
@@ -27,6 +28,11 @@ func NewCouchCARepository(client *kivik.Client) (storage.CACertificatesRepo, err
 
 	querier := newCouchDBQuerier[models.CACertificate](client.DB(caDBName))
 	querier.CreateBasicCounterView()
+
+	//Check if indexes exist, and create them if not
+	for field := range resources.CAFiltrableFields {
+		querier.EnsureIndexExists(field)
+	}
 
 	return &CouchDBCAStorage{
 		client:  client,
