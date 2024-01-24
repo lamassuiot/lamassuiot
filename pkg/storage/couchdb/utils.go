@@ -56,9 +56,9 @@ func CreateCouchDBConnection(logger *logrus.Entry, cfg config.CouchDBPSEConfig) 
 }
 
 func CheckAndCreateDB(client *kivik.Client, db string) error {
-	if exists, err := client.DBExists(context.TODO(), db); err == nil && !exists {
+	if exists, err := client.DBExists(context.Background(), db); err == nil && !exists {
 		lCouch.Infof("db does not exist. Creating db: %s", db)
-		if err := client.CreateDB(context.TODO(), db); err != nil {
+		if err := client.CreateDB(context.Background(), db); err != nil {
 			lCouch.Error(fmt.Sprintf("could not create db %s: %s", db, err))
 			return err
 		}
@@ -79,7 +79,7 @@ func newCouchDBQuerier[E any](db *kivik.DB) couchDBQuerier[E] {
 
 func (db *couchDBQuerier[E]) CreateBasicCounterView() error {
 	querier := newCouchDBQuerier[map[string]interface{}](db.DB)
-	_, err := querier.DB.Put(context.TODO(), "_design/utils", map[string]interface{}{
+	_, err := querier.DB.Put(context.Background(), "_design/utils", map[string]interface{}{
 		"_id": "_design/utils",
 		"views": map[string]interface{}{
 			"count": map[string]interface{}{
@@ -94,6 +94,16 @@ func (db *couchDBQuerier[E]) CreateBasicCounterView() error {
 	}
 
 	return nil
+}
+
+func (db *couchDBQuerier[E]) EnsureIndexExists(field string) {
+	exists, _, err := db.SelectExists("_design/" + field)
+	if err != nil {
+		fmt.Printf("Error checking for index existence: %s\n", err)
+	}
+	if !exists {
+		db.CreateIndex(field)
+	}
 }
 
 func (db *couchDBQuerier[E]) CreateIndex(fields string) error {
@@ -119,7 +129,7 @@ func (db *couchDBQuerier[E]) CreateIndex(fields string) error {
 		},
 	}
 
-	_, err := querier.DB.Put(context.TODO(), "_design/"+fields, indexPayload)
+	_, err := querier.DB.Put(context.Background(), "_design/"+fields, indexPayload)
 	if err != nil {
 		return fmt.Errorf("error creating index: %s", err)
 	}
@@ -183,7 +193,6 @@ func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, e
 		}
 
 		if queryParams.Sort.SortField != "" {
-			db.ensureIndexExists(queryParams.Sort.SortField)
 			opts["sort"] = []map[string]string{{queryParams.Sort.SortField: string(queryParams.Sort.SortMode)}}
 		}
 
@@ -232,16 +241,6 @@ func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, e
 	}
 
 	return nextBookmark, nil
-}
-
-func (db *couchDBQuerier[E]) ensureIndexExists(field string) {
-	exists, _, err := db.SelectExists("_design/" + field)
-	if err != nil {
-		fmt.Printf("Error checking for index existence: %s\n", err)
-	}
-	if !exists {
-		db.CreateIndex(field)
-	}
 }
 
 func (db *couchDBQuerier[E]) SelectExists(elemID string) (bool, *E, error) {
