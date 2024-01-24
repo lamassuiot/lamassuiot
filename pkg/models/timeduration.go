@@ -325,7 +325,7 @@ func DurationToString(d time.Duration) string {
 
 									if u%52 > 0 {
 										buf[w] = 'w'
-										w = fmtInt(buf[:w], u)
+										w = fmtInt(buf[:w], u%52)
 									} else {
 										w++
 									}
