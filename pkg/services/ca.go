@@ -8,6 +8,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -112,8 +113,19 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 		return nil, fmt.Errorf("could not find the default crypto engine")
 	}
 
+	cronInstance := cron.New()
+	if builder.CryptoMonitoringConf.Enabled {
+		builder.Logger.Infof("enabling periodic monitoring with cron expression: '%s'", builder.CryptoMonitoringConf.Frequency)
+		if strings.Count(builder.CryptoMonitoringConf.Frequency, " ") == 5 {
+			builder.Logger.Warn("periodic monitoring system contains 'second level' scheduling. This may cause performance issues in production scenarios")
+			cronInstance = cron.New(cron.WithSeconds())
+		}
+	} else {
+		builder.Logger.Warn("certificate periodic monitoring is disable")
+	}
+
 	svc := CAServiceImpl{
-		cronInstance:          cron.New(),
+		cronInstance:          cronInstance,
 		cryptoEngines:         engines,
 		defaultCryptoEngine:   defaultCryptoEngine,
 		defaultCryptoEngineID: defaultCryptoEngineID,
@@ -127,13 +139,75 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 
 	cryptoMonitor := func() {
 		ctx := context.Background()
-
 		now := time.Now()
+
+		//checks if metadata has additional expiration intervals to be checked.
+		//returns
+		// - bool: true if metadata should be updated
+		// - updated metadata
+		shouldUpdateMonitoringDeltas := func(metadata map[string]any, certificate x509.Certificate) (bool, map[string]any) {
+			if additionalDeltasIface, ok := metadata[models.CAMetadataMonitoringExpirationDeltasKey]; ok {
+				//check if additionalDeltasIface is of type
+				deltasB, err := json.Marshal(additionalDeltasIface)
+				if err != nil {
+					return false, map[string]any{}
+				}
+
+				var additionalDeltas models.CAMetadataMonitoringExpirationDeltas
+				err = json.Unmarshal(deltasB, &additionalDeltas)
+				if err == nil {
+					orderedDeltas := additionalDeltas
+
+					//order deltas from smallest to biggest
+					slices.SortStableFunc[models.MonitoringExpirationDelta](orderedDeltas, func(a models.MonitoringExpirationDelta, b models.MonitoringExpirationDelta) bool {
+						if a.Delta < b.Delta {
+							return true
+						} else {
+							return false
+						}
+					})
+
+					newMeta := metadata
+					updated := false
+					for idx, additionalDelta := range orderedDeltas {
+						// fmt.Printf("Delta %s = %s\n", additionalDelta.Name, additionalDelta.Delta.String())
+						// fmt.Printf("After Sub: %s\n", cert.ValidTo.Add(-time.Duration(additionalDelta.Delta)))
+						// fmt.Printf("After: %t\n", time.Now().After(cert.ValidTo.Add(-time.Duration(additionalDelta.Delta))))
+						if time.Now().After(certificate.NotAfter.Add(-time.Duration(additionalDelta.Delta))) {
+							if !orderedDeltas[idx].Triggered {
+								//switch 'trigger' monitoring delta to
+								orderedDeltas[idx].Triggered = true
+								newMeta[models.CAMetadataMonitoringExpirationDeltasKey] = orderedDeltas
+								updated = true
+							}
+						}
+					}
+
+					if updated {
+						return true, newMeta
+					} else {
+						return false, map[string]any{}
+					}
+				}
+			}
+
+			return false, map[string]any{}
+		}
+
 		caScanFunc := func(ca models.CACertificate) {
 			if ca.ValidTo.Before(now) && ca.Status == models.StatusActive {
 				svc.service.UpdateCAStatus(ctx, UpdateCAStatusInput{
 					CAID:   ca.ID,
 					Status: models.StatusExpired,
+				})
+				return
+			}
+
+			shouldUpdateMeta, newMetadata := shouldUpdateMonitoringDeltas(ca.Metadata, x509.Certificate(*ca.Certificate.Certificate))
+			if shouldUpdateMeta {
+				svc.service.UpdateCAMetadata(context.Background(), UpdateCAMetadataInput{
+					CAID:     ca.ID,
+					Metadata: newMetadata,
 				})
 			}
 		}
@@ -159,54 +233,13 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 						return
 					}
 
-					// fmt.Printf("Now: %s\n", time.Now())
-					// fmt.Printf("Expires At: %s\n", cert.ValidTo)
 					//check if meta contains additional monitoring deltas
-					if additionalDeltasIface, ok := cert.Metadata[models.CAMetadataMonitoringExpirationDeltasKey]; ok {
-						//check if additionalDeltasIface is of type
-						deltasB, err := json.Marshal(additionalDeltasIface)
-						if err != nil {
-							return
-						}
-						var additionalDeltas models.CAMetadataMonitoringExpirationDeltas
-						err = json.Unmarshal(deltasB, &additionalDeltas)
-						if err == nil {
-							orderedDeltas := additionalDeltas
-
-							//order deltas from smallest to biggest
-							slices.SortStableFunc[models.MonitoringExpirationDelta](orderedDeltas, func(a models.MonitoringExpirationDelta, b models.MonitoringExpirationDelta) bool {
-								if a.Delta < b.Delta {
-									return true
-								} else {
-									return false
-								}
-							})
-
-							newMeta := cert.Metadata
-							updated := false
-
-							for idx, additionalDelta := range orderedDeltas {
-								// fmt.Printf("Delta %s = %s\n", additionalDelta.Name, additionalDelta.Delta.String())
-								// fmt.Printf("After Sub: %s\n", cert.ValidTo.Add(-time.Duration(additionalDelta.Delta)))
-								// fmt.Printf("After: %t\n", time.Now().After(cert.ValidTo.Add(-time.Duration(additionalDelta.Delta))))
-								if time.Now().After(cert.ValidTo.Add(-time.Duration(additionalDelta.Delta))) {
-									if !orderedDeltas[idx].Triggered {
-										//switch 'trigger' monitoring delta to
-										orderedDeltas[idx].Triggered = true
-										newMeta[models.CAMetadataMonitoringExpirationDeltasKey] = orderedDeltas
-										updated = true
-									}
-								}
-							}
-
-							if updated {
-								svc.service.UpdateCertificateMetadata(context.Background(), UpdateCertificateMetadataInput{
-									SerialNumber: cert.SerialNumber,
-									Metadata:     newMeta,
-								})
-							}
-
-						}
+					shouldUpdateMeta, newMetadata := shouldUpdateMonitoringDeltas(cert.Metadata, x509.Certificate(*cert.Certificate))
+					if shouldUpdateMeta {
+						svc.service.UpdateCertificateMetadata(context.Background(), UpdateCertificateMetadataInput{
+							SerialNumber: cert.SerialNumber,
+							Metadata:     newMetadata,
+						})
 					}
 				},
 			},

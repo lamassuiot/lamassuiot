@@ -451,7 +451,7 @@ func StartVAServiceTestServer(t *testing.T) (*TestServer, error) {
 		t.Fatalf("could not prepare Postgres test server: %s", err)
 	}
 	cryptoConfig := PrepareCryptoEnginesForTest([]CryptoEngine{GOLANG})
-	testServer, err := AssembleSerices(storageConfig, cryptoConfig, []Service{CA, VA})
+	testServer, err := AssembleServices(storageConfig, cryptoConfig, []Service{CA, VA})
 	if err != nil {
 		t.Fatalf("could not assemble Server with HTTP server")
 	}

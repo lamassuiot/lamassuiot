@@ -14,7 +14,7 @@ func StartDeviceManagerServiceTestServer(t *testing.T) (*DeviceManagerTestServer
 		t.Fatalf("could not prepare Postgres test server: %s", err)
 	}
 	cryptoConfig := PrepareCryptoEnginesForTest([]CryptoEngine{GOLANG})
-	testServer, err := AssembleSerices(storageConfig, cryptoConfig, []Service{CA, DEVICE_MANAGER})
+	testServer, err := AssembleServices(storageConfig, cryptoConfig, []Service{CA, DEVICE_MANAGER})
 	if err != nil {
 		t.Fatalf("could not assemble Server with HTTP server")
 	}

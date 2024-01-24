@@ -2722,6 +2722,115 @@ func TestHierarchy(t *testing.T) {
 	}
 }
 
+func TestCAsAdditionalDeltasMonitoring(t *testing.T) {
+	serverTest, err := StartCAServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	type delta struct {
+		name string
+		dur  time.Duration
+	}
+
+	var testcases = []struct {
+		name   string
+		deltas []delta
+	}{
+		{
+			name: "'Preventive' Delta",
+			deltas: []delta{
+				{
+					name: "Preventive",
+					dur:  time.Second * 5,
+				},
+			},
+		},
+		{
+			name: "'Preventive' and 'MyDelta' Delta",
+			deltas: []delta{
+				{
+					name: "Preventive",
+					dur:  time.Second * 5,
+				},
+				{
+					name: "MyDelta",
+					dur:  time.Second * 3,
+				},
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			maxDeltaDur := time.Second
+			caDeltas := []models.MonitoringExpirationDelta{}
+			for _, delta := range tc.deltas {
+				if delta.dur > maxDeltaDur {
+					maxDeltaDur = delta.dur
+				}
+
+				if delta.dur > 10*time.Second { //prevent tests that have long-lasting deltas
+					t.Fatalf("bad testcase. Reprogram the test using low-value deltas")
+				}
+
+				caDeltas = append(caDeltas, models.MonitoringExpirationDelta{
+					Delta:     models.TimeDuration(delta.dur),
+					Name:      delta.name,
+					Triggered: false,
+				})
+			}
+
+			caLifespan := 3*time.Second + maxDeltaDur
+			caDur := models.TimeDuration(caLifespan)
+			issuanceDur := models.TimeDuration(maxDeltaDur)
+
+			ca, err := serverTest.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+				KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
+				Subject:            models.Subject{CommonName: "MyCA"},
+				CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDur},
+				IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+				Metadata: map[string]any{
+					models.CAMetadataMonitoringExpirationDeltasKey: models.CAMetadataMonitoringExpirationDeltas(caDeltas),
+				},
+			})
+
+			if err != nil {
+				t.Fatalf("unexpected error. Could not create CA: %s", err)
+			}
+
+			maxSeconds := int(caLifespan.Seconds())
+			elapsedSeconds := 0
+			for i := 0; i < maxSeconds; i++ {
+				time.Sleep(time.Second * 1)
+				elapsedSeconds++
+				now := time.Now()
+
+				caExpFromNow := ca.ValidTo.Sub(now)
+				updatedCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: ca.ID})
+				if err != nil {
+					t.Fatalf("unexpected error. Could not get an updated version for CA: %s", err)
+				}
+
+				var updatedCADeltas models.CAMetadataMonitoringExpirationDeltas
+				helpers.GetMetadataToStruct(updatedCA.Metadata, models.CAMetadataMonitoringExpirationDeltasKey, &updatedCADeltas)
+				for _, definedDelta := range updatedCADeltas {
+					if definedDelta.Delta > models.TimeDuration(caExpFromNow) {
+						if definedDelta.Triggered == false {
+							t.Fatalf("delta '%s' should've been triggered by now. CA expires in %ds and delta was defined with %ds", definedDelta.Name, int(caExpFromNow.Seconds()), int(time.Duration(definedDelta.Delta).Seconds()))
+						} else {
+							fmt.Printf("correctly triggered delta '%s'. CA expires in %ds and delta was defined with %ds", definedDelta.Name, int(caExpFromNow.Seconds()), int(time.Duration(definedDelta.Delta).Seconds()))
+						}
+					}
+				}
+			}
+		})
+	}
+
+}
+
 func initCA(caSDK services.CAService) (*models.CACertificate, error) {
 	caDUr := models.TimeDuration(time.Hour * 25)
 	issuanceDur := models.TimeDuration(time.Minute * 12)
@@ -2742,7 +2851,7 @@ func StartCAServiceTestServer(t *testing.T) (*TestServer, error) {
 		t.Fatalf("could not prepare Postgres test server: %s", err)
 	}
 	cryptoConfig := PrepareCryptoEnginesForTest([]CryptoEngine{GOLANG, VAULT})
-	testServer, err := AssembleSerices(storageConfig, cryptoConfig, []Service{CA})
+	testServer, err := AssembleServices(storageConfig, cryptoConfig, []Service{CA})
 	if err != nil {
 		t.Fatalf("could not assemble Server with HTTP server")
 	}
