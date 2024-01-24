@@ -193,7 +193,8 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, criptoEngines *Te
 		Storage:       storageEngine.config,
 		CryptoEngines: criptoEngines.config,
 		CryptoMonitoring: config.CryptoMonitoring{
-			Enabled: false,
+			Enabled:   true,
+			Frequency: "* * * * * *", //this CRON-like expression will scan certificate each second.
 		},
 		VAServerDomain: "http://dev.lamassu.test",
 	}, models.APIServiceInfo{
@@ -288,7 +289,7 @@ func BuildVATestServer(caCATestServer *CATestServer) (*VATestServer, error) {
 	}, nil
 }
 
-func AssembleSerices(storageEngine *TestStorageEngineConfig, criptoEngines *TestCryptoEngineConfig, services []Service) (*TestServer, error) {
+func AssembleServices(storageEngine *TestStorageEngineConfig, criptoEngines *TestCryptoEngineConfig, services []Service) (*TestServer, error) {
 	servicesMap := make(map[Service]interface{})
 
 	beforeEachActions := []func() error{}
