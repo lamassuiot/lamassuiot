@@ -133,7 +133,7 @@ func (svc DeviceManagerServiceImpl) CreateDevice(input CreateDeviceInput) (*mode
 		Metadata:          input.Metadata,
 		Icon:              input.Icon,
 		IconColor:         input.IconColor,
-		DMSOwnerID:        input.DMSID,
+		DMSOwner:          input.DMSID,
 		CreationTimestamp: now,
 		Events: map[time.Time]models.DeviceEvent{
 			now: {

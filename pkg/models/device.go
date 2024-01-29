@@ -34,7 +34,7 @@ type Device struct {
 	IconColor         string                    `json:"icon_color"`
 	CreationTimestamp time.Time                 `json:"creation_timestamp"`
 	Metadata          map[string]any            `json:"metadata" gorm:"serializer:json"`
-	DMSOwnerID        string                    `json:"dms_owner"`
+	DMSOwner          string                    `json:"dms_owner"`
 	IdentitySlot      *Slot[string]             `json:"identity,omitempty" gorm:"serializer:json"`
 	ExtraSlots        map[string]*Slot[any]     `json:"slots" gorm:"serializer:json"`
 	Events            map[time.Time]DeviceEvent `json:"events" gorm:"serializer:json"`

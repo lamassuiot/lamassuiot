@@ -797,7 +797,7 @@ func (svc DMSManagerServiceImpl) BindIdentityToDevice(ctx context.Context, input
 	}
 
 	dms, err := svc.GetDMSByID(ctx, GetDMSByIDInput{
-		ID: device.DMSOwnerID,
+		ID: device.DMSOwner,
 	})
 	if err != nil {
 		return nil, err
