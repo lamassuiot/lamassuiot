@@ -163,7 +163,7 @@ func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 		signedCrt, err = r.svc.Enroll(authCtx, csr, params.APS)
 	}
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err})
+		ctx.JSON(500, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -175,7 +175,7 @@ func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 
 	body, err := pkcs7.DegenerateCertificate(signedCrt.Raw)
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err})
+		ctx.JSON(500, gin.H{"err": err.Error()})
 		return
 	}
 
