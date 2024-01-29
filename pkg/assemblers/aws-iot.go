@@ -165,10 +165,10 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 		}
 
 		dms, err := awsConnectorSvc.DmsSDK.GetDMSByID(context.Background(), services.GetDMSByIDInput{
-			ID: device.DMSOwnerID,
+			ID: device.DMSOwner,
 		})
 		if err != nil {
-			logger.Errorf("could not get DMS %s: %s", device.DMSOwnerID, err)
+			logger.Errorf("could not get DMS %s: %s", device.DMSOwner, err)
 			return
 		}
 

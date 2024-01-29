@@ -380,8 +380,8 @@ func checkDevice(t *testing.T, device *models.Device, deviceSample services.Crea
 		t.Fatalf("device status mismatch: expected %s, got %s", models.DeviceNoIdentity, device.Status)
 	}
 
-	if device.DMSOwnerID != deviceSample.DMSID {
-		t.Fatalf("device dms id mismatch: expected %s, got %s", deviceSample.DMSID, device.DMSOwnerID)
+	if device.DMSOwner != deviceSample.DMSID {
+		t.Fatalf("device dms id mismatch: expected %s, got %s", deviceSample.DMSID, device.DMSOwner)
 	}
 
 	if device.Tags[0] != deviceSample.Tags[0] {
