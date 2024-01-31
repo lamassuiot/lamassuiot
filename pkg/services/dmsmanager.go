@@ -620,15 +620,17 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		return nil, err
 	}
 
-	//revoke superseded cert
-	_, err = svc.caClient.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
-		SerialNumber:     currentDeviceCertSN,
-		NewStatus:        models.StatusRevoked,
-		RevocationReason: ocsp.Superseded,
-	})
-	if err != nil {
-		lDMS.Errorf("could not update superseded certificate status to revoked %s: %s", currentDeviceCert.SerialNumber, err)
-		return nil, err
+	//revoke superseded cert if active. Don't try revoking expired or already revoked since is not a valid transition for the CA service.
+	if currentDeviceCert.Status == models.StatusActive {
+		_, err = svc.caClient.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
+			SerialNumber:     currentDeviceCertSN,
+			NewStatus:        models.StatusRevoked,
+			RevocationReason: ocsp.Superseded,
+		})
+		if err != nil {
+			lDMS.Errorf("could not update superseded certificate status to revoked %s: %s", currentDeviceCert.SerialNumber, err)
+			return nil, err
+		}
 	}
 
 	_, err = svc.service.BindIdentityToDevice(ctx, BindIdentityToDeviceInput{
