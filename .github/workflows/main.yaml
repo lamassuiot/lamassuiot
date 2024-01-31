@@ -108,7 +108,7 @@ jobs:
       - run: |
           git config user.name "Lamassu IoT Bot"
           git config user.email "lamassuiot@lamassu.io"
-          git fetch
+          git fetch --unshallow
           git merge origin/main -m "publishing ${{ needs.version_info.outputs.release_version_with_v }} version"
           git push
 
