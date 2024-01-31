@@ -380,6 +380,14 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 
 func getEventBody[E any](cloudEvent *event.Event) (*E, error) {
 	var elem *E
+	if cloudEvent == nil {
+		return nil, fmt.Errorf("cloud event is null")
+	}
+
+	if cloudEvent.Data() == nil {
+		return nil, fmt.Errorf("cloud event data is null")
+	}
+
 	eventDataBytes := cloudEvent.Data()
 	err := json.Unmarshal(eventDataBytes, &elem)
 	return elem, err
