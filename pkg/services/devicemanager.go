@@ -46,10 +46,13 @@ func NewDeviceManagerService(builder DeviceManagerBuilder) DeviceManagerService 
 
 	lDevice = builder.Logger
 	deviceValidate = validator.New()
-	return &DeviceManagerServiceImpl{
+	svc := &DeviceManagerServiceImpl{
 		caClient:       builder.CAClient,
 		devicesStorage: builder.DevicesStorage,
 	}
+
+	svc.service = svc
+	return svc
 }
 
 func (svc *DeviceManagerServiceImpl) SetService(service DeviceManagerService) {

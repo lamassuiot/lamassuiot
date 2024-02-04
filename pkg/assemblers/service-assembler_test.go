@@ -1,11 +1,15 @@
 package assemblers
 
 import (
+	"crypto/elliptic"
 	"fmt"
 	"net/http"
+	"os"
+	"slices"
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
@@ -52,6 +56,14 @@ type CATestServer struct {
 	AfterSuite func()
 }
 
+type DMSManagerTestServer struct {
+	Port                 int
+	Service              services.DMSManagerService
+	HttpDeviceManagerSDK services.DMSManagerService
+	BeforeEach           func() error
+	AfterSuite           func()
+}
+
 type DeviceManagerTestServer struct {
 	Service              services.DeviceManagerService
 	HttpDeviceManagerSDK services.DeviceManagerService
@@ -70,6 +82,7 @@ type TestServer struct {
 	CA            *CATestServer
 	VA            *VATestServer
 	DeviceManager *DeviceManagerTestServer
+	DMSManager    *DMSManagerTestServer
 	BeforeEach    func() error
 	AfterSuite    func()
 }
@@ -98,6 +111,11 @@ func PreparePostgresForTest(dbs []string) (*TestStorageEngineConfig, error) {
 					_, err := postgres.NewDeviceManagerRepository(postgresEngine.DB[dbName])
 					if err != nil {
 						return fmt.Errorf("could not run reinitialize DeviceManager tables: %s", err)
+					}
+				case "dmsmanager":
+					_, err := postgres.NewDMSManagerRepository(postgresEngine.DB[dbName])
+					if err != nil {
+						return fmt.Errorf("could not run reinitialize DMSManager tables: %s", err)
 					}
 				default:
 					return fmt.Errorf("unknown db name: %s", dbName)
@@ -131,7 +149,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	})
 	afterSuiteActions = append(afterSuiteActions, func() {})
 
-	if contains(engines, VAULT) {
+	if slices.Contains(engines, VAULT) {
 		vaultSDKConf, vaultSuite := vault_test.BeforeSuite()
 		cryptoEngineConf.HashicorpVaultKV2Provider = []config.HashicorpVaultCryptoEngineConfig{
 			{
@@ -167,17 +185,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	}
 }
 
-func contains[T comparable](slice []T, value T) bool {
-	for _, item := range slice {
-		if item == value {
-			return true
-		}
-	}
-	return false
-}
-
 func BuildCATestServer(storageEngine *TestStorageEngineConfig, criptoEngines *TestCryptoEngineConfig) (*CATestServer, error) {
-
 	svc, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
 		BaseConfig: config.BaseConfig{
 			Logs: config.BaseConfigLogging{
@@ -219,7 +227,7 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, criptoEngines *Te
 	}, nil
 }
 
-func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig, caCATestServer *CATestServer) (*DeviceManagerTestServer, error) {
+func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig, caTestServer *CATestServer) (*DeviceManagerTestServer, error) {
 	svc, port, err := AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
 		BaseConfig: config.BaseConfig{
 			Logs: config.BaseConfigLogging{
@@ -233,7 +241,7 @@ func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig,
 			EventBus: config.EventBusEngine{Enabled: false},
 		},
 		Storage: storageEngine.config,
-	}, caCATestServer.Service, models.APIServiceInfo{
+	}, caTestServer.Service, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
 		BuildTime: "-",
@@ -254,7 +262,73 @@ func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig,
 	}, nil
 }
 
-func BuildVATestServer(caCATestServer *CATestServer) (*VATestServer, error) {
+func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, caTestServer *CATestServer, deviceManagerTestServer *DeviceManagerTestServer) (*DMSManagerTestServer, error) {
+	key, _ := helpers.GenerateECDSAKey(elliptic.P256())
+	crt, _ := helpers.GenerateSelfSignedCertificate(key, "downstream")
+	downstreamPath := fmt.Sprintf("/tmp/%s", crt.SerialNumber.String())
+	downstreamCertPath := fmt.Sprintf("%s.crt", downstreamPath)
+	downstreamKeyPath := fmt.Sprintf("%s.key", downstreamPath)
+
+	crtPem := helpers.CertificateToPEM(crt)
+	err := os.WriteFile(downstreamCertPath, []byte(crtPem), 0600)
+	if err != nil {
+		return nil, fmt.Errorf("could not save downstream cert. Exiting: %s", err)
+	}
+
+	keyPem, _ := helpers.PrivateKeyToPEM(key)
+	err = os.WriteFile(downstreamKeyPath, []byte(keyPem), 0600)
+	if err != nil {
+		return nil, fmt.Errorf("could not save downstream cert. Exiting: %s", err)
+	}
+
+	svc, port, err := AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
+		BaseConfig: config.BaseConfig{
+			Logs: config.BaseConfigLogging{
+				Level: config.Info,
+			},
+			Server: config.HttpServer{
+				LogLevel:           config.Info,
+				HealthCheckLogging: false,
+				Protocol:           config.HTTPS,
+				CertFile:           downstreamCertPath,
+				KeyFile:            downstreamKeyPath,
+				Authentication: config.HttpServerAuthentication{
+					MutualTLS: config.HttpServerMutualTLSAuthentication{
+						Enabled:        true,
+						ValidationMode: config.Request,
+					},
+				},
+			},
+			EventBus: config.EventBusEngine{Enabled: false},
+		},
+		Storage:                   storageEngine.config,
+		DownstreamCertificateFile: downstreamCertPath,
+	},
+		caTestServer.Service,
+		deviceManagerTestServer.Service,
+		models.APIServiceInfo{
+			Version:   "test",
+			BuildSHA:  "-",
+			BuildTime: "-",
+		})
+	if err != nil {
+		return nil, fmt.Errorf("could not assemble DMS Manager Service. Exiting: %s", err)
+	}
+
+	return &DMSManagerTestServer{
+		Port:                 port,
+		Service:              *svc,
+		HttpDeviceManagerSDK: clients.NewHttpDMSManagerClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d", port)),
+		BeforeEach: func() error {
+			return nil
+		},
+		AfterSuite: func() {
+			fmt.Println("TEST CLEANUP DMS MANAGER")
+		},
+	}, nil
+}
+
+func BuildVATestServer(caTestServer *CATestServer) (*VATestServer, error) {
 	_, _, port, err := AssembleVAServiceWithHTTPServer(config.VAconfig{
 		BaseConfig: config.BaseConfig{
 			Logs: config.BaseConfigLogging{
@@ -268,7 +342,7 @@ func BuildVATestServer(caCATestServer *CATestServer) (*VATestServer, error) {
 			EventBus: config.EventBusEngine{Enabled: false},
 		},
 		CAClient: config.CAClient{},
-	}, caCATestServer.HttpCASDK, models.APIServiceInfo{
+	}, caTestServer.HttpCASDK, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
 		BuildTime: "-",
@@ -279,7 +353,7 @@ func BuildVATestServer(caCATestServer *CATestServer) (*VATestServer, error) {
 
 	return &VATestServer{
 		HttpServerURL: fmt.Sprintf("http://127.0.0.1:%d", port),
-		CaSDK:         caCATestServer.HttpCASDK,
+		CaSDK:         caTestServer.HttpCASDK,
 		BeforeEach: func() error {
 			return nil
 		},
@@ -311,17 +385,17 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, criptoEngines *Tes
 		}
 	}
 
-	caCATestServer, err := BuildCATestServer(storageEngine, criptoEngines)
-	servicesMap[CA] = caCATestServer
+	caTestServer, err := BuildCATestServer(storageEngine, criptoEngines)
+	servicesMap[CA] = caTestServer
 	if err != nil {
 		return nil, fmt.Errorf("could not build CATestServer: %s", err)
 	}
 
-	beforeEachActions = append(beforeEachActions, caCATestServer.BeforeEach)
-	afterSuiteActions = append(afterSuiteActions, caCATestServer.AfterSuite)
+	beforeEachActions = append(beforeEachActions, caTestServer.BeforeEach)
+	afterSuiteActions = append(afterSuiteActions, caTestServer.AfterSuite)
 
-	if contains(services, DEVICE_MANAGER) {
-		deviceManagerTestServer, err := BuildDeviceManagerServiceTestServer(storageEngine, caCATestServer)
+	if slices.Contains(services, DEVICE_MANAGER) {
+		deviceManagerTestServer, err := BuildDeviceManagerServiceTestServer(storageEngine, caTestServer)
 		if err != nil {
 			return nil, fmt.Errorf("could not build DeviceManagerTestServer: %s", err)
 		}
@@ -330,8 +404,28 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, criptoEngines *Tes
 		afterSuiteActions = append(afterSuiteActions, deviceManagerTestServer.AfterSuite)
 	}
 
-	if contains(services, VA) {
-		vaTestServer, err := BuildVATestServer(caCATestServer)
+	if slices.Contains(services, DMS_MANAGER) {
+		deviceTestServerIface, exists := servicesMap[DEVICE_MANAGER]
+		if !exists {
+			return nil, fmt.Errorf("could not get DeviceManagerTestServer. Make sure to also enable it")
+		}
+
+		deviceTestServer, validCasting := deviceTestServerIface.(*DeviceManagerTestServer)
+		if !validCasting {
+			return nil, fmt.Errorf("could not cast supposed DeviceManagerTestServer. Make sure it was created correctly")
+		}
+
+		dmsManagerTestServer, err := BuildDMSManagerServiceTestServer(storageEngine, caTestServer, deviceTestServer)
+		if err != nil {
+			return nil, fmt.Errorf("could not build DMSManagerTestServer: %s", err)
+		}
+		servicesMap[DMS_MANAGER] = dmsManagerTestServer
+		beforeEachActions = append(beforeEachActions, dmsManagerTestServer.BeforeEach)
+		afterSuiteActions = append(afterSuiteActions, dmsManagerTestServer.AfterSuite)
+	}
+
+	if slices.Contains(services, VA) {
+		vaTestServer, err := BuildVATestServer(caTestServer)
 		if err != nil {
 			return nil, fmt.Errorf("could not build VATestServer: %s", err)
 		}
@@ -359,10 +453,16 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, criptoEngines *Tes
 	}
 
 	return &TestServer{
-		CA: caCATestServer,
+		CA: caTestServer,
 		DeviceManager: func() *DeviceManagerTestServer {
 			if servicesMap[DEVICE_MANAGER] != nil {
 				return servicesMap[DEVICE_MANAGER].(*DeviceManagerTestServer)
+			}
+			return nil
+		}(),
+		DMSManager: func() *DMSManagerTestServer {
+			if servicesMap[DMS_MANAGER] != nil {
+				return servicesMap[DMS_MANAGER].(*DMSManagerTestServer)
 			}
 			return nil
 		}(),

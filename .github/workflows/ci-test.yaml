@@ -4,12 +4,20 @@ on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
+  workflow_call:
+    # Map the workflow outputs to job outputs
+    outputs:
+      coverage:
+        description: "Coverage report"
+        value: ${{ jobs.test.outputs.coverage }}  
+
 
 jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
-
+    outputs:
+      coverage: ${{ steps.run.outputs.coverage }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -22,6 +30,9 @@ jobs:
       - name: Install Dependencies
         run: go mod download
 
-      - name: Run Tests
+      - name: Run Golang Tests with coverage
+        id: run
         run: |
           go run gotest.tools/gotestsum@latest --format github-actions ./pkg/... -timeout 600s -coverprofile coverage.out
+          float_coverage=$(go tool cover -func coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+          echo "coverage=$float_coverage" >> $GITHUB_OUTPUT
