@@ -36,20 +36,23 @@ type BaseConfig struct {
 }
 
 type HttpServer struct {
-	LogLevel           LogLevel     `mapstructure:"log_level"`
-	HealthCheckLogging bool         `mapstructure:"health_check"`
-	ListenAddress      string       `mapstructure:"listen_address"`
-	Port               int          `mapstructure:"port"`
-	Protocol           HTTPProtocol `mapstructure:"protocol"`
-	CertFile           string       `mapstructure:"cert_file"`
-	KeyFile            string       `mapstructure:"key_file"`
-	Authentication     struct {
-		MutualTLS struct {
-			Enabled           bool          `mapstructure:"enabled"`
-			ValidationMode    MutualTLSMode `mapstructure:"validation_mode"`
-			CACertificateFile string        `mapstructure:"ca_cert_file"`
-		} `mapstructure:"mutual_tls"`
-	} `mapstructure:"authentication"`
+	LogLevel           LogLevel                 `mapstructure:"log_level"`
+	HealthCheckLogging bool                     `mapstructure:"health_check"`
+	ListenAddress      string                   `mapstructure:"listen_address"`
+	Port               int                      `mapstructure:"port"`
+	Protocol           HTTPProtocol             `mapstructure:"protocol"`
+	CertFile           string                   `mapstructure:"cert_file"`
+	KeyFile            string                   `mapstructure:"key_file"`
+	Authentication     HttpServerAuthentication `mapstructure:"authentication"`
+}
+
+type HttpServerAuthentication struct {
+	MutualTLS HttpServerMutualTLSAuthentication `mapstructure:"mutual_tls"`
+}
+type HttpServerMutualTLSAuthentication struct {
+	Enabled           bool          `mapstructure:"enabled"`
+	ValidationMode    MutualTLSMode `mapstructure:"validation_mode"`
+	CACertificateFile string        `mapstructure:"ca_cert_file"`
 }
 
 type MutualTLSMode string

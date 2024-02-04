@@ -140,6 +140,7 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 				server.TLSConfig = &tls.Config{
 					ClientAuth: clientAuth,
 					ClientCAs:  valCAPool,
+					MaxVersion: tls.VersionTLS12,
 				}
 			}
 

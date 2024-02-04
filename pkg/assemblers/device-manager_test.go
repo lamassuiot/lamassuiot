@@ -51,7 +51,6 @@ func TestDuplicateDeviceCreation(t *testing.T) {
 	if err == nil {
 		t.Fatalf("duplicate device creation should fail")
 	}
-
 }
 
 func TestPagination(t *testing.T) {

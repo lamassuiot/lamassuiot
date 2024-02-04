@@ -1,6 +1,6 @@
 Lamassu IoT
 ===================
-[![Coverage](https://img.shields.io/badge/Coverage-57%25-6d9100)](https://img.shields.io/badge/coverage-57%25-6d9100) [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-blue.svg)](http://www.mozilla.org/MPL/2.0/index.txt)
+[![Coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/haritzsaiz/a1936540297c6e96589da704a71419be/raw/coverage.json)](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/haritzsaiz/a1936540297c6e96589da704a71419be/raw/coverage.json) [![License: MPL 2.0](https://img.shields.io/badge/License-MPL%202.0-blue.svg)](http://www.mozilla.org/MPL/2.0/index.txt)
 
 <img src="https://www.lamassu.io/assets/brand/lamassu-brand.png" alt="Lamassu App" title="Lamassu" />
 
@@ -11,19 +11,29 @@ Lamassu is an IoT first PKI designed for industrial scenarios. This is the main 
 Each service has its own set of unit tests. To run them, you can use the following commands:
  > **Note:** In order to speed up the process, the tests are run in parallel by default.
  
-#For pretty printing
-go install github.com/haveyoudebuggedit/gotestfmt/v2/cmd/gotestfmt@v2.3.1
+### Run Test
 
 ```bash
 START=$(date +%s)
-go test -coverprofile cover.out -coverpkg=./... ./pkg/v3/... | awk '{if ($1 != "?") print $5; else print "0.0";}' | sed 's/\%//g' | awk '{s+=$1} END {printf "%.2f\n", s}' | bash .github/coverage-badge.sh
+go run gotest.tools/gotestsum@latest --format github-actions ./pkg/... -coverpkg=./... -timeout 600s -coverprofile cover.out
 END=$(date +%s)
 DIFF=$(( $END - $START ))
 echo "It took $DIFF seconds"
+```
 
-go-cover-treemap -coverprofile cover.out > out.svg
+### Get Coverage Badge
+```bash
+go tool cover -func cover.out | grep total | awk '{print substr($3, 1, length($3)-1)}' | .github/coverage-badge.sh
+```
+
+### Get Coverage HTML Report
+```bash
 go tool cover -html=cover.out -o cover-report.html
-go tool cover -func cover.out  | grep total
+```
+
+### Get Coverage SVG
+```bash
+go-cover-treemap -coverprofile cover.out > out.svg
 ```
 
 ```bash
