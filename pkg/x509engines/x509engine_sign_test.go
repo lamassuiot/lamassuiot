@@ -15,7 +15,7 @@ import (
 )
 
 func generateAndImportCA(keyType x509.PublicKeyAlgorithm, engine cryptoengines.CryptoEngine) (*x509.Certificate, any, error) {
-	caCertificate, key, err := helpers.GenerateSelfSignedCA(keyType, 365*24*time.Hour)
+	caCertificate, key, err := helpers.GenerateSelfSignedCA(keyType, 365*24*time.Hour, "MyCA")
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate self signed CA: %s", err)
 	}
@@ -69,7 +69,7 @@ func TestSignVerify(t *testing.T) {
 		t.Fatalf("failed to generate and import CA: %s", err)
 	}
 
-	caCertificateNotImported, _, err := helpers.GenerateSelfSignedCA(x509.ECDSA, 365*24*time.Hour)
+	caCertificateNotImported, _, err := helpers.GenerateSelfSignedCA(x509.ECDSA, 365*24*time.Hour, "MyCA")
 	if err != nil {
 		t.Fatalf("failed to generate self signed CA: %s", err)
 	}
