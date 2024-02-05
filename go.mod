@@ -3,7 +3,6 @@ module github.com/lamassuiot/lamassuiot/v2
 go 1.21
 
 require (
-	github.com/AvraamMavridis/randomcolor v0.0.0-20180822172341-208aff70bf2c
 	github.com/ThalesIgnite/crypto11 v1.2.1
 	github.com/ThreeDotsLabs/watermill v1.3.5
 	github.com/ThreeDotsLabs/watermill-amqp/v2 v2.1.1
@@ -30,7 +29,6 @@ require (
 	github.com/haritzsaiz/gin-dump v0.2.0
 	github.com/hashicorp/vault/api v1.9.2
 	github.com/jakehl/goid v1.1.0
-	github.com/kuzemkon/aws-iot-device-sdk-go v0.0.0-20200313144654-1a36b3aacf19
 	github.com/miekg/pkcs11 v1.1.1
 	github.com/ory/dockertest/v3 v3.10.0
 	github.com/robfig/cron/v3 v3.0.1
@@ -114,7 +112,7 @@ require (
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0-rc3 // indirect
-	github.com/opencontainers/runc v1.1.6 // indirect
+	github.com/opencontainers/runc v1.1.12 // indirect
 	github.com/pelletier/go-toml v1.9.3 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
