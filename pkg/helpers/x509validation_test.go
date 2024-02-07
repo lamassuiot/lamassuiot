@@ -20,7 +20,7 @@ func TestValidateCertificate(t *testing.T) {
 	}
 
 	// Call the ValidateCertificate function
-	err = ValidateCertificate(caCert, *cert, false)
+	err = ValidateCertificate(caCert, cert, false)
 
 	// Check if an error occurred during validation
 	if err != nil {
@@ -35,7 +35,7 @@ func TestValidateCertificate(t *testing.T) {
 	}
 
 	// Call the ValidateCertificate function
-	err = ValidateCertificate(caCert, *cert, false)
+	err = ValidateCertificate(caCert, cert, false)
 
 	// Check if an error occurred during validation
 	if err == nil {

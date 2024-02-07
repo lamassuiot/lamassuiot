@@ -59,7 +59,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 			Storage:          conf.Storage,
 			CryptoEngines:    conf.CryptoEngines,
 			CryptoMonitoring: conf.CryptoMonitoring,
-			VAServerDomain:   fmt.Sprintf("https://%s/api/va", conf.Domain),
+			VAServerDomain:   fmt.Sprintf("%s/api/va", conf.Domain),
 		}, apiInfo)
 		if err != nil {
 			return -1, fmt.Errorf("could not assemble CA Service: %s", err)

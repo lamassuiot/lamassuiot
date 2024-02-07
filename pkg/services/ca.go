@@ -1149,7 +1149,7 @@ func (svc *CAServiceImpl) ImportCertificate(ctx context.Context, input ImportCer
 	svc.caStorage.SelectByCommonName(ctx, input.Certificate.Issuer.CommonName, storage.StorageListRequest[models.CACertificate]{
 		ExhaustiveRun: true,
 		ApplyFunc: func(ca models.CACertificate) {
-			err := helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), x509.Certificate(*input.Certificate), false)
+			err := helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), (*x509.Certificate)(input.Certificate), false)
 			if err == nil {
 				parentCA = &ca
 			}
