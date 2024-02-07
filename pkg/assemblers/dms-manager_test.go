@@ -839,6 +839,30 @@ func TestESTReEnroll(t *testing.T) {
 		return dms, (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey
 	}
 
+	checkReEnroll := func(tc *testing.T, caCert, cert *x509.Certificate, key any) {
+		if err != nil {
+			tc.Fatalf("unexpected error: %s", err)
+		}
+
+		priv, ok := key.(*rsa.PrivateKey)
+		if !ok {
+			tc.Fatalf("could not cast priv key into RSA")
+		}
+
+		valid, err := helpers.ValidateCertAndPrivKey(cert, priv, nil)
+		if err != nil {
+			tc.Fatalf("could not validate cert and key. Got error: %s", err)
+		}
+
+		if !valid {
+			tc.Fatalf("private key does not match public key")
+		}
+
+		if err = helpers.ValidateCertificate(caCert, cert, true); err != nil {
+			tc.Fatalf("could not validate certificate with CA: %s", err)
+		}
+	}
+
 	var testcases = []struct {
 		name        string
 		run         func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error)
@@ -875,24 +899,7 @@ func TestESTReEnroll(t *testing.T) {
 				if err != nil {
 					t.Fatalf("unexpected error: %s", err)
 				}
-
-				priv, ok := key.(*rsa.PrivateKey)
-				if !ok {
-					t.Fatalf("could not cast priv key into RSA")
-				}
-
-				valid, err := helpers.ValidateCertAndPrivKey(cert, priv, nil)
-				if err != nil {
-					t.Fatalf("could not validate cert and key. Got error: %s", err)
-				}
-
-				if !valid {
-					t.Fatalf("private key does not match public key")
-				}
-
-				if err = helpers.ValidateCertificate(caCert, cert, true); err != nil {
-					t.Fatalf("could not validate certificate with CA: %s", err)
-				}
+				checkReEnroll(t, caCert, cert, key)
 			},
 		},
 		{
@@ -964,24 +971,7 @@ func TestESTReEnroll(t *testing.T) {
 				if err != nil {
 					t.Fatalf("unexpected error: %s", err)
 				}
-
-				priv, ok := key.(*rsa.PrivateKey)
-				if !ok {
-					t.Fatalf("could not cast priv key into RSA")
-				}
-
-				valid, err := helpers.ValidateCertAndPrivKey(cert, priv, nil)
-				if err != nil {
-					t.Fatalf("could not validate cert and key. Got error: %s", err)
-				}
-
-				if !valid {
-					t.Fatalf("private key does not match public key")
-				}
-
-				if err = helpers.ValidateCertificate(caCert, cert, true); err != nil {
-					t.Fatalf("could not validate certificate with CA: %s", err)
-				}
+				checkReEnroll(t, caCert, cert, key)
 			},
 		},
 		{
@@ -1060,6 +1050,93 @@ func TestESTReEnroll(t *testing.T) {
 				}
 
 				expectedErr := "certificate is revoked"
+				if !strings.Contains(err.Error(), expectedErr) {
+					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
+				}
+			},
+		},
+		{
+			name: "OK/RotateCAWithAdditionalValCAs",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = false
+					},
+					"5m",
+				)
+
+				newCA, err := createCA(fmt.Sprintf("rotated-ca-%s", uuid.NewString()), "5y", "1y")
+				if err != nil {
+					t.Fatalf("could not create Rotational CA: %s", err)
+				}
+
+				dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs = append(dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs, dms.Settings.EnrollmentSettings.EnrollmentCA)
+				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
+				dms, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{
+					DMS: *dms,
+				})
+				if err != nil {
+					t.Fatalf("could not create update DMS: %s", err)
+				}
+
+				newCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{deviceCrt},
+					PrivateKey:            deviceKey,
+					InsecureSkipVerify:    true,
+				}
+
+				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				return (*x509.Certificate)(newCA.Certificate.Certificate), reEnrollCRT, deviceKey, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				checkReEnroll(t, caCert, cert, key)
+			},
+		},
+		{
+			name: "Err/SubjectModified",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+					},
+					"1m",
+				)
+
+				newCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName, Organization: "MyOrg"}, deviceKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{deviceCrt},
+					PrivateKey:            deviceKey,
+					InsecureSkipVerify:    true,
+				}
+
+				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				return enrollmentCA, reEnrollCRT, deviceKey, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+
+				expectedErr := "invalid RawSubject bytes"
 				if !strings.Contains(err.Error(), expectedErr) {
 					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
 				}

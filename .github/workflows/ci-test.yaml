@@ -33,6 +33,6 @@ jobs:
       - name: Run Golang Tests with coverage
         id: run
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./pkg/... -timeout 600s -coverprofile coverage.out
+          go run gotest.tools/gotestsum@latest --format github-actions ./pkg/... -coverpkg=./... -timeout 600s -coverprofile coverage.out
           float_coverage=$(go tool cover -func coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
           echo "coverage=$float_coverage" >> $GITHUB_OUTPUT
