@@ -429,7 +429,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("expected error. Got none")
 				}
 
-				expectedErr := "invalid certificate"
+				expectedErr := "device not preregistered"
 				if !strings.Contains(err.Error(), expectedErr) {
 					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
 				}
