@@ -455,6 +455,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 			validCertificate = true
 		}
 
+		//try secondary validation with additional CAs
 		if !validCertificate {
 			estReEnrollOpts := dms.Settings.ReEnrollmentSettings
 			aValCAsCtr := len(estReEnrollOpts.AdditionalValidationCAs)
@@ -479,6 +480,16 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 					break
 				}
 			}
+		}
+
+		//desist the reenrollment process. No CA authorizes this enrollment
+		if !validCertificate {
+			caAki := ""
+			if len(clientCert.AuthorityKeyId) > 0 {
+				caAki = string(clientCert.AuthorityKeyId)
+			}
+			lDMS.Errorf("aborting reenrollment process for device '%s'. Unknown CA:\nCN: %s\nAKI:%s", csr.Subject.CommonName, clientCert.Issuer.CommonName, caAki)
+			return nil, errs.ErrDMSEnrollInvalidCert
 		}
 
 		//Check if EXPIRED
