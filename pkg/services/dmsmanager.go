@@ -447,6 +447,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 
 		validCertificate := false
 		var validationCA *x509.Certificate
+
 		//check if certificate is a certificate issued by Enroll CA
 		lDMS.Debugf("validating client certificate using EST Enrollment CA witch has ID=%s CN=%s SN=%s", enrollCAID, enrollCA.Certificate.Subject.CommonName, enrollCA.SerialNumber)
 		err = helpers.ValidateCertificate((*x509.Certificate)(enrollCA.Certificate.Certificate), clientCert, false)
@@ -464,8 +465,8 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 			aValCAsCtr := len(estReEnrollOpts.AdditionalValidationCAs)
 			lDMS.Debugf("could not validate client certificate using enroll CA. Will try validating using Additional Validation CAs")
 			lDMS.Debugf("DMS has %d additional validation CAs", aValCAsCtr)
-			//check if certificate is a certificate issued by Extra Val CAs
 
+			//check if certificate is a certificate issued by Extra Val CAs
 			for idx, caID := range estReEnrollOpts.AdditionalValidationCAs {
 				lDMS.Debugf("[%d/%d] obtainig validation with ID %s", idx, aValCAsCtr, caID)
 				ca, err := svc.caClient.GetCAByID(context.Background(), GetCAByIDInput{CAID: caID})
@@ -485,7 +486,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 			}
 		}
 
-		//desist the reenrollment process. No CA authorizes this enrollment
+		//abort reenrollment process. No CA signed the client certificate
 		if !validCertificate {
 			caAki := ""
 			if len(clientCert.AuthorityKeyId) > 0 {
@@ -515,7 +516,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 
 		if couldCheckRevocation {
 			if isRevoked {
-				lDMS.Warnf("certificate is revoked")
+				lDMS.Errorf("certificate is revoked")
 				return nil, fmt.Errorf("certificate is revoked")
 			}
 			lDMS.Infof("certificate is not revoked")

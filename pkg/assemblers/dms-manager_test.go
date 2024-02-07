@@ -1,12 +1,17 @@
 package assemblers
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -49,7 +54,7 @@ func TestCreateDMS(t *testing.T) {
 		ID:   "1234-5678",
 		Name: "MyIotFleet",
 	}
-	dms, err := dmsMgr.Service.CreateDMS(context.Background(), dmsSample)
+	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
 	if err != nil {
 		t.Fatalf("could not create DMS: %s", err)
 	}
@@ -712,6 +717,81 @@ func TestESTEnroll(t *testing.T) {
 		// 		}
 		// 	},
 		// },
+		{
+			name: "OK/PEMOutput",
+			run: func() (caCert, cert *x509.Certificate, key any, err error) {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+						bootstrapCA.ID,
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:         bootstrapCA.ID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
+					SignVerbatim: true,
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				estCli := pemESTClient{
+					baseEndpoint: fmt.Sprintf("https://localhost:%d/.well-known/est/%s", dmsMgr.Port, dms.ID),
+					cert:         (*x509.Certificate)(bootCrt.Certificate),
+					key:          bootKey,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := helpers.GenerateRSAKey(2048)
+				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				enrollCRT, err := estCli.Enroll(enrollCSR)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, nil
+			},
+			resultCheck: func(caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+
+				priv, ok := key.(*rsa.PrivateKey)
+				if !ok {
+					t.Fatal("could not cast priv key into RSA")
+				}
+
+				valid, err := helpers.ValidateCertAndPrivKey(cert, priv, nil)
+				if err != nil {
+					t.Fatalf("could not validate cert and key. Got error: %s", err)
+				}
+
+				if !valid {
+					t.Fatalf("private key does not match public key")
+				}
+
+				if err = helpers.ValidateCertificate(caCert, cert, true); err != nil {
+					t.Fatalf("could not validate certificate with CA: %s", err)
+				}
+			},
+		},
 	}
 
 	for _, tc := range testcases {
@@ -903,6 +983,43 @@ func TestESTReEnroll(t *testing.T) {
 			},
 		},
 		{
+			name: "Err/FakeCertificate",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+					},
+					"1m",
+				)
+
+				fakeKey, _ := helpers.GenerateRSAKey(2048)
+				fakeCert, _ := helpers.GenerateSelfSignedCertificate(fakeKey, deviceCrt.Subject.CommonName)
+
+				newCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{fakeCert},
+					PrivateKey:            fakeKey,
+					InsecureSkipVerify:    true,
+				}
+
+				_, err = estCli.Reenroll(context.Background(), newCsr)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+
+				expectedErr := "invalid certificate"
+				if !strings.Contains(err.Error(), expectedErr) {
+					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
+				}
+			},
+		},
+		{
 			name: "Err/WindowNotOpened",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
@@ -1073,7 +1190,7 @@ func TestESTReEnroll(t *testing.T) {
 
 				dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs = append(dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs, dms.Settings.EnrollmentSettings.EnrollmentCA)
 				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
-				dms, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{
+				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
 					DMS: *dms,
 				})
 				if err != nil {
@@ -1107,7 +1224,7 @@ func TestESTReEnroll(t *testing.T) {
 		{
 			name: "Err/SubjectModified",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
-				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
+				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
 						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 					},
@@ -1124,12 +1241,8 @@ func TestESTReEnroll(t *testing.T) {
 					InsecureSkipVerify:    true,
 				}
 
-				reEnrollCRT, err := estCli.Reenroll(context.Background(), newCsr)
-				if err != nil {
-					t.Fatalf("unexpected error while enrolling: %s", err)
-				}
-
-				return enrollmentCA, reEnrollCRT, deviceKey, err
+				_, err = estCli.Reenroll(context.Background(), newCsr)
+				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
 				if err == nil {
@@ -1140,6 +1253,38 @@ func TestESTReEnroll(t *testing.T) {
 				if !strings.Contains(err.Error(), expectedErr) {
 					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
 				}
+			},
+		},
+		{
+			name: "OK/PEMOutput",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+					},
+					"1m",
+				)
+
+				newCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+
+				estCli := pemESTClient{
+					baseEndpoint: fmt.Sprintf("https://localhost:%d/.well-known/est/%s", dmsMgr.Port, dms.ID),
+					cert:         deviceCrt,
+					key:          deviceKey,
+				}
+
+				reEnrollCRT, err := estCli.ReEnroll(newCsr)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				return enrollmentCA, reEnrollCRT, deviceKey, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				checkReEnroll(t, caCert, cert, key)
 			},
 		},
 	}
@@ -1157,5 +1302,77 @@ func checkDMS(t *testing.T, dms *models.DMS, dmsSample services.CreateDMSInput) 
 	if dms.ID != dmsSample.ID {
 		t.Fatalf("device id mismatch: expected %s, got %s", dmsSample.ID, dms.ID)
 	}
+}
 
+type pemESTClient struct {
+	cert         *x509.Certificate
+	key          any
+	baseEndpoint string
+}
+
+func (c *pemESTClient) Enroll(r *x509.CertificateRequest) (*x509.Certificate, error) {
+	return c.commonEnrollPEM(r, false)
+}
+func (c *pemESTClient) ReEnroll(r *x509.CertificateRequest) (*x509.Certificate, error) {
+	return c.commonEnrollPEM(r, true)
+}
+
+func (c *pemESTClient) commonEnrollPEM(r *x509.CertificateRequest, renew bool) (*x509.Certificate, error) {
+	keyPem, err := helpers.PrivateKeyToPEM(c.key)
+	if err != nil {
+		return nil, err
+	}
+
+	cer, err := tls.X509KeyPair([]byte(helpers.CertificateToPEM(c.cert)), []byte(keyPem))
+	if err != nil {
+		return nil, err
+	}
+
+	client := http.Client{}
+	client.Transport = &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+			Certificates:       []tls.Certificate{cer},
+		},
+	}
+
+	reqBody := io.NopCloser(bytes.NewBuffer([]byte(base64.StdEncoding.EncodeToString(r.Raw))))
+
+	var endpoint = "/simpleenroll"
+	if renew {
+		endpoint = "/simplereenroll"
+	}
+
+	uriEndpoint := fmt.Sprintf("%s%s", c.baseEndpoint, endpoint)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, uriEndpoint, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make new HTTP request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", "pem-test")
+	req.Header.Set("Accept", "application/x-pem-file")
+	req.Header.Set("Content-Type", "application/pkcs10")
+	req.Header.Set("Content-Transfer-Encoding", "base64")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute HTTP request: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("non 200 status code: %s", resp.Status)
+	}
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	cert, err := helpers.ParseCertificate(string(b))
+	if err != nil {
+		return nil, err
+	}
+
+	return cert, nil
 }
