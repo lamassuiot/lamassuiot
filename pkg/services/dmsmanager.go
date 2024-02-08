@@ -283,7 +283,7 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 				continue
 			}
 
-			err = helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), *clientCert, true)
+			err = helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), clientCert, true)
 			if err != nil {
 				lDMS.Debugf("invalid validation using CA [%s] with CommonName '%s', SerialNumber '%s'", ca.ID, ca.Subject.CommonName, ca.SerialNumber)
 			} else {
@@ -339,6 +339,9 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 			lDMS.Debugf("DMS '%s' allows new enrollments. continuing enrollment process for device '%s'", dms.ID, csr.Subject.CommonName)
 			//revoke active certificate
 			defer func() {
+				if device.IdentitySlot == nil {
+					device.IdentitySlot = &models.Slot[string]{}
+				}
 				_, err = svc.caClient.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
 					SerialNumber:     device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion],
 					NewStatus:        models.StatusRevoked,
@@ -444,9 +447,10 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 
 		validCertificate := false
 		var validationCA *x509.Certificate
+
 		//check if certificate is a certificate issued by Enroll CA
 		lDMS.Debugf("validating client certificate using EST Enrollment CA witch has ID=%s CN=%s SN=%s", enrollCAID, enrollCA.Certificate.Subject.CommonName, enrollCA.SerialNumber)
-		err = helpers.ValidateCertificate((*x509.Certificate)(enrollCA.Certificate.Certificate), *clientCert, false)
+		err = helpers.ValidateCertificate((*x509.Certificate)(enrollCA.Certificate.Certificate), clientCert, false)
 		if err != nil {
 			lDMS.Warnf("invalid validation using enroll CA: %s", err)
 		} else {
@@ -455,13 +459,14 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 			validCertificate = true
 		}
 
+		//try secondary validation with additional CAs
 		if !validCertificate {
 			estReEnrollOpts := dms.Settings.ReEnrollmentSettings
 			aValCAsCtr := len(estReEnrollOpts.AdditionalValidationCAs)
 			lDMS.Debugf("could not validate client certificate using enroll CA. Will try validating using Additional Validation CAs")
 			lDMS.Debugf("DMS has %d additional validation CAs", aValCAsCtr)
-			//check if certificate is a certificate issued by Extra Val CAs
 
+			//check if certificate is a certificate issued by Extra Val CAs
 			for idx, caID := range estReEnrollOpts.AdditionalValidationCAs {
 				lDMS.Debugf("[%d/%d] obtainig validation with ID %s", idx, aValCAsCtr, caID)
 				ca, err := svc.caClient.GetCAByID(context.Background(), GetCAByIDInput{CAID: caID})
@@ -470,7 +475,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 					continue
 				}
 
-				err = helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), *clientCert, false)
+				err = helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), clientCert, false)
 				if err != nil {
 					lDMS.Debugf("[%d/%d] invalid validation using CA [%s] with CommonName '%s', SerialNumber '%s'", idx, aValCAsCtr, ca.ID, ca.Subject.CommonName, ca.SerialNumber)
 				} else {
@@ -481,9 +486,19 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 			}
 		}
 
+		//abort reenrollment process. No CA signed the client certificate
+		if !validCertificate {
+			caAki := ""
+			if len(clientCert.AuthorityKeyId) > 0 {
+				caAki = string(clientCert.AuthorityKeyId)
+			}
+			lDMS.Errorf("aborting reenrollment process for device '%s'. Unknown CA:\nCN: %s\nAKI:%s", csr.Subject.CommonName, clientCert.Issuer.CommonName, caAki)
+			return nil, errs.ErrDMSEnrollInvalidCert
+		}
+
 		//Check if EXPIRED
 		now := time.Now()
-		if clientCert.NotBefore.After(now) {
+		if clientCert.NotAfter.Before(now) {
 			if dms.Settings.ReEnrollmentSettings.EnableExpiredRenewal {
 				lDMS.Infof("presented an expired certificate by %s, but DMS allows expired renewals. Continuing", now.Sub(clientCert.NotBefore))
 			} else {
@@ -500,8 +515,8 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 		}
 
 		if couldCheckRevocation {
-			lDMS.Warnf("certificate is revoked")
 			if isRevoked {
+				lDMS.Errorf("certificate is revoked")
 				return nil, fmt.Errorf("certificate is revoked")
 			}
 			lDMS.Infof("certificate is not revoked")

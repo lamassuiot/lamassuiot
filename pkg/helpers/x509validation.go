@@ -4,7 +4,7 @@ import (
 	"crypto/x509"
 )
 
-func ValidateCertificate(ca *x509.Certificate, cert x509.Certificate, considerExpiration bool) error {
+func ValidateCertificate(ca, cert *x509.Certificate, considerExpiration bool) error {
 	caPool := x509.NewCertPool()
 	caPool.AddCert(ca)
 

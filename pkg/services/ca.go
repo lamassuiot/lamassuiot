@@ -260,6 +260,10 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 	return &svc, nil
 }
 
+func (svc *CAServiceImpl) Close() {
+	svc.cronInstance.Stop()
+}
+
 func (svc *CAServiceImpl) SetService(service CAService) {
 	svc.service = service
 }
@@ -277,7 +281,7 @@ func (svc *CAServiceImpl) GetStats(ctx context.Context) (*models.CAStats, error)
 
 	casDistributionPerEngine := map[string]int{}
 	for _, engine := range engines {
-		lFunc.Debugf("counting CAs controlled by %s engins", engine.ID)
+		lFunc.Debugf("counting CAs controlled by %s engines", engine.ID)
 		ctr, err := svc.caStorage.CountByEngine(ctx, engine.ID)
 		if err != nil {
 			lFunc.Errorf("could not get CAs for engine %s: %s", engine.ID, err)
@@ -1149,7 +1153,7 @@ func (svc *CAServiceImpl) ImportCertificate(ctx context.Context, input ImportCer
 	svc.caStorage.SelectByCommonName(ctx, input.Certificate.Issuer.CommonName, storage.StorageListRequest[models.CACertificate]{
 		ExhaustiveRun: true,
 		ApplyFunc: func(ca models.CACertificate) {
-			err := helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), x509.Certificate(*input.Certificate), false)
+			err := helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), (*x509.Certificate)(input.Certificate), false)
 			if err == nil {
 				parentCA = &ca
 			}
