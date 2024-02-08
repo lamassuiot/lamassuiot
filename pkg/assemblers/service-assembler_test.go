@@ -2,6 +2,7 @@ package assemblers
 
 import (
 	"crypto/elliptic"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
@@ -128,7 +129,6 @@ func PreparePostgresForTest(dbs []string) (*TestStorageEngineConfig, error) {
 }
 
 func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig {
-
 	beforeEachActions := []func() error{}
 	afterSuiteActions := []func(){}
 
@@ -215,6 +215,9 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, criptoEngines *Te
 		return nil, fmt.Errorf("could not assemble CA with HTTP server")
 	}
 
+	caSvc := *svc
+	caBackend := caSvc.(*services.CAServiceImpl)
+
 	return &CATestServer{
 		Service:   *svc,
 		HttpCASDK: clients.NewHttpCAClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
@@ -222,7 +225,7 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, criptoEngines *Te
 			return nil
 		},
 		AfterSuite: func() {
-			fmt.Println("TEST CLEANUP CA")
+			caBackend.Close()
 		},
 	}, nil
 }
@@ -315,10 +318,16 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ca
 		return nil, fmt.Errorf("could not assemble DMS Manager Service. Exiting: %s", err)
 	}
 
+	httpCli := http.Client{}
+	httpCli.Transport = &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
 	return &DMSManagerTestServer{
 		Port:                 port,
 		Service:              *svc,
-		HttpDeviceManagerSDK: clients.NewHttpDMSManagerClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d", port)),
+		HttpDeviceManagerSDK: clients.NewHttpDMSManagerClient(&httpCli, fmt.Sprintf("https://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
 			return nil
 		},
@@ -363,7 +372,7 @@ func BuildVATestServer(caTestServer *CATestServer) (*VATestServer, error) {
 	}, nil
 }
 
-func AssembleServices(storageEngine *TestStorageEngineConfig, criptoEngines *TestCryptoEngineConfig, services []Service) (*TestServer, error) {
+func AssembleServices(storageEngine *TestStorageEngineConfig, cryptoEngines *TestCryptoEngineConfig, services []Service) (*TestServer, error) {
 	servicesMap := make(map[Service]interface{})
 
 	beforeEachActions := []func() error{}
@@ -376,16 +385,16 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, criptoEngines *Tes
 		afterSuiteActions = append(afterSuiteActions, storageEngine.AfterSuite)
 	}
 
-	if criptoEngines != nil {
-		if criptoEngines.BeforeEach != nil {
-			beforeEachActions = append(beforeEachActions, criptoEngines.BeforeEach)
+	if cryptoEngines != nil {
+		if cryptoEngines.BeforeEach != nil {
+			beforeEachActions = append(beforeEachActions, cryptoEngines.BeforeEach)
 		}
-		if criptoEngines.AfterSuite != nil {
-			afterSuiteActions = append(afterSuiteActions, criptoEngines.AfterSuite)
+		if cryptoEngines.AfterSuite != nil {
+			afterSuiteActions = append(afterSuiteActions, cryptoEngines.AfterSuite)
 		}
 	}
 
-	caTestServer, err := BuildCATestServer(storageEngine, criptoEngines)
+	caTestServer, err := BuildCATestServer(storageEngine, cryptoEngines)
 	servicesMap[CA] = caTestServer
 	if err != nil {
 		return nil, fmt.Errorf("could not build CATestServer: %s", err)

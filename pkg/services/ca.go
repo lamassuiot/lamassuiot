@@ -260,6 +260,10 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 	return &svc, nil
 }
 
+func (svc *CAServiceImpl) Close() {
+	svc.cronInstance.Stop()
+}
+
 func (svc *CAServiceImpl) SetService(service CAService) {
 	svc.service = service
 }
@@ -277,7 +281,7 @@ func (svc *CAServiceImpl) GetStats(ctx context.Context) (*models.CAStats, error)
 
 	casDistributionPerEngine := map[string]int{}
 	for _, engine := range engines {
-		lFunc.Debugf("counting CAs controlled by %s engins", engine.ID)
+		lFunc.Debugf("counting CAs controlled by %s engines", engine.ID)
 		ctr, err := svc.caStorage.CountByEngine(ctx, engine.ID)
 		if err != nil {
 			lFunc.Errorf("could not get CAs for engine %s: %s", engine.ID, err)
