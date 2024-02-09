@@ -156,12 +156,14 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 	}
 
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/import", resources.ImportCABody{
+		ID:                 input.ID,
 		CAType:             models.CertificateType(input.CAType),
 		IssuanceExpiration: input.IssuanceExpiration,
 		CACertificate:      input.CACertificate,
 		CAChain:            input.CAChain,
 		CAPrivateKey:       privKey,
 		EngineID:           input.EngineID,
+		ParentID:           input.ParentID,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err
