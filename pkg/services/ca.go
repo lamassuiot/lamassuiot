@@ -467,9 +467,10 @@ type ImportCAInput struct {
 	CACertificate      *models.X509Certificate   `validate:"required"`
 	CAChain            []*models.X509Certificate //Parent CAs. They MUST be sorted as follows. 0: Root-CA; 1: Subordinate CA from Root-CA; ...
 	CARSAKey           *rsa.PrivateKey
-	KeyType            models.KeyType
 	CAECKey            *ecdsa.PrivateKey
+	KeyType            models.KeyType
 	EngineID           string
+	ParentID           string
 }
 
 // Returned Error Codes:
@@ -532,10 +533,35 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 	}
 
 	caID := input.ID
-	if string(input.CACertificate.SubjectKeyId) != "" {
-		caID = string(input.CACertificate.SubjectKeyId)
-	} else if caID == "" {
+	if caID == "" {
 		caID = goid.NewV4UUID().String()
+	}
+
+	var parentCA *models.CACertificate
+	if input.ParentID != "" {
+		parentCA, err = svc.service.GetCAByID(ctx, GetCAByIDInput{
+			CAID: input.ParentID,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("parent CA not found: %w", err)
+		}
+
+	}
+
+	issuerMeta := models.IssuerCAMetadata{
+		ID:           caID,
+		SerialNumber: helpers.SerialNumberToString(input.CACertificate.SerialNumber),
+		Level:        0,
+	}
+	level := 0
+
+	if parentCA != nil {
+		level = parentCA.Level + 1
+		issuerMeta = models.IssuerCAMetadata{
+			ID:           input.ParentID,
+			SerialNumber: parentCA.SerialNumber,
+			Level:        parentCA.Level,
+		}
 	}
 
 	ca := &models.CACertificate{
@@ -544,6 +570,7 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 		Metadata:              map[string]interface{}{},
 		IssuanceExpirationRef: input.IssuanceExpiration,
 		CreationTS:            time.Now(),
+		Level:                 level,
 		Certificate: models.Certificate{
 			Certificate:         input.CACertificate,
 			Status:              models.StatusActive,
@@ -555,11 +582,8 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 			RevocationTimestamp: time.Time{},
 			Metadata:            map[string]interface{}{},
 			Type:                input.CAType,
-			IssuerCAMetadata: models.IssuerCAMetadata{
-				ID:           caID,
-				SerialNumber: helpers.SerialNumberToString(input.CACertificate.SerialNumber),
-			},
-			EngineID: engineID,
+			IssuerCAMetadata:    issuerMeta,
+			EngineID:            engineID,
 		},
 	}
 

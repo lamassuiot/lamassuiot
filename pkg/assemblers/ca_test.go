@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -1062,12 +1063,14 @@ func TestGetCertificates(t *testing.T) {
 				return issuedCerts, err
 			},
 			resultCheck: func(certs []*models.Certificate, err error) error {
-				if len(certs) != 20 {
-					return fmt.Errorf("should've got 20 certificates, the content of the all files: %s", err)
-				}
 				if err != nil {
-					return fmt.Errorf("should've got the certificates without error, but got error: %s", err)
+					return fmt.Errorf("got unexpected error: %s", err)
 				}
+
+				if len(certs) != 20 {
+					return fmt.Errorf("should've got 20 certificates. Got %d", len(certs))
+				}
+
 				return nil
 			},
 		},
@@ -1107,12 +1110,12 @@ func TestGetCertificates(t *testing.T) {
 				return issuedCerts, err
 			},
 			resultCheck: func(certs []*models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
 
 				if len(certs) != 5 {
-					return fmt.Errorf("should've got 5 certificates, the content of the first page: %s", err)
-				}
-				if err != nil {
-					return fmt.Errorf("should've got the certificates without error, but got error: %s", err)
+					return fmt.Errorf("should've got 5 certificates. Got %d", len(certs))
 				}
 				return nil
 			},
@@ -1202,11 +1205,12 @@ func TestGetCertificatesByCA(t *testing.T) {
 				return issuedCerts, err
 			},
 			resultCheck: func(certs []*models.Certificate, err error) error {
-				if len(certs) != 5 {
-					return fmt.Errorf("should've got 20 certificates, the content of the all files: %s", err)
-				}
 				if err != nil {
-					return fmt.Errorf("should've got the certificates without error, but got error: %s", err)
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+
+				if len(certs) != 5 {
+					return fmt.Errorf("should've got 5 certificates. Got %d", len(certs))
 				}
 				return nil
 			},
@@ -1248,11 +1252,12 @@ func TestGetCertificatesByCA(t *testing.T) {
 				return issuedCerts, err
 			},
 			resultCheck: func(certs []*models.Certificate, err error) error {
-				if len(certs) != 20 {
-					return fmt.Errorf("should've got 20 certificates, the content of the all files: %s", err)
-				}
 				if err != nil {
-					return fmt.Errorf("should've got the certificates without error, but got error: %s", err)
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+
+				if len(certs) != 20 {
+					return fmt.Errorf("should've got 20 certificates. Got %d", len(certs))
 				}
 				return nil
 			},
@@ -1288,7 +1293,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 							issuedCerts = append(issuedCerts, &elem)
 						},
 					},
-					CAID: "manex",
+					CAID: "MyCA",
 				})
 
 				return issuedCerts, err
@@ -1335,7 +1340,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 							issuedCerts = append(issuedCerts, &elem)
 						},
 					},
-					CAID: "manex",
+					CAID: "MyCA",
 				})
 
 				return issuedCerts, err
@@ -1386,7 +1391,6 @@ func TestGetCertificatesByCA(t *testing.T) {
 }
 
 func TestImportCA(t *testing.T) {
-
 	serverTest, err := StartCAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
@@ -1449,19 +1453,20 @@ func TestImportCA(t *testing.T) {
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
-		run         func(caSDK services.CAService) (*models.CAStats, error)
-		resultCheck func(*models.CAStats, error) error
+		run         func(caSDK services.CAService) (*models.CACertificate, error)
+		resultCheck func(*models.CACertificate, error) error
 	}{
 		{
 			name:   "OK/ImportingExternalCA",
 			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.CAStats, error) {
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				ca, _, err := generateSelfSignedCA(x509.RSA)
 				var duration time.Duration = 100
 				if err != nil {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
-				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6abf45b4d24e0bf7d8adef322c06987baca",
 					CAType: models.CertificateTypeExternal,
 					IssuanceExpiration: models.Expiration{
@@ -1469,32 +1474,29 @@ func TestImportCA(t *testing.T) {
 						Duration: (*models.TimeDuration)(&duration),
 					},
 					CACertificate: (*models.X509Certificate)(ca),
-
-					//Here are missing a lot of parameterss
 				})
-				if err != nil {
-					return nil, fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
-				}
-				return nil, err
+
+				return importedCA, err
 			},
-			resultCheck: func(cas *models.CAStats, err error) error {
+			resultCheck: func(ca *models.CACertificate, err error) error {
 				if err != nil {
-					return fmt.Errorf("should have gone correct, but got an error: %s", err)
+					return fmt.Errorf("got unexpected error: %s", err)
 				}
 
 				return nil
 			},
 		},
 		{
-			name:   "OK/ImportingImportedCA",
+			name:   "OK/ImportingExternalCA",
 			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.CAStats, error) {
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				ca, key, err := generateSelfSignedCA(x509.RSA)
 				var duration time.Duration = 100
 				if err != nil {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
-				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6a4e0bf7d8adef322c06987baca",
 					CAType: models.CertificateTypeImportedWithKey,
 					IssuanceExpiration: models.Expiration{
@@ -1504,24 +1506,22 @@ func TestImportCA(t *testing.T) {
 					CACertificate: (*models.X509Certificate)(ca),
 					CARSAKey:      (key).(*rsa.PrivateKey),
 					KeyType:       models.KeyType(x509.RSA),
-					//Here are missing a lot of parameterss
 				})
-				if err != nil {
-					return nil, fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
-				}
-				return nil, err
+
+				return importedCA, err
 			},
-			resultCheck: func(cas *models.CAStats, err error) error {
+			resultCheck: func(cas *models.CACertificate, err error) error {
 				if err != nil {
-					return fmt.Errorf("should have gone correct, but got an error: %s", err)
+					return fmt.Errorf("got unexpected error: %s", err)
 				}
+
 				return nil
 			},
 		},
 		{
-			name:   "Err_InputVal/ImportingImporteEngineID",
+			name:   "OK/ImportingToSpecificEngine",
 			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.CAStats, error) {
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				ca, key, err := generateSelfSignedCA(x509.RSA)
 				var duration time.Duration = 100
 				if err != nil {
@@ -1536,7 +1536,7 @@ func TestImportCA(t *testing.T) {
 					engine = engines[1]
 				}
 
-				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6a4e0bf7d8adef322c06987baca",
 					CAType: models.CertificateTypeImportedWithKey,
 					IssuanceExpiration: models.Expiration{
@@ -1547,32 +1547,28 @@ func TestImportCA(t *testing.T) {
 					CARSAKey:      (key).(*rsa.PrivateKey),
 					KeyType:       models.KeyType(x509.RSA),
 					EngineID:      engine.ID,
-
-					//Here are missing a lot of parameterss
 				})
 
-				if err != nil {
-					return nil, fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
-				}
-				return nil, err
+				return importedCA, err
 			},
-			resultCheck: func(cas *models.CAStats, err error) error {
+			resultCheck: func(cas *models.CACertificate, err error) error {
 				if err != nil {
-					return fmt.Errorf("should have gone correct, but got an error: %s", err)
+					return fmt.Errorf("got unexpected error: %s", err)
 				}
 				return nil
 			},
 		},
 		{
-			name:   "OK/ImportingImportedECDSACA",
+			name:   "OK/ImportingCAWithECDSAKey",
 			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.CAStats, error) {
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				ca, key, err := generateSelfSignedCA(x509.ECDSA)
 				var duration time.Duration = 100
 				if err != nil {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
-				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:     "c1acdb823dd8ac113d2b0a1aaa0adef322c06987baca",
 					CAType: models.CertificateTypeImportedWithKey,
 					IssuanceExpiration: models.Expiration{
@@ -1582,30 +1578,27 @@ func TestImportCA(t *testing.T) {
 					CACertificate: (*models.X509Certificate)(ca),
 					CAECKey:       (key).(*ecdsa.PrivateKey),
 					KeyType:       models.KeyType(x509.ECDSA),
-					//Here are missing a lot of parameterss
 				})
-				if err != nil {
-					return nil, fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
-				}
-				return nil, err
+				return importedCA, err
 			},
-			resultCheck: func(cas *models.CAStats, err error) error {
+			resultCheck: func(cas *models.CACertificate, err error) error {
 				if err != nil {
-					return fmt.Errorf("should have gone correct, but got an error: %s", err)
+					return fmt.Errorf("got unexpected error: %s", err)
 				}
 				return nil
 			},
 		},
 		{
-			name:   "OK/ImportingImportedCAWithoutId",
+			name:   "OK/ImportingCAWithoutID",
 			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.CAStats, error) {
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				ca, key, err := generateSelfSignedCA(x509.RSA)
 				var duration time.Duration = 100
 				if err != nil {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
-				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					CAType: models.CertificateTypeImportedWithKey,
 					IssuanceExpiration: models.Expiration{
 						Type:     models.Duration,
@@ -1614,16 +1607,205 @@ func TestImportCA(t *testing.T) {
 					CACertificate: (*models.X509Certificate)(ca),
 					CARSAKey:      (key).(*rsa.PrivateKey),
 					KeyType:       models.KeyType(x509.RSA),
-					//Here are missing a lot of parameterss
+				})
+
+				return importedCA, err
+			},
+			resultCheck: func(cas *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/ImportingHierarchy",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				ca0Crt := `-----BEGIN CERTIFICATE-----
+MIIGUTCCBDmgAwIBAgIUYuInJ29SHCU4j8ixsu5saKNItKQwDQYJKoZIhvcNAQEL
+BQAwSTEJMAcGA1UEBhMAMQkwBwYDVQQIEwAxCTAHBgNVBAcTADEJMAcGA1UEChMA
+MQkwBwYDVQQLEwAxEDAOBgNVBAMTB1Jvb3QtQ0EwHhcNMjQwMjA4MTI1NTQ4WhcN
+MjQxMjA0MTI1NTQ2WjBJMQkwBwYDVQQGEwAxCTAHBgNVBAgTADEJMAcGA1UEBxMA
+MQkwBwYDVQQKEwAxCTAHBgNVBAsTADEQMA4GA1UEAxMHUm9vdC1DQTCCAiIwDQYJ
+KoZIhvcNAQEBBQADggIPADCCAgoCggIBAKJ+YWC47TrR7nFzd36G22pqbe0k0Dbs
+iA5bgKfZIilDwp5auIIUZQPfRSG8OFXB/BvEHP/iw99PfaE1i3i9TP03adwkweZE
+fPdIwFaC4eu6dSdF/c9dqeRdeHn5lXGTaQCWywaf8BMLkcZgnOrSRt7HrDkEJUc8
+s2aHsyEv0FD6mg55nZJxKWt3+J4OKHLxrP4VWXaTezspPq4XKl5XHGgDuH+Jej6u
+qcyXmkhyH87VFideSeGWEOkAkGaWr93qSgTh/nWegaHW8dv+FQsQ0dFavUmUyjHF
+slkGDX5URXWRjXogrCHh0u8SQDgN50V0CzJgK8J7L/l7eOjeeOM5plVQdaqLqGbc
+a+q8j+yhWkPBnQJjmQ9rM7Y7IlEQdBFyTw9MwFZ+PyDM9x5NS8B1xJ0/wpOfxOo2
+LAnP+YgsggETde44volHCfEDEJOf/xVr1S5O1hWLKC/kDGtZD1bD29AxTNph4tBI
+hqHMfDjmJULoXyhLkQDU5KAF/OxicM7yFTecxXcXa4isbmcQHB1CTm5+kLtwiNDZ
+enYww4KaOX8kGFTJGNWXlFVRifP2DmuDGBlUaGYZRhQlLrATnSLk4nLGY3GOLunC
+8UBny93LYdyRQ41Fux0t2n4H6mrMaGIT9YN6X7qUeD/zPN+9tSMgNB9tD53Z2Y0L
+szEnbIx7PzTnAgMBAAGjggEvMIIBKzAOBgNVHQ8BAf8EBAMCAZYwHQYDVR0lBBYw
+FAYIKwYBBQUHAwIGCCsGAQUFBwMBMA8GA1UdEwEB/wQFMAMBAf8wLQYDVR0OBCYE
+JDY3NTMyYTYxLTYxZGEtNDI0ZS05NmEyLTZjNjA2OWY2OTMyYjAvBgNVHSMEKDAm
+gCQ2NzUzMmE2MS02MWRhLTQyNGUtOTZhMi02YzYwNjlmNjkzMmIwNwYIKwYBBQUH
+AQEEKzApMCcGCCsGAQUFBzABhhtodHRwczovL2xhYi5sYW1hc3N1LmlvL29jc3Aw
+UAYDVR0fBEkwRzBFoEOgQYY/aHR0cHM6Ly9sYWIubGFtYXNzdS5pby9jcmwvNjc1
+MzJhNjEtNjFkYS00MjRlLTk2YTItNmM2MDY5ZjY5MzJiMA0GCSqGSIb3DQEBCwUA
+A4ICAQCAyMmHG/bFKXdIWDDcOOQoG+BPLbfFpK17MZonW3r0pYf/LuqYZ9xOpsBG
+LKohw046hcPPzApjJDoI0MtsUWhWaOTvxr1JWraVm25E1MTIBPPFnrCQypBnlHHk
+TUihG3Wba1v2bXiWfuW0+pCFZsDNU8CLGvwSRwpZzVo61cnQjjC4mgit3RSoW8qb
+6ZcI/YaGlb30GR/waJEADk47l2zDHL7kj4M5m96svPAwyM63QqxdeECPi5uqXwyt
+c9r2SEpG4fOQ1UAO19MlbayvcrQwBTS7/lr5PUGBvhka9UTlsWhdn8DZAZV/ZPrw
+Gl0/EuQdj58SPODW6RHemRUWHEciPtOHD+TgXT02XqYVg6jf9gSaodJHL9zis2jw
+5myRi7nqXQdpM+DPvLcbSHTJW6ApzsuFe10RWus54OSNj2LlQ4B47n+D54kBRoe6
+ABoAryHvsqA9f9IJddKVfjGkP7fs4E2slMyiQ4sNcsNwnduWuQ71qfi2mjAXqu3r
+cQ0rJT0ev0kcp3pAre1jE1NhbGhNxzlhircijGAlSkqzaGzHlpbg8Sj7oB01n8qm
+DA9exhv4hh1mr3bFuezyCE+RFXE1+WCypxn26YEzOrhkQo9yTY7p8ZZIq7Dr/PRI
+EhOWz98nmVSio2NlV4ejsGi3YCS3lLlOKH2qEmj1qkkcPL03rA==
+-----END CERTIFICATE-----
+`
+
+				ca0Key := `-----BEGIN RSA PRIVATE KEY-----
+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
+-----END RSA PRIVATE KEY-----
+`
+
+				ca1Crt := `-----BEGIN CERTIFICATE-----
+MIIEfDCCAmSgAwIBAgIUY4nT09QvKBeOMmcYQtELjjkqiM8wDQYJKoZIhvcNAQEL
+BQAwSTEJMAcGA1UEBhMAMQkwBwYDVQQIEwAxCTAHBgNVBAcTADEJMAcGA1UEChMA
+MQkwBwYDVQQLEwAxEDAOBgNVBAMTB1Jvb3QtQ0EwHhcNMjQwMjA4MTMwMjI5WhcN
+MjQwODI2MTMwMjI5WjBKMQkwBwYDVQQGEwAxCTAHBgNVBAgTADEJMAcGA1UEBxMA
+MQkwBwYDVQQKEwAxCTAHBgNVBAsTADERMA8GA1UEAxMIQ0EtTHZMLTEwTjAQBgcq
+hkjOPQIBBgUrgQQAIQM6AASzeuvq07rwTXZ54wGeFB+9ptfEIIm0bYp7KTAJgxz9
+YBxYd7foEudkB5NCaYSmbdcPzjFyYX/L4aOCAS8wggErMA4GA1UdDwEB/wQEAwIB
+ljAdBgNVHSUEFjAUBggrBgEFBQcDAgYIKwYBBQUHAwEwDwYDVR0TAQH/BAUwAwEB
+/zAtBgNVHQ4EJgQkY2IzMjllOTQtMDg5Zi00OGJkLThjYmYtZTBkOGMzMmE2MmYw
+MC8GA1UdIwQoMCaAJDY3NTMyYTYxLTYxZGEtNDI0ZS05NmEyLTZjNjA2OWY2OTMy
+YjA3BggrBgEFBQcBAQQrMCkwJwYIKwYBBQUHMAGGG2h0dHBzOi8vbGFiLmxhbWFz
+c3UuaW8vb2NzcDBQBgNVHR8ESTBHMEWgQ6BBhj9odHRwczovL2xhYi5sYW1hc3N1
+LmlvL2NybC9jYjMyOWU5NC0wODlmLTQ4YmQtOGNiZi1lMGQ4YzMyYTYyZjAwDQYJ
+KoZIhvcNAQELBQADggIBACVOvyRAvDSes/G9UB+QyIikn0Se70S6iz07m87QyGQb
+N2zU3dy2K3ph01VB4plombYSB21LnlYqYp0mesSYyiIi9BhZDfbuBkLC/Ba8Mc+t
+oOCONJ1KWi4HNJbB2FZLwg8vonDIzdSxgESFdjn1AuH68ZR0SFuy8IL9RGoUzM2I
+hzg//VPMSz7sCccFn0MOGkSDlqxVNxqxO23OIaTUeBc0cJLitWy5H4F9Hhl0DQE4
+Tf1HsXD91dWhnd7bta2S6o7vhmoIba1Y/tgct7VTUeC4EtvECJN94lS4L+6gDT8S
+PVQBKti2p2AGBCJS5TocQaxixXAcKJTIiFPD/xH64RdR1K9iNpAsPXzMpbxTixNw
+MRZnBxEEwxPXGGExq9+OKxrJIrSLH3eJkX1DiwmQY9d9o7oVVYOxaU2LdUaX+ZAy
+qWn/efS+RB2SqVYCVqimd8mbUKm7zeA3PAcdlLzj6uwrqsuTPyT4EshjWZXVNOoL
+w2sgbWAunX64yVyCsaXVf9VXgI7hBr4iCeOvnBnDCa7hk2CcVqhqJMOe3Br43H19
+/KEpwDUNB3J7NKjFn4a2hNM5yExQYE6kp6QB9zIvVIbJQ4/piXnQGRNM5B9xgi9h
+CaOhtzDKS768LjmoLtPVwiMk/9Aa3Iumlg7m89lJM35+rHnXbuMVZZ60TLcFMwEy
+-----END CERTIFICATE-----
+`
+				ca1Key := `-----BEGIN EC PRIVATE KEY-----
+MGgCAQEEHNF0jwKnZxd4sykSEaBL8QRMKqeL/GamSiWRCuWgBwYFK4EEACGhPAM6
+AASzeuvq07rwTXZ54wGeFB+9ptfEIIm0bYp7KTAJgxz9YBxYd7foEudkB5NCaYSm
+bdcPzjFyYX/L4Q==
+-----END EC PRIVATE KEY-----`
+
+				key0, err := helpers.ParsePrivateKey([]byte(strings.TrimSpace(ca0Key)))
+				if err != nil {
+					t.Fatalf("could not parse root private key: %s", err)
+				}
+
+				key1, err := helpers.ParsePrivateKey([]byte(strings.Trim(ca1Key, "	")))
+				if err != nil {
+					t.Fatalf("could not parse ca-lvl-1 private key: %s", err)
+				}
+
+				cert0, err := helpers.ParseCertificate(strings.Trim(ca0Crt, "	"))
+				if err != nil {
+					t.Fatalf("could not parse root cert: %s", err)
+				}
+
+				cert1, err := helpers.ParseCertificate(strings.Trim(ca1Crt, "	"))
+				if err != nil {
+					t.Fatalf("could not parse ca-lvl-1 cert: %s", err)
+				}
+
+				helpers.ParsePrivateKey([]byte(ca1Key))
+				helpers.ParsePrivateKey([]byte(ca1Key))
+
+				duration, _ := models.ParseDuration("100d")
+				importedRootCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					CAType: models.CertificateTypeImportedWithKey,
+					IssuanceExpiration: models.Expiration{
+						Type:     models.Duration,
+						Duration: (*models.TimeDuration)(&duration),
+					},
+					CACertificate: (*models.X509Certificate)(cert0),
+					CARSAKey:      (key0).(*rsa.PrivateKey),
+					KeyType:       models.KeyType(x509.RSA),
 				})
 				if err != nil {
-					return nil, fmt.Errorf("Failed importing the new CA to Lamassu %s", err)
+					t.Fatalf("could not import root CA: %s", err)
 				}
-				return nil, err
+
+				importedCALvl1, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					CAType: models.CertificateTypeImportedWithKey,
+					IssuanceExpiration: models.Expiration{
+						Type:     models.Duration,
+						Duration: (*models.TimeDuration)(&duration),
+					},
+					CACertificate: (*models.X509Certificate)(cert1),
+					CAECKey:       (key1).(*ecdsa.PrivateKey),
+					KeyType:       models.KeyType(x509.ECDSA),
+					ParentID:      importedRootCA.ID,
+				})
+
+				return importedCALvl1, err
+
 			},
-			resultCheck: func(cas *models.CAStats, err error) error {
+			resultCheck: func(ca *models.CACertificate, err error) error {
 				if err != nil {
-					return fmt.Errorf("should have gone correct, but got an error: %s", err)
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+
+				if ca.Level != 1 {
+					return fmt.Errorf("CA should be at level 1. Got %d", ca.Level)
 				}
 				return nil
 			},
@@ -1633,10 +1815,6 @@ func TestImportCA(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			//
-			// err := postgres_test.BeforeEach()
-			// fmt.Errorf("Error while running BeforeEach job: %s", err)
-
 			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
@@ -1827,7 +2005,7 @@ func TestGetCAs(t *testing.T) {
 			},
 			resultCheck: func(cas []*models.CACertificate, err error) error {
 				if err != nil {
-					return fmt.Errorf("should've gone correctly, but got error.")
+					return fmt.Errorf("got unexpected error: %s", err)
 				}
 				if len(cas) != 1 {
 					return fmt.Errorf("should've got only one CA and the received quantity is different.")
@@ -1871,7 +2049,7 @@ func TestGetCAs(t *testing.T) {
 			},
 			resultCheck: func(cas []*models.CACertificate, err error) error {
 				if err != nil {
-					return fmt.Errorf("should've gone correctly, but got error.")
+					return fmt.Errorf("got unexpected error: %s", err)
 				}
 				if len(cas) != 2 {
 					return fmt.Errorf("should've got only two CAS, but got %d.", len(cas))
@@ -1915,7 +2093,7 @@ func TestGetCAs(t *testing.T) {
 			},
 			resultCheck: func(cas []*models.CACertificate, err error) error {
 				if err != nil {
-					return fmt.Errorf("should've gone correctly, but got error.")
+					return fmt.Errorf("got unexpected error: %s", err)
 				}
 				if len(cas) != 6 {
 					return fmt.Errorf("should've got 6 CAs, but got %d.", len(cas))
@@ -2006,7 +2184,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 			},
 			resultCheck: func(cas []*models.Certificate, err error) error {
 				if err != nil {
-					return fmt.Errorf("should've gone correctly, but got error.")
+					return fmt.Errorf("got unexpected error: %s", err)
 				}
 				if len(cas) != 20 {
 					return fmt.Errorf("should've got only one CA and the received quantity is different.")
@@ -2051,7 +2229,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 			},
 			resultCheck: func(cas []*models.Certificate, err error) error {
 				if err != nil {
-					return fmt.Errorf("should've gone correctly, but got error.")
+					return fmt.Errorf("got unexpected error: %s", err)
 				}
 				if len(cas) != 2 {
 					return fmt.Errorf("should've got only one CA and the received quantity is different.")
@@ -2096,7 +2274,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 			},
 			resultCheck: func(cas []*models.Certificate, err error) error {
 				if err != nil {
-					return fmt.Errorf("should've gone correctly, but got error.")
+					return fmt.Errorf("got unexpected error: %s", err)
 				}
 				if len(cas) != 0 {
 					return fmt.Errorf("should've got only one CA and the received quantity is different.")
@@ -2155,8 +2333,7 @@ func TestSignatureVerify(t *testing.T) {
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (bool, error) {
 
-				mess := "manex"
-				messB := []byte(mess)
+				messB := []byte("my Message")
 				messba64 := base64.StdEncoding.EncodeToString(messB)
 				sign, err := caSDK.SignatureSign(context.Background(), services.SignatureSignInput{
 					CAID:             DefaultCAID,
@@ -2191,8 +2368,8 @@ func TestSignatureVerify(t *testing.T) {
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (bool, error) {
 				h := sha256.New()
-				mess := "manex"
-				messB := []byte(mess)
+
+				messB := []byte("my Message")
 				h.Write([]byte(messB))
 				messH := h.Sum(nil)
 				messba64 := base64.StdEncoding.EncodeToString(messH)

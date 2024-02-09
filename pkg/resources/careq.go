@@ -20,6 +20,7 @@ type CreateCABody struct {
 type ImportCABody struct {
 	ID                 string                    `json:"id"`
 	EngineID           string                    `json:"engine_id"`
+	ParentID           string                    `json:"parent_id"`
 	CAPrivateKey       string                    `json:"private_key"` //b64 from PEM
 	CACertificate      *models.X509Certificate   `json:"ca"`
 	CAChain            []*models.X509Certificate `json:"ca_chain"`

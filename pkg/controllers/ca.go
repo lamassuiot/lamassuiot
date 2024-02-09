@@ -208,6 +208,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		CARSAKey:           rsaKey,
 		CAECKey:            ecKey,
 		EngineID:           requestBody.EngineID,
+		ParentID:           requestBody.ParentID,
 	})
 	if err != nil {
 		switch err {
