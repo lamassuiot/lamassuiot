@@ -498,7 +498,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 
 		//Check if EXPIRED
 		now := time.Now()
-		if clientCert.NotAfter.Before(now) {
+		if now.After(clientCert.NotAfter) {
 			if dms.Settings.ReEnrollmentSettings.EnableExpiredRenewal {
 				lDMS.Infof("presented an expired certificate by %s, but DMS allows expired renewals. Continuing", now.Sub(clientCert.NotBefore))
 			} else {
