@@ -141,7 +141,8 @@ func (engine X509Engine) SignCertificateRequest(caCertificate *x509.Certificate,
 	}
 	lCEngine.Debugf("successfully retrieved CA signer object")
 
-	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	sn, _ := rand.Int(rand.Reader, serialNumberLimit)
 
 	now := time.Now()
 
@@ -203,7 +204,9 @@ func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata models.KeyMeta
 	var err error
 	var signer crypto.Signer
 
-	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	sn, _ := rand.Int(rand.Reader, serialNumberLimit)
+
 	lCEngine.Debugf("generates serial number for root CA is [%s]", helpers.SerialNumberToString(sn))
 	lri := CryptoAssetLRI(CertificateAuthority, helpers.SerialNumberToString(sn))
 
@@ -243,15 +246,8 @@ func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata models.KeyMeta
 	now := time.Now()
 
 	template := x509.Certificate{
-		SerialNumber: sn,
-		Subject: pkix.Name{
-			CommonName:         subject.CommonName,
-			Country:            []string{subject.Country},
-			Province:           []string{subject.State},
-			Locality:           []string{subject.Locality},
-			Organization:       []string{subject.Organization},
-			OrganizationalUnit: []string{subject.OrganizationUnit},
-		},
+		SerialNumber:   sn,
+		Subject:        helpers.SubjectToPkixName(subject),
 		AuthorityKeyId: []byte(aki),
 		SubjectKeyId:   []byte(ski),
 		OCSPServer: []string{
