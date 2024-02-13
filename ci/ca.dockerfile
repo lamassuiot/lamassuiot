@@ -13,7 +13,7 @@ ARG VERSION= # set by build script
 RUN go mod tidy
 
 ENV GOSUMDB=off
-RUN now=$(date +'%Y-%m-%d_%T') && \ 
+RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ")&& \ 
     go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -o ca cmd/ca/main.go 
 
 # Alpine and scartch dont work for this image due to non corss compileable HSM library
