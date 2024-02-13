@@ -452,9 +452,9 @@ func (l *GormLogger) Error(ctx context.Context, str string, rest ...interface{})
 func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
 	sql, rows := fc()
 	if err != nil {
-		l.logger.Errorf("Took: %s, Err:%s, SQL: %s, AffectedRows: %d", time.Until(begin).String(), err, sql, rows)
+		l.logger.Errorf("Took: %s, Err:%s, SQL: %s, AffectedRows: %d", time.Since(begin).String(), err, sql, rows)
 	} else {
-		l.logger.Tracef("Took: %s, SQL: %s, AffectedRows: %d", time.Until(begin).String(), sql, rows)
+		l.logger.Tracef("Took: %s, SQL: %s, AffectedRows: %d", time.Since(begin).String(), sql, rows)
 	}
 
 }
