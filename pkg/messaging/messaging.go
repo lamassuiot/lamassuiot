@@ -7,12 +7,15 @@ import (
 	"strings"
 
 	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill-amazonsqs/sns"
 	"github.com/ThreeDotsLabs/watermill-amqp/v2/pkg/amqp"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
+
+const engineHandler = "lamassu-events"
 
 type MessagingEngine struct {
 	logger     logrus.Entry
@@ -22,7 +25,45 @@ type MessagingEngine struct {
 }
 
 func NewMessagingEngine(logger *logrus.Entry, conf config.EventBusEngine, serviceID string) (*MessagingEngine, error) {
+	subL := newWithLogger(logger.WithField("subsystem-provider", "Subscriber"))
+	pubL := newWithLogger(logger.WithField("subsystem-provider", "Publisher"))
+
 	switch conf.Provider {
+	case config.AWSSqsSns:
+		awsConf, err := config.GetAwsSdkConfig(conf.AWSSqsSns)
+		if err != nil {
+			return nil, err
+		}
+
+		pub, err := sns.NewPublisher(sns.PublisherConfig{
+			AWSConfig:             *awsConf,
+			CreateTopicfNotExists: true,
+			CreateTopicConfig: sns.SNSConfigAtrributes{
+				DisplayName: engineHandler,
+			},
+		}, pubL)
+		if err != nil {
+			return nil, err
+		}
+
+		// awsSnsCli := awsSns.NewFromConfig(*awsConf)
+		// snsArn, err := sns.CheckARNTopic(context.Background(), awsSnsCli, )
+
+		return &MessagingEngine{
+			Subscriber: &watermillAWSSubscriberAdapter{
+				publisher: pub,
+				logger:    subL,
+				awsConf:   awsConf,
+				serviceID: serviceID,
+			},
+			publisher: &watermillAWSPublisherAdapter{
+				publisher: pub,
+				topic:     engineHandler,
+			},
+			logger:    *logger,
+			serviceID: serviceID,
+		}, nil
+
 	case config.Amqp:
 		userPassUrlPrefix := ""
 		if conf.Amqp.BasicAuth.Enabled {
@@ -58,15 +99,12 @@ func NewMessagingEngine(logger *logrus.Entry, conf config.EventBusEngine, servic
 		amqpConfig.Connection.TLSConfig = &amqpTlsConfig
 		// amqpConfig.Exchange = conf.Amqp.Exchange
 
-		subL := newWithLogger(logger.WithField("subsystem-provider", "Subscriber"))
-		pubL := newWithLogger(logger.WithField("subsystem-provider", "Publisher"))
-
 		amqpConfig.Exchange = amqp.ExchangeConfig{
 			GenerateName: func(topic string) string {
 				if conf.Amqp.Exchange != "" {
 					return conf.Amqp.Exchange
 				} else {
-					return "lamassu-events"
+					return engineHandler
 				}
 			},
 			Type:    "topic",

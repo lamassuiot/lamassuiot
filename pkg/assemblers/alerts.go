@@ -78,7 +78,9 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 
 			}
 		}()
-
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &svc, nil
 }

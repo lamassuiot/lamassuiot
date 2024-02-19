@@ -136,6 +136,7 @@ func main() {
 			fmt.Println()
 
 			printWColor("cleaning up", color.FgRed, color.BgBlack)
+			cleanup()
 			fmt.Println()
 		}
 	}()
@@ -158,8 +159,13 @@ func main() {
 			EventBus: config.EventBusEngine{
 				LogLevel: config.Trace,
 				Enabled:  true,
-				Provider: config.Amqp,
-				Amqp:     *rmqConfig,
+				Provider: config.AWSSqsSns,
+				// Amqp:     *rmqConfig,
+				AWSSqsSns: config.AWSSDKConfig{
+					AccessKeyID:     "XXX",
+					SecretAccessKey: config.Password("XXX"),
+					Region:          "eu-west-1",
+				},
 			},
 		},
 		Domain:       "dev.lamassu.test",
