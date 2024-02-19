@@ -45,7 +45,7 @@ func (db *PostgresCAStore) CountByStatus(ctx context.Context, status models.Cert
 
 func (db *PostgresCAStore) SelectByType(ctx context.Context, CAType models.CertificateType, req storage.StorageListRequest[models.CACertificate]) (string, error) {
 	opts := []gormWhereParams{
-		{query: "ca_meta_type = ?", extraArgs: []any{CAType}},
+		{query: "type = ?", extraArgs: []any{CAType}},
 	}
 	return db.querier.SelectAll(req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
 }

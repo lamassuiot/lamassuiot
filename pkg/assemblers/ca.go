@@ -74,7 +74,7 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, error) {
 		return nil, fmt.Errorf("could not create CA service: %v", err)
 	}
 
-	caSvc := svc.(*services.CAServiceImpl)
+	caSvc := svc.(*services.CAServiceBackend)
 
 	if conf.EventBus.Enabled {
 		log.Infof("Event Bus is enabled")
