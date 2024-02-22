@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/messaging"
@@ -36,7 +37,7 @@ func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo m
 
 func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, error) {
 	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Service")
-	lMessage := helpers.ConfigureLogger(conf.EventBus.LogLevel, "Event Bus")
+	lMessaging := helpers.ConfigureLogger(conf.EventBus.LogLevel, "Event Bus")
 	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Storage")
 
 	subStorage, eventStore, err := createAlertsStorageInstance(lStorage, conf.Storage)
@@ -52,33 +53,53 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 
 	if conf.EventBus.Enabled {
 		log.Infof("Event Bus is enabled")
-		eventBus, err := messaging.NewMessagingEngine(lMessage, conf.EventBus, "alerts")
+		eventBus, err := messaging.NewMessagingEngine(lMessaging, conf.EventBus, "alerts")
 		if err != nil {
 			return nil, fmt.Errorf("could not setup event bus: %s", err)
 		}
 
-		subs, err := eventBus.Subscriber.Subscribe(context.Background(), "#")
-		go func() {
+		panicHandler := func(eventType string, msg *message.Message) {
+			if err := recover(); err != nil {
+				serializedMsg := "<message is nil>"
+				if msg != nil && msg.Payload != nil {
+					serializedMsg = string(msg.Payload)
+				}
+				lMessaging.Errorf("prevented panic while handling %s event. Faulty message: %s", eventType, serializedMsg)
+			}
+		}
+
+		subscribeAndHandle := func(eventType string, messageHandler func(msg *message.Message)) error {
+			subscriber, err := eventBus.Subscriber.Subscribe(context.Background(), eventType)
+			if err != nil {
+				return err
+			}
+
+			panicSafeMessageHandler := func(msg *message.Message) {
+				defer panicHandler(eventType, msg)
+				messageHandler(msg)
+			}
+
 			for {
 				select {
-				case message := <-subs:
-					event, err := messaging.ParseCloudEvent(message.Payload)
-					if err != nil {
-						lMessage.Errorf("something went wrong while processing cloud event: %s", err)
-						message.Ack()
-						continue
-					}
-
-					svc.HandleEvent(context.Background(), &services.HandleEventInput{
-						Event: *event,
-					})
-
+				case message := <-subscriber:
+					panicSafeMessageHandler(message)
 					message.Ack()
 				}
-
 			}
-		}()
+		}
 
+		lamassuEventHandler := func(msg *message.Message) {
+			event, err := messaging.ParseCloudEvent(msg.Payload)
+			if err != nil {
+				lMessaging.Errorf("Something went wrong while processing cloud event: %s", err)
+			}
+
+			svc.HandleEvent(context.Background(), &services.HandleEventInput{
+				Event: *event,
+			})
+		}
+
+		go subscribeAndHandle("#", lamassuEventHandler)
 	}
 	return &svc, nil
 }

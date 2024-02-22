@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/cloudevents/sdk-go/v2/event"
@@ -47,25 +48,46 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 		return nil, fmt.Errorf("could not setup event bus: %s", err)
 	}
 
-	subs, err := eventBus.Subscriber.Subscribe(context.Background(), "#")
+	panicHandler := func(eventType string, msg *message.Message) {
+		if err := recover(); err != nil {
+			serializedMsg := "<message is nil>"
+			if msg != nil && msg.Payload != nil {
+				serializedMsg = string(msg.Payload)
+			}
+			lMessaging.Errorf("prevented panic while handling %s event. Faulty message: %s", eventType, serializedMsg)
+		}
+	}
 
-	go func() {
+	subscribeAndHandle := func(eventType string, messageHandler func(msg *message.Message)) error {
+		subscriber, err := eventBus.Subscriber.Subscribe(context.Background(), eventType)
+		if err != nil {
+			return err
+		}
+
+		panicSafeMessageHandler := func(msg *message.Message) {
+			defer panicHandler(eventType, msg)
+			messageHandler(msg)
+		}
+
 		for {
 			select {
-			case message := <-subs:
-				lMessaging.Trace(string(message.Payload))
-				event, err := messaging.ParseCloudEvent(message.Payload)
-				if err != nil {
-					logrus.Errorf("Something went wrong while processing cloud event: %s", err)
-					continue
-				}
-
-				eventHandler(lMessaging, event, *awsConnectorSvc)
-
+			case message := <-subscriber:
+				panicSafeMessageHandler(message)
 				message.Ack()
 			}
 		}
-	}()
+	}
+
+	lamassuEventHandler := func(msg *message.Message) {
+		event, err := messaging.ParseCloudEvent(msg.Payload)
+		if err != nil {
+			lMessaging.Errorf("Something went wrong while processing cloud event: %s", err)
+		}
+
+		eventHandler(lMessaging, event, *awsConnectorSvc)
+	}
+
+	go subscribeAndHandle("#", lamassuEventHandler)
 
 	go func() {
 		lSvc.Infof("starting SQS thread")
