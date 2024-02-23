@@ -1,0 +1,9 @@
+go 1.21
+
+use (
+	./core
+	./plugins/apps/iot-aws-conector
+	./plugins/submodules/cryptoengines/aws
+	./plugins/submodules/cryptoengines/pkcs11
+	./plugins/submodules/cryptoengines/vault
+)

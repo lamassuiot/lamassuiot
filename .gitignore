@@ -10,7 +10,7 @@ __debug_bin*
 *.p7
 *.out
 *.html
-cmd/test
+core/cmd/test
 init.sql
 *.logs
 .DS_Store

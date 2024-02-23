@@ -1,0 +1,37 @@
+version: '3'
+
+services:
+  emqx1:
+    image: emqx:5.5.0
+    container_name: emqx1
+    environment:
+    - "EMQX_NODE_NAME=emqx@node1.emqx.io"
+    - "EMQX_CLUSTER__DISCOVERY_STRATEGY=static"
+    - "EMQX_CLUSTER__STATIC__SEEDS=[emqx@node1.emqx.io]"
+    - "EMQX_LISTENERS__SSL__DEFAULT__BIND=0.0.0.0:8883"
+    - "EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CACERTFILE=/data/ca.crt"
+    - "EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__CERTFILE=/data/tls.crt"
+    - "EMQX_LISTENERS__SSL__DEFAULT__SSL_OPTIONS__KEYFILE=/data/tls.key"
+    healthcheck:
+      test: ["CMD", "/opt/emqx/bin/emqx", "ctl", "status"]
+      interval: 5s
+      timeout: 25s
+      retries: 5
+    networks:
+      emqx-bridge:
+        aliases:
+        - node1.emqx.io
+    ports:
+      - 1883:1883
+      - 8083:8083
+      - 8084:8084
+      - 8883:8883
+      - 18083:18083 
+    volumes:
+      - ./tls.key:/data/tls.key
+      - ./tls.crt:/data/tls.crt
+      - ./ca.crt:/data/ca.crt
+
+networks:
+  emqx-bridge:
+    driver: bridge

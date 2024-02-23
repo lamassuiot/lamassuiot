@@ -1,0 +1,87 @@
+package main
+
+import (
+	"fmt"
+
+	"github.com/lamassuiot/lamassuiot/v2/core/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/sdk"
+	iotaws "github.com/lamassuiot/lamassuiot/v2/plugins/apps/iot-aws-connector"
+	log "github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v2"
+)
+
+var (
+	version   string = "v0"    // api version
+	sha1ver   string = "-"     // sha1 revision used to build the program
+	buildTime string = "devTS" // when the executable was built
+)
+
+func main() {
+	log.SetFormatter(helpers.LogFormatter)
+	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
+
+	conf, err := config.LoadConfig[iotaws.AWSIoTConnectorConfig]()
+	if err != nil {
+		log.Fatalf("something went wrong while loading config. Exiting: %s", err)
+	}
+
+	globalLogLevel, err := log.ParseLevel(string(conf.Logs.Level))
+	if err != nil {
+		log.Warn("unknown log level. defaulting to 'info' log level")
+		globalLogLevel = log.InfoLevel
+	}
+	log.SetLevel(globalLogLevel)
+
+	log.Infof("global log level set to '%s'", globalLogLevel)
+
+	confBytes, err := yaml.Marshal(conf)
+	if err != nil {
+		log.Fatalf("could not dump yaml config: %s", err)
+	}
+
+	log.Debugf("===================================================")
+	log.Debugf("%s", confBytes)
+	log.Debugf("===================================================")
+
+	lDMSClient := helpers.ConfigureLogger(conf.DMSManagerClient.LogLevel, "LMS SDK - DMS Client")
+	lDeviceClient := helpers.ConfigureLogger(conf.DevManagerClient.LogLevel, "LMS SDK - Device Client")
+	lCAClient := helpers.ConfigureLogger(conf.CAClient.LogLevel, "LMS SDK - CA Client")
+
+	dmsHttpCli, err := sdk.BuildHTTPClient(conf.DMSManagerClient.HTTPClient, lDMSClient)
+	if err != nil {
+		log.Fatalf("could not build HTTP DMS Manager Client: %s", err)
+	}
+
+	deviceHttpCli, err := sdk.BuildHTTPClient(conf.DevManagerClient.HTTPClient, lDeviceClient)
+	if err != nil {
+		log.Fatalf("could not build HTTP Device Client: %s", err)
+	}
+
+	caHttpCli, err := sdk.BuildHTTPClient(conf.CAClient.HTTPClient, lCAClient)
+	if err != nil {
+		log.Fatalf("could not build HTTP CA Client: %s", err)
+	}
+
+	dmsSDK := sdk.NewHttpDMSManagerClient(
+		sdk.HttpClientWithSourceHeaderInjector(dmsHttpCli, models.AWSIoTSource(conf.ConnectorID)),
+		fmt.Sprintf("%s://%s:%d%s", conf.DMSManagerClient.Protocol, conf.DMSManagerClient.Hostname, conf.DMSManagerClient.Port, conf.DMSManagerClient.BasePath),
+	)
+	deviceSDK := sdk.NewHttpDeviceManagerClient(
+		sdk.HttpClientWithSourceHeaderInjector(deviceHttpCli, models.AWSIoTSource(conf.ConnectorID)),
+		fmt.Sprintf("%s://%s:%d%s", conf.DevManagerClient.Protocol, conf.DevManagerClient.Hostname, conf.DevManagerClient.Port, conf.DevManagerClient.BasePath),
+	)
+	caSDK := sdk.NewHttpCAClient(
+		sdk.HttpClientWithSourceHeaderInjector(caHttpCli, models.AWSIoTSource(conf.ConnectorID)),
+		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
+	)
+
+	_, err = iotaws.AssembleAWSIoTManagerService(*conf, caSDK, dmsSDK, deviceSDK)
+	if err != nil {
+		log.Fatalf("could not run AWS IoT Manager. Exiting: %s", err)
+	}
+
+	forever := make(chan struct{})
+	<-forever
+}
