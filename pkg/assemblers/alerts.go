@@ -81,11 +81,8 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 			return nil, err
 		}
 
-		eventBusRouter.AddNoPublisherHandler("#", "#", sub, lamassuEventHandler)
-		err = eventBusRouter.Run(context.Background())
-		if err != nil {
-			return nil, fmt.Errorf("error wile running event bus: %s", err)
-		}
+		eventBusRouter.AddNoPublisherHandler("#-alerts", "#", sub, lamassuEventHandler)
+		go eventBusRouter.Run(context.Background())
 	}
 	return &svc, nil
 }

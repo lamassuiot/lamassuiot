@@ -84,7 +84,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 		}
 
 		eventBusRouter.AddNoPublisherHandler(
-			string(models.EventUpdateCertificateStatusKey),
+			string(models.EventUpdateCertificateStatusKey)+"-device-manager",
 			string(models.EventUpdateCertificateStatusKey),
 			sub,
 			func(msg *message.Message) error {
@@ -92,17 +92,15 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 			},
 		)
 		eventBusRouter.AddNoPublisherHandler(
-			string(models.EventUpdateCertificateMetadataKey),
+			string(models.EventUpdateCertificateMetadataKey)+"-device-manager",
 			string(models.EventUpdateCertificateMetadataKey),
 			sub,
 			func(msg *message.Message) error {
 				return updateCertMetaHandler(msg, svc, lMessaging)
 			},
 		)
-		err = eventBusRouter.Run(context.Background())
-		if err != nil {
-			return nil, fmt.Errorf("error wile running event bus: %s", err)
-		}
+		go eventBusRouter.Run(context.Background())
+
 	}
 	return &svc, nil
 }

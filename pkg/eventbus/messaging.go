@@ -25,12 +25,13 @@ func NewEventBusRouter(conf config.EventBusEngine, serviceID string, logger *log
 		return nil, fmt.Errorf("could not create event bus router: %s", err)
 	}
 
+	conf.Amqp.Exchange = "errors"
 	deadLetterPub, err := NewEventBusPublisher(conf, serviceID, logger)
 	if err != nil {
 		return nil, fmt.Errorf("could not create event bus publisher for unprocessable events: %s", err)
 	}
 
-	deadLetterMw, err := middleware.PoisonQueue(deadLetterPub, "errors")
+	deadLetterMw, err := middleware.PoisonQueue(deadLetterPub, "errs")
 	if err != nil {
 		return nil, fmt.Errorf("could not create DeadLetter MW: %s", err)
 	}
@@ -40,17 +41,20 @@ func NewEventBusRouter(conf config.EventBusEngine, serviceID string, logger *log
 		// CorrelationID will copy the correlation id from the incoming message's metadata to the produced messages
 		middleware.CorrelationID,
 
+		// Recoverer handles panics from handlers.
+		// In this case, it passes them as errors to the Retry middleware.
+		deadLetterMw,
+
 		// The handler function is retried if it returns an error.
 		// After MaxRetries, the message is Nacked and it's up to the PubSub to resend it.
 		middleware.Retry{
-			MaxRetries:      3,
-			InitialInterval: time.Millisecond * 100,
+			MaxRetries:      5,
+			InitialInterval: time.Second * 10,
+			MaxInterval:     time.Minute,
+			Multiplier:      3,
 			Logger:          lEventBus,
 		}.Middleware,
 
-		deadLetterMw,
-		// Recoverer handles panics from handlers.
-		// In this case, it passes them as errors to the Retry middleware.
 		middleware.Recoverer,
 	)
 

@@ -68,11 +68,8 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 		return nil, err
 	}
 
-	eventBusRouter.AddNoPublisherHandler("#", "#", sub, lamassuEventHandler)
-	err = eventBusRouter.Run(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("error wile running event bus: %s", err)
-	}
+	eventBusRouter.AddNoPublisherHandler("#-aws-iot", "#", sub, lamassuEventHandler)
+	go eventBusRouter.Run(context.Background())
 
 	go func() {
 		lSvc.Infof("starting SQS thread")
