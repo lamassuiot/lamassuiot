@@ -5,8 +5,8 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/messaging"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
@@ -78,12 +78,16 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, error) {
 
 	if conf.EventBus.Enabled {
 		log.Infof("Event Bus is enabled")
-		eventBus, err := messaging.NewMessagingEngine(lMessage, conf.EventBus, "ca")
+		pub, err := eventbus.NewEventBusPublisher(conf.EventBus, "ca", lMessage)
 		if err != nil {
-			return nil, fmt.Errorf("could not setup event bus: %s", err)
+			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
 
-		svc = eventpub.NewCAEventBusPublisher(eventBus)(svc)
+		svc = eventpub.NewCAEventBusPublisher(eventpub.CloudEventMiddlewarePublisher{
+			Publisher: pub,
+			ServiceID: "ca",
+			Logger:    lMessage,
+		})(svc)
 	}
 
 	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)

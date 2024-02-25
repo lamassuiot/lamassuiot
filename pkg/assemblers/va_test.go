@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
@@ -446,12 +447,17 @@ func getOCSPResponseGet(ocspServerURL string, crt *models.Certificate, issuer *m
 }
 
 func StartVAServiceTestServer(t *testing.T) (*TestServer, error) {
+	eventBusConfig := &TestEventBusConfig{
+		config: config.EventBusEngine{Enabled: false},
+	}
+
 	storageConfig, err := PreparePostgresForTest([]string{"ca"})
 	if err != nil {
 		t.Fatalf("could not prepare Postgres test server: %s", err)
 	}
+
 	cryptoConfig := PrepareCryptoEnginesForTest([]CryptoEngine{GOLANG})
-	testServer, err := AssembleServices(storageConfig, cryptoConfig, []Service{CA, VA})
+	testServer, err := AssembleServices(storageConfig, eventBusConfig, cryptoConfig, []Service{CA, VA})
 	if err != nil {
 		t.Fatalf("could not assemble Server with HTTP server")
 	}

@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
@@ -30,7 +31,7 @@ const DefaultCAID = "111111-2222"
 const DefaultCACN = "MyCA"
 
 func TestCryptoEngines(t *testing.T) {
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -75,7 +76,7 @@ func TestCryptoEngines(t *testing.T) {
 	}
 }
 func TestCreateCA(t *testing.T) {
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -240,7 +241,7 @@ func TestCreateCA(t *testing.T) {
 	}
 }
 func TestGetCertificatesByCaAndStatus(t *testing.T) {
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -377,7 +378,7 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 	}
 }
 func TestRevokeCA(t *testing.T) {
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -506,7 +507,7 @@ func TestRevokeCA(t *testing.T) {
 }
 
 func TestUpdateCAMetadata(t *testing.T) {
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -607,7 +608,7 @@ func TestUpdateCAMetadata(t *testing.T) {
 }
 
 func TestGetCAsByCommonName(t *testing.T) {
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -677,7 +678,7 @@ func TestGetCAsByCommonName(t *testing.T) {
 }
 
 func TestUpdateCertificateMetadata(t *testing.T) {
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -802,7 +803,7 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 	}
 }
 func TestUpdateCAStatus(t *testing.T) {
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -950,7 +951,7 @@ func TestUpdateCAStatus(t *testing.T) {
 }
 
 func TestGetStats(t *testing.T) {
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1014,7 +1015,7 @@ func TestGetStats(t *testing.T) {
 }
 
 func TestGetCertificates(t *testing.T) {
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1155,7 +1156,7 @@ func TestGetCertificates(t *testing.T) {
 }
 
 func TestGetCertificatesByCA(t *testing.T) {
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1391,7 +1392,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 }
 
 func TestImportCA(t *testing.T) {
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1842,7 +1843,7 @@ bdcPzjFyYX/L4Q==
 
 func TestDeleteCA(t *testing.T) {
 
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1973,7 +1974,7 @@ func TestDeleteCA(t *testing.T) {
 
 func TestGetCAs(t *testing.T) {
 
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -2134,7 +2135,7 @@ func TestGetCAs(t *testing.T) {
 
 func TestGetCertificatesByExpirationDate(t *testing.T) {
 
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -2315,7 +2316,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 
 func TestSignatureVerify(t *testing.T) {
 	t.Skip("Skip until we have a reliable test for this")
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -2436,7 +2437,7 @@ func TestSignatureVerify(t *testing.T) {
 	}
 }
 func TestHierarchyCryptoEngines(t *testing.T) {
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -2546,7 +2547,7 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 	}
 }
 func TestHierarchy(t *testing.T) {
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -2900,7 +2901,7 @@ func TestHierarchy(t *testing.T) {
 }
 
 func TestCAsAdditionalDeltasMonitoring(t *testing.T) {
-	serverTest, err := StartCAServiceTestServer(t)
+	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -3022,13 +3023,27 @@ func initCA(caSDK services.CAService) (*models.CACertificate, error) {
 	return ca, err
 }
 
-func StartCAServiceTestServer(t *testing.T) (*TestServer, error) {
+func StartCAServiceTestServer(t *testing.T, withEventBus bool) (*TestServer, error) {
+	var err error
+	eventBusConf := &TestEventBusConfig{
+		config: config.EventBusEngine{
+			Enabled: false,
+		},
+	}
+	if withEventBus {
+		eventBusConf, err = PrepareRabbitMQForTest()
+		if err != nil {
+			t.Fatalf("could not prepare RabbitMQ test server: %s", err)
+		}
+	}
+
 	storageConfig, err := PreparePostgresForTest([]string{"ca"})
 	if err != nil {
 		t.Fatalf("could not prepare Postgres test server: %s", err)
 	}
+
 	cryptoConfig := PrepareCryptoEnginesForTest([]CryptoEngine{GOLANG, VAULT})
-	testServer, err := AssembleServices(storageConfig, cryptoConfig, []Service{CA})
+	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, []Service{CA})
 	if err != nil {
 		t.Fatalf("could not assemble Server with HTTP server")
 	}

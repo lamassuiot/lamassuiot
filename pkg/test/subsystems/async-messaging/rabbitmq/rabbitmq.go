@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/messaging"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/test/dockerunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
@@ -32,21 +32,16 @@ func RunRabbitMQDocker() (func() error, *config.AMQPConnection, int, error) {
 	err = dockerHost.Retry(func() error {
 		lgr := logrus.New()
 		lgr.SetOutput(io.Discard)
-		_, err := messaging.NewMessagingEngine(lgr.WithField("", ""), config.EventBusEngine{
-			Enabled:  true,
-			LogLevel: config.Info,
-			Provider: config.Amqp,
-			Amqp: config.AMQPConnection{
-				BasicConnection: config.BasicConnection{
-					Hostname:  "127.0.0.1",
-					Port:      p,
-					TLSConfig: config.TLSConfig{},
-				},
-				BasicAuth: config.AMQPConnectionBasicAuth{Enabled: true, Username: "user", Password: "user"},
-				Protocol:  config.AMQP,
-				Exchange:  "lamassu",
+		_, err := eventbus.NewAMQPPub(config.AMQPConnection{
+			BasicConnection: config.BasicConnection{
+				Hostname:  "127.0.0.1",
+				Port:      p,
+				TLSConfig: config.TLSConfig{},
 			},
-		}, "")
+			BasicAuth: config.AMQPConnectionBasicAuth{Enabled: true, Username: "user", Password: "user"},
+			Protocol:  config.AMQP,
+			Exchange:  "lamassu",
+		}, "", lgr.WithField("", ""))
 
 		return err
 	})

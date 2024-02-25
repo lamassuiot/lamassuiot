@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/messaging"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
@@ -36,7 +37,7 @@ func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo m
 
 func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, error) {
 	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Service")
-	lMessage := helpers.ConfigureLogger(conf.EventBus.LogLevel, "Event Bus")
+	lMessaging := helpers.ConfigureLogger(conf.EventBus.LogLevel, "Event Bus")
 	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Storage")
 
 	subStorage, eventStore, err := createAlertsStorageInstance(lStorage, conf.Storage)
@@ -52,33 +53,39 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 
 	if conf.EventBus.Enabled {
 		log.Infof("Event Bus is enabled")
-		eventBus, err := messaging.NewMessagingEngine(lMessage, conf.EventBus, "alerts")
+		eventBusRouter, err := eventbus.NewEventBusRouter(conf.EventBus, "alerts", lMessaging)
 		if err != nil {
 			return nil, fmt.Errorf("could not setup event bus: %s", err)
 		}
 
-		subs, err := eventBus.Subscriber.Subscribe(context.Background(), "#")
-		go func() {
-			for {
-				select {
-				case message := <-subs:
-					event, err := messaging.ParseCloudEvent(message.Payload)
-					if err != nil {
-						lMessage.Errorf("something went wrong while processing cloud event: %s", err)
-						message.Ack()
-						continue
-					}
-
-					svc.HandleEvent(context.Background(), &services.HandleEventInput{
-						Event: *event,
-					})
-
-					message.Ack()
-				}
-
+		lamassuEventHandler := func(msg *message.Message) error {
+			event, err := eventbus.ParseCloudEvent(msg.Payload)
+			if err != nil {
+				lMessaging.Errorf("Something went wrong while processing cloud event: %s", err)
 			}
-		}()
 
+			err = svc.HandleEvent(context.Background(), &services.HandleEventInput{
+				Event: *event,
+			})
+			if err != nil {
+				lMessaging.Errorf("Something went wrong while handling event: %s", err)
+				return err
+			}
+
+			return nil
+		}
+
+		sub, err := eventbus.NewEventBusSubscriber(conf.EventBus, "alerts", lMessaging)
+		if err != nil {
+			lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
+			return nil, err
+		}
+
+		eventBusRouter.AddNoPublisherHandler("#", "#", sub, lamassuEventHandler)
+		err = eventBusRouter.Run(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("error wile running event bus: %s", err)
+		}
 	}
 	return &svc, nil
 }

@@ -7,8 +7,8 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/messaging"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
@@ -16,6 +16,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/couchdb"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -59,197 +60,211 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 
 	if conf.EventBus.Enabled {
 		log.Infof("Event Bus is enabled")
-		eventBus, err := messaging.NewMessagingEngine(lMessaging, conf.EventBus, "device-manager")
+		pub, err := eventbus.NewEventBusPublisher(conf.EventBus, "ca", lMessaging)
 		if err != nil {
-			return nil, fmt.Errorf("could not setup event bus: %s", err)
+			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
 
-		svc = eventpub.NewDeviceEventPublisher(eventBus)(svc)
+		svc = eventpub.NewDeviceEventPublisher(eventpub.CloudEventMiddlewarePublisher{
+			Publisher: pub,
+			ServiceID: "device-manager",
+			Logger:    lMessaging,
+		})(svc)
+
 		deviceSvc.SetService(svc)
 
-		panicHandler := func(eventType string, msg *message.Message) {
-			if err := recover(); err != nil {
-				serializedMsg := "<message is nil>"
-				if msg != nil && msg.Payload != nil {
-					serializedMsg = string(msg.Payload)
-				}
-				lMessaging.Errorf("prevented panic while handling %s event. Faulty message: %s", eventType, serializedMsg)
-			}
+		eventBusRouter, err := eventbus.NewEventBusRouter(conf.EventBus, "ca", lMessaging)
+		if err != nil {
+			return nil, fmt.Errorf("could not create Event Bus Router: %s", err)
 		}
 
-		subscribeAndHandle := func(eventType string, messageHandler func(msg *message.Message)) error {
-			subscriber, err := eventBus.Subscriber.Subscribe(context.Background(), eventType)
-			if err != nil {
-				return err
-			}
-
-			panicSafeMessageHandler := func(msg *message.Message) {
-				defer panicHandler(eventType, msg)
-				messageHandler(msg)
-			}
-
-			for {
-				select {
-				case message := <-subscriber:
-					panicSafeMessageHandler(message)
-					message.Ack()
-				}
-			}
+		sub, err := eventbus.NewEventBusSubscriber(conf.EventBus, "ca", lMessaging)
+		if err != nil {
+			return nil, fmt.Errorf("could not create Event Bus subscriber: %s", err)
 		}
 
-		updateCertStatusHandler := func(msg *message.Message) {
-			event, err := messaging.ParseCloudEvent(msg.Payload)
-			if err != nil {
-				lMessaging.Errorf("something went wrong while processing cloud event: %s", err)
-				return
-			}
-			cert, err := getEventBody[models.UpdateModel[models.Certificate]](event)
-			if err != nil {
-				lMessaging.Errorf("could not decode cloud event: %s", err)
-				return
-			}
-
-			deviceID := cert.Updated.Certificate.Subject.CommonName
-			dev, err := svc.GetDeviceByID(services.GetDeviceByIDInput{
-				ID: deviceID,
-			})
-			if err != nil {
-				lMessaging.Errorf("could not get device %s: %s", deviceID, err)
-				return
-			}
-
-			var attachedBy models.CAAttachedToDevice
-			hasKey, err := helpers.GetMetadataToStruct(cert.Updated.Metadata, models.CAAttachedToDeviceKey, &attachedBy)
-			if err != nil {
-				lMessaging.Errorf("could not decode metadata with key %s: %s", models.CAAttachedToDeviceKey, err)
-				return
-			}
-
-			if !hasKey {
-				lMessaging.Tracef("skipping event %s, Certificate doesn't have %s key", event.Type(), models.CAAttachedToDeviceKey)
-				return
-			}
-
-			if dev.IdentitySlot.Secrets[dev.IdentitySlot.ActiveVersion] != cert.Updated.SerialNumber {
-				//event is not for the active certificate. Skip
-				return
-			}
-
-			updated := false
-			if cert.Updated.Status == models.StatusExpired {
-				updated = true
-				dev.IdentitySlot.Status = models.SlotExpired
-			}
-			if cert.Updated.Status == models.StatusRevoked {
-				updated = true
-				dev.IdentitySlot.Status = models.SlotRevoke
-			}
-
-			if updated {
-				_, err = svc.UpdateDeviceIdentitySlot(services.UpdateDeviceIdentitySlotInput{
-					ID:   deviceID,
-					Slot: *dev.IdentitySlot,
-				})
-				if err != nil {
-					lMessaging.Errorf("could not update ID slot to preventive for device %s: %s", deviceID, err)
-					return
-				}
-			}
+		eventBusRouter.AddNoPublisherHandler(
+			string(models.EventUpdateCertificateStatusKey),
+			string(models.EventUpdateCertificateStatusKey),
+			sub,
+			func(msg *message.Message) error {
+				return updateCertStatusHandler(msg, svc, lMessaging)
+			},
+		)
+		eventBusRouter.AddNoPublisherHandler(
+			string(models.EventUpdateCertificateMetadataKey),
+			string(models.EventUpdateCertificateMetadataKey),
+			sub,
+			func(msg *message.Message) error {
+				return updateCertMetaHandler(msg, svc, lMessaging)
+			},
+		)
+		err = eventBusRouter.Run(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("error wile running event bus: %s", err)
 		}
-
-		updateCertMetaHandler := func(msg *message.Message) {
-
-			event, err := messaging.ParseCloudEvent(msg.Payload)
-			if err != nil {
-				lMessaging.Errorf("something went wrong while processing cloud event: %s", err)
-			}
-
-			certUpdate, err := getEventBody[models.UpdateModel[models.Certificate]](event)
-			if err != nil {
-				lMessaging.Errorf("could not decode cloud event: %s", err)
-
-				return
-			}
-
-			deviceID := certUpdate.Updated.Subject.CommonName
-			dev, err := svc.GetDeviceByID(services.GetDeviceByIDInput{
-				ID: deviceID,
-			})
-			if err != nil {
-				lMessaging.Errorf("could not get device %s: %s", deviceID, err)
-				return
-			}
-
-			if dev.IdentitySlot != nil && dev.IdentitySlot.Secrets[dev.IdentitySlot.ActiveVersion] != certUpdate.Updated.SerialNumber {
-				//event is not for the active certificate. Skip
-				return
-			}
-
-			checkIfTriggered := func(crt models.Certificate, key string) bool {
-				var deltas models.CAMetadataMonitoringExpirationDeltas
-				hasKey, err := helpers.GetMetadataToStruct(crt.Metadata, models.CAMetadataMonitoringExpirationDeltasKey, &deltas)
-				if err != nil {
-					lMessaging.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
-					return false
-				}
-
-				if !hasKey {
-					return false
-				}
-
-				idx := slices.IndexFunc(deltas, func(med models.MonitoringExpirationDelta) bool {
-					if med.Name == key && med.Triggered {
-						return true
-					}
-					return false
-				})
-
-				if idx == -1 {
-					return false
-				}
-
-				return true
-			}
-
-			criticalTriggered := checkIfTriggered(certUpdate.Updated, "Critical")
-			if criticalTriggered {
-				prevCriticalTriggered := checkIfTriggered(certUpdate.Previous, "Critical")
-				if !prevCriticalTriggered {
-					//no update
-					dev.IdentitySlot.Status = models.SlotAboutToExpire
-					_, err = svc.UpdateDeviceIdentitySlot(services.UpdateDeviceIdentitySlotInput{
-						ID:   deviceID,
-						Slot: *dev.IdentitySlot,
-					})
-					if err != nil {
-						lMessaging.Errorf("could not update ID slot to critical for device %s: %s", deviceID, err)
-						return
-					}
-				}
-			}
-
-			preventiveTriggered := checkIfTriggered(certUpdate.Updated, "Preventive")
-			if preventiveTriggered {
-				prevPreventiveTriggered := checkIfTriggered(certUpdate.Previous, "Preventive")
-				if !prevPreventiveTriggered {
-					//no update
-					dev.IdentitySlot.Status = models.SlotRenewalWindow
-					_, err = svc.UpdateDeviceIdentitySlot(services.UpdateDeviceIdentitySlotInput{
-						ID:   deviceID,
-						Slot: *dev.IdentitySlot,
-					})
-					if err != nil {
-						lMessaging.Errorf("could not update ID slot to preventive for device %s: %s", deviceID, err)
-						return
-					}
-				}
-			}
-		}
-
-		go subscribeAndHandle(string(models.EventUpdateCertificateStatusKey), updateCertStatusHandler)
-		go subscribeAndHandle(string(models.EventUpdateCertificateMetadataKey), updateCertMetaHandler)
 	}
 	return &svc, nil
+}
+
+func updateCertStatusHandler(msg *message.Message, svc services.DeviceManagerService, lMessaging *logrus.Entry) error {
+	event, err := eventbus.ParseCloudEvent(msg.Payload)
+	if err != nil {
+		err = fmt.Errorf("something went wrong while processing cloud event: %s", err)
+		lMessaging.Error(err)
+		return err
+	}
+
+	cert, err := getEventBody[models.UpdateModel[models.Certificate]](event)
+	if err != nil {
+		err = fmt.Errorf("could not decode cloud event: %s", err)
+		lMessaging.Error(err)
+		return err
+	}
+
+	deviceID := cert.Updated.Certificate.Subject.CommonName
+	dev, err := svc.GetDeviceByID(services.GetDeviceByIDInput{
+		ID: deviceID,
+	})
+	if err != nil {
+		err = fmt.Errorf("could not get device %s: %s", deviceID, err)
+		lMessaging.Error(err)
+		return err
+	}
+
+	var attachedBy models.CAAttachedToDevice
+	hasKey, err := helpers.GetMetadataToStruct(cert.Updated.Metadata, models.CAAttachedToDeviceKey, &attachedBy)
+	if err != nil {
+		err = fmt.Errorf("could not decode metadata with key %s: %s", models.CAAttachedToDeviceKey, err)
+		lMessaging.Error(err)
+		return err
+	}
+
+	if !hasKey {
+		lMessaging.Tracef("skipping event %s, Certificate doesn't have %s key", event.Type(), models.CAAttachedToDeviceKey)
+		return nil
+	}
+
+	if dev.IdentitySlot.Secrets[dev.IdentitySlot.ActiveVersion] != cert.Updated.SerialNumber {
+		//event is not for the active certificate. Skip
+		return nil
+	}
+
+	updated := false
+	if cert.Updated.Status == models.StatusExpired {
+		updated = true
+		dev.IdentitySlot.Status = models.SlotExpired
+	}
+	if cert.Updated.Status == models.StatusRevoked {
+		updated = true
+		dev.IdentitySlot.Status = models.SlotRevoke
+	}
+
+	if updated {
+		_, err = svc.UpdateDeviceIdentitySlot(services.UpdateDeviceIdentitySlotInput{
+			ID:   deviceID,
+			Slot: *dev.IdentitySlot,
+		})
+		if err != nil {
+			err = fmt.Errorf("could not update ID slot to preventive for device %s: %s", deviceID, err)
+			lMessaging.Error(err)
+			return err
+		}
+	}
+	return nil
+}
+
+func updateCertMetaHandler(msg *message.Message, svc services.DeviceManagerService, lMessaging *logrus.Entry) error {
+	event, err := eventbus.ParseCloudEvent(msg.Payload)
+	if err != nil {
+		lMessaging.Errorf("something went wrong while processing cloud event: %s", err)
+	}
+
+	certUpdate, err := getEventBody[models.UpdateModel[models.Certificate]](event)
+	if err != nil {
+		err = fmt.Errorf("could not decode cloud event: %s", err)
+		lMessaging.Error(err)
+		return err
+	}
+
+	deviceID := certUpdate.Updated.Subject.CommonName
+	dev, err := svc.GetDeviceByID(services.GetDeviceByIDInput{
+		ID: deviceID,
+	})
+	if err != nil {
+		err = fmt.Errorf("could not get device %s: %s", deviceID, err)
+		lMessaging.Error(err)
+		return err
+	}
+
+	if dev.IdentitySlot != nil && dev.IdentitySlot.Secrets[dev.IdentitySlot.ActiveVersion] != certUpdate.Updated.SerialNumber {
+		//event is not for the active certificate. Skip
+		return nil
+	}
+
+	checkIfTriggered := func(crt models.Certificate, key string) bool {
+		var deltas models.CAMetadataMonitoringExpirationDeltas
+		hasKey, err := helpers.GetMetadataToStruct(crt.Metadata, models.CAMetadataMonitoringExpirationDeltasKey, &deltas)
+		if err != nil {
+			lMessaging.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
+			return false
+		}
+
+		if !hasKey {
+			return false
+		}
+
+		idx := slices.IndexFunc(deltas, func(med models.MonitoringExpirationDelta) bool {
+			if med.Name == key && med.Triggered {
+				return true
+			}
+			return false
+		})
+
+		if idx == -1 {
+			return false
+		}
+
+		return true
+	}
+
+	criticalTriggered := checkIfTriggered(certUpdate.Updated, "Critical")
+	if criticalTriggered {
+		prevCriticalTriggered := checkIfTriggered(certUpdate.Previous, "Critical")
+		if !prevCriticalTriggered {
+			//no update
+			dev.IdentitySlot.Status = models.SlotAboutToExpire
+			_, err = svc.UpdateDeviceIdentitySlot(services.UpdateDeviceIdentitySlotInput{
+				ID:   deviceID,
+				Slot: *dev.IdentitySlot,
+			})
+			if err != nil {
+				err = fmt.Errorf("could not update ID slot to critical for device %s: %s", deviceID, err)
+				lMessaging.Error(err)
+				return err
+			}
+		}
+	}
+
+	preventiveTriggered := checkIfTriggered(certUpdate.Updated, "Preventive")
+	if preventiveTriggered {
+		prevPreventiveTriggered := checkIfTriggered(certUpdate.Previous, "Preventive")
+		if !prevPreventiveTriggered {
+			//no update
+			dev.IdentitySlot.Status = models.SlotRenewalWindow
+			_, err = svc.UpdateDeviceIdentitySlot(services.UpdateDeviceIdentitySlotInput{
+				ID:   deviceID,
+				Slot: *dev.IdentitySlot,
+			})
+			if err != nil {
+				err = fmt.Errorf("could not update ID slot to preventive for device %s: %s", deviceID, err)
+				lMessaging.Error(err)
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func createDevicesStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine) (storage.DeviceManagerRepo, error) {

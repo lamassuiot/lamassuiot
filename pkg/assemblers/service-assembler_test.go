@@ -14,6 +14,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
+	rabbitmq_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/async-messaging/rabbitmq"
 	vault_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/keyvaultkv2"
 	postgres_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/storage/postgres"
 )
@@ -37,6 +38,12 @@ const (
 	VA
 	DMS_MANAGER
 )
+
+type TestEventBusConfig struct {
+	config     config.EventBusEngine
+	BeforeEach func() error
+	AfterSuite func()
+}
 
 type TestStorageEngineConfig struct {
 	config     config.PluggableStorageEngine
@@ -84,12 +91,34 @@ type TestServer struct {
 	VA            *VATestServer
 	DeviceManager *DeviceManagerTestServer
 	DMSManager    *DMSManagerTestServer
-	BeforeEach    func() error
-	AfterSuite    func()
+
+	EventBus *TestEventBusConfig
+
+	BeforeEach func() error
+	AfterSuite func()
+}
+
+func PrepareRabbitMQForTest() (*TestEventBusConfig, error) {
+	cleanup, conf, _, err := rabbitmq_test.RunRabbitMQDocker()
+	if err != nil {
+		return nil, err
+	}
+
+	return &TestEventBusConfig{
+		config: config.EventBusEngine{
+			LogLevel: config.Trace,
+			Enabled:  true,
+			Provider: config.Amqp,
+			Amqp:     *conf,
+		},
+		AfterSuite: func() { cleanup() },
+		BeforeEach: func() error {
+			return nil
+		},
+	}, nil
 }
 
 func PreparePostgresForTest(dbs []string) (*TestStorageEngineConfig, error) {
-
 	pConfig, postgresEngine := postgres_test.BeforeSuite(dbs)
 
 	return &TestStorageEngineConfig{
@@ -185,7 +214,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	}
 }
 
-func BuildCATestServer(storageEngine *TestStorageEngineConfig, criptoEngines *TestCryptoEngineConfig) (*CATestServer, error) {
+func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *TestCryptoEngineConfig, eventBus *TestEventBusConfig) (*CATestServer, error) {
 	svc, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
 		BaseConfig: config.BaseConfig{
 			Logs: config.BaseConfigLogging{
@@ -196,10 +225,10 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, criptoEngines *Te
 				HealthCheckLogging: false,
 				Protocol:           config.HTTP,
 			},
-			EventBus: config.EventBusEngine{Enabled: false},
+			EventBus: eventBus.config,
 		},
 		Storage:       storageEngine.config,
-		CryptoEngines: criptoEngines.config,
+		CryptoEngines: cryptoEngines.config,
 		CryptoMonitoring: config.CryptoMonitoring{
 			Enabled:   true,
 			Frequency: "* * * * * *", //this CRON-like expression will scan certificate each second.
@@ -215,8 +244,8 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, criptoEngines *Te
 		return nil, fmt.Errorf("could not assemble CA with HTTP server")
 	}
 
-	caSvc := *svc
-	caBackend := caSvc.(*services.CAServiceImpl)
+	// caSvc := *svc
+	// caBackend := caSvc.(*services.CAServiceImpl)
 
 	return &CATestServer{
 		Service:   *svc,
@@ -225,12 +254,12 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, criptoEngines *Te
 			return nil
 		},
 		AfterSuite: func() {
-			caBackend.Close()
+			// caBackend.Close()
 		},
 	}, nil
 }
 
-func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig, caTestServer *CATestServer) (*DeviceManagerTestServer, error) {
+func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer) (*DeviceManagerTestServer, error) {
 	svc, port, err := AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
 		BaseConfig: config.BaseConfig{
 			Logs: config.BaseConfigLogging{
@@ -241,7 +270,7 @@ func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig,
 				HealthCheckLogging: false,
 				Protocol:           config.HTTP,
 			},
-			EventBus: config.EventBusEngine{Enabled: false},
+			EventBus: eventBus.config,
 		},
 		Storage: storageEngine.config,
 	}, caTestServer.Service, models.APIServiceInfo{
@@ -265,7 +294,7 @@ func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig,
 	}, nil
 }
 
-func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, caTestServer *CATestServer, deviceManagerTestServer *DeviceManagerTestServer) (*DMSManagerTestServer, error) {
+func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer, deviceManagerTestServer *DeviceManagerTestServer) (*DMSManagerTestServer, error) {
 	key, _ := helpers.GenerateECDSAKey(elliptic.P256())
 	crt, _ := helpers.GenerateSelfSignedCertificate(key, "downstream")
 	downstreamPath := fmt.Sprintf("/tmp/%s", crt.SerialNumber.String())
@@ -302,7 +331,7 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ca
 					},
 				},
 			},
-			EventBus: config.EventBusEngine{Enabled: false},
+			EventBus: eventBus.config,
 		},
 		Storage:                   storageEngine.config,
 		DownstreamCertificateFile: downstreamCertPath,
@@ -372,11 +401,18 @@ func BuildVATestServer(caTestServer *CATestServer) (*VATestServer, error) {
 	}, nil
 }
 
-func AssembleServices(storageEngine *TestStorageEngineConfig, cryptoEngines *TestCryptoEngineConfig, services []Service) (*TestServer, error) {
+func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, cryptoEngines *TestCryptoEngineConfig, services []Service) (*TestServer, error) {
 	servicesMap := make(map[Service]interface{})
 
 	beforeEachActions := []func() error{}
 	afterSuiteActions := []func(){}
+
+	if eventBus.BeforeEach != nil {
+		beforeEachActions = append(beforeEachActions, eventBus.BeforeEach)
+	}
+	if eventBus.AfterSuite != nil {
+		afterSuiteActions = append(afterSuiteActions, eventBus.AfterSuite)
+	}
 
 	if storageEngine.BeforeEach != nil {
 		beforeEachActions = append(beforeEachActions, storageEngine.BeforeEach)
@@ -394,7 +430,7 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, cryptoEngines *Tes
 		}
 	}
 
-	caTestServer, err := BuildCATestServer(storageEngine, cryptoEngines)
+	caTestServer, err := BuildCATestServer(storageEngine, cryptoEngines, eventBus)
 	servicesMap[CA] = caTestServer
 	if err != nil {
 		return nil, fmt.Errorf("could not build CATestServer: %s", err)
@@ -404,7 +440,7 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, cryptoEngines *Tes
 	afterSuiteActions = append(afterSuiteActions, caTestServer.AfterSuite)
 
 	if slices.Contains(services, DEVICE_MANAGER) {
-		deviceManagerTestServer, err := BuildDeviceManagerServiceTestServer(storageEngine, caTestServer)
+		deviceManagerTestServer, err := BuildDeviceManagerServiceTestServer(storageEngine, eventBus, caTestServer)
 		if err != nil {
 			return nil, fmt.Errorf("could not build DeviceManagerTestServer: %s", err)
 		}
@@ -424,7 +460,7 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, cryptoEngines *Tes
 			return nil, fmt.Errorf("could not cast supposed DeviceManagerTestServer. Make sure it was created correctly")
 		}
 
-		dmsManagerTestServer, err := BuildDMSManagerServiceTestServer(storageEngine, caTestServer, deviceTestServer)
+		dmsManagerTestServer, err := BuildDMSManagerServiceTestServer(storageEngine, eventBus, caTestServer, deviceTestServer)
 		if err != nil {
 			return nil, fmt.Errorf("could not build DMSManagerTestServer: %s", err)
 		}
@@ -462,7 +498,8 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, cryptoEngines *Tes
 	}
 
 	return &TestServer{
-		CA: caTestServer,
+		EventBus: eventBus,
+		CA:       caTestServer,
 		DeviceManager: func() *DeviceManagerTestServer {
 			if servicesMap[DEVICE_MANAGER] != nil {
 				return servicesMap[DEVICE_MANAGER].(*DeviceManagerTestServer)
