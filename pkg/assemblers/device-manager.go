@@ -113,7 +113,7 @@ func updateCertStatusHandler(msg *message.Message, svc services.DeviceManagerSer
 		return err
 	}
 
-	cert, err := getEventBody[models.UpdateModel[models.Certificate]](event)
+	cert, err := eventbus.GetEventBody[models.UpdateModel[models.Certificate]](event)
 	if err != nil {
 		err = fmt.Errorf("could not decode cloud event: %s", err)
 		lMessaging.Error(err)
@@ -178,7 +178,7 @@ func updateCertMetaHandler(msg *message.Message, svc services.DeviceManagerServi
 		lMessaging.Errorf("something went wrong while processing cloud event: %s", err)
 	}
 
-	certUpdate, err := getEventBody[models.UpdateModel[models.Certificate]](event)
+	certUpdate, err := eventbus.GetEventBody[models.UpdateModel[models.Certificate]](event)
 	if err != nil {
 		err = fmt.Errorf("could not decode cloud event: %s", err)
 		lMessaging.Error(err)

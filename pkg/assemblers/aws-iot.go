@@ -2,7 +2,6 @@ package assemblers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"slices"
 
@@ -114,7 +113,7 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 
 	switch cloudEvent.Type() {
 	case string(models.EventBindDeviceIdentityKey):
-		bindEvent, err := getEventBody[models.BindIdentityToDeviceOutput](cloudEvent)
+		bindEvent, err := eventbus.GetEventBody[models.BindIdentityToDeviceOutput](cloudEvent)
 		if err != nil {
 			logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "Certificate", err)
 			return nil
@@ -153,7 +152,7 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 		return nil
 
 	case string(models.EventUpdateDeviceMetadataKey):
-		deviceUpdate, err := getEventBody[models.UpdateModel[models.Device]](cloudEvent)
+		deviceUpdate, err := eventbus.GetEventBody[models.UpdateModel[models.Device]](cloudEvent)
 		if err != nil {
 			logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "Device", err)
 			return nil
@@ -211,7 +210,7 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 		return nil
 
 	case string(models.EventUpdateCertificateMetadataKey):
-		certUpdate, err := getEventBody[models.UpdateModel[models.Certificate]](cloudEvent)
+		certUpdate, err := eventbus.GetEventBody[models.UpdateModel[models.Certificate]](cloudEvent)
 		if err != nil {
 			logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "Certificate", err)
 			return nil
@@ -297,13 +296,13 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 		var updatedDMS *models.UpdateModel[models.DMS]
 
 		if cloudEvent.Type() == string(models.EventCreateDMSKey) {
-			dms, err = getEventBody[models.DMS](cloudEvent)
+			dms, err = eventbus.GetEventBody[models.DMS](cloudEvent)
 			if err != nil {
 				logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "DMS", err)
 				return nil
 			}
 		} else {
-			updatedDMS, err = getEventBody[models.UpdateModel[models.DMS]](cloudEvent)
+			updatedDMS, err = eventbus.GetEventBody[models.UpdateModel[models.DMS]](cloudEvent)
 			if err != nil {
 				logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "UpdateModel DMS", err)
 				return nil
@@ -373,7 +372,7 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 		var err error
 		switch cloudEvent.Type() {
 		case string(models.EventUpdateCAMetadataKey):
-			updatedCA, err := getEventBody[models.UpdateModel[models.CACertificate]](cloudEvent)
+			updatedCA, err := eventbus.GetEventBody[models.UpdateModel[models.CACertificate]](cloudEvent)
 			if err != nil {
 				logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "UpdateModel CACertificate", err)
 				return nil
@@ -381,7 +380,7 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 
 			ca = &updatedCA.Updated
 		default:
-			ca, err = getEventBody[models.CACertificate](cloudEvent)
+			ca, err = eventbus.GetEventBody[models.CACertificate](cloudEvent)
 			if err != nil {
 				logDecodeError(cloudEvent.ID(), cloudEvent.Type(), "CACertificate", err)
 				return nil
@@ -415,19 +414,4 @@ func eventHandler(logger *logrus.Entry, cloudEvent *event.Event, awsConnectorSvc
 	default:
 		return nil
 	}
-}
-
-func getEventBody[E any](cloudEvent *event.Event) (*E, error) {
-	var elem *E
-	if cloudEvent == nil {
-		return nil, fmt.Errorf("cloud event is null")
-	}
-
-	if cloudEvent.Data() == nil {
-		return nil, fmt.Errorf("cloud event data is null")
-	}
-
-	eventDataBytes := cloudEvent.Data()
-	err := json.Unmarshal(eventDataBytes, &elem)
-	return elem, err
 }

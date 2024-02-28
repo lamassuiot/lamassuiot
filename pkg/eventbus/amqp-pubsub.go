@@ -46,8 +46,6 @@ func amqpConfig(conf config.AMQPConnection, serviceID string, logger *logrus.Ent
 	}
 
 	amqpConfig.Connection.TLSConfig = &amqpTlsConfig
-	// amqpConfig.Exchange = conf.Exchange
-
 	amqpConfig.Exchange = amqp.ExchangeConfig{
 		GenerateName: func(topic string) string {
 			if conf.Exchange != "" {

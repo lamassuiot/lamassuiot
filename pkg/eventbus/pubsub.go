@@ -12,6 +12,8 @@ func NewEventBusSubscriber(conf config.EventBusEngine, serviceID string, logger 
 	switch conf.Provider {
 	case config.Amqp:
 		return NewAMQPSub(conf.Amqp, serviceID, logger)
+	case config.AWSSqsSns:
+		return NewAwsSqsBindToSnsSub(conf.AWSSqsSns, serviceID, logger), nil
 	}
 
 	return nil, fmt.Errorf("unsupported subscriber provider: %s", conf.Provider)
@@ -21,6 +23,8 @@ func NewEventBusPublisher(conf config.EventBusEngine, serviceID string, logger *
 	switch conf.Provider {
 	case config.Amqp:
 		return NewAMQPPub(conf.Amqp, serviceID, logger)
+	case config.AWSSqsSns:
+		return NewAwsSnsPub(conf.AWSSqsSns, serviceID, logger)
 	}
 
 	return nil, fmt.Errorf("unsupported subscriber provider: %s", conf.Provider)
