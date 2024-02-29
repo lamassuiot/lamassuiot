@@ -383,10 +383,10 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 	}
 
 	crt, err := svc.caClient.SignCertificate(context.Background(), SignCertificateInput{
-		CAID:         dms.Settings.EnrollmentSettings.EnrollmentCA,
-		CertRequest:  (*models.X509CertificateRequest)(csr),
-		Subject:      nil,
-		SignVerbatim: true,
+		CAID:               dms.Settings.EnrollmentSettings.EnrollmentCA,
+		CertRequest:        (*models.X509CertificateRequest)(csr),
+		UseExplicitSubject: false,
+		Subject:            nil,
 	})
 	if err != nil {
 		lDMS.Errorf("could issue certificate for device '%s': %s", csr.Subject.CommonName, err)
@@ -613,10 +613,10 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 	}
 
 	crt, err := svc.caClient.SignCertificate(context.Background(), SignCertificateInput{
-		CAID:         dms.Settings.EnrollmentSettings.EnrollmentCA,
-		CertRequest:  (*models.X509CertificateRequest)(csr),
-		Subject:      nil,
-		SignVerbatim: true,
+		CAID:               dms.Settings.EnrollmentSettings.EnrollmentCA,
+		CertRequest:        (*models.X509CertificateRequest)(csr),
+		UseExplicitSubject: false,
+		Subject:            nil,
 	})
 	if err != nil {
 		lDMS.Errorf("could not issue certificate for device '%s': %s", csr.Subject.CommonName, err)

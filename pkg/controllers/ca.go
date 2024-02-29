@@ -83,14 +83,14 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 
 	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	ca, err := r.svc.CreateCA(funCtx, services.CreateCAInput{
-		ParentID:           requestBody.ParentID,
-		ID:                 requestBody.ID,
-		KeyMetadata:        requestBody.KeyMetadata,
-		Subject:            requestBody.Subject,
-		CAExpiration:       requestBody.CAExpiration,
-		IssuanceExpiration: requestBody.IssuanceExpiration,
-		EngineID:           requestBody.EngineID,
-		Metadata:           requestBody.Metadata,
+		ParentID:               requestBody.ParentID,
+		ID:                     requestBody.ID,
+		KeyMetadata:            requestBody.KeyMetadata,
+		Subject:                requestBody.Subject,
+		CAExpiration:           requestBody.CAExpiration,
+		DefaultIssuanceProfile: requestBody.DefaultIssuanceProfile,
+		EngineID:               requestBody.EngineID,
+		Metadata:               requestBody.Metadata,
 	})
 	if err != nil {
 		switch err {
@@ -200,15 +200,15 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 
 	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	ca, err := r.svc.ImportCA(funCtx, services.ImportCAInput{
-		ID:                 requestBody.ID,
-		IssuanceExpiration: requestBody.IssuanceExpiration,
-		CAType:             requestBody.CAType,
-		CACertificate:      requestBody.CACertificate,
-		KeyType:            keyType,
-		CARSAKey:           rsaKey,
-		CAECKey:            ecKey,
-		EngineID:           requestBody.EngineID,
-		ParentID:           requestBody.ParentID,
+		ID:                     requestBody.ID,
+		DefaultIssuanceProfile: requestBody.DefaultIssuanceProfile,
+		CAType:                 requestBody.CAType,
+		CACertificate:          requestBody.CACertificate,
+		KeyType:                keyType,
+		CARSAKey:               rsaKey,
+		CAECKey:                ecKey,
+		EngineID:               requestBody.EngineID,
+		ParentID:               requestBody.ParentID,
 	})
 	if err != nil {
 		switch err {
@@ -699,10 +699,11 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 
 	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
 	ca, err := r.svc.SignCertificate(funCtx, services.SignCertificateInput{
-		CAID:         params.ID,
-		Subject:      requestBody.Subject,
-		CertRequest:  requestBody.CertRequest,
-		SignVerbatim: requestBody.SignVerbatim,
+		CAID:               params.ID,
+		Subject:            requestBody.Subject,
+		CertRequest:        requestBody.CertRequest,
+		UseExplicitSubject: requestBody.UseExplicitSubject,
+		IssuanceProfile:    requestBody.IssuanceProfile,
 	})
 	if err != nil {
 		switch err {

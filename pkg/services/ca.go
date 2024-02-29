@@ -27,6 +27,9 @@ import (
 	"golang.org/x/exp/slices"
 )
 
+var defaultCAKeyUsages = x509.KeyUsageCRLSign | x509.KeyUsageCRLSign | x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature
+var defaultCAExtKeyUsages = []x509.ExtKeyUsage{x509.ExtKeyUsageAny}
+
 type CAMiddleware func(CAService) CAService
 
 type CAService interface {
@@ -420,7 +423,11 @@ func (svc *CAServiceImpl) issueCA(ctx context.Context, input issueCAInput) (*iss
 
 	if input.ParentCA == nil {
 		lFunc.Debugf("creating ROOT CA certificate. common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
-		caCert, err = x509Engine.CreateRootCA(input.CAID, input.KeyMetadata, input.Subject, expiration)
+		caCert, err = x509Engine.CreateRootCA(input.CAID, input.KeyMetadata, input.Subject, models.IssuanceProfile{
+			KeyUsage:          defaultCAKeyUsages,
+			ExtendedKeyUsages: defaultCAExtKeyUsages,
+			Expiration:        models.Expiration{Type: models.Time, Time: &expiration},
+		})
 		if err != nil {
 			lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
 			return nil, err
@@ -443,7 +450,17 @@ func (svc *CAServiceImpl) issueCA(ctx context.Context, input issueCAInput) (*iss
 				x509Engine = x509ParentEngine
 			}
 			lFunc.Debugf("creating SUBORDINATE CA certificate.common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
-			caCert, err = x509Engine.CreateSubordinateCA(input.ParentCA.ID, input.CAID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), input.KeyMetadata, input.Subject, expiration, x509ParentEngine)
+			caCert, err = x509Engine.CreateSubordinateCA(
+				input.ParentCA.ID,
+				input.CAID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate),
+				input.KeyMetadata, input.Subject,
+				models.IssuanceProfile{
+					KeyUsage:          defaultCAKeyUsages,
+					ExtendedKeyUsages: defaultCAExtKeyUsages,
+					Expiration:        models.Expiration{Type: models.Time, Time: &expiration},
+				},
+				x509ParentEngine,
+			)
 			if err != nil {
 				lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
 				return nil, err
@@ -461,16 +478,16 @@ func (svc *CAServiceImpl) issueCA(ctx context.Context, input issueCAInput) (*iss
 }
 
 type ImportCAInput struct {
-	ID                 string
-	CAType             models.CertificateType    `validate:"required,ne=MANAGED"`
-	IssuanceExpiration models.Expiration         `validate:"required"`
-	CACertificate      *models.X509Certificate   `validate:"required"`
-	CAChain            []*models.X509Certificate //Parent CAs. They MUST be sorted as follows. 0: Root-CA; 1: Subordinate CA from Root-CA; ...
-	CARSAKey           *rsa.PrivateKey
-	CAECKey            *ecdsa.PrivateKey
-	KeyType            models.KeyType
-	EngineID           string
-	ParentID           string
+	ID                     string
+	CAType                 models.CertificateType    `validate:"required,ne=MANAGED"`
+	DefaultIssuanceProfile models.IssuanceProfile    `validate:"required"`
+	CACertificate          *models.X509Certificate   `validate:"required"`
+	CAChain                []*models.X509Certificate //Parent CAs. They MUST be sorted as follows. 0: Root-CA; 1: Subordinate CA from Root-CA; ...
+	CARSAKey               *rsa.PrivateKey
+	CAECKey                *ecdsa.PrivateKey
+	KeyType                models.KeyType
+	EngineID               string
+	ParentID               string
 }
 
 // Returned Error Codes:
@@ -565,12 +582,12 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 	}
 
 	ca := &models.CACertificate{
-		ID:                    caID,
-		Type:                  input.CAType,
-		Metadata:              map[string]interface{}{},
-		IssuanceExpirationRef: input.IssuanceExpiration,
-		CreationTS:            time.Now(),
-		Level:                 level,
+		ID:                     caID,
+		Type:                   input.CAType,
+		Metadata:               map[string]interface{}{},
+		DefaultIssuanceProfile: input.DefaultIssuanceProfile,
+		CreationTS:             time.Now(),
+		Level:                  level,
 		Certificate: models.Certificate{
 			Certificate:         input.CACertificate,
 			Status:              models.StatusActive,
@@ -592,14 +609,14 @@ func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*m
 }
 
 type CreateCAInput struct {
-	ID                 string
-	ParentID           string
-	KeyMetadata        models.KeyMetadata `validate:"required"`
-	Subject            models.Subject     `validate:"required"`
-	IssuanceExpiration models.Expiration  `validate:"required"`
-	CAExpiration       models.Expiration  `validate:"required"`
-	EngineID           string
-	Metadata           map[string]any
+	ID                     string
+	ParentID               string
+	KeyMetadata            models.KeyMetadata     `validate:"required"`
+	Subject                models.Subject         `validate:"required"`
+	DefaultIssuanceProfile models.IssuanceProfile `validate:"required"`
+	CAExpiration           models.Expiration      `validate:"required"`
+	EngineID               string
+	Metadata               map[string]any
 }
 
 // Returned Error Codes:
@@ -643,11 +660,12 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 		parentCA = ca
 		var caExpiration time.Time
 
-		if input.IssuanceExpiration.Type == models.Duration {
+		if input.CAExpiration.Type == models.Duration {
 			caExpiration = time.Now().Add((time.Duration)(*input.CAExpiration.Duration))
 		} else {
 			caExpiration = *input.CAExpiration.Time
 		}
+
 		parentCaExpiration := parentCA.Certificate.ValidTo
 
 		if parentCaExpiration.Before(caExpiration) {
@@ -715,12 +733,12 @@ func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*m
 	}
 
 	ca := models.CACertificate{
-		ID:                    caID,
-		Metadata:              input.Metadata,
-		Type:                  models.CertificateTypeManaged,
-		IssuanceExpirationRef: input.IssuanceExpiration,
-		CreationTS:            time.Now(),
-		Level:                 caLevel,
+		ID:                     caID,
+		Metadata:               input.Metadata,
+		Type:                   models.CertificateTypeManaged,
+		DefaultIssuanceProfile: input.DefaultIssuanceProfile,
+		CreationTS:             time.Now(),
+		Level:                  caLevel,
 		Certificate: models.Certificate{
 			Certificate:  (*models.X509Certificate)(caCert),
 			Status:       models.StatusActive,
@@ -1049,10 +1067,11 @@ func (svc *CAServiceImpl) DeleteCA(ctx context.Context, input DeleteCAInput) err
 }
 
 type SignCertificateInput struct {
-	CAID         string                         `validate:"required"`
-	CertRequest  *models.X509CertificateRequest `validate:"required"`
-	Subject      *models.Subject
-	SignVerbatim bool
+	CAID               string                         `validate:"required"`
+	CertRequest        *models.X509CertificateRequest `validate:"required"`
+	Subject            *models.Subject
+	IssuanceProfile    *models.IssuanceProfile
+	UseExplicitSubject bool
 }
 
 // Returned Error Codes:
@@ -1088,6 +1107,20 @@ func (svc *CAServiceImpl) SignCertificate(ctx context.Context, input SignCertifi
 		return nil, errs.ErrCAStatus
 	}
 
+	profile := ca.DefaultIssuanceProfile
+	if input.IssuanceProfile != nil {
+		profile = *input.IssuanceProfile
+		lFunc.Debugf("using provided issuance profile: %s", profile)
+	} else {
+		lFunc.Debugf("using default issuance profile configured in CA: %s", profile)
+	}
+
+	if !helpers.ValidateCAExpiration(profile.Expiration, ca.Certificate.Certificate.NotAfter) {
+		err := fmt.Errorf("can not issue certificate as it would expire before the CA")
+		lFunc.Error(err)
+		return nil, err
+	}
+
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
 
 	x509Engine := x509engines.NewX509Engine(engine, svc.vaServerDomain)
@@ -1095,7 +1128,7 @@ func (svc *CAServiceImpl) SignCertificate(ctx context.Context, input SignCertifi
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
 	csr := (*x509.CertificateRequest)(input.CertRequest)
 
-	if !input.SignVerbatim {
+	if input.UseExplicitSubject {
 		csr.Subject = pkix.Name{
 			CommonName:         input.Subject.CommonName,
 			Country:            []string{input.Subject.Country},
@@ -1106,14 +1139,8 @@ func (svc *CAServiceImpl) SignCertificate(ctx context.Context, input SignCertifi
 		}
 	}
 
-	expiration := time.Now()
-	if ca.IssuanceExpirationRef.Type == models.Duration {
-		expiration = expiration.Add(time.Duration(*ca.IssuanceExpirationRef.Duration))
-	} else {
-		expiration = *ca.IssuanceExpirationRef.Time
-	}
 	lFunc.Debugf("sign certificate request with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
-	x509Cert, err := x509Engine.SignCertificateRequest(caCert, csr, expiration)
+	x509Cert, err := x509Engine.SignCertificateRequest(caCert, csr, profile)
 	if err != nil {
 		lFunc.Errorf("could not sign certificate request with %s CA", caCert.Subject.CommonName)
 		return nil, err
@@ -1514,9 +1541,9 @@ func createCAValidation(sl validator.StructLevel) {
 		sl.ReportError(ca.CAExpiration, "CAExpiration", "CAExpiration", "InvalidCAExpiration", "")
 	}
 
-	if !helpers.ValidateExpirationTimeRef(ca.IssuanceExpiration) {
+	if !helpers.ValidateExpirationTimeRef(ca.DefaultIssuanceProfile.Expiration) {
 		// lFunc.Errorf("issuance expiration time ref is incompatible with the selected variable")
-		sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "InvalidIssuanceExpiration", "")
+		sl.ReportError(ca.DefaultIssuanceProfile.Expiration, "IssuanceExpiration", "IssuanceExpiration", "InvalidIssuanceExpiration", "")
 	}
 
 	expiration := time.Now()
@@ -1526,9 +1553,9 @@ func createCAValidation(sl validator.StructLevel) {
 		expiration = *ca.CAExpiration.Time
 	}
 
-	if !helpers.ValidateCAExpiration(ca.IssuanceExpiration, expiration) {
+	if !helpers.ValidateCAExpiration(ca.DefaultIssuanceProfile.Expiration, expiration) {
 		// lFunc.Errorf("issuance expiration is greater than the CA expiration")
-		sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
+		sl.ReportError(ca.DefaultIssuanceProfile.Expiration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
 	}
 }
 
@@ -1537,14 +1564,14 @@ func importCAValidation(sl validator.StructLevel) {
 	caCert := ca.CACertificate
 
 	if ca.CAType != models.CertificateTypeExternal {
-		if !helpers.ValidateCAExpiration(ca.IssuanceExpiration, caCert.NotAfter) {
+		if !helpers.ValidateCAExpiration(ca.DefaultIssuanceProfile.Expiration, caCert.NotAfter) {
 			// lFunc.Errorf("issuance expiration is greater than the CA expiration")
-			sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
+			sl.ReportError(ca.DefaultIssuanceProfile.Expiration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
 		}
 		// lFunc.Debugf("CA Type: %s", ca.CAType)
-		if !helpers.ValidateExpirationTimeRef(ca.IssuanceExpiration) {
+		if !helpers.ValidateExpirationTimeRef(ca.DefaultIssuanceProfile.Expiration) {
 			// lFunc.Errorf("expiration time ref is incompatible with the selected variable")
-			sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "InvalidIssuanceExpiration", "")
+			sl.ReportError(ca.DefaultIssuanceProfile.Expiration, "IssuanceExpiration", "IssuanceExpiration", "InvalidIssuanceExpiration", "")
 		}
 
 		valid, err := helpers.ValidateCertAndPrivKey((*x509.Certificate)(caCert), ca.CARSAKey, ca.CAECKey)

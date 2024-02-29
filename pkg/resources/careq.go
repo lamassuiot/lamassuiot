@@ -7,25 +7,25 @@ import (
 )
 
 type CreateCABody struct {
-	ID                 string             `json:"id"`
-	ParentID           string             `json:"parent_id"`
-	Subject            models.Subject     `json:"subject"`
-	KeyMetadata        models.KeyMetadata `json:"key_metadata"`
-	CAExpiration       models.Expiration  `json:"ca_expiration"`
-	IssuanceExpiration models.Expiration  `json:"issuance_expiration"`
-	EngineID           string             `json:"engine_id"`
-	Metadata           map[string]any     `json:"metadata"`
+	ID                     string                 `json:"id"`
+	ParentID               string                 `json:"parent_id"`
+	Subject                models.Subject         `json:"subject"`
+	KeyMetadata            models.KeyMetadata     `json:"key_metadata"`
+	CAExpiration           models.Expiration      `json:"ca_expiration"`
+	DefaultIssuanceProfile models.IssuanceProfile `json:"default_issuance_profile"`
+	EngineID               string                 `json:"engine_id"`
+	Metadata               map[string]any         `json:"metadata"`
 }
 
 type ImportCABody struct {
-	ID                 string                    `json:"id"`
-	EngineID           string                    `json:"engine_id"`
-	ParentID           string                    `json:"parent_id"`
-	CAPrivateKey       string                    `json:"private_key"` //b64 from PEM
-	CACertificate      *models.X509Certificate   `json:"ca"`
-	CAChain            []*models.X509Certificate `json:"ca_chain"`
-	CAType             models.CertificateType    `json:"ca_type"`
-	IssuanceExpiration models.Expiration         `json:"issuance_expiration"`
+	ID                     string                    `json:"id"`
+	EngineID               string                    `json:"engine_id"`
+	ParentID               string                    `json:"parent_id"`
+	CAPrivateKey           string                    `json:"private_key"` //b64 from PEM
+	CACertificate          *models.X509Certificate   `json:"ca"`
+	CAChain                []*models.X509Certificate `json:"ca_chain"`
+	CAType                 models.CertificateType    `json:"ca_type"`
+	DefaultIssuanceProfile models.IssuanceProfile    `json:"default_issuance_profile"`
 }
 
 type UpdateCAMetadataBody struct {
@@ -33,9 +33,10 @@ type UpdateCAMetadataBody struct {
 }
 
 type SignCertificateBody struct {
-	SignVerbatim bool                           `json:"sign_verbatim"`
-	CertRequest  *models.X509CertificateRequest `json:"csr"`
-	Subject      *models.Subject                `json:"subject"`
+	UseExplicitSubject bool                           `json:"explicit_subject"`
+	CertRequest        *models.X509CertificateRequest `json:"csr"`
+	Subject            *models.Subject                `json:"subject"`
+	IssuanceProfile    *models.IssuanceProfile        `json:"issuance_profile"`
 }
 
 type SignatureSignBody struct {

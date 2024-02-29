@@ -63,7 +63,7 @@ type shadowState struct {
 
 func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (*AWSCloudConnectorService, error) {
 	iotLogger := builder.Logger.WithField("sdk", "AWS IoT Client")
-	idpLogger := builder.Logger.WithField("sdk", "AWS IoT Dataple Client")
+	idpLogger := builder.Logger.WithField("sdk", "AWS IoT Dataplane Client")
 	stsLogger := builder.Logger.WithField("sdk", "AWS STS Client")
 	sqsLogger := builder.Logger.WithField("sdk", "AWS SQS Client")
 
@@ -576,9 +576,9 @@ func (svc *AWSCloudConnectorService) RegisterCA(ctx context.Context, input Regis
 	// Sign verification certificate CSR
 	lFunc.Debugf("signing validation csr with cn=%s", csr.Subject.CommonName)
 	singOutput, err := svc.CaSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-		CAID:         input.CACertificate.ID,
-		CertRequest:  &csr,
-		SignVerbatim: true,
+		CAID:               input.CACertificate.ID,
+		CertRequest:        &csr,
+		UseExplicitSubject: false,
 	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while requesting sign certificate: %s", err)

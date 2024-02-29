@@ -1,6 +1,7 @@
 package models
 
 import (
+	"crypto/x509"
 	"time"
 )
 
@@ -57,12 +58,18 @@ type IssuerCAMetadata struct {
 
 type CACertificate struct {
 	Certificate
-	ID                    string                 `json:"id" gorm:"primaryKey"`
-	Metadata              map[string]interface{} `json:"metadata" gorm:"serializer:json"`
-	IssuanceExpirationRef Expiration             `json:"issuance_expiration" gorm:"serializer:json"`
-	Type                  CertificateType        `json:"type"`
-	CreationTS            time.Time              `json:"creation_ts"`
-	Level                 int                    `json:"level"`
+	ID                     string                 `json:"id" gorm:"primaryKey"`
+	Metadata               map[string]interface{} `json:"metadata" gorm:"serializer:json"`
+	DefaultIssuanceProfile IssuanceProfile        `json:"default_issuance_profile" gorm:"serializer:json"`
+	Type                   CertificateType        `json:"type"`
+	CreationTS             time.Time              `json:"creation_ts"`
+	Level                  int                    `json:"level"`
+}
+
+type IssuanceProfile struct {
+	KeyUsage          x509.KeyUsage      `json:"key_usage"`
+	ExtendedKeyUsages []x509.ExtKeyUsage `json:"extended_key_usages"`
+	Expiration        Expiration         `json:"expiration" gorm:"serializer:json"`
 }
 
 type CAStats struct {
