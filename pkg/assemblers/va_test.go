@@ -13,13 +13,14 @@ import (
 	"testing"
 	"time"
 
+	external_clients "github.com/lamassuiot/lamassuiot/v2/pkg/clients/external"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"golang.org/x/crypto/ocsp"
 )
 
-func TestCRL(t *testing.T) {
+func TestBaseCRL(t *testing.T) {
 	serverTest, err := StartVAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create VA test server")
@@ -101,7 +102,7 @@ func TestCRL(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			serverTest.BeforeEach()
-			err := initCAForVA(serverTest)
+			_, err := initCAForVA(serverTest)
 			if err != nil {
 				t.Fatalf("could not init CA for VA: %s", err)
 			}
@@ -115,26 +116,53 @@ func TestCRL(t *testing.T) {
 				t.Fatalf("could not run 'before' function:  %s", err)
 			}
 
-			httpRequest, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, DefaultCAID), nil)
+			crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, DefaultCAID), (*x509.Certificate)(issuerCA.Certificate.Certificate), nil, true)
 			if err != nil {
-				t.Fatalf("could not generate HTTP CRL request: %s", err)
+				t.Fatalf("could not get CRL: %s", err)
 			}
 
-			httpClient := &http.Client{}
-			httpResponse, err := httpClient.Do(httpRequest)
-			if err != nil {
-				t.Fatalf("could not DO CRL request: %s", err)
-			}
-
-			defer httpResponse.Body.Close()
-			output, err := io.ReadAll(httpResponse.Body)
-			if err != nil {
-				t.Fatalf("could not read response body: %s", err)
-			}
-
-			crl, err := x509.ParseRevocationList(output)
 			tc.resultCheck(crts, issuerCA, crl, err)
 		})
+	}
+}
+
+func TestCRLNumber(t *testing.T) {
+	serverTest, err := StartVAServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create VA test server")
+	}
+
+	caSDK := serverTest.CA.HttpCASDK
+
+	serverTest.BeforeEach()
+	ca, err := initCAForVA(serverTest)
+	if err != nil {
+		t.Fatalf("could not init CA for VA: %s", err)
+	}
+
+	crtsToIssue := 10
+	for i := 0; i < crtsToIssue; i++ {
+		_, err := generateCertificate(caSDK)
+		if err != nil {
+			t.Fatalf("could not generate certificate: %s", err)
+		}
+	}
+
+	iters := 15
+	var prevCrl *x509.RevocationList
+	for i := range iters {
+		crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, DefaultCAID), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
+		if err != nil {
+			t.Fatalf("could not get CRL: %s", err)
+		}
+
+		if prevCrl != nil {
+			if crl.Number.Cmp(prevCrl.Number) <= 0 {
+				t.Fatalf("iter %d: new CRL has a lower number", i)
+			}
+		}
+
+		prevCrl = crl
 	}
 }
 
@@ -147,7 +175,7 @@ func TestPostOCSP(t *testing.T) {
 	}
 
 	serverTest.BeforeEach()
-	err = initCAForVA(serverTest)
+	_, err = initCAForVA(serverTest)
 	if err != nil {
 		t.Fatalf("could not init CA for VA: %s", err)
 	}
@@ -254,7 +282,7 @@ func TestGetOCSP(t *testing.T) {
 		t.Fatalf("could not create VA test server")
 	}
 	serverTest.BeforeEach()
-	err = initCAForVA(serverTest)
+	_, err = initCAForVA(serverTest)
 	if err != nil {
 		t.Fatalf("could not init CA for VA: %s", err)
 	}
@@ -298,7 +326,7 @@ func TestCheckOCSPRevocationCodes(t *testing.T) {
 		t.Fatalf("could not create VA test server")
 	}
 	serverTest.BeforeEach()
-	err = initCAForVA(serverTest)
+	_, err = initCAForVA(serverTest)
 	if err != nil {
 		t.Fatalf("could not init CA for VA: %s", err)
 	}
@@ -461,11 +489,11 @@ func StartVAServiceTestServer(t *testing.T) (*TestServer, error) {
 	return testServer, nil
 }
 
-func initCAForVA(testServer *TestServer) error {
+func initCAForVA(testServer *TestServer) (*models.CACertificate, error) {
 	//Init CA Server with 1 CA
 	caDUr := models.TimeDuration(time.Hour * 24)
 	issuanceDur := models.TimeDuration(time.Hour * 12)
-	_, err := testServer.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+	ca, err := testServer.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
 		ID:                 DefaultCAID,
 		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:            models.Subject{CommonName: "TestCA"},
@@ -473,9 +501,9 @@ func initCAForVA(testServer *TestServer) error {
 		IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return ca, nil
 }
 
 //Hacer la función de test de getCRL
