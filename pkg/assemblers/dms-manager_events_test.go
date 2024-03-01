@@ -139,7 +139,6 @@ func TestBindIDEvent(t *testing.T) {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
 
-				fmt.Println("Enrolledddd")
 			},
 			maxTime: time.Second * 5,
 			eventCatcher: func(msg *message.Message) (event *event.Event, err error) {
@@ -155,9 +154,29 @@ func TestBindIDEvent(t *testing.T) {
 				return nil, fmt.Errorf("not found")
 			},
 			resultCheck: func(event event.Event) error {
-				_, err := eventbus.GetEventBody[models.BindIdentityToDeviceOutput](&event)
+				if event.Source() != "lrn://dms-manager" {
+					return fmt.Errorf("unexpected event source")
+				}
+
+				eventData, err := eventbus.GetEventBody[models.BindIdentityToDeviceOutput](&event)
 				if err != nil {
-					fmt.Errorf("unexpected event format")
+					return fmt.Errorf("unexpected event format")
+				}
+
+				if eventData == nil {
+					return fmt.Errorf("event data is nil")
+				}
+
+				if eventData.Certificate == nil {
+					return fmt.Errorf("certificate is nil")
+				}
+
+				if eventData.DMS == nil {
+					return fmt.Errorf("DMS is nil")
+				}
+
+				if eventData.Device == nil {
+					return fmt.Errorf("device is nil")
 				}
 
 				return nil

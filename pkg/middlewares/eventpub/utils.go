@@ -17,15 +17,13 @@ type CloudEventMiddlewarePublisher struct {
 }
 
 func (cemp *CloudEventMiddlewarePublisher) PublishCloudEvent(ctx context.Context, eventType models.EventType, payload interface{}) {
-	src := cemp.ServiceID
+	src := "lrn://" + cemp.ServiceID
 	if ctxSource := ctx.Value(models.ContextSourceKey); ctxSource != nil {
 		ctxSourceStr, ok := ctxSource.(string)
 		if ok {
 			src = ctxSourceStr
 		}
 	}
-
-	src = "lrn://internal-service"
 
 	event := eventbus.BuildCloudEvent(string(eventType), src, payload)
 	eventBytes, marshalErr := json.Marshal(event)
@@ -35,6 +33,5 @@ func (cemp *CloudEventMiddlewarePublisher) PublishCloudEvent(ctx context.Context
 	}
 
 	cemp.Logger.Tracef("publishing event: Type=%s Source=%s \n%s", eventType, src, string(eventBytes))
-
 	cemp.Publisher.Publish(string(eventType), message.NewMessage(event.ID(), eventBytes))
 }
