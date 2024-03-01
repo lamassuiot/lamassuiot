@@ -13,7 +13,12 @@ func NewEventBusSubscriber(conf config.EventBusEngine, serviceID string, logger 
 	case config.Amqp:
 		return NewAMQPSub(conf.Amqp, serviceID, logger)
 	case config.AWSSqsSns:
-		return NewAwsSqsBindToSnsSub(conf.AWSSqsSns, serviceID, logger), nil
+		return NewSnsExchangeSubscriber(SnsExchangeBuilder{
+			Config:       conf.AWSSqsSns,
+			ExchangeName: "lamassu-events",
+			ServiceID:    serviceID,
+			Logger:       logger,
+		}), nil
 	}
 
 	return nil, fmt.Errorf("unsupported subscriber provider: %s", conf.Provider)
@@ -24,7 +29,12 @@ func NewEventBusPublisher(conf config.EventBusEngine, serviceID string, logger *
 	case config.Amqp:
 		return NewAMQPPub(conf.Amqp, serviceID, logger)
 	case config.AWSSqsSns:
-		return NewAwsSnsPub(conf.AWSSqsSns, serviceID, logger)
+		return NewSnsExchangePublisher(SnsExchangeBuilder{
+			Config:       conf.AWSSqsSns,
+			ExchangeName: "lamassu-events",
+			ServiceID:    serviceID,
+			Logger:       logger,
+		})
 	}
 
 	return nil, fmt.Errorf("unsupported subscriber provider: %s", conf.Provider)

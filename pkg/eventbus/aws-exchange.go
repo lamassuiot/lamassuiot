@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sns"
@@ -18,11 +17,30 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
-func bindSQSToSNS(conf config.AWSSDKConfig, snsPub *sns.Publisher, sqsSub *sqs.Subscriber, topic, queueName string) error {
+type SnsExchangeBuilder struct {
+	Config       config.AWSSDKConfig
+	ExchangeName string
+	ServiceID    string
+	Logger       *logrus.Entry
+}
+
+func normalizeSQSQueueName(serviceID, topic string) string {
+	sanitizedAWSSqsTopicName := strings.ReplaceAll(topic, "#", "wcard")
+	sanitizedAWSSqsTopicName = strings.ReplaceAll(sanitizedAWSSqsTopicName, ".", "-")
+
+	//SQS can only have a 80 chars name
+	queueName := fmt.Sprintf("%s--%s", sanitizedAWSSqsTopicName, serviceID)
+
+	return queueName
+}
+
+func bindSQSToSNS(builder SnsExchangeBuilder, sqsSub *sqs.Subscriber, snsPub *sns.Publisher, topic string) error {
 	snsArn, err := snsPub.GetArnTopic(context.Background(), "lamassu-events")
 	if err != nil {
 		return err
 	}
+
+	queueName := normalizeSQSQueueName(builder.ServiceID, topic)
 
 	err = sqsSub.SubscribeInitialize(queueName)
 	if err != nil {
@@ -39,7 +57,7 @@ func bindSQSToSNS(conf config.AWSSDKConfig, snsPub *sns.Publisher, sqsSub *sqs.S
 		return err
 	}
 
-	awsConf, err := config.GetAwsSdkConfig(conf)
+	awsConf, err := config.GetAwsSdkConfig(builder.Config)
 	if err != nil {
 		return err
 	}
@@ -136,120 +154,88 @@ func bindSQSToSNS(conf config.AWSSDKConfig, snsPub *sns.Publisher, sqsSub *sqs.S
 	return nil
 }
 
-func NewAwsSqsSub(conf config.AWSSDKConfig, serviceID string, logger *logrus.Entry) (message.Subscriber, error) {
-	awsConf, err := config.GetAwsSdkConfig(conf)
-	if err != nil {
-		return nil, err
-	}
-
-	lEventBus := newWithLogger(logger.WithField("subsystem-provider", "AWS.SQS - Subscriber"))
-
-	subscriberSqs, err := sqs.NewSubscriber(sqs.SubscriberConfig{
-		AWSConfig: *awsConf,
-		CreateQueueInitializerConfig: sqs.QueueConfigAtrributes{
-			ReceiveMessageWaitTimeSeconds: strconv.Itoa(10),
-		},
-	}, lEventBus)
-	if err != nil {
-		return nil, err
-	}
-
-	return subscriberSqs, nil
+type exchangeSqsSubscriber struct {
+	builderConf SnsExchangeBuilder
+	sqsSub      *sqs.Subscriber
 }
 
-type snsToSqsSub struct {
-	conf      config.AWSSDKConfig
-	serviceID string
-	logger    *logrus.Entry
-	sub       message.Subscriber
-}
-
-func (s *snsToSqsSub) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
-	pub, err := NewAwsSnsPub(s.conf, s.serviceID, s.logger)
+func (s *exchangeSqsSubscriber) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
+	pub, err := NewSnsExchangePublisher(s.builderConf)
 	if err != nil {
 		return nil, err
 	}
 
 	defer pub.Close()
 
-	snsPub, ok := pub.(*snsPublisher)
-	if !ok {
-		return nil, fmt.Errorf("could not cast to SNS Publisher")
-	}
-
-	sub, err := NewAwsSqsSub(s.conf, s.serviceID, s.logger)
+	sqsSub, err := NewAwsSqsSub(s.builderConf.Config, s.builderConf.ServiceID, s.builderConf.Logger)
 	if err != nil {
 		return nil, err
 	}
 
-	sqsSub, ok := sub.(*sqs.Subscriber)
-	if !ok {
-		return nil, fmt.Errorf("could not cast to SQS Subscriber")
-	}
-
-	sanitizedAWSSqsTopicName := strings.ReplaceAll(topic, "#", "wcard")
-	sanitizedAWSSqsTopicName = strings.ReplaceAll(sanitizedAWSSqsTopicName, ".", "-")
-
-	//SQS can only have a 80 chars name
-	queueName := fmt.Sprintf("%s--%s", sanitizedAWSSqsTopicName, s.serviceID)
-	fmt.Println(queueName, topic)
-
-	err = bindSQSToSNS(s.conf, snsPub.pub, sqsSub, topic, queueName)
+	err = bindSQSToSNS(s.builderConf, sqsSub, pub.getRawSNSPublisher(), topic)
 	if err != nil {
 		return nil, err
 	}
 
-	s.sub = sub
+	s.sqsSub = sqsSub
 
-	return sub.Subscribe(ctx, queueName)
+	queueName := normalizeSQSQueueName(s.builderConf.ServiceID, topic)
+	return sqsSub.Subscribe(ctx, queueName)
+}
+
+type SnsExchangeSubscriber struct {
 }
 
 // Close should flush unsent messages, if publisher is async.
 
-func (s *snsToSqsSub) Close() error {
-	return s.sub.Close()
+func (s *exchangeSqsSubscriber) Close() error {
+	return s.sqsSub.Close()
 }
 
-func NewAwsSqsBindToSnsSub(conf config.AWSSDKConfig, serviceID string, logger *logrus.Entry) message.Subscriber {
-	return &snsToSqsSub{
-		conf:      conf,
-		serviceID: serviceID,
-		logger:    logger,
+func NewSnsExchangeSubscriber(builder SnsExchangeBuilder) message.Subscriber {
+	return &exchangeSqsSubscriber{
+		builderConf: builder,
 	}
 }
 
-type snsPublisher struct {
-	pub *sns.Publisher
+type SnsExchangePublisher struct {
+	builderConf SnsExchangeBuilder
+	sns         *sns.Publisher
 }
 
-func (s *snsPublisher) Publish(topic string, messages ...*message.Message) error {
-	return s.pub.Publish("lamassu-events", messages...)
+func (s *SnsExchangePublisher) Publish(topic string, messages ...*message.Message) error {
+	return s.sns.Publish(s.builderConf.ExchangeName, messages...)
 }
 
-func (s *snsPublisher) Close() error {
-	return s.pub.Close()
+func (s *SnsExchangePublisher) Close() error {
+	return s.sns.Close()
 }
 
-func NewAwsSnsPub(conf config.AWSSDKConfig, serviceID string, logger *logrus.Entry) (message.Publisher, error) {
-	awsConf, err := config.GetAwsSdkConfig(conf)
+func (s *SnsExchangePublisher) getRawSNSPublisher() *sns.Publisher {
+	return s.sns
+}
+
+func NewSnsExchangePublisher(builder SnsExchangeBuilder) (*SnsExchangePublisher, error) {
+	awsConf, err := config.GetAwsSdkConfig(builder.Config)
 	if err != nil {
 		return nil, err
 	}
 
-	lEventBusPub := newWithLogger(logger.WithField("subsystem-provider", "AWS.SNS - Publisher"))
+	lEventBusPub := newWithLogger(builder.Logger.WithField("subsystem-provider", "AWS.SNS - Publisher"))
 
 	pub, err := sns.NewPublisher(sns.PublisherConfig{
 		AWSConfig:             *awsConf,
 		CreateTopicfNotExists: true,
 		CreateTopicConfig: sns.SNSConfigAtrributes{
-			DisplayName: "lamassu-events",
+			DisplayName: builder.ExchangeName,
 		},
 	}, lEventBusPub)
 	if err != nil {
 		return nil, err
 	}
 
-	return &snsPublisher{
-		pub: pub,
+	return &SnsExchangePublisher{
+		sns:         pub,
+		builderConf: builder,
 	}, nil
 }
