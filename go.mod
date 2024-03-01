@@ -1,6 +1,6 @@
 module github.com/lamassuiot/lamassuiot/v2
 
-go 1.21
+go 1.22
 
 require (
 	github.com/ThalesIgnite/crypto11 v1.2.1
