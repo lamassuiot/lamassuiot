@@ -41,7 +41,7 @@ func teardown(tempDir string) {
 func TestGetCACryptoSigner(t *testing.T) {
 	tempDir, engine, x509Engine := setup(t)
 	defer teardown(tempDir)
-	caCertificate, key, err := helpers.GenerateSelfSignedCA(x509.RSA, 365*24*time.Hour)
+	caCertificate, key, err := helpers.GenerateSelfSignedCA(x509.RSA, 365*24*time.Hour, "MyCA")
 	if err != nil {
 		t.Fatalf("failed to generate self signed CA: %s", err)
 	}
@@ -77,7 +77,7 @@ func TestGetCACryptoSigner(t *testing.T) {
 func TestGetCACryptoSignerNonExistentKey(t *testing.T) {
 	tempDir, _, x509Engine := setup(t)
 	defer teardown(tempDir)
-	caCertificate, _, err := helpers.GenerateSelfSignedCA(x509.RSA, 365*24*time.Hour)
+	caCertificate, _, err := helpers.GenerateSelfSignedCA(x509.RSA, 365*24*time.Hour, "MyCA")
 	if err != nil {
 		t.Fatalf("failed to generate self signed CA: %s", err)
 	}
@@ -350,7 +350,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 		t.Errorf("unexpected error: %s", err)
 	}
 
-	caCertificateNotImported, _, err := helpers.GenerateSelfSignedCA(x509.ECDSA, 365*24*time.Hour)
+	caCertificateNotImported, _, err := helpers.GenerateSelfSignedCA(x509.ECDSA, 365*24*time.Hour, "MyCA")
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -499,7 +499,7 @@ func TestSignCertificateRequest(t *testing.T) {
 		t.Errorf("unexpected error: %s", err)
 	}
 
-	caCertificateNotImported, _, err := helpers.GenerateSelfSignedCA(x509.ECDSA, 365*24*time.Hour)
+	caCertificateNotImported, _, err := helpers.GenerateSelfSignedCA(x509.ECDSA, 365*24*time.Hour, "MyCA")
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}

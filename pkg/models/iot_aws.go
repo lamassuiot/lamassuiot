@@ -48,6 +48,9 @@ type IoTAWSCAMetadata struct {
 	CertificateID       string `json:"certificate_id"`
 	IotCoreMQTTEndpoint string `json:"mqtt_endpoint"`
 }
+type IoTAWSCertificateMetadata struct {
+	ARN string `json:"arn"`
+}
 
 type AWSIoTRegistrationMode string
 
