@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	lamassu "github.com/lamassuiot/lamassuiot/v2/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
@@ -16,6 +18,7 @@ var (
 )
 
 func main() {
+	fmt.Println("Dummy")
 	log.SetFormatter(helpers.LogFormatter)
 	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
 
