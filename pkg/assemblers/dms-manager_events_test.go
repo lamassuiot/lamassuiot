@@ -81,15 +81,58 @@ func TestBindIDEvent(t *testing.T) {
 		return dmsMgr.Service.CreateDMS(context.Background(), input)
 	}
 
+	evCatcher := func(newMessages <-chan *message.Message, foundChan chan *event.Event) {
+		for msg := range newMessages {
+			ev, err := eventbus.ParseCloudEvent(msg.Payload)
+			if err != nil {
+				continue
+			}
+
+			if ev.Type() == string(models.EventBindDeviceIdentityKey) {
+				foundChan <- ev
+			}
+		}
+	}
+	standardEvCheck := func(event event.Event) error {
+		if event.Source() != "lrn://dms-manager" {
+			return fmt.Errorf("unexpected event source")
+		}
+
+		eventData, err := eventbus.GetEventBody[models.BindIdentityToDeviceOutput](&event)
+		if err != nil {
+			return fmt.Errorf("unexpected event format")
+		}
+
+		if eventData == nil {
+			return fmt.Errorf("event data is nil")
+		}
+
+		if eventData.Certificate == nil {
+			return fmt.Errorf("certificate is nil")
+		}
+
+		if eventData.DMS == nil {
+			return fmt.Errorf("DMS is nil")
+		}
+
+		if eventData.Device == nil {
+			return fmt.Errorf("device is nil")
+		}
+
+		return nil
+	}
+
 	var testcases = []struct {
-		name         string
-		run          func()
-		maxTime      time.Duration
-		eventCatcher func(msg *message.Message) (event *event.Event, err error)
-		resultCheck  func(event event.Event) error
+		name            string
+		run             func()
+		maxTime         time.Duration
+		expectToTimeout bool
+		eventCatcher    func(newMessages <-chan *message.Message, foundChan chan *event.Event)
+		resultCheck     func(event event.Event) error
 	}{
 		{
-			name: "OK/Enroll",
+			name:            "OK/Enroll",
+			expectToTimeout: false,
 			run: func() {
 				bootstrapCA, err := createCA("boot", "1y", "1m")
 				if err != nil {
@@ -140,46 +183,299 @@ func TestBindIDEvent(t *testing.T) {
 				}
 
 			},
-			maxTime: time.Second * 5,
-			eventCatcher: func(msg *message.Message) (event *event.Event, err error) {
-				ev, err := eventbus.ParseCloudEvent(msg.Payload)
+			maxTime:      time.Second * 5,
+			eventCatcher: evCatcher,
+			resultCheck:  standardEvCheck,
+		},
+		{
+			name:            "OK/ReEnroll",
+			expectToTimeout: false,
+			run: func() {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
 				if err != nil {
-					return nil, err
+					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				if ev.Type() == string(models.EventBindDeviceIdentityKey) {
-					return ev, nil
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
-				return nil, fmt.Errorf("not found")
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+						bootstrapCA.ID,
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:         bootstrapCA.ID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
+					SignVerbatim: true,
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{(*x509.Certificate)(bootCrt.Certificate)},
+					PrivateKey:            bootKey,
+					InsecureSkipVerify:    true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				enrollCrt, err := estCli.Enroll(context.Background(), enrollCSR)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				estCli.Certificates = []*x509.Certificate{enrollCrt}
+				estCli.PrivateKey = enrollKey
+
+				_, err = estCli.Reenroll(context.Background(), enrollCSR)
+				if err != nil {
+					t.Fatalf("unexpected error while re-enrolling: %s", err)
+				}
+			},
+			maxTime: time.Second * 5,
+			eventCatcher: func(newMessages <-chan *message.Message, foundChan chan *event.Event) {
+				ctr := 0
+				for msg := range newMessages {
+					ev, err := eventbus.ParseCloudEvent(msg.Payload)
+					if err != nil {
+						continue
+					}
+
+					if ev.Type() == string(models.EventBindDeviceIdentityKey) {
+						ctr++
+						if ctr == 2 {
+							foundChan <- ev
+						}
+					}
+				}
+			},
+			resultCheck: standardEvCheck,
+		},
+		{
+			name:            "OK/ManualAssignment",
+			expectToTimeout: false,
+			run: func() {
+				manualEnrollCA, err := createCA("manual-enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				deviceKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
+				deviceCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("device-%s", uuid.NewString())}, deviceKey)
+				deviceCert, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:         manualEnrollCA.ID,
+					CertRequest:  (*models.X509CertificateRequest)(deviceCsr),
+					SignVerbatim: true,
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				device, err := testServers.DeviceManager.HttpDeviceManagerSDK.CreateDevice(services.CreateDeviceInput{
+					ID:        deviceCert.Subject.CommonName,
+					Alias:     "",
+					Tags:      dms.Settings.EnrollmentSettings.DeviceProvisionProfile.Tags,
+					Metadata:  dms.Settings.EnrollmentSettings.DeviceProvisionProfile.Metadata,
+					DMSID:     dms.ID,
+					Icon:      "my-icon",
+					IconColor: "#25ee32",
+				})
+				if err != nil {
+					t.Fatalf("could not register device: %s", err)
+				}
+
+				_, err = testServers.DMSManager.HttpDeviceManagerSDK.BindIdentityToDevice(context.Background(), services.BindIdentityToDeviceInput{
+					DeviceID:                device.ID,
+					CertificateSerialNumber: deviceCert.SerialNumber,
+					BindMode:                models.DeviceEventTypeProvisioned,
+				})
+				if err != nil {
+					t.Fatalf("could not updated id slot: %s", err)
+				}
+			},
+			maxTime:      time.Second * 5,
+			eventCatcher: evCatcher,
+			resultCheck:  standardEvCheck,
+		},
+		{
+			name:            "Err/Enroll",
+			expectToTimeout: true,
+			run: func() {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				unauthCA, err := createCA("unAuthCA", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+						bootstrapCA.ID,
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:         unauthCA.ID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
+					SignVerbatim: true,
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{(*x509.Certificate)(bootCrt.Certificate)},
+					PrivateKey:            bootKey,
+					InsecureSkipVerify:    true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				enrollCrt, err := estCli.Enroll(context.Background(), enrollCSR)
+				if err == nil {
+					t.Fatalf("expected to get an error while enrolling. Got none")
+				}
+
+				if enrollCrt != nil {
+					t.Fatalf("expected to have a nil certificate. Got a non-nil certificate")
+				}
+			},
+			maxTime: time.Second * 10,
+			eventCatcher: func(newMessages <-chan *message.Message, foundChan chan *event.Event) {
+				for msg := range newMessages {
+					ev, err := eventbus.ParseCloudEvent(msg.Payload)
+					if err != nil {
+						continue
+					}
+
+					if ev.Type() == string(models.EventBindDeviceIdentityKey) {
+						foundChan <- ev
+					}
+				}
+
 			},
 			resultCheck: func(event event.Event) error {
-				if event.Source() != "lrn://dms-manager" {
-					return fmt.Errorf("unexpected event source")
-				}
-
-				eventData, err := eventbus.GetEventBody[models.BindIdentityToDeviceOutput](&event)
+				return fmt.Errorf("expected NO event to be analyzed")
+			},
+		},
+		{
+			name:            "Err/ReEnroll",
+			expectToTimeout: true,
+			run: func() {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
 				if err != nil {
-					return fmt.Errorf("unexpected event format")
+					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				if eventData == nil {
-					return fmt.Errorf("event data is nil")
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
-				if eventData.Certificate == nil {
-					return fmt.Errorf("certificate is nil")
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+						bootstrapCA.ID,
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
 				}
 
-				if eventData.DMS == nil {
-					return fmt.Errorf("DMS is nil")
+				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:         bootstrapCA.ID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
+					SignVerbatim: true,
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
 				}
 
-				if eventData.Device == nil {
-					return fmt.Errorf("device is nil")
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{(*x509.Certificate)(bootCrt.Certificate)},
+					PrivateKey:            bootKey,
+					InsecureSkipVerify:    true,
 				}
 
-				return nil
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				enrollCrt, err := estCli.Reenroll(context.Background(), enrollCSR)
+				if err == nil {
+					t.Fatalf("expected to get an error while re-enrolling. Got none")
+				}
+
+				if enrollCrt != nil {
+					t.Fatalf("expected to have a nil certificate. Got a non-nil certificate")
+				}
+			},
+			maxTime: time.Second * 10,
+			eventCatcher: func(newMessages <-chan *message.Message, foundChan chan *event.Event) {
+				ctr := 0
+				for msg := range newMessages {
+					ev, err := eventbus.ParseCloudEvent(msg.Payload)
+					if err != nil {
+						continue
+					}
+
+					if ev.Type() == string(models.EventBindDeviceIdentityKey) {
+						ctr++
+						if ctr == 2 {
+							foundChan <- ev
+						}
+					}
+				}
+			},
+			resultCheck: func(event event.Event) error {
+				return fmt.Errorf("expected NO event to be analyzed")
 			},
 		},
 	}
@@ -206,15 +502,18 @@ func TestBindIDEvent(t *testing.T) {
 				t.Fatalf("could not subscribe: %s", err)
 			}
 
-			resultChannel := make(chan event.Event, 1)
-			router.AddNoPublisherHandler(tc.name, "#", subscriber, func(msg *message.Message) error {
-				ev, err := tc.eventCatcher(msg)
-				if err == nil {
-					resultChannel <- *ev
-				}
+			resultChannel := make(chan *event.Event, 1)
+			newMessages := make(chan *message.Message)
 
+			defer close(resultChannel)
+			defer close(newMessages)
+
+			router.AddNoPublisherHandler(tc.name, "#", subscriber, func(msg *message.Message) error {
+				newMessages <- msg
 				return nil
 			})
+
+			go tc.eventCatcher(newMessages, resultChannel)
 
 			ctxTimeout, cancel := context.WithTimeout(context.Background(), tc.maxTime)
 			defer cancel()
@@ -224,9 +523,14 @@ func TestBindIDEvent(t *testing.T) {
 
 			select {
 			case <-ctxTimeout.Done():
-				t.Fatalf("did not receive a valid event within %f seconds", tc.maxTime.Seconds())
+				if !tc.expectToTimeout {
+					t.Fatalf("did not receive a valid event within %f seconds", tc.maxTime.Seconds())
+				}
 			case ev := <-resultChannel:
-				err = tc.resultCheck(ev)
+				if tc.expectToTimeout {
+					t.Fatalf("expected timeout. Got event to be analyzed")
+				}
+				err = tc.resultCheck(*ev)
 				if err != nil {
 					t.Fatalf("invalid event: %s", err)
 				}
