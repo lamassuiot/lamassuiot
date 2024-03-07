@@ -9,7 +9,7 @@ on:
 
 
 jobs:
-  test:
+  bumper:
     name: Bump Go version and open PR
     runs-on: ubuntu-latest
     steps:
