@@ -1110,9 +1110,9 @@ func (svc *CAServiceImpl) SignCertificate(ctx context.Context, input SignCertifi
 	profile := ca.DefaultIssuanceProfile
 	if input.IssuanceProfile != nil {
 		profile = *input.IssuanceProfile
-		lFunc.Debugf("using provided issuance profile: %s", profile)
+		lFunc.Debugf("using provided issuance profile: %+v", profile)
 	} else {
-		lFunc.Debugf("using default issuance profile configured in CA: %s", profile)
+		lFunc.Debugf("using default issuance profile configured in CA: %+v", profile)
 	}
 
 	if !helpers.ValidateCAExpiration(profile.Expiration, ca.Certificate.Certificate.NotAfter) {
