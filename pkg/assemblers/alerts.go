@@ -12,6 +12,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/couchdb"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
 	log "github.com/sirupsen/logrus"
 )
@@ -120,6 +121,23 @@ func createAlertsStorageInstance(logger *log.Entry, conf config.PluggableStorage
 		eventsStore, err := postgres.NewEventsPostgresRepository(psqlCli)
 		if err != nil {
 			return nil, nil, fmt.Errorf("could not initialize postgres Alerts client: %s", err)
+		}
+
+		return subStore, eventsStore, nil
+	case config.CouchDB:
+		couchdbClient, err := couchdb.CreateCouchDBConnection(logger, conf.CouchDB)
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not create couchdb client: %s", err)
+		}
+
+		subStore, err := couchdb.NewSubscriptionsCouchRepository(couchdbClient)
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not initialize couchdb Alerts client: %s", err)
+		}
+
+		eventsStore, err := couchdb.NewEventsCouchRepository(couchdbClient)
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not initialize couchdb Alerts client: %s", err)
 		}
 
 		return subStore, eventsStore, nil

@@ -2,6 +2,14 @@ package resources
 
 import "github.com/lamassuiot/lamassuiot/v2/pkg/models"
 
+var DeviceFiltrableFields = map[string]FilterFieldType{
+	"id":                 StringFilterFieldType,
+	"dms_owner":          StringFilterFieldType,
+	"creation_timestamp": DateFilterFieldType,
+	"status":             EnumFilterFieldType,
+	"tags":               StringArrayFilterFieldType,
+}
+
 type CreateDeviceBody struct {
 	ID        string         `json:"id"`
 	Alias     string         `json:"alias"`

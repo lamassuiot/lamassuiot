@@ -26,6 +26,11 @@ func NewCouchDMSRepository(client *kivik.Client) (storage.DMSRepo, error) {
 	querier := newCouchDBQuerier[models.DMS](client.DB(dmsDBName))
 	querier.CreateBasicCounterView()
 
+	//Check if indexes exist, and create them if not
+	for field := range resources.DMSFiltrableFields {
+		querier.EnsureIndexExists(field)
+	}
+
 	return &CouchDBDMSStorage{
 		client:  client,
 		querier: &querier,
@@ -33,7 +38,7 @@ func NewCouchDMSRepository(client *kivik.Client) (storage.DMSRepo, error) {
 }
 
 func (db *CouchDBDMSStorage) Count(ctx context.Context) (int, error) {
-	return db.querier.Count()
+	return db.querier.Count(nil)
 }
 
 func (db *CouchDBDMSStorage) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.DMS), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
