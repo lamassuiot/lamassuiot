@@ -23,16 +23,31 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 		return aws.Endpoint{}, &aws.EndpointNotFoundError{}
 	})
 
-	creds := aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(conf.AccessKeyID, string(conf.SecretAccessKey), ""))
-	creds.Invalidate()
-	awsCfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithRegion(conf.Region),
-		config.WithCredentialsProvider(creds),
-		config.WithEndpointResolverWithOptions(customResolver),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
+	switch conf.AWSAuthenticationMethod {
+	case Static:
+		creds := aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(conf.AccessKeyID, string(conf.SecretAccessKey), ""))
+		creds.Invalidate()
+		awsCfg, err := config.LoadDefaultConfig(context.TODO(),
+			config.WithRegion(conf.Region),
+			config.WithCredentialsProvider(creds),
+			config.WithEndpointResolverWithOptions(customResolver),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
+		}
+
+		return &awsCfg, nil
+	case Temporary:
+		awsCfg, err := config.LoadDefaultConfig(context.TODO(),
+			config.WithRegion(conf.Region),
+			config.WithEndpointResolverWithOptions(customResolver),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
+		}
+		return &awsCfg, nil
+	default:
+		return nil, fmt.Errorf("cannot load the AWS configs: %s authentication method not supported", conf.AWSAuthenticationMethod)
 	}
 
-	return &awsCfg, nil
 }
