@@ -49,6 +49,7 @@ const (
 type AWSAuthenticationMethod string
 
 const (
-	Static    AWSAuthenticationMethod = "static"
-	Temporary AWSAuthenticationMethod = "temporary"
+	Static     AWSAuthenticationMethod = "static"
+	Default    AWSAuthenticationMethod = "default"
+	AssumeRole AWSAuthenticationMethod = "role"
 )

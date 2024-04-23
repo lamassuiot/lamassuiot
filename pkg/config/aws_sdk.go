@@ -7,6 +7,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
 func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
@@ -37,7 +39,7 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 		}
 
 		return &awsCfg, nil
-	case Temporary:
+	case Default:
 		awsCfg, err := config.LoadDefaultConfig(context.TODO(),
 			config.WithRegion(conf.Region),
 			config.WithEndpointResolverWithOptions(customResolver),
@@ -45,6 +47,18 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
 		}
+		return &awsCfg, nil
+	case AssumeRole:
+		awsCfg, err := config.LoadDefaultConfig(context.TODO(),
+			config.WithRegion(conf.Region),
+			config.WithEndpointResolverWithOptions(customResolver),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
+		}
+		stsSvc := sts.NewFromConfig(awsCfg)
+		creds := stscreds.NewAssumeRoleProvider(stsSvc, conf.RoleARN)
+		awsCfg.Credentials = aws.NewCredentialsCache(creds)
 		return &awsCfg, nil
 	default:
 		return nil, fmt.Errorf("cannot load the AWS configs: %s authentication method not supported", conf.AWSAuthenticationMethod)

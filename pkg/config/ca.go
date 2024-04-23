@@ -67,6 +67,7 @@ type AWSSDKConfig struct {
 	AccessKeyID             string                  `mapstructure:"access_key_id"`
 	SecretAccessKey         Password                `mapstructure:"secret_access_key"`
 	Region                  string                  `mapstructure:"region"`
+	RoleARN                 string                  `mapstructure:"role_arn"`
 }
 
 type CryptoMonitoring struct {
