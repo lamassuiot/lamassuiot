@@ -22,7 +22,7 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 		return nil, -1, fmt.Errorf("could not assemble DMS Manager Service. Exiting: %s", err)
 	}
 
-	lHttp := helpers.ConfigureLogger(conf.Server.LogLevel, "HTTP Server")
+	lHttp := helpers.ConfigureLogger(conf.Server.LogLevel, "DMS Manager", "HTTP Server")
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
@@ -36,9 +36,9 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 }
 
 func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService) (*services.DMSManagerService, error) {
-	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Service")
-	lMessage := helpers.ConfigureLogger(conf.EventBus.LogLevel, "Event Bus")
-	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Storage")
+	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "DMS Manager", "Service")
+	lMessaging := helpers.ConfigureLogger(conf.PublisherEventBus.LogLevel, "DMS Manager", "Event Bus")
+	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "DMS Manager", "Storage")
 
 	downCert, err := helpers.ReadCertificateFromFile(conf.DownstreamCertificateFile)
 	if err != nil {
@@ -58,11 +58,11 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 		DownstreamCertificate: downCert,
 	})
 
-	dmsSvc := svc.(*services.DMSManagerServiceImpl)
+	dmsSvc := svc.(*services.DMSManagerServiceBackend)
 
-	if conf.EventBus.Enabled {
+	if conf.PublisherEventBus.Enabled {
 		log.Infof("Event Bus is enabled")
-		pub, err := eventbus.NewEventBusPublisher(conf.EventBus, "ca", lMessage)
+		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, "dms-manager", lMessaging)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
@@ -70,7 +70,7 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 		svc = eventpub.NewDMSEventPublisher(eventpub.CloudEventMiddlewarePublisher{
 			Publisher: pub,
 			ServiceID: "dms-manager",
-			Logger:    lMessage,
+			Logger:    lMessaging,
 		})(svc)
 	} //this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
 	dmsSvc.SetService(svc)

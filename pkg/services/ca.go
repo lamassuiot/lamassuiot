@@ -72,7 +72,7 @@ type Engine struct {
 	Service cryptoengines.CryptoEngine
 }
 
-type CAServiceImpl struct {
+type CAServiceBackend struct {
 	service               CAService
 	cryptoEngines         map[string]*cryptoengines.CryptoEngine
 	defaultCryptoEngine   *cryptoengines.CryptoEngine
@@ -124,7 +124,7 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 		builder.Logger.Warn("certificate periodic monitoring is disable")
 	}
 
-	svc := CAServiceImpl{
+	svc := CAServiceBackend{
 		cronInstance:          cronInstance,
 		cryptoEngines:         engines,
 		defaultCryptoEngine:   defaultCryptoEngine,
@@ -137,119 +137,10 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 
 	svc.service = &svc
 
-	cryptoMonitor := func() {
-		ctx := context.Background()
-		now := time.Now()
-
-		//checks if metadata has additional expiration intervals to be checked.
-		//returns
-		// - bool: true if metadata should be updated
-		// - updated metadata
-		shouldUpdateMonitoringDeltas := func(metadata map[string]any, certificate x509.Certificate) (bool, map[string]any) {
-			if additionalDeltasIface, ok := metadata[models.CAMetadataMonitoringExpirationDeltasKey]; ok {
-				//check if additionalDeltasIface is of type
-				deltasB, err := json.Marshal(additionalDeltasIface)
-				if err != nil {
-					return false, map[string]any{}
-				}
-
-				var additionalDeltas models.CAMetadataMonitoringExpirationDeltas
-				err = json.Unmarshal(deltasB, &additionalDeltas)
-				if err == nil {
-					orderedDeltas := additionalDeltas
-
-					//order deltas from smallest to biggest
-					slices.SortStableFunc[models.MonitoringExpirationDelta](orderedDeltas, func(a models.MonitoringExpirationDelta, b models.MonitoringExpirationDelta) bool {
-						if a.Delta < b.Delta {
-							return true
-						} else {
-							return false
-						}
-					})
-
-					newMeta := metadata
-					updated := false
-					for idx, additionalDelta := range orderedDeltas {
-						// fmt.Printf("Delta %s = %s\n", additionalDelta.Name, additionalDelta.Delta.String())
-						// fmt.Printf("After Sub: %s\n", cert.ValidTo.Add(-time.Duration(additionalDelta.Delta)))
-						// fmt.Printf("After: %t\n", time.Now().After(cert.ValidTo.Add(-time.Duration(additionalDelta.Delta))))
-						if time.Now().After(certificate.NotAfter.Add(-time.Duration(additionalDelta.Delta))) {
-							if !orderedDeltas[idx].Triggered {
-								//switch 'trigger' monitoring delta to
-								orderedDeltas[idx].Triggered = true
-								newMeta[models.CAMetadataMonitoringExpirationDeltasKey] = orderedDeltas
-								updated = true
-							}
-						}
-					}
-
-					if updated {
-						return true, newMeta
-					} else {
-						return false, map[string]any{}
-					}
-				}
-			}
-
-			return false, map[string]any{}
-		}
-
-		caScanFunc := func(ca models.CACertificate) {
-			if ca.ValidTo.Before(now) && ca.Status == models.StatusActive {
-				svc.service.UpdateCAStatus(ctx, UpdateCAStatusInput{
-					CAID:   ca.ID,
-					Status: models.StatusExpired,
-				})
-				return
-			}
-
-			shouldUpdateMeta, newMetadata := shouldUpdateMonitoringDeltas(ca.Metadata, x509.Certificate(*ca.Certificate.Certificate))
-			if shouldUpdateMeta {
-				svc.service.UpdateCAMetadata(context.Background(), UpdateCAMetadataInput{
-					CAID:     ca.ID,
-					Metadata: newMetadata,
-				})
-			}
-		}
-
-		svc.service.GetCAs(ctx, GetCAsInput{
-			QueryParameters: nil,
-			ExhaustiveRun:   true,
-			ApplyFunc:       caScanFunc,
-		})
-
-		svc.service.GetCertificatesByStatus(ctx, GetCertificatesByStatusInput{
-			Status: models.StatusActive,
-			ListInput: resources.ListInput[models.Certificate]{
-				QueryParameters: nil,
-				ExhaustiveRun:   true,
-				ApplyFunc: func(cert models.Certificate) {
-					//check if should be updated to expired
-					if cert.ValidTo.Before(time.Now()) {
-						svc.service.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
-							SerialNumber: cert.SerialNumber,
-							NewStatus:    models.StatusExpired,
-						})
-						return
-					}
-
-					//check if meta contains additional monitoring deltas
-					shouldUpdateMeta, newMetadata := shouldUpdateMonitoringDeltas(cert.Metadata, x509.Certificate(*cert.Certificate))
-					if shouldUpdateMeta {
-						svc.service.UpdateCertificateMetadata(context.Background(), UpdateCertificateMetadataInput{
-							SerialNumber: cert.SerialNumber,
-							Metadata:     newMetadata,
-						})
-					}
-				},
-			},
-		})
-	}
-
-	cryptoMonitor()
+	svc.CheckCAsAndCertificates()
 
 	if builder.CryptoMonitoringConf.Enabled {
-		_, err := svc.cronInstance.AddFunc(builder.CryptoMonitoringConf.Frequency, cryptoMonitor)
+		_, err := svc.cronInstance.AddFunc(builder.CryptoMonitoringConf.Frequency, svc.CheckCAsAndCertificates)
 		if err != nil {
 			lCA.Errorf("could not add scheduled run for checking certificat expiration dates")
 		}
@@ -260,15 +151,124 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 	return &svc, nil
 }
 
-func (svc *CAServiceImpl) Close() {
+func (svc *CAServiceBackend) CheckCAsAndCertificates() {
+	ctx := context.Background()
+	now := time.Now()
+
+	//checks if metadata has additional expiration intervals to be checked.
+	//returns
+	// - bool: true if metadata should be updated
+	// - updated metadata
+	shouldUpdateMonitoringDeltas := func(metadata map[string]any, certificate x509.Certificate) (bool, map[string]any) {
+		if additionalDeltasIface, ok := metadata[models.CAMetadataMonitoringExpirationDeltasKey]; ok {
+			//check if additionalDeltasIface is of type
+			deltasB, err := json.Marshal(additionalDeltasIface)
+			if err != nil {
+				return false, map[string]any{}
+			}
+
+			var additionalDeltas models.CAMetadataMonitoringExpirationDeltas
+			err = json.Unmarshal(deltasB, &additionalDeltas)
+			if err == nil {
+				orderedDeltas := additionalDeltas
+
+				//order deltas from smallest to biggest
+				slices.SortStableFunc[models.MonitoringExpirationDelta](orderedDeltas, func(a models.MonitoringExpirationDelta, b models.MonitoringExpirationDelta) bool {
+					if a.Delta < b.Delta {
+						return true
+					} else {
+						return false
+					}
+				})
+
+				newMeta := metadata
+				updated := false
+				for idx, additionalDelta := range orderedDeltas {
+					// fmt.Printf("Delta %s = %s\n", additionalDelta.Name, additionalDelta.Delta.String())
+					// fmt.Printf("After Sub: %s\n", cert.ValidTo.Add(-time.Duration(additionalDelta.Delta)))
+					// fmt.Printf("After: %t\n", time.Now().After(cert.ValidTo.Add(-time.Duration(additionalDelta.Delta))))
+					if time.Now().After(certificate.NotAfter.Add(-time.Duration(additionalDelta.Delta))) {
+						if !orderedDeltas[idx].Triggered {
+							//switch 'trigger' monitoring delta to
+							orderedDeltas[idx].Triggered = true
+							newMeta[models.CAMetadataMonitoringExpirationDeltasKey] = orderedDeltas
+							updated = true
+						}
+					}
+				}
+
+				if updated {
+					return true, newMeta
+				} else {
+					return false, map[string]any{}
+				}
+			}
+		}
+
+		return false, map[string]any{}
+	}
+
+	caScanFunc := func(ca models.CACertificate) {
+		if ca.ValidTo.Before(now) && ca.Status == models.StatusActive {
+			svc.service.UpdateCAStatus(ctx, UpdateCAStatusInput{
+				CAID:   ca.ID,
+				Status: models.StatusExpired,
+			})
+			return
+		}
+
+		shouldUpdateMeta, newMetadata := shouldUpdateMonitoringDeltas(ca.Metadata, x509.Certificate(*ca.Certificate.Certificate))
+		if shouldUpdateMeta {
+			svc.service.UpdateCAMetadata(context.Background(), UpdateCAMetadataInput{
+				CAID:     ca.ID,
+				Metadata: newMetadata,
+			})
+		}
+	}
+
+	svc.service.GetCAs(ctx, GetCAsInput{
+		QueryParameters: nil,
+		ExhaustiveRun:   true,
+		ApplyFunc:       caScanFunc,
+	})
+
+	svc.service.GetCertificatesByStatus(ctx, GetCertificatesByStatusInput{
+		Status: models.StatusActive,
+		ListInput: resources.ListInput[models.Certificate]{
+			QueryParameters: nil,
+			ExhaustiveRun:   true,
+			ApplyFunc: func(cert models.Certificate) {
+				//check if should be updated to expired
+				if cert.ValidTo.Before(time.Now()) {
+					svc.service.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
+						SerialNumber: cert.SerialNumber,
+						NewStatus:    models.StatusExpired,
+					})
+					return
+				}
+
+				//check if meta contains additional monitoring deltas
+				shouldUpdateMeta, newMetadata := shouldUpdateMonitoringDeltas(cert.Metadata, x509.Certificate(*cert.Certificate))
+				if shouldUpdateMeta {
+					svc.service.UpdateCertificateMetadata(context.Background(), UpdateCertificateMetadataInput{
+						SerialNumber: cert.SerialNumber,
+						Metadata:     newMetadata,
+					})
+				}
+			},
+		},
+	})
+}
+
+func (svc *CAServiceBackend) Close() {
 	svc.cronInstance.Stop()
 }
 
-func (svc *CAServiceImpl) SetService(service CAService) {
+func (svc *CAServiceBackend) SetService(service CAService) {
 	svc.service = service
 }
 
-func (svc *CAServiceImpl) GetStats(ctx context.Context) (*models.CAStats, error) {
+func (svc *CAServiceBackend) GetStats(ctx context.Context) (*models.CAStats, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	engines, err := svc.GetCryptoEngineProvider(ctx)
@@ -336,7 +336,7 @@ type GetStatsByCAIDInput struct {
 	CAID string
 }
 
-func (svc *CAServiceImpl) GetStatsByCAID(ctx context.Context, input GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
+func (svc *CAServiceBackend) GetStatsByCAID(ctx context.Context, input GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	stats := map[models.CertificateStatus]int{}
@@ -355,7 +355,7 @@ func (svc *CAServiceImpl) GetStatsByCAID(ctx context.Context, input GetStatsByCA
 	return stats, nil
 }
 
-func (svc *CAServiceImpl) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
+func (svc *CAServiceBackend) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
 	info := []*models.CryptoEngineProvider{}
 	for engineID, engine := range svc.cryptoEngines {
 		engineInstance := *engine
@@ -391,7 +391,7 @@ type issueCAOutput struct {
 	Certificate *x509.Certificate
 }
 
-func (svc *CAServiceImpl) issueCA(ctx context.Context, input issueCAInput) (*issueCAOutput, error) {
+func (svc *CAServiceBackend) issueCA(ctx context.Context, input issueCAInput) (*issueCAOutput, error) {
 	var err error
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
@@ -484,7 +484,7 @@ type ImportCAInput struct {
 //     The CA certificate and the private key provided are not compatible.
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
-func (svc *CAServiceImpl) ImportCA(ctx context.Context, input ImportCAInput) (*models.CACertificate, error) {
+func (svc *CAServiceBackend) ImportCA(ctx context.Context, input ImportCAInput) (*models.CACertificate, error) {
 	var err error
 
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
@@ -611,7 +611,7 @@ type CreateCAInput struct {
 //     When creating the CA, the CA Type must have the value of MANAGED.
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
-func (svc *CAServiceImpl) CreateCA(ctx context.Context, input CreateCAInput) (*models.CACertificate, error) {
+func (svc *CAServiceBackend) CreateCA(ctx context.Context, input CreateCAInput) (*models.CACertificate, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 	if input.Metadata == nil {
 		input.Metadata = map[string]any{}
@@ -754,7 +754,7 @@ type GetCAByIDInput struct {
 //     The specified CA can not be found in the Database
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
-func (svc *CAServiceImpl) GetCAByID(ctx context.Context, input GetCAByIDInput) (*models.CACertificate, error) {
+func (svc *CAServiceBackend) GetCAByID(ctx context.Context, input GetCAByIDInput) (*models.CACertificate, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	err := validate.Struct(input)
@@ -785,7 +785,7 @@ type GetCAsInput struct {
 	ApplyFunc     func(ca models.CACertificate)
 }
 
-func (svc *CAServiceImpl) GetCAs(ctx context.Context, input GetCAsInput) (string, error) {
+func (svc *CAServiceBackend) GetCAs(ctx context.Context, input GetCAsInput) (string, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	nextBookmark, err := svc.caStorage.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{
@@ -806,7 +806,7 @@ type GetCABySerialNumberInput struct {
 	SerialNumber string `validate:"required"`
 }
 
-func (svc *CAServiceImpl) GetCABySerialNumber(ctx context.Context, input GetCABySerialNumberInput) (*models.CACertificate, error) {
+func (svc *CAServiceBackend) GetCABySerialNumber(ctx context.Context, input GetCABySerialNumberInput) (*models.CACertificate, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	err := validate.Struct(input)
@@ -838,7 +838,7 @@ type GetCAsByCommonNameInput struct {
 	ApplyFunc       func(cert models.CACertificate)
 }
 
-func (svc *CAServiceImpl) GetCAsByCommonName(ctx context.Context, input GetCAsByCommonNameInput) (string, error) {
+func (svc *CAServiceBackend) GetCAsByCommonName(ctx context.Context, input GetCAsByCommonNameInput) (string, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	lFunc.Debugf("reading CAs by %s common name", input.CommonName)
@@ -869,7 +869,7 @@ type UpdateCAStatusInput struct {
 //     The required variables of the data structure are not valid.
 //   - ErrCAAlreadyRevoked
 //     CA already revoked
-func (svc *CAServiceImpl) UpdateCAStatus(ctx context.Context, input UpdateCAStatusInput) (*models.CACertificate, error) {
+func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input UpdateCAStatusInput) (*models.CACertificate, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	err := validate.Struct(input)
@@ -975,7 +975,7 @@ type UpdateCAMetadataInput struct {
 //     The specified CA can not be found in the Database
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
-func (svc *CAServiceImpl) UpdateCAMetadata(ctx context.Context, input UpdateCAMetadataInput) (*models.CACertificate, error) {
+func (svc *CAServiceBackend) UpdateCAMetadata(ctx context.Context, input UpdateCAMetadataInput) (*models.CACertificate, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	err := validate.Struct(input)
@@ -1013,7 +1013,7 @@ type DeleteCAInput struct {
 //     The required variables of the data structure are not valid.
 //   - ErrCAStatus
 //     Cannot delete a CA that is not expired or revoked.
-func (svc *CAServiceImpl) DeleteCA(ctx context.Context, input DeleteCAInput) error {
+func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input DeleteCAInput) error {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	err := validate.Struct(input)
@@ -1062,7 +1062,7 @@ type SignCertificateInput struct {
 //     The required variables of the data structure are not valid.
 //   - ErrCAStatus
 //     CA is not active
-func (svc *CAServiceImpl) SignCertificate(ctx context.Context, input SignCertificateInput) (*models.Certificate, error) {
+func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input SignCertificateInput) (*models.Certificate, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	err := validate.Struct(input)
@@ -1144,7 +1144,7 @@ type CreateCertificateInput struct {
 	Subject     models.Subject     `validate:"required"`
 }
 
-func (svc *CAServiceImpl) CreateCertificate(ctx context.Context, input CreateCertificateInput) (*models.Certificate, error) {
+func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input CreateCertificateInput) (*models.Certificate, error) {
 	return nil, fmt.Errorf("TODO")
 }
 
@@ -1154,7 +1154,7 @@ type ImportCertificateInput struct {
 	Metadata    map[string]any
 }
 
-func (svc *CAServiceImpl) ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error) {
+func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error) {
 	status := models.StatusActive
 	if input.Certificate.NotAfter.Before(time.Now()) {
 		status = models.StatusExpired
@@ -1214,7 +1214,7 @@ type SignatureSignInput struct {
 	SigningAlgorithm string                 `validate:"required"`
 }
 
-func (svc *CAServiceImpl) SignatureSign(ctx context.Context, input SignatureSignInput) ([]byte, error) {
+func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input SignatureSignInput) ([]byte, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	err := validate.Struct(input)
@@ -1253,7 +1253,7 @@ type SignatureVerifyInput struct {
 	SigningAlgorithm string                 `validate:"required"`
 }
 
-func (svc *CAServiceImpl) SignatureVerify(ctx context.Context, input SignatureVerifyInput) (bool, error) {
+func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input SignatureVerifyInput) (bool, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	err := validate.Struct(input)
@@ -1287,7 +1287,7 @@ type GetCertificatesBySerialNumberInput struct {
 //     The specified Certificate can not be found in the Database
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
-func (svc *CAServiceImpl) GetCertificateBySerialNumber(ctx context.Context, input GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
+func (svc *CAServiceBackend) GetCertificateBySerialNumber(ctx context.Context, input GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	err := validate.Struct(input)
@@ -1315,7 +1315,7 @@ type GetCertificatesInput struct {
 	resources.ListInput[models.Certificate]
 }
 
-func (svc *CAServiceImpl) GetCertificates(ctx context.Context, input GetCertificatesInput) (string, error) {
+func (svc *CAServiceBackend) GetCertificates(ctx context.Context, input GetCertificatesInput) (string, error) {
 	return svc.certStorage.SelectAll(ctx, storage.StorageListRequest[models.Certificate]{
 		ExhaustiveRun: input.ExhaustiveRun,
 		ApplyFunc:     input.ApplyFunc,
@@ -1334,7 +1334,7 @@ type GetCertificatesByCAInput struct {
 //     The specified CA can not be found in the Database
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
-func (svc *CAServiceImpl) GetCertificatesByCA(ctx context.Context, input GetCertificatesByCAInput) (string, error) {
+func (svc *CAServiceBackend) GetCertificatesByCA(ctx context.Context, input GetCertificatesByCAInput) (string, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	err := validate.Struct(input)
@@ -1370,7 +1370,7 @@ type GetCertificatesByExpirationDateInput struct {
 	resources.ListInput[models.Certificate]
 }
 
-func (svc *CAServiceImpl) GetCertificatesByExpirationDate(ctx context.Context, input GetCertificatesByExpirationDateInput) (string, error) {
+func (svc *CAServiceBackend) GetCertificatesByExpirationDate(ctx context.Context, input GetCertificatesByExpirationDateInput) (string, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	lFunc.Debugf("reading certificates by expiration date. expiresafter: %s. expiresbefore: %s", input.ExpiresAfter, input.ExpiresBefore)
@@ -1388,7 +1388,7 @@ type GetCertificatesByCaAndStatusInput struct {
 	resources.ListInput[models.Certificate]
 }
 
-func (svc *CAServiceImpl) GetCertificatesByCaAndStatus(ctx context.Context, input GetCertificatesByCaAndStatusInput) (string, error) {
+func (svc *CAServiceBackend) GetCertificatesByCaAndStatus(ctx context.Context, input GetCertificatesByCaAndStatusInput) (string, error) {
 	return svc.certStorage.SelectByCAIDAndStatus(ctx, input.CAID, input.Status, storage.StorageListRequest[models.Certificate]{
 		ExhaustiveRun: input.ExhaustiveRun,
 		ApplyFunc:     input.ApplyFunc,
@@ -1402,7 +1402,7 @@ type GetCertificatesByStatusInput struct {
 	resources.ListInput[models.Certificate]
 }
 
-func (svc *CAServiceImpl) GetCertificatesByStatus(ctx context.Context, input GetCertificatesByStatusInput) (string, error) {
+func (svc *CAServiceBackend) GetCertificatesByStatus(ctx context.Context, input GetCertificatesByStatusInput) (string, error) {
 	return svc.certStorage.SelectByStatus(ctx, input.Status, storage.StorageListRequest[models.Certificate]{
 		ExhaustiveRun: input.ExhaustiveRun,
 		ApplyFunc:     input.ApplyFunc,
@@ -1424,7 +1424,7 @@ type UpdateCertificateStatusInput struct {
 //     The specified status is not valid for this certficate due to its initial status
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
-func (svc *CAServiceImpl) UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) (*models.Certificate, error) {
+func (svc *CAServiceBackend) UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) (*models.Certificate, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	err := validate.Struct(input)
@@ -1481,7 +1481,7 @@ type UpdateCertificateMetadataInput struct {
 //     The specified Certificate can not be found in the Database
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
-func (svc *CAServiceImpl) UpdateCertificateMetadata(ctx context.Context, input UpdateCertificateMetadataInput) (*models.Certificate, error) {
+func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, input UpdateCertificateMetadataInput) (*models.Certificate, error) {
 	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	err := validate.Struct(input)

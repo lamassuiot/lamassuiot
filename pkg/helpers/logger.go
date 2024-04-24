@@ -18,7 +18,7 @@ import (
 var LogFormatter = &formatter.Formatter{
 	TimestampFormat: "2006-01-02 15:04:05",
 	HideKeys:        true,
-	FieldsOrder:     []string{"subsystem", "subsystem-provider", "req-id"},
+	FieldsOrder:     []string{"service", "subsystem", "subsystem-provider", "req-id"},
 	CallerFirst:     true,
 	CustomCallerFormatter: func(f *runtime.Frame) string {
 		filename := path.Base(f.File)
@@ -26,11 +26,14 @@ var LogFormatter = &formatter.Formatter{
 	},
 }
 
-func ConfigureLogger(currentLevel config.LogLevel, subsystem string) *logrus.Entry {
+func ConfigureLogger(currentLevel config.LogLevel, serviceID string, subsystem string) *logrus.Entry {
 	var err error
 	logger := logrus.New()
 	logger.SetFormatter(LogFormatter)
-	lSubsystem := logger.WithField("subsystem", subsystem)
+	lSubsystem := logger.WithFields(logrus.Fields{
+		"service":   serviceID,
+		"subsystem": subsystem,
+	})
 
 	if currentLevel == config.None {
 		lSubsystem.Infof("subsystem logging will be disabled")

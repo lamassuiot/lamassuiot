@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/cloudevents/sdk-go/v2/event"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
@@ -26,7 +27,7 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 		return nil, -1, fmt.Errorf("could not assemble Device Manager Service. Exiting: %s", err)
 	}
 
-	lHttp := helpers.ConfigureLogger(conf.Server.LogLevel, "HTTP Server")
+	lHttp := helpers.ConfigureLogger(conf.Server.LogLevel, "Device Manager", "HTTP Server")
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
@@ -40,10 +41,10 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 }
 
 func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService services.CAService) (*services.DeviceManagerService, error) {
-	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Service")
+	serviceID := "device-manager"
 
-	lMessaging := helpers.ConfigureLogger(conf.EventBus.LogLevel, "Messaging")
-	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Storage")
+	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Device Manager", "Service")
+	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Device Manager", "Storage")
 
 	devStorage, err := createDevicesStorageInstance(lStorage, conf.Storage)
 	if err != nil {
@@ -56,63 +57,69 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 		CAClient:       caService,
 	})
 
-	deviceSvc := svc.(*services.DeviceManagerServiceImpl)
+	deviceSvc := svc.(*services.DeviceManagerServiceBackend)
 
-	if conf.EventBus.Enabled {
-		log.Infof("Event Bus is enabled")
-		pub, err := eventbus.NewEventBusPublisher(conf.EventBus, "ca", lMessaging)
+	if conf.PublisherEventBus.Enabled {
+		lMessaging := helpers.ConfigureLogger(conf.PublisherEventBus.LogLevel, "Device Manager", "Event Bus")
+		lMessaging.Infof("Publisher Event Bus is enabled")
+		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
 
 		svc = eventpub.NewDeviceEventPublisher(eventpub.CloudEventMiddlewarePublisher{
 			Publisher: pub,
-			ServiceID: "device-manager",
+			ServiceID: serviceID,
 			Logger:    lMessaging,
 		})(svc)
 
 		deviceSvc.SetService(svc)
+	}
 
-		eventBusRouter, err := eventbus.NewEventBusRouter(conf.EventBus, "ca", lMessaging)
+	if conf.SubscriberEventBus.Enabled {
+		lMessaging := helpers.ConfigureLogger(conf.SubscriberEventBus.LogLevel, "Device Manager", "Event Bus")
+		lMessaging.Infof("Subscriber Event Bus is enabled")
+
+		eventBusRouter, err := eventbus.NewEventBusRouter(conf.SubscriberEventBus, serviceID, lMessaging)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus Router: %s", err)
 		}
 
-		sub, err := eventbus.NewEventBusSubscriber(conf.EventBus, "ca", lMessaging)
+		sub, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus subscriber: %s", err)
 		}
 
-		eventBusRouter.AddNoPublisherHandler(
-			string(models.EventUpdateCertificateStatusKey)+"-device-manager",
-			string(models.EventUpdateCertificateStatusKey),
-			sub,
-			func(msg *message.Message) error {
-				return updateCertStatusHandler(msg, svc, lMessaging)
-			},
-		)
-		eventBusRouter.AddNoPublisherHandler(
-			string(models.EventUpdateCertificateMetadataKey)+"-device-manager",
-			string(models.EventUpdateCertificateMetadataKey),
-			sub,
-			func(msg *message.Message) error {
-				return updateCertMetaHandler(msg, svc, lMessaging)
-			},
-		)
-		go eventBusRouter.Run(context.Background())
+		eventBusRouter.AddNoPublisherHandler(fmt.Sprintf("certificate.#-%s", serviceID), "certificate.#", sub, GetDeviceManagerEventHandler(lMessaging, svc))
 
+		go eventBusRouter.Run(context.Background())
 	}
+
 	return &svc, nil
 }
 
-func updateCertStatusHandler(msg *message.Message, svc services.DeviceManagerService, lMessaging *logrus.Entry) error {
-	event, err := eventbus.ParseCloudEvent(msg.Payload)
-	if err != nil {
-		err = fmt.Errorf("something went wrong while processing cloud event: %s", err)
-		lMessaging.Error(err)
-		return err
-	}
+func GetDeviceManagerEventHandler(lMessaging *logrus.Entry, svc services.DeviceManagerService) func(*message.Message) error {
+	return func(m *message.Message) error {
+		event, err := eventbus.ParseCloudEvent(m.Payload)
+		if err != nil {
+			err = fmt.Errorf("something went wrong while processing cloud event: %s", err)
+			lMessaging.Error(err)
+			return err
+		}
 
+		switch event.Type() {
+		case string(models.EventUpdateCertificateMetadataKey):
+			updateCertMetaHandler(event, svc, lMessaging)
+
+		case string(models.EventUpdateCertificateStatusKey):
+			updateCertStatusHandler(event, svc, lMessaging)
+		}
+
+		return nil
+	}
+}
+
+func updateCertStatusHandler(event *event.Event, svc services.DeviceManagerService, lMessaging *logrus.Entry) error {
 	cert, err := eventbus.GetEventBody[models.UpdateModel[models.Certificate]](event)
 	if err != nil {
 		err = fmt.Errorf("could not decode cloud event: %s", err)
@@ -172,12 +179,7 @@ func updateCertStatusHandler(msg *message.Message, svc services.DeviceManagerSer
 	return nil
 }
 
-func updateCertMetaHandler(msg *message.Message, svc services.DeviceManagerService, lMessaging *logrus.Entry) error {
-	event, err := eventbus.ParseCloudEvent(msg.Payload)
-	if err != nil {
-		lMessaging.Errorf("something went wrong while processing cloud event: %s", err)
-	}
-
+func updateCertMetaHandler(event *event.Event, svc services.DeviceManagerService, lMessaging *logrus.Entry) error {
 	certUpdate, err := eventbus.GetEventBody[models.UpdateModel[models.Certificate]](event)
 	if err != nil {
 		err = fmt.Errorf("could not decode cloud event: %s", err)

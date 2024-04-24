@@ -24,7 +24,7 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, serviceInfo models.AP
 		return nil, -1, fmt.Errorf("could not assemble CA Service. Exiting: %s", err)
 	}
 
-	lHttp := helpers.ConfigureLogger(conf.Server.LogLevel, "HTTP Server")
+	lHttp := helpers.ConfigureLogger(conf.Server.LogLevel, "CA", "HTTP Server")
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
@@ -38,10 +38,10 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, serviceInfo models.AP
 }
 
 func AssembleCAService(conf config.CAConfig) (*services.CAService, error) {
-	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Service")
-	lMessage := helpers.ConfigureLogger(conf.EventBus.LogLevel, "Event Bus")
-	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Storage")
-	lCryptoEng := helpers.ConfigureLogger(conf.CryptoEngines.LogLevel, "CryptoEngine")
+	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "CA", "Service")
+	lMessage := helpers.ConfigureLogger(conf.PublisherEventBus.LogLevel, "CA", "Event Bus")
+	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "CA", "Storage")
+	lCryptoEng := helpers.ConfigureLogger(conf.CryptoEngines.LogLevel, "CA", "CryptoEngine")
 
 	engines, err := createCryptoEngines(lCryptoEng, conf)
 	if err != nil {
@@ -74,11 +74,11 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, error) {
 		return nil, fmt.Errorf("could not create CA service: %v", err)
 	}
 
-	caSvc := svc.(*services.CAServiceImpl)
+	caSvc := svc.(*services.CAServiceBackend)
 
-	if conf.EventBus.Enabled {
+	if conf.PublisherEventBus.Enabled {
 		log.Infof("Event Bus is enabled")
-		pub, err := eventbus.NewEventBusPublisher(conf.EventBus, "ca", lMessage)
+		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, "ca", lMessage)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}

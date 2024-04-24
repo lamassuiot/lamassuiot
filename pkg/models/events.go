@@ -23,25 +23,25 @@ type EventType string
 const (
 	EventCreateCAKey         EventType = "ca.create"
 	EventImportCAKey         EventType = "ca.import"
-	EventUpdateCAStatusKey   EventType = "ca.update.status"
-	EventUpdateCAMetadataKey EventType = "ca.update.metadata"
+	EventUpdateCAStatusKey   EventType = "ca.status.update"
+	EventUpdateCAMetadataKey EventType = "ca.metadata.update"
 	EventSignCertificateKey  EventType = "ca.sign.certificate"
 	EventSignatureSignKey    EventType = "ca.sign.signature"
 	EventDeleteCAKey         EventType = "ca.delete"
 
 	EventCreateCertificateKey         EventType = "certificate.create"
 	EventImportCertificateKey         EventType = "certificate.import"
-	EventUpdateCertificateStatusKey   EventType = "certificate.update.status"
-	EventUpdateCertificateMetadataKey EventType = "certificate.update.metadata"
+	EventUpdateCertificateStatusKey   EventType = "certificate.status.update"
+	EventUpdateCertificateMetadataKey EventType = "certificate.metadata.update"
 
 	EventCreateDMSKey          EventType = "dms.create"
-	EventUpdateDMSMetadataKey  EventType = "dms.update.metadata"
+	EventUpdateDMSMetadataKey  EventType = "dms.metadata.update"
 	EventEnrollKey             EventType = "dms.enroll"
 	EventReEnrollKey           EventType = "dms.reenroll"
 	EventBindDeviceIdentityKey EventType = "dms.bind-device-id"
 
 	EventCreateDeviceKey         EventType = "device.create"
-	EventUpdateDeviceIDSlotKey   EventType = "device.update.identity"
-	EventUpdateDeviceStatusKey   EventType = "device.update.status"
-	EventUpdateDeviceMetadataKey EventType = "device.update.metadata"
+	EventUpdateDeviceIDSlotKey   EventType = "device.identity.update"
+	EventUpdateDeviceStatusKey   EventType = "device.status.update"
+	EventUpdateDeviceMetadataKey EventType = "device.metadata.update"
 )

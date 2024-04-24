@@ -22,7 +22,7 @@ func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo m
 		return nil, -1, fmt.Errorf("could not assemble Alerts Service. Exiting: %s", err)
 	}
 
-	lHttp := helpers.ConfigureLogger(conf.Server.LogLevel, "HTTP Server")
+	lHttp := helpers.ConfigureLogger(conf.Server.LogLevel, "Alerts", "HTTP Server")
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
@@ -36,9 +36,9 @@ func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo m
 }
 
 func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, error) {
-	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Service")
-	lMessaging := helpers.ConfigureLogger(conf.EventBus.LogLevel, "Event Bus")
-	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Storage")
+	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Alerts", "Service")
+	lMessaging := helpers.ConfigureLogger(conf.SubscriberEventBus.LogLevel, "Alerts", "Event Bus")
+	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Alerts", "Storage")
 
 	subStorage, eventStore, err := createAlertsStorageInstance(lStorage, conf.Storage)
 	if err != nil {
@@ -51,40 +51,43 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 		EventStorage: eventStore,
 	})
 
-	if conf.EventBus.Enabled {
+	if conf.SubscriberEventBus.Enabled {
 		log.Infof("Event Bus is enabled")
-		eventBusRouter, err := eventbus.NewEventBusRouter(conf.EventBus, "alerts", lMessaging)
+		eventBusRouter, err := eventbus.NewEventBusRouter(conf.SubscriberEventBus, "alerts", lMessaging)
 		if err != nil {
 			return nil, fmt.Errorf("could not setup event bus: %s", err)
 		}
 
-		lamassuEventHandler := func(msg *message.Message) error {
-			event, err := eventbus.ParseCloudEvent(msg.Payload)
-			if err != nil {
-				lMessaging.Errorf("Something went wrong while processing cloud event: %s", err)
-			}
-
-			err = svc.HandleEvent(context.Background(), &services.HandleEventInput{
-				Event: *event,
-			})
-			if err != nil {
-				lMessaging.Errorf("Something went wrong while handling event: %s", err)
-				return err
-			}
-
-			return nil
-		}
-
-		sub, err := eventbus.NewEventBusSubscriber(conf.EventBus, "alerts", lMessaging)
+		sub, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, "alerts", lMessaging)
 		if err != nil {
 			lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
 			return nil, err
 		}
 
-		eventBusRouter.AddNoPublisherHandler("#-alerts", "#", sub, lamassuEventHandler)
+		eventBusRouter.AddNoPublisherHandler("#-alerts", "#", sub, GetAlertsEventHandler(lMessaging, svc))
 		go eventBusRouter.Run(context.Background())
 	}
+
 	return &svc, nil
+}
+
+func GetAlertsEventHandler(lMessaging *log.Entry, svc services.AlertsService) func(*message.Message) error {
+	return func(m *message.Message) error {
+		event, err := eventbus.ParseCloudEvent(m.Payload)
+		if err != nil {
+			lMessaging.Errorf("Something went wrong while processing cloud event: %s", err)
+		}
+
+		err = svc.HandleEvent(context.Background(), &services.HandleEventInput{
+			Event: *event,
+		})
+		if err != nil {
+			lMessaging.Errorf("Something went wrong while handling event: %s", err)
+			return err
+		}
+
+		return nil
+	}
 }
 
 func createAlertsStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine) (storage.SubscriptionsRepository, storage.EventRepository, error) {

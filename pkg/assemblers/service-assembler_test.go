@@ -216,19 +216,17 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 
 func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *TestCryptoEngineConfig, eventBus *TestEventBusConfig) (*CATestServer, error) {
 	svc, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
-		BaseConfig: config.BaseConfig{
-			Logs: config.BaseConfigLogging{
-				Level: config.Info,
-			},
-			Server: config.HttpServer{
-				LogLevel:           config.Info,
-				HealthCheckLogging: false,
-				Protocol:           config.HTTP,
-			},
-			EventBus: eventBus.config,
+		Logs: config.BaseConfigLogging{
+			Level: config.Info,
 		},
-		Storage:       storageEngine.config,
-		CryptoEngines: cryptoEngines.config,
+		Server: config.HttpServer{
+			LogLevel:           config.Info,
+			HealthCheckLogging: false,
+			Protocol:           config.HTTP,
+		},
+		PublisherEventBus: eventBus.config,
+		Storage:           storageEngine.config,
+		CryptoEngines:     cryptoEngines.config,
 		CryptoMonitoring: config.CryptoMonitoring{
 			Enabled:   true,
 			Frequency: "* * * * * *", //this CRON-like expression will scan certificate each second.
@@ -261,18 +259,17 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 
 func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer) (*DeviceManagerTestServer, error) {
 	svc, port, err := AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
-		BaseConfig: config.BaseConfig{
-			Logs: config.BaseConfigLogging{
-				Level: config.Info,
-			},
-			Server: config.HttpServer{
-				LogLevel:           config.Info,
-				HealthCheckLogging: false,
-				Protocol:           config.HTTP,
-			},
-			EventBus: eventBus.config,
+		Logs: config.BaseConfigLogging{
+			Level: config.Info,
 		},
-		Storage: storageEngine.config,
+		Server: config.HttpServer{
+			LogLevel:           config.Info,
+			HealthCheckLogging: false,
+			Protocol:           config.HTTP,
+		},
+		PublisherEventBus:  eventBus.config,
+		SubscriberEventBus: eventBus.config,
+		Storage:            storageEngine.config,
 	}, caTestServer.Service, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
@@ -314,25 +311,23 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 	}
 
 	svc, port, err := AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
-		BaseConfig: config.BaseConfig{
-			Logs: config.BaseConfigLogging{
-				Level: config.Info,
-			},
-			Server: config.HttpServer{
-				LogLevel:           config.Info,
-				HealthCheckLogging: false,
-				Protocol:           config.HTTPS,
-				CertFile:           downstreamCertPath,
-				KeyFile:            downstreamKeyPath,
-				Authentication: config.HttpServerAuthentication{
-					MutualTLS: config.HttpServerMutualTLSAuthentication{
-						Enabled:        true,
-						ValidationMode: config.Request,
-					},
+		Logs: config.BaseConfigLogging{
+			Level: config.Info,
+		},
+		Server: config.HttpServer{
+			LogLevel:           config.Info,
+			HealthCheckLogging: false,
+			Protocol:           config.HTTPS,
+			CertFile:           downstreamCertPath,
+			KeyFile:            downstreamKeyPath,
+			Authentication: config.HttpServerAuthentication{
+				MutualTLS: config.HttpServerMutualTLSAuthentication{
+					Enabled:        true,
+					ValidationMode: config.Request,
 				},
 			},
-			EventBus: eventBus.config,
 		},
+		PublisherEventBus:         eventBus.config,
 		Storage:                   storageEngine.config,
 		DownstreamCertificateFile: downstreamCertPath,
 	},
@@ -368,16 +363,13 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 
 func BuildVATestServer(caTestServer *CATestServer) (*VATestServer, error) {
 	_, _, port, err := AssembleVAServiceWithHTTPServer(config.VAconfig{
-		BaseConfig: config.BaseConfig{
-			Logs: config.BaseConfigLogging{
-				Level: config.Info,
-			},
-			Server: config.HttpServer{
-				LogLevel:           config.Info,
-				HealthCheckLogging: false,
-				Protocol:           config.HTTP,
-			},
-			EventBus: config.EventBusEngine{Enabled: false},
+		Logs: config.BaseConfigLogging{
+			Level: config.Info,
+		},
+		Server: config.HttpServer{
+			LogLevel:           config.Info,
+			HealthCheckLogging: false,
+			Protocol:           config.HTTP,
 		},
 		CAClient: config.CAClient{},
 	}, caTestServer.HttpCASDK, models.APIServiceInfo{

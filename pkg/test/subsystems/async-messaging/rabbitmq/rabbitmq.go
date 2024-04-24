@@ -41,7 +41,7 @@ func RunRabbitMQDocker() (func() error, *config.AMQPConnection, int, error) {
 			BasicAuth: config.AMQPConnectionBasicAuth{Enabled: true, Username: "user", Password: "user"},
 			Protocol:  config.AMQP,
 			Exchange:  "lamassu",
-		}, "", lgr.WithField("", ""))
+		}, "docker-container-launcher", lgr.WithField("", ""))
 
 		return err
 	})

@@ -45,7 +45,7 @@ func main() {
 	log.Debugf("%s", confBytes)
 	log.Debugf("===================================================")
 
-	lCAClient := helpers.ConfigureLogger(conf.CAClient.LogLevel, "LMS SDK - CA Client")
+	lCAClient := helpers.ConfigureLogger(conf.CAClient.LogLevel, "Device Manager", "LMS SDK - CA Client")
 	caHttpCli, err := clients.BuildHTTPClient(conf.CAClient.HTTPClient, lCAClient)
 	if err != nil {
 		log.Fatalf("could not build HTTP CA Client: %s", err)

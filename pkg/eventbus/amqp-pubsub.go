@@ -58,6 +58,13 @@ func amqpConfig(conf config.AMQPConnection, serviceID string, logger *logrus.Ent
 		Durable: true,
 	}
 
+	// amqpConfig.Queue = amqp.QueueConfig{
+	// 	GenerateName: func(topic string) string {
+	// 		return serviceID
+	// 	},
+	// 	Durable: true,
+	// }
+
 	amqpConfig.QueueBind = amqp.QueueBindConfig{
 		GenerateRoutingKey: func(topic string) string {
 			suf := fmt.Sprintf("_%s", serviceID)

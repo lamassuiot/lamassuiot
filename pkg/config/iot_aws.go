@@ -1,7 +1,8 @@
 package config
 
 type IotAWS struct {
-	BaseConfig `mapstructure:",squash"`
+	Logs               BaseConfigLogging `mapstructure:"logs"`
+	SubscriberEventBus EventBusEngine    `mapstructure:"subscriber_event_bus"`
 
 	DMSManagerClient struct {
 		HTTPClient `mapstructure:",squash"`

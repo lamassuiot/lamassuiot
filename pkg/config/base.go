@@ -24,17 +24,6 @@ type BaseConfigLogging struct {
 	Level LogLevel `mapstructure:"level"`
 }
 
-type BaseConfig struct {
-	// Defines logging options
-	Logs BaseConfigLogging `mapstructure:"logs"`
-
-	// Http server configuration options
-	Server HttpServer `mapstructure:"server"`
-
-	// AMQP config options.
-	EventBus EventBusEngine `mapstructure:"event_bus"`
-}
-
 type HttpServer struct {
 	LogLevel           LogLevel                 `mapstructure:"log_level"`
 	HealthCheckLogging bool                     `mapstructure:"health_check"`

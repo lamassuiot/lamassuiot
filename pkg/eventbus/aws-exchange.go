@@ -24,23 +24,13 @@ type SnsExchangeBuilder struct {
 	Logger       *logrus.Entry
 }
 
-func normalizeSQSQueueName(serviceID, topic string) string {
-	sanitizedAWSSqsTopicName := strings.ReplaceAll(topic, "#", "wcard")
-	sanitizedAWSSqsTopicName = strings.ReplaceAll(sanitizedAWSSqsTopicName, ".", "-")
-
-	//SQS can only have a 80 chars name
-	queueName := fmt.Sprintf("%s--%s", sanitizedAWSSqsTopicName, serviceID)
-
-	return queueName
-}
-
 func bindSQSToSNS(builder SnsExchangeBuilder, sqsSub *sqs.Subscriber, snsPub *sns.Publisher, topic string) error {
 	snsArn, err := snsPub.GetArnTopic(context.Background(), "lamassu-events")
 	if err != nil {
 		return err
 	}
 
-	queueName := normalizeSQSQueueName(builder.ServiceID, topic)
+	queueName := builder.ServiceID
 
 	err = sqsSub.SubscribeInitialize(queueName)
 	if err != nil {
@@ -179,7 +169,7 @@ func (s *exchangeSqsSubscriber) Subscribe(ctx context.Context, topic string) (<-
 
 	s.sqsSub = sqsSub
 
-	queueName := normalizeSQSQueueName(s.builderConf.ServiceID, topic)
+	queueName := s.builderConf.ServiceID
 	return sqsSub.Subscribe(ctx, queueName)
 }
 
