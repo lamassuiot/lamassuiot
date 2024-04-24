@@ -142,7 +142,7 @@ func TestCRLNumber(t *testing.T) {
 	}
 
 	crtsToIssue := 10
-	for i := range crtsToIssue {
+	for i := 0; i < crtsToIssue; i++ {
 		_, err := generateCertificate(caSDK)
 		if err != nil {
 			t.Fatalf("could not generate certificate: %s", err)
