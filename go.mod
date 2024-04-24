@@ -1,6 +1,6 @@
 module github.com/lamassuiot/lamassuiot/v2
 
-go 1.21
+go 1.22.1
 
 require (
 	github.com/AvraamMavridis/randomcolor v0.0.0-20180822172341-208aff70bf2c
@@ -18,7 +18,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.23.3
 	github.com/aws/aws-sdk-go-v2/service/sns v1.29.1
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.29.7
-	github.com/cloudevents/sdk-go/v2 v2.11.0
+	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/eclipse/paho.mqtt.golang v1.4.3
 	github.com/fatih/color v1.15.0
 	github.com/gin-contrib/cors v1.4.0

@@ -89,7 +89,7 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte
 	now := time.Now()
 	crl, err := x509.CreateRevocationList(rand.Reader, &x509.RevocationList{
 		RevokedCertificateEntries: certList,
-		Number:                    big.NewInt(5),
+		Number:                    big.NewInt(time.Now().UnixMilli()),
 		ThisUpdate:                now,
 		NextUpdate:                now.Add(time.Hour * 48),
 	}, caCert, caSigner)
