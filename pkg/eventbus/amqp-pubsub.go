@@ -21,7 +21,6 @@ func amqpConfig(conf config.AMQPConnection, serviceID string, logger *logrus.Ent
 	}
 
 	amqpURL := fmt.Sprintf("%s://%s%s:%d", conf.Protocol, userPassUrlPrefix, conf.Hostname, conf.Port)
-	logger.Debugf("AMQP Broker URL: %s", amqpURL)
 
 	amqpConfig := amqp.NewDurablePubSubConfig(amqpURL, amqp.GenerateQueueNameTopicNameWithSuffix(serviceID))
 
