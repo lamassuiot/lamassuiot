@@ -39,15 +39,6 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 		}
 
 		return &awsCfg, nil
-	case Default:
-		awsCfg, err := config.LoadDefaultConfig(context.TODO(),
-			config.WithRegion(conf.Region),
-			config.WithEndpointResolverWithOptions(customResolver),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
-		}
-		return &awsCfg, nil
 	case AssumeRole:
 		stsCfg, err := config.LoadDefaultConfig(context.TODO(),
 			config.WithRegion(conf.Region),
@@ -68,8 +59,24 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 			return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
 		}
 		return &awsCfg, nil
+	case Default:
+		awsCfg, err := config.LoadDefaultConfig(context.TODO(),
+			config.WithRegion(conf.Region),
+			config.WithEndpointResolverWithOptions(customResolver),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
+		}
+		return &awsCfg, nil
 	default:
-		return nil, fmt.Errorf("cannot load the AWS configs: %s authentication method not supported", conf.AWSAuthenticationMethod)
+		awsCfg, err := config.LoadDefaultConfig(context.TODO(),
+			config.WithRegion(conf.Region),
+			config.WithEndpointResolverWithOptions(customResolver),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
+		}
+		return &awsCfg, nil
 	}
 
 }
