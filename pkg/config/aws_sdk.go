@@ -49,16 +49,24 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 		}
 		return &awsCfg, nil
 	case AssumeRole:
-		awsCfg, err := config.LoadDefaultConfig(context.TODO(),
+		stsCfg, err := config.LoadDefaultConfig(context.TODO(),
 			config.WithRegion(conf.Region),
 			config.WithEndpointResolverWithOptions(customResolver),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
 		}
-		stsSvc := sts.NewFromConfig(awsCfg)
-		creds := stscreds.NewAssumeRoleProvider(stsSvc, conf.RoleARN)
-		awsCfg.Credentials = aws.NewCredentialsCache(creds)
+		stsSvc := sts.NewFromConfig(stsCfg)
+		creds := aws.NewCredentialsCache(stscreds.NewAssumeRoleProvider(stsSvc, conf.RoleARN))
+		creds.Invalidate()
+		awsCfg, err := config.LoadDefaultConfig(context.TODO(),
+			config.WithRegion(conf.Region),
+			config.WithCredentialsProvider(creds),
+			config.WithEndpointResolverWithOptions(customResolver),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
+		}
 		return &awsCfg, nil
 	default:
 		return nil, fmt.Errorf("cannot load the AWS configs: %s authentication method not supported", conf.AWSAuthenticationMethod)
