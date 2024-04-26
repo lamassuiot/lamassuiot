@@ -60,23 +60,20 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 		}
 		return &awsCfg, nil
 	case Default:
-		awsCfg, err := config.LoadDefaultConfig(context.TODO(),
-			config.WithRegion(conf.Region),
-			config.WithEndpointResolverWithOptions(customResolver),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
-		}
-		return &awsCfg, nil
+		return loadAWSDefaultConfig(conf, customResolver)
 	default:
-		awsCfg, err := config.LoadDefaultConfig(context.TODO(),
-			config.WithRegion(conf.Region),
-			config.WithEndpointResolverWithOptions(customResolver),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
-		}
-		return &awsCfg, nil
+		return loadAWSDefaultConfig(conf, customResolver)
 	}
 
+}
+
+func loadAWSDefaultConfig(conf AWSSDKConfig, customResolver aws.EndpointResolverWithOptionsFunc) (*aws.Config, error) {
+	awsCfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithRegion(conf.Region),
+		config.WithEndpointResolverWithOptions(customResolver),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
+	}
+	return &awsCfg, nil
 }
