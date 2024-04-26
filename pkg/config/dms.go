@@ -1,8 +1,10 @@
 package config
 
 type DMSconfig struct {
-	BaseConfig `mapstructure:",squash"`
-	Storage    PluggableStorageEngine `mapstructure:"storage"`
+	Logs              BaseConfigLogging      `mapstructure:"logs"`
+	Server            HttpServer             `mapstructure:"server"`
+	PublisherEventBus EventBusEngine         `mapstructure:"publisher_event_bus"`
+	Storage           PluggableStorageEngine `mapstructure:"storage"`
 
 	CAClient struct {
 		HTTPClient `mapstructure:",squash"`

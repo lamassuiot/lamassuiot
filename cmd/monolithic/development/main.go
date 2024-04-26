@@ -152,19 +152,20 @@ func main() {
 		}
 	}()
 
+	eventBus := config.EventBusEngine{
+		LogLevel: config.Trace,
+		Enabled:  true,
+		Provider: config.Amqp,
+		Amqp:     *rmqConfig,
+	}
+
 	conf := config.MonolithicConfig{
-		BaseConfig: config.BaseConfig{
-			Logs: config.BaseConfigLogging{Level: config.Info},
-			EventBus: config.EventBusEngine{
-				LogLevel: config.Trace,
-				Enabled:  true,
-				Provider: config.Amqp,
-				Amqp:     *rmqConfig,
-			},
-		},
-		Domain:       "dev.lamassu.test",
-		GatewayPort:  8443,
-		AssemblyMode: config.Http,
+		Logs:               config.BaseConfigLogging{Level: config.Info},
+		SubscriberEventBus: eventBus,
+		PublisherEventBus:  eventBus,
+		Domain:             "dev.lamassu.test",
+		GatewayPort:        8443,
+		AssemblyMode:       config.Http,
 		CryptoEngines: config.CryptoEngines{
 			LogLevel:      config.Info,
 			DefaultEngine: "golang-1",

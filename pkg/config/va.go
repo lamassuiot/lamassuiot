@@ -1,7 +1,8 @@
 package config
 
 type VAconfig struct {
-	BaseConfig `mapstructure:",squash"`
+	Logs   BaseConfigLogging `mapstructure:"logs"`
+	Server HttpServer        `mapstructure:"server"`
 
 	CAClient CAClient `mapstructure:"ca_client"`
 }

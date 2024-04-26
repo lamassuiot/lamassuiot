@@ -43,40 +43,38 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		os.WriteFile("proxy.crt", []byte(crtPem), 0600)
 
 		_, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
-			BaseConfig: config.BaseConfig{
-				Logs: config.BaseConfigLogging{
-					Level: conf.Server.LogLevel,
-				},
-				Server: config.HttpServer{
-					LogLevel:           conf.Server.LogLevel,
-					HealthCheckLogging: true,
-					ListenAddress:      "0.0.0.0",
-					Port:               0,
-					Protocol:           config.HTTP,
-				},
-				EventBus: conf.EventBus,
+			Logs: config.BaseConfigLogging{
+				Level: conf.Server.LogLevel,
 			},
-			Storage:          conf.Storage,
-			CryptoEngines:    conf.CryptoEngines,
-			CryptoMonitoring: conf.CryptoMonitoring,
-			VAServerDomain:   fmt.Sprintf("%s/api/va", conf.Domain),
+			Server: config.HttpServer{
+				LogLevel:           conf.Server.LogLevel,
+				HealthCheckLogging: true,
+				ListenAddress:      "0.0.0.0",
+				Port:               0,
+				Protocol:           config.HTTP,
+			},
+			PublisherEventBus: conf.PublisherEventBus,
+			Storage:           conf.Storage,
+			CryptoEngines:     conf.CryptoEngines,
+			CryptoMonitoring:  conf.CryptoMonitoring,
+			VAServerDomain:    fmt.Sprintf("%s/api/va", conf.Domain),
 		}, apiInfo)
 		if err != nil {
 			return -1, fmt.Errorf("could not assemble CA Service: %s", err)
 		}
 
 		caConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: caPort}, Protocol: config.HTTP, BasePath: ""}
-		lCAClient := helpers.ConfigureLogger(config.Info, "LMS SDK - CA Client")
-		caHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
-			LogLevel:       config.Info,
-			AuthMode:       config.NoAuth,
-			HTTPConnection: caConnection,
-		}, lCAClient)
-		if err != nil {
-			log.Fatalf("could not build HTTP CA Client: %s", err)
-		}
+		caSDKBuilder := func(serviceID, src string) services.CAService {
+			lCAClient := helpers.ConfigureLogger(config.Info, serviceID, "LMS SDK - CA Client")
+			caHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
+				LogLevel:       config.Info,
+				AuthMode:       config.NoAuth,
+				HTTPConnection: caConnection,
+			}, lCAClient)
+			if err != nil {
+				log.Fatalf("could not build HTTP CA Client: %s", err)
+			}
 
-		caSDKBuilder := func(src string) services.CAService {
 			return clients.NewHttpCAClient(
 				clients.HttpClientWithSourceHeaderInjector(caHttpCli, src),
 				fmt.Sprintf("%s://%s%s:%d", caConnection.Protocol, caConnection.Hostname, caConnection.BasePath, caConnection.Port),
@@ -84,114 +82,108 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		}
 
 		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(config.VAconfig{
-			BaseConfig: config.BaseConfig{
-				Logs: config.BaseConfigLogging{
-					Level: conf.Server.LogLevel,
-				},
-				Server: config.HttpServer{
-					LogLevel:           config.Info,
-					HealthCheckLogging: true,
-					ListenAddress:      "0.0.0.0",
-					Port:               0,
-					Protocol:           config.HTTP,
-				},
-				EventBus: conf.EventBus,
+			Logs: config.BaseConfigLogging{
+				Level: conf.Server.LogLevel,
 			},
-		}, caSDKBuilder(models.VASource), apiInfo)
+			Server: config.HttpServer{
+				LogLevel:           config.Info,
+				HealthCheckLogging: true,
+				ListenAddress:      "0.0.0.0",
+				Port:               0,
+				Protocol:           config.HTTP,
+			},
+		}, caSDKBuilder("VA", models.VASource), apiInfo)
 		if err != nil {
 			return -1, fmt.Errorf("could not assemble VA Service: %s", err)
 		}
 
 		_, devPort, err := lamassu.AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
-			BaseConfig: config.BaseConfig{
-				Logs: config.BaseConfigLogging{
-					Level: conf.Server.LogLevel,
-				},
-				Server: config.HttpServer{
-					LogLevel:           config.Info,
-					HealthCheckLogging: true,
-					ListenAddress:      "0.0.0.0",
-					Port:               0,
-					Protocol:           config.HTTP,
-				},
-				EventBus: conf.EventBus,
+			Logs: config.BaseConfigLogging{
+				Level: conf.Server.LogLevel,
 			},
-			Storage: conf.Storage,
-		}, caSDKBuilder(models.DeviceManagerSource), apiInfo)
+			Server: config.HttpServer{
+				LogLevel:           config.Info,
+				HealthCheckLogging: true,
+				ListenAddress:      "0.0.0.0",
+				Port:               0,
+				Protocol:           config.HTTP,
+			},
+			PublisherEventBus:  conf.PublisherEventBus,
+			SubscriberEventBus: conf.SubscriberEventBus,
+			Storage:            conf.Storage,
+		}, caSDKBuilder("Device Manager", models.DeviceManagerSource), apiInfo)
 		if err != nil {
 			return -1, fmt.Errorf("could not assemble Device Manager Service: %s", err)
 		}
 
 		devMngrConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: devPort}, Protocol: config.HTTP, BasePath: ""}
-		lDevMngrClient := helpers.ConfigureLogger(config.Info, "LMS SDK - DevManager Client")
-		devMngrHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
-			LogLevel:       config.Info,
-			AuthMode:       config.NoAuth,
-			HTTPConnection: devMngrConnection,
-		}, lDevMngrClient)
-		if err != nil {
-			log.Fatalf("could not build HTTP DevManager Client: %s", err)
-		}
 
-		deviceMngrSDKBuilder := func(src string) services.DeviceManagerService {
+		deviceMngrSDKBuilder := func(serviceID, src string) services.DeviceManagerService {
+			lDevMngrClient := helpers.ConfigureLogger(config.Info, serviceID, "LMS SDK - DevManager Client")
+			devMngrHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
+				LogLevel:       config.Info,
+				AuthMode:       config.NoAuth,
+				HTTPConnection: devMngrConnection,
+			}, lDevMngrClient)
+			if err != nil {
+				log.Fatalf("could not build HTTP DevManager Client: %s", err)
+			}
+
 			return clients.NewHttpDeviceManagerClient(
 				clients.HttpClientWithSourceHeaderInjector(devMngrHttpCli, src),
 				fmt.Sprintf("%s://%s%s:%d", devMngrConnection.Protocol, devMngrConnection.Hostname, devMngrConnection.BasePath, devMngrConnection.Port),
 			)
 		}
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
-			BaseConfig: config.BaseConfig{
-				Logs: config.BaseConfigLogging{
-					Level: conf.Server.LogLevel,
-				},
-				Server: config.HttpServer{
-					LogLevel:           config.Info,
-					HealthCheckLogging: true,
-					ListenAddress:      "0.0.0.0",
-					Port:               0,
-					Protocol:           config.HTTP,
-				},
-				EventBus: conf.EventBus,
+			Logs: config.BaseConfigLogging{
+				Level: conf.Server.LogLevel,
 			},
+			Server: config.HttpServer{
+				LogLevel:           config.Info,
+				HealthCheckLogging: true,
+				ListenAddress:      "0.0.0.0",
+				Port:               0,
+				Protocol:           config.HTTP,
+			},
+			PublisherEventBus:         conf.PublisherEventBus,
 			DownstreamCertificateFile: "proxy.crt",
 			Storage:                   conf.Storage,
-		}, caSDKBuilder(models.DMSManagerSource), deviceMngrSDKBuilder(models.DMSManagerSource), apiInfo)
+		}, caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo)
 		if err != nil {
 			return -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
 		}
 
 		dmsMngrConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: dmsPort}, Protocol: config.HTTP, BasePath: ""}
-		lDMSMngrClient := helpers.ConfigureLogger(config.Info, "LMS SDK - DMSManager Client")
-		dmsMngrHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
-			LogLevel:       config.Info,
-			AuthMode:       config.NoAuth,
-			HTTPConnection: dmsMngrConnection,
-		}, lDMSMngrClient)
-		if err != nil {
-			log.Fatalf("could not build HTTP DMSManager Client: %s", err)
-		}
 
-		dmsMngrSDKBuilder := func(src string) services.DMSManagerService {
+		dmsMngrSDKBuilder := func(serviceID, src string) services.DMSManagerService {
+			lDMSMngrClient := helpers.ConfigureLogger(config.Info, serviceID, "LMS SDK - DMSManager Client")
+			dmsMngrHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
+				LogLevel:       config.Info,
+				AuthMode:       config.NoAuth,
+				HTTPConnection: dmsMngrConnection,
+			}, lDMSMngrClient)
+			if err != nil {
+				log.Fatalf("could not build HTTP DMSManager Client: %s", err)
+			}
+
 			return clients.NewHttpDMSManagerClient(
 				clients.HttpClientWithSourceHeaderInjector(dmsMngrHttpCli, src),
 				fmt.Sprintf("%s://%s%s:%d", dmsMngrConnection.Protocol, dmsMngrConnection.Hostname, dmsMngrConnection.BasePath, dmsMngrConnection.Port),
 			)
 		}
 		_, alertsPort, err := lamassu.AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
-			BaseConfig: config.BaseConfig{
-				Logs: config.BaseConfigLogging{
-					Level: conf.Server.LogLevel,
-				},
-				Server: config.HttpServer{
-					LogLevel:           config.Info,
-					HealthCheckLogging: true,
-					ListenAddress:      "0.0.0.0",
-					Port:               0,
-					Protocol:           config.HTTP,
-				},
-				EventBus: conf.EventBus,
+			Logs: config.BaseConfigLogging{
+				Level: conf.Server.LogLevel,
 			},
-			Storage: conf.Storage,
+			Server: config.HttpServer{
+				LogLevel:           config.Info,
+				HealthCheckLogging: true,
+				ListenAddress:      "0.0.0.0",
+				Port:               0,
+				Protocol:           config.HTTP,
+			},
+			SubscriberEventBus: conf.SubscriberEventBus,
+			Storage:            conf.Storage,
 		}, apiInfo)
 		if err != nil {
 			return -1, fmt.Errorf("could not assemble Alerts Service: %s", err)
@@ -199,15 +191,13 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 
 		if conf.AWSIoTManager.Enabled {
 			_, err = lamassu.AssembleAWSIoTManagerService(config.IotAWS{
-				BaseConfig: config.BaseConfig{
-					Logs: config.BaseConfigLogging{
-						Level: conf.Server.LogLevel,
-					},
-					EventBus: conf.EventBus,
+				Logs: config.BaseConfigLogging{
+					Level: conf.Server.LogLevel,
 				},
-				ConnectorID:  conf.AWSIoTManager.ConnectorID,
-				AWSSDKConfig: conf.AWSIoTManager.AWSSDKConfig,
-			}, caSDKBuilder(models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)), dmsMngrSDKBuilder(models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)), deviceMngrSDKBuilder(models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)))
+				SubscriberEventBus: conf.SubscriberEventBus,
+				ConnectorID:        conf.AWSIoTManager.ConnectorID,
+				AWSSDKConfig:       conf.AWSIoTManager.AWSSDKConfig,
+			}, caSDKBuilder("AWS IoT Connector", models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)), dmsMngrSDKBuilder("AWS IoT Connector", models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)), deviceMngrSDKBuilder("AWS IoT Connector", models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)))
 			if err != nil {
 				return -1, fmt.Errorf("could not assemble AWS IoT Manager: %s", err)
 			}

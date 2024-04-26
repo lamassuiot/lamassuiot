@@ -3,18 +3,33 @@ package assemblers
 import (
 	"testing"
 
+	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
 
-func StartDeviceManagerServiceTestServer(t *testing.T) (*DeviceManagerTestServer, error) {
+func StartDeviceManagerServiceTestServer(t *testing.T, withEventBus bool) (*DeviceManagerTestServer, error) {
+	var err error
+	eventBusConf := &TestEventBusConfig{
+		config: config.EventBusEngine{
+			Enabled: false,
+		},
+	}
+	if withEventBus {
+		eventBusConf, err = PrepareRabbitMQForTest()
+		if err != nil {
+			t.Fatalf("could not prepare RabbitMQ test server: %s", err)
+		}
+	}
+
 	storageConfig, err := PreparePostgresForTest([]string{"ca", "devicemanager"})
 	if err != nil {
 		t.Fatalf("could not prepare Postgres test server: %s", err)
 	}
+
 	cryptoConfig := PrepareCryptoEnginesForTest([]CryptoEngine{GOLANG})
-	testServer, err := AssembleServices(storageConfig, cryptoConfig, []Service{CA, DEVICE_MANAGER})
+	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, []Service{CA, DEVICE_MANAGER})
 	if err != nil {
 		t.Fatalf("could not assemble Server with HTTP server")
 	}
@@ -29,7 +44,7 @@ func StartDeviceManagerServiceTestServer(t *testing.T) (*DeviceManagerTestServer
 }
 
 func TestDuplicateDeviceCreation(t *testing.T) {
-	dmgr, err := StartDeviceManagerServiceTestServer(t)
+	dmgr, err := StartDeviceManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -54,7 +69,7 @@ func TestDuplicateDeviceCreation(t *testing.T) {
 }
 
 func TestPagination(t *testing.T) {
-	dmgr, err := StartDeviceManagerServiceTestServer(t)
+	dmgr, err := StartDeviceManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
@@ -259,7 +274,7 @@ func TestPagination(t *testing.T) {
 }
 
 func TestBasicDeviceManager(t *testing.T) {
-	dmgr, err := StartDeviceManagerServiceTestServer(t)
+	dmgr, err := StartDeviceManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}

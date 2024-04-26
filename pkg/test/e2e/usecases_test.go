@@ -72,31 +72,32 @@ func TestUseCase1(t *testing.T) {
 
 	cleanup = append(cleanup, rmqCleanup)
 
+	eventBus := config.EventBusEngine{
+		LogLevel: config.Info,
+		Enabled:  true,
+		Provider: config.Amqp,
+		Amqp:     *rmqConfig,
+	}
+
 	conf := config.MonolithicConfig{
-		GatewayPort: 0,
-		BaseConfig: config.BaseConfig{
-			Logs: config.BaseConfigLogging{Level: config.None},
-			EventBus: config.EventBusEngine{
-				LogLevel: config.Info,
-				Enabled:  true,
-				Provider: config.Amqp,
-				Amqp:     *rmqConfig,
-			},
-		},
-		Domain:       "dev.lamassu.test",
-		AssemblyMode: config.Http,
+		GatewayPort:        0,
+		Logs:               config.BaseConfigLogging{Level: config.None},
+		SubscriberEventBus: eventBus,
+		PublisherEventBus:  eventBus,
+		Domain:             "dev.lamassu.test",
+		AssemblyMode:       config.Http,
 		CryptoEngines: config.CryptoEngines{
 			LogLevel:      config.Info,
 			DefaultEngine: "golang-1",
 			HashicorpVaultKV2Provider: []config.HashicorpVaultCryptoEngineConfig{
-				config.HashicorpVaultCryptoEngineConfig{
+				{
 					HashicorpVaultSDK: *vaultConfig,
 					ID:                "dockertest-hcpvault-kvv2",
 					Metadata:          make(map[string]interface{}),
 				},
 			},
 			GolangProvider: []config.GolangEngineConfig{
-				config.GolangEngineConfig{
+				{
 					ID:               "golang-1",
 					Metadata:         make(map[string]interface{}),
 					StorageDirectory: "/tmp/gotest",

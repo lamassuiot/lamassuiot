@@ -1,11 +1,13 @@
 package config
 
 type CAConfig struct {
-	BaseConfig       `mapstructure:",squash"`
-	Storage          PluggableStorageEngine `mapstructure:"storage"`
-	CryptoEngines    CryptoEngines          `mapstructure:"crypto_engines"`
-	CryptoMonitoring CryptoMonitoring       `mapstructure:"crypto_monitoring"`
-	VAServerDomain   string                 `mapstructure:"va_server_domain"`
+	Logs              BaseConfigLogging      `mapstructure:"logs"`
+	Server            HttpServer             `mapstructure:"server"`
+	PublisherEventBus EventBusEngine         `mapstructure:"publisher_event_bus"`
+	Storage           PluggableStorageEngine `mapstructure:"storage"`
+	CryptoEngines     CryptoEngines          `mapstructure:"crypto_engines"`
+	CryptoMonitoring  CryptoMonitoring       `mapstructure:"crypto_monitoring"`
+	VAServerDomain    string                 `mapstructure:"va_server_domain"`
 }
 
 type CryptoEngines struct {

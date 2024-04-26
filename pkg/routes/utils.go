@@ -98,6 +98,10 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 
 	httpErrChan := make(chan error, 1)
 
+	if strings.HasSuffix(addr, ":0") {
+		addr = strings.ReplaceAll(addr, ":0", "")
+	}
+
 	go func() {
 		if httpServerCfg.Protocol == config.HTTPS {
 			srvExtraLog := ""

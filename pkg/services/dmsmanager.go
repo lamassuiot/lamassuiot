@@ -39,7 +39,7 @@ type DMSManagerService interface {
 	BindIdentityToDevice(ctx context.Context, input BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error)
 }
 
-type DMSManagerServiceImpl struct {
+type DMSManagerServiceBackend struct {
 	service          DMSManagerService
 	downstreamCert   *x509.Certificate
 	dmsStorage       storage.DMSRepo
@@ -58,7 +58,7 @@ type DMSManagerBuilder struct {
 func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
 	lDMS = builder.Logger
 
-	svc := &DMSManagerServiceImpl{
+	svc := &DMSManagerServiceBackend{
 		dmsStorage:       builder.DMSStorage,
 		caClient:         builder.CAClient,
 		deviceManagerCli: builder.DevManagerCli,
@@ -68,13 +68,13 @@ func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
 	return svc
 }
 
-func (svc *DMSManagerServiceImpl) SetService(service DMSManagerService) {
+func (svc *DMSManagerServiceBackend) SetService(service DMSManagerService) {
 	svc.service = service
 }
 
 type GetDMSStatsInput struct{}
 
-func (svc DMSManagerServiceImpl) GetDMSStats(ctx context.Context, input GetDMSStatsInput) (*models.DMSStats, error) {
+func (svc DMSManagerServiceBackend) GetDMSStats(ctx context.Context, input GetDMSStatsInput) (*models.DMSStats, error) {
 	total, err := svc.dmsStorage.Count(ctx)
 	if err != nil {
 		lDMS.Errorf("could not count dmss: %s", err)
@@ -95,7 +95,7 @@ type CreateDMSInput struct {
 	Settings models.DMSSettings `validate:"required"`
 }
 
-func (svc DMSManagerServiceImpl) CreateDMS(ctx context.Context, input CreateDMSInput) (*models.DMS, error) {
+func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input CreateDMSInput) (*models.DMS, error) {
 	err := dmsValidate.Struct(input)
 	if err != nil {
 		lDMS.Errorf("struct validation error: %s", err)
@@ -134,7 +134,7 @@ type UpdateDMSInput struct {
 	DMS models.DMS `validate:"required"`
 }
 
-func (svc DMSManagerServiceImpl) UpdateDMS(ctx context.Context, input UpdateDMSInput) (*models.DMS, error) {
+func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input UpdateDMSInput) (*models.DMS, error) {
 	err := dmsValidate.Struct(input)
 	if err != nil {
 		lDMS.Errorf("struct validation error: %s", err)
@@ -162,7 +162,7 @@ type GetDMSByIDInput struct {
 	ID string `validate:"required"`
 }
 
-func (svc DMSManagerServiceImpl) GetDMSByID(ctx context.Context, input GetDMSByIDInput) (*models.DMS, error) {
+func (svc DMSManagerServiceBackend) GetDMSByID(ctx context.Context, input GetDMSByIDInput) (*models.DMS, error) {
 
 	err := dmsValidate.Struct(input)
 	if err != nil {
@@ -187,7 +187,7 @@ type GetAllInput struct {
 	resources.ListInput[models.DMS]
 }
 
-func (svc DMSManagerServiceImpl) GetAll(ctx context.Context, input GetAllInput) (string, error) {
+func (svc DMSManagerServiceBackend) GetAll(ctx context.Context, input GetAllInput) (string, error) {
 	bookmark, err := svc.dmsStorage.SelectAll(context.Background(), input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
 	if err != nil {
 		lDMS.Errorf("something went wrong while reading all DMSs from storage engine: %s", err)
@@ -197,7 +197,7 @@ func (svc DMSManagerServiceImpl) GetAll(ctx context.Context, input GetAllInput) 
 	return bookmark, nil
 }
 
-func (svc DMSManagerServiceImpl) CACerts(aps string) ([]*x509.Certificate, error) {
+func (svc DMSManagerServiceBackend) CACerts(aps string) ([]*x509.Certificate, error) {
 	cas := []*x509.Certificate{}
 	lDMS.Debugf("checking if DMS '%s' exists", aps)
 	exists, dms, err := svc.dmsStorage.SelectExists(context.Background(), aps)
@@ -247,7 +247,7 @@ func (svc DMSManagerServiceImpl) CACerts(aps string) ([]*x509.Certificate, error
 // Validation:
 //   - Cert:
 //     Only Bootstrap cert (CA issued By Lamassu)
-func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	lDMS.Debugf("checking if DMS '%s' exists", aps)
 	dms, err := svc.service.GetDMSByID(ctx, GetDMSByIDInput{
 		ID: aps,
@@ -412,7 +412,7 @@ func (svc DMSManagerServiceImpl) Enroll(ctx context.Context, csr *x509.Certifica
 	return (*x509.Certificate)(crt.Certificate), nil
 }
 
-func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	lDMS.Debugf("checking if DMS '%s' exists", aps)
 	dms, err := svc.service.GetDMSByID(ctx, GetDMSByIDInput{
 		ID: aps,
@@ -660,7 +660,7 @@ func (svc DMSManagerServiceImpl) Reenroll(ctx context.Context, csr *x509.Certifi
 	return (*x509.Certificate)(crt.Certificate), nil
 }
 
-func (svc DMSManagerServiceImpl) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
+func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
 	var privKey any
 	var err error
 
@@ -716,7 +716,7 @@ func (svc DMSManagerServiceImpl) ServerKeyGen(ctx context.Context, csr *x509.Cer
 }
 
 // returns if the given certificate COULD BE checked for revocation (true means that it could be checked), and if it is revoked (true) or not (false)
-func (svc DMSManagerServiceImpl) checkCertificateRevocation(ctx context.Context, cert *x509.Certificate, validationCA *x509.Certificate) (bool, bool, error) {
+func (svc DMSManagerServiceBackend) checkCertificateRevocation(ctx context.Context, cert *x509.Certificate, validationCA *x509.Certificate) (bool, bool, error) {
 	revocationChecked := false
 	revoked := true
 	clientSN := helpers.SerialNumberToString(cert.SerialNumber)
@@ -798,7 +798,7 @@ type BindIdentityToDeviceInput struct {
 	BindMode                models.DeviceEventType
 }
 
-func (svc DMSManagerServiceImpl) BindIdentityToDevice(ctx context.Context, input BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error) {
+func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, input BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error) {
 	crt, err := svc.caClient.GetCertificateBySerialNumber(ctx, GetCertificatesBySerialNumberInput{
 		SerialNumber: input.CertificateSerialNumber,
 	})

@@ -4,21 +4,20 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/messaging"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
 
 type deviceEventPublisher struct {
-	next     services.DeviceManagerService
-	eventBus *messaging.MessagingEngine
+	next       services.DeviceManagerService
+	eventMWPub CloudEventMiddlewarePublisher
 }
 
-func NewDeviceEventPublisher(engine *messaging.MessagingEngine) services.DeviceMiddleware {
+func NewDeviceEventPublisher(eventMWPub CloudEventMiddlewarePublisher) services.DeviceMiddleware {
 	return func(next services.DeviceManagerService) services.DeviceManagerService {
 		return &deviceEventPublisher{
-			next:     next,
-			eventBus: engine,
+			next:       next,
+			eventMWPub: eventMWPub,
 		}
 	}
 }
@@ -30,7 +29,7 @@ func (mw *deviceEventPublisher) GetDevicesStats(input services.GetDevicesStatsIn
 func (mw *deviceEventPublisher) CreateDevice(input services.CreateDeviceInput) (output *models.Device, err error) {
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(context.Background(), models.EventCreateDeviceKey, output)
+			mw.eventMWPub.PublishCloudEvent(context.Background(), models.EventCreateDeviceKey, output)
 		}
 	}()
 	return mw.next.CreateDevice(input)
@@ -58,7 +57,7 @@ func (mw *deviceEventPublisher) UpdateDeviceStatus(input services.UpdateDeviceSt
 
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(context.Background(), models.EventUpdateDeviceStatusKey, models.UpdateModel[models.Device]{
+			mw.eventMWPub.PublishCloudEvent(context.Background(), models.EventUpdateDeviceStatusKey, models.UpdateModel[models.Device]{
 				Updated:  *output,
 				Previous: *prev,
 			})
@@ -76,7 +75,7 @@ func (mw *deviceEventPublisher) UpdateDeviceIdentitySlot(input services.UpdateDe
 	}
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(context.Background(), models.EventUpdateDeviceIDSlotKey, models.UpdateModel[models.Device]{
+			mw.eventMWPub.PublishCloudEvent(context.Background(), models.EventUpdateDeviceIDSlotKey, models.UpdateModel[models.Device]{
 				Updated:  *output,
 				Previous: *prev,
 			})
@@ -95,7 +94,7 @@ func (mw *deviceEventPublisher) UpdateDeviceMetadata(input services.UpdateDevice
 
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(context.Background(), models.EventUpdateDeviceMetadataKey, models.UpdateModel[models.Device]{
+			mw.eventMWPub.PublishCloudEvent(context.Background(), models.EventUpdateDeviceMetadataKey, models.UpdateModel[models.Device]{
 				Updated:  *output,
 				Previous: *prev,
 			})

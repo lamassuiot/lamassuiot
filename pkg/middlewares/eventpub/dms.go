@@ -5,23 +5,22 @@ import (
 	"crypto/x509"
 	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/messaging"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
 
 type dmsEventPublisher struct {
-	next     services.DMSManagerService
-	eventBus *messaging.MessagingEngine
+	next       services.DMSManagerService
+	eventMWPub CloudEventMiddlewarePublisher
 }
 
 const dmsSource = "lamassuiot.dms-manager"
 
-func NewDMSEventPublisher(engine *messaging.MessagingEngine) services.DMSManagerMiddleware {
+func NewDMSEventPublisher(eventMWPub CloudEventMiddlewarePublisher) services.DMSManagerMiddleware {
 	return func(next services.DMSManagerService) services.DMSManagerService {
 		return &dmsEventPublisher{
-			next:     next,
-			eventBus: engine,
+			next:       next,
+			eventMWPub: eventMWPub,
 		}
 	}
 }
@@ -33,7 +32,7 @@ func (mw dmsEventPublisher) GetDMSStats(ctx context.Context, input services.GetD
 func (mw dmsEventPublisher) CreateDMS(ctx context.Context, input services.CreateDMSInput) (output *models.DMS, err error) {
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(ctx, models.EventCreateDMSKey, output)
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventCreateDMSKey, output)
 		}
 	}()
 	return mw.next.CreateDMS(ctx, input)
@@ -48,7 +47,7 @@ func (mw dmsEventPublisher) UpdateDMS(ctx context.Context, input services.Update
 	}
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(ctx, models.EventUpdateDMSMetadataKey, models.UpdateModel[models.DMS]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateDMSMetadataKey, models.UpdateModel[models.DMS]{
 				Previous: *prev,
 				Updated:  *output,
 			})
@@ -72,7 +71,7 @@ func (mw dmsEventPublisher) CACerts(aps string) ([]*x509.Certificate, error) {
 func (mw dmsEventPublisher) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (out *x509.Certificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(ctx, models.EventEnrollKey, models.EnrollReenrollEvent{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventEnrollKey, models.EnrollReenrollEvent{
 				Certificate: (*models.X509Certificate)(out),
 				APS:         aps,
 			})
@@ -84,7 +83,7 @@ func (mw dmsEventPublisher) Enroll(ctx context.Context, csr *x509.CertificateReq
 func (mw dmsEventPublisher) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (out *x509.Certificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(ctx, models.EventReEnrollKey, models.EnrollReenrollEvent{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventReEnrollKey, models.EnrollReenrollEvent{
 				Certificate: (*models.X509Certificate)(out),
 				APS:         aps,
 			})
@@ -100,7 +99,7 @@ func (mw dmsEventPublisher) ServerKeyGen(ctx context.Context, csr *x509.Certific
 func (mw dmsEventPublisher) BindIdentityToDevice(ctx context.Context, input services.BindIdentityToDeviceInput) (output *models.BindIdentityToDeviceOutput, err error) {
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(ctx, models.EventBindDeviceIdentityKey, output)
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventBindDeviceIdentityKey, output)
 		}
 	}()
 	return mw.next.BindIdentityToDevice(ctx, input)
