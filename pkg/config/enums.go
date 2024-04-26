@@ -45,3 +45,11 @@ const (
 	CouchDB  StorageProvider = "couch_db"
 	DynamoDB StorageProvider = "dynamo_db"
 )
+
+type AWSAuthenticationMethod string
+
+const (
+	Static     AWSAuthenticationMethod = "static"
+	Default    AWSAuthenticationMethod = "default"
+	AssumeRole AWSAuthenticationMethod = "role"
+)
