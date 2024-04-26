@@ -44,10 +44,6 @@ func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.D
 		pubKey = &eccKey.PublicKey
 	}
 
-	if err != nil {
-		return nil, nil, err
-	}
-
 	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
 	template := x509.Certificate{
 		SerialNumber: sn,
@@ -74,7 +70,6 @@ func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.D
 	}
 
 	return cert, key, nil
-
 }
 
 // defined to generate certificates with RSA and ECDSA keys
