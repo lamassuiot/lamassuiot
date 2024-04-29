@@ -406,29 +406,6 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 	beforeEachActions := []func() error{}
 	afterSuiteActions := []func(){}
 
-	if eventBus.BeforeEach != nil {
-		beforeEachActions = append(beforeEachActions, eventBus.BeforeEach)
-	}
-	if eventBus.AfterSuite != nil {
-		afterSuiteActions = append(afterSuiteActions, eventBus.AfterSuite)
-	}
-
-	if storageEngine.BeforeEach != nil {
-		beforeEachActions = append(beforeEachActions, storageEngine.BeforeEach)
-	}
-	if storageEngine.AfterSuite != nil {
-		afterSuiteActions = append(afterSuiteActions, storageEngine.AfterSuite)
-	}
-
-	if cryptoEngines != nil {
-		if cryptoEngines.BeforeEach != nil {
-			beforeEachActions = append(beforeEachActions, cryptoEngines.BeforeEach)
-		}
-		if cryptoEngines.AfterSuite != nil {
-			afterSuiteActions = append(afterSuiteActions, cryptoEngines.AfterSuite)
-		}
-	}
-
 	caTestServer, err := BuildCATestServer(storageEngine, cryptoEngines, eventBus)
 	servicesMap[CA] = caTestServer
 	if err != nil {
@@ -476,6 +453,29 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 		servicesMap[VA] = vaTestServer
 		beforeEachActions = append(beforeEachActions, vaTestServer.BeforeEach)
 		afterSuiteActions = append(afterSuiteActions, vaTestServer.AfterSuite)
+	}
+
+	if eventBus.BeforeEach != nil {
+		beforeEachActions = append(beforeEachActions, eventBus.BeforeEach)
+	}
+	if eventBus.AfterSuite != nil {
+		afterSuiteActions = append(afterSuiteActions, eventBus.AfterSuite)
+	}
+
+	if storageEngine.BeforeEach != nil {
+		beforeEachActions = append(beforeEachActions, storageEngine.BeforeEach)
+	}
+	if storageEngine.AfterSuite != nil {
+		afterSuiteActions = append(afterSuiteActions, storageEngine.AfterSuite)
+	}
+
+	if cryptoEngines != nil {
+		if cryptoEngines.BeforeEach != nil {
+			beforeEachActions = append(beforeEachActions, cryptoEngines.BeforeEach)
+		}
+		if cryptoEngines.AfterSuite != nil {
+			afterSuiteActions = append(afterSuiteActions, cryptoEngines.AfterSuite)
+		}
 	}
 
 	beforeEach := func() error {
