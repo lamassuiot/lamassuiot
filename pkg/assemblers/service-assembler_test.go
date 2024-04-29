@@ -11,6 +11,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
@@ -242,9 +243,6 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 		return nil, fmt.Errorf("could not assemble CA with HTTP server")
 	}
 
-	// caSvc := *svc
-	// caBackend := caSvc.(*services.CAServiceImpl)
-
 	return &CATestServer{
 		Service:   *svc,
 		HttpCASDK: clients.NewHttpCAClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
@@ -252,7 +250,16 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 			return nil
 		},
 		AfterSuite: func() {
-			// caBackend.Close()
+			caSvc := *svc
+			switch localSvc := caSvc.(type) {
+			case *services.CAServiceBackend:
+				caBackend := localSvc
+				caBackend.Close()
+			case *eventpub.CAEventPublisher:
+				caBackend := localSvc.Next.(*services.CAServiceBackend)
+				caBackend.Close()
+			}
+
 		},
 	}, nil
 }
@@ -399,29 +406,6 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 	beforeEachActions := []func() error{}
 	afterSuiteActions := []func(){}
 
-	if eventBus.BeforeEach != nil {
-		beforeEachActions = append(beforeEachActions, eventBus.BeforeEach)
-	}
-	if eventBus.AfterSuite != nil {
-		afterSuiteActions = append(afterSuiteActions, eventBus.AfterSuite)
-	}
-
-	if storageEngine.BeforeEach != nil {
-		beforeEachActions = append(beforeEachActions, storageEngine.BeforeEach)
-	}
-	if storageEngine.AfterSuite != nil {
-		afterSuiteActions = append(afterSuiteActions, storageEngine.AfterSuite)
-	}
-
-	if cryptoEngines != nil {
-		if cryptoEngines.BeforeEach != nil {
-			beforeEachActions = append(beforeEachActions, cryptoEngines.BeforeEach)
-		}
-		if cryptoEngines.AfterSuite != nil {
-			afterSuiteActions = append(afterSuiteActions, cryptoEngines.AfterSuite)
-		}
-	}
-
 	caTestServer, err := BuildCATestServer(storageEngine, cryptoEngines, eventBus)
 	servicesMap[CA] = caTestServer
 	if err != nil {
@@ -469,6 +453,29 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 		servicesMap[VA] = vaTestServer
 		beforeEachActions = append(beforeEachActions, vaTestServer.BeforeEach)
 		afterSuiteActions = append(afterSuiteActions, vaTestServer.AfterSuite)
+	}
+
+	if eventBus.BeforeEach != nil {
+		beforeEachActions = append(beforeEachActions, eventBus.BeforeEach)
+	}
+	if eventBus.AfterSuite != nil {
+		afterSuiteActions = append(afterSuiteActions, eventBus.AfterSuite)
+	}
+
+	if storageEngine.BeforeEach != nil {
+		beforeEachActions = append(beforeEachActions, storageEngine.BeforeEach)
+	}
+	if storageEngine.AfterSuite != nil {
+		afterSuiteActions = append(afterSuiteActions, storageEngine.AfterSuite)
+	}
+
+	if cryptoEngines != nil {
+		if cryptoEngines.BeforeEach != nil {
+			beforeEachActions = append(beforeEachActions, cryptoEngines.BeforeEach)
+		}
+		if cryptoEngines.AfterSuite != nil {
+			afterSuiteActions = append(afterSuiteActions, cryptoEngines.AfterSuite)
+		}
 	}
 
 	beforeEach := func() error {
