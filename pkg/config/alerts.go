@@ -1,17 +1,19 @@
 package config
 
 type AlertsConfig struct {
-	BaseConfig `mapstructure:",squash"`
-	Storage    PluggableStorageEngine `mapstructure:"storage"`
-	SMTPConfig SMTPServer             `mapstructure:"smtp_server"`
+	Logs               BaseConfigLogging      `mapstructure:"logs"`
+	Server             HttpServer             `mapstructure:"server"`
+	SubscriberEventBus EventBusEngine         `mapstructure:"subscriber_event_bus"`
+	Storage            PluggableStorageEngine `mapstructure:"storage"`
+	SMTPConfig         SMTPServer             `mapstructure:"smtp_server"`
 }
 
 type SMTPServer struct {
-	From     string `json:"from"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	SSL      bool   `json:"ssl"`
-	Insecure bool   `json:"insecure"`
+	From     string `mapstructure:"from"`
+	Host     string `mapstructure:"host"`
+	Port     int    `mapstructure:"port"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+	SSL      bool   `mapstructure:"ssl"`
+	Insecure bool   `mapstructure:"insecure"`
 }

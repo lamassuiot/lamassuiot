@@ -1,11 +1,13 @@
 package config
 
 type CAConfig struct {
-	BaseConfig       `mapstructure:",squash"`
-	Storage          PluggableStorageEngine `mapstructure:"storage"`
-	CryptoEngines    CryptoEngines          `mapstructure:"crypto_engines"`
-	CryptoMonitoring CryptoMonitoring       `mapstructure:"crypto_monitoring"`
-	VAServerDomain   string                 `mapstructure:"va_server_domain"`
+	Logs              BaseConfigLogging      `mapstructure:"logs"`
+	Server            HttpServer             `mapstructure:"server"`
+	PublisherEventBus EventBusEngine         `mapstructure:"publisher_event_bus"`
+	Storage           PluggableStorageEngine `mapstructure:"storage"`
+	CryptoEngines     CryptoEngines          `mapstructure:"crypto_engines"`
+	CryptoMonitoring  CryptoMonitoring       `mapstructure:"crypto_monitoring"`
+	VAServerDomain    string                 `mapstructure:"va_server_domain"`
 }
 
 type CryptoEngines struct {
@@ -62,10 +64,12 @@ type AWSCryptoEngine struct {
 }
 
 type AWSSDKConfig struct {
-	EndpointURL     string   `mapstructure:"endpoint_url"`
-	AccessKeyID     string   `mapstructure:"access_key_id"`
-	SecretAccessKey Password `mapstructure:"secret_access_key"`
-	Region          string   `mapstructure:"region"`
+	AWSAuthenticationMethod AWSAuthenticationMethod `mapstructure:"auth_method"`
+	EndpointURL             string                  `mapstructure:"endpoint_url"`
+	AccessKeyID             string                  `mapstructure:"access_key_id"`
+	SecretAccessKey         Password                `mapstructure:"secret_access_key"`
+	Region                  string                  `mapstructure:"region"`
+	RoleARN                 string                  `mapstructure:"role_arn"`
 }
 
 type CryptoMonitoring struct {

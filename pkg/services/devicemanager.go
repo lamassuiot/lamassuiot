@@ -30,7 +30,7 @@ type DeviceManagerService interface {
 	UpdateDeviceMetadata(input UpdateDeviceMetadataInput) (*models.Device, error)
 }
 
-type DeviceManagerServiceImpl struct {
+type DeviceManagerServiceBackend struct {
 	devicesStorage storage.DeviceManagerRepo
 	caClient       CAService
 	service        DeviceManagerService
@@ -46,7 +46,7 @@ func NewDeviceManagerService(builder DeviceManagerBuilder) DeviceManagerService 
 
 	lDevice = builder.Logger
 	deviceValidate = validator.New()
-	svc := &DeviceManagerServiceImpl{
+	svc := &DeviceManagerServiceBackend{
 		caClient:       builder.CAClient,
 		devicesStorage: builder.DevicesStorage,
 	}
@@ -55,14 +55,14 @@ func NewDeviceManagerService(builder DeviceManagerBuilder) DeviceManagerService 
 	return svc
 }
 
-func (svc *DeviceManagerServiceImpl) SetService(service DeviceManagerService) {
+func (svc *DeviceManagerServiceBackend) SetService(service DeviceManagerService) {
 	svc.service = service
 }
 
 type GetDevicesStatsInput struct {
 }
 
-func (svc *DeviceManagerServiceImpl) GetDevicesStats(input GetDevicesStatsInput) (*models.DevicesStats, error) {
+func (svc *DeviceManagerServiceBackend) GetDevicesStats(input GetDevicesStatsInput) (*models.DevicesStats, error) {
 	stats := models.DevicesStats{
 		TotalDevices:  -1,
 		DevicesStatus: map[models.DeviceStatus]int{},
@@ -109,7 +109,7 @@ type CreateDeviceInput struct {
 	IconColor string `validate:"required"`
 }
 
-func (svc DeviceManagerServiceImpl) CreateDevice(input CreateDeviceInput) (*models.Device, error) {
+func (svc DeviceManagerServiceBackend) CreateDevice(input CreateDeviceInput) (*models.Device, error) {
 	err := deviceValidate.Struct(input)
 	if err != nil {
 		lDevice.Errorf("struct validation error: %s", err)
@@ -163,7 +163,7 @@ type GetDevicesInput struct {
 	resources.ListInput[models.Device]
 }
 
-func (svc DeviceManagerServiceImpl) GetDevices(input GetDevicesInput) (string, error) {
+func (svc DeviceManagerServiceBackend) GetDevices(input GetDevicesInput) (string, error) {
 	lDevice.Debugf("getting all devices")
 	return svc.devicesStorage.SelectAll(context.Background(), input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
 }
@@ -173,7 +173,7 @@ type GetDevicesByDMSInput struct {
 	resources.ListInput[models.Device]
 }
 
-func (svc DeviceManagerServiceImpl) GetDeviceByDMS(input GetDevicesByDMSInput) (string, error) {
+func (svc DeviceManagerServiceBackend) GetDeviceByDMS(input GetDevicesByDMSInput) (string, error) {
 	lDevice.Debugf("getting all devices owned by DMS with ID=%s", input.DMSID)
 	return svc.devicesStorage.SelectByDMS(context.Background(), input.DMSID, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
 }
@@ -182,7 +182,7 @@ type GetDeviceByIDInput struct {
 	ID string `validate:"required"`
 }
 
-func (svc DeviceManagerServiceImpl) GetDeviceByID(input GetDeviceByIDInput) (*models.Device, error) {
+func (svc DeviceManagerServiceBackend) GetDeviceByID(input GetDeviceByIDInput) (*models.Device, error) {
 
 	err := deviceValidate.Struct(input)
 	if err != nil {
@@ -207,7 +207,7 @@ type UpdateDeviceStatusInput struct {
 	NewStatus models.DeviceStatus `validate:"required"`
 }
 
-func (svc DeviceManagerServiceImpl) UpdateDeviceStatus(input UpdateDeviceStatusInput) (*models.Device, error) {
+func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(input UpdateDeviceStatusInput) (*models.Device, error) {
 	err := deviceValidate.Struct(input)
 	if err != nil {
 		lDevice.Errorf("struct validation error: %s", err)
@@ -278,7 +278,7 @@ type UpdateDeviceMetadataInput struct {
 	Metadata map[string]any `validate:"required"`
 }
 
-func (svc DeviceManagerServiceImpl) UpdateDeviceMetadata(input UpdateDeviceMetadataInput) (*models.Device, error) {
+func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(input UpdateDeviceMetadataInput) (*models.Device, error) {
 	err := deviceValidate.Struct(input)
 	if err != nil {
 		lDevice.Errorf("UpdateDeviceMetadata struct validation error: %s", err)
@@ -309,7 +309,7 @@ type UpdateDeviceIdentitySlotInput struct {
 	Slot models.Slot[string] `validate:"required"`
 }
 
-func (svc DeviceManagerServiceImpl) UpdateDeviceIdentitySlot(input UpdateDeviceIdentitySlotInput) (*models.Device, error) {
+func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(input UpdateDeviceIdentitySlotInput) (*models.Device, error) {
 	err := deviceValidate.Struct(input)
 	if err != nil {
 		lDevice.Errorf("struct validation error: %s", err)

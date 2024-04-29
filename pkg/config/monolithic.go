@@ -11,14 +11,17 @@ const (
 )
 
 type MonolithicConfig struct {
-	BaseConfig       `mapstructure:",squash"`
-	Storage          PluggableStorageEngine        `mapstructure:"storage"`
-	CryptoEngines    CryptoEngines                 `mapstructure:"crypto_engines"`
-	CryptoMonitoring CryptoMonitoring              `mapstructure:"crypto_monitoring"`
-	Domain           string                        `mapstructure:"domain"`
-	AssemblyMode     LamassuMonolithicAssembleMode `mapstructure:"assembly_mode"`
-	GatewayPort      int                           `mapstructure:"gateway_port"`
-	AWSIoTManager    MonolithicAWSIoTManagerConfig `mapstructure:"aws_iot_manager"`
+	Logs               BaseConfigLogging             `mapstructure:"logs"`
+	Server             HttpServer                    `mapstructure:"server"`
+	PublisherEventBus  EventBusEngine                `mapstructure:"publisher_event_bus"`
+	SubscriberEventBus EventBusEngine                `mapstructure:"subscriber_event_bus"`
+	Storage            PluggableStorageEngine        `mapstructure:"storage"`
+	CryptoEngines      CryptoEngines                 `mapstructure:"crypto_engines"`
+	CryptoMonitoring   CryptoMonitoring              `mapstructure:"crypto_monitoring"`
+	Domain             string                        `mapstructure:"domain"`
+	AssemblyMode       LamassuMonolithicAssembleMode `mapstructure:"assembly_mode"`
+	GatewayPort        int                           `mapstructure:"gateway_port"`
+	AWSIoTManager      MonolithicAWSIoTManagerConfig `mapstructure:"aws_iot_manager"`
 }
 
 type MonolithicAWSIoTManagerConfig struct {

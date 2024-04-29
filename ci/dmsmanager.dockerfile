@@ -1,4 +1,4 @@
-FROM golang:1.21-bullseye
+FROM golang:1.22.1-bullseye
 WORKDIR /app
 
 COPY cmd cmd
@@ -14,7 +14,7 @@ RUN go mod tidy
 
 ENV GOSUMDB=off
 RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ")&& \
-    go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -o dms-manager cmd/ra/main.go 
+    go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -o dms-manager cmd/dms-manager/main.go 
 
 FROM ubuntu:20.04
 

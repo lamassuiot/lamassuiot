@@ -18,19 +18,33 @@ import (
 
 	"github.com/globalsign/est"
 	"github.com/google/uuid"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"golang.org/x/crypto/ocsp"
 )
 
-func StartDMSManagerServiceTestServer(t *testing.T) (*DMSManagerTestServer, *TestServer, error) {
+func StartDMSManagerServiceTestServer(t *testing.T, withEventBus bool) (*DMSManagerTestServer, *TestServer, error) {
+	var err error
+	eventBusConf := &TestEventBusConfig{
+		config: config.EventBusEngine{
+			Enabled: false,
+		},
+	}
+	if withEventBus {
+		eventBusConf, err = PrepareRabbitMQForTest()
+		if err != nil {
+			t.Fatalf("could not prepare RabbitMQ test server: %s", err)
+		}
+	}
+
 	storageConfig, err := PreparePostgresForTest([]string{"ca", "devicemanager", "dmsmanager"})
 	if err != nil {
 		t.Fatalf("could not prepare Postgres test server: %s", err)
 	}
 	cryptoConfig := PrepareCryptoEnginesForTest([]CryptoEngine{GOLANG})
-	testServer, err := AssembleServices(storageConfig, cryptoConfig, []Service{CA, DEVICE_MANAGER, DMS_MANAGER})
+	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, []Service{CA, DEVICE_MANAGER, DMS_MANAGER})
 	if err != nil {
 		t.Fatalf("could not assemble Server with HTTP server: %s", err)
 	}
@@ -45,7 +59,7 @@ func StartDMSManagerServiceTestServer(t *testing.T) (*DMSManagerTestServer, *Tes
 }
 
 func TestCreateDMS(t *testing.T) {
-	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
@@ -68,7 +82,7 @@ func TestCreateDMS(t *testing.T) {
 
 func TestESTEnroll(t *testing.T) {
 	// t.Parallel()
-	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t)
+	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
@@ -632,7 +646,7 @@ func TestESTEnroll(t *testing.T) {
 		// {
 		// 	name: "Err/ExternalRevokedCertificate",
 		// 	run: func() (caCert, cert *x509.Certificate, key any, err error) {
-		// 		_, externalTestServers, err := StartDMSManagerServiceTestServer(t)
+		// 		_, externalTestServers, err := StartDMSManagerServiceTestServer(t, false)
 		// 		if err != nil {
 		// 			t.Fatalf("could not create Second DMS Manager test server: %s", err)
 		// 		}
@@ -809,7 +823,7 @@ func TestESTEnroll(t *testing.T) {
 
 func TestESTReEnroll(t *testing.T) {
 	// t.Parallel()
-	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t)
+	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}

@@ -28,15 +28,13 @@ func TestGenerateSelfSignedCA(t *testing.T) {
 	}
 
 	// Verificar que el certificado tenga la clave privada correspondiente
-	switch key.(type) {
+	switch key := key.(type) {
 	case *rsa.PrivateKey:
-		rsaKey := key.(*rsa.PrivateKey)
-		if !reflect.DeepEqual(&rsaKey.PublicKey, cert.PublicKey) {
+		if !reflect.DeepEqual(&key.PublicKey, cert.PublicKey) {
 			t.Errorf("La clave privada no coincide con la clave pública del certificado")
 		}
 	case *ecdsa.PrivateKey:
-		ecdsaKey := key.(*ecdsa.PrivateKey)
-		if !reflect.DeepEqual(&ecdsaKey.PublicKey, cert.PublicKey) {
+		if !reflect.DeepEqual(&key.PublicKey, cert.PublicKey) {
 			t.Errorf("La clave privada no coincide con la clave pública del certificado")
 		}
 	default:
@@ -55,15 +53,13 @@ func TestGenerateSelfSignedCA(t *testing.T) {
 	}
 
 	// Verificar que el certificado tenga la clave privada correspondiente
-	switch key.(type) {
+	switch key := key.(type) {
 	case *rsa.PrivateKey:
-		rsaKey := key.(*rsa.PrivateKey)
-		if !reflect.DeepEqual(&rsaKey.PublicKey, cert.PublicKey) {
+		if !reflect.DeepEqual(&key.PublicKey, cert.PublicKey) {
 			t.Errorf("La clave privada no coincide con la clave pública del certificado")
 		}
 	case *ecdsa.PrivateKey:
-		ecdsaKey := key.(*ecdsa.PrivateKey)
-		if !reflect.DeepEqual(&ecdsaKey.PublicKey, cert.PublicKey) {
+		if !reflect.DeepEqual(&key.PublicKey, cert.PublicKey) {
 			t.Errorf("La clave privada no coincide con la clave pública del certificado")
 		}
 	default:

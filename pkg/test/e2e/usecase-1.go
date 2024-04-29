@@ -30,7 +30,7 @@ type UseCase1Input struct {
 }
 
 func RunUseCase1(input UseCase1Input) error {
-	lUsecase := helpers.ConfigureLogger(config.Info, "test")
+	lUsecase := helpers.ConfigureLogger(config.Info, "Test Case", "test")
 
 	var hostname = input.LamassuHostname
 	var port = input.LamassuPort
@@ -72,7 +72,7 @@ func RunUseCase1(input UseCase1Input) error {
 
 	//Initialization of the client to connect to monolithic
 
-	log := helpers.ConfigureLogger(config.Info, "httpClient")
+	log := helpers.ConfigureLogger(config.Info, "Test Case", "httpClient")
 
 	httpCli, err := clients.BuildHTTPClient(config.HTTPClient{
 		AuthMode: config.NoAuth,

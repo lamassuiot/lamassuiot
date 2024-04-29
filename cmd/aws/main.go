@@ -45,9 +45,9 @@ func main() {
 	log.Debugf("%s", confBytes)
 	log.Debugf("===================================================")
 
-	lDMSClient := helpers.ConfigureLogger(conf.DMSManagerClient.LogLevel, "LMS SDK - DMS Client")
-	lDeviceClient := helpers.ConfigureLogger(conf.DevManagerClient.LogLevel, "LMS SDK - Device Client")
-	lCAClient := helpers.ConfigureLogger(conf.CAClient.LogLevel, "LMS SDK - CA Client")
+	lDMSClient := helpers.ConfigureLogger(conf.DMSManagerClient.LogLevel, "AWS IoT Connector", "LMS SDK - DMS Client")
+	lDeviceClient := helpers.ConfigureLogger(conf.DevManagerClient.LogLevel, "AWS IoT Connector", "LMS SDK - Device Client")
+	lCAClient := helpers.ConfigureLogger(conf.CAClient.LogLevel, "AWS IoT Connector", "LMS SDK - CA Client")
 
 	dmsHttpCli, err := clients.BuildHTTPClient(conf.DMSManagerClient.HTTPClient, lDMSClient)
 	if err != nil {

@@ -4,21 +4,20 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/messaging"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
 
 type caEventPublisher struct {
-	next     services.CAService
-	eventBus *messaging.MessagingEngine
+	next       services.CAService
+	eventMWPub CloudEventMiddlewarePublisher
 }
 
-func NewCAEventBusPublisher(engine *messaging.MessagingEngine) services.CAMiddleware {
+func NewCAEventBusPublisher(eventMWPub CloudEventMiddlewarePublisher) services.CAMiddleware {
 	return func(next services.CAService) services.CAService {
 		return &caEventPublisher{
-			next:     next,
-			eventBus: engine,
+			next:       next,
+			eventMWPub: eventMWPub,
 		}
 	}
 }
@@ -37,7 +36,7 @@ func (mw caEventPublisher) GetStatsByCAID(ctx context.Context, input services.Ge
 func (mw caEventPublisher) CreateCA(ctx context.Context, input services.CreateCAInput) (output *models.CACertificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(ctx, models.EventCreateCAKey, output)
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventCreateCAKey, output)
 		}
 	}()
 	return mw.next.CreateCA(ctx, input)
@@ -46,7 +45,7 @@ func (mw caEventPublisher) CreateCA(ctx context.Context, input services.CreateCA
 func (mw caEventPublisher) ImportCA(ctx context.Context, input services.ImportCAInput) (output *models.CACertificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(ctx, models.EventImportCAKey, output)
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventImportCAKey, output)
 		}
 	}()
 	return mw.next.ImportCA(ctx, input)
@@ -74,7 +73,7 @@ func (mw caEventPublisher) UpdateCAStatus(ctx context.Context, input services.Up
 
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(ctx, models.EventUpdateCAStatusKey, models.UpdateModel[models.CACertificate]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateCAStatusKey, models.UpdateModel[models.CACertificate]{
 				Updated:  *output,
 				Previous: *prev,
 			})
@@ -92,7 +91,7 @@ func (mw caEventPublisher) UpdateCAMetadata(ctx context.Context, input services.
 
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(ctx, models.EventUpdateCAMetadataKey, models.UpdateModel[models.CACertificate]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateCAMetadataKey, models.UpdateModel[models.CACertificate]{
 				Updated:  *output,
 				Previous: *prev,
 			})
@@ -104,7 +103,7 @@ func (mw caEventPublisher) UpdateCAMetadata(ctx context.Context, input services.
 func (mw caEventPublisher) DeleteCA(ctx context.Context, input services.DeleteCAInput) (err error) {
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(ctx, models.EventDeleteCAKey, input)
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventDeleteCAKey, input)
 		}
 	}()
 	return mw.next.DeleteCA(ctx, input)
@@ -113,7 +112,7 @@ func (mw caEventPublisher) DeleteCA(ctx context.Context, input services.DeleteCA
 func (mw caEventPublisher) SignCertificate(ctx context.Context, input services.SignCertificateInput) (output *models.Certificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(ctx, models.EventSignCertificateKey, output)
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventSignCertificateKey, output)
 		}
 	}()
 	return mw.next.SignCertificate(ctx, input)
@@ -122,7 +121,7 @@ func (mw caEventPublisher) SignCertificate(ctx context.Context, input services.S
 func (mw caEventPublisher) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (output *models.Certificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(ctx, models.EventCreateCertificateKey, output)
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventCreateCertificateKey, output)
 		}
 	}()
 	return mw.next.CreateCertificate(ctx, input)
@@ -131,7 +130,7 @@ func (mw caEventPublisher) CreateCertificate(ctx context.Context, input services
 func (mw caEventPublisher) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (output *models.Certificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(ctx, "ca.certificate.import", output)
+			mw.eventMWPub.PublishCloudEvent(ctx, "ca.certificate.import", output)
 		}
 	}()
 	return mw.next.ImportCertificate(ctx, input)
@@ -140,7 +139,7 @@ func (mw caEventPublisher) ImportCertificate(ctx context.Context, input services
 func (mw caEventPublisher) SignatureSign(ctx context.Context, input services.SignatureSignInput) (output []byte, err error) {
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(ctx, models.EventSignatureSignKey, output)
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventSignatureSignKey, output)
 		}
 	}()
 	return mw.next.SignatureSign(ctx, input)
@@ -176,7 +175,7 @@ func (mw caEventPublisher) UpdateCertificateStatus(ctx context.Context, input se
 
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(ctx, models.EventUpdateCertificateStatusKey, models.UpdateModel[models.Certificate]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateCertificateStatusKey, models.UpdateModel[models.Certificate]{
 				Previous: *prev,
 				Updated:  *output,
 			})
@@ -203,7 +202,7 @@ func (mw caEventPublisher) UpdateCertificateMetadata(ctx context.Context, input 
 
 	defer func() {
 		if err == nil {
-			mw.eventBus.PublishCloudEvent(ctx, models.EventUpdateCertificateMetadataKey, models.UpdateModel[models.Certificate]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateCertificateMetadataKey, models.UpdateModel[models.Certificate]{
 				Previous: *prev,
 				Updated:  *output,
 			})
