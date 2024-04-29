@@ -11,6 +11,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
@@ -242,9 +243,6 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 		return nil, fmt.Errorf("could not assemble CA with HTTP server")
 	}
 
-	caSvc := *svc
-	caBackend := caSvc.(*services.CAServiceBackend)
-
 	return &CATestServer{
 		Service:   *svc,
 		HttpCASDK: clients.NewHttpCAClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
@@ -252,7 +250,16 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 			return nil
 		},
 		AfterSuite: func() {
-			caBackend.Close()
+			caSvc := *svc
+			switch localSvc := caSvc.(type) {
+			case *services.CAServiceBackend:
+				caBackend := localSvc
+				caBackend.Close()
+			case *eventpub.CAEventPublisher:
+				caBackend := localSvc.Next.(*services.CAServiceBackend)
+				caBackend.Close()
+			}
+
 		},
 	}, nil
 }

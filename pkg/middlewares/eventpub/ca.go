@@ -8,62 +8,62 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
 
-type caEventPublisher struct {
-	next       services.CAService
+type CAEventPublisher struct {
+	Next       services.CAService
 	eventMWPub CloudEventMiddlewarePublisher
 }
 
 func NewCAEventBusPublisher(eventMWPub CloudEventMiddlewarePublisher) services.CAMiddleware {
 	return func(next services.CAService) services.CAService {
-		return &caEventPublisher{
-			next:       next,
+		return &CAEventPublisher{
+			Next:       next,
 			eventMWPub: eventMWPub,
 		}
 	}
 }
 
-func (mw caEventPublisher) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
-	return mw.next.GetCryptoEngineProvider(ctx)
+func (mw CAEventPublisher) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
+	return mw.Next.GetCryptoEngineProvider(ctx)
 }
 
-func (mw caEventPublisher) GetStats(ctx context.Context) (*models.CAStats, error) {
-	return mw.next.GetStats(ctx)
+func (mw CAEventPublisher) GetStats(ctx context.Context) (*models.CAStats, error) {
+	return mw.Next.GetStats(ctx)
 }
-func (mw caEventPublisher) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
-	return mw.next.GetStatsByCAID(ctx, input)
+func (mw CAEventPublisher) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
+	return mw.Next.GetStatsByCAID(ctx, input)
 }
 
-func (mw caEventPublisher) CreateCA(ctx context.Context, input services.CreateCAInput) (output *models.CACertificate, err error) {
+func (mw CAEventPublisher) CreateCA(ctx context.Context, input services.CreateCAInput) (output *models.CACertificate, err error) {
 	defer func() {
 		if err == nil {
 			mw.eventMWPub.PublishCloudEvent(ctx, models.EventCreateCAKey, output)
 		}
 	}()
-	return mw.next.CreateCA(ctx, input)
+	return mw.Next.CreateCA(ctx, input)
 }
 
-func (mw caEventPublisher) ImportCA(ctx context.Context, input services.ImportCAInput) (output *models.CACertificate, err error) {
+func (mw CAEventPublisher) ImportCA(ctx context.Context, input services.ImportCAInput) (output *models.CACertificate, err error) {
 	defer func() {
 		if err == nil {
 			mw.eventMWPub.PublishCloudEvent(ctx, models.EventImportCAKey, output)
 		}
 	}()
-	return mw.next.ImportCA(ctx, input)
+	return mw.Next.ImportCA(ctx, input)
 }
 
-func (mw caEventPublisher) GetCAByID(ctx context.Context, input services.GetCAByIDInput) (*models.CACertificate, error) {
-	return mw.next.GetCAByID(ctx, input)
+func (mw CAEventPublisher) GetCAByID(ctx context.Context, input services.GetCAByIDInput) (*models.CACertificate, error) {
+	return mw.Next.GetCAByID(ctx, input)
 }
 
-func (mw caEventPublisher) GetCAs(ctx context.Context, input services.GetCAsInput) (string, error) {
-	return mw.next.GetCAs(ctx, input)
+func (mw CAEventPublisher) GetCAs(ctx context.Context, input services.GetCAsInput) (string, error) {
+	return mw.Next.GetCAs(ctx, input)
 }
 
-func (mw caEventPublisher) GetCAsByCommonName(ctx context.Context, input services.GetCAsByCommonNameInput) (string, error) {
-	return mw.next.GetCAsByCommonName(ctx, input)
+func (mw CAEventPublisher) GetCAsByCommonName(ctx context.Context, input services.GetCAsByCommonNameInput) (string, error) {
+	return mw.Next.GetCAsByCommonName(ctx, input)
 }
 
-func (mw caEventPublisher) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (output *models.CACertificate, err error) {
+func (mw CAEventPublisher) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (output *models.CACertificate, err error) {
 	prev, err := mw.GetCAByID(ctx, services.GetCAByIDInput{
 		CAID: input.CAID,
 	})
@@ -79,9 +79,9 @@ func (mw caEventPublisher) UpdateCAStatus(ctx context.Context, input services.Up
 			})
 		}
 	}()
-	return mw.next.UpdateCAStatus(ctx, input)
+	return mw.Next.UpdateCAStatus(ctx, input)
 }
-func (mw caEventPublisher) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (output *models.CACertificate, err error) {
+func (mw CAEventPublisher) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (output *models.CACertificate, err error) {
 	prev, err := mw.GetCAByID(ctx, services.GetCAByIDInput{
 		CAID: input.CAID,
 	})
@@ -97,75 +97,75 @@ func (mw caEventPublisher) UpdateCAMetadata(ctx context.Context, input services.
 			})
 		}
 	}()
-	return mw.next.UpdateCAMetadata(ctx, input)
+	return mw.Next.UpdateCAMetadata(ctx, input)
 }
 
-func (mw caEventPublisher) DeleteCA(ctx context.Context, input services.DeleteCAInput) (err error) {
+func (mw CAEventPublisher) DeleteCA(ctx context.Context, input services.DeleteCAInput) (err error) {
 	defer func() {
 		if err == nil {
 			mw.eventMWPub.PublishCloudEvent(ctx, models.EventDeleteCAKey, input)
 		}
 	}()
-	return mw.next.DeleteCA(ctx, input)
+	return mw.Next.DeleteCA(ctx, input)
 }
 
-func (mw caEventPublisher) SignCertificate(ctx context.Context, input services.SignCertificateInput) (output *models.Certificate, err error) {
+func (mw CAEventPublisher) SignCertificate(ctx context.Context, input services.SignCertificateInput) (output *models.Certificate, err error) {
 	defer func() {
 		if err == nil {
 			mw.eventMWPub.PublishCloudEvent(ctx, models.EventSignCertificateKey, output)
 		}
 	}()
-	return mw.next.SignCertificate(ctx, input)
+	return mw.Next.SignCertificate(ctx, input)
 }
 
-func (mw caEventPublisher) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (output *models.Certificate, err error) {
+func (mw CAEventPublisher) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (output *models.Certificate, err error) {
 	defer func() {
 		if err == nil {
 			mw.eventMWPub.PublishCloudEvent(ctx, models.EventCreateCertificateKey, output)
 		}
 	}()
-	return mw.next.CreateCertificate(ctx, input)
+	return mw.Next.CreateCertificate(ctx, input)
 }
 
-func (mw caEventPublisher) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (output *models.Certificate, err error) {
+func (mw CAEventPublisher) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (output *models.Certificate, err error) {
 	defer func() {
 		if err == nil {
 			mw.eventMWPub.PublishCloudEvent(ctx, "ca.certificate.import", output)
 		}
 	}()
-	return mw.next.ImportCertificate(ctx, input)
+	return mw.Next.ImportCertificate(ctx, input)
 }
 
-func (mw caEventPublisher) SignatureSign(ctx context.Context, input services.SignatureSignInput) (output []byte, err error) {
+func (mw CAEventPublisher) SignatureSign(ctx context.Context, input services.SignatureSignInput) (output []byte, err error) {
 	defer func() {
 		if err == nil {
 			mw.eventMWPub.PublishCloudEvent(ctx, models.EventSignatureSignKey, output)
 		}
 	}()
-	return mw.next.SignatureSign(ctx, input)
+	return mw.Next.SignatureSign(ctx, input)
 }
 
-func (mw caEventPublisher) SignatureVerify(ctx context.Context, input services.SignatureVerifyInput) (output bool, err error) {
-	return mw.next.SignatureVerify(ctx, input)
+func (mw CAEventPublisher) SignatureVerify(ctx context.Context, input services.SignatureVerifyInput) (output bool, err error) {
+	return mw.Next.SignatureVerify(ctx, input)
 }
 
-func (mw caEventPublisher) GetCertificateBySerialNumber(ctx context.Context, input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
-	return mw.next.GetCertificateBySerialNumber(ctx, input)
+func (mw CAEventPublisher) GetCertificateBySerialNumber(ctx context.Context, input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
+	return mw.Next.GetCertificateBySerialNumber(ctx, input)
 }
 
-func (mw caEventPublisher) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {
-	return mw.next.GetCertificates(ctx, input)
+func (mw CAEventPublisher) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {
+	return mw.Next.GetCertificates(ctx, input)
 }
 
-func (mw caEventPublisher) GetCertificatesByCA(ctx context.Context, input services.GetCertificatesByCAInput) (string, error) {
-	return mw.next.GetCertificatesByCA(ctx, input)
+func (mw CAEventPublisher) GetCertificatesByCA(ctx context.Context, input services.GetCertificatesByCAInput) (string, error) {
+	return mw.Next.GetCertificatesByCA(ctx, input)
 }
 
-func (mw caEventPublisher) GetCertificatesByExpirationDate(ctx context.Context, input services.GetCertificatesByExpirationDateInput) (string, error) {
-	return mw.next.GetCertificatesByExpirationDate(ctx, input)
+func (mw CAEventPublisher) GetCertificatesByExpirationDate(ctx context.Context, input services.GetCertificatesByExpirationDateInput) (string, error) {
+	return mw.Next.GetCertificatesByExpirationDate(ctx, input)
 }
 
-func (mw caEventPublisher) UpdateCertificateStatus(ctx context.Context, input services.UpdateCertificateStatusInput) (output *models.Certificate, err error) {
+func (mw CAEventPublisher) UpdateCertificateStatus(ctx context.Context, input services.UpdateCertificateStatusInput) (output *models.Certificate, err error) {
 	prev, err := mw.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
 		SerialNumber: input.SerialNumber,
 	})
@@ -181,18 +181,18 @@ func (mw caEventPublisher) UpdateCertificateStatus(ctx context.Context, input se
 			})
 		}
 	}()
-	return mw.next.UpdateCertificateStatus(ctx, input)
+	return mw.Next.UpdateCertificateStatus(ctx, input)
 }
 
-func (mw caEventPublisher) GetCertificatesByCaAndStatus(ctx context.Context, input services.GetCertificatesByCaAndStatusInput) (string, error) {
-	return mw.next.GetCertificatesByCaAndStatus(ctx, input)
+func (mw CAEventPublisher) GetCertificatesByCaAndStatus(ctx context.Context, input services.GetCertificatesByCaAndStatusInput) (string, error) {
+	return mw.Next.GetCertificatesByCaAndStatus(ctx, input)
 }
 
-func (mw caEventPublisher) GetCertificatesByStatus(ctx context.Context, input services.GetCertificatesByStatusInput) (string, error) {
-	return mw.next.GetCertificatesByStatus(ctx, input)
+func (mw CAEventPublisher) GetCertificatesByStatus(ctx context.Context, input services.GetCertificatesByStatusInput) (string, error) {
+	return mw.Next.GetCertificatesByStatus(ctx, input)
 }
 
-func (mw caEventPublisher) UpdateCertificateMetadata(ctx context.Context, input services.UpdateCertificateMetadataInput) (output *models.Certificate, err error) {
+func (mw CAEventPublisher) UpdateCertificateMetadata(ctx context.Context, input services.UpdateCertificateMetadataInput) (output *models.Certificate, err error) {
 	prev, err := mw.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
 		SerialNumber: input.SerialNumber,
 	})
@@ -208,5 +208,5 @@ func (mw caEventPublisher) UpdateCertificateMetadata(ctx context.Context, input 
 			})
 		}
 	}()
-	return mw.next.UpdateCertificateMetadata(ctx, input)
+	return mw.Next.UpdateCertificateMetadata(ctx, input)
 }
