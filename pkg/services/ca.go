@@ -261,7 +261,8 @@ func (svc *CAServiceBackend) CheckCAsAndCertificates() {
 }
 
 func (svc *CAServiceBackend) Close() {
-	svc.cronInstance.Stop()
+	ctx := svc.cronInstance.Stop()
+	<-ctx.Done()
 }
 
 func (svc *CAServiceBackend) SetService(service CAService) {

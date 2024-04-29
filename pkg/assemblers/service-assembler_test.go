@@ -242,8 +242,8 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 		return nil, fmt.Errorf("could not assemble CA with HTTP server")
 	}
 
-	// caSvc := *svc
-	// caBackend := caSvc.(*services.CAServiceImpl)
+	caSvc := *svc
+	caBackend := caSvc.(*services.CAServiceBackend)
 
 	return &CATestServer{
 		Service:   *svc,
@@ -252,7 +252,7 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 			return nil
 		},
 		AfterSuite: func() {
-			// caBackend.Close()
+			caBackend.Close()
 		},
 	}, nil
 }
