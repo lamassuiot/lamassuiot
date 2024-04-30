@@ -381,9 +381,9 @@ func generateCertificate(caSDK services.CAService) (*models.Certificate, error) 
 	}
 
 	crt, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-		CAID:         DefaultCAID,
-		CertRequest:  (*models.X509CertificateRequest)(csr),
-		SignVerbatim: true,
+		CAID:               DefaultCAID,
+		CertRequest:        (*models.X509CertificateRequest)(csr),
+		UseExplicitSubject: false,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("could not sign csr: %s", err)
@@ -500,11 +500,15 @@ func initCAForVA(testServer *TestServer) (*models.CACertificate, error) {
 	caDUr := models.TimeDuration(time.Hour * 24)
 	issuanceDur := models.TimeDuration(time.Hour * 12)
 	ca, err := testServer.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-		ID:                 DefaultCAID,
-		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-		Subject:            models.Subject{CommonName: "TestCA"},
-		CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
-		IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+		ID:           DefaultCAID,
+		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+		Subject:      models.Subject{CommonName: "TestCA"},
+		CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDUr},
+		DefaultIssuanceProfile: models.IssuanceProfile{
+			KeyUsage:          x509.KeyUsageCRLSign,
+			ExtendedKeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageOCSPSigning},
+			Expiration:        models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+		},
 	})
 	if err != nil {
 		return nil, err

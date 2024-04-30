@@ -109,14 +109,14 @@ func (cli *httpCAClient) GetCABySerialNumber(ctx context.Context, input services
 
 func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas", resources.CreateCABody{
-		ID:                 input.ID,
-		Subject:            input.Subject,
-		KeyMetadata:        input.KeyMetadata,
-		IssuanceExpiration: input.IssuanceExpiration,
-		CAExpiration:       input.CAExpiration,
-		EngineID:           input.EngineID,
-		ParentID:           input.ParentID,
-		Metadata:           input.Metadata,
+		ID:                     input.ID,
+		Subject:                input.Subject,
+		KeyMetadata:            input.KeyMetadata,
+		DefaultIssuanceProfile: input.DefaultIssuanceProfile,
+		CAExpiration:           input.CAExpiration,
+		EngineID:               input.EngineID,
+		ParentID:               input.ParentID,
+		Metadata:               input.Metadata,
 	}, map[int][]error{
 		400: {
 			errs.ErrCAIncompatibleExpirationTimeRef,
@@ -156,14 +156,14 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 	}
 
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/import", resources.ImportCABody{
-		ID:                 input.ID,
-		CAType:             models.CertificateType(input.CAType),
-		IssuanceExpiration: input.IssuanceExpiration,
-		CACertificate:      input.CACertificate,
-		CAChain:            input.CAChain,
-		CAPrivateKey:       privKey,
-		EngineID:           input.EngineID,
-		ParentID:           input.ParentID,
+		ID:                     input.ID,
+		CAType:                 models.CertificateType(input.CAType),
+		DefaultIssuanceProfile: input.DefaultIssuanceProfile,
+		CACertificate:          input.CACertificate,
+		CAChain:                input.CAChain,
+		CAPrivateKey:           privKey,
+		EngineID:               input.EngineID,
+		ParentID:               input.ParentID,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err
@@ -174,9 +174,9 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 
 func (cli *httpCAClient) SignCertificate(ctx context.Context, input services.SignCertificateInput) (*models.Certificate, error) {
 	response, err := Post[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/certificates/sign", resources.SignCertificateBody{
-		SignVerbatim: input.SignVerbatim,
-		CertRequest:  input.CertRequest,
-		Subject:      input.Subject,
+		UseExplicitSubject: input.UseExplicitSubject,
+		CertRequest:        input.CertRequest,
+		Subject:            input.Subject,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err

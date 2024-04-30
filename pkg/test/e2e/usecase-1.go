@@ -107,9 +107,13 @@ func RunUseCase1(input UseCase1Input) error {
 	ca2Iss := models.TimeDuration(time.Minute * 5)
 	ca1, err := caClient.ImportCA(context.Background(), services.ImportCAInput{
 		CAType: models.CertificateTypeImportedWithKey,
-		IssuanceExpiration: models.Expiration{
-			Type:     models.Duration,
-			Duration: (*models.TimeDuration)(&ca2Iss),
+		DefaultIssuanceProfile: models.IssuanceProfile{
+			KeyUsage:          x509.KeyUsageCertSign,
+			ExtendedKeyUsages: []x509.ExtKeyUsage{},
+			Expiration: models.Expiration{
+				Type:     models.Duration,
+				Duration: (*models.TimeDuration)(&ca2Iss),
+			},
 		},
 		CACertificate: (*models.X509Certificate)(cert1),
 		KeyType:       models.KeyType(x509.RSA),
@@ -134,11 +138,18 @@ func RunUseCase1(input UseCase1Input) error {
 	}
 
 	ca2, err := caClient.CreateCA(context.Background(), services.CreateCAInput{
-		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-		Subject:            models.Subject{CommonName: "CA1"},
-		CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDur2},
-		IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss2},
-		EngineID:           engine.ID,
+		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+		Subject:      models.Subject{CommonName: "CA1"},
+		CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDur2},
+		DefaultIssuanceProfile: models.IssuanceProfile{
+			KeyUsage:          x509.KeyUsageCertSign,
+			ExtendedKeyUsages: []x509.ExtKeyUsage{},
+			Expiration: models.Expiration{
+				Type:     models.Duration,
+				Duration: (*models.TimeDuration)(&caIss2),
+			},
+		},
+		EngineID: engine.ID,
 	})
 	if err != nil {
 		return err
@@ -249,9 +260,8 @@ func RunUseCase1(input UseCase1Input) error {
 	}
 	log.Infof("6. Sign Bootstrap Cert with CA2")
 	bootSigedCrt, err := caClient.SignCertificate(context.Background(), services.SignCertificateInput{
-		CAID:         ca2.ID,
-		CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-		SignVerbatim: true,
+		CAID:        ca2.ID,
+		CertRequest: (*models.X509CertificateRequest)(bootCsr),
 	})
 	if err != nil {
 		return err

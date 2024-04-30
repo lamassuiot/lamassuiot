@@ -98,11 +98,15 @@ func TestCreateCA(t *testing.T) {
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                 caID,
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
-					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDUr},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsage(x509.KeyUsageDigitalSignature),
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+					},
 				})
 			},
 			resultCheck: func(createdCA *models.CACertificate, err error) error {
@@ -118,11 +122,15 @@ func TestCreateCA(t *testing.T) {
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                 caID,
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
-					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDUr},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsage(x509.KeyUsageDigitalSignature),
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+					},
 				})
 			},
 			resultCheck: func(createdCA *models.CACertificate, err error) error {
@@ -138,11 +146,15 @@ func TestCreateCA(t *testing.T) {
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                 caID,
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
-					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDUr},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsage(x509.KeyUsageDigitalSignature),
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+					},
 				})
 			},
 			resultCheck: func(createdCA *models.CACertificate, err error) error {
@@ -160,11 +172,15 @@ func TestCreateCA(t *testing.T) {
 				tCA := time.Date(9999, 11, 31, 23, 59, 59, 0, time.UTC)
 				tIssue := time.Date(9999, 11, 30, 23, 59, 59, 0, time.UTC)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                 caID,
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Expiration{Type: models.Time, Time: &tCA},
-					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &tIssue},
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Expiration{Type: models.Time, Time: &tCA},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsage(x509.KeyUsageDigitalSignature),
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Time, Time: &tIssue},
+					},
 				})
 			},
 			resultCheck: func(createdCA *models.CACertificate, err error) error {
@@ -183,11 +199,15 @@ func TestCreateCA(t *testing.T) {
 			name: "Error/Duplicate-CA-ID",
 			before: func(svc services.CAService) error {
 				_, err := svc.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                 caID,
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
-					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDUr},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsage(x509.KeyUsageDigitalSignature),
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+					},
 				})
 				if err != nil {
 					return err
@@ -196,11 +216,15 @@ func TestCreateCA(t *testing.T) {
 			},
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                 caID,
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
-					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDUr},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsage(x509.KeyUsageDigitalSignature),
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+					},
 				})
 			},
 			resultCheck: func(createdCA *models.CACertificate, err error) error {
@@ -266,7 +290,7 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 						return fmt.Errorf("Error creating the private key: %s", err)
 					}
 					csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", i)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, UseExplicitSubject: false, CertRequest: (*models.X509CertificateRequest)(csr)})
 					if err != nil {
 						return err
 					}
@@ -310,7 +334,7 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 				for i := 0; i < certsToIssue; i++ {
 					key, _ := helpers.GenerateRSAKey(2048)
 					csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", i)}, key)
-					_, err := svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err := svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, UseExplicitSubject: false, CertRequest: (*models.X509CertificateRequest)(csr)})
 					if err != nil {
 						return err
 					}
@@ -431,9 +455,9 @@ func TestRevokeCA(t *testing.T) {
 					}
 
 					caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-						CAID:         DefaultCAID,
-						CertRequest:  (*models.X509CertificateRequest)(csr),
-						SignVerbatim: true,
+						CAID:               DefaultCAID,
+						CertRequest:        (*models.X509CertificateRequest)(csr),
+						UseExplicitSubject: false,
 					})
 				}
 				caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
@@ -702,7 +726,7 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 				}
 
 				csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-				cert, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+				cert, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, UseExplicitSubject: false, CertRequest: (*models.X509CertificateRequest)(csr)})
 				if err != nil {
 					return err
 				}
@@ -1039,7 +1063,7 @@ func TestGetCertificates(t *testing.T) {
 					}
 
 					csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, UseExplicitSubject: false, CertRequest: (*models.X509CertificateRequest)(csr)})
 					if err != nil {
 						return err
 					}
@@ -1086,7 +1110,7 @@ func TestGetCertificates(t *testing.T) {
 					}
 
 					csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, UseExplicitSubject: false, CertRequest: (*models.X509CertificateRequest)(csr)})
 					if err != nil {
 						return err
 					}
@@ -1180,7 +1204,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 					}
 
 					csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, UseExplicitSubject: false, CertRequest: (*models.X509CertificateRequest)(csr)})
 					if err != nil {
 						return err
 					}
@@ -1227,7 +1251,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 					}
 
 					csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, UseExplicitSubject: false, CertRequest: (*models.X509CertificateRequest)(csr)})
 					if err != nil {
 						return err
 					}
@@ -1274,7 +1298,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 					}
 
 					csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, UseExplicitSubject: false, CertRequest: (*models.X509CertificateRequest)(csr)})
 					if err != nil {
 						return err
 					}
@@ -1321,7 +1345,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 					}
 
 					csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, UseExplicitSubject: false, CertRequest: (*models.X509CertificateRequest)(csr)})
 					if err != nil {
 						return err
 					}
@@ -1466,9 +1490,13 @@ func TestImportCA(t *testing.T) {
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6abf45b4d24e0bf7d8adef322c06987baca",
 					CAType: models.CertificateTypeExternal,
-					IssuanceExpiration: models.Expiration{
-						Type:     models.Duration,
-						Duration: (*models.TimeDuration)(&duration),
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration: models.Expiration{
+							Type:     models.Duration,
+							Duration: (*models.TimeDuration)(&duration),
+						},
 					},
 					CACertificate: (*models.X509Certificate)(ca),
 				})
@@ -1496,9 +1524,13 @@ func TestImportCA(t *testing.T) {
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6a4e0bf7d8adef322c06987baca",
 					CAType: models.CertificateTypeImportedWithKey,
-					IssuanceExpiration: models.Expiration{
-						Type:     models.Duration,
-						Duration: (*models.TimeDuration)(&duration),
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration: models.Expiration{
+							Type:     models.Duration,
+							Duration: (*models.TimeDuration)(&duration),
+						},
 					},
 					CACertificate: (*models.X509Certificate)(ca),
 					CARSAKey:      (key).(*rsa.PrivateKey),
@@ -1536,9 +1568,13 @@ func TestImportCA(t *testing.T) {
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6a4e0bf7d8adef322c06987baca",
 					CAType: models.CertificateTypeImportedWithKey,
-					IssuanceExpiration: models.Expiration{
-						Type:     models.Duration,
-						Duration: (*models.TimeDuration)(&duration),
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration: models.Expiration{
+							Type:     models.Duration,
+							Duration: (*models.TimeDuration)(&duration),
+						},
 					},
 					CACertificate: (*models.X509Certificate)(ca),
 					CARSAKey:      (key).(*rsa.PrivateKey),
@@ -1568,9 +1604,13 @@ func TestImportCA(t *testing.T) {
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:     "c1acdb823dd8ac113d2b0a1aaa0adef322c06987baca",
 					CAType: models.CertificateTypeImportedWithKey,
-					IssuanceExpiration: models.Expiration{
-						Type:     models.Duration,
-						Duration: (*models.TimeDuration)(&duration),
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration: models.Expiration{
+							Type:     models.Duration,
+							Duration: (*models.TimeDuration)(&duration),
+						},
 					},
 					CACertificate: (*models.X509Certificate)(ca),
 					CAECKey:       (key).(*ecdsa.PrivateKey),
@@ -1597,9 +1637,13 @@ func TestImportCA(t *testing.T) {
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					CAType: models.CertificateTypeImportedWithKey,
-					IssuanceExpiration: models.Expiration{
-						Type:     models.Duration,
-						Duration: (*models.TimeDuration)(&duration),
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration: models.Expiration{
+							Type:     models.Duration,
+							Duration: (*models.TimeDuration)(&duration),
+						},
 					},
 					CACertificate: (*models.X509Certificate)(ca),
 					CARSAKey:      (key).(*rsa.PrivateKey),
@@ -1769,9 +1813,13 @@ bdcPzjFyYX/L4Q==
 				duration, _ := models.ParseDuration("100d")
 				importedRootCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					CAType: models.CertificateTypeImportedWithKey,
-					IssuanceExpiration: models.Expiration{
-						Type:     models.Duration,
-						Duration: (*models.TimeDuration)(&duration),
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration: models.Expiration{
+							Type:     models.Duration,
+							Duration: (*models.TimeDuration)(&duration),
+						},
 					},
 					CACertificate: (*models.X509Certificate)(cert0),
 					CARSAKey:      (key0).(*rsa.PrivateKey),
@@ -1783,9 +1831,13 @@ bdcPzjFyYX/L4Q==
 
 				importedCALvl1, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					CAType: models.CertificateTypeImportedWithKey,
-					IssuanceExpiration: models.Expiration{
-						Type:     models.Duration,
-						Duration: (*models.TimeDuration)(&duration),
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration: models.Expiration{
+							Type:     models.Duration,
+							Duration: (*models.TimeDuration)(&duration),
+						},
 					},
 					CACertificate: (*models.X509Certificate)(cert1),
 					CAECKey:       (key1).(*ecdsa.PrivateKey),
@@ -2019,11 +2071,15 @@ func TestGetCAs(t *testing.T) {
 				for i := 0; i < 5; i++ {
 					caName = DefaultCAID + strconv.Itoa(i)
 					res, _ := svc.CreateCA(context.Background(), services.CreateCAInput{
-						ID:                 caName,
-						KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-						Subject:            models.Subject{CommonName: DefaultCACN},
-						CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
-						IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+						ID:           caName,
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+						Subject:      models.Subject{CommonName: DefaultCACN},
+						CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDUr},
+						DefaultIssuanceProfile: models.IssuanceProfile{
+							KeyUsage:          x509.KeyUsage(x509.KeyUsageDigitalSignature),
+							ExtendedKeyUsages: []x509.ExtKeyUsage{},
+							Expiration:        models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+						},
 					})
 					fmt.Println(res)
 				}
@@ -2063,11 +2119,15 @@ func TestGetCAs(t *testing.T) {
 				for i := 0; i < 5; i++ {
 					caName = DefaultCAID + strconv.Itoa(i)
 					res, _ := svc.CreateCA(context.Background(), services.CreateCAInput{
-						ID:                 caName,
-						KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-						Subject:            models.Subject{CommonName: DefaultCACN},
-						CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
-						IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+						ID:           caName,
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+						Subject:      models.Subject{CommonName: DefaultCACN},
+						CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDUr},
+						DefaultIssuanceProfile: models.IssuanceProfile{
+							KeyUsage:          x509.KeyUsage(x509.KeyUsageDigitalSignature),
+							ExtendedKeyUsages: []x509.ExtKeyUsage{},
+							Expiration:        models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+						},
 					})
 					fmt.Println(res)
 				}
@@ -2154,7 +2214,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 					}
 
 					csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, UseExplicitSubject: false, CertRequest: (*models.X509CertificateRequest)(csr)})
 					if err != nil {
 						return err
 					}
@@ -2199,7 +2259,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 					}
 
 					csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, UseExplicitSubject: false, CertRequest: (*models.X509CertificateRequest)(csr)})
 					if err != nil {
 						return err
 					}
@@ -2244,7 +2304,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 					}
 
 					csr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, UseExplicitSubject: false, CertRequest: (*models.X509CertificateRequest)(csr)})
 					if err != nil {
 						return err
 					}
@@ -2461,11 +2521,15 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
 
 				rootCA, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDurRootCA},
-					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
-					EngineID:           engines[0].ID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDurRootCA},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Duration, Duration: &caIss},
+					},
+					EngineID: engines[0].ID,
 				})
 
 				if err != nil {
@@ -2474,11 +2538,15 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 				cas = append(cas, *rootCA)
 
 				childCALvl1, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDurChild1},
-					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
-					ParentID:           rootCA.ID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDurChild1},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Duration, Duration: &caIss},
+					},
+					ParentID: rootCA.ID,
 				})
 				if err != nil {
 					t.Fatalf("failed creating the first CA child: %s", err)
@@ -2570,10 +2638,14 @@ func TestHierarchy(t *testing.T) {
 				caIss := models.TimeDuration(time.Minute * 3)
 
 				rootCA, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDurRootCA},
-					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDurRootCA},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Duration, Duration: &caIss},
+					},
 				})
 
 				if err != nil {
@@ -2582,11 +2654,15 @@ func TestHierarchy(t *testing.T) {
 				cas = append(cas, *rootCA)
 
 				childCALvl1, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDurChild1},
-					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
-					ParentID:           rootCA.ID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDurChild1},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Duration, Duration: &caIss},
+					},
+					ParentID: rootCA.ID,
 				})
 				if err != nil {
 					t.Fatalf("failed creating the first CA child: %s", err)
@@ -2599,12 +2675,16 @@ func TestHierarchy(t *testing.T) {
 				fmt.Println("=============================")
 
 				childCALvl2, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 2"},
-					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDurChild2},
-					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
-					ParentID:           childCALvl1.ID,
-					ID:                 "Lvl2",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 2"},
+					CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDurChild2},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Duration, Duration: &caIss},
+					},
+					ParentID: childCALvl1.ID,
+					ID:       "Lvl2",
 				})
 				if err != nil {
 					t.Fatalf("failed creating the second CA child: %s", err)
@@ -2650,10 +2730,14 @@ func TestHierarchy(t *testing.T) {
 				caIss := models.TimeDuration(time.Minute * 3)
 
 				rootCA, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDurRootCA},
-					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDurRootCA},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Duration, Duration: &caIss},
+					},
 				})
 
 				if err != nil {
@@ -2661,12 +2745,16 @@ func TestHierarchy(t *testing.T) {
 				}
 				cas = append(cas, *rootCA)
 				_, err = caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDurChild1},
-					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss},
-					ParentID:           rootCA.ID,
-					ID:                 "Lvl1",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDurChild1},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Duration, Duration: &caIss},
+					},
+					ParentID: rootCA.ID,
+					ID:       "Lvl1",
 				})
 
 				//cas := []*models.CACertificate{}
@@ -2696,10 +2784,14 @@ func TestHierarchy(t *testing.T) {
 
 				issuanceDur := time.Date(3000, 11, 20, 0, 0, 0, 0, time.Local) // fixed issuance: the 20 of november of 3000
 				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: DefaultCACN},
-					CAExpiration:       models.Expiration{Type: models.Time, Time: &caRDLim},
-					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &issuanceDur},
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: DefaultCACN},
+					CAExpiration: models.Expiration{Type: models.Time, Time: &caRDLim},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Time, Time: &issuanceDur},
+					},
 				})
 				if err != nil {
 					t.Fatalf("failed creating the first CA child: %s", err)
@@ -2715,11 +2807,15 @@ func TestHierarchy(t *testing.T) {
 				caIss := time.Date(2030, 11, 20, 0, 0, 0, 0, time.Local)
 
 				childCALvl1, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Expiration{Type: models.Time, Time: &caCDLim1},
-					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &caIss},
-					ParentID:           ca.ID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Expiration{Type: models.Time, Time: &caCDLim1},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Time, Time: &caIss},
+					},
+					ParentID: ca.ID,
 				})
 				if err != nil {
 					t.Fatalf("failed creating the first CA child: %s", err)
@@ -2732,11 +2828,15 @@ func TestHierarchy(t *testing.T) {
 				fmt.Println("=============================")
 
 				childCALvl2, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Expiration{Type: models.Time, Time: &caCDLim2},
-					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &caIss},
-					ParentID:           childCALvl1.ID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Expiration{Type: models.Time, Time: &caCDLim2},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Time, Time: &caIss},
+					},
+					ParentID: childCALvl1.ID,
 				})
 				if err != nil {
 					t.Fatalf("failed creating the first CA child: %s", err)
@@ -2779,10 +2879,14 @@ func TestHierarchy(t *testing.T) {
 
 				caIss := time.Date(2030, 11, 20, 0, 0, 0, 0, time.Local)
 				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: DefaultCACN},
-					CAExpiration:       models.Expiration{Type: models.Time, Time: &caRDLim},
-					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &caIss},
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: DefaultCACN},
+					CAExpiration: models.Expiration{Type: models.Time, Time: &caRDLim},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsage(x509.KeyUsageDigitalSignature),
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Time, Time: &caIss},
+					},
 				})
 
 				if err != nil {
@@ -2791,11 +2895,15 @@ func TestHierarchy(t *testing.T) {
 
 				cas = append(cas, *ca)
 				_, err = caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Expiration{Type: models.Time, Time: &caCDLim1},
-					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &caIss},
-					ParentID:           ca.ID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Expiration{Type: models.Time, Time: &caCDLim1},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Time, Time: &caIss},
+					},
+					ParentID: ca.ID,
 				})
 
 				//cas := []*models.CACertificate{}
@@ -2823,10 +2931,14 @@ func TestHierarchy(t *testing.T) {
 
 				caIss := time.Date(3000, 11, 20, 0, 0, 0, 0, time.Local)
 				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: DefaultCACN},
-					CAExpiration:       models.Expiration{Type: models.Time, Time: &caRDLim},
-					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &caIss},
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: DefaultCACN},
+					CAExpiration: models.Expiration{Type: models.Time, Time: &caRDLim},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Time, Time: &caIss},
+					},
 				})
 
 				if err != nil {
@@ -2837,11 +2949,15 @@ func TestHierarchy(t *testing.T) {
 				caIss2 := models.TimeDuration(time.Minute * 3)
 
 				childCALvl1, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDurChild1},
-					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss2},
-					ParentID:           ca.ID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDurChild1},
+					DefaultIssuanceProfile: models.IssuanceProfile{
+						KeyUsage:          x509.KeyUsageCertSign,
+						ExtendedKeyUsages: []x509.ExtKeyUsage{},
+						Expiration:        models.Expiration{Type: models.Duration, Duration: &caIss2},
+					},
+					ParentID: ca.ID,
 				})
 				cas = append(cas, *childCALvl1)
 
@@ -2962,10 +3078,14 @@ func TestCAsAdditionalDeltasMonitoring(t *testing.T) {
 			issuanceDur := models.TimeDuration(maxDeltaDur)
 
 			ca, err := serverTest.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-				KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
-				Subject:            models.Subject{CommonName: "MyCA"},
-				CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDur},
-				IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+				KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
+				Subject:      models.Subject{CommonName: "MyCA"},
+				CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDur},
+				DefaultIssuanceProfile: models.IssuanceProfile{
+					KeyUsage:          x509.KeyUsage(x509.KeyUsageDigitalSignature),
+					ExtendedKeyUsages: []x509.ExtKeyUsage{},
+					Expiration:        models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+				},
 				Metadata: map[string]any{
 					models.CAMetadataMonitoringExpirationDeltasKey: models.CAMetadataMonitoringExpirationDeltas(caDeltas),
 				},
@@ -3009,11 +3129,15 @@ func initCA(caSDK services.CAService) (*models.CACertificate, error) {
 	caDUr := models.TimeDuration(time.Hour * 25)
 	issuanceDur := models.TimeDuration(time.Minute * 12)
 	ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-		ID:                 DefaultCAID,
-		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-		Subject:            models.Subject{CommonName: DefaultCACN},
-		CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
-		IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+		ID:           DefaultCAID,
+		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+		Subject:      models.Subject{CommonName: DefaultCACN},
+		CAExpiration: models.Expiration{Type: models.Duration, Duration: &caDUr},
+		DefaultIssuanceProfile: models.IssuanceProfile{
+			KeyUsage:          x509.KeyUsage(x509.KeyUsageDigitalSignature),
+			ExtendedKeyUsages: []x509.ExtKeyUsage{},
+			Expiration:        models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+		},
 	})
 
 	return ca, err

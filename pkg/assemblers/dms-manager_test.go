@@ -91,11 +91,15 @@ func TestESTEnroll(t *testing.T) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
 		issuanceCABootDur, _ := models.ParseDuration(issuance)
 		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
-			Subject:            models.Subject{CommonName: name},
-			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
-			IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
-			Metadata:           map[string]any{},
+			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
+			Subject:      models.Subject{CommonName: name},
+			CAExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
+			DefaultIssuanceProfile: models.IssuanceProfile{
+				KeyUsage:          x509.KeyUsageCertSign,
+				ExtendedKeyUsages: []x509.ExtKeyUsage{},
+				Expiration:        models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
+			},
+			Metadata: map[string]any{},
 		})
 	}
 
@@ -174,9 +178,9 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:               bootstrapCA.ID,
+					CertRequest:        (*models.X509CertificateRequest)(bootCsr),
+					UseExplicitSubject: false,
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -251,9 +255,9 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:               bootstrapCA.ID,
+					CertRequest:        (*models.X509CertificateRequest)(bootCsr),
+					UseExplicitSubject: false,
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -329,9 +333,9 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:               bootstrapCA.ID,
+					CertRequest:        (*models.X509CertificateRequest)(bootCsr),
+					UseExplicitSubject: false,
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -420,9 +424,9 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:               bootstrapCA.ID,
+					CertRequest:        (*models.X509CertificateRequest)(bootCsr),
+					UseExplicitSubject: false,
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -531,9 +535,9 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:               bootstrapCA.ID,
+					CertRequest:        (*models.X509CertificateRequest)(bootCsr),
+					UseExplicitSubject: false,
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -593,9 +597,9 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:               bootstrapCA.ID,
+					CertRequest:        (*models.X509CertificateRequest)(bootCsr),
+					UseExplicitSubject: false,
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -690,7 +694,7 @@ func TestESTEnroll(t *testing.T) {
 		// 		bootCrt, err := externalTestServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 		// 			CAID:         bootstrapCA.ID,
 		// 			CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-		// 			SignVerbatim: true,
+		// 			UseExplicitSubject: false,
 		// 		})
 		// 		if err != nil {
 		// 			t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -757,9 +761,9 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:               bootstrapCA.ID,
+					CertRequest:        (*models.X509CertificateRequest)(bootCsr),
+					UseExplicitSubject: false,
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -828,11 +832,15 @@ func TestESTReEnroll(t *testing.T) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
 		issuanceCABootDur, _ := models.ParseDuration(issuance)
 		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
-			Subject:            models.Subject{CommonName: name},
-			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
-			IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
-			Metadata:           map[string]any{},
+			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
+			Subject:      models.Subject{CommonName: name},
+			CAExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
+			DefaultIssuanceProfile: models.IssuanceProfile{
+				KeyUsage:          x509.KeyUsageCertSign,
+				ExtendedKeyUsages: []x509.ExtKeyUsage{},
+				Expiration:        models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
+			},
+			Metadata: map[string]any{},
 		})
 	}
 
@@ -905,9 +913,9 @@ func TestESTReEnroll(t *testing.T) {
 		bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
 		bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 		bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-			CAID:         bootstrapCA.ID,
-			CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-			SignVerbatim: true,
+			CAID:               bootstrapCA.ID,
+			CertRequest:        (*models.X509CertificateRequest)(bootCsr),
+			UseExplicitSubject: false,
 		})
 		if err != nil {
 			t.Fatalf("could not sign Bootstrap Certificate: %s", err)
