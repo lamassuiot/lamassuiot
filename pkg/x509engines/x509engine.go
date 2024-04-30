@@ -299,9 +299,6 @@ func (engine X509Engine) Sign(cAssetType CryptoAssetType, certificate *x509.Cert
 
 		} else {
 			digest = message
-			if err != nil {
-				return nil, err
-			}
 		}
 		signature, err := privkey.Sign(rand.Reader, digest, hashFunc)
 		if err != nil {
@@ -329,9 +326,6 @@ func (engine X509Engine) Sign(cAssetType CryptoAssetType, certificate *x509.Cert
 			digest = h.Sum(nil)
 		} else {
 			digest = message
-			if err != nil {
-				return nil, err
-			}
 		}
 
 		sigAlg := strings.Split(signingAlgorithm, "_")
@@ -385,9 +379,6 @@ func (engine X509Engine) Verify(caCertificate *x509.Certificate, signature []byt
 			hasher = h.Sum(nil)
 		} else {
 			hasher = message
-			if err != nil {
-				return false, err
-			}
 		}
 		pubK := caCertificate.PublicKey
 		ecdsaKey, _ := pubK.(*ecdsa.PublicKey)
@@ -416,9 +407,6 @@ func (engine X509Engine) Verify(caCertificate *x509.Certificate, signature []byt
 			hasher = h.Sum(nil)
 		} else {
 			hasher = message
-			if err != nil {
-				return false, err
-			}
 		}
 
 		pubK := caCertificate.PublicKey
