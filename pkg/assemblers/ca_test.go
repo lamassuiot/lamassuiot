@@ -1421,10 +1421,6 @@ func TestImportCA(t *testing.T) {
 			pubKey = &eccKey.PublicKey
 		}
 
-		if err != nil {
-			return nil, nil, err
-		}
-
 		sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
 		template := x509.Certificate{
 			SerialNumber: sn,

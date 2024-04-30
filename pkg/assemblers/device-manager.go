@@ -18,7 +18,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/couchdb"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
 	"github.com/sirupsen/logrus"
-	log "github.com/sirupsen/logrus"
 )
 
 func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig, caService services.CAService, serviceInfo models.APIServiceInfo) (*services.DeviceManagerService, int, error) {
@@ -221,11 +220,7 @@ func updateCertMetaHandler(event *event.Event, svc services.DeviceManagerService
 			return false
 		})
 
-		if idx == -1 {
-			return false
-		}
-
-		return true
+		return idx != -1
 	}
 
 	criticalTriggered := checkIfTriggered(certUpdate.Updated, "Critical")
@@ -267,7 +262,7 @@ func updateCertMetaHandler(event *event.Event, svc services.DeviceManagerService
 	return nil
 }
 
-func createDevicesStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine) (storage.DeviceManagerRepo, error) {
+func createDevicesStorageInstance(logger *logrus.Entry, conf config.PluggableStorageEngine) (storage.DeviceManagerRepo, error) {
 	switch conf.Provider {
 	case config.Postgres:
 		psqlCli, err := postgres.CreatePostgresDBConnection(logger, conf.Postgres, "devicemanager")

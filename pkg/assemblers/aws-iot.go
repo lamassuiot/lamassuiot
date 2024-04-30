@@ -18,7 +18,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services/iot"
 	"github.com/sirupsen/logrus"
-	log "github.com/sirupsen/logrus"
 )
 
 func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAService, dmsService services.DMSManagerService, deviceService services.DeviceManagerService) (*iot.AWSCloudConnectorService, error) {
@@ -39,7 +38,7 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 		DeviceSDK:   deviceService,
 	})
 	if err != nil {
-		log.Fatal(err)
+		logrus.Fatal(err)
 	}
 
 	eventBusRouter, err := eventbus.NewEventBusRouter(conf.SubscriberEventBus, "aws-connector", lMessaging)
@@ -234,10 +233,7 @@ func mainAwsConnectorEventHandler(event *event.Event, svc iot.AWSCloudConnectorS
 		}
 
 		preventiveIdx := slices.IndexFunc(certExpirationDeltas, func(med models.MonitoringExpirationDelta) bool {
-			if med.Name == "Preventive" {
-				return true
-			}
-			return false
+			return med.Name == "Preventive"
 		})
 
 		var attachedBy models.CAAttachedToDevice
