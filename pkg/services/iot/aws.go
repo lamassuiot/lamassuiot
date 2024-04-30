@@ -194,7 +194,6 @@ func (svc *AWSCloudConnectorService) RegisterAndAttachThing(input RegisterAndAtt
 				if err != nil {
 					logrus.Warnf("error while revoking AWS certificate-principal %s for thing %s: %s", value, input.DeviceID, err)
 				}
-
 			}
 			pageNum++
 		}
@@ -282,12 +281,33 @@ func (svc *AWSCloudConnectorService) RegisterAndAttachThing(input RegisterAndAtt
 		return err
 	}
 
-	_, err = svc.iotSDK.RegisterThing(context.Background(), &iot.RegisterThingInput{
+	registrationOutput, err := svc.iotSDK.RegisterThing(context.Background(), &iot.RegisterThingInput{
 		TemplateBody: aws.String(string(templateB)),
 		Parameters:   params,
 	})
 	if err != nil {
 		logrus.Errorf("could not register thing: %s", err)
+		return err
+	}
+
+	cert, err := svc.CaSDK.GetCertificateBySerialNumber(context.Background(), services.GetCertificatesBySerialNumberInput{
+		SerialNumber: input.BindedIdentity.Certificate.SerialNumber,
+	})
+	if err != nil {
+		logrus.Errorf("could not get certificate %s: %s", input.BindedIdentity.Certificate.SerialNumber, err)
+		return err
+	}
+
+	cert.Metadata[models.AWSIoTMetadataKey(svc.ConnectorID)] = models.IoTAWSCertificateMetadata{
+		ARN: registrationOutput.ResourceArns["certificate"],
+	}
+
+	_, err = svc.CaSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
+		SerialNumber: input.BindedIdentity.Certificate.SerialNumber,
+		Metadata:     cert.Metadata,
+	})
+	if err != nil {
+		logrus.Errorf("could not update certificate %s metadata: %s", input.BindedIdentity.Certificate.SerialNumber, err)
 		return err
 	}
 

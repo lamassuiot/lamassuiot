@@ -96,7 +96,7 @@ func RunUseCase1(input UseCase1Input) error {
 	log.Infof("1. Create Out-of-band CA1 (ca expiration of 1h)")
 	lUsecase.WithField("", "Step 1").Info("starting")
 	caExp := (time.Hour * 1)
-	cert1, key1, err := helpers.GenerateSelfSignedCA(x509.RSA, caExp)
+	cert1, key1, err := helpers.GenerateSelfSignedCA(x509.RSA, caExp, "MyCA")
 
 	if err != nil {
 		return err

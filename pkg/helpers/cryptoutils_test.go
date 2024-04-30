@@ -17,7 +17,7 @@ import (
 func TestGenerateSelfSignedCA(t *testing.T) {
 	// Caso de prueba 1: keyType es x509.RSA
 	expirationTime := time.Hour * 24 * 365 // 1 año
-	cert, key, err := GenerateSelfSignedCA(x509.RSA, expirationTime)
+	cert, key, err := GenerateSelfSignedCA(x509.RSA, expirationTime, "MyCA")
 	if err != nil {
 		t.Errorf("Error generando el certificado: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestGenerateSelfSignedCA(t *testing.T) {
 	}
 
 	// Caso de prueba 2: keyType es x509.ECDSA
-	cert, key, err = GenerateSelfSignedCA(x509.ECDSA, expirationTime)
+	cert, key, err = GenerateSelfSignedCA(x509.ECDSA, expirationTime, "MyCA")
 	if err != nil {
 		t.Errorf("Error generando el certificado: %v", err)
 	}
@@ -169,12 +169,12 @@ func TestEncryptWithPublicKey(t *testing.T) {
 func TestValidateCertAndPrivKey(t *testing.T) {
 	// Generate a self-signed certificate and private keys for testing
 	expirationTime := time.Hour * 24 * 365 // 1 year
-	cert, rsaKey, err := GenerateSelfSignedCA(x509.RSA, expirationTime)
+	cert, rsaKey, err := GenerateSelfSignedCA(x509.RSA, expirationTime, "MyCA")
 	if err != nil {
 		t.Fatalf("Failed to generate self-signed certificate and RSA private key: %v", err)
 	}
 
-	certEc, ecKey, err := GenerateSelfSignedCA(x509.ECDSA, expirationTime)
+	certEc, ecKey, err := GenerateSelfSignedCA(x509.ECDSA, expirationTime, "MyCA")
 	if err != nil {
 		t.Fatalf("Failed to generate self-signed certificate and RSA private key: %v", err)
 	}

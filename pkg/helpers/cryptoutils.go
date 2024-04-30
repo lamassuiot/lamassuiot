@@ -22,7 +22,7 @@ import (
 
 //Cammbio de la función para definir la longevidad de la expiración de la CA.
 
-func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.Duration) (*x509.Certificate, any, error) {
+func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.Duration, commonName string) (*x509.Certificate, any, error) {
 	var err error
 	var key any
 	var pubKey any
@@ -48,7 +48,7 @@ func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.D
 	template := x509.Certificate{
 		SerialNumber: sn,
 		Subject: pkix.Name{
-			CommonName: "Test-CA-External",
+			CommonName: commonName,
 		},
 		NotBefore:             time.Now(),
 		NotAfter:              (time.Now().Add(expirationTime)),
