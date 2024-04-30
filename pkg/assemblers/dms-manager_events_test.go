@@ -275,7 +275,9 @@ func TestBindIDEvent(t *testing.T) {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
-				dms, err := createDMS(func(in *services.CreateDMSInput) {})
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					// This function is intentionally left empty as there are no specific settings to be configured for the DMS.
+				})
 				if err != nil {
 					t.Fatalf("could not create DMS: %s", err)
 				}
