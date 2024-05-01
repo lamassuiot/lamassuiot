@@ -121,7 +121,7 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 			cronInstance = cron.New(cron.WithSeconds())
 		}
 	} else {
-		builder.Logger.Warn("certificate periodic monitoring is disable")
+		builder.Logger.Warn("certificate periodic monitoring is disabled")
 	}
 
 	svc := CAServiceBackend{
@@ -1040,7 +1040,6 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input DeleteCAInput) 
 		return errs.ErrCAStatus
 	}
 
-	//TODO missing implementation
 	err = svc.caStorage.Delete(context.Background(), input.CAID)
 	if err != nil {
 		lFunc.Errorf("something went wrong while deleting the CA %s %s", input.CAID, err)

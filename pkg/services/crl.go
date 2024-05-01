@@ -75,9 +75,7 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte
 		return nil, err
 	}
 
-	ca, err := svc.caSDK.GetCAByID(ctx, GetCAByIDInput{
-		CAID: input.CAID,
-	})
+	ca, err := svc.caSDK.GetCAByID(ctx, GetCAByIDInput(input))
 	if err != nil {
 		return nil, err
 	}

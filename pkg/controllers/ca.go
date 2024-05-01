@@ -191,11 +191,11 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 	var rsaKey *rsa.PrivateKey
 	var ecKey *ecdsa.PrivateKey
 
-	switch key.(type) {
+	switch key := key.(type) {
 	case *rsa.PrivateKey:
-		rsaKey = key.(*rsa.PrivateKey)
+		rsaKey = key
 	case *ecdsa.PrivateKey:
-		ecKey = key.(*ecdsa.PrivateKey)
+		ecKey = key
 	}
 
 	funCtx := helpers.ConfigureContextWithRequest(ctx, ctx.Request.Header)
