@@ -21,5 +21,4 @@ func NewDMSManagerHTTPLayer(logger *logrus.Entry, httpGrp *gin.RouterGroup, svc 
 	rv1.PUT("/dms/:id", routes.UpdateDMS)
 	rv1.POST("/dms/bind-identity", routes.BindIdentityToDevice)
 
-	return
 }

@@ -231,7 +231,7 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println(readyToPKI)
+	fmt.Print(readyToPKI)
 
 	http.DefaultClient.Transport = &http.Transport{
 		TLSClientConfig: &tls.Config{

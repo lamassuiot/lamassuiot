@@ -37,7 +37,7 @@ func RunUseCase1(input UseCase1Input) error {
 	var protocol = input.LamassuHTTProtocol
 	var devicePrefix = input.DeviceIDPrefix
 	var awsIotCoreEndpoint = input.AwsIotCoreEndpoint
-	var awsNamedShadowName = input.AwsShadowName
+	//var awsNamedShadowName = input.AwsShadowName
 	var awsAccountID = input.AwsAccountID
 
 	const p = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"iot:*\"],\"Resource\":[\"*\"]}]}"
@@ -182,7 +182,7 @@ func RunUseCase1(input UseCase1Input) error {
 				},
 				GroupNames: []string{"TEST-LMS"},
 				Policies: []models.AWSIoTPolicy{
-					models.AWSIoTPolicy{PolicyName: "my-p", PolicyDocument: p},
+					{PolicyName: "my-p", PolicyDocument: p},
 				},
 				ShadowConfig: struct {
 					Enable     bool   "json:\"enable\""
@@ -226,9 +226,6 @@ func RunUseCase1(input UseCase1Input) error {
 				ManagedCAs:             []string{},
 			},
 		},
-	}
-	if err != nil {
-		return err
 	}
 
 	_, err = dmsClient.CreateDMS(context.Background(), dmsCreateInput)
@@ -328,9 +325,8 @@ func RunUseCase1(input UseCase1Input) error {
 	opts.AddBroker(fmt.Sprintf("ssl://%s:%d", broker, mqttPort))
 	opts.SetClientID(deviceID)
 
-	shadowName := "shadow"
-
-	shadowName = shadowName + "/name/" + awsNamedShadowName
+	//shadowName := "shadow"
+	//shadowName = shadowName + "/name/" + awsNamedShadowName
 
 	awsCreds, err := tls.LoadX509KeyPair("device.crt", "device.key")
 	if err != nil {
@@ -362,7 +358,7 @@ func RunUseCase1(input UseCase1Input) error {
 			break
 		} else {
 			if tryConnectAWSCount >= 2 {
-				fmt.Errorf("tried %d times connecting to AWS. Last error: %s", tryConnectAWSCount, err)
+				return fmt.Errorf("tried %d times connecting to AWS. Last error: %s", tryConnectAWSCount, err)
 			}
 		}
 

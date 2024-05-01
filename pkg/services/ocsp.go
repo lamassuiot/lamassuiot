@@ -50,13 +50,11 @@ func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) ([]byte,
 
 	status := ocsp.Unknown
 	var revokedAt time.Time
-	if err == nil {
-		if crt.Status == models.StatusRevoked {
-			status = ocsp.Revoked
-			revokedAt = crt.RevocationTimestamp
-		} else if crt.Status == models.StatusActive {
-			status = ocsp.Good
-		}
+	if crt.Status == models.StatusRevoked {
+		status = ocsp.Revoked
+		revokedAt = crt.RevocationTimestamp
+	} else if crt.Status == models.StatusActive {
+		status = ocsp.Good
 	}
 
 	// construct response template

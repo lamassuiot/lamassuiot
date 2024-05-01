@@ -405,9 +405,9 @@ type JSONSerializer struct {
 func (JSONSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue interface{}) (err error) {
 	fieldValue := reflect.New(field.FieldType)
 	var decodeVal string
-	switch dbValue.(type) {
+	switch dbValue := dbValue.(type) {
 	case string:
-		decodeVal = dbValue.(string)
+		decodeVal = dbValue
 	default:
 		return fmt.Errorf("invalid value type")
 	}

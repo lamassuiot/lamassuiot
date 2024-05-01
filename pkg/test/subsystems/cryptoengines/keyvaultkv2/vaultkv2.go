@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/hashicorp/vault/api"
 	vaultApi "github.com/hashicorp/vault/api"
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
@@ -23,7 +22,9 @@ func RunHashicorpVaultDocker() (func() error, *config.HashicorpVaultSDK, string,
 			"VAULT_DEV_ROOT_TOKEN_ID=" + rootToken,
 			"VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200",
 		},
-	}, func(hc *docker.HostConfig) {})
+	}, func(hc *docker.HostConfig) {
+		// This function is intentionally left empty.
+	})
 	if err != nil {
 		return nil, nil, "", err
 	}
@@ -49,7 +50,7 @@ func RunHashicorpVaultDocker() (func() error, *config.HashicorpVaultSDK, string,
 	client.SetToken(rootToken)
 
 	// Enable approle
-	err = client.Sys().EnableAuthWithOptions("approle", &api.EnableAuthOptions{
+	err = client.Sys().EnableAuthWithOptions("approle", &vaultApi.EnableAuthOptions{
 		Type: "approle",
 	})
 	if err != nil {
