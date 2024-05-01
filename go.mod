@@ -3,7 +3,6 @@ module github.com/lamassuiot/lamassuiot/v2
 go 1.22.1
 
 require (
-	github.com/AvraamMavridis/randomcolor v0.0.0-20180822172341-208aff70bf2c
 	github.com/ThalesIgnite/crypto11 v1.2.1
 	github.com/ThreeDotsLabs/watermill v1.3.5
 	github.com/ThreeDotsLabs/watermill-amazonsqs v0.0.3
@@ -39,8 +38,6 @@ require (
 	github.com/sirupsen/logrus v1.9.1
 	github.com/spf13/viper v1.7.0
 	github.com/stretchr/testify v1.8.4
-	github.com/swaggo/files v1.0.1
-	github.com/swaggo/gin-swagger v1.6.0
 	github.com/swaggo/swag v1.16.1
 	go.mozilla.org/pkcs7 v0.0.0-20210826202110-33d05740a352
 	golang.org/x/crypto v0.17.0
