@@ -7,6 +7,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/jobs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
@@ -17,10 +18,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func AssembleCAServiceWithHTTPServer(conf config.CAConfig, serviceInfo models.APIServiceInfo) (*services.CAService, int, error) {
-	caService, err := AssembleCAService(conf)
+func AssembleCAServiceWithHTTPServer(conf config.CAConfig, serviceInfo models.APIServiceInfo) (*services.CAService, *jobs.JobScheduler, int, error) {
+	caService, scheduler, err := AssembleCAService(conf)
 	if err != nil {
-		return nil, -1, fmt.Errorf("could not assemble CA Service. Exiting: %s", err)
+		return nil, nil, -1, fmt.Errorf("could not assemble CA Service. Exiting: %s", err)
 	}
 
 	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "CA", "HTTP Server")
@@ -30,21 +31,22 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, serviceInfo models.AP
 	routes.NewCAHTTPLayer(httpGrp, *caService)
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
-		return nil, -1, fmt.Errorf("could not run CA Service http server: %s", err)
+		return nil, nil, -1, fmt.Errorf("could not run CA Service http server: %s", err)
 	}
 
-	return caService, port, nil
+	return caService, scheduler, port, nil
 }
 
-func AssembleCAService(conf config.CAConfig) (*services.CAService, error) {
+func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobScheduler, error) {
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "CA", "Service")
 	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Event Bus")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "CA", "Storage")
 	lCryptoEng := helpers.SetupLogger(conf.CryptoEngines.LogLevel, "CA", "CryptoEngine")
+	lMonitor := helpers.SetupLogger(conf.Logs.Level, "CA", "Crypto Monitoring")
 
 	engines, err := createCryptoEngines(lCryptoEng, conf)
 	if err != nil {
-		return nil, fmt.Errorf("could not create crypto engines: %s", err)
+		return nil, nil, fmt.Errorf("could not create crypto engines: %s", err)
 	}
 
 	for engineID, engine := range engines {
@@ -58,7 +60,7 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, error) {
 
 	caStorage, certStorage, err := createCAStorageInstance(lStorage, conf.Storage)
 	if err != nil {
-		return nil, fmt.Errorf("could not create CA storage instance: %s", err)
+		return nil, nil, fmt.Errorf("could not create CA storage instance: %s", err)
 	}
 
 	svc, err := services.NewCAService(services.CAServiceBuilder{
@@ -70,7 +72,7 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, error) {
 		VAServerDomain:       conf.VAServerDomain,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("could not create CA service: %v", err)
+		return nil, nil, fmt.Errorf("could not create CA service: %v", err)
 	}
 
 	caSvc := svc.(*services.CAServiceBackend)
@@ -79,7 +81,7 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, error) {
 		log.Infof("Event Bus is enabled")
 		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, "ca", lMessage)
 		if err != nil {
-			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
+			return nil, nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
 
 		svc = eventpub.NewCAEventBusPublisher(eventpub.CloudEventMiddlewarePublisher{
@@ -89,10 +91,18 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, error) {
 		})(svc)
 	}
 
+	var scheduler *jobs.JobScheduler
+	if conf.CryptoMonitoring.Enabled {
+		log.Infof("Crypto Monitoring is enabled")
+		monitorJob := jobs.NewCryptoMonitor(svc, lMonitor)
+		scheduler = jobs.NewJobScheduler(conf.CryptoMonitoring, lMonitor, monitorJob)
+		scheduler.Start()
+	}
+
 	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
 	caSvc.SetService(svc)
 
-	return &svc, nil
+	return &svc, scheduler, nil
 }
 
 func createCAStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine) (storage.CACertificatesRepo, storage.CertificatesRepo, error) {

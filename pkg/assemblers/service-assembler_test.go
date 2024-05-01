@@ -11,7 +11,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
@@ -177,7 +176,9 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	beforeEachActions = append(beforeEachActions, func() error {
 		return nil
 	})
-	afterSuiteActions = append(afterSuiteActions, func() {})
+	afterSuiteActions = append(afterSuiteActions, func() {
+		// noop
+	})
 
 	if slices.Contains(engines, VAULT) {
 		vaultSDKConf, vaultSuite := vault_test.BeforeSuite()
@@ -218,7 +219,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *TestCryptoEngineConfig, eventBus *TestEventBusConfig) (*CATestServer, error) {
 	storageEngine.config.LogLevel = config.Trace
 
-	svc, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
+	svc, scheduler, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
 		Logs: config.BaseConfigLogging{
 			Level: config.Info,
 		},
@@ -252,16 +253,7 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 			return nil
 		},
 		AfterSuite: func() {
-			caSvc := *svc
-			switch localSvc := caSvc.(type) {
-			case *services.CAServiceBackend:
-				caBackend := localSvc
-				caBackend.Close()
-			case *eventpub.CAEventPublisher:
-				caBackend := localSvc.Next.(*services.CAServiceBackend)
-				caBackend.Close()
-			}
-
+			scheduler.Stop()
 		},
 	}, nil
 }

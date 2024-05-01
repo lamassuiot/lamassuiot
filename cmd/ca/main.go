@@ -42,7 +42,7 @@ func main() {
 	log.Debugf("%s", confBytes)
 	log.Debugf("===================================================")
 
-	_, _, err = lamassu.AssembleCAServiceWithHTTPServer(*conf, models.APIServiceInfo{
+	_, _, _, err = lamassu.AssembleCAServiceWithHTTPServer(*conf, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,
