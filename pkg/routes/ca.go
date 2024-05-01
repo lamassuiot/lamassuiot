@@ -4,19 +4,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) {
-	// docs.SwaggerInfo.Title = "Lamassu CA Service API"
-	// docs.SwaggerInfo.Description = "These are the endpoints available in the Lamassu CA Service."
-	// docs.SwaggerInfo.Version = "1.0"
-	// docs.SwaggerInfo.BasePath = "/v1"
-	// docs.SwaggerInfo.InfoInstanceName = "Lamassu CA"
-	// docs.SwaggerInfo.Host = httpServerCfg.ListenAddress
-	// docs.SwaggerInfo.Schemes = []string{string(httpServerCfg.Protocol)}
-
 	routes := controllers.NewCAHttpRoutes(svc)
 
 	router := parentRouterGroup
@@ -50,5 +40,4 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) 
 	rv1.GET("/engines", routes.GetCryptoEngineProvider)
 	rv1.GET("/stats", routes.GetStats)
 	rv1.GET("/stats/:id", routes.GetStatsByCAID)
-	rv1.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 }
