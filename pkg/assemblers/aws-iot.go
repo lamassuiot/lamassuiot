@@ -57,7 +57,7 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 
 	go func() {
 		lSvc.Infof("starting SQS thread")
-		sqsQueueName := fmt.Sprintf("https://sqs.%s.amazonaws.com/%s/%s", awsConnectorSvc.Region, awsConnectorSvc.AccountID, "Lamassu-IoT-SYNC-EventBridgeOutput6A8BBEEC-LaYbNuW753SC")
+		sqsQueueName := fmt.Sprintf("https://sqs.%s.amazonaws.com/%s/%s", awsConnectorSvc.Region, awsConnectorSvc.AccountID, conf.AWSBidirectionalQueueName)
 
 		for {
 			lSvc.Debugf("reading from queue %s", sqsQueueName)
