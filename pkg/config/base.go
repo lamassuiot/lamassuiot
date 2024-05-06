@@ -188,7 +188,7 @@ func LoadConfig[E any](defaults map[string]interface{}) (*E, error) {
 	}
 
 	if loadStandardPaths {
-		conf, err = readConfig[E]("/etc/lamassuiot/config.yml", nil)
+		conf, err = readConfig[E]("/etc/lamassuiot/config.yml", defaults)
 	}
 	if err != nil {
 		return nil, err
