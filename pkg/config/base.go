@@ -137,8 +137,11 @@ type AuthMTLSOptions struct {
 	KeyFile  string `mapstructure:"key_file"`
 }
 
-func readConfig[E any](configFilePath string) (*E, error) {
+func readConfig[E any](configFilePath string, defaults map[string]interface{}) (*E, error) {
 	vp := viper.New()
+	for key, value := range defaults {
+		vp.SetDefault(key, value)
+	}
 	vp.SetConfigFile(configFilePath)
 	if err := vp.ReadInConfig(); err != nil {
 		// This error is not raised by viper when the file is not found when using SetConfigFile.
@@ -163,7 +166,7 @@ func readConfig[E any](configFilePath string) (*E, error) {
 	return &config, nil
 }
 
-func LoadConfig[E any]() (*E, error) {
+func LoadConfig[E any](defaults map[string]interface{}) (*E, error) {
 	var err error
 	var conf *E
 
@@ -174,7 +177,7 @@ func LoadConfig[E any]() (*E, error) {
 	if configFileEnv != "" {
 		loadStandardPaths = false
 		log.Infof("loading config file from %s", configFileEnv)
-		conf, err = readConfig[E](configFileEnv)
+		conf, err = readConfig[E](configFileEnv, defaults)
 
 		if err != nil {
 			log.Warnf("failed to load config file specified in ENV '%s' variable. will try to load from standard paths: %s", configFileEnvVar, err)
@@ -185,11 +188,10 @@ func LoadConfig[E any]() (*E, error) {
 	}
 
 	if loadStandardPaths {
-		conf, err = readConfig[E]("/etc/lamassuiot/config.yml")
-
-		if err != nil {
-			return nil, err
-		}
+		conf, err = readConfig[E]("/etc/lamassuiot/config.yml", nil)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	return conf, nil
