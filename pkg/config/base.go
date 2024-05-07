@@ -141,13 +141,17 @@ func readConfig[E any](configFilePath string) (*E, error) {
 	vp := viper.New()
 	vp.SetConfigFile(configFilePath)
 	if err := vp.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+		// This error is not raised by viper when the file is not found when using SetConfigFile.
+		// Check PR https://github.com/spf13/viper/pull/1803
+		/* if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			// Config file not found; ignore error if desired
 			return nil, fmt.Errorf("config file not found: %s", err)
-		} else {
-			// Config file was found but another error was produced
-			return nil, fmt.Errorf("error while processing config file: %w", err)
 		}
+
+		} else { */
+		// Config file was found but another error was produced
+		return nil, fmt.Errorf("error while processing config file: %w", err)
+		// }
 	}
 
 	var config E
@@ -182,9 +186,10 @@ func LoadConfig[E any]() (*E, error) {
 
 	if loadStandardPaths {
 		conf, err = readConfig[E]("/etc/lamassuiot/config.yml")
-	}
-	if err != nil {
-		return nil, err
+
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return conf, nil
