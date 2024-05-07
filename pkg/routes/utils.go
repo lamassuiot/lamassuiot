@@ -41,7 +41,7 @@ func (tr *traceRequestWriter) Write(p []byte) (n int, err error) {
 
 func RequestIDMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		helpers.ConfigureContextWithRequest(c, c.Request.Header)
+		helpers.UpdateContextWithRequest(c, c.Request.Header)
 		c.Next()
 	}
 }

@@ -66,7 +66,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 
 		caConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: caPort}, Protocol: config.HTTP, BasePath: ""}
 		caSDKBuilder := func(serviceID, src string) services.CAService {
-			lCAClient := helpers.ConfigureLogger(config.Info, serviceID, "LMS SDK - CA Client")
+			lCAClient := helpers.SetupLogger(config.Info, serviceID, "LMS SDK - CA Client")
 			caHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
 				LogLevel:       config.Info,
 				AuthMode:       config.NoAuth,
@@ -120,7 +120,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		devMngrConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: devPort}, Protocol: config.HTTP, BasePath: ""}
 
 		deviceMngrSDKBuilder := func(serviceID, src string) services.DeviceManagerService {
-			lDevMngrClient := helpers.ConfigureLogger(config.Info, serviceID, "LMS SDK - DevManager Client")
+			lDevMngrClient := helpers.SetupLogger(config.Info, serviceID, "LMS SDK - DevManager Client")
 			devMngrHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
 				LogLevel:       config.Info,
 				AuthMode:       config.NoAuth,
@@ -157,7 +157,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		dmsMngrConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: dmsPort}, Protocol: config.HTTP, BasePath: ""}
 
 		dmsMngrSDKBuilder := func(serviceID, src string) services.DMSManagerService {
-			lDMSMngrClient := helpers.ConfigureLogger(config.Info, serviceID, "LMS SDK - DMSManager Client")
+			lDMSMngrClient := helpers.SetupLogger(config.Info, serviceID, "LMS SDK - DMSManager Client")
 			dmsMngrHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
 				LogLevel:       config.Info,
 				AuthMode:       config.NoAuth,

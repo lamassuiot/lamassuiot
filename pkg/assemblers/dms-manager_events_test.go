@@ -491,7 +491,7 @@ func TestBindIDEvent(t *testing.T) {
 			router, err := eventbus.NewEventBusRouter(
 				testServers.EventBus.config,
 				uuid.NewString(),
-				helpers.ConfigureLogger(config.Info, "Test Case", "router"),
+				helpers.SetupLogger(config.Info, "Test Case", "router"),
 			)
 			if err != nil {
 				t.Fatalf("could not instantiate a messaging router: %s", err)
@@ -500,7 +500,7 @@ func TestBindIDEvent(t *testing.T) {
 			subscriber, err := eventbus.NewEventBusSubscriber(
 				testServers.EventBus.config,
 				uuid.NewString(),
-				helpers.ConfigureLogger(config.Trace, "Test Case", "sub"),
+				helpers.SetupLogger(config.Trace, "Test Case", "sub"),
 			)
 			if err != nil {
 				t.Fatalf("could not subscribe: %s", err)

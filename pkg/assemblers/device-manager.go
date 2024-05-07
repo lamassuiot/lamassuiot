@@ -26,7 +26,7 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 		return nil, -1, fmt.Errorf("could not assemble Device Manager Service. Exiting: %s", err)
 	}
 
-	lHttp := helpers.ConfigureLogger(conf.Server.LogLevel, "Device Manager", "HTTP Server")
+	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "Device Manager", "HTTP Server")
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
@@ -42,8 +42,8 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService services.CAService) (*services.DeviceManagerService, error) {
 	serviceID := "device-manager"
 
-	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Device Manager", "Service")
-	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Device Manager", "Storage")
+	lSvc := helpers.SetupLogger(conf.Logs.Level, "Device Manager", "Service")
+	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "Device Manager", "Storage")
 
 	devStorage, err := createDevicesStorageInstance(lStorage, conf.Storage)
 	if err != nil {
@@ -59,7 +59,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 	deviceSvc := svc.(*services.DeviceManagerServiceBackend)
 
 	if conf.PublisherEventBus.Enabled {
-		lMessaging := helpers.ConfigureLogger(conf.PublisherEventBus.LogLevel, "Device Manager", "Event Bus")
+		lMessaging := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "Device Manager", "Event Bus")
 		lMessaging.Infof("Publisher Event Bus is enabled")
 		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
 		if err != nil {
@@ -76,7 +76,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 	}
 
 	if conf.SubscriberEventBus.Enabled {
-		lMessaging := helpers.ConfigureLogger(conf.SubscriberEventBus.LogLevel, "Device Manager", "Event Bus")
+		lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Device Manager", "Event Bus")
 		lMessaging.Infof("Subscriber Event Bus is enabled")
 
 		eventBusRouter, err := eventbus.NewEventBusRouter(conf.SubscriberEventBus, serviceID, lMessaging)

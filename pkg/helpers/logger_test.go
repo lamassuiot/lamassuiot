@@ -16,7 +16,7 @@ func TestConfigureLoggerWithRequestID(t *testing.T) {
 	logger.Logger.Level = logrus.InfoLevel
 	ctx := context.Background()
 
-	result := ConfigureLoggerWithRequestID(ctx, logger)
+	result := configureLoggerWithRequestID(ctx, logger)
 
 	// Verify that the returned logger is the same as the input logger
 	if result != logger {
@@ -26,7 +26,7 @@ func TestConfigureLoggerWithRequestID(t *testing.T) {
 	logger = logrus.NewEntry(logrus.New())
 	logger.Logger.Level = logrus.TraceLevel
 
-	result = ConfigureLoggerWithRequestID(ctx, logger)
+	result = configureLoggerWithRequestID(ctx, logger)
 
 	// Verify that the returned logger is not the same as the input logger
 	if result == logger {
@@ -37,7 +37,7 @@ func TestConfigureLoggerWithRequestID(t *testing.T) {
 	reqID := "12345"
 	ctx = context.WithValue(ctx, HTTPRequestID, reqID)
 
-	result = ConfigureLoggerWithRequestID(ctx, logger)
+	result = configureLoggerWithRequestID(ctx, logger)
 
 	// Verify that the returned logger has the correct request ID field
 	if result.Data["req-id"] != reqID {
@@ -47,7 +47,7 @@ func TestConfigureLoggerWithRequestID(t *testing.T) {
 	// Test case 3: Request ID does not exist in the context
 	ctx = context.Background()
 
-	result = ConfigureLoggerWithRequestID(ctx, logger)
+	result = configureLoggerWithRequestID(ctx, logger)
 
 	// Verify that the returned logger has a generated request ID field
 	if _, ok := result.Data["req-id"]; !ok {
@@ -68,30 +68,30 @@ func startsWith(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }
 
-func TestConfigureContextWithRequest(t *testing.T) {
+func TestUpdateContextWithRequest(t *testing.T) {
 	ctx := gin.Context{}
 	headers := http.Header{}
 	headers.Set("x-request-id", "12345")
 	headers.Set("x-lms-source", "test-source")
 	headers.Set("x-ignored", "ignored")
 
-	ConfigureContextWithRequest(&ctx, headers)
+	UpdateContextWithRequest(&ctx, headers)
 
 	// Verify that the request ID is correctly set in the context
 	reqID := ctx.Value(HTTPRequestID)
 	if reqID != "12345" {
-		t.Errorf("ConfigureContextWithRequest did not set the correct request ID in the context. Expected: %s, Got: %v", "12345", reqID)
+		t.Errorf("UpdateContextWithRequest did not set the correct request ID in the context. Expected: %s, Got: %v", "12345", reqID)
 	}
 
 	// Verify that the source is correctly set in the context
 	source := ctx.Value(models.ContextSourceKey)
 	if source != "test-source" {
-		t.Errorf("ConfigureContextWithRequest did not set the correct source in the context. Expected: %s, Got: %v", "test-source", source)
+		t.Errorf("UpdateContextWithRequest did not set the correct source in the context. Expected: %s, Got: %v", "test-source", source)
 	}
 
 	// Verify that the source is correctly set in the context
 	ignored := ctx.Value("x-ignored")
 	if ignored != nil {
-		t.Errorf("ConfigureContextWithRequest should not have set the ignored header in the context. Got: %v", ignored)
+		t.Errorf("UpdateContextWithRequest should not have set the ignored header in the context. Got: %v", ignored)
 	}
 }

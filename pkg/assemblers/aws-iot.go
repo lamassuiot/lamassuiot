@@ -21,8 +21,8 @@ import (
 )
 
 func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAService, dmsService services.DMSManagerService, deviceService services.DeviceManagerService) (*iot.AWSCloudConnectorService, error) {
-	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "AWS IoT Connector", "Service")
-	lMessaging := helpers.ConfigureLogger(conf.SubscriberEventBus.LogLevel, "AWS IoT Connector", "Event Bus")
+	lSvc := helpers.SetupLogger(conf.Logs.Level, "AWS IoT Connector", "Service")
+	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "AWS IoT Connector", "Event Bus")
 
 	awsCfg, err := config.GetAwsSdkConfig(conf.AWSSDKConfig)
 	if err != nil {

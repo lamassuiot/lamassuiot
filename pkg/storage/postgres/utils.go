@@ -439,22 +439,22 @@ func (l *GormLogger) LogMode(lvl gormlogger.LogLevel) gormlogger.Interface {
 }
 
 func (l *GormLogger) Info(ctx context.Context, str string, rest ...interface{}) {
-	le := helpers.ConfigureLoggerWithRequestID(ctx, l.logger)
+	le := helpers.ConfigureLogger(ctx, l.logger)
 	le.Infof(str, rest...)
 }
 
 func (l *GormLogger) Warn(ctx context.Context, str string, rest ...interface{}) {
-	le := helpers.ConfigureLoggerWithRequestID(ctx, l.logger)
+	le := helpers.ConfigureLogger(ctx, l.logger)
 	le.Warnf(str, rest...)
 }
 
 func (l *GormLogger) Error(ctx context.Context, str string, rest ...interface{}) {
-	le := helpers.ConfigureLoggerWithRequestID(ctx, l.logger)
+	le := helpers.ConfigureLogger(ctx, l.logger)
 	le.Errorf(str, rest...)
 }
 
 func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
-	le := helpers.ConfigureLoggerWithRequestID(ctx, l.logger)
+	le := helpers.ConfigureLogger(ctx, l.logger)
 	sql, rows := fc()
 	if err != nil {
 		le.Errorf("Took: %s, Err:%s, SQL: %s, AffectedRows: %d", time.Since(begin).String(), err, sql, rows)

@@ -16,7 +16,7 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 		return nil, nil, -1, fmt.Errorf("could not assemble VA Service. Exiting: %s", err)
 	}
 
-	lHttp := helpers.ConfigureLogger(conf.Server.LogLevel, "VA", "HTTP Server")
+	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "VA", "HTTP Server")
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
@@ -30,7 +30,7 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 }
 
 func AssembleVAService(conf config.VAconfig, caService services.CAService) (*services.CRLService, *services.OCSPService, error) {
-	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "VA", "Service")
+	lSvc := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
 
 	crl := services.NewCRLService(services.CRLServiceBuilder{
 		Logger:   lSvc,

@@ -22,7 +22,7 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 		return nil, -1, fmt.Errorf("could not assemble DMS Manager Service. Exiting: %s", err)
 	}
 
-	lHttp := helpers.ConfigureLogger(conf.Server.LogLevel, "DMS Manager", "HTTP Server")
+	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "DMS Manager", "HTTP Server")
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
@@ -36,9 +36,9 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 }
 
 func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService) (*services.DMSManagerService, error) {
-	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "DMS Manager", "Service")
-	lMessaging := helpers.ConfigureLogger(conf.PublisherEventBus.LogLevel, "DMS Manager", "Event Bus")
-	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "DMS Manager", "Storage")
+	lSvc := helpers.SetupLogger(conf.Logs.Level, "DMS Manager", "Service")
+	lMessaging := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "DMS Manager", "Event Bus")
+	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "DMS Manager", "Storage")
 
 	downCert, err := helpers.ReadCertificateFromFile(conf.DownstreamCertificateFile)
 	if err != nil {

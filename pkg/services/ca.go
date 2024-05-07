@@ -270,7 +270,7 @@ func (svc *CAServiceBackend) SetService(service CAService) {
 }
 
 func (svc *CAServiceBackend) GetStats(ctx context.Context) (*models.CAStats, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	engines, err := svc.GetCryptoEngineProvider(ctx)
 	if err != nil {
@@ -338,7 +338,7 @@ type GetStatsByCAIDInput struct {
 }
 
 func (svc *CAServiceBackend) GetStatsByCAID(ctx context.Context, input GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	stats := map[models.CertificateStatus]int{}
 	for _, status := range []models.CertificateStatus{models.StatusActive, models.StatusExpired, models.StatusRevoked} {
@@ -393,8 +393,8 @@ type issueCAOutput struct {
 }
 
 func (svc *CAServiceBackend) issueCA(ctx context.Context, input issueCAInput) (*issueCAOutput, error) {
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 	var err error
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
 
 	var x509Engine x509engines.X509Engine
 	if input.EngineID == "" {
@@ -488,7 +488,7 @@ type ImportCAInput struct {
 func (svc *CAServiceBackend) ImportCA(ctx context.Context, input ImportCAInput) (*models.CACertificate, error) {
 	var err error
 
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	validate.RegisterStructValidation(importCAValidation, ImportCAInput{})
 	err = validate.Struct(input)
@@ -613,7 +613,7 @@ type CreateCAInput struct {
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) CreateCA(ctx context.Context, input CreateCAInput) (*models.CACertificate, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 	if input.Metadata == nil {
 		input.Metadata = map[string]any{}
 	}
@@ -756,7 +756,7 @@ type GetCAByIDInput struct {
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) GetCAByID(ctx context.Context, input GetCAByIDInput) (*models.CACertificate, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	err := validate.Struct(input)
 	if err != nil {
@@ -787,7 +787,7 @@ type GetCAsInput struct {
 }
 
 func (svc *CAServiceBackend) GetCAs(ctx context.Context, input GetCAsInput) (string, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	nextBookmark, err := svc.caStorage.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{
 		ExhaustiveRun: input.ExhaustiveRun,
@@ -808,7 +808,7 @@ type GetCABySerialNumberInput struct {
 }
 
 func (svc *CAServiceBackend) GetCABySerialNumber(ctx context.Context, input GetCABySerialNumberInput) (*models.CACertificate, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	err := validate.Struct(input)
 	if err != nil {
@@ -840,7 +840,7 @@ type GetCAsByCommonNameInput struct {
 }
 
 func (svc *CAServiceBackend) GetCAsByCommonName(ctx context.Context, input GetCAsByCommonNameInput) (string, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	lFunc.Debugf("reading CAs by %s common name", input.CommonName)
 	nextBookmark, err := svc.caStorage.SelectByCommonName(ctx, input.CommonName, storage.StorageListRequest[models.CACertificate]{
@@ -871,7 +871,7 @@ type UpdateCAStatusInput struct {
 //   - ErrCAAlreadyRevoked
 //     CA already revoked
 func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input UpdateCAStatusInput) (*models.CACertificate, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	err := validate.Struct(input)
 	if err != nil {
@@ -977,7 +977,7 @@ type UpdateCAMetadataInput struct {
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) UpdateCAMetadata(ctx context.Context, input UpdateCAMetadataInput) (*models.CACertificate, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	err := validate.Struct(input)
 	if err != nil {
@@ -1015,7 +1015,7 @@ type DeleteCAInput struct {
 //   - ErrCAStatus
 //     Cannot delete a CA that is not expired or revoked.
 func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input DeleteCAInput) error {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	err := validate.Struct(input)
 	if err != nil {
@@ -1063,7 +1063,7 @@ type SignCertificateInput struct {
 //   - ErrCAStatus
 //     CA is not active
 func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input SignCertificateInput) (*models.Certificate, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	err := validate.Struct(input)
 	if err != nil {
@@ -1155,7 +1155,7 @@ type ImportCertificateInput struct {
 }
 
 func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	status := models.StatusActive
 	if input.Certificate.NotAfter.Before(time.Now()) {
@@ -1217,7 +1217,7 @@ type SignatureSignInput struct {
 }
 
 func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input SignatureSignInput) ([]byte, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	err := validate.Struct(input)
 	if err != nil {
@@ -1256,7 +1256,7 @@ type SignatureVerifyInput struct {
 }
 
 func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input SignatureVerifyInput) (bool, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	err := validate.Struct(input)
 	if err != nil {
@@ -1290,7 +1290,7 @@ type GetCertificatesBySerialNumberInput struct {
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) GetCertificateBySerialNumber(ctx context.Context, input GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	err := validate.Struct(input)
 	if err != nil {
@@ -1337,7 +1337,7 @@ type GetCertificatesByCAInput struct {
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) GetCertificatesByCA(ctx context.Context, input GetCertificatesByCAInput) (string, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	err := validate.Struct(input)
 	if err != nil {
@@ -1373,7 +1373,7 @@ type GetCertificatesByExpirationDateInput struct {
 }
 
 func (svc *CAServiceBackend) GetCertificatesByExpirationDate(ctx context.Context, input GetCertificatesByExpirationDateInput) (string, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	lFunc.Debugf("reading certificates by expiration date. expiresafter: %s. expiresbefore: %s", input.ExpiresAfter, input.ExpiresBefore)
 	return svc.certStorage.SelectByExpirationDate(ctx, input.ExpiresBefore, input.ExpiresAfter, storage.StorageListRequest[models.Certificate]{
@@ -1427,7 +1427,7 @@ type UpdateCertificateStatusInput struct {
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) (*models.Certificate, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	err := validate.Struct(input)
 	if err != nil {
@@ -1484,7 +1484,7 @@ type UpdateCertificateMetadataInput struct {
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, input UpdateCertificateMetadataInput) (*models.Certificate, error) {
-	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
 
 	err := validate.Struct(input)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	outputChannels "github.com/lamassuiot/lamassuiot/v2/pkg/services/alerts/output_channels"
@@ -53,10 +54,12 @@ type HandleEventInput struct {
 }
 
 func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *HandleEventInput) error {
-	lAlerts.Infof("handling Event ID '%s'. Event Type '%s'", input.Event.ID(), input.Event.Type())
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
+
+	lFunc.Infof("handling Event ID '%s'. Event Type '%s'", input.Event.ID(), input.Event.Type())
 	exists, storedEv, err := svc.eventStorage.GetLatestEventByEventType(ctx, models.EventType(input.Event.Type()))
 	if err != nil {
-		lAlerts.Errorf("could not obtain last event stored for type %s", input.Event.Type())
+		lFunc.Errorf("could not obtain last event stored for type %s", input.Event.Type())
 		return err
 	}
 
@@ -71,31 +74,31 @@ func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *HandleE
 
 	_, err = svc.eventStorage.InsertUpdateEvent(ctx, storedEv)
 	if err != nil {
-		lAlerts.Errorf("could not insert/update latest event: %s", err)
+		lFunc.Errorf("could not insert/update latest event: %s", err)
 		return err
 	}
 
 	_, err = svc.subsStorage.GetSubscriptionsByEventType(ctx, input.Event.Type(), true, func(sub models.Subscription) {
 		// Send alert
-		lAlerts.Debugf("sending notification to user %s via %s", sub.UserID, sub.Channel.Type)
+		lFunc.Debugf("sending notification to user %s via %s", sub.UserID, sub.Channel.Type)
 		var outSvc outputChannels.NotificationSenderService
 		chanConfigBytes, err := json.Marshal(sub.Channel.Config)
 		if err != nil {
-			lAlerts.Errorf("cannot get channel config to bytes")
+			lFunc.Errorf("cannot get channel config to bytes")
 		}
 		switch sub.Channel.Type {
 		case models.ChannelTypeWebhook:
 			var webhookCfg models.WebhookChannelConfig
 			err = json.Unmarshal(chanConfigBytes, &webhookCfg)
 			if err != nil {
-				lAlerts.Errorf("cannot get channel config to WebhookChannelConfig")
+				lFunc.Errorf("cannot get channel config to WebhookChannelConfig")
 			}
 			outSvc = outputChannels.NewWebhookOutputService(webhookCfg)
 		case models.ChannelTypeMSTeams:
 			var webhookCfg models.MSTeamsChannelConfig
 			err = json.Unmarshal(chanConfigBytes, &webhookCfg)
 			if err != nil {
-				lAlerts.Errorf("cannot get channel config to MSTeamsChannelConfig")
+				lFunc.Errorf("cannot get channel config to MSTeamsChannelConfig")
 			}
 			outSvc = outputChannels.NewMSTeamsOutputService(webhookCfg)
 
@@ -103,34 +106,36 @@ func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *HandleE
 			var emailConf models.EmailConfig
 			err = json.Unmarshal(chanConfigBytes, &emailConf)
 			if err != nil {
-				lAlerts.Errorf("cannot get channel config to EmailConfig")
+				lFunc.Errorf("cannot get channel config to EmailConfig")
 			}
 			outSvc = outputChannels.NewSMTPOutputService(emailConf, svc.smtpServerConfig)
 
 		default:
-			lAlerts.Errorf("unsupported channel type. No implementation for %s", sub.Channel.Type)
+			lFunc.Errorf("unsupported channel type. No implementation for %s", sub.Channel.Type)
 		}
 
 		err = outSvc.SendNotification(ctx, input.Event)
 		if err != nil {
-			lAlerts.Errorf("error while sending notification to user %s via %s. Event ID '%s'. Event Type '%s'. Got error: %s", sub.UserID, sub.Channel.Type, input.Event.ID(), input.Event.Type(), err)
+			lFunc.Errorf("error while sending notification to user %s via %s. Event ID '%s'. Event Type '%s'. Got error: %s", sub.UserID, sub.Channel.Type, input.Event.ID(), input.Event.Type(), err)
 		}
 	}, nil, nil)
 
 	if err != nil {
-		lAlerts.Errorf("could not get user subscriptions for event type %s: %s", input.Event.Type(), err)
+		lFunc.Errorf("could not get user subscriptions for event type %s: %s", input.Event.Type(), err)
 		return err
 	}
-	lAlerts.Debugf("completed handling Event ID '%s'. Event Type '%s'", input.Event.ID(), input.Event.Type())
+	lFunc.Debugf("completed handling Event ID '%s'. Event Type '%s'", input.Event.ID(), input.Event.Type())
 	return nil
 }
 
 type GetLatestEventsPerEventTypeInput struct{}
 
 func (svc *AlertsServiceBackend) GetLatestEventsPerEventType(ctx context.Context, input *GetLatestEventsPerEventTypeInput) ([]*models.AlertLatestEvent, error) {
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
+
 	events, err := svc.eventStorage.GetLatestEvents(ctx)
 	if err != nil {
-		lAlerts.Errorf("got unexpected error while reading events: %s", err)
+		lFunc.Errorf("got unexpected error while reading events: %s", err)
 		return nil, err
 	}
 
@@ -142,6 +147,8 @@ type GetUserSubscriptionsInput struct {
 }
 
 func (svc *AlertsServiceBackend) GetUserSubscriptions(ctx context.Context, input *GetUserSubscriptionsInput) ([]*models.Subscription, error) {
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
+
 	userSubs := []*models.Subscription{}
 	_, err := svc.subsStorage.GetSubscriptions(ctx, input.UserID, true, func(sub models.Subscription) {
 		derefSub := sub
@@ -149,11 +156,11 @@ func (svc *AlertsServiceBackend) GetUserSubscriptions(ctx context.Context, input
 	}, &resources.QueryParameters{}, map[string]interface{}{})
 
 	if err != nil {
-		lAlerts.Errorf("got unexpected error while reading subscriptions from DB: %s", err)
+		lFunc.Errorf("got unexpected error while reading subscriptions from DB: %s", err)
 		return nil, err
 	}
 
-	lAlerts.Infof("user %s has %d active subscriptions", input.UserID, len(userSubs))
+	lFunc.Infof("user %s has %d active subscriptions", input.UserID, len(userSubs))
 
 	return userSubs, nil
 }
@@ -166,7 +173,9 @@ type SubscribeInput struct {
 }
 
 func (svc *AlertsServiceBackend) Subscribe(ctx context.Context, input *SubscribeInput) ([]*models.Subscription, error) {
-	lAlerts.Infof("subscribing user %s to event type %s with %d conditions over %s", input.UserID, input.EventType, len(input.Conditions), input.Channel.Type)
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
+
+	lFunc.Infof("subscribing user %s to event type %s with %d conditions over %s", input.UserID, input.EventType, len(input.Conditions), input.Channel.Type)
 	sub := &models.Subscription{
 		ID:               uuid.NewString(),
 		UserID:           input.UserID,
@@ -178,7 +187,7 @@ func (svc *AlertsServiceBackend) Subscribe(ctx context.Context, input *Subscribe
 
 	_, err := svc.subsStorage.Subscribe(ctx, sub)
 	if err != nil {
-		lAlerts.Errorf("could not insert new subscription. Got unexpected error: %s", err)
+		lFunc.Errorf("could not insert new subscription. Got unexpected error: %s", err)
 		return nil, err
 	}
 
@@ -191,14 +200,16 @@ type UnsubscribeInput struct {
 }
 
 func (svc *AlertsServiceBackend) Unsubscribe(ctx context.Context, input *UnsubscribeInput) ([]*models.Subscription, error) {
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
+
 	var loopError error
 	userSubs := []*models.Subscription{}
 	_, err := svc.subsStorage.GetSubscriptions(ctx, input.UserID, true, func(sub models.Subscription) {
 		if sub.ID == input.SubscriptionID {
-			lAlerts.Infof("unsubscribing user %s from subscription with ID %s over event of type %s", input.UserID, sub.ID, sub.EventType)
+			lFunc.Infof("unsubscribing user %s from subscription with ID %s over event of type %s", input.UserID, sub.ID, sub.EventType)
 			err := svc.subsStorage.Unsubscribe(ctx, input.SubscriptionID)
 			if err != nil {
-				lAlerts.Errorf("got unexpected error while updating DB: %s", err)
+				lFunc.Errorf("got unexpected error while updating DB: %s", err)
 				loopError = err
 			}
 		} else {
@@ -208,7 +219,7 @@ func (svc *AlertsServiceBackend) Unsubscribe(ctx context.Context, input *Unsubsc
 	}, &resources.QueryParameters{}, map[string]interface{}{})
 
 	if err != nil {
-		lAlerts.Errorf("got unexpected error while reading subscriptions from DB: %s", err)
+		lFunc.Errorf("got unexpected error while reading subscriptions from DB: %s", err)
 		return nil, err
 	}
 
@@ -216,6 +227,6 @@ func (svc *AlertsServiceBackend) Unsubscribe(ctx context.Context, input *Unsubsc
 		return nil, loopError
 	}
 
-	lAlerts.Infof("user %s has %d active subscriptions", input.UserID, len(userSubs))
+	lFunc.Infof("user %s has %d active subscriptions", input.UserID, len(userSubs))
 	return userSubs, nil
 }

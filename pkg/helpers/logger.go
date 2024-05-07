@@ -2,14 +2,17 @@ package helpers
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net/http"
 	"path"
 	"runtime"
+	"strings"
 
 	formatter "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
@@ -19,7 +22,7 @@ import (
 var LogFormatter = &formatter.Formatter{
 	TimestampFormat: "2006-01-02 15:04:05",
 	HideKeys:        true,
-	FieldsOrder:     []string{"req-id", "service", "subsystem", "subsystem-provider"},
+	FieldsOrder:     []string{"call-id", "req-id", "service", "subsystem", "subsystem-provider"},
 	CallerFirst:     true,
 	CustomCallerFormatter: func(f *runtime.Frame) string {
 		filename := path.Base(f.File)
@@ -27,7 +30,7 @@ var LogFormatter = &formatter.Formatter{
 	},
 }
 
-func ConfigureLogger(currentLevel config.LogLevel, serviceID string, subsystem string) *logrus.Entry {
+func SetupLogger(currentLevel config.LogLevel, serviceID string, subsystem string) *logrus.Entry {
 	var err error
 	logger := logrus.New()
 	logger.SetFormatter(LogFormatter)
@@ -60,7 +63,22 @@ func ConfigureLogger(currentLevel config.LogLevel, serviceID string, subsystem s
 
 var HTTPRequestID = "HTTPRequestID"
 
-func ConfigureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
+func ConfigureLogger(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
+	logger = configureLoggerWitCallerID(ctx, logger)
+	logger = configureLoggerWithRequestID(ctx, logger)
+	return logger
+}
+
+func configureLoggerWitCallerID(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
+	reqCtx := ctx.Value(models.ContextSourceKey)
+	if callID, ok := reqCtx.(string); ok {
+		return logger.WithField("call-id", callID)
+	}
+
+	return logger
+}
+
+func configureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
 	if logger.Logger.Level < logrus.DebugLevel {
 		return logger
 	}
@@ -79,14 +97,62 @@ func InitContext() context.Context {
 	return ctx
 }
 
-func ConfigureContextWithRequest(ctx *gin.Context, headers http.Header) {
+func UpdateContextWithRequest(ctx *gin.Context, headers http.Header) {
 	reqID := headers.Get("x-request-id")
 	if reqID != "" {
 		ctx.Set(HTTPRequestID, reqID)
 	}
 
-	source := headers.Get(models.HttpSourceHeader)
-	if source != "" {
-		ctx.Set(models.ContextSourceKey, source)
+	authMode := "noauth"
+	callerID := "noid"
+	source := "nosrc"
+
+	sourceHeader := headers.Get(models.HttpSourceHeader)
+	if sourceHeader != "" {
+		source = sourceHeader
 	}
+
+	authz := headers.Get("authorization")
+	subID := getIDFromHttpAuthorizationHeader(authz)
+	if subID != "" {
+		authMode = "jwt"
+		callerID = subID
+	}
+
+	clientCert, hasValue := ctx.Value(models.ESTAuthModeClientCertificate).(*x509.Certificate)
+	if hasValue {
+		authMode = "crt"
+		callerID = clientCert.Subject.CommonName
+	}
+
+	ctx.Set(models.ContextSourceKey, fmt.Sprintf("%s:%s:%s", source, authMode, callerID))
+}
+
+func getIDFromHttpAuthorizationHeader(header string) string {
+	// The Authorization header typically looks like "Bearer <token>"
+	authToken := strings.Split(header, " ")
+	if len(authToken) != 2 || authToken[0] != "Bearer" {
+		return ""
+	}
+
+	// Parse the JWT
+	tokenString := authToken[1]
+	token, _, err := new(jwt.Parser).ParseUnverified(tokenString, jwt.MapClaims{})
+	if err != nil {
+		return ""
+	}
+
+	// Access the claims
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return ""
+	}
+
+	// Extract the sub claim
+	sub, ok := claims["sub"].(string)
+	if !ok {
+		return ""
+	}
+
+	return sub
 }
