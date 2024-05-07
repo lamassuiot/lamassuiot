@@ -12,6 +12,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	lamassu "github.com/lamassuiot/lamassuiot/v2/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
@@ -44,10 +45,10 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 
 		_, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
 			Logs: config.BaseConfigLogging{
-				Level: conf.Server.LogLevel,
+				Level: conf.Logs.Level,
 			},
 			Server: config.HttpServer{
-				LogLevel:           conf.Server.LogLevel,
+				LogLevel:           conf.Logs.Level,
 				HealthCheckLogging: true,
 				ListenAddress:      "0.0.0.0",
 				Port:               0,
@@ -83,10 +84,10 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 
 		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(config.VAconfig{
 			Logs: config.BaseConfigLogging{
-				Level: conf.Server.LogLevel,
+				Level: conf.Logs.Level,
 			},
 			Server: config.HttpServer{
-				LogLevel:           config.Info,
+				LogLevel:           conf.Logs.Level,
 				HealthCheckLogging: true,
 				ListenAddress:      "0.0.0.0",
 				Port:               0,
@@ -99,10 +100,10 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 
 		_, devPort, err := lamassu.AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
 			Logs: config.BaseConfigLogging{
-				Level: conf.Server.LogLevel,
+				Level: conf.Logs.Level,
 			},
 			Server: config.HttpServer{
-				LogLevel:           config.Info,
+				LogLevel:           conf.Logs.Level,
 				HealthCheckLogging: true,
 				ListenAddress:      "0.0.0.0",
 				Port:               0,
@@ -136,10 +137,10 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		}
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
 			Logs: config.BaseConfigLogging{
-				Level: conf.Server.LogLevel,
+				Level: conf.Logs.Level,
 			},
 			Server: config.HttpServer{
-				LogLevel:           config.Info,
+				LogLevel:           conf.Logs.Level,
 				HealthCheckLogging: true,
 				ListenAddress:      "0.0.0.0",
 				Port:               0,
@@ -173,10 +174,10 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		}
 		_, alertsPort, err := lamassu.AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
 			Logs: config.BaseConfigLogging{
-				Level: conf.Server.LogLevel,
+				Level: conf.Logs.Level,
 			},
 			Server: config.HttpServer{
-				LogLevel:           config.Info,
+				LogLevel:           conf.Logs.Level,
 				HealthCheckLogging: true,
 				ListenAddress:      "0.0.0.0",
 				Port:               0,
@@ -192,7 +193,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		if conf.AWSIoTManager.Enabled {
 			_, err = lamassu.AssembleAWSIoTManagerService(config.IotAWS{
 				Logs: config.BaseConfigLogging{
-					Level: conf.Server.LogLevel,
+					Level: conf.Logs.Level,
 				},
 				SubscriberEventBus: conf.SubscriberEventBus,
 				ConnectorID:        conf.AWSIoTManager.ConnectorID,
@@ -220,6 +221,9 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 				if err != nil {
 					panic(err)
 				}
+
+				//emulate envoy config by generating rand request id as HTTP header to the upstream service
+				c.Request.Header.Add("x-request-id", uuid.NewString())
 
 				proxy := httputil.NewSingleHostReverseProxy(remote)
 				//Define the director func

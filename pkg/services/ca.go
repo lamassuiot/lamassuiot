@@ -142,7 +142,7 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 	if builder.CryptoMonitoringConf.Enabled {
 		_, err := svc.cronInstance.AddFunc(builder.CryptoMonitoringConf.Frequency, svc.CheckCAsAndCertificates)
 		if err != nil {
-			lCA.Errorf("could not add scheduled run for checking certificat expiration dates")
+			lCA.Errorf("could not add scheduled run for checking certificate expiration dates")
 		}
 
 		svc.cronInstance.Start()
@@ -152,7 +152,7 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 }
 
 func (svc *CAServiceBackend) CheckCAsAndCertificates() {
-	ctx := context.Background()
+	ctx := helpers.InitContext()
 	now := time.Now()
 
 	//checks if metadata has additional expiration intervals to be checked.
@@ -219,7 +219,7 @@ func (svc *CAServiceBackend) CheckCAsAndCertificates() {
 
 		shouldUpdateMeta, newMetadata := shouldUpdateMonitoringDeltas(ca.Metadata, x509.Certificate(*ca.Certificate.Certificate))
 		if shouldUpdateMeta {
-			svc.service.UpdateCAMetadata(context.Background(), UpdateCAMetadataInput{
+			svc.service.UpdateCAMetadata(ctx, UpdateCAMetadataInput{
 				CAID:     ca.ID,
 				Metadata: newMetadata,
 			})
@@ -250,7 +250,7 @@ func (svc *CAServiceBackend) CheckCAsAndCertificates() {
 				//check if meta contains additional monitoring deltas
 				shouldUpdateMeta, newMetadata := shouldUpdateMonitoringDeltas(cert.Metadata, x509.Certificate(*cert.Certificate))
 				if shouldUpdateMeta {
-					svc.service.UpdateCertificateMetadata(context.Background(), UpdateCertificateMetadataInput{
+					svc.service.UpdateCertificateMetadata(ctx, UpdateCertificateMetadataInput{
 						SerialNumber: cert.SerialNumber,
 						Metadata:     newMetadata,
 					})
@@ -1040,7 +1040,7 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input DeleteCAInput) 
 		return errs.ErrCAStatus
 	}
 
-	err = svc.caStorage.Delete(context.Background(), input.CAID)
+	err = svc.caStorage.Delete(ctx, input.CAID)
 	if err != nil {
 		lFunc.Errorf("something went wrong while deleting the CA %s %s", input.CAID, err)
 		return err

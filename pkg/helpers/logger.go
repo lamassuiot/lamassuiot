@@ -9,6 +9,7 @@ import (
 	"runtime"
 
 	formatter "github.com/antonfisher/nested-logrus-formatter"
+	"github.com/gin-gonic/gin"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
@@ -18,7 +19,7 @@ import (
 var LogFormatter = &formatter.Formatter{
 	TimestampFormat: "2006-01-02 15:04:05",
 	HideKeys:        true,
-	FieldsOrder:     []string{"service", "subsystem", "subsystem-provider", "req-id"},
+	FieldsOrder:     []string{"req-id", "service", "subsystem", "subsystem-provider"},
 	CallerFirst:     true,
 	CustomCallerFormatter: func(f *runtime.Frame) string {
 		filename := path.Base(f.File)
@@ -60,7 +61,7 @@ func ConfigureLogger(currentLevel config.LogLevel, serviceID string, subsystem s
 var HTTPRequestID = "HTTPRequestID"
 
 func ConfigureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
-	if logger.Level != logrus.TraceLevel {
+	if logger.Logger.Level < logrus.DebugLevel {
 		return logger
 	}
 
@@ -69,19 +70,23 @@ func ConfigureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *lo
 		return logger.WithField("req-id", reqID)
 	}
 
-	return logger.WithField("req-id", fmt.Sprintf("internal.%s", goid.NewV4UUID()))
+	return logger.WithField("req-id", fmt.Sprintf("unset.%s", goid.NewV4UUID()))
 }
 
-func ConfigureContextWithRequest(ctx context.Context, headers http.Header) context.Context {
+func InitContext() context.Context {
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, "req-id", fmt.Sprintf("internal.%s", goid.NewV4UUID()))
+	return ctx
+}
+
+func ConfigureContextWithRequest(ctx *gin.Context, headers http.Header) {
 	reqID := headers.Get("x-request-id")
 	if reqID != "" {
-		ctx = context.WithValue(ctx, HTTPRequestID, reqID)
+		ctx.Set(HTTPRequestID, reqID)
 	}
 
 	source := headers.Get(models.HttpSourceHeader)
-	if reqID != "" {
-		ctx = context.WithValue(ctx, models.ContextSourceKey, source)
+	if source != "" {
+		ctx.Set(models.ContextSourceKey, source)
 	}
-
-	return ctx
 }

@@ -1,10 +1,7 @@
 package controllers
 
 import (
-	"context"
-
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
@@ -30,9 +27,7 @@ func (r *alertsHttpRoutes) GetUserSubscriptions(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequest(context.Background(), ctx.Request.Header)
-
-	response, err := r.svc.GetUserSubscriptions(funCtx, &services.GetUserSubscriptionsInput{
+	response, err := r.svc.GetUserSubscriptions(ctx, &services.GetUserSubscriptionsInput{
 		UserID: params.UserID,
 	})
 
@@ -49,9 +44,7 @@ func (r *alertsHttpRoutes) GetUserSubscriptions(ctx *gin.Context) {
 }
 
 func (r *alertsHttpRoutes) GetLatestEventsPerEventType(ctx *gin.Context) {
-	funCtx := helpers.ConfigureContextWithRequest(context.Background(), ctx.Request.Header)
-
-	response, err := r.svc.GetLatestEventsPerEventType(funCtx, &services.GetLatestEventsPerEventTypeInput{})
+	response, err := r.svc.GetLatestEventsPerEventType(ctx, &services.GetLatestEventsPerEventTypeInput{})
 
 	if err != nil {
 		switch err {
@@ -82,9 +75,7 @@ func (r *alertsHttpRoutes) Subscribe(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequest(context.Background(), ctx.Request.Header)
-
-	response, err := r.svc.Subscribe(funCtx, &services.SubscribeInput{
+	response, err := r.svc.Subscribe(ctx, &services.SubscribeInput{
 		UserID:     params.UserID,
 		EventType:  requestBody.EventType,
 		Conditions: requestBody.Conditions,
@@ -115,9 +106,7 @@ func (r *alertsHttpRoutes) Unsubscribe(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequest(context.Background(), ctx.Request.Header)
-
-	response, err := r.svc.Unsubscribe(funCtx, &services.UnsubscribeInput{
+	response, err := r.svc.Unsubscribe(ctx, &services.UnsubscribeInput{
 		UserID:         params.UserID,
 		SubscriptionID: params.SubscriptionID,
 	})

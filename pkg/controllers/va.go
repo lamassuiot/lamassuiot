@@ -1,14 +1,12 @@
 package controllers
 
 import (
-	"context"
 	"encoding/base64"
 	"fmt"
 	"io"
 	"net/url"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
@@ -100,8 +98,7 @@ func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 		return
 	}
 
-	funCtx := helpers.ConfigureContextWithRequest(context.Background(), ctx.Request.Header)
-	response, err := r.ocsp.Verify(funCtx, ocsp)
+	response, err := r.ocsp.Verify(ctx, ocsp)
 	if err != nil {
 		r.logger.Errorf("something went wrong while verifying ocsp request: %s", err)
 		ctx.AbortWithError(500, err)
@@ -122,8 +119,7 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 		return
 	}
 
-	funcCtx := helpers.ConfigureContextWithRequest(context.Background(), ctx.Request.Header)
-	crl, err := r.crl.GetCRL(funcCtx, services.GetCRLInput{
+	crl, err := r.crl.GetCRL(ctx, services.GetCRLInput{
 		CAID: params.ID,
 	})
 	if err != nil {

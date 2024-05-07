@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-gormigrate/gormigrate/v2"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
@@ -104,9 +105,9 @@ func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn
 	}
 }
 
-func (db *postgresDBQuerier[E]) Count(extraOpts []gormWhereParams) (int, error) {
+func (db *postgresDBQuerier[E]) Count(ctx context.Context, extraOpts []gormWhereParams) (int, error) {
 	var count int64
-	tx := db.Table(db.tableName)
+	tx := db.Table(db.tableName).WithContext(ctx)
 	for _, whereQuery := range extraOpts {
 		tx = tx.Where(whereQuery.query, whereQuery.extraArgs...)
 	}
@@ -124,9 +125,9 @@ type gormWhereParams struct {
 	extraArgs []interface{}
 }
 
-func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, extraOpts []gormWhereParams, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
+func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.QueryParameters, extraOpts []gormWhereParams, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
 	var elems []E
-	tx := db.Table(db.tableName)
+	tx := db.Table(db.tableName).WithContext(ctx)
 
 	offset := 0
 	limit := 15
@@ -276,14 +277,14 @@ func (db *postgresDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters
 
 // Selects first element from DB. if queryCol is empty or nil, the primary key column
 // defined in the creation process, is used.
-func (db *postgresDBQuerier[E]) SelectExists(queryID string, queryCol *string) (bool, *E, error) {
+func (db *postgresDBQuerier[E]) SelectExists(ctx context.Context, queryID string, queryCol *string) (bool, *E, error) {
 	searchCol := db.primaryKeyColumn
 	if queryCol != nil && *queryCol != "" {
 		searchCol = *queryCol
 	}
 
 	var elem E
-	tx := db.Table(db.tableName).First(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
+	tx := db.Table(db.tableName).WithContext(ctx).First(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
 	if err := tx.Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return false, nil, nil
@@ -295,8 +296,8 @@ func (db *postgresDBQuerier[E]) SelectExists(queryID string, queryCol *string) (
 	return true, &elem, nil
 }
 
-func (db *postgresDBQuerier[E]) Insert(elem *E, elemID string) (*E, error) {
-	tx := db.Table(db.tableName).Create(elem)
+func (db *postgresDBQuerier[E]) Insert(ctx context.Context, elem *E, elemID string) (*E, error) {
+	tx := db.Table(db.tableName).WithContext(ctx).Create(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
@@ -304,8 +305,8 @@ func (db *postgresDBQuerier[E]) Insert(elem *E, elemID string) (*E, error) {
 	return elem, nil
 }
 
-func (db *postgresDBQuerier[E]) Update(elem *E, elemID string) (*E, error) {
-	tx := db.Table(db.tableName).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID).Updates(elem)
+func (db *postgresDBQuerier[E]) Update(ctx context.Context, elem *E, elemID string) (*E, error) {
+	tx := db.Table(db.tableName).WithContext(ctx).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID).Updates(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
@@ -317,8 +318,8 @@ func (db *postgresDBQuerier[E]) Update(elem *E, elemID string) (*E, error) {
 	return elem, nil
 }
 
-func (db *postgresDBQuerier[E]) Delete(elemID string) error {
-	tx := db.Table(db.tableName).Delete(nil, db.Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID))
+func (db *postgresDBQuerier[E]) Delete(ctx context.Context, elemID string) error {
+	tx := db.Table(db.tableName).WithContext(ctx).Delete(nil, db.Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID))
 	if err := tx.Error; err != nil {
 		return err
 	}
@@ -438,23 +439,27 @@ func (l *GormLogger) LogMode(lvl gormlogger.LogLevel) gormlogger.Interface {
 }
 
 func (l *GormLogger) Info(ctx context.Context, str string, rest ...interface{}) {
-	l.logger.Infof(str, rest...)
+	le := helpers.ConfigureLoggerWithRequestID(ctx, l.logger)
+	le.Infof(str, rest...)
 }
 
 func (l *GormLogger) Warn(ctx context.Context, str string, rest ...interface{}) {
-	l.logger.Warnf(str, rest...)
+	le := helpers.ConfigureLoggerWithRequestID(ctx, l.logger)
+	le.Warnf(str, rest...)
 }
 
 func (l *GormLogger) Error(ctx context.Context, str string, rest ...interface{}) {
-	l.logger.Errorf(str, rest...)
+	le := helpers.ConfigureLoggerWithRequestID(ctx, l.logger)
+	le.Errorf(str, rest...)
 }
 
 func (l *GormLogger) Trace(ctx context.Context, begin time.Time, fc func() (sql string, rowsAffected int64), err error) {
+	le := helpers.ConfigureLoggerWithRequestID(ctx, l.logger)
 	sql, rows := fc()
 	if err != nil {
-		l.logger.Errorf("Took: %s, Err:%s, SQL: %s, AffectedRows: %d", time.Since(begin).String(), err, sql, rows)
+		le.Errorf("Took: %s, Err:%s, SQL: %s, AffectedRows: %d", time.Since(begin).String(), err, sql, rows)
 	} else {
-		l.logger.Tracef("Took: %s, SQL: %s, AffectedRows: %d", time.Since(begin).String(), sql, rows)
+		le.Tracef("Took: %s, SQL: %s, AffectedRows: %d", time.Since(begin).String(), sql, rows)
 	}
 
 }

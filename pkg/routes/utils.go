@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -38,6 +39,13 @@ func (tr *traceRequestWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
+func RequestIDMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		helpers.ConfigureContextWithRequest(c, c.Request.Header)
+		c.Next()
+	}
+}
+
 func NewGinEngine(logger *logrus.Entry) *gin.Engine {
 	gin.ForceConsoleColor()
 	gin.DebugPrintRouteFunc = func(httpMethod, absolutePath, handlerName string, nuHandlers int) {
@@ -49,7 +57,7 @@ func NewGinEngine(logger *logrus.Entry) *gin.Engine {
 	corsConfig.AllowHeaders = []string{"*"}
 
 	router := gin.New()
-	router.Use(cors.New(corsConfig), gindump.DumpWithOptions(true, true, true, true, func(dumpStr string) {
+	router.Use(cors.New(corsConfig), RequestIDMiddleware(), gindump.DumpWithOptions(true, true, true, true, func(dumpStr string) {
 		logger.Trace(dumpStr)
 	}), gin.LoggerWithWriter(&traceRequestWriter{logger: logger}), gin.Recovery())
 
@@ -181,4 +189,40 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 	}
 
 	return usedPort, nil
+}
+
+type respBodyWriter struct {
+	gin.ResponseWriter
+	body *bytes.Buffer
+}
+
+func (w respBodyWriter) Write(b []byte) (int, error) {
+	w.body.Write(b)
+	return w.ResponseWriter.Write(b)
+}
+
+func LogRequest(logger *logrus.Entry, logResponse bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rbw := &respBodyWriter{
+			body:           bytes.NewBufferString(""),
+			ResponseWriter: c.Writer,
+		}
+		c.Writer = rbw
+
+		start := time.Now()
+
+		c.Next()
+
+		latency := time.Now().Sub(start)
+		fields := make(map[string]interface{})
+
+		logger.WithFields(fields).Infof("[Request] %v |%3d| %13v | %15s |%-7s %s",
+			start.Format("2006/01/02 - 15:04:05"),
+			c.Writer.Status(),
+			latency,
+			c.ClientIP(),
+			c.Request.Method,
+			c.Request.URL.Path,
+		)
+	}
 }

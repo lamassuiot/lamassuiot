@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/sirupsen/logrus"
 )
@@ -68,13 +69,13 @@ func startsWith(s, prefix string) bool {
 }
 
 func TestConfigureContextWithRequest(t *testing.T) {
-	ctx := context.Background()
+	ctx := gin.Context{}
 	headers := http.Header{}
 	headers.Set("x-request-id", "12345")
 	headers.Set("x-lms-source", "test-source")
 	headers.Set("x-ignored", "ignored")
 
-	ctx = ConfigureContextWithRequest(ctx, headers)
+	ConfigureContextWithRequest(&ctx, headers)
 
 	// Verify that the request ID is correctly set in the context
 	reqID := ctx.Value(HTTPRequestID)
