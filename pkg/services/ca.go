@@ -142,7 +142,7 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 	if builder.CryptoMonitoringConf.Enabled {
 		_, err := svc.cronInstance.AddFunc(builder.CryptoMonitoringConf.Frequency, svc.CheckCAsAndCertificates)
 		if err != nil {
-			lCA.Errorf("could not add scheduled run for checking certificate expiration dates")
+			builder.Logger.Errorf("could not add scheduled run for checking certificate expiration dates")
 		}
 
 		svc.cronInstance.Start()
@@ -940,7 +940,7 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input UpdateCAS
 
 		ctr := 0
 		revokeCertFunc := func(c models.Certificate) {
-			lCA.Infof("\n\n%d - %s\n\n", ctr, c.SerialNumber)
+			lFunc.Infof("\n\n%d - %s\n\n", ctr, c.SerialNumber)
 			ctr++
 			_, err := svc.service.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
 				SerialNumber:     c.SerialNumber,
@@ -1155,6 +1155,8 @@ type ImportCertificateInput struct {
 }
 
 func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error) {
+	lFunc := helpers.ConfigureLoggerWithRequestID(ctx, lCA)
+
 	status := models.StatusActive
 	if input.Certificate.NotAfter.Before(time.Now()) {
 		status = models.StatusExpired
@@ -1200,7 +1202,7 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input Import
 
 	cert, err := svc.certStorage.Insert(ctx, &newCert)
 	if err != nil {
-		lCA.Errorf("could not insert certificate: %s", err)
+		lFunc.Errorf("could not insert certificate: %s", err)
 		return nil, err
 	}
 

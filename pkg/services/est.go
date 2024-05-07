@@ -7,7 +7,7 @@ import (
 
 type ESTService interface {
 	// CACerts requests a copy of the current CA certificates. See RFC7030 4.1.
-	CACerts(aps string) ([]*x509.Certificate, error)
+	CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error)
 
 	// CSRAttrs requests a list of CA-desired CSR attributes. The returned list
 	// may be empty. See RFC7030 4.5.

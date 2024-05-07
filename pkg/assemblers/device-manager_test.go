@@ -1,6 +1,7 @@
 package assemblers
 
 import (
+	"context"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
@@ -44,6 +45,7 @@ func StartDeviceManagerServiceTestServer(t *testing.T, withEventBus bool) (*Devi
 }
 
 func TestDuplicateDeviceCreation(t *testing.T) {
+	ctx := context.Background()
 	dmgr, err := StartDeviceManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
@@ -57,18 +59,19 @@ func TestDuplicateDeviceCreation(t *testing.T) {
 		Icon:      "test",
 		IconColor: "#000000",
 	}
-	device, err := dmgr.Service.CreateDevice(deviceSample)
+	device, err := dmgr.Service.CreateDevice(ctx, deviceSample)
 	if err != nil {
 		t.Fatalf("could not create device: %s", err)
 	}
 	checkDevice(t, device, deviceSample)
-	_, err = dmgr.Service.CreateDevice(deviceSample)
+	_, err = dmgr.Service.CreateDevice(ctx, deviceSample)
 	if err == nil {
 		t.Fatalf("duplicate device creation should fail")
 	}
 }
 
 func TestPagination(t *testing.T) {
+	ctx := context.Background()
 	dmgr, err := StartDeviceManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
@@ -124,11 +127,11 @@ func TestPagination(t *testing.T) {
 		IconColor: "#000004",
 	}
 
-	dmgr.Service.CreateDevice(deviceSample)
-	dmgr.Service.CreateDevice(deviceSample2)
-	dmgr.Service.CreateDevice(deviceSample3)
-	dmgr.Service.CreateDevice(deviceSample4)
-	dmgr.Service.CreateDevice(deviceSample5)
+	dmgr.Service.CreateDevice(ctx, deviceSample)
+	dmgr.Service.CreateDevice(ctx, deviceSample2)
+	dmgr.Service.CreateDevice(ctx, deviceSample3)
+	dmgr.Service.CreateDevice(ctx, deviceSample4)
+	dmgr.Service.CreateDevice(ctx, deviceSample5)
 
 	devices := []models.Device{}
 	request := services.GetDevicesInput{
@@ -147,7 +150,7 @@ func TestPagination(t *testing.T) {
 		},
 	}
 
-	bookmark, err := dmgr.Service.GetDevices(request)
+	bookmark, err := dmgr.Service.GetDevices(ctx, request)
 	if err != nil {
 		t.Fatalf("could not retrieve device: %s", err)
 	}
@@ -177,7 +180,7 @@ func TestPagination(t *testing.T) {
 		},
 	}
 
-	bookmark, err = dmgr.Service.GetDevices(request)
+	bookmark, err = dmgr.Service.GetDevices(ctx, request)
 	if err != nil {
 		t.Fatalf("could not retrieve device: %s", err)
 	}
@@ -207,7 +210,7 @@ func TestPagination(t *testing.T) {
 		},
 	}
 
-	bookmark, err = dmgr.Service.GetDevices(request)
+	bookmark, err = dmgr.Service.GetDevices(ctx, request)
 	if err != nil {
 		t.Fatalf("could not retrieve device: %s", err)
 	}
@@ -234,7 +237,7 @@ func TestPagination(t *testing.T) {
 		},
 	}
 
-	bookmark, err = dmgr.Service.GetDevices(request)
+	bookmark, err = dmgr.Service.GetDevices(ctx, request)
 	if err != nil {
 		t.Fatalf("could not retrieve device: %s", err)
 	}
@@ -265,7 +268,7 @@ func TestPagination(t *testing.T) {
 		},
 	}
 
-	_, err = dmgr.Service.GetDevices(request)
+	_, err = dmgr.Service.GetDevices(ctx, request)
 	if err != nil {
 		t.Fatalf("could not retrieve device: %s", err)
 	}
@@ -274,6 +277,8 @@ func TestPagination(t *testing.T) {
 }
 
 func TestBasicDeviceManager(t *testing.T) {
+	ctx := context.Background()
+
 	dmgr, err := StartDeviceManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
@@ -299,8 +304,8 @@ func TestBasicDeviceManager(t *testing.T) {
 		IconColor: "#000001",
 	}
 
-	device, err := dmgr.Service.CreateDevice(deviceSample)
-	dmgr.Service.CreateDevice(deviceSample2)
+	device, err := dmgr.Service.CreateDevice(ctx, deviceSample)
+	dmgr.Service.CreateDevice(ctx, deviceSample2)
 	if err != nil {
 		t.Fatalf("could not create device: %s", err)
 	}
@@ -308,7 +313,7 @@ func TestBasicDeviceManager(t *testing.T) {
 
 	request := services.GetDeviceByIDInput{ID: "test"}
 
-	deviceGet, err := dmgr.Service.GetDeviceByID(request)
+	deviceGet, err := dmgr.Service.GetDeviceByID(ctx, request)
 	if err != nil {
 		t.Fatalf("could not retrieve device: %s", err)
 	}
@@ -324,12 +329,14 @@ func TestBasicDeviceManager(t *testing.T) {
 }
 
 func checkUpdateDeviceMetadata(t *testing.T, dmgr *DeviceManagerTestServer, deviceSample services.CreateDeviceInput) {
+	ctx := context.Background()
+
 	request := services.UpdateDeviceMetadataInput{
 		ID:       deviceSample.ID,
 		Metadata: map[string]interface{}{"test": "test2"},
 	}
 
-	device, err := dmgr.Service.UpdateDeviceMetadata(request)
+	device, err := dmgr.Service.UpdateDeviceMetadata(ctx, request)
 	if err != nil {
 		t.Fatalf("could not update device metadata: %s", err)
 	}
@@ -340,12 +347,13 @@ func checkUpdateDeviceMetadata(t *testing.T, dmgr *DeviceManagerTestServer, devi
 }
 
 func checkUpdateDeviceStatus(t *testing.T, dmgr *DeviceManagerTestServer, deviceSample services.CreateDeviceInput) {
+	ctx := context.Background()
 	request := services.UpdateDeviceStatusInput{
 		ID:        deviceSample.ID,
 		NewStatus: models.DeviceActive,
 	}
 
-	device, err := dmgr.Service.UpdateDeviceStatus(request)
+	device, err := dmgr.Service.UpdateDeviceStatus(ctx, request)
 	if err != nil {
 		t.Fatalf("could not update device status: %s", err)
 	}
@@ -356,10 +364,10 @@ func checkUpdateDeviceStatus(t *testing.T, dmgr *DeviceManagerTestServer, device
 }
 
 func checkDeviceStats(t *testing.T, dmgr *DeviceManagerTestServer) {
-
+	ctx := context.Background()
 	request := services.GetDevicesStatsInput{}
 
-	stats, err := dmgr.Service.GetDevicesStats(request)
+	stats, err := dmgr.Service.GetDevicesStats(ctx, request)
 	if err != nil {
 		t.Fatalf("could not retrieve device stats: %s", err)
 	}
@@ -416,6 +424,8 @@ func checkDevice(t *testing.T, device *models.Device, deviceSample services.Crea
 }
 
 func checkSelectByDMS(t *testing.T, dmgr *DeviceManagerTestServer, deviceSample services.CreateDeviceInput) {
+	ctx := context.Background()
+
 	devices := []models.Device{}
 	request2 := services.GetDevicesByDMSInput{
 		DMSID: "test2",
@@ -428,7 +438,7 @@ func checkSelectByDMS(t *testing.T, dmgr *DeviceManagerTestServer, deviceSample 
 		},
 	}
 
-	_, err := dmgr.Service.GetDeviceByDMS(request2)
+	_, err := dmgr.Service.GetDeviceByDMS(ctx, request2)
 	if err != nil {
 		t.Fatalf("could not retrieve device: %s", err)
 	}
@@ -441,6 +451,8 @@ func checkSelectByDMS(t *testing.T, dmgr *DeviceManagerTestServer, deviceSample 
 }
 
 func checkSelectAll(t *testing.T, dmgr *DeviceManagerTestServer) {
+	ctx := context.Background()
+
 	devices := []models.Device{}
 	request2 := services.GetDevicesInput{
 		ListInput: resources.ListInput[models.Device]{
@@ -452,7 +464,7 @@ func checkSelectAll(t *testing.T, dmgr *DeviceManagerTestServer) {
 		},
 	}
 
-	_, err := dmgr.Service.GetDevices(request2)
+	_, err := dmgr.Service.GetDevices(ctx, request2)
 	if err != nil {
 		t.Fatalf("could not retrieve device: %s", err)
 	}

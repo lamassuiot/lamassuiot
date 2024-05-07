@@ -82,6 +82,8 @@ func TestCreateDMS(t *testing.T) {
 
 func TestESTEnroll(t *testing.T) {
 	// t.Parallel()
+	ctx := context.Background()
+
 	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
@@ -349,7 +351,7 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := helpers.GenerateRSAKey(2048)
 				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				_, err = testServers.DeviceManager.Service.CreateDevice(services.CreateDeviceInput{
+				_, err = testServers.DeviceManager.Service.CreateDevice(ctx, services.CreateDeviceInput{
 					ID:        deviceID,
 					Alias:     deviceID,
 					Tags:      []string{},

@@ -64,8 +64,8 @@ func (mw dmsEventPublisher) GetAll(ctx context.Context, input services.GetAllInp
 	return mw.next.GetAll(ctx, input)
 }
 
-func (mw dmsEventPublisher) CACerts(aps string) ([]*x509.Certificate, error) {
-	return mw.next.CACerts(aps)
+func (mw dmsEventPublisher) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
+	return mw.next.CACerts(ctx, aps)
 }
 
 func (mw dmsEventPublisher) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (out *x509.Certificate, err error) {

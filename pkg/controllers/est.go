@@ -53,7 +53,7 @@ func (r *estHttpRoutes) GetCACerts(ctx *gin.Context) {
 	var params aps
 	ctx.ShouldBindUri(&params)
 
-	cacerts, err := r.svc.CACerts(params.APS)
+	cacerts, err := r.svc.CACerts(ctx, params.APS)
 	if err != nil {
 		ctx.JSON(500, err)
 	}
@@ -118,15 +118,13 @@ func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 		return
 	}
 
-	authCtx := context.Background()
-
 	if bitSize := ctx.GetHeader("Bit-Size"); bitSize != "" {
 		lEst.Debugf("Bit-Size header present with value %s", bitSize)
 		bitSizeInt, err := strconv.Atoi(bitSize)
 		if err != nil {
 			lEst.Warnf("Bit-Size header with non numerical value")
 		} else {
-			authCtx = context.WithValue(authCtx, models.ESTServerKeyGenBitSize, bitSizeInt)
+			ctx.Set(models.ESTServerKeyGenBitSize, bitSizeInt)
 		}
 	}
 
@@ -135,10 +133,10 @@ func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 		switch keyType {
 		case x509.RSA.String():
 			lEst.Debugf("valid Key-Type header")
-			authCtx = context.WithValue(authCtx, models.ESTServerKeyGenBitSize, x509.RSA)
+			ctx.Set(models.ESTServerKeyGenBitSize, x509.RSA)
 		case x509.ECDSA.String():
 			lEst.Debugf("valid Key-Type header")
-			authCtx = context.WithValue(authCtx, models.ESTServerKeyGenBitSize, x509.ECDSA)
+			ctx.Set(models.ESTServerKeyGenBitSize, x509.ECDSA)
 		default:
 			lEst.Warnf("invalid Key-Type header")
 		}
@@ -149,18 +147,18 @@ func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 	}
 
 	for _, authExtractor := range authExtractors {
-		authCtx = authExtractor.ExtractAuthentication(authCtx, *ctx.Request)
+		authExtractor.ExtractAuthentication(ctx, *ctx.Request)
 	}
 
 	var key any
 	var signedCrt *x509.Certificate
 	if strings.Contains(ctx.Request.URL.Path, "serverkeygen") {
-		signedCrt, key, err = r.svc.ServerKeyGen(authCtx, csr, params.APS)
+		signedCrt, key, err = r.svc.ServerKeyGen(ctx, csr, params.APS)
 		fmt.Println(key)
 	} else if strings.Contains(ctx.Request.URL.Path, "simplereenroll") {
-		signedCrt, err = r.svc.Reenroll(authCtx, csr, params.APS)
+		signedCrt, err = r.svc.Reenroll(ctx, csr, params.APS)
 	} else {
-		signedCrt, err = r.svc.Enroll(authCtx, csr, params.APS)
+		signedCrt, err = r.svc.Enroll(ctx, csr, params.APS)
 	}
 	if err != nil {
 		ctx.JSON(500, gin.H{"err": err.Error()})
@@ -188,12 +186,12 @@ func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 }
 
 type httpAuthReqExtractor interface {
-	ExtractAuthentication(ctx context.Context, req http.Request) context.Context
+	ExtractAuthentication(ctx *gin.Context, req http.Request)
 }
 
 type ClientCertificateExtractor struct{}
 
-func (ClientCertificateExtractor) ExtractAuthentication(ctx context.Context, req http.Request) context.Context {
+func (ClientCertificateExtractor) ExtractAuthentication(ctx *gin.Context, req http.Request) {
 	var crt *x509.Certificate
 	var err error
 
@@ -212,10 +210,9 @@ func (ClientCertificateExtractor) ExtractAuthentication(ctx context.Context, req
 	}
 
 	if crt != nil {
-		ctx = context.WithValue(ctx, models.ESTAuthModeClientCertificate, crt)
+		ctx.Set(string(models.ESTAuthModeClientCertificate), crt)
 	}
 
-	return ctx
 }
 
 func getCertificateFromHeader(h http.Header) (*x509.Certificate, error) {

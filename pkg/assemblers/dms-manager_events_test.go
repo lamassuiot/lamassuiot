@@ -20,6 +20,8 @@ import (
 )
 
 func TestBindIDEvent(t *testing.T) {
+	ctx := context.Background()
+
 	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, true)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
@@ -293,7 +295,7 @@ func TestBindIDEvent(t *testing.T) {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
 				}
 
-				device, err := testServers.DeviceManager.HttpDeviceManagerSDK.CreateDevice(services.CreateDeviceInput{
+				device, err := testServers.DeviceManager.HttpDeviceManagerSDK.CreateDevice(ctx, services.CreateDeviceInput{
 					ID:        deviceCert.Subject.CommonName,
 					Alias:     "",
 					Tags:      dms.Settings.EnrollmentSettings.DeviceProvisionProfile.Tags,

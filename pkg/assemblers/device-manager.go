@@ -119,6 +119,8 @@ func GetDeviceManagerEventHandler(lMessaging *logrus.Entry, svc services.DeviceM
 }
 
 func updateCertStatusHandler(event *event.Event, svc services.DeviceManagerService, lMessaging *logrus.Entry) error {
+	ctx := context.Background()
+
 	cert, err := eventbus.GetEventBody[models.UpdateModel[models.Certificate]](event)
 	if err != nil {
 		err = fmt.Errorf("could not decode cloud event: %s", err)
@@ -127,7 +129,7 @@ func updateCertStatusHandler(event *event.Event, svc services.DeviceManagerServi
 	}
 
 	deviceID := cert.Updated.Certificate.Subject.CommonName
-	dev, err := svc.GetDeviceByID(services.GetDeviceByIDInput{
+	dev, err := svc.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: deviceID,
 	})
 	if err != nil {
@@ -165,7 +167,7 @@ func updateCertStatusHandler(event *event.Event, svc services.DeviceManagerServi
 	}
 
 	if updated {
-		_, err = svc.UpdateDeviceIdentitySlot(services.UpdateDeviceIdentitySlotInput{
+		_, err = svc.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
 			ID:   deviceID,
 			Slot: *dev.IdentitySlot,
 		})
@@ -179,6 +181,8 @@ func updateCertStatusHandler(event *event.Event, svc services.DeviceManagerServi
 }
 
 func updateCertMetaHandler(event *event.Event, svc services.DeviceManagerService, lMessaging *logrus.Entry) error {
+	ctx := context.Background()
+
 	certUpdate, err := eventbus.GetEventBody[models.UpdateModel[models.Certificate]](event)
 	if err != nil {
 		err = fmt.Errorf("could not decode cloud event: %s", err)
@@ -187,7 +191,7 @@ func updateCertMetaHandler(event *event.Event, svc services.DeviceManagerService
 	}
 
 	deviceID := certUpdate.Updated.Subject.CommonName
-	dev, err := svc.GetDeviceByID(services.GetDeviceByIDInput{
+	dev, err := svc.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: deviceID,
 	})
 	if err != nil {
@@ -229,7 +233,7 @@ func updateCertMetaHandler(event *event.Event, svc services.DeviceManagerService
 		if !prevCriticalTriggered {
 			//no update
 			dev.IdentitySlot.Status = models.SlotAboutToExpire
-			_, err = svc.UpdateDeviceIdentitySlot(services.UpdateDeviceIdentitySlotInput{
+			_, err = svc.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
 				ID:   deviceID,
 				Slot: *dev.IdentitySlot,
 			})
@@ -247,7 +251,7 @@ func updateCertMetaHandler(event *event.Event, svc services.DeviceManagerService
 		if !prevPreventiveTriggered {
 			//no update
 			dev.IdentitySlot.Status = models.SlotRenewalWindow
-			_, err = svc.UpdateDeviceIdentitySlot(services.UpdateDeviceIdentitySlotInput{
+			_, err = svc.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
 				ID:   deviceID,
 				Slot: *dev.IdentitySlot,
 			})

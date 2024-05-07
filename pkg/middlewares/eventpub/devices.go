@@ -22,33 +22,33 @@ func NewDeviceEventPublisher(eventMWPub CloudEventMiddlewarePublisher) services.
 	}
 }
 
-func (mw *deviceEventPublisher) GetDevicesStats(input services.GetDevicesStatsInput) (*models.DevicesStats, error) {
-	return mw.next.GetDevicesStats(input)
+func (mw *deviceEventPublisher) GetDevicesStats(ctx context.Context, input services.GetDevicesStatsInput) (*models.DevicesStats, error) {
+	return mw.next.GetDevicesStats(ctx, input)
 }
 
-func (mw *deviceEventPublisher) CreateDevice(input services.CreateDeviceInput) (output *models.Device, err error) {
+func (mw *deviceEventPublisher) CreateDevice(ctx context.Context, input services.CreateDeviceInput) (output *models.Device, err error) {
 	defer func() {
 		if err == nil {
 			mw.eventMWPub.PublishCloudEvent(context.Background(), models.EventCreateDeviceKey, output)
 		}
 	}()
-	return mw.next.CreateDevice(input)
+	return mw.next.CreateDevice(ctx, input)
 }
 
-func (mw *deviceEventPublisher) GetDeviceByID(input services.GetDeviceByIDInput) (*models.Device, error) {
-	return mw.next.GetDeviceByID(input)
+func (mw *deviceEventPublisher) GetDeviceByID(ctx context.Context, input services.GetDeviceByIDInput) (*models.Device, error) {
+	return mw.next.GetDeviceByID(ctx, input)
 }
 
-func (mw *deviceEventPublisher) GetDevices(input services.GetDevicesInput) (string, error) {
-	return mw.next.GetDevices(input)
+func (mw *deviceEventPublisher) GetDevices(ctx context.Context, input services.GetDevicesInput) (string, error) {
+	return mw.next.GetDevices(ctx, input)
 }
 
-func (mw *deviceEventPublisher) GetDeviceByDMS(input services.GetDevicesByDMSInput) (string, error) {
-	return mw.next.GetDeviceByDMS(input)
+func (mw *deviceEventPublisher) GetDeviceByDMS(ctx context.Context, input services.GetDevicesByDMSInput) (string, error) {
+	return mw.next.GetDeviceByDMS(ctx, input)
 }
 
-func (mw *deviceEventPublisher) UpdateDeviceStatus(input services.UpdateDeviceStatusInput) (output *models.Device, err error) {
-	prev, err := mw.GetDeviceByID(services.GetDeviceByIDInput{
+func (mw *deviceEventPublisher) UpdateDeviceStatus(ctx context.Context, input services.UpdateDeviceStatusInput) (output *models.Device, err error) {
+	prev, err := mw.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: input.ID,
 	})
 	if err != nil {
@@ -63,11 +63,11 @@ func (mw *deviceEventPublisher) UpdateDeviceStatus(input services.UpdateDeviceSt
 			})
 		}
 	}()
-	return mw.next.UpdateDeviceStatus(input)
+	return mw.next.UpdateDeviceStatus(ctx, input)
 }
 
-func (mw *deviceEventPublisher) UpdateDeviceIdentitySlot(input services.UpdateDeviceIdentitySlotInput) (output *models.Device, err error) {
-	prev, err := mw.GetDeviceByID(services.GetDeviceByIDInput{
+func (mw *deviceEventPublisher) UpdateDeviceIdentitySlot(ctx context.Context, input services.UpdateDeviceIdentitySlotInput) (output *models.Device, err error) {
+	prev, err := mw.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: input.ID,
 	})
 	if err != nil {
@@ -81,11 +81,11 @@ func (mw *deviceEventPublisher) UpdateDeviceIdentitySlot(input services.UpdateDe
 			})
 		}
 	}()
-	return mw.next.UpdateDeviceIdentitySlot(input)
+	return mw.next.UpdateDeviceIdentitySlot(ctx, input)
 }
 
-func (mw *deviceEventPublisher) UpdateDeviceMetadata(input services.UpdateDeviceMetadataInput) (output *models.Device, err error) {
-	prev, err := mw.GetDeviceByID(services.GetDeviceByIDInput{
+func (mw *deviceEventPublisher) UpdateDeviceMetadata(ctx context.Context, input services.UpdateDeviceMetadataInput) (output *models.Device, err error) {
+	prev, err := mw.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: input.ID,
 	})
 	if err != nil {
@@ -94,11 +94,11 @@ func (mw *deviceEventPublisher) UpdateDeviceMetadata(input services.UpdateDevice
 
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(context.Background(), models.EventUpdateDeviceMetadataKey, models.UpdateModel[models.Device]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateDeviceMetadataKey, models.UpdateModel[models.Device]{
 				Updated:  *output,
 				Previous: *prev,
 			})
 		}
 	}()
-	return mw.next.UpdateDeviceMetadata(input)
+	return mw.next.UpdateDeviceMetadata(ctx, input)
 }
