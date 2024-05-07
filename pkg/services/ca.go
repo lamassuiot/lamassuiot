@@ -176,11 +176,14 @@ func (svc *CAServiceBackend) CheckCAsAndCertificates() {
 				orderedDeltas := additionalDeltas
 
 				//order deltas from smallest to biggest
-				slices.SortStableFunc[models.MonitoringExpirationDelta](orderedDeltas, func(a models.MonitoringExpirationDelta, b models.MonitoringExpirationDelta) bool {
+				slices.SortStableFunc(orderedDeltas, func(a models.MonitoringExpirationDelta, b models.MonitoringExpirationDelta) int {
+					if a.Delta == b.Delta {
+						return 0
+					}
 					if a.Delta < b.Delta {
-						return true
+						return -1
 					} else {
-						return false
+						return 1
 					}
 				})
 
