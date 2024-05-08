@@ -45,7 +45,7 @@ type GetCRLInput struct {
 }
 
 func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte, error) {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	err := crlValidate.Struct(input)
 	if err != nil {
