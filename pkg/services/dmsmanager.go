@@ -8,6 +8,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -21,7 +22,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
-	"golang.org/x/exp/slices"
 )
 
 var lDMS *logrus.Entry

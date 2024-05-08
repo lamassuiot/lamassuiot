@@ -12,12 +12,12 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	log "github.com/sirupsen/logrus"
-	"golang.org/x/exp/slices"
 )
 
 //Cammbio de la función para definir la longevidad de la expiración de la CA.
