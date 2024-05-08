@@ -24,7 +24,6 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-var lDMS *logrus.Entry
 var dmsValidate = validator.New()
 
 type DMSManagerMiddleware func(DMSManagerService) DMSManagerService
@@ -46,6 +45,7 @@ type DMSManagerServiceBackend struct {
 	dmsStorage       storage.DMSRepo
 	deviceManagerCli DeviceManagerService
 	caClient         CAService
+	logger           *logrus.Entry
 }
 
 type DMSManagerBuilder struct {
@@ -57,13 +57,12 @@ type DMSManagerBuilder struct {
 }
 
 func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
-	lDMS = builder.Logger
-
 	svc := &DMSManagerServiceBackend{
 		dmsStorage:       builder.DMSStorage,
 		caClient:         builder.CAClient,
 		deviceManagerCli: builder.DevManagerCli,
 		downstreamCert:   builder.DownstreamCertificate,
+		logger:           builder.Logger,
 	}
 
 	return svc
@@ -76,7 +75,7 @@ func (svc *DMSManagerServiceBackend) SetService(service DMSManagerService) {
 type GetDMSStatsInput struct{}
 
 func (svc DMSManagerServiceBackend) GetDMSStats(ctx context.Context, input GetDMSStatsInput) (*models.DMSStats, error) {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	total, err := svc.dmsStorage.Count(ctx)
 	if err != nil {
@@ -99,7 +98,7 @@ type CreateDMSInput struct {
 }
 
 func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input CreateDMSInput) (*models.DMS, error) {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	err := dmsValidate.Struct(input)
 	if err != nil {
@@ -140,7 +139,7 @@ type UpdateDMSInput struct {
 }
 
 func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input UpdateDMSInput) (*models.DMS, error) {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	err := dmsValidate.Struct(input)
 	if err != nil {
@@ -170,7 +169,7 @@ type GetDMSByIDInput struct {
 }
 
 func (svc DMSManagerServiceBackend) GetDMSByID(ctx context.Context, input GetDMSByIDInput) (*models.DMS, error) {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	err := dmsValidate.Struct(input)
 	if err != nil {
@@ -196,7 +195,7 @@ type GetAllInput struct {
 }
 
 func (svc DMSManagerServiceBackend) GetAll(ctx context.Context, input GetAllInput) (string, error) {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	bookmark, err := svc.dmsStorage.SelectAll(ctx, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
 	if err != nil {
@@ -208,7 +207,7 @@ func (svc DMSManagerServiceBackend) GetAll(ctx context.Context, input GetAllInpu
 }
 
 func (svc DMSManagerServiceBackend) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	cas := []*x509.Certificate{}
 	lFunc.Debugf("checking if DMS '%s' exists", aps)
@@ -260,7 +259,7 @@ func (svc DMSManagerServiceBackend) CACerts(ctx context.Context, aps string) ([]
 //   - Cert:
 //     Only Bootstrap cert (CA issued By Lamassu)
 func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("checking if DMS '%s' exists", aps)
 	dms, err := svc.service.GetDMSByID(ctx, GetDMSByIDInput{
@@ -427,7 +426,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 }
 
 func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("checking if DMS '%s' exists", aps)
 	dms, err := svc.service.GetDMSByID(ctx, GetDMSByIDInput{
@@ -677,7 +676,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 }
 
 func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	var privKey any
 	var err error
@@ -735,7 +734,7 @@ func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.
 
 // returns if the given certificate COULD BE checked for revocation (true means that it could be checked), and if it is revoked (true) or not (false)
 func (svc DMSManagerServiceBackend) checkCertificateRevocation(ctx context.Context, cert *x509.Certificate, validationCA *x509.Certificate) (bool, bool, error) {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	revocationChecked := false
 	revoked := true
@@ -819,7 +818,7 @@ type BindIdentityToDeviceInput struct {
 }
 
 func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, input BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error) {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	crt, err := svc.caClient.GetCertificateBySerialNumber(ctx, GetCertificatesBySerialNumberInput{
 		SerialNumber: input.CertificateSerialNumber,

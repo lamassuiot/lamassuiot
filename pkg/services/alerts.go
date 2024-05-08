@@ -16,8 +16,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var lAlerts *logrus.Entry
-
 type AlertsService interface {
 	HandleEvent(ctx context.Context, input *HandleEventInput) error
 	GetUserSubscriptions(ctx context.Context, input *GetUserSubscriptionsInput) ([]*models.Subscription, error)
@@ -31,6 +29,7 @@ type AlertsServiceBackend struct {
 	subsStorage      storage.SubscriptionsRepository
 	eventStorage     storage.EventRepository
 	smtpServerConfig config.SMTPServer
+	logger           *logrus.Entry
 }
 
 type AlertsServiceBuilder struct {
@@ -41,11 +40,11 @@ type AlertsServiceBuilder struct {
 }
 
 func NewAlertsService(builder AlertsServiceBuilder) AlertsService {
-	lAlerts = builder.Logger
 	return &AlertsServiceBackend{
 		subsStorage:      builder.SubsStorage,
 		eventStorage:     builder.EventStorage,
 		smtpServerConfig: builder.SmtpServerConfig,
+		logger:           builder.Logger,
 	}
 }
 
@@ -54,7 +53,7 @@ type HandleEventInput struct {
 }
 
 func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *HandleEventInput) error {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Infof("handling Event ID '%s'. Event Type '%s'", input.Event.ID(), input.Event.Type())
 	exists, storedEv, err := svc.eventStorage.GetLatestEventByEventType(ctx, models.EventType(input.Event.Type()))
@@ -131,7 +130,7 @@ func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *HandleE
 type GetLatestEventsPerEventTypeInput struct{}
 
 func (svc *AlertsServiceBackend) GetLatestEventsPerEventType(ctx context.Context, input *GetLatestEventsPerEventTypeInput) ([]*models.AlertLatestEvent, error) {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	events, err := svc.eventStorage.GetLatestEvents(ctx)
 	if err != nil {
@@ -147,7 +146,7 @@ type GetUserSubscriptionsInput struct {
 }
 
 func (svc *AlertsServiceBackend) GetUserSubscriptions(ctx context.Context, input *GetUserSubscriptionsInput) ([]*models.Subscription, error) {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	userSubs := []*models.Subscription{}
 	_, err := svc.subsStorage.GetSubscriptions(ctx, input.UserID, true, func(sub models.Subscription) {
@@ -173,7 +172,7 @@ type SubscribeInput struct {
 }
 
 func (svc *AlertsServiceBackend) Subscribe(ctx context.Context, input *SubscribeInput) ([]*models.Subscription, error) {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Infof("subscribing user %s to event type %s with %d conditions over %s", input.UserID, input.EventType, len(input.Conditions), input.Channel.Type)
 	sub := &models.Subscription{
@@ -200,7 +199,7 @@ type UnsubscribeInput struct {
 }
 
 func (svc *AlertsServiceBackend) Unsubscribe(ctx context.Context, input *UnsubscribeInput) ([]*models.Subscription, error) {
-	lFunc := helpers.ConfigureLogger(ctx, lCA)
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	var loopError error
 	userSubs := []*models.Subscription{}
