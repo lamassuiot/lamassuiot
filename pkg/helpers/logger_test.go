@@ -2,12 +2,9 @@ package helpers
 
 import (
 	"context"
-	"net/http"
-	"strings"
 	"testing"
 
-	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	headerextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/basic-header-extractors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -36,7 +33,7 @@ func TestConfigureLoggerWithRequestID(t *testing.T) {
 
 	// Test case 2: Request ID exists in the context
 	reqID := "12345"
-	ctx = context.WithValue(ctx, HTTPRequestID, reqID)
+	ctx = context.WithValue(ctx, headerextractors.CtxRequestID, reqID)
 
 	result = configureLoggerWithRequestID(ctx, logger)
 
@@ -67,32 +64,4 @@ func TestConfigureLoggerWithRequestID(t *testing.T) {
 
 func startsWith(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
-}
-
-func TestUpdateContextWithRequest(t *testing.T) {
-	ctx := gin.Context{}
-	headers := http.Header{}
-	headers.Set("x-request-id", "12345")
-	headers.Set("x-lms-source", "test-source")
-	headers.Set("x-ignored", "ignored")
-
-	UpdateContextWithRequest(&ctx, headers)
-
-	// Verify that the request ID is correctly set in the context
-	reqID := ctx.Value(HTTPRequestID)
-	if reqID != "12345" {
-		t.Errorf("UpdateContextWithRequest did not set the correct request ID in the context. Expected: %s, Got: %v", "12345", reqID)
-	}
-
-	// Verify that the source is correctly set in the context
-	source := ctx.Value(models.ContextSourceKey)
-	if !strings.HasPrefix(source.(string), "test-source") {
-		t.Errorf("UpdateContextWithRequest did not set the correct source in the context. Expected: %s, Got: %v", "test-source", source)
-	}
-
-	// Verify that the source is correctly set in the context
-	ignored := ctx.Value("x-ignored")
-	if ignored != nil {
-		t.Errorf("UpdateContextWithRequest should not have set the ignored header in the context. Got: %v", ignored)
-	}
 }

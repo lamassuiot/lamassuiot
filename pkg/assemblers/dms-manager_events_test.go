@@ -5,6 +5,7 @@ import (
 	"crypto/elliptic"
 	"crypto/x509"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
 
@@ -48,7 +50,7 @@ func TestBindIDEvent(t *testing.T) {
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthModeClientCertificate,
+						AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
@@ -96,7 +98,7 @@ func TestBindIDEvent(t *testing.T) {
 		}
 	}
 	standardEvCheck := func(event event.Event) error {
-		if event.Source() != "lrn://dms-manager" {
+		if !strings.HasPrefix(event.Source(), "lrn://dms-manager") {
 			return fmt.Errorf("unexpected event source")
 		}
 
@@ -538,6 +540,7 @@ func TestBindIDEvent(t *testing.T) {
 				if err != nil {
 					t.Fatalf("invalid event: %s", err)
 				}
+				router.Close() //we found an event satisfying the test. Close subscription
 			}
 		})
 	}

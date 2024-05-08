@@ -7,6 +7,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	headerextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/basic-header-extractors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -18,7 +19,7 @@ type CloudEventMiddlewarePublisher struct {
 
 func (cemp *CloudEventMiddlewarePublisher) PublishCloudEvent(ctx context.Context, eventType models.EventType, payload interface{}) {
 	src := "lrn://" + cemp.ServiceID
-	if ctxSource := ctx.Value(models.ContextSourceKey); ctxSource != nil {
+	if ctxSource := ctx.Value(headerextractors.CtxSource); ctxSource != nil {
 		ctxSourceStr, ok := ctxSource.(string)
 		if ok {
 			src = ctxSourceStr

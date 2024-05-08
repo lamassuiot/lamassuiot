@@ -15,6 +15,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
 
@@ -197,7 +198,7 @@ func RunUseCase1(input UseCase1Input) error {
 			EnrollmentSettings: models.EnrollmentSettings{
 				EnrollmentProtocol: models.EST,
 				EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-					AuthMode: models.ESTAuthModeClientCertificate,
+					AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
 					AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 						ValidationCAs:        []string{ca2.ID},
 						ChainLevelValidation: -1,

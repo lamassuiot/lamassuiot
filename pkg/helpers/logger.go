@@ -2,27 +2,23 @@ package helpers
 
 import (
 	"context"
-	"crypto/x509"
 	"fmt"
 	"io"
-	"net/http"
 	"path"
 	"runtime"
-	"strings"
 
 	formatter "github.com/antonfisher/nested-logrus-formatter"
-	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	headerextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/basic-header-extractors"
+	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 	"github.com/sirupsen/logrus"
 )
 
 var LogFormatter = &formatter.Formatter{
 	TimestampFormat: "2006-01-02 15:04:05",
 	HideKeys:        true,
-	FieldsOrder:     []string{"call-id", "req-id", "service", "subsystem", "subsystem-provider"},
+	FieldsOrder:     []string{"src-call-id", "req-id", "service", "subsystem", "subsystem-provider"},
 	CallerFirst:     true,
 	CustomCallerFormatter: func(f *runtime.Frame) string {
 		filename := path.Base(f.File)
@@ -61,18 +57,28 @@ func SetupLogger(currentLevel config.LogLevel, serviceID string, subsystem strin
 	return lSubsystem
 }
 
-var HTTPRequestID = "HTTPRequestID"
-
 func ConfigureLogger(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
-	logger = configureLoggerWitCallerID(ctx, logger)
+	logger = configureLoggerWitSourceAndCallerID(ctx, logger)
 	logger = configureLoggerWithRequestID(ctx, logger)
 	return logger
 }
 
-func configureLoggerWitCallerID(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
-	reqCtx := ctx.Value(models.ContextSourceKey)
-	if callID, ok := reqCtx.(string); ok {
-		return logger.WithField("call-id", callID)
+func configureLoggerWitSourceAndCallerID(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
+	source := ""
+	callID := ""
+
+	sourceCtx := ctx.Value(string(headerextractors.CtxSource))
+	if src, ok := sourceCtx.(string); ok {
+		source = src
+	}
+
+	callerCtx := ctx.Value(string(identityextractors.CtxCallerID))
+	if id, ok := callerCtx.(string); ok {
+		callID = id
+	}
+
+	if source != "" || callID != "" {
+		return logger.WithField("src-call-id", callID)
 	}
 
 	return logger
@@ -83,7 +89,7 @@ func configureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *lo
 		return logger
 	}
 
-	reqCtx := ctx.Value(HTTPRequestID)
+	reqCtx := ctx.Value(headerextractors.CtxRequestID)
 	if reqID, ok := reqCtx.(string); ok {
 		return logger.WithField("req-id", reqID)
 	}
@@ -95,64 +101,4 @@ func InitContext() context.Context {
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "req-id", fmt.Sprintf("internal.%s", goid.NewV4UUID()))
 	return ctx
-}
-
-func UpdateContextWithRequest(ctx *gin.Context, headers http.Header) {
-	reqID := headers.Get("x-request-id")
-	if reqID != "" {
-		ctx.Set(HTTPRequestID, reqID)
-	}
-
-	authMode := "noauth"
-	callerID := "noid"
-	source := "nosrc"
-
-	sourceHeader := headers.Get(models.HttpSourceHeader)
-	if sourceHeader != "" {
-		source = sourceHeader
-	}
-
-	authz := headers.Get("authorization")
-	subID := getIDFromHttpAuthorizationHeader(authz)
-	if subID != "" {
-		authMode = "jwt"
-		callerID = subID
-	}
-
-	clientCert, hasValue := ctx.Value(models.ESTAuthModeClientCertificate).(*x509.Certificate)
-	if hasValue {
-		authMode = "crt"
-		callerID = clientCert.Subject.CommonName
-	}
-
-	ctx.Set(models.ContextSourceKey, fmt.Sprintf("%s:%s:%s", source, authMode, callerID))
-}
-
-func getIDFromHttpAuthorizationHeader(header string) string {
-	// The Authorization header typically looks like "Bearer <token>"
-	authToken := strings.Split(header, " ")
-	if len(authToken) != 2 || authToken[0] != "Bearer" {
-		return ""
-	}
-
-	// Parse the JWT
-	tokenString := authToken[1]
-	token, _, err := new(jwt.Parser).ParseUnverified(tokenString, jwt.MapClaims{})
-	if err != nil {
-		return ""
-	}
-
-	// Access the claims
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return ""
-	}
-
-	// Extract the sub claim
-	sub, ok := claims["sub"].(string)
-	if !ok {
-		return ""
-	}
-
-	return sub
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
+	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
@@ -276,8 +277,8 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	}
 
 	estAuthOptions := dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030
-	if estAuthOptions.AuthMode == models.ESTAuthModeClientCertificate {
-		clientCert, hasValue := ctx.Value(models.ESTAuthModeClientCertificate).(*x509.Certificate)
+	if estAuthOptions.AuthMode == models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate) {
+		clientCert, hasValue := ctx.Value(string(identityextractors.IdentityExtractorClientCertificate)).(*x509.Certificate)
 		if !hasValue {
 			lFunc.Errorf("aborting enrollment process for device '%s'. DMS '%s' is configured with '%s'. No client certificate was presented", csr.Subject.CommonName, dms.ID, estAuthOptions.AuthMode)
 			return nil, errs.ErrDMSAuthModeNotSupported
@@ -330,7 +331,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 			lFunc.Infof("could not verify certificate expiration. Assuming certificate as not-revoked")
 		}
 
-	} else if estAuthOptions.AuthMode == models.ESTAuthModeNoAuth {
+	} else if estAuthOptions.AuthMode == models.ESTAuthMode(identityextractors.IdentityExtractorNoAuth) {
 		lFunc.Warnf("DMS %s is configured with NoAuth. Allowing enrollment", dms.ID)
 	}
 
@@ -451,8 +452,8 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		return nil, err
 	}
 
-	if dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode == models.ESTAuthModeClientCertificate {
-		clientCert, hasValue := ctx.Value(models.ESTAuthModeClientCertificate).(*x509.Certificate)
+	if dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode == models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate) {
+		clientCert, hasValue := ctx.Value(string(identityextractors.IdentityExtractorClientCertificate)).(*x509.Certificate)
 		if !hasValue {
 			lFunc.Errorf("aborting reenrollment process for device '%s'. No client certificate was presented", csr.Subject.CommonName)
 			return nil, errs.ErrDMSAuthModeNotSupported
@@ -681,13 +682,13 @@ func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.
 	var privKey any
 	var err error
 
-	keyType, hasValue := ctx.Value(models.ESTServerKeyGenKeyType).(x509.PublicKeyAlgorithm)
+	keyType, hasValue := ctx.Value(string(models.ESTServerKeyGenKeyType)).(x509.PublicKeyAlgorithm)
 	if !hasValue {
 		lFunc.Debugf("no valid key type found. Defaulting to RSA")
 		keyType = x509.RSA
 	}
 
-	keySize, hasKeySizeValue := ctx.Value(models.ESTServerKeyGenBitSize).(int)
+	keySize, hasKeySizeValue := ctx.Value(string(models.ESTServerKeyGenBitSize)).(int)
 
 	switch keyType {
 	case x509.RSA:

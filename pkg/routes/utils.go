@@ -15,36 +15,16 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	gindump "github.com/haritzsaiz/gin-dump"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	headerextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/basic-header-extractors"
+	basiclogger "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/basic-logger"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/gindump"
+	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 	"github.com/sirupsen/logrus"
 )
-
-type traceRequestWriter struct {
-	logger *logrus.Entry
-}
-
-func (tr *traceRequestWriter) Write(p []byte) (n int, err error) {
-	logReq := string(p)
-	logReq = strings.ReplaceAll(logReq, "\n", "")
-	splitter := strings.SplitAfterN(logReq, "|", 2)
-	if len(splitter) == 2 {
-		tr.logger.Debugf("%s", splitter[1])
-	} else {
-		tr.logger.Debugf("%s", string(p))
-	}
-	return len(p), nil
-}
-
-func RequestIDMiddleware() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		helpers.UpdateContextWithRequest(c, c.Request.Header)
-		c.Next()
-	}
-}
 
 func NewGinEngine(logger *logrus.Entry) *gin.Engine {
 	gin.ForceConsoleColor()
@@ -57,9 +37,15 @@ func NewGinEngine(logger *logrus.Entry) *gin.Engine {
 	corsConfig.AllowHeaders = []string{"*"}
 
 	router := gin.New()
-	router.Use(cors.New(corsConfig), RequestIDMiddleware(), gindump.DumpWithOptions(true, true, true, true, func(dumpStr string) {
-		logger.Trace(dumpStr)
-	}), gin.LoggerWithWriter(&traceRequestWriter{logger: logger}), gin.Recovery())
+	router.Use(
+		cors.New(corsConfig),
+		headerextractors.RequestMetadataToContextMiddleware(logger),
+		identityextractors.RequestMetadataToContextMiddleware(logger),
+		basiclogger.UseLogger(logger),
+		gindump.DumpWithOptions(true, true, true, true, func(dumpStr string) {
+			logger.Trace(dumpStr)
+		}),
+	)
 
 	return router
 }
