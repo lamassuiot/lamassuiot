@@ -5,11 +5,6 @@ import "crypto/x509"
 type ESTAuthMode string
 
 const (
-	ESTAuthModeNoAuth            ESTAuthMode = "NO_AUTH"
-	ESTAuthModeClientCertificate ESTAuthMode = "CLIENT_CERTIFICATE"
-)
-
-const (
 	ESTServerKeyGenBitSize = "ESTServerKeyGenBitSize"
 	ESTServerKeyGenKeyType = "ESTServerKeyGenKeyType"
 )

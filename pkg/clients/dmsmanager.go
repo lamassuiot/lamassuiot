@@ -71,7 +71,7 @@ func (cli *dmsManagerClient) GetAll(ctx context.Context, input services.GetAllIn
 	}
 }
 
-func (cli *dmsManagerClient) CACerts(aps string) ([]*x509.Certificate, error) {
+func (cli *dmsManagerClient) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
 	return nil, fmt.Errorf("not supported, use the estCli instead")
 }
 

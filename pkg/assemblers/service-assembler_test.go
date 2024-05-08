@@ -216,6 +216,8 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 }
 
 func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *TestCryptoEngineConfig, eventBus *TestEventBusConfig) (*CATestServer, error) {
+	storageEngine.config.LogLevel = config.Trace
+
 	svc, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
 		Logs: config.BaseConfigLogging{
 			Level: config.Info,

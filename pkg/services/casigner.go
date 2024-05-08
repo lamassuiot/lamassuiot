@@ -13,10 +13,12 @@ import (
 type caSignerImpl struct {
 	sdk CAService
 	ca  *models.CACertificate
+	ctx context.Context
 }
 
-func NewCASigner(ca *models.CACertificate, caSDK CAService) crypto.Signer {
+func NewCASigner(ctx context.Context, ca *models.CACertificate, caSDK CAService) crypto.Signer {
 	return &caSignerImpl{
+		ctx: ctx,
 		sdk: caSDK,
 		ca:  ca,
 	}
@@ -39,7 +41,7 @@ func (s *caSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpt
 		logrus.Warnf("using default %s sing alg for client. '%s' no match", signAlg, caKeyAlg)
 	}
 
-	return s.sdk.SignatureSign(context.Background(), SignatureSignInput{
+	return s.sdk.SignatureSign(s.ctx, SignatureSignInput{
 		CAID:             s.ca.ID,
 		Message:          digest,
 		MessageType:      models.Hashed,

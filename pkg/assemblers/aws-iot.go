@@ -21,8 +21,8 @@ import (
 )
 
 func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAService, dmsService services.DMSManagerService, deviceService services.DeviceManagerService) (*iot.AWSCloudConnectorService, error) {
-	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "AWS IoT Connector", "Service")
-	lMessaging := helpers.ConfigureLogger(conf.SubscriberEventBus.LogLevel, "AWS IoT Connector", "Event Bus")
+	lSvc := helpers.SetupLogger(conf.Logs.Level, "AWS IoT Connector", "Service")
+	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "AWS IoT Connector", "Event Bus")
 
 	awsCfg, err := config.GetAwsSdkConfig(conf.AWSSDKConfig)
 	if err != nil {
@@ -100,6 +100,8 @@ func GetAWSIoTConnectorEventHandler(lMessaging *logrus.Entry, svc *iot.AWSCloudC
 }
 
 func mainAwsConnectorEventHandler(event *event.Event, svc iot.AWSCloudConnectorService, logger *logrus.Entry) error {
+	ctx := helpers.InitContext()
+
 	logDecodeError := func(eventID string, eventType string, modelObject string, err error) {
 		logger.Errorf("could not decode event '%s' into model '%s' object. Skipping event with ID %s: %s", eventType, modelObject, eventID, err)
 	}
@@ -138,7 +140,7 @@ func mainAwsConnectorEventHandler(event *event.Event, svc iot.AWSCloudConnectorS
 		if dmsAwsAutomationConfig.RegistrationMode == models.AutomaticAWSIoTRegistrationMode {
 			thingID := bindEvent.Certificate.Subject.CommonName
 			logrus.Infof("registering %s device", thingID)
-			err = svc.RegisterAndAttachThing(iot.RegisterAndAttachThingInput{
+			err = svc.RegisterAndAttachThing(ctx, iot.RegisterAndAttachThingInput{
 				DeviceID:               thingID,
 				DMSIoTAutomationConfig: dmsAwsAutomationConfig,
 				BindedIdentity:         *bindEvent,
@@ -196,7 +198,7 @@ func mainAwsConnectorEventHandler(event *event.Event, svc iot.AWSCloudConnectorS
 		}
 
 		if len(deviceMetaAWS.Actions) > 0 {
-			err = svc.UpdateDeviceShadow(iot.UpdateDeviceShadowInput{
+			err = svc.UpdateDeviceShadow(ctx, iot.UpdateDeviceShadowInput{
 				DeviceID:               device.ID,
 				RemediationActionsType: deviceMetaAWS.Actions,
 				DMSIoTAutomationConfig: dmsAWSConf,
@@ -272,7 +274,7 @@ func mainAwsConnectorEventHandler(event *event.Event, svc iot.AWSCloudConnectorS
 		}
 
 		if preventiveIdx >= 0 && certExpirationDeltas[preventiveIdx].Triggered {
-			err = svc.UpdateDeviceShadow(iot.UpdateDeviceShadowInput{
+			err = svc.UpdateDeviceShadow(ctx, iot.UpdateDeviceShadowInput{
 				DeviceID:               cert.Subject.CommonName,
 				RemediationActionsType: []models.RemediationActionType{models.RemediationActionUpdateCertificate},
 				DMSIoTAutomationConfig: dmsAWSConf,
@@ -338,12 +340,12 @@ func mainAwsConnectorEventHandler(event *event.Event, svc iot.AWSCloudConnectorS
 		if isUpdateEvent {
 			changedManagedCAs := !lms_slices.UnorderedEqualContent(updatedDMS.Previous.Settings.CADistributionSettings.ManagedCAs, updatedDMS.Updated.Settings.CADistributionSettings.ManagedCAs, func(e1, e2 string) bool { return e1 == e2 })
 			if changedManagedCAs {
-				_, err = svc.DeviceSDK.GetDeviceByDMS(services.GetDevicesByDMSInput{
+				_, err = svc.DeviceSDK.GetDeviceByDMS(ctx, services.GetDevicesByDMSInput{
 					DMSID: dms.ID,
 					ListInput: resources.ListInput[models.Device]{
 						ExhaustiveRun: true,
 						ApplyFunc: func(device models.Device) {
-							err = svc.UpdateDeviceShadow(iot.UpdateDeviceShadowInput{
+							err = svc.UpdateDeviceShadow(ctx, iot.UpdateDeviceShadowInput{
 								DeviceID:               device.ID,
 								RemediationActionsType: []models.RemediationActionType{models.RemediationActionUpdateTrustAnchorList},
 								DMSIoTAutomationConfig: dmsAwsAutomationConfig,

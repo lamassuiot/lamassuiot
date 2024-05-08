@@ -4,21 +4,21 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"path"
 	"runtime"
 
 	formatter "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	headerextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/basic-header-extractors"
+	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 	"github.com/sirupsen/logrus"
 )
 
 var LogFormatter = &formatter.Formatter{
 	TimestampFormat: "2006-01-02 15:04:05",
 	HideKeys:        true,
-	FieldsOrder:     []string{"service", "subsystem", "subsystem-provider", "req-id"},
+	FieldsOrder:     []string{"src", "auth-mode", "auth-id", "req-id", "service", "subsystem", "subsystem-provider"},
 	CallerFirst:     true,
 	CustomCallerFormatter: func(f *runtime.Frame) string {
 		filename := path.Base(f.File)
@@ -26,7 +26,7 @@ var LogFormatter = &formatter.Formatter{
 	},
 }
 
-func ConfigureLogger(currentLevel config.LogLevel, serviceID string, subsystem string) *logrus.Entry {
+func SetupLogger(currentLevel config.LogLevel, serviceID string, subsystem string) *logrus.Entry {
 	var err error
 	logger := logrus.New()
 	logger.SetFormatter(LogFormatter)
@@ -57,31 +57,54 @@ func ConfigureLogger(currentLevel config.LogLevel, serviceID string, subsystem s
 	return lSubsystem
 }
 
-var HTTPRequestID = "HTTPRequestID"
+func ConfigureLogger(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
+	logger = configureLoggerWitSourceAndCallerID(ctx, logger)
+	logger = configureLoggerWithRequestID(ctx, logger)
+	return logger
+}
 
-func ConfigureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
-	if logger.Level != logrus.TraceLevel {
+func configureLoggerWitSourceAndCallerID(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
+	source := ""
+	authMode := ""
+	authID := ""
+
+	sourceCtx := ctx.Value(string(headerextractors.CtxSource))
+	if src, ok := sourceCtx.(string); ok {
+		source = src
+	}
+
+	authIDCtx := ctx.Value(string(identityextractors.CtxAuthID))
+	if id, ok := authIDCtx.(string); ok {
+		authID = id
+	}
+
+	authModeCtx := ctx.Value(string(identityextractors.CtxAuthMode))
+	if mode, ok := authModeCtx.(string); ok {
+		authMode = mode
+	}
+
+	logger = logger.WithField("src", source)
+	logger = logger.WithField("auth-mode", authMode)
+	logger = logger.WithField("auth-id", authID)
+
+	return logger
+}
+
+func configureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
+	if logger.Logger.Level < logrus.DebugLevel {
 		return logger
 	}
 
-	reqCtx := ctx.Value(HTTPRequestID)
+	reqCtx := ctx.Value(headerextractors.CtxRequestID)
 	if reqID, ok := reqCtx.(string); ok {
 		return logger.WithField("req-id", reqID)
 	}
 
-	return logger.WithField("req-id", fmt.Sprintf("internal.%s", goid.NewV4UUID()))
+	return logger.WithField("req-id", fmt.Sprintf("unset.%s", goid.NewV4UUID()))
 }
 
-func ConfigureContextWithRequest(ctx context.Context, headers http.Header) context.Context {
-	reqID := headers.Get("x-request-id")
-	if reqID != "" {
-		ctx = context.WithValue(ctx, HTTPRequestID, reqID)
-	}
-
-	source := headers.Get(models.HttpSourceHeader)
-	if reqID != "" {
-		ctx = context.WithValue(ctx, models.ContextSourceKey, source)
-	}
-
+func InitContext() context.Context {
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, headerextractors.CtxRequestID, fmt.Sprintf("internal.%s", goid.NewV4UUID()))
 	return ctx
 }

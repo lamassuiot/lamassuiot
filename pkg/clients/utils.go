@@ -48,6 +48,7 @@ func (lrt sourceRoundTripper) RoundTrip(req *http.Request) (res *http.Response, 
 
 func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client, error) {
 	client := &http.Client{}
+	ctx := helpers.InitContext()
 
 	caPool := helpers.LoadSytemCACertPool()
 
@@ -98,7 +99,7 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 			RevocationURL string `json:"revocation_endpoint"`
 		}
 
-		wellKnown, err := Get[ODICDiscoveryJSON](context.Background(), authHttpCli, cfg.AuthJWTOptions.OIDCWellKnownURL, &resources.QueryParameters{}, map[int][]error{})
+		wellKnown, err := Get[ODICDiscoveryJSON](ctx, authHttpCli, cfg.AuthJWTOptions.OIDCWellKnownURL, &resources.QueryParameters{}, map[int][]error{})
 		if err != nil {
 			return nil, err
 		}
@@ -118,7 +119,7 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 			TLSClientConfig: tlsConfig,
 		}
 
-		httpCtx := context.WithValue(context.Background(), oauth2.HTTPClient, authHttpCli)
+		httpCtx := context.WithValue(ctx, oauth2.HTTPClient, authHttpCli)
 		client = clientConfig.Client(httpCtx)
 	case config.NoAuth:
 		client.Transport = &http.Transport{
@@ -241,7 +242,7 @@ func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.C
 	queryParams.NextBookmark = ""
 
 	for continueIter {
-		response, err := Get[T](context.Background(), client, url, queryParams, knownErrors)
+		response, err := Get[T](ctx, client, url, queryParams, knownErrors)
 		if err != nil {
 			return err
 		}

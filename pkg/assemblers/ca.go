@@ -24,7 +24,7 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, serviceInfo models.AP
 		return nil, -1, fmt.Errorf("could not assemble CA Service. Exiting: %s", err)
 	}
 
-	lHttp := helpers.ConfigureLogger(conf.Server.LogLevel, "CA", "HTTP Server")
+	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "CA", "HTTP Server")
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
@@ -38,10 +38,10 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, serviceInfo models.AP
 }
 
 func AssembleCAService(conf config.CAConfig) (*services.CAService, error) {
-	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "CA", "Service")
-	lMessage := helpers.ConfigureLogger(conf.PublisherEventBus.LogLevel, "CA", "Event Bus")
-	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "CA", "Storage")
-	lCryptoEng := helpers.ConfigureLogger(conf.CryptoEngines.LogLevel, "CA", "CryptoEngine")
+	lSvc := helpers.SetupLogger(conf.Logs.Level, "CA", "Service")
+	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Event Bus")
+	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "CA", "Storage")
+	lCryptoEng := helpers.SetupLogger(conf.CryptoEngines.LogLevel, "CA", "CryptoEngine")
 
 	engines, err := createCryptoEngines(lCryptoEng, conf)
 	if err != nil {

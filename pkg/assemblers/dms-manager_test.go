@@ -21,6 +21,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"golang.org/x/crypto/ocsp"
 )
@@ -82,6 +83,8 @@ func TestCreateDMS(t *testing.T) {
 
 func TestESTEnroll(t *testing.T) {
 	// t.Parallel()
+	ctx := context.Background()
+
 	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
@@ -108,7 +111,7 @@ func TestESTEnroll(t *testing.T) {
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthModeClientCertificate,
+						AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
@@ -349,7 +352,7 @@ func TestESTEnroll(t *testing.T) {
 				enrollKey, _ := helpers.GenerateRSAKey(2048)
 				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
-				_, err = testServers.DeviceManager.Service.CreateDevice(services.CreateDeviceInput{
+				_, err = testServers.DeviceManager.Service.CreateDevice(ctx, services.CreateDeviceInput{
 					ID:        deviceID,
 					Alias:     deviceID,
 					Tags:      []string{},
@@ -845,7 +848,7 @@ func TestESTReEnroll(t *testing.T) {
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthModeClientCertificate,
+						AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},

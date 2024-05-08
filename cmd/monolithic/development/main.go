@@ -160,7 +160,7 @@ func main() {
 	}
 
 	conf := config.MonolithicConfig{
-		Logs:               config.BaseConfigLogging{Level: config.Info},
+		Logs:               config.BaseConfigLogging{Level: config.Debug},
 		SubscriberEventBus: eventBus,
 		PublisherEventBus:  eventBus,
 		Domain:             "dev.lamassu.test",

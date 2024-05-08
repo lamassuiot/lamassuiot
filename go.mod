@@ -28,7 +28,7 @@ require (
 	github.com/go-kivik/couchdb/v4 v4.0.0-20220217152009-9380cf8517a0
 	github.com/go-kivik/kivik/v4 v4.0.0-20221214110802-0ad92c6bcd46
 	github.com/go-playground/validator/v10 v10.14.0
-	github.com/haritzsaiz/gin-dump v0.2.0
+	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/hashicorp/vault/api v1.9.2
 	github.com/jakehl/goid v1.1.0
 	github.com/miekg/pkcs11 v1.1.1

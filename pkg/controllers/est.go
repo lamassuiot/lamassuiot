@@ -5,14 +5,12 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -53,7 +51,7 @@ func (r *estHttpRoutes) GetCACerts(ctx *gin.Context) {
 	var params aps
 	ctx.ShouldBindUri(&params)
 
-	cacerts, err := r.svc.CACerts(params.APS)
+	cacerts, err := r.svc.CACerts(ctx, params.APS)
 	if err != nil {
 		ctx.JSON(500, err)
 	}
@@ -118,15 +116,13 @@ func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 		return
 	}
 
-	authCtx := context.Background()
-
 	if bitSize := ctx.GetHeader("Bit-Size"); bitSize != "" {
 		lEst.Debugf("Bit-Size header present with value %s", bitSize)
 		bitSizeInt, err := strconv.Atoi(bitSize)
 		if err != nil {
 			lEst.Warnf("Bit-Size header with non numerical value")
 		} else {
-			authCtx = context.WithValue(authCtx, models.ESTServerKeyGenBitSize, bitSizeInt)
+			ctx.Set(models.ESTServerKeyGenBitSize, bitSizeInt)
 		}
 	}
 
@@ -135,32 +131,24 @@ func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 		switch keyType {
 		case x509.RSA.String():
 			lEst.Debugf("valid Key-Type header")
-			authCtx = context.WithValue(authCtx, models.ESTServerKeyGenBitSize, x509.RSA)
+			ctx.Set(models.ESTServerKeyGenBitSize, x509.RSA)
 		case x509.ECDSA.String():
 			lEst.Debugf("valid Key-Type header")
-			authCtx = context.WithValue(authCtx, models.ESTServerKeyGenBitSize, x509.ECDSA)
+			ctx.Set(models.ESTServerKeyGenBitSize, x509.ECDSA)
 		default:
 			lEst.Warnf("invalid Key-Type header")
 		}
 	}
 
-	authExtractors := []httpAuthReqExtractor{
-		ClientCertificateExtractor{},
-	}
-
-	for _, authExtractor := range authExtractors {
-		authCtx = authExtractor.ExtractAuthentication(authCtx, *ctx.Request)
-	}
-
 	var key any
 	var signedCrt *x509.Certificate
 	if strings.Contains(ctx.Request.URL.Path, "serverkeygen") {
-		signedCrt, key, err = r.svc.ServerKeyGen(authCtx, csr, params.APS)
+		signedCrt, key, err = r.svc.ServerKeyGen(ctx, csr, params.APS)
 		fmt.Println(key)
 	} else if strings.Contains(ctx.Request.URL.Path, "simplereenroll") {
-		signedCrt, err = r.svc.Reenroll(authCtx, csr, params.APS)
+		signedCrt, err = r.svc.Reenroll(ctx, csr, params.APS)
 	} else {
-		signedCrt, err = r.svc.Enroll(authCtx, csr, params.APS)
+		signedCrt, err = r.svc.Enroll(ctx, csr, params.APS)
 	}
 	if err != nil {
 		ctx.JSON(500, gin.H{"err": err.Error()})
@@ -185,88 +173,6 @@ func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 	ctx.Writer.Header().Set("Content-Transfer-Encoding", "base64")
 	ctx.Writer.WriteHeader(http.StatusOK)
 	ctx.Writer.Write(body)
-}
-
-type httpAuthReqExtractor interface {
-	ExtractAuthentication(ctx context.Context, req http.Request) context.Context
-}
-
-type ClientCertificateExtractor struct{}
-
-func (ClientCertificateExtractor) ExtractAuthentication(ctx context.Context, req http.Request) context.Context {
-	var crt *x509.Certificate
-	var err error
-
-	if crt, err = getCertificateFromHeader(req.Header); err != nil {
-		if err != ErrorMissingClientCertificate {
-			lEst.Tracef("something went wrong while processing headers: %s", err)
-		}
-
-		//no (valid) certificate in the header. check if a certificate can be obtained from client TLS connection
-		if req.TLS != nil && len(req.TLS.PeerCertificates) > 0 {
-			lEst.Trace("Using certificate presented in peer connection")
-			crt = req.TLS.PeerCertificates[0]
-		} else {
-			lEst.Trace("No certificate presented in peer connection")
-		}
-	}
-
-	if crt != nil {
-		ctx = context.WithValue(ctx, models.ESTAuthModeClientCertificate, crt)
-	}
-
-	return ctx
-}
-
-func getCertificateFromHeader(h http.Header) (*x509.Certificate, error) {
-	headerNames := []string{
-		"x-forwarded-client-cert", //envoy and regular nginx use this value
-		"ssl-client-cert",
-	}
-
-	for _, headerName := range headerNames {
-		forwardedClientCertificate := h.Get(headerName)
-		if len(forwardedClientCertificate) != 0 {
-			lEst.Debugf("attempting envoy-style certificate extraction from header %s", headerName)
-			crts := ExtractClientCertFromHeaderEnvoyStyle(headerName, forwardedClientCertificate)
-			if len(crts) == 0 {
-				lEst.Debugf("envoy-style certificate extraction didn't return anything")
-			} else {
-				return crts[0], nil
-			}
-		}
-	}
-	return nil, ErrorMissingClientCertificate
-}
-
-func ExtractClientCertFromHeaderEnvoyStyle(headerName, headerString string) []*x509.Certificate {
-	lEst.Tracef("got header %s with %s", headerName, headerString)
-
-	splits := strings.Split(headerString, ";")
-	for _, split := range splits {
-		splitKeyVal := strings.Split(split, "=")
-		if len(splitKeyVal) == 2 {
-			key := splitKeyVal[0]
-			val := splitKeyVal[1]
-
-			switch key {
-			case "Cert", "Chain":
-				cert := strings.Replace(val, "\"", "", -1)
-				decodedCert, _ := url.QueryUnescape(cert)
-				block, _ := pem.Decode([]byte(decodedCert))
-				certificate, err := x509.ParseCertificate(block.Bytes)
-				if err != nil {
-					lEst.Warnf("request includes header %s but could not decode certificate. Skipping: %s", headerName, err)
-					continue
-				}
-
-				return []*x509.Certificate{certificate}
-
-			}
-		}
-	}
-
-	return []*x509.Certificate{}
 }
 
 type MultipartPart struct {

@@ -5,6 +5,7 @@ import (
 	"crypto/elliptic"
 	"crypto/x509"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,10 +17,13 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
 
 func TestBindIDEvent(t *testing.T) {
+	ctx := context.Background()
+
 	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, true)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
@@ -46,7 +50,7 @@ func TestBindIDEvent(t *testing.T) {
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-						AuthMode: models.ESTAuthModeClientCertificate,
+						AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 							ChainLevelValidation: -1,
 							ValidationCAs:        []string{},
@@ -94,7 +98,7 @@ func TestBindIDEvent(t *testing.T) {
 		}
 	}
 	standardEvCheck := func(event event.Event) error {
-		if event.Source() != "lrn://dms-manager" {
+		if !strings.HasPrefix(event.Source(), "lrn://dms-manager") {
 			return fmt.Errorf("unexpected event source")
 		}
 
@@ -293,7 +297,7 @@ func TestBindIDEvent(t *testing.T) {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
 				}
 
-				device, err := testServers.DeviceManager.HttpDeviceManagerSDK.CreateDevice(services.CreateDeviceInput{
+				device, err := testServers.DeviceManager.HttpDeviceManagerSDK.CreateDevice(ctx, services.CreateDeviceInput{
 					ID:        deviceCert.Subject.CommonName,
 					Alias:     "",
 					Tags:      dms.Settings.EnrollmentSettings.DeviceProvisionProfile.Tags,
@@ -489,7 +493,7 @@ func TestBindIDEvent(t *testing.T) {
 			router, err := eventbus.NewEventBusRouter(
 				testServers.EventBus.config,
 				uuid.NewString(),
-				helpers.ConfigureLogger(config.Info, "Test Case", "router"),
+				helpers.SetupLogger(config.Info, "Test Case", "router"),
 			)
 			if err != nil {
 				t.Fatalf("could not instantiate a messaging router: %s", err)
@@ -498,7 +502,7 @@ func TestBindIDEvent(t *testing.T) {
 			subscriber, err := eventbus.NewEventBusSubscriber(
 				testServers.EventBus.config,
 				uuid.NewString(),
-				helpers.ConfigureLogger(config.Trace, "Test Case", "sub"),
+				helpers.SetupLogger(config.Trace, "Test Case", "sub"),
 			)
 			if err != nil {
 				t.Fatalf("could not subscribe: %s", err)
@@ -536,6 +540,7 @@ func TestBindIDEvent(t *testing.T) {
 				if err != nil {
 					t.Fatalf("invalid event: %s", err)
 				}
+				router.Close() //we found an event satisfying the test. Close subscription
 			}
 		})
 	}

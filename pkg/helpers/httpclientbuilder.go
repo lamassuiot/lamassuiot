@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	gindump "github.com/haritzsaiz/gin-dump"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/gindump"
 	"github.com/sirupsen/logrus"
 )
 

@@ -45,7 +45,7 @@ func main() {
 	log.Debugf("%s", confBytes)
 	log.Debugf("===================================================")
 
-	lCAClient := helpers.ConfigureLogger(conf.CAClient.LogLevel, "DMS Manager", "LMS SDK - CA Client")
+	lCAClient := helpers.SetupLogger(conf.CAClient.LogLevel, "DMS Manager", "LMS SDK - CA Client")
 	caHttpCli, err := clients.BuildHTTPClient(conf.CAClient.HTTPClient, lCAClient)
 	if err != nil {
 		log.Fatalf("could not build HTTP CA Client: %s", err)
@@ -55,7 +55,7 @@ func main() {
 		clients.HttpClientWithSourceHeaderInjector(caHttpCli, models.DMSManagerSource),
 		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
 	)
-	lDeviceManagerClient := helpers.ConfigureLogger(conf.DevManagerClient.LogLevel, "DMS Manager", "LMS SDK - DeviceManager Client")
+	lDeviceManagerClient := helpers.SetupLogger(conf.DevManagerClient.LogLevel, "DMS Manager", "LMS SDK - DeviceManager Client")
 	deviceMngrHttpCli, err := clients.BuildHTTPClient(conf.DevManagerClient.HTTPClient, lDeviceManagerClient)
 	if err != nil {
 		log.Fatalf("could not build HTTP Device Manager Client: %s", err)

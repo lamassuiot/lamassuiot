@@ -30,20 +30,20 @@ func (db *PostgresSubscriptionsStore) GetSubscriptions(ctx context.Context, user
 	opts := []gormWhereParams{
 		{query: "user_id = ?", extraArgs: []any{userID}},
 	}
-	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(ctx, queryParams, opts, exhaustiveRun, applyFunc)
 }
 
 func (db *PostgresSubscriptionsStore) Subscribe(ctx context.Context, sub *models.Subscription) (*models.Subscription, error) {
-	return db.querier.Insert(sub, sub.ID)
+	return db.querier.Insert(ctx, sub, sub.ID)
 }
 
 func (db *PostgresSubscriptionsStore) Unsubscribe(ctx context.Context, subscriptionID string) error {
-	return db.querier.Delete(subscriptionID)
+	return db.querier.Delete(ctx, subscriptionID)
 }
 
 func (db *PostgresSubscriptionsStore) GetSubscriptionsByEventType(ctx context.Context, eventType string, exhaustiveRun bool, applyFunc func(models.Subscription), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
 	opts := []gormWhereParams{
 		{query: "event_type = ?", extraArgs: []any{eventType}},
 	}
-	return db.querier.SelectAll(queryParams, opts, exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(ctx, queryParams, opts, exhaustiveRun, applyFunc)
 }

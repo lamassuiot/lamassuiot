@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -14,29 +15,16 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
-	gindump "github.com/haritzsaiz/gin-dump"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	headerextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/basic-header-extractors"
+	basiclogger "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/basic-logger"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/gindump"
+	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 	"github.com/sirupsen/logrus"
 )
-
-type traceRequestWriter struct {
-	logger *logrus.Entry
-}
-
-func (tr *traceRequestWriter) Write(p []byte) (n int, err error) {
-	logReq := string(p)
-	logReq = strings.ReplaceAll(logReq, "\n", "")
-	splitter := strings.SplitAfterN(logReq, "|", 2)
-	if len(splitter) == 2 {
-		tr.logger.Debugf("%s", splitter[1])
-	} else {
-		tr.logger.Debugf("%s", string(p))
-	}
-	return len(p), nil
-}
 
 func NewGinEngine(logger *logrus.Entry) *gin.Engine {
 	gin.ForceConsoleColor()
@@ -49,9 +37,15 @@ func NewGinEngine(logger *logrus.Entry) *gin.Engine {
 	corsConfig.AllowHeaders = []string{"*"}
 
 	router := gin.New()
-	router.Use(cors.New(corsConfig), gindump.DumpWithOptions(true, true, true, true, func(dumpStr string) {
-		logger.Trace(dumpStr)
-	}), gin.LoggerWithWriter(&traceRequestWriter{logger: logger}), gin.Recovery())
+	router.Use(
+		cors.New(corsConfig),
+		headerextractors.RequestMetadataToContextMiddleware(logger),
+		identityextractors.RequestMetadataToContextMiddleware(logger),
+		basiclogger.UseLogger(logger),
+		gindump.DumpWithOptions(true, true, true, true, func(dumpStr string) {
+			logger.Trace(dumpStr)
+		}),
+	)
 
 	return router
 }
@@ -181,4 +175,40 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 	}
 
 	return usedPort, nil
+}
+
+type respBodyWriter struct {
+	gin.ResponseWriter
+	body *bytes.Buffer
+}
+
+func (w respBodyWriter) Write(b []byte) (int, error) {
+	w.body.Write(b)
+	return w.ResponseWriter.Write(b)
+}
+
+func LogRequest(logger *logrus.Entry, logResponse bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rbw := &respBodyWriter{
+			body:           bytes.NewBufferString(""),
+			ResponseWriter: c.Writer,
+		}
+		c.Writer = rbw
+
+		start := time.Now()
+
+		c.Next()
+
+		latency := time.Now().Sub(start)
+		fields := make(map[string]interface{})
+
+		logger.WithFields(fields).Infof("[Request] %v |%3d| %13v | %15s |%-7s %s",
+			start.Format("2006/01/02 - 15:04:05"),
+			c.Writer.Status(),
+			latency,
+			c.ClientIP(),
+			c.Request.Method,
+			c.Request.URL.Path,
+		)
+	}
 }

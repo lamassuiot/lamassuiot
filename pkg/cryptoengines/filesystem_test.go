@@ -21,7 +21,7 @@ func setup(t *testing.T) (string, *GoCryptoEngine) {
 	tempDir := t.TempDir()
 
 	// Create a new instance of GoCryptoEngine
-	log := helpers.ConfigureLogger(config.Info, "CA TestCase", "Golang Engine")
+	log := helpers.SetupLogger(config.Info, "CA TestCase", "Golang Engine")
 	engine := NewGolangPEMEngine(log, config.GolangEngineConfig{StorageDirectory: tempDir})
 
 	return tempDir, engine.(*GoCryptoEngine)

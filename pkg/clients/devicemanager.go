@@ -23,8 +23,8 @@ func NewHttpDeviceManagerClient(client *http.Client, url string) services.Device
 	}
 }
 
-func (cli *deviceManagerClient) GetDevicesStats(input services.GetDevicesStatsInput) (*models.DevicesStats, error) {
-	response, err := Get[models.DevicesStats](context.Background(), cli.httpClient, cli.baseUrl+"/v1/stats", nil, map[int][]error{})
+func (cli *deviceManagerClient) GetDevicesStats(ctx context.Context, input services.GetDevicesStatsInput) (*models.DevicesStats, error) {
+	response, err := Get[models.DevicesStats](ctx, cli.httpClient, cli.baseUrl+"/v1/stats", nil, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
@@ -32,8 +32,8 @@ func (cli *deviceManagerClient) GetDevicesStats(input services.GetDevicesStatsIn
 	return &response, nil
 }
 
-func (cli *deviceManagerClient) CreateDevice(input services.CreateDeviceInput) (*models.Device, error) {
-	response, err := Post[*models.Device](context.Background(), cli.httpClient, cli.baseUrl+"/v1/devices", resources.CreateDeviceBody{
+func (cli *deviceManagerClient) CreateDevice(ctx context.Context, input services.CreateDeviceInput) (*models.Device, error) {
+	response, err := Post[*models.Device](ctx, cli.httpClient, cli.baseUrl+"/v1/devices", resources.CreateDeviceBody{
 		ID:        input.ID,
 		Alias:     input.Alias,
 		Tags:      input.Tags,
@@ -49,8 +49,8 @@ func (cli *deviceManagerClient) CreateDevice(input services.CreateDeviceInput) (
 	return response, nil
 }
 
-func (cli *deviceManagerClient) GetDeviceByID(input services.GetDeviceByIDInput) (*models.Device, error) {
-	response, err := Get[models.Device](context.Background(), cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID, nil, map[int][]error{
+func (cli *deviceManagerClient) GetDeviceByID(ctx context.Context, input services.GetDeviceByIDInput) (*models.Device, error) {
+	response, err := Get[models.Device](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID, nil, map[int][]error{
 		400: {errs.ErrDeviceNotFound},
 	})
 	if err != nil {
@@ -60,31 +60,31 @@ func (cli *deviceManagerClient) GetDeviceByID(input services.GetDeviceByIDInput)
 	return &response, nil
 }
 
-func (cli *deviceManagerClient) GetDevices(input services.GetDevicesInput) (string, error) {
+func (cli *deviceManagerClient) GetDevices(ctx context.Context, input services.GetDevicesInput) (string, error) {
 	url := cli.baseUrl + "/v1/devices"
 
 	if input.ExhaustiveRun {
-		err := IterGet[models.Device, resources.GetDevicesResponse](context.Background(), cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
+		err := IterGet[models.Device, resources.GetDevicesResponse](ctx, cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
 		return "", err
 	} else {
-		resp, err := Get[resources.GetDevicesResponse](context.Background(), cli.httpClient, url, input.QueryParameters, map[int][]error{})
+		resp, err := Get[resources.GetDevicesResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
 		return resp.NextBookmark, err
 	}
 }
-func (cli *deviceManagerClient) GetDeviceByDMS(input services.GetDevicesByDMSInput) (string, error) {
+func (cli *deviceManagerClient) GetDeviceByDMS(ctx context.Context, input services.GetDevicesByDMSInput) (string, error) {
 	url := cli.baseUrl + "/v1/devices/dms/" + input.DMSID
 
 	if input.ExhaustiveRun {
-		err := IterGet[models.Device, *resources.GetDevicesResponse](context.Background(), cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
+		err := IterGet[models.Device, *resources.GetDevicesResponse](ctx, cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
 		return "", err
 	} else {
-		resp, err := Get[resources.GetDevicesResponse](context.Background(), cli.httpClient, url, input.QueryParameters, map[int][]error{})
+		resp, err := Get[resources.GetDevicesResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
 		return resp.NextBookmark, err
 	}
 }
 
-func (cli *deviceManagerClient) UpdateDeviceStatus(input services.UpdateDeviceStatusInput) (*models.Device, error) {
-	response, err := Post[*models.Device](context.Background(), cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/decommission", "", map[int][]error{})
+func (cli *deviceManagerClient) UpdateDeviceStatus(ctx context.Context, input services.UpdateDeviceStatusInput) (*models.Device, error) {
+	response, err := Post[*models.Device](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/decommission", "", map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
@@ -92,8 +92,8 @@ func (cli *deviceManagerClient) UpdateDeviceStatus(input services.UpdateDeviceSt
 	return response, nil
 }
 
-func (cli *deviceManagerClient) UpdateDeviceIdentitySlot(input services.UpdateDeviceIdentitySlotInput) (*models.Device, error) {
-	response, err := Put[*models.Device](context.Background(), cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/idslot", resources.UpdateDeviceIdentitySlotBody{
+func (cli *deviceManagerClient) UpdateDeviceIdentitySlot(ctx context.Context, input services.UpdateDeviceIdentitySlotInput) (*models.Device, error) {
+	response, err := Put[*models.Device](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/idslot", resources.UpdateDeviceIdentitySlotBody{
 		Slot: input.Slot,
 	}, map[int][]error{})
 	if err != nil {
@@ -103,8 +103,8 @@ func (cli *deviceManagerClient) UpdateDeviceIdentitySlot(input services.UpdateDe
 	return response, nil
 }
 
-func (cli *deviceManagerClient) UpdateDeviceMetadata(input services.UpdateDeviceMetadataInput) (*models.Device, error) {
-	response, err := Put[*models.Device](context.Background(), cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/metadata", resources.UpdateDeviceMetadataBody{
+func (cli *deviceManagerClient) UpdateDeviceMetadata(ctx context.Context, input services.UpdateDeviceMetadataInput) (*models.Device, error) {
+	response, err := Put[*models.Device](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/metadata", resources.UpdateDeviceMetadataBody{
 		Metadata: input.Metadata,
 	}, map[int][]error{})
 	if err != nil {

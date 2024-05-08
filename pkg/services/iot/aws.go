@@ -148,7 +148,7 @@ type RegisterAndAttachThingInput struct {
 	DMSIoTAutomationConfig models.IotAWSDMSMetadata
 }
 
-func (svc *AWSCloudConnectorService) RegisterAndAttachThing(input RegisterAndAttachThingInput) error {
+func (svc *AWSCloudConnectorService) RegisterAndAttachThing(ctx context.Context, input RegisterAndAttachThingInput) error {
 	err := svc.RegisterUpdatePolicies(context.Background(), RegisterUpdatePoliciesInput{
 		Policies: input.DMSIoTAutomationConfig.Policies,
 	})
@@ -311,7 +311,7 @@ func (svc *AWSCloudConnectorService) RegisterAndAttachThing(input RegisterAndAtt
 		return err
 	}
 
-	device, err := svc.DeviceSDK.GetDeviceByID(services.GetDeviceByIDInput{
+	device, err := svc.DeviceSDK.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: input.DeviceID,
 	})
 	if err != nil {
@@ -324,7 +324,7 @@ func (svc *AWSCloudConnectorService) RegisterAndAttachThing(input RegisterAndAtt
 		Actions:    []models.RemediationActionType{},
 	}
 
-	_, err = svc.DeviceSDK.UpdateDeviceMetadata(services.UpdateDeviceMetadataInput{
+	_, err = svc.DeviceSDK.UpdateDeviceMetadata(ctx, services.UpdateDeviceMetadataInput{
 		ID:       input.DeviceID,
 		Metadata: device.Metadata,
 	})
@@ -342,7 +342,7 @@ type UpdateDeviceShadowInput struct {
 	DMSIoTAutomationConfig models.IotAWSDMSMetadata
 }
 
-func (svc *AWSCloudConnectorService) UpdateDeviceShadow(input UpdateDeviceShadowInput) error {
+func (svc *AWSCloudConnectorService) UpdateDeviceShadow(ctx context.Context, input UpdateDeviceShadowInput) error {
 	if !input.DMSIoTAutomationConfig.ShadowConfig.Enable {
 		logrus.Warnf("shadow usage is not enabled for DMS associated to device %s. Skipping", input.DeviceID)
 		return nil
@@ -428,7 +428,7 @@ func (svc *AWSCloudConnectorService) UpdateDeviceShadow(input UpdateDeviceShadow
 		actions = append(actions, key)
 	}
 
-	device, err := svc.DeviceSDK.GetDeviceByID(services.GetDeviceByIDInput{
+	device, err := svc.DeviceSDK.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: input.DeviceID,
 	})
 	if err != nil {
@@ -456,7 +456,7 @@ func (svc *AWSCloudConnectorService) UpdateDeviceShadow(input UpdateDeviceShadow
 
 	device.Metadata[models.AWSIoTMetadataKey(svc.ConnectorID)] = deviceMetaAWS
 
-	_, err = svc.DeviceSDK.UpdateDeviceMetadata(services.UpdateDeviceMetadataInput{
+	_, err = svc.DeviceSDK.UpdateDeviceMetadata(ctx, services.UpdateDeviceMetadataInput{
 		ID:       input.DeviceID,
 		Metadata: device.Metadata,
 	})
@@ -470,7 +470,7 @@ func (svc *AWSCloudConnectorService) UpdateDeviceShadow(input UpdateDeviceShadow
 		EventDescriptions: fmt.Sprintf("Remediation Actions: %s", strings.Join(addedActions, ", ")),
 	}
 
-	_, err = svc.DeviceSDK.UpdateDeviceIdentitySlot(services.UpdateDeviceIdentitySlotInput{
+	_, err = svc.DeviceSDK.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
 		ID:   input.DeviceID,
 		Slot: *device.IdentitySlot,
 	})
@@ -483,7 +483,7 @@ func (svc *AWSCloudConnectorService) UpdateDeviceShadow(input UpdateDeviceShadow
 	return nil
 }
 
-func (svc *AWSCloudConnectorService) GetRegisteredCAs(context.Context) ([]*models.CACertificate, error) {
+func (svc *AWSCloudConnectorService) GetRegisteredCAs(ctx context.Context) ([]*models.CACertificate, error) {
 	lFunc := svc.logger
 	cas := []*models.CACertificate{}
 	lmsCAs := 0

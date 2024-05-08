@@ -15,6 +15,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
 
@@ -30,7 +31,7 @@ type UseCase1Input struct {
 }
 
 func RunUseCase1(input UseCase1Input) error {
-	lUsecase := helpers.ConfigureLogger(config.Info, "Test Case", "test")
+	lUsecase := helpers.SetupLogger(config.Info, "Test Case", "test")
 
 	var hostname = input.LamassuHostname
 	var port = input.LamassuPort
@@ -72,7 +73,7 @@ func RunUseCase1(input UseCase1Input) error {
 
 	//Initialization of the client to connect to monolithic
 
-	log := helpers.ConfigureLogger(config.Info, "Test Case", "httpClient")
+	log := helpers.SetupLogger(config.Info, "Test Case", "httpClient")
 
 	httpCli, err := clients.BuildHTTPClient(config.HTTPClient{
 		AuthMode: config.NoAuth,
@@ -197,7 +198,7 @@ func RunUseCase1(input UseCase1Input) error {
 			EnrollmentSettings: models.EnrollmentSettings{
 				EnrollmentProtocol: models.EST,
 				EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
-					AuthMode: models.ESTAuthModeClientCertificate,
+					AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
 					AuthOptionsMTLS: models.AuthOptionsClientCertificate{
 						ValidationCAs:        []string{ca2.ID},
 						ChainLevelValidation: -1,

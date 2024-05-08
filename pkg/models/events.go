@@ -2,8 +2,8 @@ package models
 
 import "fmt"
 
-const ContextSourceKey = "_lms/event-source-id"
 const HttpSourceHeader = "x-lms-source"
+const HttpRequestIDHeader = "x-request-id"
 
 const CASource = "lrn://service/lamassuiot-ca"
 const DMSManagerSource = "lrn://service/lamassuiot-ra"

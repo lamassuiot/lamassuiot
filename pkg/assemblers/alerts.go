@@ -22,7 +22,7 @@ func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo m
 		return nil, -1, fmt.Errorf("could not assemble Alerts Service. Exiting: %s", err)
 	}
 
-	lHttp := helpers.ConfigureLogger(conf.Server.LogLevel, "Alerts", "HTTP Server")
+	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "Alerts", "HTTP Server")
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
@@ -36,9 +36,9 @@ func AssembleAlertsServiceWithHTTPServer(conf config.AlertsConfig, serviceInfo m
 }
 
 func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, error) {
-	lSvc := helpers.ConfigureLogger(conf.Logs.Level, "Alerts", "Service")
-	lMessaging := helpers.ConfigureLogger(conf.SubscriberEventBus.LogLevel, "Alerts", "Event Bus")
-	lStorage := helpers.ConfigureLogger(conf.Storage.LogLevel, "Alerts", "Storage")
+	lSvc := helpers.SetupLogger(conf.Logs.Level, "Alerts", "Service")
+	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Alerts", "Event Bus")
+	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "Alerts", "Storage")
 
 	subStorage, eventStore, err := createAlertsStorageInstance(lStorage, conf.Storage)
 	if err != nil {

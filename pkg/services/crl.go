@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/sirupsen/logrus"
@@ -44,14 +45,16 @@ type GetCRLInput struct {
 }
 
 func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte, error) {
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
+
 	err := crlValidate.Struct(input)
 	if err != nil {
-		svc.logger.Errorf("struct validation error: %s", err)
+		lFunc.Errorf("struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
 
 	certList := []x509.RevocationListEntry{}
-	svc.logger.Debugf("reading CA %s certificates", input.CAID)
+	lFunc.Debugf("reading CA %s certificates", input.CAID)
 	_, err = svc.caSDK.GetCertificatesByCaAndStatus(ctx, GetCertificatesByCaAndStatusInput{
 		CAID:   input.CAID,
 		Status: models.StatusRevoked,
@@ -71,7 +74,7 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte
 		},
 	})
 	if err != nil {
-		svc.logger.Errorf("something went wrong while reading CA %s certificates: %s", input.CAID, err)
+		lFunc.Errorf("something went wrong while reading CA %s certificates: %s", input.CAID, err)
 		return nil, err
 	}
 
@@ -80,10 +83,10 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte
 		return nil, err
 	}
 
-	caSigner := NewCASigner(ca, svc.caSDK)
+	caSigner := NewCASigner(ctx, ca, svc.caSDK)
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
 
-	svc.logger.Debugf("creating revocation list. CA %s", input.CAID)
+	lFunc.Debugf("creating revocation list. CA %s", input.CAID)
 	now := time.Now()
 	crl, err := x509.CreateRevocationList(rand.Reader, &x509.RevocationList{
 		RevokedCertificateEntries: certList,
@@ -92,7 +95,7 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte
 		NextUpdate:                now.Add(time.Hour * 48),
 	}, caCert, caSigner)
 	if err != nil {
-		svc.logger.Errorf("something went wrong while creating revocation list: %s", err)
+		lFunc.Errorf("something went wrong while creating revocation list: %s", err)
 		return nil, err
 	}
 
