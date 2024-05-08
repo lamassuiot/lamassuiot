@@ -1,24 +1,21 @@
 package gindump
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"mime"
-	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 )
 
-func DumpResponse(res *http.Response, showHeaders bool, showBody bool) string {
+func DumpResponseWriter(res gin.ResponseWriter, showHeaders bool, showBody bool) string {
 	headerHiddenFields := make([]string, 0)
 	bodyHiddenFields := make([]string, 0)
 
 	var strB strings.Builder
 
-	//dump req header
-	s, err := formatToBeautifulJson(res.Header, headerHiddenFields)
+	//dump resp header
+	s, err := formatToBeautifulJson(res.Header(), headerHiddenFields)
 	if showHeaders {
 		if err != nil {
 			strB.WriteString(fmt.Sprintf("\nparse resp header err \n" + err.Error()))
@@ -29,16 +26,13 @@ func DumpResponse(res *http.Response, showHeaders bool, showBody bool) string {
 	}
 
 	if showBody {
-		bodyBytes, err := io.ReadAll(res.Body)
-		//reset the response body to the original unread state
-		res.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
-		if err != nil {
-			strB.WriteString(fmt.Sprintf("\nparse resp header err \n" + err.Error()))
-		}
-		//dump res body
-		if bodyAllowedForStatus(res.StatusCode) && len(bodyBytes) > 0 {
-			ctGet := res.Header.Get("Content-Type")
+		bw, ok := res.(*bodyWriter)
+		if !ok {
+			strB.WriteString("\nbodyWriter was override , can not read bodyCache")
+			goto End
+		} //dump res body
+		if bodyAllowedForStatus(bw.Status()) && bw.bodyCache.Len() > 0 {
+			ctGet := res.Header().Get("Content-Type")
 			ct, _, err := mime.ParseMediaType(ctGet)
 			if err != nil {
 				strB.WriteString(fmt.Sprintf("\ncontent-type: %s parse  err \n %s", ctGet, err.Error()))
@@ -46,18 +40,17 @@ func DumpResponse(res *http.Response, showHeaders bool, showBody bool) string {
 			}
 			switch ct {
 			case gin.MIMEJSON:
-				s, err := beautifyJsonBytes(bodyBytes, bodyHiddenFields)
+				s, err := beautifyJsonBytes(bw.bodyCache.Bytes(), bodyHiddenFields)
 				if err != nil {
 					strB.WriteString(fmt.Sprintf("\nparse bodyCache err \n" + err.Error()))
 					goto End
 				}
 				strB.WriteString("\nResponse-Body:\n")
-
 				strB.WriteString(string(s))
 			case gin.MIMEHTML:
 			default:
 				strB.WriteString("\nResponse-Body:\n")
-				strB.WriteString(string(bodyBytes))
+				strB.WriteString(bw.bodyCache.String())
 
 			}
 		}
@@ -66,5 +59,4 @@ func DumpResponse(res *http.Response, showHeaders bool, showBody bool) string {
 
 End:
 	return strB.String()
-
 }

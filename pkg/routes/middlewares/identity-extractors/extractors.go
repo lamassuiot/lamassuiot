@@ -2,7 +2,6 @@ package identityextractors
 
 import (
 	"crypto/x509"
-	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -10,7 +9,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const CtxCallerID = "REQ_CALLER_ID"
+const CtxAuthMode = "REQ_AUTH_MODE"
+const CtxAuthID = "REQ_AUTH_ID"
 
 type IdentityExtractor string
 
@@ -44,8 +44,8 @@ func RequestMetadataToContextMiddleware(logger *logrus.Entry) gin.HandlerFunc {
 }
 
 func UpdateContextWithRequest(ctx *gin.Context, headers http.Header) {
-	authMode := "noauth"
-	callerID := "noid"
+	authMode := ""
+	callerID := ""
 
 	jwtAny, hasValue := ctx.Get(string(IdentityExtractorJWT))
 	if hasValue {
@@ -69,5 +69,11 @@ func UpdateContextWithRequest(ctx *gin.Context, headers http.Header) {
 		callerID = clientCert.Subject.CommonName
 	}
 
-	ctx.Set(CtxCallerID, fmt.Sprintf("%s:%s", authMode, callerID))
+	if authMode != "" {
+		ctx.Set(CtxAuthMode, authMode)
+	}
+
+	if callerID != "" {
+		ctx.Set(CtxAuthID, callerID)
+	}
 }

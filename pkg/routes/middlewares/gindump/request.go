@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func dumpRequest(req *http.Request, showHeaders bool, showBody bool) string {
+func DumpRequest(req *http.Request, showHeaders bool, showBody bool) string {
 	headerHiddenFields := make([]string, 0)
 	bodyHiddenFields := make([]string, 0)
 

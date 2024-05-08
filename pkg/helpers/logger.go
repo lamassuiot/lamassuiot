@@ -18,7 +18,7 @@ import (
 var LogFormatter = &formatter.Formatter{
 	TimestampFormat: "2006-01-02 15:04:05",
 	HideKeys:        true,
-	FieldsOrder:     []string{"src-call-id", "req-id", "service", "subsystem", "subsystem-provider"},
+	FieldsOrder:     []string{"src", "auth-mode", "auth-id", "req-id", "service", "subsystem", "subsystem-provider"},
 	CallerFirst:     true,
 	CustomCallerFormatter: func(f *runtime.Frame) string {
 		filename := path.Base(f.File)
@@ -65,21 +65,27 @@ func ConfigureLogger(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
 
 func configureLoggerWitSourceAndCallerID(ctx context.Context, logger *logrus.Entry) *logrus.Entry {
 	source := ""
-	callID := ""
+	authMode := ""
+	authID := ""
 
 	sourceCtx := ctx.Value(string(headerextractors.CtxSource))
 	if src, ok := sourceCtx.(string); ok {
 		source = src
 	}
 
-	callerCtx := ctx.Value(string(identityextractors.CtxCallerID))
-	if id, ok := callerCtx.(string); ok {
-		callID = id
+	authIDCtx := ctx.Value(string(identityextractors.CtxAuthID))
+	if id, ok := authIDCtx.(string); ok {
+		authID = id
 	}
 
-	if source != "" || callID != "" {
-		return logger.WithField("src-call-id", callID)
+	authModeCtx := ctx.Value(string(identityextractors.CtxAuthMode))
+	if mode, ok := authModeCtx.(string); ok {
+		authMode = mode
 	}
+
+	logger = logger.WithField("src", source)
+	logger = logger.WithField("auth-mode", authMode)
+	logger = logger.WithField("auth-id", authID)
 
 	return logger
 }

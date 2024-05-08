@@ -18,14 +18,14 @@ func DumpWithOptions(showReq bool, showResp bool, showBody bool, showHeaders boo
 		var strB strings.Builder
 
 		if showReq {
-			strB.WriteString(dumpRequest(ctx.Request, showHeaders, showBody))
+			strB.WriteString(DumpRequest(ctx.Request, showHeaders, showBody))
 		}
 
 		ctx.Writer = &bodyWriter{bodyCache: bytes.NewBufferString(""), ResponseWriter: ctx.Writer}
 		ctx.Next()
 
 		if showResp {
-			strB.WriteString(dumpResponse(ctx.Writer, showHeaders, showBody))
+			strB.WriteString(DumpResponseWriter(ctx.Writer, showHeaders, showBody))
 		}
 
 		if cb != nil {
