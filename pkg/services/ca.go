@@ -153,7 +153,10 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 
 func (svc *CAServiceBackend) CheckCAsAndCertificates() {
 	ctx := helpers.InitContext()
+	lFunc := helpers.ConfigureLogger(ctx, lCA)
+
 	now := time.Now()
+	lFunc.Info("starting periodic CAs and Certificate check for expired certificates")
 
 	//checks if metadata has additional expiration intervals to be checked.
 	//returns
@@ -258,6 +261,9 @@ func (svc *CAServiceBackend) CheckCAsAndCertificates() {
 			},
 		},
 	})
+
+	end := time.Now()
+	lFunc.Infof("ending check. Took %v", end.Sub(now))
 }
 
 func (svc *CAServiceBackend) Close() {
@@ -278,7 +284,7 @@ func (svc *CAServiceBackend) GetStats(ctx context.Context) (*models.CAStats, err
 		return nil, err
 	}
 
-	lFunc.Debugf("got %d engines", err)
+	lFunc.Debugf("got %d engines", len(engines))
 
 	casDistributionPerEngine := map[string]int{}
 	for _, engine := range engines {

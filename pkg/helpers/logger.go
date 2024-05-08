@@ -99,6 +99,6 @@ func configureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *lo
 
 func InitContext() context.Context {
 	ctx := context.Background()
-	ctx = context.WithValue(ctx, "req-id", fmt.Sprintf("internal.%s", goid.NewV4UUID()))
+	ctx = context.WithValue(ctx, headerextractors.CtxRequestID, fmt.Sprintf("internal.%s", goid.NewV4UUID()))
 	return ctx
 }
