@@ -127,7 +127,7 @@ type gormWhereParams struct {
 
 func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.QueryParameters, extraOpts []gormWhereParams, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
 	var elems []E
-	tx := db.Table(db.tableName).WithContext(ctx)
+	tx := db.Table(db.tableName)
 
 	offset := 0
 	limit := 15
@@ -242,7 +242,7 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 	}
 
 	if exhaustiveRun {
-		res := tx.FindInBatches(&elems, limit, func(tx *gorm.DB, batch int) error {
+		res := tx.WithContext(ctx).FindInBatches(&elems, limit, func(tx *gorm.DB, batch int) error {
 			for _, elem := range elems {
 				applyFunc(elem)
 			}
@@ -257,7 +257,7 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 	} else {
 		tx.Offset(offset)
 		tx.Limit(limit)
-		rs := tx.Find(&elems)
+		rs := tx.WithContext(ctx).Find(&elems)
 		for _, elem := range elems {
 			// batch processing found records
 			applyFunc(elem)

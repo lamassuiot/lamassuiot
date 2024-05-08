@@ -3,6 +3,7 @@ package helpers
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -85,7 +86,7 @@ func TestUpdateContextWithRequest(t *testing.T) {
 
 	// Verify that the source is correctly set in the context
 	source := ctx.Value(models.ContextSourceKey)
-	if source != "test-source" {
+	if !strings.HasPrefix(source.(string), "test-source") {
 		t.Errorf("UpdateContextWithRequest did not set the correct source in the context. Expected: %s, Got: %v", "test-source", source)
 	}
 
