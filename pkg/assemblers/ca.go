@@ -12,8 +12,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/couchdb"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/builder"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/x509engines"
 	log "github.com/sirupsen/logrus"
 )
@@ -97,44 +96,22 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, error) {
 }
 
 func createCAStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine) (storage.CACertificatesRepo, storage.CertificatesRepo, error) {
-	switch conf.Provider {
-	case config.Postgres:
-		psqlCli, err := postgres.CreatePostgresDBConnection(logger, conf.Postgres, "ca")
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not create postgres client: %s", err)
-		}
-
-		caStore, err := postgres.NewCAPostgresRepository(psqlCli)
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not initialize postgres CA client: %s", err)
-		}
-
-		certStore, err := postgres.NewCertificateRepository(psqlCli)
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not initialize postgres Cert client: %s", err)
-		}
-
-		return caStore, certStore, nil
-	case config.CouchDB:
-		couchdbClient, err := couchdb.CreateCouchDBConnection(logger, conf.CouchDB)
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not create couchdb client: %s", err)
-		}
-
-		caStore, err := couchdb.NewCouchCARepository(couchdbClient)
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not initialize couchdb CA client: %s", err)
-		}
-
-		certStore, err := couchdb.NewCouchCertificateRepository(couchdbClient)
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not initialize couchdb Cert client: %s", err)
-		}
-
-		return caStore, certStore, nil
+	engine, err := builder.BuildStorageEngine(logger, conf)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not create storage engine: %s", err)
 	}
 
-	return nil, nil, fmt.Errorf("no storage engine")
+	caStorage, err := engine.GetCAStorage()
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not get CA storage: %s", err)
+	}
+
+	certStorage, err := engine.GetCertstorage()
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not get Cert storage: %s", err)
+	}
+
+	return caStorage, certStorage, nil
 }
 
 func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*services.Engine, error) {
