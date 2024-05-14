@@ -91,51 +91,16 @@ func TestCreateRSAPrivateKey(t *testing.T) {
 	tempDir, engine := setup(t)
 	defer teardown(tempDir)
 
-	keySize := 2048
-	keyID := "test-key"
-
-	t.Run("CreateRSAPrivateKey", func(t *testing.T) {
-		signer, err := engine.CreateRSAPrivateKey(keySize, keyID)
-		if err != nil {
-			t.Fatalf("failed to create RSA private key: %s", err)
-		}
-
-		// Check the type of the returned signer
-		switch signer.(type) {
-		case *rsa.PrivateKey:
-			// Private key is of type RSA
-			t.Logf("Private key with ID '%s' is of type RSA", keyID)
-		default:
-			t.Errorf("unexpected private key type for ID '%s'", keyID)
-		}
-	})
-
-	// Add more test cases if needed
+	testCreateRSAPrivateKey(t, engine)
 }
 
 func TestCreateECDSAPrivateKey(t *testing.T) {
 	tempDir, engine := setup(t)
 	defer teardown(tempDir)
 
-	keyID := "test-key"
-
-	t.Run("CreateECDSAPrivateKey", func(t *testing.T) {
-		curve := elliptic.P256()
-		signer, err := engine.CreateECDSAPrivateKey(curve, keyID)
-		if err != nil {
-			t.Fatalf("failed to create ECDSA private key: %s", err)
-		}
-
-		// Check the type of the returned signer
-		switch signer.(type) {
-		case *ecdsa.PrivateKey:
-			// Private key is of type ECDSA
-			t.Logf("Private key with ID '%s' is of type ECDSA", keyID)
-		default:
-			t.Errorf("unexpected private key type for ID '%s'", keyID)
-		}
-	})
+	testCreateECDSAPrivateKey(t, engine)
 }
+
 func TestDeleteKey(t *testing.T) {
 	tempDir, engine := setup(t)
 	defer teardown(tempDir)
