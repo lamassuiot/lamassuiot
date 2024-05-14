@@ -11,8 +11,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/couchdb"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/builder"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -79,32 +78,13 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 }
 
 func createDMSStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine) (storage.DMSRepo, error) {
-	switch conf.Provider {
-	case config.Postgres:
-		psqlCli, err := postgres.CreatePostgresDBConnection(logger, conf.Postgres, "dmsmanager")
-		if err != nil {
-			return nil, fmt.Errorf("could not create postgres client: %s", err)
-		}
-
-		dmsStore, err := postgres.NewDMSManagerRepository(psqlCli)
-		if err != nil {
-			return nil, fmt.Errorf("could not initialize postgres DMS client: %s", err)
-		}
-
-		return dmsStore, nil
-	case config.CouchDB:
-		couchdbClient, err := couchdb.CreateCouchDBConnection(logger, conf.CouchDB)
-		if err != nil {
-			return nil, fmt.Errorf("could not create couchdb client: %s", err)
-		}
-
-		dmsStore, err := couchdb.NewCouchDMSRepository(couchdbClient)
-		if err != nil {
-			return nil, fmt.Errorf("could not initialize couchdb DMS client: %s", err)
-		}
-
-		return dmsStore, nil
+	storage, err := builder.BuildStorageEngine(logger, conf)
+	if err != nil {
+		return nil, fmt.Errorf("could not create storage engine: %s", err)
 	}
-
-	return nil, fmt.Errorf("no storage engine")
+	dmsStorage, err := storage.GetDMSStorage()
+	if err != nil {
+		return nil, fmt.Errorf("could not get device storage: %s", err)
+	}
+	return dmsStorage, nil
 }

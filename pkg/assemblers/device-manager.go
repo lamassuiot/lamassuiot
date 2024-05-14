@@ -15,8 +15,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/couchdb"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/builder"
 	"github.com/sirupsen/logrus"
 )
 
@@ -267,32 +266,13 @@ func updateCertMetaHandler(event *event.Event, svc services.DeviceManagerService
 }
 
 func createDevicesStorageInstance(logger *logrus.Entry, conf config.PluggableStorageEngine) (storage.DeviceManagerRepo, error) {
-	switch conf.Provider {
-	case config.Postgres:
-		psqlCli, err := postgres.CreatePostgresDBConnection(logger, conf.Postgres, "devicemanager")
-		if err != nil {
-			return nil, fmt.Errorf("could not create postgres client: %s", err)
-		}
-
-		deviceStore, err := postgres.NewDeviceManagerRepository(psqlCli)
-		if err != nil {
-			return nil, fmt.Errorf("could not initialize postgres Device client: %s", err)
-		}
-
-		return deviceStore, nil
-	case config.CouchDB:
-		couchdbClient, err := couchdb.CreateCouchDBConnection(logger, conf.CouchDB)
-		if err != nil {
-			return nil, fmt.Errorf("could not create couchdb client: %s", err)
-		}
-
-		deviceStore, err := couchdb.NewCouchDeviceRepository(couchdbClient)
-		if err != nil {
-			return nil, fmt.Errorf("could not initialize couchdb Device client: %s", err)
-		}
-
-		return deviceStore, nil
+	storage, err := builder.BuildStorageEngine(logger, conf)
+	if err != nil {
+		return nil, fmt.Errorf("could not create storage engine: %s", err)
 	}
-
-	return nil, fmt.Errorf("no storage engine")
+	deviceStorage, err := storage.GetDeviceStorage()
+	if err != nil {
+		return nil, fmt.Errorf("could not get device storage: %s", err)
+	}
+	return deviceStorage, nil
 }

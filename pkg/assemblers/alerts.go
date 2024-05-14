@@ -12,7 +12,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/builder"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -91,25 +91,20 @@ func GetAlertsEventHandler(lMessaging *log.Entry, svc services.AlertsService) fu
 }
 
 func createAlertsStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine) (storage.SubscriptionsRepository, storage.EventRepository, error) {
-	switch conf.Provider {
-	case config.Postgres:
-		psqlCli, err := postgres.CreatePostgresDBConnection(logger, conf.Postgres, "alerts")
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not create postgres client: %s", err)
-		}
-
-		subStore, err := postgres.NewSubscriptionsPostgresRepository(psqlCli)
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not initialize postgres Alerts client: %s", err)
-		}
-
-		eventsStore, err := postgres.NewEventsPostgresRepository(psqlCli)
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not initialize postgres Alerts client: %s", err)
-		}
-
-		return subStore, eventsStore, nil
+	engine, err := builder.BuildStorageEngine(logger, conf)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not create storage engine: %s", err)
 	}
 
-	return nil, nil, fmt.Errorf("no storage engine")
+	subStore, err := engine.GetSubscriptionsStorage()
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not get subscriptions storage: %s", err)
+	}
+
+	eventsStore, err := engine.GetEnventsStorage()
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not get event storage: %s", err)
+	}
+
+	return subStore, eventsStore, nil
 }
