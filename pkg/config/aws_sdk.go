@@ -59,8 +59,6 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 			return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
 		}
 		return &awsCfg, nil
-	case Default:
-		return loadAWSDefaultConfig(conf, customResolver)
 	default:
 		return loadAWSDefaultConfig(conf, customResolver)
 	}
