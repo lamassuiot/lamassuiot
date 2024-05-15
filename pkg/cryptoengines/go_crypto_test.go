@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	keystorager "github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/key_storager"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 )
 
@@ -22,7 +23,9 @@ func setup(t *testing.T) (string, *GoCryptoEngine) {
 
 	// Create a new instance of GoCryptoEngine
 	log := helpers.SetupLogger(config.Info, "CA TestCase", "Golang Engine")
-	engine := NewGolangPEMEngine(log, config.GolangEngineConfig{StorageDirectory: tempDir})
+
+	keyStorage := keystorager.NewFilesystemKeyStorage(log, tempDir)
+	engine := NewGolangPEMEngine(log, keyStorage)
 
 	return tempDir, engine.(*GoCryptoEngine)
 }

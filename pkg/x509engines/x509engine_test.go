@@ -16,6 +16,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
+	keystorager "github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/key_storager"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 )
@@ -26,7 +27,8 @@ func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
 
 	// Create a new instance of GoCryptoEngine
 	log := helpers.SetupLogger(config.Info, "Test Case", "Golang Engine")
-	engine := cryptoengines.NewGolangPEMEngine(log, config.GolangEngineConfig{StorageDirectory: tempDir})
+	keyStore := keystorager.NewFilesystemKeyStorage(log, tempDir)
+	engine := cryptoengines.NewGolangPEMEngine(log, keyStore)
 
 	x509Engine := NewX509Engine(&engine, "ocsp.lamassu.io")
 
