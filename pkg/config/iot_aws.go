@@ -20,3 +20,7 @@ type IotAWS struct {
 	AWSSDKConfig              AWSSDKConfig `mapstructure:"aws_config"`
 	AWSBidirectionalQueueName string       `mapstructure:"aws_bidirectional_queue_name"`
 }
+
+var IotAWSDefaults = IotAWS{
+	AWSBidirectionalQueueName: "Lamassu-IoT-SYNC-EventBridgeOutput6A8BBEEC-LaYbNuW753SC",
+}

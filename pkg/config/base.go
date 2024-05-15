@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/mitchellh/mapstructure"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -137,11 +138,21 @@ type AuthMTLSOptions struct {
 	KeyFile  string `mapstructure:"key_file"`
 }
 
-func readConfig[E any](configFilePath string, defaults map[string]interface{}) (*E, error) {
+func readConfig[E any](configFilePath string, defaults *E) (*E, error) {
 	vp := viper.New()
-	for key, value := range defaults {
-		vp.SetDefault(key, value)
+	defaultsMap := map[string]interface{}{}
+
+	if defaults != nil {
+		mapstructure.Decode(defaults, &defaultsMap)
+
+		for key, value := range defaultsMap {
+			if value != nil && value != "" {
+				vp.SetDefault(key, value)
+			}
+
+		}
 	}
+
 	vp.SetConfigFile(configFilePath)
 	if err := vp.ReadInConfig(); err != nil {
 		// This error is not raised by viper when the file is not found when using SetConfigFile.
@@ -166,7 +177,7 @@ func readConfig[E any](configFilePath string, defaults map[string]interface{}) (
 	return &config, nil
 }
 
-func LoadConfig[E any](defaults map[string]interface{}) (*E, error) {
+func LoadConfig[E any](defaults *E) (*E, error) {
 	var err error
 	var conf *E
 
