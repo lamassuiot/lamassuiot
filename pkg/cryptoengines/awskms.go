@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -18,7 +19,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/sirupsen/logrus"
-	"go.step.sm/crypto/kms/awskms"
 )
 
 var lAWSKMS *logrus.Entry
@@ -115,7 +115,7 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, 
 		return nil, errors.New("kms key not found")
 	}
 
-	signer, err := awskms.NewSigner(p.kmscli, keyID)
+	signer, err := newKmsKeyCryptoSingerWrapper(p.kmscli, keyID)
 
 	// kmsSinger, err := sigstoreAWS.LoadSignerVerifier(context.Background(), keyID, func(lo *config.LoadOptions) error {
 	// 	lo.Credentials = p.kmsConfig.Credentials
@@ -233,4 +233,96 @@ func (p *AWSKMSCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID 
 
 func (p *AWSKMSCryptoEngine) DeleteKey(keyID string) error {
 	return fmt.Errorf("cannot delete key [%s]. Go to your aws account and do it manually", keyID)
+}
+
+type kmsKeyCryptoSingerWrapper struct {
+	keyArn string
+	sdk    *kms.Client
+
+	publicKey crypto.PublicKey
+}
+
+func newKmsKeyCryptoSingerWrapper(sdk *kms.Client, keyArn string) (crypto.Signer, error) {
+	//preload PubKey from KMS
+	pubResp, err := sdk.GetPublicKey(context.TODO(), &kms.GetPublicKeyInput{
+		KeyId: &keyArn,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	pubKey, err := x509.ParsePKIXPublicKey(pubResp.PublicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return &kmsKeyCryptoSingerWrapper{
+		sdk:       sdk,
+		keyArn:    keyArn,
+		publicKey: pubKey,
+	}, nil
+}
+
+func (k *kmsKeyCryptoSingerWrapper) Public() crypto.PublicKey {
+	return k.publicKey
+}
+func (k *kmsKeyCryptoSingerWrapper) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
+	alg, err := getSigningAlgorithm(k.Public(), opts)
+	if err != nil {
+		return nil, err
+	}
+
+	req := &kms.SignInput{
+		KeyId:            &k.keyArn,
+		SigningAlgorithm: alg,
+		Message:          digest,
+		MessageType:      types.MessageTypeDigest,
+	}
+
+	resp, err := k.sdk.Sign(context.TODO(), req)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Signature, nil
+
+}
+
+func getSigningAlgorithm(key crypto.PublicKey, opts crypto.SignerOpts) (types.SigningAlgorithmSpec, error) {
+	switch key.(type) {
+	case *rsa.PublicKey:
+		_, isPSS := opts.(*rsa.PSSOptions)
+		switch h := opts.HashFunc(); h {
+		case crypto.SHA256:
+			if isPSS {
+				return types.SigningAlgorithmSpecRsassaPssSha256, nil
+			}
+			return types.SigningAlgorithmSpecRsassaPkcs1V15Sha256, nil
+		case crypto.SHA384:
+			if isPSS {
+				return types.SigningAlgorithmSpecRsassaPssSha384, nil
+			}
+			return types.SigningAlgorithmSpecRsassaPkcs1V15Sha384, nil
+		case crypto.SHA512:
+			if isPSS {
+				return types.SigningAlgorithmSpecRsassaPssSha512, nil
+			}
+			return types.SigningAlgorithmSpecRsassaPkcs1V15Sha512, nil
+		default:
+			return "", fmt.Errorf("unsupported hash function %v", h)
+		}
+	case *ecdsa.PublicKey:
+		switch h := opts.HashFunc(); h {
+		case crypto.SHA256:
+			return types.SigningAlgorithmSpecEcdsaSha256, nil
+		case crypto.SHA384:
+			return types.SigningAlgorithmSpecEcdsaSha384, nil
+		case crypto.SHA512:
+			return types.SigningAlgorithmSpecEcdsaSha512, nil
+		default:
+			return "", fmt.Errorf("unsupported hash function %v", h)
+		}
+	default:
+		return "", fmt.Errorf("unsupported key type %T", key)
+	}
 }
