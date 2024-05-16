@@ -330,17 +330,8 @@ func (engine X509Engine) Sign(cAssetType CryptoAssetType, certificate *x509.Cert
 
 		sigAlg := strings.Split(signingAlgorithm, "_")
 		if sigAlg[1] == "PSS" {
-			var saltLength int
-			switch hashFunc {
-			case crypto.SHA256:
-				saltLength = 32
-			case crypto.SHA384:
-				saltLength = 48
-			case crypto.SHA512:
-				saltLength = 64
-			}
 			signature, err := privkey.Sign(rand.Reader, digest, &rsa.PSSOptions{
-				SaltLength: saltLength,
+				SaltLength: rsa.PSSSaltLengthEqualsHash,
 				Hash:       hashFunc,
 			})
 			if err != nil {
@@ -414,17 +405,8 @@ func (engine X509Engine) Verify(caCertificate *x509.Certificate, signature []byt
 
 		sigAlg := strings.Split(signingAlgorithm, "_")
 		if sigAlg[1] == "PSS" {
-			var saltLength int
-			switch hashFunc {
-			case crypto.SHA256:
-				saltLength = 32
-			case crypto.SHA384:
-				saltLength = 48
-			case crypto.SHA512:
-				saltLength = 64
-			}
 			err = rsa.VerifyPSS(rsaKey, hashFunc, hasher, signature, &rsa.PSSOptions{
-				SaltLength: saltLength,
+				SaltLength: rsa.PSSSaltLengthEqualsHash,
 				Hash:       hashFunc,
 			})
 			if err != nil {

@@ -42,9 +42,10 @@ func RunAWSEmulationLocalStackDocker() (func() error, *config.AWSSDKConfig, erro
 	}
 
 	return containerCleanup, &config.AWSSDKConfig{
-		EndpointURL:     endpoint,
-		AccessKeyID:     "test",
-		SecretAccessKey: "test",
-		Region:          "us-east-1",
+		EndpointURL:             endpoint,
+		AccessKeyID:             "test",
+		SecretAccessKey:         "test",
+		AWSAuthenticationMethod: config.Static,
+		Region:                  "us-east-1",
 	}, nil
 }
