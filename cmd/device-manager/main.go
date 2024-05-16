@@ -22,7 +22,7 @@ func main() {
 	log.SetFormatter(helpers.LogFormatter)
 	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
 
-	conf, err := config.LoadConfig[config.DeviceManagerConfig]()
+	conf, err := config.LoadConfig[config.DeviceManagerConfig](nil)
 	if err != nil {
 		log.Fatal(err)
 	}

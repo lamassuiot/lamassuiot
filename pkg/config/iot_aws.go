@@ -16,6 +16,11 @@ type IotAWS struct {
 		HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"ca_client"`
 
-	ConnectorID  string       `mapstructure:"connector_id"`
-	AWSSDKConfig AWSSDKConfig `mapstructure:"aws_config"`
+	ConnectorID               string       `mapstructure:"connector_id"`
+	AWSSDKConfig              AWSSDKConfig `mapstructure:"aws_config"`
+	AWSBidirectionalQueueName string       `mapstructure:"aws_bidirectional_queue_name"`
+}
+
+var IotAWSDefaults = IotAWS{
+	AWSBidirectionalQueueName: "Lamassu-IoT-SYNC-EventBridgeOutput6A8BBEEC-LaYbNuW753SC",
 }
