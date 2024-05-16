@@ -22,7 +22,7 @@ type GoCryptoEngine struct {
 	logger  *logrus.Entry
 }
 
-func NewGolangPEMEngine(logger *logrus.Entry, storage keystorager.KeyStorager) CryptoEngine {
+func NewGolangEngine(logger *logrus.Entry, storage keystorager.KeyStorager, metadata map[string]any) CryptoEngine {
 	log := logger.WithField("subsystem-provider", "GoSoft")
 	return &GoCryptoEngine{
 		logger:  log,
@@ -32,7 +32,7 @@ func NewGolangPEMEngine(logger *logrus.Entry, storage keystorager.KeyStorager) C
 			SecurityLevel: models.SL0,
 			Provider:      "Golang",
 			Name:          runtime.Version(),
-			Metadata:      map[string]any{},
+			Metadata:      metadata,
 			SupportedKeyTypes: []models.SupportedKeyTypeInfo{
 				{
 					Type: models.KeyType(x509.RSA),
@@ -85,6 +85,7 @@ func (engine *GoCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, er
 		}
 		engine.logger.Debugf("successfully decoded PKCS1 %s key", keyID)
 		return key, err
+
 	case "EC PRIVATE KEY":
 		engine.logger.Debugf("Key %s is EC", keyID)
 		key, err := x509.ParseECPrivateKey(block.Bytes)
@@ -92,11 +93,20 @@ func (engine *GoCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, er
 			engine.logger.Errorf("could not parse EC %s key", keyID)
 			return nil, err
 		}
+
 		engine.logger.Debugf("successfully decoded EC %s key", keyID)
 		return key, err
+
 	default:
-		engine.logger.Errorf("could not parse key %s in PEM '%s' format", keyID, block.Type)
-		return nil, fmt.Errorf("unsupported key type")
+		key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			engine.logger.Errorf("could not parse PKCS8 %s key", keyID)
+			return nil, err
+		}
+
+		engine.logger.Debugf("successfully decoded PKCS8 %s key", keyID)
+		signer := key.(crypto.Signer)
+		return signer, err
 	}
 }
 

@@ -11,13 +11,15 @@ type CAConfig struct {
 }
 
 type CryptoEngines struct {
-	LogLevel                  LogLevel                           `mapstructure:"log_level"`
-	DefaultEngine             string                             `mapstructure:"default_id"`
-	PKCS11Provider            []PKCS11EngineConfig               `mapstructure:"pkcs11"`
-	HashicorpVaultKV2Provider []HashicorpVaultCryptoEngineConfig `mapstructure:"hashicorp_vault"`
-	AWSKMSProvider            []AWSCryptoEngine                  `mapstructure:"aws_kms"`
-	AWSSecretsManagerProvider []AWSCryptoEngine                  `mapstructure:"aws_secrets_manager"`
-	GolangProvider            []GolangEngineConfig               `mapstructure:"golang"`
+	LogLevel       LogLevel             `mapstructure:"log_level"`
+	DefaultEngine  string               `mapstructure:"default_id"`
+	PKCS11Provider []PKCS11EngineConfig `mapstructure:"pkcs11"`
+	AWSKMSProvider []AWSCryptoEngine    `mapstructure:"aws_kms"`
+
+	//Go-based engines
+	GolangHashicorpVaultKV2Provider []HashicorpVaultCryptoEngineConfig `mapstructure:"hashicorp_vault"`
+	GolangAWSSecretsManagerProvider []AWSCryptoEngine                  `mapstructure:"aws_secrets_manager"`
+	GolangFilesystemProvider        []GolangFilesystemEngineConfig     `mapstructure:"filesystem"`
 }
 
 type HashicorpVaultCryptoEngineConfig struct {
@@ -34,7 +36,7 @@ type HashicorpVaultSDK struct {
 	HTTPConnection    `mapstructure:",squash"`
 }
 
-type GolangEngineConfig struct {
+type GolangFilesystemEngineConfig struct {
 	ID               string                 `mapstructure:"id"`
 	Metadata         map[string]interface{} `mapstructure:"metadata"`
 	StorageDirectory string                 `mapstructure:"storage_directory"`

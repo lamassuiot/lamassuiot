@@ -164,7 +164,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	cryptoEngineConf := config.CryptoEngines{
 		LogLevel:      config.Info,
 		DefaultEngine: "filesystem-1",
-		GolangProvider: []config.GolangEngineConfig{
+		GolangFilesystemProvider: []config.GolangFilesystemEngineConfig{
 			{
 				ID:               "filesystem-1",
 				Metadata:         map[string]interface{}{},
@@ -182,7 +182,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 
 	if slices.Contains(engines, VAULT) {
 		vaultSDKConf, vaultSuite := vault_test.BeforeSuite()
-		cryptoEngineConf.HashicorpVaultKV2Provider = []config.HashicorpVaultCryptoEngineConfig{
+		cryptoEngineConf.GolangHashicorpVaultKV2Provider = []config.HashicorpVaultCryptoEngineConfig{
 			{
 				ID:                "vault-1",
 				HashicorpVaultSDK: vaultSDKConf,

@@ -18,7 +18,7 @@ type AWSSecretsManagerKeyStorager struct {
 	smngerCli *secretsmanager.Client
 }
 
-func NewAWSSecretManagerKeyStorage(logger *logrus.Entry, awsConf aws.Config, metadata map[string]any) (KeyStorager, error) {
+func NewAWSSecretManagerKeyStorage(logger *logrus.Entry, awsConf aws.Config) (KeyStorager, error) {
 	log := logger.WithField("subsystem-provider", "AWS SecretsManager Client")
 
 	httpCli, err := helpers.BuildHTTPClientWithTracerLogger(http.DefaultClient, log)
@@ -80,7 +80,7 @@ func (engine *AWSSecretsManagerKeyStorager) Create(keyID string, key []byte) err
 	})
 
 	if err != nil {
-		engine.logger.Error("Could not import RSA private key: ", err)
+		engine.logger.Error("Could not import private key: ", err)
 		return err
 	}
 

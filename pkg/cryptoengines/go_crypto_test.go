@@ -24,8 +24,8 @@ func setup(t *testing.T) (string, *GoCryptoEngine) {
 	// Create a new instance of GoCryptoEngine
 	log := helpers.SetupLogger(config.Info, "CA TestCase", "Golang Engine")
 
-	keyStorage := keystorager.NewFilesystemKeyStorage(log, tempDir)
-	engine := NewGolangPEMEngine(log, keyStorage)
+	keyStorage := keystorager.NewFilesystemKeyStorage(log, config.GolangFilesystemEngineConfig{StorageDirectory: tempDir})
+	engine := NewGolangEngine(log, keyStorage, map[string]any{})
 
 	return tempDir, engine.(*GoCryptoEngine)
 }

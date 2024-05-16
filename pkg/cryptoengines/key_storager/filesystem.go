@@ -3,6 +3,7 @@ package keystorager
 import (
 	"os"
 
+	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/sirupsen/logrus"
 )
 
@@ -11,10 +12,10 @@ type FilesystemKeyStorage struct {
 	directory string
 }
 
-func NewFilesystemKeyStorage(logger *logrus.Entry, directory string) KeyStorager {
+func NewFilesystemKeyStorage(logger *logrus.Entry, conf config.GolangFilesystemEngineConfig) KeyStorager {
 	return &FilesystemKeyStorage{
 		logger:    logger,
-		directory: directory,
+		directory: conf.StorageDirectory,
 	}
 }
 
