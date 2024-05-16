@@ -55,17 +55,13 @@ func TestNewAWSKMSEngine(t *testing.T) {
 
 	assert.Equal(t, expectedConfig, engine.GetEngineConfig())
 }
-func TestDeleteKeyOnKMS(t *testing.T) {
-	engine := prepareDummyKMSEngine(t)
-
+func testDeleteKeyOnKMS(t *testing.T, engine CryptoEngine) {
 	awsengine := engine.(*AWSKMSCryptoEngine)
 	err := awsengine.DeleteKey("test-key")
 	assert.EqualError(t, err, "cannot delete key [test-key]. Go to your aws account and do it manually")
 }
 
-func TestImportRSAKeyOnKMS(t *testing.T) {
-	engine := prepareDummyKMSEngine(t)
-
+func testImportRSAKeyOnKMS(t *testing.T, engine CryptoEngine) {
 	key, err := helpers.GenerateRSAKey(2048)
 	assert.NoError(t, err)
 
@@ -73,31 +69,39 @@ func TestImportRSAKeyOnKMS(t *testing.T) {
 	assert.EqualError(t, err, "KMS does not support asymmetric key import")
 }
 
-func TestImportECDSAKeyOnKMS(t *testing.T) {
-	engine := prepareDummyKMSEngine(t)
-
+func testImportECDSAKeyOnKMS(t *testing.T, engine CryptoEngine) {
 	key, err := helpers.GenerateECDSAKey(elliptic.P256())
 	assert.NoError(t, err)
 
-	_, err = engine.ImportECDSAPrivateKey(key, "imported-rsa-key")
+	_, err = engine.ImportECDSAPrivateKey(key, "imported-ecdsa-key")
 	assert.EqualError(t, err, "KMS does not support asymmetric key import")
 }
 
-func TestCreateRSAPrivateKeyOnKMS(t *testing.T) {
-	engine := prepareKMSCryptoEngine(t)
-	testCreateRSAPrivateKey(t, engine)
-}
-
-func TestCreateECDSAPrivateKeyOnKMS(t *testing.T) {
-	engine := prepareKMSCryptoEngine(t)
-	testCreateECDSAPrivateKey(t, engine)
-}
-
-func TestGetPrivateKeyNotFoundOnKMS(t *testing.T) {
-	engine := prepareKMSCryptoEngine(t)
-
-	_, err := engine.GetPrivateKeyByID("test-rsa-key")
+func testGetPrivateKeyNotFoundOnKMS(t *testing.T, engine CryptoEngine) {
+	_, err := engine.GetPrivateKeyByID("test-unknown-key")
 	assert.EqualError(t, err, "kms key not found")
+}
+
+func TestAWSKMSCryptoEngine(t *testing.T) {
+	engine := prepareKMSCryptoEngine(t)
+
+	table := []struct {
+		name     string
+		function func(t *testing.T, engine CryptoEngine)
+	}{
+		{"CreateECDSAPrivateKey", testCreateECDSAPrivateKey},
+		{"CreateRSAPrivateKey", testCreateRSAPrivateKey},
+		{"GetPrivateKeyNotFound", testGetPrivateKeyNotFoundOnKMS},
+		{"DeleteKey", testDeleteKeyOnKMS},
+		{"ImportRSAKey", testImportRSAKeyOnKMS},
+		{"ImportECDSAKey", testImportECDSAKeyOnKMS},
+	}
+
+	for _, tt := range table {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.function(t, engine)
+		})
+	}
 }
 
 func prepareKMSCryptoEngine(t *testing.T) CryptoEngine {
@@ -116,14 +120,5 @@ func prepareKMSCryptoEngine(t *testing.T) CryptoEngine {
 	engine, err := NewAWSKMSEngine(logger, *awsConf, metadata)
 	assert.NoError(t, err)
 	assert.NotNil(t, engine)
-	return engine
-}
-
-func prepareDummyKMSEngine(t *testing.T) CryptoEngine {
-	logger := logrus.New().WithField("test", "AWSKMSEngine")
-	awsConf := aws.Config{}
-	metadata := map[string]interface{}{}
-	engine, err := NewAWSKMSEngine(logger, awsConf, metadata)
-	assert.NoError(t, err)
 	return engine
 }

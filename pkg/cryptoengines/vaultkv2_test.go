@@ -12,24 +12,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCreateECDSAPrivateKeyOnVault(t *testing.T) {
-	engine := prepareVaultkv2CryptoEngine(t)
-	testCreateECDSAPrivateKey(t, engine)
-}
-
-func TestCreateRSAPrivateKeyOnVault(t *testing.T) {
-	engine := prepareVaultkv2CryptoEngine(t)
-	testCreateRSAPrivateKey(t, engine)
-}
-
-func TestGetPrivateKeyNotFoundOnVault(t *testing.T) {
-	engine := prepareVaultkv2CryptoEngine(t)
+func testGetPrivateKeyNotFoundOnVault(t *testing.T, engine CryptoEngine) {
 	_, err := engine.GetPrivateKeyByID("not-found")
 	assert.Error(t, err)
 }
 
-func TestGetEngineConfig(t *testing.T) {
-	engine := prepareVaultkv2CryptoEngine(t)
+func testGetEngineConfig(t *testing.T, engine CryptoEngine) {
+
 	config := engine.GetEngineConfig()
 
 	assert.Equal(t, models.VaultKV2, config.Type)
@@ -59,9 +48,7 @@ func TestGetEngineConfig(t *testing.T) {
 	assert.Equal(t, expectedKeyTypes, config.SupportedKeyTypes)
 }
 
-func TestDeleteKeyOnVault(t *testing.T) {
-	engine := prepareVaultkv2CryptoEngine(t)
-
+func testDeleteKeyOnVault(t *testing.T, engine CryptoEngine) {
 	_, err := engine.CreateECDSAPrivateKey(elliptic.P256(), "test-ecdsa")
 	assert.NoError(t, err)
 
@@ -75,6 +62,28 @@ func TestDeleteKeyOnVault(t *testing.T) {
 	// VaultKV2 supports key deletion, but it should be configured at the vault server level
 	// _, err = engine.GetPrivateKeyByID("test-ecdsa")
 	// assert.Error(t, err)
+}
+
+func TestVaultCryptoEngine(t *testing.T) {
+	engine := prepareVaultkv2CryptoEngine(t)
+
+	table := []struct {
+		name     string
+		function func(t *testing.T, engine CryptoEngine)
+	}{
+		{"CreateECDSAPrivateKey", testCreateECDSAPrivateKey},
+		{"CreateRSAPrivateKey", testCreateRSAPrivateKey},
+		{"GetPrivateKeyNotFound", testGetPrivateKeyNotFoundOnVault},
+		{"GetEngineConfig", testGetEngineConfig},
+		{"DeleteKey", testDeleteKeyOnVault},
+	}
+
+	for _, tt := range table {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.function(t, engine)
+		})
+	}
+
 }
 
 func prepareVaultkv2CryptoEngine(t *testing.T) CryptoEngine {

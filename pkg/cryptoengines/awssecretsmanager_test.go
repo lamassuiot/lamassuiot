@@ -54,29 +54,35 @@ func TestNewAWSSecretManagerEngine(t *testing.T) {
 	}, awsEngine.GetEngineConfig())
 }
 
-func TestDeleteKeyOnSecretsManager(t *testing.T) {
-	engine := prepareDummySecretsManagerEngine(t)
-
+func testDeleteKeyOnSecretsManager(t *testing.T, engine CryptoEngine) {
 	awsengine := engine.(*AWSSecretsManagerCryptoEngine)
 	err := awsengine.DeleteKey("test-key")
 	assert.EqualError(t, err, "cannot delete key [test-key]. Go to your aws account and do it manually")
 }
 
-func TestCreateRSAPrivateKeyOnSecretsManager(t *testing.T) {
-	engine := prepareSecretsManagerCryptoEngine(t)
-	testCreateRSAPrivateKey(t, engine)
-}
-
-func TestCreateECDSAPrivateKeyOnSecretsManager(t *testing.T) {
-	engine := prepareSecretsManagerCryptoEngine(t)
-	testCreateECDSAPrivateKey(t, engine)
-}
-
-func TestGetPrivateKeyNotFoundOnSecretsManager(t *testing.T) {
-	engine := prepareSecretsManagerCryptoEngine(t)
-
+func testGetPrivateKeyNotFoundOnSecretsManager(t *testing.T, engine CryptoEngine) {
 	_, err := engine.GetPrivateKeyByID("test-key")
 	assert.Error(t, err)
+}
+
+func TestAWSSecretsManagerCryptoEngine(t *testing.T) {
+	engine := prepareSecretsManagerCryptoEngine(t)
+
+	table := []struct {
+		name     string
+		function func(t *testing.T, engine CryptoEngine)
+	}{
+		{"CreateECDSAPrivateKey", testCreateECDSAPrivateKey},
+		{"CreateRSAPrivateKey", testCreateRSAPrivateKey},
+		{"GetPrivateKeyNotFound", testGetPrivateKeyNotFoundOnSecretsManager},
+		{"DeleteKey", testDeleteKeyOnSecretsManager},
+	}
+
+	for _, tt := range table {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.function(t, engine)
+		})
+	}
 }
 
 func prepareSecretsManagerCryptoEngine(t *testing.T) CryptoEngine {
@@ -95,15 +101,5 @@ func prepareSecretsManagerCryptoEngine(t *testing.T) CryptoEngine {
 	engine, err := NewAWSSecretManagerEngine(logger, *awsConf, metadata)
 	assert.NoError(t, err)
 	assert.NotNil(t, engine)
-	return engine
-}
-
-func prepareDummySecretsManagerEngine(t *testing.T) CryptoEngine {
-	logger := logrus.New().WithField("test", "NewAWSSecretManagerEngine")
-	awsConf := aws.Config{}
-	metadata := map[string]interface{}{}
-
-	engine, err := NewAWSSecretManagerEngine(logger, awsConf, metadata)
-	assert.NoError(t, err)
 	return engine
 }
