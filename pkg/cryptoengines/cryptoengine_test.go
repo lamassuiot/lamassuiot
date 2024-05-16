@@ -22,7 +22,7 @@ func testCreateRSAPrivateKey(t *testing.T, engine CryptoEngine) {
 	hashed := h.Sum(nil)
 
 	signature, err := signer.Sign(rand.Reader, hashed, &rsa.PSSOptions{
-		SaltLength: 32,
+		SaltLength: rsa.PSSSaltLengthAuto,
 		Hash:       crypto.SHA256,
 	})
 	assert.NoError(t, err)
@@ -33,7 +33,7 @@ func testCreateRSAPrivateKey(t *testing.T, engine CryptoEngine) {
 	assert.Equal(t, signer.Public(), signer2.Public())
 
 	err = rsa.VerifyPSS(signer2.Public().(*rsa.PublicKey), crypto.SHA256, hashed, signature, &rsa.PSSOptions{
-		SaltLength: 32,
+		SaltLength: rsa.PSSSaltLengthAuto,
 		Hash:       crypto.SHA256,
 	})
 

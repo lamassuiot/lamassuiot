@@ -84,7 +84,6 @@ func TestImportECDSAKeyOnKMS(t *testing.T) {
 }
 
 func TestCreateRSAPrivateKeyOnKMS(t *testing.T) {
-	t.Skip("Skip not reliable test")
 	engine := prepareKMSCryptoEngine(t)
 	testCreateRSAPrivateKey(t, engine)
 }
