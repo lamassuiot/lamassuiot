@@ -117,23 +117,6 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, 
 
 	signer, err := newKmsKeyCryptoSingerWrapper(p.kmscli, keyID)
 
-	// kmsSinger, err := sigstoreAWS.LoadSignerVerifier(context.Background(), keyID, func(lo *config.LoadOptions) error {
-	// 	lo.Credentials = p.kmsConfig.Credentials
-	// 	lo.HTTPClient = p.kmsConfig.HTTPClient
-	// 	lo.Region = p.kmsConfig.Region
-	// 	lo.EndpointResolverWithOptions = p.kmsConfig.EndpointResolverWithOptions
-	// 	return nil
-	// })
-
-	// if err != nil {
-	// 	lAWSKMS.Errorf("could not create KMS Signer: %s", err)
-	// 	return nil, err
-	// }
-
-	// signer, _, err := kmsSinger.CryptoSigner(context.Background(), func(err error) {
-	// 	lAWSKMS.Errorf("could not create Signer: %s", err)
-	// })
-
 	return signer, err
 }
 
