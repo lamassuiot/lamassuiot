@@ -22,7 +22,7 @@ func main() {
 	log.SetFormatter(helpers.LogFormatter)
 	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
 
-	conf, err := config.LoadConfig[config.IotAWS]()
+	conf, err := config.LoadConfig[config.IotAWS](&config.IotAWSDefaults)
 	if err != nil {
 		log.Fatalf("something went wrong while loading config. Exiting: %s", err)
 	}
