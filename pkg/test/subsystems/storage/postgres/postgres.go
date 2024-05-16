@@ -30,7 +30,10 @@ func RunPostgresDocker(dbs []string) (func() error, *config.PostgresPSEConfig, e
 	}
 	os.Mkdir(fmt.Sprintf("%s/testdata", pwd), 0755) // #nosec
 	initScriptFname := fmt.Sprintf("%s/testdata/init.sql", pwd)
-	os.WriteFile(initScriptFname, []byte(sqlStatements), 0644) // #nosec
+	err = os.WriteFile(initScriptFname, []byte(sqlStatements), 0644) // #nosec
+	if err != nil {
+		return nil, nil, err
+	}
 
 	containerCleanup, container, dockerHost, err := dockerunner.RunDocker(dockertest.RunOptions{
 		Repository: "postgres", // image

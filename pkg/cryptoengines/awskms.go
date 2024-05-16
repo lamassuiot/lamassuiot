@@ -13,14 +13,12 @@ import (
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/sirupsen/logrus"
-
-	sigstoreAWS "github.com/sigstore/sigstore/pkg/signature/kms/aws"
+	"go.step.sm/crypto/kms/awskms"
 )
 
 var lAWSKMS *logrus.Entry
@@ -102,7 +100,7 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, 
 		for _, alias := range aliases.Aliases {
 			aliasName := strings.Replace(*alias.AliasName, "alias/", "", -1)
 			if aliasName == keyAlias {
-				keyID = *key.KeyId
+				keyID = *key.KeyArn
 				break
 			}
 		}
@@ -115,26 +113,26 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, 
 	if keyID == "" {
 		lAWSKMS.Errorf("kms key not found")
 		return nil, errors.New("kms key not found")
-	} else {
-		keyID = "awskms:///" + keyID
 	}
 
-	kmsSinger, err := sigstoreAWS.LoadSignerVerifier(context.Background(), keyID, func(lo *config.LoadOptions) error {
-		lo.Credentials = p.kmsConfig.Credentials
-		lo.HTTPClient = p.kmsConfig.HTTPClient
-		lo.Region = p.kmsConfig.Region
-		lo.EndpointResolverWithOptions = p.kmsConfig.EndpointResolverWithOptions
-		return nil
-	})
+	signer, err := awskms.NewSigner(p.kmscli, keyID)
 
-	if err != nil {
-		lAWSKMS.Errorf("could not create KMS Signer: %s", err)
-		return nil, err
-	}
+	// kmsSinger, err := sigstoreAWS.LoadSignerVerifier(context.Background(), keyID, func(lo *config.LoadOptions) error {
+	// 	lo.Credentials = p.kmsConfig.Credentials
+	// 	lo.HTTPClient = p.kmsConfig.HTTPClient
+	// 	lo.Region = p.kmsConfig.Region
+	// 	lo.EndpointResolverWithOptions = p.kmsConfig.EndpointResolverWithOptions
+	// 	return nil
+	// })
 
-	signer, _, err := kmsSinger.CryptoSigner(context.Background(), func(err error) {
-		lAWSKMS.Errorf("could not create Signer: %s", err)
-	})
+	// if err != nil {
+	// 	lAWSKMS.Errorf("could not create KMS Signer: %s", err)
+	// 	return nil, err
+	// }
+
+	// signer, _, err := kmsSinger.CryptoSigner(context.Background(), func(err error) {
+	// 	lAWSKMS.Errorf("could not create Signer: %s", err)
+	// })
 
 	return signer, err
 }
