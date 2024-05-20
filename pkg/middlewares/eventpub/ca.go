@@ -10,10 +10,10 @@ import (
 
 type CAEventPublisher struct {
 	Next       services.CAService
-	eventMWPub CloudEventMiddlewarePublisher
+	eventMWPub ICloudEventMiddlewarePublisher
 }
 
-func NewCAEventBusPublisher(eventMWPub CloudEventMiddlewarePublisher) services.CAMiddleware {
+func NewCAEventBusPublisher(eventMWPub ICloudEventMiddlewarePublisher) services.CAMiddleware {
 	return func(next services.CAService) services.CAService {
 		return &CAEventPublisher{
 			Next:       next,
