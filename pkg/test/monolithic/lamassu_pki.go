@@ -43,7 +43,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		crtPem := helpers.CertificateToPEM(crt)
 		os.WriteFile("proxy.crt", []byte(crtPem), 0600)
 
-		_, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
+		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
 			Logs: config.BaseConfigLogging{
 				Level: conf.Logs.Level,
 			},

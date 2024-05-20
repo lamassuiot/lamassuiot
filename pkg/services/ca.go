@@ -6,10 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
 	"fmt"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -22,7 +19,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/x509engines"
-	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )
@@ -77,7 +73,6 @@ type CAServiceBackend struct {
 	defaultCryptoEngineID string
 	caStorage             storage.CACertificatesRepo
 	certStorage           storage.CertificatesRepo
-	cronInstance          *cron.Cron
 	cryptoMonitorConfig   config.CryptoMonitoring
 	vaServerDomain        string
 	logger                *logrus.Entry
@@ -110,19 +105,7 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 		return nil, fmt.Errorf("could not find the default crypto engine")
 	}
 
-	cronInstance := cron.New()
-	if builder.CryptoMonitoringConf.Enabled {
-		builder.Logger.Infof("enabling periodic monitoring with cron expression: '%s'", builder.CryptoMonitoringConf.Frequency)
-		if strings.Count(builder.CryptoMonitoringConf.Frequency, " ") == 5 {
-			builder.Logger.Warn("periodic monitoring system contains 'second level' scheduling. This may cause performance issues in production scenarios")
-			cronInstance = cron.New(cron.WithSeconds())
-		}
-	} else {
-		builder.Logger.Warn("certificate periodic monitoring is disabled")
-	}
-
 	svc := CAServiceBackend{
-		cronInstance:          cronInstance,
 		cryptoEngines:         engines,
 		defaultCryptoEngine:   defaultCryptoEngine,
 		defaultCryptoEngineID: defaultCryptoEngineID,
@@ -135,141 +118,11 @@ func NewCAService(builder CAServiceBuilder) (CAService, error) {
 
 	svc.service = &svc
 
-	svc.CheckCAsAndCertificates()
-
-	if builder.CryptoMonitoringConf.Enabled {
-		_, err := svc.cronInstance.AddFunc(builder.CryptoMonitoringConf.Frequency, svc.CheckCAsAndCertificates)
-		if err != nil {
-			builder.Logger.Errorf("could not add scheduled run for checking certificate expiration dates")
-		}
-
-		svc.cronInstance.Start()
-	}
-
 	return &svc, nil
 }
 
-func (svc *CAServiceBackend) CheckCAsAndCertificates() {
-	ctx := helpers.InitContext()
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
-
-	now := time.Now()
-	lFunc.Info("starting periodic CAs and Certificate check for expired certificates")
-
-	//checks if metadata has additional expiration intervals to be checked.
-	//returns
-	// - bool: true if metadata should be updated
-	// - updated metadata
-	shouldUpdateMonitoringDeltas := func(metadata map[string]any, certificate x509.Certificate) (bool, map[string]any) {
-		if additionalDeltasIface, ok := metadata[models.CAMetadataMonitoringExpirationDeltasKey]; ok {
-			//check if additionalDeltasIface is of type
-			deltasB, err := json.Marshal(additionalDeltasIface)
-			if err != nil {
-				return false, map[string]any{}
-			}
-
-			var additionalDeltas models.CAMetadataMonitoringExpirationDeltas
-			err = json.Unmarshal(deltasB, &additionalDeltas)
-			if err == nil {
-				orderedDeltas := additionalDeltas
-
-				//order deltas from smallest to biggest
-				slices.SortStableFunc(orderedDeltas, func(a models.MonitoringExpirationDelta, b models.MonitoringExpirationDelta) int {
-					if a.Delta == b.Delta {
-						return 0
-					}
-					if a.Delta < b.Delta {
-						return -1
-					} else {
-						return 1
-					}
-				})
-
-				newMeta := metadata
-				updated := false
-				for idx, additionalDelta := range orderedDeltas {
-					// fmt.Printf("Delta %s = %s\n", additionalDelta.Name, additionalDelta.Delta.String())
-					// fmt.Printf("After Sub: %s\n", cert.ValidTo.Add(-time.Duration(additionalDelta.Delta)))
-					// fmt.Printf("After: %t\n", time.Now().After(cert.ValidTo.Add(-time.Duration(additionalDelta.Delta))))
-					if time.Now().After(certificate.NotAfter.Add(-time.Duration(additionalDelta.Delta))) {
-						if !orderedDeltas[idx].Triggered {
-							//switch 'trigger' monitoring delta to
-							orderedDeltas[idx].Triggered = true
-							newMeta[models.CAMetadataMonitoringExpirationDeltasKey] = orderedDeltas
-							updated = true
-						}
-					}
-				}
-
-				if updated {
-					return true, newMeta
-				} else {
-					return false, map[string]any{}
-				}
-			}
-		}
-
-		return false, map[string]any{}
-	}
-
-	caScanFunc := func(ca models.CACertificate) {
-		if ca.ValidTo.Before(now) && ca.Status == models.StatusActive {
-			svc.service.UpdateCAStatus(ctx, UpdateCAStatusInput{
-				CAID:   ca.ID,
-				Status: models.StatusExpired,
-			})
-			return
-		}
-
-		shouldUpdateMeta, newMetadata := shouldUpdateMonitoringDeltas(ca.Metadata, x509.Certificate(*ca.Certificate.Certificate))
-		if shouldUpdateMeta {
-			svc.service.UpdateCAMetadata(ctx, UpdateCAMetadataInput{
-				CAID:     ca.ID,
-				Metadata: newMetadata,
-			})
-		}
-	}
-
-	svc.service.GetCAs(ctx, GetCAsInput{
-		QueryParameters: nil,
-		ExhaustiveRun:   true,
-		ApplyFunc:       caScanFunc,
-	})
-
-	svc.service.GetCertificatesByStatus(ctx, GetCertificatesByStatusInput{
-		Status: models.StatusActive,
-		ListInput: resources.ListInput[models.Certificate]{
-			QueryParameters: nil,
-			ExhaustiveRun:   true,
-			ApplyFunc: func(cert models.Certificate) {
-				//check if should be updated to expired
-				if cert.ValidTo.Before(time.Now()) {
-					svc.service.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
-						SerialNumber: cert.SerialNumber,
-						NewStatus:    models.StatusExpired,
-					})
-					return
-				}
-
-				//check if meta contains additional monitoring deltas
-				shouldUpdateMeta, newMetadata := shouldUpdateMonitoringDeltas(cert.Metadata, x509.Certificate(*cert.Certificate))
-				if shouldUpdateMeta {
-					svc.service.UpdateCertificateMetadata(ctx, UpdateCertificateMetadataInput{
-						SerialNumber: cert.SerialNumber,
-						Metadata:     newMetadata,
-					})
-				}
-			},
-		},
-	})
-
-	end := time.Now()
-	lFunc.Infof("ending check. Took %v", end.Sub(now))
-}
-
 func (svc *CAServiceBackend) Close() {
-	ctx := svc.cronInstance.Stop()
-	<-ctx.Done()
+	//no op
 }
 
 func (svc *CAServiceBackend) SetService(service CAService) {
