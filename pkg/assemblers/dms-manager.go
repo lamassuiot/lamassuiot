@@ -66,7 +66,7 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
 
-		svc = eventpub.NewDMSEventPublisher(eventpub.CloudEventMiddlewarePublisher{
+		svc = eventpub.NewDMSEventPublisher(&eventpub.CloudEventMiddlewarePublisher{
 			Publisher: pub,
 			ServiceID: "dms-manager",
 			Logger:    lMessaging,

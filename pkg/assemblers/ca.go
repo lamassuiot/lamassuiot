@@ -84,11 +84,13 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 			return nil, nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
 
-		svc = eventpub.NewCAEventBusPublisher(eventpub.CloudEventMiddlewarePublisher{
+		eventpublisher := &eventpub.CloudEventMiddlewarePublisher{
 			Publisher: pub,
 			ServiceID: "ca",
 			Logger:    lMessage,
-		})(svc)
+		}
+
+		svc = eventpub.NewCAEventBusPublisher(eventpublisher)(svc)
 	}
 
 	var scheduler *jobs.JobScheduler
