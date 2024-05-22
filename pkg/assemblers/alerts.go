@@ -11,6 +11,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/services/handlers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/builder"
 	log "github.com/sirupsen/logrus"
@@ -64,7 +65,8 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 			return nil, err
 		}
 
-		eventBusRouter.AddNoPublisherHandler("#-alerts", "#", sub, GetAlertsEventHandler(lMessaging, svc))
+		handler := handlers.NewAlertsEventHandler(lMessaging, svc)
+		eventBusRouter.AddNoPublisherHandler("#-alerts", "#", sub, handler.HandleEvent)
 		go eventBusRouter.Run(context.Background())
 	}
 
