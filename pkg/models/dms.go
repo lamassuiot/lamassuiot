@@ -22,6 +22,7 @@ type DMS struct {
 }
 
 type DMSSettings struct {
+	ServerKeyGen           ServerKeyGenSettings   `json:"server_keygen_settings,omitempty"`
 	EnrollmentSettings     EnrollmentSettings     `json:"enrollment_settings"`
 	ReEnrollmentSettings   ReEnrollmentSettings   `json:"reenrollment_settings"`
 	CADistributionSettings CADistributionSettings `json:"ca_distribution_settings"`
@@ -32,6 +33,16 @@ type EnrollmentProto string
 const (
 	EST EnrollmentProto = "EST_RFC7030"
 )
+
+type ServerKeyGenSettings struct {
+	Enabled bool            `json:"enabled"`
+	Key     ServerKeyGenKey `json:"key"`
+}
+
+type ServerKeyGenKey struct {
+	Type KeyType `json:"type"`
+	Bits int     `json:"bits"`
+}
 
 type DeviceProvisionProfile struct {
 	Icon      string         `json:"icon"`
