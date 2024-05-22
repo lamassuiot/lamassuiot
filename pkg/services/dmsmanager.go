@@ -675,61 +675,74 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	return (*x509.Certificate)(crt.Certificate), nil
 }
 
-func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
+func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, any, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	var privKey any
 	var err error
 
-	keyType, hasValue := ctx.Value(string(models.ESTServerKeyGenKeyType)).(x509.PublicKeyAlgorithm)
-	if !hasValue {
-		lFunc.Debugf("no valid key type found. Defaulting to RSA")
-		keyType = x509.RSA
+	dms, err := svc.GetDMSByID(ctx, GetDMSByIDInput{
+		ID: aps,
+	})
+	if err != nil {
+		return nil, nil, err
 	}
 
-	keySize, hasKeySizeValue := ctx.Value(string(models.ESTServerKeyGenBitSize)).(int)
+	if !dms.Settings.ServerKeyGen.Enabled {
+		lFunc.Errorf("server key generation not enabled for DMS: %s", aps)
+		return nil, nil, fmt.Errorf("server key generation not enabled")
+	}
 
-	switch keyType {
+	keyType := dms.Settings.ServerKeyGen.Key.Type
+	keySize := dms.Settings.ServerKeyGen.Key.Bits
+
+	switch x509.PublicKeyAlgorithm(keyType) {
 	case x509.RSA:
-		if hasKeySizeValue {
-			if keySize%1024 != 0 {
-				lFunc.Warnf("invalid key size of %d for RSA. Defaulting to 4096", keySize)
-				keySize = 4096
-			}
-		} else {
-			lFunc.Debugf("no key size specified. Defaulting to RSA 4096")
-			keySize = 4096
-		}
-
 		privKey, err = rsa.GenerateKey(rand.Reader, keySize)
 	case x509.ECDSA:
 		var curve elliptic.Curve
-		if hasKeySizeValue {
-			switch keySize {
-			case 224:
-				curve = elliptic.P224()
-			case 256:
-				curve = elliptic.P256()
-			case 384:
-				curve = elliptic.P384()
-			case 521:
-				curve = elliptic.P521()
-			default:
-				lFunc.Warnf("invalid key size of %d for ECDSA. Defaulting to 256 curve", keySize)
-				curve = elliptic.P256()
-			}
-		} else {
-			lFunc.Debugf("no key size specified. Defaulting to ECDSA 256 curve")
+		switch keySize {
+		case 224:
+			curve = elliptic.P224()
+		case 256:
+			curve = elliptic.P256()
+		case 384:
+			curve = elliptic.P384()
+		case 521:
+			curve = elliptic.P521()
+		default:
+			lFunc.Warnf("invalid key size of %d for ECDSA. Defaulting to 256 curve", keySize)
 			curve = elliptic.P256()
 		}
 
 		privKey, err = ecdsa.GenerateKey(curve, rand.Reader)
+		if err != nil {
+			lFunc.Errorf("could not generate ecdsa key: %s", err)
+			return nil, nil, err
+		}
 	default:
 		return nil, nil, fmt.Errorf("unsupported key type %s", keyType)
 	}
 
-	fmt.Println(privKey, err)
-	return nil, nil, fmt.Errorf("TODO")
+	newCsrBytes, err := x509.CreateCertificateRequest(rand.Reader, csr, privKey)
+	if err != nil {
+		lFunc.Errorf("could not generate new csr: %s", err)
+		return nil, nil, err
+	}
+
+	newCsr, err := x509.ParseCertificateRequest(newCsrBytes)
+	if err != nil {
+		lFunc.Errorf("could not parse newly generated CSR: %s", err)
+		return nil, nil, err
+	}
+
+	crt, err := svc.Enroll(ctx, newCsr, aps)
+	if err != nil {
+		lFunc.Errorf("could not enroll: %s", err)
+		return nil, nil, err
+	}
+
+	return crt, privKey, nil
 }
 
 // returns if the given certificate COULD BE checked for revocation (true means that it could be checked), and if it is revoked (true) or not (false)

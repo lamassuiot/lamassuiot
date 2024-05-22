@@ -11,12 +11,10 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/sirupsen/logrus"
 	"go.mozilla.org/pkcs7"
@@ -90,62 +88,20 @@ func (r *estHttpRoutes) GetCACerts(ctx *gin.Context) {
 
 func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 	var params aps
-	ctx.ShouldBindUri(&params)
-
-	contentType := ctx.ContentType()
-	if contentType != "application/pkcs10" {
-		ctx.JSON(400, gin.H{"err": "content-type must be application/pkcs10"})
-		return
-	}
-
-	data, err := io.ReadAll(ctx.Request.Body)
+	err := ctx.ShouldBindUri(&params)
 	if err != nil {
-		ctx.JSON(400, gin.H{"err": fmt.Sprintf("could not read the body payload: %s", err)})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
-	dec, err := base64.StdEncoding.DecodeString(string(data))
+	csr, err := commonEnroll(ctx)
 	if err != nil {
-		ctx.JSON(400, gin.H{"err": "body payload must be base64 encoded"})
+		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
 
-	csr, err := x509.ParseCertificateRequest(dec)
-	if err != nil {
-		ctx.JSON(400, gin.H{"err": fmt.Sprintf("could not parse the payload into a csr: %s", err)})
-		return
-	}
-
-	if bitSize := ctx.GetHeader("Bit-Size"); bitSize != "" {
-		lEst.Debugf("Bit-Size header present with value %s", bitSize)
-		bitSizeInt, err := strconv.Atoi(bitSize)
-		if err != nil {
-			lEst.Warnf("Bit-Size header with non numerical value")
-		} else {
-			ctx.Set(models.ESTServerKeyGenBitSize, bitSizeInt)
-		}
-	}
-
-	if keyType := ctx.GetHeader("Key-Type"); keyType != "" {
-		lEst.Debugf("Key-Type header present with value %s", keyType)
-		switch keyType {
-		case x509.RSA.String():
-			lEst.Debugf("valid Key-Type header")
-			ctx.Set(models.ESTServerKeyGenBitSize, x509.RSA)
-		case x509.ECDSA.String():
-			lEst.Debugf("valid Key-Type header")
-			ctx.Set(models.ESTServerKeyGenBitSize, x509.ECDSA)
-		default:
-			lEst.Warnf("invalid Key-Type header")
-		}
-	}
-
-	var key any
 	var signedCrt *x509.Certificate
-	if strings.Contains(ctx.Request.URL.Path, "serverkeygen") {
-		signedCrt, key, err = r.svc.ServerKeyGen(ctx, csr, params.APS)
-		fmt.Println(key)
-	} else if strings.Contains(ctx.Request.URL.Path, "simplereenroll") {
+	if strings.Contains(ctx.Request.URL.Path, "simplereenroll") {
 		signedCrt, err = r.svc.Reenroll(ctx, csr, params.APS)
 	} else {
 		signedCrt, err = r.svc.Enroll(ctx, csr, params.APS)
@@ -175,7 +131,76 @@ func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 	ctx.Writer.Write(body)
 }
 
-type MultipartPart struct {
+func commonEnroll(ctx *gin.Context) (*x509.CertificateRequest, error) {
+	contentType := ctx.ContentType()
+	if contentType != "application/pkcs10" {
+		return nil, fmt.Errorf("content-type must be application/pkcs10")
+	}
+
+	data, err := io.ReadAll(ctx.Request.Body)
+	if err != nil {
+		return nil, fmt.Errorf("could not read the body payload: %s", err)
+	}
+
+	dec, err := base64.StdEncoding.DecodeString(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("body payload must be base64 encoded")
+	}
+
+	csr, err := x509.ParseCertificateRequest(dec)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse the payload into a csr: %s", err)
+	}
+
+	return csr, nil
+}
+
+func (r *estHttpRoutes) ServerKeyGen(ctx *gin.Context) {
+	var params aps
+	err := ctx.ShouldBindUri(&params)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	csr, err := commonEnroll(ctx)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	crt, key, err := r.svc.ServerKeyGen(ctx, csr, params.APS)
+	if err != nil {
+		ctx.JSON(500, gin.H{"err": err.Error()})
+		return
+	}
+
+	keyBytes, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		ctx.JSON(500, gin.H{"err": err.Error()})
+		return
+	}
+
+	buf, contentType, err := encodeMultiPart(
+		"estServerLamassuBoundary",
+		[]multipartPart{
+			{ContentType: "application/pkcs8", Data: keyBytes},
+			{ContentType: "application/pkcs7-mime; smime-type=certs-only", Data: crt},
+		},
+	)
+	if err != nil {
+		ctx.JSON(500, gin.H{"err": err.Error()})
+		return
+	}
+
+	ctx.Writer.Header().Set("Content-Type", contentType)
+	ctx.Writer.Header().Set("Content-Transfer-Encoding", "base64")
+
+	ctx.Writer.WriteHeader(http.StatusOK)
+	ctx.Writer.Write(buf.Bytes())
+}
+
+type multipartPart struct {
 	ContentType string
 	Data        interface{}
 }
@@ -189,29 +214,6 @@ func base64Encode(src []byte) []byte {
 	enc := make([]byte, base64.StdEncoding.EncodedLen(len(src)))
 	base64.StdEncoding.Encode(enc, src)
 	return breakLines(enc, base64LineLength)
-}
-
-// base64Decode base64-decodes a slice of bytes using standard encoding.
-func base64Decode(src []byte) ([]byte, error) {
-	dec := make([]byte, base64.StdEncoding.DecodedLen(len(src)))
-	n, err := base64.StdEncoding.Decode(dec, src)
-	if err != nil {
-		return nil, err
-	}
-	return dec[:n], nil
-}
-func ReadAllBase64Response(r io.Reader) ([]byte, error) {
-	b, err := io.ReadAll(r)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read HTTP response body: %w", err)
-	}
-
-	decoded, err := base64Decode(b)
-	if err != nil {
-		return nil, fmt.Errorf("failed to base64-decode HTTP response body: %w", err)
-	}
-
-	return []byte(decoded), nil
 }
 
 // encodePKCS7CertsOnly encodes a slice of certificates as a PKCS#7 degenerate
@@ -232,18 +234,6 @@ func DecodePKCS7CertsOnly(b []byte) ([]*x509.Certificate, error) {
 		return nil, err
 	}
 	return p7.Certificates, nil
-}
-func ReadCertResponse(r io.Reader) ([]*x509.Certificate, error) {
-	p7, err := ReadAllBase64Response(r)
-	if err != nil {
-		return nil, err
-	}
-
-	certs, err := DecodePKCS7CertsOnly(p7)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode PKCS7: %w", err)
-	}
-	return certs, nil
 }
 
 // breakLines inserts a CRLF line break in the provided slice of bytes every n
@@ -277,7 +267,7 @@ func breakLines(b []byte, n int) []byte {
 	return buf.Bytes()
 }
 
-func EncodeMultiPart(boundary string, parts []MultipartPart) (*bytes.Buffer, string, error) {
+func encodeMultiPart(boundary string, parts []multipartPart) (*bytes.Buffer, string, error) {
 	buf := bytes.NewBuffer([]byte{})
 	w := multipart.NewWriter(buf)
 	if err := w.SetBoundary(boundary); err != nil {

@@ -4,11 +4,6 @@ import "crypto/x509"
 
 type ESTAuthMode string
 
-const (
-	ESTServerKeyGenBitSize = "ESTServerKeyGenBitSize"
-	ESTServerKeyGenKeyType = "ESTServerKeyGenKeyType"
-)
-
 type ESTServerAuthOptionsClientCertificate struct {
 	ClientCertificate *x509.Certificate
 }
