@@ -5,7 +5,7 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/cloudevents/sdk-go/v2/event"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/sirupsen/logrus"
 )
@@ -14,15 +14,14 @@ type IEventHandler interface {
 	HandleEvent(event *message.Message) error
 }
 
-type EventHandler[T any] struct {
+type EventHandler struct {
 	lMessaging *logrus.Entry
-	svc        T
 	dipatchMap map[string]func(*event.Event) error
 }
 
-func (h EventHandler[T]) HandleEvent(m *message.Message) error {
+func (h EventHandler) HandleEvent(m *message.Message) error {
 	h.lMessaging.Infof("Received event: %s", m.Payload)
-	event, err := eventbus.ParseCloudEvent(m.Payload)
+	event, err := helpers.ParseCloudEvent(m.Payload)
 	if err != nil {
 		err = fmt.Errorf("something went wrong while processing cloud event: %s", err)
 		h.lMessaging.Error(err)

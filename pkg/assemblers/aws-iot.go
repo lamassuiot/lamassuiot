@@ -36,20 +36,12 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 		logrus.Fatal(err)
 	}
 
-	eventBusRouter, err := eventbus.NewEventBusRouter(conf.SubscriberEventBus, "aws-connector", lMessaging)
-	if err != nil {
-		return nil, fmt.Errorf("could not setup event bus: %s", err)
-	}
-
-	sub, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, "aws-connector", lMessaging)
-	if err != nil {
-		lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
-		return nil, err
-	}
-
 	handler := handlers.NewAWSIoTEventHandler(lMessaging, *awsConnectorSvc)
-	eventBusRouter.AddNoPublisherHandler("#-aws-connector", "#", sub, handler.HandleEvent)
-	go eventBusRouter.Run(context.Background())
+	subHandler, err := eventbus.NewEventBusSubscriptionHandler(conf.SubscriberEventBus, "aws-connector", lMessaging, *handler, "#-aws-connector", "#")
+	if err != nil {
+		lMessaging.Errorf("could not generate Event Bus Subscription Handler: %s", err)
+	}
+	subHandler.RunAsync()
 
 	go func() {
 		lSvc.Infof("starting SQS thread")

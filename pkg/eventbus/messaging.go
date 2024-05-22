@@ -11,12 +11,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type MessagingEngine struct {
-	serviceID  string
-	publisher  message.Publisher
-	subscriber message.Subscriber
-}
-
 func NewEventBusRouter(conf config.EventBusEngine, serviceID string, logger *logrus.Entry) (*message.Router, error) {
 	lEventBus := newWithLogger(logger.WithField("subsystem-provider", "EventBus - Router"))
 

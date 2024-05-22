@@ -45,9 +45,8 @@ func TestHandleEvent(t *testing.T) {
 		},
 	}
 
-	handler := EventHandler[MockService]{
+	handler := EventHandler{
 		lMessaging: entry,
-		svc:        MockService{},
 		dipatchMap: dispatchMap,
 	}
 
@@ -111,9 +110,8 @@ func TestHandleAnyEvent(t *testing.T) {
 		},
 	}
 
-	handler := EventHandler[MockService]{
+	handler := EventHandler{
 		lMessaging: entry,
-		svc:        MockService{},
 		dipatchMap: dispatchMap,
 	}
 

@@ -9,10 +9,9 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewAlertsEventHandler(l *logrus.Entry, svc services.AlertsService) *EventHandler[services.AlertsService] {
-	return &EventHandler[services.AlertsService]{
+func NewAlertsEventHandler(l *logrus.Entry, svc services.AlertsService) *EventHandler {
+	return &EventHandler{
 		lMessaging: l,
-		svc:        svc,
 		dipatchMap: map[string]func(*event.Event) error{
 			string(models.EventAnyKey): func(e *event.Event) error {
 				return svc.HandleEvent(context.Background(), &services.HandleEventInput{

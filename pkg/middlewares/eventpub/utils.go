@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	headerextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/basic-header-extractors"
 	"github.com/sirupsen/logrus"
@@ -30,7 +30,7 @@ func (cemp *CloudEventMiddlewarePublisher) PublishCloudEvent(ctx context.Context
 		}
 	}
 
-	event := eventbus.BuildCloudEvent(string(eventType), src, payload)
+	event := helpers.BuildCloudEvent(string(eventType), src, payload)
 	eventBytes, marshalErr := json.Marshal(event)
 	if marshalErr != nil {
 		cemp.Logger.Errorf("error while serializing event: %s", marshalErr)

@@ -1,4 +1,4 @@
-package eventbus
+package helpers
 
 import (
 	"encoding/json"

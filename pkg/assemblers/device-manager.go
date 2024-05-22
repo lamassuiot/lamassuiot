@@ -1,7 +1,6 @@
 package assemblers
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
@@ -73,23 +72,17 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 	}
 
 	if conf.SubscriberEventBus.Enabled {
+
 		lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Device Manager", "Event Bus")
 		lMessaging.Infof("Subscriber Event Bus is enabled")
 
-		eventBusRouter, err := eventbus.NewEventBusRouter(conf.SubscriberEventBus, serviceID, lMessaging)
-		if err != nil {
-			return nil, fmt.Errorf("could not create Event Bus Router: %s", err)
-		}
-
-		sub, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
-		if err != nil {
-			return nil, fmt.Errorf("could not create Event Bus subscriber: %s", err)
-		}
-
 		handler := handlers.NewDeviceEventHandler(lMessaging, svc)
-		eventBusRouter.AddNoPublisherHandler(fmt.Sprintf("certificate.#-%s", serviceID), "certificate.#", sub, handler.HandleEvent)
+		subHandler, err := eventbus.NewEventBusSubscriptionHandler(conf.SubscriberEventBus, serviceID, lMessaging, *handler, fmt.Sprintf("certificate.#-%s", serviceID), "certificate.#")
+		if err != nil {
+			return nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
+		}
+		subHandler.RunAsync()
 
-		go eventBusRouter.Run(context.Background())
 	}
 
 	return &svc, nil

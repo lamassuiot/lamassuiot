@@ -6,7 +6,6 @@ import (
 	"slices"
 
 	"github.com/cloudevents/sdk-go/v2/event"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	lms_slices "github.com/lamassuiot/lamassuiot/v2/pkg/helpers/slices"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
@@ -16,10 +15,9 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewAWSIoTEventHandler(l *logrus.Entry, svc iot.AWSCloudConnectorService) *EventHandler[iot.AWSCloudConnectorService] {
-	return &EventHandler[iot.AWSCloudConnectorService]{
+func NewAWSIoTEventHandler(l *logrus.Entry, svc iot.AWSCloudConnectorService) *EventHandler {
+	return &EventHandler{
 		lMessaging: l,
-		svc:        svc,
 		dipatchMap: map[string]func(*event.Event) error{
 			string(models.EventBindDeviceIdentityKey):        func(e *event.Event) error { return handlerWarpper(e, svc, l, bindDeviceIdentityHandler) },
 			string(models.EventUpdateDeviceMetadataKey):      func(e *event.Event) error { return handlerWarpper(e, svc, l, updateDeviceMetadataHandler) },
@@ -59,7 +57,7 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc iot.AW
 	var err error
 	switch event.Type() {
 	case string(models.EventUpdateCAMetadataKey):
-		updatedCA, err := eventbus.GetEventBody[models.UpdateModel[models.CACertificate]](event)
+		updatedCA, err := helpers.GetEventBody[models.UpdateModel[models.CACertificate]](event)
 		if err != nil {
 			logDecodeError(logger, event.ID(), event.Type(), "UpdateModel CACertificate", err)
 			return nil
@@ -67,7 +65,7 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc iot.AW
 
 		ca = &updatedCA.Updated
 	default:
-		ca, err = eventbus.GetEventBody[models.CACertificate](event)
+		ca, err = helpers.GetEventBody[models.CACertificate](event)
 		if err != nil {
 			logDecodeError(logger, event.ID(), event.Type(), "CACertificate", err)
 			return nil
@@ -108,13 +106,13 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc iot.A
 	var updatedDMS *models.UpdateModel[models.DMS]
 
 	if event.Type() == string(models.EventCreateDMSKey) {
-		dms, err = eventbus.GetEventBody[models.DMS](event)
+		dms, err = helpers.GetEventBody[models.DMS](event)
 		if err != nil {
 			logDecodeError(logger, event.ID(), event.Type(), "DMS", err)
 			return nil
 		}
 	} else {
-		updatedDMS, err = eventbus.GetEventBody[models.UpdateModel[models.DMS]](event)
+		updatedDMS, err = helpers.GetEventBody[models.UpdateModel[models.DMS]](event)
 		if err != nil {
 			logDecodeError(logger, event.ID(), event.Type(), "UpdateModel DMS", err)
 			return nil
@@ -181,7 +179,7 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc iot.A
 }
 
 func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, svc iot.AWSCloudConnectorService, logger *logrus.Entry) error {
-	certUpdate, err := eventbus.GetEventBody[models.UpdateModel[models.Certificate]](event)
+	certUpdate, err := helpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
 	if err != nil {
 		logDecodeError(logger, event.ID(), event.Type(), "Certificate", err)
 		return nil
@@ -258,7 +256,7 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 }
 
 func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc iot.AWSCloudConnectorService, logger *logrus.Entry) error {
-	deviceUpdate, err := eventbus.GetEventBody[models.UpdateModel[models.Device]](event)
+	deviceUpdate, err := helpers.GetEventBody[models.UpdateModel[models.Device]](event)
 	if err != nil {
 		logDecodeError(logger, event.ID(), event.Type(), "Device", err)
 		return nil
@@ -317,7 +315,7 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc io
 }
 
 func bindDeviceIdentityHandler(ctx context.Context, event *event.Event, svc iot.AWSCloudConnectorService, logger *logrus.Entry) error {
-	bindEvent, err := eventbus.GetEventBody[models.BindIdentityToDeviceOutput](event)
+	bindEvent, err := helpers.GetEventBody[models.BindIdentityToDeviceOutput](event)
 	if err != nil {
 		logDecodeError(logger, event.ID(), event.Type(), "Certificate", err)
 		return nil
