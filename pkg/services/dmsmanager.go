@@ -696,9 +696,15 @@ func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.
 	keyType := dms.Settings.ServerKeyGen.Key.Type
 	keySize := dms.Settings.ServerKeyGen.Key.Bits
 
+	//remove signature algorithm from csr
+	csr.SignatureAlgorithm = x509.UnknownSignatureAlgorithm
+
 	switch x509.PublicKeyAlgorithm(keyType) {
 	case x509.RSA:
 		privKey, err = rsa.GenerateKey(rand.Reader, keySize)
+		if err != nil {
+			return nil, nil, err
+		}
 	case x509.ECDSA:
 		var curve elliptic.Curve
 		switch keySize {

@@ -823,7 +823,7 @@ func TestESTEnroll(t *testing.T) {
 
 func TestESTServerKeyGen(t *testing.T) {
 	// t.Parallel()
-	// ctx := context.Background()
+	ctx := context.Background()
 
 	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
@@ -833,7 +833,7 @@ func TestESTServerKeyGen(t *testing.T) {
 	createCA := func(name string, lifespan string, issuance string) (*models.CACertificate, error) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
 		issuanceCABootDur, _ := models.ParseDuration(issuance)
-		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+		return testServers.CA.Service.CreateCA(ctx, services.CreateCAInput{
 			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
 			Subject:            models.Subject{CommonName: name},
 			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
@@ -890,7 +890,7 @@ func TestESTServerKeyGen(t *testing.T) {
 
 		modifier(&input)
 
-		return dmsMgr.Service.CreateDMS(context.Background(), input)
+		return dmsMgr.Service.CreateDMS(ctx, input)
 	}
 
 	var testcases = []struct {
@@ -927,7 +927,7 @@ func TestESTServerKeyGen(t *testing.T) {
 
 				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					SignVerbatim: true,
@@ -955,7 +955,7 @@ func TestESTServerKeyGen(t *testing.T) {
 					CommonName: deviceID,
 				}
 
-				enrollCRT, enrollKey, err := estCli.ServerKeyGen(context.Background(), enrollCSR)
+				enrollCRT, enrollKey, err := estCli.ServerKeyGen(ctx, enrollCSR)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
@@ -1024,7 +1024,7 @@ func TestESTServerKeyGen(t *testing.T) {
 
 				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					SignVerbatim: true,
@@ -1052,7 +1052,7 @@ func TestESTServerKeyGen(t *testing.T) {
 					CommonName: deviceID,
 				}
 
-				enrollCRT, enrollKey, err := estCli.ServerKeyGen(context.Background(), enrollCSR)
+				enrollCRT, enrollKey, err := estCli.ServerKeyGen(ctx, enrollCSR)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
