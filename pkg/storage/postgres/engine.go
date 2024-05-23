@@ -8,6 +8,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+func init() {
+	storage.RegisterStorageEngine(config.Postgres, func(logger *log.Entry, conf config.PluggableStorageEngine) (storage.StorageEngine, error) {
+		return NewStorageEngine(logger, conf.Postgres)
+	})
+}
+
 const (
 	CA_DB_NAME     = "ca"
 	DEVICE_DB_NAME = "devicemanager"
