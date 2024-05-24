@@ -1,3 +1,6 @@
+//go:build experimental
+// +build experimental
+
 package couchdb
 
 import (
@@ -8,6 +11,12 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
 	log "github.com/sirupsen/logrus"
 )
+
+func init() {
+	storage.RegisterStorageEngine(config.CouchDB, func(logger *log.Entry, conf config.PluggableStorageEngine) (storage.StorageEngine, error) {
+		return NewStorageEngine(logger, conf.CouchDB)
+	})
+}
 
 type CouchDBStorageEngine struct {
 	storage.CommonStorageEngine
