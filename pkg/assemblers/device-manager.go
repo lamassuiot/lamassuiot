@@ -65,7 +65,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
 
-		svc = eventpub.NewDeviceEventPublisher(eventpub.CloudEventMiddlewarePublisher{
+		svc = eventpub.NewDeviceEventPublisher(&eventpub.CloudEventMiddlewarePublisher{
 			Publisher: pub,
 			ServiceID: serviceID,
 			Logger:    lMessaging,

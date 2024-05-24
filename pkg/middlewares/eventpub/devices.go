@@ -10,10 +10,10 @@ import (
 
 type deviceEventPublisher struct {
 	next       services.DeviceManagerService
-	eventMWPub CloudEventMiddlewarePublisher
+	eventMWPub ICloudEventMiddlewarePublisher
 }
 
-func NewDeviceEventPublisher(eventMWPub CloudEventMiddlewarePublisher) services.DeviceMiddleware {
+func NewDeviceEventPublisher(eventMWPub ICloudEventMiddlewarePublisher) services.DeviceMiddleware {
 	return func(next services.DeviceManagerService) services.DeviceManagerService {
 		return &deviceEventPublisher{
 			next:       next,

@@ -10,10 +10,10 @@ import (
 
 type CAEventPublisher struct {
 	Next       services.CAService
-	eventMWPub CloudEventMiddlewarePublisher
+	eventMWPub ICloudEventMiddlewarePublisher
 }
 
-func NewCAEventBusPublisher(eventMWPub CloudEventMiddlewarePublisher) services.CAMiddleware {
+func NewCAEventBusPublisher(eventMWPub ICloudEventMiddlewarePublisher) services.CAMiddleware {
 	return func(next services.CAService) services.CAService {
 		return &CAEventPublisher{
 			Next:       next,
@@ -130,7 +130,7 @@ func (mw CAEventPublisher) CreateCertificate(ctx context.Context, input services
 func (mw CAEventPublisher) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (output *models.Certificate, err error) {
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, "ca.certificate.import", output)
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventImportCACertificateKey, output)
 		}
 	}()
 	return mw.Next.ImportCertificate(ctx, input)

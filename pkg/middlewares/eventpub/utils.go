@@ -11,6 +11,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type ICloudEventMiddlewarePublisher interface {
+	PublishCloudEvent(ctx context.Context, eventType models.EventType, payload interface{})
+}
+
 type CloudEventMiddlewarePublisher struct {
 	Publisher message.Publisher
 	ServiceID string
