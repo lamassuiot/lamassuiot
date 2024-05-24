@@ -22,7 +22,7 @@ type DMS struct {
 }
 
 type DMSSettings struct {
-	ServerKeyGen           ServerKeyGenSettings   `json:"server_keygen_settings,omitempty"`
+	ServerKeyGen           *ServerKeyGenSettings  `json:"server_keygen_settings"`
 	EnrollmentSettings     EnrollmentSettings     `json:"enrollment_settings"`
 	ReEnrollmentSettings   ReEnrollmentSettings   `json:"reenrollment_settings"`
 	CADistributionSettings CADistributionSettings `json:"ca_distribution_settings"`

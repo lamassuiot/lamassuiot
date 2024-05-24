@@ -1321,7 +1321,7 @@ func TestESTServerKeyGen(t *testing.T) {
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
-				ServerKeyGen: models.ServerKeyGenSettings{
+				ServerKeyGen: &models.ServerKeyGenSettings{
 					Enabled: true,
 					Key: models.ServerKeyGenKey{
 						Type: models.KeyType(x509.RSA),
