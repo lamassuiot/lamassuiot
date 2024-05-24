@@ -12,7 +12,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func init() {
+func Register() {
 	storage.RegisterStorageEngine(config.CouchDB, func(logger *log.Entry, conf config.PluggableStorageEngine) (storage.StorageEngine, error) {
 		return NewStorageEngine(logger, conf.CouchDB)
 	})

@@ -8,7 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func init() {
+func Register() {
 	storage.RegisterStorageEngine(config.Postgres, func(logger *log.Entry, conf config.PluggableStorageEngine) (storage.StorageEngine, error) {
 		return NewStorageEngine(logger, conf.Postgres)
 	})
