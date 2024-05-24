@@ -47,7 +47,7 @@ func (mw dmsEventPublisher) UpdateDMS(ctx context.Context, input services.Update
 	}
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateDMSMetadataKey, models.UpdateModel[models.DMS]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateDMSKey, models.UpdateModel[models.DMS]{
 				Previous: *prev,
 				Updated:  *output,
 			})

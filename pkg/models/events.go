@@ -35,7 +35,7 @@ const (
 	EventUpdateCertificateMetadataKey EventType = "certificate.metadata.update"
 
 	EventCreateDMSKey          EventType = "dms.create"
-	EventUpdateDMSMetadataKey  EventType = "dms.metadata.update"
+	EventUpdateDMSKey          EventType = "dms.update"
 	EventEnrollKey             EventType = "dms.enroll"
 	EventReEnrollKey           EventType = "dms.reenroll"
 	EventBindDeviceIdentityKey EventType = "dms.bind-device-id"

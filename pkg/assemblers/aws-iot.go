@@ -288,7 +288,7 @@ func mainAwsConnectorEventHandler(event *event.Event, svc iot.AWSCloudConnectorS
 
 		return nil
 
-	case string(models.EventCreateDMSKey), string(models.EventUpdateDMSMetadataKey):
+	case string(models.EventCreateDMSKey), string(models.EventUpdateDMSKey):
 		var dms *models.DMS
 		var err error
 
