@@ -360,7 +360,11 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 					NewStatus:        models.StatusRevoked,
 					RevocationReason: ocsp.Superseded,
 				})
-				lFunc.Errorf("could not revoke certificate %s: %s", device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion], err)
+				if err != nil {
+					lFunc.Errorf("could not revoke certificate %s: %s", device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion], err)
+				} else {
+					lFunc.Infof("revoked certificate %s successfully", device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion])
+				}
 			}()
 		} else {
 			lFunc.Debugf("DMS '%s' forbids new enrollments. aborting enrollment process for device '%s'. consider switching NewEnrollment option ON in the DMS", dms.ID, csr.Subject.CommonName)
