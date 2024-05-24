@@ -60,12 +60,18 @@ type PluggableStorageEngine struct {
 
 	CouchDB  CouchDBPSEConfig  `mapstructure:"couch_db"`
 	Postgres PostgresPSEConfig `mapstructure:"postgres"`
+	SQLite   SQLitePSEConfig   `mapstructure:"sqlite"`
 }
 
 type CouchDBPSEConfig struct {
 	HTTPConnection `mapstructure:",squash"`
 	Username       string   `mapstructure:"username"`
 	Password       Password `mapstructure:"password"`
+}
+
+type SQLitePSEConfig struct {
+	DatabasePath string `mapstructure:"database_path"`
+	InMemory     bool   `mapstructure:"in_memory"`
 }
 
 type PostgresPSEConfig struct {

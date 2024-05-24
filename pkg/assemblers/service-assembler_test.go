@@ -14,9 +14,11 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/sqlite"
 	rabbitmq_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/async-messaging/rabbitmq"
 	vault_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/keyvaultkv2"
 	postgres_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/storage/postgres"
+	sqlite_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/storage/sqlite"
 )
 
 type CryptoEngine int
@@ -115,6 +117,51 @@ func PrepareRabbitMQForTest() (*TestEventBusConfig, error) {
 		BeforeEach: func() error {
 			return nil
 		},
+	}, nil
+}
+
+func PrepareSQLiteForTest(dbs []string) (*TestStorageEngineConfig, error) {
+
+	cfg := config.SQLitePSEConfig{
+		InMemory:     false,
+		DatabasePath: "/mnt/c/Temp",
+	}
+
+	sqliteTest := sqlite_test.BeforeSuite(cfg, dbs)
+
+	return &TestStorageEngineConfig{
+		config: config.PluggableStorageEngine{LogLevel: config.Info, Provider: config.SQLite, SQLite: cfg},
+		BeforeEach: func() error {
+			sqliteTest.BeforeEach()
+			for _, dbName := range dbs {
+				switch dbName {
+				case "ca":
+					_, err := sqlite.NewCARepository(sqliteTest.DB[dbName])
+					if err != nil {
+						return fmt.Errorf("could not run reinitialize CA tables: %s", err)
+					}
+				case "certificates":
+					_, err := sqlite.NewCertificateRepository(sqliteTest.DB[dbName])
+					if err != nil {
+						return fmt.Errorf("could not run reinitialize Certificates tables: %s", err)
+					}
+				case "devicemanager":
+					_, err := sqlite.NewDeviceManagerRepository(sqliteTest.DB[dbName])
+					if err != nil {
+						return fmt.Errorf("could not run reinitialize DeviceManager tables: %s", err)
+					}
+				case "dmsmanager":
+					_, err := sqlite.NewDMSManagerRepository(sqliteTest.DB[dbName])
+					if err != nil {
+						return fmt.Errorf("could not run reinitialize DMSManager tables: %s", err)
+					}
+				default:
+					return fmt.Errorf("unknown db name: %s", dbName)
+				}
+			}
+			return nil
+		},
+		AfterSuite: sqliteTest.AfterSuite,
 	}, nil
 }
 
