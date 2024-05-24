@@ -1,16 +1,15 @@
 package assemblers
 
 import (
-	"context"
 	"fmt"
 
-	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/services/handlers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/builder"
 	log "github.com/sirupsen/logrus"
@@ -53,41 +52,16 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 
 	if conf.SubscriberEventBus.Enabled {
 		log.Infof("Event Bus is enabled")
-		eventBusRouter, err := eventbus.NewEventBusRouter(conf.SubscriberEventBus, "alerts", lMessaging)
-		if err != nil {
-			return nil, fmt.Errorf("could not setup event bus: %s", err)
-		}
 
-		sub, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, "alerts", lMessaging)
+		handler := handlers.NewAlertsEventHandler(lMessaging, svc)
+		subHandler, err := eventbus.NewEventBusSubscriptionHandler(conf.SubscriberEventBus, "alerts", lMessaging, *handler, "alerts", "#")
 		if err != nil {
-			lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
-			return nil, err
+			lMessaging.Errorf("could not generate Event Bus Subscription Handler: %s", err)
 		}
-
-		eventBusRouter.AddNoPublisherHandler("#-alerts", "#", sub, GetAlertsEventHandler(lMessaging, svc))
-		go eventBusRouter.Run(context.Background())
+		subHandler.RunAsync()
 	}
 
 	return &svc, nil
-}
-
-func GetAlertsEventHandler(lMessaging *log.Entry, svc services.AlertsService) func(*message.Message) error {
-	return func(m *message.Message) error {
-		event, err := eventbus.ParseCloudEvent(m.Payload)
-		if err != nil {
-			lMessaging.Errorf("Something went wrong while processing cloud event: %s", err)
-		}
-
-		err = svc.HandleEvent(context.Background(), &services.HandleEventInput{
-			Event: *event,
-		})
-		if err != nil {
-			lMessaging.Errorf("Something went wrong while handling event: %s", err)
-			return err
-		}
-
-		return nil
-	}
 }
 
 func createAlertsStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine) (storage.SubscriptionsRepository, storage.EventRepository, error) {

@@ -45,4 +45,6 @@ const (
 	EventUpdateDeviceIDSlotKey   EventType = "device.identity.update"
 	EventUpdateDeviceStatusKey   EventType = "device.status.update"
 	EventUpdateDeviceMetadataKey EventType = "device.metadata.update"
+
+	EventAnyKey EventType = "any"
 )

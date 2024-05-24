@@ -138,7 +138,7 @@ func TestDMSEventPublisher(t *testing.T) {
 		{
 			name: "UpdateDMS with errors - Not fire event",
 			test: func(t *testing.T) {
-				dmsWithErrors(t, "UpdateDMS", services.UpdateDMSInput{}, models.EventUpdateDMSMetadataKey, &models.DMS{},
+				dmsWithErrors(t, "UpdateDMS", services.UpdateDMSInput{}, models.EventUpdateDMSKey, &models.DMS{},
 					func(mockCAService *svcmock.MockDMSManagerService) {
 						mockCAService.On("GetDMSByID", context.Background(), mock.Anything).Return(&models.DMS{}, nil)
 					})
@@ -147,7 +147,7 @@ func TestDMSEventPublisher(t *testing.T) {
 		{
 			name: "UpdateDMS without errors - fire event",
 			test: func(t *testing.T) {
-				dmsWithoutErrors(t, "UpdateDMS", services.UpdateDMSInput{}, models.EventUpdateDMSMetadataKey, &models.DMS{},
+				dmsWithoutErrors(t, "UpdateDMS", services.UpdateDMSInput{}, models.EventUpdateDMSKey, &models.DMS{},
 					func(mockCAService *svcmock.MockDMSManagerService) {
 						mockCAService.On("GetDMSByID", context.Background(), mock.Anything).Return(&models.DMS{}, nil)
 					})
