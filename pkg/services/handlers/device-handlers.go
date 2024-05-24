@@ -15,7 +15,7 @@ import (
 func NewDeviceEventHandler(l *logrus.Entry, svc services.DeviceManagerService) *EventHandler {
 	return &EventHandler{
 		lMessaging: l,
-		dipatchMap: map[string]func(*event.Event) error{
+		dispatchMap: map[string]func(*event.Event) error{
 			string(models.EventUpdateCertificateMetadataKey): func(m *event.Event) error { return updateCertMetaHandler(m, svc, l) },
 			string(models.EventUpdateCertificateStatusKey):   func(m *event.Event) error { return updateCertStatusHandler(m, svc, l) },
 		},

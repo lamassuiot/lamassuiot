@@ -15,8 +15,8 @@ type IEventHandler interface {
 }
 
 type EventHandler struct {
-	lMessaging *logrus.Entry
-	dipatchMap map[string]func(*event.Event) error
+	lMessaging  *logrus.Entry
+	dispatchMap map[string]func(*event.Event) error
 }
 
 func (h EventHandler) HandleEvent(m *message.Message) error {
@@ -28,11 +28,11 @@ func (h EventHandler) HandleEvent(m *message.Message) error {
 		return err
 	}
 
-	handler, ok := h.dipatchMap[event.Type()]
+	handler, ok := h.dispatchMap[event.Type()]
 	if !ok {
 		h.lMessaging.Warnf("No handler found for event type: %s", event.Type())
 
-		handler, ok = h.dipatchMap[string(models.EventAnyKey)]
+		handler, ok = h.dispatchMap[string(models.EventAnyKey)]
 		if !ok {
 			h.lMessaging.Warnf("No default handler found for event type: %s", event.Type())
 			return nil

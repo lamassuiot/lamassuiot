@@ -46,8 +46,8 @@ func TestHandleEvent(t *testing.T) {
 	}
 
 	handler := EventHandler{
-		lMessaging: entry,
-		dipatchMap: dispatchMap,
+		lMessaging:  entry,
+		dispatchMap: dispatchMap,
 	}
 
 	t.Run("ValidEvent", func(t *testing.T) {
@@ -111,8 +111,8 @@ func TestHandleAnyEvent(t *testing.T) {
 	}
 
 	handler := EventHandler{
-		lMessaging: entry,
-		dipatchMap: dispatchMap,
+		lMessaging:  entry,
+		dispatchMap: dispatchMap,
 	}
 
 	message := &message.Message{
