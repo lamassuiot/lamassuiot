@@ -29,15 +29,6 @@ func NewHttpCAClient(client *http.Client, url string) services.CAService {
 	}
 }
 
-func (cli *httpCAClient) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
-	engine, err := Get[[]*models.CryptoEngineProvider](ctx, cli.httpClient, cli.baseUrl+"/v1/engines", nil, map[int][]error{})
-	if err != nil {
-		return nil, err
-	}
-
-	return engine, nil
-}
-
 func (cli *httpCAClient) GetStats(ctx context.Context) (*models.CAStats, error) {
 	stats, err := Get[*models.CAStats](ctx, cli.httpClient, cli.baseUrl+"/v1/stats", nil, map[int][]error{})
 	if err != nil {

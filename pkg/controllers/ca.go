@@ -49,20 +49,6 @@ func NewCAHttpRoutes(svc services.CAService) *caHttpRoutes {
 	}
 }
 
-func (r *caHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
-	engine, err := r.svc.GetCryptoEngineProvider(ctx)
-	if err != nil {
-		switch err {
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
-		return
-	}
-
-	ctx.JSON(200, engine)
-}
-
 // @Summary Create CA
 // @Description Create CA
 // @Accept json

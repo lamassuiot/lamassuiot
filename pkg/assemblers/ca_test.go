@@ -30,51 +30,6 @@ import (
 const DefaultCAID = "111111-2222"
 const DefaultCACN = "MyCA"
 
-func TestCryptoEngines(t *testing.T) {
-	serverTest, err := StartCAServiceTestServer(t, false)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-	caTest := serverTest.CA
-
-	var testcases = []struct {
-		name        string
-		resultCheck func(engines []*models.CryptoEngineProvider, err error) error
-	}{
-		{
-			name: "OK/Got-2-Engines",
-			resultCheck: func(engines []*models.CryptoEngineProvider, err error) error {
-				if err != nil {
-					return fmt.Errorf("should've got no error, but got one: %s", err)
-				}
-
-				if len(engines) != 2 {
-					return fmt.Errorf("should've got two engines, but got %d", len(engines))
-				}
-
-				return nil
-			},
-		},
-	}
-
-	for _, tc := range testcases {
-		tc := tc
-
-		t.Run(tc.name, func(t *testing.T) {
-
-			err = serverTest.BeforeEach()
-			if err != nil {
-				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
-			}
-
-			err = tc.resultCheck(caTest.Service.GetCryptoEngineProvider(context.Background()))
-			if err != nil {
-				t.Fatalf("unexpected result in test case: %s", err)
-			}
-
-		})
-	}
-}
 func TestCreateCA(t *testing.T) {
 	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
@@ -1524,7 +1479,9 @@ func TestImportCA(t *testing.T) {
 				if err != nil {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
-				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
+
+				kmsSDK := serverTest.KMS.Service
+				engines, _ := kmsSDK.GetCryptoEngineProvider(context.Background())
 				var engine *models.CryptoEngineProvider
 
 				if !engines[0].Default {
@@ -2439,7 +2396,7 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
-		run         func(caSDK services.CAService) ([]models.CACertificate, error)
+		run         func(kmsSDK services.KMSService, caSDK services.CAService) ([]models.CACertificate, error)
 		resultCheck func([]models.CACertificate, error) error
 	}{
 		{
@@ -2448,13 +2405,13 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 
 				return nil
 			},
-			run: func(caSDK services.CAService) ([]models.CACertificate, error) {
+			run: func(kmsSDK services.KMSService, caSDK services.CAService) ([]models.CACertificate, error) {
 				var cas []models.CACertificate
 				caDurRootCA := models.TimeDuration(time.Hour * 25)
 				caDurChild1 := models.TimeDuration(time.Hour * 24)
 
 				caIss := models.TimeDuration(time.Minute * 3)
-				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
+				engines, _ := kmsSDK.GetCryptoEngineProvider(context.Background())
 
 				rootCA, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
@@ -2531,7 +2488,7 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 				t.Fatalf("failed running 'before' func in test case: %s", err)
 			}
 
-			err = tc.resultCheck(tc.run(caTest.HttpCASDK))
+			err = tc.resultCheck(tc.run(serverTest.KMS.Service, caTest.HttpCASDK))
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
 			}

@@ -90,6 +90,7 @@ func RunUseCase1(input UseCase1Input) error {
 		return err
 	}
 
+	kmsClient := clients.NewHttpKMSClient(httpCli, fmt.Sprintf("%s://%s:%d/api/kms", protocol, hostname, port))
 	caClient := clients.NewHttpCAClient(httpCli, fmt.Sprintf("%s://%s:%d/api/ca", protocol, hostname, port))
 	dmsClient := clients.NewHttpDMSManagerClient(httpCli, fmt.Sprintf("%s://%s:%d/api/dmsmanager", protocol, hostname, port))
 
@@ -122,7 +123,7 @@ func RunUseCase1(input UseCase1Input) error {
 
 	//3. Create CA2 in Lamassu (Try engine different from default CE. If not possible, use default CE) -> Key Value - V2
 	log.Infof("3. Create CA2 in Lamassu (Try engine different from default CE. If not possible, use default CE) -> Key Value - V2")
-	engines, _ := caClient.GetCryptoEngineProvider(context.Background())
+	engines, _ := kmsClient.GetCryptoEngineProvider(context.Background())
 	caDur2 := models.TimeDuration(time.Hour * 10)
 	caIss2 := models.TimeDuration(time.Minute * 5)
 

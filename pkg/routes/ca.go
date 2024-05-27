@@ -37,7 +37,6 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) 
 	rv1.PUT("/certificates/:sn/metadata", routes.UpdateCertificateMetadata)
 	rv1.POST("/certificates/import", routes.ImportCertificate)
 
-	rv1.GET("/engines", routes.GetCryptoEngineProvider)
 	rv1.GET("/stats", routes.GetStats)
 	rv1.GET("/stats/:id", routes.GetStatsByCAID)
 }

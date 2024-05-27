@@ -43,6 +43,40 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		crtPem := helpers.CertificateToPEM(crt)
 		os.WriteFile("proxy.crt", []byte(crtPem), 0600)
 
+		_, kmsPort, err := lamassu.AssembleKMSServiceWithHTTPServer(config.KMSConfig{
+			Logs: config.BaseConfigLogging{
+				Level: config.Trace,
+			},
+			Server: config.HttpServer{
+				LogLevel:           config.Trace,
+				HealthCheckLogging: true,
+				ListenAddress:      "0.0.0.0",
+				Port:               0,
+				Protocol:           config.HTTP,
+			},
+			CryptoEngines: conf.CryptoEngines,
+		}, apiInfo)
+		if err != nil {
+			return -1, fmt.Errorf("could not assemble KMS Service: %s", err)
+		}
+
+		kmsConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: kmsPort}, Protocol: config.HTTP, BasePath: ""}
+		lKMSClient := helpers.SetupLogger(config.Info, "KMS", "SDK")
+		kmsHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
+			LogLevel:       config.Trace,
+			AuthMode:       config.NoAuth,
+			HTTPConnection: kmsConnection,
+		}, lKMSClient)
+		if err != nil {
+			log.Fatalf("could not build HTTP KMS Client: %s", err)
+		}
+		kmsSDKBuilder := func(src string) services.KMSService {
+			return clients.NewHttpKMSClient(
+				clients.HttpClientWithSourceHeaderInjector(kmsHttpCli, src),
+				fmt.Sprintf("%s://%s%s:%d", kmsConnection.Protocol, kmsConnection.Hostname, kmsConnection.BasePath, kmsConnection.Port),
+			)
+		}
+
 		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
 			Logs: config.BaseConfigLogging{
 				Level: conf.Logs.Level,
@@ -56,10 +90,9 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 			},
 			PublisherEventBus: conf.PublisherEventBus,
 			Storage:           conf.Storage,
-			CryptoEngines:     conf.CryptoEngines,
 			CryptoMonitoring:  conf.CryptoMonitoring,
 			VAServerDomain:    fmt.Sprintf("%s/api/va", conf.Domain),
-		}, apiInfo)
+		}, kmsSDKBuilder("CA"), apiInfo)
 		if err != nil {
 			return -1, fmt.Errorf("could not assemble CA Service: %s", err)
 		}

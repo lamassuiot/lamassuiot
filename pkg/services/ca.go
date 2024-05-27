@@ -3,22 +3,22 @@ package services
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/x509engines"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )
@@ -28,8 +28,6 @@ type CAMiddleware func(CAService) CAService
 type CAService interface {
 	GetStats(ctx context.Context) (*models.CAStats, error)
 	GetStatsByCAID(ctx context.Context, input GetStatsByCAIDInput) (map[models.CertificateStatus]int, error)
-
-	GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error)
 
 	CreateCA(ctx context.Context, input CreateCAInput) (*models.CACertificate, error)
 	ImportCA(ctx context.Context, input ImportCAInput) (*models.CACertificate, error)
@@ -61,26 +59,19 @@ type CAService interface {
 
 var validate *validator.Validate
 
-type Engine struct {
-	Default bool
-	Service cryptoengines.CryptoEngine
-}
-
 type CAServiceBackend struct {
-	service               CAService
-	cryptoEngines         map[string]*cryptoengines.CryptoEngine
-	defaultCryptoEngine   *cryptoengines.CryptoEngine
-	defaultCryptoEngineID string
-	caStorage             storage.CACertificatesRepo
-	certStorage           storage.CertificatesRepo
-	cryptoMonitorConfig   config.CryptoMonitoring
-	vaServerDomain        string
-	logger                *logrus.Entry
+	service             CAService
+	kmsService          KMSService
+	caStorage           storage.CACertificatesRepo
+	certStorage         storage.CertificatesRepo
+	cryptoMonitorConfig config.CryptoMonitoring
+	vaServerDomain      string
+	logger              *logrus.Entry
 }
 
 type CAServiceBuilder struct {
 	Logger               *logrus.Entry
-	CryptoEngines        map[string]*Engine
+	KMSService           KMSService
 	CAStorage            storage.CACertificatesRepo
 	CertificateStorage   storage.CertificatesRepo
 	CryptoMonitoringConf config.CryptoMonitoring
@@ -90,30 +81,13 @@ type CAServiceBuilder struct {
 func NewCAService(builder CAServiceBuilder) (CAService, error) {
 	validate = validator.New()
 
-	engines := map[string]*cryptoengines.CryptoEngine{}
-	var defaultCryptoEngine *cryptoengines.CryptoEngine
-	var defaultCryptoEngineID string
-	for engineID, engineInstance := range builder.CryptoEngines {
-		engines[engineID] = &engineInstance.Service
-		if engineInstance.Default {
-			defaultCryptoEngine = &engineInstance.Service
-			defaultCryptoEngineID = engineID
-		}
-	}
-
-	if defaultCryptoEngine == nil {
-		return nil, fmt.Errorf("could not find the default crypto engine")
-	}
-
 	svc := CAServiceBackend{
-		cryptoEngines:         engines,
-		defaultCryptoEngine:   defaultCryptoEngine,
-		defaultCryptoEngineID: defaultCryptoEngineID,
-		caStorage:             builder.CAStorage,
-		certStorage:           builder.CertificateStorage,
-		cryptoMonitorConfig:   builder.CryptoMonitoringConf,
-		vaServerDomain:        builder.VAServerDomain,
-		logger:                builder.Logger,
+		kmsService:          builder.KMSService,
+		caStorage:           builder.CAStorage,
+		certStorage:         builder.CertificateStorage,
+		cryptoMonitorConfig: builder.CryptoMonitoringConf,
+		vaServerDomain:      builder.VAServerDomain,
+		logger:              builder.Logger,
 	}
 
 	svc.service = &svc
@@ -132,7 +106,7 @@ func (svc *CAServiceBackend) SetService(service CAService) {
 func (svc *CAServiceBackend) GetStats(ctx context.Context) (*models.CAStats, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
-	engines, err := svc.GetCryptoEngineProvider(ctx)
+	engines, err := svc.kmsService.GetCryptoEngineProvider(ctx)
 	if err != nil {
 		lFunc.Errorf("could not get engines: %s", err)
 		return nil, err
@@ -216,28 +190,6 @@ func (svc *CAServiceBackend) GetStatsByCAID(ctx context.Context, input GetStatsB
 	return stats, nil
 }
 
-func (svc *CAServiceBackend) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
-	info := []*models.CryptoEngineProvider{}
-	for engineID, engine := range svc.cryptoEngines {
-		engineInstance := *engine
-		engineInfo := engineInstance.GetEngineConfig()
-		info = append(info, &models.CryptoEngineProvider{
-			CryptoEngineInfo: engineInfo,
-			ID:               engineID,
-			Default:          engineID == svc.defaultCryptoEngineID,
-		})
-	}
-
-	return info, nil
-}
-
-type SignInput struct {
-	CAID               string
-	Message            []byte
-	MessageType        models.SignMessageType
-	SignatureAlgorithm string
-}
-
 type issueCAInput struct {
 	ParentCA     *models.CACertificate
 	KeyMetadata  models.KeyMetadata     `validate:"required"`
@@ -256,22 +208,6 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input issueCAInput) (*
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 	var err error
 
-	var x509Engine x509engines.X509Engine
-	if input.EngineID == "" {
-		x509Engine = x509engines.NewX509Engine(svc.defaultCryptoEngine, svc.vaServerDomain)
-		lFunc.Infof("creating CA %s with default engine %s crypto engine", input.Subject.CommonName, x509Engine.GetEngineConfig().Provider)
-	} else {
-		if engine, ok := svc.cryptoEngines[input.EngineID]; ok {
-			x509Engine = x509engines.NewX509Engine(engine, svc.vaServerDomain)
-			lFunc.Infof("creating CA %s with %s crypto engine", input.Subject.CommonName, x509Engine.GetEngineConfig().Provider)
-		} else {
-			errMsg := fmt.Sprintf("engine ID %s not configured", input.EngineID)
-			lFunc.Error(errMsg)
-			return nil, fmt.Errorf(errMsg)
-		}
-	}
-
-	var caCert *x509.Certificate
 	expiration := time.Now()
 	if input.CAExpiration.Type == models.Duration {
 		expiration = expiration.Add(time.Duration(*input.CAExpiration.Duration))
@@ -279,40 +215,96 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input issueCAInput) (*
 		expiration = *input.CAExpiration.Time
 	}
 
+	caKey, err := svc.kmsService.CreatePrivateKey(ctx, CreatePrivateKeyInput{
+		EngineID:     input.EngineID,
+		KeyAlgorithm: input.KeyMetadata.Type,
+		KeySize:      input.KeyMetadata.Bits,
+	})
+	if err != nil {
+		lFunc.Errorf("could not create CA %s private key: %s", input.Subject.CommonName, err)
+		return nil, err
+	}
+
+	aki := caKey.KeyID
+	ski := caKey.KeyID
+	if input.ParentCA != nil {
+		aki = string(input.ParentCA.Certificate.Certificate.SubjectKeyId)
+	}
+
+	caPubKey, err := helpers.PublicKeyPEMToCryptoKey(caKey.PublicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	caSigner, err := NewKMSCryptoSigner(caKey.EngineID, string(caKey.KeyID), svc.kmsService)
+	if err != nil {
+		err := fmt.Errorf("could not get KMS Crypto Signer for CA: %s", err)
+		lFunc.Errorf(err.Error())
+		return nil, err
+	}
+
+	now := time.Now()
+	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
+	template := x509.Certificate{
+		IsCA:           true,
+		SerialNumber:   sn,
+		Subject:        helpers.SubjectToPkixName(input.Subject),
+		AuthorityKeyId: []byte(aki),
+		SubjectKeyId:   []byte(ski),
+		OCSPServer: []string{
+			fmt.Sprintf("%s/ocsp", svc.vaServerDomain),
+		},
+		CRLDistributionPoints: []string{
+			fmt.Sprintf("%s/crl/%s", svc.vaServerDomain, ski),
+		},
+		NotBefore:             now,
+		NotAfter:              expiration,
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsage(x509.ExtKeyUsageOCSPSigning),
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	var caCert *x509.Certificate
 	if input.ParentCA == nil {
-		lFunc.Debugf("creating ROOT CA certificate. common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
-		caCert, err = x509Engine.CreateRootCA(input.CAID, input.KeyMetadata, input.Subject, expiration)
+		lFunc.Debugf("creating root CA certificate. common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
+		derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, caPubKey, caSigner)
+		if err != nil {
+			err := fmt.Errorf("could not create root CA: %s", err)
+			lFunc.Errorf(err.Error())
+			return nil, err
+		}
+
+		caCert, err = x509.ParseCertificate(derBytes)
+		if err != nil {
+			lFunc.Errorf(err.Error())
+			return nil, err
+		}
+	} else {
+		parentKey, err := svc.kmsService.GetKey(ctx, GetKeyInput{
+			EngineID: input.ParentCA.EngineID,
+			KeyID:    string(input.ParentCA.Certificate.Certificate.SubjectKeyId),
+		})
+		if err != nil {
+			lFunc.Errorf(err.Error())
+			return nil, err
+		}
+
+		parentSigner, err := NewKMSCryptoSigner(input.ParentCA.EngineID, parentKey.KeyID, svc.kmsService)
+		if err != nil {
+			return nil, err
+		}
+
+		lFunc.Debugf("creating subordinate CA certificate. common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
+		derBytes, err := x509.CreateCertificate(rand.Reader, &template, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), caPubKey, parentSigner)
 		if err != nil {
 			lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
 			return nil, err
 		}
-	} else {
-		if parentEngine, ok := svc.cryptoEngines[input.ParentCA.EngineID]; ok {
-			x509ParentEngine := x509engines.NewX509Engine(parentEngine, svc.vaServerDomain)
-			if input.ParentCA.EngineID != input.EngineID {
-				if input.EngineID == "" {
-					x509Engine = x509engines.NewX509Engine(svc.defaultCryptoEngine, svc.vaServerDomain)
-				} else {
-					childEngine, ok := svc.cryptoEngines[input.EngineID]
-					if !ok {
-						lFunc.Errorf("something went wrong while doing the cast")
-						return nil, nil
-					}
-					x509Engine = x509engines.NewX509Engine(childEngine, svc.vaServerDomain)
-				}
-			} else {
-				x509Engine = x509ParentEngine
-			}
-			lFunc.Debugf("creating SUBORDINATE CA certificate.common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
-			caCert, err = x509Engine.CreateSubordinateCA(input.ParentCA.ID, input.CAID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), input.KeyMetadata, input.Subject, expiration, x509ParentEngine)
-			if err != nil {
-				lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
-				return nil, err
-			}
-		} else {
-			errMsg := fmt.Sprintf("parent engine ID %s not configured", input.ParentCA.EngineID)
-			lFunc.Error(errMsg)
-			return nil, fmt.Errorf(errMsg)
+
+		caCert, err = x509.ParseCertificate(derBytes)
+		if err != nil {
+			lFunc.Errorf(err.Error())
+			return nil, err
 		}
 	}
 
@@ -363,25 +355,14 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input ImportCAInput) 
 	var engineID string
 	if input.CAType != models.CertificateTypeExternal {
 		lFunc.Debugf("importing CA %s - %s  private key. CA type: %s", helpers.SerialNumberToString(input.CACertificate.SerialNumber), input.CACertificate.Subject.CommonName, input.CAType)
-		var engine cryptoengines.CryptoEngine
-		if input.EngineID == "" {
-			engine = *svc.defaultCryptoEngine
-			engineID = svc.defaultCryptoEngineID
-			lFunc.Infof("importing CA %s - %s  with %s crypto engine", helpers.SerialNumberToString(input.CACertificate.SerialNumber), input.CACertificate.Subject.CommonName, engine.GetEngineConfig().Provider)
-		} else {
-			engine = *svc.cryptoEngines[input.EngineID]
-			engineID = input.EngineID
-			lFunc.Infof("importing CA %s - %s with %s crypto engine", helpers.SerialNumberToString(input.CACertificate.SerialNumber), input.CACertificate.Subject.CommonName, engine.GetEngineConfig().Provider)
-		}
-
 		if input.CARSAKey != nil {
-			_, err := engine.ImportRSAPrivateKey(input.CARSAKey, x509engines.CryptoAssetLRI(x509engines.CertificateAuthority, helpers.SerialNumberToString(input.CACertificate.SerialNumber)))
+			// _, err := svc.kmsService.ImportRSAPrivateKey(input.EngineID, input.CARSAKey, x509engines.CryptoAssetLRI(x509engines.CertificateAuthority, helpers.SerialNumberToString(input.CACertificate.SerialNumber)))
 			if err != nil {
 				lFunc.Errorf("could not imported  %s private key: %s", helpers.SerialNumberToString(input.CACertificate.SerialNumber), err)
 				return nil, fmt.Errorf("could not import key: %w", err)
 			}
 		} else if input.CAECKey != nil {
-			_, err = engine.ImportECDSAPrivateKey(input.CAECKey, x509engines.CryptoAssetLRI(x509engines.CertificateAuthority, helpers.SerialNumberToString(input.CACertificate.SerialNumber)))
+			// _, err = svc.kmsService.ImportECDSAPrivateKey(input.EngineID, input.CAECKey, x509engines.CryptoAssetLRI(x509engines.CertificateAuthority, helpers.SerialNumberToString(input.CACertificate.SerialNumber)))
 		} else {
 			lFunc.Errorf("key type %s not supported", input.KeyType)
 			return nil, fmt.Errorf("KeyType not supported")
@@ -406,7 +387,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input ImportCAInput) 
 		if err != nil {
 			return nil, fmt.Errorf("parent CA not found: %w", err)
 		}
-
 	}
 
 	issuerMeta := models.IssuerCAMetadata{
@@ -550,10 +530,21 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input CreateCAInput) 
 		lFunc.Errorf("could not create CA %s certificate: %s", input.Subject.CommonName, err)
 		return nil, err
 	}
+
 	var engineID string
 	if input.EngineID == "" {
-		engineID = svc.defaultCryptoEngineID
+		engineID = ""
+		engines, err := svc.kmsService.GetCryptoEngineProvider(ctx)
+		if err != nil {
+			return nil, err
+		}
 
+		for _, engine := range engines {
+			if engine.Default {
+				engineID = engine.ID
+				break
+			}
+		}
 	} else {
 		engineID = input.EngineID
 	}
@@ -948,10 +939,6 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input SignCert
 		return nil, errs.ErrCAStatus
 	}
 
-	engine := svc.cryptoEngines[ca.Certificate.EngineID]
-
-	x509Engine := x509engines.NewX509Engine(engine, svc.vaServerDomain)
-
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
 	csr := (*x509.CertificateRequest)(input.CertRequest)
 
@@ -972,27 +959,63 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input SignCert
 	} else {
 		expiration = *ca.IssuanceExpirationRef.Time
 	}
-	lFunc.Debugf("sign certificate request with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
-	x509Cert, err := x509Engine.SignCertificateRequest(caCert, csr, expiration)
+
+	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
+	now := time.Now()
+	certificateTemplate := x509.Certificate{
+		PublicKeyAlgorithm: csr.PublicKeyAlgorithm,
+		PublicKey:          csr.PublicKey,
+		AuthorityKeyId:     caCert.SubjectKeyId,
+		SerialNumber:       sn,
+		Issuer:             caCert.Subject,
+		Subject:            csr.Subject,
+		NotBefore:          now,
+		NotAfter:           expiration,
+		KeyUsage:           x509.KeyUsageDigitalSignature,
+		OCSPServer: []string{
+			fmt.Sprintf("https://%s/api/va/ocsp", svc.vaServerDomain),
+		},
+		CRLDistributionPoints: []string{
+			fmt.Sprintf("https://%s/api/va/crl/%s", svc.vaServerDomain, string(caCert.SubjectKeyId)),
+		},
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+
+	caSigner, err := NewKMSCryptoSigner(ca.EngineID, string(caCert.SubjectKeyId), svc.kmsService)
 	if err != nil {
-		lFunc.Errorf("could not sign certificate request with %s CA", caCert.Subject.CommonName)
+		err := fmt.Errorf("could not get KMS Crypto Signer for CA: %s", err)
+		lFunc.Errorf(err.Error())
+		return nil, err
+	}
+
+	certificateBytes, err := x509.CreateCertificate(rand.Reader, &certificateTemplate, caCert, csr.PublicKey, caSigner)
+	if err != nil {
+		err := fmt.Errorf("could not sign certificate: %s", err)
+		lFunc.Errorf(err.Error())
+		return nil, err
+	}
+
+	certificate, err := x509.ParseCertificate(certificateBytes)
+	if err != nil {
+		err := fmt.Errorf("could not parse signed certificate %s", err)
+		lFunc.Errorf(err.Error())
 		return nil, err
 	}
 
 	cert := models.Certificate{
 		Metadata:    map[string]interface{}{},
 		Type:        models.CertificateTypeExternal,
-		Certificate: (*models.X509Certificate)(x509Cert),
+		Certificate: (*models.X509Certificate)(certificate),
 		IssuerCAMetadata: models.IssuerCAMetadata{
 			SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
 			ID:           ca.ID,
 		},
 		Status:              models.StatusActive,
-		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate(x509Cert),
-		Subject:             helpers.PkixNameToSubject(x509Cert.Subject),
-		SerialNumber:        helpers.SerialNumberToString(x509Cert.SerialNumber),
-		ValidFrom:           x509Cert.NotBefore,
-		ValidTo:             x509Cert.NotAfter,
+		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate(certificate),
+		Subject:             helpers.PkixNameToSubject(certificate.Subject),
+		SerialNumber:        helpers.SerialNumberToString(certificate.SerialNumber),
+		ValidFrom:           certificate.NotBefore,
+		ValidTo:             certificate.NotAfter,
 		RevocationTimestamp: time.Time{},
 	}
 	lFunc.Debugf("insert Certificate %s in storage engine", cert.SerialNumber)
@@ -1096,10 +1119,13 @@ func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input SignatureS
 		return nil, errs.ErrCANotFound
 	}
 
-	engine := svc.cryptoEngines[ca.Certificate.EngineID]
-	x509Engine := x509engines.NewX509Engine(engine, svc.vaServerDomain)
-	lFunc.Debugf("sign signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
-	signature, err := x509Engine.Sign(x509engines.CertificateAuthority, (*x509.Certificate)(ca.Certificate.Certificate), input.Message, input.MessageType, input.SigningAlgorithm)
+	signature, err := svc.kmsService.Sign(ctx, SignInput{
+		EngineID:         ca.EngineID,
+		KeyID:            string(ca.Certificate.Certificate.SubjectKeyId),
+		Message:          input.Message,
+		MessageType:      input.MessageType,
+		SigningAlgorithm: input.SigningAlgorithm,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -1134,10 +1160,20 @@ func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input Signatur
 		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
 		return false, errs.ErrCANotFound
 	}
-	engine := svc.cryptoEngines[ca.Certificate.EngineID]
-	x509Engine := x509engines.NewX509Engine(engine, svc.vaServerDomain)
-	lFunc.Debugf("verify signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
-	return x509Engine.Verify((*x509.Certificate)(ca.Certificate.Certificate), input.Signature, input.Message, input.MessageType, input.SigningAlgorithm)
+
+	valid, err := svc.kmsService.Verify(ctx, VerifyInput{
+		EngineID:         ca.EngineID,
+		KeyID:            string(ca.Certificate.Certificate.SubjectKeyId),
+		Message:          input.Message,
+		MessageType:      input.MessageType,
+		SigningAlgorithm: input.SigningAlgorithm,
+		Signature:        input.Signature,
+	})
+	if err != nil {
+		return false, err
+	}
+
+	return valid, nil
 }
 
 type GetCertificatesBySerialNumberInput struct {
