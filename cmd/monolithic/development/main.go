@@ -41,7 +41,7 @@ const (
 	AwsKms            CryptoEngineOption = "aws-kms"
 	Vault             CryptoEngineOption = "vault"
 	Pkcs11            CryptoEngineOption = "pkcs11"
-	Golang            CryptoEngineOption = "golang"
+	GolangFS          CryptoEngineOption = "golangfs"
 )
 
 func main() {
@@ -52,7 +52,7 @@ func main() {
 	awsIoTManagerPass := flag.String("awsiot-keysecret", "", "AWS IoT Manager SecretAccessKey")
 	awsIoTManagerRegion := flag.String("awsiot-region", "eu-west-1", "AWS IoT Manager Region")
 	awsIoTManagerID := flag.String("awsiot-id", "", "AWS IoT Manager ConnectorID")
-	cryptoengineOptions := flag.String("cryptoengines", "", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','golang']")
+	cryptoengineOptions := flag.String("cryptoengines", "golangfs", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','golangfs']")
 	sqliteOptions := flag.String("sqlite", "", "set path to sqlite database to enable sqlite storage engine")
 	disableMonitor := flag.Bool("disable-monitor", false, "disable crypto monitoring")
 	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
@@ -79,7 +79,7 @@ func main() {
 		AwsKms:            {},
 		Vault:             {},
 		Pkcs11:            {},
-		Golang:            {},
+		GolangFS:          {},
 	}
 
 	if (*cryptoengineOptions) != "" {
@@ -259,11 +259,11 @@ func main() {
 		}
 	}
 
-	if _, ok := cryptoengineOptionsMap[Golang]; ok {
-		cryptoEnginesConfig.DefaultEngine = "golang-1"
+	if _, ok := cryptoengineOptionsMap[GolangFS]; ok {
+		cryptoEnginesConfig.DefaultEngine = "golangfs-1"
 		cryptoEnginesConfig.GolangProvider = []config.GolangEngineConfig{
 			{
-				ID:               "golang-1",
+				ID:               "golangfs-1",
 				Metadata:         make(map[string]interface{}),
 				StorageDirectory: "/tmp/gotest",
 			},
@@ -356,7 +356,7 @@ func parseCryptoEngineOptions(options string) (map[CryptoEngineOption]struct{}, 
 	opts := make(map[CryptoEngineOption]struct{})
 	for _, opt := range strings.Split(options, ",") {
 		switch CryptoEngineOption(opt) {
-		case AwsSecretsManager, AwsKms, Vault, Pkcs11, Golang:
+		case AwsSecretsManager, AwsKms, Vault, Pkcs11, GolangFS:
 			opts[CryptoEngineOption(opt)] = struct{}{}
 		default:
 			return nil, fmt.Errorf("invalid crypto engine option: %s", opt)
