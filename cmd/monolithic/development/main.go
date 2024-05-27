@@ -55,6 +55,7 @@ func main() {
 	cryptoengineOptions := flag.String("cryptoengines", "", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','golang']")
 	sqliteOptions := flag.String("sqlite", "", "set path to sqlite database to enable sqlite storage engine")
 	disableMonitor := flag.Bool("disable-monitor", false, "disable crypto monitoring")
+	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
 	flag.Parse()
 
 	fmt.Println("===================== FLAGS ======================")
@@ -150,16 +151,21 @@ func main() {
 	}
 
 	fmt.Println("Async Messaging Engine")
-	fmt.Println(">> launching docker: RabbitMQ ...")
-	var err error
-	rmqCleanup, rmqConfig, adminPort, err := rabbitmq_test.RunRabbitMQDocker()
-	if err != nil {
-		log.Fatalf("could not launch RabbitMQ: %s", err)
+	rmqCleanup := func() error { return nil }
+	rmqConfig := &config.AMQPConnection{}
+	adminPort := 0
+	if !*disableEventbus {
+		fmt.Println(">> launching docker: RabbitMQ ...")
+		var err error
+		rmqCleanup, rmqConfig, adminPort, err = rabbitmq_test.RunRabbitMQDocker()
+		if err != nil {
+			log.Fatalf("could not launch RabbitMQ: %s", err)
+		}
+		fmt.Printf(" 	-- rabbitmq UI port: %d\n", adminPort)
+		fmt.Printf(" 	-- rabbitmq amqp port: %d\n", rmqConfig.Port)
+		fmt.Printf(" 	-- rabbitmq user: %s\n", rmqConfig.BasicAuth.Username)
+		fmt.Printf(" 	-- rabbitmq pass: %s\n", rmqConfig.BasicAuth.Password)
 	}
-	fmt.Printf(" 	-- rabbitmq UI port: %d\n", adminPort)
-	fmt.Printf(" 	-- rabbitmq amqp port: %d\n", rmqConfig.Port)
-	fmt.Printf(" 	-- rabbitmq user: %s\n", rmqConfig.BasicAuth.Username)
-	fmt.Printf(" 	-- rabbitmq pass: %s\n", rmqConfig.BasicAuth.Password)
 
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
 
@@ -208,9 +214,12 @@ func main() {
 
 	eventBus := config.EventBusEngine{
 		LogLevel: config.Trace,
-		Enabled:  true,
+		Enabled:  false,
 		Provider: config.Amqp,
 		Amqp:     *rmqConfig,
+	}
+	if !*disableEventbus {
+		eventBus.Enabled = true
 	}
 
 	cryptoEnginesConfig := config.CryptoEngines{
@@ -306,7 +315,7 @@ func main() {
 		})
 	}
 
-	_, err = monolithic.RunMonolithicLamassuPKI(conf)
+	_, err := monolithic.RunMonolithicLamassuPKI(conf)
 	if err != nil {
 		panic(err)
 	}
