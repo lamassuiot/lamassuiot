@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -23,7 +24,7 @@ import (
 )
 
 const readyToPKI = ` 
-________   _______    ________   ________       ___    ___      _________   ________          ________   ___  __     ___     
+ ________   _______    ________   ________       ___    ___      _________   ________          ________   ___  __     ___     
 |\   __  \ |\  ___ \  |\   __  \ |\   ___ \     |\  \  /  /|    |\___   ___\|\   __  \        |\   __  \ |\  \|\  \  |\  \    
 \ \  \|\  \\ \   __/| \ \  \|\  \\ \  \_|\ \    \ \  \/  / /    \|___ \  \_|\ \  \|\  \       \ \  \|\  \\ \  \/  /|_\ \  \   
  \ \   _  _\\ \  \_|/__\ \   __  \\ \  \ \\ \    \ \    / /          \ \  \  \ \  \\\  \       \ \   ____\\ \   ___  \\ \  \  
@@ -33,6 +34,50 @@ ________   _______    ________   ________       ___    ___      _________   ____
                                                \|___|/                                                                        
 `
 
+const lamassuLogo = `
+                                                              ..                
+                                                         ............           
+                                                        ....       ....         
+                                                       ...          ....        
+                                                       ...          ....        
+                                                       ...          ....        
+ ..... .........................                                                
+ ....                         ....                      ..............          
+      ....                       ....                  .................        
+     .....  ...................    ....                .....       .....        
+                             .....   .....             ....         ....        
+          .....  ...........    ....    ....           .....       .....        
+           ..             ....    .....   .....        .......   .......        
+                            ....     ....    ....      .......   .......        
+                               ....    ....    ....     ...............         
+                  ...........    ....     ....    ....    ..........    .       
+                ...............     ...     ....    ....     .....    ....      
+               ..................     ....     ...     ....        .......      
+              ......................                             .........      
+            ...    .......................................................      
+            ..     .......................................................      
+            ..     .......................................................      
+            ..     .......................................................      
+            ..     .......................................................      
+            ..    ............ ........                    ...... ........      
+           ..   ..........      .......                   ......   .......      
+         ..     .......           .....                   .....     ......      
+       .        .....              .....                 .....       .....      
+                .....               .....               .....        .....      
+                ..........           ........           .......       .......   
+                ...........          ..........        ..........     ......... 
+`
+
+type CryptoEngineOption string
+
+const (
+	AwsSecretsManager CryptoEngineOption = "aws-secrets"
+	AwsKms            CryptoEngineOption = "aws-kms"
+	Vault             CryptoEngineOption = "vault"
+	Pkcs11            CryptoEngineOption = "pkcs11"
+	GolangFS          CryptoEngineOption = "golangfs"
+)
+
 func main() {
 	hsmModule := flag.String("hsm-module-path", "", "enable HSM support")
 
@@ -41,6 +86,10 @@ func main() {
 	awsIoTManagerPass := flag.String("awsiot-keysecret", "", "AWS IoT Manager SecretAccessKey")
 	awsIoTManagerRegion := flag.String("awsiot-region", "eu-west-1", "AWS IoT Manager Region")
 	awsIoTManagerID := flag.String("awsiot-id", "", "AWS IoT Manager ConnectorID")
+	cryptoengineOptions := flag.String("cryptoengines", "golangfs", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','golangfs']")
+	sqliteOptions := flag.String("sqlite", "", "set path to sqlite database to enable sqlite storage engine")
+	disableMonitor := flag.Bool("disable-monitor", false, "disable crypto monitoring")
+	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
 	flag.Parse()
 
 	fmt.Println("===================== FLAGS ======================")
@@ -58,38 +107,77 @@ func main() {
 		fmt.Printf("HSM - PKCS11 Module Driver: %s\n", *hsmModule)
 	}
 
+	// By default, all crypto engines are enabled
+	cryptoengineOptionsMap := map[CryptoEngineOption]struct{}{
+		AwsSecretsManager: {},
+		AwsKms:            {},
+		Vault:             {},
+		Pkcs11:            {},
+		GolangFS:          {},
+	}
+
+	if (*cryptoengineOptions) != "" {
+		var err error
+		cryptoengineOptionsMap, err = parseCryptoEngineOptions(*cryptoengineOptions)
+		if err != nil {
+			log.Fatalf("could not parse crypto engine options: %s", err)
+		}
+		fmt.Printf("Crypto Engines: %v\n", cryptoengineOptionsMap)
+	}
+
 	fmt.Println("========== LAUNCHING AUXILIARY SERVICES ==========")
 	fmt.Println("Storage Engine")
-	fmt.Println(">> launching docker: Postgres ...")
-	pCleanup, storageConfig, err := postgres_test.RunPostgresDocker([]string{"ca", "alerts", "dmsmanager", "devicemanager", "cloudproxy"})
-	if err != nil {
-		log.Fatalf("could not launch Postgres: %s", err)
-	}
+	pCleanup := func() error { return nil }
+	var postgresStorageConfig *config.PostgresPSEConfig
+	if *sqliteOptions == "" {
+		fmt.Println(">> launching docker: Postgres ...")
+		var err error
+		pCleanup, postgresStorageConfig, err = postgres_test.RunPostgresDocker([]string{"ca", "alerts", "dmsmanager", "devicemanager", "cloudproxy"})
+		if err != nil {
+			log.Fatalf("could not launch Postgres: %s", err)
+		}
 
-	fmt.Printf(" 	-- postgres port: %d\n", storageConfig.Port)
-	fmt.Printf(" 	-- postgres user: %s\n", storageConfig.Username)
-	fmt.Printf(" 	-- postgres pass: %s\n", storageConfig.Password)
+		fmt.Printf(" 	-- postgres port: %d\n", postgresStorageConfig.Port)
+		fmt.Printf(" 	-- postgres user: %s\n", postgresStorageConfig.Username)
+		fmt.Printf(" 	-- postgres pass: %s\n", postgresStorageConfig.Password)
+	} else {
+		fmt.Printf(">> using sqlite storage engine: %s", *sqliteOptions)
+	}
 
 	fmt.Println("Crypto Engines")
-	fmt.Println(">> launching docker: Hashicorp Vault ...")
-	vCleanup, vaultConfig, rootToken, err := keyvaultkv2_test.RunHashicorpVaultDocker()
-	if err != nil {
-		log.Fatalf("could not launch Hashicorp Vault: %s", err)
+	vCleanup := func() error { return nil }
+	vaultConfig := &config.HashicorpVaultSDK{}
+	rootToken := ""
+	if _, ok := cryptoengineOptionsMap[Vault]; ok {
+		fmt.Println(">> launching docker: Hashicorp Vault ...")
+		var err error
+		vCleanup, vaultConfig, rootToken, err = keyvaultkv2_test.RunHashicorpVaultDocker()
+		if err != nil {
+			log.Fatalf("could not launch Hashicorp Vault: %s", err)
+		}
+		fmt.Printf(" 	-- vault port: %d\n", vaultConfig.Port)
+		fmt.Printf(" 	-- vault root token: %s\n", rootToken)
 	}
-	fmt.Printf(" 	-- vault port: %d\n", vaultConfig.Port)
-	fmt.Printf(" 	-- vault root token: %s\n", rootToken)
 
-	fmt.Println(">> launching docker: AWS Platform (Secrets Manager + KMS) ...")
-	awsCleanup, awsCfg, err := awskmssm_test.RunAWSEmulationLocalStackDocker()
-	if err != nil {
-		log.Fatalf("could not launch AWS Platform: %s", err)
+	_, awsSecretsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
+	_, awsKmsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
+	awsCleanup := func() error { return nil }
+	awsCfg := &config.AWSSDKConfig{}
+	if awsSecretsEnabled || awsKmsEnabled {
+		var err error
+		fmt.Println(">> launching docker: AWS Platform (Secrets Manager + KMS) ...")
+		awsCleanup, awsCfg, err = awskmssm_test.RunAWSEmulationLocalStackDocker()
+		if err != nil {
+			log.Fatalf("could not launch AWS Platform: %s", err)
+		}
 	}
 
 	hsmModulePath := *hsmModule
 	var softhsmCleanup func() error
 	var pkcs11Cfg *config.PKCS11Config
-	if hsmModulePath != "" {
+	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok && hsmModulePath != "" {
 		fmt.Println(">> launching docker: SoftHSM ...")
+		var err error
 		softhsmCleanup, pkcs11Cfg, err = softhsmv2_test.RunSoftHsmV2Docker(hsmModulePath)
 		if err != nil {
 			log.Fatalf("could not launch SoftHSM: %s", err)
@@ -97,15 +185,21 @@ func main() {
 	}
 
 	fmt.Println("Async Messaging Engine")
-	fmt.Println(">> launching docker: RabbitMQ ...")
-	rmqCleanup, rmqConfig, adminPort, err := rabbitmq_test.RunRabbitMQDocker()
-	if err != nil {
-		log.Fatalf("could not launch RabbitMQ: %s", err)
+	rmqCleanup := func() error { return nil }
+	rmqConfig := &config.AMQPConnection{}
+	adminPort := 0
+	if !*disableEventbus {
+		fmt.Println(">> launching docker: RabbitMQ ...")
+		var err error
+		rmqCleanup, rmqConfig, adminPort, err = rabbitmq_test.RunRabbitMQDocker()
+		if err != nil {
+			log.Fatalf("could not launch RabbitMQ: %s", err)
+		}
+		fmt.Printf(" 	-- rabbitmq UI port: %d\n", adminPort)
+		fmt.Printf(" 	-- rabbitmq amqp port: %d\n", rmqConfig.Port)
+		fmt.Printf(" 	-- rabbitmq user: %s\n", rmqConfig.BasicAuth.Username)
+		fmt.Printf(" 	-- rabbitmq pass: %s\n", rmqConfig.BasicAuth.Password)
 	}
-	fmt.Printf(" 	-- rabbitmq UI port: %d\n", adminPort)
-	fmt.Printf(" 	-- rabbitmq amqp port: %d\n", rmqConfig.Port)
-	fmt.Printf(" 	-- rabbitmq user: %s\n", rmqConfig.BasicAuth.Username)
-	fmt.Printf(" 	-- rabbitmq pass: %s\n", rmqConfig.BasicAuth.Password)
 
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
 
@@ -113,7 +207,7 @@ func main() {
 		fmt.Println("========== CLEANING UP ==========")
 		svcCleanup := func(svcName string, cleaner func() error) {
 			fmt.Printf(">> Cleaning %s ...\n", svcName)
-			err = cleaner()
+			err := cleaner()
 			if err != nil {
 				fmt.Printf("could not cleanup %s: %s\n", svcName, err)
 			}
@@ -154,9 +248,73 @@ func main() {
 
 	eventBus := config.EventBusEngine{
 		LogLevel: config.Trace,
-		Enabled:  true,
+		Enabled:  false,
 		Provider: config.Amqp,
 		Amqp:     *rmqConfig,
+	}
+	if !*disableEventbus {
+		eventBus.Enabled = true
+	}
+
+	cryptoEnginesConfig := config.CryptoEngines{
+		LogLevel: config.Info,
+	}
+
+	if _, ok := cryptoengineOptionsMap[Vault]; ok {
+		cryptoEnginesConfig.DefaultEngine = "dockertest-hcpvault-kvv2"
+		cryptoEnginesConfig.HashicorpVaultKV2Provider = []config.HashicorpVaultCryptoEngineConfig{
+			{
+				HashicorpVaultSDK: *vaultConfig,
+				ID:                "dockertest-hcpvault-kvv2",
+				Metadata:          make(map[string]interface{}),
+			},
+		}
+	}
+
+	if _, ok := cryptoengineOptionsMap[AwsKms]; ok {
+		cryptoEnginesConfig.DefaultEngine = "dockertest-localstack-kms"
+		cryptoEnginesConfig.AWSKMSProvider = []config.AWSCryptoEngine{
+			{
+				AWSSDKConfig: *awsCfg,
+				ID:           "dockertest-localstack-kms",
+				Metadata:     make(map[string]interface{}),
+			},
+		}
+	}
+
+	if _, ok := cryptoengineOptionsMap[AwsSecretsManager]; ok {
+		cryptoEnginesConfig.DefaultEngine = "dockertest-localstack-smngr"
+		cryptoEnginesConfig.AWSSecretsManagerProvider = []config.AWSCryptoEngine{
+			{
+				AWSSDKConfig: *awsCfg,
+				ID:           "dockertest-localstack-smngr",
+				Metadata:     make(map[string]interface{}),
+			},
+		}
+	}
+
+	if _, ok := cryptoengineOptionsMap[GolangFS]; ok {
+		cryptoEnginesConfig.DefaultEngine = "golangfs-1"
+		cryptoEnginesConfig.GolangProvider = []config.GolangEngineConfig{
+			{
+				ID:               "golangfs-1",
+				Metadata:         make(map[string]interface{}),
+				StorageDirectory: "/tmp/gotest",
+			},
+		}
+	}
+
+	pluglableStorageConfig := &config.PluggableStorageEngine{
+		LogLevel: config.Trace,
+	}
+	if *sqliteOptions != "" {
+		pluglableStorageConfig.Provider = config.SQLite
+		pluglableStorageConfig.SQLite = config.SQLitePSEConfig{
+			DatabasePath: *sqliteOptions,
+		}
+	} else {
+		pluglableStorageConfig.Provider = config.Postgres
+		pluglableStorageConfig.Postgres = *postgresStorageConfig
 	}
 
 	conf := config.MonolithicConfig{
@@ -166,47 +324,12 @@ func main() {
 		Domain:             "dev.lamassu.test",
 		GatewayPort:        8443,
 		AssemblyMode:       config.Http,
-		CryptoEngines: config.CryptoEngines{
-			LogLevel:      config.Info,
-			DefaultEngine: "golang-1",
-			HashicorpVaultKV2Provider: []config.HashicorpVaultCryptoEngineConfig{
-				{
-					HashicorpVaultSDK: *vaultConfig,
-					ID:                "dockertest-hcpvault-kvv2",
-					Metadata:          make(map[string]interface{}),
-				},
-			},
-			AWSKMSProvider: []config.AWSCryptoEngine{
-				{
-					AWSSDKConfig: *awsCfg,
-					ID:           "dockertest-localstack-kms",
-					Metadata:     make(map[string]interface{}),
-				},
-			},
-			AWSSecretsManagerProvider: []config.AWSCryptoEngine{
-				{
-					AWSSDKConfig: *awsCfg,
-					ID:           "dockertest-localstack-smngr",
-					Metadata:     make(map[string]interface{}),
-				},
-			},
-			GolangProvider: []config.GolangEngineConfig{
-				{
-					ID:               "golang-1",
-					Metadata:         make(map[string]interface{}),
-					StorageDirectory: "/tmp/gotest",
-				},
-			},
-		},
+		CryptoEngines:      cryptoEnginesConfig,
 		CryptoMonitoring: config.CryptoMonitoring{
-			Enabled:   true,
+			Enabled:   !*disableMonitor,
 			Frequency: "* * * * *",
 		},
-		Storage: config.PluggableStorageEngine{
-			LogLevel: config.Trace,
-			Provider: config.Postgres,
-			Postgres: *storageConfig,
-		},
+		Storage: *pluglableStorageConfig,
 		AWSIoTManager: config.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
@@ -226,11 +349,12 @@ func main() {
 		})
 	}
 
-	_, err = monolithic.RunMonolithicLamassuPKI(conf)
+	_, err := monolithic.RunMonolithicLamassuPKI(conf)
 	if err != nil {
 		panic(err)
 	}
 
+	fmt.Print(lamassuLogo)
 	fmt.Print(readyToPKI)
 
 	http.DefaultClient.Transport = &http.Transport{
@@ -255,6 +379,25 @@ func main() {
 	forever := make(chan struct{})
 	<-forever
 
+}
+
+func parseCryptoEngineOptions(options string) (map[CryptoEngineOption]struct{}, error) {
+	if options == "" {
+		return nil, nil
+	}
+	// lowercase the options
+	options = strings.ToLower(options)
+
+	opts := make(map[CryptoEngineOption]struct{})
+	for _, opt := range strings.Split(options, ",") {
+		switch CryptoEngineOption(opt) {
+		case AwsSecretsManager, AwsKms, Vault, Pkcs11, GolangFS:
+			opts[CryptoEngineOption(opt)] = struct{}{}
+		default:
+			return nil, fmt.Errorf("invalid crypto engine option: %s", opt)
+		}
+	}
+	return opts, nil
 }
 
 func printWColor(str string, fg, bg color.Attribute) {

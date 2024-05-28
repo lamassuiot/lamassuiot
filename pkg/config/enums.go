@@ -44,6 +44,7 @@ const (
 	Postgres StorageProvider = "postgres"
 	CouchDB  StorageProvider = "couch_db"
 	DynamoDB StorageProvider = "dynamo_db"
+	SQLite   StorageProvider = "sqlite"
 )
 
 type AWSAuthenticationMethod string
