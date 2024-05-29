@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	_ "github.com/go-kivik/couchdb" // The CouchDB driver
 	"github.com/go-kivik/couchdb/v4"
@@ -141,85 +140,8 @@ func (db *couchDBQuerier[E]) CreateIndex(fields string) error {
 }
 
 func (db *couchDBQuerier[E]) Count(opts *map[string]interface{}) (int, error) {
-
-	if opts == nil {
-		countRows := db.AllDocs(context.Background(), map[string]interface{}{"include_docs": false})
-
-		docCount := 0
-		for countRows.Next() {
-			if !strings.HasPrefix(countRows.ID(), "_design/") {
-				docCount++
-			}
-		}
-		if countRows.Err() != nil {
-			return -1, fmt.Errorf("error while iterating documents: %s", countRows.Err())
-		}
-		defer func() {
-			countRows.Close()
-		}()
-
-		return docCount, nil
-	} else {
-		countRowsBy := db.Find(context.Background(), opts)
-
-		docCountEngineCA := 0
-		for countRowsBy.Next() {
-			docCountEngineCA++
-		}
-
-		if countRowsBy.Err() != nil {
-			return -1, fmt.Errorf("error while iterating through the documents: %s", countRowsBy.Err())
-		}
-
-		defer func() {
-			countRowsBy.Close()
-		}()
-
-		return docCountEngineCA, nil
-	}
-		return fmt.Errorf("error creating index: %s", err)
-	}
-
-	return nil
-}
-
-func (db *couchDBQuerier[E]) Count(opts *map[string]interface{}) (int, error) {
-
-	if opts == nil {
-		countRows := db.AllDocs(context.Background(), map[string]interface{}{"include_docs": false})
-
-		docCount := 0
-		for countRows.Next() {
-			if !strings.HasPrefix(countRows.ID(), "_design/") {
-				docCount++
-			}
-		}
-		if countRows.Err() != nil {
-			return -1, fmt.Errorf("error while iterating documents: %s", countRows.Err())
-		}
-		defer func() {
-			countRows.Close()
-		}()
-
-		return docCount, nil
-	} else {
-		countRowsBy := db.Find(context.Background(), opts)
-
-		docCountEngineCA := 0
-		for countRowsBy.Next() {
-			docCountEngineCA++
-		}
-
-		if countRowsBy.Err() != nil {
-			return -1, fmt.Errorf("error while iterating through the documents: %s", countRowsBy.Err())
-		}
-
-		defer func() {
-			countRowsBy.Close()
-		}()
-
-		return docCountEngineCA, nil
-	}
+	// CouchDB does not support count with selector
+	return -1, fmt.Errorf("count not supported")
 }
 
 func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, extraOpts *map[string]interface{}, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
@@ -229,15 +151,6 @@ func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, e
 	}
 
 	if queryParams != nil {
-		if len(queryParams.Filters) > 0 {
-			for _, filter := range queryParams.Filters {
-				filterSelector := FilterOperandToCouchDBSelector(filter)
-				for key, value := range filterSelector {
-					opts["selector"].(map[string]interface{})[key] = value
-				}
-			}
-		}
-
 		if len(queryParams.Filters) > 0 {
 			for _, filter := range queryParams.Filters {
 				filterSelector := FilterOperandToCouchDBSelector(filter)
@@ -257,15 +170,6 @@ func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, e
 
 		if queryParams.PageSize > 0 {
 			opts["limit"] = queryParams.PageSize
-		}
-	}
-
-	derefExtraOpts := *extraOpts
-	if _, extraHasSelector := derefExtraOpts["selector"]; extraHasSelector {
-		if extraSelectors, ok := derefExtraOpts["selector"].(map[string]interface{}); ok {
-			for key, val := range extraSelectors {
-				opts["selector"].(map[string]interface{})[key] = val
-			}
 		}
 	}
 
@@ -424,35 +328,6 @@ func getElements[E any](db *kivik.DB, bookmark string, opts map[string]interface
 	}
 
 	return finisthResult.Bookmark, elements, nil
-}
-
-func FilterOperandToCouchDBSelector(filter resources.FilterOption) map[string]interface{} {
-	selector := map[string]interface{}{}
-
-	switch filter.FilterOperation {
-	case resources.StringEqual:
-		selector[filter.Field] = filter.Value
-	case resources.StringNotEqual:
-		selector[filter.Field] = map[string]interface{}{"$ne": filter.Value}
-	case resources.StringContains:
-		selector[filter.Field] = map[string]interface{}{"$regex": fmt.Sprintf(".*%s.*", filter.Value)}
-	case resources.StringNotContains:
-		selector[filter.Field] = map[string]interface{}{"$not": map[string]interface{}{"$regex": fmt.Sprintf(".*%s.*", filter.Value)}}
-	case resources.DateEqual, resources.NumberEqual, resources.EnumEqual:
-		selector[filter.Field] = filter.Value
-	case resources.DateBefore, resources.NumberLessThan:
-		selector[filter.Field] = map[string]interface{}{"$lt": filter.Value}
-	case resources.DateAfter, resources.NumberGreaterThan:
-		selector[filter.Field] = map[string]interface{}{"$gt": filter.Value}
-	case resources.NumberNotEqual, resources.EnumNotEqual:
-		selector[filter.Field] = map[string]interface{}{"$ne": filter.Value}
-	case resources.NumberLessOrEqualThan:
-		selector[filter.Field] = map[string]interface{}{"$lte": filter.Value}
-	case resources.NumberGreaterOrEqualThan:
-		selector[filter.Field] = map[string]interface{}{"$gte": filter.Value}
-	}
-
-	return selector
 }
 
 func FilterOperandToCouchDBSelector(filter resources.FilterOption) map[string]interface{} {
