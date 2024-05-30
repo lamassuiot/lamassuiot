@@ -3,12 +3,10 @@ package assemblers
 import (
 	"context"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
@@ -114,7 +112,7 @@ func TestKMSSignatureVerify(t *testing.T) {
 			},
 			resultCheck: func(bol bool, err error) error {
 				fmt.Println(bol)
-				if !errors.Is(err, errs.ErrCAStatus) {
+				if err != nil {
 					return fmt.Errorf("got unexpected error: %s", err)
 				}
 				return nil
