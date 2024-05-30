@@ -97,11 +97,11 @@ func (s *VaultKV2Engine) Get(keyID string) ([]byte, error) {
 	s.logger.Debugf("requesting key with ID [%s]", keyID)
 	key, err := s.kvv2Client.Get(context.Background(), keyID)
 	if err != nil {
-		s.logger.Errorf("could not get private key: %s", err)
-		return nil, errors.New("could not get private key")
+		s.logger.Errorf("could not get value: %s", err)
+		return nil, errors.New("could not get value")
 	}
 
-	s.logger.Debugf("successfully retrieved private key")
+	s.logger.Debugf("successfully retrieved value")
 
 	var b64Key string
 	mapValue, ok := key.Data["key"]
@@ -129,11 +129,11 @@ func (s *VaultKV2Engine) Create(keyID string, key []byte) error {
 
 	_, err := s.kvv2Client.Put(context.Background(), keyID, keyMap)
 	if err != nil {
-		s.logger.Errorf("could not create key: %s", err)
+		s.logger.Errorf("could not create the value: %s", err)
 		return err
 	}
 
-	s.logger.Debugf("key successfully generated")
+	s.logger.Debugf("the value successfully generated")
 	return nil
 }
 

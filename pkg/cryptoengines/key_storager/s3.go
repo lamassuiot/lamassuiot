@@ -31,9 +31,11 @@ func NewS3Storager(logger *logrus.Entry, awsConf aws.Config, bucket string) (Key
 
 	awsConf.HTTPClient = httpCli
 
-	s3Client := s3.NewFromConfig(awsConf)
+	s3Client := s3.NewFromConfig(awsConf, func(o *s3.Options) {
+		o.UsePathStyle = true
+	})
 
-	_, err = s3Client.HeadBucket(context.TODO(), &s3.HeadBucketInput{
+	_, err = s3Client.HeadBucket(context.Background(), &s3.HeadBucketInput{
 		Bucket: aws.String(bucket),
 	})
 	exists := true
@@ -65,8 +67,9 @@ func NewS3Storager(logger *logrus.Entry, awsConf aws.Config, bucket string) (Key
 	}
 
 	return &AWSS3KeyStorager{
-		logger: log,
-		sdk:    s3Client,
+		logger:     log,
+		sdk:        s3Client,
+		bucketName: bucket,
 	}, nil
 }
 
@@ -98,7 +101,7 @@ func (engine *AWSS3KeyStorager) Create(keyID string, key []byte) error {
 	})
 
 	if err != nil {
-		engine.logger.Error("Could not import private key: ", err)
+		engine.logger.Error("Could not import the value: ", err)
 		return err
 	}
 

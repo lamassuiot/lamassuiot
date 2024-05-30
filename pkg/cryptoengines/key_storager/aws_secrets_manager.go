@@ -37,7 +37,7 @@ func NewAWSSecretManagerKeyStorage(logger *logrus.Entry, awsConf aws.Config) (Ke
 }
 
 func (engine *AWSSecretsManagerKeyStorager) Get(keyID string) ([]byte, error) {
-	engine.logger.Debugf("Getting the key with ID: %s", keyID)
+	engine.logger.Debugf("Getting the value with ID: %s", keyID)
 
 	result, err := engine.smngerCli.GetSecretValue(context.Background(), &secretsmanager.GetSecretValueInput{
 		SecretId: aws.String(keyID),
@@ -80,7 +80,7 @@ func (engine *AWSSecretsManagerKeyStorager) Create(keyID string, key []byte) err
 	})
 
 	if err != nil {
-		engine.logger.Error("Could not import private key: ", err)
+		engine.logger.Error("Could not import the value: ", err)
 		return err
 	}
 
@@ -88,5 +88,15 @@ func (engine *AWSSecretsManagerKeyStorager) Create(keyID string, key []byte) err
 }
 
 func (engine *AWSSecretsManagerKeyStorager) Delete(keyID string) error {
-	return fmt.Errorf("cannot delete key [%s]. Go to your aws account and do it manually", keyID)
+
+	_, err := engine.smngerCli.DeleteSecret(context.Background(), &secretsmanager.DeleteSecretInput{
+		SecretId:                   &keyID,
+		RecoveryWindowInDays:       aws.Int64(7),
+		ForceDeleteWithoutRecovery: aws.Bool(false),
+	})
+	if err != nil {
+		engine.logger.Error("Could not delete the value: ", err)
+		return err
+	}
+	return nil
 }
