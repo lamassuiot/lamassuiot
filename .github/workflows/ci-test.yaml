@@ -38,6 +38,10 @@ jobs:
         run: echo ${{ github.event.pull_request.base.sha }}
       - name: Create annotation for build error head
         run: echo ${{ github.event.pull_request.head.sha }}
+      - name: Create annotation for build error manual
+        run: echo 94f32fde185f8fadf967cbf7c9f9954a58295e3e
+
+
         
  
       - name: Run Golang Tests with coverage
