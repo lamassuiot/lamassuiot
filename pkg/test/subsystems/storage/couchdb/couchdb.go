@@ -1,6 +1,3 @@
-//go:build experimental
-// +build experimental
-
 package couchdb_test
 
 import (
