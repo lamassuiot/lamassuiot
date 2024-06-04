@@ -44,7 +44,7 @@ jobs:
         uses: codecov/codecov-action@v4.0.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          commit_parent: b2442f8
+          commit_parent: 5195ab4e917307d45b655e2064e0848e7794daf7
           codecov_yml_path: codecov.yml
           slug: lamassuiot/lamassuiot.github.io
       # - name: Upload Coverage report to CodeCov
