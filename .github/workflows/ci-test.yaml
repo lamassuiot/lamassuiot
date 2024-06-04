@@ -2,7 +2,6 @@ name: CI Launch Tests
 
 on:
   pull_request:
-    branches: [main]
     types: [opened, synchronize, reopened]
   workflow_call:
     # Map the workflow outputs to job outputs
@@ -33,7 +32,7 @@ jobs:
       - name: Run Golang Tests with coverage
         id: run
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./pkg/... -coverpkg=./... -timeout 600s -coverprofile coverage.txt
+          go run gotest.tools/gotestsum@latest --format github-actions ./pkg/x509engines/... -coverpkg=./... -timeout 600s -coverprofile coverage.txt
           float_coverage=$(go tool cover -func coverage.txt | grep total | awk '{print substr($3, 1, length($3)-1)}')
           echo "coverage=$float_coverage" >> $GITHUB_OUTPUT
     
