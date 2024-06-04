@@ -43,6 +43,7 @@ jobs:
         uses: codecov/codecov-action@v4.0.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          commit_parent: 1607cb9
           codecov_yml_path: codecov.yml
           commit_parent: 1607cb9
           slug: lamassuiot/lamassuiot.github.io
