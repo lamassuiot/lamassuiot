@@ -53,7 +53,7 @@ jobs:
           echo ${{ github.event.pull_request.base.sha }}
           echo ${{ github.event.pull_request.head.sha }}
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v4.0.1
+        uses: codecov/codecov-action@v4.2.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           commit_parent: "${{github.event.pull_request.base.sha}}"
