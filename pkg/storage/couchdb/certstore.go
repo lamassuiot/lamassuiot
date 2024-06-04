@@ -5,13 +5,12 @@ package couchdb
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	_ "github.com/go-kivik/couchdb/v4" // The CouchDB driver
 	kivik "github.com/go-kivik/kivik/v4"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
 )
 
@@ -31,6 +30,11 @@ func NewCouchCertificateRepository(client *kivik.Client) (storage.CertificatesRe
 	querier := newCouchDBQuerier[models.Certificate](client.DB(certDBName))
 	querier.CreateBasicCounterView()
 
+	//Check if indexes exist, and create them if not
+	for field := range resources.CertificateFiltrableFields {
+		querier.EnsureIndexExists(field)
+	}
+
 	return &CouchDBCertificateStorage{
 		client:  client,
 		querier: &querier,
@@ -38,29 +42,37 @@ func NewCouchCertificateRepository(client *kivik.Client) (storage.CertificatesRe
 }
 
 func (db *CouchDBCertificateStorage) Count(ctx context.Context) (int, error) {
-	return db.querier.Count()
+	return db.querier.Count(nil)
 }
+
 func (db *CouchDBCertificateStorage) CountByCAIDAndStatus(ctx context.Context, caID string, status models.CertificateStatus) (int, error) {
-	return -1, fmt.Errorf("TODO")
+	opts := map[string]interface{}{
+		"selector": map[string]interface{}{
+			"status": map[string]interface{}{
+				"$eq": status,
+			},
+			"issuer_metadata": map[string]interface{}{
+				"id": map[string]interface{}{
+					"$eq": caID,
+				},
+			},
+		},
+		"fields": []string{"_id"},
+	}
+
+	return db.querier.Count(&opts)
 }
 
 func (db *CouchDBCertificateStorage) SelectByType(ctx context.Context, CAType models.CertificateType, req storage.StorageListRequest[models.Certificate]) (string, error) {
 	opts := map[string]interface{}{
 		"type": CAType,
 	}
-	return db.querier.SelectAll(req.QueryParams, helpers.MergeMaps(&req.ExtraOpts, &opts), req.ExhaustiveRun, req.ApplyFunc)
+
+	return db.querier.SelectAll(req.QueryParams, &opts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *CouchDBCertificateStorage) SelectAll(ctx context.Context, req storage.StorageListRequest[models.Certificate]) (string, error) {
-	opts := map[string]interface{}{
-		"selector": map[string]interface{}{
-			"serial_number": map[string]string{
-				"$ne": "",
-			},
-		},
-	}
-
-	return db.querier.SelectAll(req.QueryParams, helpers.MergeMaps(&req.ExtraOpts, &opts), req.ExhaustiveRun, req.ApplyFunc)
+	return db.querier.SelectAll(req.QueryParams, &req.ExtraOpts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *CouchDBCertificateStorage) SelectExistsBySerialNumber(ctx context.Context, id string) (bool, *models.Certificate, error) {
@@ -78,13 +90,14 @@ func (db *CouchDBCertificateStorage) Update(ctx context.Context, certificate *mo
 func (db *CouchDBCertificateStorage) SelectByCA(ctx context.Context, caID string, req storage.StorageListRequest[models.Certificate]) (string, error) {
 	opts := map[string]interface{}{
 		"selector": map[string]interface{}{
-			"issuer_metadata.ca_name": map[string]string{
-				"$eq": caID,
+			"issuer_metadata": map[string]interface{}{
+				"id": map[string]interface{}{
+					"$eq": caID,
+				},
 			},
 		},
 	}
-
-	return db.querier.SelectAll(req.QueryParams, helpers.MergeMaps(&req.ExtraOpts, &opts), req.ExhaustiveRun, req.ApplyFunc)
+	return db.querier.SelectAll(req.QueryParams, &opts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *CouchDBCertificateStorage) SelectByExpirationDate(ctx context.Context, beforeExpirationDate time.Time, afterExpirationDate time.Time, req storage.StorageListRequest[models.Certificate]) (string, error) {
@@ -94,28 +107,18 @@ func (db *CouchDBCertificateStorage) SelectByExpirationDate(ctx context.Context,
 				{
 					"valid_to": map[string]interface{}{
 						"$gt": afterExpirationDate.Format(time.RFC3339),
-					},
-				},
-				{
-					"valid_to": map[string]interface{}{
 						"$lt": beforeExpirationDate.Format(time.RFC3339),
 					},
 				},
 				{
 					"status": map[string]interface{}{
-						"$ne": models.StatusExpired,
-					},
-				},
-				{
-					"status": map[string]interface{}{
-						"$ne": models.StatusRevoked,
+						"$nin": []models.CertificateStatus{models.StatusExpired, models.StatusRevoked},
 					},
 				},
 			},
 		},
 	}
-
-	return db.querier.SelectAll(req.QueryParams, helpers.MergeMaps(&req.ExtraOpts, &opts), req.ExhaustiveRun, req.ApplyFunc)
+	return db.querier.SelectAll(req.QueryParams, &opts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *CouchDBCertificateStorage) SelectByCAIDAndStatus(ctx context.Context, CAID string, status models.CertificateStatus, req storage.StorageListRequest[models.Certificate]) (string, error) {
@@ -128,14 +131,16 @@ func (db *CouchDBCertificateStorage) SelectByCAIDAndStatus(ctx context.Context, 
 					},
 				},
 				{
-					"issuer_metadata.ca_id": map[string]interface{}{
-						"$eq": CAID,
+					"issuer_metadata": map[string]interface{}{
+						"id": map[string]interface{}{
+							"$eq": CAID,
+						},
 					},
 				},
 			},
 		},
 	}
-	return db.querier.SelectAll(req.QueryParams, helpers.MergeMaps(&req.ExtraOpts, &opts), req.ExhaustiveRun, req.ApplyFunc)
+	return db.querier.SelectAll(req.QueryParams, &opts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *CouchDBCertificateStorage) SelectByStatus(ctx context.Context, status models.CertificateStatus, req storage.StorageListRequest[models.Certificate]) (string, error) {
@@ -150,13 +155,32 @@ func (db *CouchDBCertificateStorage) SelectByStatus(ctx context.Context, status 
 			},
 		},
 	}
-	return db.querier.SelectAll(req.QueryParams, helpers.MergeMaps(&req.ExtraOpts, &opts), req.ExhaustiveRun, req.ApplyFunc)
+	return db.querier.SelectAll(req.QueryParams, &opts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *CouchDBCertificateStorage) CountByCA(ctx context.Context, caID string) (int, error) {
-	return -1, fmt.Errorf("TODO")
+	opts := map[string]interface{}{
+		"selector": map[string]interface{}{
+			"issuer_metadata": map[string]interface{}{
+				"id": map[string]interface{}{
+					"$eq": caID,
+				},
+			},
+		},
+		"fields": []string{"_id"},
+	}
+	return db.querier.Count(&opts)
 }
 
 func (db *CouchDBCertificateStorage) SelectByParentCA(ctx context.Context, parentCAID string, req storage.StorageListRequest[models.Certificate]) (string, error) {
-	return "", fmt.Errorf("TODO")
+	opts := map[string]interface{}{
+		"selector": map[string]interface{}{
+			"issuer_metadata": map[string]interface{}{
+				"id": map[string]interface{}{
+					"$eq": parentCAID,
+				},
+			},
+		},
+	}
+	return db.querier.SelectAll(req.QueryParams, &opts, req.ExhaustiveRun, req.ApplyFunc)
 }

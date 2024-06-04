@@ -6,6 +6,32 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 )
 
+var CAFiltrableFields = map[string]FilterFieldType{
+	"id":                   StringFilterFieldType,
+	"level":                NumberFilterFieldType,
+	"type":                 EnumFilterFieldType,
+	"serial_number":        StringFilterFieldType,
+	"status":               EnumFilterFieldType,
+	"engine_id":            StringFilterFieldType,
+	"valid_to":             DateFilterFieldType,
+	"valid_from":           DateFilterFieldType,
+	"revocation_timestamp": DateFilterFieldType,
+	"revocation_reason":    EnumFilterFieldType,
+}
+
+var CertificateFiltrableFields = map[string]FilterFieldType{
+	"type":                 EnumFilterFieldType,
+	"serial_number":        StringFilterFieldType,
+	"subject.common_name":  StringFilterFieldType,
+	"issuer_meta.id":       StringFilterFieldType,
+	"status":               EnumFilterFieldType,
+	"engine_id":            StringFilterFieldType,
+	"valid_to":             DateFilterFieldType,
+	"valid_from":           DateFilterFieldType,
+	"revocation_timestamp": DateFilterFieldType,
+	"revocation_reason":    EnumFilterFieldType,
+}
+
 type CreateCABody struct {
 	ID                 string             `json:"id"`
 	ParentID           string             `json:"parent_id"`

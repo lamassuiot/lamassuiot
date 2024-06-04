@@ -8,14 +8,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
 
-var deviceFiltrableFieldMap = map[string]resources.FilterFieldType{
-	"id":                 resources.StringFilterFieldType,
-	"dms_owner":          resources.StringFilterFieldType,
-	"creation_timestamp": resources.DateFilterFieldType,
-	"status":             resources.EnumFilterFieldType,
-	"tags":               resources.StringArrayFilterFieldType,
-}
-
 type devManagerHttpRoutes struct {
 	svc services.DeviceManagerService
 }
@@ -38,7 +30,7 @@ func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, deviceFiltrableFieldMap)
+	queryParams := FilterQuery(ctx.Request, resources.DeviceFiltrableFields)
 
 	devices := []models.Device{}
 	nextBookmark, err := r.svc.GetDevices(ctx, services.GetDevicesInput{
@@ -65,7 +57,7 @@ func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, deviceFiltrableFieldMap)
+	queryParams := FilterQuery(ctx.Request, resources.DeviceFiltrableFields)
 	type uriParams struct {
 		DMSID string `uri:"id" binding:"required"`
 	}

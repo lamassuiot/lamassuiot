@@ -5,11 +5,9 @@ package couchdb
 
 import (
 	"context"
-	"fmt"
 
 	_ "github.com/go-kivik/couchdb/v4" // The CouchDB driver
 	kivik "github.com/go-kivik/kivik/v4"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
@@ -31,6 +29,11 @@ func NewCouchCARepository(client *kivik.Client) (storage.CACertificatesRepo, err
 	querier := newCouchDBQuerier[models.CACertificate](client.DB(caDBName))
 	querier.CreateBasicCounterView()
 
+	//Check if indexes exist, and create them if not
+	for field := range resources.CAFiltrableFields {
+		querier.EnsureIndexExists(field)
+	}
+
 	return &CouchDBCAStorage{
 		client:  client,
 		querier: &querier,
@@ -38,22 +41,40 @@ func NewCouchCARepository(client *kivik.Client) (storage.CACertificatesRepo, err
 }
 
 func (db *CouchDBCAStorage) Count(ctx context.Context) (int, error) {
-	return db.querier.Count()
+	return db.querier.Count(nil)
 }
 
 func (db *CouchDBCAStorage) CountByEngine(ctx context.Context, engineID string) (int, error) {
-	return -1, fmt.Errorf("TODO")
+	countByEngineCAOpts := map[string]interface{}{
+		"selector": map[string]interface{}{
+			"engine_id": map[string]interface{}{
+				"$eq": engineID,
+			},
+		},
+		"fields": []string{"_id"},
+	}
+	return db.querier.Count(&countByEngineCAOpts)
 }
 
 func (db *CouchDBCAStorage) CountByStatus(ctx context.Context, status models.CertificateStatus) (int, error) {
-	return -1, fmt.Errorf("TODO")
+	countByStatusCAOpts := map[string]interface{}{
+		"selector": map[string]interface{}{
+			"status": map[string]interface{}{
+				"$eq": status,
+			},
+		},
+		"fields": []string{"_id"},
+	}
+	return db.querier.Count(&countByStatusCAOpts)
 }
 
 func (db *CouchDBCAStorage) SelectByType(ctx context.Context, CAType models.CertificateType, req storage.StorageListRequest[models.CACertificate]) (string, error) {
-	opts := map[string]interface{}{
-		"type": CAType,
+	selectTypeCAOpts := map[string]interface{}{
+		"selector": map[string]interface{}{
+			"type": CAType,
+		},
 	}
-	return db.querier.SelectAll(req.QueryParams, helpers.MergeMaps(&req.ExtraOpts, &opts), req.ExhaustiveRun, req.ApplyFunc)
+	return db.querier.SelectAll(req.QueryParams, &selectTypeCAOpts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *CouchDBCAStorage) SelectAll(ctx context.Context, req storage.StorageListRequest[models.CACertificate]) (string, error) {
@@ -61,14 +82,15 @@ func (db *CouchDBCAStorage) SelectAll(ctx context.Context, req storage.StorageLi
 }
 
 func (db *CouchDBCAStorage) SelectByCommonName(ctx context.Context, commonName string, req storage.StorageListRequest[models.CACertificate]) (string, error) {
-	opts := map[string]interface{}{
+	selectByCommonNameCAOpts := map[string]interface{}{
 		"selector": map[string]interface{}{
-			"subject.common_name": map[string]string{
-				"$eq": commonName,
+			"_id": map[string]string{
+				"$ne": commonName,
 			},
 		},
 	}
-	return db.querier.SelectAll(req.QueryParams, helpers.MergeMaps(&req.ExtraOpts, &opts), req.ExhaustiveRun, req.ApplyFunc)
+
+	return db.querier.SelectAll(req.QueryParams, &selectByCommonNameCAOpts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *CouchDBCAStorage) SelectExistsByID(ctx context.Context, id string) (bool, *models.CACertificate, error) {
@@ -76,30 +98,17 @@ func (db *CouchDBCAStorage) SelectExistsByID(ctx context.Context, id string) (bo
 }
 
 func (db *CouchDBCAStorage) SelectByParentCA(ctx context.Context, parentCAID string, req storage.StorageListRequest[models.CACertificate]) (string, error) {
-	return "", fmt.Errorf("TODO")
-}
-
-func (db *CouchDBCAStorage) SelectExistsBySerialNumber(ctx context.Context, serialNumber string) (bool, *models.CACertificate, error) {
-	opts := map[string]interface{}{
+	selectByParentCAOpts := map[string]interface{}{
 		"selector": map[string]interface{}{
-			"serial_number": map[string]string{
-				"$eq": serialNumber,
-			},
+			"parentCA": parentCAID,
 		},
 	}
 
-	var ca *models.CACertificate
-	_, err := db.querier.SelectAll(&resources.QueryParameters{}, &opts, true, func(elem models.CACertificate) {
-		ca = &elem
-	})
+	return db.querier.SelectAll(req.QueryParams, &selectByParentCAOpts, req.ExhaustiveRun, req.ApplyFunc)
+}
 
-	if err != nil {
-		return false, nil, err
-	} else if ca == nil {
-		return false, nil, nil
-	}
-
-	return true, ca, nil
+func (db *CouchDBCAStorage) SelectExistsBySerialNumber(ctx context.Context, serialNumber string) (bool, *models.CACertificate, error) {
+	return db.querier.SelectExists(serialNumber)
 }
 
 func (db *CouchDBCAStorage) Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error) {

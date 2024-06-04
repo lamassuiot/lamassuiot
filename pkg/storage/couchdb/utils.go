@@ -58,9 +58,9 @@ func CreateCouchDBConnection(logger *logrus.Entry, cfg config.CouchDBPSEConfig) 
 }
 
 func CheckAndCreateDB(client *kivik.Client, db string) error {
-	if exists, err := client.DBExists(context.TODO(), db); err == nil && !exists {
+	if exists, err := client.DBExists(context.Background(), db); err == nil && !exists {
 		lCouch.Infof("db does not exist. Creating db: %s", db)
-		if err := client.CreateDB(context.TODO(), db); err != nil {
+		if err := client.CreateDB(context.Background(), db); err != nil {
 			lCouch.Error(fmt.Sprintf("could not create db %s: %s", db, err))
 			return err
 		}
@@ -81,7 +81,7 @@ func newCouchDBQuerier[E any](db *kivik.DB) couchDBQuerier[E] {
 
 func (db *couchDBQuerier[E]) CreateBasicCounterView() error {
 	querier := newCouchDBQuerier[map[string]interface{}](db.DB)
-	_, err := querier.DB.Put(context.TODO(), "_design/utils", map[string]interface{}{
+	_, err := querier.DB.Put(context.Background(), "_design/utils", map[string]interface{}{
 		"_id": "_design/utils",
 		"views": map[string]interface{}{
 			"count": map[string]interface{}{
@@ -98,39 +98,79 @@ func (db *couchDBQuerier[E]) CreateBasicCounterView() error {
 	return nil
 }
 
-func (db *couchDBQuerier[E]) Count() (int, error) {
-	opts := map[string]interface{}{}
-	rows := db.Query(context.TODO(), "_design/utils", "_view/count", opts)
-	if err := rows.Err(); err != nil {
-		return -1, err
-	}
-
-	rows.Next()
-	var result int
-	err := rows.ScanValue(&result)
+func (db *couchDBQuerier[E]) EnsureIndexExists(field string) {
+	exists, _, err := db.SelectExists("_design/" + field)
 	if err != nil {
-		return -1, err
+		fmt.Printf("Error checking for index existence: %s\n", err)
+	}
+	if !exists {
+		db.CreateIndex(field)
+	}
+}
+
+func (db *couchDBQuerier[E]) CreateIndex(fields string) error {
+	querier := newCouchDBQuerier[map[string]interface{}](db.DB)
+
+	indexPayload := map[string]interface{}{
+		"language": "query",
+		"views": map[string]interface{}{
+			fields + "-json-index": map[string]interface{}{
+				"map": map[string]interface{}{
+					"fields": map[string]string{
+						fields: "asc",
+					},
+					"partial_filter_selector": map[string]interface{}{},
+				},
+				"reduce": "_count",
+				"options": map[string]interface{}{
+					"def": map[string]interface{}{
+						"fields": []string{fields},
+					},
+				},
+			},
+		},
 	}
 
-	return result, nil
+	_, err := querier.DB.Put(context.Background(), "_design/"+fields, indexPayload)
+	if err != nil {
+		return fmt.Errorf("error creating index: %s", err)
+	}
 
+	return nil
+}
+
+func (db *couchDBQuerier[E]) Count(opts *map[string]interface{}) (int, error) {
+	// CouchDB does not support count with selector
+	return -1, fmt.Errorf("count not supported")
 }
 
 func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, extraOpts *map[string]interface{}, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
 	nextBookmark := ""
 	opts := map[string]interface{}{
-		"selector": map[string]interface{}{
-			"_id": map[string]string{
-				"$ne": "",
-			},
-		},
+		"selector": map[string]interface{}{"_id": map[string]string{"$ne": ""}},
 	}
 
 	if queryParams != nil {
-		if queryParams.Sort.SortField != "" {
-			opts["sort"] = []map[string]string{
-				{queryParams.Sort.SortField: string(queryParams.Sort.SortMode)},
+		if len(queryParams.Filters) > 0 {
+			for _, filter := range queryParams.Filters {
+				filterSelector := FilterOperandToCouchDBSelector(filter)
+				for key, value := range filterSelector {
+					opts["selector"].(map[string]interface{})[key] = value
+				}
 			}
+		}
+
+		if len(queryParams.Filters) > 0 {
+			for _, filter := range queryParams.Filters {
+				filterSelector := FilterOperandToCouchDBSelector(filter)
+				for key, value := range filterSelector {
+					opts["selector"].(map[string]interface{})[key] = value
+				}
+			}
+		}
+
+		if queryParams.Sort.SortField != "" {
+			opts["sort"] = []map[string]string{{queryParams.Sort.SortField: string(queryParams.Sort.SortMode)}}
 		}
 
 		if queryParams.NextBookmark != "" {
@@ -142,15 +182,18 @@ func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, e
 		}
 	}
 
-	iterCounter := 0
-
-	for key, val := range *extraOpts {
-		opts[key] = val
+	derefExtraOpts := *extraOpts
+	if _, extraHasSelector := derefExtraOpts["selector"]; extraHasSelector {
+		if extraSelectors, ok := derefExtraOpts["selector"].(map[string]interface{}); ok {
+			for key, val := range extraSelectors {
+				opts["selector"].(map[string]interface{})[key] = val
+			}
+		}
 	}
 
+	iterCounter := 0
 	continueIter := true
 	for continueIter {
-
 		bookmark, elems, err := getElements[*E](db.DB, nextBookmark, opts)
 		if err != nil {
 			return "", err
@@ -171,7 +214,6 @@ func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, e
 			continueIter = false
 		}
 
-		// fmt.Printf("  >>  running iter [%d]. Number of items in resp [%d]. Has Next [%t]. NextBookmark [%s]\n", iterCounter, len(elems), continueIter, nextBookmark)
 		iterCounter++
 	}
 
@@ -295,4 +337,33 @@ func getElements[E any](db *kivik.DB, bookmark string, opts map[string]interface
 	}
 
 	return finisthResult.Bookmark, elements, nil
+}
+
+func FilterOperandToCouchDBSelector(filter resources.FilterOption) map[string]interface{} {
+	selector := map[string]interface{}{}
+
+	switch filter.FilterOperation {
+	case resources.StringEqual:
+		selector[filter.Field] = filter.Value
+	case resources.StringNotEqual:
+		selector[filter.Field] = map[string]interface{}{"$ne": filter.Value}
+	case resources.StringContains:
+		selector[filter.Field] = map[string]interface{}{"$regex": fmt.Sprintf(".*%s.*", filter.Value)}
+	case resources.StringNotContains:
+		selector[filter.Field] = map[string]interface{}{"$not": map[string]interface{}{"$regex": fmt.Sprintf(".*%s.*", filter.Value)}}
+	case resources.DateEqual, resources.NumberEqual, resources.EnumEqual:
+		selector[filter.Field] = filter.Value
+	case resources.DateBefore, resources.NumberLessThan:
+		selector[filter.Field] = map[string]interface{}{"$lt": filter.Value}
+	case resources.DateAfter, resources.NumberGreaterThan:
+		selector[filter.Field] = map[string]interface{}{"$gt": filter.Value}
+	case resources.NumberNotEqual, resources.EnumNotEqual:
+		selector[filter.Field] = map[string]interface{}{"$ne": filter.Value}
+	case resources.NumberLessOrEqualThan:
+		selector[filter.Field] = map[string]interface{}{"$lte": filter.Value}
+	case resources.NumberGreaterOrEqualThan:
+		selector[filter.Field] = map[string]interface{}{"$gte": filter.Value}
+	}
+
+	return selector
 }
