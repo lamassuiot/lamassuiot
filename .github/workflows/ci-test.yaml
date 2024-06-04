@@ -45,7 +45,6 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           commit_parent: 1607cb9
           codecov_yml_path: codecov.yml
-          commit_parent: 1607cb9
           slug: lamassuiot/lamassuiot.github.io
       # - name: Upload Coverage report to CodeCov
       #   uses: codecov/codecov-action@v1.0.0
