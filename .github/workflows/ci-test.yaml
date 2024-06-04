@@ -54,7 +54,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           commit_parent: ${{ github.event.pull_request.base.sha }}
-          codecov_yml_path: codecov.yml
+          # codecov_yml_path: codecov.yml
           slug: lamassuiot/lamassuiot.github.io
       # - name: Upload Coverage report to CodeCov
       #   uses: codecov/codecov-action@v1.0.0
