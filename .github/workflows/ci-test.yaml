@@ -4,8 +4,6 @@ on:
   push:
   pull_request:
     types: [opened, synchronize, reopened]
-
-  push:
   workflow_dispatch:
     inputs:
       release_version:
