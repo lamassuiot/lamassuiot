@@ -2,7 +2,6 @@ name: CI Launch Tests
 
  
 on:
-  push:
   pull_request:
     types: [opened, synchronize, reopened]
   workflow_dispatch:
@@ -50,14 +49,12 @@ jobs:
           go run gotest.tools/gotestsum@latest --format github-actions ./pkg/x509engines/... -coverpkg=./... -timeout 600s -coverprofile coverage.txt
           float_coverage=$(go tool cover -func coverage.txt | grep total | awk '{print substr($3, 1, length($3)-1)}')
           echo "coverage=$float_coverage" >> $GITHUB_OUTPUT
-          echo ${{ github.event.pull_request.base.sha }}
-          echo ${{ github.event.pull_request.head.sha }}
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4.2.0
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          commit_parent: "${{ github.event.pull_request.base.sha }}"
-          codecov_yml_path: codecov.yml
+          commit_parent: ${{ github.event.pull_request.base.sha }}
+          # codecov_yml_path: codecov.yml
           slug: lamassuiot/lamassuiot.github.io
       # - name: Upload Coverage report to CodeCov
       #   uses: codecov/codecov-action@v1.0.0
