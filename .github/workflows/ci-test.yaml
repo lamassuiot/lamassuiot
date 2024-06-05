@@ -37,8 +37,10 @@ jobs:
           float_coverage=$(go tool cover -func coverage.txt | grep total | awk '{print substr($3, 1, length($3)-1)}')
           echo "coverage=$float_coverage" >> $GITHUB_OUTPUT
     
-      # - name: Upload Coverage report to CodeCov
-      #   uses: codecov/codecov-action@v1.0.0
-      #   with:
-      #     token: ${{secrets.CODECOV_TOKEN}}
-      #     file: ./coverage.txt
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v4.2.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          commit_parent: ${{ github.event.pull_request.base.sha }}
+          fail_ci_if_error: true
+          verbose: true
