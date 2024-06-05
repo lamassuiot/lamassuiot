@@ -3,12 +3,7 @@ name: CI Launch Tests
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-  workflow_call:
-    # Map the workflow outputs to job outputs
-    outputs:
-      coverage:
-        description: "Coverage report"
-        value: ${{ jobs.test.outputs.coverage }}  
+
 
 
 jobs:
