@@ -1,8 +1,11 @@
 name: CI Launch Tests
-
+ 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
 jobs:
   test:
     name: Run Tests
@@ -10,20 +13,19 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-
+ 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version: '^1.20.0' # The Go version to download (if necessary) and use.
-
+ 
       - name: Install Dependencies
         run: go mod download
-
+ 
       - name: Run Golang Tests with coverage
         id: run
         run: |
           go run gotest.tools/gotestsum@latest --format github-actions ./pkg/... -coverpkg=./... -timeout 600s -coverprofile coverage.txt
-          
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4.2.0
         with:
