@@ -25,7 +25,7 @@ If documentation changes are required, indicate which sections should be updated
 
 ## Helm Chart
 
-Note that image bumping (updating a pod/container) DOES NOT require updating the helm chart
+Note that image bumping (updating a pod/container image tag) DOES NOT require updating the helm chart, since this is related to the Release lifecycle
 
 - [ ] REQUIRES updating the helm chart
 - [ ] DOES NOT require updating the helm chart 
