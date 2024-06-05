@@ -3,8 +3,9 @@ name: CI Launch Tests
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-
-
+  push:
+    branches:
+      - main 
 
 jobs:
   test:
