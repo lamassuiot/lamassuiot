@@ -1486,6 +1486,7 @@ func TestESTServerKeyGen(t *testing.T) {
 						Type: models.KeyType(x509.RSA),
 						Bits: 3072,
 					}
+					
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
