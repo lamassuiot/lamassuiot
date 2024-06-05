@@ -1,2 +1,5 @@
 ignore:
  - "pkg/test"
+ - "pkg/storage/sqlite"
+ - "pkg/storage/couchdb"
+ - "pkg/services/mock"
