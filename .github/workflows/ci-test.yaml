@@ -2,7 +2,6 @@ name: CI Launch Tests
 
 on:
   pull_request:
-    branches: [main]
     types: [opened, synchronize, reopened]
   workflow_call:
     # Map the workflow outputs to job outputs
