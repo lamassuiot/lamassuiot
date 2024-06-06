@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	keystorager "github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/key_storager"
+	keystorager "github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/keystore"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 )
 
