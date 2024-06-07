@@ -9,9 +9,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/huh"
 	"github.com/fatih/color"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
@@ -79,37 +81,109 @@ const (
 	GolangFS          CryptoEngineOption = "golangfs"
 )
 
+var (
+	cryptoEngines []string
+	pkcs11Module  string
+
+	storageEngine  string
+	sqliteFilePath string
+
+	eventBusEngine string
+)
+
 func main() {
-	hsmModule := flag.String("hsm-module-path", "", "enable HSM support")
+	nonInteractiveFlag := flag.Bool("non-interactive", false, "non interactive mode")
 
-	awsIoTManager := flag.Bool("awsiot", false, "enable AWS IoT Manager")
-	awsIoTManagerUser := flag.String("awsiot-keyid", "", "AWS IoT Manager AccessKeyID")
-	awsIoTManagerPass := flag.String("awsiot-keysecret", "", "AWS IoT Manager SecretAccessKey")
-	awsIoTManagerRegion := flag.String("awsiot-region", "eu-west-1", "AWS IoT Manager Region")
-	awsIoTManagerID := flag.String("awsiot-id", "", "AWS IoT Manager ConnectorID")
+	hsmModuleFlag := flag.String("hsm-module-path", "", "enable HSM support")
 
-	cryptoEngineOptions := flag.String("cryptoengines", "golangfs", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','golangfs']")
-	disableMonitor := flag.Bool("disable-monitor", false, "disable crypto monitoring")
-	disableEventBus := flag.Bool("disable-eventbus", false, "disable eventbus")
+	awsIoTManagerFlag := flag.Bool("awsiot", false, "enable AWS IoT Manager")
+	awsIoTManagerUserFlag := flag.String("awsiot-keyid", "", "AWS IoT Manager AccessKeyID")
+	awsIoTManagerPassFlag := flag.String("awsiot-keysecret", "", "AWS IoT Manager SecretAccessKey")
+	awsIoTManagerRegionFlag := flag.String("awsiot-region", "eu-west-1", "AWS IoT Manager Region")
+	awsIoTManagerIDFlag := flag.String("awsiot-id", "", "AWS IoT Manager ConnectorID")
 
-	storageEngine := flag.String("storageengine", "postgres", "valid options: sqlite, postgres, couchdb")
-	sqliteOptions := flag.String("sqlite", "", "set path to sqlite database to enable sqlite storage engine")
+	cryptoEngineOptionsFlag := flag.String("cryptoengines", "golangfs", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','golangfs']")
+	disableMonitorFlag := flag.Bool("disable-monitor", false, "disable crypto monitoring")
+	disableEventBusFlag := flag.Bool("disable-eventbus", false, "disable eventbus")
+
+	storageEngineFlag := flag.String("storageengine", "postgres", "valid options: sqlite, postgres, couchdb")
+	sqliteOptionsFlag := flag.String("sqlite", "", "set path to sqlite database to enable sqlite storage engine")
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title("Select CRYPTO Engines to deploy").
+				Options(
+					huh.NewOption("Filesystem", "fs").Selected(true),
+					huh.NewOption("AWS KMS", "aws-kms"),
+					huh.NewOption("AWS Secrets Manager", "aws-secrets-manager"),
+					huh.NewOption("Hashicorp Vault - KV V2", "hashicorp-vault-kv-v2"),
+					huh.NewOption("SoftHSM - PKCS11", "softhsm"),
+				).
+				Value(&cryptoEngines), // store the chosen option
+		),
+		huh.NewGroup(
+			huh.NewText().
+				Title("PKCS11 module path").
+				Description("Specify the absolute path to the .so PKCS11 module...").
+				Value(&pkcs11Module).Validate(huh.ValidateNotEmpty()),
+		).WithHideFunc(func() bool {
+			return !slices.Contains(cryptoEngines, "softhsm")
+		}),
+
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Select STORAGE engine to deploy").
+				Options(
+					huh.NewOption("Postgres", "postgres").Selected(true),
+					huh.NewOption("Sqlite", "sqlite"),
+					huh.NewOption("CouchDB", "couchdb"),
+				).
+				Value(&storageEngine),
+		),
+		huh.NewGroup(
+			huh.NewText().
+				Title("Sqlite file path").
+				Description("Specify the absolute path to the sqlite file...").
+				Value(&sqliteFilePath).Validate(huh.ValidateNotEmpty()),
+		).WithHideFunc(func() bool {
+			return storageEngine != "sqlite"
+		}),
+
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Select EVENT BUS engine to deploy").
+				Options(
+					huh.NewOption("RabbitMQ", "rabbit").Selected(true),
+					huh.NewOption("AWS SQS-SNS", "aws-sqs-sns"),
+					huh.NewOption("DISABLED", "disabled"),
+				).
+				Value(&eventBusEngine),
+		),
+	)
 
 	flag.Parse()
 
-	fmt.Println("===================== FLAGS ======================")
-
-	fmt.Printf("AWS IoT Manager Enabled: %v\n", *awsIoTManager)
-	if *awsIoTManager {
-		ai := *awsIoTManagerID
-		fmt.Printf("AWS IoT Manager ConnectorID: %s\n", ai)
-		fmt.Printf("AWS IoT Manager AccessKey: %s\n", *awsIoTManagerUser)
-		fmt.Printf("AWS IoT Manager SecretAccessKey: %s\n", *awsIoTManagerPass)
-		fmt.Printf("AWS IoT Manager Region: %s\n", *awsIoTManagerRegion)
+	if !*nonInteractiveFlag {
+		err := form.Run()
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
-	if *hsmModule != "" {
-		fmt.Printf("HSM - PKCS11 Module Driver: %s\n", *hsmModule)
+	fmt.Println("===================== FLAGS ======================")
+
+	fmt.Printf("AWS IoT Manager Enabled: %v\n", *awsIoTManagerFlag)
+	if *awsIoTManagerFlag {
+		ai := *awsIoTManagerIDFlag
+		fmt.Printf("AWS IoT Manager ConnectorID: %s\n", ai)
+		fmt.Printf("AWS IoT Manager AccessKey: %s\n", *awsIoTManagerUserFlag)
+		fmt.Printf("AWS IoT Manager SecretAccessKey: %s\n", *awsIoTManagerPassFlag)
+		fmt.Printf("AWS IoT Manager Region: %s\n", *awsIoTManagerRegionFlag)
+	}
+
+	if *hsmModuleFlag != "" {
+		fmt.Printf("HSM - PKCS11 Module Driver: %s\n", *hsmModuleFlag)
 	}
 
 	cleanupMap := make(map[string]func() error)
@@ -123,9 +197,9 @@ func main() {
 		GolangFS:          {},
 	}
 
-	if (*cryptoEngineOptions) != "" {
+	if (*cryptoEngineOptionsFlag) != "" {
 		var err error
-		cryptoEngineOptionsMap, err = parseCryptoEngineOptions(*cryptoEngineOptions)
+		cryptoEngineOptionsMap, err = parseCryptoEngineOptions(*cryptoEngineOptionsFlag)
 		if err != nil {
 			log.Fatalf("could not parse crypto engine options: %s", err)
 		}
@@ -138,17 +212,17 @@ func main() {
 		LogLevel: config.Trace,
 	}
 
-	if *storageEngine == "sqlite" {
-		if *sqliteOptions == "" {
+	if *storageEngineFlag == "sqlite" {
+		if *sqliteOptionsFlag == "" {
 			log.Fatalf("sqlite storage engine requires a path to the database file. None provided. Exiting...")
 		}
 
-		fmt.Printf("using sqlite storage engine: %s", *sqliteOptions)
+		fmt.Printf("using sqlite storage engine: %s", *sqliteOptionsFlag)
 		pluglableStorageConfig.Provider = config.SQLite
 		pluglableStorageConfig.SQLite = config.SQLitePSEConfig{
-			DatabasePath: *sqliteOptions,
+			DatabasePath: *sqliteOptionsFlag,
 		}
-	} else if *storageEngine == "couchdb" {
+	} else if *storageEngineFlag == "couchdb" {
 		fmt.Println(" 	launching docker: CouchDB ...")
 		cCleanup, couchConfig, err := couchdb_test.RunCouchDBDocker()
 		if err != nil {
@@ -251,7 +325,7 @@ func main() {
 		cleanupMap["AWS - LocalStack"] = awsCleanup
 	}
 
-	hsmModulePath := *hsmModule
+	hsmModulePath := *hsmModuleFlag
 	if _, ok := cryptoEngineOptionsMap[Pkcs11]; ok && hsmModulePath != "" {
 		fmt.Println("	launching docker: SoftHSM ...")
 		var err error
@@ -277,7 +351,7 @@ func main() {
 		Enabled:  false,
 	}
 
-	if !*disableEventBus {
+	if !*disableEventBusFlag {
 		fmt.Println("	launching docker: RabbitMQ ...")
 		var err error
 		rmqCleanup, rmqConfig, adminPort, err := rabbitmq_test.RunRabbitMQDocker()
@@ -346,17 +420,17 @@ func main() {
 		AssemblyMode:       config.Http,
 		CryptoEngines:      cryptoEnginesConfig,
 		CryptoMonitoring: config.CryptoMonitoring{
-			Enabled:   !*disableMonitor,
+			Enabled:   !*disableMonitorFlag,
 			Frequency: "* * * * *",
 		},
 		Storage: *pluglableStorageConfig,
 		AWSIoTManager: config.MonolithicAWSIoTManagerConfig{
-			Enabled:     *awsIoTManager,
-			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
+			Enabled:     *awsIoTManagerFlag,
+			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerIDFlag),
 			AWSSDKConfig: config.AWSSDKConfig{
-				AccessKeyID:     *awsIoTManagerUser,
-				SecretAccessKey: config.Password(*awsIoTManagerPass),
-				Region:          *awsIoTManagerRegion,
+				AccessKeyID:     *awsIoTManagerUserFlag,
+				SecretAccessKey: config.Password(*awsIoTManagerPassFlag),
+				Region:          *awsIoTManagerRegionFlag,
 			},
 		},
 	}

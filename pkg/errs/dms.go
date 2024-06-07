@@ -1,13 +1,12 @@
 package errs
 
-import "errors"
-
 var (
-	ErrDMSNotFound      error = errors.New("DMS not found")
-	ErrDMSAlreadyExists error = errors.New("DMS already exists")
+	ErrDMSNotFound      = NewAPIError(errorBuilder{Status: 404, Msg: "DMS not found"})
+	ErrDMSAlreadyExists = NewAPIError(errorBuilder{Status: 409, Msg: "DMS already exists"})
 
-	ErrDMSOnlyEST              error = errors.New("DMS uses EST protocol")
-	ErrDMSInvalidAuthMode      error = errors.New("DMS invalid auth mode")
-	ErrDMSAuthModeNotSupported error = errors.New("DMS auth mode not supported")
-	ErrDMSEnrollInvalidCert    error = errors.New("invalid certificate")
+	ErrDMSOnlyEST              = NewAPIError(errorBuilder{Status: 400, Msg: "only EST is supported"})
+	ErrDMSInvalidAuthMode      = NewAPIError(errorBuilder{Status: 400, Msg: "invalid auth mode"})
+	ErrDMSAuthModeNotSupported = NewAPIError(errorBuilder{Status: 400, Msg: "auth mode not supported"})
+	ErrDMSEnrollInvalidCert    = NewAPIError(errorBuilder{Status: 400, Msg: "invalid cert"})
+	ErrDMSRevokedCert          = NewAPIError(errorBuilder{Status: 400, Msg: "revoked certificate"})
 )
