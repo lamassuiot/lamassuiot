@@ -26,7 +26,7 @@ func (s *MockService) Event2(event *event.Event) error {
 	return args.Error(0)
 }
 
-func TestHandleEvent(t *testing.T) {
+func TestHandleMessage(t *testing.T) {
 	logger := logrus.New()
 	logger.SetLevel(logrus.DebugLevel)
 	entry := logrus.NewEntry(logger)
@@ -45,7 +45,7 @@ func TestHandleEvent(t *testing.T) {
 		},
 	}
 
-	handler := EventHandler{
+	handler := CloudEventHandler{
 		lMessaging:  entry,
 		dispatchMap: dispatchMap,
 	}
@@ -55,7 +55,7 @@ func TestHandleEvent(t *testing.T) {
 			Payload: []byte(`{"type": "event_type_1", "specversion": "1.0"}`),
 		}
 
-		err := handler.HandleEvent(message)
+		err := handler.HandleMessage(message)
 		assert.NoError(t, err)
 		svc.AssertCalled(t, "Event1", mock.Anything)
 		svc.AssertNotCalled(t, "Event2")
@@ -66,7 +66,7 @@ func TestHandleEvent(t *testing.T) {
 			Payload: []byte(`{"type": "event_type_3", "specversion": "1.0"`),
 		}
 
-		err := handler.HandleEvent(message)
+		err := handler.HandleMessage(message)
 		assert.Error(t, err)
 		svc.AssertNotCalled(t, "Event1")
 		svc.AssertNotCalled(t, "Event2")
@@ -77,7 +77,7 @@ func TestHandleEvent(t *testing.T) {
 			Payload: []byte(`{"type": "event_type_3", "specversion": "1.0"}`),
 		}
 
-		err := handler.HandleEvent(message)
+		err := handler.HandleMessage(message)
 		assert.NoError(t, err)
 		svc.AssertNotCalled(t, "Event1")
 		svc.AssertNotCalled(t, "Event2")
@@ -88,7 +88,7 @@ func TestHandleEvent(t *testing.T) {
 			Payload: []byte(`{"type": "event_type_2", "specversion": "1.0"}`),
 		}
 
-		err := handler.HandleEvent(message)
+		err := handler.HandleMessage(message)
 		assert.Error(t, err)
 		svc.AssertNotCalled(t, "Event1")
 		svc.AssertCalled(t, "Event2", mock.Anything)
@@ -110,7 +110,7 @@ func TestHandleAnyEvent(t *testing.T) {
 		},
 	}
 
-	handler := EventHandler{
+	handler := CloudEventHandler{
 		lMessaging:  entry,
 		dispatchMap: dispatchMap,
 	}
@@ -119,7 +119,7 @@ func TestHandleAnyEvent(t *testing.T) {
 		Payload: []byte(`{"type": "event_type_1", "specversion": "1.0"}`),
 	}
 
-	err := handler.HandleEvent(message)
+	err := handler.HandleMessage(message)
 	assert.NoError(t, err)
 	svc.AssertCalled(t, "Event1", mock.Anything)
 

@@ -24,7 +24,6 @@ type EventSubscriptionHandler struct {
 }
 
 func NewEventBusSubscriptionHandler(conf config.EventBusEngine, serviceId string, lMessaging *logrus.Entry, handler handlers.EventHandler, handlerName string, topic string) (*EventSubscriptionHandler, error) {
-
 	eventBusRouter, err := NewEventBusRouter(conf, serviceId, lMessaging)
 	if err != nil {
 		return nil, fmt.Errorf("could not setup event bus: %s", err)
@@ -36,7 +35,7 @@ func NewEventBusSubscriptionHandler(conf config.EventBusEngine, serviceId string
 		return nil, err
 	}
 
-	mHandler := eventBusRouter.AddNoPublisherHandler(handlerName, topic, sub, handler.HandleEvent)
+	mHandler := eventBusRouter.AddNoPublisherHandler(handlerName, topic, sub, handler.HandleMessage)
 
 	return &EventSubscriptionHandler{
 		router:      eventBusRouter,

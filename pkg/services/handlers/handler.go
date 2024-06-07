@@ -10,16 +10,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type IEventHandler interface {
-	HandleEvent(event *message.Message) error
+type EventHandler interface {
+	HandleMessage(*message.Message) error
 }
 
-type EventHandler struct {
+type CloudEventHandler struct {
 	lMessaging  *logrus.Entry
 	dispatchMap map[string]func(*event.Event) error
 }
 
-func (h EventHandler) HandleEvent(m *message.Message) error {
+func (h CloudEventHandler) HandleMessage(m *message.Message) error {
 	h.lMessaging.Infof("Received event: %s", m.Payload)
 	event, err := helpers.ParseCloudEvent(m.Payload)
 	if err != nil {

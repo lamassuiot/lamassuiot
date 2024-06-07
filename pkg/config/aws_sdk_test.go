@@ -5,12 +5,11 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	awskmssm_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/aws-kms-sm"
+	awsplatform_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/aws-platform"
 )
 
 func TestGetAwsSdkConfig(t *testing.T) {
-
-	containerCleanup, conf, err := awskmssm_test.RunAWSEmulationLocalStackDocker()
+	containerCleanup, conf, err := awsplatform_test.RunAWSEmulationLocalStackDocker()
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
