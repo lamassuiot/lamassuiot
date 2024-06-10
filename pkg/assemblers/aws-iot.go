@@ -41,7 +41,12 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 	if err != nil {
 		lMessaging.Errorf("could not generate Event Bus Subscription Handler: %s", err)
 	}
-	subHandler.RunAsync()
+
+	err = subHandler.RunAsync()
+	if err != nil {
+		lMessaging.Errorf("could not run Event Bus Subscription Handler: %s", err)
+		return nil, err
+	}
 
 	go func() {
 		lSvc.Infof("starting SQS thread")

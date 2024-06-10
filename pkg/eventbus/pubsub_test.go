@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -29,7 +30,7 @@ func PrepareAWSSqsSNS() (*TestEventBusConfig, error) {
 
 	return &TestEventBusConfig{
 		config: config.EventBusEngine{
-			LogLevel:  config.Trace,
+			LogLevel:  config.Debug,
 			Enabled:   true,
 			Provider:  config.AWSSqsSns,
 			AWSSqsSns: *conf,
@@ -42,16 +43,14 @@ func PrepareAWSSqsSNS() (*TestEventBusConfig, error) {
 }
 
 func PrepareRabbitMQForTest() (*TestEventBusConfig, error) {
-	cleanup, conf, adminPort, err := rabbitmq_test.RunRabbitMQDocker()
+	cleanup, conf, _, err := rabbitmq_test.RunRabbitMQDocker()
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Println(adminPort)
-
 	return &TestEventBusConfig{
 		config: config.EventBusEngine{
-			LogLevel: config.Trace,
+			LogLevel: config.Debug,
 			Enabled:  true,
 			Provider: config.Amqp,
 			Amqp:     *conf,
@@ -84,7 +83,7 @@ func TestWildcardSubscribe(t *testing.T) {
 		},
 		{
 			name:            "OK/WildcardAtEnd",
-			subscriptionKey: "my.topic.*",
+			subscriptionKey: "my.topic.#",
 			expectedTimeout: false,
 		},
 		{
@@ -92,6 +91,11 @@ func TestWildcardSubscribe(t *testing.T) {
 			subscriptionKey: "another.topic",
 			expectedTimeout: true,
 		},
+	}
+
+	awsSqsSnsEventBus, err := PrepareAWSSqsSNS()
+	if err != nil {
+		t.Fatalf("could not prepare AWS SQS/SNS test server: %s", err)
 	}
 
 	rabbitEventBus, err := PrepareRabbitMQForTest()
@@ -107,14 +111,14 @@ func TestWildcardSubscribe(t *testing.T) {
 			name: "RabbitMQ",
 			conf: rabbitEventBus,
 		},
-		// {
-		// 	name: "AWSSqsSNS",
-		// 	conf: awsSqsSnsEventBus,
-		// },
+		{
+			name: "AWSSqsSNS",
+			conf: awsSqsSnsEventBus,
+		},
 	}
 
 	for _, eventBusConf := range eventBusEngines {
-		pub, err := NewEventBusPublisher(eventBusConf.conf.config, "test-pub", helpers.SetupLogger(config.Trace, "Test Case", "pub"))
+		pub, err := NewEventBusPublisher(eventBusConf.conf.config, "test-pub", helpers.SetupLogger(config.Debug, "Test Case", "pub"))
 		if err != nil {
 			t.Fatalf("could not create publisher: %s", err)
 		}
@@ -124,7 +128,7 @@ func TestWildcardSubscribe(t *testing.T) {
 
 			t.Run(fmt.Sprintf("%s-%s", eventBusConf.name, tc.name), func(t *testing.T) {
 				subAndPub := func(publishFunc func() error) error {
-					logger := helpers.SetupLogger(config.Trace, "Test Case", "sub")
+					logger := helpers.SetupLogger(config.Debug, "Test Case", "sub")
 
 					resultChannel := make(chan int, 1)
 
@@ -138,7 +142,11 @@ func TestWildcardSubscribe(t *testing.T) {
 						return fmt.Errorf("could not create subscription handler: %s", err)
 					}
 
-					subHandler.RunAsync()
+					err = subHandler.RunAsync()
+					if err != nil {
+						return fmt.Errorf("could not run subscription handler: %s", err)
+					}
+
 					time.Sleep(3 * time.Second)
 					err = publishFunc()
 
@@ -178,7 +186,7 @@ func TestWildcardSubscribe(t *testing.T) {
 	}
 }
 
-func TestMultiSubscribe(t *testing.T) {
+func TestMultiServiceSubscribe(t *testing.T) {
 	type sub struct {
 		serviceID       string
 		subscriptionKey string
@@ -235,6 +243,11 @@ func TestMultiSubscribe(t *testing.T) {
 		t.Fatalf("could not prepare RabbitMQ test server: %s", err)
 	}
 
+	awsSqsSnsEventBus, err := PrepareAWSSqsSNS()
+	if err != nil {
+		t.Fatalf("could not prepare AWS SQS/SNS test server: %s", err)
+	}
+
 	eventBusEngines := []struct {
 		name string
 		conf *TestEventBusConfig
@@ -243,15 +256,14 @@ func TestMultiSubscribe(t *testing.T) {
 			name: "RabbitMQ",
 			conf: rabbitEventBus,
 		},
-		// {
-		// 	name: "AWSSqsSNS",
-		// 	conf: awsSqsSnsEventBus,
-		// },
+		{
+			name: "AWSSqsSNS",
+			conf: awsSqsSnsEventBus,
+		},
 	}
 
 	for _, eventBusConf := range eventBusEngines {
-
-		pub, err := NewEventBusPublisher(eventBusConf.conf.config, "test-pub", helpers.SetupLogger(config.Trace, "Test Case", "pub"))
+		pub, err := NewEventBusPublisher(eventBusConf.conf.config, "test-pub", helpers.SetupLogger(config.Debug, "Test Case", "pub"))
 		if err != nil {
 			t.Fatalf("could not create publisher: %s", err)
 		}
@@ -261,7 +273,7 @@ func TestMultiSubscribe(t *testing.T) {
 
 			t.Run(fmt.Sprintf("%s-%s", eventBusConf.name, tc.name), func(t *testing.T) {
 				subAndPub := func(publishFunc func() error) error {
-					logger := helpers.SetupLogger(config.Trace, "Test Case", "sub")
+					logger := helpers.SetupLogger(config.Debug, "Test Case", "sub")
 
 					resultChannel := make(chan string)
 
@@ -269,7 +281,7 @@ func TestMultiSubscribe(t *testing.T) {
 					responses := []string{}
 
 					for _, sub := range tc.subscriptions {
-						subHandler, err := NewEventBusSubscriptionHandler(eventBusConf.conf.config, fmt.Sprintf("%s-%s-%d", tc.name, sub.serviceID, time.Now().UnixMilli()), logger, &basicTestHandler{
+						subHandler, err := NewEventBusSubscriptionHandler(eventBusConf.conf.config, fmt.Sprintf("%s-%s-%d", strings.ReplaceAll(tc.name, "/", "-"), sub.serviceID, time.Now().UnixMilli()), logger, &basicTestHandler{
 							handler: func(msg *message.Message) error {
 								t.Logf("subscriber %s - %s message ACK", sub.serviceID, sub.subscriptionKey)
 								resultChannel <- sub.serviceID
@@ -281,7 +293,12 @@ func TestMultiSubscribe(t *testing.T) {
 						}
 
 						stopAllFuncs = append(stopAllFuncs, subHandler.Stop)
-						subHandler.RunAsync()
+						err = subHandler.RunAsync()
+						if err != nil {
+							return fmt.Errorf("could not run subscription handler: %s", err)
+						}
+
+						fmt.Println("ready")
 					}
 
 					stopAll := func() {
@@ -361,10 +378,10 @@ func TestMultiConsumers(t *testing.T) {
 		t.Fatalf("could not prepare RabbitMQ test server: %s", err)
 	}
 
-	// awsSqsSnsEventBus, err := PrepareAWSSqsSNS()
-	// if err != nil {
-	// 	t.Fatalf("could not prepare AWS SQS/SNS test server: %s", err)
-	// }
+	awsSqsSnsEventBus, err := PrepareAWSSqsSNS()
+	if err != nil {
+		t.Fatalf("could not prepare AWS SQS/SNS test server: %s", err)
+	}
 
 	eventBusEngines := []struct {
 		name string
@@ -374,10 +391,10 @@ func TestMultiConsumers(t *testing.T) {
 			name: "RabbitMQ",
 			conf: rabbitEventBus,
 		},
-		// {
-		// 	name: "AWSSqsSNS",
-		// 	conf: awsSqsSnsEventBus,
-		// },
+		{
+			name: "AWSSqsSNS",
+			conf: awsSqsSnsEventBus,
+		},
 	}
 
 	testcases := []struct {
@@ -412,7 +429,7 @@ func TestMultiConsumers(t *testing.T) {
 	}
 
 	for _, eventBusConf := range eventBusEngines {
-		pub, err := NewEventBusPublisher(eventBusConf.conf.config, "test-pub", helpers.SetupLogger(config.Trace, "Test Case", "pub"))
+		pub, err := NewEventBusPublisher(eventBusConf.conf.config, "test-pub", helpers.SetupLogger(config.Debug, "Test Case", "pub"))
 		if err != nil {
 			t.Fatalf("could not create publisher: %s", err)
 		}
@@ -421,7 +438,7 @@ func TestMultiConsumers(t *testing.T) {
 			tc := tc
 			t.Run(fmt.Sprintf("%s-%s", eventBusConf.name, tc.name), func(t *testing.T) {
 				subAndPub := func(publishFunc func() error) error {
-					logger := helpers.SetupLogger(config.Trace, "Test Case", "sub")
+					logger := helpers.SetupLogger(config.Debug, "Test Case", "sub")
 
 					resultChannel := make(chan string)
 
@@ -429,7 +446,8 @@ func TestMultiConsumers(t *testing.T) {
 					responses := map[string]int{}
 
 					for _, sub := range tc.subscriptions {
-						subHandler, err := NewEventBusSubscriptionHandler(eventBusConf.conf.config, fmt.Sprintf("%s-%s", tc.name, sub.serviceID), logger, &basicTestHandler{
+						//SQS Can only include alphanumeric characters, hyphens, or underscores. 1 to 80 in length
+						subHandler, err := NewEventBusSubscriptionHandler(eventBusConf.conf.config, fmt.Sprintf("%s-%s", strings.ReplaceAll(tc.name, "/", "-"), sub.serviceID), logger, &basicTestHandler{
 							handler: func(msg *message.Message) error {
 								t.Logf("subscriber %s - %s message ACK", sub.serviceID, sub.subscriptionKey)
 								resultChannel <- sub.serviceID
@@ -441,7 +459,11 @@ func TestMultiConsumers(t *testing.T) {
 						}
 
 						stopAllFuncs = append(stopAllFuncs, subHandler.Stop)
-						subHandler.RunAsync()
+
+						err = subHandler.RunAsync()
+						if err != nil {
+							return fmt.Errorf("could not run subscription handler: %s", err)
+						}
 					}
 
 					stopAll := func() {
@@ -450,7 +472,7 @@ func TestMultiConsumers(t *testing.T) {
 						}
 					}
 
-					time.Sleep(10 * time.Second)
+					time.Sleep(3 * time.Second)
 
 					ctxTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 					defer cancel()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sns"
@@ -12,6 +13,7 @@ import (
 	awsSns "github.com/aws/aws-sdk-go-v2/service/sns"
 	awsSqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/sirupsen/logrus"
 
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -95,13 +97,13 @@ func bindSQSToSNS(builder SnsExchangeBuilder, sqsSub *sqs.Subscriber, snsPub *sn
 
 		if !strings.Contains(topic, "#") {
 			filterPolicy = map[string]any{
-				"type": []string{topic},
+				"topic": []string{topic},
 			}
 		} else {
 			if strings.HasSuffix(topic, "#") {
 				topic, _ = strings.CutSuffix(topic, "#")
 				filterPolicy = map[string]any{
-					"type": []any{
+					"topic": []any{
 						map[string]any{
 							"prefix": topic,
 						},
@@ -117,7 +119,7 @@ func bindSQSToSNS(builder SnsExchangeBuilder, sqsSub *sqs.Subscriber, snsPub *sn
 		}
 
 		subAttributes["FilterPolicy"] = string(filterPolicyJSON)
-		subAttributes["FilterPolicyScope"] = "MessageBody"
+		subAttributes["FilterPolicyScope"] = "MessageAttributes"
 
 	}
 
@@ -194,7 +196,12 @@ type SnsExchangePublisher struct {
 }
 
 func (s *SnsExchangePublisher) Publish(topic string, messages ...*message.Message) error {
-	return s.sns.Publish(s.builderConf.ExchangeName, messages...)
+	newMessages := make([]*message.Message, 0, len(messages))
+	for _, msg := range messages {
+		msg.Metadata.Set("topic", topic)
+		newMessages = append(newMessages, msg)
+	}
+	return s.sns.Publish(s.builderConf.ExchangeName, newMessages...)
 }
 
 func (s *SnsExchangePublisher) Close() error {
@@ -212,6 +219,8 @@ func NewSnsExchangePublisher(builder SnsExchangeBuilder) (*SnsExchangePublisher,
 	}
 
 	lEventBusPub := newWithLogger(builder.Logger.WithField("subsystem-provider", "AWS.SNS - Publisher"))
+	httpCli, _ := helpers.BuildHTTPClientWithTracerLogger(&http.Client{}, builder.Logger)
+	awsConf.HTTPClient = httpCli
 
 	pub, err := sns.NewPublisher(sns.PublisherConfig{
 		AWSConfig:             *awsConf,

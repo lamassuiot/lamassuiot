@@ -46,8 +46,23 @@ func NewEventBusSubscriptionHandler(conf config.EventBusEngine, serviceId string
 	}, nil
 }
 
-func (s *EventSubscriptionHandler) RunAsync() {
-	go s.router.Run(context.Background())
+func (s *EventSubscriptionHandler) RunAsync() error {
+	errChan := make(chan error)
+	go func() {
+		err := s.router.Run(context.Background())
+		if err != nil {
+			errChan <- err
+		}
+
+		errChan <- nil
+	}()
+
+	select {
+	case <-s.router.Running(): // implementation states that when router "running" channel is closed, it means the router is running
+		return nil
+	case err := <-errChan:
+		return err
+	}
 }
 
 func (s *EventSubscriptionHandler) Stop() {

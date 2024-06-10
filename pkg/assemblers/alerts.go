@@ -57,8 +57,14 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 		subHandler, err := eventbus.NewEventBusSubscriptionHandler(conf.SubscriberEventBus, "alerts", lMessaging, *handler, "alerts", "#")
 		if err != nil {
 			lMessaging.Errorf("could not generate Event Bus Subscription Handler: %s", err)
+			return nil, err
 		}
-		subHandler.RunAsync()
+
+		err = subHandler.RunAsync()
+		if err != nil {
+			lMessaging.Errorf("could not run Event Bus Subscription Handler: %s", err)
+			return nil, err
+		}
 	}
 
 	return &svc, nil
