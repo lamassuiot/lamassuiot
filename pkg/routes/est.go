@@ -21,8 +21,8 @@ func NewESTHttpRoutes(logger *logrus.Entry, router *gin.RouterGroup, svc service
 	est.POST("/simplereenroll", routes.EnrollReenroll)
 	est.POST("/:aps/simplereenroll", routes.EnrollReenroll)
 
-	// est.POST("/serverkeygen", routes.ServerKeygen)
-	// est.POST("/:aps/serverkeygen", routes.ServerKeygenWithAPS)
+	est.POST("/serverkeygen", routes.ServerKeyGen)
+	est.POST("/:aps/serverkeygen", routes.ServerKeyGen)
 
 	return est
 }
