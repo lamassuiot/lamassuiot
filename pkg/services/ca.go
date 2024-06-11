@@ -1009,7 +1009,6 @@ func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input Create
 }
 
 type ImportCertificateInput struct {
-	ImportMode  models.CertificateType
 	Certificate *models.X509Certificate
 	Metadata    map[string]any
 }

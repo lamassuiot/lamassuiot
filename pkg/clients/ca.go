@@ -96,17 +96,6 @@ func (cli *httpCAClient) GetCAsByCommonName(ctx context.Context, input services.
 
 }
 
-func (cli *httpCAClient) GetCABySerialNumber(ctx context.Context, input services.GetCABySerialNumberInput) (*models.CACertificate, error) {
-	url := cli.baseUrl + "/v1/cas/sn/" + input.SerialNumber
-
-	resp, err := Get[models.CACertificate](ctx, cli.httpClient, url, nil, map[int][]error{
-		404: {
-			errs.ErrCANotFound,
-		},
-	})
-	return &resp, err
-}
-
 func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas", resources.CreateCABody{
 		ID:                 input.ID,
@@ -177,7 +166,11 @@ func (cli *httpCAClient) SignCertificate(ctx context.Context, input services.Sig
 		SignVerbatim: input.SignVerbatim,
 		CertRequest:  input.CertRequest,
 		Subject:      input.Subject,
-	}, map[int][]error{})
+	}, map[int][]error{
+		404: {
+			errs.ErrCANotFound,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
