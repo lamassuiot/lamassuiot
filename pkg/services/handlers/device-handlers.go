@@ -12,8 +12,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewDeviceEventHandler(l *logrus.Entry, svc services.DeviceManagerService) *EventHandler {
-	return &EventHandler{
+func NewDeviceEventHandler(l *logrus.Entry, svc services.DeviceManagerService) *CloudEventHandler {
+	return &CloudEventHandler{
 		lMessaging: l,
 		dispatchMap: map[string]func(*event.Event) error{
 			string(models.EventUpdateCertificateMetadataKey): func(m *event.Event) error { return updateCertMetaHandler(m, svc, l) },

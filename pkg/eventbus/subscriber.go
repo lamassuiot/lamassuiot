@@ -24,7 +24,6 @@ type EventSubscriptionHandler struct {
 }
 
 func NewEventBusSubscriptionHandler(conf config.EventBusEngine, serviceId string, lMessaging *logrus.Entry, handler handlers.EventHandler, handlerName string, topic string) (*EventSubscriptionHandler, error) {
-
 	eventBusRouter, err := NewEventBusRouter(conf, serviceId, lMessaging)
 	if err != nil {
 		return nil, fmt.Errorf("could not setup event bus: %s", err)
@@ -36,7 +35,7 @@ func NewEventBusSubscriptionHandler(conf config.EventBusEngine, serviceId string
 		return nil, err
 	}
 
-	mHandler := eventBusRouter.AddNoPublisherHandler(handlerName, topic, sub, handler.HandleEvent)
+	mHandler := eventBusRouter.AddNoPublisherHandler(handlerName, topic, sub, handler.HandleMessage)
 
 	return &EventSubscriptionHandler{
 		router:      eventBusRouter,
@@ -47,8 +46,23 @@ func NewEventBusSubscriptionHandler(conf config.EventBusEngine, serviceId string
 	}, nil
 }
 
-func (s *EventSubscriptionHandler) RunAsync() {
-	go s.router.Run(context.Background())
+func (s *EventSubscriptionHandler) RunAsync() error {
+	errChan := make(chan error)
+	go func() {
+		err := s.router.Run(context.Background())
+		if err != nil {
+			errChan <- err
+		}
+
+		errChan <- nil
+	}()
+
+	select {
+	case <-s.router.Running(): // implementation states that when router "running" channel is closed, it means the router is running
+		return nil
+	case err := <-errChan:
+		return err
+	}
 }
 
 func (s *EventSubscriptionHandler) Stop() {
