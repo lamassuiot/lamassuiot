@@ -9,7 +9,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
-	awskmssm_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/aws-kms-sm"
+	awsplatform_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/aws-platform"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -105,7 +105,7 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 }
 
 func prepareKMSCryptoEngine(t *testing.T) CryptoEngine {
-	containerCleanup, conf, err := awskmssm_test.RunAWSEmulationLocalStackDocker()
+	containerCleanup, conf, err := awsplatform_test.RunAWSEmulationLocalStackDocker()
 	assert.NoError(t, err)
 
 	t.Cleanup(func() { _ = containerCleanup() })

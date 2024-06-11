@@ -377,6 +377,490 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestSignCertificate(t *testing.T) {
+	serverTest, err := StartCAServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	caTest := serverTest.CA
+
+	var testcases = []struct {
+		name        string
+		run         func(caSDK services.CAService, caIDToSign string) (*models.Certificate, error)
+		resultCheck func(issuedCerts *models.Certificate, err error) error
+	}{
+		{
+			name: "OK/SignCertificate",
+			run: func(caSDK services.CAService, caIDToSign string) (*models.Certificate, error) {
+				key, err := helpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				csr, err := helpers.GenerateCertificateRequest(models.Subject{CommonName: "test", Country: "ES", Organization: "lamassu", OrganizationUnit: "iot", State: "lamassu-world", Locality: "lamassu-city"}, key)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:         caIDToSign,
+					CertRequest:  (*models.X509CertificateRequest)(csr),
+					SignVerbatim: true,
+				})
+			},
+			resultCheck: func(issuedCert *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCert == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if issuedCert.Subject.CommonName != "test" {
+					return fmt.Errorf("issued certificate should have CommonName 'test' but got %s", issuedCert.Subject.CommonName)
+				}
+
+				if issuedCert.Subject.Country != "ES" {
+					return fmt.Errorf("issued certificate should have Country 'ES' but got %s", issuedCert.Subject.Country)
+				}
+
+				if issuedCert.Subject.Organization != "lamassu" {
+					return fmt.Errorf("issued certificate should have Organization 'lamassu' but got %s", issuedCert.Subject.Organization)
+				}
+
+				if issuedCert.Subject.OrganizationUnit != "iot" {
+					return fmt.Errorf("issued certificate should have OrganizationUnit 'iot' but got %s", issuedCert.Subject.OrganizationUnit)
+				}
+
+				if issuedCert.Subject.State != "lamassu-world" {
+					return fmt.Errorf("issued certificate should have State 'lamassu-world' but got %s", issuedCert.Subject.State)
+				}
+
+				if issuedCert.Subject.Locality != "lamassu-city" {
+					return fmt.Errorf("issued certificate should have Locality 'lamassu-city' but got %s", issuedCert.Subject.Locality)
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/SignCertificateWithAltSubject",
+			run: func(caSDK services.CAService, caIDToSign string) (*models.Certificate, error) {
+				key, err := helpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				csr, err := helpers.GenerateCertificateRequest(models.Subject{CommonName: "test", Country: "ES", Organization: "lamassu", OrganizationUnit: "iot", State: "lamassu-world", Locality: "lamassu-city"}, key)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:         caIDToSign,
+					CertRequest:  (*models.X509CertificateRequest)(csr),
+					SignVerbatim: false,
+					Subject: &models.Subject{
+						CommonName:       "other-test",
+						Country:          "US",
+						Organization:     "other-lamassu",
+						OrganizationUnit: "other-iot",
+						State:            "other-lamassu-world",
+						Locality:         "other-lamassu-city",
+					},
+				})
+			},
+			resultCheck: func(issuedCert *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCert == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if issuedCert.Subject.CommonName != "other-test" {
+					return fmt.Errorf("issued certificate should have CommonName 'other-test' but got %s", issuedCert.Subject.CommonName)
+				}
+
+				if issuedCert.Subject.Country != "US" {
+					return fmt.Errorf("issued certificate should have Country 'US' but got %s", issuedCert.Subject.Country)
+				}
+
+				if issuedCert.Subject.Organization != "other-lamassu" {
+					return fmt.Errorf("issued certificate should have Organization 'other-lamassu' but got %s", issuedCert.Subject.Organization)
+				}
+
+				if issuedCert.Subject.OrganizationUnit != "other-iot" {
+					return fmt.Errorf("issued certificate should have OrganizationUnit 'other-iot' but got %s", issuedCert.Subject.OrganizationUnit)
+				}
+
+				if issuedCert.Subject.State != "other-lamassu-world" {
+					return fmt.Errorf("issued certificate should have State 'other-lamassu-world' but got %s", issuedCert.Subject.State)
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "Err/CADoesNotExist",
+			run: func(caSDK services.CAService, caIDToSign string) (*models.Certificate, error) {
+				key, err := helpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				csr, err := helpers.GenerateCertificateRequest(models.Subject{CommonName: "test", Country: "ES", Organization: "lamassu", OrganizationUnit: "iot", State: "lamassu-world", Locality: "lamassu-city"}, key)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:         "myCA",
+					CertRequest:  (*models.X509CertificateRequest)(csr),
+					SignVerbatim: true,
+				})
+			},
+			resultCheck: func(issuedCert *models.Certificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error but got none")
+				}
+
+				if !errors.Is(err, errs.ErrCANotFound) {
+					return fmt.Errorf("should've got error %s but got %s", errs.ErrCANotFound, err)
+				}
+
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			//
+			err = serverTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
+			}
+
+			_, err = initCA(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running 'initCA' func in test case: %s", err)
+			}
+
+			caExpiration := models.TimeDuration(time.Hour * 24)
+			issuanceExpiration := models.TimeDuration(time.Hour * 2)
+
+			ca, err := caTest.Service.CreateCA(context.Background(), services.CreateCAInput{
+				KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+				Subject:            models.Subject{CommonName: "TestCA"},
+				CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caExpiration},
+				IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceExpiration},
+			})
+			if err != nil {
+				t.Fatalf("failed creating CA: %s", err)
+			}
+
+			err = tc.resultCheck(tc.run(caTest.HttpCASDK, ca.ID))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+		})
+	}
+}
+
+func TestImportCertificate(t *testing.T) {
+	serverTest, err := StartCAServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	caTest := serverTest.CA
+
+	var testcases = []struct {
+		name        string
+		run         func(caSDK services.CAService) (*models.Certificate, *models.CACertificate, error)
+		resultCheck func(importedCert *models.Certificate, ca *models.CACertificate, err error) error
+	}{
+		{
+			name: "OK/ImportCertificate",
+			run: func(caSDK services.CAService) (*models.Certificate, *models.CACertificate, error) {
+				//Create Out of Band CA
+				ca, caKey, err := helpers.GenerateSelfSignedCA(x509.ECDSA, time.Hour*10, "myCA")
+				if err != nil {
+					t.Fatalf("failed creating self signed CA: %s", err)
+				}
+
+				//Sign Certificate with Out of Band CA
+				key, err := helpers.GenerateRSAKey(2048)
+				if err != nil {
+					t.Fatalf("failed generating RSA key: %s", err)
+				}
+
+				csr, err := helpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, key)
+				if err != nil {
+					t.Fatalf("failed generating certificate request: %s", err)
+				}
+
+				certificateTemplate := x509.Certificate{
+					PublicKeyAlgorithm: csr.PublicKeyAlgorithm,
+					PublicKey:          csr.PublicKey,
+					SerialNumber:       big.NewInt(1),
+					Issuer:             ca.Subject,
+					Subject:            csr.Subject,
+					NotBefore:          time.Now(),
+					NotAfter:           time.Now().Add(time.Hour),
+					KeyUsage:           x509.KeyUsageDigitalSignature,
+				}
+
+				certificateBytes, err := x509.CreateCertificate(rand.Reader, &certificateTemplate, ca, csr.PublicKey, caKey)
+				if err != nil {
+					t.Fatalf("failed creating signed certificate: %s", err)
+				}
+
+				cert, err := x509.ParseCertificate(certificateBytes)
+				if err != nil {
+					t.Fatalf("failed parsing certificate: %s", err)
+				}
+
+				//Import CA
+				issuanceDur := models.TimeDuration(time.Hour * 2)
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					CAType: models.CertificateTypeImportedWithKey,
+					IssuanceExpiration: models.Expiration{
+						Type:     models.Duration,
+						Duration: &issuanceDur,
+					},
+					CAECKey:       caKey.(*ecdsa.PrivateKey),
+					CACertificate: (*models.X509Certificate)(ca),
+					KeyType:       models.KeyType(x509.ECDSA),
+				})
+				if err != nil {
+					t.Fatalf("failed importing CA: %s", err)
+				}
+
+				//Import Certificate
+				importedCert, err := caSDK.ImportCertificate(context.Background(), services.ImportCertificateInput{
+					Certificate: (*models.X509Certificate)(cert),
+					Metadata: map[string]any{
+						"test": "test2",
+					},
+				})
+
+				return importedCert, importedCA, err
+			},
+			resultCheck: func(importedCert *models.Certificate, ca *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if importedCert == nil {
+					return fmt.Errorf("should've got imported certificate but got nil")
+				}
+
+				if importedCert.IssuerCAMetadata.Level != ca.Level {
+					return fmt.Errorf("imported certificate should have Level %d but got %d", ca.Level, importedCert.IssuerCAMetadata.Level)
+				}
+
+				if importedCert.IssuerCAMetadata.ID != ca.ID {
+					return fmt.Errorf("imported certificate should have CAID %s but got %s", ca.ID, importedCert.IssuerCAMetadata.ID)
+				}
+
+				if importedCert.IssuerCAMetadata.SerialNumber != ca.SerialNumber {
+					return fmt.Errorf("imported certificate should have SerialNumber %s but got %s", ca.SerialNumber, importedCert.IssuerCAMetadata.SerialNumber)
+				}
+
+				if importedCert.Status != models.StatusActive {
+					return fmt.Errorf("imported certificate should have Active status but got %s", importedCert.Status)
+				}
+
+				if importedCert.Metadata["test"] != "test2" {
+					return fmt.Errorf("imported certificate should have metadata 'test' with value 'test2' but got %s", importedCert.Metadata["test"])
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/ExpiredCert",
+			run: func(caSDK services.CAService) (*models.Certificate, *models.CACertificate, error) {
+				//Create Out of Band CA
+				ca, caKey, err := helpers.GenerateSelfSignedCA(x509.ECDSA, time.Hour*10, "myCA")
+				if err != nil {
+					t.Fatalf("failed creating self signed CA: %s", err)
+				}
+
+				//Sign Certificate with Out of Band CA
+				key, err := helpers.GenerateRSAKey(2048)
+				if err != nil {
+					t.Fatalf("failed generating RSA key: %s", err)
+				}
+
+				csr, err := helpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, key)
+				if err != nil {
+					t.Fatalf("failed generating certificate request: %s", err)
+				}
+
+				certificateTemplate := x509.Certificate{
+					PublicKeyAlgorithm: csr.PublicKeyAlgorithm,
+					PublicKey:          csr.PublicKey,
+					SerialNumber:       big.NewInt(1),
+					Issuer:             ca.Subject,
+					Subject:            csr.Subject,
+					NotBefore:          time.Now().Add(-time.Hour * 24 * 2), //2 days ago
+					NotAfter:           time.Now().Add(-time.Hour * 24),     //1 day ago
+					KeyUsage:           x509.KeyUsageDigitalSignature,
+				}
+
+				certificateBytes, err := x509.CreateCertificate(rand.Reader, &certificateTemplate, ca, csr.PublicKey, caKey)
+				if err != nil {
+					t.Fatalf("failed creating signed certificate: %s", err)
+				}
+
+				cert, err := x509.ParseCertificate(certificateBytes)
+				if err != nil {
+					t.Fatalf("failed parsing certificate: %s", err)
+				}
+
+				//Import CA
+				issuanceDur := models.TimeDuration(time.Hour * 2)
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					CAType: models.CertificateTypeImportedWithKey,
+					IssuanceExpiration: models.Expiration{
+						Type:     models.Duration,
+						Duration: &issuanceDur,
+					},
+					CAECKey:       caKey.(*ecdsa.PrivateKey),
+					CACertificate: (*models.X509Certificate)(ca),
+					KeyType:       models.KeyType(x509.ECDSA),
+				})
+				if err != nil {
+					t.Fatalf("failed importing CA: %s", err)
+				}
+
+				//Import Certificate
+				importedCert, err := caSDK.ImportCertificate(context.Background(), services.ImportCertificateInput{
+					Certificate: (*models.X509Certificate)(cert),
+					Metadata: map[string]any{
+						"test": "test2",
+					},
+				})
+
+				return importedCert, importedCA, err
+			},
+			resultCheck: func(importedCert *models.Certificate, ca *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if importedCert == nil {
+					return fmt.Errorf("should've got imported certificate but got nil")
+				}
+
+				if importedCert.Status != models.StatusExpired {
+					return fmt.Errorf("imported certificate should have Expired status but got %s", importedCert.Status)
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/AloneCert",
+			run: func(caSDK services.CAService) (*models.Certificate, *models.CACertificate, error) {
+				//Create Out of Band CA
+				ca, caKey, err := helpers.GenerateSelfSignedCA(x509.ECDSA, time.Hour*10, "myCA")
+				if err != nil {
+					t.Fatalf("failed creating self signed CA: %s", err)
+				}
+
+				//Sign Certificate with Out of Band CA
+				key, err := helpers.GenerateRSAKey(2048)
+				if err != nil {
+					t.Fatalf("failed generating RSA key: %s", err)
+				}
+
+				csr, err := helpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, key)
+				if err != nil {
+					t.Fatalf("failed generating certificate request: %s", err)
+				}
+
+				certificateTemplate := x509.Certificate{
+					PublicKeyAlgorithm: csr.PublicKeyAlgorithm,
+					PublicKey:          csr.PublicKey,
+					SerialNumber:       big.NewInt(1),
+					Issuer:             ca.Subject,
+					Subject:            csr.Subject,
+					NotBefore:          time.Now(),
+					NotAfter:           time.Now().Add(time.Hour),
+					KeyUsage:           x509.KeyUsageDigitalSignature,
+				}
+
+				certificateBytes, err := x509.CreateCertificate(rand.Reader, &certificateTemplate, ca, csr.PublicKey, caKey)
+				if err != nil {
+					t.Fatalf("failed creating signed certificate: %s", err)
+				}
+
+				cert, err := x509.ParseCertificate(certificateBytes)
+				if err != nil {
+					t.Fatalf("failed parsing certificate: %s", err)
+				}
+
+				//Import Certificate. This time CA is not imported beforehand
+				importedCert, err := caSDK.ImportCertificate(context.Background(), services.ImportCertificateInput{
+					Certificate: (*models.X509Certificate)(cert),
+					Metadata: map[string]any{
+						"test": "test2",
+					},
+				})
+
+				return importedCert, nil, err
+			},
+			resultCheck: func(importedCert *models.Certificate, ca *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if importedCert == nil {
+					return fmt.Errorf("should've got imported certificate but got nil")
+				}
+
+				if importedCert.IssuerCAMetadata.ID != "-" {
+					return fmt.Errorf("imported certificate should have IssuerCAMetadata.ID '-' but got %s", importedCert.IssuerCAMetadata.ID)
+				}
+
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			//
+			err = serverTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
+			}
+
+			_, err = initCA(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running 'initCA' func in test case: %s", err)
+			}
+
+			err = tc.resultCheck(tc.run(caTest.HttpCASDK))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+		})
+	}
+}
+
 func TestRevokeCA(t *testing.T) {
 	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
@@ -2118,6 +2602,151 @@ func TestGetCAs(t *testing.T) {
 			}
 
 			err = tc.resultCheck(tc.run(caTest.HttpCASDK))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+		})
+	}
+}
+
+func TestGetStatsByCAID(t *testing.T) {
+	serverTest, err := StartCAServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	caTest := serverTest.CA
+
+	var testcases = []struct {
+		name        string
+		before      func(svc services.CAService, caID string) error
+		run         func(caSDK services.CAService, caID string) (map[models.CertificateStatus]int, error)
+		resultCheck func(map[models.CertificateStatus]int, error) error
+	}{
+		{
+			name: "OK/0Certs",
+			before: func(svc services.CAService, caID string) error {
+				return nil
+			},
+			run: func(caSDK services.CAService, caID string) (map[models.CertificateStatus]int, error) {
+				return caSDK.GetStatsByCAID(context.Background(), services.GetStatsByCAIDInput{
+					CAID: caID,
+				})
+			},
+			resultCheck: func(stats map[models.CertificateStatus]int, err error) error {
+				if err != nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+
+				if stats[models.StatusRevoked] != 0 {
+					return fmt.Errorf("should've got 0 revoked certificates. Got %d", stats[models.StatusRevoked])
+				}
+
+				if stats[models.StatusActive] != 0 {
+					return fmt.Errorf("should've got 0 active certificates. Got %d", stats[models.StatusActive])
+				}
+
+				if stats[models.StatusExpired] != 0 {
+					return fmt.Errorf("should've got 0 expired certificates. Got %d", stats[models.StatusExpired])
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/1Active1Revoked",
+			before: func(svc services.CAService, caID string) error {
+				actKey, err := helpers.GenerateRSAKey(2048)
+				if err != nil {
+					return fmt.Errorf("Error creating the private key: %s", err)
+				}
+
+				actCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "active-cert"}, actKey)
+				_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: caID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(actCSR)})
+
+				if err != nil {
+					return fmt.Errorf("Error signing the active certificate: %s", err)
+				}
+
+				revKey, err := helpers.GenerateRSAKey(2048)
+				if err != nil {
+					return fmt.Errorf("Error creating the private key: %s", err)
+				}
+
+				revCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "revoked-cert"}, revKey)
+				revCrt, err := svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: caID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(revCSR)})
+				if err != nil {
+					return fmt.Errorf("Error signing the revoked certificate: %s", err)
+				}
+
+				_, err = svc.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
+					SerialNumber:     revCrt.SerialNumber,
+					NewStatus:        models.StatusRevoked,
+					RevocationReason: ocsp.Unknown,
+				})
+				if err != nil {
+					return fmt.Errorf("Error revoking the certificate: %s", err)
+				}
+
+				return nil
+			},
+			run: func(caSDK services.CAService, caID string) (map[models.CertificateStatus]int, error) {
+				return caSDK.GetStatsByCAID(context.Background(), services.GetStatsByCAIDInput{
+					CAID: caID,
+				})
+			},
+			resultCheck: func(stats map[models.CertificateStatus]int, err error) error {
+				if err != nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+
+				if stats[models.StatusRevoked] != 1 {
+					return fmt.Errorf("should've got 1 revoked certificates. Got %d", stats[models.StatusRevoked])
+				}
+
+				if stats[models.StatusActive] != 1 {
+					return fmt.Errorf("should've got 1 active certificates. Got %d", stats[models.StatusActive])
+				}
+
+				if stats[models.StatusExpired] != 0 {
+					return fmt.Errorf("should've got 0 expired certificates. Got %d", stats[models.StatusExpired])
+				}
+
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			err = serverTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
+			}
+
+			//Init CA Server with 1 CA
+			_, err = initCA(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running initCA: %s", err)
+			}
+
+			exp := models.TimeDuration(time.Hour * 25)
+			iss := models.TimeDuration(time.Hour * 24)
+
+			rootCA, err := caTest.Service.CreateCA(context.Background(), services.CreateCAInput{
+				KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+				Subject:            models.Subject{CommonName: "CA Lvl 1"},
+				CAExpiration:       models.Expiration{Type: models.Duration, Duration: &exp},
+				IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &iss},
+			})
+
+			err = tc.before(caTest.Service, rootCA.ID)
+			if err != nil {
+				t.Fatalf("failed running 'before' func in test case: %s", err)
+			}
+
+			err = tc.resultCheck(tc.run(caTest.HttpCASDK, rootCA.ID))
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
 			}

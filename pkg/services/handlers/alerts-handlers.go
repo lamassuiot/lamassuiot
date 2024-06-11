@@ -9,8 +9,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewAlertsEventHandler(l *logrus.Entry, svc services.AlertsService) *EventHandler {
-	return &EventHandler{
+func NewAlertsEventHandler(l *logrus.Entry, svc services.AlertsService) *CloudEventHandler {
+	return &CloudEventHandler{
 		lMessaging: l,
 		dispatchMap: map[string]func(*event.Event) error{
 			string(models.EventAnyKey): func(e *event.Event) error {

@@ -15,8 +15,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewAWSIoTEventHandler(l *logrus.Entry, svc iot.AWSCloudConnectorService) *EventHandler {
-	return &EventHandler{
+func NewAWSIoTEventHandler(l *logrus.Entry, svc iot.AWSCloudConnectorService) *CloudEventHandler {
+	return &CloudEventHandler{
 		lMessaging: l,
 		dispatchMap: map[string]func(*event.Event) error{
 			string(models.EventBindDeviceIdentityKey):        func(e *event.Event) error { return handlerWarpper(e, svc, l, bindDeviceIdentityHandler) },

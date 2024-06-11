@@ -81,8 +81,12 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
 		}
-		subHandler.RunAsync()
 
+		err = subHandler.RunAsync()
+		if err != nil {
+			lMessaging.Errorf("could not run Event Bus Subscription Handler: %s", err)
+			return nil, err
+		}
 	}
 
 	return &svc, nil
