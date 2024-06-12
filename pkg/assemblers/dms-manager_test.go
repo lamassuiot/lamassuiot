@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"github.com/globalsign/est"
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
@@ -811,6 +813,169 @@ func TestESTEnroll(t *testing.T) {
 		},
 	}
 
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			tc.resultCheck(tc.run())
+		})
+	}
+}
+
+func TestESTGetCACerts(t *testing.T) {
+	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	createCA := func(name string, lifespan string, issuance string) (*models.CACertificate, error) {
+		lifespanCABootDur, _ := models.ParseDuration(lifespan)
+		issuanceCABootDur, _ := models.ParseDuration(issuance)
+		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
+			Subject:            models.Subject{CommonName: name},
+			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
+			IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
+			Metadata:           map[string]any{},
+		})
+	}
+	createCA("asd", "10m", "5m")
+
+	createDMS := func(modifier func(in *services.CreateDMSInput)) (*models.DMS, error) {
+		input := services.CreateDMSInput{
+			ID:       uuid.NewString(),
+			Name:     "MyIotFleet",
+			Metadata: map[string]any{},
+			Settings: models.DMSSettings{
+				EnrollmentSettings: models.EnrollmentSettings{
+					EnrollmentProtocol: models.EST,
+					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
+						AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
+						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
+							ChainLevelValidation: -1,
+							ValidationCAs:        []string{},
+						},
+					},
+					DeviceProvisionProfile: models.DeviceProvisionProfile{
+						Icon:      "BiSolidCreditCardFront",
+						IconColor: "#25ee32-#222222",
+						Metadata:  map[string]any{},
+						Tags:      []string{"iot", "testdms", "cloud"},
+					},
+					RegistrationMode:            models.JITP,
+					EnableReplaceableEnrollment: true,
+				},
+				ReEnrollmentSettings: models.ReEnrollmentSettings{
+					AdditionalValidationCAs:     []string{},
+					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
+					EnableExpiredRenewal:        true,
+					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
+					CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
+				},
+				CADistributionSettings: models.CADistributionSettings{
+					IncludeLamassuSystemCA: true,
+					IncludeEnrollmentCA:    true,
+					ManagedCAs:             []string{},
+				},
+			},
+		}
+		modifier(&input)
+
+		return dmsMgr.Service.CreateDMS(context.Background(), input)
+	}
+
+	createDMS(func(in *services.CreateDMSInput) {
+
+	})
+	var testcases = []struct {
+		name        string
+		run         func() (caCerts []*x509.Certificate, cert *x509.Certificate, key any, err error)
+		resultCheck func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error)
+	}{
+		{
+			name: "Err/DmsNotExist",
+			run: func() (caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: "test",
+					InsecureSkipVerify:    true,
+				}
+
+				_, err = estCli.CACerts(context.Background())
+
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					fmt.Errorf("should've got error but got none")
+				}
+
+				if !errors.Is(err, errs.ErrDMSNotFound) {
+					fmt.Errorf("should've got error %s but got %s", errs.ErrDMSNotFound, err)
+				}
+			},
+		},
+		{
+			name: "OK/DmsExistCADistributionSettingsFalse",
+			run: func() (caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.CADistributionSettings.IncludeEnrollmentCA = false
+					in.Settings.CADistributionSettings.IncludeLamassuSystemCA = false
+				})
+				if err != nil {
+					t.Fatalf("unexpected error while creating the DMS: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					InsecureSkipVerify:    true,
+				}
+
+				caCerts, err := estCli.CACerts(context.Background())
+
+				return caCerts, nil, nil, err
+			},
+			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					fmt.Errorf("should've nor got error but got an error")
+				}
+				if len(caCert) == 0 {
+					fmt.Errorf("should've got at least one cacert")
+				}
+			},
+		},
+		{
+			name: "OK/DmsExistCADistributionSettingsTrue",
+			run: func() (caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {})
+				if err != nil {
+					t.Fatalf("unexpected error while creating the DMS: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					InsecureSkipVerify:    true,
+				}
+
+				caCerts, err := estCli.CACerts(context.Background())
+
+				return caCerts, nil, nil, err
+			},
+			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					fmt.Errorf("should've not got error but got an error")
+				}
+				if len(caCert) == 0 {
+					fmt.Errorf("should've got at least one cacert")
+				}
+			},
+		},
+	}
 	for _, tc := range testcases {
 		tc := tc
 
