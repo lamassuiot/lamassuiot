@@ -116,77 +116,191 @@ func (mw CAValidator) ImportCA(ctx context.Context, input services.ImportCAInput
 }
 
 func (mw CAValidator) GetCAByID(ctx context.Context, input services.GetCAByIDInput) (*models.CACertificate, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return nil, errs.ErrInvalidInput
+	}
+
 	return mw.Next.GetCAByID(ctx, input)
 }
 
 func (mw CAValidator) GetCAs(ctx context.Context, input services.GetCAsInput) (string, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return "", errs.ErrInvalidInput
+	}
+
 	return mw.Next.GetCAs(ctx, input)
 }
 
 func (mw CAValidator) GetCAsByCommonName(ctx context.Context, input services.GetCAsByCommonNameInput) (string, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return "", errs.ErrInvalidInput
+	}
+
 	return mw.Next.GetCAsByCommonName(ctx, input)
 }
 
-func (mw CAValidator) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (output *models.CACertificate, err error) {
+func (mw CAValidator) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (*models.CACertificate, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return nil, errs.ErrInvalidInput
+	}
+
 	return mw.Next.UpdateCAStatus(ctx, input)
 }
 
-func (mw CAValidator) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (output *models.CACertificate, err error) {
+func (mw CAValidator) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (*models.CACertificate, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return nil, errs.ErrInvalidInput
+	}
+
 	return mw.Next.UpdateCAMetadata(ctx, input)
 }
 
-func (mw CAValidator) DeleteCA(ctx context.Context, input services.DeleteCAInput) (err error) {
+func (mw CAValidator) DeleteCA(ctx context.Context, input services.DeleteCAInput) error {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return errs.ErrInvalidInput
+	}
+
 	return mw.Next.DeleteCA(ctx, input)
 }
 
-func (mw CAValidator) SignCertificate(ctx context.Context, input services.SignCertificateInput) (output *models.Certificate, err error) {
+func (mw CAValidator) SignCertificate(ctx context.Context, input services.SignCertificateInput) (*models.Certificate, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return nil, errs.ErrInvalidInput
+	}
+
 	return mw.Next.SignCertificate(ctx, input)
 }
 
-func (mw CAValidator) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (output *models.Certificate, err error) {
+func (mw CAValidator) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (*models.Certificate, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return nil, errs.ErrInvalidInput
+	}
+
 	return mw.Next.CreateCertificate(ctx, input)
 }
 
-func (mw CAValidator) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (output *models.Certificate, err error) {
+func (mw CAValidator) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (*models.Certificate, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return nil, errs.ErrInvalidInput
+	}
+
 	return mw.Next.ImportCertificate(ctx, input)
 }
 
-func (mw CAValidator) SignatureSign(ctx context.Context, input services.SignatureSignInput) (output []byte, err error) {
+func (mw CAValidator) SignatureSign(ctx context.Context, input services.SignatureSignInput) ([]byte, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return nil, errs.ErrInvalidInput
+	}
+
 	return mw.Next.SignatureSign(ctx, input)
 }
 
-func (mw CAValidator) SignatureVerify(ctx context.Context, input services.SignatureVerifyInput) (output bool, err error) {
+func (mw CAValidator) SignatureVerify(ctx context.Context, input services.SignatureVerifyInput) (bool, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return false, errs.ErrInvalidInput
+	}
+
 	return mw.Next.SignatureVerify(ctx, input)
 }
 
 func (mw CAValidator) GetCertificateBySerialNumber(ctx context.Context, input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return nil, errs.ErrInvalidInput
+	}
+
 	return mw.Next.GetCertificateBySerialNumber(ctx, input)
 }
 
 func (mw CAValidator) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return "", errs.ErrInvalidInput
+	}
+
 	return mw.Next.GetCertificates(ctx, input)
 }
 
 func (mw CAValidator) GetCertificatesByCA(ctx context.Context, input services.GetCertificatesByCAInput) (string, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return "", errs.ErrInvalidInput
+	}
+
 	return mw.Next.GetCertificatesByCA(ctx, input)
 }
 
 func (mw CAValidator) GetCertificatesByExpirationDate(ctx context.Context, input services.GetCertificatesByExpirationDateInput) (string, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return "", errs.ErrInvalidInput
+	}
+
 	return mw.Next.GetCertificatesByExpirationDate(ctx, input)
 }
 
-func (mw CAValidator) UpdateCertificateStatus(ctx context.Context, input services.UpdateCertificateStatusInput) (output *models.Certificate, err error) {
+func (mw CAValidator) UpdateCertificateStatus(ctx context.Context, input services.UpdateCertificateStatusInput) (*models.Certificate, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return nil, errs.ErrInvalidInput
+	}
+
 	return mw.Next.UpdateCertificateStatus(ctx, input)
 }
 
 func (mw CAValidator) GetCertificatesByCaAndStatus(ctx context.Context, input services.GetCertificatesByCaAndStatusInput) (string, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return "", errs.ErrInvalidInput
+	}
+
 	return mw.Next.GetCertificatesByCaAndStatus(ctx, input)
 }
 
 func (mw CAValidator) GetCertificatesByStatus(ctx context.Context, input services.GetCertificatesByStatusInput) (string, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return "", errs.ErrInvalidInput
+	}
+
 	return mw.Next.GetCertificatesByStatus(ctx, input)
 }
 
-func (mw CAValidator) UpdateCertificateMetadata(ctx context.Context, input services.UpdateCertificateMetadataInput) (output *models.Certificate, err error) {
+func (mw CAValidator) UpdateCertificateMetadata(ctx context.Context, input services.UpdateCertificateMetadataInput) (*models.Certificate, error) {
+	err := mw.Validator.Struct(input)
+	if err != nil {
+		logInputValidationError(err, mw.Logger)
+		return nil, errs.ErrInvalidInput
+	}
+
 	return mw.Next.UpdateCertificateMetadata(ctx, input)
 }

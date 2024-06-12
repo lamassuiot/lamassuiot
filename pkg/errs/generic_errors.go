@@ -1,7 +1,5 @@
 package errs
 
-import "errors"
-
 var (
-	ErrInvalidInput error = errors.New("invalid input")
+	ErrInvalidInput HttpAPIError = HttpAPIError{Status: 400, Msg: "invalid input"}
 )
