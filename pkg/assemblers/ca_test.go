@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
@@ -75,6 +76,82 @@ func TestCryptoEngines(t *testing.T) {
 		})
 	}
 }
+func TestCreateCAInputValidation(t *testing.T) {
+	serverTest, err := StartCAServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	caServer := serverTest.CA
+
+	var testcases = []struct {
+		name               string
+		inputModifier      func(in *services.CreateCAInput)
+		expectedError      error
+		expectedStatusCode int
+	}{
+		{
+			name:               "OK/ValidInput-1",
+			inputModifier:      func(in *services.CreateCAInput) {},
+			expectedError:      nil,
+			expectedStatusCode: 201,
+		},
+		{
+			name: "Err/InvalidInput-CAExpiration-Duration",
+			inputModifier: func(in *services.CreateCAInput) {
+				caDur := models.TimeDuration(time.Hour * 2)
+				issuanceDur := models.TimeDuration(time.Hour * 8)
+				in.CAExpiration.Duration = &caDur
+				in.IssuanceExpiration.Duration = &issuanceDur
+			},
+			expectedError:      errs.ErrInvalidInput,
+			expectedStatusCode: 400,
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			err = serverTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
+			}
+
+			caDur := models.TimeDuration(time.Hour * 24)
+			issuanceDur := models.TimeDuration(time.Hour * 12)
+			createCAInput := &services.CreateCAInput{
+				KeyMetadata: models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+				Subject:     models.Subject{CommonName: "TestCA"},
+				CAExpiration: models.Expiration{
+					Type:     models.Duration,
+					Duration: &caDur,
+				},
+				IssuanceExpiration: models.Expiration{
+					Type:     models.Duration,
+					Duration: &issuanceDur,
+				},
+			}
+
+			tc.inputModifier(createCAInput)
+			ctx := context.Background()
+			responseInfo := &clients.HttpResponseInfo{}
+			ctx = context.WithValue(ctx, clients.CtxHttpResponseInfo, responseInfo)
+			_, err := caServer.HttpCASDK.CreateCA(ctx, *createCAInput)
+			if err != nil {
+				if !errors.Is(err, tc.expectedError) {
+					t.Fatalf("expected error '%s' but got '%s'", tc.expectedError, err)
+				}
+			}
+
+			if responseInfo.StatusCode != tc.expectedStatusCode {
+				t.Fatalf("expected status code %d but got %d", tc.expectedStatusCode, responseInfo.StatusCode)
+			}
+
+		})
+	}
+}
+
 func TestCreateCA(t *testing.T) {
 	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
@@ -88,16 +165,16 @@ func TestCreateCA(t *testing.T) {
 	issuanceDur := models.TimeDuration(time.Hour * 12)
 
 	var testcases = []struct {
-		name        string
-		before      func(svc services.CAService) error
-		run         func(caSDK services.CAService) (*models.CACertificate, error)
-		resultCheck func(createdCA *models.CACertificate, err error) error
+		name                string
+		run                 func(context context.Context, caSDK services.CAService) (*models.CACertificate, error)
+		expectedStatusCode  int
+		expectedError       error
+		advancedResultCheck func(createdCA *models.CACertificate) error
 	}{
 		{
-			name:   "OK/KeyType-RSA",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.CACertificate, error) {
-				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+			name: "OK/KeyType-RSA",
+			run: func(ctx context.Context, caSDK services.CAService) (*models.CACertificate, error) {
+				return caSDK.CreateCA(ctx, services.CreateCAInput{
 					ID:                 caID,
 					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:            models.Subject{CommonName: "TestCA"},
@@ -105,19 +182,16 @@ func TestCreateCA(t *testing.T) {
 					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
 				})
 			},
-			resultCheck: func(createdCA *models.CACertificate, err error) error {
-				if err != nil {
-					return fmt.Errorf("should've created CA without error, but got error: %s", err)
-				}
-
+			expectedStatusCode: 201,
+			expectedError:      nil,
+			advancedResultCheck: func(createdCA *models.CACertificate) error {
 				return nil
 			},
 		},
 		{
-			name:   "OK/KeyType-ECC",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.CACertificate, error) {
-				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+			name: "OK/KeyType-ECC",
+			run: func(ctx context.Context, caSDK services.CAService) (*models.CACertificate, error) {
+				return caSDK.CreateCA(ctx, services.CreateCAInput{
 					ID:                 caID,
 					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
 					Subject:            models.Subject{CommonName: "TestCA"},
@@ -125,19 +199,16 @@ func TestCreateCA(t *testing.T) {
 					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
 				})
 			},
-			resultCheck: func(createdCA *models.CACertificate, err error) error {
-				if err != nil {
-					return fmt.Errorf("should've created CA without error, but got error: %s", err)
-				}
-
+			expectedStatusCode: 201,
+			expectedError:      nil,
+			advancedResultCheck: func(createdCA *models.CACertificate) error {
 				return nil
 			},
 		},
 		{
-			name:   "OK/Expiration-Duration",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.CACertificate, error) {
-				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+			name: "OK/Expiration-Duration",
+			run: func(ctx context.Context, caSDK services.CAService) (*models.CACertificate, error) {
+				return caSDK.CreateCA(ctx, services.CreateCAInput{
 					ID:                 caID,
 					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:            models.Subject{CommonName: "TestCA"},
@@ -145,21 +216,18 @@ func TestCreateCA(t *testing.T) {
 					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
 				})
 			},
-			resultCheck: func(createdCA *models.CACertificate, err error) error {
-				if err != nil {
-					return fmt.Errorf("should've created CA without error, but got error: %s", err)
-				}
-
+			expectedStatusCode: 201,
+			expectedError:      nil,
+			advancedResultCheck: func(createdCA *models.CACertificate) error {
 				return nil
 			},
 		},
 		{
-			name:   "OK/Expiration-Time",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+			name: "OK/Expiration-Time",
+			run: func(ctx context.Context, caSDK services.CAService) (*models.CACertificate, error) {
 				tCA := time.Date(9999, 11, 31, 23, 59, 59, 0, time.UTC)
 				tIssue := time.Date(9999, 11, 30, 23, 59, 59, 0, time.UTC)
-				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+				return caSDK.CreateCA(ctx, services.CreateCAInput{
 					ID:                 caID,
 					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:            models.Subject{CommonName: "TestCA"},
@@ -167,22 +235,19 @@ func TestCreateCA(t *testing.T) {
 					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &tIssue},
 				})
 			},
-			resultCheck: func(createdCA *models.CACertificate, err error) error {
-				if err != nil {
-					return fmt.Errorf("should've created CA without error, but got error: %s", err)
-				}
-
+			expectedStatusCode: 201,
+			expectedError:      nil,
+			advancedResultCheck: func(createdCA *models.CACertificate) error {
 				if createdCA.ValidTo.Year() != 9999 {
-					t.Fatalf("CA certificate should expire on 9999 but got %d", createdCA.ValidTo.Year())
+					fmt.Errorf("CA certificate should expire on 9999 but got %d", createdCA.ValidTo.Year())
 				}
-
 				return nil
 			},
 		},
 		{
 			name: "Error/Duplicate-CA-ID",
-			before: func(svc services.CAService) error {
-				_, err := svc.CreateCA(context.Background(), services.CreateCAInput{
+			run: func(ctx context.Context, caSDK services.CAService) (*models.CACertificate, error) {
+				_, err := caSDK.CreateCA(ctx, services.CreateCAInput{
 					ID:                 caID,
 					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:            models.Subject{CommonName: "TestCA"},
@@ -190,12 +255,10 @@ func TestCreateCA(t *testing.T) {
 					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
 				})
 				if err != nil {
-					return err
+					t.Fatalf("failed creating CA: %s", err)
 				}
-				return nil
-			},
-			run: func(caSDK services.CAService) (*models.CACertificate, error) {
-				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+
+				return caSDK.CreateCA(ctx, services.CreateCAInput{
 					ID:                 caID,
 					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 					Subject:            models.Subject{CommonName: "TestCA"},
@@ -203,15 +266,9 @@ func TestCreateCA(t *testing.T) {
 					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
 				})
 			},
-			resultCheck: func(createdCA *models.CACertificate, err error) error {
-				if err == nil {
-					return fmt.Errorf("should've got error. Got none")
-				}
-
-				if !errors.Is(err, errs.ErrCAAlreadyExists) {
-					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrCAAlreadyExists, err)
-				}
-
+			expectedStatusCode: 409,
+			expectedError:      errs.ErrCAAlreadyExists,
+			advancedResultCheck: func(createdCA *models.CACertificate) error {
 				return nil
 			},
 		},
@@ -227,16 +284,26 @@ func TestCreateCA(t *testing.T) {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
 
-			err = tc.before(caTest.Service)
-			if err != nil {
-				t.Fatalf("failed running 'before' func in test case: %s", err)
+			ctx := context.Background()
+			responseInfo := &clients.HttpResponseInfo{}
+			ctx = context.WithValue(ctx, clients.CtxHttpResponseInfo, responseInfo)
+
+			result, err := tc.run(ctx, caTest.HttpCASDK)
+
+			if responseInfo.StatusCode != tc.expectedStatusCode {
+				t.Fatalf("expected status code %d but got %d", tc.expectedStatusCode, responseInfo.StatusCode)
 			}
 
-			err = tc.resultCheck(tc.run(caTest.HttpCASDK))
 			if err != nil {
-				t.Fatalf("unexpected result in test case: %s", err)
+				if !errors.Is(err, tc.expectedError) {
+					t.Fatalf("expected error '%s' but got '%s'", tc.expectedError, err)
+				}
+			} else {
+				err = tc.advancedResultCheck(result)
+				if err != nil {
+					t.Fatalf("unexpected result in test case: %s", err)
+				}
 			}
-
 		})
 	}
 }
@@ -1248,7 +1315,7 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 					return fmt.Errorf("should've got error. Got none")
 				}
 
-				if !errors.Is(err, errs.ErrValidateBadRequest) {
+				if !errors.Is(err, errs.ErrInvalidInput) {
 					return fmt.Errorf("got unexpected error: %s", err)
 				}
 
@@ -2411,7 +2478,7 @@ func TestDeleteCA(t *testing.T) {
 				return err
 			},
 			resultCheck: func(err error) error {
-				if !errors.Is(err, errs.ErrCAStatus) {
+				if !errors.Is(err, errs.ErrCAInvalidStatus) {
 					return fmt.Errorf("got unexpected error: %s", err)
 				}
 				return nil
@@ -2979,7 +3046,7 @@ func TestSignatureVerify(t *testing.T) {
 			},
 			resultCheck: func(bol bool, err error) error {
 				fmt.Println(bol)
-				if !errors.Is(err, errs.ErrCAStatus) {
+				if !errors.Is(err, errs.ErrCAInvalidStatus) {
 					return fmt.Errorf("got unexpected error: %s", err)
 				}
 				return nil
@@ -3018,7 +3085,7 @@ func TestSignatureVerify(t *testing.T) {
 			},
 			resultCheck: func(bol bool, err error) error {
 				fmt.Println(bol)
-				if !errors.Is(err, errs.ErrCAStatus) {
+				if !errors.Is(err, errs.ErrCAInvalidStatus) {
 					return fmt.Errorf("got unexpected error: %s", err)
 				}
 				return nil

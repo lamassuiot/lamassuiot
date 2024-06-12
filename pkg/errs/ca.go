@@ -1,24 +1,18 @@
 package errs
 
-import "errors"
-
 var (
-	ErrCryptoEngineNotFound error = errors.New("crypto engine not found")
+	ErrCryptoEngineNotFound HttpAPIError = HttpAPIError{Status: 404, Msg: "crypto engine not found"}
 
-	ErrCANotFound                      error = errors.New("CA not found")
-	ErrCAAlreadyExists                 error = errors.New("CA already exists")
-	ErrCAStatusTransitionNotAllowed    error = errors.New("status transition not allowed for CA")
-	ErrCAStatus                        error = errors.New("CA Status inconsistent")
-	ErrCAAlreadyRevoked                error = errors.New("CA already revoked")
-	ErrCAIncompatibleHashFunc          error = errors.New("incompatible hash function")
-	ErrCAIncompatibleExpirationTimeRef error = errors.New("incompatible expiration time ref")
-	ErrCAIssuanceExpiration            error = errors.New("issuance expiration greater than CA expiration")
-	ErrCAType                          error = errors.New("CA type inconsistent")
-	ErrCAValidCertAndPrivKey           error = errors.New("CA and the provided key don't match")
+	ErrCANotFound HttpAPIError = HttpAPIError{Status: 404, Msg: "CA not found"}
 
-	ErrValidateBadRequest error = errors.New("struct validation error")
+	ErrCAAlreadyExists              HttpAPIError = HttpAPIError{Status: 409, Msg: "CA already exists"}
+	ErrCAStatusTransitionNotAllowed HttpAPIError = HttpAPIError{Status: 400, Msg: "new status transition not allowed for CA"}
+	ErrCAInvalidStatus              HttpAPIError = HttpAPIError{Status: 400, Msg: "invalid CA status"}
 
-	ErrCertificateNotFound                   error = errors.New("certificate not found")
-	ErrCertificateAlreadyRevoked             error = errors.New("certificate already revoked")
-	ErrCertificateStatusTransitionNotAllowed error = errors.New("new status transition not allowed for certificate")
+	ErrCAAlreadyRevoked       HttpAPIError = HttpAPIError{Status: 400, Msg: "CA already revoked"}
+	ErrCAIncompatibleHashFunc HttpAPIError = HttpAPIError{Status: 400, Msg: "CA hash function is incompatible with the requested operation"}
+
+	ErrCertificateNotFound                   HttpAPIError = HttpAPIError{Status: 404, Msg: "certificate not found"}
+	ErrCertificateAlreadyRevoked             HttpAPIError = HttpAPIError{Status: 400, Msg: "certificate already revoked"}
+	ErrCertificateStatusTransitionNotAllowed HttpAPIError = HttpAPIError{Status: 400, Msg: "new status transition not allowed for certificate"}
 )

@@ -108,14 +108,10 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 		Metadata:           input.Metadata,
 	}, map[int][]error{
 		400: {
-			errs.ErrCAIncompatibleExpirationTimeRef,
-			errs.ErrCAIssuanceExpiration,
+			errs.ErrInvalidInput,
 		},
 		409: {
 			errs.ErrCAAlreadyExists,
-		},
-		500: {
-			errs.ErrCAIncompatibleExpirationTimeRef,
 		},
 	})
 	if err != nil {
@@ -226,7 +222,7 @@ func (cli *httpCAClient) DeleteCA(ctx context.Context, input services.DeleteCAIn
 			errs.ErrCANotFound,
 		},
 		400: {
-			errs.ErrCAStatus,
+			errs.ErrCAInvalidStatus,
 		},
 	})
 	if err != nil {
@@ -378,7 +374,7 @@ func (cli *httpCAClient) UpdateCertificateMetadata(ctx context.Context, input se
 		},
 
 		400: {
-			errs.ErrValidateBadRequest,
+			errs.ErrInvalidInput,
 		},
 	})
 	if err != nil {

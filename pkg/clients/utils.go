@@ -18,6 +18,12 @@ import (
 	"golang.org/x/oauth2/clientcredentials"
 )
 
+const CtxHttpResponseInfo = "HTTP_RESPONSE_INFO"
+
+type HttpResponseInfo struct {
+	StatusCode int
+}
+
 func BuildURL(cfg config.HTTPClient) string {
 	return fmt.Sprintf("%s://%s:%d%s", cfg.Protocol, cfg.Hostname, cfg.Port, cfg.BasePath)
 }
@@ -162,7 +168,14 @@ func requestWithBody[T any](ctx context.Context, client *http.Client, method str
 		return m, err
 	}
 
-	if res.StatusCode != 200 && res.StatusCode != 201 {
+	if ctx.Value(CtxHttpResponseInfo) != nil {
+		ctxInfo := ctx.Value(CtxHttpResponseInfo)
+		if info, ok := ctxInfo.(*HttpResponseInfo); ok {
+			info.StatusCode = res.StatusCode
+		}
+	}
+
+	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusCreated {
 		return m, nonOKResponseToError(res.StatusCode, body, knownErrors)
 	}
 
@@ -198,6 +211,13 @@ func Get[T any](ctx context.Context, client *http.Client, url string, queryParam
 	res.Body.Close()
 	if err != nil {
 		return m, err
+	}
+
+	if ctx.Value(CtxHttpResponseInfo) != nil {
+		ctxInfo := ctx.Value(CtxHttpResponseInfo)
+		if info, ok := ctxInfo.(*HttpResponseInfo); ok {
+			info.StatusCode = res.StatusCode
+		}
 	}
 
 	if res.StatusCode != 200 {
