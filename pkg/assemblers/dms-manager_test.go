@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -838,6 +839,10 @@ func TestESTGetCACerts(t *testing.T) {
 		})
 	}
 	enrollCA, err := createCA("enroll", "1y", "am")
+	if err != nil {
+		t.Fatalf("could not create the enrollment CA: %s", err)
+	}
+	caMm, err := createCA("asd", "10m", "5m")
 
 	if err != nil {
 		t.Fatalf("unexpected error while creating the CA: %s", err)
@@ -944,12 +949,12 @@ func TestESTGetCACerts(t *testing.T) {
 				if len(caCert) != 1 {
 					t.Fatalf("should've got only one cacert")
 				}
+
 			},
 		},
 		{
 			name: "OK/NotIncludeLamassuSystemCA",
 			run: func() (caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
-
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.CADistributionSettings.IncludeEnrollmentCA = true
 					in.Settings.CADistributionSettings.IncludeLamassuSystemCA = false
@@ -970,11 +975,21 @@ func TestESTGetCACerts(t *testing.T) {
 				return caCerts, nil, nil, err
 			},
 			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+				check := 0
 				if err != nil {
 					t.Fatalf("should've not got error but got an error")
 				}
 				if len(caCert) != 1 {
 					t.Fatalf("should've got only one cacert")
+				}
+
+				for _, cert := range caCert {
+					if reflect.DeepEqual((*x509.Certificate)(enrollCA.Certificate.Certificate), cert) {
+						check += 1
+					}
+				}
+				if check != 1 {
+					t.Fatalf("the enrollment ca´s certificate has not been received as cacert")
 				}
 			},
 		},
@@ -1000,18 +1015,29 @@ func TestESTGetCACerts(t *testing.T) {
 				return caCerts, nil, nil, err
 			},
 			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+				check := 0
 				if err != nil {
 					t.Fatalf("should've nor got error but got an error")
 				}
 				if len(caCert) != 2 {
 					t.Fatalf("should've got only one cacert")
 				}
+
+				for _, cert := range caCert {
+					if reflect.DeepEqual((*x509.Certificate)(enrollCA.Certificate.Certificate), cert) {
+						check += 1
+					}
+				}
+				if check != 1 {
+					t.Fatalf("the enrollment ca´s certificate has not been received as cacert")
+				}
+
 			},
 		},
 		{
 			name: "OK/IncludingManagedCA",
 			run: func() (caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
-				caMm, err := createCA("asd", "10m", "5m")
+
 				if err != nil {
 					t.Fatalf("unexpected error while creating the DMS: %s", err)
 				}
@@ -1035,12 +1061,26 @@ func TestESTGetCACerts(t *testing.T) {
 				return caCerts, nil, nil, err
 			},
 			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+				check := 0
 				if err != nil {
 					t.Fatalf("should've nor got error but got an error")
 				}
 				if len(caCert) != 3 {
 					t.Fatalf("should've got only one cacert")
 				}
+
+				for _, cert := range caCert {
+					if reflect.DeepEqual((*x509.Certificate)(enrollCA.Certificate.Certificate), cert) {
+						check += 1
+					}
+					if reflect.DeepEqual((*x509.Certificate)(caMm.Certificate.Certificate), cert) {
+						check += 1
+					}
+				}
+				if check != 2 {
+					t.Fatalf("the enrollment ca´s certificate has not been received as cacert")
+				}
+
 			},
 		},
 	}
