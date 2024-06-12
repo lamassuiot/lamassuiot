@@ -9,7 +9,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,7 +19,6 @@ import (
 	"github.com/globalsign/est"
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
@@ -839,7 +837,11 @@ func TestESTGetCACerts(t *testing.T) {
 			Metadata:           map[string]any{},
 		})
 	}
-	createCA("asd", "10m", "5m")
+	enrollCA, err := createCA("enroll", "1y", "am")
+
+	if err != nil {
+		t.Fatalf("unexpected error while creating the CA: %s", err)
+	}
 
 	createDMS := func(modifier func(in *services.CreateDMSInput)) (*models.DMS, error) {
 		input := services.CreateDMSInput{
@@ -849,6 +851,7 @@ func TestESTGetCACerts(t *testing.T) {
 			Settings: models.DMSSettings{
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
+					EnrollmentCA:       "",
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
 						AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
 						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
@@ -908,21 +911,17 @@ func TestESTGetCACerts(t *testing.T) {
 			},
 			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
 				if err == nil {
-					fmt.Errorf("should've got error but got none")
-				}
-
-				if !errors.Is(err, errs.ErrDMSNotFound) {
-					fmt.Errorf("should've got error %s but got %s", errs.ErrDMSNotFound, err)
+					t.Fatalf("should've got error but got none")
 				}
 			},
 		},
 		{
-			name: "OK/DmsExistCADistributionSettingsFalse",
+			name: "OK/NotIncludeEnrollmentCA",
 			run: func() (caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.CADistributionSettings.IncludeEnrollmentCA = false
-					in.Settings.CADistributionSettings.IncludeLamassuSystemCA = false
+					in.Settings.CADistributionSettings.IncludeLamassuSystemCA = true
 				})
 				if err != nil {
 					t.Fatalf("unexpected error while creating the DMS: %s", err)
@@ -940,18 +939,22 @@ func TestESTGetCACerts(t *testing.T) {
 			},
 			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
 				if err != nil {
-					fmt.Errorf("should've nor got error but got an error")
+					t.Fatalf("should've nor got error but got an error")
 				}
-				if len(caCert) == 0 {
-					fmt.Errorf("should've got at least one cacert")
+				if len(caCert) != 1 {
+					t.Fatalf("should've got only one cacert")
 				}
 			},
 		},
 		{
-			name: "OK/DmsExistCADistributionSettingsTrue",
+			name: "OK/NotIncludeLamassuSystemCA",
 			run: func() (caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
 
-				dms, err := createDMS(func(in *services.CreateDMSInput) {})
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.CADistributionSettings.IncludeEnrollmentCA = true
+					in.Settings.CADistributionSettings.IncludeLamassuSystemCA = false
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+				})
 				if err != nil {
 					t.Fatalf("unexpected error while creating the DMS: %s", err)
 				}
@@ -968,10 +971,75 @@ func TestESTGetCACerts(t *testing.T) {
 			},
 			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
 				if err != nil {
-					fmt.Errorf("should've not got error but got an error")
+					t.Fatalf("should've not got error but got an error")
 				}
-				if len(caCert) == 0 {
-					fmt.Errorf("should've got at least one cacert")
+				if len(caCert) != 1 {
+					t.Fatalf("should've got only one cacert")
+				}
+			},
+		},
+		{
+			name: "OK/IncludeEnrollmentAndSystemCA",
+			run: func() (caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+				})
+				if err != nil {
+					t.Fatalf("unexpected error while creating the DMS: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					InsecureSkipVerify:    true,
+				}
+
+				caCerts, err := estCli.CACerts(context.Background())
+
+				return caCerts, nil, nil, err
+			},
+			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("should've nor got error but got an error")
+				}
+				if len(caCert) != 2 {
+					t.Fatalf("should've got only one cacert")
+				}
+			},
+		},
+		{
+			name: "OK/IncludingManagedCA",
+			run: func() (caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+				caMm, err := createCA("asd", "10m", "5m")
+				if err != nil {
+					t.Fatalf("unexpected error while creating the DMS: %s", err)
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.CADistributionSettings.ManagedCAs = []string{caMm.ID}
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+				})
+				if err != nil {
+					t.Fatalf("unexpected error while creating the DMS: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					InsecureSkipVerify:    true,
+				}
+
+				caCerts, err := estCli.CACerts(context.Background())
+
+				return caCerts, nil, nil, err
+			},
+			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("should've nor got error but got an error")
+				}
+				if len(caCert) != 3 {
+					t.Fatalf("should've got only one cacert")
 				}
 			},
 		},
