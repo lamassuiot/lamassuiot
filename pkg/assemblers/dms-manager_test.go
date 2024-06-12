@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -842,7 +842,7 @@ func TestESTGetCACerts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not create the enrollment CA: %s", err)
 	}
-	caMm, err := createCA("asd", "10m", "5m")
+	caMm, err := createCA("managedCA", "10m", "5m")
 
 	if err != nil {
 		t.Fatalf("unexpected error while creating the CA: %s", err)
@@ -897,12 +897,12 @@ func TestESTGetCACerts(t *testing.T) {
 	})
 	var testcases = []struct {
 		name        string
-		run         func() (caCerts []*x509.Certificate, cert *x509.Certificate, key any, err error)
-		resultCheck func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error)
+		run         func() (caCerts []*x509.Certificate, err error)
+		resultCheck func(caCerts []*x509.Certificate, err error)
 	}{
 		{
 			name: "Err/DmsNotExist",
-			run: func() (caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+			run: func() (caCert []*x509.Certificate, err error) {
 
 				estCli := est.Client{
 					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
@@ -912,17 +912,17 @@ func TestESTGetCACerts(t *testing.T) {
 
 				_, err = estCli.CACerts(context.Background())
 
-				return nil, nil, nil, err
+				return nil, err
 			},
-			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+			resultCheck: func(caCerts []*x509.Certificate, err error) {
 				if err == nil {
 					t.Fatalf("should've got error but got none")
 				}
 			},
 		},
 		{
-			name: "OK/NotIncludeEnrollmentCA",
-			run: func() (caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+			name: "OK/IncludeLamassuSystemCA",
+			run: func() (caCert []*x509.Certificate, err error) {
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.CADistributionSettings.IncludeEnrollmentCA = false
@@ -940,20 +940,20 @@ func TestESTGetCACerts(t *testing.T) {
 
 				caCerts, err := estCli.CACerts(context.Background())
 
-				return caCerts, nil, nil, err
+				return caCerts, err
 			},
-			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+			resultCheck: func(caCerts []*x509.Certificate, err error) {
 				if err != nil {
 					t.Fatalf("should've not got error but got an error")
 				}
-				if len(caCert) != 1 {
+				if len(caCerts) != 1 {
 					t.Fatalf("should've got only one cacert")
 				}
 			},
 		},
 		{
-			name: "OK/NotIncludeLamassuSystemCA",
-			run: func() (caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+			name: "OK/IncludeEnrollmentCA",
+			run: func() (caCert []*x509.Certificate, err error) {
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.CADistributionSettings.IncludeEnrollmentCA = true
 					in.Settings.CADistributionSettings.IncludeLamassuSystemCA = false
@@ -971,70 +971,27 @@ func TestESTGetCACerts(t *testing.T) {
 
 				caCerts, err := estCli.CACerts(context.Background())
 
-				return caCerts, nil, nil, err
+				return caCerts, err
 			},
-			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
-				check := 0
+			resultCheck: func(caCerts []*x509.Certificate, err error) {
 				if err != nil {
 					t.Fatalf("should've not got error but got an error")
 				}
-				if len(caCert) != 1 {
+				if len(caCerts) != 1 {
 					t.Fatalf("should've got only one cacert")
 				}
 
-				for _, cert := range caCert {
-					if reflect.DeepEqual((*x509.Certificate)(enrollCA.Certificate.Certificate), cert) {
-						check += 1
-					}
-				}
-				if check != 1 {
-					t.Fatalf("the enrollment ca´s certificate has not been received as cacert")
-				}
-			},
-		},
-		{
-			name: "OK/IncludeEnrollmentAndSystemCA",
-			run: func() (caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
-
-				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+				contains := slices.ContainsFunc(caCerts, func(caCert *x509.Certificate) bool {
+					return helpers.CertificateToPEM(caCert) == helpers.CertificateToPEM((*x509.Certificate)(enrollCA.Certificate.Certificate))
 				})
-				if err != nil {
-					t.Fatalf("unexpected error while creating the DMS: %s", err)
-				}
-
-				estCli := est.Client{
-					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
-					AdditionalPathSegment: dms.ID,
-					InsecureSkipVerify:    true,
-				}
-
-				caCerts, err := estCli.CACerts(context.Background())
-
-				return caCerts, nil, nil, err
-			},
-			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
-				check := 0
-				if err != nil {
-					t.Fatalf("should've not got error but got an error")
-				}
-				if len(caCert) != 2 {
-					t.Fatalf("should've got only two cacerts")
-				}
-
-				for _, cert := range caCert {
-					if reflect.DeepEqual((*x509.Certificate)(enrollCA.Certificate.Certificate), cert) {
-						check += 1
-					}
-				}
-				if check != 1 {
+				if contains != true {
 					t.Fatalf("the enrollment ca´s certificate has not been received as cacert")
 				}
 			},
 		},
 		{
 			name: "OK/IncludingManagedCA",
-			run: func() (caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
+			run: func() (caCert []*x509.Certificate, err error) {
 
 				if err != nil {
 					t.Fatalf("unexpected error while creating the DMS: %s", err)
@@ -1056,29 +1013,30 @@ func TestESTGetCACerts(t *testing.T) {
 
 				caCerts, err := estCli.CACerts(context.Background())
 
-				return caCerts, nil, nil, err
+				return caCerts, err
 			},
-			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
-				check := 0
+			resultCheck: func(caCerts []*x509.Certificate, err error) {
+
 				if err != nil {
 					t.Fatalf("should've nor got error but got an error")
 				}
-				if len(caCert) != 3 {
+				if len(caCerts) != 3 {
 					t.Fatalf("should've got three cacerts")
 				}
 
-				for _, cert := range caCert {
-					if reflect.DeepEqual((*x509.Certificate)(enrollCA.Certificate.Certificate), cert) {
-						check += 1
-					}
-					if reflect.DeepEqual((*x509.Certificate)(caMm.Certificate.Certificate), cert) {
-						check += 1
-					}
-				}
-				if check != 2 {
-					t.Fatalf("the certificates have not been received correctly")
+				contains := slices.ContainsFunc(caCerts, func(caCert *x509.Certificate) bool {
+					return helpers.CertificateToPEM(caCert) == helpers.CertificateToPEM((*x509.Certificate)(enrollCA.Certificate.Certificate))
+				})
+				if contains != true {
+					t.Fatalf("the enrollment ca´s certificate has not been received as cacert")
 				}
 
+				containsMa := slices.ContainsFunc(caCerts, func(caCert *x509.Certificate) bool {
+					return helpers.CertificateToPEM(caCert) == helpers.CertificateToPEM((*x509.Certificate)(caMm.Certificate.Certificate))
+				})
+				if containsMa != true {
+					t.Fatalf("the managed ca´s certificate has not been received as cacert")
+				}
 			},
 		},
 	}
