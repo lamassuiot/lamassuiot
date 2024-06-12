@@ -944,12 +944,11 @@ func TestESTGetCACerts(t *testing.T) {
 			},
 			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
 				if err != nil {
-					t.Fatalf("should've nor got error but got an error")
+					t.Fatalf("should've not got error but got an error")
 				}
 				if len(caCert) != 1 {
 					t.Fatalf("should've got only one cacert")
 				}
-
 			},
 		},
 		{
@@ -1017,10 +1016,10 @@ func TestESTGetCACerts(t *testing.T) {
 			resultCheck: func(caCert []*x509.Certificate, cert *x509.Certificate, key any, err error) {
 				check := 0
 				if err != nil {
-					t.Fatalf("should've nor got error but got an error")
+					t.Fatalf("should've not got error but got an error")
 				}
 				if len(caCert) != 2 {
-					t.Fatalf("should've got only one cacert")
+					t.Fatalf("should've got only two cacerts")
 				}
 
 				for _, cert := range caCert {
@@ -1031,7 +1030,6 @@ func TestESTGetCACerts(t *testing.T) {
 				if check != 1 {
 					t.Fatalf("the enrollment ca´s certificate has not been received as cacert")
 				}
-
 			},
 		},
 		{
@@ -1066,7 +1064,7 @@ func TestESTGetCACerts(t *testing.T) {
 					t.Fatalf("should've nor got error but got an error")
 				}
 				if len(caCert) != 3 {
-					t.Fatalf("should've got only one cacert")
+					t.Fatalf("should've got three cacerts")
 				}
 
 				for _, cert := range caCert {
@@ -1078,7 +1076,7 @@ func TestESTGetCACerts(t *testing.T) {
 					}
 				}
 				if check != 2 {
-					t.Fatalf("the enrollment ca´s certificate has not been received as cacert")
+					t.Fatalf("the certificates have not been received correctly")
 				}
 
 			},
