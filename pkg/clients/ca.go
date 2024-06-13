@@ -194,7 +194,11 @@ func (cli *httpCAClient) UpdateCAStatus(ctx context.Context, input services.Upda
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/status", resources.UpdateCertificateStatusBody{
 		NewStatus:        input.Status,
 		RevocationReason: input.RevocationReason,
-	}, map[int][]error{})
+	}, map[int][]error{
+		400: {
+			errs.ErrCAStatusTransitionNotAllowed,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}

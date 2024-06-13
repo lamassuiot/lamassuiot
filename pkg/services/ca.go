@@ -635,28 +635,6 @@ func (svc *CAServiceBackend) GetCAs(ctx context.Context, input GetCAsInput) (str
 	return nextBookmark, nil
 }
 
-type GetCABySerialNumberInput struct {
-	SerialNumber string `validate:"required"`
-}
-
-func (svc *CAServiceBackend) GetCABySerialNumber(ctx context.Context, input GetCABySerialNumberInput) (*models.CACertificate, error) {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
-
-	lFunc.Debugf("checking if CA '%s' exists", input.SerialNumber)
-	exists, ca, err := svc.caStorage.SelectExistsBySerialNumber(ctx, input.SerialNumber)
-	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.SerialNumber, err)
-		return nil, err
-	}
-
-	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.SerialNumber)
-		return nil, errs.ErrCANotFound
-	}
-
-	return ca, nil
-}
-
 type GetCAsByCommonNameInput struct {
 	CommonName string
 
