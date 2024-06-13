@@ -1,4 +1,4 @@
-package keystorager
+package keystore
 
 import (
 	"os"
@@ -12,7 +12,7 @@ type FilesystemKeyStorage struct {
 	directory string
 }
 
-func NewFilesystemKeyStorage(logger *logrus.Entry, conf config.GolangFilesystemEngineConfig) KeyStorager {
+func NewFilesystemKeyStorage(logger *logrus.Entry, conf config.GolangFilesystemEngineConfig) KeyStore {
 	return &FilesystemKeyStorage{
 		logger:    logger,
 		directory: conf.StorageDirectory,

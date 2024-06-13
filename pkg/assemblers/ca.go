@@ -5,7 +5,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
-	keystorager "github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/keystore"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/keystore"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/jobs"
@@ -132,7 +132,7 @@ func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*s
 
 	engines := map[string]*services.Engine{}
 	for _, cfg := range conf.CryptoEngines.GolangHashicorpVaultKV2Provider {
-		store, err := keystorager.NewVaultKV2Engine(logger, cfg)
+		store, err := keystore.NewVaultKV2Engine(logger, cfg)
 		if err != nil {
 			log.Warnf("skipping Hashicorp Vault KV2 engine with id %s. could not create Vault engine: %s", cfg.ID, err)
 			continue
@@ -173,7 +173,7 @@ func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*s
 			continue
 		}
 
-		store, err := keystorager.NewAWSSecretManagerKeyStorage(logger, *awsCfg)
+		store, err := keystore.NewAWSSecretManagerKeyStorage(logger, *awsCfg)
 		if err != nil {
 			log.Warnf("skipping AWS Secrets Manager engine with id %s: %s", cfg.ID, err)
 			continue
@@ -192,7 +192,7 @@ func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*s
 	}
 
 	for _, cfg := range conf.CryptoEngines.GolangFilesystemProvider {
-		fs := keystorager.NewFilesystemKeyStorage(logger, cfg)
+		fs := keystore.NewFilesystemKeyStorage(logger, cfg)
 		engine := cryptoengines.NewGolangEngine(logger, fs, cfg.Metadata)
 		engines[cfg.ID] = &services.Engine{
 			Default: cfg.ID == conf.CryptoEngines.DefaultEngine,

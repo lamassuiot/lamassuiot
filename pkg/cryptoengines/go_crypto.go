@@ -11,18 +11,18 @@ import (
 	"fmt"
 	"runtime"
 
-	keystorager "github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/keystore"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/keystore"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/sirupsen/logrus"
 )
 
 type GoCryptoEngine struct {
 	config  models.CryptoEngineInfo
-	keyRepo keystorager.KeyStorager
+	keyRepo keystore.KeyStore
 	logger  *logrus.Entry
 }
 
-func NewGolangEngine(logger *logrus.Entry, storage keystorager.KeyStorager, metadata map[string]any) CryptoEngine {
+func NewGolangEngine(logger *logrus.Entry, storage keystore.KeyStore, metadata map[string]any) CryptoEngine {
 	log := logger.WithField("subsystem-provider", "GoSoft")
 	return &GoCryptoEngine{
 		logger:  log,

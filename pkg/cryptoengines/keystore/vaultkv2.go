@@ -1,4 +1,4 @@
-package keystorager
+package keystore
 
 import (
 	"context"
@@ -20,7 +20,7 @@ type VaultKV2Engine struct {
 	logger     *logrus.Entry
 }
 
-func NewVaultKV2Engine(logger *logrus.Entry, conf config.HashicorpVaultCryptoEngineConfig) (KeyStorager, error) {
+func NewVaultKV2Engine(logger *logrus.Entry, conf config.HashicorpVaultCryptoEngineConfig) (KeyStore, error) {
 	var err error
 	log := logger.WithField("subsystem-provider", "Vault-KV2")
 	address := fmt.Sprintf("%s://%s:%d", conf.Protocol, conf.Hostname, conf.Port)

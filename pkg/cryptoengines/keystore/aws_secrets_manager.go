@@ -1,4 +1,4 @@
-package keystorager
+package keystore
 
 import (
 	"context"
@@ -18,7 +18,7 @@ type AWSSecretsManagerKeyStorager struct {
 	smngerCli *secretsmanager.Client
 }
 
-func NewAWSSecretManagerKeyStorage(logger *logrus.Entry, awsConf aws.Config) (KeyStorager, error) {
+func NewAWSSecretManagerKeyStorage(logger *logrus.Entry, awsConf aws.Config) (KeyStore, error) {
 	log := logger.WithField("subsystem-provider", "AWS SecretsManager Client")
 
 	httpCli, err := helpers.BuildHTTPClientWithTracerLogger(http.DefaultClient, log)

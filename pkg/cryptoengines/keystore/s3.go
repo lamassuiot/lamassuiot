@@ -1,4 +1,4 @@
-package keystorager
+package keystore
 
 import (
 	"bytes"
@@ -21,7 +21,7 @@ type AWSS3KeyStorager struct {
 	bucketName string
 }
 
-func NewS3Storager(logger *logrus.Entry, awsConf aws.Config, bucket string) (KeyStorager, error) {
+func NewS3Storager(logger *logrus.Entry, awsConf aws.Config, bucket string) (KeyStore, error) {
 	log := logger.WithField("subsystem-provider", "AWS S3 Client")
 
 	httpCli, err := helpers.BuildHTTPClientWithTracerLogger(http.DefaultClient, log)
