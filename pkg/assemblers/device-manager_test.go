@@ -44,6 +44,104 @@ func StartDeviceManagerServiceTestServer(t *testing.T, withEventBus bool) (*Devi
 	return testServer.DeviceManager, nil
 }
 
+func TestGetAllDevices(t *testing.T) {
+	// t.Parallel()
+	ctx := context.Background()
+	dmgr, err := StartDeviceManagerServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create Device Manager test server: %s", err)
+	}
+	deviceSample1 := services.CreateDeviceInput{
+		ID:        "test",
+		Alias:     "test",
+		Tags:      []string{"test"},
+		Metadata:  map[string]interface{}{"test": "test"},
+		DMSID:     "test",
+		Icon:      "test",
+		IconColor: "#000000",
+	}
+	_, err = dmgr.Service.CreateDevice(ctx, deviceSample1)
+	if err != nil {
+		t.Fatalf("could not create device: %s", err)
+	}
+
+	deviceSample2 := services.CreateDeviceInput{
+		ID:        "test2",
+		Alias:     "test2",
+		Tags:      []string{"test"},
+		Metadata:  map[string]interface{}{"test": "test"},
+		DMSID:     "test",
+		Icon:      "test",
+		IconColor: "#000000",
+	}
+	_, err = dmgr.Service.CreateDevice(ctx, deviceSample2)
+	if err != nil {
+		t.Fatalf("could not create device: %s", err)
+	}
+
+	deviceSample3 := services.CreateDeviceInput{
+		ID:        "test3",
+		Alias:     "test3",
+		Tags:      []string{"test"},
+		Metadata:  map[string]interface{}{"test": "test"},
+		DMSID:     "test",
+		Icon:      "test",
+		IconColor: "#000000",
+	}
+	_, err = dmgr.Service.CreateDevice(ctx, deviceSample3)
+	if err != nil {
+		t.Fatalf("could not create device: %s", err)
+	}
+
+	var testcases = []struct {
+		name        string
+		run         func() ([]models.Device, error)
+		resultCheck func(devices []models.Device, err error)
+	}{
+		{
+			name: "OK/ApplyingPagination",
+			run: func() ([]models.Device, error) {
+				devices := []models.Device{}
+
+				request := services.GetDevicesInput{
+					ListInput: resources.ListInput[models.Device]{
+						QueryParameters: &resources.QueryParameters{
+							PageSize: 2,
+							Sort: resources.SortOptions{
+								SortMode:  resources.SortModeAsc,
+								SortField: "id",
+							},
+						},
+						ExhaustiveRun: false,
+						ApplyFunc: func(dev models.Device) {
+							devices = append(devices, dev)
+						},
+					},
+				}
+
+				bookmark, err := dmgr.HttpDeviceManagerSDK.GetDevices(context.Background(), request)
+				if err != nil {
+					t.Fatalf("could not retrieve a device: %s", err)
+				}
+				return devices, nil
+			},
+			resultCheck: func(devices []models.Device, err error) {
+				if len(devices) != 2 {
+					t.Fatalf("The amount of devices should have been two, and it has been %d", len(devices))
+				}
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			tc.resultCheck(tc.run())
+		})
+	}
+}
+
 func TestDuplicateDeviceCreation(t *testing.T) {
 	ctx := context.Background()
 	dmgr, err := StartDeviceManagerServiceTestServer(t, false)

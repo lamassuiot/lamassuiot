@@ -57,18 +57,7 @@ func (cli *httpCAClient) GetStatsByCAID(ctx context.Context, input services.GetS
 
 func (cli *httpCAClient) GetCAs(ctx context.Context, input services.GetCAsInput) (string, error) {
 	url := cli.baseUrl + "/v1/cas"
-
-	if input.ExhaustiveRun {
-		err := IterGet[models.CACertificate, *resources.GetCAsResponse](ctx, cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
-		return "", err
-	} else {
-		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
-		for _, elem := range resp.IterableList.List {
-			input.ApplyFunc(elem)
-		}
-		return resp.NextBookmark, err
-	}
-
+	return IterGet[models.CACertificate, *resources.GetCAsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 
 func (cli *httpCAClient) GetCAByID(ctx context.Context, input services.GetCAByIDInput) (*models.CACertificate, error) {
@@ -82,18 +71,7 @@ func (cli *httpCAClient) GetCAByID(ctx context.Context, input services.GetCAByID
 
 func (cli *httpCAClient) GetCAsByCommonName(ctx context.Context, input services.GetCAsByCommonNameInput) (string, error) {
 	url := cli.baseUrl + "/v1/cas/cn/" + input.CommonName
-
-	if input.ExhaustiveRun {
-		err := IterGet[models.CACertificate, *resources.GetCAsResponse](ctx, cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
-		return "", err
-	} else {
-		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
-		for _, elem := range resp.IterableList.List {
-			input.ApplyFunc(elem)
-		}
-		return resp.NextBookmark, err
-	}
-
+	return IterGet[models.CACertificate, *resources.GetCAsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 
 func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
@@ -278,84 +256,33 @@ func (cli *httpCAClient) GetCertificateBySerialNumber(ctx context.Context, input
 
 func (cli *httpCAClient) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {
 	url := cli.baseUrl + "/v1/certificates"
-
-	if input.ExhaustiveRun {
-		err := IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
-		return "", err
-	} else {
-		resp, err := Get[resources.GetCertsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
-		for _, elem := range resp.IterableList.List {
-			input.ApplyFunc(elem)
-		}
-		return resp.NextBookmark, err
-	}
+	return IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 
 func (cli *httpCAClient) GetCertificatesByCA(ctx context.Context, input services.GetCertificatesByCAInput) (string, error) {
 	url := cli.baseUrl + "/v1/cas/" + input.CAID + "/certificates"
-
-	if input.ExhaustiveRun {
-		err := IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{
-			404: {
-				errs.ErrCANotFound,
-			},
-		})
-		return "", err
-	} else {
-		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{
-			404: {
-				errs.ErrCANotFound,
-			},
-		})
-		for _, elem := range resp.IterableList.List {
-			input.ApplyFunc(elem.Certificate)
-		}
-		return resp.NextBookmark, err
-	}
+	return IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{
+		404: {
+			errs.ErrCANotFound,
+		},
+	})
 }
 
 func (cli *httpCAClient) GetCertificatesByExpirationDate(ctx context.Context, input services.GetCertificatesByExpirationDateInput) (string, error) {
 	url := fmt.Sprintf("%s/v1/certificates/expiration?expires_after=%s&expires_before=%s", cli.baseUrl, input.ExpiresAfter.UTC().Format("2006-01-02T15:04:05Z07:00"), input.ExpiresBefore.UTC().Format("2006-01-02T15:04:05Z07:00"))
-
-	if input.ExhaustiveRun {
-		err := IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
-		return "", err
-	} else {
-		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
-		for _, elem := range resp.IterableList.List {
-			input.ApplyFunc(elem.Certificate)
-		}
-		return resp.NextBookmark, err
-	}
+	return IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
+
 func (cli *httpCAClient) GetCertificatesByCaAndStatus(ctx context.Context, input services.GetCertificatesByCaAndStatusInput) (string, error) {
 	url := fmt.Sprintf("%s/v1/cas/%s/certificates/status/%s", cli.baseUrl, input.CAID, input.Status)
 
-	if input.ExhaustiveRun {
-		err := IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, input.QueryParameters, input.ApplyFunc, map[int][]error{})
-		return "", err
-	} else {
-		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
-		for _, elem := range resp.IterableList.List {
-			input.ApplyFunc(elem.Certificate)
-		}
-		return resp.NextBookmark, err
-	}
+	return IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 
 func (cli *httpCAClient) GetCertificatesByStatus(ctx context.Context, input services.GetCertificatesByStatusInput) (string, error) {
 	url := fmt.Sprintf("%s/v1/certificates/status/%s", cli.baseUrl, input.Status)
 
-	if input.ExhaustiveRun {
-		err := IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, input.QueryParameters, input.ApplyFunc, map[int][]error{})
-		return "", err
-	} else {
-		resp, err := Get[resources.GetCAsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
-		for _, elem := range resp.IterableList.List {
-			input.ApplyFunc(elem.Certificate)
-		}
-		return resp.NextBookmark, err
-	}
+	return IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 
 func (cli *httpCAClient) UpdateCertificateStatus(ctx context.Context, input services.UpdateCertificateStatusInput) (*models.Certificate, error) {

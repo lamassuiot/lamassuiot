@@ -63,24 +63,13 @@ func (cli *deviceManagerClient) GetDeviceByID(ctx context.Context, input service
 func (cli *deviceManagerClient) GetDevices(ctx context.Context, input services.GetDevicesInput) (string, error) {
 	url := cli.baseUrl + "/v1/devices"
 
-	if input.ExhaustiveRun {
-		err := IterGet[models.Device, resources.GetDevicesResponse](ctx, cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
-		return "", err
-	} else {
-		resp, err := Get[resources.GetDevicesResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
-		return resp.NextBookmark, err
-	}
+	return IterGet[models.Device, *resources.GetDevicesResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 func (cli *deviceManagerClient) GetDeviceByDMS(ctx context.Context, input services.GetDevicesByDMSInput) (string, error) {
 	url := cli.baseUrl + "/v1/devices/dms/" + input.DMSID
 
-	if input.ExhaustiveRun {
-		err := IterGet[models.Device, *resources.GetDevicesResponse](ctx, cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
-		return "", err
-	} else {
-		resp, err := Get[resources.GetDevicesResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
-		return resp.NextBookmark, err
-	}
+	return IterGet[models.Device, *resources.GetDevicesResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+
 }
 
 func (cli *deviceManagerClient) UpdateDeviceStatus(ctx context.Context, input services.UpdateDeviceStatusInput) (*models.Device, error) {
