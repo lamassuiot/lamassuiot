@@ -2,11 +2,15 @@ package assemblers
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
@@ -49,13 +53,14 @@ func StartDeviceManagerServiceTestServer(t *testing.T, withEventBus bool) (*Devi
 
 func TestGetAllDevices(t *testing.T) {
 	// t.Parallel()
+	devsIds := [3]string{"test1", "test2", "test3"}
 	ctx := context.Background()
 	dmgr, err := StartDeviceManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
 	deviceSample1 := services.CreateDeviceInput{
-		ID:        "test",
+		ID:        devsIds[0],
 		Alias:     "test",
 		Tags:      []string{"test"},
 		Metadata:  map[string]interface{}{"test": "test"},
@@ -69,7 +74,7 @@ func TestGetAllDevices(t *testing.T) {
 	}
 
 	deviceSample2 := services.CreateDeviceInput{
-		ID:        "test2",
+		ID:        devsIds[1],
 		Alias:     "test2",
 		Tags:      []string{"test"},
 		Metadata:  map[string]interface{}{"test": "test"},
@@ -83,7 +88,7 @@ func TestGetAllDevices(t *testing.T) {
 	}
 
 	deviceSample3 := services.CreateDeviceInput{
-		ID:        "test3",
+		ID:        devsIds[2],
 		Alias:     "test3",
 		Tags:      []string{"test"},
 		Metadata:  map[string]interface{}{"test": "test"},
@@ -129,8 +134,24 @@ func TestGetAllDevices(t *testing.T) {
 				return devices, nil
 			},
 			resultCheck: func(devices []models.Device, err error) {
+				check := 0
 				if len(devices) != 2 {
-					t.Fatalf("The amount is two, got %d", len(devices))
+					t.Fatalf("the amount is two, got %d", len(devices))
+				}
+				devTest := devsIds[:2]
+				for _, id := range devTest {
+					contains := slices.ContainsFunc(devices, func(device models.Device) bool {
+						fmt.Println(device.ID)
+						return device.ID == id
+					})
+					if contains != true {
+						t.Fatalf("the device id is not of this test")
+					} else {
+						check += 1
+					}
+				}
+				if check != 2 {
+					t.Fatalf("device with a different id")
 				}
 			},
 		},
@@ -162,8 +183,22 @@ func TestGetAllDevices(t *testing.T) {
 				return devices, nil
 			},
 			resultCheck: func(devices []models.Device, err error) {
+				check := 0
 				if len(devices) != 3 {
-					t.Fatalf("The amount is three, got %d", len(devices))
+					t.Fatalf("the amount is three, got %d", len(devices))
+				}
+				for _, id := range devsIds {
+					contains := slices.ContainsFunc(devices, func(device models.Device) bool {
+						return device.ID == id
+					})
+					if contains != true {
+						t.Fatalf("the device id is not of this test")
+					} else {
+						check += 1
+					}
+				}
+				if check != 3 {
+					t.Fatalf("device with a different id")
 				}
 			},
 		},
@@ -179,6 +214,7 @@ func TestGetAllDevices(t *testing.T) {
 }
 
 func TestGetDeviceStats(t *testing.T) {
+	devsIds := [3]string{"test1", "test2", "test3"}
 	// t.Parallel()
 	ctx := context.Background()
 	dmgr, err := StartDeviceManagerServiceTestServer(t, false)
@@ -186,7 +222,7 @@ func TestGetDeviceStats(t *testing.T) {
 		t.Fatalf("could not create Device Manager test server: %s", err)
 	}
 	deviceSample1 := services.CreateDeviceInput{
-		ID:        "test",
+		ID:        devsIds[0],
 		Alias:     "test",
 		Tags:      []string{"test"},
 		Metadata:  map[string]interface{}{"test": "test"},
@@ -200,7 +236,7 @@ func TestGetDeviceStats(t *testing.T) {
 	}
 
 	deviceSample2 := services.CreateDeviceInput{
-		ID:        "test2",
+		ID:        devsIds[1],
 		Alias:     "test2",
 		Tags:      []string{"test"},
 		Metadata:  map[string]interface{}{"test": "test"},
@@ -214,7 +250,7 @@ func TestGetDeviceStats(t *testing.T) {
 	}
 
 	deviceSample3 := services.CreateDeviceInput{
-		ID:        "test3",
+		ID:        devsIds[2],
 		Alias:     "test3",
 		Tags:      []string{"test"},
 		Metadata:  map[string]interface{}{"test": "test"},
@@ -244,10 +280,155 @@ func TestGetDeviceStats(t *testing.T) {
 			},
 			resultCheck: func(stats *models.DevicesStats, err error) {
 				if stats == nil {
-					t.Fatalf("The stastics are nil")
+					t.Fatalf("the stastics are nil")
 				}
 				if err != nil {
 					t.Fatalf("not expected error. Got an error")
+				}
+
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			tc.resultCheck(tc.run())
+		})
+	}
+}
+
+func TestGetDeviceByID(t *testing.T) {
+
+	// t.Parallel()
+	ctx := context.Background()
+	dmgr, err := StartDeviceManagerServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create Device Manager test server: %s", err)
+	}
+	deviceSample1 := services.CreateDeviceInput{
+		ID:        "test",
+		Alias:     "test",
+		Tags:      []string{"test"},
+		Metadata:  map[string]interface{}{"test": "test"},
+		DMSID:     "test",
+		Icon:      "test",
+		IconColor: "#000000",
+	}
+	_, err = dmgr.Service.CreateDevice(ctx, deviceSample1)
+	if err != nil {
+		t.Fatalf("could not create device: %s", err)
+	}
+
+	var testcases = []struct {
+		name        string
+		run         func() (*models.Device, error)
+		resultCheck func(*models.Device, error)
+	}{
+		{
+			name: "OK/GetDeviceByID",
+			run: func() (*models.Device, error) {
+
+				device, err := dmgr.HttpDeviceManagerSDK.GetDeviceByID(ctx, services.GetDeviceByIDInput{
+					ID: "test",
+				})
+				if err != nil {
+					t.Fatalf("could not retrieve a device: %s", err)
+				}
+				return device, nil
+			},
+			resultCheck: func(device *models.Device, err error) {
+				if device == nil {
+					t.Fatalf("the device has not been found")
+				}
+				if err != nil {
+					t.Fatalf("not expected error. Got an error")
+				}
+				if device.ID != "test" {
+					t.Fatalf("The iD of the devices is not correct")
+				}
+			},
+		},
+		{
+			name: "Err/IDDoesNotExist",
+			run: func() (*models.Device, error) {
+
+				device, err := dmgr.HttpDeviceManagerSDK.GetDeviceByID(ctx, services.GetDeviceByIDInput{
+					ID: "error",
+				})
+
+				return device, err
+			},
+			resultCheck: func(device *models.Device, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got not an error")
+				}
+				if !errors.Is(err, errs.ErrDeviceNotFound) {
+					t.Fatalf("Unexpected error %s", err)
+				}
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			tc.resultCheck(tc.run())
+		})
+	}
+}
+
+func TestUpdateDeviceMetadata(t *testing.T) {
+	// t.Parallel()
+
+	ctx := context.Background()
+	dmgr, err := StartDeviceManagerServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create Device Manager test server: %s", err)
+	}
+	deviceUpdMeta := map[string]any{
+		"test":    "test",
+		"lamassu": "lamassu",
+	}
+	deviceSample1 := services.CreateDeviceInput{
+		ID:        "test",
+		Alias:     "test",
+		Tags:      []string{"test"},
+		Metadata:  map[string]interface{}{"test": "test"},
+		DMSID:     "test",
+		Icon:      "test",
+		IconColor: "#000000",
+	}
+	_, err = dmgr.Service.CreateDevice(ctx, deviceSample1)
+	if err != nil {
+		t.Fatalf("could not create device: %s", err)
+	}
+
+	var testcases = []struct {
+		name        string
+		run         func() (*models.Device, error)
+		resultCheck func(device *models.Device, err error)
+	}{
+		{
+			name: "OK/DeviceNotExist",
+			run: func() (*models.Device, error) {
+
+				device, err := dmgr.HttpDeviceManagerSDK.UpdateDeviceMetadata(context.Background(), services.UpdateDeviceMetadataInput{
+					ID:       "test",
+					Metadata: deviceUpdMeta,
+				})
+				if err != nil {
+					t.Fatalf("could not retrieve a device: %s", err)
+				}
+				return device, nil
+			},
+			resultCheck: func(device *models.Device, err error) {
+				for key, value := range device.Metadata {
+					if val, ok := deviceUpdMeta[key]; !ok || val != value {
+						t.Fatalf("the device´s metadata is not correct: %s", err)
+					}
 				}
 			},
 		},
@@ -263,6 +444,8 @@ func TestGetDeviceStats(t *testing.T) {
 }
 
 func TestGetDevicesByDMS(t *testing.T) {
+	devDMS1 := [3]string{"test1", "test2", "test3"}
+	devDMS2 := [3]string{"test11", "test12", "test13"}
 	// t.Parallel()
 	ctx := context.Background()
 	dmgr, err := StartDeviceManagerServiceTestServer(t, false)
@@ -351,7 +534,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 					t.Fatalf("could not create DMS: %s", err)
 				}
 				deviceSample1 := services.CreateDeviceInput{
-					ID:        "test",
+					ID:        devDMS1[0],
 					Alias:     "test",
 					Tags:      []string{"test"},
 					Metadata:  map[string]interface{}{"test": "test"},
@@ -365,7 +548,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 				}
 
 				deviceSample2 := services.CreateDeviceInput{
-					ID:        "test2",
+					ID:        devDMS1[1],
 					Alias:     "test2",
 					Tags:      []string{"test"},
 					Metadata:  map[string]interface{}{"test": "test"},
@@ -374,20 +557,6 @@ func TestGetDevicesByDMS(t *testing.T) {
 					IconColor: "#000000",
 				}
 				_, err = dmgr.Service.CreateDevice(ctx, deviceSample2)
-				if err != nil {
-					t.Fatalf("could not create device: %s", err)
-				}
-
-				deviceSample3 := services.CreateDeviceInput{
-					ID:        "test3",
-					Alias:     "test3",
-					Tags:      []string{"test"},
-					Metadata:  map[string]interface{}{"test": "test"},
-					DMSID:     dms.ID,
-					Icon:      "test",
-					IconColor: "#000000",
-				}
-				_, err = dmgr.Service.CreateDevice(ctx, deviceSample3)
 				if err != nil {
 					t.Fatalf("could not create device: %s", err)
 				}
@@ -404,8 +573,23 @@ func TestGetDevicesByDMS(t *testing.T) {
 				return devices, nil
 			},
 			resultCheck: func(devices []models.Device, err error) {
+				check := 0
+				devTest := devDMS1[:2]
 				if len(devices) != 2 {
-					t.Fatalf("The amount is three, got %d", len(devices))
+					t.Fatalf("the amount is two, got %d", len(devices))
+				}
+				for _, id := range devTest {
+					contains := slices.ContainsFunc(devices, func(device models.Device) bool {
+						return device.ID == id
+					})
+					if contains != true {
+						t.Fatalf("the device id is not of this test")
+					} else {
+						check += 1
+					}
+				}
+				if check != 2 {
+					t.Fatalf("device with a different id")
 				}
 			},
 		},
@@ -436,7 +620,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 					t.Fatalf("could not create DMS: %s", err)
 				}
 				deviceSample1 := services.CreateDeviceInput{
-					ID:        "test11",
+					ID:        devDMS2[0],
 					Alias:     "test",
 					Tags:      []string{"test"},
 					Metadata:  map[string]interface{}{"test": "test"},
@@ -450,7 +634,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 				}
 
 				deviceSample2 := services.CreateDeviceInput{
-					ID:        "test12",
+					ID:        devDMS2[1],
 					Alias:     "test2",
 					Tags:      []string{"test"},
 					Metadata:  map[string]interface{}{"test": "test"},
@@ -464,7 +648,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 				}
 
 				deviceSample3 := services.CreateDeviceInput{
-					ID:        "test13",
+					ID:        devDMS2[2],
 					Alias:     "test3",
 					Tags:      []string{"test"},
 					Metadata:  map[string]interface{}{"test": "test"},
@@ -489,8 +673,22 @@ func TestGetDevicesByDMS(t *testing.T) {
 				return devices, nil
 			},
 			resultCheck: func(devices []models.Device, err error) {
+				check := 0
 				if len(devices) != 3 {
-					t.Fatalf("The amount is three, got %d", len(devices))
+					t.Fatalf("the amount is three, got %d", len(devices))
+				}
+				for _, id := range devDMS2 {
+					contains := slices.ContainsFunc(devices, func(device models.Device) bool {
+						return device.ID == id
+					})
+					if contains != true {
+						t.Fatalf("the device id is not of this test")
+					} else {
+						check += 1
+					}
+				}
+				if check != 3 {
+					t.Fatalf("device with a different id")
 				}
 			},
 		},
