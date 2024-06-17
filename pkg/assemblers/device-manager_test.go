@@ -498,7 +498,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 
 		modifier(&input)
 
-		return dmsMgr.Service.CreateDMS(context.Background(), input)
+		return dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), input)
 
 	}
 
@@ -542,7 +542,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 					Icon:      "test",
 					IconColor: "#000000",
 				}
-				_, err = dmgr.Service.CreateDevice(ctx, deviceSample1)
+				_, err = dmgr.HttpDeviceManagerSDK.CreateDevice(ctx, deviceSample1)
 				if err != nil {
 					t.Fatalf("could not create device: %s", err)
 				}
@@ -556,12 +556,12 @@ func TestGetDevicesByDMS(t *testing.T) {
 					Icon:      "test",
 					IconColor: "#000000",
 				}
-				_, err = dmgr.Service.CreateDevice(ctx, deviceSample2)
+				_, err = dmgr.HttpDeviceManagerSDK.CreateDevice(ctx, deviceSample2)
 				if err != nil {
 					t.Fatalf("could not create device: %s", err)
 				}
 
-				_, err = dmgr.Service.GetDeviceByDMS(ctx, services.GetDevicesByDMSInput{
+				_, err = dmgr.HttpDeviceManagerSDK.GetDeviceByDMS(ctx, services.GetDevicesByDMSInput{
 					DMSID:     dms.ID,
 					ListInput: request.ListInput,
 				})
@@ -688,6 +688,232 @@ func TestGetDevicesByDMS(t *testing.T) {
 					}
 				}
 				if check != 3 {
+					t.Fatalf("device with a different id")
+				}
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			tc.resultCheck(tc.run())
+		})
+	}
+}
+
+/*
+func TestUpdateDeviceIdentitySlot(t *testing.T) {
+
+	// t.Parallel()
+	ctx := context.Background()
+	dmgr, err := StartDeviceManagerServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create Device Manager test server: %s", err)
+	}
+
+	deviceSample1 := services.CreateDeviceInput{
+		ID:        "test",
+		Alias:     "test",
+		Tags:      []string{"test"},
+		Metadata:  map[string]interface{}{"test": "test"},
+		DMSID:     "test",
+		Icon:      "test",
+		IconColor: "#000000",
+	}
+	_, err = dmgr.Service.CreateDevice(ctx, deviceSample1)
+	if err != nil {
+		t.Fatalf("could not create device: %s", err)
+	}
+
+	var testcases = []struct {
+		name        string
+		run         func() (*models.Device, error)
+		resultCheck func(devices *models.Device, err error)
+	}{
+		{
+			name: "OK/UpdateDeviceIdentity",
+			run: func() (*models.Device, error) {
+
+				device, err := dmgr.HttpDeviceManagerSDK.UpdateDeviceIdentitySlot(context.Background(), services.UpdateDeviceIdentitySlotInput{
+					ID: "test",
+					Slot: models.Slot[string]{
+						ActiveVersion: 234,
+					},
+				})
+
+				if err != nil {
+					t.Fatalf("error while updating identity: %s", err)
+				}
+
+				return device, nil
+			},
+			resultCheck: func(device *models.Device, err error) {
+
+				if err != nil {
+					t.Fatalf("got an unexepected error: %s", err)
+				}
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			tc.resultCheck(tc.run())
+		})
+	}
+
+}
+*/
+func TestDecommissionDevice(t *testing.T) {
+	devDMS1 := [3]string{"test1", "test2", "test3"}
+
+	// t.Parallel()
+	ctx := context.Background()
+	dmgr, err := StartDeviceManagerServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create Device Manager test server: %s", err)
+	}
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create Dms Manager test server: %s", err)
+	}
+
+	createDMS := func(modifier func(in *services.CreateDMSInput)) (*models.DMS, error) {
+		input := services.CreateDMSInput{
+			ID:       uuid.NewString(),
+			Name:     "MyIotFleet",
+			Metadata: map[string]any{},
+			Settings: models.DMSSettings{
+				EnrollmentSettings: models.EnrollmentSettings{
+					EnrollmentProtocol: models.EST,
+					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
+						AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
+						AuthOptionsMTLS: models.AuthOptionsClientCertificate{
+							ChainLevelValidation: -1,
+							ValidationCAs:        []string{},
+						},
+					},
+					DeviceProvisionProfile: models.DeviceProvisionProfile{
+						Icon:      "BiSolidCreditCardFront",
+						IconColor: "#25ee32-#222222",
+						Metadata:  map[string]any{},
+						Tags:      []string{"iot", "testdms", "cloud"},
+					},
+					RegistrationMode:            models.JITP,
+					EnableReplaceableEnrollment: true,
+				},
+				ReEnrollmentSettings: models.ReEnrollmentSettings{
+					AdditionalValidationCAs:     []string{},
+					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
+					EnableExpiredRenewal:        true,
+					PreventiveReEnrollmentDelta: models.TimeDuration(time.Minute * 3),
+					CriticalReEnrollmentDelta:   models.TimeDuration(time.Minute * 2),
+				},
+				CADistributionSettings: models.CADistributionSettings{
+					IncludeLamassuSystemCA: true,
+					IncludeEnrollmentCA:    true,
+					ManagedCAs:             []string{},
+				},
+			},
+		}
+
+		modifier(&input)
+
+		return dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), input)
+
+	}
+
+	var testcases = []struct {
+		name        string
+		run         func() ([]models.Device, error)
+		resultCheck func(devices []models.Device, err error)
+	}{
+		{
+			name: "OK/PaginationWithoutExhaustiveRun",
+			run: func() ([]models.Device, error) {
+
+				devices := []models.Device{}
+
+				request := services.GetDevicesInput{
+					ListInput: resources.ListInput[models.Device]{
+						QueryParameters: &resources.QueryParameters{
+							PageSize: 2,
+							Sort: resources.SortOptions{
+								SortMode:  resources.SortModeAsc,
+								SortField: "id",
+							},
+						},
+						ExhaustiveRun: false,
+						ApplyFunc: func(dev models.Device) {
+							devices = append(devices, dev)
+						},
+					},
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+				deviceSample1 := services.CreateDeviceInput{
+					ID:        devDMS1[0],
+					Alias:     "test",
+					Tags:      []string{"test"},
+					Metadata:  map[string]interface{}{"test": "test"},
+					DMSID:     dms.ID,
+					Icon:      "test",
+					IconColor: "#000000",
+				}
+				_, err = dmgr.Service.CreateDevice(ctx, deviceSample1)
+				if err != nil {
+					t.Fatalf("could not create device: %s", err)
+				}
+
+				deviceSample2 := services.CreateDeviceInput{
+					ID:        devDMS1[1],
+					Alias:     "test2",
+					Tags:      []string{"test"},
+					Metadata:  map[string]interface{}{"test": "test"},
+					DMSID:     dms.ID,
+					Icon:      "test",
+					IconColor: "#000000",
+				}
+				_, err = dmgr.Service.CreateDevice(ctx, deviceSample2)
+				if err != nil {
+					t.Fatalf("could not create device: %s", err)
+				}
+
+				_, err = dmgr.Service.GetDeviceByDMS(ctx, services.GetDevicesByDMSInput{
+					DMSID:     dms.ID,
+					ListInput: request.ListInput,
+				})
+
+				if err != nil {
+					t.Fatalf("could not retrieve a device: %s", err)
+				}
+
+				return devices, nil
+			},
+			resultCheck: func(devices []models.Device, err error) {
+				check := 0
+				devTest := devDMS1[:2]
+				if len(devices) != 2 {
+					t.Fatalf("the amount is two, got %d", len(devices))
+				}
+				for _, id := range devTest {
+					contains := slices.ContainsFunc(devices, func(device models.Device) bool {
+						return device.ID == id
+					})
+					if contains != true {
+						t.Fatalf("the device id is not of this test")
+					} else {
+						check += 1
+					}
+				}
+				if check != 2 {
 					t.Fatalf("device with a different id")
 				}
 			},
@@ -869,7 +1095,7 @@ func TestPagination(t *testing.T) {
 		},
 	}
 
-	bookmark, err = dmgr.Service.GetDevices(ctx, request)
+	bookmark, err = dmgr.HttpDeviceManagerSDK.GetDevices(ctx, request)
 	if err != nil {
 		t.Fatalf("could not retrieve device: %s", err)
 	}
