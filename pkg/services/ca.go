@@ -895,16 +895,43 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input DeleteCAInput) 
 		return errs.ErrCANotFound
 	}
 
-	if ca.Status != models.StatusExpired && ca.Status != models.StatusRevoked {
+	if ca.Type == models.CertificateTypeExternal {
+		lFunc.Debugf("External CA, so it can be deleted")
+	} else if ca.Status == models.StatusExpired || ca.Status == models.StatusRevoked {
+		lFunc.Debugf("Expired or revoked CA, so it can be deleted")
+	} else {
 		lFunc.Errorf("CA %s can not be deleted while in status %s", input.CAID, ca.Status)
 		return errs.ErrCAStatus
 	}
 
+	ctr := 0
+	revokeCertFunc := func(c models.Certificate) {
+		lFunc.Infof("\n\n%d - %s\n\n", ctr, c.SerialNumber)
+		ctr++
+		_, err := svc.service.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
+			SerialNumber:     c.SerialNumber,
+			NewStatus:        models.StatusRevoked,
+			RevocationReason: ocsp.CessationOfOperation,
+		})
+		if err != nil {
+			lFunc.Errorf("could not revoke certificate %s issued by CA %s", c.SerialNumber, c.IssuerCAMetadata.ID)
+		}
+	}
+	_, err = svc.certStorage.SelectByCA(ctx, ca.ID, storage.StorageListRequest[models.Certificate]{
+		ExhaustiveRun: true,
+		ApplyFunc:     revokeCertFunc,
+		QueryParams:   &resources.QueryParameters{},
+		ExtraOpts:     map[string]interface{}{},
+	})
+	if err != nil {
+		lFunc.Errorf("could not revoke certificate %s issued by CA %s", ca.SerialNumber, ca.IssuerCAMetadata.ID)
+	}
 	err = svc.caStorage.Delete(ctx, input.CAID)
 	if err != nil {
 		lFunc.Errorf("something went wrong while deleting the CA %s %s", input.CAID, err)
 		return err
 	}
+
 	return err
 }
 
