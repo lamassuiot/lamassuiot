@@ -16,19 +16,26 @@ import (
 	awsplatform_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/aws-platform"
 )
 
+var sqsTestServer *TestEventBusConfig
+var rabbitTestServer *TestEventBusConfig
+
 type TestEventBusConfig struct {
 	config     config.EventBusEngine
 	BeforeEach func() error
 	AfterSuite func()
 }
 
-func PrepareAWSSqsSNS() (*TestEventBusConfig, error) {
+func prepareAWSSqsSNSForTest() (*TestEventBusConfig, error) {
+	if sqsTestServer != nil {
+		return sqsTestServer, nil
+	}
+
 	cleanup, conf, err := awsplatform_test.RunAWSEmulationLocalStackDocker()
 	if err != nil {
 		return nil, err
 	}
 
-	return &TestEventBusConfig{
+	sqsTestServer = &TestEventBusConfig{
 		config: config.EventBusEngine{
 			LogLevel:  config.Debug,
 			Enabled:   true,
@@ -39,16 +46,23 @@ func PrepareAWSSqsSNS() (*TestEventBusConfig, error) {
 		BeforeEach: func() error {
 			return nil
 		},
-	}, nil
+	}
+
+	return sqsTestServer, nil
 }
 
-func PrepareRabbitMQForTest() (*TestEventBusConfig, error) {
+func prepareRabbitMQForTest() (*TestEventBusConfig, error) {
+
+	if rabbitTestServer != nil {
+		return rabbitTestServer, nil
+	}
+
 	cleanup, conf, _, err := rabbitmq_test.RunRabbitMQDocker()
 	if err != nil {
 		return nil, err
 	}
 
-	return &TestEventBusConfig{
+	rabbitTestServer = &TestEventBusConfig{
 		config: config.EventBusEngine{
 			LogLevel: config.Debug,
 			Enabled:  true,
@@ -59,7 +73,26 @@ func PrepareRabbitMQForTest() (*TestEventBusConfig, error) {
 		BeforeEach: func() error {
 			return nil
 		},
-	}, nil
+	}
+
+	return rabbitTestServer, nil
+}
+
+func setupSuite() func(t *testing.T) {
+	aws, err := prepareAWSSqsSNSForTest()
+	if err != nil {
+		return nil
+	}
+	sns, err := prepareRabbitMQForTest()
+
+	if err != nil {
+		return nil
+	}
+
+	return func(t *testing.T) {
+		aws.AfterSuite()
+		sns.AfterSuite()
+	}
 }
 
 type basicTestHandler struct {
@@ -70,7 +103,16 @@ func (h *basicTestHandler) HandleMessage(msg *message.Message) error {
 	return h.handler(msg)
 }
 
-func TestWildcardSubscribe(t *testing.T) {
+func TestSuiteEventBus(t *testing.T) {
+	teardown := setupSuite()
+	defer teardown(t)
+
+	t.Run("TestWildcardSubscribe", testWildcardSubscribe)
+	t.Run("TestMultiServiceSubscribe", testMultiServiceSubscribe)
+	t.Run("TestMultiConsumers", testMultiConsumers)
+}
+
+func testWildcardSubscribe(t *testing.T) {
 	testcases := []struct {
 		name            string
 		subscriptionKey string
@@ -93,27 +135,17 @@ func TestWildcardSubscribe(t *testing.T) {
 		},
 	}
 
-	awsSqsSnsEventBus, err := PrepareAWSSqsSNS()
-	if err != nil {
-		t.Fatalf("could not prepare AWS SQS/SNS test server: %s", err)
-	}
-
-	rabbitEventBus, err := PrepareRabbitMQForTest()
-	if err != nil {
-		t.Fatalf("could not prepare RabbitMQ test server: %s", err)
-	}
-
 	eventBusEngines := []struct {
 		name string
 		conf *TestEventBusConfig
 	}{
 		{
 			name: "RabbitMQ",
-			conf: rabbitEventBus,
+			conf: rabbitTestServer,
 		},
 		{
 			name: "AWSSqsSNS",
-			conf: awsSqsSnsEventBus,
+			conf: rabbitTestServer,
 		},
 	}
 
@@ -186,7 +218,7 @@ func TestWildcardSubscribe(t *testing.T) {
 	}
 }
 
-func TestMultiServiceSubscribe(t *testing.T) {
+func testMultiServiceSubscribe(t *testing.T) {
 	type sub struct {
 		serviceID       string
 		subscriptionKey string
@@ -238,15 +270,6 @@ func TestMultiServiceSubscribe(t *testing.T) {
 			},
 		},
 	}
-	rabbitEventBus, err := PrepareRabbitMQForTest()
-	if err != nil {
-		t.Fatalf("could not prepare RabbitMQ test server: %s", err)
-	}
-
-	awsSqsSnsEventBus, err := PrepareAWSSqsSNS()
-	if err != nil {
-		t.Fatalf("could not prepare AWS SQS/SNS test server: %s", err)
-	}
 
 	eventBusEngines := []struct {
 		name string
@@ -254,11 +277,11 @@ func TestMultiServiceSubscribe(t *testing.T) {
 	}{
 		{
 			name: "RabbitMQ",
-			conf: rabbitEventBus,
+			conf: rabbitTestServer,
 		},
 		{
 			name: "AWSSqsSNS",
-			conf: awsSqsSnsEventBus,
+			conf: sqsTestServer,
 		},
 	}
 
@@ -366,21 +389,11 @@ func TestMultiServiceSubscribe(t *testing.T) {
 	}
 }
 
-func TestMultiConsumers(t *testing.T) {
+func testMultiConsumers(t *testing.T) {
 	type sub struct {
 		consumerID      string
 		serviceID       string
 		subscriptionKey string
-	}
-
-	rabbitEventBus, err := PrepareRabbitMQForTest()
-	if err != nil {
-		t.Fatalf("could not prepare RabbitMQ test server: %s", err)
-	}
-
-	awsSqsSnsEventBus, err := PrepareAWSSqsSNS()
-	if err != nil {
-		t.Fatalf("could not prepare AWS SQS/SNS test server: %s", err)
 	}
 
 	eventBusEngines := []struct {
@@ -389,11 +402,11 @@ func TestMultiConsumers(t *testing.T) {
 	}{
 		{
 			name: "RabbitMQ",
-			conf: rabbitEventBus,
+			conf: rabbitTestServer,
 		},
 		{
 			name: "AWSSqsSNS",
-			conf: awsSqsSnsEventBus,
+			conf: sqsTestServer,
 		},
 	}
 

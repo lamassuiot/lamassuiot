@@ -348,6 +348,11 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		}
 	} else {
 		lFunc.Debugf("device '%s' does exist", csr.Subject.CommonName)
+		if device.DMSOwner != dms.ID {
+			lFunc.Errorf("device '%s' is registered with DMS '%s'. Aborting enrollment process", csr.Subject.CommonName, device.DMSOwner)
+			return nil, fmt.Errorf("device already registered to another DMS")
+		}
+
 		if dms.Settings.EnrollmentSettings.EnableReplaceableEnrollment {
 			lFunc.Debugf("DMS '%s' allows new enrollments. continuing enrollment process for device '%s'", dms.ID, csr.Subject.CommonName)
 			//revoke active certificate
