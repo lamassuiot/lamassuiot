@@ -17,6 +17,7 @@ var CAFiltrableFields = map[string]FilterFieldType{
 	"valid_from":           DateFilterFieldType,
 	"revocation_timestamp": DateFilterFieldType,
 	"revocation_reason":    EnumFilterFieldType,
+	"subject.common_name":  StringFilterFieldType,
 }
 
 var CertificateFiltrableFields = map[string]FilterFieldType{
