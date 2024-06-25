@@ -27,7 +27,7 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 
 	switch conf.AWSAuthenticationMethod {
 	case Static:
-		creds := aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(conf.AccessKeyID, string(conf.SecretAccessKey), ""))
+		creds := aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(conf.AccessKeyID, string(conf.SecretAccessKey), conf.SessionToken))
 		creds.Invalidate()
 		awsCfg, err := config.LoadDefaultConfig(context.TODO(),
 			config.WithRegion(conf.Region),

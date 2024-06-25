@@ -262,7 +262,7 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
 		cryptoEnginesConfig.DefaultEngine = "dockertest-hcpvault-kvv2"
-		cryptoEnginesConfig.HashicorpVaultKV2Provider = []config.HashicorpVaultCryptoEngineConfig{
+		cryptoEnginesConfig.GolangHashicorpVaultKV2Provider = []config.HashicorpVaultCryptoEngineConfig{
 			{
 				HashicorpVaultSDK: *vaultConfig,
 				ID:                "dockertest-hcpvault-kvv2",
@@ -284,7 +284,7 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[AwsSecretsManager]; ok {
 		cryptoEnginesConfig.DefaultEngine = "dockertest-localstack-smngr"
-		cryptoEnginesConfig.AWSSecretsManagerProvider = []config.AWSCryptoEngine{
+		cryptoEnginesConfig.GolangAWSSecretsManagerProvider = []config.AWSCryptoEngine{
 			{
 				AWSSDKConfig: *awsCfg,
 				ID:           "dockertest-localstack-smngr",
@@ -295,7 +295,7 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[GolangFS]; ok {
 		cryptoEnginesConfig.DefaultEngine = "golangfs-1"
-		cryptoEnginesConfig.GolangProvider = []config.GolangEngineConfig{
+		cryptoEnginesConfig.GolangFilesystemProvider = []config.GolangFilesystemEngineConfig{
 			{
 				ID:               "golangfs-1",
 				Metadata:         make(map[string]interface{}),

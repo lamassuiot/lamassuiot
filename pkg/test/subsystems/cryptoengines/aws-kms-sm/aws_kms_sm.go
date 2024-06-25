@@ -14,7 +14,7 @@ import (
 func RunAWSEmulationLocalStackDocker() (func() error, *config.AWSSDKConfig, error) {
 	containerCleanup, container, dockerHost, err := dockerunner.RunDocker(dockertest.RunOptions{
 		Repository: "localstack/localstack", // image
-		Tag:        "latest",                // version
+		Tag:        "3.4",                   // version
 	}, func(hc *docker.HostConfig) {})
 	if err != nil {
 		return nil, nil, err
