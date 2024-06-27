@@ -50,7 +50,7 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte
 	err := crlValidate.Struct(input)
 	if err != nil {
 		lFunc.Errorf("struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
+		return nil, errs.ErrInvalidInput
 	}
 
 	certList := []x509.RevocationListEntry{}

@@ -117,7 +117,7 @@ func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input C
 	err := deviceValidate.Struct(input)
 	if err != nil {
 		lFunc.Errorf("struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
+		return nil, errs.ErrInvalidInput
 	}
 
 	if input.Metadata == nil {
@@ -196,7 +196,7 @@ func (svc DeviceManagerServiceBackend) GetDeviceByID(ctx context.Context, input 
 	err := deviceValidate.Struct(input)
 	if err != nil {
 		lFunc.Errorf("struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
+		return nil, errs.ErrInvalidInput
 	}
 	lFunc.Debugf("checking if device '%s' exists", input.ID)
 	exists, device, err := svc.devicesStorage.SelectExists(ctx, input.ID)
@@ -222,7 +222,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 	err := deviceValidate.Struct(input)
 	if err != nil {
 		lFunc.Errorf("struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
+		return nil, errs.ErrInvalidInput
 	}
 	lFunc.Debugf("checking if device '%s' exists", input.ID)
 	exists, device, err := svc.devicesStorage.SelectExists(ctx, input.ID)
@@ -295,7 +295,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context,
 	err := deviceValidate.Struct(input)
 	if err != nil {
 		lFunc.Errorf("UpdateDeviceMetadata struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
+		return nil, errs.ErrInvalidInput
 	}
 
 	lFunc.Debugf("checking if device '%s' exists", input.ID)
@@ -328,7 +328,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 	err := deviceValidate.Struct(input)
 	if err != nil {
 		lFunc.Errorf("struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
+		return nil, errs.ErrInvalidInput
 	}
 	lFunc.Debugf("checking if device '%s' exists", input.ID)
 	exists, device, err := svc.devicesStorage.SelectExists(ctx, input.ID)

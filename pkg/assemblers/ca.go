@@ -9,6 +9,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/jobs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/eventpub"
+	validator "github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/validation"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
@@ -40,6 +41,7 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, serviceInfo models.AP
 func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobScheduler, error) {
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "CA", "Service")
 	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Event Bus")
+	lValidator := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Validator")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "CA", "Storage")
 	lCryptoEng := helpers.SetupLogger(conf.CryptoEngines.LogLevel, "CA", "CryptoEngine")
 	lMonitor := helpers.SetupLogger(conf.Logs.Level, "CA", "Crypto Monitoring")
@@ -92,6 +94,9 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 
 		svc = eventpub.NewCAEventBusPublisher(eventpublisher)(svc)
 	}
+
+	validationMw := validator.NewCAValidator(lValidator)
+	svc = validationMw(svc)
 
 	var scheduler *jobs.JobScheduler
 	if conf.CryptoMonitoring.Enabled {

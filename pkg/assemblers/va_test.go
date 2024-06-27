@@ -29,16 +29,16 @@ func TestBaseCRL(t *testing.T) {
 
 	var testcases = []struct {
 		name        string
-		before      func(services.CAService) ([]*models.Certificate, error)
+		before      func(sdk services.CAService, caID string) ([]*models.Certificate, error)
 		resultCheck func(certs []*models.Certificate, issuer *models.CACertificate, crl *x509.RevocationList, err error)
 	}{
 		{
 			name: "OK/GetCRL-10-Certificates",
-			before: func(caSDK services.CAService) ([]*models.Certificate, error) {
+			before: func(caSDK services.CAService, caID string) ([]*models.Certificate, error) {
 				crtsToIssue := 10
 				crts := []*models.Certificate{}
 				for i := 0; i < crtsToIssue; i++ {
-					crt, err := generateCertificate(caSDK)
+					crt, err := generateCertificate(caSDK, caID)
 					if err != nil {
 						return nil, err
 					}
@@ -64,11 +64,11 @@ func TestBaseCRL(t *testing.T) {
 		},
 		{
 			name: "OK/CheckSignature",
-			before: func(caSDK services.CAService) ([]*models.Certificate, error) {
+			before: func(caSDK services.CAService, caID string) ([]*models.Certificate, error) {
 				crtsToIssue := 10
 				crts := []*models.Certificate{}
 				for i := 0; i < crtsToIssue; i++ {
-					crt, err := generateCertificate(caSDK)
+					crt, err := generateCertificate(caSDK, caID)
 					if err != nil {
 						return nil, err
 					}
@@ -103,21 +103,22 @@ func TestBaseCRL(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			serverTest.BeforeEach()
-			_, err := initCAForVA(serverTest)
+			ca, err := initCAForVA(serverTest)
 			if err != nil {
 				t.Fatalf("could not init CA for VA: %s", err)
 			}
-			issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+
+			issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: ca.ID})
 			if err != nil {
 				t.Fatalf("could not get issuer CA: %s", err)
 			}
 
-			crts, err := tc.before(serverTest.CA.Service)
+			crts, err := tc.before(serverTest.CA.Service, ca.ID)
 			if err != nil {
 				t.Fatalf("could not run 'before' function:  %s", err)
 			}
 
-			crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, DefaultCAID), (*x509.Certificate)(issuerCA.Certificate.Certificate), nil, true)
+			crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, ca.ID), (*x509.Certificate)(issuerCA.Certificate.Certificate), nil, true)
 			if err != nil {
 				t.Fatalf("could not get CRL: %s", err)
 			}
@@ -143,7 +144,7 @@ func TestCRLNumber(t *testing.T) {
 
 	crtsToIssue := 10
 	for i := 0; i < crtsToIssue; i++ {
-		_, err := generateCertificate(caSDK)
+		_, err := generateCertificate(caSDK, ca.ID)
 		if err != nil {
 			t.Fatalf("could not generate certificate: %s", err)
 		}
@@ -152,7 +153,7 @@ func TestCRLNumber(t *testing.T) {
 	iters := 15
 	var prevCrl *x509.RevocationList
 	for i := range iters {
-		crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, DefaultCAID), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
+		crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, ca.ID), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
 		if err != nil {
 			t.Fatalf("could not get CRL: %s", err)
 		}
@@ -176,7 +177,7 @@ func TestPostOCSP(t *testing.T) {
 	}
 
 	serverTest.BeforeEach()
-	_, err = initCAForVA(serverTest)
+	ca, err := initCAForVA(serverTest)
 	if err != nil {
 		t.Fatalf("could not init CA for VA: %s", err)
 	}
@@ -248,16 +249,13 @@ func TestPostOCSP(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
-
-			crt, err := generateCertificate(serverTest.CA.Service)
+			crt, err := generateCertificate(serverTest.CA.Service, ca.ID)
 			if err != nil {
 				t.Fatalf("failed generating crt in test case: %s", err)
 			}
 
-			issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+			issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: ca.ID})
 			if err != nil {
 				t.Fatalf("could not get issuer CA: %s", err)
 			}
@@ -283,17 +281,17 @@ func TestGetOCSP(t *testing.T) {
 		t.Fatalf("could not create VA test server")
 	}
 	serverTest.BeforeEach()
-	_, err = initCAForVA(serverTest)
+	ca, err := initCAForVA(serverTest)
 	if err != nil {
 		t.Fatalf("could not init CA for VA: %s", err)
 	}
 
-	issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+	issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: ca.ID})
 	if err != nil {
 		t.Fatalf("could not get issuer CA: %s", err)
 	}
 
-	crt, err := generateCertificate(serverTest.CA.Service)
+	crt, err := generateCertificate(serverTest.CA.Service, ca.ID)
 	if err != nil {
 		t.Fatalf("failed generating crt in test case: %s", err)
 	}
@@ -327,19 +325,21 @@ func TestCheckOCSPRevocationCodes(t *testing.T) {
 		t.Fatalf("could not create VA test server")
 	}
 	serverTest.BeforeEach()
-	_, err = initCAForVA(serverTest)
+	ca, err := initCAForVA(serverTest)
 	if err != nil {
 		t.Fatalf("could not init CA for VA: %s", err)
 	}
 
-	issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+	caID := ca.ID
+
+	issuerCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: caID})
 	if err != nil {
 		t.Fatalf("could not get issuer CA: %s", err)
 	}
 
 	for reason, reasonName := range testcases {
 		t.Run(fmt.Sprintf("Revocation-%s", reasonName), func(t *testing.T) {
-			crt, err := generateCertificate(serverTest.CA.Service)
+			crt, err := generateCertificate(serverTest.CA.Service, caID)
 			if err != nil {
 				t.Fatalf("failed generating crt in test case: %s", err)
 			}
@@ -369,7 +369,7 @@ func TestCheckOCSPRevocationCodes(t *testing.T) {
 	}
 }
 
-func generateCertificate(caSDK services.CAService) (*models.Certificate, error) {
+func generateCertificate(caSDK services.CAService, caID string) (*models.Certificate, error) {
 	key, err := helpers.GenerateRSAKey(2048)
 	if err != nil {
 		return nil, fmt.Errorf("could not generate private key: %s", err)
@@ -381,7 +381,7 @@ func generateCertificate(caSDK services.CAService) (*models.Certificate, error) 
 	}
 
 	crt, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-		CAID:         DefaultCAID,
+		CAID:         caID,
 		CertRequest:  (*models.X509CertificateRequest)(csr),
 		SignVerbatim: true,
 	})
@@ -500,7 +500,6 @@ func initCAForVA(testServer *TestServer) (*models.CACertificate, error) {
 	caDUr := models.TimeDuration(time.Hour * 24)
 	issuanceDur := models.TimeDuration(time.Hour * 12)
 	ca, err := testServer.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-		ID:                 DefaultCAID,
 		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:            models.Subject{CommonName: "TestCA"},
 		CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
@@ -511,5 +510,3 @@ func initCAForVA(testServer *TestServer) (*models.CACertificate, error) {
 	}
 	return ca, nil
 }
-
-//Hacer la función de test de getCRL

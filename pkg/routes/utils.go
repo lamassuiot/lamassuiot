@@ -17,6 +17,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/controllers"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	headerextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/basic-header-extractors"
@@ -45,6 +46,7 @@ func NewGinEngine(logger *logrus.Entry) *gin.Engine {
 		gindump.DumpWithOptions(true, true, true, true, func(dumpStr string) {
 			logger.Trace(dumpStr)
 		}),
+		ErrorToStatusCodeMiddleware(logger),
 	)
 
 	return router
@@ -175,6 +177,22 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 	}
 
 	return usedPort, nil
+}
+
+func ErrorToStatusCodeMiddleware(logger *logrus.Entry) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Next()
+		for _, ginErr := range c.Errors {
+			err := ginErr.Err
+			switch typedErr := err.(type) {
+			case errs.HttpAPIError:
+				c.JSON(typedErr.Status, gin.H{"err": typedErr.Msg})
+			default:
+				c.JSON(500, gin.H{"err": err.Error()})
+			}
+			return
+		}
+	}
 }
 
 type respBodyWriter struct {
