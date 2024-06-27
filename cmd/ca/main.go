@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
+
 	lamassu "github.com/lamassuiot/lamassuiot/v2/pkg/assemblers"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
@@ -42,7 +45,18 @@ func main() {
 	log.Debugf("%s", confBytes)
 	log.Debugf("===================================================")
 
-	_, _, _, err = lamassu.AssembleCAServiceWithHTTPServer(*conf, models.APIServiceInfo{
+	lKMSClient := helpers.SetupLogger(conf.KMSClient.LogLevel, "CA SDK", "HTTP Client")
+	kmsHttpCli, err := clients.BuildHTTPClient(conf.KMSClient.HTTPClient, lKMSClient)
+	if err != nil {
+		log.Fatalf("could not build HTTP CA Client: %s", err)
+	}
+
+	kmsSDK := clients.NewHttpKMSClient(
+		clients.HttpClientWithSourceHeaderInjector(kmsHttpCli, models.CASource),
+		fmt.Sprintf("%s://%s:%d%s", conf.KMSClient.Protocol, conf.KMSClient.Hostname, conf.KMSClient.Port, conf.KMSClient.BasePath),
+	)
+
+	_, _, _, err = lamassu.AssembleCAServiceWithHTTPServer(*conf, kmsSDK, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,
