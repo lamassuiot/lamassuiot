@@ -38,6 +38,7 @@ type CAService interface {
 	GetCAsByCommonName(ctx context.Context, input GetCAsByCommonNameInput) (string, error)
 	UpdateCAStatus(ctx context.Context, input UpdateCAStatusInput) (*models.CACertificate, error)
 	UpdateCAMetadata(ctx context.Context, input UpdateCAMetadataInput) (*models.CACertificate, error)
+	UpdateCAIssuanceExpiration(ctx context.Context, input UpdateCAIssuanceExpirationInput) (*models.CACertificate, error)
 	DeleteCA(ctx context.Context, input DeleteCAInput) error
 
 	SignatureSign(ctx context.Context, input SignatureSignInput) ([]byte, error)
@@ -824,6 +825,39 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input UpdateCAS
 	}
 
 	return ca, err
+}
+
+type UpdateCAIssuanceExpirationInput struct {
+	CAID               string            `validate:"required"`
+	IssuanceExpiration models.Expiration `validate:"required"`
+}
+
+func (svc *CAServiceBackend) UpdateCAIssuanceExpiration(ctx context.Context, input UpdateCAIssuanceExpirationInput) (*models.CACertificate, error) {
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+
+	err := validate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("UpdateIssuanceExpirationInput struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
+	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
+		return nil, err
+	}
+
+	if !exists {
+		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
+		return nil, errs.ErrCANotFound
+	}
+
+	ca.IssuanceExpirationRef = input.IssuanceExpiration
+
+	lFunc.Debugf("updating %s CA issuance expiration", input.CAID)
+	return svc.caStorage.Update(ctx, ca)
+
 }
 
 type UpdateCAMetadataInput struct {
