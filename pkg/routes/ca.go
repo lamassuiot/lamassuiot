@@ -27,6 +27,7 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) 
 	rv1.POST("/cas/:id/signature/sign", routes.SignatureSign)
 	rv1.POST("/cas/:id/signature/verify", routes.SignatureVerify)
 	rv1.GET("/cas/:id/certificates/:sn", routes.GetCertificateBySerialNumber)
+	rv1.PUT("/cas/:id/issuanceExpiration", routes.UpdateCAIssuanceExpiration)
 	rv1.DELETE("/cas/:id", routes.DeleteCA)
 
 	rv1.GET("/certificates", routes.GetCertificates)

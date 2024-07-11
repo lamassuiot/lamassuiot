@@ -266,7 +266,7 @@ func (r *caHttpRoutes) UpdateCAIssuanceExpiration(ctx *gin.Context) {
 
 	ca, err := r.svc.UpdateCAIssuanceExpiration(ctx, services.UpdateCAIssuanceExpirationInput{
 		CAID:               params.ID,
-		IssuanceExpiration: requestBody.IssuanceExpiration,
+		IssuanceExpiration: requestBody.Expiration,
 	})
 	if err != nil {
 		switch err {

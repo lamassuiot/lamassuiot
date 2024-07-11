@@ -222,7 +222,7 @@ func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.Up
 
 func (cli *httpCAClient) UpdateCAIssuanceExpiration(ctx context.Context, input services.UpdateCAIssuanceExpirationInput) (*models.CACertificate, error) {
 	response, err := Put[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/metadata", resources.UpdateCAIssuanceExpirationBody{
-		IssuanceExpiration: input.IssuanceExpiration,
+		Expiration: input.IssuanceExpiration,
 	}, map[int][]error{
 		404: {
 			errs.ErrCANotFound,

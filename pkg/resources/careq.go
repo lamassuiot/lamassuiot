@@ -58,7 +58,7 @@ type UpdateCAMetadataBody struct {
 	Metadata map[string]interface{} `json:"metadata"`
 }
 type UpdateCAIssuanceExpirationBody struct {
-	IssuanceExpiration models.Expiration `json:"issuance_expiration"`
+	models.Expiration
 }
 
 type SignCertificateBody struct {

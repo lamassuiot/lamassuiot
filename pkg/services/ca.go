@@ -834,8 +834,8 @@ type UpdateCAIssuanceExpirationInput struct {
 
 func (svc *CAServiceBackend) UpdateCAIssuanceExpiration(ctx context.Context, input UpdateCAIssuanceExpirationInput) (*models.CACertificate, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
-
-	err := validate.Struct(input)
+	var err error
+	err = validate.Struct(input)
 	if err != nil {
 		lFunc.Errorf("UpdateIssuanceExpirationInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
@@ -851,6 +851,11 @@ func (svc *CAServiceBackend) UpdateCAIssuanceExpiration(ctx context.Context, inp
 	if !exists {
 		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
 		return nil, errs.ErrCANotFound
+	}
+
+	if !helpers.ValidateCAExpiration(input.IssuanceExpiration, ca.Certificate.ValidTo) {
+		lFunc.Errorf("issuance expiration is greater than the CA expiration")
+		return nil, errs.ErrValidateBadRequest
 	}
 
 	ca.IssuanceExpirationRef = input.IssuanceExpiration
