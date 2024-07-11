@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
@@ -59,8 +58,6 @@ type CAService interface {
 	UpdateCertificateMetadata(ctx context.Context, input UpdateCertificateMetadataInput) (*models.Certificate, error)
 }
 
-var validate *validator.Validate
-
 type Engine struct {
 	Default bool
 	Service cryptoengines.CryptoEngine
@@ -88,8 +85,6 @@ type CAServiceBuilder struct {
 }
 
 func NewCAService(builder CAServiceBuilder) (CAService, error) {
-	validate = validator.New()
-
 	engines := map[string]*cryptoengines.CryptoEngine{}
 	var defaultCryptoEngine *cryptoengines.CryptoEngine
 	var defaultCryptoEngineID string
@@ -347,17 +342,7 @@ type ImportCAInput struct {
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) ImportCA(ctx context.Context, input ImportCAInput) (*models.CACertificate, error) {
 	var err error
-
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
-
-	validate.RegisterStructValidation(importCAValidation, ImportCAInput{})
-	err = validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("ImportCA struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
-	} else {
-		lFunc.Tracef("ImportCA struct validation success")
-	}
 
 	caCert := input.CACertificate
 	var engineID string
@@ -479,13 +464,6 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input CreateCAInput) 
 	}
 
 	var err error
-	validate.RegisterStructValidation(createCAValidation, CreateCAInput{})
-	err = validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("CreateCAInput struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
-	}
-
 	var parentCA *models.CACertificate
 	if input.ParentID != "" {
 		lFunc.Infof("request includes a parent CA id: %s", input.ParentID)
@@ -618,12 +596,6 @@ type GetCAByIDInput struct {
 func (svc *CAServiceBackend) GetCAByID(ctx context.Context, input GetCAByIDInput) (*models.CACertificate, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
-	err := validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("GetCAByIDInput struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
-	}
-
 	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
 	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
 	if err != nil {
@@ -661,34 +633,6 @@ func (svc *CAServiceBackend) GetCAs(ctx context.Context, input GetCAsInput) (str
 	}
 
 	return nextBookmark, nil
-}
-
-type GetCABySerialNumberInput struct {
-	SerialNumber string `validate:"required"`
-}
-
-func (svc *CAServiceBackend) GetCABySerialNumber(ctx context.Context, input GetCABySerialNumberInput) (*models.CACertificate, error) {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
-
-	err := validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("GetCABySerialNumber struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
-	}
-
-	lFunc.Debugf("checking if CA '%s' exists", input.SerialNumber)
-	exists, ca, err := svc.caStorage.SelectExistsBySerialNumber(ctx, input.SerialNumber)
-	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.SerialNumber, err)
-		return nil, err
-	}
-
-	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.SerialNumber)
-		return nil, errs.ErrCANotFound
-	}
-
-	return ca, nil
 }
 
 type GetCAsByCommonNameInput struct {
@@ -732,12 +676,6 @@ type UpdateCAStatusInput struct {
 //     CA already revoked
 func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input UpdateCAStatusInput) (*models.CACertificate, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
-
-	err := validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("UpdateCAStatusInput struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
-	}
 
 	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
 	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
@@ -839,12 +777,6 @@ type UpdateCAMetadataInput struct {
 func (svc *CAServiceBackend) UpdateCAMetadata(ctx context.Context, input UpdateCAMetadataInput) (*models.CACertificate, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
-	err := validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("UpdateCAMetadataInput struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
-	}
-
 	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
 	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
 	if err != nil {
@@ -877,12 +809,6 @@ type DeleteCAInput struct {
 func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input DeleteCAInput) error {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
-	err := validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("DeleteCA struct validation error: %s", err)
-		return errs.ErrValidateBadRequest
-	}
-
 	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
 	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
 	if err != nil {
@@ -897,7 +823,7 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input DeleteCAInput) 
 
 	if ca.Status != models.StatusExpired && ca.Status != models.StatusRevoked {
 		lFunc.Errorf("CA %s can not be deleted while in status %s", input.CAID, ca.Status)
-		return errs.ErrCAStatus
+		return errs.ErrCAInvalidStatus
 	}
 
 	err = svc.caStorage.Delete(ctx, input.CAID)
@@ -918,18 +844,10 @@ type SignCertificateInput struct {
 // Returned Error Codes:
 //   - ErrCANotFound
 //     The specified CA can not be found in the Database
-//   - ErrValidateBadRequest
-//     The required variables of the data structure are not valid.
 //   - ErrCAStatus
 //     CA is not active
 func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input SignCertificateInput) (*models.Certificate, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
-
-	err := validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("SignCertificateInput struct validation error: %s", err)
-		return nil, errs.ErrCANotFound
-	}
 
 	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
 	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
@@ -945,7 +863,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input SignCert
 
 	if ca.Status != models.StatusActive {
 		lFunc.Errorf("%s CA is not active", ca.ID)
-		return nil, errs.ErrCAStatus
+		return nil, errs.ErrCAInvalidStatus
 	}
 
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
@@ -972,6 +890,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input SignCert
 	} else {
 		expiration = *ca.IssuanceExpirationRef.Time
 	}
+
 	lFunc.Debugf("sign certificate request with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
 	x509Cert, err := x509Engine.SignCertificateRequest(caCert, csr, expiration)
 	if err != nil {
@@ -1078,11 +997,6 @@ type SignatureSignInput struct {
 func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input SignatureSignInput) ([]byte, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
-	err := validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("ImportCertificate struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
-	}
 	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
 	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
 	if err != nil {
@@ -1117,11 +1031,6 @@ type SignatureVerifyInput struct {
 func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input SignatureVerifyInput) (bool, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
-	err := validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("SignatureVerifyInput struct validation error: %s", err)
-		return false, errs.ErrValidateBadRequest
-	}
 	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
 	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
 	if err != nil {
@@ -1150,12 +1059,6 @@ type GetCertificatesBySerialNumberInput struct {
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) GetCertificateBySerialNumber(ctx context.Context, input GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
-
-	err := validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("GetCertificatesBySerialNumberInput struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
-	}
 
 	lFunc.Debugf("checking if Certificate '%s' exists", input.SerialNumber)
 	exists, cert, err := svc.certStorage.SelectExistsBySerialNumber(ctx, input.SerialNumber)
@@ -1197,12 +1100,6 @@ type GetCertificatesByCAInput struct {
 //     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) GetCertificatesByCA(ctx context.Context, input GetCertificatesByCAInput) (string, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
-
-	err := validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("GetCertificatesByCAInput struct validation error: %s", err)
-		return "", errs.ErrValidateBadRequest
-	}
 
 	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
 	exists, _, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
@@ -1288,12 +1185,6 @@ type UpdateCertificateStatusInput struct {
 func (svc *CAServiceBackend) UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) (*models.Certificate, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
-	err := validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("UpdateCertificateStatus struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
-	}
-
 	lFunc.Debugf("checking if certificate '%s' exists", input.SerialNumber)
 	exists, cert, err := svc.certStorage.SelectExistsBySerialNumber(ctx, input.SerialNumber)
 	if err != nil {
@@ -1345,12 +1236,6 @@ type UpdateCertificateMetadataInput struct {
 func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, input UpdateCertificateMetadataInput) (*models.Certificate, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
-	err := validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("UpdateCertificateMetadataInput struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
-	}
-
 	lFunc.Debugf("checking if certificate '%s' exists", input.SerialNumber)
 	exists, cert, err := svc.certStorage.SelectExistsBySerialNumber(ctx, input.SerialNumber)
 	if err != nil {
@@ -1366,58 +1251,4 @@ func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, inpu
 	cert.Metadata = input.Metadata
 	lFunc.Debugf("updating %s certificate metadata", input.SerialNumber)
 	return svc.certStorage.Update(ctx, cert)
-}
-
-func createCAValidation(sl validator.StructLevel) {
-	ca := sl.Current().Interface().(CreateCAInput)
-	if !helpers.ValidateExpirationTimeRef(ca.CAExpiration) {
-		// lFunc.Errorf("CA Expiration time ref is incompatible with the selected variable")
-		sl.ReportError(ca.CAExpiration, "CAExpiration", "CAExpiration", "InvalidCAExpiration", "")
-	}
-
-	if !helpers.ValidateExpirationTimeRef(ca.IssuanceExpiration) {
-		// lFunc.Errorf("issuance expiration time ref is incompatible with the selected variable")
-		sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "InvalidIssuanceExpiration", "")
-	}
-
-	expiration := time.Now()
-	if ca.CAExpiration.Type == models.Duration {
-		expiration = expiration.Add(time.Duration(*ca.CAExpiration.Duration))
-	} else {
-		expiration = *ca.CAExpiration.Time
-	}
-
-	if !helpers.ValidateCAExpiration(ca.IssuanceExpiration, expiration) {
-		// lFunc.Errorf("issuance expiration is greater than the CA expiration")
-		sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
-	}
-}
-
-func importCAValidation(sl validator.StructLevel) {
-	ca := sl.Current().Interface().(ImportCAInput)
-	caCert := ca.CACertificate
-
-	if ca.CAType != models.CertificateTypeExternal {
-		if !helpers.ValidateCAExpiration(ca.IssuanceExpiration, caCert.NotAfter) {
-			// lFunc.Errorf("issuance expiration is greater than the CA expiration")
-			sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
-		}
-		// lFunc.Debugf("CA Type: %s", ca.CAType)
-		if !helpers.ValidateExpirationTimeRef(ca.IssuanceExpiration) {
-			// lFunc.Errorf("expiration time ref is incompatible with the selected variable")
-			sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "InvalidIssuanceExpiration", "")
-		}
-
-		valid, err := helpers.ValidateCertAndPrivKey((*x509.Certificate)(caCert), ca.CARSAKey, ca.CAECKey)
-		if err != nil {
-			sl.ReportError(ca.CARSAKey, "CARSAKey", "CARSAKey", "PrivateKeyAndCertificateNotMatch", "")
-			sl.ReportError(ca.CAECKey, "CAECKey", "CAECKey", "PrivateKeyAndCertificateNotMatch", "")
-		}
-
-		if !valid {
-			// lFunc.Errorf("CA certificate and the private key provided are not compatible")
-			sl.ReportError(ca.CARSAKey, "CARSAKey", "CARSAKey", "PrivateKeyAndCertificateNotMatch", "")
-			sl.ReportError(ca.CAECKey, "CAECKey", "CAECKey", "PrivateKeyAndCertificateNotMatch", "")
-		}
-	}
 }

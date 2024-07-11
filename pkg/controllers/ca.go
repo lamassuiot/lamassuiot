@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
@@ -26,11 +25,7 @@ func NewCAHttpRoutes(svc services.CAService) *caHttpRoutes {
 func (r *caHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
 	engine, err := r.svc.GetCryptoEngineProvider(ctx)
 	if err != nil {
-		switch err {
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 
@@ -65,33 +60,17 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 		Metadata:           requestBody.Metadata,
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAType:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAIssuanceExpiration:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAIncompatibleExpirationTimeRef:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAAlreadyExists:
-			ctx.JSON(409, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		ctx.Error(err)
 		return
 	}
+
 	ctx.JSON(201, ca)
 }
 
 func (r *caHttpRoutes) GetStats(ctx *gin.Context) {
 	stats, err := r.svc.GetStats(ctx)
 	if err != nil {
-		switch err {
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 
@@ -112,13 +91,8 @@ func (r *caHttpRoutes) GetStatsByCAID(ctx *gin.Context) {
 	stats, err := r.svc.GetStatsByCAID(ctx, services.GetStatsByCAIDInput{
 		CAID: params.ID,
 	})
-
 	if err != nil {
-		switch err {
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 
@@ -180,21 +154,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		ParentID:           requestBody.ParentID,
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAType:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAIssuanceExpiration:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAIncompatibleExpirationTimeRef:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAValidCertAndPrivKey:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 	ctx.JSON(201, ca)
@@ -233,17 +193,10 @@ func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 		Metadata: requestBody.Metadata,
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
+
 	ctx.JSON(200, ca)
 }
 
@@ -270,13 +223,8 @@ func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 			cas = append(cas, ca)
 		},
 	})
-
 	if err != nil {
-		switch err {
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 
@@ -310,11 +258,7 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 
@@ -352,15 +296,7 @@ func (r *caHttpRoutes) GetCAByID(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 
@@ -392,19 +328,8 @@ func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 	err := r.svc.DeleteCA(ctx, services.DeleteCAInput{
 		CAID: params.CAId,
 	})
-
 	if err != nil {
-		switch err {
-		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAStatus:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 
@@ -433,19 +358,8 @@ func (r *caHttpRoutes) UpdateCAStatus(ctx *gin.Context) {
 		Status:           requestBody.NewStatus,
 		RevocationReason: requestBody.RevocationReason,
 	})
-
 	if err != nil {
-		switch err {
-		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrCAAlreadyRevoked:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 
@@ -476,19 +390,11 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 	cert, err := r.svc.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
 		SerialNumber: params.SerialNumber,
 	})
-
 	if err != nil {
-		switch err {
-		case errs.ErrCertificateNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
+
 	ctx.JSON(200, cert)
 }
 
@@ -517,11 +423,7 @@ func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
 	})
 
 	if err != nil {
-		switch err {
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 
@@ -555,13 +457,8 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 			},
 		},
 	})
-
 	if err != nil {
-		switch err {
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 
@@ -609,15 +506,7 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 		},
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 
@@ -664,17 +553,7 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 		SignVerbatim: requestBody.SignVerbatim,
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAStatus:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 
@@ -711,13 +590,7 @@ func (r *caHttpRoutes) SignatureSign(ctx *gin.Context) {
 		SigningAlgorithm: requestBody.SigningAlgorithm,
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 
@@ -763,13 +636,7 @@ func (r *caHttpRoutes) SignatureVerify(ctx *gin.Context) {
 		SigningAlgorithm: requestBody.SigningAlgorithm,
 	})
 	if err != nil {
-		switch err {
-		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 
@@ -805,19 +672,8 @@ func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 			},
 		},
 	})
-
 	if err != nil {
-		switch err {
-		case errs.ErrCertificateNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrCertificateStatusTransitionNotAllowed:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 
@@ -854,15 +710,8 @@ func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
 			},
 		},
 	})
-
 	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
 
@@ -907,21 +756,11 @@ func (r *caHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
 		NewStatus:        requestBody.NewStatus,
 		RevocationReason: requestBody.RevocationReason,
 	})
-
 	if err != nil {
-		switch err {
-		case errs.ErrCertificateNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrCertificateStatusTransitionNotAllowed:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		ctx.Error(err)
 		return
 	}
+
 	ctx.JSON(200, cert)
 }
 
@@ -946,20 +785,11 @@ func (r *caHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
 		SerialNumber: params.SerialNumber,
 		Metadata:     requestBody.Metadata,
 	})
-
 	if err != nil {
-		switch err {
-		case errs.ErrCertificateNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrCertificateStatusTransitionNotAllowed:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		ctx.Error(err)
 		return
 	}
+
 	ctx.JSON(200, cert)
 }
 
@@ -974,12 +804,8 @@ func (r *caHttpRoutes) ImportCertificate(ctx *gin.Context) {
 		Metadata:    requestBody.Metadata,
 		Certificate: requestBody.Certificate,
 	})
-
 	if err != nil {
-		switch err {
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		ctx.Error(err)
 		return
 	}
 

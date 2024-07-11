@@ -103,7 +103,7 @@ func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input CreateD
 	err := dmsValidate.Struct(input)
 	if err != nil {
 		lFunc.Errorf("struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
+		return nil, errs.ErrInvalidInput
 	}
 	lFunc.Debugf("checking if DMS '%s' exists", input.ID)
 	if exists, _, err := svc.dmsStorage.SelectExists(ctx, input.ID); err != nil {
@@ -144,7 +144,7 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input UpdateD
 	err := dmsValidate.Struct(input)
 	if err != nil {
 		lFunc.Errorf("struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
+		return nil, errs.ErrInvalidInput
 	}
 	lFunc.Debugf("checking if DMS '%s' exists", input.DMS.ID)
 	exists, dms, err := svc.dmsStorage.SelectExists(ctx, input.DMS.ID)
@@ -174,7 +174,7 @@ func (svc DMSManagerServiceBackend) GetDMSByID(ctx context.Context, input GetDMS
 	err := dmsValidate.Struct(input)
 	if err != nil {
 		lFunc.Errorf("struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
+		return nil, errs.ErrInvalidInput
 	}
 	lFunc.Debugf("checking if DMS '%s' exists", input.ID)
 	exists, dms, err := svc.dmsStorage.SelectExists(ctx, input.ID)
