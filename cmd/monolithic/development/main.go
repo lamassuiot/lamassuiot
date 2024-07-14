@@ -304,6 +304,17 @@ func main() {
 		}
 	}
 
+	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok {
+		cryptoEnginesConfig.DefaultEngine = "pkcs11-1"
+		cryptoEnginesConfig.PKCS11Provider = []config.PKCS11EngineConfig{
+			{
+				ID:           "pkcs11-1",
+				Metadata:     make(map[string]interface{}),
+				PKCS11Config: *pkcs11Cfg,
+			},
+		}
+	}
+
 	pluglableStorageConfig := &config.PluggableStorageEngine{
 		LogLevel: config.Trace,
 	}
@@ -339,14 +350,6 @@ func main() {
 				Region:          *awsIoTManagerRegion,
 			},
 		},
-	}
-
-	if hsmModulePath != "" {
-		conf.CryptoEngines.PKCS11Provider = append(conf.CryptoEngines.PKCS11Provider, config.PKCS11EngineConfig{
-			PKCS11Config: *pkcs11Cfg,
-			ID:           "softhsm-test",
-			Metadata:     make(map[string]interface{}),
-		})
 	}
 
 	_, err := monolithic.RunMonolithicLamassuPKI(conf)
