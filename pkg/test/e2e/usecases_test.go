@@ -89,14 +89,14 @@ func TestUseCase1(t *testing.T) {
 		CryptoEngines: config.CryptoEngines{
 			LogLevel:      config.Info,
 			DefaultEngine: "golang-1",
-			HashicorpVaultKV2Provider: []config.HashicorpVaultCryptoEngineConfig{
+			GolangHashicorpVaultKV2Provider: []config.HashicorpVaultCryptoEngineConfig{
 				{
 					HashicorpVaultSDK: *vaultConfig,
 					ID:                "dockertest-hcpvault-kvv2",
 					Metadata:          make(map[string]interface{}),
 				},
 			},
-			GolangProvider: []config.GolangEngineConfig{
+			GolangFilesystemProvider: []config.GolangFilesystemEngineConfig{
 				{
 					ID:               "golang-1",
 					Metadata:         make(map[string]interface{}),
