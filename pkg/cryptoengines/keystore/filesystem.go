@@ -2,6 +2,7 @@ package keystore
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/sirupsen/logrus"
@@ -21,7 +22,12 @@ func NewFilesystemKeyStorage(logger *logrus.Entry, conf config.GolangFilesystemE
 
 func (s *FilesystemKeyStorage) Get(keyID string) ([]byte, error) {
 	s.logger.Debugf("reading %s Key", keyID)
-	key, err := os.ReadFile(s.directory + "/" + keyID)
+
+	// Safely construct file path
+	filePath := filepath.Join(s.directory, keyID)
+	filePath = filepath.Clean(filePath)
+
+	key, err := os.ReadFile(filePath)
 	if err != nil {
 		s.logger.Errorf("Could not read %s Key: %s", keyID, err)
 		return nil, err
@@ -37,7 +43,11 @@ func (s *FilesystemKeyStorage) Create(keyID string, key []byte) error {
 		return err
 	}
 
-	err = os.WriteFile(s.directory+"/"+keyID, key, 0600)
+	// Safely construct file path
+	filePath := filepath.Join(s.directory, keyID)
+	filePath = filepath.Clean(filePath)
+
+	err = os.WriteFile(filePath, key, 0600)
 	if err != nil {
 		s.logger.Errorf("could not save %s key: %s", keyID, err)
 		return err
@@ -47,7 +57,11 @@ func (s *FilesystemKeyStorage) Create(keyID string, key []byte) error {
 }
 
 func (s *FilesystemKeyStorage) Delete(keyID string) error {
-	return os.Remove(s.directory + "/" + keyID)
+	// Safely construct file path
+	filePath := filepath.Join(s.directory, keyID)
+	filePath = filepath.Clean(filePath)
+
+	return os.Remove(filePath)
 }
 
 func (s *FilesystemKeyStorage) checkAndCreateStorageDir() error {
