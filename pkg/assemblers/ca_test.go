@@ -459,6 +459,185 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 	}
 }
 
+func TestCaIssuanceExpiration(t *testing.T) {
+	serverTest, err := StartCAServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	caTest := serverTest.CA
+
+	caDUr := models.TimeDuration(time.Hour * 24)
+
+	var testcases = []struct {
+		name        string
+		before      func(svc services.CAService) error
+		run         func(caSDK services.CAService) error
+		resultCheck func(err error) error
+	}{
+		{
+			name:   "OK/ChangingCAIssuanceExpiration",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) error {
+				issuanceDur := models.TimeDuration(time.Hour * 12)
+				issuanceDurNew := models.TimeDuration(time.Hour * 6)
+				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: "TestCA"},
+					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
+					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+				})
+
+				if err != nil {
+					t.Fatalf("could not create CA: %s", err)
+				}
+
+				_, err = caSDK.UpdateCAIssuanceExpiration(context.Background(), services.UpdateCAIssuanceExpirationInput{
+					CAID:               ca.ID,
+					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDurNew},
+				})
+				return err
+			},
+
+			resultCheck: func(err error) error {
+				if err != nil {
+					return fmt.Errorf("should've not got an error, but it has got an error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name:   "Err/TooLargeIssuanceExpiration",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) error {
+				issuanceDur := models.TimeDuration(time.Hour * 12)
+				issuanceDurNew := models.TimeDuration(time.Hour * 2000)
+
+				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: "TestCA"},
+					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
+					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+				})
+
+				if err != nil {
+					t.Fatalf("could not create CA: %s", err)
+				}
+
+				_, err = caSDK.UpdateCAIssuanceExpiration(context.Background(), services.UpdateCAIssuanceExpirationInput{
+					CAID:               ca.ID,
+					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDurNew},
+				})
+				return err
+			},
+
+			resultCheck: func(err error) error {
+
+				if err == nil {
+					return fmt.Errorf("should've got an error, but it has not got an error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "Err/TooLargeIssuanceExpirationDate",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) error {
+
+				tCA := time.Date(2024, 11, 31, 23, 59, 59, 0, time.UTC)
+				tIssue := time.Date(2024, 8, 30, 23, 59, 59, 0, time.UTC)
+				tIssueNew := time.Date(2025, 8, 30, 23, 59, 59, 0, time.UTC)
+
+				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: "TestCA"},
+					CAExpiration:       models.Expiration{Type: models.Time, Time: &tCA},
+					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &tIssue},
+				})
+
+				if err != nil {
+					t.Fatalf("could not create CA: %s", err)
+				}
+
+				_, err = caSDK.UpdateCAIssuanceExpiration(context.Background(), services.UpdateCAIssuanceExpirationInput{
+					CAID:               ca.ID,
+					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &tIssueNew},
+				})
+				return err
+			},
+
+			resultCheck: func(err error) error {
+
+				if err == nil {
+					return fmt.Errorf("should've got an error, but it has not got an error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/IssuanceExpirationDate",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) error {
+
+				tCA := time.Date(2024, 11, 31, 23, 59, 59, 0, time.UTC)
+				tIssue := time.Date(2024, 8, 30, 23, 59, 59, 0, time.UTC)
+				tIssueNew := time.Date(2024, 7, 30, 23, 59, 59, 0, time.UTC)
+
+				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: "TestCA"},
+					CAExpiration:       models.Expiration{Type: models.Time, Time: &tCA},
+					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &tIssue},
+				})
+
+				if err != nil {
+					t.Fatalf("could not create CA: %s", err)
+				}
+
+				_, err = caSDK.UpdateCAIssuanceExpiration(context.Background(), services.UpdateCAIssuanceExpirationInput{
+					CAID:               ca.ID,
+					IssuanceExpiration: models.Expiration{Type: models.Time, Time: &tIssueNew},
+				})
+				return err
+			},
+
+			resultCheck: func(err error) error {
+
+				if err != nil {
+					return fmt.Errorf("should've not got an error, but it has got an error: %s", err)
+				}
+
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+
+			err = serverTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
+			}
+
+			err = tc.before(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running 'before' func in test case: %s", err)
+			}
+			err = tc.run(caTest.HttpCASDK)
+			err = tc.resultCheck(err)
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+
+		})
+	}
+}
+
 func TestGetCertificatesByCaAndStatus(t *testing.T) {
 	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
