@@ -58,6 +58,9 @@ type ImportCABody struct {
 type UpdateCAMetadataBody struct {
 	Metadata map[string]interface{} `json:"metadata"`
 }
+type UpdateCAIssuanceExpirationBody struct {
+	models.Expiration
+}
 
 type SignCertificateBody struct {
 	SignVerbatim bool                           `json:"sign_verbatim"`
