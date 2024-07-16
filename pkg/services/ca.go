@@ -935,9 +935,9 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input DeleteCAInput) 
 	}
 
 	if ca.Type == models.CertificateTypeExternal {
-		lFunc.Debugf("External CA, so it can be deleted")
+		lFunc.Debugf("External CA can be deleted")
 	} else if ca.Status == models.StatusExpired || ca.Status == models.StatusRevoked {
-		lFunc.Debugf("Expired or revoked CA, so it can be deleted")
+		lFunc.Debugf("Expired or revoked CA can be deleted")
 	} else {
 		lFunc.Errorf("CA %s can not be deleted while in status %s", input.CAID, ca.Status)
 		return errs.ErrCAStatus
