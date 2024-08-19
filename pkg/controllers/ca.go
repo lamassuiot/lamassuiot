@@ -247,6 +247,42 @@ func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 	ctx.JSON(200, ca)
 }
 
+func (r *caHttpRoutes) UpdateCAIssuanceExpiration(ctx *gin.Context) {
+	var requestBody resources.UpdateCAIssuanceExpirationBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	ca, err := r.svc.UpdateCAIssuanceExpiration(ctx, services.UpdateCAIssuanceExpirationInput{
+		CAID:               params.ID,
+		IssuanceExpiration: requestBody.Expiration,
+	})
+	if err != nil {
+		switch err {
+		case errs.ErrCANotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+	ctx.JSON(200, ca)
+}
+
 func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, resources.CAFiltrableFields)
 

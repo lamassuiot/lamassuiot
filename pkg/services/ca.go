@@ -38,6 +38,7 @@ type CAService interface {
 	GetCAsByCommonName(ctx context.Context, input GetCAsByCommonNameInput) (string, error)
 	UpdateCAStatus(ctx context.Context, input UpdateCAStatusInput) (*models.CACertificate, error)
 	UpdateCAMetadata(ctx context.Context, input UpdateCAMetadataInput) (*models.CACertificate, error)
+	UpdateCAIssuanceExpiration(ctx context.Context, input UpdateCAIssuanceExpirationInput) (*models.CACertificate, error)
 	DeleteCA(ctx context.Context, input DeleteCAInput) error
 
 	SignatureSign(ctx context.Context, input SignatureSignInput) ([]byte, error)
@@ -826,6 +827,44 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input UpdateCAS
 	return ca, err
 }
 
+type UpdateCAIssuanceExpirationInput struct {
+	CAID               string            `validate:"required"`
+	IssuanceExpiration models.Expiration `validate:"required"`
+}
+
+func (svc *CAServiceBackend) UpdateCAIssuanceExpiration(ctx context.Context, input UpdateCAIssuanceExpirationInput) (*models.CACertificate, error) {
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	var err error
+	err = validate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("UpdateIssuanceExpirationInput struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
+	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
+		return nil, err
+	}
+
+	if !exists {
+		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
+		return nil, errs.ErrCANotFound
+	}
+
+	if !helpers.ValidateCAExpiration(input.IssuanceExpiration, ca.Certificate.ValidTo) {
+		lFunc.Errorf("issuance expiration is greater than the CA expiration")
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	ca.IssuanceExpirationRef = input.IssuanceExpiration
+
+	lFunc.Debugf("updating %s CA issuance expiration", input.CAID)
+	return svc.caStorage.Update(ctx, ca)
+
+}
+
 type UpdateCAMetadataInput struct {
 	CAID     string                 `validate:"required"`
 	Metadata map[string]interface{} `validate:"required"`
@@ -895,16 +934,43 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input DeleteCAInput) 
 		return errs.ErrCANotFound
 	}
 
-	if ca.Status != models.StatusExpired && ca.Status != models.StatusRevoked {
+	if ca.Type == models.CertificateTypeExternal {
+		lFunc.Debugf("External CA can be deleted. Proceeding")
+	} else if ca.Status == models.StatusExpired || ca.Status == models.StatusRevoked {
+		lFunc.Debugf("Expired or revoked CA can be deleted. Proceeding")
+	} else {
 		lFunc.Errorf("CA %s can not be deleted while in status %s", input.CAID, ca.Status)
 		return errs.ErrCAStatus
 	}
 
+	ctr := 0
+	revokeCertFunc := func(c models.Certificate) {
+		lFunc.Infof("\n\n%d - %s\n\n", ctr, c.SerialNumber)
+		ctr++
+		_, err := svc.service.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
+			SerialNumber:     c.SerialNumber,
+			NewStatus:        models.StatusRevoked,
+			RevocationReason: ocsp.CessationOfOperation,
+		})
+		if err != nil {
+			lFunc.Errorf("could not revoke certificate %s issued by CA %s: %s", c.SerialNumber, c.IssuerCAMetadata.ID, err)
+		}
+	}
+	_, err = svc.certStorage.SelectByCA(ctx, ca.ID, storage.StorageListRequest[models.Certificate]{
+		ExhaustiveRun: true,
+		ApplyFunc:     revokeCertFunc,
+		QueryParams:   &resources.QueryParameters{},
+		ExtraOpts:     map[string]interface{}{},
+	})
+	if err != nil {
+		lFunc.Errorf("could not revoke certificate %s issued by CA %s", ca.SerialNumber, ca.IssuerCAMetadata.ID)
+	}
 	err = svc.caStorage.Delete(ctx, input.CAID)
 	if err != nil {
 		lFunc.Errorf("something went wrong while deleting the CA %s %s", input.CAID, err)
 		return err
 	}
+
 	return err
 }
 

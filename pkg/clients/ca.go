@@ -198,6 +198,21 @@ func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.Up
 	return response, nil
 }
 
+func (cli *httpCAClient) UpdateCAIssuanceExpiration(ctx context.Context, input services.UpdateCAIssuanceExpirationInput) (*models.CACertificate, error) {
+	response, err := Put[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/issuance-expiration", resources.UpdateCAIssuanceExpirationBody{
+		Expiration: input.IssuanceExpiration,
+	}, map[int][]error{
+		404: {
+			errs.ErrCANotFound,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func (cli *httpCAClient) DeleteCA(ctx context.Context, input services.DeleteCAInput) error {
 	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID, map[int][]error{
 		404: {
