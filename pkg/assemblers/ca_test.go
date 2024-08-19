@@ -459,7 +459,7 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 	}
 }
 
-func TestCaIssuanceExpiration(t *testing.T) {
+func TestUpdateCAIssuanceExpiration(t *testing.T) {
 	serverTest, err := StartCAServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
@@ -487,7 +487,6 @@ func TestCaIssuanceExpiration(t *testing.T) {
 					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
 					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
 				})
-
 				if err != nil {
 					t.Fatalf("could not create CA: %s", err)
 				}
@@ -519,7 +518,6 @@ func TestCaIssuanceExpiration(t *testing.T) {
 					CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
 					IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
 				})
-
 				if err != nil {
 					t.Fatalf("could not create CA: %s", err)
 				}
@@ -532,9 +530,8 @@ func TestCaIssuanceExpiration(t *testing.T) {
 			},
 
 			resultCheck: func(err error) error {
-
 				if err == nil {
-					return fmt.Errorf("should've got an error, but it has not got an error: %s", err)
+					return fmt.Errorf("should've got an error, but got no error")
 				}
 
 				return nil
@@ -570,7 +567,7 @@ func TestCaIssuanceExpiration(t *testing.T) {
 			resultCheck: func(err error) error {
 
 				if err == nil {
-					return fmt.Errorf("should've got an error, but it has not got an error: %s", err)
+					return fmt.Errorf("should've got an error, but got no error")
 				}
 
 				return nil
