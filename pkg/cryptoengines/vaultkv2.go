@@ -79,7 +79,7 @@ func NewVaultKV2Engine(logger *logrus.Entry, conf config.HashicorpVaultCryptoEng
 	hasMount := false
 
 	for mountPath := range mounts {
-		if mountPath == conf.MountPath {
+		if mountPath == fmt.Sprintf("%s/", conf.MountPath) { //mountPath has a trailing slash
 			hasMount = true
 		}
 	}

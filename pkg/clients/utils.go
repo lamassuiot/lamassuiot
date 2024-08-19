@@ -233,25 +233,27 @@ func Delete(ctx context.Context, client *http.Client, url string, knownErrors ma
 	return nil
 }
 
-func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.Client, url string, queryParams *resources.QueryParameters, applyFunc func(E), knownErrors map[int][]error) error {
+func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.Client, url string, exhaustiveRun bool, queryParams *resources.QueryParameters, applyFunc func(E), knownErrors map[int][]error) (string, error) {
 	continueIter := true
 	if queryParams == nil {
 		queryParams = &resources.QueryParameters{}
 	}
 
-	queryParams.NextBookmark = ""
+	if exhaustiveRun {
+		queryParams.NextBookmark = ""
+	}
 
 	for continueIter {
 		response, err := Get[T](ctx, client, url, queryParams, knownErrors)
 		if err != nil {
-			return err
+			return "", err
 		}
 
-		if response.GetNextBookmark() == "" {
+		if response.GetNextBookmark() == "" || !exhaustiveRun {
 			continueIter = false
-		} else {
-			queryParams.NextBookmark = response.GetNextBookmark()
 		}
+
+		queryParams.NextBookmark = response.GetNextBookmark()
 
 		for _, item := range response.GetList() {
 			if &item != nil {
@@ -260,7 +262,7 @@ func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.C
 		}
 	}
 
-	return nil
+	return queryParams.NextBookmark, nil
 }
 
 func parseJSON[T any](s []byte) (T, error) {

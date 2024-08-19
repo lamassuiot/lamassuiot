@@ -83,6 +83,7 @@ func (r *estHttpRoutes) GetCACerts(ctx *gin.Context) {
 
 	ctx.Writer.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
 	ctx.Writer.Header().Set("Content-Transfer-Encoding", "base64")
+	ctx.Writer.Header().Set("Content-Length", strconv.Itoa(len(body)))
 
 	ctx.Writer.WriteHeader(http.StatusOK)
 	ctx.Writer.Write(body)
@@ -171,6 +172,7 @@ func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 
 	ctx.Writer.Header().Set("Content-Type", "application/pkcs7-mime; smime-type=certs-only")
 	ctx.Writer.Header().Set("Content-Transfer-Encoding", "base64")
+	ctx.Writer.Header().Set("Content-Length", strconv.Itoa(len(body)))
 	ctx.Writer.WriteHeader(http.StatusOK)
 	ctx.Writer.Write(body)
 }

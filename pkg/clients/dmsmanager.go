@@ -62,13 +62,7 @@ func (cli *dmsManagerClient) GetDMSByID(ctx context.Context, input services.GetD
 func (cli *dmsManagerClient) GetAll(ctx context.Context, input services.GetAllInput) (string, error) {
 	url := cli.baseUrl + "/v1/dms"
 
-	if input.ExhaustiveRun {
-		err := IterGet[models.DMS, resources.GetDMSsResponse](ctx, cli.httpClient, url, nil, input.ApplyFunc, map[int][]error{})
-		return "", err
-	} else {
-		resp, err := Get[resources.GetDMSsResponse](ctx, cli.httpClient, url, input.QueryParameters, map[int][]error{})
-		return resp.NextBookmark, err
-	}
+	return IterGet[models.DMS, *resources.GetDMSsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 
 func (cli *dmsManagerClient) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
