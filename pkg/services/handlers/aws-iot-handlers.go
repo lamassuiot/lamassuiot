@@ -185,10 +185,9 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 		return nil
 	}
 
-	cert := certUpdate.Updated
-
-	var certExpirationDeltas models.CAMetadataMonitoringExpirationDeltas
-	hasKey, err := helpers.GetMetadataToStruct(cert.Metadata, models.CAMetadataMonitoringExpirationDeltasKey, &certExpirationDeltas)
+	var certUpdatedExpirationDeltas models.CAMetadataMonitoringExpirationDeltas
+	var certPreviousExpirationDeltas models.CAMetadataMonitoringExpirationDeltas
+	hasKey, err := helpers.GetMetadataToStruct(certUpdate.Updated.Metadata, models.CAMetadataMonitoringExpirationDeltasKey, &certUpdatedExpirationDeltas)
 	if err != nil {
 		err = fmt.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
 		logger.Error(err)
@@ -200,12 +199,28 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 		return nil
 	}
 
-	preventiveIdx := slices.IndexFunc(certExpirationDeltas, func(med models.MonitoringExpirationDelta) bool {
+	hasKey, err = helpers.GetMetadataToStruct(certUpdate.Previous.Metadata, models.CAMetadataMonitoringExpirationDeltasKey, &certPreviousExpirationDeltas)
+	if err != nil {
+		err = fmt.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
+		logger.Error(err)
+		return err
+	}
+
+	if !hasKey {
+		logrus.Warnf("skipping event %s, Certificate doesn't have %s key", event.Type(), models.CAMetadataMonitoringExpirationDeltasKey)
+		return nil
+	}
+
+	preventiveUpdatedIdx := slices.IndexFunc(certUpdatedExpirationDeltas, func(med models.MonitoringExpirationDelta) bool {
+		return med.Name == "Preventive"
+	})
+
+	preventivePrevIdx := slices.IndexFunc(certPreviousExpirationDeltas, func(med models.MonitoringExpirationDelta) bool {
 		return med.Name == "Preventive"
 	})
 
 	var attachedBy models.CAAttachedToDevice
-	hasKey, err = helpers.GetMetadataToStruct(cert.Metadata, models.CAAttachedToDeviceKey, &attachedBy)
+	hasKey, err = helpers.GetMetadataToStruct(certUpdate.Updated.Metadata, models.CAAttachedToDeviceKey, &attachedBy)
 	if err != nil {
 		err = fmt.Errorf("could not decode metadata with key %s: %s", models.CAAttachedToDeviceKey, err)
 		logger.Error(err)
@@ -239,16 +254,19 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 		return nil
 	}
 
-	if preventiveIdx >= 0 && certExpirationDeltas[preventiveIdx].Triggered {
-		err = svc.UpdateDeviceShadow(ctx, iot.UpdateDeviceShadowInput{
-			DeviceID:               cert.Subject.CommonName,
-			RemediationActionsType: []models.RemediationActionType{models.RemediationActionUpdateCertificate},
-			DMSIoTAutomationConfig: dmsAWSConf,
-		})
-		if err != nil {
-			err = fmt.Errorf("something went wrong while updating %s Thing Shadow: %s", attachedBy.DeviceID, err)
-			logger.Error(err)
-			return err
+	if preventiveUpdatedIdx >= 0 && certUpdatedExpirationDeltas[preventiveUpdatedIdx].Triggered {
+		// if previously was not triggered (it's the first time) or it did't had a delta defined beforehand
+		if (preventivePrevIdx >= 0 && !certPreviousExpirationDeltas[preventivePrevIdx].Triggered) || preventivePrevIdx == -1 {
+			err = svc.UpdateDeviceShadow(ctx, iot.UpdateDeviceShadowInput{
+				DeviceID:               attachedBy.DeviceID,
+				RemediationActionsType: []models.RemediationActionType{models.RemediationActionUpdateCertificate},
+				DMSIoTAutomationConfig: dmsAWSConf,
+			})
+			if err != nil {
+				err = fmt.Errorf("something went wrong while updating %s Thing Shadow: %s", attachedBy.DeviceID, err)
+				logger.Error(err)
+				return err
+			}
 		}
 	}
 

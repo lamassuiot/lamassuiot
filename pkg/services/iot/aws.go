@@ -428,6 +428,8 @@ func (svc *AWSCloudConnectorService) UpdateDeviceShadow(ctx context.Context, inp
 		actions = append(actions, key)
 	}
 
+	logrus.Infof("updated shadow for device %s with remediation actions '%s'", input.DeviceID, strings.Join(actions, ","))
+
 	device, err := svc.DeviceSDK.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: input.DeviceID,
 	})
@@ -479,7 +481,6 @@ func (svc *AWSCloudConnectorService) UpdateDeviceShadow(ctx context.Context, inp
 		return err
 	}
 
-	logrus.Infof("updated shadow for device %s with remediation actions '%s'", input.DeviceID, strings.Join(actions, ","))
 	return nil
 }
 
