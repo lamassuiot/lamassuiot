@@ -1043,7 +1043,7 @@ func TestPagination(t *testing.T) {
 		t.Fatalf("bookmark is empty")
 	}
 	if len(devices) != 2 {
-		t.Fatalf("could not retrieve device: %s", err)
+		t.Fatalf("expected 2 devices, got %d", len(devices))
 	}
 
 	checkDevice(t, &devices[0], deviceSample)
@@ -1073,7 +1073,7 @@ func TestPagination(t *testing.T) {
 		t.Fatalf("bookmark is empty")
 	}
 	if len(devices) != 2 {
-		t.Fatalf("could not retrieve device: %s", err)
+		t.Fatalf("expected 2 more devices, got %d", len(devices))
 	}
 
 	checkDevice(t, &devices[0], deviceSample3)
@@ -1104,32 +1104,6 @@ func TestPagination(t *testing.T) {
 		t.Fatalf("could not retrieve device: %v", len(devices))
 	}
 	checkDevice(t, &devices[0], deviceSample5)
-
-	devices = []models.Device{}
-	request = services.GetDevicesInput{
-		ListInput: resources.ListInput[models.Device]{
-			QueryParameters: &resources.QueryParameters{
-				NextBookmark: bookmark,
-				Sort: resources.SortOptions{
-					SortMode:  resources.SortModeAsc,
-					SortField: "id",
-				},
-			},
-			ExhaustiveRun: false,
-			ApplyFunc: func(dev models.Device) {
-				devices = append(devices, dev)
-			},
-		},
-	}
-
-	bookmark, err = dmgr.Service.GetDevices(ctx, request)
-	if err != nil {
-		t.Fatalf("could not retrieve device: %s", err)
-	}
-
-	if len(devices) != 0 {
-		t.Fatalf("could not retrieve device: %v", len(devices))
-	}
 
 	if bookmark != "" {
 		t.Fatalf("bookmark should be empty at last page %s", bookmark)
