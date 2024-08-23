@@ -153,13 +153,13 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 
 			if queryParams.Sort.SortField != "" {
 				sortBy = queryParams.Sort.SortField
-				nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s", sortMode, sortBy)
+				nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s;", sortMode, sortBy)
 				tx = tx.Order(sortBy + " " + sortMode)
 			}
 
 			for _, filter := range queryParams.Filters {
 				tx = FilterOperandToWhereClause(filter, tx)
-				nextBookmark = nextBookmark + fmt.Sprintf("filter:%s-%d-%s", base64.StdEncoding.EncodeToString([]byte(filter.Field)), filter.FilterOperation, base64.StdEncoding.EncodeToString([]byte(filter.Value)))
+				nextBookmark = nextBookmark + fmt.Sprintf("filter:%s-%d-%s;", base64.StdEncoding.EncodeToString([]byte(filter.Field)), filter.FilterOperation, base64.StdEncoding.EncodeToString([]byte(filter.Value)))
 			}
 
 		} else {
