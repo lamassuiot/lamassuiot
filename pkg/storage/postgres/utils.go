@@ -220,6 +220,8 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 							FilterOperation: resources.FilterOperation(operand),
 							Value:           string(value),
 						}, tx)
+
+						nextBookmark = nextBookmark + fmt.Sprintf("filter:%s-%d-%s;", base64.StdEncoding.EncodeToString([]byte(filter.Field)), filter.FilterOperation, base64.StdEncoding.EncodeToString([]byte(filter.Value)))
 					}
 				}
 				if sortMode != "" && sortBy != "" {
@@ -229,7 +231,7 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 			nextBookmark = fmt.Sprintf("off:%d;lim:%d;", offset+limit, limit)
 			if queryParams.Sort.SortField != "" {
 				sortBy = queryParams.Sort.SortField
-				nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s", sortMode, sortBy)
+				nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s;", sortMode, sortBy)
 			}
 		}
 	}
