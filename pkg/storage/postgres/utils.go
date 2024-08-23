@@ -228,7 +228,7 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 					tx = tx.Order(sortBy + " " + sortMode)
 				}
 			}
-			nextBookmark = fmt.Sprintf("off:%d;lim:%d;", offset+limit, limit)
+			nextBookmark = nextBookmark + fmt.Sprintf("off:%d;lim:%d;", offset+limit, limit)
 			if queryParams.Sort.SortField != "" {
 				sortBy = queryParams.Sort.SortField
 				nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s;", sortMode, sortBy)
@@ -270,6 +270,18 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 		}
 
 		if rs.RowsAffected == 0 {
+			return "", nil
+		}
+
+		//check if there are more records to fetch
+		var nextElem E
+		tx.Offset(offset + limit).First(&nextElem)
+		if err := tx.Error; err != nil && err != gorm.ErrRecordNotFound {
+			return "", fmt.Errorf("error fetching next record: %v", err)
+		}
+
+		if tx.RowsAffected == 0 {
+			// no more records to fetch. Reset nextBookmark to empty string
 			return "", nil
 		}
 
