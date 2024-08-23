@@ -5,7 +5,6 @@ on:
 
 jobs:
   build_docker_image:
-    needs: [create_tag, version_info]
     strategy:
       matrix:
         service: [ca, devmanager, dmsmanager, va, alerts, aws-connector]
