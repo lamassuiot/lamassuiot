@@ -36,7 +36,7 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 		logrus.Fatal(err)
 	}
 
-	handler := handlers.NewAWSIoTEventHandler(lMessaging, *awsConnectorSvc)
+	handler := handlers.NewAWSIoTEventHandler(lMessaging, awsConnectorSvc)
 	subHandler, err := eventbus.NewEventBusSubscriptionHandler(conf.SubscriberEventBus, "aws-connector", lMessaging, *handler, "#-aws-connector", "#")
 	if err != nil {
 		lMessaging.Errorf("could not generate Event Bus Subscription Handler: %s", err)
@@ -50,11 +50,12 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 
 	go func() {
 		lSvc.Infof("starting SQS thread")
-		sqsQueueName := fmt.Sprintf("https://sqs.%s.amazonaws.com/%s/%s", awsConnectorSvc.Region, awsConnectorSvc.AccountID, conf.AWSBidirectionalQueueName)
+		sqsQueueName := fmt.Sprintf("https://sqs.%s.amazonaws.com/%s/%s", awsConnectorSvc.GetRegion(), awsConnectorSvc.GetAccountID(), conf.AWSBidirectionalQueueName)
 
 		for {
 			lSvc.Debugf("reading from queue %s", sqsQueueName)
-			sqsOutput, err := awsConnectorSvc.SqsSDK.ReceiveMessage(context.Background(), &sqs.ReceiveMessageInput{
+			sqsService := awsConnectorSvc.GetSQSService()
+			sqsOutput, err := sqsService.ReceiveMessage(context.Background(), &sqs.ReceiveMessageInput{
 				QueueUrl:            aws.String(sqsQueueName),
 				MaxNumberOfMessages: int32(10),
 				WaitTimeSeconds:     int32(20),
@@ -73,5 +74,5 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 		}
 	}()
 
-	return awsConnectorSvc, nil
+	return &awsConnectorSvc, nil
 }

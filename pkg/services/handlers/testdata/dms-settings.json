@@ -1,0 +1,63 @@
+{
+    "id": "test",
+    "name": "DMS Test",
+    "metadata": {
+        "lamassu.io/iot/test": {
+            "groups": [
+                "TEST-LMS"
+            ],
+            "jitp_config": {
+                "enable_template": false,
+                "provisioning_role_arn": ""
+            },
+            "policies": [
+                {
+                    "policy_document": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":[\"iot:*\"],\"Resource\":[\"*\"]}]}",
+                    "policy_name": "my-p"
+                }
+            ],
+            "registration_mode": "auto",
+            "shadow_config": {
+                "enable": true
+            }
+        }
+    },
+    "creation_ts": "2024-06-14T08:46:27.740275Z",
+    "settings": {
+        "enrollment_settings": {
+            "protocol": "EST_RFC7030",
+            "est_rfc7030_settings": {
+                "auth_mode": "",
+                "client_certificate_settings": {
+                    "validation_cas": [
+                        "ab55b02d-3502-45c6-96a4-05ca6918869f"
+                    ],
+                    "chain_level_validation": -1
+                }
+            },
+            "device_provisioning_profile": {
+                "icon": "CgSmartphoneShake",
+                "icon_color": "#302ec3-#9e6c4e",
+                "metadata": {},
+                "tags": [
+                    "test"
+                ]
+            },
+            "enrollment_ca": "39cb81fb-c939-4912-b12f-a74fabff8847",
+            "enable_replaceable_enrollment": true,
+            "registration_mode": "JITP"
+        },
+        "reenrollment_settings": {
+            "additional_validation_cas": [],
+            "reenrollment_delta": "2y",
+            "enable_expired_renewal": true,
+            "preventive_delta": "1y",
+            "critical_delta": "10m"
+        },
+        "ca_distribution_settings": {
+            "include_system_ca": true,
+            "include_enrollment_ca": true,
+            "managed_cas": []
+        }
+    }
+}
