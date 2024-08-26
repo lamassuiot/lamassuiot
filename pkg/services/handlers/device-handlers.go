@@ -65,9 +65,16 @@ func updateCertStatusHandler(event *event.Event, svc services.DeviceManagerServi
 		updated = true
 		dev.IdentitySlot.Status = models.SlotExpired
 	}
+
 	if cert.Updated.Status == models.StatusRevoked {
 		updated = true
 		dev.IdentitySlot.Status = models.SlotRevoke
+	}
+
+	//This should be the case when the certificate is un-revoked/reinstated (from the OnHold revocation reason)
+	if cert.Updated.Status == models.StatusActive {
+		updated = true
+		dev.IdentitySlot.Status = models.SlotActive
 	}
 
 	if updated {
