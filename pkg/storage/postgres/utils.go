@@ -153,13 +153,13 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 
 			if queryParams.Sort.SortField != "" {
 				sortBy = queryParams.Sort.SortField
-				nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s", sortMode, sortBy)
+				nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s;", sortMode, sortBy)
 				tx = tx.Order(sortBy + " " + sortMode)
 			}
 
 			for _, filter := range queryParams.Filters {
 				tx = FilterOperandToWhereClause(filter, tx)
-				nextBookmark = nextBookmark + fmt.Sprintf("filter:%s-%d-%s", base64.StdEncoding.EncodeToString([]byte(filter.Field)), filter.FilterOperation, base64.StdEncoding.EncodeToString([]byte(filter.Value)))
+				nextBookmark = nextBookmark + fmt.Sprintf("filter:%s-%d-%s;", base64.StdEncoding.EncodeToString([]byte(filter.Field)), filter.FilterOperation, base64.StdEncoding.EncodeToString([]byte(filter.Value)))
 			}
 
 		} else {
@@ -220,16 +220,18 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 							FilterOperation: resources.FilterOperation(operand),
 							Value:           string(value),
 						}, tx)
+
+						nextBookmark = nextBookmark + fmt.Sprintf("filter:%s-%d-%s;", base64.StdEncoding.EncodeToString([]byte(field)), operand, base64.StdEncoding.EncodeToString([]byte(value)))
 					}
 				}
 				if sortMode != "" && sortBy != "" {
 					tx = tx.Order(sortBy + " " + sortMode)
 				}
 			}
-			nextBookmark = fmt.Sprintf("off:%d;lim:%d;", offset+limit, limit)
+			nextBookmark = nextBookmark + fmt.Sprintf("off:%d;lim:%d;", offset+limit, limit)
 			if queryParams.Sort.SortField != "" {
 				sortBy = queryParams.Sort.SortField
-				nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s", sortMode, sortBy)
+				nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s;", sortMode, sortBy)
 			}
 		}
 	}
@@ -268,6 +270,18 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 		}
 
 		if rs.RowsAffected == 0 {
+			return "", nil
+		}
+
+		//check if there are more records to fetch
+		var nextElem E
+		tx.Offset(offset + limit).First(&nextElem)
+		if err := tx.Error; err != nil && err != gorm.ErrRecordNotFound {
+			return "", fmt.Errorf("error fetching next record: %v", err)
+		}
+
+		if tx.RowsAffected == 0 {
+			// no more records to fetch. Reset nextBookmark to empty string
 			return "", nil
 		}
 
