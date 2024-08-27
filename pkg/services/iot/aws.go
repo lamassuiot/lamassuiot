@@ -27,7 +27,25 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type AWSCloudConnectorService struct {
+type AWSCloudConnectorService interface {
+	RegisterAndAttachThing(ctx context.Context, input RegisterAndAttachThingInput) error
+	UpdateDeviceShadow(ctx context.Context, input UpdateDeviceShadowInput) error
+	RegisterCA(ctx context.Context, input RegisterCAInput) (*models.CACertificate, error)
+	RegisterGroups(ctx context.Context, input RegisterGroupsInput) error
+	RegisterUpdatePolicies(ctx context.Context, input RegisterUpdatePoliciesInput) error
+	RegisterUpdateJITPProvisioner(ctx context.Context, input RegisterUpdateJITPProvisionerInput) error
+	GetRegisteredCAs(ctx context.Context) ([]*models.CACertificate, error)
+	GetConnectorID() string
+	GetDMSService() services.DMSManagerService
+	GetDeviceService() services.DeviceManagerService
+	GetCAService() services.CAService
+	GetRegion() string
+	GetAccountID() string
+	GetSQSService() sqs.Client
+}
+
+type AWSCloudConnectorServiceBackend struct {
+	service         AWSCloudConnectorService
 	SqsSDK          sqs.Client
 	iotSDK          iot.Client
 	Region          string
@@ -39,6 +57,39 @@ type AWSCloudConnectorService struct {
 	DmsSDK          services.DMSManagerService
 	DeviceSDK       services.DeviceManagerService
 	AccountID       string
+}
+
+// GetAccountID implements AWSCloudConnectorService.
+func (svc *AWSCloudConnectorServiceBackend) GetAccountID() string {
+	return svc.AccountID
+}
+
+// GetRegion implements AWSCloudConnectorService.
+func (svc *AWSCloudConnectorServiceBackend) GetRegion() string {
+	return svc.Region
+}
+
+// GetSQSService implements AWSCloudConnectorService.
+func (svc *AWSCloudConnectorServiceBackend) GetSQSService() sqs.Client {
+	return svc.SqsSDK
+}
+
+func (svc *AWSCloudConnectorServiceBackend) GetDeviceService() services.DeviceManagerService {
+	return svc.DeviceSDK
+}
+
+func (svc *AWSCloudConnectorServiceBackend) GetCAService() services.CAService {
+	return svc.CaSDK
+}
+
+// GetDMSService implements AWSCloudConnectorService.
+func (svc *AWSCloudConnectorServiceBackend) GetDMSService() services.DMSManagerService {
+	return svc.DmsSDK
+}
+
+// GetConnectorID implements AWSCloudConnectorService.
+func (svc *AWSCloudConnectorServiceBackend) GetConnectorID() string {
+	return svc.ConnectorID
 }
 
 type AWSCloudConnectorBuilder struct {
@@ -61,7 +112,7 @@ type shadowState struct {
 	Desired  map[string]any `json:"desired"`
 }
 
-func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (*AWSCloudConnectorService, error) {
+func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (AWSCloudConnectorService, error) {
 	iotLogger := builder.Logger.WithField("sdk", "AWS IoT Client")
 	idpLogger := builder.Logger.WithField("sdk", "AWS IoT Dataple Client")
 	stsLogger := builder.Logger.WithField("sdk", "AWS STS Client")
@@ -127,7 +178,7 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (*AWSC
 
 	builder.Logger.Infof("connector is configured for account '%s', which uses iot:Data-ATS endpoint with uri %s", *callIDOutput.Account, *endpoint.EndpointAddress)
 
-	return &AWSCloudConnectorService{
+	svc := &AWSCloudConnectorServiceBackend{
 		SqsSDK:          *sqsClient,
 		iotSDK:          *iotClient,
 		iotdataplaneSDK: *iotdpClient,
@@ -139,7 +190,10 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (*AWSC
 		CaSDK:           builder.CaSDK,
 		DmsSDK:          builder.DmsSDK,
 		DeviceSDK:       builder.DeviceSDK,
-	}, nil
+	}
+
+	svc.service = svc
+	return svc, nil
 }
 
 type RegisterAndAttachThingInput struct {
@@ -148,7 +202,7 @@ type RegisterAndAttachThingInput struct {
 	DMSIoTAutomationConfig models.IotAWSDMSMetadata
 }
 
-func (svc *AWSCloudConnectorService) RegisterAndAttachThing(ctx context.Context, input RegisterAndAttachThingInput) error {
+func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.Context, input RegisterAndAttachThingInput) error {
 	err := svc.RegisterUpdatePolicies(context.Background(), RegisterUpdatePoliciesInput{
 		Policies: input.DMSIoTAutomationConfig.Policies,
 	})
@@ -342,7 +396,7 @@ type UpdateDeviceShadowInput struct {
 	DMSIoTAutomationConfig models.IotAWSDMSMetadata
 }
 
-func (svc *AWSCloudConnectorService) UpdateDeviceShadow(ctx context.Context, input UpdateDeviceShadowInput) error {
+func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Context, input UpdateDeviceShadowInput) error {
 	if !input.DMSIoTAutomationConfig.ShadowConfig.Enable {
 		logrus.Warnf("shadow usage is not enabled for DMS associated to device %s. Skipping", input.DeviceID)
 		return nil
@@ -428,6 +482,8 @@ func (svc *AWSCloudConnectorService) UpdateDeviceShadow(ctx context.Context, inp
 		actions = append(actions, key)
 	}
 
+	logrus.Infof("updated shadow for device %s with remediation actions '%s'", input.DeviceID, strings.Join(actions, ","))
+
 	device, err := svc.DeviceSDK.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: input.DeviceID,
 	})
@@ -479,11 +535,10 @@ func (svc *AWSCloudConnectorService) UpdateDeviceShadow(ctx context.Context, inp
 		return err
 	}
 
-	logrus.Infof("updated shadow for device %s with remediation actions '%s'", input.DeviceID, strings.Join(actions, ","))
 	return nil
 }
 
-func (svc *AWSCloudConnectorService) GetRegisteredCAs(ctx context.Context) ([]*models.CACertificate, error) {
+func (svc *AWSCloudConnectorServiceBackend) GetRegisteredCAs(ctx context.Context) ([]*models.CACertificate, error) {
 	lFunc := svc.logger
 	cas := []*models.CACertificate{}
 	lmsCAs := 0
@@ -547,7 +602,7 @@ type RegisterCAInput struct {
 	RegisterConfiguration models.IoTAWSCAMetadata
 }
 
-func (svc *AWSCloudConnectorService) RegisterCA(ctx context.Context, input RegisterCAInput) (*models.CACertificate, error) {
+func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, input RegisterCAInput) (*models.CACertificate, error) {
 	lFunc := svc.logger
 
 	//check if CA already registered in AWS
@@ -672,7 +727,7 @@ type RegisterGroupsInput struct {
 	Groups []string
 }
 
-func (svc *AWSCloudConnectorService) RegisterGroups(ctx context.Context, input RegisterGroupsInput) error {
+func (svc *AWSCloudConnectorServiceBackend) RegisterGroups(ctx context.Context, input RegisterGroupsInput) error {
 	var rae *types.ResourceAlreadyExistsException
 	_, err := svc.iotSDK.CreateThingGroup(ctx, &iot.CreateThingGroupInput{
 		ThingGroupName: aws.String("LAMASSU"),
@@ -702,7 +757,7 @@ type RegisterUpdatePoliciesInput struct {
 	Policies []models.AWSIoTPolicy
 }
 
-func (svc *AWSCloudConnectorService) RegisterUpdatePolicies(ctx context.Context, input RegisterUpdatePoliciesInput) error {
+func (svc *AWSCloudConnectorServiceBackend) RegisterUpdatePolicies(ctx context.Context, input RegisterUpdatePoliciesInput) error {
 	lFunc := svc.logger
 	for _, policy := range input.Policies {
 		iotPolicy, err := svc.iotSDK.GetPolicy(ctx, &iot.GetPolicyInput{
@@ -771,7 +826,7 @@ type RegisterUpdateJITPProvisionerInput struct {
 	AwsJITPConfig models.IotAWSDMSMetadata
 }
 
-func (svc *AWSCloudConnectorService) RegisterUpdateJITPProvisioner(ctx context.Context, input RegisterUpdateJITPProvisionerInput) error {
+func (svc *AWSCloudConnectorServiceBackend) RegisterUpdateJITPProvisioner(ctx context.Context, input RegisterUpdateJITPProvisionerInput) error {
 	lFunc := svc.logger
 
 	err := svc.RegisterGroups(ctx, RegisterGroupsInput{
