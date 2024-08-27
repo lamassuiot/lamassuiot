@@ -2,7 +2,7 @@
     "id": "test",
     "name": "DMS Test",
     "metadata": {
-        "lamassu.io/iot/test": {
+        "lamassu.io/iot/aws-12345": {
             "groups": [
                 "TEST-LMS"
             ],
