@@ -19,6 +19,7 @@ func NewAWSIoTEventHandler(l *logrus.Entry, svc iot.AWSCloudConnectorService) *C
 	return &CloudEventHandler{
 		lMessaging: l,
 		dispatchMap: map[string]func(*event.Event) error{
+			string(models.EventUpdateCertificateStatusKey):   func(e *event.Event) error { return handlerWarpper(e, svc, l, UpdateCertificateStatusHandler) },
 			string(models.EventBindDeviceIdentityKey):        func(e *event.Event) error { return handlerWarpper(e, svc, l, bindDeviceIdentityHandler) },
 			string(models.EventUpdateDeviceMetadataKey):      func(e *event.Event) error { return handlerWarpper(e, svc, l, updateDeviceMetadataHandler) },
 			string(models.EventUpdateCertificateMetadataKey): func(e *event.Event) error { return handlerWarpper(e, svc, l, updateCertificateMetadataHandler) },
@@ -91,6 +92,43 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc iot.AW
 	})
 	if err != nil {
 		err = fmt.Errorf("could not register CA %s - %s: %s", ca.ID, ca.Subject.CommonName, err)
+		logger.Error(err)
+		return err
+	}
+
+	return nil
+}
+
+func UpdateCertificateStatusHandler(ctx context.Context, event *event.Event, svc iot.AWSCloudConnectorService, logger *logrus.Entry) error {
+	var cert *models.Certificate
+	var err error
+	updatedCert, err := helpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
+	if err != nil {
+		logDecodeError(logger, event.ID(), event.Type(), "UpdateModel Certificate", err)
+		return nil
+	}
+
+	cert = &updatedCert.Updated
+
+	var certIoTCoreMeta models.IoTAWSCertificateMetadata
+	hasKey, err := helpers.GetMetadataToStruct(cert.Metadata, models.AWSIoTMetadataKey(svc.GetConnectorID()), &certIoTCoreMeta)
+	if err != nil {
+		err = fmt.Errorf("error while getting %s key: %s", models.AWSIoTMetadataKey(svc.GetConnectorID()), err)
+		logger.Error(err)
+		return err
+	}
+
+	if !hasKey {
+		logrus.Warnf("skipping event %s, CA doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
+		return nil
+	}
+
+	err = svc.UpdateCertificateStatus(context.Background(), iot.UpdateCertificateStatusInput{
+		Certificate: *cert,
+	})
+
+	if err != nil {
+		err = fmt.Errorf("could not update certificate status %s - %s: %s", cert.SerialNumber, cert.Subject.CommonName, err)
 		logger.Error(err)
 		return err
 	}

@@ -25,6 +25,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/crypto/ocsp"
 )
 
 type AWSCloudConnectorService interface {
@@ -34,6 +35,7 @@ type AWSCloudConnectorService interface {
 	RegisterGroups(ctx context.Context, input RegisterGroupsInput) error
 	RegisterUpdatePolicies(ctx context.Context, input RegisterUpdatePoliciesInput) error
 	RegisterUpdateJITPProvisioner(ctx context.Context, input RegisterUpdateJITPProvisionerInput) error
+	UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) error
 	GetRegisteredCAs(ctx context.Context) ([]*models.CACertificate, error)
 	GetConnectorID() string
 	GetDMSService() services.DMSManagerService
@@ -114,7 +116,7 @@ type shadowState struct {
 
 func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (AWSCloudConnectorService, error) {
 	iotLogger := builder.Logger.WithField("sdk", "AWS IoT Client")
-	idpLogger := builder.Logger.WithField("sdk", "AWS IoT Dataple Client")
+	idpLogger := builder.Logger.WithField("sdk", "AWS IoT Dataplane Client")
 	stsLogger := builder.Logger.WithField("sdk", "AWS STS Client")
 	sqsLogger := builder.Logger.WithField("sdk", "AWS SQS Client")
 
@@ -385,6 +387,53 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 	if err != nil {
 		logrus.Errorf("could not update device metadata: %s", err)
 		return err
+	}
+
+	return nil
+}
+
+type UpdateCertificateStatusInput struct {
+	Certificate models.Certificate
+}
+
+func (svc *AWSCloudConnectorServiceBackend) UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) error {
+	var certIoTCoreMeta models.IoTAWSCertificateMetadata
+
+	hasKey, err := helpers.GetMetadataToStruct(input.Certificate.Metadata, models.AWSIoTMetadataKey(svc.ConnectorID), &certIoTCoreMeta)
+	if err != nil {
+		logrus.Errorf("could not decode metadata with key %s: %s", models.AWSIoTMetadataKey(svc.ConnectorID), err)
+		return err
+	}
+
+	if !hasKey {
+		logrus.Warnf("Certificate doesn't have %s key", models.AWSIoTMetadataKey(svc.ConnectorID))
+		return nil
+	}
+
+	certIDSplit := strings.Split(certIoTCoreMeta.ARN, "/")
+	var status types.CertificateStatus
+
+	switch input.Certificate.Status {
+	case models.StatusRevoked:
+		if input.Certificate.RevocationReason == ocsp.CertificateHold {
+			status = types.CertificateStatusInactive
+		} else {
+			status = types.CertificateStatusRevoked
+		}
+
+	case models.StatusActive:
+		status = types.CertificateStatusActive
+	default:
+		logrus.Warnf("certificate new status (%s - %s) status requires no further action", input.Certificate.SerialNumber, input.Certificate.Status)
+		return nil
+	}
+
+	_, err = svc.iotSDK.UpdateCertificate(context.Background(), &iot.UpdateCertificateInput{
+		CertificateId: aws.String(certIDSplit[1]),
+		NewStatus:     status,
+	})
+	if err != nil {
+		logrus.Warnf("error while updating AWS certificate %s (%s) status to %s: %s", certIDSplit[1], input.Certificate.SerialNumber, status, err)
 	}
 
 	return nil
