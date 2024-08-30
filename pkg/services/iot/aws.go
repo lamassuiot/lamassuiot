@@ -390,9 +390,17 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 	return nil
 }
 
+type UpdateDeviceShadowUpdateMode string
+
+const (
+	UpdateDeviceShadowUpdateModeAdd    UpdateDeviceShadowUpdateMode = "Add"
+	UpdateDeviceShadowUpdateModeRemove UpdateDeviceShadowUpdateMode = "Remove"
+)
+
 type UpdateDeviceShadowInput struct {
 	DeviceID               string
 	RemediationActionsType []models.RemediationActionType
+	UpdateMode             UpdateDeviceShadowUpdateMode
 	DMSIoTAutomationConfig models.IotAWSDMSMetadata
 }
 
@@ -446,11 +454,40 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 		}
 	}
 
-	addedActions := []string{}
+	actionsLogs := []string{}
+	processedActions := []models.RemediationActionType{}
 	ts := int(time.Now().UnixMilli())
+
+	for key := range idShadow {
+		if slices.Contains(input.RemediationActionsType, models.RemediationActionType(key)) {
+			processedActions = append(processedActions, models.RemediationActionType(key))
+			//action included in input actions. Check if should be added or updated
+			if input.UpdateMode == UpdateDeviceShadowUpdateModeAdd {
+				//update
+				idShadow[key] = ts
+				actionsLogs = append(actionsLogs, fmt.Sprintf("%s (updated)", key))
+			} else {
+				delete(idShadow, key)
+				actionsLogs = append(actionsLogs, fmt.Sprintf("%s (removed)", key))
+			}
+		} else {
+			//action not included in input actions. Maintaining it with the same value (timestamp)
+			actionsLogs = append(actionsLogs, fmt.Sprintf("%s (retained)", key))
+		}
+	}
+
 	for _, action := range input.RemediationActionsType {
-		idShadow[string(action)] = ts
-		addedActions = append(addedActions, string(action))
+		//check if action is not already processed
+		if !slices.Contains(processedActions, action) {
+			//action not processed
+			if input.UpdateMode == UpdateDeviceShadowUpdateModeAdd {
+				idShadow[string(action)] = ts
+				actionsLogs = append(actionsLogs, fmt.Sprintf("%s (added)", action))
+				processedActions = append(processedActions, action)
+			} else {
+				logrus.Warnf("action '%s' is not present in shadow. Skipping removal", action)
+			}
+		}
 	}
 
 	deviceShadow.State.Desired["identity_actions"] = idShadow
@@ -523,7 +560,7 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 
 	device.IdentitySlot.Events[time.Now()] = models.DeviceEvent{
 		EvenType:          models.DeviceEventTypeShadowUpdated,
-		EventDescriptions: fmt.Sprintf("Remediation Actions: %s", strings.Join(addedActions, ", ")),
+		EventDescriptions: fmt.Sprintf("Remediation Actions: %s", strings.Join(actionsLogs, ", ")),
 	}
 
 	_, err = svc.DeviceSDK.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{

@@ -159,6 +159,7 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc iot.A
 							DeviceID:               device.ID,
 							RemediationActionsType: []models.RemediationActionType{models.RemediationActionUpdateTrustAnchorList},
 							DMSIoTAutomationConfig: dmsAwsAutomationConfig,
+							UpdateMode:             iot.UpdateDeviceShadowUpdateModeAdd,
 						})
 						if err != nil {
 							logger.Errorf("something went wrong while updating %s Thing Shadow: %s", device.ID, err)
@@ -261,6 +262,7 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 				DeviceID:               attachedBy.DeviceID,
 				RemediationActionsType: []models.RemediationActionType{models.RemediationActionUpdateCertificate},
 				DMSIoTAutomationConfig: dmsAWSConf,
+				UpdateMode:             iot.UpdateDeviceShadowUpdateModeAdd,
 			})
 			if err != nil {
 				err = fmt.Errorf("something went wrong while updating %s Thing Shadow: %s", attachedBy.DeviceID, err)
@@ -321,6 +323,7 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc io
 			DeviceID:               device.ID,
 			RemediationActionsType: deviceMetaAWS.Actions,
 			DMSIoTAutomationConfig: dmsAWSConf,
+			UpdateMode:             iot.UpdateDeviceShadowUpdateModeAdd,
 		})
 		if err != nil {
 			err = fmt.Errorf("something went wrong while updating %s Thing Shadow: %s", device.ID, err)
