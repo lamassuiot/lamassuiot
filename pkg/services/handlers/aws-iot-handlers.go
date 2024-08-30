@@ -19,7 +19,7 @@ func NewAWSIoTEventHandler(l *logrus.Entry, svc iot.AWSCloudConnectorService) *C
 	return &CloudEventHandler{
 		lMessaging: l,
 		dispatchMap: map[string]func(*event.Event) error{
-			string(models.EventUpdateCertificateStatusKey):   func(e *event.Event) error { return handlerWarpper(e, svc, l, UpdateCertificateStatusHandler) },
+			string(models.EventUpdateCertificateStatusKey):   func(e *event.Event) error { return handlerWarpper(e, svc, l, updateCertificateStatusHandler) },
 			string(models.EventBindDeviceIdentityKey):        func(e *event.Event) error { return handlerWarpper(e, svc, l, bindDeviceIdentityHandler) },
 			string(models.EventUpdateDeviceMetadataKey):      func(e *event.Event) error { return handlerWarpper(e, svc, l, updateDeviceMetadataHandler) },
 			string(models.EventUpdateCertificateMetadataKey): func(e *event.Event) error { return handlerWarpper(e, svc, l, updateCertificateMetadataHandler) },
@@ -99,7 +99,7 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc iot.AW
 	return nil
 }
 
-func UpdateCertificateStatusHandler(ctx context.Context, event *event.Event, svc iot.AWSCloudConnectorService, logger *logrus.Entry) error {
+func updateCertificateStatusHandler(ctx context.Context, event *event.Event, svc iot.AWSCloudConnectorService, logger *logrus.Entry) error {
 	var cert *models.Certificate
 	var err error
 	updatedCert, err := helpers.GetEventBody[models.UpdateModel[models.Certificate]](event)

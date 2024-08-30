@@ -15,6 +15,35 @@ import (
 
 // A device certificate is updated and the preventive delta is changed from false to true
 // The connector should update the device shadow
+func TestHandleUpdateCertificate(t *testing.T) {
+	// Prepare logger
+	entry := logrus.WithField("svc", "aws-iot")
+
+	eventContent, err := os.ReadFile("testdata/cloudevents/cert_update_status__revoked.json")
+	if err != nil {
+		t.Error(err)
+	}
+
+	message := message.Message{
+		Payload: eventContent,
+	}
+
+	// Prepare mocks
+	awsConnectorMock := smock.MockAWSCloudConnectorService{}
+	awsConnectorMock.On("GetConnectorID").Return("aws-12345")
+	awsConnectorMock.On("UpdateCertificateStatus", mock.Anything, mock.Anything).Return(nil)
+
+	// Test logic
+	handler := NewAWSIoTEventHandler(entry, &awsConnectorMock)
+	handler.HandleMessage(&message)
+
+	// Assert
+	awsConnectorMock.AssertExpectations(t)
+	awsConnectorMock.AssertNumberOfCalls(t, "UpdateCertificateStatus", 1)
+}
+
+// A device certificate is updated and the preventive delta is changed from false to true
+// The connector should update the device shadow
 func TestHandleUpdateMetadataUpdateShadow(t *testing.T) {
 	// Prepare logger
 	entry := logrus.WithField("svc", "aws-iot")
