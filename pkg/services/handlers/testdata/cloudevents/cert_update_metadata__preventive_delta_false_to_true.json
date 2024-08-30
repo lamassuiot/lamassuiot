@@ -1,0 +1,108 @@
+{
+    "specversion": "1.0",
+    "id": "68dc9d3e-c022-452f-a568-832be6038821",
+    "source": "lrn://ca",
+    "type": "certificate.metadata.update",
+    "datacontenttype": "application/json",
+    "time": "2024-08-18T10:18:00.046294164Z",
+    "data": {
+        "previous": {
+            "serial_number": "a2-37-bc-aa-c1-f2-ab-25-ae-24-6e-f3-1b-99-e1-6c",
+            "metadata": {
+                "lamassu.io/ca/attached-to": {
+                    "authorized_by": {
+                        "ra_id": "test"
+                    },
+                    "device_id": "bf5c9136-de0e-493a-bc72-f38cc7ba8f89"
+                },
+                "lamassu.io/ca/expiration-deltas": [
+                    {
+                        "delta": "1w",
+                        "name": "Critical",
+                        "triggered": false
+                    },
+                    {
+                        "delta": "1y",
+                        "name": "Preventive",
+                        "triggered": false
+                    }
+                ]
+            },
+            "issuer_metadata": {
+                "serial_number": "29-c0-ad-d6-18-21-72-2b-3d-71-f1-07-d4-13-c0-43",
+                "id": "380ca81c-7053-4f60-acb1-5a06103c6ba8",
+                "level": 0
+            },
+            "status": "ACTIVE",
+            "certificate": "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUZJekNDQXd1Z0F3SUJBZ0lSQUtJM3ZLckI4cXNscmlSdTh4dVo0V3d3RFFZSktvWklodmNOQVFFTEJRQXcKR1RFWE1CVUdBMVVFQXhNT1VtOXZkRk5UYVdkdVpXUWdRMEV3SGhjTk1qUXdOVEUzTVRBeE56TTRXaGNOTWpRdwpPREkxTVRBeE56TTRXakNCZ1RFTE1Ba0dBMVVFQmhNQ1JWTXhFVEFQQmdOVkJBZ1RDRWRwY0hWNmEyOWhNUkV3CkR3WURWUVFIRXdoRWIyNXZjM1JwWVRFUU1BNEdBMVVFQ2hNSFRHRnRZWE56ZFRFTE1Ba0dBMVVFQ3hNQ1NWUXgKTFRBckJnTlZCQU1USkdKbU5XTTVNVE0yTFdSbE1HVXRORGt6WVMxaVl6Y3lMV1l6T0dOak4ySmhPR1k0T1RDQwpBU0l3RFFZSktvWklodmNOQVFFQkJRQURnZ0VQQURDQ0FRb0NnZ0VCQUs0VFJGRFJSSTVJQ1RMWEU3VnpWR2F1CnpPM2dwbUN0d25NTk14bXZsU21hVG51eG41bU5oQnVRSnRQS0FJR2ZmVkdZZkFHcWpVNkJ5dzRHOVRRV0Q1SU0KQzJVVHRIRTVGbXdISUoxWU5LVjJ2TGpxVTVIWW9iQnZLRVNFSlh5a0hBVWdOVmgxM1V3cVdVQ3ArMDhuV1dzZAoza1IralFIcjRhYVdBMnBIUVRySWlvMjFjSnRqSytCTVg1RjBMTHkzOU5mdGQ4U3AyL2xVYnUvejUvTlRtQWU2CmU0MW91V3dNckpiZFM4OXJES29ZdzU2dGpCanp2bTBtaEVZTHhXWGxuMzdKSVRlWVloeDBvWExFSk9sdHNOaUwKMTBkVTMwYUxDOU9MRm9EcjZ0azNpbldlRktkOWdwZmhHUmszaFoxOXVFeDJHN2JPdG01YkVRZU1lSzg0Uk9VQwpBd0VBQWFPQi9EQ0IrVEFPQmdOVkhROEJBZjhFQkFNQ0I0QXdIUVlEVlIwbEJCWXdGQVlJS3dZQkJRVUhBd0lHCkNDc0dBUVVGQndNQk1DOEdBMVVkSXdRb01DYUFKRE00TUdOaE9ERmpMVGN3TlRNdE5HWTJNQzFoWTJJeExUVmgKTURZeE1ETmpObUpoT0RBK0JnZ3JCZ0VGQlFjQkFRUXlNREF3TGdZSUt3WUJCUVVITUFHR0ltaDBkSEJ6T2k4dgpiR0ZpTG14aGJXRnpjM1V1YVc4dllYQnBMM1poTDI5amMzQXdWd1lEVlIwZkJGQXdUakJNb0VxZ1NJWkdhSFIwCmNITTZMeTlzWVdJdWJHRnRZWE56ZFM1cGJ5OWhjR2t2ZG1FdlkzSnNMek00TUdOaE9ERmpMVGN3TlRNdE5HWTIKTUMxaFkySXhMVFZoTURZeE1ETmpObUpoT0RBTkJna3Foa2lHOXcwQkFRc0ZBQU9DQWdFQWx1OTY5NGIvdllicwo0UzREV2x6ei9BVXp6dEtTelZrcUpMNlBDRnJpTFVUUTdWdXNkWnk0Tk0xb0JEcjhycExlMGdxYy9vYUVkV2hzCnNueW1UQ1JLUGJHRUNwWjF5aEZSdlBTSTRWWlUvNVNudlRxU2xnWlNUTWZ0SEhnbkNVcFBBcTh6NXdPN0plWncKTlRUUjJ5VUQ1S2JTaXNNRzF5MjB2QWprMWNMY3NLdUIySk5yekZiYUQ1SWRBTEwrUHhXaVl5MVkweW0yQW9sVgp4QXNWNHNwSk9rdXpnR1ZibTZxRWRGeXZuYTdNRjRRNUpZRGd3b3M0dzJsOStxN25KN1hFb2RDWWRNV2RpK0RwCjdYSStvV1dRRk51Z3hlYkJlSlp0MFROVXBHMGJsOGRMOU9lbW11WWx5a2V5WFNNT25SYWxoa28xeW9VZUtSYU8KK3lUZXdzYUZldXhzakhRa1BsOE50NHRKdU5TL0JqU3Rza3BmLzY0NjhUQks1WmRsdytWNDZXeDJpcm9SYkNQNQpvbFArTm5va3h2ZlhQc01KdEVEbnp2cm1KUTNUY2FsOGJ4VmJpZkRNVDM0Q1lqc0xSWnVrdkVHR2NGa1dFeHBWCkQ4MmMxdXVqTGFrTnl1dUs3QXBNSlZISEhiek04QjhnNWpsWHhuQktOeXZsK3lBdHlRdVpuclQrcFpRNityb0EKaFY2ejBJOSthdWd2YTBDdjNva0g2QnRsQ0J4RTFGZDdUejFmS0N1d2VjZUphSkhXT2c4OVVGWi96dmJ6TUNpQgpvcHMvWmpHSk83bWQ2aXN5Vk94eEVGME40SlAxWVdPUzZPN2dZcnRBYi9mZ0N6Z1d5alNOb2xFVjloY0J6S3FZCkwrdnh4V3czMkNpckxWZ2tueWpHMVNRNzRDcW5UcGc9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K",
+            "key_metadata": {
+                "type": "RSA",
+                "bits": 2048,
+                "strength": "MEDIUM"
+            },
+            "subject": {
+                "common_name": "bf5c9136-de0e-493a-bc72-f38cc7ba8f89",
+                "organization": "Lamassu",
+                "organization_unit": "IT",
+                "country": "ES",
+                "state": "Gipuzkoa",
+                "locality": "Donostia"
+            },
+            "valid_from": "2024-05-17T10:17:38Z",
+            "valid_to": "2024-08-25T10:17:38Z",
+            "revocation_timestamp": "0001-01-01T00:00:00Z",
+            "revocation_reason": "Unspecified",
+            "type": "EXTERNAL",
+            "engine_id": ""
+        },
+        "updated": {
+            "serial_number": "a2-37-bc-aa-c1-f2-ab-25-ae-24-6e-f3-1b-99-e1-6c",
+            "metadata": {
+                "lamassu.io/ca/attached-to": {
+                    "authorized_by": {
+                        "ra_id": "test"
+                    },
+                    "device_id": "bf5c9136-de0e-493a-bc72-f38cc7ba8f89"
+                },
+                "lamassu.io/ca/expiration-deltas": [
+                    {
+                        "delta": "1w",
+                        "name": "Critical",
+                        "triggered": false
+                    },
+                    {
+                        "delta": "1y",
+                        "name": "Preventive",
+                        "triggered": true
+                    }
+                ]
+            },
+            "issuer_metadata": {
+                "serial_number": "29-c0-ad-d6-18-21-72-2b-3d-71-f1-07-d4-13-c0-43",
+                "id": "380ca81c-7053-4f60-acb1-5a06103c6ba8",
+                "level": 0
+            },
+            "status": "ACTIVE",
+            "certificate": "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUZJekNDQXd1Z0F3SUJBZ0lSQUtJM3ZLckI4cXNscmlSdTh4dVo0V3d3RFFZSktvWklodmNOQVFFTEJRQXcKR1RFWE1CVUdBMVVFQXhNT1VtOXZkRk5UYVdkdVpXUWdRMEV3SGhjTk1qUXdOVEUzTVRBeE56TTRXaGNOTWpRdwpPREkxTVRBeE56TTRXakNCZ1RFTE1Ba0dBMVVFQmhNQ1JWTXhFVEFQQmdOVkJBZ1RDRWRwY0hWNmEyOWhNUkV3CkR3WURWUVFIRXdoRWIyNXZjM1JwWVRFUU1BNEdBMVVFQ2hNSFRHRnRZWE56ZFRFTE1Ba0dBMVVFQ3hNQ1NWUXgKTFRBckJnTlZCQU1USkdKbU5XTTVNVE0yTFdSbE1HVXRORGt6WVMxaVl6Y3lMV1l6T0dOak4ySmhPR1k0T1RDQwpBU0l3RFFZSktvWklodmNOQVFFQkJRQURnZ0VQQURDQ0FRb0NnZ0VCQUs0VFJGRFJSSTVJQ1RMWEU3VnpWR2F1CnpPM2dwbUN0d25NTk14bXZsU21hVG51eG41bU5oQnVRSnRQS0FJR2ZmVkdZZkFHcWpVNkJ5dzRHOVRRV0Q1SU0KQzJVVHRIRTVGbXdISUoxWU5LVjJ2TGpxVTVIWW9iQnZLRVNFSlh5a0hBVWdOVmgxM1V3cVdVQ3ArMDhuV1dzZAoza1IralFIcjRhYVdBMnBIUVRySWlvMjFjSnRqSytCTVg1RjBMTHkzOU5mdGQ4U3AyL2xVYnUvejUvTlRtQWU2CmU0MW91V3dNckpiZFM4OXJES29ZdzU2dGpCanp2bTBtaEVZTHhXWGxuMzdKSVRlWVloeDBvWExFSk9sdHNOaUwKMTBkVTMwYUxDOU9MRm9EcjZ0azNpbldlRktkOWdwZmhHUmszaFoxOXVFeDJHN2JPdG01YkVRZU1lSzg0Uk9VQwpBd0VBQWFPQi9EQ0IrVEFPQmdOVkhROEJBZjhFQkFNQ0I0QXdIUVlEVlIwbEJCWXdGQVlJS3dZQkJRVUhBd0lHCkNDc0dBUVVGQndNQk1DOEdBMVVkSXdRb01DYUFKRE00TUdOaE9ERmpMVGN3TlRNdE5HWTJNQzFoWTJJeExUVmgKTURZeE1ETmpObUpoT0RBK0JnZ3JCZ0VGQlFjQkFRUXlNREF3TGdZSUt3WUJCUVVITUFHR0ltaDBkSEJ6T2k4dgpiR0ZpTG14aGJXRnpjM1V1YVc4dllYQnBMM1poTDI5amMzQXdWd1lEVlIwZkJGQXdUakJNb0VxZ1NJWkdhSFIwCmNITTZMeTlzWVdJdWJHRnRZWE56ZFM1cGJ5OWhjR2t2ZG1FdlkzSnNMek00TUdOaE9ERmpMVGN3TlRNdE5HWTIKTUMxaFkySXhMVFZoTURZeE1ETmpObUpoT0RBTkJna3Foa2lHOXcwQkFRc0ZBQU9DQWdFQWx1OTY5NGIvdllicwo0UzREV2x6ei9BVXp6dEtTelZrcUpMNlBDRnJpTFVUUTdWdXNkWnk0Tk0xb0JEcjhycExlMGdxYy9vYUVkV2hzCnNueW1UQ1JLUGJHRUNwWjF5aEZSdlBTSTRWWlUvNVNudlRxU2xnWlNUTWZ0SEhnbkNVcFBBcTh6NXdPN0plWncKTlRUUjJ5VUQ1S2JTaXNNRzF5MjB2QWprMWNMY3NLdUIySk5yekZiYUQ1SWRBTEwrUHhXaVl5MVkweW0yQW9sVgp4QXNWNHNwSk9rdXpnR1ZibTZxRWRGeXZuYTdNRjRRNUpZRGd3b3M0dzJsOStxN25KN1hFb2RDWWRNV2RpK0RwCjdYSStvV1dRRk51Z3hlYkJlSlp0MFROVXBHMGJsOGRMOU9lbW11WWx5a2V5WFNNT25SYWxoa28xeW9VZUtSYU8KK3lUZXdzYUZldXhzakhRa1BsOE50NHRKdU5TL0JqU3Rza3BmLzY0NjhUQks1WmRsdytWNDZXeDJpcm9SYkNQNQpvbFArTm5va3h2ZlhQc01KdEVEbnp2cm1KUTNUY2FsOGJ4VmJpZkRNVDM0Q1lqc0xSWnVrdkVHR2NGa1dFeHBWCkQ4MmMxdXVqTGFrTnl1dUs3QXBNSlZISEhiek04QjhnNWpsWHhuQktOeXZsK3lBdHlRdVpuclQrcFpRNityb0EKaFY2ejBJOSthdWd2YTBDdjNva0g2QnRsQ0J4RTFGZDdUejFmS0N1d2VjZUphSkhXT2c4OVVGWi96dmJ6TUNpQgpvcHMvWmpHSk83bWQ2aXN5Vk94eEVGME40SlAxWVdPUzZPN2dZcnRBYi9mZ0N6Z1d5alNOb2xFVjloY0J6S3FZCkwrdnh4V3czMkNpckxWZ2tueWpHMVNRNzRDcW5UcGc9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K",
+            "key_metadata": {
+                "type": "RSA",
+                "bits": 2048,
+                "strength": "MEDIUM"
+            },
+            "subject": {
+                "common_name": "bf5c9136-de0e-493a-bc72-f38cc7ba8f89",
+                "organization": "Lamassu",
+                "organization_unit": "IT",
+                "country": "ES",
+                "state": "Gipuzkoa",
+                "locality": "Donostia"
+            },
+            "valid_from": "2024-05-17T10:17:38Z",
+            "valid_to": "2024-08-25T10:17:38Z",
+            "revocation_timestamp": "0001-01-01T00:00:00Z",
+            "revocation_reason": "Unspecified",
+            "type": "EXTERNAL",
+            "engine_id": ""
+        }
+    }
+}
