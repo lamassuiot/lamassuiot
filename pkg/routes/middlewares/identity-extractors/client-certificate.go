@@ -2,12 +2,10 @@ package identityextractors
 
 import (
 	"crypto/x509"
-	"encoding/pem"
 	"net/http"
-	"net/url"
-	"strings"
 
 	"github.com/gin-gonic/gin"
+	clientcertificateextractor "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors/client-certificate-extractor"
 	"github.com/sirupsen/logrus"
 )
 
@@ -44,54 +42,23 @@ func (extractor ClientCertificateExtractor) ExtractAuthentication(ctx *gin.Conte
 	}
 }
 
+type ClientCertificateReqExtractor interface {
+	ExtractCertificate(http.Header) []*x509.Certificate
+}
+
 func (extractor ClientCertificateExtractor) getCertificateFromHeader(h http.Header) (*x509.Certificate, error) {
-	headerNames := []string{
-		"x-forwarded-client-cert", //envoy and regular nginx use this value
-		"ssl-client-cert",
+	headerExtractors := []ClientCertificateReqExtractor{
+		clientcertificateextractor.NewEnvoyClientCertificateExtractor(extractor.logger),
+		clientcertificateextractor.NewNginxClientCertificateExtractor(extractor.logger),
 	}
 
-	for _, headerName := range headerNames {
-		forwardedClientCertificate := h.Get(headerName)
-		if len(forwardedClientCertificate) != 0 {
-			extractor.logger.Debugf("attempting envoy-style certificate extraction from header %s", headerName)
-			crts := extractor.extractClientCertFromHeaderEnvoyStyle(headerName, forwardedClientCertificate)
-			if len(crts) == 0 {
-				extractor.logger.Debugf("envoy-style certificate extraction didn't return anything")
-			} else {
-				return crts[0], nil
-			}
+	for _, headerExtractor := range headerExtractors {
+		certs := headerExtractor.ExtractCertificate(h)
+
+		if len(certs) > 0 {
+			return certs[0], nil
 		}
 	}
 
 	return nil, nil
-}
-
-func (extractor ClientCertificateExtractor) extractClientCertFromHeaderEnvoyStyle(headerName, headerString string) []*x509.Certificate {
-	extractor.logger.Tracef("got header %s with %s", headerName, headerString)
-
-	splits := strings.Split(headerString, ";")
-	for _, split := range splits {
-		splitKeyVal := strings.Split(split, "=")
-		if len(splitKeyVal) == 2 {
-			key := splitKeyVal[0]
-			val := splitKeyVal[1]
-
-			switch key {
-			case "Cert", "Chain":
-				cert := strings.Replace(val, "\"", "", -1)
-				decodedCert, _ := url.QueryUnescape(cert)
-				block, _ := pem.Decode([]byte(decodedCert))
-				certificate, err := x509.ParseCertificate(block.Bytes)
-				if err != nil {
-					extractor.logger.Warnf("request includes header %s but could not decode certificate. Skipping: %s", headerName, err)
-					continue
-				}
-
-				return []*x509.Certificate{certificate}
-
-			}
-		}
-	}
-
-	return []*x509.Certificate{}
 }
