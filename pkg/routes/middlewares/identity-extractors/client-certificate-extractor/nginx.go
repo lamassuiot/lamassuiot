@@ -32,6 +32,7 @@ func (extractor nginxClientCertificateExtractor) ExtractCertificate(headers http
 	certificate, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		extractor.logger.Warnf("request includes header %s but could not decode certificate. Skipping: %s", nginxClientCertificateHeader, err)
+		return []*x509.Certificate{}
 	}
 
 	return []*x509.Certificate{certificate}
