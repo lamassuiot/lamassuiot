@@ -14,6 +14,11 @@ type MockAWSCloudConnectorService struct {
 	mock.Mock
 }
 
+func (m *MockAWSCloudConnectorService) UpdateCertificateStatus(ctx context.Context, input iot.UpdateCertificateStatusInput) error {
+	args := m.Called(ctx, input)
+	return args.Error(0)
+}
+
 func (m *MockAWSCloudConnectorService) RegisterAndAttachThing(ctx context.Context, input iot.RegisterAndAttachThingInput) error {
 	args := m.Called(ctx, input)
 	return args.Error(0)

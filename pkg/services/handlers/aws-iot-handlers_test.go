@@ -15,6 +15,99 @@ import (
 
 // A device certificate is updated and the preventive delta is changed from false to true
 // The connector should update the device shadow
+func TestHandleUpdateCertificate(t *testing.T) {
+	// Prepare logger
+	entry := logrus.WithField("svc", "aws-iot")
+
+	eventContent, err := os.ReadFile("testdata/cloudevents/cert_update_status__revoked.json")
+	if err != nil {
+		t.Error(err)
+	}
+
+	message := message.Message{
+		Payload: eventContent,
+	}
+
+	// Prepare mocks
+	awsConnectorMock := smock.MockAWSCloudConnectorService{}
+	awsConnectorMock.On("GetConnectorID").Return("aws-12345")
+	awsConnectorMock.On("UpdateCertificateStatus", mock.Anything, mock.Anything).Return(nil)
+
+	// Test logic
+	handler := NewAWSIoTEventHandler(entry, &awsConnectorMock)
+	handler.HandleMessage(&message)
+
+	// Assert
+	awsConnectorMock.AssertExpectations(t)
+	awsConnectorMock.AssertNumberOfCalls(t, "UpdateCertificateStatus", 1)
+}
+
+func TestHandleUpdateCertificateNotAttached(t *testing.T) {
+	// Prepare logger
+	entry := logrus.WithField("svc", "aws-iot")
+
+	eventContent, err := os.ReadFile("testdata/cloudevents/cert_update_status__revoked.json")
+	if err != nil {
+		t.Error(err)
+	}
+
+	var parsed map[string]interface{}
+	json.Unmarshal(eventContent, &parsed)
+	data := parsed["data"].(map[string]interface{})
+	updated := data["updated"].(map[string]interface{})
+	metadata := updated["metadata"].(map[string]interface{})
+	delete(metadata, "lamassu.io/iot/aws-12345")
+
+	eventContent, err = json.Marshal(parsed)
+	if err != nil {
+		t.Error(err)
+	}
+
+	message := message.Message{
+		Payload: eventContent,
+	}
+
+	// Prepare mocks
+	awsConnectorMock := smock.MockAWSCloudConnectorService{}
+	awsConnectorMock.On("GetConnectorID").Return("aws-12345")
+
+	// Test logic
+	handler := NewAWSIoTEventHandler(entry, &awsConnectorMock)
+	handler.HandleMessage(&message)
+
+	// Assert
+	awsConnectorMock.AssertExpectations(t)
+	awsConnectorMock.AssertNotCalled(t, "UpdateCertificateStatus")
+}
+
+func TestHandleUpdateCertificateNotSameConnector(t *testing.T) {
+	// Prepare logger
+	entry := logrus.WithField("svc", "aws-iot")
+
+	eventContent, err := os.ReadFile("testdata/cloudevents/cert_update_status__revoked.json")
+	if err != nil {
+		t.Error(err)
+	}
+
+	message := message.Message{
+		Payload: eventContent,
+	}
+
+	// Prepare mocks
+	awsConnectorMock := smock.MockAWSCloudConnectorService{}
+	awsConnectorMock.On("GetConnectorID").Return("aws-12345-other")
+
+	// Test logic
+	handler := NewAWSIoTEventHandler(entry, &awsConnectorMock)
+	handler.HandleMessage(&message)
+
+	// Assert
+	awsConnectorMock.AssertExpectations(t)
+	awsConnectorMock.AssertNotCalled(t, "UpdateCertificateStatus")
+}
+
+// A device certificate is updated and the preventive delta is changed from false to true
+// The connector should update the device shadow
 func TestHandleUpdateMetadataUpdateShadow(t *testing.T) {
 	// Prepare logger
 	entry := logrus.WithField("svc", "aws-iot")
