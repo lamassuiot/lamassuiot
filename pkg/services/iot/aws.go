@@ -52,19 +52,20 @@ type AWSCloudConnectorService interface {
 }
 
 type AWSCloudConnectorServiceBackend struct {
-	service         AWSCloudConnectorService
-	SqsSDK          sqs.Client
-	iotSDK          iot.Client
-	Region          string
-	iotdataplaneSDK iotdataplane.Client
-	logger          *logrus.Entry
-	endpointAddress string
-	awsCredentials  *aws.Credentials
-	ConnectorID     string
-	CaSDK           services.CAService
-	DmsSDK          services.DMSManagerService
-	DeviceSDK       services.DeviceManagerService
-	AccountID       string
+	service                      AWSCloudConnectorService
+	SqsSDK                       sqs.Client
+	iotSDK                       iot.Client
+	Region                       string
+	iotdataplaneSDK              iotdataplane.Client
+	logger                       *logrus.Entry
+	endpointAddress              string
+	incomingSQSIoTEventQueueName string
+	awsCredentials               *aws.Credentials
+	ConnectorID                  string
+	CaSDK                        services.CAService
+	DmsSDK                       services.DMSManagerService
+	DeviceSDK                    services.DeviceManagerService
+	AccountID                    string
 }
 
 // GetAccountID implements AWSCloudConnectorService.
@@ -101,12 +102,13 @@ func (svc *AWSCloudConnectorServiceBackend) GetConnectorID() string {
 }
 
 type AWSCloudConnectorBuilder struct {
-	Conf        aws.Config
-	Logger      *logrus.Entry
-	ConnectorID string
-	CaSDK       services.CAService
-	DmsSDK      services.DMSManagerService
-	DeviceSDK   services.DeviceManagerService
+	Conf                         aws.Config
+	Logger                       *logrus.Entry
+	ConnectorID                  string
+	CaSDK                        services.CAService
+	DmsSDK                       services.DMSManagerService
+	DeviceSDK                    services.DeviceManagerService
+	IncomingSQSIoTEventQueueName string
 }
 
 type shadowMsg struct {
@@ -193,21 +195,110 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (AWSCl
 	builder.Logger.Infof("connector is configured for account '%s', which uses iot:Data-ATS endpoint with uri %s", *callIDOutput.Account, *endpoint.EndpointAddress)
 
 	svc := &AWSCloudConnectorServiceBackend{
-		SqsSDK:          *sqsClient,
-		iotSDK:          *iotClient,
-		iotdataplaneSDK: *iotdpClient,
-		logger:          logger,
-		Region:          builder.Conf.Region,
-		awsCredentials:  &awsCreds,
-		endpointAddress: *endpoint.EndpointAddress,
-		AccountID:       *callIDOutput.Account,
-		ConnectorID:     builder.ConnectorID,
-		CaSDK:           builder.CaSDK,
-		DmsSDK:          builder.DmsSDK,
-		DeviceSDK:       builder.DeviceSDK,
+		SqsSDK:                       *sqsClient,
+		iotSDK:                       *iotClient,
+		iotdataplaneSDK:              *iotdpClient,
+		logger:                       logger,
+		Region:                       builder.Conf.Region,
+		incomingSQSIoTEventQueueName: builder.IncomingSQSIoTEventQueueName,
+		awsCredentials:               &awsCreds,
+		endpointAddress:              *endpoint.EndpointAddress,
+		AccountID:                    *callIDOutput.Account,
+		ConnectorID:                  builder.ConnectorID,
+		CaSDK:                        builder.CaSDK,
+		DmsSDK:                       builder.DmsSDK,
+		DeviceSDK:                    builder.DeviceSDK,
 	}
 
 	svc.service = svc
+	/*
+		logger.Infof("Trying to initialize IoT Core Events rules")
+		config, err := svc.iotSDK.DescribeEventConfigurations(context.Background(), &iot.DescribeEventConfigurationsInput{})
+		if err != nil {
+			logger.Errorf("could not describe AWS account IoT Core Event Configurations: %s", err)
+			return nil, err
+		}
+
+
+			createdQueue, err := sqsClient.CreateQueue(context.Background(), &sqs.CreateQueueInput{
+				QueueName: aws.String(builder.IncomingSQSIoTEventQueueName),
+			})
+			if err != nil {
+				logger.Errorf("could not create SQS queue for incoming IoT Core Events: %s", err)
+				return nil, err
+			}
+
+			iotEventsSQSQueueURL := *createdQueue.QueueUrl
+
+			logger.Infof("Found %d IoT Core Events rules", len(config.EventConfigurations))
+			for ruleName, rule := range config.EventConfigurations {
+				logger.Infof("Rule '%s' is %v", ruleName, rule.Enabled)
+				if ruleName == "CERTIFICATE" {
+					logger.Infof("Enabling rule '%s'", ruleName)
+					config.EventConfigurations[ruleName] = types.Configuration{
+						Enabled: true,
+					}
+					_, err = svc.iotSDK.UpdateEventConfigurations(context.Background(), &iot.UpdateEventConfigurationsInput{
+						EventConfigurations: config.EventConfigurations,
+					})
+					if err != nil {
+						logger.Errorf("could not update AWS account IoT Core Event Configurations for rule '%s': %s", ruleName, err)
+						return nil, err
+					}
+
+					//now add Message Routing rule to send to SQS about CONNECTION & DISCONNECTION events
+					logger.Infof("Adding Message Routing rule to send CONNECTION & DISCONNECTION events to SQS")
+					_, err = svc.iotSDK.CreateTopicRule(context.Background(), &iot.CreateTopicRuleInput{
+						RuleName: aws.String("Lamassu_Connection_Disconnection_Events"), // Must satisfy regular expression pattern: ^[a-zA-Z0-9_]+$
+						TopicRulePayload: &types.TopicRulePayload{
+							Actions: []types.Action{
+								{
+									Sqs: &types.SqsAction{
+										QueueUrl: aws.String(iotEventsSQSQueueURL),
+										RoleArn:  aws.String("arn:aws:iam::954121426360:role/service-role/iot-core-shadow-rules"),
+									},
+								},
+							},
+
+							Description:  aws.String("Send Connection & Disconnection events to SQS to be processed by Lamassu"),
+							RuleDisabled: aws.Bool(false),
+							Sql:          aws.String("SELECT * as event, timestamp, version, topic(4) as eventType, topic(5) as clientId FROM '$aws/events/presence/+/+' WHERE topic(4) = 'connected' or topic(4) = 'disconnected'"),
+						},
+					})
+					if err != nil {
+						logger.Errorf("could not create Message Routing rule to send CONNECTION & DISCONNECTION events to SQS: %s", err)
+						return nil, err
+					}
+
+					logger.Infof("Rule '%s' is now enabled", ruleName)
+
+					//now add Message Routing rule to send to SQS about Shadow Updated events
+					logger.Infof("Adding Message Routing rule to send Shadow Updated events to SQS")
+					// _, err = svc.iotSDK.CreateTopicRule(context.Background(), &iot.CreateTopicRuleInput{
+					// 	RuleName: aws.String("Lamassu_Shadow_Updates_Events"), // Must satisfy regular expression pattern: ^[a-zA-Z0-9_]+$
+					// 	TopicRulePayload: &types.TopicRulePayload{
+					// 		Actions: []types.Action{
+					// 			{
+					// 				Sqs: &types.SqsAction{
+					// 					QueueUrl: aws.String(iotEventsSQSQueueURL),
+					// 					RoleArn:  aws.String("arn:aws:iam::954121426360:role/service-role/iot-core-shadow-rules"),
+					// 				},
+					// 			},
+					// 		},
+
+					// 		Description:  aws.String("Send Shadow Updated events to SQS to be processed by Lamassu"),
+					// 		RuleDisabled: aws.Bool(false),
+					// 		Sql:          aws.String("SELECT * as event, timestamp, version, topic(4) as eventType, topic(5) as clientId FROM '$aws/events/presence/+/+' WHERE topic(4) = 'connected' or topic(4) = 'disconnected'"),
+					// 	},
+					// })
+					// if err != nil {
+					// 	logger.Errorf("could not create Message Routing rule to send CONNECTION & DISCONNECTION events to SQS: %s", err)
+					// 	return nil, err
+					// }
+				}
+			}
+	*/
+
 	return svc, nil
 }
 
@@ -591,17 +682,15 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 		return err
 	}
 
-	device.IdentitySlot.Events[time.Now()] = models.DeviceEvent{
-		EvenType:          models.DeviceEventTypeShadowUpdated,
-		EventDescriptions: fmt.Sprintf("Remediation Actions: %s", strings.Join(addedActions, ", ")),
-	}
-
-	_, err = svc.DeviceSDK.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
-		ID:   input.DeviceID,
-		Slot: *device.IdentitySlot,
+	_, err = svc.DeviceSDK.CreateDeviceEvent(ctx, services.CreateDeviceEventInput{
+		DeviceID:    input.DeviceID,
+		Timestamp:   time.Now(),
+		Type:        models.DeviceEventTypeShadowUpdated,
+		Description: fmt.Sprintf("Remediation Actions: %s", strings.Join(addedActions, ", ")),
+		Source:      models.AWSIoTSource(svc.ConnectorID),
 	})
 	if err != nil {
-		logrus.Errorf("could not update device metadata: %s", err)
+		logrus.Errorf("could not create device event: %s", err)
 		return err
 	}
 

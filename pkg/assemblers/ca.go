@@ -118,7 +118,7 @@ func createCAStorageInstance(logger *log.Entry, conf config.PluggableStorageEngi
 		return nil, nil, fmt.Errorf("could not get CA storage: %s", err)
 	}
 
-	certStorage, err := engine.GetCertstorage()
+	certStorage, err := engine.GetCertStorage()
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not get Cert storage: %s", err)
 	}

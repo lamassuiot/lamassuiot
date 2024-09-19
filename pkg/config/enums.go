@@ -36,6 +36,7 @@ type EventBusProvider string
 const (
 	Amqp      EventBusProvider = "amqp"
 	AWSSqsSns EventBusProvider = "aws_sqs_sns"
+	AWSSqs    EventBusProvider = "aws_sqs"
 )
 
 type StorageProvider string

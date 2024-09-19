@@ -23,11 +23,14 @@ func NewAWSIoTEventHandler(l *logrus.Entry, svc iot.AWSCloudConnectorService) *C
 			string(models.EventBindDeviceIdentityKey):        func(e *event.Event) error { return handlerWarpper(e, svc, l, bindDeviceIdentityHandler) },
 			string(models.EventUpdateDeviceMetadataKey):      func(e *event.Event) error { return handlerWarpper(e, svc, l, updateDeviceMetadataHandler) },
 			string(models.EventUpdateCertificateMetadataKey): func(e *event.Event) error { return handlerWarpper(e, svc, l, updateCertificateMetadataHandler) },
-			string(models.EventCreateDMSKey):                 func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateDMSHandler) },
-			string(models.EventUpdateDMSKey):                 func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateDMSHandler) },
-			string(models.EventCreateCAKey):                  func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateCAHandler) },
-			string(models.EventImportCAKey):                  func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateCAHandler) },
-			string(models.EventUpdateCAMetadataKey):          func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateCAHandler) },
+			// A DMS update can have multiple repercussions with regards to AWS IoT:
+			// - If the CA distribution settings change, the trust anchor list of all devices associated with the DMS must be updated -> Trigger a shadow update for all devices
+			// - If the Policy is updated, the policy of all devices associated with the DMS must be updated -> Update the policy document by name
+			string(models.EventCreateDMSKey):        func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateDMSHandler) },
+			string(models.EventUpdateDMSKey):        func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateDMSHandler) },
+			string(models.EventCreateCAKey):         func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateCAHandler) },
+			string(models.EventImportCAKey):         func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateCAHandler) },
+			string(models.EventUpdateCAMetadataKey): func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateCAHandler) },
 		},
 	}
 }
@@ -82,7 +85,7 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc iot.AW
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, CA doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
+		logger.Warnf("skipping event %s, CA doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
 		return nil
 	}
 
@@ -119,7 +122,7 @@ func updateCertificateStatusHandler(ctx context.Context, event *event.Event, svc
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, CA doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
+		logger.Warnf("skipping event %s, CA doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
 		return nil
 	}
 
@@ -169,8 +172,18 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc iot.A
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
+		logger.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
 		return nil
+	}
+
+	var oldDmsAwsAutomationConfig models.IotAWSDMSMetadata
+	if isUpdateEvent {
+		_, err := helpers.GetMetadataToStruct(updatedDMS.Previous.Metadata, models.AWSIoTMetadataKey(svc.GetConnectorID()), &oldDmsAwsAutomationConfig)
+		if err != nil {
+			err = fmt.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
+			logger.Error(err)
+			return err
+		}
 	}
 
 	if dmsAwsAutomationConfig.RegistrationMode == models.JitpAWSIoTRegistrationMode {
@@ -212,7 +225,20 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc iot.A
 				return err
 			}
 		}
+
+		changedPolicies := !lms_slices.UnorderedEqualContent(oldDmsAwsAutomationConfig.Policies, dmsAwsAutomationConfig.Policies, func(e1, e2 models.AWSIoTPolicy) bool { return e1.PolicyDocument == e2.PolicyDocument })
+		if changedPolicies {
+			err = svc.RegisterUpdatePolicies(ctx, iot.RegisterUpdatePoliciesInput{
+				Policies: dmsAwsAutomationConfig.Policies,
+			})
+			if err != nil {
+				err = fmt.Errorf("something went wrong while updating policies: %s", err)
+				logger.Error(err)
+				return err
+			}
+		}
 	}
+
 	return nil
 }
 
@@ -233,7 +259,7 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, Certificate doesn't have %s key", event.Type(), models.CAMetadataMonitoringExpirationDeltasKey)
+		logger.Warnf("skipping event %s, Certificate doesn't have %s key", event.Type(), models.CAMetadataMonitoringExpirationDeltasKey)
 		return nil
 	}
 
@@ -245,7 +271,7 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, Certificate doesn't have %s key", event.Type(), models.CAMetadataMonitoringExpirationDeltasKey)
+		logger.Warnf("skipping event %s, Certificate doesn't have %s key", event.Type(), models.CAMetadataMonitoringExpirationDeltasKey)
 		return nil
 	}
 
@@ -266,7 +292,7 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, Certificate doesn't have %s key", event.Type(), models.CAAttachedToDeviceKey)
+		logger.Warnf("skipping event %s, Certificate doesn't have %s key", event.Type(), models.CAAttachedToDeviceKey)
 		return nil
 	}
 
@@ -288,7 +314,7 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
+		logger.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
 		return nil
 	}
 
@@ -328,7 +354,7 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc io
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, Device doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
+		logger.Warnf("skipping event %s, Device doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
 		return nil
 	}
 
@@ -350,7 +376,7 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc io
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
+		logger.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
 		return nil
 	}
 
@@ -388,13 +414,13 @@ func bindDeviceIdentityHandler(ctx context.Context, event *event.Event, svc iot.
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
+		logger.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
 		return nil
 	}
 
 	if dmsAwsAutomationConfig.RegistrationMode == models.AutomaticAWSIoTRegistrationMode {
 		thingID := bindEvent.Certificate.Subject.CommonName
-		logrus.Infof("registering %s device", thingID)
+		logger.Infof("registering %s device", thingID)
 		err = svc.RegisterAndAttachThing(ctx, iot.RegisterAndAttachThingInput{
 			DeviceID:               thingID,
 			DMSIoTAutomationConfig: dmsAwsAutomationConfig,

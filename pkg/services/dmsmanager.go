@@ -875,37 +875,54 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		return nil, err
 	}
 
+	var newEvent *models.DeviceEvent
 	idSlot := device.IdentitySlot
 	if idSlot == nil {
 		idSlot = &models.Slot[string]{
-			Status:        models.SlotActive,
 			ActiveVersion: 0,
 			SecretType:    models.X509SlotProfileType,
 			Secrets: map[int]string{
 				0: crt.SerialNumber,
 			},
-			Events: map[time.Time]models.DeviceEvent{
-				time.Now(): {
-					EvenType: models.DeviceEventTypeProvisioned,
-				},
-			},
+		}
+
+		newEvent = &models.DeviceEvent{
+			Type:        models.DeviceEventTypeProvisioned,
+			Timestamp:   time.Now(),
+			DeviceID:    device.ID,
+			Description: "",
 		}
 	} else {
 		idSlot.ActiveVersion = idSlot.ActiveVersion + 1
-		idSlot.Status = models.SlotActive
 		idSlot.Secrets[idSlot.ActiveVersion] = crt.SerialNumber
 
-		idSlot.Events[time.Now()] = models.DeviceEvent{
-			EvenType:          input.BindMode,
-			EventDescriptions: fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion),
+		newEvent = &models.DeviceEvent{
+			DeviceID:    device.ID,
+			Timestamp:   time.Now(),
+			Type:        input.BindMode,
+			Description: fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion),
 		}
 	}
 	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(ctx, UpdateDeviceIdentitySlotInput{
-		ID:   crt.Subject.CommonName,
-		Slot: *idSlot,
+		ID:        crt.Subject.CommonName,
+		Slot:      *idSlot,
+		NewStatus: models.DeviceActive,
 	})
 	if err != nil {
 		lFunc.Errorf("could not update device '%s' identity slot. Aborting enrollment process: %s", device.ID, err)
+		return nil, err
+	}
+
+	_, err = svc.deviceManagerCli.CreateDeviceEvent(ctx, CreateDeviceEventInput{
+		DeviceID:    newEvent.DeviceID,
+		Timestamp:   newEvent.Timestamp,
+		Type:        newEvent.Type,
+		Description: newEvent.Description,
+		Source:      models.DMSManagerSource,
+		Status:      models.DeviceActive,
+	})
+	if err != nil {
+		lFunc.Errorf("could not create device event %s for device '%s': %s. Event Description: %s", newEvent.Type, device.ID, err, newEvent.Description)
 		return nil, err
 	}
 

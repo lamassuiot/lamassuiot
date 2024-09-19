@@ -20,15 +20,15 @@ func NewEventBusRouter(conf config.EventBusEngine, serviceID string, logger *log
 	}
 
 	conf.Amqp.Exchange = "errors"
-	deadLetterPub, err := NewEventBusPublisher(conf, serviceID, logger)
-	if err != nil {
-		return nil, fmt.Errorf("could not create event bus publisher for unprocessable events: %s", err)
-	}
+	// deadLetterPub, err := NewEventBusPublisher(conf, serviceID, logger)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("could not create event bus publisher for unprocessable events: %s", err)
+	// }
 
-	deadLetterMw, err := middleware.PoisonQueue(deadLetterPub, "errs")
-	if err != nil {
-		return nil, fmt.Errorf("could not create DeadLetter MW: %s", err)
-	}
+	// deadLetterMw, err := middleware.PoisonQueue(deadLetterPub, "errs")
+	// if err != nil {
+	// 	return nil, fmt.Errorf("could not create DeadLetter MW: %s", err)
+	// }
 
 	router.AddPlugin(plugin.SignalsHandler)
 	router.AddMiddleware(
@@ -37,7 +37,7 @@ func NewEventBusRouter(conf config.EventBusEngine, serviceID string, logger *log
 
 		// Recoverer handles panics from handlers.
 		// In this case, it passes them as errors to the Retry middleware.
-		deadLetterMw,
+		// deadLetterMw,
 
 		// The handler function is retried if it returns an error.
 		// After MaxRetries, the message is Nacked and it's up to the PubSub to resend it.

@@ -195,9 +195,10 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 				Logs: config.BaseConfigLogging{
 					Level: conf.Logs.Level,
 				},
-				SubscriberEventBus: conf.SubscriberEventBus,
-				ConnectorID:        conf.AWSIoTManager.ConnectorID,
-				AWSSDKConfig:       conf.AWSIoTManager.AWSSDKConfig,
+				SubscriberEventBus:        conf.SubscriberEventBus,
+				ConnectorID:               conf.AWSIoTManager.ConnectorID,
+				AWSSDKConfig:              conf.AWSIoTManager.AWSSDKConfig,
+				SQSIncomingEventQueueName: conf.AWSIoTManager.IncomingSQSIoTEventQueueName,
 			}, caSDKBuilder("AWS IoT Connector", models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)), dmsMngrSDKBuilder("AWS IoT Connector", models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)), deviceMngrSDKBuilder("AWS IoT Connector", models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)))
 			if err != nil {
 				return -1, fmt.Errorf("could not assemble AWS IoT Manager: %s", err)
@@ -277,7 +278,6 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 
 func clientCertsToHeaderUsingEnvoyStyle() gin.HandlerFunc {
 	return func(c *gin.Context) {
-
 		if c.Request.TLS != nil {
 			if len(c.Request.TLS.PeerCertificates) > 0 {
 				crtChain := []string{}

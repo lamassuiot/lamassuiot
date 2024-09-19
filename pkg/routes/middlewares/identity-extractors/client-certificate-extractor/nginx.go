@@ -24,8 +24,11 @@ func NewNginxClientCertificateExtractor(logger *logrus.Entry) nginxClientCertifi
 func (extractor nginxClientCertificateExtractor) ExtractCertificate(headers http.Header) []*x509.Certificate {
 	cert := headers.Get(nginxClientCertificateHeader)
 	if cert == "" {
+		extractor.logger.Tracef("request does not include header %s", nginxClientCertificateHeader)
 		return []*x509.Certificate{}
 	}
+
+	extractor.logger.Tracef("request does include header %s. Trying to decode certificate", nginxClientCertificateHeader)
 
 	decodedCert, _ := url.QueryUnescape(cert)
 	block, _ := pem.Decode([]byte(decodedCert))

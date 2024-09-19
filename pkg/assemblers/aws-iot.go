@@ -1,11 +1,8 @@
 package assemblers
 
 import (
-	"context"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
@@ -18,6 +15,8 @@ import (
 func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAService, dmsService services.DMSManagerService, deviceService services.DeviceManagerService) (*iot.AWSCloudConnectorService, error) {
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "AWS IoT Connector", "Service")
 	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "AWS IoT Connector", "Event Bus")
+	lSqsConDiscon := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "AWS IoT Connector", "SQS - Incoming Conn/Disconn Events")
+	lSqsShadowUpd := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "AWS IoT Connector", "SQS - Shadow Update Events")
 
 	awsCfg, err := config.GetAwsSdkConfig(conf.AWSSDKConfig)
 	if err != nil {
@@ -25,12 +24,13 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 	}
 
 	awsConnectorSvc, err := iot.NewAWSCloudConnectorServiceService(iot.AWSCloudConnectorBuilder{
-		Conf:        *awsCfg,
-		Logger:      lSvc,
-		ConnectorID: conf.ConnectorID,
-		CaSDK:       caService,
-		DmsSDK:      dmsService,
-		DeviceSDK:   deviceService,
+		Conf:                         *awsCfg,
+		Logger:                       lSvc,
+		ConnectorID:                  conf.ConnectorID,
+		CaSDK:                        caService,
+		DmsSDK:                       dmsService,
+		DeviceSDK:                    deviceService,
+		IncomingSQSIoTEventQueueName: conf.SQSIncomingEventQueueName,
 	})
 	if err != nil {
 		logrus.Fatal(err)
@@ -48,31 +48,43 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 		return nil, err
 	}
 
-	go func() {
-		lSvc.Infof("starting SQS thread")
-		sqsQueueName := fmt.Sprintf("https://sqs.%s.amazonaws.com/%s/%s", awsConnectorSvc.GetRegion(), awsConnectorSvc.GetAccountID(), conf.AWSBidirectionalQueueName)
+	lSqsConDiscon.Infof("starting Connect/Disconnect Thing Event Bus Subscription Handler")
+	connectDisconnectThingMessageHandler := handlers.NewAWSIoTThingConnectionDisconnectionEventHandler(lSqsConDiscon, awsConnectorSvc)
+	connectDisconnectThingSubHandler, err := eventbus.NewEventBusSubscriptionHandler(config.EventBusEngine{
+		Enabled:   true,
+		LogLevel:  conf.SubscriberEventBus.LogLevel,
+		Provider:  config.AWSSqs,
+		AWSSqsSns: conf.AWSSDKConfig,
+		// }, "", lMessaging, connectDisconnectThingMessageHandler, "iotcore-events-conn-disconn", conf.SQSIncomingEventQueueName)
+	}, "", lSqsConDiscon, connectDisconnectThingMessageHandler, "iotcore-events-conn-disconn", "aws-iot-events-to-lamassu")
+	if err != nil {
+		lSqsConDiscon.Errorf("could not generate IoT Connection/Disconnection Event Bus Subscription Handler: %s", err)
+	}
 
-		for {
-			lSvc.Debugf("reading from queue %s", sqsQueueName)
-			sqsService := awsConnectorSvc.GetSQSService()
-			sqsOutput, err := sqsService.ReceiveMessage(context.Background(), &sqs.ReceiveMessageInput{
-				QueueUrl:            aws.String(sqsQueueName),
-				MaxNumberOfMessages: int32(10),
-				WaitTimeSeconds:     int32(20),
-			})
+	err = connectDisconnectThingSubHandler.RunAsync()
+	if err != nil {
+		lMessaging.Errorf("could not run IoT Connection/Disconnection Event Bus Subscription Handler: %s", err)
+		return nil, err
+	}
 
-			if err != nil {
-				lSvc.Errorf("could not receive SQS messages: %s", err)
-				return
-			}
+	lSqsShadowUpd.Infof("starting Shadow Update Event Bus Subscription Handler")
+	shadowUpdateMessageHandler := handlers.NewAWSIoTThingShadowUpdateEventHandler(lSqsShadowUpd, awsConnectorSvc)
+	shadowUpdateMessageSubHandler, err := eventbus.NewEventBusSubscriptionHandler(config.EventBusEngine{
+		Enabled:   true,
+		LogLevel:  conf.SubscriberEventBus.LogLevel,
+		Provider:  config.AWSSqs,
+		AWSSqsSns: conf.AWSSDKConfig,
+		// }, "", lMessaging, shadowUpdateMessageHandler, "iotcore-events-conn-disconn", conf.SQSIncomingEventQueueName)
+	}, "", lSqsShadowUpd, shadowUpdateMessageHandler, "iotcore-events-shadow-update", "aws-iot-shadow-events-to-lamassu")
+	if err != nil {
+		lSqsShadowUpd.Errorf("could not generate IoT Shadow Update Event Bus Subscription Handler: %s", err)
+	}
 
-			totalInBatch := len(sqsOutput.Messages)
-			lSvc.Tracef("received sqs batch messages of size %d ", totalInBatch)
-			for idx, sqsMessage := range sqsOutput.Messages {
-				lSvc.Tracef("message [%d/%d]: %s", idx+1, totalInBatch, *sqsMessage.Body)
-			}
-		}
-	}()
+	err = shadowUpdateMessageSubHandler.RunAsync()
+	if err != nil {
+		lSqsShadowUpd.Errorf("could not run IoT Shadow Update Event Bus Subscription Handler: %s", err)
+		return nil, err
+	}
 
 	return &awsConnectorSvc, nil
 }

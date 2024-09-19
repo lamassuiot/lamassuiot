@@ -1,6 +1,10 @@
 package resources
 
-import "github.com/lamassuiot/lamassuiot/v2/pkg/models"
+import (
+	"time"
+
+	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+)
 
 var DeviceFiltrableFields = map[string]FilterFieldType{
 	"id":                 StringFilterFieldType,
@@ -22,8 +26,18 @@ type CreateDeviceBody struct {
 
 type UpdateDeviceIdentitySlotBody struct {
 	models.Slot[string]
+	NewStatus models.DeviceStatus `json:"new_status"`
 }
 
 type UpdateDeviceMetadataBody struct {
 	Metadata map[string]any `json:"metadata"`
+}
+
+type CreateDeviceEventBody struct {
+	Timestamp        time.Time              `json:"timestamp"`
+	Type             models.DeviceEventType `json:"type"`
+	Description      string                 `json:"description"`
+	Source           string                 `json:"source"`
+	Status           models.DeviceStatus    `json:"status"`
+	StructuredFields map[string]any         `json:"structured_fields"`
 }

@@ -81,7 +81,7 @@ func createAlertsStorageInstance(logger *log.Entry, conf config.PluggableStorage
 		return nil, nil, fmt.Errorf("could not get subscriptions storage: %s", err)
 	}
 
-	eventsStore, err := engine.GetEnventsStorage()
+	eventsStore, err := engine.GetEventsStorage()
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not get event storage: %s", err)
 	}

@@ -164,8 +164,9 @@ func (r *devManagerHttpRoutes) UpdateDeviceIdentitySlot(ctx *gin.Context) {
 	}
 
 	dev, err := r.svc.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
-		ID:   params.ID,
-		Slot: requestBody.Slot,
+		ID:        params.ID,
+		Slot:      requestBody.Slot,
+		NewStatus: requestBody.NewStatus,
 	})
 
 	if err != nil {
@@ -228,4 +229,76 @@ func (r *devManagerHttpRoutes) DecommissionDevice(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, dev)
+}
+
+func (r *devManagerHttpRoutes) GetDeviceEvents(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	queryParams := FilterQuery(ctx.Request, resources.DeviceFiltrableFields)
+	events := []models.DeviceEvent{}
+	nextBookmark, err := r.svc.GetDeviceEvents(ctx, services.GetDeviceEventsInput{
+		DeviceID: params.ID,
+		ListInput: resources.ListInput[models.DeviceEvent]{
+			QueryParameters: queryParams,
+			ExhaustiveRun:   false,
+			ApplyFunc: func(event models.DeviceEvent) {
+				events = append(events, event)
+			},
+		},
+	})
+
+	if err != nil {
+		ctx.JSON(500, err)
+		return
+	}
+
+	ctx.JSON(200, resources.GetDeviceEventsResponse{
+		IterableList: resources.IterableList[models.DeviceEvent]{
+			NextBookmark: nextBookmark,
+			List:         events,
+		},
+	})
+}
+
+func (r *devManagerHttpRoutes) CreateDeviceEvent(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody resources.CreateDeviceEventBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	event, err := r.svc.CreateDeviceEvent(ctx, services.CreateDeviceEventInput{
+		DeviceID:         params.ID,
+		Timestamp:        requestBody.Timestamp,
+		Type:             requestBody.Type,
+		Description:      requestBody.Description,
+		Source:           requestBody.Source,
+		Status:           requestBody.Status,
+		StructuredFields: requestBody.StructuredFields,
+	})
+
+	if err != nil {
+		ctx.JSON(500, err)
+		return
+	}
+
+	ctx.JSON(201, event)
 }

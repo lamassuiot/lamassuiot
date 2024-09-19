@@ -24,7 +24,8 @@ type MonolithicConfig struct {
 }
 
 type MonolithicAWSIoTManagerConfig struct {
-	Enabled      bool         `mapstructure:"enabled"`
-	ConnectorID  string       `mapstructure:"connector_id"`
-	AWSSDKConfig AWSSDKConfig `mapstructure:"aws_config"`
+	Enabled                      bool         `mapstructure:"enabled"`
+	ConnectorID                  string       `mapstructure:"connector_id"`
+	AWSSDKConfig                 AWSSDKConfig `mapstructure:"aws_config"`
+	IncomingSQSIoTEventQueueName string       `mapstructure:"sqs_incoming_event_queue_name"`
 }
