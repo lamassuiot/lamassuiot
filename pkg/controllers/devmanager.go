@@ -251,7 +251,6 @@ func (r *devManagerHttpRoutes) GetDeviceEventsInStream(ctx *gin.Context) {
 	}
 
 	queryParams := FilterQuery(ctx.Request, resources.DeviceFiltrableFields)
-
 	v, ok := ctx.Get("client")
 	if !ok {
 		ctx.JSON(500, nil)
@@ -276,7 +275,7 @@ func (r *devManagerHttpRoutes) GetDeviceEventsInStream(ctx *gin.Context) {
 				if r.stream.TotalClients[client.ID] == nil {
 					// Client doesn't exist or disconnected
 					log.Printf("Receiver - %d doesn't exist or disconnected.", 1)
-					// return
+					return
 				} else {
 					events := []models.DeviceEvent{}
 					now := time.Now()

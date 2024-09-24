@@ -64,6 +64,7 @@ func (h *AWSIoTThingConnectionDisconnectionEventHandler) HandleMessage(msg *mess
 	}
 
 	deviceID := ""
+	principalID := ""
 	isConnectEvent := false
 	var connect connectMsg
 	var disconnect disconnectMsg
@@ -77,9 +78,11 @@ func (h *AWSIoTThingConnectionDisconnectionEventHandler) HandleMessage(msg *mess
 	if connect.Event.EventType == "connected" {
 		h.logger.Debugf("received connect message for device %s", connect.Event.ClientId)
 		deviceID = connect.Event.ClientId
+		principalID = connect.Event.PrincipalIdentifier
 		isConnectEvent = true
 	} else {
 		deviceID = connect.Event.ClientId
+		principalID = connect.Event.PrincipalIdentifier
 		isConnectEvent = false
 		err = json.Unmarshal(msg.Payload, &disconnect)
 		if err != nil {
@@ -153,6 +156,9 @@ func (h *AWSIoTThingConnectionDisconnectionEventHandler) HandleMessage(msg *mess
 		Type:        models.DeviceEventTypeConnectionUpdate,
 		Description: eventDescription,
 		Source:      models.AWSIoTSource(h.svc.GetConnectorID()),
+		StructuredFields: map[string]any{
+			"principal_identifier": principalID,
+		},
 	})
 	if err != nil {
 		h.logger.Errorf("could not create device event: %s", err)
@@ -265,6 +271,7 @@ func (h *AWSIoTThingShadowUpdateEventHandler) HandleMessage(msg *message.Message
 
 			//Get the time of the change
 			timestampTime := time.Unix(0, int64(timestamp)*int64(time.Millisecond))
+			timestampTime = timestampTime.Add(time.Millisecond * 999)
 
 			//Create the event
 			_, err = h.svc.GetDeviceService().CreateDeviceEvent(context.Background(), services.CreateDeviceEventInput{
