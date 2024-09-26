@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -43,7 +44,8 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 		log.Fatal(err)
 	}
 
-	eventBus, err := messaging.NewMessagingEngine(lMessaging, conf.EventBus, "aws-connector")
+	busName := strings.ReplaceAll(conf.ConnectorID, "aws.", "-")
+	eventBus, err := messaging.NewMessagingEngine(lMessaging, conf.EventBus, fmt.Sprintf("aws-connector-%s", busName))
 	if err != nil {
 		return nil, fmt.Errorf("could not setup event bus: %s", err)
 	}
