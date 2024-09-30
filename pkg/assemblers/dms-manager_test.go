@@ -26,6 +26,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/ocsp"
 )
 
@@ -82,6 +83,80 @@ func TestCreateDMS(t *testing.T) {
 	if err == nil {
 		t.Fatalf("duplicate dms creation should fail")
 	}
+
+	dmsFromDB, err := dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: dmsSample.ID})
+	if err != nil {
+		t.Fatalf("could not get DMS by ID: %s", err)
+	}
+	checkDMS(t, dmsFromDB, dmsSample)
+}
+
+func TestUpdateDMS(t *testing.T) {
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	dmsSample := services.CreateDMSInput{
+		ID:   "1234-5678",
+		Name: "MyIotFleet",
+	}
+	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
+	if err != nil {
+		t.Fatalf("could not create DMS: %s", err)
+	}
+	assert.Equal(t, dms.Name, dmsSample.Name)
+
+	dms.Name = "MyIotFleet2"
+
+	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{DMS: *dms})
+	if err != nil {
+		t.Fatalf("could not update DMS: %s", err)
+	}
+
+	dmsFromDB, err := dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: dmsSample.ID})
+	if err != nil {
+		t.Fatalf("could not get DMS by ID: %s", err)
+	}
+
+	assert.Equal(t, dms.Name, dmsFromDB.Name)
+}
+
+func TestGetMissingDMSShouldFail(t *testing.T) {
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	dmsSample := models.DMS{
+		ID:   "1234-5678",
+		Name: "MyIotFleet",
+	}
+
+	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{DMS: dmsSample})
+	if err == nil {
+		t.Fatalf("Get DMS by ID should fail")
+	}
+
+	assert.Contains(t, err.Error(), "DMS not found")
+}
+
+func TestUpdatetMissingDMSShouldFail(t *testing.T) {
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	dmsSample := services.CreateDMSInput{
+		ID: "1234-5678",
+	}
+
+	_, err = dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: dmsSample.ID})
+	if err == nil {
+		t.Fatalf("Get DMS by ID should fail")
+	}
+
+	assert.Contains(t, err.Error(), "DMS not found")
 }
 
 func TestESTEnroll(t *testing.T) {
@@ -1075,7 +1150,7 @@ func TestESTGetCACerts(t *testing.T) {
 	createCA := func(name string, lifespan string, issuance string) (*models.CACertificate, error) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
 		issuanceCABootDur, _ := models.ParseDuration(issuance)
-		return testServers.CA.Service.CreateCA(ctx, services.CreateCAInput{
+		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
 			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
 			Subject:            models.Subject{CommonName: name},
 			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
@@ -1486,7 +1561,7 @@ func TestESTServerKeyGen(t *testing.T) {
 						Type: models.KeyType(x509.RSA),
 						Bits: 3072,
 					}
-					
+
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
@@ -1564,6 +1639,140 @@ func TestESTServerKeyGen(t *testing.T) {
 				if err = helpers.ValidateCertificate(caCert, cert, true); err != nil {
 					t.Fatalf("could not validate certificate with CA: %s", err)
 				}
+			},
+		},
+		{
+			name: "Err/KeyGenConfigMissing",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.ServerKeyGen = nil
+
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+						bootstrapCA.ID,
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
+					CAID:         bootstrapCA.ID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
+					SignVerbatim: true,
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{(*x509.Certificate)(bootCrt.Certificate)},
+					PrivateKey:            bootKey,
+					InsecureSkipVerify:    true,
+				}
+
+				//Generate a "generic" key pair
+				genericKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "generic-csr"}, genericKey)
+
+				//Replace the CSR subject (it is crucial that the signature of the CSR is not valid due to this change as it is stated in the RFC7030)
+				//the server should not check the consistency/validity of the signature
+				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewString())
+				enrollCSR.Subject = pkix.Name{
+					CommonName: deviceID,
+				}
+
+				_, _, err = estCli.ServerKeyGen(ctx, enrollCSR)
+
+				return (*x509.Certificate)(enrollCA.Certificate.Certificate), nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("Error is expected")
+				}
+
+				assert.Contains(t, err.Error(), "server key generation not enabled")
+			},
+		},
+		{
+			name: "Err/KeyGenDisabled",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.ServerKeyGen.Enabled = false
+
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+						bootstrapCA.ID,
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
+					CAID:         bootstrapCA.ID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
+					SignVerbatim: true,
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{(*x509.Certificate)(bootCrt.Certificate)},
+					PrivateKey:            bootKey,
+					InsecureSkipVerify:    true,
+				}
+
+				//Generate a "generic" key pair
+				genericKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "generic-csr"}, genericKey)
+
+				//Replace the CSR subject (it is crucial that the signature of the CSR is not valid due to this change as it is stated in the RFC7030)
+				//the server should not check the consistency/validity of the signature
+				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewString())
+				enrollCSR.Subject = pkix.Name{
+					CommonName: deviceID,
+				}
+
+				_, _, err = estCli.ServerKeyGen(ctx, enrollCSR)
+
+				return (*x509.Certificate)(enrollCA.Certificate.Certificate), nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("Error is expected")
+				}
+
+				assert.Contains(t, err.Error(), "server key generation not enabled")
 			},
 		},
 	}

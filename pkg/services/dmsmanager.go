@@ -697,7 +697,7 @@ func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.
 		return nil, nil, err
 	}
 
-	if !dms.Settings.ServerKeyGen.Enabled {
+	if dms.Settings.ServerKeyGen == nil || !dms.Settings.ServerKeyGen.Enabled {
 		lFunc.Errorf("server key generation not enabled for DMS: %s", aps)
 		return nil, nil, fmt.Errorf("server key generation not enabled")
 	}
