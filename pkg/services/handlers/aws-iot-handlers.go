@@ -86,14 +86,18 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc iot.AW
 		return nil
 	}
 
-	_, err = svc.RegisterCA(context.Background(), iot.RegisterCAInput{
-		CACertificate:         *ca,
-		RegisterConfiguration: awsIoTCoreCACfg,
-	})
-	if err != nil {
-		err = fmt.Errorf("could not register CA %s - %s: %s", ca.ID, ca.Subject.CommonName, err)
-		logger.Error(err)
-		return err
+	if awsIoTCoreCACfg.Registration.Status == models.IoTAWSCAMetadataRegistrationRequested {
+		_, err = svc.RegisterCA(context.Background(), iot.RegisterCAInput{
+			CACertificate:         *ca,
+			RegisterConfiguration: awsIoTCoreCACfg,
+		})
+		if err != nil {
+			err = fmt.Errorf("could not register CA %s - %s: %s", ca.ID, ca.Subject.CommonName, err)
+			logger.Error(err)
+			return err
+		}
+	} else {
+		logger.Infof("Not registering CA %s - %s: status is %s", ca.ID, ca.Subject.CommonName, awsIoTCoreCACfg.Registration.Status)
 	}
 
 	return nil
