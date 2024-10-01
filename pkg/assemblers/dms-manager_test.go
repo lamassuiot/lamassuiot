@@ -8,7 +8,6 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/base64"
 	"fmt"
 	"io"
@@ -1443,12 +1442,12 @@ func TestESTServerKeyGen(t *testing.T) {
 
 	var testcases = []struct {
 		name        string
-		run         func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error)
-		resultCheck func(caCert *x509.Certificate, cert *x509.Certificate, key any, err error)
+		run         func() (caCert *x509.Certificate, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error)
+		resultCheck func(caCert *x509.Certificate, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error)
 	}{
 		{
 			name: "OK/ECDSA-256",
-			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error) {
 				bootstrapCA, err := createCA("boot", "1y", "1m")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
@@ -1494,28 +1493,24 @@ func TestESTServerKeyGen(t *testing.T) {
 
 				//Generate a "generic" key pair
 				genericKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
-				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "generic-csr"}, genericKey)
-
-				//Replace the CSR subject (it is crucial that the signature of the CSR is not valid due to this change as it is stated in the RFC7030)
-				//the server should not check the consistency/validity of the signature
 				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewString())
-				enrollCSR.Subject = pkix.Name{
-					CommonName: deviceID,
-				}
+				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, genericKey)
 
 				enrollCRT, enrollKey, err := estCli.ServerKeyGen(ctx, enrollCSR)
 				if err != nil {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
 
+				assert.Equal(t, deviceID, enrollCRT.Subject.CommonName)
+
 				serverKeyGen, err := x509.ParsePKCS8PrivateKey(enrollKey)
 				if err != nil {
 					t.Fatalf("unexpected error while parsing server generated key: %s", err)
 				}
 
-				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, serverKeyGen, nil
+				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollCSR, serverKeyGen, nil
 			},
-			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+			resultCheck: func(caCert, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error) {
 				if err != nil {
 					t.Fatalf("unexpected error: %s", err)
 				}
@@ -1541,11 +1536,16 @@ func TestESTServerKeyGen(t *testing.T) {
 				if err = helpers.ValidateCertificate(caCert, cert, true); err != nil {
 					t.Fatalf("could not validate certificate with CA: %s", err)
 				}
+
+				csrPubDerBytes, _ := x509.MarshalPKIXPublicKey(csr.PublicKey)
+				crtPubDerBytes, _ := x509.MarshalPKIXPublicKey(cert.PublicKey)
+				assert.False(t, bytes.Equal(csrPubDerBytes, crtPubDerBytes), "CSR and Cert public keys should not be the same")
+
 			},
 		},
 		{
 			name: "OK/RSA-3072",
-			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error) {
 				bootstrapCA, err := createCA("boot", "1y", "1m")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
@@ -1592,14 +1592,8 @@ func TestESTServerKeyGen(t *testing.T) {
 
 				//Generate a "generic" key pair
 				genericKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
-				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "generic-csr"}, genericKey)
-
-				//Replace the CSR subject (it is crucial that the signature of the CSR is not valid due to this change as it is stated in the RFC7030)
-				//the server should not check the consistency/validity of the signature
 				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewString())
-				enrollCSR.Subject = pkix.Name{
-					CommonName: deviceID,
-				}
+				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, genericKey)
 
 				enrollCRT, enrollKey, err := estCli.ServerKeyGen(ctx, enrollCSR)
 				if err != nil {
@@ -1611,9 +1605,9 @@ func TestESTServerKeyGen(t *testing.T) {
 					t.Fatalf("unexpected error while parsing server generated key: %s", err)
 				}
 
-				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, serverKeyGen, nil
+				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollCSR, serverKeyGen, nil
 			},
-			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+			resultCheck: func(caCert, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error) {
 				if err != nil {
 					t.Fatalf("unexpected error: %s", err)
 				}
@@ -1639,11 +1633,15 @@ func TestESTServerKeyGen(t *testing.T) {
 				if err = helpers.ValidateCertificate(caCert, cert, true); err != nil {
 					t.Fatalf("could not validate certificate with CA: %s", err)
 				}
+
+				csrPubDerBytes, _ := x509.MarshalPKIXPublicKey(csr.PublicKey)
+				crtPubDerBytes, _ := x509.MarshalPKIXPublicKey(cert.PublicKey)
+				assert.False(t, bytes.Equal(csrPubDerBytes, crtPubDerBytes), "CSR and Cert public keys should not be the same")
 			},
 		},
 		{
 			name: "Err/KeyGenConfigMissing",
-			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error) {
 				bootstrapCA, err := createCA("boot", "1y", "1m")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
@@ -1687,20 +1685,14 @@ func TestESTServerKeyGen(t *testing.T) {
 
 				//Generate a "generic" key pair
 				genericKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
-				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "generic-csr"}, genericKey)
-
-				//Replace the CSR subject (it is crucial that the signature of the CSR is not valid due to this change as it is stated in the RFC7030)
-				//the server should not check the consistency/validity of the signature
 				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewString())
-				enrollCSR.Subject = pkix.Name{
-					CommonName: deviceID,
-				}
+				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, genericKey)
 
 				_, _, err = estCli.ServerKeyGen(ctx, enrollCSR)
 
-				return (*x509.Certificate)(enrollCA.Certificate.Certificate), nil, nil, err
+				return (*x509.Certificate)(enrollCA.Certificate.Certificate), nil, nil, nil, err
 			},
-			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+			resultCheck: func(caCert, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error) {
 				if err == nil {
 					t.Fatalf("Error is expected")
 				}
@@ -1710,7 +1702,7 @@ func TestESTServerKeyGen(t *testing.T) {
 		},
 		{
 			name: "Err/KeyGenDisabled",
-			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error) {
 				bootstrapCA, err := createCA("boot", "1y", "1m")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
@@ -1754,20 +1746,14 @@ func TestESTServerKeyGen(t *testing.T) {
 
 				//Generate a "generic" key pair
 				genericKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
-				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "generic-csr"}, genericKey)
-
-				//Replace the CSR subject (it is crucial that the signature of the CSR is not valid due to this change as it is stated in the RFC7030)
-				//the server should not check the consistency/validity of the signature
 				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewString())
-				enrollCSR.Subject = pkix.Name{
-					CommonName: deviceID,
-				}
+				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, genericKey)
 
 				_, _, err = estCli.ServerKeyGen(ctx, enrollCSR)
 
-				return (*x509.Certificate)(enrollCA.Certificate.Certificate), nil, nil, err
+				return (*x509.Certificate)(enrollCA.Certificate.Certificate), nil, nil, nil, err
 			},
-			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+			resultCheck: func(caCert, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error) {
 				if err == nil {
 					t.Fatalf("Error is expected")
 				}
