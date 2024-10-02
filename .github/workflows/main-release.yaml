@@ -74,7 +74,7 @@ jobs:
           # Generate RELEASE-NOTES.md file.
           git-chglog                                                  \
               --no-case                                               \
-              --output "RELEASE-NOTES.md"                                 \
+              --output "RELEASE-NOTES.md"                             \
               --next-tag "${{ github.event.inputs.release_version }}" \
               "${{ github.event.inputs.release_version }}"
 
@@ -84,8 +84,8 @@ jobs:
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
 
           # Commit changes locally.
-          git add CHANGELOG.md
-          git add RELEASE-NOTES.md
+          git add ${chart_path}/CHANGELOG.md
+          git add ${chart_path}/RELEASE-NOTES.md
           git commit -m "Update CHANGELOG and RELEASE-NOTES"
 
           # Push changes to branch.          
@@ -93,7 +93,7 @@ jobs:
 
   create_tag:
     name: Create Tag
-    needs: [change_logs]
+    needs: [change_logs, version_info]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
