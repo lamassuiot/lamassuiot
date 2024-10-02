@@ -7,7 +7,7 @@ options:
   commits:
     filters:
       Type:
-        - bumping
+        - bump
         - removed
         - fix
         - feat
@@ -16,7 +16,7 @@ options:
     title_maps:
       feat: Features
       fix: Bug Fixes
-      bumping: Bumping
+      bumping: Bump Versions
       removed: Removed
       security: Security Fixes
   header:
