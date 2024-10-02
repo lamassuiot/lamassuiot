@@ -14,18 +14,18 @@ feat: AWS Connector: add hat wobble
 |     |      
 |     +-> Service being updated: CA, Device Manager, DMS Manager, AWS Connector, Alerts
 |
-+-------> Type: chore, docs, feat, fix, refactor, style, or test.
++-------> Type: chore, feat, fix, bump, remove, security or test
 ```
 
 More Examples:
 
+- `chore`: (updating grunt tasks etc; no production code change)
 - `feat`: (new feature for the user, not a new feature for build script)
 - `fix`: (bug fix for the user, not a fix to a build script)
-- `docs`: (changes to the documentation)
-- `style`: (formatting, missing semi colons, etc; no production code change)
-- `refactor`: (refactoring production code, eg. renaming a variable)
+- `bump`: (bump libraries or go version number)
+- `remove`: (deleted feature)
+- `security`: (security fix)
 - `test`: (adding missing tests, refactoring tests; no production code change)
-- `chore`: (updating grunt tasks etc; no production code change)
 
 References:
 

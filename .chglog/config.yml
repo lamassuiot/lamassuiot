@@ -8,17 +8,21 @@ options:
     filters:
       Type:
         - bump
-        - removed
+        - remove
         - fix
         - feat
         - security
+        - test
+        - chore
   commit_groups:
     title_maps:
       feat: Features
       fix: Bug Fixes
-      bumping: Bump Versions
-      removed: Removed
+      bump: Bump Versions
+      remove: Removed
       security: Security Fixes
+      test: Tests
+      chore: Chores
   header:
     pattern: "^((\\w+)\\s.*)$"
     pattern_maps:

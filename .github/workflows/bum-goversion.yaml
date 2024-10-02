@@ -31,7 +31,7 @@ jobs:
               echo "Updated Dockerfile: $dockerfile"
           done
 
-          git commit -s -am "Bump go version to ${{ github.event.inputs.go_version }}" 
+          git commit -s -am "bump go version to ${{ github.event.inputs.go_version }}" 
           
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
