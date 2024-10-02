@@ -67,12 +67,14 @@ jobs:
           # Generate chart CHANGELOG.md file.
           git-chglog                                                  \
               --output "CHANGELOG.md"                                 \
+              --no-case                                               \
               --next-tag "${{ github.event.inputs.release_version }}" 
 
           #
           # Generate RELEASE-NOTES.md file.
           git-chglog                                                  \
-              --output "CHANGELOG.md"                                 \
+              --no-case                                               \
+              --output "RELEASE-NOTES.md"                                 \
               --next-tag "${{ github.event.inputs.release_version }}" \
               "${{ github.event.inputs.release_version }}"
 
