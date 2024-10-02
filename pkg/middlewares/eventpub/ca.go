@@ -22,10 +22,6 @@ func NewCAEventBusPublisher(eventMWPub ICloudEventMiddlewarePublisher) services.
 	}
 }
 
-func (mw CAEventPublisher) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
-	return mw.Next.GetCryptoEngineProvider(ctx)
-}
-
 func (mw CAEventPublisher) GetStats(ctx context.Context) (*models.CAStats, error) {
 	return mw.Next.GetStats(ctx)
 }
