@@ -516,11 +516,31 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 		}
 	}
 
-	addedActions := []string{}
+	actionsLogs := []string{}
+	processedActions := []models.RemediationActionType{}
 	ts := int(time.Now().UnixMilli())
+
+	for key := range idShadow {
+		if slices.Contains(input.RemediationActionsType, models.RemediationActionType(key)) {
+			processedActions = append(processedActions, models.RemediationActionType(key))
+			//action included in input actions. Check if should be added or updated
+			//update
+			idShadow[key] = ts
+			actionsLogs = append(actionsLogs, fmt.Sprintf("%s (updated)", key))
+		} else {
+			//action not included in input actions. Maintaining it with the same value (timestamp)
+			actionsLogs = append(actionsLogs, fmt.Sprintf("%s (retained)", key))
+		}
+	}
+
 	for _, action := range input.RemediationActionsType {
-		idShadow[string(action)] = ts
-		addedActions = append(addedActions, string(action))
+		//check if action is not already processed
+		if !slices.Contains(processedActions, action) {
+			//action not processed
+			idShadow[string(action)] = ts
+			actionsLogs = append(actionsLogs, fmt.Sprintf("%s (added)", action))
+			processedActions = append(processedActions, action)
+		}
 	}
 
 	deviceShadow.State.Desired["identity_actions"] = idShadow
@@ -593,7 +613,7 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 
 	device.IdentitySlot.Events[time.Now()] = models.DeviceEvent{
 		EvenType:          models.DeviceEventTypeShadowUpdated,
-		EventDescriptions: fmt.Sprintf("Remediation Actions: %s", strings.Join(addedActions, ", ")),
+		EventDescriptions: fmt.Sprintf("Remediation Actions: %s", strings.Join(actionsLogs, ", ")),
 	}
 
 	_, err = svc.DeviceSDK.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
