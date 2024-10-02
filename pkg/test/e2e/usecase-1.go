@@ -151,7 +151,10 @@ func RunUseCase1(input UseCase1Input) error {
 	//Comment -> The functionality is not working due to aws-connector service is not working properly.
 	metaUpdateData := map[string]interface{}{
 		fmt.Sprintf("lamassu.io/iot/aws.%s", awsAccountID): models.IoTAWSCAMetadata{
-			Register: true,
+			Registration: models.IoTAWSCAMetadataRegistration{
+				RegistrationRequestTime: time.Now(),
+				Status:                  models.IoTAWSCAMetadataRegistrationRequested,
+			},
 		},
 	}
 

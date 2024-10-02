@@ -793,7 +793,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 
 		registerInput.VerificationCertificate = aws.String(string(validationCertBytes))
 	} else {
-		lFunc.Debugf("CA %s is not primary account. Skipping verification certificate registration. Using SNI mode", input.ID)
+		lFunc.Debugf("CA %s is not the primary account. Skipping verification certificate registration. Using SNI mode", input.ID)
 		registerInput.CertificateMode = types.CertificateModeSniOnly
 	}
 
@@ -816,6 +816,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 			Status:                  models.IoTAWSCAMetadataRegistrationSucceeded,
 			Error:                   "",
 			RegistrationRequestTime: input.RegisterConfiguration.Registration.RegistrationRequestTime,
+			PrimaryAccount:          input.RegisterConfiguration.Registration.PrimaryAccount,
 		},
 	}
 

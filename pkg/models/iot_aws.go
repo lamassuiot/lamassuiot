@@ -49,8 +49,8 @@ const (
 )
 
 type IoTAWSCAMetadataRegistration struct {
-	RegistrationRequestTime time.Time                          `json:"registration_request_time"`
-	RegistrationTime        time.Time                          `json:"registration_time"`
+	RegistrationRequestTime time.Time                          `json:"registration_request_time,omitempty"`
+	RegistrationTime        time.Time                          `json:"registration_time,omitempty"`
 	Status                  IoTAWSCAMetadataRegistrationStatus `json:"status"`
 	Error                   string                             `json:"error"`
 	PrimaryAccount          bool                               `json:"primary_account"`
