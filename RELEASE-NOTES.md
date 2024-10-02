@@ -2,8 +2,10 @@
 <a name="2.7.0"></a>
 ## [2.7.0](https://github.com/lamassuiot/lamassuiot/compare/v2.6.0...2.7.0) (2024-10-02)
 
-### Chore
+### Chores
 
+* Chore: fix ci release workflow
+* Chore: Add dependant job in release workflow ([#167](https://github.com/lamassuiot/lamassuiot/issues/167))
 * Chore: Add changelog generation based on commits ([#158](https://github.com/lamassuiot/lamassuiot/issues/158))
 
 ### Feat
