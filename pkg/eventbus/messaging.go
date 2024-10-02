@@ -42,9 +42,9 @@ func NewEventBusRouter(conf config.EventBusEngine, serviceID string, logger *log
 		// The handler function is retried if it returns an error.
 		// After MaxRetries, the message is Nacked and it's up to the PubSub to resend it.
 		middleware.Retry{
-			MaxRetries:      5,
+			MaxRetries:      3,
 			InitialInterval: time.Second * 10,
-			MaxInterval:     time.Minute,
+			MaxInterval:     time.Second * 30,
 			Multiplier:      3,
 			Logger:          lEventBus,
 		}.Middleware,

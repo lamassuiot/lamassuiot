@@ -253,17 +253,19 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 			}
 			slot := device.IdentitySlot
 			slot.Status = models.SlotRevoke
-			//don't revoke IdSlot, this will be handled by revoking the attached certificate
-			_, err = svc.caClient.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
-				SerialNumber:     slot.Secrets[slot.ActiveVersion],
-				NewStatus:        models.StatusRevoked,
-				RevocationReason: ocsp.CessationOfOperation,
-			})
+			defer func() {
+				//don't revoke IdSlot, this will be handled by revoking the attached certificate
+				_, err = svc.caClient.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
+					SerialNumber:     slot.Secrets[slot.ActiveVersion],
+					NewStatus:        models.StatusRevoked,
+					RevocationReason: ocsp.CessationOfOperation,
+				})
 
-			if err != nil {
-				lFunc.Errorf("error while updating IdentitySlot from device %s to revoked. could not update certificate %s status: %s", device.ID, slot.Secrets[slot.ActiveVersion], err)
-				return nil, err
-			}
+				if err != nil {
+					lFunc.Errorf("error while updating IdentitySlot from device %s to revoked. could not update certificate %s status: %s", device.ID, slot.Secrets[slot.ActiveVersion], err)
+					return
+				}
+			}()
 		}
 	} else {
 		device.Events[time.Now()] = models.DeviceEvent{

@@ -3,12 +3,16 @@ package iot
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"sort"
 	"strings"
@@ -21,10 +25,12 @@ import (
 	iotdataplaneTypes "github.com/aws/aws-sdk-go-v2/service/iotdataplane/types"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/crypto/ocsp"
 )
 
 type AWSCloudConnectorService interface {
@@ -34,6 +40,7 @@ type AWSCloudConnectorService interface {
 	RegisterGroups(ctx context.Context, input RegisterGroupsInput) error
 	RegisterUpdatePolicies(ctx context.Context, input RegisterUpdatePoliciesInput) error
 	RegisterUpdateJITPProvisioner(ctx context.Context, input RegisterUpdateJITPProvisionerInput) error
+	UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) error
 	GetRegisteredCAs(ctx context.Context) ([]*models.CACertificate, error)
 	GetConnectorID() string
 	GetDMSService() services.DMSManagerService
@@ -52,6 +59,7 @@ type AWSCloudConnectorServiceBackend struct {
 	iotdataplaneSDK iotdataplane.Client
 	logger          *logrus.Entry
 	endpointAddress string
+	awsCredentials  *aws.Credentials
 	ConnectorID     string
 	CaSDK           services.CAService
 	DmsSDK          services.DMSManagerService
@@ -114,7 +122,7 @@ type shadowState struct {
 
 func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (AWSCloudConnectorService, error) {
 	iotLogger := builder.Logger.WithField("sdk", "AWS IoT Client")
-	idpLogger := builder.Logger.WithField("sdk", "AWS IoT Dataple Client")
+	idpLogger := builder.Logger.WithField("sdk", "AWS IoT Dataplane Client")
 	stsLogger := builder.Logger.WithField("sdk", "AWS STS Client")
 	sqsLogger := builder.Logger.WithField("sdk", "AWS SQS Client")
 
@@ -145,6 +153,12 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (AWSCl
 	iotConf := builder.Conf
 	iotConf.HTTPClient = iotHttpCli
 	iotClient := iot.NewFromConfig(iotConf)
+
+	awsCreds, err := iotConf.Credentials.Retrieve(context.Background())
+	if err != nil {
+		builder.Logger.Errorf("could not retrieve AWS credentials: %s", err)
+		return nil, err
+	}
 
 	iotdpConf := builder.Conf
 	iotdpConf.HTTPClient = idpHttpCli
@@ -184,6 +198,7 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (AWSCl
 		iotdataplaneSDK: *iotdpClient,
 		logger:          logger,
 		Region:          builder.Conf.Region,
+		awsCredentials:  &awsCreds,
 		endpointAddress: *endpoint.EndpointAddress,
 		AccountID:       *callIDOutput.Account,
 		ConnectorID:     builder.ConnectorID,
@@ -385,6 +400,61 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 	if err != nil {
 		logrus.Errorf("could not update device metadata: %s", err)
 		return err
+	}
+
+	return nil
+}
+
+type UpdateCertificateStatusInput struct {
+	Certificate models.Certificate
+}
+
+func (svc *AWSCloudConnectorServiceBackend) UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) error {
+	var certIoTCoreMeta models.IoTAWSCertificateMetadata
+
+	hasKey, err := helpers.GetMetadataToStruct(input.Certificate.Metadata, models.AWSIoTMetadataKey(svc.ConnectorID), &certIoTCoreMeta)
+	if err != nil {
+		logrus.Errorf("could not decode metadata with key %s: %s", models.AWSIoTMetadataKey(svc.ConnectorID), err)
+		return err
+	}
+
+	if !hasKey {
+		logrus.Warnf("Certificate doesn't have %s key", models.AWSIoTMetadataKey(svc.ConnectorID))
+		return nil
+	}
+
+	certIDSplit := strings.Split(certIoTCoreMeta.ARN, "/")
+	var status types.CertificateStatus
+
+	switch input.Certificate.Status {
+	case models.StatusRevoked:
+		if input.Certificate.RevocationReason == ocsp.CertificateHold {
+			status = types.CertificateStatusInactive
+		} else {
+			status = types.CertificateStatusRevoked
+		}
+
+		defer func() {
+			logrus.Infof("connecting to IoTCore to force device %s disconnection after cert status update %s", input.Certificate.SerialNumber, status)
+			err = svc.connectThingOverMqttWss(ctx, input.Certificate.Certificate.Subject.CommonName)
+			if err != nil {
+				logrus.Errorf("could not disconnect device %s over MQTT-WSS: %s", input.Certificate.Certificate.Subject.CommonName, err)
+			}
+		}()
+
+	case models.StatusActive:
+		status = types.CertificateStatusActive
+	default:
+		logrus.Warnf("certificate new status (%s - %s) status requires no further action", input.Certificate.SerialNumber, input.Certificate.Status)
+		return nil
+	}
+
+	_, err = svc.iotSDK.UpdateCertificate(context.Background(), &iot.UpdateCertificateInput{
+		CertificateId: aws.String(certIDSplit[1]),
+		NewStatus:     status,
+	})
+	if err != nil {
+		logrus.Warnf("error while updating AWS certificate %s (%s) status to %s: %s", certIDSplit[1], input.Certificate.SerialNumber, status, err)
 	}
 
 	return nil
@@ -931,6 +1001,86 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterUpdateJITPProvisioner(ctx co
 		lFunc.Errorf("something went wrong while updating DMS metadata: %s", err)
 		return err
 	}
+
+	return nil
+}
+
+type SigV4Utils struct{}
+
+func (s *SigV4Utils) sign(key []byte, msg string) string {
+	h := hmac.New(sha256.New, key)
+	h.Write([]byte(msg))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func (s *SigV4Utils) sha256(msg string) string {
+	h := sha256.New()
+	h.Write([]byte(msg))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func (s *SigV4Utils) getSignatureKey(key, dateStamp, regionName, serviceName string) []byte {
+	hmacSHA256 := func(data string, key []byte) []byte {
+		h := hmac.New(sha256.New, key)
+		h.Write([]byte(data))
+		return h.Sum(nil)
+	}
+
+	kDate := hmacSHA256(dateStamp, []byte("AWS4"+key))
+	kRegion := hmacSHA256(regionName, kDate)
+	kService := hmacSHA256(serviceName, kRegion)
+	kSigning := hmacSHA256("aws4_request", kService)
+	return kSigning
+}
+
+func (svc *AWSCloudConnectorServiceBackend) connectThingOverMqttWss(ctx context.Context, thingID string) error {
+	time := time.Now().UTC()
+	dateStamp := time.Format("20060102")
+	amzdate := dateStamp + "T" + time.Format("150405") + "Z"
+	service := "iotdevicegateway"
+	region := svc.Region
+	secretKey := svc.awsCredentials.SecretAccessKey
+	accessKey := svc.awsCredentials.AccessKeyID
+	algorithm := "AWS4-HMAC-SHA256"
+	method := "GET"
+	canonicalUri := "/mqtt"
+	host := svc.endpointAddress
+
+	credentialScope := fmt.Sprintf("%s/%s/%s/aws4_request", dateStamp, region, service)
+	canonicalQuerystring := "X-Amz-Algorithm=AWS4-HMAC-SHA256"
+	canonicalQuerystring += "&X-Amz-Credential=" + url.QueryEscape(accessKey+"/"+credentialScope)
+	canonicalQuerystring += "&X-Amz-Date=" + amzdate
+	canonicalQuerystring += "&X-Amz-Expires=86400"
+	canonicalQuerystring += "&X-Amz-SignedHeaders=host"
+	canonicalHeaders := "host:" + host + "\n"
+	payloadHash := "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	canonicalRequest := fmt.Sprintf("%s\n%s\n%s\n%s\nhost\n%s", method, canonicalUri, canonicalQuerystring, canonicalHeaders, payloadHash)
+
+	sigV4 := &SigV4Utils{}
+	stringToSign := fmt.Sprintf("%s\n%s\n%s\n%s", algorithm, amzdate, credentialScope, sigV4.sha256(canonicalRequest))
+	signingKey := sigV4.getSignatureKey(secretKey, dateStamp, region, service)
+	signature := sigV4.sign(signingKey, stringToSign)
+	canonicalQuerystring += "&X-Amz-Signature=" + signature
+
+	if svc.awsCredentials.SessionToken != "" {
+		canonicalQuerystring += "&X-Amz-Security-Token=" + url.QueryEscape(svc.awsCredentials.SessionToken)
+	}
+
+	requestUrl := fmt.Sprintf("wss://%s%s?%s", host, canonicalUri, canonicalQuerystring)
+	fmt.Println(requestUrl)
+
+	opts := mqtt.NewClientOptions()
+	opts.AddBroker(requestUrl)
+	opts.SetClientID(thingID)
+
+	mqttClient := mqtt.NewClient(opts)
+	if token := mqttClient.Connect(); token.Wait() && token.Error() != nil {
+		return token.Error()
+	}
+
+	logrus.Infof("connected to AWS IoT Core over MQTT-WSS")
+	mqttClient.Disconnect(0)
+	logrus.Infof("disconnected from AWS IoT Core over MQTT-WSS")
 
 	return nil
 }

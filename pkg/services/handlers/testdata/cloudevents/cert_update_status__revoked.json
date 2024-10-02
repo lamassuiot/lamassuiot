@@ -1,0 +1,114 @@
+{
+    "specversion": "1.0",
+    "id": "509f9b93-17ff-4320-9014-7ce26a14f3d7",
+    "source": "lrn://ca",
+    "type": "certificate.status.update",
+    "datacontenttype": "application/json",
+    "time": "2024-08-30T12:54:57.613654269Z",
+    "data": {
+        "previous": {
+            "serial_number": "67-f4-94-f2-7a-d4-ca-65-9f-79-52-9e-06-86-4d-ef",
+            "metadata": {
+                "lamassu.io/ca/attached-to": {
+                    "authorized_by": {
+                        "ra_id": "dms_KonektBox_Smart_Doorbell_1724748417"
+                    },
+                    "device_id": "konnektbox_1724748417"
+                },
+                "lamassu.io/ca/expiration-deltas": [
+                    {
+                        "delta": "35m",
+                        "name": "Preventive",
+                        "triggered": false
+                    },
+                    {
+                        "delta": "10m",
+                        "name": "Critical",
+                        "triggered": false
+                    }
+                ],
+                "lamassu.io/iot/aws-12345": {
+                    "arn": "arn:aws:iot:eu-west-1:12345:cert/face4e2cdd104f1848680f3cb96e78ab7f65d6bbf49a54117416e75fbde486df"
+                }
+            },
+            "issuer_metadata": {
+                "serial_number": "38-65-7e-e2-43-30-e3-b9-64-fa-f8-10-c1-b1-9f-93",
+                "id": "b7c1a71d-1754-4235-af95-c60eb1bfbdef",
+                "level": 0
+            },
+            "status": "ACTIVE",
+            "certificate": "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUREekNDQXJhZ0F3SUJBZ0lRWi9TVThuclV5bVdmZVZLZUJvWk43ekFLQmdncWhrak9QUVFEQWpBcU1TZ3cKSmdZRFZRUUREQjlyYjI1bGEzUmliM2hmYzIxaGNuUmZaRzl2Y21KbGJHd3lNREkwT0RJM01CNFhEVEkwTURneQpOekE0TkRjMU1Wb1hEVEkxTURneU5qQTRORGMxTVZvd0lERWVNQndHQTFVRUF3d1ZhMjl1Ym1WcmRHSnZlRjh4Ck56STBOelE0TkRFM01JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBdlZkWk8rejkKcWgvd1o4QnN4WG9wVG9aby9GR1AzVGNxUEZiTGNGWDc1RGZyeHNmekFwQlYyOGI2bG4yM3kwdWV5VmFrTWxtZgpkT0MzUEZSaDZkK0RlejJ1ZDBsU0hGcVc0Z3ppemVqaDRCbFRuNjg1cFVlcVl4Tnd4S0lnSlRpNlRkVVFBazkxCk5vYTZWQlFMMnlKcjBUWjVZbWI5eXJEZFhXWnZHejZ1YVB0Mi9vNEJXUWZ2Q0NqY0RPL2h1Zk4xdU1xNzJ6MkIKa1V1NkFpNWZpdndpWmc3LzhQK2JvdEFiRXo0SWFJYU5KLzhKd1BvMHlDT01lVjMvWEpEZ1l1b3dldUltMmgwaQowNXNHa2h1ekN2K1F6UWZ6VTlldnVsR0JoVG5RM08xYk5rZE5MVGdJb095K1lncGxwMnoyOWxuc01ibTR3VHJ5ClJlYnRpR25MMUVXZFFRSURBUUFCbzRIOE1JSDVNQTRHQTFVZER3RUIvd1FFQXdJSGdEQWRCZ05WSFNVRUZqQVUKQmdnckJnRUZCUWNEQWdZSUt3WUJCUVVIQXdFd0x3WURWUjBqQkNnd0pvQWtZamRqTVdFM01XUXRNVGMxTkMwMApNak0xTFdGbU9UVXRZell3WldJeFltWmlaR1ZtTUQ0R0NDc0dBUVVGQndFQkJESXdNREF1QmdnckJnRUZCUWN3CkFZWWlhSFIwY0hNNkx5OXNZV0l1YkdGdFlYTnpkUzVwYnk5aGNHa3ZkbUV2YjJOemNEQlhCZ05WSFI4RVVEQk8KTUV5Z1NxQkloa1pvZEhSd2N6b3ZMMnhoWWk1c1lXMWhjM04xTG1sdkwyRndhUzkyWVM5amNtd3ZZamRqTVdFMwpNV1F0TVRjMU5DMDBNak0xTFdGbU9UVXRZell3WldJeFltWmlaR1ZtTUFvR0NDcUdTTTQ5QkFNQ0EwY0FNRVFDCklCbTRqV2ducmFmKzcza09mU3RSMEJGcXR6czFkRDVUSkJkaXRpZ01xaTRJQWlCNU9IdG9SWDd1bXpqSXo5V2YKYTlnODJnRUt0SFF0dDd0bUJGVlkyZmVEZXc9PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==",
+            "key_metadata": {
+                "type": "RSA",
+                "bits": 2048,
+                "strength": "MEDIUM"
+            },
+            "subject": {
+                "common_name": "konnektbox_1724748417",
+                "organization": "",
+                "organization_unit": "",
+                "country": "",
+                "state": "",
+                "locality": ""
+            },
+            "valid_from": "2024-08-27T08:47:51Z",
+            "valid_to": "2025-08-26T08:47:51Z",
+            "revocation_timestamp": "0001-01-01T00:00:00Z",
+            "revocation_reason": "Unspecified",
+            "type": "EXTERNAL",
+            "engine_id": ""
+        },
+        "updated": {
+            "serial_number": "67-f4-94-f2-7a-d4-ca-65-9f-79-52-9e-06-86-4d-ef",
+            "metadata": {
+                "lamassu.io/ca/attached-to": {
+                    "authorized_by": {
+                        "ra_id": "dms_KonektBox_Smart_Doorbell_1724748417"
+                    },
+                    "device_id": "konnektbox_1724748417"
+                },
+                "lamassu.io/ca/expiration-deltas": [
+                    {
+                        "delta": "35m",
+                        "name": "Preventive",
+                        "triggered": false
+                    },
+                    {
+                        "delta": "10m",
+                        "name": "Critical",
+                        "triggered": false
+                    }
+                ],
+                "lamassu.io/iot/aws-12345": {
+                    "arn": "arn:aws:iot:eu-west-1:12345:cert/face4e2cdd104f1848680f3cb96e78ab7f65d6bbf49a54117416e75fbde486df"
+                }
+            },
+            "issuer_metadata": {
+                "serial_number": "38-65-7e-e2-43-30-e3-b9-64-fa-f8-10-c1-b1-9f-93",
+                "id": "b7c1a71d-1754-4235-af95-c60eb1bfbdef",
+                "level": 0
+            },
+            "status": "REVOKED",
+            "certificate": "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUREekNDQXJhZ0F3SUJBZ0lRWi9TVThuclV5bVdmZVZLZUJvWk43ekFLQmdncWhrak9QUVFEQWpBcU1TZ3cKSmdZRFZRUUREQjlyYjI1bGEzUmliM2hmYzIxaGNuUmZaRzl2Y21KbGJHd3lNREkwT0RJM01CNFhEVEkwTURneQpOekE0TkRjMU1Wb1hEVEkxTURneU5qQTRORGMxTVZvd0lERWVNQndHQTFVRUF3d1ZhMjl1Ym1WcmRHSnZlRjh4Ck56STBOelE0TkRFM01JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBdlZkWk8rejkKcWgvd1o4QnN4WG9wVG9aby9GR1AzVGNxUEZiTGNGWDc1RGZyeHNmekFwQlYyOGI2bG4yM3kwdWV5VmFrTWxtZgpkT0MzUEZSaDZkK0RlejJ1ZDBsU0hGcVc0Z3ppemVqaDRCbFRuNjg1cFVlcVl4Tnd4S0lnSlRpNlRkVVFBazkxCk5vYTZWQlFMMnlKcjBUWjVZbWI5eXJEZFhXWnZHejZ1YVB0Mi9vNEJXUWZ2Q0NqY0RPL2h1Zk4xdU1xNzJ6MkIKa1V1NkFpNWZpdndpWmc3LzhQK2JvdEFiRXo0SWFJYU5KLzhKd1BvMHlDT01lVjMvWEpEZ1l1b3dldUltMmgwaQowNXNHa2h1ekN2K1F6UWZ6VTlldnVsR0JoVG5RM08xYk5rZE5MVGdJb095K1lncGxwMnoyOWxuc01ibTR3VHJ5ClJlYnRpR25MMUVXZFFRSURBUUFCbzRIOE1JSDVNQTRHQTFVZER3RUIvd1FFQXdJSGdEQWRCZ05WSFNVRUZqQVUKQmdnckJnRUZCUWNEQWdZSUt3WUJCUVVIQXdFd0x3WURWUjBqQkNnd0pvQWtZamRqTVdFM01XUXRNVGMxTkMwMApNak0xTFdGbU9UVXRZell3WldJeFltWmlaR1ZtTUQ0R0NDc0dBUVVGQndFQkJESXdNREF1QmdnckJnRUZCUWN3CkFZWWlhSFIwY0hNNkx5OXNZV0l1YkdGdFlYTnpkUzVwYnk5aGNHa3ZkbUV2YjJOemNEQlhCZ05WSFI4RVVEQk8KTUV5Z1NxQkloa1pvZEhSd2N6b3ZMMnhoWWk1c1lXMWhjM04xTG1sdkwyRndhUzkyWVM5amNtd3ZZamRqTVdFMwpNV1F0TVRjMU5DMDBNak0xTFdGbU9UVXRZell3WldJeFltWmlaR1ZtTUFvR0NDcUdTTTQ5QkFNQ0EwY0FNRVFDCklCbTRqV2ducmFmKzcza09mU3RSMEJGcXR6czFkRDVUSkJkaXRpZ01xaTRJQWlCNU9IdG9SWDd1bXpqSXo5V2YKYTlnODJnRUt0SFF0dDd0bUJGVlkyZmVEZXc9PQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg==",
+            "key_metadata": {
+                "type": "RSA",
+                "bits": 2048,
+                "strength": "MEDIUM"
+            },
+            "subject": {
+                "common_name": "konnektbox_1724748417",
+                "organization": "",
+                "organization_unit": "",
+                "country": "",
+                "state": "",
+                "locality": ""
+            },
+            "valid_from": "2024-08-27T08:47:51Z",
+            "valid_to": "2025-08-26T08:47:51Z",
+            "revocation_timestamp": "2024-08-30T12:54:57.610872869Z",
+            "revocation_reason": "Unspecified",
+            "type": "EXTERNAL",
+            "engine_id": ""
+        }
+    }
+}
