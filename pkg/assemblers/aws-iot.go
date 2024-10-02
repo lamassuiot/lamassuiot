@@ -3,6 +3,7 @@ package assemblers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
@@ -36,8 +37,9 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 		logrus.Fatal(err)
 	}
 
+	busName := fmt.Sprintf("aws-connector-%s", strings.ReplaceAll(conf.ConnectorID, "aws.", "-"))
 	handler := handlers.NewAWSIoTEventHandler(lMessaging, awsConnectorSvc)
-	subHandler, err := eventbus.NewEventBusSubscriptionHandler(conf.SubscriberEventBus, "aws-connector", lMessaging, *handler, "#-aws-connector", "#")
+	subHandler, err := eventbus.NewEventBusSubscriptionHandler(conf.SubscriberEventBus, busName, lMessaging, *handler, "#-aws-connector", "#")
 	if err != nil {
 		lMessaging.Errorf("could not generate Event Bus Subscription Handler: %s", err)
 	}
