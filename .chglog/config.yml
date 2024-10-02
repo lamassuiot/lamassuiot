@@ -24,7 +24,7 @@ options:
       test: Tests
       chore: Chores
   header:
-    pattern: "^((\\w+)\\s.*)$"
+    pattern: "^((\\w+)[\\s:]\\s.*)$"
     pattern_maps:
       - Subject
       - Type
