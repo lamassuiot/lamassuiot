@@ -48,7 +48,11 @@ type aps struct {
 
 func (r *estHttpRoutes) GetCACerts(ctx *gin.Context) {
 	var params aps
-	ctx.ShouldBindUri(&params)
+	err := ctx.ShouldBindUri(&params)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
 
 	cacerts, err := r.svc.CACerts(ctx, params.APS)
 	if err != nil {
