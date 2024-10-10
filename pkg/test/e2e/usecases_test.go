@@ -49,10 +49,16 @@ func TestUseCase1(t *testing.T) {
 		}
 	}
 
-	pCleanup, storageConfig, err := postgres_test.RunPostgresDocker([]string{"ca", "alerts", "dmsmanager", "devicemanager", "cloudproxy"})
+	pCleanup, storageConfig, err := postgres_test.RunPostgresDocker(map[string]string{
+		"ca":            "",
+		"alerts":        "",
+		"dmsmanager":    "",
+		"devicemanager": "",
+	})
 	if err != nil {
 		log.Fatalf("could not launch Postgres: %s", err)
 	}
+
 	cleanup = append(cleanup, pCleanup)
 
 	fmt.Println("Crypto Engines")
