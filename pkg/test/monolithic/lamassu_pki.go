@@ -277,7 +277,6 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 
 func clientCertsToHeaderUsingEnvoyStyle() gin.HandlerFunc {
 	return func(c *gin.Context) {
-
 		if c.Request.TLS != nil {
 			if len(c.Request.TLS.PeerCertificates) > 0 {
 				crtChain := []string{}
