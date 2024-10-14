@@ -64,7 +64,6 @@ type EnrollmentSettings struct {
 	DeviceProvisionProfile      DeviceProvisionProfile      `json:"device_provisioning_profile"`
 	EnrollmentCA                string                      `json:"enrollment_ca"`
 	EnableReplaceableEnrollment bool                        `json:"enable_replaceable_enrollment"` //switch-like option that enables enrolling, already enrolled devices
-	EnableExpiredRenewal        bool                        `json:"enable_expired_renewal"`        // switch-like option that enables renewing expired certificates
 	RegistrationMode            RegistrationMode            `json:"registration_mode"`
 }
 
@@ -76,6 +75,7 @@ type EnrollmentOptionsESTRFC7030 struct {
 type AuthOptionsClientCertificate struct {
 	ValidationCAs        []string `json:"validation_cas"`
 	ChainLevelValidation int      `json:"chain_level_validation"`
+	AllowExpired         bool     `json:"allow_expired"` // switch-like option that allows the use of expired certificates
 }
 
 type ReEnrollmentSettings struct {

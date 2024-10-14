@@ -292,7 +292,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 
 		// Allow enrolment with expired certificates
 		allowExpiredEnroll := false
-		if dms.Settings.EnrollmentSettings.EnableExpiredRenewal {
+		if dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.AllowExpired {
 			lFunc.Warnf("Enrollment with expired certificates is allowed at %s", dms.ID)
 			allowExpiredEnroll = true
 		}

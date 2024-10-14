@@ -754,7 +754,7 @@ func TestESTEnroll(t *testing.T) {
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnableExpiredRenewal = true
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.AllowExpired = true
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
@@ -905,7 +905,7 @@ func TestESTEnroll(t *testing.T) {
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnableExpiredRenewal = true
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.AllowExpired = true
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
