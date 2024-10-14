@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
