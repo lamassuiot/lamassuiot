@@ -40,13 +40,29 @@ func AWSIoTMetadataKey(connectorID string) string {
 	return fmt.Sprintf("lamassu.io/iot/%s", connectorID)
 }
 
+type IoTAWSCAMetadataRegistrationStatus string
+
+const (
+	IoTAWSCAMetadataRegistrationRequested IoTAWSCAMetadataRegistrationStatus = "REQUESTED"
+	IoTAWSCAMetadataRegistrationFailed    IoTAWSCAMetadataRegistrationStatus = "FAILED"
+	IoTAWSCAMetadataRegistrationSucceeded IoTAWSCAMetadataRegistrationStatus = "SUCCEEDED"
+)
+
+type IoTAWSCAMetadataRegistration struct {
+	RegistrationRequestTime time.Time                          `json:"registration_request_time,omitempty"`
+	RegistrationTime        time.Time                          `json:"registration_time,omitempty"`
+	Status                  IoTAWSCAMetadataRegistrationStatus `json:"status"`
+	Error                   string                             `json:"error"`
+	PrimaryAccount          bool                               `json:"primary_account"`
+}
+
 type IoTAWSCAMetadata struct {
-	Register            bool   `json:"register"`
-	Account             string `json:"account"`
-	Region              string `json:"region"`
-	ARN                 string `json:"arn"`
-	CertificateID       string `json:"certificate_id"`
-	IotCoreMQTTEndpoint string `json:"mqtt_endpoint"`
+	Registration        IoTAWSCAMetadataRegistration `json:"registration"`
+	Account             string                       `json:"account"`
+	Region              string                       `json:"region"`
+	ARN                 string                       `json:"arn"`
+	CertificateID       string                       `json:"certificate_id"`
+	IotCoreMQTTEndpoint string                       `json:"mqtt_endpoint"`
 }
 type IoTAWSCertificateMetadata struct {
 	ARN string `json:"arn"`

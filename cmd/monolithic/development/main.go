@@ -82,8 +82,9 @@ func main() {
 	hsmModule := flag.String("hsm-module-path", "", "enable HSM support")
 
 	awsIoTManager := flag.Bool("awsiot", false, "enable AWS IoT Manager")
-	awsIoTManagerUser := flag.String("awsiot-keyid", "", "AWS IoT Manager AccessKeyID")
-	awsIoTManagerPass := flag.String("awsiot-keysecret", "", "AWS IoT Manager SecretAccessKey")
+	awsIoTManagerAKID := flag.String("awsiot-keyid", "", "AWS IoT Manager AccessKeyID")
+	awsIoTManagerSAK := flag.String("awsiot-keysecret", "", "AWS IoT Manager SecretAccessKey")
+	awsIoTManagerST := flag.String("awsiot-sessiontoken", "", "AWS IoT Manager SessionToken")
 	awsIoTManagerRegion := flag.String("awsiot-region", "eu-west-1", "AWS IoT Manager Region")
 	awsIoTManagerID := flag.String("awsiot-id", "", "AWS IoT Manager ConnectorID")
 	cryptoengineOptions := flag.String("cryptoengines", "golangfs", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','golangfs']")
@@ -98,8 +99,9 @@ func main() {
 	if *awsIoTManager {
 		ai := *awsIoTManagerID
 		fmt.Printf("AWS IoT Manager ConnectorID: %s\n", ai)
-		fmt.Printf("AWS IoT Manager AccessKey: %s\n", *awsIoTManagerUser)
-		fmt.Printf("AWS IoT Manager SecretAccessKey: %s\n", *awsIoTManagerPass)
+		fmt.Printf("AWS IoT Manager AccessKey: %s\n", *awsIoTManagerAKID)
+		fmt.Printf("AWS IoT Manager SecretAccessKey: %s\n", *awsIoTManagerSAK)
+		fmt.Printf("AWS IoT Manager SessionToken: %s\n", *awsIoTManagerST)
 		fmt.Printf("AWS IoT Manager Region: %s\n", *awsIoTManagerRegion)
 	}
 
@@ -350,8 +352,9 @@ func main() {
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
 			AWSSDKConfig: config.AWSSDKConfig{
-				AccessKeyID:     *awsIoTManagerUser,
-				SecretAccessKey: config.Password(*awsIoTManagerPass),
+				AccessKeyID:     *awsIoTManagerAKID,
+				SecretAccessKey: config.Password(*awsIoTManagerSAK),
+				SessionToken:    config.Password(*awsIoTManagerST),
 				Region:          *awsIoTManagerRegion,
 			},
 		},
