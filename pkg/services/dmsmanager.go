@@ -289,6 +289,14 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		validCertificate := false
 		var validationCA *models.CACertificate
 		estEnrollOpts := dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030
+
+		// Allow enrolment with expired certificates
+		allowExpiredEnroll := false
+		if dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.AllowExpired {
+			lFunc.Warnf("Enrollment with expired certificates is allowed at %s", dms.ID)
+			allowExpiredEnroll = true
+		}
+
 		for _, caID := range estEnrollOpts.AuthOptionsMTLS.ValidationCAs {
 			ca, err := svc.caClient.GetCAByID(ctx, GetCAByIDInput{CAID: caID})
 			if err != nil {
@@ -296,7 +304,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 				continue
 			}
 
-			err = helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), clientCert, true)
+			err = helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), clientCert, !allowExpiredEnroll)
 			if err != nil {
 				lFunc.Debugf("invalid validation using CA [%s] with CommonName '%s', SerialNumber '%s'", ca.ID, ca.Subject.CommonName, ca.SerialNumber)
 			} else {

@@ -75,6 +75,7 @@ type EnrollmentOptionsESTRFC7030 struct {
 type AuthOptionsClientCertificate struct {
 	ValidationCAs        []string `json:"validation_cas"`
 	ChainLevelValidation int      `json:"chain_level_validation"`
+	AllowExpired         bool     `json:"allow_expired"` // switch-like option that allows the use of expired certificates
 }
 
 type ReEnrollmentSettings struct {
