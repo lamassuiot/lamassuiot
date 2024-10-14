@@ -1395,7 +1395,7 @@ func TestESTServerKeyGen(t *testing.T) {
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
-				ServerKeyGen: &models.ServerKeyGenSettings{
+				ServerKeyGen: models.ServerKeyGenSettings{
 					Enabled: true,
 					Key: models.ServerKeyGenKey{
 						Type: models.KeyType(x509.RSA),
@@ -1653,7 +1653,9 @@ func TestESTServerKeyGen(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.ServerKeyGen = nil
+					in.Settings.ServerKeyGen = models.ServerKeyGenSettings{
+						Enabled: false,
+					}
 
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
