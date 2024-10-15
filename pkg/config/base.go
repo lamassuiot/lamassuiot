@@ -213,3 +213,21 @@ func LoadConfig[E any](defaults *E) (*E, error) {
 
 	return conf, nil
 }
+
+func DecodeStruct[E any](source map[string]interface{}, target E) (E, error) {
+	err := mapstructure.Decode(source, &target)
+	if err != nil {
+		var zero E
+		return zero, fmt.Errorf("could not decode struct: %w", err)
+	}
+	return target, nil
+}
+
+func EncodeStruct[E any](source E) (map[string]interface{}, error) {
+	var target map[string]interface{}
+	err := mapstructure.Decode(source, &target)
+	if err != nil {
+		return nil, fmt.Errorf("could not decode struct: %w", err)
+	}
+	return target, nil
+}

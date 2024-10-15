@@ -1,4 +1,4 @@
-package cryptoengines
+package internal
 
 import (
 	"crypto"
@@ -9,10 +9,11 @@ import (
 	"crypto/sha256"
 	"testing"
 
+	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
 	"github.com/stretchr/testify/assert"
 )
 
-func testCreateRSAPrivateKey(t *testing.T, engine CryptoEngine) {
+func SharedTestCreateRSAPrivateKey(t *testing.T, engine cryptoengines.CryptoEngine) {
 	signer, err := engine.CreateRSAPrivateKey(2048, "test-rsa-key")
 	assert.NoError(t, err)
 
@@ -40,7 +41,7 @@ func testCreateRSAPrivateKey(t *testing.T, engine CryptoEngine) {
 	assert.NoError(t, err)
 }
 
-func testCreateECDSAPrivateKey(t *testing.T, engine CryptoEngine) {
+func SharedTestCreateECDSAPrivateKey(t *testing.T, engine cryptoengines.CryptoEngine) {
 	signer, err := engine.CreateECDSAPrivateKey(elliptic.P256(), "test-ecdsa-key")
 	assert.NoError(t, err)
 

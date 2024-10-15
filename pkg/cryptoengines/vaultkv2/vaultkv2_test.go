@@ -1,4 +1,4 @@
-package cryptoengines
+package vaultkv2
 
 import (
 	"crypto/elliptic"
@@ -6,18 +6,20 @@ import (
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/internal"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/keyvaultkv2"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
-func testGetPrivateKeyNotFoundOnVault(t *testing.T, engine CryptoEngine) {
+func testGetPrivateKeyNotFoundOnVault(t *testing.T, engine cryptoengines.CryptoEngine) {
 	_, err := engine.GetPrivateKeyByID("not-found")
 	assert.Error(t, err)
 }
 
-func testGetEngineConfig(t *testing.T, engine CryptoEngine) {
+func testGetEngineConfig(t *testing.T, engine cryptoengines.CryptoEngine) {
 
 	config := engine.GetEngineConfig()
 
@@ -48,7 +50,7 @@ func testGetEngineConfig(t *testing.T, engine CryptoEngine) {
 	assert.Equal(t, expectedKeyTypes, config.SupportedKeyTypes)
 }
 
-func testDeleteKeyOnVault(t *testing.T, engine CryptoEngine) {
+func testDeleteKeyOnVault(t *testing.T, engine cryptoengines.CryptoEngine) {
 	_, err := engine.CreateECDSAPrivateKey(elliptic.P256(), "test-ecdsa")
 	assert.NoError(t, err)
 
@@ -69,10 +71,10 @@ func TestVaultCryptoEngine(t *testing.T) {
 
 	table := []struct {
 		name     string
-		function func(t *testing.T, engine CryptoEngine)
+		function func(t *testing.T, engine cryptoengines.CryptoEngine)
 	}{
-		{"CreateECDSAPrivateKey", testCreateECDSAPrivateKey},
-		{"CreateRSAPrivateKey", testCreateRSAPrivateKey},
+		{"CreateECDSAPrivateKey", internal.SharedTestCreateECDSAPrivateKey},
+		{"CreateRSAPrivateKey", internal.SharedTestCreateRSAPrivateKey},
 		{"GetPrivateKeyNotFound", testGetPrivateKeyNotFoundOnVault},
 		{"GetEngineConfig", testGetEngineConfig},
 		{"DeleteKey", testDeleteKeyOnVault},
@@ -86,7 +88,7 @@ func TestVaultCryptoEngine(t *testing.T) {
 
 }
 
-func prepareVaultkv2CryptoEngine(t *testing.T) CryptoEngine {
+func prepareVaultkv2CryptoEngine(t *testing.T) cryptoengines.CryptoEngine {
 	vCleanup, vaultConfig, _, err := keyvaultkv2_test.RunHashicorpVaultDocker()
 	t.Cleanup(func() { _ = vCleanup() })
 	assert.NoError(t, err)
