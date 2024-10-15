@@ -45,9 +45,10 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 	}
 
 	svc := services.NewAlertsService(services.AlertsServiceBuilder{
-		Logger:       lSvc,
-		SubsStorage:  subStorage,
-		EventStorage: eventStore,
+		Logger:           lSvc,
+		SubsStorage:      subStorage,
+		EventStorage:     eventStore,
+		SmtpServerConfig: conf.SMTPConfig,
 	})
 
 	if conf.SubscriberEventBus.Enabled {

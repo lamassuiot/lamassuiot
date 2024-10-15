@@ -121,7 +121,7 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 
 		httpCtx := context.WithValue(ctx, oauth2.HTTPClient, authHttpCli)
 		client = clientConfig.Client(httpCtx)
-	case config.NoAuth:
+	default:
 		client.Transport = &http.Transport{
 			TLSClientConfig: tlsConfig,
 		}

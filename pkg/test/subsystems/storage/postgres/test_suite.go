@@ -17,7 +17,12 @@ type PostgresSuite struct {
 }
 
 func BeforeSuite(dbNames []string) (config.PostgresPSEConfig, PostgresSuite) {
-	cleaner, conf, err := RunPostgresDocker(dbNames)
+	dbs := make(map[string]string)
+	for _, dbName := range dbNames {
+		dbs[dbName] = ""
+	}
+
+	cleaner, conf, err := RunPostgresDocker(dbs)
 	if err != nil {
 		log.Fatal(err)
 	}

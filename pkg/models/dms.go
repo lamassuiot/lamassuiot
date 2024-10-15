@@ -22,6 +22,7 @@ type DMS struct {
 }
 
 type DMSSettings struct {
+	ServerKeyGen           *ServerKeyGenSettings  `json:"server_keygen_settings"`
 	EnrollmentSettings     EnrollmentSettings     `json:"enrollment_settings"`
 	ReEnrollmentSettings   ReEnrollmentSettings   `json:"reenrollment_settings"`
 	CADistributionSettings CADistributionSettings `json:"ca_distribution_settings"`
@@ -32,6 +33,16 @@ type EnrollmentProto string
 const (
 	EST EnrollmentProto = "EST_RFC7030"
 )
+
+type ServerKeyGenSettings struct {
+	Enabled bool            `json:"enabled"`
+	Key     ServerKeyGenKey `json:"key"`
+}
+
+type ServerKeyGenKey struct {
+	Type KeyType `json:"type"`
+	Bits int     `json:"bits"`
+}
 
 type DeviceProvisionProfile struct {
 	Icon      string         `json:"icon"`
@@ -64,6 +75,7 @@ type EnrollmentOptionsESTRFC7030 struct {
 type AuthOptionsClientCertificate struct {
 	ValidationCAs        []string `json:"validation_cas"`
 	ChainLevelValidation int      `json:"chain_level_validation"`
+	AllowExpired         bool     `json:"allow_expired"` // switch-like option that allows the use of expired certificates
 }
 
 type ReEnrollmentSettings struct {

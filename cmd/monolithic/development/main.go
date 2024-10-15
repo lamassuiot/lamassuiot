@@ -134,7 +134,12 @@ func main() {
 	if *sqliteOptions == "" {
 		fmt.Println(">> launching docker: Postgres ...")
 		var err error
-		pCleanup, postgresStorageConfig, err = postgres_test.RunPostgresDocker([]string{"ca", "alerts", "dmsmanager", "devicemanager", "cloudproxy"})
+		pCleanup, postgresStorageConfig, err = postgres_test.RunPostgresDocker(map[string]string{
+			"ca":            "",
+			"alerts":        "",
+			"dmsmanager":    "",
+			"devicemanager": "",
+		})
 		if err != nil {
 			log.Fatalf("could not launch Postgres: %s", err)
 		}
