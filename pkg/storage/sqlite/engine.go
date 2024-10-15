@@ -70,7 +70,7 @@ func (s *SQLiteStorageEngine) initialiceCACertStorage() error {
 	return nil
 }
 
-func (s *SQLiteStorageEngine) GetCertstorage() (storage.CertificatesRepo, error) {
+func (s *SQLiteStorageEngine) GetCertStorage() (storage.CertificatesRepo, error) {
 	if s.Cert == nil {
 		err := s.initialiceCACertStorage()
 		if err != nil {
@@ -114,7 +114,7 @@ func (s *SQLiteStorageEngine) GetDMSStorage() (storage.DMSRepo, error) {
 	return s.DMS, nil
 }
 
-func (s *SQLiteStorageEngine) GetEnventsStorage() (storage.EventRepository, error) {
+func (s *SQLiteStorageEngine) GetEventsStorage() (storage.EventRepository, error) {
 	if s.Events == nil {
 		s.initialiceSubscriptionsStorage()
 	}

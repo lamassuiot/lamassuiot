@@ -40,15 +40,22 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "Device Manager", "Service")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "Device Manager", "Storage")
+	lStorageEvents := helpers.SetupLogger(conf.Storage.LogLevel, "Device Manager", "Storage - Events")
 
 	devStorage, err := createDevicesStorageInstance(lStorage, conf.Storage)
 	if err != nil {
 		return nil, fmt.Errorf("could not create device storage: %s", err)
 	}
 
+	eventStorage, err := createDeviceEventsStorageInstance(lStorageEvents, conf.Storage)
+	if err != nil {
+		return nil, fmt.Errorf("could not create device events storage: %s", err)
+	}
+
 	svc := services.NewDeviceManagerService(services.DeviceManagerBuilder{
 		Logger:         lSvc,
 		DevicesStorage: devStorage,
+		DeviceEvents:   eventStorage,
 		CAClient:       caService,
 	})
 
@@ -102,4 +109,18 @@ func createDevicesStorageInstance(logger *logrus.Entry, conf config.PluggableSto
 		return nil, fmt.Errorf("could not get device storage: %s", err)
 	}
 	return deviceStorage, nil
+}
+
+func createDeviceEventsStorageInstance(logger *logrus.Entry, conf config.PluggableStorageEngine) (storage.DeviceEventsRepo, error) {
+	storage, err := builder.BuildStorageEngine(logger, conf)
+	if err != nil {
+		return nil, fmt.Errorf("could not create storage engine: %s", err)
+	}
+
+	eventStorage, err := storage.GetDeviceEventsStorage()
+	if err != nil {
+		return nil, fmt.Errorf("could not get device storage: %s", err)
+	}
+
+	return eventStorage, nil
 }

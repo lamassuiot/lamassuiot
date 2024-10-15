@@ -19,6 +19,8 @@ func NewEventBusSubscriber(conf config.EventBusEngine, serviceID string, logger 
 			ServiceID:    serviceID,
 			Logger:       logger,
 		}), nil
+	case config.AWSSqs:
+		return NewAwsSqsSub(conf.AWSSqsSns, serviceID, logger)
 	}
 
 	return nil, fmt.Errorf("unsupported subscriber provider: %s", conf.Provider)
@@ -35,7 +37,9 @@ func NewEventBusPublisher(conf config.EventBusEngine, serviceID string, logger *
 			ServiceID:    serviceID,
 			Logger:       logger,
 		})
+	case config.AWSSqs:
+		return NewAwsSqsPub(conf.AWSSqsSns, serviceID, logger)
 	}
 
-	return nil, fmt.Errorf("unsupported subscriber provider: %s", conf.Provider)
+	return nil, fmt.Errorf("unsupported publisher provider: %s", conf.Provider)
 }

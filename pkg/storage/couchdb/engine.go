@@ -50,7 +50,7 @@ func (s *CouchDBStorageEngine) GetCAStorage() (storage.CACertificatesRepo, error
 	return s.CA, nil
 }
 
-func (s *CouchDBStorageEngine) GetCertstorage() (storage.CertificatesRepo, error) {
+func (s *CouchDBStorageEngine) GetCertStorage() (storage.CertificatesRepo, error) {
 	if s.Cert == nil {
 		certStore, err := NewCouchCertificateRepository(s.couchdbClient)
 		s.Cert = certStore
@@ -83,7 +83,7 @@ func (s *CouchDBStorageEngine) GetDMSStorage() (storage.DMSRepo, error) {
 	return s.DMS, nil
 }
 
-func (s *CouchDBStorageEngine) GetEnventsStorage() (storage.EventRepository, error) {
+func (s *CouchDBStorageEngine) GetEventsStorage() (storage.EventRepository, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 

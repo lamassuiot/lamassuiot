@@ -349,8 +349,9 @@ func main() {
 		},
 		Storage: *pluglableStorageConfig,
 		AWSIoTManager: config.MonolithicAWSIoTManagerConfig{
-			Enabled:     *awsIoTManager,
-			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
+			Enabled:                      *awsIoTManager,
+			ConnectorID:                  fmt.Sprintf("aws.%s", *awsIoTManagerID),
+			IncomingSQSIoTEventQueueName: "aws-iot-events-to-lamassu",
 			AWSSDKConfig: config.AWSSDKConfig{
 				AccessKeyID:     *awsIoTManagerAKID,
 				SecretAccessKey: config.Password(*awsIoTManagerSAK),

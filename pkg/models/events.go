@@ -43,6 +43,7 @@ const (
 	EventBindDeviceIdentityKey EventType = "dms.bind-device-id"
 
 	EventCreateDeviceKey         EventType = "device.create"
+	EventCreateDeviceEventKey    EventType = "device.event.create"
 	EventUpdateDeviceIDSlotKey   EventType = "device.identity.update"
 	EventUpdateDeviceStatusKey   EventType = "device.status.update"
 	EventUpdateDeviceMetadataKey EventType = "device.metadata.update"

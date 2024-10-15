@@ -63,24 +63,25 @@ func updateCertStatusHandler(event *event.Event, svc services.DeviceManagerServi
 	updated := false
 	if cert.Updated.Status == models.StatusExpired {
 		updated = true
-		dev.IdentitySlot.Status = models.SlotExpired
+		dev.Status = models.DeviceExpired
 	}
 
 	if cert.Updated.Status == models.StatusRevoked {
 		updated = true
-		dev.IdentitySlot.Status = models.SlotRevoke
+		dev.Status = models.DeviceRevoked
 	}
 
 	//This should be the case when the certificate is un-revoked/reinstated (from the OnHold revocation reason)
 	if cert.Updated.Status == models.StatusActive {
 		updated = true
-		dev.IdentitySlot.Status = models.SlotActive
+		dev.Status = models.DeviceActive
 	}
 
 	if updated {
 		_, err = svc.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
-			ID:   deviceID,
-			Slot: *dev.IdentitySlot,
+			ID:        deviceID,
+			Slot:      *dev.IdentitySlot,
+			NewStatus: dev.Status,
 		})
 		if err != nil {
 			err = fmt.Errorf("could not update ID slot to preventive for device %s: %s", deviceID, err)
@@ -143,10 +144,10 @@ func updateCertMetaHandler(event *event.Event, svc services.DeviceManagerService
 		prevCriticalTriggered := checkIfTriggered(certUpdate.Previous, "Critical")
 		if !prevCriticalTriggered {
 			//no update
-			dev.IdentitySlot.Status = models.SlotAboutToExpire
 			_, err = svc.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
-				ID:   deviceID,
-				Slot: *dev.IdentitySlot,
+				ID:        deviceID,
+				Slot:      *dev.IdentitySlot,
+				NewStatus: models.DeviceAboutToExpire,
 			})
 			if err != nil {
 				err = fmt.Errorf("could not update ID slot to critical for device %s: %s", deviceID, err)
@@ -161,10 +162,10 @@ func updateCertMetaHandler(event *event.Event, svc services.DeviceManagerService
 		prevPreventiveTriggered := checkIfTriggered(certUpdate.Previous, "Preventive")
 		if !prevPreventiveTriggered {
 			//no update
-			dev.IdentitySlot.Status = models.SlotRenewalWindow
 			_, err = svc.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
-				ID:   deviceID,
-				Slot: *dev.IdentitySlot,
+				ID:        deviceID,
+				Slot:      *dev.IdentitySlot,
+				NewStatus: models.DeviceRenewalWindow,
 			})
 			if err != nil {
 				err = fmt.Errorf("could not update ID slot to preventive for device %s: %s", deviceID, err)

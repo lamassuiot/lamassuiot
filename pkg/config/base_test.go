@@ -12,11 +12,11 @@ func TestReadConfigWithDefaults(t *testing.T) {
 
 	config, err := readConfig[IotAWS](configFilePath, &IotAWSDefaults)
 	assert.NoError(t, err)
-	assert.Equal(t, IotAWSDefaults.AWSBidirectionalQueueName, config.AWSBidirectionalQueueName)
+	assert.Equal(t, IotAWSDefaults.SQSIncomingEventQueueName, config.SQSIncomingEventQueueName)
 
 	config, err = readConfig[IotAWS](configFilePath, nil)
 	assert.NoError(t, err)
-	assert.Empty(t, config.AWSBidirectionalQueueName)
+	assert.Empty(t, config.SQSIncomingEventQueueName)
 }
 
 func TestReadConfig(t *testing.T) {

@@ -9,6 +9,7 @@ type CommonStorageEngine struct {
 	CA            CACertificatesRepo
 	Cert          CertificatesRepo
 	Device        DeviceManagerRepo
+	DeviceEvents  DeviceEventsRepo
 	DMS           DMSRepo
 	Events        EventRepository
 	Subscriptions SubscriptionsRepository
@@ -16,10 +17,11 @@ type CommonStorageEngine struct {
 
 type StorageEngine interface {
 	GetCAStorage() (CACertificatesRepo, error)
-	GetCertstorage() (CertificatesRepo, error)
+	GetCertStorage() (CertificatesRepo, error)
 	GetDeviceStorage() (DeviceManagerRepo, error)
+	GetDeviceEventsStorage() (DeviceEventsRepo, error)
 	GetDMSStorage() (DMSRepo, error)
-	GetEnventsStorage() (EventRepository, error)
+	GetEventsStorage() (EventRepository, error)
 	GetSubscriptionsStorage() (SubscriptionsRepository, error)
 }
 
