@@ -134,33 +134,12 @@ func (p *AWSKMSCryptoEngine) CreateRSAPrivateKey(keySize int, keyID string) (cry
 	case 4096:
 		keySpec = types.KeySpecRsa4096
 	default:
-		err := fmt.Errorf("key curve not supported")
+		err := fmt.Errorf("key size not supported")
 		lAWSKMS.Error(err)
 		return nil, err
 	}
 
-	key, err := p.kmscli.CreateKey(context.Background(), &kms.CreateKeyInput{
-		KeyUsage: types.KeyUsageTypeSignVerify,
-		KeySpec:  keySpec,
-	})
-
-	if err != nil {
-		lAWSKMS.Errorf("could not create '%s' RSA Private Key: %s", keyID, err)
-		return nil, err
-	}
-
-	lAWSKMS.Debugf("RSA key created with ARN [%s]", *key.KeyMetadata.Arn)
-
-	_, err = p.kmscli.CreateAlias(context.Background(), &kms.CreateAliasInput{
-		AliasName:   aws.String(fmt.Sprintf("alias/%s", keyID)),
-		TargetKeyId: key.KeyMetadata.Arn,
-	})
-
-	if err != nil {
-		lAWSKMS.Warnf("Could not create alias for key ARN [%s]: %s", *key.KeyMetadata.Arn, err)
-	}
-
-	return p.GetPrivateKeyByID(keyID)
+	return p.createPrivateKey(keySpec, keyID)
 }
 
 func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, keyID string) (crypto.Signer, error) {
@@ -181,17 +160,22 @@ func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, keyID s
 		return nil, err
 	}
 
+	return p.createPrivateKey(keySpec, keyID)
+}
+
+func (p *AWSKMSCryptoEngine) createPrivateKey(keySpec types.KeySpec, keyID string) (crypto.Signer, error) {
+
 	key, err := p.kmscli.CreateKey(context.Background(), &kms.CreateKeyInput{
 		KeyUsage: types.KeyUsageTypeSignVerify,
 		KeySpec:  keySpec,
 	})
 
 	if err != nil {
-		lAWSKMS.Errorf("could not create '%s' ECDSA Private Key: %s", keyID, err)
+		lAWSKMS.Errorf("could not create '%s' Private Key: %s", keyID, err)
 		return nil, err
 	}
 
-	lAWSKMS.Debugf("ECDSA key created with ARN [%s]", *key.KeyMetadata.Arn)
+	lAWSKMS.Debugf("Key created with ARN [%s]", *key.KeyMetadata.Arn)
 
 	_, err = p.kmscli.CreateAlias(context.Background(), &kms.CreateAliasInput{
 		AliasName:   aws.String(fmt.Sprintf("alias/%s", keyID)),

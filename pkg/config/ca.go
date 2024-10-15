@@ -101,77 +101,65 @@ func MigrateCryptoEnginesToV2Config(config *CAConfig) *CAConfig {
 	newCryptoEngines := make([]CryptoEngine, 0)
 	// Iterate over the crypto engines of type PKCS11
 	for _, pkcs11Engine := range config.CryptoEngines.PKCS11Provider {
-		encoded, err := EncodeStruct(pkcs11Engine)
-		if err != nil {
-			panic(err)
-		}
-		newCryptoEngines = append(newCryptoEngines, CryptoEngine{
-			ID:       pkcs11Engine.ID,
-			Metadata: pkcs11Engine.Metadata,
-			Type:     PKCS11Provider,
-			Config:   encoded,
-		})
+		newCryptoEngines = addCryptoEngine[PKCS11EngineConfig](PKCS11Provider, pkcs11Engine, newCryptoEngines)
 	}
 
 	// Iterate over the crypto engines of type HashicorpVault
 	for _, hashicorpVaultEngine := range config.CryptoEngines.HashicorpVaultKV2Provider {
-		encoded, err := EncodeStruct(hashicorpVaultEngine)
-		if err != nil {
-			panic(err)
-		}
-		newCryptoEngines = append(newCryptoEngines, CryptoEngine{
-			ID:       hashicorpVaultEngine.ID,
-			Metadata: hashicorpVaultEngine.Metadata,
-			Type:     HashicorpVaultProvider,
-			Config:   encoded,
-		})
+		newCryptoEngines = addCryptoEngine[HashicorpVaultCryptoEngineConfig](HashicorpVaultProvider, hashicorpVaultEngine, newCryptoEngines)
 	}
 
 	// Iterate over the crypto engines of type AWSKMS
 	for _, awsKmsEngine := range config.CryptoEngines.AWSKMSProvider {
-		encoded, err := EncodeStruct(awsKmsEngine)
-		if err != nil {
-			panic(err)
-		}
-		newCryptoEngines = append(newCryptoEngines, CryptoEngine{
-			ID:       awsKmsEngine.ID,
-			Metadata: awsKmsEngine.Metadata,
-			Type:     AWSKMSProvider,
-			Config:   encoded,
-		})
+		newCryptoEngines = addCryptoEngine[AWSCryptoEngine](AWSKMSProvider, awsKmsEngine, newCryptoEngines)
 	}
 
 	// Iterate over the crypto engines of type AWSSecretsManager
 	for _, awsSecretsManagerEngine := range config.CryptoEngines.AWSSecretsManagerProvider {
-		encoded, err := EncodeStruct(awsSecretsManagerEngine)
-		if err != nil {
-			panic(err)
-		}
-
-		newCryptoEngines = append(newCryptoEngines, CryptoEngine{
-			ID:       awsSecretsManagerEngine.ID,
-			Metadata: awsSecretsManagerEngine.Metadata,
-			Type:     AWSSecretsManagerProvider,
-			Config:   encoded,
-		})
+		newCryptoEngines = addCryptoEngine[AWSCryptoEngine](AWSSecretsManagerProvider, awsSecretsManagerEngine, newCryptoEngines)
 	}
 
 	// Iterate over the crypto engines of type Golang
 	for _, golangEngine := range config.CryptoEngines.GolangProvider {
-		encoded, err := EncodeStruct(golangEngine)
-		if err != nil {
-			panic(err)
-		}
-
-		newCryptoEngines = append(newCryptoEngines, CryptoEngine{
-			ID:       golangEngine.ID,
-			Metadata: golangEngine.Metadata,
-			Type:     GolangProvider,
-			Config:   encoded,
-		})
+		newCryptoEngines = addCryptoEngine[GolangEngineConfig](GolangProvider, golangEngine, newCryptoEngines)
 	}
 
 	config.CryptoEngines.CryptoEngines = newCryptoEngines
 
 	return config
+}
+
+func addCryptoEngine[E any](provider CryptoEngineProvider, config E, newCryptoEngines []CryptoEngine) []CryptoEngine {
+	encoded, err := EncodeStruct(config)
+	if err != nil {
+		panic(err)
+	}
+
+	var id string
+	var metadata map[string]interface{}
+
+	switch t := any(config).(type) {
+	case PKCS11EngineConfig:
+		id = t.ID
+		metadata = t.Metadata
+	case HashicorpVaultCryptoEngineConfig:
+		id = t.ID
+		metadata = t.Metadata
+	case AWSCryptoEngine:
+		id = t.ID
+		metadata = t.Metadata
+	case GolangEngineConfig:
+		id = t.ID
+		metadata = t.Metadata
+	default:
+		panic("Unrecognized config type")
+	}
+
+	newCryptoEngines = append(newCryptoEngines, CryptoEngine{
+		ID:       id,
+		Metadata: metadata,
+		Type:     provider,
+		Config:   encoded,
+	})
+	return newCryptoEngines
 }
