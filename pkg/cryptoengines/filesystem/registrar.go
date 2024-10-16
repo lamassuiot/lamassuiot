@@ -8,8 +8,11 @@ import (
 
 func Register() {
 	cryptoengines.RegisterCryptoEngine(config.GolangProvider, func(logger *log.Entry, conf config.CryptoEngine) (cryptoengines.CryptoEngine, error) {
-		var ceConfig config.GolangEngineConfig
-		config.DecodeStruct(conf.Config, &ceConfig)
+
+		ceConfig, _ := config.DecodeStruct[config.GolangEngineConfig](conf.Config)
+		ceConfig.ID = conf.ID
+		ceConfig.Metadata = conf.Metadata
+
 		return NewGolangPEMEngine(logger, ceConfig)
 	})
 }

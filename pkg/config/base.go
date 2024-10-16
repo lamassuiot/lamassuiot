@@ -214,7 +214,9 @@ func LoadConfig[E any](defaults *E) (*E, error) {
 	return conf, nil
 }
 
-func DecodeStruct[E any](source map[string]interface{}, target E) (E, error) {
+func DecodeStruct[E any](source map[string]interface{}) (E, error) {
+
+	var target E
 	err := mapstructure.Decode(source, &target)
 	if err != nil {
 		var zero E

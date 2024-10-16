@@ -8,8 +8,8 @@ import (
 
 func RegisterAWSKMS() {
 	cryptoengines.RegisterCryptoEngine(config.AWSKMSProvider, func(logger *log.Entry, conf config.CryptoEngine) (cryptoengines.CryptoEngine, error) {
-		var ceConfig config.AWSCryptoEngine
-		config.DecodeStruct(conf.Config, &ceConfig)
+
+		ceConfig, _ := config.DecodeStruct[config.AWSCryptoEngine](conf.Config)
 
 		awsCfg, err := config.GetAwsSdkConfig(ceConfig.AWSSDKConfig)
 		if err != nil {
@@ -22,12 +22,12 @@ func RegisterAWSKMS() {
 
 func RegisterAWSSecrets() {
 	cryptoengines.RegisterCryptoEngine(config.AWSSecretsManagerProvider, func(logger *log.Entry, conf config.CryptoEngine) (cryptoengines.CryptoEngine, error) {
-		var ceConfig config.AWSCryptoEngine
-		config.DecodeStruct(conf.Config, &ceConfig)
+
+		ceConfig, _ := config.DecodeStruct[config.AWSCryptoEngine](conf.Config)
 
 		awsCfg, err := config.GetAwsSdkConfig(ceConfig.AWSSDKConfig)
 		if err != nil {
-			log.Warnf("skipping AWS KMS engine with id %s: %s", conf.ID, err)
+			log.Warnf("skipping AWS Sercrets Manager engine with id %s: %s", conf.ID, err)
 		}
 
 		return NewAWSSecretManagerEngine(logger, *awsCfg, conf.Metadata)

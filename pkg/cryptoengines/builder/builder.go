@@ -17,7 +17,7 @@ func BuildCryptoEngine(logger *log.Entry, conf config.CryptoEngine) (cryptoengin
 
 	builder := cryptoengines.GetEngineBuilder(config.CryptoEngineProvider(conf.Type))
 	if builder == nil {
-		return nil, fmt.Errorf("no storage engine of type %s", conf.Type)
+		return nil, fmt.Errorf("no crypto engine of type %s", conf.Type)
 	}
 	return builder(logger, conf)
 }

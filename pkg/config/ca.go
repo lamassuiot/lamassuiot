@@ -124,6 +124,13 @@ func MigrateCryptoEnginesToV2Config(config *CAConfig) *CAConfig {
 		newCryptoEngines = addCryptoEngine[GolangEngineConfig](GolangProvider, golangEngine, newCryptoEngines)
 	}
 
+	// Clear old config
+	config.CryptoEngines.PKCS11Provider = nil
+	config.CryptoEngines.HashicorpVaultKV2Provider = nil
+	config.CryptoEngines.AWSSecretsManagerProvider = nil
+	config.CryptoEngines.AWSKMSProvider = nil
+	config.CryptoEngines.GolangProvider = nil
+
 	config.CryptoEngines.CryptoEngines = newCryptoEngines
 
 	return config
@@ -134,6 +141,9 @@ func addCryptoEngine[E any](provider CryptoEngineProvider, config E, newCryptoEn
 	if err != nil {
 		panic(err)
 	}
+
+	delete(encoded, "id")
+	delete(encoded, "metadata")
 
 	var id string
 	var metadata map[string]interface{}

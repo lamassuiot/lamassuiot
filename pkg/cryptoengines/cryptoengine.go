@@ -23,10 +23,8 @@ type CryptoEngine interface {
 	ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID string) (crypto.Signer, error)
 }
 
-// map of available storage engines with config.StorageProvider as key and function to build the storage engine as value
 var cryptoEngineBuilders = make(map[config.CryptoEngineProvider]func(*logrus.Entry, config.CryptoEngine) (CryptoEngine, error))
 
-// RegisterStorageEngine registers a new storage engine
 func RegisterCryptoEngine(name config.CryptoEngineProvider, builder func(*logrus.Entry, config.CryptoEngine) (CryptoEngine, error)) {
 	cryptoEngineBuilders[name] = builder
 }

@@ -8,8 +8,11 @@ import (
 
 func Register() {
 	cryptoengines.RegisterCryptoEngine(config.HashicorpVaultProvider, func(logger *log.Entry, conf config.CryptoEngine) (cryptoengines.CryptoEngine, error) {
-		var ceConfig config.HashicorpVaultCryptoEngineConfig
-		config.DecodeStruct(conf.Config, &ceConfig)
+
+		ceConfig, _ := config.DecodeStruct[config.HashicorpVaultCryptoEngineConfig](conf.Config)
+		ceConfig.ID = conf.ID
+		ceConfig.Metadata = conf.Metadata
+
 		return NewVaultKV2Engine(logger, ceConfig)
 	})
 }
