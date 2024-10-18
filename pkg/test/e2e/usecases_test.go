@@ -102,7 +102,7 @@ func TestUseCase1(t *testing.T) {
 					Metadata:          make(map[string]interface{}),
 				},
 			},
-			GolangProvider: []config.GolangEngineConfig{
+			FilesystemProvider: []config.FilesystemEngineConfig{
 				{
 					ID:               "golang-1",
 					Metadata:         make(map[string]interface{}),

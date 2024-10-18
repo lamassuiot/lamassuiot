@@ -17,7 +17,7 @@ type CryptoEngines struct {
 	HashicorpVaultKV2Provider []HashicorpVaultCryptoEngineConfig `mapstructure:"hashicorp_vault"`
 	AWSKMSProvider            []AWSCryptoEngine                  `mapstructure:"aws_kms"`
 	AWSSecretsManagerProvider []AWSCryptoEngine                  `mapstructure:"aws_secrets_manager"`
-	GolangProvider            []GolangEngineConfig               `mapstructure:"golang"`
+	FilesystemProvider        []FilesystemEngineConfig           `mapstructure:"golang"`
 	CryptoEngines             []CryptoEngine                     `mapstructure:"crypto_engines"`
 }
 
@@ -42,7 +42,7 @@ type HashicorpVaultSDK struct {
 	HTTPConnection    `mapstructure:",squash"`
 }
 
-type GolangEngineConfig struct {
+type FilesystemEngineConfig struct {
 	ID               string                 `mapstructure:"id"`
 	Metadata         map[string]interface{} `mapstructure:"metadata"`
 	StorageDirectory string                 `mapstructure:"storage_directory"`
@@ -120,8 +120,8 @@ func MigrateCryptoEnginesToV2Config(config *CAConfig) *CAConfig {
 	}
 
 	// Iterate over the crypto engines of type Golang
-	for _, golangEngine := range config.CryptoEngines.GolangProvider {
-		newCryptoEngines = addCryptoEngine[GolangEngineConfig](GolangProvider, golangEngine, newCryptoEngines)
+	for _, golangEngine := range config.CryptoEngines.FilesystemProvider {
+		newCryptoEngines = addCryptoEngine[FilesystemEngineConfig](FilesystemProvider, golangEngine, newCryptoEngines)
 	}
 
 	// Clear old config
@@ -129,7 +129,7 @@ func MigrateCryptoEnginesToV2Config(config *CAConfig) *CAConfig {
 	config.CryptoEngines.HashicorpVaultKV2Provider = nil
 	config.CryptoEngines.AWSSecretsManagerProvider = nil
 	config.CryptoEngines.AWSKMSProvider = nil
-	config.CryptoEngines.GolangProvider = nil
+	config.CryptoEngines.FilesystemProvider = nil
 
 	config.CryptoEngines.CryptoEngines = newCryptoEngines
 
@@ -158,7 +158,7 @@ func addCryptoEngine[E any](provider CryptoEngineProvider, config E, newCryptoEn
 	case AWSCryptoEngine:
 		id = t.ID
 		metadata = t.Metadata
-	case GolangEngineConfig:
+	case FilesystemEngineConfig:
 		id = t.ID
 		metadata = t.Metadata
 	default:

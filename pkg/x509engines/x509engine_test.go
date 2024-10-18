@@ -27,7 +27,7 @@ func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
 
 	// Create a new instance of GoCryptoEngine
 	log := helpers.SetupLogger(config.Info, "Test Case", "Golang Engine")
-	engine, _ := filesystem.NewGolangPEMEngine(log, config.GolangEngineConfig{StorageDirectory: tempDir})
+	engine, _ := filesystem.NewFilesystemPEMEngine(log, config.FilesystemEngineConfig{StorageDirectory: tempDir})
 
 	x509Engine := NewX509Engine(&engine, "ocsp.lamassu.io")
 

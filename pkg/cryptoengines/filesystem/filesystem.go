@@ -21,19 +21,19 @@ import (
 
 var lGo *logrus.Entry
 
-type GoCryptoEngine struct {
+type FilesystemCryptoEngine struct {
 	config           models.CryptoEngineInfo
 	storageDirectory string
 }
 
-func NewGolangPEMEngine(logger *logrus.Entry, conf config.GolangEngineConfig) (cryptoengines.CryptoEngine, error) {
+func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.FilesystemEngineConfig) (cryptoengines.CryptoEngine, error) {
 	lGo = logger.WithField("subsystem-provider", "GoSoft")
 
 	defaultMeta := map[string]interface{}{
 		"lamassu.io/cryptoengine.golang.storage-path": conf.StorageDirectory,
 	}
 	meta := helpers.MergeMaps[interface{}](&defaultMeta, &conf.Metadata)
-	return &GoCryptoEngine{
+	return &FilesystemCryptoEngine{
 		storageDirectory: conf.StorageDirectory,
 		config: models.CryptoEngineInfo{
 			Type:          models.Golang,
@@ -65,11 +65,11 @@ func NewGolangPEMEngine(logger *logrus.Entry, conf config.GolangEngineConfig) (c
 	}, nil
 }
 
-func (p *GoCryptoEngine) GetEngineConfig() models.CryptoEngineInfo {
+func (p *FilesystemCryptoEngine) GetEngineConfig() models.CryptoEngineInfo {
 	return p.config
 }
 
-func (p *GoCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
+func (p *FilesystemCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
 	lGo.Debugf("reading %s Key", keyID)
 	privatePEM, err := os.ReadFile(p.storageDirectory + "/" + keyID)
 	if err != nil {
@@ -108,7 +108,7 @@ func (p *GoCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) 
 	}
 }
 
-func (p *GoCryptoEngine) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
+func (p *FilesystemCryptoEngine) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
 	lGo.Debugf("creating RSA %d key for keyID: %s", keySize, keyID)
 	key, err := rsa.GenerateKey(rand.Reader, keySize)
 	if err != nil {
@@ -119,7 +119,7 @@ func (p *GoCryptoEngine) CreateRSAPrivateKey(keySize int, keyID string) (crypto.
 	return p.ImportRSAPrivateKey(key, keyID)
 }
 
-func (p *GoCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, keyID string) (crypto.Signer, error) {
+func (p *FilesystemCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, keyID string) (crypto.Signer, error) {
 	lGo.Debugf("creating ECDSA %d key for keyID: %s", curve.Params().BitSize, keyID)
 	key, err := ecdsa.GenerateKey(curve, rand.Reader)
 	if err != nil {
@@ -130,11 +130,11 @@ func (p *GoCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve, keyID strin
 	return p.ImportECDSAPrivateKey(key, keyID)
 }
 
-func (p *GoCryptoEngine) DeleteKey(keyID string) error {
+func (p *FilesystemCryptoEngine) DeleteKey(keyID string) error {
 	return os.Remove(p.storageDirectory + "/" + keyID)
 }
 
-func (p *GoCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) (crypto.Signer, error) {
+func (p *FilesystemCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) (crypto.Signer, error) {
 	lGo.Debugf("importing RSA %d key for keyID: %s", key.Size(), keyID)
 	p.checkAndCreateStorageDir()
 
@@ -150,7 +150,7 @@ func (p *GoCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) 
 	return p.GetPrivateKeyByID(keyID)
 }
 
-func (p *GoCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID string) (crypto.Signer, error) {
+func (p *FilesystemCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID string) (crypto.Signer, error) {
 	lGo.Debugf("importing ECDSA %d key for keyID: %s", key.Params().BitSize, keyID)
 	p.checkAndCreateStorageDir()
 
@@ -171,7 +171,7 @@ func (p *GoCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID stri
 	return p.GetPrivateKeyByID(keyID)
 }
 
-func (p *GoCryptoEngine) checkAndCreateStorageDir() error {
+func (p *FilesystemCryptoEngine) checkAndCreateStorageDir() error {
 	var err error
 	if _, err = os.Stat(p.storageDirectory); os.IsNotExist(err) {
 		lGo.Warnf("storage directory %s does not exist. Will create such directory", p.storageDirectory)

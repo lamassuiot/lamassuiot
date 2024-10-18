@@ -164,7 +164,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	cryptoEngineConf := config.CryptoEngines{
 		LogLevel:      config.Info,
 		DefaultEngine: "filesystem-1",
-		GolangProvider: []config.GolangEngineConfig{
+		FilesystemProvider: []config.FilesystemEngineConfig{
 			{
 				ID:               "filesystem-1",
 				Metadata:         map[string]interface{}{},

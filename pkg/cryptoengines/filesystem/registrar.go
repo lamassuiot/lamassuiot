@@ -7,12 +7,12 @@ import (
 )
 
 func Register() {
-	cryptoengines.RegisterCryptoEngine(config.GolangProvider, func(logger *log.Entry, conf config.CryptoEngine) (cryptoengines.CryptoEngine, error) {
+	cryptoengines.RegisterCryptoEngine(config.FilesystemProvider, func(logger *log.Entry, conf config.CryptoEngine) (cryptoengines.CryptoEngine, error) {
 
-		ceConfig, _ := config.DecodeStruct[config.GolangEngineConfig](conf.Config)
+		ceConfig, _ := config.DecodeStruct[config.FilesystemEngineConfig](conf.Config)
 		ceConfig.ID = conf.ID
 		ceConfig.Metadata = conf.Metadata
 
-		return NewGolangPEMEngine(logger, ceConfig)
+		return NewFilesystemPEMEngine(logger, ceConfig)
 	})
 }

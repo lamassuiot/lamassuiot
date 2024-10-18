@@ -61,6 +61,6 @@ const (
 	HashicorpVaultProvider    CryptoEngineProvider = "hashicorp_vault"
 	AWSKMSProvider            CryptoEngineProvider = "aws_kms"
 	AWSSecretsManagerProvider CryptoEngineProvider = "aws_secrets_manager"
-	GolangProvider            CryptoEngineProvider = "golang"
+	FilesystemProvider        CryptoEngineProvider = "filesystem"
 	PKCS11Provider            CryptoEngineProvider = "pkcs11"
 )

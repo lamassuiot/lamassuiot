@@ -17,15 +17,15 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 )
 
-func setup(t *testing.T) (string, *GoCryptoEngine) {
+func setup(t *testing.T) (string, *FilesystemCryptoEngine) {
 	// Create a temporary directory for testing
 	tempDir := t.TempDir()
 
 	// Create a new instance of GoCryptoEngine
 	log := helpers.SetupLogger(config.Info, "CA TestCase", "Golang Engine")
-	engine, _ := NewGolangPEMEngine(log, config.GolangEngineConfig{StorageDirectory: tempDir})
+	engine, _ := NewFilesystemPEMEngine(log, config.FilesystemEngineConfig{StorageDirectory: tempDir})
 
-	return tempDir, engine.(*GoCryptoEngine)
+	return tempDir, engine.(*FilesystemCryptoEngine)
 }
 
 func teardown(tempDir string) {

@@ -17,7 +17,7 @@ func TestBuildStorageEnginePostgres(t *testing.T) {
 
 	conf := config.CryptoEngine{
 		ID:     "local",
-		Type:   config.GolangProvider,
+		Type:   config.FilesystemProvider,
 		Config: cfg,
 	}
 
@@ -29,7 +29,7 @@ func TestBuildStorageEnginePostgres(t *testing.T) {
 		t.Errorf("unexpected error: %s", err)
 	}
 
-	_, ok := engine.(*filesystem.GoCryptoEngine)
+	_, ok := engine.(*filesystem.FilesystemCryptoEngine)
 	if !ok {
 		t.Error("expected storage engine of type *filesystem.GoCryptoEngine")
 	}
