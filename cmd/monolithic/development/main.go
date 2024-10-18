@@ -302,7 +302,7 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[GolangFS]; ok {
 		cryptoEnginesConfig.DefaultEngine = "golangfs-1"
-		cryptoEnginesConfig.GolangProvider = []config.GolangEngineConfig{
+		cryptoEnginesConfig.FilesystemProvider = []config.FilesystemEngineConfig{
 			{
 				ID:               "golangfs-1",
 				Metadata:         make(map[string]interface{}),

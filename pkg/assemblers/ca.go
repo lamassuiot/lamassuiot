@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
+	cebilder "github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/builder"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/jobs"
@@ -43,6 +43,10 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "CA", "Storage")
 	lCryptoEng := helpers.SetupLogger(conf.CryptoEngines.LogLevel, "CA", "CryptoEngine")
 	lMonitor := helpers.SetupLogger(conf.Logs.Level, "CA", "Crypto Monitoring")
+
+	// Migrate CryptoEngines to V2 config format if needed (backward compatibility)
+	confv2 := config.MigrateCryptoEnginesToV2Config(&conf)
+	conf = *confv2
 
 	engines, err := createCryptoEngines(lCryptoEng, conf)
 	if err != nil {
@@ -130,68 +134,12 @@ func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*s
 	x509engines.SetCryptoEngineLogger(logger) //Important!
 
 	engines := map[string]*services.Engine{}
-	for _, cfg := range conf.CryptoEngines.HashicorpVaultKV2Provider {
-		vaultEngine, err := cryptoengines.NewVaultKV2Engine(logger, cfg)
-		if err != nil {
-			log.Warnf("skipping Hashicorp Vault KV2 engine with id %s. could not create Vault engine: %s", cfg.ID, err)
-		} else {
-			engines[cfg.ID] = &services.Engine{
-				Default: cfg.ID == conf.CryptoEngines.DefaultEngine,
-				Service: vaultEngine,
-			}
-		}
-	}
 
-	for _, cfg := range conf.CryptoEngines.AWSKMSProvider {
-		awsCfg, err := config.GetAwsSdkConfig(cfg.AWSSDKConfig)
-		if err != nil {
-			log.Warnf("skipping AWS KMS engine with id %s: %s", cfg.ID, err)
-			continue
-		}
+	for _, cfg := range conf.CryptoEngines.CryptoEngines {
+		engine, err := cebilder.BuildCryptoEngine(logger, cfg)
 
-		awsEngine, err := cryptoengines.NewAWSKMSEngine(logger, *awsCfg, cfg.Metadata)
 		if err != nil {
-			log.Warnf("skipping AWS KMS engine with id %s. could not create KMS engine: %s", cfg.ID, err)
-			continue
-		} else {
-			engines[cfg.ID] = &services.Engine{
-				Default: cfg.ID == conf.CryptoEngines.DefaultEngine,
-				Service: awsEngine,
-			}
-		}
-	}
-
-	for _, cfg := range conf.CryptoEngines.AWSSecretsManagerProvider {
-		awsCfg, err := config.GetAwsSdkConfig(cfg.AWSSDKConfig)
-		if err != nil {
-			log.Warnf("skipping AWS Secrets Manager engine with id %s: %s", cfg.ID, err)
-			continue
-		}
-
-		awsEngine, err := cryptoengines.NewAWSSecretManagerEngine(logger, *awsCfg, cfg.Metadata)
-		if err != nil {
-			log.Warnf("skipping AWS Secrets Manager with id %s. could not create Secrets Manager engine: %s", cfg.ID, err)
-			continue
-		} else {
-			engines[cfg.ID] = &services.Engine{
-				Default: cfg.ID == conf.CryptoEngines.DefaultEngine,
-				Service: awsEngine,
-			}
-		}
-	}
-
-	for _, cfg := range conf.CryptoEngines.GolangProvider {
-		engine := cryptoengines.NewGolangPEMEngine(logger, cfg)
-		engines[cfg.ID] = &services.Engine{
-			Default: cfg.ID == conf.CryptoEngines.DefaultEngine,
-			Service: engine,
-		}
-	}
-
-	for _, cfg := range conf.CryptoEngines.PKCS11Provider {
-		engine, err := cryptoengines.NewPKCS11Engine(logger, cfg)
-		if err != nil {
-			log.Warnf("skipping PKCS11 provider with id %s. could not create PKCS11 engine: %s", cfg.ID, err)
+			log.Warnf("skipping engine with id %s of type %s. Can not create engine: %s", cfg.ID, cfg.Type, err)
 		} else {
 			engines[cfg.ID] = &services.Engine{
 				Default: cfg.ID == conf.CryptoEngines.DefaultEngine,

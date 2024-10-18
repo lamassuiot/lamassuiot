@@ -1,4 +1,4 @@
-package cryptoengines
+package filesystem
 
 import (
 	"crypto/ecdsa"
@@ -13,18 +13,19 @@ import (
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/internal"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 )
 
-func setup(t *testing.T) (string, *GoCryptoEngine) {
+func setup(t *testing.T) (string, *FilesystemCryptoEngine) {
 	// Create a temporary directory for testing
 	tempDir := t.TempDir()
 
 	// Create a new instance of GoCryptoEngine
 	log := helpers.SetupLogger(config.Info, "CA TestCase", "Golang Engine")
-	engine := NewGolangPEMEngine(log, config.GolangEngineConfig{StorageDirectory: tempDir})
+	engine, _ := NewFilesystemPEMEngine(log, config.FilesystemEngineConfig{StorageDirectory: tempDir})
 
-	return tempDir, engine.(*GoCryptoEngine)
+	return tempDir, engine.(*FilesystemCryptoEngine)
 }
 
 func teardown(tempDir string) {
@@ -91,14 +92,14 @@ func TestCreateRSAPrivateKey(t *testing.T) {
 	tempDir, engine := setup(t)
 	defer teardown(tempDir)
 
-	testCreateRSAPrivateKey(t, engine)
+	internal.SharedTestCreateRSAPrivateKey(t, engine)
 }
 
 func TestCreateECDSAPrivateKey(t *testing.T) {
 	tempDir, engine := setup(t)
 	defer teardown(tempDir)
 
-	testCreateECDSAPrivateKey(t, engine)
+	internal.SharedTestCreateECDSAPrivateKey(t, engine)
 }
 
 func TestDeleteKey(t *testing.T) {

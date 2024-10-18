@@ -1,4 +1,4 @@
-package cryptoengines
+package aws
 
 import (
 	"crypto/elliptic"
@@ -7,6 +7,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/internal"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	awsplatform_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/aws-platform"
@@ -55,13 +57,13 @@ func TestNewAWSKMSEngine(t *testing.T) {
 
 	assert.Equal(t, expectedConfig, engine.GetEngineConfig())
 }
-func testDeleteKeyOnKMS(t *testing.T, engine CryptoEngine) {
+func testDeleteKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
 	awsengine := engine.(*AWSKMSCryptoEngine)
 	err := awsengine.DeleteKey("test-key")
 	assert.EqualError(t, err, "cannot delete key [test-key]. Go to your aws account and do it manually")
 }
 
-func testImportRSAKeyOnKMS(t *testing.T, engine CryptoEngine) {
+func testImportRSAKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
 	key, err := helpers.GenerateRSAKey(2048)
 	assert.NoError(t, err)
 
@@ -69,7 +71,7 @@ func testImportRSAKeyOnKMS(t *testing.T, engine CryptoEngine) {
 	assert.EqualError(t, err, "KMS does not support asymmetric key import")
 }
 
-func testImportECDSAKeyOnKMS(t *testing.T, engine CryptoEngine) {
+func testImportECDSAKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
 	key, err := helpers.GenerateECDSAKey(elliptic.P256())
 	assert.NoError(t, err)
 
@@ -77,7 +79,7 @@ func testImportECDSAKeyOnKMS(t *testing.T, engine CryptoEngine) {
 	assert.EqualError(t, err, "KMS does not support asymmetric key import")
 }
 
-func testGetPrivateKeyNotFoundOnKMS(t *testing.T, engine CryptoEngine) {
+func testGetPrivateKeyNotFoundOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
 	_, err := engine.GetPrivateKeyByID("test-unknown-key")
 	assert.EqualError(t, err, "kms key not found")
 }
@@ -87,10 +89,10 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 
 	table := []struct {
 		name     string
-		function func(t *testing.T, engine CryptoEngine)
+		function func(t *testing.T, engine cryptoengines.CryptoEngine)
 	}{
-		{"CreateECDSAPrivateKey", testCreateECDSAPrivateKey},
-		{"CreateRSAPrivateKey", testCreateRSAPrivateKey},
+		{"CreateECDSAPrivateKey", internal.SharedTestCreateECDSAPrivateKey},
+		{"CreateRSAPrivateKey", internal.SharedTestCreateRSAPrivateKey},
 		{"GetPrivateKeyNotFound", testGetPrivateKeyNotFoundOnKMS},
 		{"DeleteKey", testDeleteKeyOnKMS},
 		{"ImportRSAKey", testImportRSAKeyOnKMS},
@@ -104,7 +106,7 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 	}
 }
 
-func prepareKMSCryptoEngine(t *testing.T) CryptoEngine {
+func prepareKMSCryptoEngine(t *testing.T) cryptoengines.CryptoEngine {
 	containerCleanup, conf, err := awsplatform_test.RunAWSEmulationLocalStackDocker()
 	assert.NoError(t, err)
 

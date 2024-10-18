@@ -1,4 +1,4 @@
-package cryptoengines
+package vaultkv2
 
 import (
 	"context"
@@ -18,9 +18,15 @@ import (
 
 	"github.com/hashicorp/vault/api"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/sirupsen/logrus"
+)
+
+const (
+	RSA_PRIVATE_KEY string = "RSA PRIVATE KEY"
+	ECC_PRIVATE_KEY string = "EC PRIVATE KEY"
 )
 
 var lVault *logrus.Entry
@@ -29,7 +35,7 @@ type VaultKV2Engine struct {
 	kvv2Client *api.KVv2
 }
 
-func NewVaultKV2Engine(logger *logrus.Entry, conf config.HashicorpVaultCryptoEngineConfig) (CryptoEngine, error) {
+func NewVaultKV2Engine(logger *logrus.Entry, conf config.HashicorpVaultCryptoEngineConfig) (cryptoengines.CryptoEngine, error) {
 	var err error
 	lVault = logger.WithField("subsystem-provider", "Vault-KV2")
 	address := fmt.Sprintf("%s://%s:%d", conf.Protocol, conf.Hostname, conf.Port)
@@ -159,9 +165,9 @@ func (vaultCli *VaultKV2Engine) GetPrivateKeyByID(keyID string) (crypto.Signer, 
 	}
 
 	switch block.Type {
-	case "RSA PRIVATE KEY":
+	case RSA_PRIVATE_KEY:
 		return x509.ParsePKCS1PrivateKey(block.Bytes)
-	case "EC PRIVATE KEY":
+	case ECC_PRIVATE_KEY:
 		return x509.ParseECPrivateKey(block.Bytes)
 	default:
 		return nil, fmt.Errorf("unsupported key type %q", block.Type)
@@ -187,7 +193,7 @@ func (vaultCli *VaultKV2Engine) CreateRSAPrivateKey(keySize int, keyID string) (
 
 	//output, err := client.Logical().Write("secret/data/abd", inputData)
 	keyPem := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
+		Type:  RSA_PRIVATE_KEY,
 		Bytes: x509.MarshalPKCS1PrivateKey(rsaKey),
 	})
 	keyBase64 := base64.StdEncoding.EncodeToString([]byte(keyPem))
@@ -221,7 +227,7 @@ func (vaultCli *VaultKV2Engine) CreateECDSAPrivateKey(c elliptic.Curve, keyID st
 		return nil, err
 	}
 
-	keyPem := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
+	keyPem := pem.EncodeToMemory(&pem.Block{Type: ECC_PRIVATE_KEY, Bytes: keyBytes})
 
 	keyBase64 := base64.StdEncoding.EncodeToString([]byte(keyPem))
 
@@ -236,7 +242,7 @@ func (vaultCli *VaultKV2Engine) CreateECDSAPrivateKey(c elliptic.Curve, keyID st
 
 func (vaultCli *VaultKV2Engine) ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) (crypto.Signer, error) {
 	keyPem := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
+		Type:  RSA_PRIVATE_KEY,
 		Bytes: x509.MarshalPKCS1PrivateKey(key),
 	})
 	keyBase64 := base64.StdEncoding.EncodeToString([]byte(keyPem))
@@ -264,7 +270,7 @@ func (vaultCli *VaultKV2Engine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey, key
 		return nil, err
 	}
 
-	keyPem := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes})
+	keyPem := pem.EncodeToMemory(&pem.Block{Type: ECC_PRIVATE_KEY, Bytes: keyBytes})
 
 	keyBase64 := base64.StdEncoding.EncodeToString([]byte(keyPem))
 

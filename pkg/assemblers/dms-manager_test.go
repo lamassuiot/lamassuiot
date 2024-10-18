@@ -1368,7 +1368,7 @@ func TestESTGetCACerts(t *testing.T) {
 	}
 
 	createDMS(func(in *services.CreateDMSInput) {
-
+		// Create DMS without modifications on the base config
 	})
 	var testcases = []struct {
 		name        string
@@ -1467,10 +1467,6 @@ func TestESTGetCACerts(t *testing.T) {
 		{
 			name: "OK/IncludingManagedCA",
 			run: func() (caCert []*x509.Certificate, err error) {
-
-				if err != nil {
-					t.Fatalf("unexpected error while creating the DMS: %s", err)
-				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.CADistributionSettings.ManagedCAs = []string{caMm.ID}

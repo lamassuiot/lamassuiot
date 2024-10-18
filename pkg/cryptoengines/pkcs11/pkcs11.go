@@ -1,7 +1,7 @@
 //go:build !windows
 // +build !windows
 
-package cryptoengines
+package pkcs11
 
 import (
 	"crypto"
@@ -15,6 +15,7 @@ import (
 
 	"github.com/ThalesIgnite/crypto11"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/miekg/pkcs11"
@@ -28,7 +29,7 @@ type pkcs11EngineContext struct {
 	config   models.CryptoEngineInfo
 }
 
-func NewPKCS11Engine(logger *logrus.Entry, conf config.PKCS11EngineConfig) (CryptoEngine, error) {
+func NewPKCS11Engine(logger *logrus.Entry, conf config.PKCS11EngineConfig) (cryptoengines.CryptoEngine, error) {
 	lPkcs11 = logger.WithField("subsystem-provider", "PKCS11")
 	config := &crypto11.Config{
 		Path:       conf.ModulePath,

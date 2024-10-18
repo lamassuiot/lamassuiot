@@ -1,4 +1,4 @@
-package cryptoengines
+package aws
 
 import (
 	"crypto/x509"
@@ -6,6 +6,8 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/internal"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	awskmssm_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/aws-kms-sm"
 	"github.com/sirupsen/logrus"
@@ -54,13 +56,13 @@ func TestNewAWSSecretManagerEngine(t *testing.T) {
 	}, awsEngine.GetEngineConfig())
 }
 
-func testDeleteKeyOnSecretsManager(t *testing.T, engine CryptoEngine) {
+func testDeleteKeyOnSecretsManager(t *testing.T, engine cryptoengines.CryptoEngine) {
 	awsengine := engine.(*AWSSecretsManagerCryptoEngine)
 	err := awsengine.DeleteKey("test-key")
 	assert.EqualError(t, err, "cannot delete key [test-key]. Go to your aws account and do it manually")
 }
 
-func testGetPrivateKeyNotFoundOnSecretsManager(t *testing.T, engine CryptoEngine) {
+func testGetPrivateKeyNotFoundOnSecretsManager(t *testing.T, engine cryptoengines.CryptoEngine) {
 	_, err := engine.GetPrivateKeyByID("test-key")
 	assert.Error(t, err)
 }
@@ -70,10 +72,10 @@ func TestAWSSecretsManagerCryptoEngine(t *testing.T) {
 
 	table := []struct {
 		name     string
-		function func(t *testing.T, engine CryptoEngine)
+		function func(t *testing.T, engine cryptoengines.CryptoEngine)
 	}{
-		{"CreateECDSAPrivateKey", testCreateECDSAPrivateKey},
-		{"CreateRSAPrivateKey", testCreateRSAPrivateKey},
+		{"CreateECDSAPrivateKey", internal.SharedTestCreateECDSAPrivateKey},
+		{"CreateRSAPrivateKey", internal.SharedTestCreateRSAPrivateKey},
 		{"GetPrivateKeyNotFound", testGetPrivateKeyNotFoundOnSecretsManager},
 		{"DeleteKey", testDeleteKeyOnSecretsManager},
 	}
@@ -85,7 +87,7 @@ func TestAWSSecretsManagerCryptoEngine(t *testing.T) {
 	}
 }
 
-func prepareSecretsManagerCryptoEngine(t *testing.T) CryptoEngine {
+func prepareSecretsManagerCryptoEngine(t *testing.T) cryptoengines.CryptoEngine {
 	containerCleanup, conf, err := awskmssm_test.RunAWSEmulationLocalStackDocker()
 	assert.NoError(t, err)
 
