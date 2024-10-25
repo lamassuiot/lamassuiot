@@ -8,9 +8,9 @@ import (
 	"os"
 	"slices"
 
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
@@ -293,19 +293,19 @@ func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig,
 }
 
 func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer, deviceManagerTestServer *DeviceManagerTestServer) (*DMSManagerTestServer, error) {
-	key, _ := helpers.GenerateECDSAKey(elliptic.P256())
-	crt, _ := helpers.GenerateSelfSignedCertificate(key, "downstream")
+	key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
+	crt, _ := chelpers.GenerateSelfSignedCertificate(key, "downstream")
 	downstreamPath := fmt.Sprintf("/tmp/%s", crt.SerialNumber.String())
 	downstreamCertPath := fmt.Sprintf("%s.crt", downstreamPath)
 	downstreamKeyPath := fmt.Sprintf("%s.key", downstreamPath)
 
-	crtPem := helpers.CertificateToPEM(crt)
+	crtPem := chelpers.CertificateToPEM(crt)
 	err := os.WriteFile(downstreamCertPath, []byte(crtPem), 0600)
 	if err != nil {
 		return nil, fmt.Errorf("could not save downstream cert. Exiting: %s", err)
 	}
 
-	keyPem, _ := helpers.PrivateKeyToPEM(key)
+	keyPem, _ := chelpers.PrivateKeyToPEM(key)
 	err = os.WriteFile(downstreamKeyPath, []byte(keyPem), 0600)
 	if err != nil {
 		return nil, fmt.Errorf("could not save downstream cert. Exiting: %s", err)

@@ -13,6 +13,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	lamassu "github.com/lamassuiot/lamassuiot/v2/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
@@ -31,16 +32,16 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 			BuildTime: "-",
 		}
 
-		key, _ := helpers.GenerateRSAKey(2048)
-		keyPem, _ := helpers.PrivateKeyToPEM(key)
+		key, _ := chelpers.GenerateRSAKey(2048)
+		keyPem, _ := chelpers.PrivateKeyToPEM(key)
 		os.WriteFile("proxy.key", []byte(keyPem), 0600)
 
-		crt, err := helpers.GenerateSelfSignedCertificate(key, "proxy-lms-test")
+		crt, err := chelpers.GenerateSelfSignedCertificate(key, "proxy-lms-test")
 		if err != nil {
 			panic(fmt.Sprintf("could not create self signed cert: %s", err))
 		}
 
-		crtPem := helpers.CertificateToPEM(crt)
+		crtPem := chelpers.CertificateToPEM(crt)
 		os.WriteFile("proxy.crt", []byte(crtPem), 0600)
 
 		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
@@ -281,7 +282,7 @@ func clientCertsToHeaderUsingEnvoyStyle() gin.HandlerFunc {
 			if len(c.Request.TLS.PeerCertificates) > 0 {
 				crtChain := []string{}
 				for _, crt := range c.Request.TLS.PeerCertificates {
-					crtPem := helpers.CertificateToPEM(crt)
+					crtPem := chelpers.CertificateToPEM(crt)
 					crtURLEnc := url.QueryEscape(crtPem)
 					crtChain = append(crtChain, fmt.Sprintf("Cert=%s", crtURLEnc))
 				}

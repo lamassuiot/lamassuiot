@@ -3,6 +3,7 @@ package assemblers
 import (
 	"fmt"
 
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
@@ -39,7 +40,7 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 	lMessaging := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "DMS Manager", "Event Bus")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "DMS Manager", "Storage")
 
-	downCert, err := helpers.ReadCertificateFromFile(conf.DownstreamCertificateFile)
+	downCert, err := chelpers.ReadCertificateFromFile(conf.DownstreamCertificateFile)
 	if err != nil {
 		return nil, fmt.Errorf("could not read downstream certificate: %s", err)
 	}

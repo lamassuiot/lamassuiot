@@ -8,8 +8,8 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill-amqp/v2/pkg/amqp"
 	"github.com/ThreeDotsLabs/watermill/message"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,7 +25,7 @@ func amqpConfig(conf config.AMQPConnection, serviceID string, logger *logrus.Ent
 	amqpConfig := amqp.NewDurablePubSubConfig(amqpURL, amqp.GenerateQueueNameTopicNameWithSuffix(serviceID))
 
 	amqpTlsConfig := tls.Config{}
-	certPool := helpers.LoadSystemCACertPoolWithExtraCAsFromFiles([]string{conf.CACertificateFile})
+	certPool := chelpers.LoadSystemCACertPoolWithExtraCAsFromFiles([]string{conf.CACertificateFile})
 	amqpTlsConfig.RootCAs = certPool
 
 	if conf.InsecureSkipVerify {

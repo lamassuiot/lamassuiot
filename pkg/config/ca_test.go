@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -57,11 +58,11 @@ func TestMigrateCryptoEnginesToV2Config(t *testing.T) {
 			config: CAConfig{
 				CryptoEngines: CryptoEngines{
 					PKCS11Provider: []PKCS11EngineConfig{{PKCS11Config: PKCS11Config{ModulePath: "dd"}}},
-					CryptoEngines: []CryptoEngine{
+					CryptoEngines: []cconfig.CryptoEngine{
 						{
 							ID:       "existing-engine",
 							Metadata: map[string]interface{}{},
-							Type:     PKCS11Provider,
+							Type:     cconfig.PKCS11Provider,
 							Config:   map[string]interface{}{"configKey": "configValue"},
 						},
 					},
@@ -70,11 +71,11 @@ func TestMigrateCryptoEnginesToV2Config(t *testing.T) {
 			want: CAConfig{
 				CryptoEngines: CryptoEngines{
 					PKCS11Provider: []PKCS11EngineConfig{{PKCS11Config: PKCS11Config{ModulePath: "dd"}}},
-					CryptoEngines: []CryptoEngine{
+					CryptoEngines: []cconfig.CryptoEngine{
 						{
 							ID:       "existing-engine",
 							Metadata: map[string]interface{}{},
-							Type:     PKCS11Provider,
+							Type:     cconfig.PKCS11Provider,
 							Config:   map[string]interface{}{"configKey": "configValue"},
 						},
 					},
@@ -96,11 +97,11 @@ func TestMigrateCryptoEnginesToV2Config(t *testing.T) {
 			},
 			want: CAConfig{
 				CryptoEngines: CryptoEngines{
-					CryptoEngines: []CryptoEngine{
+					CryptoEngines: []cconfig.CryptoEngine{
 						{
 							ID:       "filesystem-engine",
 							Metadata: nil,
-							Type:     FilesystemProvider,
+							Type:     cconfig.FilesystemProvider,
 							Config: map[string]interface{}{
 								"storage_directory": "/path/to/root",
 							},

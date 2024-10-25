@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )
@@ -45,7 +45,7 @@ func GetOCSPResponse(ocspServerURL string, certificate *x509.Certificate, issuer
 			},
 		}
 	} else {
-		pool := helpers.LoadSytemCACertPool()
+		pool := chelpers.LoadSytemCACertPool()
 		pool.AddCert(serverCertificate)
 
 		httpClient.Transport = &http.Transport{

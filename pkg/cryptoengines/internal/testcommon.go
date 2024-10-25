@@ -9,7 +9,7 @@ import (
 	"crypto/sha256"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	"github.com/stretchr/testify/assert"
 )
 

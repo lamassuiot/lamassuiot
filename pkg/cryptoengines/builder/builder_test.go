@@ -3,7 +3,7 @@ package builder
 import (
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/filesystem"
 	log "github.com/sirupsen/logrus"
 )
@@ -15,9 +15,9 @@ func TestBuildStorageEnginePostgres(t *testing.T) {
 		"StorageDirectory": "filepath",
 	}
 
-	conf := config.CryptoEngine{
+	conf := cconfig.CryptoEngine{
 		ID:     "local",
-		Type:   config.FilesystemProvider,
+		Type:   cconfig.FilesystemProvider,
 		Config: cfg,
 	}
 
@@ -42,9 +42,9 @@ func TestBuildStorageEngineInvalidProvider(t *testing.T) {
 		"StorageDirectory": "filepath",
 	}
 
-	conf := config.CryptoEngine{
+	conf := cconfig.CryptoEngine{
 		ID:     "local",
-		Type:   config.CryptoEngineProvider("invalid_provider"),
+		Type:   cconfig.CryptoEngineProvider("invalid_provider"),
 		Config: cfg,
 	}
 

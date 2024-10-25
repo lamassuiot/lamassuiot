@@ -3,8 +3,8 @@ package builder
 import (
 	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/aws"
@@ -13,9 +13,9 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/vaultkv2"
 )
 
-func BuildCryptoEngine(logger *log.Entry, conf config.CryptoEngine) (cryptoengines.CryptoEngine, error) {
+func BuildCryptoEngine(logger *log.Entry, conf cconfig.CryptoEngine) (cryptoengines.CryptoEngine, error) {
 
-	builder := cryptoengines.GetEngineBuilder(config.CryptoEngineProvider(conf.Type))
+	builder := cryptoengines.GetEngineBuilder(cconfig.CryptoEngineProvider(conf.Type))
 	if builder == nil {
 		return nil, fmt.Errorf("no crypto engine of type %s", conf.Type)
 	}

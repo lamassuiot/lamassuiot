@@ -5,19 +5,19 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 )
 
 func TestSubjectToPkixName(t *testing.T) {
 
-	subj1 := models.Subject{}
+	subj1 := cmodels.Subject{}
 	expected1 := pkix.Name{}
 	result1 := SubjectToPkixName(subj1)
 	if !reflect.DeepEqual(result1, expected1) {
 		t.Errorf("Expected %v, but got %v", expected1, result1)
 	}
 
-	subj2 := models.Subject{
+	subj2 := cmodels.Subject{
 		CommonName: "example.com",
 	}
 	expected2 := pkix.Name{
@@ -28,7 +28,7 @@ func TestSubjectToPkixName(t *testing.T) {
 		t.Errorf("Expected %v, but got %v", expected2, result2)
 	}
 
-	subj3 := models.Subject{
+	subj3 := cmodels.Subject{
 		Country: "US",
 	}
 	expected3 := pkix.Name{
@@ -39,7 +39,7 @@ func TestSubjectToPkixName(t *testing.T) {
 		t.Errorf("Expected %v, but got %v", expected3, result3)
 	}
 
-	subj4 := models.Subject{
+	subj4 := cmodels.Subject{
 		Locality: "San Francisco",
 	}
 	expected4 := pkix.Name{
@@ -50,7 +50,7 @@ func TestSubjectToPkixName(t *testing.T) {
 		t.Errorf("Expected %v, but got %v", expected4, result4)
 	}
 
-	subj5 := models.Subject{
+	subj5 := cmodels.Subject{
 		Organization: "Acme Corp",
 	}
 	expected5 := pkix.Name{
@@ -61,7 +61,7 @@ func TestSubjectToPkixName(t *testing.T) {
 		t.Errorf("Expected %v, but got %v", expected5, result5)
 	}
 
-	subj6 := models.Subject{
+	subj6 := cmodels.Subject{
 		OrganizationUnit: "IT",
 	}
 	expected6 := pkix.Name{
@@ -72,7 +72,7 @@ func TestSubjectToPkixName(t *testing.T) {
 		t.Errorf("Expected %v, but got %v", expected6, result6)
 	}
 
-	subj7 := models.Subject{
+	subj7 := cmodels.Subject{
 		State: "California",
 	}
 	expected7 := pkix.Name{
@@ -83,7 +83,7 @@ func TestSubjectToPkixName(t *testing.T) {
 		t.Errorf("Expected %v, but got %v", expected7, result7)
 	}
 
-	subj8 := models.Subject{
+	subj8 := cmodels.Subject{
 		CommonName:       "example.com",
 		Country:          "US",
 		Locality:         "San Francisco",
@@ -108,7 +108,7 @@ func TestSubjectToPkixName(t *testing.T) {
 func TestPkixNameToSubject(t *testing.T) {
 
 	pkixName1 := pkix.Name{}
-	expected1 := models.Subject{}
+	expected1 := cmodels.Subject{}
 	result1 := PkixNameToSubject(pkixName1)
 	if !reflect.DeepEqual(result1, expected1) {
 		t.Errorf("Expected %v, but got %v", expected1, result1)
@@ -117,7 +117,7 @@ func TestPkixNameToSubject(t *testing.T) {
 	pkixName2 := pkix.Name{
 		CommonName: "example.com",
 	}
-	expected2 := models.Subject{
+	expected2 := cmodels.Subject{
 		CommonName: "example.com",
 	}
 	result2 := PkixNameToSubject(pkixName2)
@@ -128,7 +128,7 @@ func TestPkixNameToSubject(t *testing.T) {
 	pkixName3 := pkix.Name{
 		Country: []string{"US"},
 	}
-	expected3 := models.Subject{
+	expected3 := cmodels.Subject{
 		Country: "US",
 	}
 	result3 := PkixNameToSubject(pkixName3)
@@ -139,7 +139,7 @@ func TestPkixNameToSubject(t *testing.T) {
 	pkixName4 := pkix.Name{
 		Organization: []string{"Acme Corp"},
 	}
-	expected4 := models.Subject{
+	expected4 := cmodels.Subject{
 		Organization: "Acme Corp",
 	}
 	result4 := PkixNameToSubject(pkixName4)
@@ -150,7 +150,7 @@ func TestPkixNameToSubject(t *testing.T) {
 	pkixName5 := pkix.Name{
 		OrganizationalUnit: []string{"IT"},
 	}
-	expected5 := models.Subject{
+	expected5 := cmodels.Subject{
 		OrganizationUnit: "IT",
 	}
 	result5 := PkixNameToSubject(pkixName5)
@@ -161,7 +161,7 @@ func TestPkixNameToSubject(t *testing.T) {
 	pkixName6 := pkix.Name{
 		Locality: []string{"San Francisco"},
 	}
-	expected6 := models.Subject{
+	expected6 := cmodels.Subject{
 		Locality: "San Francisco",
 	}
 	result6 := PkixNameToSubject(pkixName6)
@@ -172,7 +172,7 @@ func TestPkixNameToSubject(t *testing.T) {
 	pkixName7 := pkix.Name{
 		Province: []string{"California"},
 	}
-	expected7 := models.Subject{
+	expected7 := cmodels.Subject{
 		State: "California",
 	}
 	result7 := PkixNameToSubject(pkixName7)
@@ -188,7 +188,7 @@ func TestPkixNameToSubject(t *testing.T) {
 		Locality:           []string{"San Francisco"},
 		Province:           []string{"California"},
 	}
-	expected8 := models.Subject{
+	expected8 := cmodels.Subject{
 		CommonName:       "example.com",
 		Country:          "US",
 		Organization:     "Acme Corp",

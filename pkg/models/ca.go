@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 )
 
 type CertificateType string
@@ -28,19 +30,19 @@ const (
 )
 
 type Certificate struct {
-	SerialNumber        string                 `json:"serial_number" gorm:"primaryKey"`
-	Metadata            map[string]interface{} `json:"metadata" gorm:"serializer:json"`
-	IssuerCAMetadata    IssuerCAMetadata       `json:"issuer_metadata"  gorm:"embedded;embeddedPrefix:issuer_meta_"`
-	Status              CertificateStatus      `json:"status"`
-	Certificate         *X509Certificate       `json:"certificate"`
-	KeyMetadata         KeyStrengthMetadata    `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_strength_meta_"`
-	Subject             Subject                `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
-	ValidFrom           time.Time              `json:"valid_from"`
-	ValidTo             time.Time              `json:"valid_to"`
-	RevocationTimestamp time.Time              `json:"revocation_timestamp"`
-	RevocationReason    RevocationReason       `json:"revocation_reason"`
-	Type                CertificateType        `json:"type"`
-	EngineID            string                 `json:"engine_id"`
+	SerialNumber        string                      `json:"serial_number" gorm:"primaryKey"`
+	Metadata            map[string]interface{}      `json:"metadata" gorm:"serializer:json"`
+	IssuerCAMetadata    IssuerCAMetadata            `json:"issuer_metadata"  gorm:"embedded;embeddedPrefix:issuer_meta_"`
+	Status              CertificateStatus           `json:"status"`
+	Certificate         *X509Certificate            `json:"certificate"`
+	KeyMetadata         cmodels.KeyStrengthMetadata `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_strength_meta_"`
+	Subject             cmodels.Subject             `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
+	ValidFrom           time.Time                   `json:"valid_from"`
+	ValidTo             time.Time                   `json:"valid_to"`
+	RevocationTimestamp time.Time                   `json:"revocation_timestamp"`
+	RevocationReason    RevocationReason            `json:"revocation_reason"`
+	Type                CertificateType             `json:"type"`
+	EngineID            string                      `json:"engine_id"`
 }
 
 type Expiration struct {

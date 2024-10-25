@@ -19,7 +19,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
@@ -44,7 +46,7 @@ func NewX509Engine(cryptoEngine *cryptoengines.CryptoEngine, validationAuthority
 	}
 }
 
-func (engine X509Engine) GetEngineConfig() models.CryptoEngineInfo {
+func (engine X509Engine) GetEngineConfig() cmodels.CryptoEngineInfo {
 	return engine.cryptoEngine.GetEngineConfig()
 }
 
@@ -53,7 +55,7 @@ func (engine X509Engine) GetCACryptoSigner(caCertificate *x509.Certificate) (cry
 	return engine.cryptoEngine.GetPrivateKeyByID(caSn)
 }
 
-func (engine X509Engine) CreateRootCA(caID string, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time) (*x509.Certificate, error) {
+func (engine X509Engine) CreateRootCA(caID string, keyMetadata cmodels.KeyMetadata, subject cmodels.Subject, expirationTine time.Time) (*x509.Certificate, error) {
 	lCEngine.Debugf("starting root CA generation with key metadata [%v], subject [%v] and expiration time [%s]", keyMetadata, subject, expirationTine)
 	templateCA, signer, err := engine.genCertTemplateAndPrivateKey(keyMetadata, subject, expirationTine, caID, caID)
 	if err != nil {
@@ -66,7 +68,7 @@ func (engine X509Engine) CreateRootCA(caID string, keyMetadata models.KeyMetadat
 	templateCA.IsCA = true
 
 	var derBytes []byte
-	if models.KeyType(keyMetadata.Type) == models.KeyType(x509.RSA) {
+	if cmodels.KeyType(keyMetadata.Type) == cmodels.KeyType(x509.RSA) {
 		rsaPub := signer.Public().(*rsa.PublicKey)
 		derBytes, err = x509.CreateCertificate(rand.Reader, templateCA, templateCA, rsaPub, signer)
 		if err != nil {
@@ -92,7 +94,7 @@ func (engine X509Engine) CreateRootCA(caID string, keyMetadata models.KeyMetadat
 	return cert, nil
 }
 
-func (engine X509Engine) CreateSubordinateCA(aki string, caID string, parentCACertificate *x509.Certificate, keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time, parentEngine X509Engine) (*x509.Certificate, error) {
+func (engine X509Engine) CreateSubordinateCA(aki string, caID string, parentCACertificate *x509.Certificate, keyMetadata cmodels.KeyMetadata, subject cmodels.Subject, expirationTine time.Time, parentEngine X509Engine) (*x509.Certificate, error) {
 	templateCA, signer, err := engine.genCertTemplateAndPrivateKey(keyMetadata, subject, expirationTine, aki, caID)
 	if err != nil {
 		lCEngine.Errorf("could not generate subordinate CA Template and Key: %s", err)
@@ -100,7 +102,7 @@ func (engine X509Engine) CreateSubordinateCA(aki string, caID string, parentCACe
 	}
 
 	var pubKey interface{}
-	if models.KeyType(keyMetadata.Type) == models.KeyType(x509.RSA) {
+	if cmodels.KeyType(keyMetadata.Type) == cmodels.KeyType(x509.RSA) {
 		pubKey = signer.Public().(*rsa.PublicKey)
 	} else {
 		pubKey = signer.Public().(*ecdsa.PublicKey)
@@ -200,7 +202,7 @@ func (engine X509Engine) SignCertificateRequest(caCertificate *x509.Certificate,
 	return certificate, nil
 }
 
-func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata models.KeyMetadata, subject models.Subject, expirationTine time.Time, aki, ski string) (*x509.Certificate, crypto.Signer, error) {
+func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata cmodels.KeyMetadata, subject cmodels.Subject, expirationTine time.Time, aki, ski string) (*x509.Certificate, crypto.Signer, error) {
 	var err error
 	var signer crypto.Signer
 
@@ -210,7 +212,7 @@ func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata models.KeyMeta
 	lCEngine.Debugf("generates serial number for root CA is [%s]", helpers.SerialNumberToString(sn))
 	lri := CryptoAssetLRI(CertificateAuthority, helpers.SerialNumberToString(sn))
 
-	if models.KeyType(keyMetadata.Type) == models.KeyType(x509.RSA) {
+	if cmodels.KeyType(keyMetadata.Type) == cmodels.KeyType(x509.RSA) {
 		lCEngine.Debugf("requesting cryptoengine instance for RSA key generation: %s", lri)
 
 		signer, err = engine.cryptoEngine.CreateRSAPrivateKey(keyMetadata.Bits, lri)
@@ -247,7 +249,7 @@ func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata models.KeyMeta
 
 	template := x509.Certificate{
 		SerialNumber:   sn,
-		Subject:        helpers.SubjectToPkixName(subject),
+		Subject:        chelpers.SubjectToPkixName(subject),
 		AuthorityKeyId: []byte(aki),
 		SubjectKeyId:   []byte(ski),
 		OCSPServer: []string{

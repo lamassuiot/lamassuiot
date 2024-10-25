@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
@@ -50,7 +51,7 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 	client := &http.Client{}
 	ctx := helpers.InitContext()
 
-	caPool := helpers.LoadSytemCACertPool()
+	caPool := chelpers.LoadSytemCACertPool()
 
 	tlsConfig := &tls.Config{}
 
@@ -59,7 +60,7 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 	}
 
 	if cfg.CACertificateFile != "" {
-		cert, err := helpers.ReadCertificateFromFile(cfg.CACertificateFile)
+		cert, err := chelpers.ReadCertificateFromFile(cfg.CACertificateFile)
 		if err != nil {
 			return nil, err
 		}

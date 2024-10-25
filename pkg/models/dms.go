@@ -2,6 +2,8 @@ package models
 
 import (
 	"time"
+
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 )
 
 type DMSStatus string
@@ -40,8 +42,8 @@ type ServerKeyGenSettings struct {
 }
 
 type ServerKeyGenKey struct {
-	Type KeyType `json:"type"`
-	Bits int     `json:"bits"`
+	Type cmodels.KeyType `json:"type"`
+	Bits int             `json:"bits"`
 }
 
 type DeviceProvisionProfile struct {

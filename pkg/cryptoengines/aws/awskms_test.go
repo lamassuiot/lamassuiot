@@ -6,11 +6,11 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/internal"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	awsplatform_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/aws-platform"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -64,7 +64,7 @@ func testDeleteKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
 }
 
 func testImportRSAKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
-	key, err := helpers.GenerateRSAKey(2048)
+	key, err := chelpers.GenerateRSAKey(2048)
 	assert.NoError(t, err)
 
 	_, err = engine.ImportRSAPrivateKey(key, "imported-rsa-key")
@@ -72,7 +72,7 @@ func testImportRSAKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
 }
 
 func testImportECDSAKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
-	key, err := helpers.GenerateECDSAKey(elliptic.P256())
+	key, err := chelpers.GenerateECDSAKey(elliptic.P256())
 	assert.NoError(t, err)
 
 	_, err = engine.ImportECDSAPrivateKey(key, "imported-ecdsa-key")

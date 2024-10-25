@@ -11,6 +11,8 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/globalsign/est"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
@@ -97,7 +99,7 @@ func RunUseCase1(input UseCase1Input) error {
 	log.Infof("1. Create Out-of-band CA1 (ca expiration of 1h)")
 	lUsecase.WithField("", "Step 1").Info("starting")
 	caExp := (time.Hour * 1)
-	cert1, key1, err := helpers.GenerateSelfSignedCA(x509.RSA, caExp, "MyCA")
+	cert1, key1, err := chelpers.GenerateSelfSignedCA(x509.RSA, caExp, "MyCA")
 
 	if err != nil {
 		return err
@@ -113,7 +115,7 @@ func RunUseCase1(input UseCase1Input) error {
 			Duration: (*models.TimeDuration)(&ca2Iss),
 		},
 		CACertificate: (*models.X509Certificate)(cert1),
-		KeyType:       models.KeyType(x509.RSA),
+		KeyType:       cmodels.KeyType(x509.RSA),
 		CARSAKey:      key1.(*rsa.PrivateKey),
 	})
 	if err != nil {
@@ -126,7 +128,7 @@ func RunUseCase1(input UseCase1Input) error {
 	caDur2 := models.TimeDuration(time.Hour * 10)
 	caIss2 := models.TimeDuration(time.Minute * 5)
 
-	var engine *models.CryptoEngineProvider
+	var engine *cmodels.CryptoEngineProvider
 	for i := range engines {
 		fmt.Println(engines[i].Name)
 		if engines[i].Name == "Key Value - V2" {
@@ -135,8 +137,8 @@ func RunUseCase1(input UseCase1Input) error {
 	}
 
 	ca2, err := caClient.CreateCA(context.Background(), services.CreateCAInput{
-		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-		Subject:            models.Subject{CommonName: "CA1"},
+		KeyMetadata:        cmodels.KeyMetadata{Type: cmodels.KeyType(x509.RSA), Bits: 2048},
+		Subject:            cmodels.Subject{CommonName: "CA1"},
 		CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDur2},
 		IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss2},
 		EngineID:           engine.ID,
@@ -239,12 +241,12 @@ func RunUseCase1(input UseCase1Input) error {
 
 	//6. Sign Bootstrap Cert with CA2
 	log.Infof("6. Sign Bootstrap Cert with CA2")
-	bootKey, err := helpers.GenerateRSAKey(2048)
+	bootKey, err := chelpers.GenerateRSAKey(2048)
 	if err != nil {
 		return err
 	}
 
-	bootCsr, err := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-crt"}, bootKey)
+	bootCsr, err := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-crt"}, bootKey)
 	if err != nil {
 		return err
 	}
@@ -262,12 +264,12 @@ func RunUseCase1(input UseCase1Input) error {
 	// 	Generate Device Key. Then generate the CSR used while enrolling
 	// 	Generate Device Key and CSR
 	log.Infof("7.1	Device 1:")
-	devKey, err := helpers.GenerateRSAKey(2048)
+	devKey, err := chelpers.GenerateRSAKey(2048)
 	if err != nil {
 		return err
 	}
 
-	deviceCsr, err := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("device-%d", time.Now().Unix())}, devKey)
+	deviceCsr, err := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: fmt.Sprintf("device-%d", time.Now().Unix())}, devKey)
 	if err != nil {
 		return err
 	}
@@ -296,7 +298,7 @@ func RunUseCase1(input UseCase1Input) error {
 	//Definition of the metadata for the update of dms
 
 	fmt.Println("Connecting")
-	keystr, err := helpers.PrivateKeyToPEM(devKey)
+	keystr, err := chelpers.PrivateKeyToPEM(devKey)
 	if err != nil {
 		return err
 	}
@@ -306,7 +308,7 @@ func RunUseCase1(input UseCase1Input) error {
 		return err
 	}
 
-	err = os.WriteFile("device.crt", []byte(helpers.CertificateToPEM(deviceCrt)), 0644)
+	err = os.WriteFile("device.crt", []byte(chelpers.CertificateToPEM(deviceCrt)), 0644)
 	if err != nil {
 		return err
 	}
@@ -395,13 +397,13 @@ func RunUseCase1(input UseCase1Input) error {
 
 	//Enroll offline out of band
 
-	dev2Key, err := helpers.GenerateRSAKey(2048)
+	dev2Key, err := chelpers.GenerateRSAKey(2048)
 
 	if err != nil {
 		return err
 	}
 
-	crDev2, err := helpers.GenerateSelfSignedCertificate(dev2Key, fmt.Sprintf("device-%d", time.Now().Unix()))
+	crDev2, err := chelpers.GenerateSelfSignedCertificate(dev2Key, fmt.Sprintf("device-%d", time.Now().Unix()))
 
 	if err != nil {
 		return err
@@ -416,7 +418,7 @@ func RunUseCase1(input UseCase1Input) error {
 }
 
 func writeCrtKey(crt *x509.Certificate, key any, idx int) error {
-	keystr, err := helpers.PrivateKeyToPEM(key)
+	keystr, err := chelpers.PrivateKeyToPEM(key)
 	if err != nil {
 		return err
 	}
@@ -426,7 +428,7 @@ func writeCrtKey(crt *x509.Certificate, key any, idx int) error {
 		return err
 	}
 
-	err = os.WriteFile(fmt.Sprintf("device-%d.crt", idx), []byte(helpers.CertificateToPEM(crt)), 0644)
+	err = os.WriteFile(fmt.Sprintf("device-%d.crt", idx), []byte(chelpers.CertificateToPEM(crt)), 0644)
 	if err != nil {
 		return err
 	}

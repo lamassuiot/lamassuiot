@@ -6,13 +6,14 @@ import (
 	"net/http"
 	"time"
 
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/gindump"
 	"github.com/sirupsen/logrus"
 )
 
 func BuildHTTPClientWithTLSOptions(cli *http.Client, cfg config.TLSConfig) (*http.Client, error) {
-	caPool := LoadSytemCACertPool()
+	caPool := chelpers.LoadSytemCACertPool()
 	tlsConfig := &tls.Config{}
 
 	if cfg.InsecureSkipVerify {
@@ -20,7 +21,7 @@ func BuildHTTPClientWithTLSOptions(cli *http.Client, cfg config.TLSConfig) (*htt
 	}
 
 	if cfg.CACertificateFile != "" {
-		cert, err := ReadCertificateFromFile(cfg.CACertificateFile)
+		cert, err := chelpers.ReadCertificateFromFile(cfg.CACertificateFile)
 		if err != nil {
 			return nil, err
 		}

@@ -11,11 +11,13 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/jakehl/goid"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	models "github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/x509engines"
@@ -29,7 +31,7 @@ type CAService interface {
 	GetStats(ctx context.Context) (*models.CAStats, error)
 	GetStatsByCAID(ctx context.Context, input GetStatsByCAIDInput) (map[models.CertificateStatus]int, error)
 
-	GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error)
+	GetCryptoEngineProvider(ctx context.Context) ([]*cmodels.CryptoEngineProvider, error)
 
 	CreateCA(ctx context.Context, input CreateCAInput) (*models.CACertificate, error)
 	ImportCA(ctx context.Context, input ImportCAInput) (*models.CACertificate, error)
@@ -217,12 +219,12 @@ func (svc *CAServiceBackend) GetStatsByCAID(ctx context.Context, input GetStatsB
 	return stats, nil
 }
 
-func (svc *CAServiceBackend) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
-	info := []*models.CryptoEngineProvider{}
+func (svc *CAServiceBackend) GetCryptoEngineProvider(ctx context.Context) ([]*cmodels.CryptoEngineProvider, error) {
+	info := []*cmodels.CryptoEngineProvider{}
 	for engineID, engine := range svc.cryptoEngines {
 		engineInstance := *engine
 		engineInfo := engineInstance.GetEngineConfig()
-		info = append(info, &models.CryptoEngineProvider{
+		info = append(info, &cmodels.CryptoEngineProvider{
 			CryptoEngineInfo: engineInfo,
 			ID:               engineID,
 			Default:          engineID == svc.defaultCryptoEngineID,
@@ -241,8 +243,8 @@ type SignInput struct {
 
 type issueCAInput struct {
 	ParentCA     *models.CACertificate
-	KeyMetadata  models.KeyMetadata     `validate:"required"`
-	Subject      models.Subject         `validate:"required"`
+	KeyMetadata  cmodels.KeyMetadata    `validate:"required"`
+	Subject      cmodels.Subject        `validate:"required"`
 	CAType       models.CertificateType `validate:"required"`
 	CAExpiration models.Expiration
 	EngineID     string
@@ -330,7 +332,7 @@ type ImportCAInput struct {
 	CAChain            []*models.X509Certificate //Parent CAs. They MUST be sorted as follows. 0: Root-CA; 1: Subordinate CA from Root-CA; ...
 	CARSAKey           *rsa.PrivateKey
 	CAECKey            *ecdsa.PrivateKey
-	KeyType            models.KeyType
+	KeyType            cmodels.KeyType
 	EngineID           string
 	ParentID           string
 }
@@ -438,7 +440,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input ImportCAInput) 
 			Status:              models.StatusActive,
 			SerialNumber:        helpers.SerialNumberToString(caCert.SerialNumber),
 			KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate((*x509.Certificate)(caCert)),
-			Subject:             helpers.PkixNameToSubject(caCert.Subject),
+			Subject:             chelpers.PkixNameToSubject(caCert.Subject),
 			ValidFrom:           caCert.NotBefore,
 			ValidTo:             caCert.NotAfter,
 			RevocationTimestamp: time.Time{},
@@ -456,10 +458,10 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input ImportCAInput) 
 type CreateCAInput struct {
 	ID                 string
 	ParentID           string
-	KeyMetadata        models.KeyMetadata `validate:"required"`
-	Subject            models.Subject     `validate:"required"`
-	IssuanceExpiration models.Expiration  `validate:"required"`
-	CAExpiration       models.Expiration  `validate:"required"`
+	KeyMetadata        cmodels.KeyMetadata `validate:"required"`
+	Subject            cmodels.Subject     `validate:"required"`
+	IssuanceExpiration models.Expiration   `validate:"required"`
+	CAExpiration       models.Expiration   `validate:"required"`
 	EngineID           string
 	Metadata           map[string]any
 }
@@ -587,10 +589,10 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input CreateCAInput) 
 			Certificate:  (*models.X509Certificate)(caCert),
 			Status:       models.StatusActive,
 			SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
-			KeyMetadata: models.KeyStrengthMetadata{
+			KeyMetadata: cmodels.KeyStrengthMetadata{
 				Type:     input.KeyMetadata.Type,
 				Bits:     input.KeyMetadata.Bits,
-				Strength: models.KeyStrengthHigh,
+				Strength: cmodels.KeyStrengthHigh,
 			},
 			Subject:             input.Subject,
 			ValidFrom:           caCert.NotBefore,
@@ -977,7 +979,7 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input DeleteCAInput) 
 type SignCertificateInput struct {
 	CAID         string                         `validate:"required"`
 	CertRequest  *models.X509CertificateRequest `validate:"required"`
-	Subject      *models.Subject
+	Subject      *cmodels.Subject
 	SignVerbatim bool
 }
 
@@ -1055,7 +1057,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input SignCert
 		},
 		Status:              models.StatusActive,
 		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate(x509Cert),
-		Subject:             helpers.PkixNameToSubject(x509Cert.Subject),
+		Subject:             chelpers.PkixNameToSubject(x509Cert.Subject),
 		SerialNumber:        helpers.SerialNumberToString(x509Cert.SerialNumber),
 		ValidFrom:           x509Cert.NotBefore,
 		ValidTo:             x509Cert.NotAfter,
@@ -1066,8 +1068,8 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input SignCert
 }
 
 type CreateCertificateInput struct {
-	KeyMetadata models.KeyMetadata `validate:"required"`
-	Subject     models.Subject     `validate:"required"`
+	KeyMetadata cmodels.KeyMetadata `validate:"required"`
+	Subject     cmodels.Subject     `validate:"required"`
 }
 
 func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input CreateCertificateInput) (*models.Certificate, error) {
@@ -1093,7 +1095,7 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input Import
 		Certificate:         (*models.X509Certificate)(input.Certificate),
 		Status:              status,
 		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate((*x509.Certificate)(input.Certificate)),
-		Subject:             helpers.PkixNameToSubject(input.Certificate.Subject),
+		Subject:             chelpers.PkixNameToSubject(input.Certificate.Subject),
 		SerialNumber:        helpers.SerialNumberToString(input.Certificate.SerialNumber),
 		ValidFrom:           input.Certificate.NotBefore,
 		ValidTo:             input.Certificate.NotAfter,
@@ -1474,7 +1476,7 @@ func importCAValidation(sl validator.StructLevel) {
 			sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "InvalidIssuanceExpiration", "")
 		}
 
-		valid, err := helpers.ValidateCertAndPrivKey((*x509.Certificate)(caCert), ca.CARSAKey, ca.CAECKey)
+		valid, err := chelpers.ValidateCertAndPrivKey((*x509.Certificate)(caCert), ca.CARSAKey, ca.CAECKey)
 		if err != nil {
 			sl.ReportError(ca.CARSAKey, "CARSAKey", "CARSAKey", "PrivateKeyAndCertificateNotMatch", "")
 			sl.ReportError(ca.CAECKey, "CAECKey", "CAECKey", "PrivateKeyAndCertificateNotMatch", "")

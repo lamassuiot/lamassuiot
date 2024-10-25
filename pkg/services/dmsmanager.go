@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	external_clients "github.com/lamassuiot/lamassuiot/v2/pkg/clients/external"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
@@ -247,7 +248,7 @@ func (svc DMSManagerServiceBackend) CACerts(ctx context.Context, aps string) ([]
 			return nil, err
 		}
 
-		lFunc.Debugf("got CA %s\n%s", caResponse.ID, helpers.CertificateToPEM((*x509.Certificate)(caResponse.Certificate.Certificate)))
+		lFunc.Debugf("got CA %s\n%s", caResponse.ID, chelpers.CertificateToPEM((*x509.Certificate)(caResponse.Certificate.Certificate)))
 
 		cas = append(cas, (*x509.Certificate)(caResponse.Certificate.Certificate))
 	}

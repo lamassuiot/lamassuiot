@@ -9,13 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 )
 
 func generateAndImportCA(keyType x509.PublicKeyAlgorithm, engine cryptoengines.CryptoEngine) (*x509.Certificate, any, error) {
-	caCertificate, key, err := helpers.GenerateSelfSignedCA(keyType, 365*24*time.Hour, "MyCA")
+	caCertificate, key, err := chelpers.GenerateSelfSignedCA(keyType, 365*24*time.Hour, "MyCA")
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to generate self signed CA: %s", err)
 	}
@@ -69,7 +70,7 @@ func TestSignVerify(t *testing.T) {
 		t.Fatalf("failed to generate and import CA: %s", err)
 	}
 
-	caCertificateNotImported, _, err := helpers.GenerateSelfSignedCA(x509.ECDSA, 365*24*time.Hour, "MyCA")
+	caCertificateNotImported, _, err := chelpers.GenerateSelfSignedCA(x509.ECDSA, 365*24*time.Hour, "MyCA")
 	if err != nil {
 		t.Fatalf("failed to generate self signed CA: %s", err)
 	}

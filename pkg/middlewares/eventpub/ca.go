@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
@@ -22,7 +23,7 @@ func NewCAEventBusPublisher(eventMWPub ICloudEventMiddlewarePublisher) services.
 	}
 }
 
-func (mw CAEventPublisher) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
+func (mw CAEventPublisher) GetCryptoEngineProvider(ctx context.Context) ([]*cmodels.CryptoEngineProvider, error) {
 	return mw.Next.GetCryptoEngineProvider(ctx)
 }
 

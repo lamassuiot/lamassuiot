@@ -2,19 +2,21 @@ package helpers
 
 import (
 	"testing"
+
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 )
 
 func TestValidateCertificate(t *testing.T) {
 	// Load the CA certificate
 	caCertFilePath := "testdata/cacertificate.pem"
-	caCert, err := ReadCertificateFromFile(caCertFilePath)
+	caCert, err := chelpers.ReadCertificateFromFile(caCertFilePath)
 	if err != nil {
 		t.Fatalf("Failed to read CA certificate from file: %v", err)
 	}
 
 	// Load the certificate to be validated
 	certFilePath := "testdata/samecaeccertificate.pem"
-	cert, err := ReadCertificateFromFile(certFilePath)
+	cert, err := chelpers.ReadCertificateFromFile(certFilePath)
 	if err != nil {
 		t.Fatalf("Failed to read certificate from file: %v", err)
 	}
@@ -29,7 +31,7 @@ func TestValidateCertificate(t *testing.T) {
 
 	// Load the certificate to be validated
 	certFilePath = "testdata/noncacert.pem"
-	cert, err = ReadCertificateFromFile(certFilePath)
+	cert, err = chelpers.ReadCertificateFromFile(certFilePath)
 	if err != nil {
 		t.Fatalf("Failed to read certificate from file: %v", err)
 	}

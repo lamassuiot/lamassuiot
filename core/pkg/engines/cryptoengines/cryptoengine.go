@@ -6,8 +6,8 @@ import (
 	"crypto/elliptic"
 	"crypto/rsa"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/sirupsen/logrus"
 )
 

@@ -1,6 +1,9 @@
 package config
 
-import "github.com/sirupsen/logrus"
+import (
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	"github.com/sirupsen/logrus"
+)
 
 type CAConfig struct {
 	Logs              BaseConfigLogging      `mapstructure:"logs"`
@@ -20,14 +23,7 @@ type CryptoEngines struct {
 	AWSKMSProvider            []AWSCryptoEngine                  `mapstructure:"aws_kms"`
 	AWSSecretsManagerProvider []AWSCryptoEngine                  `mapstructure:"aws_secrets_manager"`
 	FilesystemProvider        []FilesystemEngineConfig           `mapstructure:"golang"`
-	CryptoEngines             []CryptoEngine                     `mapstructure:"crypto_engines"`
-}
-
-type CryptoEngine struct {
-	ID       string                 `mapstructure:"id"`
-	Metadata map[string]interface{} `mapstructure:"metadata"`
-	Type     CryptoEngineProvider   `mapstructure:"type"`
-	Config   map[string]interface{} `mapstructure:",remain"`
+	CryptoEngines             []cconfig.CryptoEngine             `mapstructure:"crypto_engines"`
 }
 
 type HashicorpVaultCryptoEngineConfig struct {
@@ -103,30 +99,30 @@ func MigrateCryptoEnginesToV2Config(logger *logrus.Entry, config CAConfig) CACon
 	logger.Warn("Please update your configuration to the new format")
 
 	// Create a new slice to hold the new crypto engines
-	newCryptoEngines := make([]CryptoEngine, 0)
+	newCryptoEngines := make([]cconfig.CryptoEngine, 0)
 	// Iterate over the crypto engines of type PKCS11
 	for _, pkcs11Engine := range config.CryptoEngines.PKCS11Provider {
-		newCryptoEngines = addCryptoEngine[PKCS11EngineConfig](PKCS11Provider, pkcs11Engine, newCryptoEngines)
+		newCryptoEngines = addCryptoEngine[PKCS11EngineConfig](cconfig.PKCS11Provider, pkcs11Engine, newCryptoEngines)
 	}
 
 	// Iterate over the crypto engines of type HashicorpVault
 	for _, hashicorpVaultEngine := range config.CryptoEngines.HashicorpVaultKV2Provider {
-		newCryptoEngines = addCryptoEngine[HashicorpVaultCryptoEngineConfig](HashicorpVaultProvider, hashicorpVaultEngine, newCryptoEngines)
+		newCryptoEngines = addCryptoEngine[HashicorpVaultCryptoEngineConfig](cconfig.HashicorpVaultProvider, hashicorpVaultEngine, newCryptoEngines)
 	}
 
 	// Iterate over the crypto engines of type AWSKMS
 	for _, awsKmsEngine := range config.CryptoEngines.AWSKMSProvider {
-		newCryptoEngines = addCryptoEngine[AWSCryptoEngine](AWSKMSProvider, awsKmsEngine, newCryptoEngines)
+		newCryptoEngines = addCryptoEngine[AWSCryptoEngine](cconfig.AWSKMSProvider, awsKmsEngine, newCryptoEngines)
 	}
 
 	// Iterate over the crypto engines of type AWSSecretsManager
 	for _, awsSecretsManagerEngine := range config.CryptoEngines.AWSSecretsManagerProvider {
-		newCryptoEngines = addCryptoEngine[AWSCryptoEngine](AWSSecretsManagerProvider, awsSecretsManagerEngine, newCryptoEngines)
+		newCryptoEngines = addCryptoEngine[AWSCryptoEngine](cconfig.AWSSecretsManagerProvider, awsSecretsManagerEngine, newCryptoEngines)
 	}
 
 	// Iterate over the crypto engines of type Golang
 	for _, golangEngine := range config.CryptoEngines.FilesystemProvider {
-		newCryptoEngines = addCryptoEngine[FilesystemEngineConfig](FilesystemProvider, golangEngine, newCryptoEngines)
+		newCryptoEngines = addCryptoEngine[FilesystemEngineConfig](cconfig.FilesystemProvider, golangEngine, newCryptoEngines)
 	}
 
 	// Clear old config
@@ -141,7 +137,7 @@ func MigrateCryptoEnginesToV2Config(logger *logrus.Entry, config CAConfig) CACon
 	return config
 }
 
-func addCryptoEngine[E any](provider CryptoEngineProvider, config E, newCryptoEngines []CryptoEngine) []CryptoEngine {
+func addCryptoEngine[E any](provider cconfig.CryptoEngineProvider, config E, newCryptoEngines []cconfig.CryptoEngine) []cconfig.CryptoEngine {
 	encoded, err := EncodeStruct(config)
 	if err != nil {
 		panic(err)
@@ -170,7 +166,7 @@ func addCryptoEngine[E any](provider CryptoEngineProvider, config E, newCryptoEn
 		panic("Unrecognized config type")
 	}
 
-	newCryptoEngines = append(newCryptoEngines, CryptoEngine{
+	newCryptoEngines = append(newCryptoEngines, cconfig.CryptoEngine{
 		ID:       id,
 		Metadata: metadata,
 		Type:     provider,

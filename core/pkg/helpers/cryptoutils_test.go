@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 )
 
 func TestGenerateSelfSignedCA(t *testing.T) {
@@ -68,7 +68,7 @@ func TestGenerateSelfSignedCA(t *testing.T) {
 }
 
 func TestGenerateCertificateRequest(t *testing.T) {
-	subject := models.Subject{
+	subject := cmodels.Subject{
 		CommonName:       "example.com",
 		Organization:     "Acme Inc",
 		OrganizationUnit: "IT",

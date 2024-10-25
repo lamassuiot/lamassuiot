@@ -3,6 +3,7 @@ package resources
 import (
 	"time"
 
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 )
 
@@ -34,14 +35,14 @@ var CertificateFiltrableFields = map[string]FilterFieldType{
 }
 
 type CreateCABody struct {
-	ID                 string             `json:"id"`
-	ParentID           string             `json:"parent_id"`
-	Subject            models.Subject     `json:"subject"`
-	KeyMetadata        models.KeyMetadata `json:"key_metadata"`
-	CAExpiration       models.Expiration  `json:"ca_expiration"`
-	IssuanceExpiration models.Expiration  `json:"issuance_expiration"`
-	EngineID           string             `json:"engine_id"`
-	Metadata           map[string]any     `json:"metadata"`
+	ID                 string              `json:"id"`
+	ParentID           string              `json:"parent_id"`
+	Subject            cmodels.Subject     `json:"subject"`
+	KeyMetadata        cmodels.KeyMetadata `json:"key_metadata"`
+	CAExpiration       models.Expiration   `json:"ca_expiration"`
+	IssuanceExpiration models.Expiration   `json:"issuance_expiration"`
+	EngineID           string              `json:"engine_id"`
+	Metadata           map[string]any      `json:"metadata"`
 }
 
 type ImportCABody struct {
@@ -65,7 +66,7 @@ type UpdateCAIssuanceExpirationBody struct {
 type SignCertificateBody struct {
 	SignVerbatim bool                           `json:"sign_verbatim"`
 	CertRequest  *models.X509CertificateRequest `json:"csr"`
-	Subject      *models.Subject                `json:"subject"`
+	Subject      *cmodels.Subject               `json:"subject"`
 }
 
 type SignatureSignBody struct {

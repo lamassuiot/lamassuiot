@@ -6,8 +6,9 @@ import (
 	"encoding/base64"
 
 	"github.com/gin-gonic/gin"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
@@ -150,14 +151,14 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 
 	var key any
 	if len(requestBody.CAPrivateKey) > 0 {
-		key, err = helpers.ParsePrivateKey(decodedKey)
+		key, err = chelpers.ParsePrivateKey(decodedKey)
 		if err != nil {
 			ctx.JSON(400, gin.H{"err": err.Error()})
 			return
 		}
 	}
 
-	var keyType models.KeyType
+	var keyType cmodels.KeyType
 	var rsaKey *rsa.PrivateKey
 	var ecKey *ecdsa.PrivateKey
 

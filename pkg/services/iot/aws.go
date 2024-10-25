@@ -26,6 +26,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
@@ -342,8 +344,8 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 		"ThingName":               input.DeviceID,
 		"SerialNumber":            helpers.SerialNumberToString(input.BindedIdentity.Certificate.Certificate.SerialNumber),
 		"DMS":                     input.BindedIdentity.DMS.ID,
-		"LamassuCertificate":      helpers.CertificateToPEM((*x509.Certificate)(input.BindedIdentity.Certificate.Certificate)),
-		"LamassuCACertificatePem": helpers.CertificateToPEM((*x509.Certificate)(ca.Certificate.Certificate)),
+		"LamassuCertificate":      chelpers.CertificateToPEM((*x509.Certificate)(input.BindedIdentity.Certificate.Certificate)),
+		"LamassuCACertificatePem": chelpers.CertificateToPEM((*x509.Certificate)(ca.Certificate.Certificate)),
 	}
 
 	templateB, err := json.Marshal(template)
@@ -667,7 +669,7 @@ func (svc *AWSCloudConnectorServiceBackend) GetRegisteredCAs(ctx context.Context
 				lFunc.Errorf("something went wrong while describing '%s' CA certificate from AWS IoT: %s", *caMeta.CertificateId, err)
 				return cas, err
 			}
-			descCrt, err := helpers.ParseCertificate(*descRes.CertificateDescription.CertificatePem)
+			descCrt, err := chelpers.ParseCertificate(*descRes.CertificateDescription.CertificatePem)
 			if err != nil {
 				lFunc.Errorf("something went wrong while parsing PEM from CA certificate '%s': %s", *caMeta.CertificateId, err)
 				return cas, err
@@ -781,12 +783,12 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 			return nil, err
 		}
 
-		key, err := helpers.GenerateRSAKey(2048)
+		key, err := chelpers.GenerateRSAKey(2048)
 		if err != nil {
 			return nil, err
 		}
 
-		regCodeCSR, err := helpers.GenerateCertificateRequest(models.Subject{CommonName: *regCode.RegistrationCode}, key)
+		regCodeCSR, err := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: *regCode.RegistrationCode}, key)
 		if err != nil {
 			return nil, err
 		}

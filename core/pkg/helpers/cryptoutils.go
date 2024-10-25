@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -73,7 +73,7 @@ func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.D
 }
 
 // defined to generate certificates with RSA and ECDSA keys
-func GenerateCertificateRequest(subject models.Subject, key any) (*x509.CertificateRequest, error) {
+func GenerateCertificateRequest(subject cmodels.Subject, key any) (*x509.CertificateRequest, error) {
 	template := x509.CertificateRequest{
 		Subject: SubjectToPkixName(subject),
 	}
@@ -92,7 +92,7 @@ func GenerateCertificateRequest(subject models.Subject, key any) (*x509.Certific
 }
 
 // defined to generate certificates with RSA and ECDSA keys
-func GenerateCertificateRequestWithExtensions(subject models.Subject, extensions []pkix.Extension, key any) (*x509.CertificateRequest, error) {
+func GenerateCertificateRequestWithExtensions(subject cmodels.Subject, extensions []pkix.Extension, key any) (*x509.CertificateRequest, error) {
 	template := x509.CertificateRequest{
 		Subject:         SubjectToPkixName(subject),
 		ExtraExtensions: extensions,

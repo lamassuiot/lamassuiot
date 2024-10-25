@@ -4,10 +4,10 @@ import (
 	"crypto/x509/pkix"
 	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 )
 
-func SubjectToPkixName(subj models.Subject) pkix.Name {
+func SubjectToPkixName(subj cmodels.Subject) pkix.Name {
 	subjPkix := pkix.Name{}
 
 	if subj.CommonName != "" {
@@ -47,8 +47,8 @@ func SubjectToPkixName(subj models.Subject) pkix.Name {
 	return subjPkix
 }
 
-func PkixNameToSubject(pkixName pkix.Name) models.Subject {
-	subject := models.Subject{
+func PkixNameToSubject(pkixName pkix.Name) cmodels.Subject {
+	subject := cmodels.Subject{
 		CommonName: pkixName.CommonName,
 	}
 

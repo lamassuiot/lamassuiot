@@ -13,6 +13,8 @@ import (
 	"github.com/cloudevents/sdk-go/v2/event"
 	"github.com/globalsign/est"
 	"github.com/google/uuid"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
@@ -32,8 +34,8 @@ func TestBindIDEvent(t *testing.T) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
 		issuanceCABootDur, _ := models.ParseDuration(issuance)
 		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
-			Subject:            models.Subject{CommonName: name},
+			KeyMetadata:        cmodels.KeyMetadata{Type: cmodels.KeyType(x509.ECDSA), Bits: 224},
+			Subject:            cmodels.Subject{CommonName: name},
 			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
 			IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
 			Metadata:           map[string]any{},
@@ -157,8 +159,8 @@ func TestBindIDEvent(t *testing.T) {
 					t.Fatalf("could not create DMS: %s", err)
 				}
 
-				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -177,8 +179,8 @@ func TestBindIDEvent(t *testing.T) {
 				}
 
 				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
-				enrollKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
-				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
 
 				_, err = estCli.Enroll(context.Background(), enrollCSR)
 				if err != nil {
@@ -214,8 +216,8 @@ func TestBindIDEvent(t *testing.T) {
 					t.Fatalf("could not create DMS: %s", err)
 				}
 
-				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -234,8 +236,8 @@ func TestBindIDEvent(t *testing.T) {
 				}
 
 				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
-				enrollKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
-				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
 
 				enrollCrt, err := estCli.Enroll(context.Background(), enrollCSR)
 				if err != nil {
@@ -285,8 +287,8 @@ func TestBindIDEvent(t *testing.T) {
 					t.Fatalf("could not create DMS: %s", err)
 				}
 
-				deviceKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
-				deviceCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("device-%s", uuid.NewString())}, deviceKey)
+				deviceKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				deviceCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: fmt.Sprintf("device-%s", uuid.NewString())}, deviceKey)
 				deviceCert, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         manualEnrollCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(deviceCsr),
@@ -351,8 +353,8 @@ func TestBindIDEvent(t *testing.T) {
 					t.Fatalf("could not create DMS: %s", err)
 				}
 
-				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         unauthCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -371,8 +373,8 @@ func TestBindIDEvent(t *testing.T) {
 				}
 
 				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
-				enrollKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
-				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
 
 				enrollCrt, err := estCli.Enroll(context.Background(), enrollCSR)
 				if err == nil {
@@ -425,8 +427,8 @@ func TestBindIDEvent(t *testing.T) {
 					t.Fatalf("could not create DMS: %s", err)
 				}
 
-				bootKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -445,8 +447,8 @@ func TestBindIDEvent(t *testing.T) {
 				}
 
 				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
-				enrollKey, _ := helpers.GenerateECDSAKey(elliptic.P224())
-				enrollCSR, _ := helpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
 
 				_, err = estCli.Enroll(context.Background(), enrollCSR)
 				if err != nil {

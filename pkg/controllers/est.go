@@ -15,7 +15,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/sirupsen/logrus"
 	"go.mozilla.org/pkcs7"
@@ -63,7 +63,7 @@ func (r *estHttpRoutes) GetCACerts(ctx *gin.Context) {
 		casPEM := []string{}
 
 		for _, cert := range cacerts {
-			casPEM = append(casPEM, helpers.CertificateToPEM(cert))
+			casPEM = append(casPEM, chelpers.CertificateToPEM(cert))
 		}
 
 		ctx.Writer.Header().Set("Content-Type", "application/x-pem-file")
@@ -119,7 +119,7 @@ func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 
 	if ctx.Request.Header.Get("accept") == "application/x-pem-file" {
 		ctx.Writer.Header().Set("Content-Type", "application/x-pem-file")
-		ctx.Writer.Write([]byte(helpers.CertificateToPEM(signedCrt)))
+		ctx.Writer.Write([]byte(chelpers.CertificateToPEM(signedCrt)))
 		return
 	}
 

@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 
@@ -34,7 +34,7 @@ func GetCRLResponse(crlServerURL string, issuer *x509.Certificate, serverCertifi
 			},
 		}
 	} else {
-		pool := helpers.LoadSytemCACertPool()
+		pool := chelpers.LoadSytemCACertPool()
 		pool.AddCert(serverCertificate)
 
 		httpClient.Transport = &http.Transport{

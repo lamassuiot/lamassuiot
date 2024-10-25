@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	external_clients "github.com/lamassuiot/lamassuiot/v2/pkg/clients/external"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
@@ -370,12 +372,12 @@ func TestCheckOCSPRevocationCodes(t *testing.T) {
 }
 
 func generateCertificate(caSDK services.CAService) (*models.Certificate, error) {
-	key, err := helpers.GenerateRSAKey(2048)
+	key, err := chelpers.GenerateRSAKey(2048)
 	if err != nil {
 		return nil, fmt.Errorf("could not generate private key: %s", err)
 	}
 
-	csr, err := helpers.GenerateCertificateRequest(models.Subject{CommonName: "my-cert"}, key)
+	csr, err := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "my-cert"}, key)
 	if err != nil {
 		return nil, fmt.Errorf("could not generate csr: %s", err)
 	}
@@ -501,8 +503,8 @@ func initCAForVA(testServer *TestServer) (*models.CACertificate, error) {
 	issuanceDur := models.TimeDuration(time.Hour * 12)
 	ca, err := testServer.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
 		ID:                 DefaultCAID,
-		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-		Subject:            models.Subject{CommonName: "TestCA"},
+		KeyMetadata:        cmodels.KeyMetadata{Type: cmodels.KeyType(x509.RSA), Bits: 2048},
+		Subject:            cmodels.Subject{CommonName: "TestCA"},
 		CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
 		IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
 	})

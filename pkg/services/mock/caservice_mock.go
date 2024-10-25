@@ -3,6 +3,7 @@ package mock
 import (
 	"context"
 
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/stretchr/testify/mock"
@@ -36,9 +37,9 @@ func (m *MockCAService) GetStatsByCAID(ctx context.Context, input services.GetSt
 	return args.Get(0).(map[models.CertificateStatus]int), args.Error(1)
 }
 
-func (m *MockCAService) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
+func (m *MockCAService) GetCryptoEngineProvider(ctx context.Context) ([]*cmodels.CryptoEngineProvider, error) {
 	args := m.Called(ctx)
-	return args.Get(0).([]*models.CryptoEngineProvider), args.Error(1)
+	return args.Get(0).([]*cmodels.CryptoEngineProvider), args.Error(1)
 }
 
 func (m *MockCAService) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
@@ -29,8 +30,8 @@ func NewHttpCAClient(client *http.Client, url string) services.CAService {
 	}
 }
 
-func (cli *httpCAClient) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
-	engine, err := Get[[]*models.CryptoEngineProvider](ctx, cli.httpClient, cli.baseUrl+"/v1/engines", nil, map[int][]error{})
+func (cli *httpCAClient) GetCryptoEngineProvider(ctx context.Context) ([]*cmodels.CryptoEngineProvider, error) {
+	engine, err := Get[[]*cmodels.CryptoEngineProvider](ctx, cli.httpClient, cli.baseUrl+"/v1/engines", nil, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
@@ -105,13 +106,13 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 
 func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
 	var privKey string
-	if input.KeyType == models.KeyType(x509.RSA) {
+	if input.KeyType == cmodels.KeyType(x509.RSA) {
 		rsaBytes := x509.MarshalPKCS1PrivateKey(input.CARSAKey)
 		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
 			Type:  "RSA PRIVATE KEY",
 			Bytes: rsaBytes,
 		}))
-	} else if input.KeyType == models.KeyType(x509.ECDSA) {
+	} else if input.KeyType == cmodels.KeyType(x509.ECDSA) {
 		ecBytes, err := x509.MarshalECPrivateKey(input.CAECKey)
 		if err != nil {
 			return nil, err

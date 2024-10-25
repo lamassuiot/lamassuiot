@@ -14,11 +14,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/filesystem"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 )
 
 func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
@@ -42,7 +43,7 @@ func teardown(tempDir string) {
 func TestGetCACryptoSigner(t *testing.T) {
 	tempDir, engine, x509Engine := setup(t)
 	defer teardown(tempDir)
-	caCertificate, key, err := helpers.GenerateSelfSignedCA(x509.RSA, 365*24*time.Hour, "MyCA")
+	caCertificate, key, err := chelpers.GenerateSelfSignedCA(x509.RSA, 365*24*time.Hour, "MyCA")
 	if err != nil {
 		t.Fatalf("failed to generate self signed CA: %s", err)
 	}
@@ -78,7 +79,7 @@ func TestGetCACryptoSigner(t *testing.T) {
 func TestGetCACryptoSignerNonExistentKey(t *testing.T) {
 	tempDir, _, x509Engine := setup(t)
 	defer teardown(tempDir)
-	caCertificate, _, err := helpers.GenerateSelfSignedCA(x509.RSA, 365*24*time.Hour, "MyCA")
+	caCertificate, _, err := chelpers.GenerateSelfSignedCA(x509.RSA, 365*24*time.Hour, "MyCA")
 	if err != nil {
 		t.Fatalf("failed to generate self signed CA: %s", err)
 	}
@@ -124,7 +125,7 @@ func TestCryptoAssetLRI(t *testing.T) {
 	}
 }
 
-func checkCertificate(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyType, tcExpirationTime time.Time) error {
+func checkCertificate(cert *x509.Certificate, tcSubject cmodels.Subject, tcKeyMetadata cmodels.KeyType, tcExpirationTime time.Time) error {
 	if cert.Subject.CommonName != tcSubject.CommonName {
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.Subject.CommonName, tcSubject.CommonName)
 	}
@@ -146,7 +147,7 @@ func checkCertificate(cert *x509.Certificate, tcSubject models.Subject, tcKeyMet
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.Subject.Locality, tcSubject.Locality)
 	}
 
-	if models.KeyType(cert.PublicKeyAlgorithm) != tcKeyMetadata {
+	if cmodels.KeyType(cert.PublicKeyAlgorithm) != tcKeyMetadata {
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.PublicKeyAlgorithm, tcKeyMetadata)
 	}
 
@@ -156,7 +157,7 @@ func checkCertificate(cert *x509.Certificate, tcSubject models.Subject, tcKeyMet
 	return nil
 }
 
-func checkCACertificate(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, tcExpirationTime time.Time) error {
+func checkCACertificate(cert *x509.Certificate, tcSubject cmodels.Subject, tcKeyMetadata cmodels.KeyMetadata, tcExpirationTime time.Time) error {
 
 	err := checkCertificate(cert, tcSubject, tcKeyMetadata.Type, tcExpirationTime)
 	if err != nil {
@@ -184,7 +185,7 @@ func TestCreateRootCA(t *testing.T) {
 
 	expirationTime := time.Now().AddDate(1, 0, 0) // Set expiration time to 1 year from now
 
-	checkOk := func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, tcExpirationTime time.Time, err error) error {
+	checkOk := func(cert *x509.Certificate, tcSubject cmodels.Subject, tcKeyMetadata cmodels.KeyMetadata, tcExpirationTime time.Time, err error) error {
 		if err != nil {
 			return fmt.Errorf("unexpected error: %s", err)
 		}
@@ -192,14 +193,14 @@ func TestCreateRootCA(t *testing.T) {
 		return checkCACertificate(cert, tcSubject, tcKeyMetadata, tcExpirationTime)
 	}
 
-	checkFail := func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, tcExpirationTime time.Time, err error) error {
+	checkFail := func(cert *x509.Certificate, tcSubject cmodels.Subject, tcKeyMetadata cmodels.KeyMetadata, tcExpirationTime time.Time, err error) error {
 		if err == nil {
 			return fmt.Errorf("expected error, got nil")
 		}
 		return nil
 	}
 
-	caSubject := models.Subject{
+	caSubject := cmodels.Subject{
 		CommonName:       "Root CA",
 		Organization:     "Lamassu IoT",
 		OrganizationUnit: "CA",
@@ -211,17 +212,17 @@ func TestCreateRootCA(t *testing.T) {
 	var testcases = []struct {
 		name           string
 		caId           string
-		subject        models.Subject
-		keyMetadata    models.KeyMetadata
+		subject        cmodels.Subject
+		keyMetadata    cmodels.KeyMetadata
 		expirationTime time.Time
-		check          func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, expirationTime time.Time, err error) error
+		check          func(cert *x509.Certificate, tcSubject cmodels.Subject, tcKeyMetadata cmodels.KeyMetadata, expirationTime time.Time, err error) error
 	}{
 		{
 			name:    "OK/RSA_2048",
 			caId:    "rootCA-RSA2048",
 			subject: caSubject,
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.RSA),
+			keyMetadata: cmodels.KeyMetadata{
+				Type: cmodels.KeyType(x509.RSA),
 				Bits: 2048,
 			},
 			expirationTime: expirationTime,
@@ -231,8 +232,8 @@ func TestCreateRootCA(t *testing.T) {
 			name:    "FAIL/RSA_1",
 			caId:    "rootCA-RSA1",
 			subject: caSubject,
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.RSA),
+			keyMetadata: cmodels.KeyMetadata{
+				Type: cmodels.KeyType(x509.RSA),
 				Bits: 1,
 			},
 			expirationTime: expirationTime,
@@ -242,8 +243,8 @@ func TestCreateRootCA(t *testing.T) {
 			name:    "OK/ECDSA_256",
 			caId:    "rootCA-ECDSA_256",
 			subject: caSubject,
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.ECDSA),
+			keyMetadata: cmodels.KeyMetadata{
+				Type: cmodels.KeyType(x509.ECDSA),
 				Bits: 256,
 			},
 			expirationTime: expirationTime,
@@ -253,8 +254,8 @@ func TestCreateRootCA(t *testing.T) {
 			name:    "OK/ECDSA_224",
 			caId:    "rootCA-ECDSA_224",
 			subject: caSubject,
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.ECDSA),
+			keyMetadata: cmodels.KeyMetadata{
+				Type: cmodels.KeyType(x509.ECDSA),
 				Bits: 224,
 			},
 			expirationTime: expirationTime,
@@ -264,8 +265,8 @@ func TestCreateRootCA(t *testing.T) {
 			name:    "OK/ECDSA_384",
 			caId:    "rootCA-ECDSA_384",
 			subject: caSubject,
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.ECDSA),
+			keyMetadata: cmodels.KeyMetadata{
+				Type: cmodels.KeyType(x509.ECDSA),
 				Bits: 384,
 			},
 			expirationTime: expirationTime,
@@ -275,8 +276,8 @@ func TestCreateRootCA(t *testing.T) {
 			name:    "OK/ECDSA_521",
 			caId:    "rootCA-ECDSA_521",
 			subject: caSubject,
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.ECDSA),
+			keyMetadata: cmodels.KeyMetadata{
+				Type: cmodels.KeyType(x509.ECDSA),
 				Bits: 521,
 			},
 			expirationTime: expirationTime,
@@ -286,8 +287,8 @@ func TestCreateRootCA(t *testing.T) {
 			name:    "FAIL/ECDSA_NOT_SUPORTED",
 			caId:    "rootCA-ECDSA_FAIL",
 			subject: caSubject,
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.ECDSA),
+			keyMetadata: cmodels.KeyMetadata{
+				Type: cmodels.KeyType(x509.ECDSA),
 				Bits: 1024,
 			},
 			expirationTime: expirationTime,
@@ -317,11 +318,11 @@ func TestCreateSubordinateCA(t *testing.T) {
 	defer teardown(tempDir)
 
 	caID := "rootCA"
-	keyMetadata := models.KeyMetadata{
-		Type: models.KeyType(x509.RSA),
+	keyMetadata := cmodels.KeyMetadata{
+		Type: cmodels.KeyType(x509.RSA),
 		Bits: 2048,
 	}
-	subject := models.Subject{
+	subject := cmodels.Subject{
 		CommonName:       "Root CA",
 		Organization:     "Lamassu IoT",
 		OrganizationUnit: "CA",
@@ -339,8 +340,8 @@ func TestCreateSubordinateCA(t *testing.T) {
 		t.Errorf("unexpected error: %s", err)
 	}
 
-	keyMetadata = models.KeyMetadata{
-		Type: models.KeyType(x509.ECDSA),
+	keyMetadata = cmodels.KeyMetadata{
+		Type: cmodels.KeyType(x509.ECDSA),
 		Bits: 256,
 	}
 
@@ -351,12 +352,12 @@ func TestCreateSubordinateCA(t *testing.T) {
 		t.Errorf("unexpected error: %s", err)
 	}
 
-	caCertificateNotImported, _, err := helpers.GenerateSelfSignedCA(x509.ECDSA, 365*24*time.Hour, "MyCA")
+	caCertificateNotImported, _, err := chelpers.GenerateSelfSignedCA(x509.ECDSA, 365*24*time.Hour, "MyCA")
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
 
-	subordinateSubject := models.Subject{
+	subordinateSubject := cmodels.Subject{
 		CommonName:       "Subordinate CA",
 		Organization:     "Lamassu IoT",
 		OrganizationUnit: "CA",
@@ -365,7 +366,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 		Locality:         "Arrasate",
 	}
 
-	checkOk := func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, tcExpirationTime time.Time, err error) error {
+	checkOk := func(cert *x509.Certificate, tcSubject cmodels.Subject, tcKeyMetadata cmodels.KeyMetadata, tcExpirationTime time.Time, err error) error {
 		// Verify the result
 		if err != nil {
 			t.Errorf("unexpected error: %s", err)
@@ -374,7 +375,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 		return checkCACertificate(cert, tcSubject, tcKeyMetadata, tcExpirationTime)
 	}
 
-	checkFail := func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, tcExpirationTime time.Time, err error) error {
+	checkFail := func(cert *x509.Certificate, tcSubject cmodels.Subject, tcKeyMetadata cmodels.KeyMetadata, tcExpirationTime time.Time, err error) error {
 		if err == nil {
 			return fmt.Errorf("expected error, got nil")
 		}
@@ -386,18 +387,18 @@ func TestCreateSubordinateCA(t *testing.T) {
 		subordinateCAID string
 		aki             string
 		rootCaCert      *x509.Certificate
-		subject         models.Subject
-		keyMetadata     models.KeyMetadata
+		subject         cmodels.Subject
+		keyMetadata     cmodels.KeyMetadata
 		expirationTime  time.Time
-		check           func(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, tcExpirationTime time.Time, err error) error
+		check           func(cert *x509.Certificate, tcSubject cmodels.Subject, tcKeyMetadata cmodels.KeyMetadata, tcExpirationTime time.Time, err error) error
 	}{
 		{name: "OK/RSA_RSA",
 			subordinateCAID: "subCA",
 			aki:             "12345",
 			rootCaCert:      rootCaCertRSA,
 			subject:         subordinateSubject,
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.RSA),
+			keyMetadata: cmodels.KeyMetadata{
+				Type: cmodels.KeyType(x509.RSA),
 				Bits: 2048,
 			},
 			expirationTime: expirationTime,
@@ -408,8 +409,8 @@ func TestCreateSubordinateCA(t *testing.T) {
 			aki:             "12345",
 			rootCaCert:      rootCaCertRSA,
 			subject:         subordinateSubject,
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.ECDSA),
+			keyMetadata: cmodels.KeyMetadata{
+				Type: cmodels.KeyType(x509.ECDSA),
 				Bits: 256,
 			},
 			expirationTime: expirationTime,
@@ -420,8 +421,8 @@ func TestCreateSubordinateCA(t *testing.T) {
 			aki:             "12345",
 			rootCaCert:      rootCaCertEC,
 			subject:         subordinateSubject,
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.RSA),
+			keyMetadata: cmodels.KeyMetadata{
+				Type: cmodels.KeyType(x509.RSA),
 				Bits: 2048,
 			},
 			expirationTime: expirationTime,
@@ -432,8 +433,8 @@ func TestCreateSubordinateCA(t *testing.T) {
 			aki:             "12345",
 			rootCaCert:      rootCaCertEC,
 			subject:         subordinateSubject,
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.ECDSA),
+			keyMetadata: cmodels.KeyMetadata{
+				Type: cmodels.KeyType(x509.ECDSA),
 				Bits: 256,
 			},
 			expirationTime: expirationTime,
@@ -444,8 +445,8 @@ func TestCreateSubordinateCA(t *testing.T) {
 			aki:             "12345",
 			rootCaCert:      caCertificateNotImported,
 			subject:         subordinateSubject,
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.ECDSA),
+			keyMetadata: cmodels.KeyMetadata{
+				Type: cmodels.KeyType(x509.ECDSA),
 				Bits: 256,
 			},
 			expirationTime: expirationTime,
@@ -474,12 +475,12 @@ func TestSignCertificateRequest(t *testing.T) {
 	defer teardown(tempDir)
 
 	caID := "rootCA"
-	keyMetadata := models.KeyMetadata{
-		Type: models.KeyType(x509.RSA),
+	keyMetadata := cmodels.KeyMetadata{
+		Type: cmodels.KeyType(x509.RSA),
 		Bits: 2048,
 	}
 
-	subject := models.Subject{
+	subject := cmodels.Subject{
 		CommonName: "Root CA",
 	}
 	expirationTime := time.Now().AddDate(1, 0, 0) // Set expiration time to 1 year from now
@@ -490,8 +491,8 @@ func TestSignCertificateRequest(t *testing.T) {
 		t.Errorf("unexpected error: %s", err)
 	}
 
-	keyMetadata = models.KeyMetadata{
-		Type: models.KeyType(x509.ECDSA),
+	keyMetadata = cmodels.KeyMetadata{
+		Type: cmodels.KeyType(x509.ECDSA),
 		Bits: 256,
 	}
 
@@ -500,12 +501,12 @@ func TestSignCertificateRequest(t *testing.T) {
 		t.Errorf("unexpected error: %s", err)
 	}
 
-	caCertificateNotImported, _, err := helpers.GenerateSelfSignedCA(x509.ECDSA, 365*24*time.Hour, "MyCA")
+	caCertificateNotImported, _, err := chelpers.GenerateSelfSignedCA(x509.ECDSA, 365*24*time.Hour, "MyCA")
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
 
-	csrSubject := models.Subject{
+	csrSubject := cmodels.Subject{
 		CommonName:       "Subordinate CA",
 		Organization:     "Lamassu IoT",
 		OrganizationUnit: "CA",
@@ -514,7 +515,7 @@ func TestSignCertificateRequest(t *testing.T) {
 		Locality:         "Arrasate",
 	}
 
-	checkOk := func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr error, errSign error) error {
+	checkOk := func(cert *x509.Certificate, tcSubject cmodels.Subject, keyType cmodels.KeyType, expirationTime time.Time, errCsr error, errSign error) error {
 
 		if errCsr != nil {
 			return fmt.Errorf("unexpected error: %s", err)
@@ -535,7 +536,7 @@ func TestSignCertificateRequest(t *testing.T) {
 		return nil
 	}
 
-	checkFail := func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr error, errSign error) error {
+	checkFail := func(cert *x509.Certificate, tcSubject cmodels.Subject, keyType cmodels.KeyType, expirationTime time.Time, errCsr error, errSign error) error {
 		if errCsr != nil {
 			return fmt.Errorf("unexpected error: %s", err)
 		}
@@ -548,20 +549,20 @@ func TestSignCertificateRequest(t *testing.T) {
 	var testcases = []struct {
 		name          string
 		caCertificate *x509.Certificate
-		subject       models.Subject
+		subject       cmodels.Subject
 		extensions    func() []pkix.Extension
-		keyType       models.KeyType
+		keyType       cmodels.KeyType
 		key           func() any
-		check         func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr error, errSign error) error
+		check         func(cert *x509.Certificate, tcSubject cmodels.Subject, keyType cmodels.KeyType, expirationTime time.Time, errCsr error, errSign error) error
 	}{
 		{
 			name:          "OK/RSA_RSA",
 			caCertificate: caCertificateRSA,
 			subject:       csrSubject,
 			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.KeyType(x509.RSA),
+			keyType:       cmodels.KeyType(x509.RSA),
 			key: func() any {
-				key, _ := helpers.GenerateRSAKey(2048)
+				key, _ := chelpers.GenerateRSAKey(2048)
 				return key
 			},
 			check: checkOk,
@@ -571,9 +572,9 @@ func TestSignCertificateRequest(t *testing.T) {
 			caCertificate: caCertificateEC,
 			subject:       csrSubject,
 			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.KeyType(x509.RSA),
+			keyType:       cmodels.KeyType(x509.RSA),
 			key: func() any {
-				key, _ := helpers.GenerateRSAKey(2048)
+				key, _ := chelpers.GenerateRSAKey(2048)
 				return key
 			},
 			check: checkOk,
@@ -583,9 +584,9 @@ func TestSignCertificateRequest(t *testing.T) {
 			caCertificate: caCertificateRSA,
 			subject:       csrSubject,
 			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.KeyType(x509.ECDSA),
+			keyType:       cmodels.KeyType(x509.ECDSA),
 			key: func() any {
-				key, _ := helpers.GenerateECDSAKey(elliptic.P256())
+				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
 				return key
 			},
 			check: checkOk,
@@ -595,9 +596,9 @@ func TestSignCertificateRequest(t *testing.T) {
 			caCertificate: caCertificateEC,
 			subject:       csrSubject,
 			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.KeyType(x509.ECDSA),
+			keyType:       cmodels.KeyType(x509.ECDSA),
 			key: func() any {
-				key, _ := helpers.GenerateECDSAKey(elliptic.P256())
+				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
 				return key
 			},
 			check: checkOk,
@@ -623,12 +624,12 @@ func TestSignCertificateRequest(t *testing.T) {
 					Value: val,
 				}}
 			},
-			keyType: models.KeyType(x509.ECDSA),
+			keyType: cmodels.KeyType(x509.ECDSA),
 			key: func() any {
-				key, _ := helpers.GenerateECDSAKey(elliptic.P256())
+				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
 				return key
 			},
-			check: func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr, errSign error) error {
+			check: func(cert *x509.Certificate, tcSubject cmodels.Subject, keyType cmodels.KeyType, expirationTime time.Time, errCsr, errSign error) error {
 				if err := checkOk(cert, tcSubject, keyType, expirationTime, errCsr, errSign); err != nil {
 					return nil
 				}
@@ -657,13 +658,13 @@ func TestSignCertificateRequest(t *testing.T) {
 			name:          "OK/KEY_USAGE",
 			caCertificate: caCertificateEC,
 			subject:       csrSubject,
-			keyType:       models.KeyType(x509.ECDSA),
+			keyType:       cmodels.KeyType(x509.ECDSA),
 			key: func() any {
-				key, _ := helpers.GenerateECDSAKey(elliptic.P256())
+				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
 				return key
 			},
 			extensions: func() []pkix.Extension { return []pkix.Extension{} },
-			check: func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr, errSign error) error {
+			check: func(cert *x509.Certificate, tcSubject cmodels.Subject, keyType cmodels.KeyType, expirationTime time.Time, errCsr, errSign error) error {
 				if err := checkOk(cert, tcSubject, keyType, expirationTime, errCsr, errSign); err != nil {
 					return nil
 				}
@@ -686,10 +687,10 @@ func TestSignCertificateRequest(t *testing.T) {
 			name:          "FAIL/NOT_EXISTENT_CA",
 			caCertificate: caCertificateNotImported,
 			subject:       csrSubject,
-			keyType:       models.KeyType(x509.ECDSA),
+			keyType:       cmodels.KeyType(x509.ECDSA),
 			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
 			key: func() any {
-				key, _ := helpers.GenerateECDSAKey(elliptic.P256())
+				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
 				return key
 			},
 			check: checkFail,
@@ -699,7 +700,7 @@ func TestSignCertificateRequest(t *testing.T) {
 	for _, tc := range testcases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			csr, errCsr := helpers.GenerateCertificateRequestWithExtensions(tc.subject, tc.extensions(), tc.key())
+			csr, errCsr := chelpers.GenerateCertificateRequestWithExtensions(tc.subject, tc.extensions(), tc.key())
 			cert, errSing := x509Engine.SignCertificateRequest(tc.caCertificate, csr, expirationTime)
 			err := tc.check(cert, tc.subject, tc.keyType, expirationTime, errCsr, errSing)
 			if err != nil {

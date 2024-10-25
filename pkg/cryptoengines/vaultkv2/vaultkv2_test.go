@@ -5,10 +5,10 @@ import (
 	"crypto/x509"
 	"testing"
 
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/internal"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/keyvaultkv2"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
