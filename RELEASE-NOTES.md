@@ -1,18 +1,22 @@
 
-<a name="2.7.0"></a>
-## [2.7.0](https://github.com/lamassuiot/lamassuiot/compare/v2.6.0...2.7.0) (2024-10-02)
+<a name="2.8.0"></a>
+## [2.8.0](https://github.com/lamassuiot/lamassuiot/compare/v2.7.0...2.8.0) (2024-10-14)
+
+### Bug Fixes
+
+* Fix: Alerts: add missing SMTP config to service builder ([#168](https://github.com/lamassuiot/lamassuiot/issues/168))
 
 ### Chores
 
-* Chore: fix ci release workflow
-* Chore: Add dependant job in release workflow ([#167](https://github.com/lamassuiot/lamassuiot/issues/167))
-* Chore: Add changelog generation based on commits ([#158](https://github.com/lamassuiot/lamassuiot/issues/158))
+* Chore: move mapstructure unmantained depency to new ref
 
-### Feat
+### Features
 
-* Feat: AWS Connector: Improve event description in Device's Events on shadow update ([#157](https://github.com/lamassuiot/lamassuiot/issues/157))
-* Feat: DMS Manager Add support for EST ServerKeyGen ([#123](https://github.com/lamassuiot/lamassuiot/issues/123))
-* Feat: reduce erroneous event processing Intervals in eventbus([#165](https://github.com/lamassuiot/lamassuiot/issues/165))
-* Feat: allow multiple AWS Connectors in a single Lamassu Instance
-* Feat: Add support for Nginx client certificate identity extraction ([#161](https://github.com/lamassuiot/lamassuiot/issues/161))
+* Feat: DMS: Allow enrollment with expired certificates ([#171](https://github.com/lamassuiot/lamassuiot/issues/171))
+* Feat: AWS IoT Connector: Add additional info in CA registration mode + add SNI CA registration (without private key access) ([#166](https://github.com/lamassuiot/lamassuiot/issues/166))
+
+### Test
+
+* Test: Allow importing SQL dumps into DBs in docker-launched postgres container ([#170](https://github.com/lamassuiot/lamassuiot/issues/170))
+* Test: DMS Manager: add new test to the EST routes and controller ([#169](https://github.com/lamassuiot/lamassuiot/issues/169))
 
