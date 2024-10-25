@@ -86,14 +86,14 @@ type CryptoMonitoring struct {
 	Frequency string `mapstructure:"frequency"`
 }
 
-func MigrateCryptoEnginesToV2Config(config *CAConfig) *CAConfig {
+func MigrateCryptoEnginesToV2Config(config CAConfig) CAConfig {
 
 	// Migrate CryptoEngines to V2
 	// Process each crypto engine config an convert into the new format CryptoEngine
 	// This is done to ensure that the config is backward compatible with the previous version
 	// of the config
 
-	if config.CryptoEngines.CryptoEngines != nil {
+	if len(config.CryptoEngines.CryptoEngines) > 0 {
 		return config
 	}
 

@@ -1,0 +1,26 @@
+logs:
+ level: info
+crypto_engines:
+ crypto_engines:
+   - id: "pkcs11-engine"
+     type: "pkcs11"
+     token: "ForFabric"
+     pin: "2222"
+     module_path: "/usr/local/lib/softhsm/libsofthsm2.so"
+   - id: "vault-engine"
+     type: "hashicorp_vault"
+     role_id: "vault"
+     secret_id: "vault"
+     auto_unseal_enabled: true
+     mount_path: "secret"
+   - id: "aws-engine"
+     type: "aws_kms"
+     region: "us-west-2"
+   - id: "aws-secrets-manager-engine"
+     type: "aws_secrets_manager"
+     region: "us-west-2"
+   - id: "golang-engine"
+     type: "golang"
+     storage_directory: "/tmp/fabric"
+    
+  
