@@ -45,7 +45,7 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 	lMonitor := helpers.SetupLogger(conf.Logs.Level, "CA", "Crypto Monitoring")
 
 	// Migrate CryptoEngines to V2 config format if needed (backward compatibility)
-	conf = config.MigrateCryptoEnginesToV2Config(conf)
+	conf = config.MigrateCryptoEnginesToV2Config(lSvc, conf)
 
 	engines, err := createCryptoEngines(lCryptoEng, conf)
 	if err != nil {

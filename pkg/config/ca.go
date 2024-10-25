@@ -1,5 +1,7 @@
 package config
 
+import "github.com/sirupsen/logrus"
+
 type CAConfig struct {
 	Logs              BaseConfigLogging      `mapstructure:"logs"`
 	Server            HttpServer             `mapstructure:"server"`
@@ -86,7 +88,7 @@ type CryptoMonitoring struct {
 	Frequency string `mapstructure:"frequency"`
 }
 
-func MigrateCryptoEnginesToV2Config(config CAConfig) CAConfig {
+func MigrateCryptoEnginesToV2Config(logger *logrus.Entry, config CAConfig) CAConfig {
 
 	// Migrate CryptoEngines to V2
 	// Process each crypto engine config an convert into the new format CryptoEngine
@@ -96,6 +98,9 @@ func MigrateCryptoEnginesToV2Config(config CAConfig) CAConfig {
 	if len(config.CryptoEngines.CryptoEngines) > 0 {
 		return config
 	}
+
+	logger.Warn("Old crypto engine config detected this is deprecated and will be removed in the future")
+	logger.Warn("Please update your configuration to the new format")
 
 	// Create a new slice to hold the new crypto engines
 	newCryptoEngines := make([]CryptoEngine, 0)

@@ -4,17 +4,20 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMigrateCryptoEnginesToV2ConfigFromFile(t *testing.T) {
+
+	tlog := logrus.New().WithField("service", "test")
 
 	config1, err := readConfig[CAConfig]("testdata/ca-config.yml", nil)
 	if err != nil {
 		t.Fatalf("Failed to read config: %v", err)
 	}
 
-	config2 := MigrateCryptoEnginesToV2Config(*config1)
+	config2 := MigrateCryptoEnginesToV2Config(tlog, *config1)
 
 	assert.Equal(t, 5, len(config2.CryptoEngines.CryptoEngines), "Expected 5 crypto engines")
 	assert.False(t, reflect.DeepEqual(*config1, config2))
@@ -32,11 +35,13 @@ func TestReadConfigFromFileNoMigrationNeeded(t *testing.T) {
 
 func TestReadConfigFromFileNoMigrationNeededNoEffect(t *testing.T) {
 
+	tlog := logrus.New().WithField("service", "test")
+
 	config1, err := readConfig[CAConfig]("testdata/ca-config-v2.yml", nil)
 	if err != nil {
 		t.Fatalf("Failed to read config: %v", err)
 	}
-	config2 := MigrateCryptoEnginesToV2Config(*config1)
+	config2 := MigrateCryptoEnginesToV2Config(tlog, *config1)
 
 	assert.True(t, reflect.DeepEqual(*config1, config2))
 }
@@ -107,8 +112,9 @@ func TestMigrateCryptoEnginesToV2Config(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tlog := logrus.New().WithField("service", "test")
 		t.Run(tt.name, func(t *testing.T) {
-			got := MigrateCryptoEnginesToV2Config(tt.config)
+			got := MigrateCryptoEnginesToV2Config(tlog, tt.config)
 			if !reflect.DeepEqual(got.CryptoEngines.CryptoEngines, tt.want.CryptoEngines.CryptoEngines) {
 				t.Errorf("MigrateCryptoEnginesToV2Config() = %v, want %v", got, tt.want)
 			}
