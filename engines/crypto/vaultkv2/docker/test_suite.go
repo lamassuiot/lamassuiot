@@ -1,4 +1,4 @@
-package keyvaultkv2_test
+package docker
 
 import (
 	"log"

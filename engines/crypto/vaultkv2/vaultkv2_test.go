@@ -13,7 +13,7 @@ import (
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/crypto/vault/pkg/test/subsystems/cryptoengines/keyvaultkv2"
+	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/docker"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

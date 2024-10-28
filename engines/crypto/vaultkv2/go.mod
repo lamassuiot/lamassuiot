@@ -1,14 +1,17 @@
-module github.com/lamassuiot/lamassuiot/v2/crypto/vault
+module github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2
 
 go 1.22.1
 
+replace github.com/lamassuiot/lamassuiot/v2/core => ../../../core
+
 require (
 	github.com/hashicorp/vault/api v1.15.0
-	
 	github.com/ory/dockertest/v3 v3.11.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
 )
+
+require github.com/lamassuiot/lamassuiot/v2/core v0.0.0-00010101000000-000000000000
 
 require (
 	dario.cat/mergo v1.0.0 // indirect
@@ -79,4 +82,3 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-

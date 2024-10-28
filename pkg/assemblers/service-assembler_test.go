@@ -10,7 +10,7 @@ import (
 
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
-	vault_test "github.com/lamassuiot/lamassuiot/v2/crypto/vault/pkg/test/subsystems/cryptoengines/keyvaultkv2"
+	vault_test "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/docker"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"

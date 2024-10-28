@@ -5,7 +5,7 @@ import (
 
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/v2/crypto/vault/pkg/cryptoengines/vaultkv2"
+	vaultkv2 "github.com/lamassuiot/lamassuiot/v2/crypto/vault"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/lamassuiot/lamassuiot/v2/crypto/aws/pkg/cryptoengines/aws"

@@ -1,4 +1,4 @@
-package keyvaultkv2_test
+package docker
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	vaultApi "github.com/hashicorp/vault/api"
 
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/test/dockerrunner"
+	dockerunner "github.com/lamassuiot/lamassuiot/v2/core/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
