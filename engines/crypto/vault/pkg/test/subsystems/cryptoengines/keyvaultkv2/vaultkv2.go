@@ -6,13 +6,13 @@ import (
 
 	vaultApi "github.com/hashicorp/vault/api"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/test/dockerunner"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
 
-func RunHashicorpVaultDocker() (func() error, *config.HashicorpVaultSDK, string, error) {
+func RunHashicorpVaultDocker() (func() error, *cconfig.HashicorpVaultSDK, string, error) {
 	rootToken := "root-token-dev"
 	containerCleanup, container, _, err := dockerunner.RunDocker(dockertest.RunOptions{
 		Repository: "vault",  // image
@@ -102,17 +102,17 @@ func RunHashicorpVaultDocker() (func() error, *config.HashicorpVaultSDK, string,
 
 	secretID := secretIDRAW.Data["secret_id"].(string)
 
-	return containerCleanup, &config.HashicorpVaultSDK{
+	return containerCleanup, &cconfig.HashicorpVaultSDK{
 		RoleID:    roleID,
-		SecretID:  config.Password(secretID),
+		SecretID:  cconfig.Password(secretID),
 		MountPath: mountPath,
-		HTTPConnection: config.HTTPConnection{
-			Protocol: config.HTTP,
+		HTTPConnection: cconfig.HTTPConnection{
+			Protocol: cconfig.HTTP,
 			BasePath: "",
-			BasicConnection: config.BasicConnection{
+			BasicConnection: cconfig.BasicConnection{
 				Hostname:  "127.0.0.1",
 				Port:      p,
-				TLSConfig: config.TLSConfig{},
+				TLSConfig: cconfig.TLSConfig{},
 			},
 		},
 	}, rootToken, nil

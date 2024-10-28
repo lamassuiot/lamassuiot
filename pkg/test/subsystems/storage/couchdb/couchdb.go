@@ -8,9 +8,10 @@ import (
 	"net/http"
 	"strconv"
 
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/test/dockerrunner"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/test/dockerunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	logger "github.com/sirupsen/logrus"
@@ -38,13 +39,13 @@ func RunCouchDBDocker() (func() error, *config.CouchDBPSEConfig, error) {
 	p, _ := strconv.Atoi(container.GetPort("5984/tcp"))
 
 	address := fmt.Sprintf("%s://%s:%s@%s:%d%s", "http", admin, passwd, "localhost", p, "/_up")
-	httpCli, err := helpers.BuildHTTPClientWithTLSOptions(&http.Client{}, config.TLSConfig{})
+	httpCli, err := chelpers.BuildHTTPClientWithTLSOptions(&http.Client{}, cconfig.TLSConfig{})
 	if err != nil {
 		return nil, nil, err
 	}
 
 	lCouch := logger.WithField("subsystem-provider", "CouchDB")
-	httpCli, err = helpers.BuildHTTPClientWithTracerLogger(httpCli, lCouch)
+	httpCli, err = chelpers.BuildHTTPClientWithTracerLogger(httpCli, lCouch)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -61,10 +62,10 @@ func RunCouchDBDocker() (func() error, *config.CouchDBPSEConfig, error) {
 	})
 
 	return containerCleanup, &config.CouchDBPSEConfig{
-		HTTPConnection: config.HTTPConnection{
+		HTTPConnection: cconfig.HTTPConnection{
 			Protocol: "http",
 			BasePath: "/",
-			BasicConnection: config.BasicConnection{
+			BasicConnection: cconfig.BasicConnection{
 				Hostname: "localhost",
 				Port:     p,
 			},

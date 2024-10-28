@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strconv"
 
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/test/dockerrunner"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/test/dockerunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
@@ -40,7 +41,7 @@ func RunSoftHsmV2Docker(pkcs11ProxyPath string) (func() error, *config.PKCS11Con
 
 	return containerCleanup, &config.PKCS11Config{
 		TokenLabel: label,
-		TokenPin:   config.Password(pin),
+		TokenPin:   cconfig.Password(pin),
 		ModulePath: pkcs11ProxyPath,
 		ModuleExtraOptions: config.PKCS11ModuleExtraOptions{
 			Env: map[string]string{

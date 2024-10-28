@@ -11,6 +11,7 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/globalsign/est"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
@@ -79,10 +80,10 @@ func RunUseCase1(input UseCase1Input) error {
 
 	httpCli, err := clients.BuildHTTPClient(config.HTTPClient{
 		AuthMode: config.NoAuth,
-		HTTPConnection: config.HTTPConnection{
-			Protocol: config.HTTPS,
-			BasicConnection: config.BasicConnection{
-				TLSConfig: config.TLSConfig{
+		HTTPConnection: cconfig.HTTPConnection{
+			Protocol: cconfig.HTTPS,
+			BasicConnection: cconfig.BasicConnection{
+				TLSConfig: cconfig.TLSConfig{
 					InsecureSkipVerify: true,
 				},
 			},

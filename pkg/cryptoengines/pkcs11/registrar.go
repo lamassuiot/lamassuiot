@@ -10,7 +10,7 @@ import (
 func Register() {
 	cryptoengines.RegisterCryptoEngine(cconfig.PKCS11Provider, func(logger *log.Entry, conf cconfig.CryptoEngine) (cryptoengines.CryptoEngine, error) {
 
-		ceConfig, _ := config.DecodeStruct[config.PKCS11EngineConfig](conf.Config)
+		ceConfig, _ := cconfig.DecodeStruct[config.PKCS11EngineConfig](conf.Config)
 		ceConfig.ID = conf.ID
 		ceConfig.Metadata = conf.Metadata
 

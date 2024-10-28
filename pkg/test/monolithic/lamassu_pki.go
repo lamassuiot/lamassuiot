@@ -13,6 +13,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	lamassu "github.com/lamassuiot/lamassuiot/v2/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
@@ -53,7 +54,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 				HealthCheckLogging: true,
 				ListenAddress:      "0.0.0.0",
 				Port:               0,
-				Protocol:           config.HTTP,
+				Protocol:           cconfig.HTTP,
 			},
 			PublisherEventBus: conf.PublisherEventBus,
 			Storage:           conf.Storage,
@@ -65,7 +66,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 			return -1, fmt.Errorf("could not assemble CA Service: %s", err)
 		}
 
-		caConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: caPort}, Protocol: config.HTTP, BasePath: ""}
+		caConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: caPort}, Protocol: cconfig.HTTP, BasePath: ""}
 		caSDKBuilder := func(serviceID, src string) services.CAService {
 			lCAClient := helpers.SetupLogger(config.Info, serviceID, "LMS SDK - CA Client")
 			caHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
@@ -92,7 +93,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 				HealthCheckLogging: true,
 				ListenAddress:      "0.0.0.0",
 				Port:               0,
-				Protocol:           config.HTTP,
+				Protocol:           cconfig.HTTP,
 			},
 		}, caSDKBuilder("VA", models.VASource), apiInfo)
 		if err != nil {
@@ -108,7 +109,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 				HealthCheckLogging: true,
 				ListenAddress:      "0.0.0.0",
 				Port:               0,
-				Protocol:           config.HTTP,
+				Protocol:           cconfig.HTTP,
 			},
 			PublisherEventBus:  conf.PublisherEventBus,
 			SubscriberEventBus: conf.SubscriberEventBus,
@@ -118,7 +119,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 			return -1, fmt.Errorf("could not assemble Device Manager Service: %s", err)
 		}
 
-		devMngrConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: devPort}, Protocol: config.HTTP, BasePath: ""}
+		devMngrConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: devPort}, Protocol: cconfig.HTTP, BasePath: ""}
 
 		deviceMngrSDKBuilder := func(serviceID, src string) services.DeviceManagerService {
 			lDevMngrClient := helpers.SetupLogger(config.Info, serviceID, "LMS SDK - DevManager Client")
@@ -145,7 +146,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 				HealthCheckLogging: true,
 				ListenAddress:      "0.0.0.0",
 				Port:               0,
-				Protocol:           config.HTTP,
+				Protocol:           cconfig.HTTP,
 			},
 			PublisherEventBus:         conf.PublisherEventBus,
 			DownstreamCertificateFile: "proxy.crt",
@@ -155,7 +156,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 			return -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
 		}
 
-		dmsMngrConnection := config.HTTPConnection{BasicConnection: config.BasicConnection{Hostname: "127.0.0.1", Port: dmsPort}, Protocol: config.HTTP, BasePath: ""}
+		dmsMngrConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: dmsPort}, Protocol: cconfig.HTTP, BasePath: ""}
 
 		dmsMngrSDKBuilder := func(serviceID, src string) services.DMSManagerService {
 			lDMSMngrClient := helpers.SetupLogger(config.Info, serviceID, "LMS SDK - DMSManager Client")
@@ -182,7 +183,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 				HealthCheckLogging: true,
 				ListenAddress:      "0.0.0.0",
 				Port:               0,
-				Protocol:           config.HTTP,
+				Protocol:           cconfig.HTTP,
 			},
 			SubscriberEventBus: conf.SubscriberEventBus,
 			Storage:            conf.Storage,

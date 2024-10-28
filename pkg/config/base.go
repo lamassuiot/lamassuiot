@@ -5,21 +5,10 @@ import (
 	"os"
 
 	"github.com/go-viper/mapstructure/v2"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
-
-type Password string
-
-func (p Password) MarshalText() ([]byte, error) {
-	return []byte("*************"), nil
-}
-
-func (p *Password) UnmarshalText(text []byte) (err error) {
-	pw := string(text)
-	p = (*Password)(&pw)
-	return nil
-}
 
 type BaseConfigLogging struct {
 	Level LogLevel `mapstructure:"level"`
@@ -30,7 +19,7 @@ type HttpServer struct {
 	HealthCheckLogging bool                     `mapstructure:"health_check"`
 	ListenAddress      string                   `mapstructure:"listen_address"`
 	Port               int                      `mapstructure:"port"`
-	Protocol           HTTPProtocol             `mapstructure:"protocol"`
+	Protocol           cconfig.HTTPProtocol     `mapstructure:"protocol"`
 	CertFile           string                   `mapstructure:"cert_file"`
 	KeyFile            string                   `mapstructure:"key_file"`
 	Authentication     HttpServerAuthentication `mapstructure:"authentication"`
@@ -64,9 +53,9 @@ type PluggableStorageEngine struct {
 }
 
 type CouchDBPSEConfig struct {
-	HTTPConnection `mapstructure:",squash"`
-	Username       string   `mapstructure:"username"`
-	Password       Password `mapstructure:"password"`
+	cconfig.HTTPConnection `mapstructure:",squash"`
+	Username               string           `mapstructure:"username"`
+	Password               cconfig.Password `mapstructure:"password"`
 }
 
 type SQLitePSEConfig struct {
@@ -75,10 +64,10 @@ type SQLitePSEConfig struct {
 }
 
 type PostgresPSEConfig struct {
-	Hostname string   `mapstructure:"hostname"`
-	Port     int      `mapstructure:"port"`
-	Username string   `mapstructure:"username"`
-	Password Password `mapstructure:"password"`
+	Hostname string           `mapstructure:"hostname"`
+	Port     int              `mapstructure:"port"`
+	Username string           `mapstructure:"username"`
+	Password cconfig.Password `mapstructure:"password"`
 }
 
 type EventBusEngine struct {
@@ -91,52 +80,35 @@ type EventBusEngine struct {
 	AWSSqsSns AWSSDKConfig   `mapstructure:"aws_sqs_sns"`
 }
 
-type TLSConfig struct {
-	InsecureSkipVerify bool   `mapstructure:"insecure_skip_verify"`
-	CACertificateFile  string `mapstructure:"ca_cert_file"`
-}
-
-type BasicConnection struct {
-	Hostname  string `mapstructure:"hostname"`
-	Port      int    `mapstructure:"port"`
-	TLSConfig `mapstructure:",squash"`
-}
-
-type HTTPConnection struct {
-	Protocol        HTTPProtocol `mapstructure:"protocol"`
-	BasePath        string       `mapstructure:"base_path"`
-	BasicConnection `mapstructure:",squash"`
-}
-
 type AMQPConnection struct {
-	BasicConnection `mapstructure:",squash"`
-	Exchange        string                  `mapstructure:"exchange"`
-	Protocol        AMQPProtocol            `mapstructure:"protocol"`
-	BasicAuth       AMQPConnectionBasicAuth `mapstructure:"basic_auth"`
-	ClientTLSAuth   struct {
+	cconfig.BasicConnection `mapstructure:",squash"`
+	Exchange                string                  `mapstructure:"exchange"`
+	Protocol                AMQPProtocol            `mapstructure:"protocol"`
+	BasicAuth               AMQPConnectionBasicAuth `mapstructure:"basic_auth"`
+	ClientTLSAuth           struct {
 		Enabled  bool   `mapstructure:"enabled"`
 		CertFile string `mapstructure:"cert_file"`
 		KeyFile  string `mapstructure:"key_file"`
 	} `mapstructure:"client_tls_auth"`
 }
 type AMQPConnectionBasicAuth struct {
-	Enabled  bool     `mapstructure:"enabled"`
-	Username string   `mapstructure:"username"`
-	Password Password `mapstructure:"password"`
+	Enabled  bool             `mapstructure:"enabled"`
+	Username string           `mapstructure:"username"`
+	Password cconfig.Password `mapstructure:"password"`
 }
 
 type HTTPClient struct {
-	LogLevel        LogLevel             `mapstructure:"log_level"`
-	AuthMode        HTTPClientAuthMethod `mapstructure:"auth_mode"`
-	AuthJWTOptions  AuthJWTOptions       `mapstructure:"jwt_options"`
-	AuthMTLSOptions AuthMTLSOptions      `mapstructure:"mtls_options"`
-	HTTPConnection  `mapstructure:",squash"`
+	LogLevel               LogLevel             `mapstructure:"log_level"`
+	AuthMode               HTTPClientAuthMethod `mapstructure:"auth_mode"`
+	AuthJWTOptions         AuthJWTOptions       `mapstructure:"jwt_options"`
+	AuthMTLSOptions        AuthMTLSOptions      `mapstructure:"mtls_options"`
+	cconfig.HTTPConnection `mapstructure:",squash"`
 }
 
 type AuthJWTOptions struct {
-	ClientID         string   `mapstructure:"oidc_client_id"`
-	ClientSecret     Password `mapstructure:"oidc_client_secret"`
-	OIDCWellKnownURL string   `mapstructure:"oidc_well_known"`
+	ClientID         string           `mapstructure:"oidc_client_id"`
+	ClientSecret     cconfig.Password `mapstructure:"oidc_client_secret"`
+	OIDCWellKnownURL string           `mapstructure:"oidc_well_known"`
 }
 
 type AuthMTLSOptions struct {
@@ -212,24 +184,4 @@ func LoadConfig[E any](defaults *E) (*E, error) {
 	}
 
 	return conf, nil
-}
-
-func DecodeStruct[E any](source map[string]interface{}) (E, error) {
-
-	var target E
-	err := mapstructure.Decode(source, &target)
-	if err != nil {
-		var zero E
-		return zero, fmt.Errorf("could not decode struct: %w", err)
-	}
-	return target, nil
-}
-
-func EncodeStruct[E any](source E) (map[string]interface{}, error) {
-	var target map[string]interface{}
-	err := mapstructure.Decode(source, &target)
-	if err != nil {
-		return nil, fmt.Errorf("could not decode struct: %w", err)
-	}
-	return target, nil
 }

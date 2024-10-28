@@ -3,7 +3,7 @@ package keyvaultkv2_test
 import (
 	"log"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 )
 
 type VaultSuite struct {

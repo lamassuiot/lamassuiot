@@ -128,25 +128,25 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (AWSCl
 	stsLogger := builder.Logger.WithField("sdk", "AWS STS Client")
 	sqsLogger := builder.Logger.WithField("sdk", "AWS SQS Client")
 
-	iotHttpCli, err := helpers.BuildHTTPClientWithTracerLogger(&http.Client{}, iotLogger)
+	iotHttpCli, err := chelpers.BuildHTTPClientWithTracerLogger(&http.Client{}, iotLogger)
 	if err != nil {
 		builder.Logger.Errorf("could not build IoT http client with tracer: %s", err)
 		return nil, err
 	}
 
-	idpHttpCli, err := helpers.BuildHTTPClientWithTracerLogger(&http.Client{}, idpLogger)
+	idpHttpCli, err := chelpers.BuildHTTPClientWithTracerLogger(&http.Client{}, idpLogger)
 	if err != nil {
 		builder.Logger.Errorf("could not build IoT Dataplane http client with tracer: %s", err)
 		return nil, err
 	}
 
-	stsHttpCli, err := helpers.BuildHTTPClientWithTracerLogger(&http.Client{}, stsLogger)
+	stsHttpCli, err := chelpers.BuildHTTPClientWithTracerLogger(&http.Client{}, stsLogger)
 	if err != nil {
 		builder.Logger.Errorf("could not build STS http client with tracer: %s", err)
 		return nil, err
 	}
 
-	sqsHttpCli, err := helpers.BuildHTTPClientWithTracerLogger(&http.Client{}, sqsLogger)
+	sqsHttpCli, err := chelpers.BuildHTTPClientWithTracerLogger(&http.Client{}, sqsLogger)
 	if err != nil {
 		builder.Logger.Errorf("could not build SQS http client with tracer: %s", err)
 		return nil, err

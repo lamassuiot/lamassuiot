@@ -8,7 +8,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/internal"
 	awskmssm_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/aws-kms-sm"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -74,8 +73,8 @@ func TestAWSSecretsManagerCryptoEngine(t *testing.T) {
 		name     string
 		function func(t *testing.T, engine cryptoengines.CryptoEngine)
 	}{
-		{"CreateECDSAPrivateKey", internal.SharedTestCreateECDSAPrivateKey},
-		{"CreateRSAPrivateKey", internal.SharedTestCreateRSAPrivateKey},
+		{"CreateECDSAPrivateKey", SharedTestCreateECDSAPrivateKey},
+		{"CreateRSAPrivateKey", SharedTestCreateRSAPrivateKey},
 		{"GetPrivateKeyNotFound", testGetPrivateKeyNotFoundOnSecretsManager},
 		{"DeleteKey", testDeleteKeyOnSecretsManager},
 	}

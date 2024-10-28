@@ -17,8 +17,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 
@@ -32,7 +32,7 @@ type AWSSecretsManagerCryptoEngine struct {
 func NewAWSSecretManagerEngine(logger *logrus.Entry, awsConf aws.Config, metadata map[string]any) (cryptoengines.CryptoEngine, error) {
 	lAWSSM = logger.WithField("subsystem-provider", "AWS SecretsManager Client")
 
-	httpCli, err := helpers.BuildHTTPClientWithTracerLogger(http.DefaultClient, lAWSSM)
+	httpCli, err := chelpers.BuildHTTPClientWithTracerLogger(http.DefaultClient, lAWSSM)
 	if err != nil {
 		return nil, err
 	}

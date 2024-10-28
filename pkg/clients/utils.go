@@ -128,7 +128,7 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 		}
 	}
 
-	return helpers.BuildHTTPClientWithTracerLogger(client, logger)
+	return chelpers.BuildHTTPClientWithTracerLogger(client, logger)
 }
 
 func Post[T any](ctx context.Context, client *http.Client, url string, data any, knownErrors map[int][]error) (T, error) {

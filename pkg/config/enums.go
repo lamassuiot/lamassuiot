@@ -9,13 +9,6 @@ const (
 	None  LogLevel = "none"
 )
 
-type HTTPProtocol string
-
-const (
-	HTTPS HTTPProtocol = "https"
-	HTTP  HTTPProtocol = "http"
-)
-
 type HTTPClientAuthMethod string
 
 const (

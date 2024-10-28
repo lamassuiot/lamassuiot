@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/sirupsen/logrus"
 )
 
@@ -13,7 +13,7 @@ func TestBuildHTTPClientWithTLSOptions(t *testing.T) {
 	mockClient := &http.Client{}
 
 	// Test case 1: InsecureSkipVerify is true
-	cfg := config.TLSConfig{
+	cfg := cconfig.TLSConfig{
 		InsecureSkipVerify: true,
 	}
 	client, err := BuildHTTPClientWithTLSOptions(mockClient, cfg)
@@ -28,7 +28,7 @@ func TestBuildHTTPClientWithTLSOptions(t *testing.T) {
 	}
 
 	// Test case 3: CACertificateFile is empty
-	cfg = config.TLSConfig{}
+	cfg = cconfig.TLSConfig{}
 	client, err = BuildHTTPClientWithTLSOptions(mockClient, cfg)
 	if err != nil {
 		t.Errorf("BuildHTTPClientWithTLSOptions failed with error: %v", err)

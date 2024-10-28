@@ -15,13 +15,14 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/utils/gindump"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	headerextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/basic-header-extractors"
 	basiclogger "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/basic-logger"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/gindump"
 	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 	"github.com/sirupsen/logrus"
 )
@@ -97,7 +98,7 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 	}
 
 	go func() {
-		if httpServerCfg.Protocol == config.HTTPS {
+		if httpServerCfg.Protocol == cconfig.HTTPS {
 			srvExtraLog := ""
 			if httpServerCfg.Authentication.MutualTLS.Enabled {
 				srvExtraLog = "with mTLS enabled"

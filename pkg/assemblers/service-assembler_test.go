@@ -8,14 +8,15 @@ import (
 	"os"
 	"slices"
 
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	vault_test "github.com/lamassuiot/lamassuiot/v2/crypto/vault/pkg/test/subsystems/cryptoengines/keyvaultkv2"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
 	rabbitmq_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/async-messaging/rabbitmq"
-	vault_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/keyvaultkv2"
 	postgres_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/storage/postgres"
 )
 
@@ -182,7 +183,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 
 	if slices.Contains(engines, VAULT) {
 		vaultSDKConf, vaultSuite := vault_test.BeforeSuite()
-		cryptoEngineConf.HashicorpVaultKV2Provider = []config.HashicorpVaultCryptoEngineConfig{
+		cryptoEngineConf.HashicorpVaultKV2Provider = []cconfig.HashicorpVaultCryptoEngineConfig{
 			{
 				ID:                "vault-1",
 				HashicorpVaultSDK: vaultSDKConf,
@@ -226,7 +227,7 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 		Server: config.HttpServer{
 			LogLevel:           config.Info,
 			HealthCheckLogging: false,
-			Protocol:           config.HTTP,
+			Protocol:           cconfig.HTTP,
 		},
 		PublisherEventBus: eventBus.config,
 		Storage:           storageEngine.config,
@@ -266,7 +267,7 @@ func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig,
 		Server: config.HttpServer{
 			LogLevel:           config.Info,
 			HealthCheckLogging: false,
-			Protocol:           config.HTTP,
+			Protocol:           cconfig.HTTP,
 		},
 		PublisherEventBus:  eventBus.config,
 		SubscriberEventBus: eventBus.config,
@@ -318,7 +319,7 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 		Server: config.HttpServer{
 			LogLevel:           config.Info,
 			HealthCheckLogging: false,
-			Protocol:           config.HTTPS,
+			Protocol:           cconfig.HTTPS,
 			CertFile:           downstreamCertPath,
 			KeyFile:            downstreamKeyPath,
 			Authentication: config.HttpServerAuthentication{
@@ -370,7 +371,7 @@ func BuildVATestServer(caTestServer *CATestServer) (*VATestServer, error) {
 		Server: config.HttpServer{
 			LogLevel:           config.Info,
 			HealthCheckLogging: false,
-			Protocol:           config.HTTP,
+			Protocol:           cconfig.HTTP,
 		},
 		CAClient: config.CAClient{},
 	}, caTestServer.HttpCASDK, models.APIServiceInfo{

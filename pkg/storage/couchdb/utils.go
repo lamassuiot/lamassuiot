@@ -13,8 +13,8 @@ import (
 	"github.com/go-kivik/couchdb/v4"
 	"github.com/go-kivik/couchdb/v4/chttp"
 	"github.com/go-kivik/kivik/v4"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/sirupsen/logrus"
 )
@@ -25,13 +25,13 @@ var (
 
 func CreateCouchDBConnection(logger *logrus.Entry, cfg config.CouchDBPSEConfig) (*kivik.Client, error) {
 	address := fmt.Sprintf("%s://%s:%s@%s:%d%s", cfg.Protocol, cfg.Username, cfg.Password, cfg.Hostname, cfg.Port, cfg.BasePath)
-	httpCli, err := helpers.BuildHTTPClientWithTLSOptions(&http.Client{}, cfg.TLSConfig)
+	httpCli, err := chelpers.BuildHTTPClientWithTLSOptions(&http.Client{}, cfg.TLSConfig)
 	if err != nil {
 		return nil, err
 	}
 
 	lCouch = logger.WithField("subsystem-provider", "CouchDB")
-	httpCli, err = helpers.BuildHTTPClientWithTracerLogger(httpCli, lCouch)
+	httpCli, err = chelpers.BuildHTTPClientWithTracerLogger(httpCli, lCouch)
 	if err != nil {
 		return nil, err
 	}

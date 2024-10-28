@@ -10,7 +10,7 @@ import (
 func Register() {
 	cryptoengines.RegisterCryptoEngine(cconfig.FilesystemProvider, func(logger *log.Entry, conf cconfig.CryptoEngine) (cryptoengines.CryptoEngine, error) {
 
-		ceConfig, _ := config.DecodeStruct[config.FilesystemEngineConfig](conf.Config)
+		ceConfig, _ := cconfig.DecodeStruct[config.FilesystemEngineConfig](conf.Config)
 		ceConfig.ID = conf.ID
 		ceConfig.Metadata = conf.Metadata
 

@@ -6,10 +6,11 @@ import (
 	"log"
 	"testing"
 
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/crypto/vault/pkg/test/subsystems/cryptoengines/keyvaultkv2"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/test/monolithic"
 	rabbitmq_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/async-messaging/rabbitmq"
-	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/keyvaultkv2"
 	postgres_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/storage/postgres"
 )
 
@@ -95,7 +96,7 @@ func TestUseCase1(t *testing.T) {
 		CryptoEngines: config.CryptoEngines{
 			LogLevel:      config.Info,
 			DefaultEngine: "golang-1",
-			HashicorpVaultKV2Provider: []config.HashicorpVaultCryptoEngineConfig{
+			HashicorpVaultKV2Provider: []cconfig.HashicorpVaultCryptoEngineConfig{
 				{
 					HashicorpVaultSDK: *vaultConfig,
 					ID:                "dockertest-hcpvault-kvv2",
@@ -124,7 +125,7 @@ func TestUseCase1(t *testing.T) {
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerAccountID),
 			AWSSDKConfig: config.AWSSDKConfig{
 				AccessKeyID:     *awsIoTManagerUser,
-				SecretAccessKey: config.Password(*awsIoTManagerPass),
+				SecretAccessKey: cconfig.Password(*awsIoTManagerPass),
 				Region:          *awsIoTManagerRegion,
 			},
 		},

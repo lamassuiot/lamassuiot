@@ -7,8 +7,9 @@ import (
 	"strconv"
 
 	"github.com/ThreeDotsLabs/watermill-amqp/v2/pkg/amqp"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/test/dockerrunner"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/test/dockerunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	"github.com/sirupsen/logrus"
@@ -51,10 +52,10 @@ func RunRabbitMQDocker() (func() error, *config.AMQPConnection, int, error) {
 
 	return containerCleanup, &config.AMQPConnection{
 		Protocol: config.AMQP,
-		BasicConnection: config.BasicConnection{
+		BasicConnection: cconfig.BasicConnection{
 			Hostname:  "127.0.0.1",
 			Port:      p,
-			TLSConfig: config.TLSConfig{},
+			TLSConfig: cconfig.TLSConfig{},
 		},
 		BasicAuth: config.AMQPConnectionBasicAuth{Enabled: true, Username: "user", Password: "user"},
 		Exchange:  "lamassu",

@@ -16,28 +16,14 @@ type CAConfig struct {
 }
 
 type CryptoEngines struct {
-	LogLevel                  LogLevel                           `mapstructure:"log_level"`
-	DefaultEngine             string                             `mapstructure:"default_id"`
-	PKCS11Provider            []PKCS11EngineConfig               `mapstructure:"pkcs11"`
-	HashicorpVaultKV2Provider []HashicorpVaultCryptoEngineConfig `mapstructure:"hashicorp_vault"`
-	AWSKMSProvider            []AWSCryptoEngine                  `mapstructure:"aws_kms"`
-	AWSSecretsManagerProvider []AWSCryptoEngine                  `mapstructure:"aws_secrets_manager"`
-	FilesystemProvider        []FilesystemEngineConfig           `mapstructure:"golang"`
-	CryptoEngines             []cconfig.CryptoEngine             `mapstructure:"crypto_engines"`
-}
-
-type HashicorpVaultCryptoEngineConfig struct {
-	HashicorpVaultSDK `mapstructure:",squash"`
-	ID                string                 `mapstructure:"id"`
-	Metadata          map[string]interface{} `mapstructure:"metadata"`
-}
-type HashicorpVaultSDK struct {
-	RoleID            string     `mapstructure:"role_id"`
-	SecretID          Password   `mapstructure:"secret_id"`
-	AutoUnsealEnabled bool       `mapstructure:"auto_unseal_enabled"`
-	AutoUnsealKeys    []Password `mapstructure:"auto_unseal_keys"`
-	MountPath         string     `mapstructure:"mount_path"`
-	HTTPConnection    `mapstructure:",squash"`
+	LogLevel                  LogLevel                                   `mapstructure:"log_level"`
+	DefaultEngine             string                                     `mapstructure:"default_id"`
+	PKCS11Provider            []PKCS11EngineConfig                       `mapstructure:"pkcs11"`
+	HashicorpVaultKV2Provider []cconfig.HashicorpVaultCryptoEngineConfig `mapstructure:"hashicorp_vault"`
+	AWSKMSProvider            []AWSCryptoEngine                          `mapstructure:"aws_kms"`
+	AWSSecretsManagerProvider []AWSCryptoEngine                          `mapstructure:"aws_secrets_manager"`
+	FilesystemProvider        []FilesystemEngineConfig                   `mapstructure:"golang"`
+	CryptoEngines             []cconfig.CryptoEngine                     `mapstructure:"crypto_engines"`
 }
 
 type FilesystemEngineConfig struct {
@@ -48,7 +34,7 @@ type FilesystemEngineConfig struct {
 
 type PKCS11Config struct {
 	TokenLabel         string                   `mapstructure:"token"`
-	TokenPin           Password                 `mapstructure:"pin"`
+	TokenPin           cconfig.Password         `mapstructure:"pin"`
 	ModulePath         string                   `mapstructure:"module_path"`
 	ModuleExtraOptions PKCS11ModuleExtraOptions `mapstructure:"module_extra_options"`
 }
@@ -73,8 +59,8 @@ type AWSSDKConfig struct {
 	AWSAuthenticationMethod AWSAuthenticationMethod `mapstructure:"auth_method"`
 	EndpointURL             string                  `mapstructure:"endpoint_url"`
 	AccessKeyID             string                  `mapstructure:"access_key_id"`
-	SecretAccessKey         Password                `mapstructure:"secret_access_key"`
-	SessionToken            Password                `mapstructure:"session_token"`
+	SecretAccessKey         cconfig.Password        `mapstructure:"secret_access_key"`
+	SessionToken            cconfig.Password        `mapstructure:"session_token"`
 	Region                  string                  `mapstructure:"region"`
 	RoleARN                 string                  `mapstructure:"role_arn"`
 }
@@ -107,7 +93,7 @@ func MigrateCryptoEnginesToV2Config(logger *logrus.Entry, config CAConfig) CACon
 
 	// Iterate over the crypto engines of type HashicorpVault
 	for _, hashicorpVaultEngine := range config.CryptoEngines.HashicorpVaultKV2Provider {
-		newCryptoEngines = addCryptoEngine[HashicorpVaultCryptoEngineConfig](cconfig.HashicorpVaultProvider, hashicorpVaultEngine, newCryptoEngines)
+		newCryptoEngines = addCryptoEngine[cconfig.HashicorpVaultCryptoEngineConfig](cconfig.HashicorpVaultProvider, hashicorpVaultEngine, newCryptoEngines)
 	}
 
 	// Iterate over the crypto engines of type AWSKMS
@@ -138,7 +124,7 @@ func MigrateCryptoEnginesToV2Config(logger *logrus.Entry, config CAConfig) CACon
 }
 
 func addCryptoEngine[E any](provider cconfig.CryptoEngineProvider, config E, newCryptoEngines []cconfig.CryptoEngine) []cconfig.CryptoEngine {
-	encoded, err := EncodeStruct(config)
+	encoded, err := cconfig.EncodeStruct(config)
 	if err != nil {
 		panic(err)
 	}
@@ -153,7 +139,7 @@ func addCryptoEngine[E any](provider cconfig.CryptoEngineProvider, config E, new
 	case PKCS11EngineConfig:
 		id = t.ID
 		metadata = t.Metadata
-	case HashicorpVaultCryptoEngineConfig:
+	case cconfig.HashicorpVaultCryptoEngineConfig:
 		id = t.ID
 		metadata = t.Metadata
 	case AWSCryptoEngine:

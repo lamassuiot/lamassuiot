@@ -1,4 +1,8 @@
 go 1.22.8
 
-use .
-use ./core
+use (
+ .
+ ./core
+ ./engines/crypto/vault
+ ./engines/crypto/aws
+ )

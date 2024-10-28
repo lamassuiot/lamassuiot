@@ -17,8 +17,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 
@@ -33,7 +33,7 @@ type AWSKMSCryptoEngine struct {
 func NewAWSKMSEngine(logger *logrus.Entry, awsConf aws.Config, metadata map[string]any) (cryptoengines.CryptoEngine, error) {
 	lAWSKMS = logger.WithField("subsystem-provider", "AWS-KMS")
 
-	httpCli, err := helpers.BuildHTTPClientWithTracerLogger(&http.Client{}, lAWSKMS)
+	httpCli, err := chelpers.BuildHTTPClientWithTracerLogger(&http.Client{}, lAWSKMS)
 	if err != nil {
 		return nil, err
 	}

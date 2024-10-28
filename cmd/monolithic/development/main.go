@@ -13,12 +13,13 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/crypto/vault/pkg/test/subsystems/cryptoengines/keyvaultkv2"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/test/monolithic"
 	rabbitmq_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/async-messaging/rabbitmq"
 	awskmssm_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/aws-kms-sm"
-	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/keyvaultkv2"
 	softhsmv2_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/softhsmv2"
 	postgres_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/storage/postgres"
 )
@@ -153,7 +154,7 @@ func main() {
 
 	fmt.Println("Crypto Engines")
 	vCleanup := func() error { return nil }
-	vaultConfig := &config.HashicorpVaultSDK{}
+	vaultConfig := &cconfig.HashicorpVaultSDK{}
 	rootToken := ""
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
 		fmt.Println(">> launching docker: Hashicorp Vault ...")
@@ -269,7 +270,7 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
 		cryptoEnginesConfig.DefaultEngine = "dockertest-hcpvault-kvv2"
-		cryptoEnginesConfig.HashicorpVaultKV2Provider = []config.HashicorpVaultCryptoEngineConfig{
+		cryptoEnginesConfig.HashicorpVaultKV2Provider = []cconfig.HashicorpVaultCryptoEngineConfig{
 			{
 				HashicorpVaultSDK: *vaultConfig,
 				ID:                "dockertest-hcpvault-kvv2",
@@ -353,8 +354,8 @@ func main() {
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
 			AWSSDKConfig: config.AWSSDKConfig{
 				AccessKeyID:     *awsIoTManagerAKID,
-				SecretAccessKey: config.Password(*awsIoTManagerSAK),
-				SessionToken:    config.Password(*awsIoTManagerST),
+				SecretAccessKey: cconfig.Password(*awsIoTManagerSAK),
+				SessionToken:    cconfig.Password(*awsIoTManagerST),
 				Region:          *awsIoTManagerRegion,
 			},
 		},
