@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/filesystem"
+	"github.com/lamassuiot/lamassuiot/v2/crypto/filesystem"
 	log "github.com/sirupsen/logrus"
 )
 

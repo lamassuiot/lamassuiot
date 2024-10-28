@@ -17,8 +17,8 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/crypto/filesystem"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/filesystem"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 )
 

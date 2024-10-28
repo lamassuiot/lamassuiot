@@ -7,8 +7,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/crypto/aws/docker"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	awskmssm_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/aws-kms-sm"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/test"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -73,8 +74,8 @@ func TestAWSSecretsManagerCryptoEngine(t *testing.T) {
 		name     string
 		function func(t *testing.T, engine cryptoengines.CryptoEngine)
 	}{
-		{"CreateECDSAPrivateKey", SharedTestCreateECDSAPrivateKey},
-		{"CreateRSAPrivateKey", SharedTestCreateRSAPrivateKey},
+		{"CreateECDSAPrivateKey", test.SharedTestCreateECDSAPrivateKey},
+		{"CreateRSAPrivateKey", test.SharedTestCreateRSAPrivateKey},
 		{"GetPrivateKeyNotFound", testGetPrivateKeyNotFoundOnSecretsManager},
 		{"DeleteKey", testDeleteKeyOnSecretsManager},
 	}
@@ -87,7 +88,7 @@ func TestAWSSecretsManagerCryptoEngine(t *testing.T) {
 }
 
 func prepareSecretsManagerCryptoEngine(t *testing.T) cryptoengines.CryptoEngine {
-	containerCleanup, conf, err := awskmssm_test.RunAWSEmulationLocalStackDocker()
+	containerCleanup, conf, err := docker.RunAWSEmulationLocalStackDocker()
 	assert.NoError(t, err)
 
 	t.Cleanup(func() { _ = containerCleanup() })

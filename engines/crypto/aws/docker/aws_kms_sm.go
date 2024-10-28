@@ -1,11 +1,11 @@
-package awskmssm_test
+package docker
 
 import (
 	"fmt"
 	"net/http"
 	"strconv"
 
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/test/dockerrunner"
+	dockerunner "github.com/lamassuiot/lamassuiot/v2/core/pkg/test/dockerrunner"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"

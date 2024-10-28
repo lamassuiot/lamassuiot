@@ -5,13 +5,12 @@ import (
 
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
-	vaultkv2 "github.com/lamassuiot/lamassuiot/v2/crypto/vault"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/lamassuiot/lamassuiot/v2/crypto/aws/pkg/cryptoengines/aws"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/filesystem"
-	pkcs11 "github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/pkcs11"
-	//"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/vaultkv2"
+	"github.com/lamassuiot/lamassuiot/v2/crypto/aws"
+	"github.com/lamassuiot/lamassuiot/v2/crypto/filesystem"
+	"github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11"
+	"github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2"
 )
 
 func BuildCryptoEngine(logger *log.Entry, conf cconfig.CryptoEngine) (cryptoengines.CryptoEngine, error) {

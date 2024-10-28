@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/internal"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/test"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 )
 
@@ -92,14 +92,14 @@ func TestCreateRSAPrivateKey(t *testing.T) {
 	tempDir, engine := setup(t)
 	defer teardown(tempDir)
 
-	internal.SharedTestCreateRSAPrivateKey(t, engine)
+	test.SharedTestCreateRSAPrivateKey(t, engine)
 }
 
 func TestCreateECDSAPrivateKey(t *testing.T) {
 	tempDir, engine := setup(t)
 	defer teardown(tempDir)
 
-	internal.SharedTestCreateECDSAPrivateKey(t, engine)
+	test.SharedTestCreateECDSAPrivateKey(t, engine)
 }
 
 func TestDeleteKey(t *testing.T) {

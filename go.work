@@ -3,6 +3,8 @@ go 1.22.8
 use (
  .
  ./core
+ ./engines/crypto/filesystem
+ ./engines/crypto/pkcs11
  ./engines/crypto/vaultkv2
  ./engines/crypto/aws
  )
