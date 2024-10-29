@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )

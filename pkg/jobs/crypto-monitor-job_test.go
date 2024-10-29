@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	svcmock "github.com/lamassuiot/lamassuiot/v2/pkg/services/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

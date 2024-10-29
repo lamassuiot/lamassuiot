@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	awsplatform_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/aws-platform"
 )
 

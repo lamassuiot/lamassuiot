@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 )
 
 type MSTeamsWebhookSectionFact struct {

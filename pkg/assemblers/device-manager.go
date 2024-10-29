@@ -3,15 +3,16 @@ package assemblers
 import (
 	"fmt"
 
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/eventpub"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services/handlers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/builder"
 	"github.com/sirupsen/logrus"
 )
@@ -92,7 +93,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 	return &svc, nil
 }
 
-func createDevicesStorageInstance(logger *logrus.Entry, conf config.PluggableStorageEngine) (storage.DeviceManagerRepo, error) {
+func createDevicesStorageInstance(logger *logrus.Entry, conf cconfig.PluggableStorageEngine) (storage.DeviceManagerRepo, error) {
 	storage, err := builder.BuildStorageEngine(logger, conf)
 	if err != nil {
 		return nil, fmt.Errorf("could not create storage engine: %s", err)

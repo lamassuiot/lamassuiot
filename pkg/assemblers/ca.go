@@ -3,16 +3,17 @@ package assemblers
 import (
 	"fmt"
 
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	cebilder "github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/builder"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/jobs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/eventpub"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/builder"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/x509engines"
 	log "github.com/sirupsen/logrus"
@@ -110,7 +111,7 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 	return &svc, scheduler, nil
 }
 
-func createCAStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine) (storage.CACertificatesRepo, storage.CertificatesRepo, error) {
+func createCAStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.CACertificatesRepo, storage.CertificatesRepo, error) {
 	engine, err := builder.BuildStorageEngine(logger, conf)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create storage engine: %s", err)

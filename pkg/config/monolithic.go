@@ -1,5 +1,7 @@
 package config
 
+import cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+
 type LamassuMonolithicAssembleMode string
 
 const (
@@ -11,20 +13,20 @@ const (
 )
 
 type MonolithicConfig struct {
-	Logs               BaseConfigLogging             `mapstructure:"logs"`
-	PublisherEventBus  EventBusEngine                `mapstructure:"publisher_event_bus"`
-	SubscriberEventBus EventBusEngine                `mapstructure:"subscriber_event_bus"`
-	Storage            PluggableStorageEngine        `mapstructure:"storage"`
-	CryptoEngines      CryptoEngines                 `mapstructure:"crypto_engines"`
-	CryptoMonitoring   CryptoMonitoring              `mapstructure:"crypto_monitoring"`
-	Domain             string                        `mapstructure:"domain"`
-	AssemblyMode       LamassuMonolithicAssembleMode `mapstructure:"assembly_mode"`
-	GatewayPort        int                           `mapstructure:"gateway_port"`
-	AWSIoTManager      MonolithicAWSIoTManagerConfig `mapstructure:"aws_iot_manager"`
+	Logs               BaseConfigLogging              `mapstructure:"logs"`
+	PublisherEventBus  EventBusEngine                 `mapstructure:"publisher_event_bus"`
+	SubscriberEventBus EventBusEngine                 `mapstructure:"subscriber_event_bus"`
+	Storage            cconfig.PluggableStorageEngine `mapstructure:"storage"`
+	CryptoEngines      CryptoEngines                  `mapstructure:"crypto_engines"`
+	CryptoMonitoring   CryptoMonitoring               `mapstructure:"crypto_monitoring"`
+	Domain             string                         `mapstructure:"domain"`
+	AssemblyMode       LamassuMonolithicAssembleMode  `mapstructure:"assembly_mode"`
+	GatewayPort        int                            `mapstructure:"gateway_port"`
+	AWSIoTManager      MonolithicAWSIoTManagerConfig  `mapstructure:"aws_iot_manager"`
 }
 
 type MonolithicAWSIoTManagerConfig struct {
-	Enabled      bool         `mapstructure:"enabled"`
-	ConnectorID  string       `mapstructure:"connector_id"`
-	AWSSDKConfig AWSSDKConfig `mapstructure:"aws_config"`
+	Enabled      bool                 `mapstructure:"enabled"`
+	ConnectorID  string               `mapstructure:"connector_id"`
+	AWSSDKConfig cconfig.AWSSDKConfig `mapstructure:"aws_config"`
 }

@@ -21,10 +21,10 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/sirupsen/logrus"
 )
 

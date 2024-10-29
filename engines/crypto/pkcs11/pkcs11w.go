@@ -6,8 +6,8 @@ package pkcs11
 import (
 	"fmt"
 
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/sirupsen/logrus"
 )
 

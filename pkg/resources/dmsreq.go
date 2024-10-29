@@ -1,14 +1,8 @@
 package resources
 
 import (
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 )
-
-var DMSFiltrableFields = map[string]FilterFieldType{
-	"id":          StringFilterFieldType,
-	"name":        StringFilterFieldType,
-	"creation_ts": DateFilterFieldType,
-}
 
 type CreateDMSBody struct {
 	ID       string             `json:"id"`

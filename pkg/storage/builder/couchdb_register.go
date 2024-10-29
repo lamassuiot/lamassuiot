@@ -4,7 +4,7 @@
 package builder
 
 import (
-	couchdb "github.com/lamassuiot/lamassuiot/v2/pkg/storage/couchdb"
+	couchdb "github.com/lamassuiot/lamassuiot/v2/storage/couchdb"
 )
 
 func init() {

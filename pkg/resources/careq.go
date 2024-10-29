@@ -3,35 +3,23 @@ package resources
 import (
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
 )
 
-var CAFiltrableFields = map[string]FilterFieldType{
-	"id":                   StringFilterFieldType,
-	"level":                NumberFilterFieldType,
-	"type":                 EnumFilterFieldType,
-	"serial_number":        StringFilterFieldType,
-	"status":               EnumFilterFieldType,
-	"engine_id":            StringFilterFieldType,
-	"valid_to":             DateFilterFieldType,
-	"valid_from":           DateFilterFieldType,
-	"revocation_timestamp": DateFilterFieldType,
-	"revocation_reason":    EnumFilterFieldType,
-	"subject.common_name":  StringFilterFieldType,
-}
-
-var CertificateFiltrableFields = map[string]FilterFieldType{
-	"type":                 EnumFilterFieldType,
-	"serial_number":        StringFilterFieldType,
-	"subject.common_name":  StringFilterFieldType,
-	"issuer_meta.id":       StringFilterFieldType,
-	"status":               EnumFilterFieldType,
-	"engine_id":            StringFilterFieldType,
-	"valid_to":             DateFilterFieldType,
-	"valid_from":           DateFilterFieldType,
-	"revocation_timestamp": DateFilterFieldType,
-	"revocation_reason":    EnumFilterFieldType,
+var CAFiltrableFields = map[string]resources.FilterFieldType{
+	"id":                   resources.StringFilterFieldType,
+	"level":                resources.NumberFilterFieldType,
+	"type":                 resources.EnumFilterFieldType,
+	"serial_number":        resources.StringFilterFieldType,
+	"status":               resources.EnumFilterFieldType,
+	"engine_id":            resources.StringFilterFieldType,
+	"valid_to":             resources.DateFilterFieldType,
+	"valid_from":           resources.DateFilterFieldType,
+	"revocation_timestamp": resources.DateFilterFieldType,
+	"revocation_reason":    resources.EnumFilterFieldType,
+	"subject.common_name":  resources.StringFilterFieldType,
 }
 
 type CreateCABody struct {

@@ -3,7 +3,7 @@ package helpers
 import (
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 )
 
 func ValidateExpirationTimeRef(input models.Expiration) bool {

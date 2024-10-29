@@ -5,13 +5,12 @@ import (
 	"strconv"
 
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/test/dockerrunner"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	dockerunner "github.com/lamassuiot/lamassuiot/v2/core/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
 
-func RunSoftHsmV2Docker(pkcs11ProxyPath string) (func() error, *config.PKCS11Config, error) {
+func RunSoftHsmV2Docker(pkcs11ProxyPath string) (func() error, *cconfig.PKCS11Config, error) {
 	slot := "0"
 	label := "lamassuHSM"
 	pin := "0123"
@@ -39,11 +38,11 @@ func RunSoftHsmV2Docker(pkcs11ProxyPath string) (func() error, *config.PKCS11Con
 		return nil, nil, err
 	}
 
-	return containerCleanup, &config.PKCS11Config{
+	return containerCleanup, &cconfig.PKCS11Config{
 		TokenLabel: label,
 		TokenPin:   cconfig.Password(pin),
 		ModulePath: pkcs11ProxyPath,
-		ModuleExtraOptions: config.PKCS11ModuleExtraOptions{
+		ModuleExtraOptions: cconfig.PKCS11ModuleExtraOptions{
 			Env: map[string]string{
 				"PKCS11_PROXY_SOCKET": fmt.Sprintf("%s://0.0.0.0:%d", proto, p),
 			},

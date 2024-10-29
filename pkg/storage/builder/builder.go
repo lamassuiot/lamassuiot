@@ -3,8 +3,8 @@ package builder
 import (
 	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/storage"
 	log "github.com/sirupsen/logrus"
 )
 

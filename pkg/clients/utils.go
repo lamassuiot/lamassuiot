@@ -10,9 +10,9 @@ import (
 	"net/http"
 
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	cresources "github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
@@ -49,7 +49,7 @@ func (lrt sourceRoundTripper) RoundTrip(req *http.Request) (res *http.Response, 
 
 func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client, error) {
 	client := &http.Client{}
-	ctx := helpers.InitContext()
+	ctx := chelpers.InitContext()
 
 	caPool := chelpers.LoadSytemCACertPool()
 
@@ -100,7 +100,7 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 			RevocationURL string `json:"revocation_endpoint"`
 		}
 
-		wellKnown, err := Get[ODICDiscoveryJSON](ctx, authHttpCli, cfg.AuthJWTOptions.OIDCWellKnownURL, &resources.QueryParameters{}, map[int][]error{})
+		wellKnown, err := Get[ODICDiscoveryJSON](ctx, authHttpCli, cfg.AuthJWTOptions.OIDCWellKnownURL, &cresources.QueryParameters{}, map[int][]error{})
 		if err != nil {
 			return nil, err
 		}
@@ -170,7 +170,7 @@ func requestWithBody[T any](ctx context.Context, client *http.Client, method str
 	return parseJSON[T](body)
 }
 
-func Get[T any](ctx context.Context, client *http.Client, url string, queryParams *resources.QueryParameters, knownErrors map[int][]error) (T, error) {
+func Get[T any](ctx context.Context, client *http.Client, url string, queryParams *cresources.QueryParameters, knownErrors map[int][]error) (T, error) {
 	var m T
 	r, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -234,10 +234,10 @@ func Delete(ctx context.Context, client *http.Client, url string, knownErrors ma
 	return nil
 }
 
-func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.Client, url string, exhaustiveRun bool, queryParams *resources.QueryParameters, applyFunc func(E), knownErrors map[int][]error) (string, error) {
+func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.Client, url string, exhaustiveRun bool, queryParams *cresources.QueryParameters, applyFunc func(E), knownErrors map[int][]error) (string, error) {
 	continueIter := true
 	if queryParams == nil {
-		queryParams = &resources.QueryParameters{}
+		queryParams = &cresources.QueryParameters{}
 	}
 
 	if exhaustiveRun {

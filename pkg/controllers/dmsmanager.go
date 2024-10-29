@@ -2,7 +2,8 @@ package controllers
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	cresources "github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
@@ -29,11 +30,11 @@ func (r *dmsManagerHttpRoutes) GetStats(ctx *gin.Context) {
 }
 
 func (r *dmsManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.DMSFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, cresources.DMSFiltrableFields)
 
 	dmss := []models.DMS{}
 	nextBookmark, err := r.svc.GetAll(ctx, services.GetAllInput{
-		ListInput: resources.ListInput[models.DMS]{
+		ListInput: cresources.ListInput[models.DMS]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(dms models.DMS) {

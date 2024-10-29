@@ -6,10 +6,11 @@ import (
 	"slices"
 
 	"github.com/cloudevents/sdk-go/v2/event"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	lms_slices "github.com/lamassuiot/lamassuiot/v2/pkg/helpers/slices"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services/iot"
 	"github.com/sirupsen/logrus"
@@ -37,7 +38,7 @@ func handlerWarpper(event *event.Event,
 	logger *logrus.Entry,
 	handler func(ctx context.Context, e *event.Event, svc iot.AWSCloudConnectorService, logger *logrus.Entry) error) error {
 
-	ctx := helpers.InitContext()
+	ctx := chelpers.InitContext()
 
 	logger.Tracef("incoming cloud event: type=%s source=%s id=%s", event.Type(), event.Source(), event.ID())
 	if event.Source() == models.AWSIoTSource(svc.GetConnectorID()) {

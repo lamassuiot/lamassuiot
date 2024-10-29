@@ -13,12 +13,12 @@ import (
 	"github.com/cloudevents/sdk-go/v2/event"
 	"github.com/globalsign/est"
 	"github.com/google/uuid"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
@@ -494,7 +494,7 @@ func TestBindIDEvent(t *testing.T) {
 			router, err := eventbus.NewEventBusRouter(
 				testServers.EventBus.config,
 				uuid.NewString(),
-				helpers.SetupLogger(config.Info, "Test Case", "router"),
+				chelpers.SetupLogger(cconfig.Info, "Test Case", "router"),
 			)
 			if err != nil {
 				t.Fatalf("could not instantiate a messaging router: %s", err)
@@ -503,7 +503,7 @@ func TestBindIDEvent(t *testing.T) {
 			subscriber, err := eventbus.NewEventBusSubscriber(
 				testServers.EventBus.config,
 				uuid.NewString(),
-				helpers.SetupLogger(config.Trace, "Test Case", "sub"),
+				chelpers.SetupLogger(cconfig.Trace, "Test Case", "sub"),
 			)
 			if err != nil {
 				t.Fatalf("could not subscribe: %s", err)

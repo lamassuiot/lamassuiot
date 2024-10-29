@@ -7,4 +7,8 @@ use (
  ./engines/crypto/pkcs11
  ./engines/crypto/vaultkv2
  ./engines/crypto/aws
+ ./engines/storage/postgres
+ ./engines/storage/couchdb
+ ./engines/storage/sqlite
+
  )

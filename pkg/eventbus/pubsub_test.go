@@ -10,8 +10,9 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/google/uuid"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	rabbitmq_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/async-messaging/rabbitmq"
 	awsplatform_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/aws-platform"
 )
@@ -37,7 +38,7 @@ func prepareAWSSqsSNSForTest() (*TestEventBusConfig, error) {
 
 	sqsTestServer = &TestEventBusConfig{
 		config: config.EventBusEngine{
-			LogLevel:  config.Debug,
+			LogLevel:  cconfig.Debug,
 			Enabled:   true,
 			Provider:  config.AWSSqsSns,
 			AWSSqsSns: *conf,
@@ -64,7 +65,7 @@ func prepareRabbitMQForTest() (*TestEventBusConfig, error) {
 
 	rabbitTestServer = &TestEventBusConfig{
 		config: config.EventBusEngine{
-			LogLevel: config.Debug,
+			LogLevel: cconfig.Debug,
 			Enabled:  true,
 			Provider: config.Amqp,
 			Amqp:     *conf,
@@ -150,7 +151,7 @@ func testWildcardSubscribe(t *testing.T) {
 	}
 
 	for _, eventBusConf := range eventBusEngines {
-		pub, err := NewEventBusPublisher(eventBusConf.conf.config, "test-pub", helpers.SetupLogger(config.Debug, "Test Case", "pub"))
+		pub, err := NewEventBusPublisher(eventBusConf.conf.config, "test-pub", helpers.SetupLogger(cconfig.Debug, "Test Case", "pub"))
 		if err != nil {
 			t.Fatalf("could not create publisher: %s", err)
 		}
@@ -160,7 +161,7 @@ func testWildcardSubscribe(t *testing.T) {
 
 			t.Run(fmt.Sprintf("%s-%s", eventBusConf.name, tc.name), func(t *testing.T) {
 				subAndPub := func(publishFunc func() error) error {
-					logger := helpers.SetupLogger(config.Debug, "Test Case", "sub")
+					logger := helpers.SetupLogger(cconfig.Debug, "Test Case", "sub")
 
 					resultChannel := make(chan int, 1)
 
@@ -286,7 +287,7 @@ func testMultiServiceSubscribe(t *testing.T) {
 	}
 
 	for _, eventBusConf := range eventBusEngines {
-		pub, err := NewEventBusPublisher(eventBusConf.conf.config, "test-pub", helpers.SetupLogger(config.Debug, "Test Case", "pub"))
+		pub, err := NewEventBusPublisher(eventBusConf.conf.config, "test-pub", helpers.SetupLogger(cconfig.Debug, "Test Case", "pub"))
 		if err != nil {
 			t.Fatalf("could not create publisher: %s", err)
 		}
@@ -296,7 +297,7 @@ func testMultiServiceSubscribe(t *testing.T) {
 
 			t.Run(fmt.Sprintf("%s-%s", eventBusConf.name, tc.name), func(t *testing.T) {
 				subAndPub := func(publishFunc func() error) error {
-					logger := helpers.SetupLogger(config.Debug, "Test Case", "sub")
+					logger := helpers.SetupLogger(cconfig.Debug, "Test Case", "sub")
 
 					resultChannel := make(chan string)
 
@@ -442,7 +443,7 @@ func testMultiConsumers(t *testing.T) {
 	}
 
 	for _, eventBusConf := range eventBusEngines {
-		pub, err := NewEventBusPublisher(eventBusConf.conf.config, "test-pub", helpers.SetupLogger(config.Debug, "Test Case", "pub"))
+		pub, err := NewEventBusPublisher(eventBusConf.conf.config, "test-pub", helpers.SetupLogger(cconfig.Debug, "Test Case", "pub"))
 		if err != nil {
 			t.Fatalf("could not create publisher: %s", err)
 		}
@@ -451,7 +452,7 @@ func testMultiConsumers(t *testing.T) {
 			tc := tc
 			t.Run(fmt.Sprintf("%s-%s", eventBusConf.name, tc.name), func(t *testing.T) {
 				subAndPub := func(publishFunc func() error) error {
-					logger := helpers.SetupLogger(config.Debug, "Test Case", "sub")
+					logger := helpers.SetupLogger(cconfig.Debug, "Test Case", "sub")
 
 					resultChannel := make(chan string)
 

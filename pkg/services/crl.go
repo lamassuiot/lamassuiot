@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/sirupsen/logrus"
 )
 
@@ -45,7 +45,7 @@ type GetCRLInput struct {
 }
 
 func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte, error) {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := crlValidate.Struct(input)
 	if err != nil {

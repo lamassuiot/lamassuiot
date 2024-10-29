@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 

@@ -10,14 +10,14 @@ import (
 
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	vault_test "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/docker"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/postgres"
 	rabbitmq_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/async-messaging/rabbitmq"
 	postgres_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/storage/postgres"
+	"github.com/lamassuiot/lamassuiot/v2/storage/postgres"
 )
 
 type CryptoEngine int
@@ -47,7 +47,7 @@ type TestEventBusConfig struct {
 }
 
 type TestStorageEngineConfig struct {
-	config     config.PluggableStorageEngine
+	config     cconfig.PluggableStorageEngine
 	BeforeEach func() error
 	AfterSuite func()
 }
@@ -107,7 +107,7 @@ func PrepareRabbitMQForTest() (*TestEventBusConfig, error) {
 
 	return &TestEventBusConfig{
 		config: config.EventBusEngine{
-			LogLevel: config.Trace,
+			LogLevel: cconfig.Trace,
 			Enabled:  true,
 			Provider: config.Amqp,
 			Amqp:     *conf,
@@ -123,7 +123,7 @@ func PreparePostgresForTest(dbs []string) (*TestStorageEngineConfig, error) {
 	pConfig, postgresEngine := postgres_test.BeforeSuite(dbs)
 
 	return &TestStorageEngineConfig{
-		config: config.PluggableStorageEngine{LogLevel: config.Info, Provider: config.Postgres, Postgres: pConfig},
+		config: cconfig.PluggableStorageEngine{LogLevel: cconfig.Info, Provider: cconfig.Postgres, Postgres: pConfig},
 		BeforeEach: func() error {
 			for _, dbName := range dbs {
 				postgresEngine.BeforeEach()
@@ -163,9 +163,9 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	afterSuiteActions := []func(){}
 
 	cryptoEngineConf := config.CryptoEngines{
-		LogLevel:      config.Info,
+		LogLevel:      cconfig.Info,
 		DefaultEngine: "filesystem-1",
-		FilesystemProvider: []config.FilesystemEngineConfig{
+		FilesystemProvider: []cconfig.FilesystemEngineConfig{
 			{
 				ID:               "filesystem-1",
 				Metadata:         map[string]interface{}{},
@@ -218,14 +218,14 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 }
 
 func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *TestCryptoEngineConfig, eventBus *TestEventBusConfig) (*CATestServer, error) {
-	storageEngine.config.LogLevel = config.Trace
+	storageEngine.config.LogLevel = cconfig.Trace
 
 	svc, scheduler, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
 		Logs: config.BaseConfigLogging{
-			Level: config.Info,
+			Level: cconfig.Info,
 		},
 		Server: config.HttpServer{
-			LogLevel:           config.Info,
+			LogLevel:           cconfig.Info,
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},
@@ -262,10 +262,10 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer) (*DeviceManagerTestServer, error) {
 	svc, port, err := AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
 		Logs: config.BaseConfigLogging{
-			Level: config.Info,
+			Level: cconfig.Info,
 		},
 		Server: config.HttpServer{
-			LogLevel:           config.Info,
+			LogLevel:           cconfig.Info,
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},
@@ -314,10 +314,10 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 
 	svc, port, err := AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
 		Logs: config.BaseConfigLogging{
-			Level: config.Info,
+			Level: cconfig.Info,
 		},
 		Server: config.HttpServer{
-			LogLevel:           config.Info,
+			LogLevel:           cconfig.Info,
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTPS,
 			CertFile:           downstreamCertPath,
@@ -366,10 +366,10 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 func BuildVATestServer(caTestServer *CATestServer) (*VATestServer, error) {
 	_, _, port, err := AssembleVAServiceWithHTTPServer(config.VAconfig{
 		Logs: config.BaseConfigLogging{
-			Level: config.Info,
+			Level: cconfig.Info,
 		},
 		Server: config.HttpServer{
-			LogLevel:           config.Info,
+			LogLevel:           cconfig.Info,
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},

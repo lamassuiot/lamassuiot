@@ -10,8 +10,8 @@ import (
 	"text/template"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"gopkg.in/gomail.v2"

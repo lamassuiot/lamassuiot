@@ -2,8 +2,9 @@ package controllers
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	cresources "github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
@@ -30,11 +31,11 @@ func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.DeviceFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, cresources.DeviceFiltrableFields)
 
 	devices := []models.Device{}
 	nextBookmark, err := r.svc.GetDevices(ctx, services.GetDevicesInput{
-		ListInput: resources.ListInput[models.Device]{
+		ListInput: cresources.ListInput[models.Device]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(dev models.Device) {
@@ -57,7 +58,7 @@ func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.DeviceFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, cresources.DeviceFiltrableFields)
 	type uriParams struct {
 		DMSID string `uri:"id" binding:"required"`
 	}
@@ -71,7 +72,7 @@ func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
 	devices := []models.Device{}
 	nextBookmark, err := r.svc.GetDeviceByDMS(ctx, services.GetDevicesByDMSInput{
 		DMSID: params.DMSID,
-		ListInput: resources.ListInput[models.Device]{
+		ListInput: cresources.ListInput[models.Device]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(dev models.Device) {

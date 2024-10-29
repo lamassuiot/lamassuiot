@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/sqlite"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/storage/sqlite"
 
 	"gorm.io/gorm"
 )

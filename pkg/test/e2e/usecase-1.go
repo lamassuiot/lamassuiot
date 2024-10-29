@@ -12,12 +12,12 @@ import (
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/globalsign/est"
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
@@ -34,7 +34,7 @@ type UseCase1Input struct {
 }
 
 func RunUseCase1(input UseCase1Input) error {
-	lUsecase := helpers.SetupLogger(config.Info, "Test Case", "test")
+	lUsecase := helpers.SetupLogger(cconfig.Info, "Test Case", "test")
 
 	var hostname = input.LamassuHostname
 	var port = input.LamassuPort
@@ -76,7 +76,7 @@ func RunUseCase1(input UseCase1Input) error {
 
 	//Initialization of the client to connect to monolithic
 
-	log := helpers.SetupLogger(config.Info, "Test Case", "httpClient")
+	log := helpers.SetupLogger(cconfig.Info, "Test Case", "httpClient")
 
 	httpCli, err := clients.BuildHTTPClient(config.HTTPClient{
 		AuthMode: config.NoAuth,

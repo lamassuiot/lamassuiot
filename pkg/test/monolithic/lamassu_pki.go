@@ -15,11 +15,10 @@ import (
 	"github.com/google/uuid"
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	lamassu "github.com/lamassuiot/lamassuiot/v2/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	log "github.com/sirupsen/logrus"
 )
@@ -68,9 +67,9 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 
 		caConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: caPort}, Protocol: cconfig.HTTP, BasePath: ""}
 		caSDKBuilder := func(serviceID, src string) services.CAService {
-			lCAClient := helpers.SetupLogger(config.Info, serviceID, "LMS SDK - CA Client")
+			lCAClient := chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - CA Client")
 			caHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
-				LogLevel:       config.Info,
+				LogLevel:       cconfig.Info,
 				AuthMode:       config.NoAuth,
 				HTTPConnection: caConnection,
 			}, lCAClient)
@@ -122,9 +121,9 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		devMngrConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: devPort}, Protocol: cconfig.HTTP, BasePath: ""}
 
 		deviceMngrSDKBuilder := func(serviceID, src string) services.DeviceManagerService {
-			lDevMngrClient := helpers.SetupLogger(config.Info, serviceID, "LMS SDK - DevManager Client")
+			lDevMngrClient := chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - DevManager Client")
 			devMngrHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
-				LogLevel:       config.Info,
+				LogLevel:       cconfig.Info,
 				AuthMode:       config.NoAuth,
 				HTTPConnection: devMngrConnection,
 			}, lDevMngrClient)
@@ -159,9 +158,9 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		dmsMngrConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: dmsPort}, Protocol: cconfig.HTTP, BasePath: ""}
 
 		dmsMngrSDKBuilder := func(serviceID, src string) services.DMSManagerService {
-			lDMSMngrClient := helpers.SetupLogger(config.Info, serviceID, "LMS SDK - DMSManager Client")
+			lDMSMngrClient := chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - DMSManager Client")
 			dmsMngrHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
-				LogLevel:       config.Info,
+				LogLevel:       cconfig.Info,
 				AuthMode:       config.NoAuth,
 				HTTPConnection: dmsMngrConnection,
 			}, lDMSMngrClient)

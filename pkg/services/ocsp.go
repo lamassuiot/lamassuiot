@@ -5,8 +5,8 @@ import (
 	"crypto/x509"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )

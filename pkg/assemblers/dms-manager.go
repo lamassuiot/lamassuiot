@@ -3,15 +3,15 @@ package assemblers
 import (
 	"fmt"
 
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/storage"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/eventpub"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/builder"
 	log "github.com/sirupsen/logrus"
 )
@@ -22,7 +22,7 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 		return nil, -1, fmt.Errorf("could not assemble DMS Manager Service. Exiting: %s", err)
 	}
 
-	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "DMS Manager", "HTTP Server")
+	lHttp := chelpers.SetupLogger(conf.Server.LogLevel, "DMS Manager", "HTTP Server")
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
@@ -36,9 +36,9 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 }
 
 func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService) (*services.DMSManagerService, error) {
-	lSvc := helpers.SetupLogger(conf.Logs.Level, "DMS Manager", "Service")
-	lMessaging := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "DMS Manager", "Event Bus")
-	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "DMS Manager", "Storage")
+	lSvc := chelpers.SetupLogger(conf.Logs.Level, "DMS Manager", "Service")
+	lMessaging := chelpers.SetupLogger(conf.PublisherEventBus.LogLevel, "DMS Manager", "Event Bus")
+	lStorage := chelpers.SetupLogger(conf.Storage.LogLevel, "DMS Manager", "Storage")
 
 	downCert, err := chelpers.ReadCertificateFromFile(conf.DownstreamCertificateFile)
 	if err != nil {
@@ -78,7 +78,7 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 	return &svc, nil
 }
 
-func createDMSStorageInstance(logger *log.Entry, conf config.PluggableStorageEngine) (storage.DMSRepo, error) {
+func createDMSStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.DMSRepo, error) {
 	storage, err := builder.BuildStorageEngine(logger, conf)
 	if err != nil {
 		return nil, fmt.Errorf("could not create storage engine: %s", err)

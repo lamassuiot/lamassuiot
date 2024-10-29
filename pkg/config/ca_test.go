@@ -57,7 +57,7 @@ func TestMigrateCryptoEnginesToV2Config(t *testing.T) {
 			name: "NoMigrationNeeded",
 			config: CAConfig{
 				CryptoEngines: CryptoEngines{
-					PKCS11Provider: []PKCS11EngineConfig{{PKCS11Config: PKCS11Config{ModulePath: "dd"}}},
+					PKCS11Provider: []cconfig.PKCS11EngineConfig{{PKCS11Config: cconfig.PKCS11Config{ModulePath: "dd"}}},
 					CryptoEngines: []cconfig.CryptoEngine{
 						{
 							ID:       "existing-engine",
@@ -70,7 +70,7 @@ func TestMigrateCryptoEnginesToV2Config(t *testing.T) {
 			},
 			want: CAConfig{
 				CryptoEngines: CryptoEngines{
-					PKCS11Provider: []PKCS11EngineConfig{{PKCS11Config: PKCS11Config{ModulePath: "dd"}}},
+					PKCS11Provider: []cconfig.PKCS11EngineConfig{{PKCS11Config: cconfig.PKCS11Config{ModulePath: "dd"}}},
 					CryptoEngines: []cconfig.CryptoEngine{
 						{
 							ID:       "existing-engine",
@@ -86,7 +86,7 @@ func TestMigrateCryptoEnginesToV2Config(t *testing.T) {
 			name: "MigrateFilesystemProvider",
 			config: CAConfig{
 				CryptoEngines: CryptoEngines{
-					FilesystemProvider: []FilesystemEngineConfig{
+					FilesystemProvider: []cconfig.FilesystemEngineConfig{
 						{
 							ID:               "filesystem-engine",
 							Metadata:         nil,

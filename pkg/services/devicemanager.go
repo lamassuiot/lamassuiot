@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/storage"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/storage"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )
@@ -63,7 +63,7 @@ type GetDevicesStatsInput struct {
 }
 
 func (svc *DeviceManagerServiceBackend) GetDevicesStats(ctx context.Context, input GetDevicesStatsInput) (*models.DevicesStats, error) {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	stats := models.DevicesStats{
 		TotalDevices:  -1,
@@ -112,7 +112,7 @@ type CreateDeviceInput struct {
 }
 
 func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input CreateDeviceInput) (*models.Device, error) {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
 	if err != nil {
@@ -168,7 +168,7 @@ type GetDevicesInput struct {
 }
 
 func (svc DeviceManagerServiceBackend) GetDevices(ctx context.Context, input GetDevicesInput) (string, error) {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("getting all devices")
 	return svc.devicesStorage.SelectAll(ctx, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
@@ -180,7 +180,7 @@ type GetDevicesByDMSInput struct {
 }
 
 func (svc DeviceManagerServiceBackend) GetDeviceByDMS(ctx context.Context, input GetDevicesByDMSInput) (string, error) {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("getting all devices owned by DMS with ID=%s", input.DMSID)
 	return svc.devicesStorage.SelectByDMS(ctx, input.DMSID, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
@@ -191,7 +191,7 @@ type GetDeviceByIDInput struct {
 }
 
 func (svc DeviceManagerServiceBackend) GetDeviceByID(ctx context.Context, input GetDeviceByIDInput) (*models.Device, error) {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
 	if err != nil {
@@ -217,7 +217,7 @@ type UpdateDeviceStatusInput struct {
 }
 
 func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, input UpdateDeviceStatusInput) (*models.Device, error) {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
 	if err != nil {
@@ -292,7 +292,7 @@ type UpdateDeviceMetadataInput struct {
 }
 
 func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context, input UpdateDeviceMetadataInput) (*models.Device, error) {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
 	if err != nil {
@@ -325,7 +325,7 @@ type UpdateDeviceIdentitySlotInput struct {
 }
 
 func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Context, input UpdateDeviceIdentitySlotInput) (*models.Device, error) {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
 	if err != nil {

@@ -6,63 +6,24 @@ import (
 )
 
 type CAConfig struct {
-	Logs              BaseConfigLogging      `mapstructure:"logs"`
-	Server            HttpServer             `mapstructure:"server"`
-	PublisherEventBus EventBusEngine         `mapstructure:"publisher_event_bus"`
-	Storage           PluggableStorageEngine `mapstructure:"storage"`
-	CryptoEngines     CryptoEngines          `mapstructure:"crypto_engines"`
-	CryptoMonitoring  CryptoMonitoring       `mapstructure:"crypto_monitoring"`
-	VAServerDomain    string                 `mapstructure:"va_server_domain"`
+	Logs              BaseConfigLogging              `mapstructure:"logs"`
+	Server            HttpServer                     `mapstructure:"server"`
+	PublisherEventBus EventBusEngine                 `mapstructure:"publisher_event_bus"`
+	Storage           cconfig.PluggableStorageEngine `mapstructure:"storage"`
+	CryptoEngines     CryptoEngines                  `mapstructure:"crypto_engines"`
+	CryptoMonitoring  CryptoMonitoring               `mapstructure:"crypto_monitoring"`
+	VAServerDomain    string                         `mapstructure:"va_server_domain"`
 }
 
 type CryptoEngines struct {
-	LogLevel                  LogLevel                                   `mapstructure:"log_level"`
+	LogLevel                  cconfig.LogLevel                           `mapstructure:"log_level"`
 	DefaultEngine             string                                     `mapstructure:"default_id"`
-	PKCS11Provider            []PKCS11EngineConfig                       `mapstructure:"pkcs11"`
+	PKCS11Provider            []cconfig.PKCS11EngineConfig               `mapstructure:"pkcs11"`
 	HashicorpVaultKV2Provider []cconfig.HashicorpVaultCryptoEngineConfig `mapstructure:"hashicorp_vault"`
-	AWSKMSProvider            []AWSCryptoEngine                          `mapstructure:"aws_kms"`
-	AWSSecretsManagerProvider []AWSCryptoEngine                          `mapstructure:"aws_secrets_manager"`
-	FilesystemProvider        []FilesystemEngineConfig                   `mapstructure:"golang"`
+	AWSKMSProvider            []cconfig.AWSCryptoEngine                  `mapstructure:"aws_kms"`
+	AWSSecretsManagerProvider []cconfig.AWSCryptoEngine                  `mapstructure:"aws_secrets_manager"`
+	FilesystemProvider        []cconfig.FilesystemEngineConfig           `mapstructure:"golang"`
 	CryptoEngines             []cconfig.CryptoEngine                     `mapstructure:"crypto_engines"`
-}
-
-type FilesystemEngineConfig struct {
-	ID               string                 `mapstructure:"id"`
-	Metadata         map[string]interface{} `mapstructure:"metadata"`
-	StorageDirectory string                 `mapstructure:"storage_directory"`
-}
-
-type PKCS11Config struct {
-	TokenLabel         string                   `mapstructure:"token"`
-	TokenPin           cconfig.Password         `mapstructure:"pin"`
-	ModulePath         string                   `mapstructure:"module_path"`
-	ModuleExtraOptions PKCS11ModuleExtraOptions `mapstructure:"module_extra_options"`
-}
-
-type PKCS11EngineConfig struct {
-	PKCS11Config `mapstructure:",squash"`
-	ID           string                 `mapstructure:"id"`
-	Metadata     map[string]interface{} `mapstructure:"metadata"`
-}
-
-type PKCS11ModuleExtraOptions struct {
-	Env map[string]string `mapstructure:"env"`
-}
-
-type AWSCryptoEngine struct {
-	AWSSDKConfig `mapstructure:",squash"`
-	ID           string                 `mapstructure:"id"`
-	Metadata     map[string]interface{} `mapstructure:"metadata"`
-}
-
-type AWSSDKConfig struct {
-	AWSAuthenticationMethod AWSAuthenticationMethod `mapstructure:"auth_method"`
-	EndpointURL             string                  `mapstructure:"endpoint_url"`
-	AccessKeyID             string                  `mapstructure:"access_key_id"`
-	SecretAccessKey         cconfig.Password        `mapstructure:"secret_access_key"`
-	SessionToken            cconfig.Password        `mapstructure:"session_token"`
-	Region                  string                  `mapstructure:"region"`
-	RoleARN                 string                  `mapstructure:"role_arn"`
 }
 
 type CryptoMonitoring struct {
@@ -88,7 +49,7 @@ func MigrateCryptoEnginesToV2Config(logger *logrus.Entry, config CAConfig) CACon
 	newCryptoEngines := make([]cconfig.CryptoEngine, 0)
 	// Iterate over the crypto engines of type PKCS11
 	for _, pkcs11Engine := range config.CryptoEngines.PKCS11Provider {
-		newCryptoEngines = addCryptoEngine[PKCS11EngineConfig](cconfig.PKCS11Provider, pkcs11Engine, newCryptoEngines)
+		newCryptoEngines = addCryptoEngine[cconfig.PKCS11EngineConfig](cconfig.PKCS11Provider, pkcs11Engine, newCryptoEngines)
 	}
 
 	// Iterate over the crypto engines of type HashicorpVault
@@ -98,17 +59,17 @@ func MigrateCryptoEnginesToV2Config(logger *logrus.Entry, config CAConfig) CACon
 
 	// Iterate over the crypto engines of type AWSKMS
 	for _, awsKmsEngine := range config.CryptoEngines.AWSKMSProvider {
-		newCryptoEngines = addCryptoEngine[AWSCryptoEngine](cconfig.AWSKMSProvider, awsKmsEngine, newCryptoEngines)
+		newCryptoEngines = addCryptoEngine[cconfig.AWSCryptoEngine](cconfig.AWSKMSProvider, awsKmsEngine, newCryptoEngines)
 	}
 
 	// Iterate over the crypto engines of type AWSSecretsManager
 	for _, awsSecretsManagerEngine := range config.CryptoEngines.AWSSecretsManagerProvider {
-		newCryptoEngines = addCryptoEngine[AWSCryptoEngine](cconfig.AWSSecretsManagerProvider, awsSecretsManagerEngine, newCryptoEngines)
+		newCryptoEngines = addCryptoEngine[cconfig.AWSCryptoEngine](cconfig.AWSSecretsManagerProvider, awsSecretsManagerEngine, newCryptoEngines)
 	}
 
 	// Iterate over the crypto engines of type Golang
 	for _, golangEngine := range config.CryptoEngines.FilesystemProvider {
-		newCryptoEngines = addCryptoEngine[FilesystemEngineConfig](cconfig.FilesystemProvider, golangEngine, newCryptoEngines)
+		newCryptoEngines = addCryptoEngine[cconfig.FilesystemEngineConfig](cconfig.FilesystemProvider, golangEngine, newCryptoEngines)
 	}
 
 	// Clear old config
@@ -136,16 +97,16 @@ func addCryptoEngine[E any](provider cconfig.CryptoEngineProvider, config E, new
 	var metadata map[string]interface{}
 
 	switch t := any(config).(type) {
-	case PKCS11EngineConfig:
+	case cconfig.PKCS11EngineConfig:
 		id = t.ID
 		metadata = t.Metadata
 	case cconfig.HashicorpVaultCryptoEngineConfig:
 		id = t.ID
 		metadata = t.Metadata
-	case AWSCryptoEngine:
+	case cconfig.AWSCryptoEngine:
 		id = t.ID
 		metadata = t.Metadata
-	case FilesystemEngineConfig:
+	case cconfig.FilesystemEngineConfig:
 		id = t.ID
 		metadata = t.Metadata
 	default:

@@ -80,7 +80,7 @@ func TestUseCase1(t *testing.T) {
 	cleanup = append(cleanup, rmqCleanup)
 
 	eventBus := config.EventBusEngine{
-		LogLevel: config.Info,
+		LogLevel: cconfig.Info,
 		Enabled:  true,
 		Provider: config.Amqp,
 		Amqp:     *rmqConfig,
@@ -88,13 +88,13 @@ func TestUseCase1(t *testing.T) {
 
 	conf := config.MonolithicConfig{
 		GatewayPort:        0,
-		Logs:               config.BaseConfigLogging{Level: config.None},
+		Logs:               config.BaseConfigLogging{Level: cconfig.None},
 		SubscriberEventBus: eventBus,
 		PublisherEventBus:  eventBus,
 		Domain:             "dev.lamassu.test",
 		AssemblyMode:       config.Http,
 		CryptoEngines: config.CryptoEngines{
-			LogLevel:      config.Info,
+			LogLevel:      cconfig.Info,
 			DefaultEngine: "golang-1",
 			HashicorpVaultKV2Provider: []cconfig.HashicorpVaultCryptoEngineConfig{
 				{
@@ -103,7 +103,7 @@ func TestUseCase1(t *testing.T) {
 					Metadata:          make(map[string]interface{}),
 				},
 			},
-			FilesystemProvider: []config.FilesystemEngineConfig{
+			FilesystemProvider: []cconfig.FilesystemEngineConfig{
 				{
 					ID:               "golang-1",
 					Metadata:         make(map[string]interface{}),
@@ -115,15 +115,15 @@ func TestUseCase1(t *testing.T) {
 			Enabled:   true,
 			Frequency: "* * * * *",
 		},
-		Storage: config.PluggableStorageEngine{
-			LogLevel: config.Info,
-			Provider: config.Postgres,
+		Storage: cconfig.PluggableStorageEngine{
+			LogLevel: cconfig.Info,
+			Provider: cconfig.Postgres,
 			Postgres: *storageConfig,
 		},
 		AWSIoTManager: config.MonolithicAWSIoTManagerConfig{
 			Enabled:     true,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerAccountID),
-			AWSSDKConfig: config.AWSSDKConfig{
+			AWSSDKConfig: cconfig.AWSSDKConfig{
 				AccessKeyID:     *awsIoTManagerUser,
 				SecretAccessKey: cconfig.Password(*awsIoTManagerPass),
 				Region:          *awsIoTManagerRegion,

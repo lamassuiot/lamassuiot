@@ -7,9 +7,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	cresources "github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
@@ -539,12 +540,12 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 // @Failure 500
 // @Router /certificates [get]
 func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, cresources.CertificateFiltrableFields)
 
 	certs := []models.Certificate{}
 
 	nextBookmark, err := r.svc.GetCertificates(ctx, services.GetCertificatesInput{
-		ListInput: resources.ListInput[models.Certificate]{
+		ListInput: cresources.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert models.Certificate) {
@@ -577,14 +578,14 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 		return
 	}
 
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, cresources.CertificateFiltrableFields)
 
 	certs := []models.Certificate{}
 
 	nextBookmark, err := r.svc.GetCertificatesByExpirationDate(ctx, services.GetCertificatesByExpirationDateInput{
 		ExpiresAfter:  expirationQueryParams.ExpiresAfter,
 		ExpiresBefore: expirationQueryParams.ExpiresBefore,
-		ListInput: resources.ListInput[models.Certificate]{
+		ListInput: cresources.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert models.Certificate) {
@@ -621,7 +622,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 // @Failure 500
 // @Router /cas/{id}/certificates [get]
 func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, cresources.CertificateFiltrableFields)
 
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
@@ -637,7 +638,7 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 
 	nextBookmark, err := r.svc.GetCertificatesByCA(ctx, services.GetCertificatesByCAInput{
 		CAID: params.ID,
-		ListInput: resources.ListInput[models.Certificate]{
+		ListInput: cresources.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert models.Certificate) {
@@ -816,7 +817,7 @@ func (r *caHttpRoutes) SignatureVerify(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, cresources.CertificateFiltrableFields)
 
 	type uriParams struct {
 		CAID   string `uri:"id" binding:"required"`
@@ -834,7 +835,7 @@ func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 	nextBookmark, err := r.svc.GetCertificatesByCaAndStatus(ctx, services.GetCertificatesByCaAndStatusInput{
 		CAID:   params.CAID,
 		Status: models.CertificateStatus(params.Status),
-		ListInput: resources.ListInput[models.Certificate]{
+		ListInput: cresources.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert models.Certificate) {
@@ -867,7 +868,7 @@ func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, cresources.CertificateFiltrableFields)
 
 	type uriParams struct {
 		Status string `uri:"status" binding:"required"`
@@ -883,7 +884,7 @@ func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
 
 	nextBookmark, err := r.svc.GetCertificatesByStatus(ctx, services.GetCertificatesByStatusInput{
 		Status: models.CertificateStatus(params.Status),
-		ListInput: resources.ListInput[models.Certificate]{
+		ListInput: cresources.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(cert models.Certificate) {

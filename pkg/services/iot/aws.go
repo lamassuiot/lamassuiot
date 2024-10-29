@@ -27,9 +27,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
@@ -220,7 +220,7 @@ type RegisterAndAttachThingInput struct {
 }
 
 func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.Context, input RegisterAndAttachThingInput) error {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := svc.RegisterUpdatePolicies(context.Background(), RegisterUpdatePoliciesInput{
 		Policies: input.DMSIoTAutomationConfig.Policies,
@@ -414,7 +414,7 @@ type UpdateCertificateStatusInput struct {
 }
 
 func (svc *AWSCloudConnectorServiceBackend) UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) error {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	var certIoTCoreMeta models.IoTAWSCertificateMetadata
 
@@ -473,7 +473,7 @@ type UpdateDeviceShadowInput struct {
 }
 
 func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Context, input UpdateDeviceShadowInput) error {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	if !input.DMSIoTAutomationConfig.ShadowConfig.Enable {
 		lFunc.Warnf("shadow usage is not enabled for DMS associated to device %s. Skipping", input.DeviceID)
@@ -637,7 +637,7 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 }
 
 func (svc *AWSCloudConnectorServiceBackend) GetRegisteredCAs(ctx context.Context) ([]*models.CACertificate, error) {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	cas := []*models.CACertificate{}
 	lmsCAs := 0
@@ -702,7 +702,7 @@ type RegisterCAInput struct {
 }
 
 func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, input RegisterCAInput) (ca *models.CACertificate, err error) {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	//check if CA already registered in AWS
 	cas, err := svc.GetRegisteredCAs(context.Background())
@@ -1076,7 +1076,7 @@ func (s *SigV4Utils) getSignatureKey(key, dateStamp, regionName, serviceName str
 }
 
 func (svc *AWSCloudConnectorServiceBackend) connectThingOverMqttWss(ctx context.Context, thingID string) error {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	time := time.Now().UTC()
 	dateStamp := time.Format("20060102")

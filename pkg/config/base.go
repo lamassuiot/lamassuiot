@@ -11,11 +11,11 @@ import (
 )
 
 type BaseConfigLogging struct {
-	Level LogLevel `mapstructure:"level"`
+	Level cconfig.LogLevel `mapstructure:"level"`
 }
 
 type HttpServer struct {
-	LogLevel           LogLevel                 `mapstructure:"log_level"`
+	LogLevel           cconfig.LogLevel         `mapstructure:"log_level"`
 	HealthCheckLogging bool                     `mapstructure:"health_check"`
 	ListenAddress      string                   `mapstructure:"listen_address"`
 	Port               int                      `mapstructure:"port"`
@@ -42,42 +42,14 @@ const (
 	Any     MutualTLSMode = "any"
 )
 
-type PluggableStorageEngine struct {
-	LogLevel LogLevel `mapstructure:"log_level"`
-
-	Provider StorageProvider `mapstructure:"provider"`
-
-	CouchDB  CouchDBPSEConfig  `mapstructure:"couch_db"`
-	Postgres PostgresPSEConfig `mapstructure:"postgres"`
-	SQLite   SQLitePSEConfig   `mapstructure:"sqlite"`
-}
-
-type CouchDBPSEConfig struct {
-	cconfig.HTTPConnection `mapstructure:",squash"`
-	Username               string           `mapstructure:"username"`
-	Password               cconfig.Password `mapstructure:"password"`
-}
-
-type SQLitePSEConfig struct {
-	DatabasePath string `mapstructure:"database_path"`
-	InMemory     bool   `mapstructure:"in_memory"`
-}
-
-type PostgresPSEConfig struct {
-	Hostname string           `mapstructure:"hostname"`
-	Port     int              `mapstructure:"port"`
-	Username string           `mapstructure:"username"`
-	Password cconfig.Password `mapstructure:"password"`
-}
-
 type EventBusEngine struct {
-	LogLevel LogLevel `mapstructure:"log_level"`
-	Enabled  bool     `mapstructure:"enabled"`
+	LogLevel cconfig.LogLevel `mapstructure:"log_level"`
+	Enabled  bool             `mapstructure:"enabled"`
 
 	Provider EventBusProvider `mapstructure:"provider"`
 
-	Amqp      AMQPConnection `mapstructure:"amqp"`
-	AWSSqsSns AWSSDKConfig   `mapstructure:"aws_sqs_sns"`
+	Amqp      AMQPConnection       `mapstructure:"amqp"`
+	AWSSqsSns cconfig.AWSSDKConfig `mapstructure:"aws_sqs_sns"`
 }
 
 type AMQPConnection struct {
@@ -98,7 +70,7 @@ type AMQPConnectionBasicAuth struct {
 }
 
 type HTTPClient struct {
-	LogLevel               LogLevel             `mapstructure:"log_level"`
+	LogLevel               cconfig.LogLevel     `mapstructure:"log_level"`
 	AuthMode               HTTPClientAuthMethod `mapstructure:"auth_mode"`
 	AuthJWTOptions         AuthJWTOptions       `mapstructure:"jwt_options"`
 	AuthMTLSOptions        AuthMTLSOptions      `mapstructure:"mtls_options"`

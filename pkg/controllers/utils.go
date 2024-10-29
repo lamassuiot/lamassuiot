@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
 )
 
 func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFieldType) *resources.QueryParameters {

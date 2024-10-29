@@ -131,7 +131,7 @@ func main() {
 	fmt.Println("========== LAUNCHING AUXILIARY SERVICES ==========")
 	fmt.Println("Storage Engine")
 	pCleanup := func() error { return nil }
-	var postgresStorageConfig *config.PostgresPSEConfig
+	var postgresStorageConfig *cconfig.PostgresPSEConfig
 	if *sqliteOptions == "" {
 		fmt.Println(">> launching docker: Postgres ...")
 		var err error
@@ -170,7 +170,7 @@ func main() {
 	_, awsSecretsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
 	_, awsKmsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
 	awsCleanup := func() error { return nil }
-	awsCfg := &config.AWSSDKConfig{}
+	awsCfg := &cconfig.AWSSDKConfig{}
 	if awsSecretsEnabled || awsKmsEnabled {
 		var err error
 		fmt.Println(">> launching docker: AWS Platform (Secrets Manager + KMS) ...")
@@ -182,7 +182,7 @@ func main() {
 
 	hsmModulePath := *hsmModule
 	var softhsmCleanup func() error
-	var pkcs11Cfg *config.PKCS11Config
+	var pkcs11Cfg *cconfig.PKCS11Config
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok && hsmModulePath != "" {
 		fmt.Println(">> launching docker: SoftHSM ...")
 		var err error
@@ -255,7 +255,7 @@ func main() {
 	}()
 
 	eventBus := config.EventBusEngine{
-		LogLevel: config.Trace,
+		LogLevel: cconfig.Trace,
 		Enabled:  false,
 		Provider: config.Amqp,
 		Amqp:     *rmqConfig,
@@ -265,7 +265,7 @@ func main() {
 	}
 
 	cryptoEnginesConfig := config.CryptoEngines{
-		LogLevel: config.Info,
+		LogLevel: cconfig.Info,
 	}
 
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
@@ -281,7 +281,7 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[AwsKms]; ok {
 		cryptoEnginesConfig.DefaultEngine = "dockertest-localstack-kms"
-		cryptoEnginesConfig.AWSKMSProvider = []config.AWSCryptoEngine{
+		cryptoEnginesConfig.AWSKMSProvider = []cconfig.AWSCryptoEngine{
 			{
 				AWSSDKConfig: *awsCfg,
 				ID:           "dockertest-localstack-kms",
@@ -292,7 +292,7 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[AwsSecretsManager]; ok {
 		cryptoEnginesConfig.DefaultEngine = "dockertest-localstack-smngr"
-		cryptoEnginesConfig.AWSSecretsManagerProvider = []config.AWSCryptoEngine{
+		cryptoEnginesConfig.AWSSecretsManagerProvider = []cconfig.AWSCryptoEngine{
 			{
 				AWSSDKConfig: *awsCfg,
 				ID:           "dockertest-localstack-smngr",
@@ -303,7 +303,7 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[GolangFS]; ok {
 		cryptoEnginesConfig.DefaultEngine = "golangfs-1"
-		cryptoEnginesConfig.FilesystemProvider = []config.FilesystemEngineConfig{
+		cryptoEnginesConfig.FilesystemProvider = []cconfig.FilesystemEngineConfig{
 			{
 				ID:               "golangfs-1",
 				Metadata:         make(map[string]interface{}),
@@ -314,7 +314,7 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok {
 		cryptoEnginesConfig.DefaultEngine = "pkcs11-1"
-		cryptoEnginesConfig.PKCS11Provider = []config.PKCS11EngineConfig{
+		cryptoEnginesConfig.PKCS11Provider = []cconfig.PKCS11EngineConfig{
 			{
 				ID:           "pkcs11-1",
 				Metadata:     make(map[string]interface{}),
@@ -323,21 +323,21 @@ func main() {
 		}
 	}
 
-	pluglableStorageConfig := &config.PluggableStorageEngine{
-		LogLevel: config.Trace,
+	pluglableStorageConfig := &cconfig.PluggableStorageEngine{
+		LogLevel: cconfig.Trace,
 	}
 	if *sqliteOptions != "" {
-		pluglableStorageConfig.Provider = config.SQLite
-		pluglableStorageConfig.SQLite = config.SQLitePSEConfig{
+		pluglableStorageConfig.Provider = cconfig.SQLite
+		pluglableStorageConfig.SQLite = cconfig.SQLitePSEConfig{
 			DatabasePath: *sqliteOptions,
 		}
 	} else {
-		pluglableStorageConfig.Provider = config.Postgres
+		pluglableStorageConfig.Provider = cconfig.Postgres
 		pluglableStorageConfig.Postgres = *postgresStorageConfig
 	}
 
 	conf := config.MonolithicConfig{
-		Logs:               config.BaseConfigLogging{Level: config.Debug},
+		Logs:               config.BaseConfigLogging{Level: cconfig.Debug},
 		SubscriberEventBus: eventBus,
 		PublisherEventBus:  eventBus,
 		Domain:             "dev.lamassu.test",
@@ -352,7 +352,7 @@ func main() {
 		AWSIoTManager: config.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
-			AWSSDKConfig: config.AWSSDKConfig{
+			AWSSDKConfig: cconfig.AWSSDKConfig{
 				AccessKeyID:     *awsIoTManagerAKID,
 				SecretAccessKey: cconfig.Password(*awsIoTManagerSAK),
 				SessionToken:    cconfig.Password(*awsIoTManagerST),

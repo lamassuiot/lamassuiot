@@ -1,10 +1,10 @@
 package main
 
 import (
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	lamassu "github.com/lamassuiot/lamassuiot/v2/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )

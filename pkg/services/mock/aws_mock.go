@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services/iot"
 	"github.com/stretchr/testify/mock"
