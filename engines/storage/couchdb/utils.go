@@ -9,10 +9,8 @@ import (
 	"fmt"
 	"net/http"
 
-	_ "github.com/go-kivik/couchdb" // The CouchDB driver
-	"github.com/go-kivik/couchdb/v4"
-	"github.com/go-kivik/couchdb/v4/chttp"
-	"github.com/go-kivik/kivik/v4"
+	kivik "github.com/go-kivik/kivik/v4"
+	_ "github.com/go-kivik/kivik/v4/couchdb" // The CouchDB driver
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
@@ -35,12 +33,14 @@ func CreateCouchDBConnection(logger *logrus.Entry, cfg config.CouchDBPSEConfig) 
 	if err != nil {
 		return nil, err
 	}
+	/*
+	   	kiviOpts := kivik.Options{
+	   		couchdb.OptionHTTPClient: httpCli,
+	   	}
 
-	kivikOpts := kivik.Options{
-		couchdb.OptionHTTPClient: httpCli,
-	}
-
-	client, err := kivik.New("couch", address, kivikOpts)
+	   client, err := kivik.New("couch", address, kivikOpts)
+	*/
+	client, err := kivik.New("couch", address, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -212,24 +212,25 @@ func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, e
 }
 
 func (db *couchDBQuerier[E]) SelectExists(elemID string) (bool, *E, error) {
-	rs := db.Get(context.Background(), elemID)
-	err := rs.Err()
-	if err != nil {
-		switch err := err.(type) {
-		case *chttp.HTTPError:
-			if err.Response.StatusCode == http.StatusNotFound {
-				return false, nil, nil
-			} else {
+	doc := db.Get(context.Background(), elemID)
+	err := doc.Err()
+	return false, nil, err
+	/*
+		if err != nil {
+			switch err := err.(type) {
+			case *kivik.HTTPError:
+				if err.Response.StatusCode == http.StatusNotFound {
+					return false, nil, nil
+				} else {
+					return false, nil, err
+				}
+			default:
 				return false, nil, err
 			}
-		default:
-			return false, nil, err
-		}
-	}
+		}*/
 
-	rs.Next()
 	var elem E
-	if err := rs.ScanDoc(&elem); err != nil {
+	if err := doc.ScanDoc(&elem); err != nil {
 		return false, nil, err
 	}
 
@@ -247,14 +248,13 @@ func (db *couchDBQuerier[E]) Insert(elem E, elemID string) (*E, error) {
 }
 
 func (db *couchDBQuerier[E]) Update(elem E, elemID string) (*E, error) {
-	rs := db.Get(context.Background(), elemID)
-	if rs.Err() != nil {
-		return nil, rs.Err()
+	doc := db.Get(context.Background(), elemID)
+	if doc.Err() != nil {
+		return nil, doc.Err()
 	}
 
-	rs.Next()
-	var prevElem map[string]interface{}
-	if err := rs.ScanDoc(&prevElem); err != nil {
+	currentRev, err := doc.Rev()
+	if err != nil {
 		return nil, err
 	}
 
@@ -269,7 +269,7 @@ func (db *couchDBQuerier[E]) Update(elem E, elemID string) (*E, error) {
 		return nil, err
 	}
 
-	newElem["_rev"] = prevElem["_rev"]
+	newElem["_rev"] = currentRev
 	_, err = db.Put(context.Background(), elemID, newElem)
 	if err != nil {
 		return nil, err
@@ -280,18 +280,16 @@ func (db *couchDBQuerier[E]) Update(elem E, elemID string) (*E, error) {
 }
 
 func (db *couchDBQuerier[E]) Delete(elemID string) error {
-	rs := db.Get(context.Background(), elemID)
-	if rs.Err() != nil {
-		return rs.Err()
+	doc := db.Get(context.Background(), elemID)
+	if doc.Err() != nil {
+		return doc.Err()
 	}
 
-	rs.Next()
-	var prevElem map[string]interface{}
-	if err := rs.ScanDoc(&prevElem); err != nil {
+	rev, err := doc.Rev()
+	if err != nil {
 		return err
 	}
-
-	_, err := db.DB.Delete(context.Background(), elemID, prevElem["_rev"].(string))
+	_, err = db.DB.Delete(context.Background(), elemID, rev)
 	if err != nil {
 		return err
 	}
@@ -322,10 +320,12 @@ func getElements[E any](db *kivik.DB, bookmark string, opts map[string]interface
 		elements = append(elements, element)
 	}
 
-	finisthResult, err := rs.Finish()
+	finisthResult, err := rs.Metadata()
 	if err != nil {
 		return "", []E{}, rs.Err()
 	}
+
+	rs.Close()
 
 	return finisthResult.Bookmark, elements, nil
 }

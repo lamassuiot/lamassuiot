@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	log "github.com/sirupsen/logrus"
 )
 
