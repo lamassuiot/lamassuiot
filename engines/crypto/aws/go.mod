@@ -6,8 +6,11 @@ replace github.com/lamassuiot/lamassuiot/v2/core => ../../../core
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.32.2
+	github.com/aws/aws-sdk-go-v2/config v1.26.6
+	github.com/aws/aws-sdk-go-v2/credentials v1.16.16
 	github.com/aws/aws-sdk-go-v2/service/kms v1.37.2
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.34.2
+	github.com/aws/aws-sdk-go-v2/service/sts v1.26.7
 	github.com/lamassuiot/lamassuiot/v2/core v0.0.0-00010101000000-000000000000
 	github.com/ory/dockertest/v3 v3.11.0
 	github.com/sirupsen/logrus v1.9.3
@@ -20,8 +23,6 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/antonfisher/nested-logrus-formatter v1.3.1 // indirect
-	github.com/aws/aws-sdk-go-v2/config v1.26.6 // indirect
-	github.com/aws/aws-sdk-go-v2/credentials v1.16.16 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.14.11 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.21 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.21 // indirect
@@ -30,7 +31,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.10.10 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.18.7 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.21.7 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.26.7 // indirect
 	github.com/aws/smithy-go v1.22.0 // indirect
 	github.com/bytedance/sonic v1.11.6 // indirect
 	github.com/bytedance/sonic/loader v0.1.1 // indirect

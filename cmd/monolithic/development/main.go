@@ -14,7 +14,11 @@ import (
 
 	"github.com/fatih/color"
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
 	awskmssm_test "github.com/lamassuiot/lamassuiot/v2/crypto/aws/docker"
+	fsconfig "github.com/lamassuiot/lamassuiot/v2/crypto/filesystem/config"
+	pconfig "github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11/config"
+	vconfig "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/config"
 	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/docker"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
@@ -154,7 +158,7 @@ func main() {
 
 	fmt.Println("Crypto Engines")
 	vCleanup := func() error { return nil }
-	vaultConfig := &cconfig.HashicorpVaultSDK{}
+	vaultConfig := &vconfig.HashicorpVaultSDK{}
 	rootToken := ""
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
 		fmt.Println(">> launching docker: Hashicorp Vault ...")
@@ -170,7 +174,7 @@ func main() {
 	_, awsSecretsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
 	_, awsKmsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
 	awsCleanup := func() error { return nil }
-	awsCfg := &cconfig.AWSSDKConfig{}
+	awsCfg := &aconfig.AWSSDKConfig{}
 	if awsSecretsEnabled || awsKmsEnabled {
 		var err error
 		fmt.Println(">> launching docker: AWS Platform (Secrets Manager + KMS) ...")
@@ -182,7 +186,7 @@ func main() {
 
 	hsmModulePath := *hsmModule
 	var softhsmCleanup func() error
-	var pkcs11Cfg *cconfig.PKCS11Config
+	var pkcs11Cfg *pconfig.PKCS11Config
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok && hsmModulePath != "" {
 		fmt.Println(">> launching docker: SoftHSM ...")
 		var err error
@@ -270,7 +274,7 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
 		cryptoEnginesConfig.DefaultEngine = "dockertest-hcpvault-kvv2"
-		cryptoEnginesConfig.HashicorpVaultKV2Provider = []cconfig.HashicorpVaultCryptoEngineConfig{
+		cryptoEnginesConfig.HashicorpVaultKV2Provider = []vconfig.HashicorpVaultCryptoEngineConfig{
 			{
 				HashicorpVaultSDK: *vaultConfig,
 				ID:                "dockertest-hcpvault-kvv2",
@@ -281,7 +285,7 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[AwsKms]; ok {
 		cryptoEnginesConfig.DefaultEngine = "dockertest-localstack-kms"
-		cryptoEnginesConfig.AWSKMSProvider = []cconfig.AWSCryptoEngine{
+		cryptoEnginesConfig.AWSKMSProvider = []aconfig.AWSCryptoEngine{
 			{
 				AWSSDKConfig: *awsCfg,
 				ID:           "dockertest-localstack-kms",
@@ -292,7 +296,7 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[AwsSecretsManager]; ok {
 		cryptoEnginesConfig.DefaultEngine = "dockertest-localstack-smngr"
-		cryptoEnginesConfig.AWSSecretsManagerProvider = []cconfig.AWSCryptoEngine{
+		cryptoEnginesConfig.AWSSecretsManagerProvider = []aconfig.AWSCryptoEngine{
 			{
 				AWSSDKConfig: *awsCfg,
 				ID:           "dockertest-localstack-smngr",
@@ -303,7 +307,7 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[GolangFS]; ok {
 		cryptoEnginesConfig.DefaultEngine = "golangfs-1"
-		cryptoEnginesConfig.FilesystemProvider = []cconfig.FilesystemEngineConfig{
+		cryptoEnginesConfig.FilesystemProvider = []fsconfig.FilesystemEngineConfig{
 			{
 				ID:               "golangfs-1",
 				Metadata:         make(map[string]interface{}),
@@ -314,7 +318,7 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok {
 		cryptoEnginesConfig.DefaultEngine = "pkcs11-1"
-		cryptoEnginesConfig.PKCS11Provider = []cconfig.PKCS11EngineConfig{
+		cryptoEnginesConfig.PKCS11Provider = []pconfig.PKCS11EngineConfig{
 			{
 				ID:           "pkcs11-1",
 				Metadata:     make(map[string]interface{}),
@@ -352,7 +356,7 @@ func main() {
 		AWSIoTManager: config.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
-			AWSSDKConfig: cconfig.AWSSDKConfig{
+			AWSSDKConfig: aconfig.AWSSDKConfig{
 				AccessKeyID:     *awsIoTManagerAKID,
 				SecretAccessKey: cconfig.Password(*awsIoTManagerSAK),
 				SessionToken:    cconfig.Password(*awsIoTManagerST),

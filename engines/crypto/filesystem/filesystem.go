@@ -12,10 +12,10 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/crypto/filesystem/config"
 	"github.com/sirupsen/logrus"
 )
 

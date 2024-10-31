@@ -7,6 +7,9 @@ import (
 	"testing"
 
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
+	fsconfig "github.com/lamassuiot/lamassuiot/v2/crypto/filesystem/config"
+	vconfig "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/config"
 	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/docker"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/test/monolithic"
@@ -96,14 +99,14 @@ func TestUseCase1(t *testing.T) {
 		CryptoEngines: config.CryptoEngines{
 			LogLevel:      cconfig.Info,
 			DefaultEngine: "golang-1",
-			HashicorpVaultKV2Provider: []cconfig.HashicorpVaultCryptoEngineConfig{
+			HashicorpVaultKV2Provider: []vconfig.HashicorpVaultCryptoEngineConfig{
 				{
 					HashicorpVaultSDK: *vaultConfig,
 					ID:                "dockertest-hcpvault-kvv2",
 					Metadata:          make(map[string]interface{}),
 				},
 			},
-			FilesystemProvider: []cconfig.FilesystemEngineConfig{
+			FilesystemProvider: []fsconfig.FilesystemEngineConfig{
 				{
 					ID:               "golang-1",
 					Metadata:         make(map[string]interface{}),
@@ -123,7 +126,7 @@ func TestUseCase1(t *testing.T) {
 		AWSIoTManager: config.MonolithicAWSIoTManagerConfig{
 			Enabled:     true,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerAccountID),
-			AWSSDKConfig: cconfig.AWSSDKConfig{
+			AWSSDKConfig: aconfig.AWSSDKConfig{
 				AccessKeyID:     *awsIoTManagerUser,
 				SecretAccessKey: cconfig.Password(*awsIoTManagerPass),
 				Region:          *awsIoTManagerRegion,

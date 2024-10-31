@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	fsconfig "github.com/lamassuiot/lamassuiot/v2/crypto/filesystem/config"
+	pconfig "github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11/config"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -57,7 +59,7 @@ func TestMigrateCryptoEnginesToV2Config(t *testing.T) {
 			name: "NoMigrationNeeded",
 			config: CAConfig{
 				CryptoEngines: CryptoEngines{
-					PKCS11Provider: []cconfig.PKCS11EngineConfig{{PKCS11Config: cconfig.PKCS11Config{ModulePath: "dd"}}},
+					PKCS11Provider: []pconfig.PKCS11EngineConfig{{PKCS11Config: pconfig.PKCS11Config{ModulePath: "dd"}}},
 					CryptoEngines: []cconfig.CryptoEngine{
 						{
 							ID:       "existing-engine",
@@ -70,7 +72,7 @@ func TestMigrateCryptoEnginesToV2Config(t *testing.T) {
 			},
 			want: CAConfig{
 				CryptoEngines: CryptoEngines{
-					PKCS11Provider: []cconfig.PKCS11EngineConfig{{PKCS11Config: cconfig.PKCS11Config{ModulePath: "dd"}}},
+					PKCS11Provider: []pconfig.PKCS11EngineConfig{{PKCS11Config: pconfig.PKCS11Config{ModulePath: "dd"}}},
 					CryptoEngines: []cconfig.CryptoEngine{
 						{
 							ID:       "existing-engine",
@@ -86,7 +88,7 @@ func TestMigrateCryptoEnginesToV2Config(t *testing.T) {
 			name: "MigrateFilesystemProvider",
 			config: CAConfig{
 				CryptoEngines: CryptoEngines{
-					FilesystemProvider: []cconfig.FilesystemEngineConfig{
+					FilesystemProvider: []fsconfig.FilesystemEngineConfig{
 						{
 							ID:               "filesystem-engine",
 							Metadata:         nil,

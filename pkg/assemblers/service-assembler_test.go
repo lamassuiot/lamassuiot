@@ -11,6 +11,8 @@ import (
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	fsconfig "github.com/lamassuiot/lamassuiot/v2/crypto/filesystem/config"
+	vconfig "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/config"
 	vault_test "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/docker"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
@@ -165,7 +167,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	cryptoEngineConf := config.CryptoEngines{
 		LogLevel:      cconfig.Info,
 		DefaultEngine: "filesystem-1",
-		FilesystemProvider: []cconfig.FilesystemEngineConfig{
+		FilesystemProvider: []fsconfig.FilesystemEngineConfig{
 			{
 				ID:               "filesystem-1",
 				Metadata:         map[string]interface{}{},
@@ -183,7 +185,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 
 	if slices.Contains(engines, VAULT) {
 		vaultSDKConf, vaultSuite := vault_test.BeforeSuite()
-		cryptoEngineConf.HashicorpVaultKV2Provider = []cconfig.HashicorpVaultCryptoEngineConfig{
+		cryptoEngineConf.HashicorpVaultKV2Provider = []vconfig.HashicorpVaultCryptoEngineConfig{
 			{
 				ID:                "vault-1",
 				HashicorpVaultSDK: vaultSDKConf,

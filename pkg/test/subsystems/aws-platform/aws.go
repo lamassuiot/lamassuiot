@@ -7,11 +7,12 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	dockerunner "github.com/lamassuiot/lamassuiot/v2/core/pkg/test/dockerrunner"
+	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
 
-func RunAWSEmulationLocalStackDocker() (func() error, *config.AWSSDKConfig, error) {
+func RunAWSEmulationLocalStackDocker() (func() error, *aconfig.AWSSDKConfig, error) {
 	containerCleanup, container, dockerHost, err := dockerunner.RunDocker(dockertest.RunOptions{
 		Repository: "localstack/localstack", // image
 		Tag:        "3.4",                   // version
@@ -41,7 +42,7 @@ func RunAWSEmulationLocalStackDocker() (func() error, *config.AWSSDKConfig, erro
 		return nil, nil, err
 	}
 
-	return containerCleanup, &config.AWSSDKConfig{
+	return containerCleanup, &aconfig.AWSSDKConfig{
 		EndpointURL:             endpoint,
 		AccessKeyID:             "test",
 		SecretAccessKey:         "test",

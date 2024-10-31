@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -49,7 +50,7 @@ type EventBusEngine struct {
 	Provider EventBusProvider `mapstructure:"provider"`
 
 	Amqp      AMQPConnection       `mapstructure:"amqp"`
-	AWSSqsSns cconfig.AWSSDKConfig `mapstructure:"aws_sqs_sns"`
+	AWSSqsSns aconfig.AWSSDKConfig `mapstructure:"aws_sqs_sns"`
 }
 
 type AMQPConnection struct {

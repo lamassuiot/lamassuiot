@@ -5,6 +5,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
 	awsplatform_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/aws-platform"
 )
 
@@ -18,7 +19,7 @@ func TestGetAwsSdkConfig(t *testing.T) {
 
 	conf.AWSAuthenticationMethod = config.Static
 	// Test Static authentication method
-	awsCfg, err := config.GetAwsSdkConfig(*conf)
+	awsCfg, err := aconfig.GetAwsSdkConfig(*conf)
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -39,7 +40,7 @@ func TestGetAwsSdkConfig(t *testing.T) {
 
 	// reset endpoint
 	conf.EndpointURL = ""
-	awsCfg, err = config.GetAwsSdkConfig(*conf)
+	awsCfg, err = aconfig.GetAwsSdkConfig(*conf)
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -51,7 +52,7 @@ func TestGetAwsSdkConfig(t *testing.T) {
 
 	// Test AssumeRole authentication method
 	conf.AWSAuthenticationMethod = config.AssumeRole
-	awsCfg, err = config.GetAwsSdkConfig(*conf)
+	awsCfg, err = aconfig.GetAwsSdkConfig(*conf)
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}

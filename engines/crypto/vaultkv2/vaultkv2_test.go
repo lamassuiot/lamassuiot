@@ -10,9 +10,9 @@ import (
 	"crypto/x509"
 	"testing"
 
-	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	vconfig "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/config"
 	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/docker"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -99,7 +99,7 @@ func prepareVaultkv2CryptoEngine(t *testing.T) cryptoengines.CryptoEngine {
 
 	logger := logrus.New().WithField("test", "VaultKV2")
 
-	ceConfig := cconfig.HashicorpVaultCryptoEngineConfig{
+	ceConfig := vconfig.HashicorpVaultCryptoEngineConfig{
 		HashicorpVaultSDK: *vaultConfig,
 		ID:                "dockertest-hcpvault-kvv2",
 		Metadata:          make(map[string]interface{})}

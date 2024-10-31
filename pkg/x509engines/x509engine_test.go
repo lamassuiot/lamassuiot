@@ -19,6 +19,7 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/crypto/filesystem"
+	fsconfig "github.com/lamassuiot/lamassuiot/v2/crypto/filesystem/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 )
 
@@ -28,7 +29,7 @@ func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
 
 	// Create a new instance of GoCryptoEngine
 	log := chelpers.SetupLogger(cconfig.Info, "Test Case", "Golang Engine")
-	engine, _ := filesystem.NewFilesystemPEMEngine(log, cconfig.FilesystemEngineConfig{StorageDirectory: tempDir})
+	engine, _ := filesystem.NewFilesystemPEMEngine(log, fsconfig.FilesystemEngineConfig{StorageDirectory: tempDir})
 
 	x509Engine := NewX509Engine(&engine, "ocsp.lamassu.io")
 

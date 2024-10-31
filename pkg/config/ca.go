@@ -2,6 +2,10 @@ package config
 
 import (
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
+	fsconfig "github.com/lamassuiot/lamassuiot/v2/crypto/filesystem/config"
+	pconfig "github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11/config"
+	vconfig "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/config"
 	"github.com/sirupsen/logrus"
 )
 
@@ -18,11 +22,11 @@ type CAConfig struct {
 type CryptoEngines struct {
 	LogLevel                  cconfig.LogLevel                           `mapstructure:"log_level"`
 	DefaultEngine             string                                     `mapstructure:"default_id"`
-	PKCS11Provider            []cconfig.PKCS11EngineConfig               `mapstructure:"pkcs11"`
-	HashicorpVaultKV2Provider []cconfig.HashicorpVaultCryptoEngineConfig `mapstructure:"hashicorp_vault"`
-	AWSKMSProvider            []cconfig.AWSCryptoEngine                  `mapstructure:"aws_kms"`
-	AWSSecretsManagerProvider []cconfig.AWSCryptoEngine                  `mapstructure:"aws_secrets_manager"`
-	FilesystemProvider        []cconfig.FilesystemEngineConfig           `mapstructure:"golang"`
+	PKCS11Provider            []pconfig.PKCS11EngineConfig               `mapstructure:"pkcs11"`
+	HashicorpVaultKV2Provider []vconfig.HashicorpVaultCryptoEngineConfig `mapstructure:"hashicorp_vault"`
+	AWSKMSProvider            []aconfig.AWSCryptoEngine                  `mapstructure:"aws_kms"`
+	AWSSecretsManagerProvider []aconfig.AWSCryptoEngine                  `mapstructure:"aws_secrets_manager"`
+	FilesystemProvider        []fsconfig.FilesystemEngineConfig          `mapstructure:"golang"`
 	CryptoEngines             []cconfig.CryptoEngine                     `mapstructure:"crypto_engines"`
 }
 
@@ -49,27 +53,27 @@ func MigrateCryptoEnginesToV2Config(logger *logrus.Entry, config CAConfig) CACon
 	newCryptoEngines := make([]cconfig.CryptoEngine, 0)
 	// Iterate over the crypto engines of type PKCS11
 	for _, pkcs11Engine := range config.CryptoEngines.PKCS11Provider {
-		newCryptoEngines = addCryptoEngine[cconfig.PKCS11EngineConfig](cconfig.PKCS11Provider, pkcs11Engine, newCryptoEngines)
+		newCryptoEngines = addCryptoEngine[pconfig.PKCS11EngineConfig](cconfig.PKCS11Provider, pkcs11Engine, newCryptoEngines)
 	}
 
 	// Iterate over the crypto engines of type HashicorpVault
 	for _, hashicorpVaultEngine := range config.CryptoEngines.HashicorpVaultKV2Provider {
-		newCryptoEngines = addCryptoEngine[cconfig.HashicorpVaultCryptoEngineConfig](cconfig.HashicorpVaultProvider, hashicorpVaultEngine, newCryptoEngines)
+		newCryptoEngines = addCryptoEngine[vconfig.HashicorpVaultCryptoEngineConfig](cconfig.HashicorpVaultProvider, hashicorpVaultEngine, newCryptoEngines)
 	}
 
 	// Iterate over the crypto engines of type AWSKMS
 	for _, awsKmsEngine := range config.CryptoEngines.AWSKMSProvider {
-		newCryptoEngines = addCryptoEngine[cconfig.AWSCryptoEngine](cconfig.AWSKMSProvider, awsKmsEngine, newCryptoEngines)
+		newCryptoEngines = addCryptoEngine[aconfig.AWSCryptoEngine](cconfig.AWSKMSProvider, awsKmsEngine, newCryptoEngines)
 	}
 
 	// Iterate over the crypto engines of type AWSSecretsManager
 	for _, awsSecretsManagerEngine := range config.CryptoEngines.AWSSecretsManagerProvider {
-		newCryptoEngines = addCryptoEngine[cconfig.AWSCryptoEngine](cconfig.AWSSecretsManagerProvider, awsSecretsManagerEngine, newCryptoEngines)
+		newCryptoEngines = addCryptoEngine[aconfig.AWSCryptoEngine](cconfig.AWSSecretsManagerProvider, awsSecretsManagerEngine, newCryptoEngines)
 	}
 
 	// Iterate over the crypto engines of type Golang
 	for _, golangEngine := range config.CryptoEngines.FilesystemProvider {
-		newCryptoEngines = addCryptoEngine[cconfig.FilesystemEngineConfig](cconfig.FilesystemProvider, golangEngine, newCryptoEngines)
+		newCryptoEngines = addCryptoEngine[fsconfig.FilesystemEngineConfig](cconfig.FilesystemProvider, golangEngine, newCryptoEngines)
 	}
 
 	// Clear old config
@@ -97,16 +101,16 @@ func addCryptoEngine[E any](provider cconfig.CryptoEngineProvider, config E, new
 	var metadata map[string]interface{}
 
 	switch t := any(config).(type) {
-	case cconfig.PKCS11EngineConfig:
+	case pconfig.PKCS11EngineConfig:
 		id = t.ID
 		metadata = t.Metadata
-	case cconfig.HashicorpVaultCryptoEngineConfig:
+	case vconfig.HashicorpVaultCryptoEngineConfig:
 		id = t.ID
 		metadata = t.Metadata
-	case cconfig.AWSCryptoEngine:
+	case aconfig.AWSCryptoEngine:
 		id = t.ID
 		metadata = t.Metadata
-	case cconfig.FilesystemEngineConfig:
+	case fsconfig.FilesystemEngineConfig:
 		id = t.ID
 		metadata = t.Metadata
 	default:

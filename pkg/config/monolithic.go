@@ -1,6 +1,9 @@
 package config
 
-import cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+import (
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
+)
 
 type LamassuMonolithicAssembleMode string
 
@@ -28,5 +31,5 @@ type MonolithicConfig struct {
 type MonolithicAWSIoTManagerConfig struct {
 	Enabled      bool                 `mapstructure:"enabled"`
 	ConnectorID  string               `mapstructure:"connector_id"`
-	AWSSDKConfig cconfig.AWSSDKConfig `mapstructure:"aws_config"`
+	AWSSDKConfig aconfig.AWSSDKConfig `mapstructure:"aws_config"`
 }

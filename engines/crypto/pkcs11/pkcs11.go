@@ -14,10 +14,11 @@ import (
 	"os"
 
 	"github.com/ThalesIgnite/crypto11"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11/config"
 	"github.com/miekg/pkcs11"
 	"github.com/sirupsen/logrus"
 )

@@ -14,9 +14,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v2/crypto/filesystem/config"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -25,7 +26,7 @@ func setup(t *testing.T) (string, *FilesystemCryptoEngine) {
 	tempDir := t.TempDir()
 
 	// Create a new instance of GoCryptoEngine
-	log := helpers.SetupLogger(config.Info, "CA TestCase", "Golang Engine")
+	log := helpers.SetupLogger(cconfig.Info, "CA TestCase", "Golang Engine")
 	engine, _ := NewFilesystemPEMEngine(log, config.FilesystemEngineConfig{StorageDirectory: tempDir})
 
 	return tempDir, engine.(*FilesystemCryptoEngine)

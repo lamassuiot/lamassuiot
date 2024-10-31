@@ -21,6 +21,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	vconfig "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/config"
 	"github.com/sirupsen/logrus"
 )
 
@@ -35,7 +36,7 @@ type VaultKV2Engine struct {
 	kvv2Client *api.KVv2
 }
 
-func NewVaultKV2Engine(logger *logrus.Entry, conf config.HashicorpVaultCryptoEngineConfig) (cryptoengines.CryptoEngine, error) {
+func NewVaultKV2Engine(logger *logrus.Entry, conf vconfig.HashicorpVaultCryptoEngineConfig) (cryptoengines.CryptoEngine, error) {
 	var err error
 	lVault = logger.WithField("subsystem-provider", "Vault-KV2")
 	address := fmt.Sprintf("%s://%s:%d", conf.Protocol, conf.Hostname, conf.Port)

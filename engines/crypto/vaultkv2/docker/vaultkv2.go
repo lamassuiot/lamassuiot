@@ -8,11 +8,12 @@ import (
 
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	dockerunner "github.com/lamassuiot/lamassuiot/v2/core/pkg/test/dockerrunner"
+	vconfig "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/config"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
 
-func RunHashicorpVaultDocker() (func() error, *cconfig.HashicorpVaultSDK, string, error) {
+func RunHashicorpVaultDocker() (func() error, *vconfig.HashicorpVaultSDK, string, error) {
 	rootToken := "root-token-dev"
 	containerCleanup, container, _, err := dockerunner.RunDocker(dockertest.RunOptions{
 		Repository: "vault",  // image
@@ -102,7 +103,7 @@ func RunHashicorpVaultDocker() (func() error, *cconfig.HashicorpVaultSDK, string
 
 	secretID := secretIDRAW.Data["secret_id"].(string)
 
-	return containerCleanup, &cconfig.HashicorpVaultSDK{
+	return containerCleanup, &vconfig.HashicorpVaultSDK{
 		RoleID:    roleID,
 		SecretID:  cconfig.Password(secretID),
 		MountPath: mountPath,

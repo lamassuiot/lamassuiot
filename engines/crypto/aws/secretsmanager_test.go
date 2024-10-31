@@ -11,9 +11,9 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
 	"github.com/lamassuiot/lamassuiot/v2/crypto/aws/docker"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -102,7 +102,7 @@ func prepareSecretsManagerCryptoEngine(t *testing.T) cryptoengines.CryptoEngine 
 
 	metadata := map[string]interface{}{}
 
-	awsConf, err := cconfig.GetAwsSdkConfig(*conf)
+	awsConf, err := aconfig.GetAwsSdkConfig(*conf)
 	assert.NoError(t, err)
 
 	engine, err := NewAWSSecretManagerEngine(logger, *awsConf, metadata)

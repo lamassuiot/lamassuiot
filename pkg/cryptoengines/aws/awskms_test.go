@@ -11,11 +11,11 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	awsce "github.com/lamassuiot/lamassuiot/v2/crypto/aws"
+	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
 	awsplatform_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/aws-platform"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -121,7 +121,7 @@ func prepareKMSCryptoEngine(t *testing.T) cryptoengines.CryptoEngine {
 
 	metadata := map[string]interface{}{}
 
-	awsConf, err := config.GetAwsSdkConfig(*conf)
+	awsConf, err := aconfig.GetAwsSdkConfig(*conf)
 	assert.NoError(t, err)
 
 	engine, err := awsce.NewAWSKMSEngine(logger, *awsConf, metadata)

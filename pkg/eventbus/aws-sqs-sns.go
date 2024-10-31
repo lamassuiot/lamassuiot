@@ -4,13 +4,12 @@ import (
 	"strconv"
 
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
 	"github.com/sirupsen/logrus"
 )
 
-func NewAwsSqsSub(conf config.AWSSDKConfig, serviceID string, logger *logrus.Entry) (*sqs.Subscriber, error) {
-	awsConf, err := cconfig.GetAwsSdkConfig(conf)
+func NewAwsSqsSub(conf aconfig.AWSSDKConfig, serviceID string, logger *logrus.Entry) (*sqs.Subscriber, error) {
+	awsConf, err := aconfig.GetAwsSdkConfig(conf)
 	if err != nil {
 		return nil, err
 	}

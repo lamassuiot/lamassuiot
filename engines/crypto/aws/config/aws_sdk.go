@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 )
 
 func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
@@ -26,7 +27,7 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 	})
 
 	switch conf.AWSAuthenticationMethod {
-	case Static:
+	case cconfig.Static:
 		creds := aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(conf.AccessKeyID, string(conf.SecretAccessKey), string(conf.SessionToken)))
 		creds.Invalidate()
 		awsCfg, err := config.LoadDefaultConfig(context.TODO(),
@@ -39,7 +40,7 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 		}
 
 		return &awsCfg, nil
-	case AssumeRole:
+	case cconfig.AssumeRole:
 		stsCfg, err := config.LoadDefaultConfig(context.TODO(),
 			config.WithRegion(conf.Region),
 			config.WithEndpointResolverWithOptions(customResolver),

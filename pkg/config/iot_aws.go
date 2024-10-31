@@ -1,6 +1,8 @@
 package config
 
-import cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+import (
+	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
+)
 
 type IotAWS struct {
 	Logs               BaseConfigLogging `mapstructure:"logs"`
@@ -19,7 +21,7 @@ type IotAWS struct {
 	} `mapstructure:"ca_client"`
 
 	ConnectorID               string               `mapstructure:"connector_id"`
-	AWSSDKConfig              cconfig.AWSSDKConfig `mapstructure:"aws_config"`
+	AWSSDKConfig              aconfig.AWSSDKConfig `mapstructure:"aws_config"`
 	AWSBidirectionalQueueName string               `mapstructure:"aws_bidirectional_queue_name"`
 }
 
