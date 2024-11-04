@@ -146,7 +146,7 @@ func testWildcardSubscribe(t *testing.T) {
 		},
 		{
 			name: "AWSSqsSNS",
-			conf: rabbitTestServer,
+			conf: sqsTestServer,
 		},
 	}
 

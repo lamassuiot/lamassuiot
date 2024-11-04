@@ -1,4 +1,4 @@
-package eventbus
+package aws
 
 import (
 	"strconv"

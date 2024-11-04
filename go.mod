@@ -18,25 +18,32 @@ replace github.com/lamassuiot/lamassuiot/v2/storage/sqlite => ./engines/storage/
 
 replace github.com/lamassuiot/lamassuiot/v2/storage/couchdb => ./engines/storage/couchdb
 
+replace github.com/lamassuiot/lamassuiot/v2/eventbus/amqp => ./engines/eventbus/amqp
+
+replace github.com/lamassuiot/lamassuiot/v2/eventbus/aws => ./engines/eventbus/aws
+
+replace github.com/lamassuiot/lamassuiot/v2/eventbus/channel => ./engines/eventbus/channel
+
 require (
 	github.com/lamassuiot/lamassuiot/v2/core v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v2/crypto/aws v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v2/crypto/filesystem v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11 v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2 v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v2/eventbus/amqp v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v2/eventbus/aws v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v2/eventbus/channel v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v2/storage/couchdb v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v2/storage/postgres v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v2/storage/sqlite v0.0.0-00010101000000-000000000000
 )
 
 require (
-	github.com/ThreeDotsLabs/watermill v1.3.5
-	github.com/ThreeDotsLabs/watermill-amazonsqs v0.0.3
-	github.com/ThreeDotsLabs/watermill-amqp/v2 v2.1.1
+	github.com/ThreeDotsLabs/watermill v1.3.7
+	github.com/ThreeDotsLabs/watermill-amqp/v2 v2.1.3
 	github.com/aws/aws-sdk-go-v2 v1.32.3
 	github.com/aws/aws-sdk-go-v2/service/iot v1.45.1
 	github.com/aws/aws-sdk-go-v2/service/iotdataplane v1.19.3
-	github.com/aws/aws-sdk-go-v2/service/sns v1.29.1
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.29.7
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/eclipse/paho.mqtt.golang v1.4.3
@@ -70,6 +77,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/ThalesIgnite/crypto11 v1.2.5 // indirect
+	github.com/ThreeDotsLabs/watermill-amazonsqs v0.0.3 // indirect
 	github.com/antonfisher/nested-logrus-formatter v1.3.1 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.28.1 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.42 // indirect
@@ -81,6 +89,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.12.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/kms v1.37.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.34.2 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sns v1.29.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.24.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.28.3 // indirect
 	github.com/aws/smithy-go v1.22.0 // indirect
@@ -126,11 +135,11 @@ require (
 	github.com/opencontainers/runc v1.1.13 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/rabbitmq/amqp091-go v1.9.0 // indirect
+	github.com/rabbitmq/amqp091-go v1.10.0 // indirect
 	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
-	github.com/sony/gobreaker v0.5.0 // indirect
+	github.com/sony/gobreaker v1.0.0 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.6.0 // indirect
@@ -154,7 +163,7 @@ require (
 	github.com/cenkalti/backoff/v3 v3.2.2 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/golang/protobuf v1.5.3 // indirect
+	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect

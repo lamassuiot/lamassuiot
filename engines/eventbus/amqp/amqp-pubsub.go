@@ -1,4 +1,4 @@
-package eventbus
+package amqp
 
 import (
 	"crypto/tls"
@@ -9,7 +9,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill-amqp/v2/pkg/amqp"
 	"github.com/ThreeDotsLabs/watermill/message"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/eventbus/amqp/config"
 	"github.com/sirupsen/logrus"
 )
 

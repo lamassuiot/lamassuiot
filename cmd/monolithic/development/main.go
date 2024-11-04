@@ -20,6 +20,7 @@ import (
 	pconfig "github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11/config"
 	vconfig "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/config"
 	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/docker"
+	eventbus_amqp "github.com/lamassuiot/lamassuiot/v2/eventbus/amqp/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/test/monolithic"
@@ -198,7 +199,7 @@ func main() {
 
 	fmt.Println("Async Messaging Engine")
 	rmqCleanup := func() error { return nil }
-	rmqConfig := &config.AMQPConnection{}
+	rmqConfig := &eventbus_amqp.AMQPConnection{}
 	adminPort := 0
 	if !*disableEventbus {
 		fmt.Println(">> launching docker: RabbitMQ ...")

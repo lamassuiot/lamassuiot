@@ -7,6 +7,7 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
+	ampq "github.com/lamassuiot/lamassuiot/v2/eventbus/amqp/config"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -49,25 +50,9 @@ type EventBusEngine struct {
 
 	Provider EventBusProvider `mapstructure:"provider"`
 
-	Amqp      AMQPConnection       `mapstructure:"amqp"`
-	AWSSqsSns aconfig.AWSSDKConfig `mapstructure:"aws_sqs_sns"`
-}
-
-type AMQPConnection struct {
-	cconfig.BasicConnection `mapstructure:",squash"`
-	Exchange                string                  `mapstructure:"exchange"`
-	Protocol                AMQPProtocol            `mapstructure:"protocol"`
-	BasicAuth               AMQPConnectionBasicAuth `mapstructure:"basic_auth"`
-	ClientTLSAuth           struct {
-		Enabled  bool   `mapstructure:"enabled"`
-		CertFile string `mapstructure:"cert_file"`
-		KeyFile  string `mapstructure:"key_file"`
-	} `mapstructure:"client_tls_auth"`
-}
-type AMQPConnectionBasicAuth struct {
-	Enabled  bool             `mapstructure:"enabled"`
-	Username string           `mapstructure:"username"`
-	Password cconfig.Password `mapstructure:"password"`
+	Amqp      ampq.AMQPConnection    `mapstructure:"amqp"`
+	AWSSqsSns aconfig.AWSSDKConfig   `mapstructure:"aws_sqs_sns"`
+	Config    map[string]interface{} `mapstructure:",remain"`
 }
 
 type HTTPClient struct {
@@ -87,6 +72,35 @@ type AuthJWTOptions struct {
 type AuthMTLSOptions struct {
 	CertFile string `mapstructure:"cert_file"`
 	KeyFile  string `mapstructure:"key_file"`
+}
+
+func MigrateEventBusToV2Config(config EventBusEngine) (EventBusEngine, error) {
+	// Migrate EventBus to V2
+
+	// Process each event bus config an convert into the new format EventBusEngine
+	// This is done to ensure that the config is backward compatible with the previous version
+	// of the config
+
+	switch config.Provider {
+	case Amqp:
+		var err error
+		config.Config, err = cconfig.EncodeStruct(config.Amqp)
+		if err != nil {
+			log.Errorf("could not encode AMQP Connection config: %s", err)
+			return config, err
+		}
+
+	case AWSSqsSns:
+		var err error
+		config.Config, err = cconfig.EncodeStruct(config.AWSSqsSns)
+		if err != nil {
+			log.Errorf("could not encode AMQP Connection config: %s", err)
+			return config, err
+		}
+	}
+
+	return config, nil
+
 }
 
 func readConfig[E any](configFilePath string, defaults *E) (*E, error) {

@@ -8,14 +8,14 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill-amqp/v2/pkg/amqp"
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/test/dockerrunner"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	dockerunner "github.com/lamassuiot/lamassuiot/v2/core/pkg/test/dockerrunner"
+	ampq "github.com/lamassuiot/lamassuiot/v2/eventbus/amqp/config"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	"github.com/sirupsen/logrus"
 )
 
-func RunRabbitMQDocker() (func() error, *config.AMQPConnection, int, error) {
+func RunRabbitMQDocker() (func() error, *ampq.AMQPConnection, int, error) {
 	containerCleanup, container, dockerHost, err := dockerunner.RunDocker(dockertest.RunOptions{
 		Repository: "rabbitmq",        // image
 		Tag:        "3.12-management", // version
@@ -50,14 +50,14 @@ func RunRabbitMQDocker() (func() error, *config.AMQPConnection, int, error) {
 		return nil, nil, -1, err
 	}
 
-	return containerCleanup, &config.AMQPConnection{
-		Protocol: config.AMQP,
+	return containerCleanup, &ampq.AMQPConnection{
+		Protocol: ampq.AMQP,
 		BasicConnection: cconfig.BasicConnection{
 			Hostname:  "127.0.0.1",
 			Port:      p,
 			TLSConfig: cconfig.TLSConfig{},
 		},
-		BasicAuth: config.AMQPConnectionBasicAuth{Enabled: true, Username: "user", Password: "user"},
+		BasicAuth: ampq.AMQPConnectionBasicAuth{Enabled: true, Username: "user", Password: "user"},
 		Exchange:  "lamassu",
 	}, adminPort, nil
 }

@@ -10,5 +10,7 @@ use (
  ./engines/storage/postgres
  ./engines/storage/couchdb
  ./engines/storage/sqlite
-
+ ./engines/eventbus/amqp
+ ./engines/eventbus/aws
+ ./engines/eventbus/channel
  )

@@ -5,37 +5,38 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus/builder"
 	"github.com/sirupsen/logrus"
 )
 
 func NewEventBusSubscriber(conf config.EventBusEngine, serviceID string, logger *logrus.Entry) (message.Subscriber, error) {
-	switch conf.Provider {
-	case config.Amqp:
-		return NewAMQPSub(conf.Amqp, serviceID, logger)
-	case config.AWSSqsSns:
-		return NewSnsExchangeSubscriber(SnsExchangeBuilder{
-			Config:       conf.AWSSqsSns,
-			ExchangeName: "lamassu-events",
-			ServiceID:    serviceID,
-			Logger:       logger,
-		}), nil
+
+	conf2, err := config.MigrateEventBusToV2Config(conf)
+	if err != nil {
+		return nil, fmt.Errorf("could not migrate event bus config: %s", err)
 	}
 
-	return nil, fmt.Errorf("unsupported subscriber provider: %s", conf.Provider)
+	engine, err := builder.BuildEventBusEngine(string(conf.Provider), conf2.Config, serviceID, logger)
+	if err != nil {
+		logger.Errorf("could not generate Event Bus Subscriber: %s", err)
+		return nil, err
+	}
+
+	return engine.Subscriber()
+
 }
 
 func NewEventBusPublisher(conf config.EventBusEngine, serviceID string, logger *logrus.Entry) (message.Publisher, error) {
-	switch conf.Provider {
-	case config.Amqp:
-		return NewAMQPPub(conf.Amqp, serviceID, logger)
-	case config.AWSSqsSns:
-		return NewSnsExchangePublisher(SnsExchangeBuilder{
-			Config:       conf.AWSSqsSns,
-			ExchangeName: "lamassu-events",
-			ServiceID:    serviceID,
-			Logger:       logger,
-		})
+	conf2, err := config.MigrateEventBusToV2Config(conf)
+	if err != nil {
+		return nil, fmt.Errorf("could not migrate event bus config: %s", err)
 	}
 
-	return nil, fmt.Errorf("unsupported subscriber provider: %s", conf.Provider)
+	engine, err := builder.BuildEventBusEngine(string(conf.Provider), conf2.Config, serviceID, logger)
+	if err != nil {
+		logger.Errorf("could not generate Event Bus Subscriber: %s", err)
+		return nil, err
+	}
+
+	return engine.Publisher()
 }

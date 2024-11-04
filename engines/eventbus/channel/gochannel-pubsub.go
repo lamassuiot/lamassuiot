@@ -1,4 +1,4 @@
-package eventbus
+package channel
 
 import (
 	"github.com/ThreeDotsLabs/watermill/message"

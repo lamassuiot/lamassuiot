@@ -8,13 +8,6 @@ const (
 	NoAuth HTTPClientAuthMethod = "noauth"
 )
 
-type AMQPProtocol string
-
-const (
-	AMQP  AMQPProtocol = "amqp"
-	AMQPS AMQPProtocol = "amqps"
-)
-
 type EventBusProvider string
 
 const (
