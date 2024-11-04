@@ -4,10 +4,10 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 )
 
 type deviceManagerClient struct {

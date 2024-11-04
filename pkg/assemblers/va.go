@@ -5,9 +5,10 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
+	lservices "github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
 
 func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CAService, serviceInfo models.APIServiceInfo) (*services.CRLService, *services.OCSPService, int, error) {
@@ -32,12 +33,12 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 func AssembleVAService(conf config.VAconfig, caService services.CAService) (*services.CRLService, *services.OCSPService, error) {
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
 
-	crl := services.NewCRLService(services.CRLServiceBuilder{
+	crl := lservices.NewCRLService(lservices.CRLServiceBuilder{
 		Logger:   lSvc,
 		CAClient: caService,
 	})
 
-	ocsp := services.NewOCSPService(services.OCSPServiceBuilder{
+	ocsp := lservices.NewOCSPService(lservices.OCSPServiceBuilder{
 		Logger:   lSvc,
 		CAClient: caService,
 	})

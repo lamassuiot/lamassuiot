@@ -16,3 +16,11 @@ const (
 	Default    AWSAuthenticationMethod = "default"
 	AssumeRole AWSAuthenticationMethod = "role"
 )
+
+type HTTPClientAuthMethod string
+
+const (
+	JWT    HTTPClientAuthMethod = "jwt"
+	MTLS   HTTPClientAuthMethod = "mtls"
+	NoAuth HTTPClientAuthMethod = "noauth"
+)

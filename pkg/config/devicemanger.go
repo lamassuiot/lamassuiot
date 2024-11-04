@@ -9,6 +9,6 @@ type DeviceManagerConfig struct {
 	SubscriberEventBus EventBusEngine                 `mapstructure:"subscriber_event_bus"`
 	Storage            cconfig.PluggableStorageEngine `mapstructure:"storage"`
 	CAClient           struct {
-		HTTPClient `mapstructure:",squash"`
+		cconfig.HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"ca_client"`
 }

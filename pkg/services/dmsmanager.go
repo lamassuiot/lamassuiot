@@ -13,12 +13,12 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	external_clients "github.com/lamassuiot/lamassuiot/v2/core/pkg/clients/external"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
-	external_clients "github.com/lamassuiot/lamassuiot/v2/pkg/clients/external"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 	"github.com/sirupsen/logrus"
@@ -27,37 +27,26 @@ import (
 
 var dmsValidate = validator.New()
 
-type DMSManagerMiddleware func(DMSManagerService) DMSManagerService
-
-type DMSManagerService interface {
-	ESTService
-	GetDMSStats(ctx context.Context, input GetDMSStatsInput) (*models.DMSStats, error)
-	CreateDMS(ctx context.Context, input CreateDMSInput) (*models.DMS, error)
-	UpdateDMS(ctx context.Context, input UpdateDMSInput) (*models.DMS, error)
-	GetDMSByID(ctx context.Context, input GetDMSByIDInput) (*models.DMS, error)
-	GetAll(ctx context.Context, input GetAllInput) (string, error)
-
-	BindIdentityToDevice(ctx context.Context, input BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error)
-}
+type DMSManagerMiddleware func(services.DMSManagerService) services.DMSManagerService
 
 type DMSManagerServiceBackend struct {
-	service          DMSManagerService
+	service          services.DMSManagerService
 	downstreamCert   *x509.Certificate
 	dmsStorage       storage.DMSRepo
-	deviceManagerCli DeviceManagerService
-	caClient         CAService
+	deviceManagerCli services.DeviceManagerService
+	caClient         services.CAService
 	logger           *logrus.Entry
 }
 
 type DMSManagerBuilder struct {
 	Logger                *logrus.Entry
-	DevManagerCli         DeviceManagerService
-	CAClient              CAService
+	DevManagerCli         services.DeviceManagerService
+	CAClient              services.CAService
 	DMSStorage            storage.DMSRepo
 	DownstreamCertificate *x509.Certificate
 }
 
-func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
+func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService {
 	svc := &DMSManagerServiceBackend{
 		dmsStorage:       builder.DMSStorage,
 		caClient:         builder.CAClient,
@@ -69,13 +58,11 @@ func NewDMSManagerService(builder DMSManagerBuilder) DMSManagerService {
 	return svc
 }
 
-func (svc *DMSManagerServiceBackend) SetService(service DMSManagerService) {
+func (svc *DMSManagerServiceBackend) SetService(service services.DMSManagerService) {
 	svc.service = service
 }
 
-type GetDMSStatsInput struct{}
-
-func (svc DMSManagerServiceBackend) GetDMSStats(ctx context.Context, input GetDMSStatsInput) (*models.DMSStats, error) {
+func (svc DMSManagerServiceBackend) GetDMSStats(ctx context.Context, input services.GetDMSStatsInput) (*models.DMSStats, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	total, err := svc.dmsStorage.Count(ctx)
@@ -91,14 +78,7 @@ func (svc DMSManagerServiceBackend) GetDMSStats(ctx context.Context, input GetDM
 	}, nil
 }
 
-type CreateDMSInput struct {
-	ID       string `validate:"required"`
-	Name     string `validate:"required"`
-	Metadata map[string]any
-	Settings models.DMSSettings `validate:"required"`
-}
-
-func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input CreateDMSInput) (*models.DMS, error) {
+func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input services.CreateDMSInput) (*models.DMS, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := dmsValidate.Struct(input)
@@ -135,11 +115,7 @@ func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input CreateD
 	return dms, nil
 }
 
-type UpdateDMSInput struct {
-	DMS models.DMS `validate:"required"`
-}
-
-func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input UpdateDMSInput) (*models.DMS, error) {
+func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input services.UpdateDMSInput) (*models.DMS, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := dmsValidate.Struct(input)
@@ -165,11 +141,7 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input UpdateD
 	return svc.dmsStorage.Update(ctx, dms)
 }
 
-type GetDMSByIDInput struct {
-	ID string `validate:"required"`
-}
-
-func (svc DMSManagerServiceBackend) GetDMSByID(ctx context.Context, input GetDMSByIDInput) (*models.DMS, error) {
+func (svc DMSManagerServiceBackend) GetDMSByID(ctx context.Context, input services.GetDMSByIDInput) (*models.DMS, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := dmsValidate.Struct(input)
@@ -191,11 +163,7 @@ func (svc DMSManagerServiceBackend) GetDMSByID(ctx context.Context, input GetDMS
 	return dms, nil
 }
 
-type GetAllInput struct {
-	resources.ListInput[models.DMS]
-}
-
-func (svc DMSManagerServiceBackend) GetAll(ctx context.Context, input GetAllInput) (string, error) {
+func (svc DMSManagerServiceBackend) GetAll(ctx context.Context, input services.GetAllInput) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	bookmark, err := svc.dmsStorage.SelectAll(ctx, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
@@ -240,7 +208,7 @@ func (svc DMSManagerServiceBackend) CACerts(ctx context.Context, aps string) ([]
 
 	for _, ca := range reqCAs {
 		lFunc.Debugf("Reading CA %s Certificate", ca)
-		caResponse, err := svc.caClient.GetCAByID(ctx, GetCAByIDInput{
+		caResponse, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{
 			CAID: ca,
 		})
 		if err != nil {
@@ -263,7 +231,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("checking if DMS '%s' exists", aps)
-	dms, err := svc.service.GetDMSByID(ctx, GetDMSByIDInput{
+	dms, err := svc.service.GetDMSByID(ctx, services.GetDMSByIDInput{
 		ID: aps,
 	})
 	if err != nil {
@@ -299,7 +267,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		}
 
 		for _, caID := range estEnrollOpts.AuthOptionsMTLS.ValidationCAs {
-			ca, err := svc.caClient.GetCAByID(ctx, GetCAByIDInput{CAID: caID})
+			ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: caID})
 			if err != nil {
 				lFunc.Warnf("could not obtain lamassu CA '%s'. Skipping to next validation CA: %s", caID, err)
 				continue
@@ -344,7 +312,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	}
 
 	var device *models.Device
-	device, err = svc.deviceManagerCli.GetDeviceByID(ctx, GetDeviceByIDInput{
+	device, err = svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: csr.Subject.CommonName,
 	})
 	if err != nil {
@@ -369,7 +337,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 				if device.IdentitySlot == nil {
 					device.IdentitySlot = &models.Slot[string]{}
 				}
-				_, err = svc.caClient.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
+				_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
 					SerialNumber:     device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion],
 					NewStatus:        models.StatusRevoked,
 					RevocationReason: ocsp.Superseded,
@@ -390,7 +358,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		if device == nil {
 			lFunc.Debugf("DMS '%s' is configured with JustInTime registration. will create device with ID %s", dms.ID, csr.Subject.CommonName)
 			//contact device manager and register device first
-			device, err = svc.deviceManagerCli.CreateDevice(ctx, CreateDeviceInput{
+			device, err = svc.deviceManagerCli.CreateDevice(ctx, services.CreateDeviceInput{
 				ID:        csr.Subject.CommonName,
 				Alias:     csr.Subject.CommonName,
 				Tags:      dms.Settings.EnrollmentSettings.DeviceProvisionProfile.Tags,
@@ -413,7 +381,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		lFunc.Debugf("device '%s' is preregistered. continuing enrollment process", device.ID)
 	}
 
-	crt, err := svc.caClient.SignCertificate(ctx, SignCertificateInput{
+	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
 		CAID:         dms.Settings.EnrollmentSettings.EnrollmentCA,
 		CertRequest:  (*models.X509CertificateRequest)(csr),
 		Subject:      nil,
@@ -431,7 +399,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		bindMode = models.DeviceEventTypeReProvisioned
 	}
 
-	_, err = svc.service.BindIdentityToDevice(ctx, BindIdentityToDeviceInput{
+	_, err = svc.service.BindIdentityToDevice(ctx, services.BindIdentityToDeviceInput{
 		DeviceID:                device.ID,
 		CertificateSerialNumber: crt.SerialNumber,
 		BindMode:                bindMode,
@@ -447,7 +415,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("checking if DMS '%s' exists", aps)
-	dms, err := svc.service.GetDMSByID(ctx, GetDMSByIDInput{
+	dms, err := svc.service.GetDMSByID(ctx, services.GetDMSByIDInput{
 		ID: aps,
 	})
 	if err != nil {
@@ -461,7 +429,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	}
 
 	enrollCAID := dms.Settings.EnrollmentSettings.EnrollmentCA
-	enrollCA, err := svc.caClient.GetCAByID(ctx, GetCAByIDInput{
+	enrollCA, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{
 		CAID: enrollCAID,
 	})
 	if err != nil {
@@ -502,7 +470,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 			//check if certificate is a certificate issued by Extra Val CAs
 			for idx, caID := range estReEnrollOpts.AdditionalValidationCAs {
 				lFunc.Debugf("[%d/%d] obtainig validation with ID %s", idx, aValCAsCtr, caID)
-				ca, err := svc.caClient.GetCAByID(ctx, GetCAByIDInput{CAID: caID})
+				ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: caID})
 				if err != nil {
 					lFunc.Warnf("[%d/%d] could not obtain lamassu CA with ID %s. Skipping to next validation CA: %s", idx, aValCAsCtr, caID, err)
 					continue
@@ -562,7 +530,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	}
 
 	var device *models.Device
-	device, err = svc.deviceManagerCli.GetDeviceByID(ctx, GetDeviceByIDInput{
+	device, err = svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: csr.Subject.CommonName,
 	})
 	if err != nil {
@@ -578,7 +546,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	}
 
 	currentDeviceCertSN := device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion]
-	currentDeviceCert, err := svc.caClient.GetCertificateBySerialNumber(ctx, GetCertificatesBySerialNumberInput{
+	currentDeviceCert, err := svc.caClient.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
 		SerialNumber: currentDeviceCertSN,
 	})
 	if err != nil {
@@ -645,7 +613,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		return nil, fmt.Errorf("invalid reenroll window")
 	}
 
-	crt, err := svc.caClient.SignCertificate(ctx, SignCertificateInput{
+	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
 		CAID:         dms.Settings.EnrollmentSettings.EnrollmentCA,
 		CertRequest:  (*models.X509CertificateRequest)(csr),
 		Subject:      nil,
@@ -659,7 +627,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	//detach certificate from meta
 	delete(currentDeviceCert.Metadata, models.CAAttachedToDeviceKey)
 	delete(currentDeviceCert.Metadata, models.CAMetadataMonitoringExpirationDeltasKey)
-	_, err = svc.caClient.UpdateCertificateMetadata(ctx, UpdateCertificateMetadataInput{
+	_, err = svc.caClient.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
 		SerialNumber: currentDeviceCertSN,
 		Metadata:     currentDeviceCert.Metadata,
 	})
@@ -670,7 +638,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 
 	//revoke superseded cert if active. Don't try revoking expired or already revoked since is not a valid transition for the CA service.
 	if currentDeviceCert.Status == models.StatusActive {
-		_, err = svc.caClient.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
+		_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
 			SerialNumber:     currentDeviceCertSN,
 			NewStatus:        models.StatusRevoked,
 			RevocationReason: ocsp.Superseded,
@@ -681,7 +649,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		}
 	}
 
-	_, err = svc.service.BindIdentityToDevice(ctx, BindIdentityToDeviceInput{
+	_, err = svc.service.BindIdentityToDevice(ctx, services.BindIdentityToDeviceInput{
 		DeviceID:                device.ID,
 		CertificateSerialNumber: crt.SerialNumber,
 		BindMode:                models.DeviceEventTypeRenewed,
@@ -699,7 +667,7 @@ func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.
 	var privKey any
 	var err error
 
-	dms, err := svc.GetDMSByID(ctx, GetDMSByIDInput{
+	dms, err := svc.GetDMSByID(ctx, services.GetDMSByIDInput{
 		ID: aps,
 	})
 	if err != nil {
@@ -779,7 +747,7 @@ func (svc DMSManagerServiceBackend) checkCertificateRevocation(ctx context.Conte
 	//check if revoked
 	//  If cert is in Lamassu: check status
 	//  If cert NOT in Lamassu (i.e. Issued Offline/Outside Lamassu), check if the certificate has CRL/OCSP in presented CRT.
-	lmsCrt, err := svc.caClient.GetCertificateBySerialNumber(ctx, GetCertificatesBySerialNumberInput{
+	lmsCrt, err := svc.caClient.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
 		SerialNumber: clientSN,
 	})
 	if err != nil {
@@ -848,30 +816,24 @@ func (svc DMSManagerServiceBackend) checkCertificateRevocation(ctx context.Conte
 	return revocationChecked, revoked, nil
 }
 
-type BindIdentityToDeviceInput struct {
-	DeviceID                string
-	CertificateSerialNumber string
-	BindMode                models.DeviceEventType
-}
-
-func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, input BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error) {
+func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, input services.BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	crt, err := svc.caClient.GetCertificateBySerialNumber(ctx, GetCertificatesBySerialNumberInput{
+	crt, err := svc.caClient.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
 		SerialNumber: input.CertificateSerialNumber,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	device, err := svc.deviceManagerCli.GetDeviceByID(ctx, GetDeviceByIDInput{
+	device, err := svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: input.DeviceID,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	dms, err := svc.GetDMSByID(ctx, GetDMSByIDInput{
+	dms, err := svc.GetDMSByID(ctx, services.GetDMSByIDInput{
 		ID: device.DMSOwner,
 	})
 	if err != nil {
@@ -898,7 +860,7 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		DeviceID: device.ID,
 	}
 
-	crt, err = svc.caClient.UpdateCertificateMetadata(ctx, UpdateCertificateMetadataInput{
+	crt, err = svc.caClient.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
 		SerialNumber: crt.SerialNumber,
 		Metadata:     newMeta,
 	})
@@ -932,7 +894,7 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 			EventDescriptions: fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion),
 		}
 	}
-	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(ctx, UpdateDeviceIdentitySlotInput{
+	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
 		ID:   crt.Subject.CommonName,
 		Slot: *idSlot,
 	})

@@ -13,13 +13,13 @@ import (
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/clients"
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	lamassu "github.com/lamassuiot/lamassuiot/v2/pkg/assemblers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -68,9 +68,9 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		caConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: caPort}, Protocol: cconfig.HTTP, BasePath: ""}
 		caSDKBuilder := func(serviceID, src string) services.CAService {
 			lCAClient := chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - CA Client")
-			caHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
+			caHttpCli, err := clients.BuildHTTPClient(cconfig.HTTPClient{
 				LogLevel:       cconfig.Info,
-				AuthMode:       config.NoAuth,
+				AuthMode:       cconfig.NoAuth,
 				HTTPConnection: caConnection,
 			}, lCAClient)
 			if err != nil {
@@ -122,9 +122,9 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 
 		deviceMngrSDKBuilder := func(serviceID, src string) services.DeviceManagerService {
 			lDevMngrClient := chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - DevManager Client")
-			devMngrHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
+			devMngrHttpCli, err := clients.BuildHTTPClient(cconfig.HTTPClient{
 				LogLevel:       cconfig.Info,
-				AuthMode:       config.NoAuth,
+				AuthMode:       cconfig.NoAuth,
 				HTTPConnection: devMngrConnection,
 			}, lDevMngrClient)
 			if err != nil {
@@ -159,9 +159,9 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 
 		dmsMngrSDKBuilder := func(serviceID, src string) services.DMSManagerService {
 			lDMSMngrClient := chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - DMSManager Client")
-			dmsMngrHttpCli, err := clients.BuildHTTPClient(config.HTTPClient{
+			dmsMngrHttpCli, err := clients.BuildHTTPClient(cconfig.HTTPClient{
 				LogLevel:       cconfig.Info,
-				AuthMode:       config.NoAuth,
+				AuthMode:       cconfig.NoAuth,
 				HTTPConnection: dmsMngrConnection,
 			}, lDMSMngrClient)
 			if err != nil {

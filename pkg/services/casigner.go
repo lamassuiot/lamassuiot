@@ -7,16 +7,17 @@ import (
 	"io"
 
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	"github.com/sirupsen/logrus"
 )
 
 type caSignerImpl struct {
-	sdk CAService
+	sdk services.CAService
 	ca  *models.CACertificate
 	ctx context.Context
 }
 
-func NewCASigner(ctx context.Context, ca *models.CACertificate, caSDK CAService) crypto.Signer {
+func NewCASigner(ctx context.Context, ca *models.CACertificate, caSDK services.CAService) crypto.Signer {
 	return &caSignerImpl{
 		ctx: ctx,
 		sdk: caSDK,
@@ -41,7 +42,7 @@ func (s *caSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpt
 		logrus.Warnf("using default %s sing alg for client. '%s' no match", signAlg, caKeyAlg)
 	}
 
-	return s.sdk.SignatureSign(s.ctx, SignatureSignInput{
+	return s.sdk.SignatureSign(s.ctx, services.SignatureSignInput{
 		CAID:             s.ca.ID,
 		Message:          digest,
 		MessageType:      models.Hashed,

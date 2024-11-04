@@ -7,43 +7,32 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )
 
 var deviceValidate *validator.Validate
 
-type DeviceMiddleware func(DeviceManagerService) DeviceManagerService
-
-type DeviceManagerService interface {
-	GetDevicesStats(ctx context.Context, input GetDevicesStatsInput) (*models.DevicesStats, error)
-	CreateDevice(ctx context.Context, input CreateDeviceInput) (*models.Device, error)
-	GetDeviceByID(ctx context.Context, input GetDeviceByIDInput) (*models.Device, error)
-	GetDevices(ctx context.Context, input GetDevicesInput) (string, error)
-	GetDeviceByDMS(ctx context.Context, input GetDevicesByDMSInput) (string, error)
-	UpdateDeviceStatus(ctx context.Context, input UpdateDeviceStatusInput) (*models.Device, error)
-	UpdateDeviceIdentitySlot(ctx context.Context, input UpdateDeviceIdentitySlotInput) (*models.Device, error)
-	UpdateDeviceMetadata(ctx context.Context, input UpdateDeviceMetadataInput) (*models.Device, error)
-}
+type DeviceMiddleware func(services.DeviceManagerService) services.DeviceManagerService
 
 type DeviceManagerServiceBackend struct {
 	devicesStorage storage.DeviceManagerRepo
-	caClient       CAService
-	service        DeviceManagerService
+	caClient       services.CAService
+	service        services.DeviceManagerService
 	logger         *logrus.Entry
 }
 
 type DeviceManagerBuilder struct {
 	Logger         *logrus.Entry
-	CAClient       CAService
+	CAClient       services.CAService
 	DevicesStorage storage.DeviceManagerRepo
 }
 
-func NewDeviceManagerService(builder DeviceManagerBuilder) DeviceManagerService {
+func NewDeviceManagerService(builder DeviceManagerBuilder) services.DeviceManagerService {
 	deviceValidate = validator.New()
 	svc := &DeviceManagerServiceBackend{
 		caClient:       builder.CAClient,
@@ -55,14 +44,11 @@ func NewDeviceManagerService(builder DeviceManagerBuilder) DeviceManagerService 
 	return svc
 }
 
-func (svc *DeviceManagerServiceBackend) SetService(service DeviceManagerService) {
+func (svc *DeviceManagerServiceBackend) SetService(service services.DeviceManagerService) {
 	svc.service = service
 }
 
-type GetDevicesStatsInput struct {
-}
-
-func (svc *DeviceManagerServiceBackend) GetDevicesStats(ctx context.Context, input GetDevicesStatsInput) (*models.DevicesStats, error) {
+func (svc *DeviceManagerServiceBackend) GetDevicesStats(ctx context.Context, input services.GetDevicesStatsInput) (*models.DevicesStats, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	stats := models.DevicesStats{
@@ -101,17 +87,7 @@ func (svc *DeviceManagerServiceBackend) GetDevicesStats(ctx context.Context, inp
 	return &stats, nil
 }
 
-type CreateDeviceInput struct {
-	ID        string `validate:"required"`
-	Alias     string
-	Tags      []string
-	Metadata  map[string]any
-	DMSID     string `validate:"required"`
-	Icon      string `validate:"required"`
-	IconColor string `validate:"required"`
-}
-
-func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input CreateDeviceInput) (*models.Device, error) {
+func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input services.CreateDeviceInput) (*models.Device, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
@@ -158,39 +134,21 @@ func (svc DeviceManagerServiceBackend) CreateDevice(ctx context.Context, input C
 	return dev, nil
 }
 
-type ProvisionDeviceSlotInput struct {
-	ID     string `validate:"required"`
-	SlotID string `validate:"required"`
-}
-
-type GetDevicesInput struct {
-	resources.ListInput[models.Device]
-}
-
-func (svc DeviceManagerServiceBackend) GetDevices(ctx context.Context, input GetDevicesInput) (string, error) {
+func (svc DeviceManagerServiceBackend) GetDevices(ctx context.Context, input services.GetDevicesInput) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("getting all devices")
 	return svc.devicesStorage.SelectAll(ctx, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
 }
 
-type GetDevicesByDMSInput struct {
-	DMSID string
-	resources.ListInput[models.Device]
-}
-
-func (svc DeviceManagerServiceBackend) GetDeviceByDMS(ctx context.Context, input GetDevicesByDMSInput) (string, error) {
+func (svc DeviceManagerServiceBackend) GetDeviceByDMS(ctx context.Context, input services.GetDevicesByDMSInput) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("getting all devices owned by DMS with ID=%s", input.DMSID)
 	return svc.devicesStorage.SelectByDMS(ctx, input.DMSID, input.ExhaustiveRun, input.ApplyFunc, input.QueryParameters, nil)
 }
 
-type GetDeviceByIDInput struct {
-	ID string `validate:"required"`
-}
-
-func (svc DeviceManagerServiceBackend) GetDeviceByID(ctx context.Context, input GetDeviceByIDInput) (*models.Device, error) {
+func (svc DeviceManagerServiceBackend) GetDeviceByID(ctx context.Context, input services.GetDeviceByIDInput) (*models.Device, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
@@ -211,12 +169,7 @@ func (svc DeviceManagerServiceBackend) GetDeviceByID(ctx context.Context, input 
 	return device, nil
 }
 
-type UpdateDeviceStatusInput struct {
-	ID        string              `validate:"required"`
-	NewStatus models.DeviceStatus `validate:"required"`
-}
-
-func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, input UpdateDeviceStatusInput) (*models.Device, error) {
+func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, input services.UpdateDeviceStatusInput) (*models.Device, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
@@ -255,7 +208,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 			slot.Status = models.SlotRevoke
 			defer func() {
 				//don't revoke IdSlot, this will be handled by revoking the attached certificate
-				_, err = svc.caClient.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
+				_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
 					SerialNumber:     slot.Secrets[slot.ActiveVersion],
 					NewStatus:        models.StatusRevoked,
 					RevocationReason: ocsp.CessationOfOperation,
@@ -286,12 +239,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 	return device, nil
 }
 
-type UpdateDeviceMetadataInput struct {
-	ID       string         `validate:"required"`
-	Metadata map[string]any `validate:"required"`
-}
-
-func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context, input UpdateDeviceMetadataInput) (*models.Device, error) {
+func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context, input services.UpdateDeviceMetadataInput) (*models.Device, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
@@ -319,12 +267,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context,
 
 }
 
-type UpdateDeviceIdentitySlotInput struct {
-	ID   string              `validate:"required"`
-	Slot models.Slot[string] `validate:"required"`
-}
-
-func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Context, input UpdateDeviceIdentitySlotInput) (*models.Device, error) {
+func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Context, input services.UpdateDeviceIdentitySlotInput) (*models.Device, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := deviceValidate.Struct(input)
@@ -352,7 +295,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 	switch input.Slot.Status {
 	case models.SlotRevoke:
 		sn := device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion]
-		crt, err := svc.caClient.GetCertificateBySerialNumber(ctx, GetCertificatesBySerialNumberInput{
+		crt, err := svc.caClient.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
 			SerialNumber: sn,
 		})
 		if err != nil {
@@ -361,7 +304,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 		}
 
 		if crt.Status != models.StatusRevoked {
-			_, err = svc.caClient.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
+			_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
 				SerialNumber:     sn,
 				NewStatus:        models.StatusRevoked,
 				RevocationReason: ocsp.Unspecified,
@@ -398,7 +341,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 	}
 
 	if device.Status != newDevStatus {
-		device, err = svc.service.UpdateDeviceStatus(ctx, UpdateDeviceStatusInput{
+		device, err = svc.service.UpdateDeviceStatus(ctx, services.UpdateDeviceStatusInput{
 			ID:        device.ID,
 			NewStatus: newDevStatus,
 		})

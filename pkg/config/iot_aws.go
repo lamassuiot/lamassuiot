@@ -1,6 +1,7 @@
 package config
 
 import (
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
 )
 
@@ -9,15 +10,15 @@ type IotAWS struct {
 	SubscriberEventBus EventBusEngine    `mapstructure:"subscriber_event_bus"`
 
 	DMSManagerClient struct {
-		HTTPClient `mapstructure:",squash"`
+		cconfig.HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"dms_manager_client"`
 
 	DevManagerClient struct {
-		HTTPClient `mapstructure:",squash"`
+		cconfig.HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"device_manager_client"`
 
 	CAClient struct {
-		HTTPClient `mapstructure:",squash"`
+		cconfig.HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"ca_client"`
 
 	ConnectorID               string               `mapstructure:"connector_id"`

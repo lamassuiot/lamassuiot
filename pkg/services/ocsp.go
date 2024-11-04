@@ -6,26 +6,23 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )
 
-type OCSPService interface {
-	Verify(ctx context.Context, req *ocsp.Request) ([]byte, error)
-}
-
 type ocspResponder struct {
-	caSDK  CAService
+	caSDK  services.CAService
 	logger *logrus.Entry
 }
 
 type OCSPServiceBuilder struct {
 	Logger   *logrus.Entry
-	CAClient CAService
+	CAClient services.CAService
 }
 
-func NewOCSPService(builder OCSPServiceBuilder) OCSPService {
+func NewOCSPService(builder OCSPServiceBuilder) services.OCSPService {
 	return &ocspResponder{
 		caSDK:  builder.CAClient,
 		logger: builder.Logger,
@@ -34,14 +31,14 @@ func NewOCSPService(builder OCSPServiceBuilder) OCSPService {
 
 func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) ([]byte, error) {
 	ocspCrtSN := helpers.SerialNumberToString(req.SerialNumber)
-	crt, err := svc.caSDK.GetCertificateBySerialNumber(ctx, GetCertificatesBySerialNumberInput{
+	crt, err := svc.caSDK.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
 		SerialNumber: ocspCrtSN,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	ca, err := svc.caSDK.GetCAByID(ctx, GetCAByIDInput{
+	ca, err := svc.caSDK.GetCAByID(ctx, services.GetCAByIDInput{
 		CAID: crt.IssuerCAMetadata.ID,
 	})
 	if err != nil {

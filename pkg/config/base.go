@@ -55,25 +55,6 @@ type EventBusEngine struct {
 	Config    map[string]interface{} `mapstructure:",remain"`
 }
 
-type HTTPClient struct {
-	LogLevel               cconfig.LogLevel     `mapstructure:"log_level"`
-	AuthMode               HTTPClientAuthMethod `mapstructure:"auth_mode"`
-	AuthJWTOptions         AuthJWTOptions       `mapstructure:"jwt_options"`
-	AuthMTLSOptions        AuthMTLSOptions      `mapstructure:"mtls_options"`
-	cconfig.HTTPConnection `mapstructure:",squash"`
-}
-
-type AuthJWTOptions struct {
-	ClientID         string           `mapstructure:"oidc_client_id"`
-	ClientSecret     cconfig.Password `mapstructure:"oidc_client_secret"`
-	OIDCWellKnownURL string           `mapstructure:"oidc_well_known"`
-}
-
-type AuthMTLSOptions struct {
-	CertFile string `mapstructure:"cert_file"`
-	KeyFile  string `mapstructure:"key_file"`
-}
-
 func MigrateEventBusToV2Config(config EventBusEngine) (EventBusEngine, error) {
 	// Migrate EventBus to V2
 

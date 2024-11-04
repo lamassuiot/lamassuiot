@@ -1,5 +1,7 @@
 package config
 
+import cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+
 type VAconfig struct {
 	Logs   BaseConfigLogging `mapstructure:"logs"`
 	Server HttpServer        `mapstructure:"server"`
@@ -8,5 +10,5 @@ type VAconfig struct {
 }
 
 type CAClient struct {
-	HTTPClient `mapstructure:",squash"`
+	cconfig.HTTPClient `mapstructure:",squash"`
 }

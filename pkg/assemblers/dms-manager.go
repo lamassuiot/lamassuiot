@@ -7,11 +7,12 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/storage"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
+	lservices "github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/builder"
 	log "github.com/sirupsen/logrus"
 )
@@ -50,7 +51,7 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 		return nil, fmt.Errorf("could not create dms storage instance: %s", err)
 	}
 
-	svc := services.NewDMSManagerService(services.DMSManagerBuilder{
+	svc := lservices.NewDMSManagerService(lservices.DMSManagerBuilder{
 		Logger:                lSvc,
 		DMSStorage:            devStorage,
 		CAClient:              caService,
@@ -58,7 +59,7 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 		DownstreamCertificate: downCert,
 	})
 
-	dmsSvc := svc.(*services.DMSManagerServiceBackend)
+	dmsSvc := svc.(*lservices.DMSManagerServiceBackend)
 
 	if conf.PublisherEventBus.Enabled {
 		log.Infof("Event Bus is enabled")

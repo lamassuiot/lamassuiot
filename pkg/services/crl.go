@@ -9,30 +9,27 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	"github.com/sirupsen/logrus"
 )
 
 var crlValidate *validator.Validate
 
-type CRLService interface {
-	GetCRL(ctx context.Context, input GetCRLInput) ([]byte, error)
-}
-
 type crlServiceImpl struct {
-	caSDK  CAService
+	caSDK  services.CAService
 	logger *logrus.Entry
 }
 
 type CRLServiceBuilder struct {
 	Logger   *logrus.Entry
-	CAClient CAService
+	CAClient services.CAService
 }
 
-func NewCRLService(builder CRLServiceBuilder) CRLService {
+func NewCRLService(builder CRLServiceBuilder) services.CRLService {
 	crlValidate = validator.New()
 	return &crlServiceImpl{
 		caSDK:  builder.CAClient,
@@ -40,11 +37,7 @@ func NewCRLService(builder CRLServiceBuilder) CRLService {
 	}
 }
 
-type GetCRLInput struct {
-	CAID string `validate:"required"`
-}
-
-func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte, error) {
+func (svc crlServiceImpl) GetCRL(ctx context.Context, input services.GetCRLInput) ([]byte, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := crlValidate.Struct(input)
@@ -55,7 +48,7 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte
 
 	certList := []x509.RevocationListEntry{}
 	lFunc.Debugf("reading CA %s certificates", input.CAID)
-	_, err = svc.caSDK.GetCertificatesByCaAndStatus(ctx, GetCertificatesByCaAndStatusInput{
+	_, err = svc.caSDK.GetCertificatesByCaAndStatus(ctx, services.GetCertificatesByCaAndStatusInput{
 		CAID:   input.CAID,
 		Status: models.StatusRevoked,
 		ListInput: resources.ListInput[models.Certificate]{
@@ -78,7 +71,7 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input GetCRLInput) ([]byte
 		return nil, err
 	}
 
-	ca, err := svc.caSDK.GetCAByID(ctx, GetCAByIDInput(input))
+	ca, err := svc.caSDK.GetCAByID(ctx, services.GetCAByIDInput(input))
 	if err != nil {
 		return nil, err
 	}

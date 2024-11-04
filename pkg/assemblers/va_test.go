@@ -13,13 +13,13 @@ import (
 	"testing"
 	"time"
 
+	external_clients "github.com/lamassuiot/lamassuiot/v2/core/pkg/clients/external"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	external_clients "github.com/lamassuiot/lamassuiot/v2/pkg/clients/external"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"golang.org/x/crypto/ocsp"
 )
 

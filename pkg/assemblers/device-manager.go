@@ -7,11 +7,12 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/routes"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
+	lservices "github.com/lamassuiot/lamassuiot/v2/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services/handlers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/storage/builder"
 	"github.com/sirupsen/logrus"
@@ -47,13 +48,13 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 		return nil, fmt.Errorf("could not create device storage: %s", err)
 	}
 
-	svc := services.NewDeviceManagerService(services.DeviceManagerBuilder{
+	svc := lservices.NewDeviceManagerService(lservices.DeviceManagerBuilder{
 		Logger:         lSvc,
 		DevicesStorage: devStorage,
 		CAClient:       caService,
 	})
 
-	deviceSvc := svc.(*services.DeviceManagerServiceBackend)
+	deviceSvc := svc.(*lservices.DeviceManagerServiceBackend)
 
 	if conf.PublisherEventBus.Enabled {
 		lMessaging := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "Device Manager", "Event Bus")

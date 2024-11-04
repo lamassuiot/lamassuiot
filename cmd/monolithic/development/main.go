@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/clients"
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
 	awskmssm_test "github.com/lamassuiot/lamassuiot/v2/crypto/aws/docker"
@@ -21,7 +22,6 @@ import (
 	vconfig "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/config"
 	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/docker"
 	eventbus_amqp "github.com/lamassuiot/lamassuiot/v2/eventbus/amqp/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/test/monolithic"
 	rabbitmq_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/async-messaging/rabbitmq"

@@ -5,15 +5,16 @@ import (
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
-)
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
+	lservices "github.com/lamassuiot/lamassuiot/v2/pkg/services"
+ )
 
 type deviceEventPublisher struct {
 	next       services.DeviceManagerService
 	eventMWPub ICloudEventMiddlewarePublisher
 }
 
-func NewDeviceEventPublisher(eventMWPub ICloudEventMiddlewarePublisher) services.DeviceMiddleware {
+func NewDeviceEventPublisher(eventMWPub ICloudEventMiddlewarePublisher) lservices.DeviceMiddleware {
 	return func(next services.DeviceManagerService) services.DeviceManagerService {
 		return &deviceEventPublisher{
 			next:       next,

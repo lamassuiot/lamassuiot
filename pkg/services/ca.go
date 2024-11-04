@@ -2,8 +2,6 @@ package services
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"fmt"
@@ -13,54 +11,20 @@ import (
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	models "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/x509engines"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )
 
-type CAMiddleware func(CAService) CAService
-
-type CAService interface {
-	GetStats(ctx context.Context) (*models.CAStats, error)
-	GetStatsByCAID(ctx context.Context, input GetStatsByCAIDInput) (map[models.CertificateStatus]int, error)
-
-	GetCryptoEngineProvider(ctx context.Context) ([]*cmodels.CryptoEngineProvider, error)
-
-	CreateCA(ctx context.Context, input CreateCAInput) (*models.CACertificate, error)
-	ImportCA(ctx context.Context, input ImportCAInput) (*models.CACertificate, error)
-	GetCAByID(ctx context.Context, input GetCAByIDInput) (*models.CACertificate, error)
-	GetCAs(ctx context.Context, input GetCAsInput) (string, error)
-	GetCAsByCommonName(ctx context.Context, input GetCAsByCommonNameInput) (string, error)
-	UpdateCAStatus(ctx context.Context, input UpdateCAStatusInput) (*models.CACertificate, error)
-	UpdateCAMetadata(ctx context.Context, input UpdateCAMetadataInput) (*models.CACertificate, error)
-	UpdateCAIssuanceExpiration(ctx context.Context, input UpdateCAIssuanceExpirationInput) (*models.CACertificate, error)
-	DeleteCA(ctx context.Context, input DeleteCAInput) error
-
-	SignatureSign(ctx context.Context, input SignatureSignInput) ([]byte, error)
-	SignatureVerify(ctx context.Context, input SignatureVerifyInput) (bool, error)
-
-	SignCertificate(ctx context.Context, input SignCertificateInput) (*models.Certificate, error)
-	CreateCertificate(ctx context.Context, input CreateCertificateInput) (*models.Certificate, error)
-	ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error)
-
-	GetCertificateBySerialNumber(ctx context.Context, input GetCertificatesBySerialNumberInput) (*models.Certificate, error)
-	GetCertificates(ctx context.Context, input GetCertificatesInput) (string, error)
-	GetCertificatesByCA(ctx context.Context, input GetCertificatesByCAInput) (string, error)
-	GetCertificatesByExpirationDate(ctx context.Context, input GetCertificatesByExpirationDateInput) (string, error)
-	GetCertificatesByCaAndStatus(ctx context.Context, input GetCertificatesByCaAndStatusInput) (string, error)
-	// GetCertificatesByExpirationDateAndCA(input GetCertificatesByExpirationDateInput) (string, error)
-	GetCertificatesByStatus(ctx context.Context, input GetCertificatesByStatusInput) (string, error)
-	// GetCertificatesByStatusAndCA(input GetCertificatesByExpirationDateInput) (string, error)
-	UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) (*models.Certificate, error)
-	UpdateCertificateMetadata(ctx context.Context, input UpdateCertificateMetadataInput) (*models.Certificate, error)
-}
+type CAMiddleware func(services.CAService) services.CAService
 
 var validate *validator.Validate
 
@@ -70,7 +34,7 @@ type Engine struct {
 }
 
 type CAServiceBackend struct {
-	service               CAService
+	service               services.CAService
 	cryptoEngines         map[string]*cryptoengines.CryptoEngine
 	defaultCryptoEngine   *cryptoengines.CryptoEngine
 	defaultCryptoEngineID string
@@ -90,7 +54,7 @@ type CAServiceBuilder struct {
 	VAServerDomain       string
 }
 
-func NewCAService(builder CAServiceBuilder) (CAService, error) {
+func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
 	validate = validator.New()
 
 	engines := map[string]*cryptoengines.CryptoEngine{}
@@ -128,7 +92,7 @@ func (svc *CAServiceBackend) Close() {
 	//no op
 }
 
-func (svc *CAServiceBackend) SetService(service CAService) {
+func (svc *CAServiceBackend) SetService(service services.CAService) {
 	svc.service = service
 }
 
@@ -196,11 +160,7 @@ func (svc *CAServiceBackend) GetStats(ctx context.Context) (*models.CAStats, err
 	}, nil
 }
 
-type GetStatsByCAIDInput struct {
-	CAID string
-}
-
-func (svc *CAServiceBackend) GetStatsByCAID(ctx context.Context, input GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
+func (svc *CAServiceBackend) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	stats := map[models.CertificateStatus]int{}
@@ -234,28 +194,7 @@ func (svc *CAServiceBackend) GetCryptoEngineProvider(ctx context.Context) ([]*cm
 	return info, nil
 }
 
-type SignInput struct {
-	CAID               string
-	Message            []byte
-	MessageType        models.SignMessageType
-	SignatureAlgorithm string
-}
-
-type issueCAInput struct {
-	ParentCA     *models.CACertificate
-	KeyMetadata  cmodels.KeyMetadata    `validate:"required"`
-	Subject      cmodels.Subject        `validate:"required"`
-	CAType       models.CertificateType `validate:"required"`
-	CAExpiration models.Expiration
-	EngineID     string
-	CAID         string `validate:"required"`
-}
-
-type issueCAOutput struct {
-	Certificate *x509.Certificate
-}
-
-func (svc *CAServiceBackend) issueCA(ctx context.Context, input issueCAInput) (*issueCAOutput, error) {
+func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCAInput) (*services.IssueCAOutput, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 	var err error
 
@@ -319,22 +258,9 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input issueCAInput) (*
 		}
 	}
 
-	return &issueCAOutput{
+	return &services.IssueCAOutput{
 		Certificate: caCert,
 	}, nil
-}
-
-type ImportCAInput struct {
-	ID                 string
-	CAType             models.CertificateType    `validate:"required,ne=MANAGED"`
-	IssuanceExpiration models.Expiration         `validate:"required"`
-	CACertificate      *models.X509Certificate   `validate:"required"`
-	CAChain            []*models.X509Certificate //Parent CAs. They MUST be sorted as follows. 0: Root-CA; 1: Subordinate CA from Root-CA; ...
-	CARSAKey           *rsa.PrivateKey
-	CAECKey            *ecdsa.PrivateKey
-	KeyType            cmodels.KeyType
-	EngineID           string
-	ParentID           string
 }
 
 // Returned Error Codes:
@@ -348,12 +274,12 @@ type ImportCAInput struct {
 //     The CA certificate and the private key provided are not compatible.
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
-func (svc *CAServiceBackend) ImportCA(ctx context.Context, input ImportCAInput) (*models.CACertificate, error) {
+func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
 	var err error
 
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	validate.RegisterStructValidation(importCAValidation, ImportCAInput{})
+	validate.RegisterStructValidation(importCAValidation, services.ImportCAInput{})
 	err = validate.Struct(input)
 	if err != nil {
 		lFunc.Errorf("ImportCA struct validation error: %s", err)
@@ -403,7 +329,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input ImportCAInput) 
 
 	var parentCA *models.CACertificate
 	if input.ParentID != "" {
-		parentCA, err = svc.service.GetCAByID(ctx, GetCAByIDInput{
+		parentCA, err = svc.service.GetCAByID(ctx, services.GetCAByIDInput{
 			CAID: input.ParentID,
 		})
 		if err != nil {
@@ -455,17 +381,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input ImportCAInput) 
 	return svc.caStorage.Insert(ctx, ca)
 }
 
-type CreateCAInput struct {
-	ID                 string
-	ParentID           string
-	KeyMetadata        cmodels.KeyMetadata `validate:"required"`
-	Subject            cmodels.Subject     `validate:"required"`
-	IssuanceExpiration models.Expiration   `validate:"required"`
-	CAExpiration       models.Expiration   `validate:"required"`
-	EngineID           string
-	Metadata           map[string]any
-}
-
 // Returned Error Codes:
 //   - ErrCAIncompatibleExpirationTimeRef
 //     The Expiration time ref is incompatible with the selected variable, i.e. if the time ref is Duration the variable must be of type Duration not of type Time.
@@ -475,14 +390,14 @@ type CreateCAInput struct {
 //     When creating the CA, the CA Type must have the value of MANAGED.
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
-func (svc *CAServiceBackend) CreateCA(ctx context.Context, input CreateCAInput) (*models.CACertificate, error) {
+func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 	if input.Metadata == nil {
 		input.Metadata = map[string]any{}
 	}
 
 	var err error
-	validate.RegisterStructValidation(createCAValidation, CreateCAInput{})
+	validate.RegisterStructValidation(createCAValidation, services.CreateCAInput{})
 	err = validate.Struct(input)
 	if err != nil {
 		lFunc.Errorf("CreateCAInput struct validation error: %s", err)
@@ -540,7 +455,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input CreateCAInput) 
 	}
 
 	lFunc.Debugf("creating CA with common name: %s", input.Subject.CommonName)
-	issuedCA, err := svc.issueCA(ctx, issueCAInput{
+	issuedCA, err := svc.issueCA(ctx, services.IssueCAInput{
 		ParentCA:     parentCA,
 		KeyMetadata:  input.KeyMetadata,
 		Subject:      input.Subject,
@@ -609,16 +524,12 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input CreateCAInput) 
 	return svc.caStorage.Insert(ctx, &ca)
 }
 
-type GetCAByIDInput struct {
-	CAID string `validate:"required"`
-}
-
 // Returned Error Codes:
 //   - ErrCANotFound
 //     The specified CA can not be found in the Database
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
-func (svc *CAServiceBackend) GetCAByID(ctx context.Context, input GetCAByIDInput) (*models.CACertificate, error) {
+func (svc *CAServiceBackend) GetCAByID(ctx context.Context, input services.GetCAByIDInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := validate.Struct(input)
@@ -642,14 +553,7 @@ func (svc *CAServiceBackend) GetCAByID(ctx context.Context, input GetCAByIDInput
 	return ca, err
 }
 
-type GetCAsInput struct {
-	QueryParameters *resources.QueryParameters
-
-	ExhaustiveRun bool //wether to iter all elems
-	ApplyFunc     func(ca models.CACertificate)
-}
-
-func (svc *CAServiceBackend) GetCAs(ctx context.Context, input GetCAsInput) (string, error) {
+func (svc *CAServiceBackend) GetCAs(ctx context.Context, input services.GetCAsInput) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	nextBookmark, err := svc.caStorage.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{
@@ -666,11 +570,7 @@ func (svc *CAServiceBackend) GetCAs(ctx context.Context, input GetCAsInput) (str
 	return nextBookmark, nil
 }
 
-type GetCABySerialNumberInput struct {
-	SerialNumber string `validate:"required"`
-}
-
-func (svc *CAServiceBackend) GetCABySerialNumber(ctx context.Context, input GetCABySerialNumberInput) (*models.CACertificate, error) {
+func (svc *CAServiceBackend) GetCABySerialNumber(ctx context.Context, input services.GetCABySerialNumberInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := validate.Struct(input)
@@ -694,15 +594,7 @@ func (svc *CAServiceBackend) GetCABySerialNumber(ctx context.Context, input GetC
 	return ca, nil
 }
 
-type GetCAsByCommonNameInput struct {
-	CommonName string
-
-	QueryParameters *resources.QueryParameters
-	ExhaustiveRun   bool //wether to iter all elems
-	ApplyFunc       func(cert models.CACertificate)
-}
-
-func (svc *CAServiceBackend) GetCAsByCommonName(ctx context.Context, input GetCAsByCommonNameInput) (string, error) {
+func (svc *CAServiceBackend) GetCAsByCommonName(ctx context.Context, input services.GetCAsByCommonNameInput) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("reading CAs by %s common name", input.CommonName)
@@ -720,12 +612,6 @@ func (svc *CAServiceBackend) GetCAsByCommonName(ctx context.Context, input GetCA
 	return nextBookmark, err
 }
 
-type UpdateCAStatusInput struct {
-	CAID             string                   `validate:"required"`
-	Status           models.CertificateStatus `validate:"required"`
-	RevocationReason models.RevocationReason
-}
-
 // Returned Error Codes:
 //   - ErrCANotFound
 //     The specified CA can not be found in the Database
@@ -733,7 +619,7 @@ type UpdateCAStatusInput struct {
 //     The required variables of the data structure are not valid.
 //   - ErrCAAlreadyRevoked
 //     CA already revoked
-func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input UpdateCAStatusInput) (*models.CACertificate, error) {
+func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := validate.Struct(input)
@@ -781,7 +667,7 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input UpdateCAS
 
 	if input.Status == models.StatusRevoked {
 		revokeCAFunc := func(ca models.CACertificate) {
-			_, err := svc.service.UpdateCAStatus(ctx, UpdateCAStatusInput{
+			_, err := svc.service.UpdateCAStatus(ctx, services.UpdateCAStatusInput{
 				CAID:             ca.ID,
 				Status:           models.StatusRevoked,
 				RevocationReason: ocsp.CessationOfOperation,
@@ -805,7 +691,7 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input UpdateCAS
 		revokeCertFunc := func(c models.Certificate) {
 			lFunc.Infof("\n\n%d - %s\n\n", ctr, c.SerialNumber)
 			ctr++
-			_, err := svc.service.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
+			_, err := svc.service.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
 				SerialNumber:     c.SerialNumber,
 				NewStatus:        models.StatusRevoked,
 				RevocationReason: ocsp.CessationOfOperation,
@@ -829,12 +715,7 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input UpdateCAS
 	return ca, err
 }
 
-type UpdateCAIssuanceExpirationInput struct {
-	CAID               string            `validate:"required"`
-	IssuanceExpiration models.Expiration `validate:"required"`
-}
-
-func (svc *CAServiceBackend) UpdateCAIssuanceExpiration(ctx context.Context, input UpdateCAIssuanceExpirationInput) (*models.CACertificate, error) {
+func (svc *CAServiceBackend) UpdateCAIssuanceExpiration(ctx context.Context, input services.UpdateCAIssuanceExpirationInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 	var err error
 	err = validate.Struct(input)
@@ -867,17 +748,12 @@ func (svc *CAServiceBackend) UpdateCAIssuanceExpiration(ctx context.Context, inp
 
 }
 
-type UpdateCAMetadataInput struct {
-	CAID     string                 `validate:"required"`
-	Metadata map[string]interface{} `validate:"required"`
-}
-
 // Returned Error Codes:
 //   - ErrCANotFound
 //     The specified CA can not be found in the Database
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
-func (svc *CAServiceBackend) UpdateCAMetadata(ctx context.Context, input UpdateCAMetadataInput) (*models.CACertificate, error) {
+func (svc *CAServiceBackend) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := validate.Struct(input)
@@ -904,10 +780,6 @@ func (svc *CAServiceBackend) UpdateCAMetadata(ctx context.Context, input UpdateC
 	return svc.caStorage.Update(ctx, ca)
 }
 
-type DeleteCAInput struct {
-	CAID string `validate:"required"`
-}
-
 // Returned Error Codes:
 //   - ErrCANotFound
 //     The specified CA can not be found in the Database
@@ -915,7 +787,7 @@ type DeleteCAInput struct {
 //     The required variables of the data structure are not valid.
 //   - ErrCAStatus
 //     Cannot delete a CA that is not expired or revoked.
-func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input DeleteCAInput) error {
+func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.DeleteCAInput) error {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := validate.Struct(input)
@@ -949,7 +821,7 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input DeleteCAInput) 
 	revokeCertFunc := func(c models.Certificate) {
 		lFunc.Infof("\n\n%d - %s\n\n", ctr, c.SerialNumber)
 		ctr++
-		_, err := svc.service.UpdateCertificateStatus(ctx, UpdateCertificateStatusInput{
+		_, err := svc.service.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
 			SerialNumber:     c.SerialNumber,
 			NewStatus:        models.StatusRevoked,
 			RevocationReason: ocsp.CessationOfOperation,
@@ -976,13 +848,6 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input DeleteCAInput) 
 	return err
 }
 
-type SignCertificateInput struct {
-	CAID         string                         `validate:"required"`
-	CertRequest  *models.X509CertificateRequest `validate:"required"`
-	Subject      *cmodels.Subject
-	SignVerbatim bool
-}
-
 // Returned Error Codes:
 //   - ErrCANotFound
 //     The specified CA can not be found in the Database
@@ -990,7 +855,7 @@ type SignCertificateInput struct {
 //     The required variables of the data structure are not valid.
 //   - ErrCAStatus
 //     CA is not active
-func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input SignCertificateInput) (*models.Certificate, error) {
+func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services.SignCertificateInput) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := validate.Struct(input)
@@ -1067,21 +932,11 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input SignCert
 	return svc.certStorage.Insert(ctx, &cert)
 }
 
-type CreateCertificateInput struct {
-	KeyMetadata cmodels.KeyMetadata `validate:"required"`
-	Subject     cmodels.Subject     `validate:"required"`
-}
-
-func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input CreateCertificateInput) (*models.Certificate, error) {
+func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (*models.Certificate, error) {
 	return nil, fmt.Errorf("TODO")
 }
 
-type ImportCertificateInput struct {
-	Certificate *models.X509Certificate
-	Metadata    map[string]any
-}
-
-func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error) {
+func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	status := models.StatusActive
@@ -1136,14 +991,7 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input Import
 	return cert, nil
 }
 
-type SignatureSignInput struct {
-	CAID             string                 `validate:"required"`
-	Message          []byte                 `validate:"required"`
-	MessageType      models.SignMessageType `validate:"required"`
-	SigningAlgorithm string                 `validate:"required"`
-}
-
-func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input SignatureSignInput) ([]byte, error) {
+func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input services.SignatureSignInput) ([]byte, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := validate.Struct(input)
@@ -1174,15 +1022,7 @@ func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input SignatureS
 	return signature, nil
 }
 
-type SignatureVerifyInput struct {
-	CAID             string                 `validate:"required"`
-	Signature        []byte                 `validate:"required"`
-	Message          []byte                 `validate:"required"`
-	MessageType      models.SignMessageType `validate:"required"`
-	SigningAlgorithm string                 `validate:"required"`
-}
-
-func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input SignatureVerifyInput) (bool, error) {
+func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input services.SignatureVerifyInput) (bool, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := validate.Struct(input)
@@ -1207,16 +1047,12 @@ func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input Signatur
 	return x509Engine.Verify((*x509.Certificate)(ca.Certificate.Certificate), input.Signature, input.Message, input.MessageType, input.SigningAlgorithm)
 }
 
-type GetCertificatesBySerialNumberInput struct {
-	SerialNumber string `validate:"required"`
-}
-
 // Returned Error Codes:
 //   - ErrCertificateNotFound
 //     The specified Certificate can not be found in the Database
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
-func (svc *CAServiceBackend) GetCertificateBySerialNumber(ctx context.Context, input GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
+func (svc *CAServiceBackend) GetCertificateBySerialNumber(ctx context.Context, input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := validate.Struct(input)
@@ -1240,11 +1076,7 @@ func (svc *CAServiceBackend) GetCertificateBySerialNumber(ctx context.Context, i
 	return cert, nil
 }
 
-type GetCertificatesInput struct {
-	resources.ListInput[models.Certificate]
-}
-
-func (svc *CAServiceBackend) GetCertificates(ctx context.Context, input GetCertificatesInput) (string, error) {
+func (svc *CAServiceBackend) GetCertificates(ctx context.Context, input services.GetCertificatesInput) (string, error) {
 	return svc.certStorage.SelectAll(ctx, storage.StorageListRequest[models.Certificate]{
 		ExhaustiveRun: input.ExhaustiveRun,
 		ApplyFunc:     input.ApplyFunc,
@@ -1253,17 +1085,12 @@ func (svc *CAServiceBackend) GetCertificates(ctx context.Context, input GetCerti
 	})
 }
 
-type GetCertificatesByCAInput struct {
-	CAID string `validate:"required"`
-	resources.ListInput[models.Certificate]
-}
-
 // Returned Error Codes:
 //   - ErrCANotFound
 //     The specified CA can not be found in the Database
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
-func (svc *CAServiceBackend) GetCertificatesByCA(ctx context.Context, input GetCertificatesByCAInput) (string, error) {
+func (svc *CAServiceBackend) GetCertificatesByCA(ctx context.Context, input services.GetCertificatesByCAInput) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := validate.Struct(input)
@@ -1293,13 +1120,7 @@ func (svc *CAServiceBackend) GetCertificatesByCA(ctx context.Context, input GetC
 	})
 }
 
-type GetCertificatesByExpirationDateInput struct {
-	ExpiresAfter  time.Time
-	ExpiresBefore time.Time
-	resources.ListInput[models.Certificate]
-}
-
-func (svc *CAServiceBackend) GetCertificatesByExpirationDate(ctx context.Context, input GetCertificatesByExpirationDateInput) (string, error) {
+func (svc *CAServiceBackend) GetCertificatesByExpirationDate(ctx context.Context, input services.GetCertificatesByExpirationDateInput) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Debugf("reading certificates by expiration date. expiresafter: %s. expiresbefore: %s", input.ExpiresAfter, input.ExpiresBefore)
@@ -1311,13 +1132,7 @@ func (svc *CAServiceBackend) GetCertificatesByExpirationDate(ctx context.Context
 	})
 }
 
-type GetCertificatesByCaAndStatusInput struct {
-	CAID   string
-	Status models.CertificateStatus
-	resources.ListInput[models.Certificate]
-}
-
-func (svc *CAServiceBackend) GetCertificatesByCaAndStatus(ctx context.Context, input GetCertificatesByCaAndStatusInput) (string, error) {
+func (svc *CAServiceBackend) GetCertificatesByCaAndStatus(ctx context.Context, input services.GetCertificatesByCaAndStatusInput) (string, error) {
 	return svc.certStorage.SelectByCAIDAndStatus(ctx, input.CAID, input.Status, storage.StorageListRequest[models.Certificate]{
 		ExhaustiveRun: input.ExhaustiveRun,
 		ApplyFunc:     input.ApplyFunc,
@@ -1326,24 +1141,13 @@ func (svc *CAServiceBackend) GetCertificatesByCaAndStatus(ctx context.Context, i
 	})
 }
 
-type GetCertificatesByStatusInput struct {
-	Status models.CertificateStatus
-	resources.ListInput[models.Certificate]
-}
-
-func (svc *CAServiceBackend) GetCertificatesByStatus(ctx context.Context, input GetCertificatesByStatusInput) (string, error) {
+func (svc *CAServiceBackend) GetCertificatesByStatus(ctx context.Context, input services.GetCertificatesByStatusInput) (string, error) {
 	return svc.certStorage.SelectByStatus(ctx, input.Status, storage.StorageListRequest[models.Certificate]{
 		ExhaustiveRun: input.ExhaustiveRun,
 		ApplyFunc:     input.ApplyFunc,
 		QueryParams:   input.QueryParameters,
 		ExtraOpts:     nil,
 	})
-}
-
-type UpdateCertificateStatusInput struct {
-	SerialNumber     string                   `validate:"required"`
-	NewStatus        models.CertificateStatus `validate:"required"`
-	RevocationReason models.RevocationReason
 }
 
 // Returned Error Codes:
@@ -1353,7 +1157,7 @@ type UpdateCertificateStatusInput struct {
 //     The specified status is not valid for this certficate due to its initial status
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
-func (svc *CAServiceBackend) UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) (*models.Certificate, error) {
+func (svc *CAServiceBackend) UpdateCertificateStatus(ctx context.Context, input services.UpdateCertificateStatusInput) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := validate.Struct(input)
@@ -1400,17 +1204,12 @@ func (svc *CAServiceBackend) UpdateCertificateStatus(ctx context.Context, input 
 	return svc.certStorage.Update(ctx, cert)
 }
 
-type UpdateCertificateMetadataInput struct {
-	SerialNumber string                 `validate:"required"`
-	Metadata     map[string]interface{} `validate:"required"`
-}
-
 // Returned Error Codes:
 //   - ErrCertificateNotFound
 //     The specified Certificate can not be found in the Database
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
-func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, input UpdateCertificateMetadataInput) (*models.Certificate, error) {
+func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, input services.UpdateCertificateMetadataInput) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := validate.Struct(input)
@@ -1437,7 +1236,7 @@ func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, inpu
 }
 
 func createCAValidation(sl validator.StructLevel) {
-	ca := sl.Current().Interface().(CreateCAInput)
+	ca := sl.Current().Interface().(services.CreateCAInput)
 	if !helpers.ValidateExpirationTimeRef(ca.CAExpiration) {
 		// lFunc.Errorf("CA Expiration time ref is incompatible with the selected variable")
 		sl.ReportError(ca.CAExpiration, "CAExpiration", "CAExpiration", "InvalidCAExpiration", "")
@@ -1462,7 +1261,7 @@ func createCAValidation(sl validator.StructLevel) {
 }
 
 func importCAValidation(sl validator.StructLevel) {
-	ca := sl.Current().Interface().(ImportCAInput)
+	ca := sl.Current().Interface().(services.ImportCAInput)
 	caCert := ca.CACertificate
 
 	if ca.CAType != models.CertificateTypeExternal {

@@ -42,6 +42,25 @@ type TLSConfig struct {
 	CACertificateFile  string `mapstructure:"ca_cert_file"`
 }
 
+type HTTPClient struct {
+	LogLevel        LogLevel             `mapstructure:"log_level"`
+	AuthMode        HTTPClientAuthMethod `mapstructure:"auth_mode"`
+	AuthJWTOptions  AuthJWTOptions       `mapstructure:"jwt_options"`
+	AuthMTLSOptions AuthMTLSOptions      `mapstructure:"mtls_options"`
+	HTTPConnection  `mapstructure:",squash"`
+}
+
+type AuthJWTOptions struct {
+	ClientID         string   `mapstructure:"oidc_client_id"`
+	ClientSecret     Password `mapstructure:"oidc_client_secret"`
+	OIDCWellKnownURL string   `mapstructure:"oidc_well_known"`
+}
+
+type AuthMTLSOptions struct {
+	CertFile string `mapstructure:"cert_file"`
+	KeyFile  string `mapstructure:"key_file"`
+}
+
 func DecodeStruct[E any](source map[string]interface{}) (E, error) {
 
 	var target E

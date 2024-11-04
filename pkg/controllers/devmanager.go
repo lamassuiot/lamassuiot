@@ -2,11 +2,11 @@ package controllers
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
 	cresources "github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/errs"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 )
 
 type devManagerHttpRoutes struct {

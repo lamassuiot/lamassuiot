@@ -6,7 +6,8 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
+	lservices "github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
 
 type CAEventPublisher struct {
@@ -14,7 +15,7 @@ type CAEventPublisher struct {
 	eventMWPub ICloudEventMiddlewarePublisher
 }
 
-func NewCAEventBusPublisher(eventMWPub ICloudEventMiddlewarePublisher) services.CAMiddleware {
+func NewCAEventBusPublisher(eventMWPub ICloudEventMiddlewarePublisher) lservices.CAMiddleware {
 	return func(next services.CAService) services.CAService {
 		return &CAEventPublisher{
 			Next:       next,

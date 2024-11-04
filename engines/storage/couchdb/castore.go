@@ -10,7 +10,7 @@ import (
 	_ "github.com/go-kivik/kivik/v4/couchdb" // The CouchDB driver
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
 )
 
 const caDBName = "certificate-authority"

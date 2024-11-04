@@ -6,7 +6,8 @@ import (
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
+	lservices "github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
 
 type dmsEventPublisher struct {
@@ -14,7 +15,7 @@ type dmsEventPublisher struct {
 	eventMWPub ICloudEventMiddlewarePublisher
 }
 
-func NewDMSEventPublisher(eventMWPub ICloudEventMiddlewarePublisher) services.DMSManagerMiddleware {
+func NewDMSEventPublisher(eventMWPub ICloudEventMiddlewarePublisher) lservices.DMSManagerMiddleware {
 	return func(next services.DMSManagerService) services.DMSManagerService {
 		return &dmsEventPublisher{
 			next:       next,

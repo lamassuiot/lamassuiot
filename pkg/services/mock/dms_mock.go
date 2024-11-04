@@ -5,7 +5,7 @@ import (
 	"crypto/x509"
 
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	"github.com/stretchr/testify/mock"
 )
 

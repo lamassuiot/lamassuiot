@@ -11,15 +11,14 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/globalsign/est"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/clients"
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/clients"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/services"
 )
 
 type UseCase1Input struct {
@@ -78,8 +77,8 @@ func RunUseCase1(input UseCase1Input) error {
 
 	log := helpers.SetupLogger(cconfig.Info, "Test Case", "httpClient")
 
-	httpCli, err := clients.BuildHTTPClient(config.HTTPClient{
-		AuthMode: config.NoAuth,
+	httpCli, err := clients.BuildHTTPClient(cconfig.HTTPClient{
+		AuthMode: cconfig.NoAuth,
 		HTTPConnection: cconfig.HTTPConnection{
 			Protocol: cconfig.HTTPS,
 			BasicConnection: cconfig.BasicConnection{
