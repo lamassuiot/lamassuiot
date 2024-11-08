@@ -193,7 +193,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		}
 
 		if conf.AWSIoTManager.Enabled {
-			_, err = awsiotconnector.AssembleAWSIoTManagerService(config.IotAWS{
+			_, err = awsiotconnector.AssembleAWSIoTManagerService(awsiotconnector.ConnectorServiceConfig{
 				Logs: cconfig.Logging{
 					Level: conf.Logs.Level,
 				},

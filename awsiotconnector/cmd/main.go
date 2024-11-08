@@ -8,7 +8,6 @@ import (
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
@@ -23,7 +22,7 @@ func main() {
 	log.SetFormatter(helpers.LogFormatter)
 	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
 
-	conf, err := cconfig.LoadConfig[config.IotAWS](&config.IotAWSDefaults)
+	conf, err := cconfig.LoadConfig[lamassu.ConnectorServiceConfig](&lamassu.ConnectorServiceConfigDefaults)
 	if err != nil {
 		log.Fatalf("something went wrong while loading config. Exiting: %s", err)
 	}

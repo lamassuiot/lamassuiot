@@ -1,16 +1,18 @@
 go 1.22.8
 
 use (
- .
- ./core
- ./engines/crypto/filesystem
- ./engines/crypto/pkcs11
- ./engines/crypto/vaultkv2
- ./engines/crypto/aws
- ./engines/storage/postgres
- ./engines/storage/couchdb
- ./engines/storage/sqlite
- ./engines/eventbus/amqp
- ./engines/eventbus/aws
- ./engines/eventbus/channel
- )
+	.
+	./awsiotconnector
+	./core
+	./engines/crypto/aws
+	./engines/crypto/filesystem
+	./engines/crypto/pkcs11
+	./engines/crypto/vaultkv2
+	./engines/eventbus/amqp
+	./engines/eventbus/aws
+	./engines/eventbus/channel
+	./engines/storage/couchdb
+	./engines/storage/postgres
+	./engines/storage/sqlite
+	./monolithic
+)

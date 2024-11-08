@@ -1000,7 +1000,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterUpdateJITPProvisioner(ctx co
 		TemplateBody:        &templateBody,
 		TemplateName:        &input.DMS.ID,
 		Description:         &input.DMS.Name,
-		Enabled:             input.AwsJITPConfig.JITPProvisioningTemplate.EnableTemplate,
+		Enabled:             aws.Bool(input.AwsJITPConfig.JITPProvisioningTemplate.EnableTemplate),
 		PreProvisioningHook: nil,
 		Tags:                []types.Tag{{Key: aws.String("created-by"), Value: aws.String("LAMASSU")}},
 		Type:                types.TemplateTypeJitp,
