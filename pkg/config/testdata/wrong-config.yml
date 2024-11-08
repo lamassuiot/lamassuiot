@@ -1,6 +1,0 @@
-logs:
-  level: "info"
-secret_value: **** # This is a wrong value
-http_server:
-  port: 7777
-  listen_address: "0.0.0.0"
