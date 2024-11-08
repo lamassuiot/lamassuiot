@@ -1,4 +1,4 @@
-package iot
+package pkg
 
 import (
 	"bytes"

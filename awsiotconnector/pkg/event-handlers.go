@@ -1,4 +1,4 @@
-package handlers
+package pkg
 
 import (
 	"context"
@@ -10,16 +10,16 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services/eventhandling"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	lms_slices "github.com/lamassuiot/lamassuiot/v2/pkg/helpers/slices"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/services/iot"
 	"github.com/sirupsen/logrus"
 )
 
-func NewAWSIoTEventHandler(l *logrus.Entry, svc iot.AWSCloudConnectorService) *CloudEventHandler {
-	return &CloudEventHandler{
-		lMessaging: l,
-		dispatchMap: map[string]func(*event.Event) error{
+func NewAWSIoTEventHandler(l *logrus.Entry, svc AWSCloudConnectorService) *eventhandling.CloudEventHandler {
+	return &eventhandling.CloudEventHandler{
+		Logger: l,
+		DispatchMap: map[string]func(*event.Event) error{
 			string(models.EventUpdateCertificateStatusKey):   func(e *event.Event) error { return handlerWarpper(e, svc, l, updateCertificateStatusHandler) },
 			string(models.EventBindDeviceIdentityKey):        func(e *event.Event) error { return handlerWarpper(e, svc, l, bindDeviceIdentityHandler) },
 			string(models.EventUpdateDeviceMetadataKey):      func(e *event.Event) error { return handlerWarpper(e, svc, l, updateDeviceMetadataHandler) },
@@ -34,9 +34,9 @@ func NewAWSIoTEventHandler(l *logrus.Entry, svc iot.AWSCloudConnectorService) *C
 }
 
 func handlerWarpper(event *event.Event,
-	svc iot.AWSCloudConnectorService,
+	svc AWSCloudConnectorService,
 	logger *logrus.Entry,
-	handler func(ctx context.Context, e *event.Event, svc iot.AWSCloudConnectorService, logger *logrus.Entry) error) error {
+	handler func(ctx context.Context, e *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error) error {
 
 	ctx := chelpers.InitContext()
 
@@ -54,7 +54,7 @@ func logDecodeError(logger *logrus.Entry, eventID string, eventType string, mode
 	logger.Errorf("could not decode event '%s' into model '%s' object. Skipping event with ID %s: %s", eventType, modelObject, eventID, err)
 }
 
-func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc iot.AWSCloudConnectorService, logger *logrus.Entry) error {
+func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error {
 	var ca *models.CACertificate
 	var err error
 	switch event.Type() {
@@ -88,7 +88,7 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc iot.AW
 	}
 
 	if awsIoTCoreCACfg.Registration.Status == models.IoTAWSCAMetadataRegistrationRequested {
-		_, err = svc.RegisterCA(context.Background(), iot.RegisterCAInput{
+		_, err = svc.RegisterCA(context.Background(), RegisterCAInput{
 			CACertificate:         *ca,
 			RegisterConfiguration: awsIoTCoreCACfg,
 		})
@@ -104,7 +104,7 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc iot.AW
 	return nil
 }
 
-func updateCertificateStatusHandler(ctx context.Context, event *event.Event, svc iot.AWSCloudConnectorService, logger *logrus.Entry) error {
+func updateCertificateStatusHandler(ctx context.Context, event *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error {
 	var cert *models.Certificate
 	var err error
 	updatedCert, err := helpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
@@ -128,7 +128,7 @@ func updateCertificateStatusHandler(ctx context.Context, event *event.Event, svc
 		return nil
 	}
 
-	err = svc.UpdateCertificateStatus(context.Background(), iot.UpdateCertificateStatusInput{
+	err = svc.UpdateCertificateStatus(context.Background(), UpdateCertificateStatusInput{
 		Certificate: *cert,
 	})
 
@@ -141,7 +141,7 @@ func updateCertificateStatusHandler(ctx context.Context, event *event.Event, svc
 	return nil
 }
 
-func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc iot.AWSCloudConnectorService, logger *logrus.Entry) error {
+func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error {
 	var dms *models.DMS
 	var err error
 
@@ -179,7 +179,7 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc iot.A
 	}
 
 	if dmsAwsAutomationConfig.RegistrationMode == models.JitpAWSIoTRegistrationMode {
-		err = svc.RegisterUpdateJITPProvisioner(context.Background(), iot.RegisterUpdateJITPProvisionerInput{
+		err = svc.RegisterUpdateJITPProvisioner(context.Background(), RegisterUpdateJITPProvisionerInput{
 			DMS:           dms,
 			AwsJITPConfig: dmsAwsAutomationConfig,
 		})
@@ -198,7 +198,7 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc iot.A
 				ListInput: resources.ListInput[models.Device]{
 					ExhaustiveRun: true,
 					ApplyFunc: func(device models.Device) {
-						err = svc.UpdateDeviceShadow(ctx, iot.UpdateDeviceShadowInput{
+						err = svc.UpdateDeviceShadow(ctx, UpdateDeviceShadowInput{
 							DeviceID:               device.ID,
 							RemediationActionsType: []models.RemediationActionType{models.RemediationActionUpdateTrustAnchorList},
 							DMSIoTAutomationConfig: dmsAwsAutomationConfig,
@@ -221,7 +221,7 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc iot.A
 	return nil
 }
 
-func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, svc iot.AWSCloudConnectorService, logger *logrus.Entry) error {
+func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error {
 	certUpdate, err := helpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
 	if err != nil {
 		logDecodeError(logger, event.ID(), event.Type(), "Certificate", err)
@@ -300,7 +300,7 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 	if preventiveUpdatedIdx >= 0 && certUpdatedExpirationDeltas[preventiveUpdatedIdx].Triggered {
 		// if previously was not triggered (it's the first time) or it did't had a delta defined beforehand
 		if (preventivePrevIdx >= 0 && !certPreviousExpirationDeltas[preventivePrevIdx].Triggered) || preventivePrevIdx == -1 {
-			err = svc.UpdateDeviceShadow(ctx, iot.UpdateDeviceShadowInput{
+			err = svc.UpdateDeviceShadow(ctx, UpdateDeviceShadowInput{
 				DeviceID:               attachedBy.DeviceID,
 				RemediationActionsType: []models.RemediationActionType{models.RemediationActionUpdateCertificate},
 				DMSIoTAutomationConfig: dmsAWSConf,
@@ -316,7 +316,7 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 	return nil
 }
 
-func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc iot.AWSCloudConnectorService, logger *logrus.Entry) error {
+func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error {
 	deviceUpdate, err := helpers.GetEventBody[models.UpdateModel[models.Device]](event)
 	if err != nil {
 		logDecodeError(logger, event.ID(), event.Type(), "Device", err)
@@ -360,7 +360,7 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc io
 	}
 
 	if len(deviceMetaAWS.Actions) > 0 {
-		err = svc.UpdateDeviceShadow(ctx, iot.UpdateDeviceShadowInput{
+		err = svc.UpdateDeviceShadow(ctx, UpdateDeviceShadowInput{
 			DeviceID:               device.ID,
 			RemediationActionsType: deviceMetaAWS.Actions,
 			DMSIoTAutomationConfig: dmsAWSConf,
@@ -375,7 +375,7 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc io
 	return nil
 }
 
-func bindDeviceIdentityHandler(ctx context.Context, event *event.Event, svc iot.AWSCloudConnectorService, logger *logrus.Entry) error {
+func bindDeviceIdentityHandler(ctx context.Context, event *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error {
 	bindEvent, err := helpers.GetEventBody[models.BindIdentityToDeviceOutput](event)
 	if err != nil {
 		logDecodeError(logger, event.ID(), event.Type(), "Certificate", err)
@@ -400,7 +400,7 @@ func bindDeviceIdentityHandler(ctx context.Context, event *event.Event, svc iot.
 	if dmsAwsAutomationConfig.RegistrationMode == models.AutomaticAWSIoTRegistrationMode {
 		thingID := bindEvent.Certificate.Subject.CommonName
 		logrus.Infof("registering %s device", thingID)
-		err = svc.RegisterAndAttachThing(ctx, iot.RegisterAndAttachThingInput{
+		err = svc.RegisterAndAttachThing(ctx, RegisterAndAttachThingInput{
 			DeviceID:               thingID,
 			DMSIoTAutomationConfig: dmsAwsAutomationConfig,
 			BindedIdentity:         *bindEvent,

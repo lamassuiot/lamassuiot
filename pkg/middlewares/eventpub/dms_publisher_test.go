@@ -9,7 +9,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
-	svcmock "github.com/lamassuiot/lamassuiot/v2/pkg/services/mock"
+	svcmock "github.com/lamassuiot/lamassuiot/v2/core/pkg/services/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

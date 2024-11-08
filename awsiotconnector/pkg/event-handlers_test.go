@@ -1,4 +1,4 @@
-package handlers
+package pkg
 
 import (
 	"encoding/json"
@@ -7,8 +7,8 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	smock "github.com/lamassuiot/lamassuiot/v2/core/pkg/services/mock"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	smock "github.com/lamassuiot/lamassuiot/v2/pkg/services/mock"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 )
@@ -29,7 +29,7 @@ func TestHandleUpdateCertificate(t *testing.T) {
 	}
 
 	// Prepare mocks
-	awsConnectorMock := smock.MockAWSCloudConnectorService{}
+	awsConnectorMock := mockAWSCloudConnectorService{}
 	awsConnectorMock.On("GetConnectorID").Return("aws-12345")
 	awsConnectorMock.On("UpdateCertificateStatus", mock.Anything, mock.Anything).Return(nil)
 
@@ -68,7 +68,7 @@ func TestHandleUpdateCertificateNotAttached(t *testing.T) {
 	}
 
 	// Prepare mocks
-	awsConnectorMock := smock.MockAWSCloudConnectorService{}
+	awsConnectorMock := mockAWSCloudConnectorService{}
 	awsConnectorMock.On("GetConnectorID").Return("aws-12345")
 
 	// Test logic
@@ -94,7 +94,7 @@ func TestHandleUpdateCertificateNotSameConnector(t *testing.T) {
 	}
 
 	// Prepare mocks
-	awsConnectorMock := smock.MockAWSCloudConnectorService{}
+	awsConnectorMock := mockAWSCloudConnectorService{}
 	awsConnectorMock.On("GetConnectorID").Return("aws-12345-other")
 
 	// Test logic
@@ -141,7 +141,7 @@ func TestHandleUpdateMetadataUpdateShadow(t *testing.T) {
 	dms := loadDMSFromFile(t, "testdata/dms-settings.json")
 
 	// Prepare mocks
-	awsConnectorMock := smock.MockAWSCloudConnectorService{}
+	awsConnectorMock := mockAWSCloudConnectorService{}
 	dmsMock := smock.MockDMSManagerService{}
 	awsConnectorMock.On("GetDMSService").Return(&dmsMock)
 	awsConnectorMock.On("GetConnectorID").Return("aws-12345")
@@ -228,7 +228,7 @@ func TestHandleUpdateMetadataNotUpdateShadow(t *testing.T) {
 	dms := loadDMSFromFile(t, "testdata/dms-settings.json")
 
 	// Prepare mocks
-	awsConnectorMock := smock.MockAWSCloudConnectorService{}
+	awsConnectorMock := mockAWSCloudConnectorService{}
 	dmsMock := smock.MockDMSManagerService{}
 	awsConnectorMock.On("GetDMSService").Return(&dmsMock)
 	awsConnectorMock.On("GetConnectorID").Return("aws-12345")
@@ -282,7 +282,7 @@ func TestHandleUpdateMetadataMultipleUpdates(t *testing.T) {
 	dms := loadDMSFromFile(t, "testdata/dms-settings.json")
 
 	// Prepare mocks
-	awsConnectorMock := smock.MockAWSCloudConnectorService{}
+	awsConnectorMock := mockAWSCloudConnectorService{}
 	dmsMock := smock.MockDMSManagerService{}
 	awsConnectorMock.On("GetDMSService").Return(&dmsMock)
 	awsConnectorMock.On("GetConnectorID").Return("aws-12345")
@@ -326,7 +326,7 @@ func TestHandleUpdateMetadataMultipleUpdates(t *testing.T) {
 	message = prepareMessage(t, "testdata/cloudevents/cert_update_metadata__preventive_delta_false_to_true.json", prevState, newState)
 
 	// Assert
-	awsConnectorMock = smock.MockAWSCloudConnectorService{} // Reset mock
+	awsConnectorMock = mockAWSCloudConnectorService{} // Reset mock
 	awsConnectorMock.On("GetDMSService").Return(&dmsMock)
 	awsConnectorMock.On("GetConnectorID").Return("aws-12345")
 
@@ -375,7 +375,7 @@ func TestHandleUpdateMetadataDMSNoConfiguredNoUpdateShadow(t *testing.T) {
 	delete(dms.Metadata, "lamassu.io/iot/aws-12345")
 
 	// Prepare mocks
-	awsConnectorMock := smock.MockAWSCloudConnectorService{}
+	awsConnectorMock := mockAWSCloudConnectorService{}
 	dmsMock := smock.MockDMSManagerService{}
 	awsConnectorMock.On("GetDMSService").Return(&dmsMock)
 	awsConnectorMock.On("GetConnectorID").Return("aws-12345")

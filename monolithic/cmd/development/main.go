@@ -22,8 +22,8 @@ import (
 	vconfig "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/config"
 	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/docker"
 	eventbus_amqp "github.com/lamassuiot/lamassuiot/v2/eventbus/amqp/config"
+	"github.com/lamassuiot/lamassuiot/v2/monolithic/pkg"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/test/monolithic"
 	rabbitmq_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/async-messaging/rabbitmq"
 	softhsmv2_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/softhsmv2"
 	postgres_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/storage/postgres"
@@ -367,7 +367,7 @@ func main() {
 		},
 	}
 
-	_, err := monolithic.RunMonolithicLamassuPKI(conf)
+	_, err := pkg.RunMonolithicLamassuPKI(conf)
 	if err != nil {
 		fmt.Println("could not start monolithic PKI. Shuting down: ", err)
 		panic(err)

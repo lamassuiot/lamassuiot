@@ -1,4 +1,4 @@
-package assemblers
+package pkg
 
 import (
 	"context"
@@ -12,12 +12,10 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/services/handlers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/services/iot"
 	"github.com/sirupsen/logrus"
 )
 
-func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAService, dmsService services.DMSManagerService, deviceService services.DeviceManagerService) (*iot.AWSCloudConnectorService, error) {
+func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAService, dmsService services.DMSManagerService, deviceService services.DeviceManagerService) (*AWSCloudConnectorService, error) {
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "AWS IoT Connector", "Service")
 	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "AWS IoT Connector", "Event Bus")
 
@@ -26,7 +24,7 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 		return nil, fmt.Errorf("could not get aws config: %s", err)
 	}
 
-	awsConnectorSvc, err := iot.NewAWSCloudConnectorServiceService(iot.AWSCloudConnectorBuilder{
+	awsConnectorSvc, err := NewAWSCloudConnectorServiceService(AWSCloudConnectorBuilder{
 		Conf:        *awsCfg,
 		Logger:      lSvc,
 		ConnectorID: conf.ConnectorID,
@@ -39,7 +37,7 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 	}
 
 	busName := fmt.Sprintf("aws-connector-%s", strings.ReplaceAll(conf.ConnectorID, "aws.", "-"))
-	handler := handlers.NewAWSIoTEventHandler(lMessaging, awsConnectorSvc)
+	handler := NewAWSIoTEventHandler(lMessaging, awsConnectorSvc)
 	subHandler, err := eventbus.NewEventBusSubscriptionHandler(conf.SubscriberEventBus, busName, lMessaging, *handler, "#-aws-connector", "#")
 	if err != nil {
 		lMessaging.Errorf("could not generate Event Bus Subscription Handler: %s", err)

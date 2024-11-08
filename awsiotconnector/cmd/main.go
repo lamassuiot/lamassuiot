@@ -3,11 +3,11 @@ package main
 import (
 	"fmt"
 
+	lamassu "github.com/lamassuiot/lamassuiot/v2/awsiotconnector/pkg"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/clients"
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	lamassu "github.com/lamassuiot/lamassuiot/v2/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"

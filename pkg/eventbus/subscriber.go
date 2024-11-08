@@ -6,7 +6,7 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/services/handlers"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services/eventhandling"
 	"github.com/sirupsen/logrus"
 )
 
@@ -23,7 +23,7 @@ type EventSubscriptionHandler struct {
 	handler     *message.Handler
 }
 
-func NewEventBusSubscriptionHandler(conf cconfig.EventBusEngine, serviceId string, lMessaging *logrus.Entry, handler handlers.EventHandler, handlerName string, topic string) (*EventSubscriptionHandler, error) {
+func NewEventBusSubscriptionHandler(conf cconfig.EventBusEngine, serviceId string, lMessaging *logrus.Entry, handler eventhandling.EventHandler, handlerName string, topic string) (*EventSubscriptionHandler, error) {
 	eventBusRouter, err := NewEventBusRouter(conf, serviceId, lMessaging)
 	if err != nil {
 		return nil, fmt.Errorf("could not setup event bus: %s", err)

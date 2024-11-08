@@ -8,14 +8,15 @@ import (
 	"github.com/cloudevents/sdk-go/v2/event"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services/eventhandling"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 
-func NewDeviceEventHandler(l *logrus.Entry, svc services.DeviceManagerService) *CloudEventHandler {
-	return &CloudEventHandler{
-		lMessaging: l,
-		dispatchMap: map[string]func(*event.Event) error{
+func NewDeviceEventHandler(l *logrus.Entry, svc services.DeviceManagerService) *eventhandling.CloudEventHandler {
+	return &eventhandling.CloudEventHandler{
+		Logger: l,
+		DispatchMap: map[string]func(*event.Event) error{
 			string(models.EventUpdateCertificateMetadataKey): func(m *event.Event) error { return updateCertMetaHandler(m, svc, l) },
 			string(models.EventUpdateCertificateStatusKey):   func(m *event.Event) error { return updateCertStatusHandler(m, svc, l) },
 		},

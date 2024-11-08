@@ -1,4 +1,4 @@
-package monolithic
+package pkg
 
 import (
 	"crypto/tls"
@@ -13,6 +13,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	awsiotconnector "github.com/lamassuiot/lamassuiot/v2/awsiotconnector/pkg"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/clients"
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
@@ -192,7 +193,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		}
 
 		if conf.AWSIoTManager.Enabled {
-			_, err = lamassu.AssembleAWSIoTManagerService(config.IotAWS{
+			_, err = awsiotconnector.AssembleAWSIoTManagerService(config.IotAWS{
 				Logs: cconfig.Logging{
 					Level: conf.Logs.Level,
 				},

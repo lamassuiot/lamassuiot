@@ -1,4 +1,4 @@
-package handlers
+package eventhandling
 
 import (
 	"errors"
@@ -46,8 +46,8 @@ func TestHandleMessage(t *testing.T) {
 	}
 
 	handler := CloudEventHandler{
-		lMessaging:  entry,
-		dispatchMap: dispatchMap,
+		Logger:      entry,
+		DispatchMap: dispatchMap,
 	}
 
 	t.Run("ValidEvent", func(t *testing.T) {
@@ -111,8 +111,8 @@ func TestHandleAnyEvent(t *testing.T) {
 	}
 
 	handler := CloudEventHandler{
-		lMessaging:  entry,
-		dispatchMap: dispatchMap,
+		Logger:      entry,
+		DispatchMap: dispatchMap,
 	}
 
 	message := &message.Message{

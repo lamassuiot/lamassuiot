@@ -1,4 +1,4 @@
-package handlers
+package eventhandling
 
 import (
 	"fmt"
@@ -15,26 +15,26 @@ type EventHandler interface {
 }
 
 type CloudEventHandler struct {
-	lMessaging  *logrus.Entry
-	dispatchMap map[string]func(*event.Event) error
+	Logger      *logrus.Entry
+	DispatchMap map[string]func(*event.Event) error
 }
 
 func (h CloudEventHandler) HandleMessage(m *message.Message) error {
-	h.lMessaging.Infof("Received event: %s", m.Payload)
+	h.Logger.Infof("Received event: %s", m.Payload)
 	event, err := helpers.ParseCloudEvent(m.Payload)
 	if err != nil {
 		err = fmt.Errorf("something went wrong while processing cloud event: %s", err)
-		h.lMessaging.Error(err)
+		h.Logger.Error(err)
 		return err
 	}
 
-	handler, ok := h.dispatchMap[event.Type()]
+	handler, ok := h.DispatchMap[event.Type()]
 	if !ok {
-		h.lMessaging.Warnf("No handler found for event type: %s", event.Type())
+		h.Logger.Warnf("No handler found for event type: %s", event.Type())
 
-		handler, ok = h.dispatchMap[string(models.EventAnyKey)]
+		handler, ok = h.DispatchMap[string(models.EventAnyKey)]
 		if !ok {
-			h.lMessaging.Warnf("No default handler found for event type: %s", event.Type())
+			h.Logger.Warnf("No default handler found for event type: %s", event.Type())
 			return nil
 		}
 	}
@@ -42,7 +42,7 @@ func (h CloudEventHandler) HandleMessage(m *message.Message) error {
 	err = handler(event)
 
 	if err != nil {
-		h.lMessaging.Errorf("Something went wrong while handling event: %s", err)
+		h.Logger.Errorf("Something went wrong while handling event: %s", err)
 	}
 
 	return err
