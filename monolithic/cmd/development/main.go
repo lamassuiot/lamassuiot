@@ -259,12 +259,14 @@ func main() {
 		}
 	}()
 
+	eventBusConfig, _ := cconfig.EncodeStruct(rmqConfig)
 	eventBus := cconfig.EventBusEngine{
 		LogLevel: cconfig.Trace,
 		Enabled:  false,
 		Provider: cconfig.Amqp,
-		Config:   *rmqConfig,
+		Config:   eventBusConfig,
 	}
+
 	if !*disableEventbus {
 		eventBus.Enabled = true
 	}

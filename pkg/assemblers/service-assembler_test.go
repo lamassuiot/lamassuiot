@@ -107,11 +107,17 @@ func PrepareRabbitMQForTest() (*TestEventBusConfig, error) {
 		return nil, err
 	}
 
+	eventBusConfig, err := cconfig.EncodeStruct(conf)
+	if err != nil {
+		return nil, err
+	}
+
 	return &TestEventBusConfig{
 		config: cconfig.EventBusEngine{
 			LogLevel: cconfig.Trace,
 			Enabled:  true,
-			Config:   conf,
+			Provider: cconfig.Amqp,
+			Config:   eventBusConfig,
 		},
 		AfterSuite: func() { cleanup() },
 		BeforeEach: func() error {
