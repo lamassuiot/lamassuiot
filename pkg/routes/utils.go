@@ -19,7 +19,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/utils/gindump"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/controllers"
 	headerextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/basic-header-extractors"
 	basiclogger "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/basic-logger"
@@ -51,7 +50,7 @@ func NewGinEngine(logger *logrus.Entry) *gin.Engine {
 	return router
 }
 
-func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCfg config.HttpServer, apiInfo models.APIServiceInfo) (int, error) {
+func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCfg cconfig.HttpServer, apiInfo models.APIServiceInfo) (int, error) {
 	hCheckRoute := controllers.NewHealthCheckRoute(apiInfo)
 	mainLogger := logger
 	if !httpServerCfg.HealthCheckLogging {
@@ -113,13 +112,13 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 				}
 
 				var clientAuth tls.ClientAuthType
-				if httpServerCfg.Authentication.MutualTLS.ValidationMode == config.Any {
+				if httpServerCfg.Authentication.MutualTLS.ValidationMode == cconfig.Any {
 					clientAuth = tls.RequireAnyClientCert
 					srvExtraLog = srvExtraLog + " using 'any' validation mode (at least one client certificate MUST be sent but wont be validated)"
-				} else if httpServerCfg.Authentication.MutualTLS.ValidationMode == config.Strict {
+				} else if httpServerCfg.Authentication.MutualTLS.ValidationMode == cconfig.Strict {
 					clientAuth = tls.RequireAndVerifyClientCert
 					srvExtraLog = srvExtraLog + " using 'strict' validation mode"
-				} else if httpServerCfg.Authentication.MutualTLS.ValidationMode == config.Request {
+				} else if httpServerCfg.Authentication.MutualTLS.ValidationMode == cconfig.Request {
 					clientAuth = tls.RequestClientCert
 					srvExtraLog = srvExtraLog + " using 'request' validation mode (client certificate will be request although not mandatory to be sent. Behaves like optional mTLS)"
 				} else if httpServerCfg.Authentication.MutualTLS.ValidationMode == "" {

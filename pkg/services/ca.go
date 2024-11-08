@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/jakehl/goid"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/errs"
@@ -17,10 +18,10 @@ import (
 	models "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/x509engines"
 	"github.com/sirupsen/logrus"
+
 	"golang.org/x/crypto/ocsp"
 )
 
@@ -40,7 +41,7 @@ type CAServiceBackend struct {
 	defaultCryptoEngineID string
 	caStorage             storage.CACertificatesRepo
 	certStorage           storage.CertificatesRepo
-	cryptoMonitorConfig   config.CryptoMonitoring
+	cryptoMonitorConfig   cconfig.MonitoringJob
 	vaServerDomain        string
 	logger                *logrus.Entry
 }
@@ -50,7 +51,7 @@ type CAServiceBuilder struct {
 	CryptoEngines        map[string]*Engine
 	CAStorage            storage.CACertificatesRepo
 	CertificateStorage   storage.CertificatesRepo
-	CryptoMonitoringConf config.CryptoMonitoring
+	CryptoMonitoringConf cconfig.MonitoringJob
 	VAServerDomain       string
 }
 

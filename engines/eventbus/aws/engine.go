@@ -4,26 +4,25 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/eventbus"
-	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
 	"github.com/sirupsen/logrus"
 )
 
 func Register() {
-	eventbus.RegisterEventBusEngine("aws_sqs_sns", func(eventBusProvider string, config map[string]interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
+	eventbus.RegisterEventBusEngine("aws_sqs_sns", func(eventBusProvider string, config interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
 		return NewAWSEngine(config, serviceId, logger)
 	})
 }
 
 type AwsEngine struct {
 	logger     *logrus.Entry
-	config     aconfig.AWSSDKConfig
+	config     cconfig.AWSSDKConfig
 	serviceID  string
 	subscriber message.Subscriber
 	publisher  message.Publisher
 }
 
-func NewAWSEngine(conf map[string]interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
-	localConf, err := cconfig.DecodeStruct[aconfig.AWSSDKConfig](conf)
+func NewAWSEngine(conf interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
+	localConf, err := cconfig.DecodeStruct[cconfig.AWSSDKConfig](conf)
 	if err != nil {
 		logger.Errorf("could not decode AMQP Connection config: %s", err)
 		return nil, err

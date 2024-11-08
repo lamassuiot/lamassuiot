@@ -43,7 +43,7 @@ const (
 )
 
 type TestEventBusConfig struct {
-	config     config.EventBusEngine
+	config     cconfig.EventBusEngine
 	BeforeEach func() error
 	AfterSuite func()
 }
@@ -108,11 +108,10 @@ func PrepareRabbitMQForTest() (*TestEventBusConfig, error) {
 	}
 
 	return &TestEventBusConfig{
-		config: config.EventBusEngine{
+		config: cconfig.EventBusEngine{
 			LogLevel: cconfig.Trace,
 			Enabled:  true,
-			Provider: config.Amqp,
-			Amqp:     *conf,
+			Config:   conf,
 		},
 		AfterSuite: func() { cleanup() },
 		BeforeEach: func() error {
@@ -223,10 +222,10 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 	storageEngine.config.LogLevel = cconfig.Trace
 
 	svc, scheduler, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
-		Logs: config.BaseConfigLogging{
+		Logs: cconfig.Logging{
 			Level: cconfig.Info,
 		},
-		Server: config.HttpServer{
+		Server: cconfig.HttpServer{
 			LogLevel:           cconfig.Info,
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
@@ -234,7 +233,7 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 		PublisherEventBus: eventBus.config,
 		Storage:           storageEngine.config,
 		CryptoEngines:     cryptoEngines.config,
-		CryptoMonitoring: config.CryptoMonitoring{
+		CryptoMonitoring: cconfig.MonitoringJob{
 			Enabled:   true,
 			Frequency: "* * * * * *", //this CRON-like expression will scan certificate each second.
 		},
@@ -263,10 +262,10 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 
 func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer) (*DeviceManagerTestServer, error) {
 	svc, port, err := AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
-		Logs: config.BaseConfigLogging{
+		Logs: cconfig.Logging{
 			Level: cconfig.Info,
 		},
-		Server: config.HttpServer{
+		Server: cconfig.HttpServer{
 			LogLevel:           cconfig.Info,
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
@@ -315,19 +314,19 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 	}
 
 	svc, port, err := AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
-		Logs: config.BaseConfigLogging{
+		Logs: cconfig.Logging{
 			Level: cconfig.Info,
 		},
-		Server: config.HttpServer{
+		Server: cconfig.HttpServer{
 			LogLevel:           cconfig.Info,
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTPS,
 			CertFile:           downstreamCertPath,
 			KeyFile:            downstreamKeyPath,
-			Authentication: config.HttpServerAuthentication{
-				MutualTLS: config.HttpServerMutualTLSAuthentication{
+			Authentication: cconfig.HttpServerAuthentication{
+				MutualTLS: cconfig.HttpServerMutualTLSAuthentication{
 					Enabled:        true,
-					ValidationMode: config.Request,
+					ValidationMode: cconfig.Request,
 				},
 			},
 		},
@@ -367,10 +366,10 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 
 func BuildVATestServer(caTestServer *CATestServer) (*VATestServer, error) {
 	_, _, port, err := AssembleVAServiceWithHTTPServer(config.VAconfig{
-		Logs: config.BaseConfigLogging{
+		Logs: cconfig.Logging{
 			Level: cconfig.Info,
 		},
-		Server: config.HttpServer{
+		Server: cconfig.HttpServer{
 			LogLevel:           cconfig.Info,
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,

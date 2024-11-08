@@ -3,7 +3,7 @@ package jobs
 import (
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/sirupsen/logrus"
 )
 
@@ -14,7 +14,7 @@ func (mj *mockJob) Run() {
 }
 
 func TestNewJobSchedulerWithoutJob(t *testing.T) {
-	config := config.CryptoMonitoring{
+	config := cconfig.MonitoringJob{
 		Enabled:   true,
 		Frequency: "0 0 * * *",
 	}
@@ -38,7 +38,7 @@ func TestNewJobSchedulerWithoutJob(t *testing.T) {
 }
 
 func TestNewJobSchedulerDisabled(t *testing.T) {
-	config := config.CryptoMonitoring{
+	config := cconfig.MonitoringJob{
 		Enabled:   false,
 		Frequency: "0 0 * * *",
 	}
@@ -63,7 +63,7 @@ func TestNewJobSchedulerDisabled(t *testing.T) {
 }
 
 func TestNewJobScheduler(t *testing.T) {
-	config := config.CryptoMonitoring{
+	config := cconfig.MonitoringJob{
 		Enabled:   true,
 		Frequency: "0 0 * * *",
 	}
@@ -91,7 +91,7 @@ func TestNewJobScheduler(t *testing.T) {
 
 func TestJobSchedulerStart(t *testing.T) {
 
-	config := config.CryptoMonitoring{
+	config := cconfig.MonitoringJob{
 		Enabled:   true,
 		Frequency: "0 0 * * *",
 	}
@@ -112,7 +112,7 @@ func TestJobSchedulerStart(t *testing.T) {
 }
 
 func TestJobSchedulerNextRun(t *testing.T) {
-	config := config.CryptoMonitoring{
+	config := cconfig.MonitoringJob{
 		Enabled:   true,
 		Frequency: "0 0 * * *",
 	}
@@ -133,7 +133,7 @@ func TestJobSchedulerNextRun(t *testing.T) {
 }
 
 func TestJobSchedulerInSeconds(t *testing.T) {
-	config := config.CryptoMonitoring{
+	config := cconfig.MonitoringJob{
 		Enabled:   true,
 		Frequency: "0 0 * * * *",
 	}
@@ -154,7 +154,7 @@ func TestJobSchedulerInSeconds(t *testing.T) {
 }
 
 func TestJobSchedulerStop(t *testing.T) {
-	config := config.CryptoMonitoring{
+	config := cconfig.MonitoringJob{
 		Enabled:   true,
 		Frequency: "0 0 * * *",
 	}

@@ -9,18 +9,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+
 	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 )
 
 func StartDeviceManagerServiceTestServer(t *testing.T, withEventBus bool) (*DeviceManagerTestServer, error) {
 	var err error
 	eventBusConf := &TestEventBusConfig{
-		config: config.EventBusEngine{
+		config: cconfig.EventBusEngine{
 			Enabled: false,
 		},
 	}

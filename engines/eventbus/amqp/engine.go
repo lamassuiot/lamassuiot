@@ -9,7 +9,7 @@ import (
 )
 
 func Register() {
-	eventbus.RegisterEventBusEngine("amqp", func(eventBusProvider string, config map[string]interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
+	eventbus.RegisterEventBusEngine("amqp", func(eventBusProvider string, config interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
 		return NewAmqpEngine(config, serviceId, logger)
 	})
 }
@@ -22,7 +22,7 @@ type AmqpEngine struct {
 	publisher  message.Publisher
 }
 
-func NewAmqpEngine(conf map[string]interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
+func NewAmqpEngine(conf interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
 	localConf, err := cconfig.DecodeStruct[config.AMQPConnection](conf)
 	if err != nil {
 		logger.Errorf("could not decode AMQP Connection config: %s", err)

@@ -10,12 +10,12 @@ import (
 )
 
 type CAConfig struct {
-	Logs              BaseConfigLogging              `mapstructure:"logs"`
-	Server            HttpServer                     `mapstructure:"server"`
-	PublisherEventBus EventBusEngine                 `mapstructure:"publisher_event_bus"`
+	Logs              cconfig.Logging                `mapstructure:"logs"`
+	Server            cconfig.HttpServer             `mapstructure:"server"`
+	PublisherEventBus cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
 	Storage           cconfig.PluggableStorageEngine `mapstructure:"storage"`
 	CryptoEngines     CryptoEngines                  `mapstructure:"crypto_engines"`
-	CryptoMonitoring  CryptoMonitoring               `mapstructure:"crypto_monitoring"`
+	CryptoMonitoring  cconfig.MonitoringJob          `mapstructure:"crypto_monitoring"`
 	VAServerDomain    string                         `mapstructure:"va_server_domain"`
 }
 
@@ -28,11 +28,6 @@ type CryptoEngines struct {
 	AWSSecretsManagerProvider []aconfig.AWSCryptoEngine                  `mapstructure:"aws_secrets_manager"`
 	FilesystemProvider        []fsconfig.FilesystemEngineConfig          `mapstructure:"golang"`
 	CryptoEngines             []cconfig.CryptoEngine                     `mapstructure:"crypto_engines"`
-}
-
-type CryptoMonitoring struct {
-	Enabled   bool   `mapstructure:"enabled"`
-	Frequency string `mapstructure:"frequency"`
 }
 
 func MigrateCryptoEnginesToV2Config(logger *logrus.Entry, config CAConfig) CAConfig {

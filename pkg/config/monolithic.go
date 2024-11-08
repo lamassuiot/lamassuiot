@@ -2,7 +2,6 @@ package config
 
 import (
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
 )
 
 type LamassuMonolithicAssembleMode string
@@ -16,12 +15,12 @@ const (
 )
 
 type MonolithicConfig struct {
-	Logs               BaseConfigLogging              `mapstructure:"logs"`
-	PublisherEventBus  EventBusEngine                 `mapstructure:"publisher_event_bus"`
-	SubscriberEventBus EventBusEngine                 `mapstructure:"subscriber_event_bus"`
+	Logs               cconfig.Logging                `mapstructure:"logs"`
+	PublisherEventBus  cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
+	SubscriberEventBus cconfig.EventBusEngine         `mapstructure:"subscriber_event_bus"`
 	Storage            cconfig.PluggableStorageEngine `mapstructure:"storage"`
 	CryptoEngines      CryptoEngines                  `mapstructure:"crypto_engines"`
-	CryptoMonitoring   CryptoMonitoring               `mapstructure:"crypto_monitoring"`
+	CryptoMonitoring   cconfig.MonitoringJob          `mapstructure:"crypto_monitoring"`
 	Domain             string                         `mapstructure:"domain"`
 	AssemblyMode       LamassuMonolithicAssembleMode  `mapstructure:"assembly_mode"`
 	GatewayPort        int                            `mapstructure:"gateway_port"`
@@ -31,5 +30,5 @@ type MonolithicConfig struct {
 type MonolithicAWSIoTManagerConfig struct {
 	Enabled      bool                 `mapstructure:"enabled"`
 	ConnectorID  string               `mapstructure:"connector_id"`
-	AWSSDKConfig aconfig.AWSSDKConfig `mapstructure:"aws_config"`
+	AWSSDKConfig cconfig.AWSSDKConfig `mapstructure:"aws_config"`
 }

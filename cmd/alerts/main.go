@@ -1,6 +1,7 @@
 package main
 
 import (
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	lamassu "github.com/lamassuiot/lamassuiot/v2/pkg/assemblers"
@@ -19,7 +20,7 @@ func main() {
 	log.SetFormatter(helpers.LogFormatter)
 	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
 
-	conf, err := config.LoadConfig[config.AlertsConfig](nil)
+	conf, err := cconfig.LoadConfig[config.AlertsConfig](nil)
 	if err != nil {
 		log.Fatalf("something went wrong while loading config. Exiting: %s", err)
 	}

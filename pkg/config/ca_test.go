@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"reflect"
 	"testing"
 
@@ -12,10 +13,12 @@ import (
 )
 
 func TestMigrateCryptoEnginesToV2ConfigFromFile(t *testing.T) {
-
 	tlog := logrus.New().WithField("service", "test")
 
-	config1, err := readConfig[CAConfig]("testdata/ca-config.yml", nil)
+	config1File := "testdata/ca-config.yml"
+	os.Setenv("LAMASSU_CONFIG_FILE", config1File)
+
+	config1, err := cconfig.LoadConfig[CAConfig](nil)
 	if err != nil {
 		t.Fatalf("Failed to read config: %v", err)
 	}
@@ -27,8 +30,10 @@ func TestMigrateCryptoEnginesToV2ConfigFromFile(t *testing.T) {
 }
 
 func TestReadConfigFromFileNoMigrationNeeded(t *testing.T) {
+	configFile := "testdata/ca-config-v2.yml"
+	os.Setenv("LAMASSU_CONFIG_FILE", configFile)
 
-	config, err := readConfig[CAConfig]("testdata/ca-config-v2.yml", nil)
+	config, err := cconfig.LoadConfig[CAConfig](nil)
 	if err != nil {
 		t.Fatalf("Failed to read config: %v", err)
 	}
@@ -37,13 +42,15 @@ func TestReadConfigFromFileNoMigrationNeeded(t *testing.T) {
 }
 
 func TestReadConfigFromFileNoMigrationNeededNoEffect(t *testing.T) {
+	configFile := "testdata/ca-config-v2.yml"
+	os.Setenv("LAMASSU_CONFIG_FILE", configFile)
 
-	tlog := logrus.New().WithField("service", "test")
-
-	config1, err := readConfig[CAConfig]("testdata/ca-config-v2.yml", nil)
+	config1, err := cconfig.LoadConfig[CAConfig](nil)
 	if err != nil {
 		t.Fatalf("Failed to read config: %v", err)
 	}
+
+	tlog := logrus.New().WithField("service", "test")
 	config2 := MigrateCryptoEnginesToV2Config(tlog, *config1)
 
 	assert.True(t, reflect.DeepEqual(*config1, config2))

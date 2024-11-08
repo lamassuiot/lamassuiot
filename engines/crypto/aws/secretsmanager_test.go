@@ -1,19 +1,13 @@
 package aws
 
 import (
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
 	"github.com/lamassuiot/lamassuiot/v2/crypto/aws/docker"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -79,8 +73,8 @@ func TestAWSSecretsManagerCryptoEngine(t *testing.T) {
 		name     string
 		function func(t *testing.T, engine cryptoengines.CryptoEngine)
 	}{
-		{"CreateECDSAPrivateKey", SharedTestCreateECDSAPrivateKey},
-		{"CreateRSAPrivateKey", SharedTestCreateRSAPrivateKey},
+		{"CreateECDSAPrivateKey", cryptoengines.SharedTestCreateECDSAPrivateKey},
+		{"CreateRSAPrivateKey", cryptoengines.SharedTestCreateRSAPrivateKey},
 		{"GetPrivateKeyNotFound", testGetPrivateKeyNotFoundOnSecretsManager},
 		{"DeleteKey", testDeleteKeyOnSecretsManager},
 	}
@@ -102,60 +96,11 @@ func prepareSecretsManagerCryptoEngine(t *testing.T) cryptoengines.CryptoEngine 
 
 	metadata := map[string]interface{}{}
 
-	awsConf, err := aconfig.GetAwsSdkConfig(*conf)
+	awsConf, err := cconfig.GetAwsSdkConfig(*conf)
 	assert.NoError(t, err)
 
 	engine, err := NewAWSSecretManagerEngine(logger, *awsConf, metadata)
 	assert.NoError(t, err)
 	assert.NotNil(t, engine)
 	return engine
-}
-
-func SharedTestCreateRSAPrivateKey(t *testing.T, engine cryptoengines.CryptoEngine) {
-	signer, err := engine.CreateRSAPrivateKey(2048, "test-rsa-key")
-	assert.NoError(t, err)
-
-	h := sha256.New()
-	_, err = h.Write([]byte("aa"))
-	assert.NoError(t, err)
-	hashed := h.Sum(nil)
-
-	signature, err := signer.Sign(rand.Reader, hashed, &rsa.PSSOptions{
-		SaltLength: rsa.PSSSaltLengthAuto,
-		Hash:       crypto.SHA256,
-	})
-	assert.NoError(t, err)
-
-	signer2, err := engine.GetPrivateKeyByID("test-rsa-key")
-	assert.NoError(t, err)
-
-	assert.Equal(t, signer.Public(), signer2.Public())
-
-	err = rsa.VerifyPSS(signer2.Public().(*rsa.PublicKey), crypto.SHA256, hashed, signature, &rsa.PSSOptions{
-		SaltLength: rsa.PSSSaltLengthAuto,
-		Hash:       crypto.SHA256,
-	})
-
-	assert.NoError(t, err)
-}
-
-func SharedTestCreateECDSAPrivateKey(t *testing.T, engine cryptoengines.CryptoEngine) {
-	signer, err := engine.CreateECDSAPrivateKey(elliptic.P256(), "test-ecdsa-key")
-	assert.NoError(t, err)
-
-	h := sha256.New()
-	_, err = h.Write([]byte("aa"))
-	assert.NoError(t, err)
-	hashed := h.Sum(nil)
-
-	signature, err := signer.Sign(rand.Reader, hashed, crypto.SHA256)
-	assert.NoError(t, err)
-
-	signer2, err := engine.GetPrivateKeyByID("test-ecdsa-key")
-	assert.NoError(t, err)
-
-	assert.Equal(t, signer.Public(), signer2.Public())
-
-	res := ecdsa.VerifyASN1(signer2.Public().(*ecdsa.PublicKey), hashed, signature)
-	assert.True(t, res)
 }

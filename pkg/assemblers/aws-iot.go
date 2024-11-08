@@ -7,9 +7,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
-	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/services/handlers"
@@ -21,7 +21,7 @@ func AssembleAWSIoTManagerService(conf config.IotAWS, caService services.CAServi
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "AWS IoT Connector", "Service")
 	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "AWS IoT Connector", "Event Bus")
 
-	awsCfg, err := aconfig.GetAwsSdkConfig(conf.AWSSDKConfig)
+	awsCfg, err := cconfig.GetAwsSdkConfig(conf.AWSSDKConfig)
 	if err != nil {
 		return nil, fmt.Errorf("could not get aws config: %s", err)
 	}

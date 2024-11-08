@@ -45,10 +45,10 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		os.WriteFile("proxy.crt", []byte(crtPem), 0600)
 
 		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
-			Logs: config.BaseConfigLogging{
+			Logs: cconfig.Logging{
 				Level: conf.Logs.Level,
 			},
-			Server: config.HttpServer{
+			Server: cconfig.HttpServer{
 				LogLevel:           conf.Logs.Level,
 				HealthCheckLogging: true,
 				ListenAddress:      "0.0.0.0",
@@ -84,10 +84,10 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		}
 
 		_, _, vaPort, err := lamassu.AssembleVAServiceWithHTTPServer(config.VAconfig{
-			Logs: config.BaseConfigLogging{
+			Logs: cconfig.Logging{
 				Level: conf.Logs.Level,
 			},
-			Server: config.HttpServer{
+			Server: cconfig.HttpServer{
 				LogLevel:           conf.Logs.Level,
 				HealthCheckLogging: true,
 				ListenAddress:      "0.0.0.0",
@@ -100,10 +100,10 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		}
 
 		_, devPort, err := lamassu.AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
-			Logs: config.BaseConfigLogging{
+			Logs: cconfig.Logging{
 				Level: conf.Logs.Level,
 			},
-			Server: config.HttpServer{
+			Server: cconfig.HttpServer{
 				LogLevel:           conf.Logs.Level,
 				HealthCheckLogging: true,
 				ListenAddress:      "0.0.0.0",
@@ -137,10 +137,10 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 			)
 		}
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
-			Logs: config.BaseConfigLogging{
+			Logs: cconfig.Logging{
 				Level: conf.Logs.Level,
 			},
-			Server: config.HttpServer{
+			Server: cconfig.HttpServer{
 				LogLevel:           conf.Logs.Level,
 				HealthCheckLogging: true,
 				ListenAddress:      "0.0.0.0",
@@ -174,10 +174,10 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 			)
 		}
 		_, alertsPort, err := lamassu.AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
-			Logs: config.BaseConfigLogging{
+			Logs: cconfig.Logging{
 				Level: conf.Logs.Level,
 			},
-			Server: config.HttpServer{
+			Server: cconfig.HttpServer{
 				LogLevel:           conf.Logs.Level,
 				HealthCheckLogging: true,
 				ListenAddress:      "0.0.0.0",
@@ -193,7 +193,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 
 		if conf.AWSIoTManager.Enabled {
 			_, err = lamassu.AssembleAWSIoTManagerService(config.IotAWS{
-				Logs: config.BaseConfigLogging{
+				Logs: cconfig.Logging{
 					Level: conf.Logs.Level,
 				},
 				SubscriberEventBus: conf.SubscriberEventBus,

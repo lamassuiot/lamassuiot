@@ -14,11 +14,11 @@ import (
 	"time"
 
 	external_clients "github.com/lamassuiot/lamassuiot/v2/core/pkg/clients/external"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"golang.org/x/crypto/ocsp"
 )
@@ -478,7 +478,7 @@ func getOCSPResponseGet(ocspServerURL string, crt *models.Certificate, issuer *m
 
 func StartVAServiceTestServer(t *testing.T) (*TestServer, error) {
 	eventBusConfig := &TestEventBusConfig{
-		config: config.EventBusEngine{Enabled: false},
+		config: cconfig.EventBusEngine{Enabled: false},
 	}
 
 	storageConfig, err := PreparePostgresForTest([]string{"ca"})

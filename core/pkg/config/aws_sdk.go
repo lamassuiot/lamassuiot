@@ -9,8 +9,25 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 )
+
+type AWSAuthenticationMethod string
+
+const (
+	Static     AWSAuthenticationMethod = "static"
+	Default    AWSAuthenticationMethod = "default"
+	AssumeRole AWSAuthenticationMethod = "role"
+)
+
+type AWSSDKConfig struct {
+	AWSAuthenticationMethod AWSAuthenticationMethod `mapstructure:"auth_method"`
+	EndpointURL             string                  `mapstructure:"endpoint_url"`
+	AccessKeyID             string                  `mapstructure:"access_key_id"`
+	SecretAccessKey         Password                `mapstructure:"secret_access_key"`
+	SessionToken            Password                `mapstructure:"session_token"`
+	Region                  string                  `mapstructure:"region"`
+	RoleARN                 string                  `mapstructure:"role_arn"`
+}
 
 func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
@@ -27,7 +44,7 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 	})
 
 	switch conf.AWSAuthenticationMethod {
-	case cconfig.Static:
+	case Static:
 		creds := aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(conf.AccessKeyID, string(conf.SecretAccessKey), string(conf.SessionToken)))
 		creds.Invalidate()
 		awsCfg, err := config.LoadDefaultConfig(context.TODO(),
@@ -40,7 +57,7 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 		}
 
 		return &awsCfg, nil
-	case cconfig.AssumeRole:
+	case AssumeRole:
 		stsCfg, err := config.LoadDefaultConfig(context.TODO(),
 			config.WithRegion(conf.Region),
 			config.WithEndpointResolverWithOptions(customResolver),

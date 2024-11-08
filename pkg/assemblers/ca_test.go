@@ -19,13 +19,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	"golang.org/x/crypto/ocsp"
 )
@@ -4044,7 +4044,7 @@ func initCA(caSDK services.CAService) (*models.CACertificate, error) {
 func StartCAServiceTestServer(t *testing.T, withEventBus bool) (*TestServer, error) {
 	var err error
 	eventBusConf := &TestEventBusConfig{
-		config: config.EventBusEngine{
+		config: cconfig.EventBusEngine{
 			Enabled: false,
 		},
 	}

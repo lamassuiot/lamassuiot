@@ -4,20 +4,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
 )
 
 type JobScheduler struct {
-	config       config.CryptoMonitoring
+	config       cconfig.MonitoringJob
 	cronInstance *cron.Cron
 	logger       *logrus.Entry
 	job          cron.Job
 	jobId        cron.EntryID
 }
 
-func NewJobScheduler(config config.CryptoMonitoring, logger *logrus.Entry, job cron.Job) *JobScheduler {
+func NewJobScheduler(config cconfig.MonitoringJob, logger *logrus.Entry, job cron.Job) *JobScheduler {
 	cronInstance := cron.New()
 	var err error
 	var jobId cron.EntryID

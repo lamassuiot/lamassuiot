@@ -12,15 +12,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsSns "github.com/aws/aws-sdk-go-v2/service/sns"
 	awsSqs "github.com/aws/aws-sdk-go-v2/service/sqs"
+	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
-	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
 	"github.com/sirupsen/logrus"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 )
 
 type SnsExchangeBuilder struct {
-	Config       aconfig.AWSSDKConfig
+	Config       cconfig.AWSSDKConfig
 	ExchangeName string
 	ServiceID    string
 	Logger       *logrus.Entry
@@ -49,7 +49,7 @@ func bindSQSToSNS(builder SnsExchangeBuilder, sqsSub *sqs.Subscriber, snsPub *sn
 		return err
 	}
 
-	awsConf, err := aconfig.GetAwsSdkConfig(builder.Config)
+	awsConf, err := cconfig.GetAwsSdkConfig(builder.Config)
 	if err != nil {
 		return err
 	}
@@ -213,7 +213,7 @@ func (s *SnsExchangePublisher) getRawSNSPublisher() *sns.Publisher {
 }
 
 func NewSnsExchangePublisher(builder SnsExchangeBuilder) (*SnsExchangePublisher, error) {
-	awsConf, err := aconfig.GetAwsSdkConfig(builder.Config)
+	awsConf, err := cconfig.GetAwsSdkConfig(builder.Config)
 	if err != nil {
 		return nil, err
 	}

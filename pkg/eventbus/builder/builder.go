@@ -8,7 +8,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func BuildEventBusEngine(provider string, config map[string]interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
+func BuildEventBusEngine(provider string, config interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
 	return eventbus.GetEventBusEngine(provider, config, serviceId, logger)
 }
 

@@ -9,10 +9,10 @@ import (
 )
 
 func BuildStorageEngine(logger *log.Entry, conf config.PluggableStorageEngine) (storage.StorageEngine, error) {
-
 	builder := storage.GetEngineBuilder(conf.Provider)
 	if builder == nil {
 		return nil, fmt.Errorf("no storage engine of type %s", conf.Provider)
 	}
+
 	return builder(logger, conf)
 }

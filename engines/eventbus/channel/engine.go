@@ -7,7 +7,7 @@ import (
 )
 
 func Register() {
-	eventbus.RegisterEventBusEngine("channel", func(eventBusProvider string, config map[string]interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
+	eventbus.RegisterEventBusEngine("channel", func(eventBusProvider string, config interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
 		return NewChannelEngine(config, serviceId, logger)
 	})
 }
@@ -19,8 +19,7 @@ type ChannelEngine struct {
 	publisher  message.Publisher
 }
 
-func NewChannelEngine(conf map[string]interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
-
+func NewChannelEngine(conf interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
 	pub, sub := NewGoChannelPubSub(logger)
 
 	return &ChannelEngine{

@@ -2,12 +2,11 @@ package config
 
 import (
 	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
 )
 
 type IotAWS struct {
-	Logs               BaseConfigLogging `mapstructure:"logs"`
-	SubscriberEventBus EventBusEngine    `mapstructure:"subscriber_event_bus"`
+	Logs               cconfig.Logging        `mapstructure:"logs"`
+	SubscriberEventBus cconfig.EventBusEngine `mapstructure:"subscriber_event_bus"`
 
 	DMSManagerClient struct {
 		cconfig.HTTPClient `mapstructure:",squash"`
@@ -22,7 +21,7 @@ type IotAWS struct {
 	} `mapstructure:"ca_client"`
 
 	ConnectorID               string               `mapstructure:"connector_id"`
-	AWSSDKConfig              aconfig.AWSSDKConfig `mapstructure:"aws_config"`
+	AWSSDKConfig              cconfig.AWSSDKConfig `mapstructure:"aws_config"`
 	AWSBidirectionalQueueName string               `mapstructure:"aws_bidirectional_queue_name"`
 }
 

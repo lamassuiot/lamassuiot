@@ -12,7 +12,7 @@ func RegisterAWSKMS() {
 
 		ceConfig, _ := cconfig.DecodeStruct[aconfig.AWSCryptoEngine](conf.Config)
 
-		awsCfg, err := aconfig.GetAwsSdkConfig(ceConfig.AWSSDKConfig)
+		awsCfg, err := cconfig.GetAwsSdkConfig(ceConfig.AWSSDKConfig)
 		if err != nil {
 			log.Warnf("skipping AWS KMS engine with id %s: %s", conf.ID, err)
 		}
@@ -26,7 +26,7 @@ func RegisterAWSSecrets() {
 
 		ceConfig, _ := cconfig.DecodeStruct[aconfig.AWSCryptoEngine](conf.Config)
 
-		awsCfg, err := aconfig.GetAwsSdkConfig(ceConfig.AWSSDKConfig)
+		awsCfg, err := cconfig.GetAwsSdkConfig(ceConfig.AWSSDKConfig)
 		if err != nil {
 			log.Warnf("skipping AWS Sercrets Manager engine with id %s: %s", conf.ID, err)
 		}

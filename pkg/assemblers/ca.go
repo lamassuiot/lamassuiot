@@ -9,7 +9,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	cebilder "github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/builder"
+	cebuilder "github.com/lamassuiot/lamassuiot/v2/pkg/cryptoengines/builder"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/jobs"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/middlewares/eventpub"
@@ -137,7 +137,7 @@ func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*l
 	engines := map[string]*lservices.Engine{}
 
 	for _, cfg := range conf.CryptoEngines.CryptoEngines {
-		engine, err := cebilder.BuildCryptoEngine(logger, cfg)
+		engine, err := cebuilder.BuildCryptoEngine(logger, cfg)
 
 		if err != nil {
 			log.Warnf("skipping engine with id %s of type %s. Can not create engine: %s", cfg.ID, cfg.Type, err)

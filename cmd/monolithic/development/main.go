@@ -175,7 +175,7 @@ func main() {
 	_, awsSecretsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
 	_, awsKmsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
 	awsCleanup := func() error { return nil }
-	awsCfg := &aconfig.AWSSDKConfig{}
+	awsCfg := &cconfig.AWSSDKConfig{}
 	if awsSecretsEnabled || awsKmsEnabled {
 		var err error
 		fmt.Println(">> launching docker: AWS Platform (Secrets Manager + KMS) ...")
@@ -259,11 +259,11 @@ func main() {
 		}
 	}()
 
-	eventBus := config.EventBusEngine{
+	eventBus := cconfig.EventBusEngine{
 		LogLevel: cconfig.Trace,
 		Enabled:  false,
-		Provider: config.Amqp,
-		Amqp:     *rmqConfig,
+		Provider: cconfig.Amqp,
+		Config:   *rmqConfig,
 	}
 	if !*disableEventbus {
 		eventBus.Enabled = true
@@ -342,14 +342,14 @@ func main() {
 	}
 
 	conf := config.MonolithicConfig{
-		Logs:               config.BaseConfigLogging{Level: cconfig.Debug},
+		Logs:               cconfig.Logging{Level: cconfig.Debug},
 		SubscriberEventBus: eventBus,
 		PublisherEventBus:  eventBus,
 		Domain:             "dev.lamassu.test",
 		GatewayPort:        8443,
 		AssemblyMode:       config.Http,
 		CryptoEngines:      cryptoEnginesConfig,
-		CryptoMonitoring: config.CryptoMonitoring{
+		CryptoMonitoring: cconfig.MonitoringJob{
 			Enabled:   !*disableMonitor,
 			Frequency: "* * * * *",
 		},
@@ -357,17 +357,19 @@ func main() {
 		AWSIoTManager: config.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
-			AWSSDKConfig: aconfig.AWSSDKConfig{
-				AccessKeyID:     *awsIoTManagerAKID,
-				SecretAccessKey: cconfig.Password(*awsIoTManagerSAK),
-				SessionToken:    cconfig.Password(*awsIoTManagerST),
-				Region:          *awsIoTManagerRegion,
+			AWSSDKConfig: cconfig.AWSSDKConfig{
+				AWSAuthenticationMethod: cconfig.Static,
+				AccessKeyID:             *awsIoTManagerAKID,
+				SecretAccessKey:         cconfig.Password(*awsIoTManagerSAK),
+				SessionToken:            cconfig.Password(*awsIoTManagerST),
+				Region:                  *awsIoTManagerRegion,
 			},
 		},
 	}
 
 	_, err := monolithic.RunMonolithicLamassuPKI(conf)
 	if err != nil {
+		fmt.Println("could not start monolithic PKI. Shuting down: ", err)
 		panic(err)
 	}
 
