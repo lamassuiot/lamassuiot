@@ -1,0 +1,7 @@
+logs:
+  level: "info"
+connector_id:  aws.580561117445
+ aws_config: # This is an unexpected key
+  access_key_id: ****
+  secret_access_key:  "****"
+  region:  eu-west-1
