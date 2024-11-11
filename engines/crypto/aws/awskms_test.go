@@ -10,7 +10,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	awsplatform_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/aws-platform"
+	awsplatform_test "github.com/lamassuiot/lamassuiot/v2/crypto/aws/docker"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

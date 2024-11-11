@@ -59,7 +59,7 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc AWSClo
 	var err error
 	switch event.Type() {
 	case string(models.EventUpdateCAMetadataKey):
-		updatedCA, err := helpers.GetEventBody[models.UpdateModel[models.CACertificate]](event)
+		updatedCA, err := chelpers.GetEventBody[models.UpdateModel[models.CACertificate]](event)
 		if err != nil {
 			logDecodeError(logger, event.ID(), event.Type(), "UpdateModel CACertificate", err)
 			return nil
@@ -67,7 +67,7 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc AWSClo
 
 		ca = &updatedCA.Updated
 	default:
-		ca, err = helpers.GetEventBody[models.CACertificate](event)
+		ca, err = chelpers.GetEventBody[models.CACertificate](event)
 		if err != nil {
 			logDecodeError(logger, event.ID(), event.Type(), "CACertificate", err)
 			return nil
@@ -107,7 +107,7 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc AWSClo
 func updateCertificateStatusHandler(ctx context.Context, event *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error {
 	var cert *models.Certificate
 	var err error
-	updatedCert, err := helpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
+	updatedCert, err := chelpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
 	if err != nil {
 		logDecodeError(logger, event.ID(), event.Type(), "UpdateModel Certificate", err)
 		return nil
@@ -149,13 +149,13 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCl
 	var updatedDMS *models.UpdateModel[models.DMS]
 
 	if event.Type() == string(models.EventCreateDMSKey) {
-		dms, err = helpers.GetEventBody[models.DMS](event)
+		dms, err = chelpers.GetEventBody[models.DMS](event)
 		if err != nil {
 			logDecodeError(logger, event.ID(), event.Type(), "DMS", err)
 			return nil
 		}
 	} else {
-		updatedDMS, err = helpers.GetEventBody[models.UpdateModel[models.DMS]](event)
+		updatedDMS, err = chelpers.GetEventBody[models.UpdateModel[models.DMS]](event)
 		if err != nil {
 			logDecodeError(logger, event.ID(), event.Type(), "UpdateModel DMS", err)
 			return nil
@@ -222,7 +222,7 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCl
 }
 
 func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error {
-	certUpdate, err := helpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
+	certUpdate, err := chelpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
 	if err != nil {
 		logDecodeError(logger, event.ID(), event.Type(), "Certificate", err)
 		return nil
@@ -317,7 +317,7 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 }
 
 func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error {
-	deviceUpdate, err := helpers.GetEventBody[models.UpdateModel[models.Device]](event)
+	deviceUpdate, err := chelpers.GetEventBody[models.UpdateModel[models.Device]](event)
 	if err != nil {
 		logDecodeError(logger, event.ID(), event.Type(), "Device", err)
 		return nil
@@ -376,7 +376,7 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc AW
 }
 
 func bindDeviceIdentityHandler(ctx context.Context, event *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error {
-	bindEvent, err := helpers.GetEventBody[models.BindIdentityToDeviceOutput](event)
+	bindEvent, err := chelpers.GetEventBody[models.BindIdentityToDeviceOutput](event)
 	if err != nil {
 		logDecodeError(logger, event.ID(), event.Type(), "Certificate", err)
 		return nil

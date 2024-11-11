@@ -2,11 +2,37 @@ module github.com/lamassuiot/lamassuiot/v2/awsiotconnector
 
 go 1.22.8
 
-toolchain go1.22.9
-
 replace github.com/lamassuiot/lamassuiot/v2/core => ../core
 
 replace github.com/lamassuiot/lamassuiot/v2 => ..
+
+replace github.com/lamassuiot/lamassuiot/v2/crypto/aws => ../engines/crypto/aws
+
+replace github.com/lamassuiot/lamassuiot/v2/crypto/filesystem => ../engines/crypto/filesystem
+
+replace github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11 => ../engines/crypto/pkcs11
+
+replace github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2 => ../engines/crypto/vaultkv2
+
+replace github.com/lamassuiot/lamassuiot/v2/storage/postgres => ../engines/storage/postgres
+
+replace github.com/lamassuiot/lamassuiot/v2/storage/sqlite => ../engines/storage/sqlite
+
+replace github.com/lamassuiot/lamassuiot/v2/storage/couchdb => ../engines/storage/couchdb
+
+replace github.com/lamassuiot/lamassuiot/v2/eventbus/amqp => ../engines/eventbus/amqp
+
+replace github.com/lamassuiot/lamassuiot/v2/eventbus/aws => ../engines/eventbus/aws
+
+replace github.com/lamassuiot/lamassuiot/v2/eventbus/channel => ../engines/eventbus/channel
+
+require (
+	github.com/lamassuiot/lamassuiot/v2 v2.8.0
+	github.com/lamassuiot/lamassuiot/v2/core v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v2/eventbus/amqp v0.0.0-00010101000000-000000000000 // indirect
+	github.com/lamassuiot/lamassuiot/v2/eventbus/aws v0.0.0-00010101000000-000000000000 // indirect
+	github.com/lamassuiot/lamassuiot/v2/eventbus/channel v0.0.0-00010101000000-000000000000 // indirect
+)
 
 require (
 	github.com/ThreeDotsLabs/watermill v1.4.1
@@ -14,11 +40,9 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/iot v1.59.5
 	github.com/aws/aws-sdk-go-v2/service/iotdataplane v1.26.5
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.37.0
-	github.com/aws/aws-sdk-go-v2/service/sts v1.32.3
+	github.com/aws/aws-sdk-go-v2/service/sts v1.32.4
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/eclipse/paho.mqtt.golang v1.5.0
-	github.com/lamassuiot/lamassuiot/v2 v2.8.0
-	github.com/lamassuiot/lamassuiot/v2/core v0.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/crypto v0.28.0
@@ -26,17 +50,20 @@ require (
 )
 
 require (
+	github.com/ThreeDotsLabs/watermill-amazonsqs v0.0.3 // indirect
+	github.com/ThreeDotsLabs/watermill-amqp/v2 v2.1.3 // indirect
 	github.com/antonfisher/nested-logrus-formatter v1.3.1 // indirect
-	github.com/aws/aws-sdk-go-v2/config v1.28.1 // indirect
-	github.com/aws/aws-sdk-go-v2/credentials v1.17.42 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.18 // indirect
+	github.com/aws/aws-sdk-go-v2/config v1.28.3 // indirect
+	github.com/aws/aws-sdk-go-v2/credentials v1.17.44 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.16.19 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.3.23 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.6.23 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.1 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.12.0 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.12.3 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.24.3 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.28.3 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.12.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sns v1.29.1 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.24.5 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.28.4 // indirect
 	github.com/aws/smithy-go v1.22.0 // indirect
 	github.com/bytedance/sonic v1.12.3 // indirect
 	github.com/bytedance/sonic/loader v0.2.1 // indirect
@@ -73,6 +100,8 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
+	github.com/rabbitmq/amqp091-go v1.10.0 // indirect
+	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/sony/gobreaker v1.0.0 // indirect

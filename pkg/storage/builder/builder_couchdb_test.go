@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	couchdb_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/storage/couchdb"
 	"github.com/lamassuiot/lamassuiot/v2/storage/couchdb"
+	couchdb_test "github.com/lamassuiot/lamassuiot/v2/storage/couchdb/test"
 	log "github.com/sirupsen/logrus"
 )
 

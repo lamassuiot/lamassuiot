@@ -19,14 +19,14 @@ import (
 	awskmssm_test "github.com/lamassuiot/lamassuiot/v2/crypto/aws/docker"
 	fsconfig "github.com/lamassuiot/lamassuiot/v2/crypto/filesystem/config"
 	pconfig "github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11/config"
+	softhsmv2_test "github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11/test"
 	vconfig "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/config"
 	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/docker"
 	eventbus_amqp "github.com/lamassuiot/lamassuiot/v2/eventbus/amqp/config"
+	rabbitmq_test "github.com/lamassuiot/lamassuiot/v2/eventbus/amqp/test"
 	"github.com/lamassuiot/lamassuiot/v2/monolithic/pkg"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	rabbitmq_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/async-messaging/rabbitmq"
-	softhsmv2_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/cryptoengines/softhsmv2"
-	postgres_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/storage/postgres"
+	postgres_test "github.com/lamassuiot/lamassuiot/v2/storage/postgres/test"
 )
 
 const readyToPKI = ` 

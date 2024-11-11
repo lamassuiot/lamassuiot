@@ -19,7 +19,6 @@ import (
 	cmodels "github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/eventbus"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	identityextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/identity-extractors"
 )
 
@@ -88,7 +87,7 @@ func TestBindIDEvent(t *testing.T) {
 
 	evCatcher := func(newMessages <-chan *message.Message, foundChan chan *event.Event) {
 		for msg := range newMessages {
-			ev, err := helpers.ParseCloudEvent(msg.Payload)
+			ev, err := chelpers.ParseCloudEvent(msg.Payload)
 			if err != nil {
 				continue
 			}
@@ -103,7 +102,7 @@ func TestBindIDEvent(t *testing.T) {
 			return fmt.Errorf("unexpected event source")
 		}
 
-		eventData, err := helpers.GetEventBody[models.BindIdentityToDeviceOutput](&event)
+		eventData, err := chelpers.GetEventBody[models.BindIdentityToDeviceOutput](&event)
 		if err != nil {
 			return fmt.Errorf("unexpected event format")
 		}
@@ -256,7 +255,7 @@ func TestBindIDEvent(t *testing.T) {
 			eventCatcher: func(newMessages <-chan *message.Message, foundChan chan *event.Event) {
 				ctr := 0
 				for msg := range newMessages {
-					ev, err := helpers.ParseCloudEvent(msg.Payload)
+					ev, err := chelpers.ParseCloudEvent(msg.Payload)
 					if err != nil {
 						continue
 					}
@@ -388,7 +387,7 @@ func TestBindIDEvent(t *testing.T) {
 			maxTime: time.Second * 10,
 			eventCatcher: func(newMessages <-chan *message.Message, foundChan chan *event.Event) {
 				for msg := range newMessages {
-					ev, err := helpers.ParseCloudEvent(msg.Payload)
+					ev, err := chelpers.ParseCloudEvent(msg.Payload)
 					if err != nil {
 						continue
 					}
@@ -468,7 +467,7 @@ func TestBindIDEvent(t *testing.T) {
 			eventCatcher: func(newMessages <-chan *message.Message, foundChan chan *event.Event) {
 				ctr := 0
 				for msg := range newMessages {
-					ev, err := helpers.ParseCloudEvent(msg.Payload)
+					ev, err := chelpers.ParseCloudEvent(msg.Payload)
 					if err != nil {
 						continue
 					}

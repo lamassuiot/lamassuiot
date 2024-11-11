@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
 	headerextractors "github.com/lamassuiot/lamassuiot/v2/pkg/routes/middlewares/basic-header-extractors"
 	"github.com/sirupsen/logrus"
 )

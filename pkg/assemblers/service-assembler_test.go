@@ -16,10 +16,10 @@ import (
 	fsconfig "github.com/lamassuiot/lamassuiot/v2/crypto/filesystem/config"
 	vconfig "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/config"
 	vault_test "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/docker"
+	rabbitmq_test "github.com/lamassuiot/lamassuiot/v2/eventbus/amqp/test"
 	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	rabbitmq_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/async-messaging/rabbitmq"
-	postgres_test "github.com/lamassuiot/lamassuiot/v2/pkg/test/subsystems/storage/postgres"
 	"github.com/lamassuiot/lamassuiot/v2/storage/postgres"
+	postgres_test "github.com/lamassuiot/lamassuiot/v2/storage/postgres/test"
 )
 
 type CryptoEngine int

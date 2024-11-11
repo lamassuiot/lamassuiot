@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/cloudevents/sdk-go/v2/event"
+	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services/eventhandling"
@@ -26,7 +27,7 @@ func NewDeviceEventHandler(l *logrus.Entry, svc services.DeviceManagerService) *
 func updateCertStatusHandler(event *event.Event, svc services.DeviceManagerService, lMessaging *logrus.Entry) error {
 	ctx := context.Background()
 
-	cert, err := helpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
+	cert, err := chelpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
 	if err != nil {
 		err = fmt.Errorf("could not decode cloud event: %s", err)
 		lMessaging.Error(err)
@@ -95,7 +96,7 @@ func updateCertStatusHandler(event *event.Event, svc services.DeviceManagerServi
 func updateCertMetaHandler(event *event.Event, svc services.DeviceManagerService, lMessaging *logrus.Entry) error {
 	ctx := context.Background()
 
-	certUpdate, err := helpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
+	certUpdate, err := chelpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
 	if err != nil {
 		err = fmt.Errorf("could not decode cloud event: %s", err)
 		lMessaging.Error(err)
