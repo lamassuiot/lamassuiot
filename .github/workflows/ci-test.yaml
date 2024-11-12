@@ -21,9 +21,9 @@ jobs:
           - engines/eventbus/amqp
           - engines/eventbus/aws
           - engines/eventbus/channel
-          - engines/eventbus/storage/couchdb
-          - engines/eventbus/storage/postgres
-          - engines/eventbus/storage/sqlite
+          - engines/storage/couchdb
+          - engines/storage/postgres
+          - engines/storage/sqlite
     name: ${{ matrix.module }} - Tests
     runs-on: ubuntu-latest
     steps:
