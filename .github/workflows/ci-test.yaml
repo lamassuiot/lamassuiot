@@ -8,7 +8,23 @@ on:
       - main
 jobs:
   test:
-    name: Run Tests
+    strategy:
+      matrix:
+        module: 
+          - core
+          - backend
+          - sdk
+          - engines/crypto/aws
+          - engines/crypto/filesystem
+          - engines/crypto/pkcs11
+          - engines/crypto/vaultkv2
+          - engines/eventbus/amqp
+          - engines/eventbus/aws
+          - engines/eventbus/channel
+          - engines/eventbus/storage/couchdb
+          - engines/eventbus/storage/postgres
+          - engines/eventbus/storage/sqlite
+    name: ${{ matrix.module }} - Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -18,6 +34,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '^1.20.0' # The Go version to download (if necessary) and use.
+ 
+      - name: Go to dir
+        run: cd ${{ matrix.module }}
  
       - name: Install Dependencies
         run: go mod download
