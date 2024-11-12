@@ -33,7 +33,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '^1.20.0' # The Go version to download (if necessary) and use.
+          go-version: '^1.22.0' # The Go version to download (if necessary) and use.
+          cache-dependency-path: "**/*.sum"
  
       - name: Install Dependencies
         working-directory: ${{ matrix.module }}
