@@ -5,7 +5,7 @@ go 1.22.1
 replace github.com/lamassuiot/lamassuiot/v2/core => ../../../core
 
 require (
-	github.com/ThreeDotsLabs/watermill v1.3.5
+	github.com/ThreeDotsLabs/watermill v1.4.1
 	github.com/lamassuiot/lamassuiot/v2/core v0.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.9.3
 )
