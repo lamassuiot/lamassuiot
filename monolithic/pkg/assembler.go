@@ -13,14 +13,14 @@ import (
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	awsiotconnector "github.com/lamassuiot/lamassuiot/v2/awsiotconnector/pkg"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/clients"
-	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
-	lamassu "github.com/lamassuiot/lamassuiot/v2/pkg/assemblers"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
+	awsiotconnector "github.com/lamassuiot/lamassuiot/v3/awsiotconnector/pkg"
+	lamassu "github.com/lamassuiot/lamassuiot/v3/backend/pkg/assemblers"
+	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v3/sdk"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -69,7 +69,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 		caConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: caPort}, Protocol: cconfig.HTTP, BasePath: ""}
 		caSDKBuilder := func(serviceID, src string) services.CAService {
 			lCAClient := chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - CA Client")
-			caHttpCli, err := clients.BuildHTTPClient(cconfig.HTTPClient{
+			caHttpCli, err := sdk.BuildHTTPClient(cconfig.HTTPClient{
 				LogLevel:       cconfig.Info,
 				AuthMode:       cconfig.NoAuth,
 				HTTPConnection: caConnection,
@@ -78,8 +78,8 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 				log.Fatalf("could not build HTTP CA Client: %s", err)
 			}
 
-			return clients.NewHttpCAClient(
-				clients.HttpClientWithSourceHeaderInjector(caHttpCli, src),
+			return sdk.NewHttpCAClient(
+				sdk.HttpClientWithSourceHeaderInjector(caHttpCli, src),
 				fmt.Sprintf("%s://%s%s:%d", caConnection.Protocol, caConnection.Hostname, caConnection.BasePath, caConnection.Port),
 			)
 		}
@@ -123,7 +123,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 
 		deviceMngrSDKBuilder := func(serviceID, src string) services.DeviceManagerService {
 			lDevMngrClient := chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - DevManager Client")
-			devMngrHttpCli, err := clients.BuildHTTPClient(cconfig.HTTPClient{
+			devMngrHttpCli, err := sdk.BuildHTTPClient(cconfig.HTTPClient{
 				LogLevel:       cconfig.Info,
 				AuthMode:       cconfig.NoAuth,
 				HTTPConnection: devMngrConnection,
@@ -132,8 +132,8 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 				log.Fatalf("could not build HTTP DevManager Client: %s", err)
 			}
 
-			return clients.NewHttpDeviceManagerClient(
-				clients.HttpClientWithSourceHeaderInjector(devMngrHttpCli, src),
+			return sdk.NewHttpDeviceManagerClient(
+				sdk.HttpClientWithSourceHeaderInjector(devMngrHttpCli, src),
 				fmt.Sprintf("%s://%s%s:%d", devMngrConnection.Protocol, devMngrConnection.Hostname, devMngrConnection.BasePath, devMngrConnection.Port),
 			)
 		}
@@ -160,7 +160,7 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 
 		dmsMngrSDKBuilder := func(serviceID, src string) services.DMSManagerService {
 			lDMSMngrClient := chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - DMSManager Client")
-			dmsMngrHttpCli, err := clients.BuildHTTPClient(cconfig.HTTPClient{
+			dmsMngrHttpCli, err := sdk.BuildHTTPClient(cconfig.HTTPClient{
 				LogLevel:       cconfig.Info,
 				AuthMode:       cconfig.NoAuth,
 				HTTPConnection: dmsMngrConnection,
@@ -169,8 +169,8 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 				log.Fatalf("could not build HTTP DMSManager Client: %s", err)
 			}
 
-			return clients.NewHttpDMSManagerClient(
-				clients.HttpClientWithSourceHeaderInjector(dmsMngrHttpCli, src),
+			return sdk.NewHttpDMSManagerClient(
+				sdk.HttpClientWithSourceHeaderInjector(dmsMngrHttpCli, src),
 				fmt.Sprintf("%s://%s%s:%d", dmsMngrConnection.Protocol, dmsMngrConnection.Hostname, dmsMngrConnection.BasePath, dmsMngrConnection.Port),
 			)
 		}

@@ -4,7 +4,7 @@ import (
 	"strconv"
 
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
-	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/sirupsen/logrus"
 )
 

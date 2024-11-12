@@ -1,14 +1,14 @@
-module github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11
+module github.com/lamassuiot/lamassuiot/v3/crypto/pkcs11
 
 go 1.22.1
 
-replace github.com/lamassuiot/lamassuiot/v2/core => ../../../core
+replace github.com/lamassuiot/lamassuiot/v3/core => ../../../core
 
 require github.com/sirupsen/logrus v1.9.3
 
 require (
 	github.com/ThalesIgnite/crypto11 v1.2.5
-	github.com/lamassuiot/lamassuiot/v2/core v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
 	github.com/miekg/pkcs11 v1.1.1
 	github.com/ory/dockertest/v3 v3.11.0
 )

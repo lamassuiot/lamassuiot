@@ -4,8 +4,8 @@ import (
 	"context"
 	"crypto/x509"
 
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
 	"github.com/stretchr/testify/mock"
 )
 

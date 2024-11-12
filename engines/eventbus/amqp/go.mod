@@ -1,13 +1,13 @@
-module github.com/lamassuiot/lamassuiot/v2/eventbus/amqp
+module github.com/lamassuiot/lamassuiot/v3/eventbus/amqp
 
 go 1.22.1
 
-replace github.com/lamassuiot/lamassuiot/v2/core => ../../../core
+replace github.com/lamassuiot/lamassuiot/v3/core => ../../../core
 
 require (
 	github.com/ThreeDotsLabs/watermill v1.4.1
 	github.com/ThreeDotsLabs/watermill-amqp/v2 v2.1.3
-	github.com/lamassuiot/lamassuiot/v2/core v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
 	github.com/ory/dockertest/v3 v3.11.0
 	github.com/sirupsen/logrus v1.9.3
 )

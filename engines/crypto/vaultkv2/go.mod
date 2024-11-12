@@ -1,8 +1,8 @@
-module github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2
+module github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2
 
 go 1.22.1
 
-replace github.com/lamassuiot/lamassuiot/v2/core => ../../../core
+replace github.com/lamassuiot/lamassuiot/v3/core => ../../../core
 
 require (
 	github.com/hashicorp/vault/api v1.15.0
@@ -11,7 +11,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 )
 
-require github.com/lamassuiot/lamassuiot/v2/core v0.0.0-00010101000000-000000000000
+require github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
 
 require (
 	dario.cat/mergo v1.0.0 // indirect

@@ -6,11 +6,11 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
-	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	awsplatform_test "github.com/lamassuiot/lamassuiot/v2/crypto/aws/docker"
+	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
+	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
+	awsplatform_test "github.com/lamassuiot/lamassuiot/v3/crypto/aws/docker"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

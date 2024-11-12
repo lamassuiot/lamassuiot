@@ -11,9 +11,9 @@ import (
 
 	kivik "github.com/go-kivik/kivik/v4"
 	_ "github.com/go-kivik/kivik/v4/couchdb" // The CouchDB driver
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/resources"
 	"github.com/sirupsen/logrus"
 )
 

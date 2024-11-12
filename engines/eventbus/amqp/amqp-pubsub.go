@@ -8,8 +8,8 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill-amqp/v2/pkg/amqp"
 	"github.com/ThreeDotsLabs/watermill/message"
-	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/eventbus/amqp/config"
+	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v3/eventbus/amqp/config"
 	"github.com/sirupsen/logrus"
 )
 

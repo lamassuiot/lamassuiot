@@ -13,20 +13,20 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/clients"
-	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	aconfig "github.com/lamassuiot/lamassuiot/v2/crypto/aws/config"
-	awskmssm_test "github.com/lamassuiot/lamassuiot/v2/crypto/aws/docker"
-	fsconfig "github.com/lamassuiot/lamassuiot/v2/crypto/filesystem/config"
-	pconfig "github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11/config"
-	softhsmv2_test "github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11/test"
-	vconfig "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/config"
-	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/docker"
-	eventbus_amqp "github.com/lamassuiot/lamassuiot/v2/eventbus/amqp/config"
-	rabbitmq_test "github.com/lamassuiot/lamassuiot/v2/eventbus/amqp/test"
-	"github.com/lamassuiot/lamassuiot/v2/monolithic/pkg"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/config"
-	postgres_test "github.com/lamassuiot/lamassuiot/v2/storage/postgres/test"
+	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	aconfig "github.com/lamassuiot/lamassuiot/v3/crypto/aws/config"
+	awskmssm_test "github.com/lamassuiot/lamassuiot/v3/crypto/aws/docker"
+	fsconfig "github.com/lamassuiot/lamassuiot/v3/crypto/filesystem/config"
+	pconfig "github.com/lamassuiot/lamassuiot/v3/crypto/pkcs11/config"
+	softhsmv2_test "github.com/lamassuiot/lamassuiot/v3/crypto/pkcs11/test"
+	vconfig "github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2/config"
+	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2/docker"
+	eventbus_amqp "github.com/lamassuiot/lamassuiot/v3/eventbus/amqp/config"
+	rabbitmq_test "github.com/lamassuiot/lamassuiot/v3/eventbus/amqp/test"
+	"github.com/lamassuiot/lamassuiot/v3/monolithic/pkg"
+	"github.com/lamassuiot/lamassuiot/v3/sdk"
+	postgres_test "github.com/lamassuiot/lamassuiot/v3/storage/postgres/test"
 )
 
 const readyToPKI = ` 
@@ -385,7 +385,7 @@ func main() {
 	}
 
 	time.Sleep(3 * time.Second)
-	caCli := clients.NewHttpCAClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/ca", conf.GatewayPort))
+	caCli := sdk.NewHttpCAClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/ca", conf.GatewayPort))
 	engines, err := caCli.GetCryptoEngineProvider(context.Background())
 	if err != nil {
 		panic(err)

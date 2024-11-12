@@ -6,13 +6,13 @@ import (
 	"slices"
 
 	"github.com/cloudevents/sdk-go/v2/event"
-	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/services/eventhandling"
-	"github.com/lamassuiot/lamassuiot/v2/pkg/helpers"
-	lms_slices "github.com/lamassuiot/lamassuiot/v2/pkg/helpers/slices"
+	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/helpers"
+	lms_slices "github.com/lamassuiot/lamassuiot/v3/backend/pkg/helpers/slices"
+	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services/eventhandling"
 	"github.com/sirupsen/logrus"
 )
 

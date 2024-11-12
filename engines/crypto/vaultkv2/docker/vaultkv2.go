@@ -6,9 +6,9 @@ import (
 
 	vaultApi "github.com/hashicorp/vault/api"
 
-	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	dockerunner "github.com/lamassuiot/lamassuiot/v2/core/pkg/test/dockerrunner"
-	vconfig "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	dockerunner "github.com/lamassuiot/lamassuiot/v3/core/pkg/test/dockerrunner"
+	vconfig "github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2/config"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )

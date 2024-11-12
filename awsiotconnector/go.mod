@@ -1,37 +1,36 @@
-module github.com/lamassuiot/lamassuiot/v2/awsiotconnector
+module github.com/lamassuiot/lamassuiot/v3/awsiotconnector
 
 go 1.22.8
 
-replace github.com/lamassuiot/lamassuiot/v2/core => ../core
+replace github.com/lamassuiot/lamassuiot/v3/core => ../core
 
-replace github.com/lamassuiot/lamassuiot/v2 => ..
+replace github.com/lamassuiot/lamassuiot/v3/backend => ../backend
 
-replace github.com/lamassuiot/lamassuiot/v2/crypto/aws => ../engines/crypto/aws
+replace github.com/lamassuiot/lamassuiot/v3/crypto/aws => ../engines/crypto/aws
 
-replace github.com/lamassuiot/lamassuiot/v2/crypto/filesystem => ../engines/crypto/filesystem
+replace github.com/lamassuiot/lamassuiot/v3/crypto/filesystem => ../engines/crypto/filesystem
 
-replace github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11 => ../engines/crypto/pkcs11
+replace github.com/lamassuiot/lamassuiot/v3/crypto/pkcs11 => ../engines/crypto/pkcs11
 
-replace github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2 => ../engines/crypto/vaultkv2
+replace github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2 => ../engines/crypto/vaultkv2
 
-replace github.com/lamassuiot/lamassuiot/v2/storage/postgres => ../engines/storage/postgres
+replace github.com/lamassuiot/lamassuiot/v3/storage/postgres => ../engines/storage/postgres
 
-replace github.com/lamassuiot/lamassuiot/v2/storage/sqlite => ../engines/storage/sqlite
+replace github.com/lamassuiot/lamassuiot/v3/storage/sqlite => ../engines/storage/sqlite
 
-replace github.com/lamassuiot/lamassuiot/v2/storage/couchdb => ../engines/storage/couchdb
+replace github.com/lamassuiot/lamassuiot/v3/storage/couchdb => ../engines/storage/couchdb
 
-replace github.com/lamassuiot/lamassuiot/v2/eventbus/amqp => ../engines/eventbus/amqp
+replace github.com/lamassuiot/lamassuiot/v3/eventbus/amqp => ../engines/eventbus/amqp
 
-replace github.com/lamassuiot/lamassuiot/v2/eventbus/aws => ../engines/eventbus/aws
+replace github.com/lamassuiot/lamassuiot/v3/eventbus/aws => ../engines/eventbus/aws
 
-replace github.com/lamassuiot/lamassuiot/v2/eventbus/channel => ../engines/eventbus/channel
+replace github.com/lamassuiot/lamassuiot/v3/eventbus/channel => ../engines/eventbus/channel
 
 require (
-	github.com/lamassuiot/lamassuiot/v2 v2.8.0
-	github.com/lamassuiot/lamassuiot/v2/core v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v2/eventbus/amqp v0.0.0-00010101000000-000000000000 // indirect
-	github.com/lamassuiot/lamassuiot/v2/eventbus/aws v0.0.0-00010101000000-000000000000 // indirect
-	github.com/lamassuiot/lamassuiot/v2/eventbus/channel v0.0.0-00010101000000-000000000000 // indirect
+	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/eventbus/amqp v0.0.0-00010101000000-000000000000 // indirect
+	github.com/lamassuiot/lamassuiot/v3/eventbus/aws v0.0.0-00010101000000-000000000000 // indirect
+	github.com/lamassuiot/lamassuiot/v3/eventbus/channel v0.0.0-00010101000000-000000000000 // indirect
 )
 
 require (
@@ -43,6 +42,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.32.4
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/eclipse/paho.mqtt.golang v1.5.0
+	github.com/lamassuiot/lamassuiot/v3/backend v0.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/crypto v0.28.0

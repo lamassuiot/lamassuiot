@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 )
 
 type PKCS11Config struct {

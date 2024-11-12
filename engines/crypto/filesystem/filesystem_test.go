@@ -12,10 +12,10 @@ import (
 	"os"
 	"testing"
 
-	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/crypto/filesystem/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v3/crypto/filesystem/config"
 )
 
 func setup(t *testing.T) (string, *FilesystemCryptoEngine) {

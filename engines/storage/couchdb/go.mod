@@ -1,12 +1,12 @@
-module github.com/lamassuiot/lamassuiot/v2/storage/couchdb
+module github.com/lamassuiot/lamassuiot/v3/storage/couchdb
 
 go 1.22.8
 
-replace github.com/lamassuiot/lamassuiot/v2/core => ../../../core
+replace github.com/lamassuiot/lamassuiot/v3/core => ../../../core
 
 require (
 	github.com/go-kivik/kivik/v4 v4.3.2
-	github.com/lamassuiot/lamassuiot/v2/core v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
 	github.com/ory/dockertest/v3 v3.11.0
 	github.com/sirupsen/logrus v1.9.3
 )

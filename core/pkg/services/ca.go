@@ -7,8 +7,8 @@ import (
 	"crypto/x509"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/resources"
 )
 
 type CAService interface {

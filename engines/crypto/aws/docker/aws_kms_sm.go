@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	dockerunner "github.com/lamassuiot/lamassuiot/v2/core/pkg/test/dockerrunner"
+	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	dockerunner "github.com/lamassuiot/lamassuiot/v3/core/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )

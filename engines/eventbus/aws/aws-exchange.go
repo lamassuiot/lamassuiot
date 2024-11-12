@@ -12,8 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsSns "github.com/aws/aws-sdk-go-v2/service/sns"
 	awsSqs "github.com/aws/aws-sdk-go-v2/service/sqs"
-	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
+	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/sirupsen/logrus"
 
 	"github.com/ThreeDotsLabs/watermill/message"

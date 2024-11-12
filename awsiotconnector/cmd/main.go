@@ -3,11 +3,11 @@ package main
 import (
 	"fmt"
 
-	lamassu "github.com/lamassuiot/lamassuiot/v2/awsiotconnector/pkg"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/clients"
-	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
+	lamassu "github.com/lamassuiot/lamassuiot/v3/awsiotconnector/pkg"
+	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v3/sdk"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
@@ -49,31 +49,31 @@ func main() {
 	lDeviceClient := helpers.SetupLogger(conf.DevManagerClient.LogLevel, "AWS IoT Connector", "LMS SDK - Device Client")
 	lCAClient := helpers.SetupLogger(conf.CAClient.LogLevel, "AWS IoT Connector", "LMS SDK - CA Client")
 
-	dmsHttpCli, err := clients.BuildHTTPClient(conf.DMSManagerClient.HTTPClient, lDMSClient)
+	dmsHttpCli, err := sdk.BuildHTTPClient(conf.DMSManagerClient.HTTPClient, lDMSClient)
 	if err != nil {
 		log.Fatalf("could not build HTTP DMS Manager Client: %s", err)
 	}
 
-	deviceHttpCli, err := clients.BuildHTTPClient(conf.DevManagerClient.HTTPClient, lDeviceClient)
+	deviceHttpCli, err := sdk.BuildHTTPClient(conf.DevManagerClient.HTTPClient, lDeviceClient)
 	if err != nil {
 		log.Fatalf("could not build HTTP Device Client: %s", err)
 	}
 
-	caHttpCli, err := clients.BuildHTTPClient(conf.CAClient.HTTPClient, lCAClient)
+	caHttpCli, err := sdk.BuildHTTPClient(conf.CAClient.HTTPClient, lCAClient)
 	if err != nil {
 		log.Fatalf("could not build HTTP CA Client: %s", err)
 	}
 
-	dmsSDK := clients.NewHttpDMSManagerClient(
-		clients.HttpClientWithSourceHeaderInjector(dmsHttpCli, models.AWSIoTSource(conf.ConnectorID)),
+	dmsSDK := sdk.NewHttpDMSManagerClient(
+		sdk.HttpClientWithSourceHeaderInjector(dmsHttpCli, models.AWSIoTSource(conf.ConnectorID)),
 		fmt.Sprintf("%s://%s:%d%s", conf.DMSManagerClient.Protocol, conf.DMSManagerClient.Hostname, conf.DMSManagerClient.Port, conf.DMSManagerClient.BasePath),
 	)
-	deviceSDK := clients.NewHttpDeviceManagerClient(
-		clients.HttpClientWithSourceHeaderInjector(deviceHttpCli, models.AWSIoTSource(conf.ConnectorID)),
+	deviceSDK := sdk.NewHttpDeviceManagerClient(
+		sdk.HttpClientWithSourceHeaderInjector(deviceHttpCli, models.AWSIoTSource(conf.ConnectorID)),
 		fmt.Sprintf("%s://%s:%d%s", conf.DevManagerClient.Protocol, conf.DevManagerClient.Hostname, conf.DevManagerClient.Port, conf.DevManagerClient.BasePath),
 	)
-	caSDK := clients.NewHttpCAClient(
-		clients.HttpClientWithSourceHeaderInjector(caHttpCli, models.AWSIoTSource(conf.ConnectorID)),
+	caSDK := sdk.NewHttpCAClient(
+		sdk.HttpClientWithSourceHeaderInjector(caHttpCli, models.AWSIoTSource(conf.ConnectorID)),
 		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
 	)
 

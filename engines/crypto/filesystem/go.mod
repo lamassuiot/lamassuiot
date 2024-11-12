@@ -1,15 +1,15 @@
-module github.com/lamassuiot/lamassuiot/v2/crypto/filesystem
+module github.com/lamassuiot/lamassuiot/v3/crypto/filesystem
 
 go 1.22.1
 
-replace github.com/lamassuiot/lamassuiot/v2/core => ../../../core
+replace github.com/lamassuiot/lamassuiot/v3/core => ../../../core
 
 require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0 // indirect
 )
 
-require github.com/lamassuiot/lamassuiot/v2/core v0.0.0-00010101000000-000000000000
+require github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
 
 require (
 	github.com/antonfisher/nested-logrus-formatter v1.3.1 // indirect

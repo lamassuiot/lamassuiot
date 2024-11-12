@@ -1,40 +1,48 @@
-module github.com/lamassuiot/lamassuiot/v2/monolithic
+module github.com/lamassuiot/lamassuiot/v3/monolithic
 
 go 1.22.8
 
 toolchain go1.22.9
 
-replace github.com/lamassuiot/lamassuiot/v2/core => ../core
+replace github.com/lamassuiot/lamassuiot/v3/core => ../core
 
-replace github.com/lamassuiot/lamassuiot/v2/awsiotconnector => ../awsiotconnector
+replace github.com/lamassuiot/lamassuiot/v3/backend => ../backend
 
-replace github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11 => ../engines/crypto/pkcs11
+replace github.com/lamassuiot/lamassuiot/v3/awsiotconnector => ../awsiotconnector
 
-replace github.com/lamassuiot/lamassuiot/v2/crypto/filesystem => ../engines/crypto/filesystem
+replace github.com/lamassuiot/lamassuiot/v3/crypto/pkcs11 => ../engines/crypto/pkcs11
 
-replace github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2 => ../engines/crypto/vaultkv2
+replace github.com/lamassuiot/lamassuiot/v3/crypto/filesystem => ../engines/crypto/filesystem
 
-replace github.com/lamassuiot/lamassuiot/v2/crypto/aws => ../engines/crypto/aws
+replace github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2 => ../engines/crypto/vaultkv2
 
-replace github.com/lamassuiot/lamassuiot/v2/eventbus/amqp => ../engines/eventbus/amqp
+replace github.com/lamassuiot/lamassuiot/v3/crypto/aws => ../engines/crypto/aws
 
-replace github.com/lamassuiot/lamassuiot/v2/storage/postgres => ../engines/storage/postgres
+replace github.com/lamassuiot/lamassuiot/v3/eventbus/aws => ../engines/eventbus/aws
 
-replace github.com/lamassuiot/lamassuiot/v2/storage/couchdb => ../engines/storage/couchdb
+replace github.com/lamassuiot/lamassuiot/v3/eventbus/amqp => ../engines/eventbus/amqp
+
+replace github.com/lamassuiot/lamassuiot/v3/eventbus/channel => ../engines/eventbus/channel
+
+replace github.com/lamassuiot/lamassuiot/v3/storage/postgres => ../engines/storage/postgres
+
+replace github.com/lamassuiot/lamassuiot/v3/storage/sqlite => ../engines/storage/sqlite
+
+replace github.com/lamassuiot/lamassuiot/v3/storage/couchdb => ../engines/storage/couchdb
 
 require (
 	github.com/fatih/color v1.16.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/uuid v1.6.0
-	github.com/lamassuiot/lamassuiot/v2 v2.8.0
-	github.com/lamassuiot/lamassuiot/v2/awsiotconnector v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v2/core v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v2/crypto/aws v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v2/crypto/filesystem v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11 v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2 v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v2/eventbus/amqp v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v2/storage/postgres v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/awsiotconnector v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/backend v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/crypto/aws v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/crypto/filesystem v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/crypto/pkcs11 v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2 v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/eventbus/amqp v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/storage/postgres v0.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.9.3
 )
 
@@ -87,10 +95,7 @@ require (
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-gormigrate/gormigrate/v2 v2.1.3 // indirect
 	github.com/go-jose/go-jose/v4 v4.0.1 // indirect
-	github.com/go-kivik/couchdb v2.0.0+incompatible // indirect
-	github.com/go-kivik/couchdb/v4 v4.0.0-20220217152009-9380cf8517a0 // indirect
-	github.com/go-kivik/kivik v2.0.0+incompatible // indirect
-	github.com/go-kivik/kivik/v4 v4.0.0-20221214110802-0ad92c6bcd46 // indirect
+	github.com/go-kivik/kivik/v4 v4.3.2 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.22.1 // indirect
@@ -119,6 +124,10 @@ require (
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
+	github.com/lamassuiot/lamassuiot/v3/eventbus/aws v0.0.0-00010101000000-000000000000 // indirect
+	github.com/lamassuiot/lamassuiot/v3/eventbus/channel v0.0.0-00010101000000-000000000000 // indirect
+	github.com/lamassuiot/lamassuiot/v3/storage/couchdb v0.0.0-00010101000000-000000000000 // indirect
+	github.com/lamassuiot/lamassuiot/v3/storage/sqlite v0.0.0-00010101000000-000000000000 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
@@ -156,6 +165,7 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/thales-e-security/pool v0.0.2 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
+	github.com/ugorji/go v1.2.12 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
@@ -172,7 +182,6 @@ require (
 	golang.org/x/sys v0.26.0 // indirect
 	golang.org/x/text v0.19.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
-	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/protobuf v1.35.1 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df // indirect

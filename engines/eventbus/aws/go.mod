@@ -1,10 +1,10 @@
-module github.com/lamassuiot/lamassuiot/v2/eventbus/aws
+module github.com/lamassuiot/lamassuiot/v3/eventbus/aws
 
 go 1.22.1
 
-replace github.com/lamassuiot/lamassuiot/v2/core => ../../../core
+replace github.com/lamassuiot/lamassuiot/v3/core => ../../../core
 
-replace github.com/lamassuiot/lamassuiot/v2/crypto/aws => ../../../engines/crypto/aws
+replace github.com/lamassuiot/lamassuiot/v3/crypto/aws => ../../../engines/crypto/aws
 
 require (
 	github.com/ThreeDotsLabs/watermill v1.4.1
@@ -12,7 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.32.4
 	github.com/aws/aws-sdk-go-v2/service/sns v1.26.7
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.29.7
-	github.com/lamassuiot/lamassuiot/v2/core v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.9.3
 )
 

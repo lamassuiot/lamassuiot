@@ -17,11 +17,11 @@ import (
 	"strings"
 
 	"github.com/hashicorp/vault/api"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
-	chelpers "github.com/lamassuiot/lamassuiot/v2/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/models"
-	vconfig "github.com/lamassuiot/lamassuiot/v2/crypto/vaultkv2/config"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
+	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
+	vconfig "github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2/config"
 	"github.com/sirupsen/logrus"
 )
 

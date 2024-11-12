@@ -1,9 +1,9 @@
 package pkcs11
 
 import (
-	cconfig "github.com/lamassuiot/lamassuiot/v2/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v2/core/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/v2/crypto/pkcs11/config"
+	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v3/crypto/pkcs11/config"
 	log "github.com/sirupsen/logrus"
 )
 
