@@ -36,13 +36,11 @@ jobs:
           go-version: '^1.20.0' # The Go version to download (if necessary) and use.
  
       - name: Install Dependencies
+        working-directory: ${{ matrix.module }}
         run: go mod download
-
-      - name: Go to dir
-        run: cd ${{ matrix.module }}
- 
       - name: Run Golang Tests with coverage
         id: run
+        working-directory: ${{ matrix.module }}
         run: |
           go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
       - name: Upload coverage reports to Codecov
