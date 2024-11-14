@@ -50,7 +50,7 @@ func StartDMSManagerServiceTestServer(t *testing.T, withEventBus bool) (*DMSMana
 		t.Fatalf("could not prepare Postgres test server: %s", err)
 	}
 	cryptoConfig := PrepareCryptoEnginesForTest([]CryptoEngine{GOLANG})
-	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, []Service{CA, DEVICE_MANAGER, DMS_MANAGER})
+	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, []Service{CA, DEVICE_MANAGER, DMS_MANAGER}, true)
 	if err != nil {
 		t.Fatalf("could not assemble Server with HTTP server: %s", err)
 	}

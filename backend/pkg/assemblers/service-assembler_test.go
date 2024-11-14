@@ -224,7 +224,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	}
 }
 
-func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *TestCryptoEngineConfig, eventBus *TestEventBusConfig) (*CATestServer, error) {
+func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *TestCryptoEngineConfig, eventBus *TestEventBusConfig, monitor bool) (*CATestServer, error) {
 	storageEngine.config.LogLevel = cconfig.Trace
 
 	svc, scheduler, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
@@ -240,7 +240,7 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 		Storage:           storageEngine.config,
 		CryptoEngines:     cryptoEngines.config,
 		CryptoMonitoring: cconfig.MonitoringJob{
-			Enabled:   true,
+			Enabled:   monitor,
 			Frequency: "* * * * * *", //this CRON-like expression will scan certificate each second.
 		},
 		VAServerDomain: "dev.lamassu.test",
@@ -261,7 +261,9 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 			return nil
 		},
 		AfterSuite: func() {
-			scheduler.Stop()
+			if scheduler != nil {
+				scheduler.Stop()
+			}
 		},
 	}, nil
 }
@@ -402,13 +404,13 @@ func BuildVATestServer(caTestServer *CATestServer) (*VATestServer, error) {
 	}, nil
 }
 
-func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, cryptoEngines *TestCryptoEngineConfig, services []Service) (*TestServer, error) {
+func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, cryptoEngines *TestCryptoEngineConfig, services []Service, monitor bool) (*TestServer, error) {
 	servicesMap := make(map[Service]interface{})
 
 	beforeEachActions := []func() error{}
 	afterSuiteActions := []func(){}
 
-	caTestServer, err := BuildCATestServer(storageEngine, cryptoEngines, eventBus)
+	caTestServer, err := BuildCATestServer(storageEngine, cryptoEngines, eventBus, monitor)
 	servicesMap[CA] = caTestServer
 	if err != nil {
 		return nil, fmt.Errorf("could not build CATestServer: %s", err)

@@ -38,7 +38,7 @@ func StartDeviceManagerServiceTestServer(t *testing.T, withEventBus bool) (*Devi
 	}
 
 	cryptoConfig := PrepareCryptoEnginesForTest([]CryptoEngine{GOLANG})
-	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, []Service{CA, DEVICE_MANAGER})
+	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, []Service{CA, DEVICE_MANAGER}, true)
 	if err != nil {
 		t.Fatalf("could not assemble Server with HTTP server")
 	}

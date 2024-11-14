@@ -487,7 +487,7 @@ func StartVAServiceTestServer(t *testing.T) (*TestServer, error) {
 	}
 
 	cryptoConfig := PrepareCryptoEnginesForTest([]CryptoEngine{GOLANG})
-	testServer, err := AssembleServices(storageConfig, eventBusConfig, cryptoConfig, []Service{CA, VA})
+	testServer, err := AssembleServices(storageConfig, eventBusConfig, cryptoConfig, []Service{CA, VA}, true)
 	if err != nil {
 		t.Fatalf("could not assemble Server with HTTP server")
 	}
