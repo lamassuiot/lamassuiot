@@ -32,7 +32,7 @@ func TestConfigureLoggerWithRequestID(t *testing.T) {
 
 	// Test case 2: Request ID exists in the context
 	reqID := "12345"
-	ctx = context.WithValue(ctx, "req-id", reqID)
+	ctx = context.WithValue(ctx, CtxRequestID, reqID)
 
 	result = configureLoggerWithRequestID(ctx, logger)
 
