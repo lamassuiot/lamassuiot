@@ -1,4 +1,4 @@
-module github.com/lamassuiot/lamassuiot/v3/crypto/filesystem
+module github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem
 
 go 1.22.1
 

@@ -1,4 +1,4 @@
-module github.com/lamassuiot/lamassuiot/v3/crypto/pkcs11
+module github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11
 
 go 1.22.1
 

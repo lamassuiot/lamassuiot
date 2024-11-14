@@ -2,10 +2,10 @@ package config
 
 import (
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	aconfig "github.com/lamassuiot/lamassuiot/v3/crypto/aws/config"
-	fsconfig "github.com/lamassuiot/lamassuiot/v3/crypto/filesystem/config"
-	pconfig "github.com/lamassuiot/lamassuiot/v3/crypto/pkcs11/config"
-	vconfig "github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2/config"
+	aconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws/config"
+	fsconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem/config"
+	pconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11/config"
+	vconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
 	"github.com/sirupsen/logrus"
 )
 

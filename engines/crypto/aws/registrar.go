@@ -3,7 +3,7 @@ package aws
 import (
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
-	aconfig "github.com/lamassuiot/lamassuiot/v3/crypto/aws/config"
+	aconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws/config"
 	log "github.com/sirupsen/logrus"
 )
 

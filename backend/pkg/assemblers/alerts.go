@@ -10,6 +10,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/services/handlers"
 	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	ceventbus "github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/eventbus"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
@@ -55,11 +56,16 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 	if conf.SubscriberEventBus.Enabled {
 		log.Infof("Event Bus is enabled")
 
-		handler := handlers.NewAlertsEventHandler(lMessaging, svc)
-		subHandler, err := eventbus.NewEventBusSubscriptionHandler(conf.SubscriberEventBus, "alerts", lMessaging, *handler, "alerts", "#")
+		subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, "alerts", lMessaging)
 		if err != nil {
-			lMessaging.Errorf("could not generate Event Bus Subscription Handler: %s", err)
+			lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
 			return nil, err
+		}
+
+		eventHandlers := handlers.NewAlertsEventHandler(lMessaging, svc)
+		subHandler, err := ceventbus.NewEventBusMessageHandler("Alerts-DEFAULT", "#", subscriber, lMessaging, *eventHandlers)
+		if err != nil {
+			return nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
 		}
 
 		err = subHandler.RunAsync()

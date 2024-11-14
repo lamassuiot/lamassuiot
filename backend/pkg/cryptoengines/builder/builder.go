@@ -7,10 +7,10 @@ import (
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/lamassuiot/lamassuiot/v3/crypto/aws"
-	"github.com/lamassuiot/lamassuiot/v3/crypto/filesystem"
-	"github.com/lamassuiot/lamassuiot/v3/crypto/pkcs11"
-	"github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2"
+	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws"
+	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem"
+	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11"
+	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2"
 )
 
 func BuildCryptoEngine(logger *log.Entry, conf cconfig.CryptoEngine) (cryptoengines.CryptoEngine, error) {

@@ -1,4 +1,4 @@
-module github.com/lamassuiot/lamassuiot/v3/storage/sqlite
+module github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite
 
 go 1.22.8
 

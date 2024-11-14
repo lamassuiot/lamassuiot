@@ -13,13 +13,13 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
-	fsconfig "github.com/lamassuiot/lamassuiot/v3/crypto/filesystem/config"
-	vconfig "github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2/config"
-	vault_test "github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2/docker"
-	rabbitmq_test "github.com/lamassuiot/lamassuiot/v3/eventbus/amqp/test"
+	fsconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem/config"
+	vconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
+	vault_test "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/docker"
+	rabbitmq_test "github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/test"
+	"github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres"
+	postgres_test "github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres/test"
 	"github.com/lamassuiot/lamassuiot/v3/sdk"
-	"github.com/lamassuiot/lamassuiot/v3/storage/postgres"
-	postgres_test "github.com/lamassuiot/lamassuiot/v3/storage/postgres/test"
 )
 
 type CryptoEngine int

@@ -15,7 +15,6 @@ func NewEventBusSubscriber(conf cconfig.EventBusEngine, serviceID string, logger
 	}
 
 	return engine.Subscriber()
-
 }
 
 func NewEventBusPublisher(conf cconfig.EventBusEngine, serviceID string, logger *logrus.Entry) (message.Publisher, error) {

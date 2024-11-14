@@ -4,38 +4,40 @@ go 1.22.8
 
 replace github.com/lamassuiot/lamassuiot/v3/core => ../core
 
-replace github.com/lamassuiot/lamassuiot/v3/crypto/aws => ../engines/crypto/aws
+replace github.com/lamassuiot/lamassuiot/v3/sdk => ../sdk
 
-replace github.com/lamassuiot/lamassuiot/v3/crypto/filesystem => ../engines/crypto/filesystem
+replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws => ../engines/crypto/aws
 
-replace github.com/lamassuiot/lamassuiot/v3/crypto/pkcs11 => ../engines/crypto/pkcs11
+replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem => ../engines/crypto/filesystem
 
-replace github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2 => ../engines/crypto/vaultkv2
+replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11 => ../engines/crypto/pkcs11
 
-replace github.com/lamassuiot/lamassuiot/v3/storage/postgres => ../engines/storage/postgres
+replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2 => ../engines/crypto/vaultkv2
 
-replace github.com/lamassuiot/lamassuiot/v3/storage/sqlite => ../engines/storage/sqlite
+replace github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres => ../engines/storage/postgres
 
-replace github.com/lamassuiot/lamassuiot/v3/storage/couchdb => ../engines/storage/couchdb
+replace github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite => ../engines/storage/sqlite
 
-replace github.com/lamassuiot/lamassuiot/v3/eventbus/amqp => ../engines/eventbus/amqp
+replace github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb => ../engines/storage/couchdb
 
-replace github.com/lamassuiot/lamassuiot/v3/eventbus/aws => ../engines/eventbus/aws
+replace github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp => ../engines/eventbus/amqp
 
-replace github.com/lamassuiot/lamassuiot/v3/eventbus/channel => ../engines/eventbus/channel
+replace github.com/lamassuiot/lamassuiot/v3/engines/eventbus/aws => ../engines/eventbus/aws
+
+replace github.com/lamassuiot/lamassuiot/v3/engines/eventbus/channel => ../engines/eventbus/channel
 
 require (
 	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/crypto/aws v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/crypto/filesystem v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/crypto/pkcs11 v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2 v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/eventbus/amqp v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/eventbus/aws v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/eventbus/channel v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/storage/couchdb v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/storage/postgres v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/storage/sqlite v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11 v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2 v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/engines/eventbus/aws v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/engines/eventbus/channel v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite v0.0.0-00010101000000-000000000000
 )
 
 require (
@@ -48,6 +50,7 @@ require (
 	github.com/go-playground/validator/v10 v10.22.1
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/jakehl/goid v1.1.0
+	github.com/lamassuiot/lamassuiot/v3/sdk v0.0.0-00010101000000-000000000000
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
@@ -55,6 +58,7 @@ require (
 	golang.org/x/crypto v0.28.0
 	golang.org/x/text v0.19.0
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
@@ -188,6 +192,5 @@ require (
 	golang.org/x/sys v0.26.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/protobuf v1.35.1 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

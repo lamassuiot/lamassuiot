@@ -3,7 +3,7 @@ package docker
 import (
 	"log"
 
-	"github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2/config"
+	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
 )
 
 type VaultSuite struct {

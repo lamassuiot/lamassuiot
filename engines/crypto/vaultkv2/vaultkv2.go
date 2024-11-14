@@ -21,7 +21,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	vconfig "github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2/config"
+	vconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
 	"github.com/sirupsen/logrus"
 )
 

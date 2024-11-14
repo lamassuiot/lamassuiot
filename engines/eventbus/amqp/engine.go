@@ -4,7 +4,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/eventbus"
-	"github.com/lamassuiot/lamassuiot/v3/eventbus/amqp/config"
+	"github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/config"
 	"github.com/sirupsen/logrus"
 )
 
@@ -37,7 +37,6 @@ func NewAmqpEngine(conf interface{}, serviceId string, logger *logrus.Entry) (ev
 
 func (e *AmqpEngine) Subscriber() (message.Subscriber, error) {
 	if e.subscriber == nil {
-
 		subscriber, err := NewAMQPSub(e.config, e.serviceID, e.logger)
 
 		if err != nil {

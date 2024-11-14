@@ -1,4 +1,4 @@
-module github.com/lamassuiot/lamassuiot/v3/storage/postgres
+module github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres
 
 go 1.22.8
 

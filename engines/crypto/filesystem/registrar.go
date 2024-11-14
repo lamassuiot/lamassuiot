@@ -3,7 +3,7 @@ package filesystem
 import (
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/v3/crypto/filesystem/config"
+	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem/config"
 	log "github.com/sirupsen/logrus"
 )
 

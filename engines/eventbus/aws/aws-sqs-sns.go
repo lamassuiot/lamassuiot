@@ -5,6 +5,7 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill-amazonsqs/sqs"
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/eventbus"
 	"github.com/sirupsen/logrus"
 )
 
@@ -14,7 +15,7 @@ func NewAwsSqsSub(conf cconfig.AWSSDKConfig, serviceID string, logger *logrus.En
 		return nil, err
 	}
 
-	lEventBus := newWithLogger(logger.WithField("subsystem-provider", "AWS.SQS - Subscriber"))
+	lEventBus := eventbus.NewLoggerAdapter(logger.WithField("subsystem-provider", "AWS.SQS - Subscriber"))
 
 	subscriberSqs, err := sqs.NewSubscriber(sqs.SubscriberConfig{
 		AWSConfig: *awsConf,

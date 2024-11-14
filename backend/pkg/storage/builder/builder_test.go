@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/storage/postgres"
+	"github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres"
 	log "github.com/sirupsen/logrus"
 )
 

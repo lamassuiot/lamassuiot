@@ -1,10 +1,10 @@
-module github.com/lamassuiot/lamassuiot/v3/eventbus/aws
+module github.com/lamassuiot/lamassuiot/v3/engines/eventbus/aws
 
 go 1.22.1
 
 replace github.com/lamassuiot/lamassuiot/v3/core => ../../../core
 
-replace github.com/lamassuiot/lamassuiot/v3/crypto/aws => ../../../engines/crypto/aws
+replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws => ../../../engines/crypto/aws
 
 require (
 	github.com/ThreeDotsLabs/watermill v1.4.1
@@ -32,6 +32,7 @@ require (
 	github.com/aws/smithy-go v1.22.0 // indirect
 	github.com/bytedance/sonic v1.11.6 // indirect
 	github.com/bytedance/sonic/loader v0.1.1 // indirect
+	github.com/cenkalti/backoff/v3 v3.2.2 // indirect
 	github.com/cloudevents/sdk-go/v2 v2.15.2 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/cloudwego/iasm v0.2.0 // indirect
@@ -63,6 +64,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
+	github.com/sony/gobreaker v1.0.0 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.6.0 // indirect

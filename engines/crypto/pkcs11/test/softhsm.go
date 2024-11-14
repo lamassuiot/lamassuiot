@@ -6,7 +6,7 @@ import (
 
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	dockerunner "github.com/lamassuiot/lamassuiot/v3/core/pkg/test/dockerrunner"
-	pconfig "github.com/lamassuiot/lamassuiot/v3/crypto/pkcs11/config"
+	pconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11/config"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )

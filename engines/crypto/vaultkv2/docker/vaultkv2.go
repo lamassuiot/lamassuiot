@@ -8,7 +8,7 @@ import (
 
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	dockerunner "github.com/lamassuiot/lamassuiot/v3/core/pkg/test/dockerrunner"
-	vconfig "github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2/config"
+	vconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )

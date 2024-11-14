@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/eventbus"
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	ceventbus "github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/eventbus"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -35,14 +36,20 @@ func AssembleAWSIoTManagerService(conf ConnectorServiceConfig, caService service
 		logrus.Fatal(err)
 	}
 
-	busName := fmt.Sprintf("aws-connector-%s", strings.ReplaceAll(conf.ConnectorID, "aws.", "-"))
-	handler := NewAWSIoTEventHandler(lMessaging, awsConnectorSvc)
-	subHandler, err := eventbus.NewEventBusSubscriptionHandler(conf.SubscriberEventBus, busName, lMessaging, *handler, "#-aws-connector", "#")
+	serviceID := fmt.Sprintf("aws-connector-%s", strings.ReplaceAll(conf.ConnectorID, "aws.", "-"))
+	eventHandlers := NewAWSIoTEventHandler(lMessaging, awsConnectorSvc)
+	subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
+	if err != nil {
+		lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
+		return nil, err
+	}
+
+	routerHandler, err := ceventbus.NewEventBusMessageHandler("AWSConnector-DEFAULT", "#", subscriber, lMessaging, *eventHandlers)
 	if err != nil {
 		lMessaging.Errorf("could not generate Event Bus Subscription Handler: %s", err)
 	}
 
-	err = subHandler.RunAsync()
+	err = routerHandler.RunAsync()
 	if err != nil {
 		lMessaging.Errorf("could not run Event Bus Subscription Handler: %s", err)
 		return nil, err

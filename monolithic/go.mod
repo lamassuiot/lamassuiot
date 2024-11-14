@@ -8,27 +8,29 @@ replace github.com/lamassuiot/lamassuiot/v3/core => ../core
 
 replace github.com/lamassuiot/lamassuiot/v3/backend => ../backend
 
+replace github.com/lamassuiot/lamassuiot/v3/sdk => ../sdk
+
 replace github.com/lamassuiot/lamassuiot/v3/awsiotconnector => ../awsiotconnector
 
-replace github.com/lamassuiot/lamassuiot/v3/crypto/pkcs11 => ../engines/crypto/pkcs11
+replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11 => ../engines/crypto/pkcs11
 
-replace github.com/lamassuiot/lamassuiot/v3/crypto/filesystem => ../engines/crypto/filesystem
+replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem => ../engines/crypto/filesystem
 
-replace github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2 => ../engines/crypto/vaultkv2
+replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2 => ../engines/crypto/vaultkv2
 
-replace github.com/lamassuiot/lamassuiot/v3/crypto/aws => ../engines/crypto/aws
+replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws => ../engines/crypto/aws
 
-replace github.com/lamassuiot/lamassuiot/v3/eventbus/aws => ../engines/eventbus/aws
+replace github.com/lamassuiot/lamassuiot/v3/engines/eventbus/aws => ../engines/eventbus/aws
 
-replace github.com/lamassuiot/lamassuiot/v3/eventbus/amqp => ../engines/eventbus/amqp
+replace github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp => ../engines/eventbus/amqp
 
-replace github.com/lamassuiot/lamassuiot/v3/eventbus/channel => ../engines/eventbus/channel
+replace github.com/lamassuiot/lamassuiot/v3/engines/eventbus/channel => ../engines/eventbus/channel
 
-replace github.com/lamassuiot/lamassuiot/v3/storage/postgres => ../engines/storage/postgres
+replace github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres => ../engines/storage/postgres
 
-replace github.com/lamassuiot/lamassuiot/v3/storage/sqlite => ../engines/storage/sqlite
+replace github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite => ../engines/storage/sqlite
 
-replace github.com/lamassuiot/lamassuiot/v3/storage/couchdb => ../engines/storage/couchdb
+replace github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb => ../engines/storage/couchdb
 
 require (
 	github.com/fatih/color v1.16.0
@@ -37,12 +39,13 @@ require (
 	github.com/lamassuiot/lamassuiot/v3/awsiotconnector v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v3/backend v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/crypto/aws v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/crypto/filesystem v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/crypto/pkcs11 v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2 v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/eventbus/amqp v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/storage/postgres v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11 v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2 v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/sdk v0.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.9.3
 )
 
@@ -124,10 +127,10 @@ require (
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
-	github.com/lamassuiot/lamassuiot/v3/eventbus/aws v0.0.0-00010101000000-000000000000 // indirect
-	github.com/lamassuiot/lamassuiot/v3/eventbus/channel v0.0.0-00010101000000-000000000000 // indirect
-	github.com/lamassuiot/lamassuiot/v3/storage/couchdb v0.0.0-00010101000000-000000000000 // indirect
-	github.com/lamassuiot/lamassuiot/v3/storage/sqlite v0.0.0-00010101000000-000000000000 // indirect
+	github.com/lamassuiot/lamassuiot/v3/engines/eventbus/aws v0.0.0-00010101000000-000000000000 // indirect
+	github.com/lamassuiot/lamassuiot/v3/engines/eventbus/channel v0.0.0-00010101000000-000000000000 // indirect
+	github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb v0.0.0-00010101000000-000000000000 // indirect
+	github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite v0.0.0-00010101000000-000000000000 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect

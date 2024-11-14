@@ -9,7 +9,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v3/storage/sqlite"
+	"github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite"
 
 	"gorm.io/gorm"
 )

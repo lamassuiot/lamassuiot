@@ -7,8 +7,8 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	vconfig "github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2/config"
-	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2/docker"
+	vconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
+	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/docker"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

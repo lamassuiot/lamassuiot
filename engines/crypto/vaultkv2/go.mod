@@ -1,4 +1,4 @@
-module github.com/lamassuiot/lamassuiot/v3/crypto/vaultkv2
+module github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2
 
 go 1.22.1
 

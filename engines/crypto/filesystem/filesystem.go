@@ -15,7 +15,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v3/crypto/filesystem/config"
+	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem/config"
 	"github.com/sirupsen/logrus"
 )
 

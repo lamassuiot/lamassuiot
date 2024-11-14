@@ -1,4 +1,4 @@
-module github.com/lamassuiot/lamassuiot/v3/crypto/aws
+module github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws
 
 go 1.22.1
 

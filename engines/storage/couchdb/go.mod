@@ -1,4 +1,4 @@
-module github.com/lamassuiot/lamassuiot/v3/storage/couchdb
+module github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb
 
 go 1.22.8
 

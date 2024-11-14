@@ -2,9 +2,9 @@ package builder
 
 import (
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/eventbus"
-	"github.com/lamassuiot/lamassuiot/v3/eventbus/amqp"
-	"github.com/lamassuiot/lamassuiot/v3/eventbus/aws"
-	"github.com/lamassuiot/lamassuiot/v3/eventbus/channel"
+	"github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp"
+	"github.com/lamassuiot/lamassuiot/v3/engines/eventbus/aws"
+	"github.com/lamassuiot/lamassuiot/v3/engines/eventbus/channel"
 	"github.com/sirupsen/logrus"
 )
 

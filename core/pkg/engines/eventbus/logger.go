@@ -1,4 +1,4 @@
-package amqp
+package eventbus
 
 import (
 	"github.com/ThreeDotsLabs/watermill"
@@ -9,7 +9,7 @@ type messagingLogger struct {
 	entry *logrus.Entry
 }
 
-func newWithLogger(l *logrus.Entry) watermill.LoggerAdapter {
+func NewLoggerAdapter(l *logrus.Entry) watermill.LoggerAdapter {
 	return &messagingLogger{
 		entry: l,
 	}

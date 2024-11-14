@@ -16,6 +16,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/eventbus"
 	identityextractors "github.com/lamassuiot/lamassuiot/v3/backend/pkg/routes/middlewares/identity-extractors"
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	ceventbus "github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/eventbus"
 	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
 	cmodels "github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
@@ -490,9 +491,7 @@ func TestBindIDEvent(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			router, err := eventbus.NewEventBusRouter(
-				testServers.EventBus.config,
-				uuid.NewString(),
+			router, err := ceventbus.NewMessageRouter(
 				chelpers.SetupLogger(cconfig.Info, "Test Case", "router"),
 			)
 			if err != nil {

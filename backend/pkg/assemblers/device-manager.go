@@ -11,6 +11,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/services/handlers"
 	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	ceventbus "github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/eventbus"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
@@ -74,12 +75,17 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 	}
 
 	if conf.SubscriberEventBus.Enabled {
-
 		lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Device Manager", "Event Bus")
 		lMessaging.Infof("Subscriber Event Bus is enabled")
 
-		handler := handlers.NewDeviceEventHandler(lMessaging, svc)
-		subHandler, err := eventbus.NewEventBusSubscriptionHandler(conf.SubscriberEventBus, serviceID, lMessaging, *handler, fmt.Sprintf("certificate.#-%s", serviceID), "certificate.#")
+		subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
+		if err != nil {
+			lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
+			return nil, err
+		}
+
+		eventHandlers := handlers.NewDeviceEventHandler(lMessaging, svc)
+		subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManger-DEFAULT", "certificate.#", subscriber, lMessaging, *eventHandlers)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
 		}

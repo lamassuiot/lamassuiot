@@ -4,7 +4,7 @@
 package builder
 
 import (
-	"github.com/lamassuiot/lamassuiot/v3/storage/sqlite"
+	"github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite"
 )
 
 func init() {

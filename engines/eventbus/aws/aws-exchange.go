@@ -13,6 +13,7 @@ import (
 	awsSns "github.com/aws/aws-sdk-go-v2/service/sns"
 	awsSqs "github.com/aws/aws-sdk-go-v2/service/sqs"
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/eventbus"
 	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/sirupsen/logrus"
 
@@ -218,7 +219,7 @@ func NewSnsExchangePublisher(builder SnsExchangeBuilder) (*SnsExchangePublisher,
 		return nil, err
 	}
 
-	lEventBusPub := newWithLogger(builder.Logger.WithField("subsystem-provider", "AWS.SNS - Publisher"))
+	lEventBusPub := eventbus.NewLoggerAdapter(builder.Logger.WithField("subsystem-provider", "AWS.SNS - Publisher"))
 	httpCli, _ := chelpers.BuildHTTPClientWithTracerLogger(&http.Client{}, builder.Logger)
 	awsConf.HTTPClient = httpCli
 

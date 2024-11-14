@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	fsconfig "github.com/lamassuiot/lamassuiot/v3/crypto/filesystem/config"
-	pconfig "github.com/lamassuiot/lamassuiot/v3/crypto/pkcs11/config"
+	fsconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem/config"
+	pconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11/config"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

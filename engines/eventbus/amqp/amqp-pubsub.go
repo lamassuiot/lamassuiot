@@ -8,8 +8,9 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill-amqp/v2/pkg/amqp"
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/eventbus"
 	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v3/eventbus/amqp/config"
+	"github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/config"
 	"github.com/sirupsen/logrus"
 )
 
@@ -89,7 +90,7 @@ func NewAMQPPub(conf config.AMQPConnection, serviceID string, logger *logrus.Ent
 		return nil, err
 	}
 
-	lEventBusPub := newWithLogger(logger.WithField("subsystem-provider", "AMQP - Publisher"))
+	lEventBusPub := eventbus.NewLoggerAdapter(logger.WithField("subsystem-provider", "AMQP - Publisher"))
 
 	publisher, err := amqp.NewPublisher(*amqpConfig, lEventBusPub)
 	if err != nil {
@@ -105,7 +106,7 @@ func NewAMQPSub(conf config.AMQPConnection, serviceID string, logger *logrus.Ent
 		return nil, err
 	}
 
-	lEventBusSub := newWithLogger(logger.WithField("subsystem-provider", "AMQP - Subscriber"))
+	lEventBusSub := eventbus.NewLoggerAdapter(logger.WithField("subsystem-provider", "AMQP - Subscriber"))
 	subscriber, err := amqp.NewSubscriber(
 		// This config is based on this example: https://www.rabbitmq.com/tutorials/tutorial-two-go.html
 		// It works as a simple queue.
