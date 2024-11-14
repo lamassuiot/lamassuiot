@@ -34,7 +34,7 @@ const DefaultCACN = "MyCA"
 
 func TestCryptoEngines(t *testing.T) {
 	//serverTest, err := StartCAServiceTestServer(t, false)
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").WithVault().Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithVault().Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -79,7 +79,7 @@ func TestCryptoEngines(t *testing.T) {
 	}
 }
 func TestCreateCA(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -245,7 +245,7 @@ func TestCreateCA(t *testing.T) {
 }
 
 func TestDeleteCAAndIssuedCertificates(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -462,7 +462,7 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 }
 
 func TestUpdateCAIssuanceExpiration(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -638,7 +638,7 @@ func TestUpdateCAIssuanceExpiration(t *testing.T) {
 }
 
 func TestGetCertificatesByCaAndStatus(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -776,7 +776,7 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 }
 
 func TestSignCertificate(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -972,7 +972,7 @@ func TestSignCertificate(t *testing.T) {
 }
 
 func TestImportCertificate(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1259,7 +1259,7 @@ func TestImportCertificate(t *testing.T) {
 }
 
 func TestRevokeCA(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1388,7 +1388,7 @@ func TestRevokeCA(t *testing.T) {
 }
 
 func TestUpdateCAMetadata(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1489,7 +1489,7 @@ func TestUpdateCAMetadata(t *testing.T) {
 }
 
 func TestGetCAsByCommonName(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1559,7 +1559,7 @@ func TestGetCAsByCommonName(t *testing.T) {
 }
 
 func TestUpdateCertificateMetadata(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1684,7 +1684,7 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 	}
 }
 func TestUpdateCAStatus(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1832,7 +1832,7 @@ func TestUpdateCAStatus(t *testing.T) {
 }
 
 func TestGetStats(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1896,7 +1896,7 @@ func TestGetStats(t *testing.T) {
 }
 
 func TestGetCertificates(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -2037,7 +2037,7 @@ func TestGetCertificates(t *testing.T) {
 }
 
 func TestGetCertificatesByCA(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -2273,7 +2273,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 }
 
 func TestImportCA(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").WithVault().Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithVault().Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -2716,7 +2716,7 @@ CR8nD8fRUZg5Lp5Npew7bufQhTnw8b75zA==
 
 func TestDeleteCA(t *testing.T) {
 
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -2846,7 +2846,7 @@ func TestDeleteCA(t *testing.T) {
 }
 
 func TestGetCAs(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -3006,7 +3006,7 @@ func TestGetCAs(t *testing.T) {
 }
 
 func TestGetStatsByCAID(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -3152,7 +3152,7 @@ func TestGetStatsByCAID(t *testing.T) {
 
 func TestGetCertificatesByExpirationDate(t *testing.T) {
 
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -3333,7 +3333,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 
 func TestSignatureVerify(t *testing.T) {
 	t.Skip("Skip until we have a reliable test for this")
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -3454,7 +3454,7 @@ func TestSignatureVerify(t *testing.T) {
 	}
 }
 func TestHierarchyCryptoEngines(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -3564,7 +3564,7 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 	}
 }
 func TestHierarchy(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -3918,7 +3918,7 @@ func TestHierarchy(t *testing.T) {
 }
 
 func TestCAsAdditionalDeltasMonitoring(t *testing.T) {
-	serverTest, err := CAServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -4040,34 +4040,40 @@ func initCA(caSDK services.CAService) (*models.CACertificate, error) {
 	return ca, err
 }
 
-type CAServiceBuilder struct {
+type TestServiceBuilder struct {
 	withEventBus bool
 	withVault    bool
 	withDatabase []string
 	withMonitor  bool
+	withService  []Service
 }
 
-func (b CAServiceBuilder) WithEventBus() CAServiceBuilder {
+func (b TestServiceBuilder) WithEventBus() TestServiceBuilder {
 	b.withEventBus = true
 	return b
 }
 
-func (b CAServiceBuilder) WithVault() CAServiceBuilder {
+func (b TestServiceBuilder) WithVault() TestServiceBuilder {
 	b.withVault = true
 	return b
 }
 
-func (b CAServiceBuilder) WithDatabase(dbs ...string) CAServiceBuilder {
+func (b TestServiceBuilder) WithDatabase(dbs ...string) TestServiceBuilder {
 	b.withDatabase = dbs
 	return b
 }
 
-func (b CAServiceBuilder) WithMonitor() CAServiceBuilder {
+func (b TestServiceBuilder) WithMonitor() TestServiceBuilder {
 	b.withMonitor = true
 	return b
 }
 
-func (b CAServiceBuilder) Build(t *testing.T) (*TestServer, error) {
+func (b TestServiceBuilder) WithService(services ...Service) TestServiceBuilder {
+	b.withService = services
+	return b
+}
+
+func (b TestServiceBuilder) Build(t *testing.T) (*TestServer, error) {
 	var err error
 	eventBusConf := &TestEventBusConfig{
 		config: config.EventBusEngine{
@@ -4092,7 +4098,12 @@ func (b CAServiceBuilder) Build(t *testing.T) (*TestServer, error) {
 	}
 
 	cryptoConfig := PrepareCryptoEnginesForTest(cryptoEngines)
-	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, []Service{CA}, b.withMonitor)
+
+	if b.withService == nil {
+		b.withService = []Service{CA}
+	}
+
+	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, b.withService, b.withMonitor)
 	if err != nil {
 		t.Fatalf("could not assemble Server with HTTP server")
 	}

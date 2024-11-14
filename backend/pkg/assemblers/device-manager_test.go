@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/resources"
@@ -19,36 +18,15 @@ import (
 )
 
 func StartDeviceManagerServiceTestServer(t *testing.T, withEventBus bool) (*DeviceManagerTestServer, error) {
-	var err error
-	eventBusConf := &TestEventBusConfig{
-		config: cconfig.EventBusEngine{
-			Enabled: false,
-		},
-	}
+
+	builder := TestServiceBuilder{}.WithDatabase("ca", "devicemanager").WithService(CA, DEVICE_MANAGER)
 	if withEventBus {
-		eventBusConf, err = PrepareRabbitMQForTest()
-		if err != nil {
-			t.Fatalf("could not prepare RabbitMQ test server: %s", err)
-		}
+		builder = builder.WithEventBus()
 	}
-
-	storageConfig, err := PreparePostgresForTest([]string{"ca", "devicemanager"})
+	testServer, err := builder.Build(t)
 	if err != nil {
-		t.Fatalf("could not prepare Postgres test server: %s", err)
+		return nil, fmt.Errorf("could not create Device Manager test server: %s", err)
 	}
-
-	cryptoConfig := PrepareCryptoEnginesForTest([]CryptoEngine{GOLANG})
-	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, []Service{CA, DEVICE_MANAGER}, true)
-	if err != nil {
-		t.Fatalf("could not assemble Server with HTTP server")
-	}
-	err = testServer.BeforeEach()
-	if err != nil {
-		t.Fatalf("could not run 'BeforeEach' cleanup func in test case: %s", err)
-	}
-
-	t.Cleanup(testServer.AfterSuite)
-
 	return testServer.DeviceManager, nil
 }
 

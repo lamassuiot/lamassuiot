@@ -14,10 +14,8 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/helpers"
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	cmodels "github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
 	external_clients "github.com/lamassuiot/lamassuiot/v3/sdk/external"
 	"golang.org/x/crypto/ocsp"
@@ -377,7 +375,7 @@ func generateCertificate(caSDK services.CAService) (*models.Certificate, error) 
 		return nil, fmt.Errorf("could not generate private key: %s", err)
 	}
 
-	csr, err := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "my-cert"}, key)
+	csr, err := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "my-cert"}, key)
 	if err != nil {
 		return nil, fmt.Errorf("could not generate csr: %s", err)
 	}
@@ -477,23 +475,10 @@ func getOCSPResponseGet(ocspServerURL string, crt *models.Certificate, issuer *m
 }
 
 func StartVAServiceTestServer(t *testing.T) (*TestServer, error) {
-	eventBusConfig := &TestEventBusConfig{
-		config: cconfig.EventBusEngine{Enabled: false},
-	}
-
-	storageConfig, err := PreparePostgresForTest([]string{"ca"})
+	testServer, err := TestServiceBuilder{}.WithDatabase("ca").WithService(CA, VA).Build(t)
 	if err != nil {
-		t.Fatalf("could not prepare Postgres test server: %s", err)
+		return nil, fmt.Errorf("could not create Device Manager test server: %s", err)
 	}
-
-	cryptoConfig := PrepareCryptoEnginesForTest([]CryptoEngine{GOLANG})
-	testServer, err := AssembleServices(storageConfig, eventBusConfig, cryptoConfig, []Service{CA, VA}, true)
-	if err != nil {
-		t.Fatalf("could not assemble Server with HTTP server")
-	}
-
-	t.Cleanup(testServer.AfterSuite)
-
 	return testServer, nil
 }
 
@@ -503,8 +488,8 @@ func initCAForVA(testServer *TestServer) (*models.CACertificate, error) {
 	issuanceDur := models.TimeDuration(time.Hour * 12)
 	ca, err := testServer.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
 		ID:                 DefaultCAID,
-		KeyMetadata:        cmodels.KeyMetadata{Type: cmodels.KeyType(x509.RSA), Bits: 2048},
-		Subject:            cmodels.Subject{CommonName: "TestCA"},
+		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+		Subject:            models.Subject{CommonName: "TestCA"},
 		CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
 		IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
 	})
