@@ -185,7 +185,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 		return nil
 	})
 	afterSuiteActions = append(afterSuiteActions, func() {
-		// noop
+		os.RemoveAll("/tmp/lms-test/")
 	})
 
 	if slices.Contains(engines, VAULT) {
