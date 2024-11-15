@@ -13,12 +13,7 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
-	fsconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem/config"
-	vconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
-	vault_test "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/docker"
-	rabbitmq_test "github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/test"
-	"github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres"
-	postgres_test "github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres/test"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/test/subsystems"
 	"github.com/lamassuiot/lamassuiot/v3/sdk"
 )
 
@@ -102,67 +97,36 @@ type TestServer struct {
 }
 
 func PrepareRabbitMQForTest() (*TestEventBusConfig, error) {
-	cleanup, conf, _, err := rabbitmq_test.RunRabbitMQDocker()
-	if err != nil {
-		return nil, err
-	}
+	rabbitmqSubsystem := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.RabbitMQ)
 
-	eventBusConfig, err := cconfig.EncodeStruct(conf)
+	backend, err := rabbitmqSubsystem.Run()
 	if err != nil {
 		return nil, err
 	}
 
 	return &TestEventBusConfig{
-		config: cconfig.EventBusEngine{
-			LogLevel: cconfig.Trace,
-			Enabled:  true,
-			Provider: cconfig.Amqp,
-			Config:   eventBusConfig,
-		},
-		AfterSuite: func() { cleanup() },
-		BeforeEach: func() error {
-			return nil
-		},
+		config:     backend.Config.(cconfig.EventBusEngine),
+		AfterSuite: backend.AfterSuite,
+		BeforeEach: backend.BeforeEach,
 	}, nil
+
 }
 
 func PreparePostgresForTest(dbs []string) (*TestStorageEngineConfig, error) {
-	pConfig, postgresEngine := postgres_test.BeforeSuite(dbs)
+	postgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
+
+	postgresSubsystem.Prepare(dbs)
+	backend, err := postgresSubsystem.Run()
+	if err != nil {
+		return nil, err
+	}
 
 	return &TestStorageEngineConfig{
-		config: cconfig.PluggableStorageEngine{LogLevel: cconfig.Info, Provider: cconfig.Postgres, Postgres: pConfig},
-		BeforeEach: func() error {
-			for _, dbName := range dbs {
-				postgresEngine.BeforeEach()
-				switch dbName {
-				case "ca":
-					_, err := postgres.NewCAPostgresRepository(postgresEngine.DB[dbName])
-					if err != nil {
-						return fmt.Errorf("could not run reinitialize CA tables: %s", err)
-					}
-				case "certificates":
-					_, err := postgres.NewCertificateRepository(postgresEngine.DB[dbName])
-					if err != nil {
-						return fmt.Errorf("could not run reinitialize Certificates tables: %s", err)
-					}
-				case "devicemanager":
-					_, err := postgres.NewDeviceManagerRepository(postgresEngine.DB[dbName])
-					if err != nil {
-						return fmt.Errorf("could not run reinitialize DeviceManager tables: %s", err)
-					}
-				case "dmsmanager":
-					_, err := postgres.NewDMSManagerRepository(postgresEngine.DB[dbName])
-					if err != nil {
-						return fmt.Errorf("could not run reinitialize DMSManager tables: %s", err)
-					}
-				default:
-					return fmt.Errorf("unknown db name: %s", dbName)
-				}
-			}
-			return nil
-		},
-		AfterSuite: postgresEngine.AfterSuite,
+		config:     backend.Config.(cconfig.PluggableStorageEngine),
+		BeforeEach: backend.BeforeEach,
+		AfterSuite: backend.AfterSuite,
 	}, nil
+
 }
 
 func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig {
@@ -172,14 +136,19 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	cryptoEngineConf := config.CryptoEngines{
 		LogLevel:      cconfig.Info,
 		DefaultEngine: "filesystem-1",
-		FilesystemProvider: []fsconfig.FilesystemEngineConfig{
-			{
-				ID:               "filesystem-1",
-				Metadata:         map[string]interface{}{},
-				StorageDirectory: "/tmp/lms-test/",
-			},
+		CryptoEngines: []cconfig.CryptoEngine{},
+	}
+
+	fsconfig := cconfig.CryptoEngine{
+		ID:       "filesystem-1",
+		Metadata: map[string]interface{}{},
+		Type:     cconfig.FilesystemProvider,
+		Config: map[string]interface{}{
+			"storage_directory": "/tmp/lms-test/",
 		},
 	}
+
+	cryptoEngineConf.CryptoEngines = append(cryptoEngineConf.CryptoEngines, fsconfig)
 
 	beforeEachActions = append(beforeEachActions, func() error {
 		return nil
@@ -189,16 +158,16 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	})
 
 	if slices.Contains(engines, VAULT) {
-		vaultSDKConf, vaultSuite := vault_test.BeforeSuite()
-		cryptoEngineConf.HashicorpVaultKV2Provider = []vconfig.HashicorpVaultCryptoEngineConfig{
-			{
-				ID:                "vault-1",
-				HashicorpVaultSDK: vaultSDKConf,
-				Metadata:          map[string]interface{}{},
-			},
+
+		backend, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Vault).Run()
+		if err != nil {
+			panic(fmt.Sprintf("could not run Vault subsystem: %s", err))
 		}
-		beforeEachActions = append(beforeEachActions, vaultSuite.BeforeEach)
-		afterSuiteActions = append(afterSuiteActions, vaultSuite.AfterSuite)
+
+		cryptoEngineConf.CryptoEngines = append(cryptoEngineConf.CryptoEngines, backend.Config.(cconfig.CryptoEngine))
+
+		beforeEachActions = append(beforeEachActions, backend.BeforeEach)
+		afterSuiteActions = append(afterSuiteActions, backend.AfterSuite)
 	}
 
 	beforeEach := func() error {

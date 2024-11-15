@@ -15,16 +15,12 @@ import (
 	"github.com/fatih/color"
 	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/test/subsystems"
 	aconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws/config"
-	awskmssm_test "github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws/docker"
 	fsconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem/config"
 	pconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11/config"
-	softhsmv2_test "github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11/test"
 	vconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
-	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/docker"
 	eventbus_amqp "github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/config"
-	rabbitmq_test "github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/test"
-	postgres_test "github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres/test"
 	"github.com/lamassuiot/lamassuiot/v3/monolithic/pkg"
 	"github.com/lamassuiot/lamassuiot/v3/sdk"
 )
@@ -97,6 +93,7 @@ func main() {
 	sqliteOptions := flag.String("sqlite", "", "set path to sqlite database to enable sqlite storage engine")
 	disableMonitor := flag.Bool("disable-monitor", false, "disable crypto monitoring")
 	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
+	useAwsEventbus := flag.Bool("use-aws-eventbus", false, "use AWS Eventbus")
 	flag.Parse()
 
 	fmt.Println("===================== FLAGS ======================")
@@ -136,16 +133,22 @@ func main() {
 	fmt.Println("========== LAUNCHING AUXILIARY SERVICES ==========")
 	fmt.Println("Storage Engine")
 	pCleanup := func() error { return nil }
-	var postgresStorageConfig *cconfig.PostgresPSEConfig
+	var postgresStorageConfig cconfig.PostgresPSEConfig
 	if *sqliteOptions == "" {
 		fmt.Println(">> launching docker: Postgres ...")
-		var err error
-		pCleanup, postgresStorageConfig, err = postgres_test.RunPostgresDocker(map[string]string{
-			"ca":            "",
-			"alerts":        "",
-			"dmsmanager":    "",
-			"devicemanager": "",
-		})
+		posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
+		posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager"})
+		backend, err := posgresSubsystem.Run()
+		if err != nil {
+			log.Fatalf("could not launch Postgres: %s", err)
+		}
+		pCleanup = func() error {
+			backend.AfterSuite()
+			return nil
+		}
+
+		postgresStorageConfig = backend.Config.(cconfig.PluggableStorageEngine).Postgres
+
 		if err != nil {
 			log.Fatalf("could not launch Postgres: %s", err)
 		}
@@ -163,11 +166,24 @@ func main() {
 	rootToken := ""
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
 		fmt.Println(">> launching docker: Hashicorp Vault ...")
-		var err error
-		vCleanup, vaultConfig, rootToken, err = keyvaultkv2_test.RunHashicorpVaultDocker()
+		vaultSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Vault).Run()
 		if err != nil {
 			log.Fatalf("could not launch Hashicorp Vault: %s", err)
 		}
+
+		vCleanup = func() error {
+			vaultSubsystem.AfterSuite()
+			return nil
+		}
+
+		internalVaultConfig := vaultSubsystem.Config.(cconfig.CryptoEngine).Config
+		vaultConfig, err = cconfig.DecodeStruct[*vconfig.HashicorpVaultSDK](internalVaultConfig)
+		if err != nil {
+			log.Fatalf("could not parse vault config: %s", err)
+		}
+
+		rootToken = (*vaultSubsystem.Extra)["rootToken"].(string)
+
 		fmt.Printf(" 	-- vault port: %d\n", vaultConfig.Port)
 		fmt.Printf(" 	-- vault root token: %s\n", rootToken)
 	}
@@ -179,7 +195,17 @@ func main() {
 	if awsSecretsEnabled || awsKmsEnabled {
 		var err error
 		fmt.Println(">> launching docker: AWS Platform (Secrets Manager + KMS) ...")
-		awsCleanup, awsCfg, err = awskmssm_test.RunAWSEmulationLocalStackDocker()
+		awsSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Aws).Run()
+		if err != nil {
+			log.Fatalf("could not launch AWS Platform: %s", err)
+		}
+
+		awsCleanup = func() error {
+			awsSubsystem.AfterSuite()
+			return nil
+		}
+
+		awsCfg, err = cconfig.DecodeStruct[*cconfig.AWSSDKConfig](awsSubsystem.Config)
 		if err != nil {
 			log.Fatalf("could not launch AWS Platform: %s", err)
 		}
@@ -190,10 +216,21 @@ func main() {
 	var pkcs11Cfg *pconfig.PKCS11Config
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok && hsmModulePath != "" {
 		fmt.Println(">> launching docker: SoftHSM ...")
-		var err error
-		softhsmCleanup, pkcs11Cfg, err = softhsmv2_test.RunSoftHsmV2Docker(hsmModulePath)
+		pkcs11SubsystemBuilder := subsystems.GetSubsystemBuilder[subsystems.ParametrizedSubsystem](subsystems.Pkcs11)
+		pkcs11SubsystemBuilder.Preare(map[string]interface{}{"hsmModulePath": hsmModulePath})
+		pkcs11Subsystem, err := pkcs11SubsystemBuilder.Run()
 		if err != nil {
 			log.Fatalf("could not launch SoftHSM: %s", err)
+		}
+		softhsmCleanup = func() error {
+			pkcs11Subsystem.AfterSuite()
+			return nil
+		}
+
+		internalPKCS11Config := pkcs11Subsystem.Config.(cconfig.CryptoEngine).Config
+		pkcs11Cfg, err = cconfig.DecodeStruct[*pconfig.PKCS11Config](internalPKCS11Config)
+		if err != nil {
+			log.Fatalf("could not parse pkcs11 config: %s", err)
 		}
 	}
 
@@ -201,17 +238,54 @@ func main() {
 	rmqCleanup := func() error { return nil }
 	rmqConfig := &eventbus_amqp.AMQPConnection{}
 	adminPort := 0
-	if !*disableEventbus {
+
+	eventBusConfig, _ := cconfig.EncodeStruct(rmqConfig)
+	eventBus := cconfig.EventBusEngine{
+		LogLevel: cconfig.Trace,
+		Enabled:  false,
+		Provider: cconfig.Amqp,
+		Config:   eventBusConfig,
+	}
+
+	if !*disableEventbus && !*useAwsEventbus {
 		fmt.Println(">> launching docker: RabbitMQ ...")
-		var err error
-		rmqCleanup, rmqConfig, adminPort, err = rabbitmq_test.RunRabbitMQDocker()
+		rabbitmqSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.RabbitMQ).Run()
 		if err != nil {
 			log.Fatalf("could not launch RabbitMQ: %s", err)
 		}
+
+		rmqCleanup = func() error {
+			rabbitmqSubsystem.AfterSuite()
+			return nil
+		}
+
+		eventBus := rabbitmqSubsystem.Config.(cconfig.EventBusEngine)
+		rmqConfig, err := cconfig.DecodeStruct[eventbus_amqp.AMQPConnection](eventBus.Config)
+		if err != nil {
+			log.Fatalf("could not parse rabbitmq config: %s", err)
+		}
+
+		adminPort = (*rabbitmqSubsystem.Extra)["adminPort"].(int)
+
 		fmt.Printf(" 	-- rabbitmq UI port: %d\n", adminPort)
 		fmt.Printf(" 	-- rabbitmq amqp port: %d\n", rmqConfig.Port)
 		fmt.Printf(" 	-- rabbitmq user: %s\n", rmqConfig.BasicAuth.Username)
 		fmt.Printf(" 	-- rabbitmq pass: %s\n", rmqConfig.BasicAuth.Password)
+	}
+
+	if !*disableEventbus && *useAwsEventbus {
+		fmt.Println(">> using AWS Eventbus")
+		internarlConfig, err := cconfig.EncodeStruct(awsCfg)
+		if err != nil {
+			log.Fatalf("could not encode aws config: %s", err)
+		}
+
+		eventBus = cconfig.EventBusEngine{
+			LogLevel: cconfig.Trace,
+			Enabled:  true,
+			Provider: cconfig.AWSSqsSns,
+			Config:   internarlConfig,
+		}
 	}
 
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
@@ -258,18 +332,6 @@ func main() {
 			os.Exit(0)
 		}
 	}()
-
-	eventBusConfig, _ := cconfig.EncodeStruct(rmqConfig)
-	eventBus := cconfig.EventBusEngine{
-		LogLevel: cconfig.Trace,
-		Enabled:  false,
-		Provider: cconfig.Amqp,
-		Config:   eventBusConfig,
-	}
-
-	if !*disableEventbus {
-		eventBus.Enabled = true
-	}
 
 	cryptoEnginesConfig := config.CryptoEngines{
 		LogLevel: cconfig.Info,
@@ -340,7 +402,7 @@ func main() {
 		}
 	} else {
 		pluglableStorageConfig.Provider = cconfig.Postgres
-		pluglableStorageConfig.Postgres = *postgresStorageConfig
+		pluglableStorageConfig.Postgres = postgresStorageConfig
 	}
 
 	conf := config.MonolithicConfig{

@@ -4,33 +4,22 @@ go 1.22.8
 
 toolchain go1.22.9
 
-replace github.com/lamassuiot/lamassuiot/v3/core => ../core
-
-replace github.com/lamassuiot/lamassuiot/v3/backend => ../backend
-
-replace github.com/lamassuiot/lamassuiot/v3/sdk => ../sdk
-
-replace github.com/lamassuiot/lamassuiot/v3/awsiotconnector => ../awsiotconnector
-
-replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11 => ../engines/crypto/pkcs11
-
-replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem => ../engines/crypto/filesystem
-
-replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2 => ../engines/crypto/vaultkv2
-
-replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws => ../engines/crypto/aws
-
-replace github.com/lamassuiot/lamassuiot/v3/engines/eventbus/aws => ../engines/eventbus/aws
-
-replace github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp => ../engines/eventbus/amqp
-
-replace github.com/lamassuiot/lamassuiot/v3/engines/eventbus/channel => ../engines/eventbus/channel
-
-replace github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres => ../engines/storage/postgres
-
-replace github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite => ../engines/storage/sqlite
-
-replace github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb => ../engines/storage/couchdb
+replace ( 
+ github.com/lamassuiot/lamassuiot/v3/core => ../core
+ github.com/lamassuiot/lamassuiot/v3/backend => ../backend
+ github.com/lamassuiot/lamassuiot/v3/sdk => ../sdk
+ github.com/lamassuiot/lamassuiot/v3/awsiotconnector => ../awsiotconnector
+ github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11 => ../engines/crypto/pkcs11
+ github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem => ../engines/crypto/filesystem
+ github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2 => ../engines/crypto/vaultkv2
+ github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws => ../engines/crypto/aws
+ github.com/lamassuiot/lamassuiot/v3/engines/eventbus/aws => ../engines/eventbus/aws
+ github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp => ../engines/eventbus/amqp
+ github.com/lamassuiot/lamassuiot/v3/engines/eventbus/channel => ../engines/eventbus/channel
+ github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres => ../engines/storage/postgres
+ github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite => ../engines/storage/sqlite
+ github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb => ../engines/storage/couchdb
+)
 
 require (
 	github.com/fatih/color v1.16.0
