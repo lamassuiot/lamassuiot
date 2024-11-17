@@ -10,6 +10,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite"
+	lconfig "github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite/config"
 
 	"gorm.io/gorm"
 )
@@ -20,7 +21,7 @@ type SQLiteSuite struct {
 	cleanup func() error
 }
 
-func BeforeSuite(cfg config.SQLitePSEConfig, dbNames []string) SQLiteSuite {
+func BeforeSuite(cfg lconfig.SQLitePSEConfig, dbNames []string) SQLiteSuite {
 
 	logger := helpers.SetupLogger(config.Trace, "", "")
 	dbMap := make(map[string]*gorm.DB)

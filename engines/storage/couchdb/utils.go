@@ -11,9 +11,9 @@ import (
 
 	kivik "github.com/go-kivik/kivik/v4"
 	_ "github.com/go-kivik/kivik/v4/couchdb" // The CouchDB driver
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/resources"
+	cdb_config "github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb/config"
 	"github.com/sirupsen/logrus"
 )
 
@@ -21,7 +21,7 @@ var (
 	lCouch *logrus.Entry
 )
 
-func CreateCouchDBConnection(logger *logrus.Entry, cfg config.CouchDBPSEConfig) (*kivik.Client, error) {
+func CreateCouchDBConnection(logger *logrus.Entry, cfg cdb_config.CouchDBPSEConfig) (*kivik.Client, error) {
 	address := fmt.Sprintf("%s://%s:%s@%s:%d%s", cfg.Protocol, cfg.Username, cfg.Password, cfg.Hostname, cfg.Port, cfg.BasePath)
 	httpCli, err := helpers.BuildHTTPClientWithTLSOptions(&http.Client{}, cfg.TLSConfig)
 	if err != nil {

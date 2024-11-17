@@ -1,5 +1,4 @@
-//go:build couchdb
-// +build couchdb
+//go:build experimental || couchdb
 
 package builder
 

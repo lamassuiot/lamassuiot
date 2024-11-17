@@ -28,7 +28,7 @@ func (p *CouchDBSubsystem) Run() (*subsystems.SubsystemBackend, error) {
 		return nil, err
 	}
 
-	config := config.PluggableStorageEngine{LogLevel: config.Info, Provider: config.CouchDB, CouchDB: *cconfig}
+	config := config.PluggableStorageEngine{LogLevel: config.Info, Provider: config.CouchDB, Config: *cconfig}
 
 	beforeEach := func() error {
 		return nil

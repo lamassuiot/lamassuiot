@@ -132,8 +132,8 @@ func main() {
 
 	fmt.Println("========== LAUNCHING AUXILIARY SERVICES ==========")
 	fmt.Println("Storage Engine")
-	pCleanup := func() error { return nil }
-	var postgresStorageConfig cconfig.PostgresPSEConfig
+	pCleanup := func() { /* do nothing */ }
+	var postgresStorageConfig cconfig.PluggableStorageEngine
 	if *sqliteOptions == "" {
 		fmt.Println(">> launching docker: Postgres ...")
 		posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
@@ -142,26 +142,19 @@ func main() {
 		if err != nil {
 			log.Fatalf("could not launch Postgres: %s", err)
 		}
-		pCleanup = func() error {
-			backend.AfterSuite()
-			return nil
-		}
 
-		postgresStorageConfig = backend.Config.(cconfig.PluggableStorageEngine).Postgres
+		pCleanup = backend.AfterSuite
+		postgresStorageConfig = backend.Config.(cconfig.PluggableStorageEngine)
 
-		if err != nil {
-			log.Fatalf("could not launch Postgres: %s", err)
-		}
-
-		fmt.Printf(" 	-- postgres port: %d\n", postgresStorageConfig.Port)
-		fmt.Printf(" 	-- postgres user: %s\n", postgresStorageConfig.Username)
-		fmt.Printf(" 	-- postgres pass: %s\n", postgresStorageConfig.Password)
+		fmt.Printf(" 	-- postgres port: %d\n", postgresStorageConfig.Config["port"].(int))
+		fmt.Printf(" 	-- postgres user: %s\n", postgresStorageConfig.Config["username"].(string))
+		fmt.Printf(" 	-- postgres pass: %s\n", postgresStorageConfig.Config["password"].(cconfig.Password))
 	} else {
 		fmt.Printf(">> using sqlite storage engine: %s", *sqliteOptions)
 	}
 
 	fmt.Println("Crypto Engines")
-	vCleanup := func() error { return nil }
+	vCleanup := func() { /* do nothing */ }
 	vaultConfig := &vconfig.HashicorpVaultSDK{}
 	rootToken := ""
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
@@ -171,10 +164,7 @@ func main() {
 			log.Fatalf("could not launch Hashicorp Vault: %s", err)
 		}
 
-		vCleanup = func() error {
-			vaultSubsystem.AfterSuite()
-			return nil
-		}
+		vCleanup = vaultSubsystem.AfterSuite
 
 		internalVaultConfig := vaultSubsystem.Config.(cconfig.CryptoEngine).Config
 		vaultConfig, err = cconfig.DecodeStruct[*vconfig.HashicorpVaultSDK](internalVaultConfig)
@@ -190,7 +180,7 @@ func main() {
 
 	_, awsSecretsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
 	_, awsKmsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
-	awsCleanup := func() error { return nil }
+	awsCleanup := func() { /* do nothing */ }
 	awsCfg := &cconfig.AWSSDKConfig{}
 	if awsSecretsEnabled || awsKmsEnabled {
 		var err error
@@ -200,10 +190,7 @@ func main() {
 			log.Fatalf("could not launch AWS Platform: %s", err)
 		}
 
-		awsCleanup = func() error {
-			awsSubsystem.AfterSuite()
-			return nil
-		}
+		awsCleanup = awsSubsystem.AfterSuite
 
 		awsCfg, err = cconfig.DecodeStruct[*cconfig.AWSSDKConfig](awsSubsystem.Config)
 		if err != nil {
@@ -212,20 +199,17 @@ func main() {
 	}
 
 	hsmModulePath := *hsmModule
-	var softhsmCleanup func() error
+	var softhsmCleanup func()
 	var pkcs11Cfg *pconfig.PKCS11Config
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok && hsmModulePath != "" {
 		fmt.Println(">> launching docker: SoftHSM ...")
 		pkcs11SubsystemBuilder := subsystems.GetSubsystemBuilder[subsystems.ParametrizedSubsystem](subsystems.Pkcs11)
-		pkcs11SubsystemBuilder.Preare(map[string]interface{}{"hsmModulePath": hsmModulePath})
+		pkcs11SubsystemBuilder.Prepare(map[string]interface{}{"hsmModulePath": hsmModulePath})
 		pkcs11Subsystem, err := pkcs11SubsystemBuilder.Run()
 		if err != nil {
 			log.Fatalf("could not launch SoftHSM: %s", err)
 		}
-		softhsmCleanup = func() error {
-			pkcs11Subsystem.AfterSuite()
-			return nil
-		}
+		softhsmCleanup = pkcs11Subsystem.AfterSuite
 
 		internalPKCS11Config := pkcs11Subsystem.Config.(cconfig.CryptoEngine).Config
 		pkcs11Cfg, err = cconfig.DecodeStruct[*pconfig.PKCS11Config](internalPKCS11Config)
@@ -235,7 +219,7 @@ func main() {
 	}
 
 	fmt.Println("Async Messaging Engine")
-	rmqCleanup := func() error { return nil }
+	rmqCleanup := func() { /* do nothing */ }
 	rmqConfig := &eventbus_amqp.AMQPConnection{}
 	adminPort := 0
 
@@ -254,10 +238,7 @@ func main() {
 			log.Fatalf("could not launch RabbitMQ: %s", err)
 		}
 
-		rmqCleanup = func() error {
-			rabbitmqSubsystem.AfterSuite()
-			return nil
-		}
+		rmqCleanup = rabbitmqSubsystem.AfterSuite
 
 		eventBus := rabbitmqSubsystem.Config.(cconfig.EventBusEngine)
 		rmqConfig, err := cconfig.DecodeStruct[eventbus_amqp.AMQPConnection](eventBus.Config)
@@ -292,12 +273,9 @@ func main() {
 
 	cleanup := func() {
 		fmt.Println("========== CLEANING UP ==========")
-		svcCleanup := func(svcName string, cleaner func() error) {
+		svcCleanup := func(svcName string, cleaner func()) {
 			fmt.Printf(">> Cleaning %s ...\n", svcName)
-			err := cleaner()
-			if err != nil {
-				fmt.Printf("could not cleanup %s: %s\n", svcName, err)
-			}
+			cleaner()
 		}
 
 		svcCleanup("Postgres", pCleanup)
@@ -397,12 +375,11 @@ func main() {
 	}
 	if *sqliteOptions != "" {
 		pluglableStorageConfig.Provider = cconfig.SQLite
-		pluglableStorageConfig.SQLite = cconfig.SQLitePSEConfig{
-			DatabasePath: *sqliteOptions,
+		pluglableStorageConfig.Config = map[string]interface{}{
+			"databasePath": *sqliteOptions,
 		}
 	} else {
-		pluglableStorageConfig.Provider = cconfig.Postgres
-		pluglableStorageConfig.Postgres = postgresStorageConfig
+		pluglableStorageConfig = &postgresStorageConfig
 	}
 
 	conf := config.MonolithicConfig{

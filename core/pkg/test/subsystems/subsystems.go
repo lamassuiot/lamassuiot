@@ -18,7 +18,7 @@ type StorageSubsystem interface {
 
 type ParametrizedSubsystem interface {
 	Subsystem
-	Preare(config map[string]interface{}) error
+	Prepare(config map[string]interface{}) error
 }
 
 type SubsystemProvider string

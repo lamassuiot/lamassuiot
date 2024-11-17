@@ -25,7 +25,11 @@ func (p *PostgresSubsystem) Prepare(dbs []string) error {
 func (p *PostgresSubsystem) Run() (*subsystems.SubsystemBackend, error) {
 
 	pConfig, postgresEngine := postgres_test.BeforeSuite(p.dbs)
-	config := config.PluggableStorageEngine{LogLevel: config.Info, Provider: config.Postgres, Postgres: pConfig}
+	configMap, err := config.EncodeStruct(pConfig)
+	if err != nil {
+		return nil, fmt.Errorf("could not encode postgres config: %s", err)
+	}
+	config := config.PluggableStorageEngine{LogLevel: config.Info, Provider: config.Postgres, Config: configMap}
 
 	beforeEach := func() error {
 		for _, dbName := range p.dbs {

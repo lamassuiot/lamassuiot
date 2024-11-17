@@ -9,23 +9,28 @@ import (
 	kivik "github.com/go-kivik/kivik/v4"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/storage"
+	cdb_config "github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb/config"
 	log "github.com/sirupsen/logrus"
 )
 
 func Register() {
 	storage.RegisterStorageEngine(config.CouchDB, func(logger *log.Entry, conf config.PluggableStorageEngine) (storage.StorageEngine, error) {
-		return NewStorageEngine(logger, conf.CouchDB)
+		config, err := config.DecodeStruct[cdb_config.CouchDBPSEConfig](conf.Config)
+		if err != nil {
+			return nil, fmt.Errorf("could not decode couchdb config: %s", err)
+		}
+		return NewStorageEngine(logger, config)
 	})
 }
 
 type CouchDBStorageEngine struct {
 	storage.CommonStorageEngine
-	Config        config.CouchDBPSEConfig
+	Config        cdb_config.CouchDBPSEConfig
 	logger        *log.Entry
 	couchdbClient *kivik.Client
 }
 
-func NewStorageEngine(logger *log.Entry, config config.CouchDBPSEConfig) (storage.StorageEngine, error) {
+func NewStorageEngine(logger *log.Entry, config cdb_config.CouchDBPSEConfig) (storage.StorageEngine, error) {
 	couchdbClient, err := CreateCouchDBConnection(logger, config)
 	if err != nil {
 		return nil, fmt.Errorf("could not create couchdb client: %s", err)
@@ -36,6 +41,10 @@ func NewStorageEngine(logger *log.Entry, config config.CouchDBPSEConfig) (storag
 		logger:        logger,
 		couchdbClient: couchdbClient,
 	}, nil
+}
+
+func (s *CouchDBStorageEngine) GetProvider() config.StorageProvider {
+	return config.CouchDB
 }
 
 func (s *CouchDBStorageEngine) GetCAStorage() (storage.CACertificatesRepo, error) {
