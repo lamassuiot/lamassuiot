@@ -16,11 +16,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/test/subsystems"
-	aconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws/config"
-	fsconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem/config"
-	pconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11/config"
-	vconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
-	eventbus_amqp "github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/config"
 	"github.com/lamassuiot/lamassuiot/v3/monolithic/pkg"
 	"github.com/lamassuiot/lamassuiot/v3/sdk"
 )
@@ -155,7 +150,8 @@ func main() {
 
 	fmt.Println("Crypto Engines")
 	vCleanup := func() { /* do nothing */ }
-	vaultConfig := &vconfig.HashicorpVaultSDK{}
+
+	var vaultCryptoEngine cconfig.CryptoEngine
 	rootToken := ""
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
 		fmt.Println(">> launching docker: Hashicorp Vault ...")
@@ -165,25 +161,20 @@ func main() {
 		}
 
 		vCleanup = vaultSubsystem.AfterSuite
+		vaultCryptoEngine := vaultSubsystem.Config.(cconfig.CryptoEngine)
 
-		internalVaultConfig := vaultSubsystem.Config.(cconfig.CryptoEngine).Config
-		vaultConfig, err = cconfig.DecodeStruct[*vconfig.HashicorpVaultSDK](internalVaultConfig)
-		if err != nil {
-			log.Fatalf("could not parse vault config: %s", err)
-		}
-
+		port := (vaultCryptoEngine.Config)["port"].(int)
 		rootToken = (*vaultSubsystem.Extra)["rootToken"].(string)
 
-		fmt.Printf(" 	-- vault port: %d\n", vaultConfig.Port)
+		fmt.Printf(" 	-- vault port: %d\n", port)
 		fmt.Printf(" 	-- vault root token: %s\n", rootToken)
 	}
 
 	_, awsSecretsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
-	_, awsKmsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
+	_, awsKmsEnabled := cryptoengineOptionsMap[AwsKms]
 	awsCleanup := func() { /* do nothing */ }
-	awsCfg := &cconfig.AWSSDKConfig{}
+	var awsBaseCryptoEngine cconfig.CryptoEngine
 	if awsSecretsEnabled || awsKmsEnabled {
-		var err error
 		fmt.Println(">> launching docker: AWS Platform (Secrets Manager + KMS) ...")
 		awsSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Aws).Run()
 		if err != nil {
@@ -191,16 +182,12 @@ func main() {
 		}
 
 		awsCleanup = awsSubsystem.AfterSuite
-
-		awsCfg, err = cconfig.DecodeStruct[*cconfig.AWSSDKConfig](awsSubsystem.Config)
-		if err != nil {
-			log.Fatalf("could not launch AWS Platform: %s", err)
-		}
+		awsBaseCryptoEngine = awsSubsystem.Config.(cconfig.CryptoEngine)
 	}
 
 	hsmModulePath := *hsmModule
 	var softhsmCleanup func()
-	var pkcs11Cfg *pconfig.PKCS11Config
+	var pkcs11Cfg cconfig.CryptoEngine
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok && hsmModulePath != "" {
 		fmt.Println(">> launching docker: SoftHSM ...")
 		pkcs11SubsystemBuilder := subsystems.GetSubsystemBuilder[subsystems.ParametrizedSubsystem](subsystems.Pkcs11)
@@ -211,24 +198,18 @@ func main() {
 		}
 		softhsmCleanup = pkcs11Subsystem.AfterSuite
 
-		internalPKCS11Config := pkcs11Subsystem.Config.(cconfig.CryptoEngine).Config
-		pkcs11Cfg, err = cconfig.DecodeStruct[*pconfig.PKCS11Config](internalPKCS11Config)
-		if err != nil {
-			log.Fatalf("could not parse pkcs11 config: %s", err)
-		}
+		pkcs11Cfg = pkcs11Subsystem.Config.(cconfig.CryptoEngine)
+
 	}
 
 	fmt.Println("Async Messaging Engine")
 	rmqCleanup := func() { /* do nothing */ }
-	rmqConfig := &eventbus_amqp.AMQPConnection{}
 	adminPort := 0
-
-	eventBusConfig, _ := cconfig.EncodeStruct(rmqConfig)
 	eventBus := cconfig.EventBusEngine{
 		LogLevel: cconfig.Trace,
 		Enabled:  false,
 		Provider: cconfig.Amqp,
-		Config:   eventBusConfig,
+		Config:   make(map[string]interface{}),
 	}
 
 	if !*disableEventbus && !*useAwsEventbus {
@@ -240,32 +221,26 @@ func main() {
 
 		rmqCleanup = rabbitmqSubsystem.AfterSuite
 
-		eventBus := rabbitmqSubsystem.Config.(cconfig.EventBusEngine)
-		rmqConfig, err := cconfig.DecodeStruct[eventbus_amqp.AMQPConnection](eventBus.Config)
-		if err != nil {
-			log.Fatalf("could not parse rabbitmq config: %s", err)
-		}
+		eventBus = rabbitmqSubsystem.Config.(cconfig.EventBusEngine)
 
 		adminPort = (*rabbitmqSubsystem.Extra)["adminPort"].(int)
+		basicAuth := eventBus.Config["basic_auth"].(map[string]interface{})
 
 		fmt.Printf(" 	-- rabbitmq UI port: %d\n", adminPort)
-		fmt.Printf(" 	-- rabbitmq amqp port: %d\n", rmqConfig.Port)
-		fmt.Printf(" 	-- rabbitmq user: %s\n", rmqConfig.BasicAuth.Username)
-		fmt.Printf(" 	-- rabbitmq pass: %s\n", rmqConfig.BasicAuth.Password)
+		fmt.Printf(" 	-- rabbitmq amqp port: %d\n", eventBus.Config["port"].(int))
+		fmt.Printf(" 	-- rabbitmq user: %s\n", basicAuth["username"].(string))
+		fmt.Printf(" 	-- rabbitmq pass: %s\n", basicAuth["password"].(cconfig.Password))
 	}
 
 	if !*disableEventbus && *useAwsEventbus {
 		fmt.Println(">> using AWS Eventbus")
-		internarlConfig, err := cconfig.EncodeStruct(awsCfg)
-		if err != nil {
-			log.Fatalf("could not encode aws config: %s", err)
-		}
+		internalConfig := awsBaseCryptoEngine.Config
 
 		eventBus = cconfig.EventBusEngine{
 			LogLevel: cconfig.Trace,
 			Enabled:  true,
 			Provider: cconfig.AWSSqsSns,
-			Config:   internarlConfig,
+			Config:   internalConfig,
 		}
 	}
 
@@ -315,60 +290,56 @@ func main() {
 		LogLevel: cconfig.Info,
 	}
 
+	cryptoEngines := make([]cconfig.CryptoEngine, 1)
+
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
-		cryptoEnginesConfig.DefaultEngine = "dockertest-hcpvault-kvv2"
-		cryptoEnginesConfig.HashicorpVaultKV2Provider = []vconfig.HashicorpVaultCryptoEngineConfig{
-			{
-				HashicorpVaultSDK: *vaultConfig,
-				ID:                "dockertest-hcpvault-kvv2",
-				Metadata:          make(map[string]interface{}),
-			},
-		}
+		vaultCryptoEngine.ID = "dockertest-hcpvault-kvv2"
+		cryptoEnginesConfig.DefaultEngine = vaultCryptoEngine.ID
+		cryptoEngines = append(cryptoEngines, vaultCryptoEngine)
 	}
 
 	if _, ok := cryptoengineOptionsMap[AwsKms]; ok {
-		cryptoEnginesConfig.DefaultEngine = "dockertest-localstack-kms"
-		cryptoEnginesConfig.AWSKMSProvider = []aconfig.AWSCryptoEngine{
-			{
-				AWSSDKConfig: *awsCfg,
-				ID:           "dockertest-localstack-kms",
-				Metadata:     make(map[string]interface{}),
-			},
+		kmsCryptoEngine := cconfig.CryptoEngine{
+			ID:       "dockertest-localstack-kms",
+			Metadata: make(map[string]interface{}),
+			Type:     cconfig.AWSKMSProvider,
+			Config:   awsBaseCryptoEngine.Config,
 		}
+		cryptoEnginesConfig.DefaultEngine = kmsCryptoEngine.ID
+		cryptoEngines = append(cryptoEngines, kmsCryptoEngine)
 	}
 
 	if _, ok := cryptoengineOptionsMap[AwsSecretsManager]; ok {
-		cryptoEnginesConfig.DefaultEngine = "dockertest-localstack-smngr"
-		cryptoEnginesConfig.AWSSecretsManagerProvider = []aconfig.AWSCryptoEngine{
-			{
-				AWSSDKConfig: *awsCfg,
-				ID:           "dockertest-localstack-smngr",
-				Metadata:     make(map[string]interface{}),
-			},
+		secretsManagerCryptoEngine := cconfig.CryptoEngine{
+			ID:       "dockertest-localstack-smngr",
+			Metadata: make(map[string]interface{}),
+			Type:     cconfig.AWSSecretsManagerProvider,
+			Config:   awsBaseCryptoEngine.Config,
 		}
+		cryptoEnginesConfig.DefaultEngine = secretsManagerCryptoEngine.ID
+		cryptoEngines = append(cryptoEngines, secretsManagerCryptoEngine)
 	}
 
 	if _, ok := cryptoengineOptionsMap[GolangFS]; ok {
-		cryptoEnginesConfig.DefaultEngine = "golangfs-1"
-		cryptoEnginesConfig.FilesystemProvider = []fsconfig.FilesystemEngineConfig{
-			{
-				ID:               "golangfs-1",
-				Metadata:         make(map[string]interface{}),
-				StorageDirectory: "/tmp/gotest",
+
+		cryptoEngines = append(cryptoEngines, cconfig.CryptoEngine{
+			ID:       "golangfs-1",
+			Metadata: make(map[string]interface{}),
+			Type:     cconfig.FilesystemProvider,
+			Config: map[string]interface{}{
+				"storageDirectory": "/tmp/gotest",
 			},
-		}
+		})
+		cryptoEnginesConfig.DefaultEngine = "golangfs-1"
 	}
 
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok {
-		cryptoEnginesConfig.DefaultEngine = "pkcs11-1"
-		cryptoEnginesConfig.PKCS11Provider = []pconfig.PKCS11EngineConfig{
-			{
-				ID:           "pkcs11-1",
-				Metadata:     make(map[string]interface{}),
-				PKCS11Config: *pkcs11Cfg,
-			},
-		}
+		pkcs11Cfg.ID = "pkcs11-1"
+		cryptoEnginesConfig.DefaultEngine = pkcs11Cfg.ID
+		cryptoEngines = append(cryptoEngines, pkcs11Cfg)
 	}
+
+	cryptoEnginesConfig.CryptoEngines = cryptoEngines
 
 	pluglableStorageConfig := &cconfig.PluggableStorageEngine{
 		LogLevel: cconfig.Trace,
