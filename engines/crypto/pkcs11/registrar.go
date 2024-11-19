@@ -8,8 +8,7 @@ import (
 )
 
 func Register() {
-	cryptoengines.RegisterCryptoEngine(cconfig.PKCS11Provider, func(logger *log.Entry, conf cconfig.CryptoEngine) (cryptoengines.CryptoEngine, error) {
-
+	cryptoengines.RegisterCryptoEngine(cconfig.PKCS11Provider, func(logger *log.Entry, conf cconfig.CryptoEngine[any]) (cryptoengines.CryptoEngine, error) {
 		ceConfig, _ := cconfig.DecodeStruct[config.PKCS11EngineConfig](conf.Config)
 		ceConfig.ID = conf.ID
 		ceConfig.Metadata = conf.Metadata

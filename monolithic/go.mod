@@ -1,8 +1,8 @@
 module github.com/lamassuiot/lamassuiot/v3/monolithic
 
-go 1.22.8
+go 1.22.0
 
-toolchain go1.22.9
+toolchain go1.22.0
 
 replace github.com/lamassuiot/lamassuiot/v3/core => ../core
 
@@ -56,7 +56,7 @@ require (
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/ThalesIgnite/crypto11 v1.2.5 // indirect
 	github.com/ThreeDotsLabs/watermill v1.4.1 // indirect
-	github.com/ThreeDotsLabs/watermill-amazonsqs v0.0.3 // indirect
+	github.com/ThreeDotsLabs/watermill-aws v1.0.0 // indirect
 	github.com/ThreeDotsLabs/watermill-amqp/v2 v2.1.3 // indirect
 	github.com/antonfisher/nested-logrus-formatter v1.3.1 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.32.4 // indirect

@@ -1,17 +1,16 @@
-package docker
+package aws
 
 import (
 	"fmt"
 	"net/http"
 	"strconv"
 
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	dockerunner "github.com/lamassuiot/lamassuiot/v3/core/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
 
-func RunAWSEmulationLocalStackDocker() (func() error, *cconfig.AWSSDKConfig, error) {
+func RunAWSEmulationLocalStackDocker() (func() error, *AWSSDKConfig, error) {
 	containerCleanup, container, dockerHost, err := dockerunner.RunDocker(dockertest.RunOptions{
 		Repository: "localstack/localstack", // image
 		Tag:        "latest",                // version
@@ -41,11 +40,11 @@ func RunAWSEmulationLocalStackDocker() (func() error, *cconfig.AWSSDKConfig, err
 		return nil, nil, err
 	}
 
-	return containerCleanup, &cconfig.AWSSDKConfig{
+	return containerCleanup, &AWSSDKConfig{
 		EndpointURL:             endpoint,
 		AccessKeyID:             "test",
 		SecretAccessKey:         "test",
-		AWSAuthenticationMethod: cconfig.Static,
+		AWSAuthenticationMethod: Static,
 		Region:                  "us-east-1",
 	}, nil
 }

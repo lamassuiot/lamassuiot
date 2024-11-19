@@ -1,6 +1,6 @@
 module github.com/lamassuiot/lamassuiot/v3/awsiotconnector
 
-go 1.22.8
+go 1.22.0
 
 replace github.com/lamassuiot/lamassuiot/v3/core => ../core
 
@@ -53,7 +53,7 @@ require (
 )
 
 require (
-	github.com/ThreeDotsLabs/watermill-amazonsqs v0.0.3 // indirect
+	github.com/ThreeDotsLabs/watermill-aws v1.0.0 // indirect
 	github.com/ThreeDotsLabs/watermill-amqp/v2 v2.1.3 // indirect
 	github.com/antonfisher/nested-logrus-formatter v1.3.1 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.28.3 // indirect

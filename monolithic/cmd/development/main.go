@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	laws "github.com/lamassuiot/lamassuiot/v3/aws"
 	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	aconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws/config"
-	awskmssm_test "github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws/docker"
-	fsconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem/config"
+	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws"
+	fscengine "github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem"
 	pconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11/config"
 	softhsmv2_test "github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11/test"
 	vconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
@@ -175,11 +175,11 @@ func main() {
 	_, awsSecretsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
 	_, awsKmsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
 	awsCleanup := func() error { return nil }
-	awsCfg := &cconfig.AWSSDKConfig{}
+	awsCfg := &laws.AWSSDKConfig{}
 	if awsSecretsEnabled || awsKmsEnabled {
 		var err error
 		fmt.Println(">> launching docker: AWS Platform (Secrets Manager + KMS) ...")
-		awsCleanup, awsCfg, err = awskmssm_test.RunAWSEmulationLocalStackDocker()
+		awsCleanup, awsCfg, err = laws.RunAWSEmulationLocalStackDocker()
 		if err != nil {
 			log.Fatalf("could not launch AWS Platform: %s", err)
 		}
@@ -277,57 +277,62 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
 		cryptoEnginesConfig.DefaultEngine = "dockertest-hcpvault-kvv2"
-		cryptoEnginesConfig.HashicorpVaultKV2Provider = []vconfig.HashicorpVaultCryptoEngineConfig{
-			{
+		cryptoEnginesConfig.CryptoEngines = append(cryptoEnginesConfig.CryptoEngines, cconfig.CryptoEngine[any]{
+			ID:       "dockertest-hcpvault-kvv2",
+			Metadata: make(map[string]interface{}),
+			Type:     cconfig.HashicorpVaultProvider,
+			Config: vconfig.HashicorpVaultCryptoEngineConfig{
 				HashicorpVaultSDK: *vaultConfig,
-				ID:                "dockertest-hcpvault-kvv2",
-				Metadata:          make(map[string]interface{}),
 			},
-		}
+		})
 	}
 
 	if _, ok := cryptoengineOptionsMap[AwsKms]; ok {
 		cryptoEnginesConfig.DefaultEngine = "dockertest-localstack-kms"
-		cryptoEnginesConfig.AWSKMSProvider = []aconfig.AWSCryptoEngine{
-			{
+		cryptoEnginesConfig.CryptoEngines = append(cryptoEnginesConfig.CryptoEngines, cconfig.CryptoEngine[any]{
+			ID:       "dockertest-localstack-kms",
+			Metadata: make(map[string]interface{}),
+			Type:     cconfig.AWSKMSProvider,
+			Config: aws.AWSCryptoEngine{
 				AWSSDKConfig: *awsCfg,
-				ID:           "dockertest-localstack-kms",
-				Metadata:     make(map[string]interface{}),
 			},
-		}
+		})
 	}
 
 	if _, ok := cryptoengineOptionsMap[AwsSecretsManager]; ok {
 		cryptoEnginesConfig.DefaultEngine = "dockertest-localstack-smngr"
-		cryptoEnginesConfig.AWSSecretsManagerProvider = []aconfig.AWSCryptoEngine{
-			{
+		cryptoEnginesConfig.CryptoEngines = append(cryptoEnginesConfig.CryptoEngines, cconfig.CryptoEngine[any]{
+			ID:       "dockertest-localstack-smngr",
+			Metadata: make(map[string]interface{}),
+			Type:     cconfig.AWSSecretsManagerProvider,
+			Config: aws.AWSCryptoEngine{
 				AWSSDKConfig: *awsCfg,
-				ID:           "dockertest-localstack-smngr",
-				Metadata:     make(map[string]interface{}),
 			},
-		}
+		})
 	}
 
 	if _, ok := cryptoengineOptionsMap[GolangFS]; ok {
 		cryptoEnginesConfig.DefaultEngine = "golangfs-1"
-		cryptoEnginesConfig.FilesystemProvider = []fsconfig.FilesystemEngineConfig{
-			{
-				ID:               "golangfs-1",
-				Metadata:         make(map[string]interface{}),
+		cryptoEnginesConfig.CryptoEngines = append(cryptoEnginesConfig.CryptoEngines, cconfig.CryptoEngine[any]{
+			ID:       "golangfs-1",
+			Metadata: make(map[string]interface{}),
+			Type:     cconfig.AWSSecretsManagerProvider,
+			Config: fscengine.FilesystemEngineConfig{
 				StorageDirectory: "/tmp/gotest",
 			},
-		}
+		})
 	}
 
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok {
 		cryptoEnginesConfig.DefaultEngine = "pkcs11-1"
-		cryptoEnginesConfig.PKCS11Provider = []pconfig.PKCS11EngineConfig{
-			{
-				ID:           "pkcs11-1",
-				Metadata:     make(map[string]interface{}),
+		cryptoEnginesConfig.CryptoEngines = append(cryptoEnginesConfig.CryptoEngines, cconfig.CryptoEngine[any]{
+			ID:       "pkcs11-1",
+			Metadata: make(map[string]interface{}),
+			Type:     cconfig.AWSSecretsManagerProvider,
+			Config: pconfig.PKCS11EngineConfig{
 				PKCS11Config: *pkcs11Cfg,
 			},
-		}
+		})
 	}
 
 	pluglableStorageConfig := &cconfig.PluggableStorageEngine{
@@ -343,24 +348,24 @@ func main() {
 		pluglableStorageConfig.Postgres = *postgresStorageConfig
 	}
 
-	conf := config.MonolithicConfig{
+	conf := pkg.MonolithicConfig{
 		Logs:               cconfig.Logging{Level: cconfig.Debug},
 		SubscriberEventBus: eventBus,
 		PublisherEventBus:  eventBus,
 		Domain:             "dev.lamassu.test",
 		GatewayPort:        8443,
-		AssemblyMode:       config.Http,
-		CryptoEngines:      cryptoEnginesConfig,
+		AssemblyMode:       pkg.Http,
+		CryptoEngines:      cryptoEnginesConfig.CryptoEngines,
 		CryptoMonitoring: cconfig.MonitoringJob{
-			Enabled:   !*disableMonitor,
+			Enabled:   *disableMonitor,
 			Frequency: "* * * * *",
 		},
 		Storage: *pluglableStorageConfig,
-		AWSIoTManager: config.MonolithicAWSIoTManagerConfig{
+		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
-			AWSSDKConfig: cconfig.AWSSDKConfig{
-				AWSAuthenticationMethod: cconfig.Static,
+			AWSSDKConfig: laws.AWSSDKConfig{
+				AWSAuthenticationMethod: laws.Static,
 				AccessKeyID:             *awsIoTManagerAKID,
 				SecretAccessKey:         cconfig.Password(*awsIoTManagerSAK),
 				SessionToken:            cconfig.Password(*awsIoTManagerST),

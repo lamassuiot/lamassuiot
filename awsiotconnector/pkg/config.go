@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	laws "github.com/lamassuiot/lamassuiot/v3/aws"
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 )
 
@@ -20,9 +21,9 @@ type ConnectorServiceConfig struct {
 		cconfig.HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"ca_client"`
 
-	ConnectorID               string               `mapstructure:"connector_id"`
-	AWSSDKConfig              cconfig.AWSSDKConfig `mapstructure:"aws_config"`
-	AWSBidirectionalQueueName string               `mapstructure:"aws_bidirectional_queue_name"`
+	ConnectorID               string            `mapstructure:"connector_id"`
+	AWSSDKConfig              laws.AWSSDKConfig `mapstructure:"aws_config"`
+	AWSBidirectionalQueueName string            `mapstructure:"aws_bidirectional_queue_name"`
 }
 
 var ConnectorServiceConfigDefaults = ConnectorServiceConfig{}

@@ -1,10 +1,10 @@
 package config
 
-type CryptoEngine struct {
+type CryptoEngine[E any] struct {
 	ID       string                 `mapstructure:"id"`
 	Metadata map[string]interface{} `mapstructure:"metadata"`
 	Type     CryptoEngineProvider   `mapstructure:"type"`
-	Config   map[string]interface{} `mapstructure:",remain"`
+	Config   E                      `mapstructure:",remain"`
 }
 
 type CryptoEngineProvider string

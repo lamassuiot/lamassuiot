@@ -1,15 +1,17 @@
 module github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws
 
-go 1.22.1
+go 1.22.0
 
 replace github.com/lamassuiot/lamassuiot/v3/core => ../../../core
+
+replace github.com/lamassuiot/lamassuiot/v3/aws => ../../../aws
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.32.4
 	github.com/aws/aws-sdk-go-v2/service/kms v1.37.2
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.34.2
+	github.com/lamassuiot/lamassuiot/v3/aws v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
-	github.com/ory/dockertest/v3 v3.11.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
 )
@@ -71,6 +73,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0 // indirect
 	github.com/opencontainers/runc v1.1.13 // indirect
+	github.com/ory/dockertest/v3 v3.11.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect

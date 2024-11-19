@@ -23,12 +23,12 @@ type CryptoEngine interface {
 	ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID string) (crypto.Signer, error)
 }
 
-var cryptoEngineBuilders = make(map[config.CryptoEngineProvider]func(*logrus.Entry, config.CryptoEngine) (CryptoEngine, error))
+var cryptoEngineBuilders = make(map[config.CryptoEngineProvider]func(*logrus.Entry, config.CryptoEngine[any]) (CryptoEngine, error))
 
-func RegisterCryptoEngine(name config.CryptoEngineProvider, builder func(*logrus.Entry, config.CryptoEngine) (CryptoEngine, error)) {
+func RegisterCryptoEngine(name config.CryptoEngineProvider, builder func(*logrus.Entry, config.CryptoEngine[any]) (CryptoEngine, error)) {
 	cryptoEngineBuilders[name] = builder
 }
 
-func GetEngineBuilder(name config.CryptoEngineProvider) func(*logrus.Entry, config.CryptoEngine) (CryptoEngine, error) {
+func GetEngineBuilder(name config.CryptoEngineProvider) func(*logrus.Entry, config.CryptoEngine[any]) (CryptoEngine, error) {
 	return cryptoEngineBuilders[name]
 }

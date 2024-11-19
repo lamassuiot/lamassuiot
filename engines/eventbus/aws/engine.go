@@ -2,6 +2,7 @@ package aws
 
 import (
 	"github.com/ThreeDotsLabs/watermill/message"
+	laws "github.com/lamassuiot/lamassuiot/v3/aws"
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/eventbus"
 	"github.com/sirupsen/logrus"
@@ -15,14 +16,14 @@ func Register() {
 
 type AwsEngine struct {
 	logger     *logrus.Entry
-	config     cconfig.AWSSDKConfig
+	config     laws.AWSSDKConfig
 	serviceID  string
 	subscriber message.Subscriber
 	publisher  message.Publisher
 }
 
 func NewAWSEngine(conf interface{}, serviceId string, logger *logrus.Entry) (eventbus.EventBusEngine, error) {
-	localConf, err := cconfig.DecodeStruct[cconfig.AWSSDKConfig](conf)
+	localConf, err := cconfig.DecodeStruct[laws.AWSSDKConfig](conf)
 	if err != nil {
 		logger.Errorf("could not decode AMQP Connection config: %s", err)
 		return nil, err
@@ -36,13 +37,15 @@ func NewAWSEngine(conf interface{}, serviceId string, logger *logrus.Entry) (eve
 
 func (e *AwsEngine) Subscriber() (message.Subscriber, error) {
 	if e.subscriber == nil {
-
-		subscriber := NewSnsExchangeSubscriber(SnsExchangeBuilder{
-			Config:       e.config,
-			ExchangeName: "lamassu-events",
-			ServiceID:    e.serviceID,
-			Logger:       e.logger,
-		})
+		subscriber, err := NewAwsSqsSub(
+			e.config,
+			e.serviceID,
+			e.logger,
+		)
+		if err != nil {
+			e.logger.Errorf("could not generate Event Bus Subscriber: %s", err)
+			return nil, err
+		}
 
 		e.subscriber = subscriber
 	}
@@ -51,16 +54,15 @@ func (e *AwsEngine) Subscriber() (message.Subscriber, error) {
 
 func (e *AwsEngine) Publisher() (message.Publisher, error) {
 	if e.publisher == nil {
-		publisher, err := NewSnsExchangePublisher(SnsExchangeBuilder{
-			Config:       e.config,
-			ExchangeName: "lamassu-events",
-			ServiceID:    e.serviceID,
-			Logger:       e.logger,
-		})
+		publisher, err := NewAwsSnsPub(
+			e.config,
+			e.logger,
+		)
 		if err != nil {
 			e.logger.Errorf("could not generate Event Bus Publisher: %s", err)
 			return nil, err
 		}
+
 		e.publisher = publisher
 	}
 

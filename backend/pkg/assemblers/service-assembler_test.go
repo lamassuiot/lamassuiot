@@ -13,7 +13,7 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
-	fsconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem/config"
+	fscengine "github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem"
 	vconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
 	vault_test "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/docker"
 	rabbitmq_test "github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/test"
@@ -172,11 +172,14 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	cryptoEngineConf := config.CryptoEngines{
 		LogLevel:      cconfig.Info,
 		DefaultEngine: "filesystem-1",
-		FilesystemProvider: []fsconfig.FilesystemEngineConfig{
-			{
-				ID:               "filesystem-1",
-				Metadata:         map[string]interface{}{},
-				StorageDirectory: "/tmp/lms-test/",
+		CryptoEngines: []cconfig.CryptoEngine[any]{
+			cconfig.CryptoEngine[any]{
+				ID:       "filesystem-1",
+				Metadata: map[string]interface{}{},
+				Type:     cconfig.FilesystemProvider,
+				Config: fscengine.FilesystemEngineConfig{
+					StorageDirectory: "/tmp/lms-test/",
+				},
 			},
 		},
 	}
@@ -190,13 +193,14 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 
 	if slices.Contains(engines, VAULT) {
 		vaultSDKConf, vaultSuite := vault_test.BeforeSuite()
-		cryptoEngineConf.HashicorpVaultKV2Provider = []vconfig.HashicorpVaultCryptoEngineConfig{
-			{
-				ID:                "vault-1",
+		cryptoEngineConf.CryptoEngines = append(cryptoEngineConf.CryptoEngines, cconfig.CryptoEngine[any]{
+			ID:       "vault-1",
+			Metadata: map[string]interface{}{},
+			Type:     cconfig.HashicorpVaultProvider,
+			Config: vconfig.HashicorpVaultCryptoEngineConfig{
 				HashicorpVaultSDK: vaultSDKConf,
-				Metadata:          map[string]interface{}{},
 			},
-		}
+		})
 		beforeEachActions = append(beforeEachActions, vaultSuite.BeforeEach)
 		afterSuiteActions = append(afterSuiteActions, vaultSuite.AfterSuite)
 	}
@@ -236,9 +240,9 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},
-		PublisherEventBus: eventBus.config,
-		Storage:           storageEngine.config,
-		CryptoEngines:     cryptoEngines.config,
+		PublisherEventBus:  eventBus.config,
+		Storage:            storageEngine.config,
+		CryptoEngineConfig: cryptoEngines.config,
 		CryptoMonitoring: cconfig.MonitoringJob{
 			Enabled:   true,
 			Frequency: "* * * * * *", //this CRON-like expression will scan certificate each second.

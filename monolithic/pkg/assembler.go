@@ -24,9 +24,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
+func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, error) {
 	log.SetLevel(log.PanicLevel)
-	if conf.AssemblyMode == config.Http {
+	if conf.AssemblyMode == Http {
 		apiInfo := models.APIServiceInfo{
 			Version:   "-",
 			BuildSHA:  "-",
@@ -58,9 +58,13 @@ func RunMonolithicLamassuPKI(conf config.MonolithicConfig) (int, error) {
 			},
 			PublisherEventBus: conf.PublisherEventBus,
 			Storage:           conf.Storage,
-			CryptoEngines:     conf.CryptoEngines,
-			CryptoMonitoring:  conf.CryptoMonitoring,
-			VAServerDomain:    fmt.Sprintf("%s/api/va", conf.Domain),
+			CryptoEngineConfig: config.CryptoEngines{
+				LogLevel:      cconfig.Info,
+				DefaultEngine: conf.CryptoEngines[0].ID,
+				CryptoEngines: conf.CryptoEngines,
+			},
+			CryptoMonitoring: conf.CryptoMonitoring,
+			VAServerDomain:   fmt.Sprintf("%s/api/va", conf.Domain),
 		}, apiInfo)
 		if err != nil {
 			return -1, fmt.Errorf("could not assemble CA Service: %s", err)

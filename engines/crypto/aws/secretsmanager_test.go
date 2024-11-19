@@ -5,10 +5,9 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	laws "github.com/lamassuiot/lamassuiot/v3/aws"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws/docker"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -87,7 +86,7 @@ func TestAWSSecretsManagerCryptoEngine(t *testing.T) {
 }
 
 func prepareSecretsManagerCryptoEngine(t *testing.T) cryptoengines.CryptoEngine {
-	containerCleanup, conf, err := docker.RunAWSEmulationLocalStackDocker()
+	containerCleanup, conf, err := laws.RunAWSEmulationLocalStackDocker()
 	assert.NoError(t, err)
 
 	t.Cleanup(func() { _ = containerCleanup() })
@@ -96,7 +95,7 @@ func prepareSecretsManagerCryptoEngine(t *testing.T) cryptoengines.CryptoEngine 
 
 	metadata := map[string]interface{}{}
 
-	awsConf, err := cconfig.GetAwsSdkConfig(*conf)
+	awsConf, err := laws.GetAwsSdkConfig(*conf)
 	assert.NoError(t, err)
 
 	engine, err := NewAWSSecretManagerEngine(logger, *awsConf, metadata)

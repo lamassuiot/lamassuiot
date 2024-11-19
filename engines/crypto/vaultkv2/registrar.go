@@ -9,8 +9,7 @@ import (
 )
 
 func Register() {
-	cryptoengines.RegisterCryptoEngine(cconfig.HashicorpVaultProvider, func(logger *log.Entry, conf cconfig.CryptoEngine) (cryptoengines.CryptoEngine, error) {
-
+	cryptoengines.RegisterCryptoEngine(cconfig.HashicorpVaultProvider, func(logger *log.Entry, conf cconfig.CryptoEngine[any]) (cryptoengines.CryptoEngine, error) {
 		ceConfig, _ := cconfig.DecodeStruct[config.HashicorpVaultCryptoEngineConfig](conf.Config)
 		ceConfig.ID = conf.ID
 		ceConfig.Metadata = conf.Metadata

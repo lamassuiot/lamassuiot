@@ -15,7 +15,7 @@ func TestBuildStorageEnginePostgres(t *testing.T) {
 		"StorageDirectory": "filepath",
 	}
 
-	conf := cconfig.CryptoEngine{
+	conf := cconfig.CryptoEngine[any]{
 		ID:     "local",
 		Type:   cconfig.FilesystemProvider,
 		Config: cfg,
@@ -42,7 +42,7 @@ func TestBuildStorageEngineInvalidProvider(t *testing.T) {
 		"StorageDirectory": "filepath",
 	}
 
-	conf := cconfig.CryptoEngine{
+	conf := cconfig.CryptoEngine[any]{
 		ID:     "local",
 		Type:   cconfig.CryptoEngineProvider("invalid_provider"),
 		Config: cfg,

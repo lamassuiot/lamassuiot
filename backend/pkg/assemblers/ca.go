@@ -43,11 +43,8 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "CA", "Service")
 	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Event Bus")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "CA", "Storage")
-	lCryptoEng := helpers.SetupLogger(conf.CryptoEngines.LogLevel, "CA", "CryptoEngine")
+	lCryptoEng := helpers.SetupLogger(conf.CryptoEngineConfig.LogLevel, "CA", "CryptoEngine")
 	lMonitor := helpers.SetupLogger(conf.Logs.Level, "CA", "Crypto Monitoring")
-
-	// Migrate CryptoEngines to V2 config format if needed (backward compatibility)
-	conf = config.MigrateCryptoEnginesToV2Config(lSvc, conf)
 
 	engines, err := createCryptoEngines(lCryptoEng, conf)
 	if err != nil {
@@ -136,14 +133,14 @@ func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*l
 
 	engines := map[string]*lservices.Engine{}
 
-	for _, cfg := range conf.CryptoEngines.CryptoEngines {
+	for _, cfg := range conf.CryptoEngineConfig.CryptoEngines {
 		engine, err := cebuilder.BuildCryptoEngine(logger, cfg)
 
 		if err != nil {
 			log.Warnf("skipping engine with id %s of type %s. Can not create engine: %s", cfg.ID, cfg.Type, err)
 		} else {
 			engines[cfg.ID] = &lservices.Engine{
-				Default: cfg.ID == conf.CryptoEngines.DefaultEngine,
+				Default: cfg.ID == conf.CryptoEngineConfig.DefaultEngine,
 				Service: engine,
 			}
 		}

@@ -1,9 +1,10 @@
-go 1.22.8
+go 1.22.0
 
 use (
-	./core
+	./aws
+	./awsiotconnector
 	./backend
-	./sdk
+	./core
 	./engines/crypto/aws
 	./engines/crypto/filesystem
 	./engines/crypto/pkcs11
@@ -15,5 +16,5 @@ use (
 	./engines/storage/postgres
 	./engines/storage/sqlite
 	./monolithic
-	./awsiotconnector
+	./sdk
 )

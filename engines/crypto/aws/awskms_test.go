@@ -5,12 +5,12 @@ import (
 	"crypto/x509"
 	"testing"
 
+	laws "github.com/lamassuiot/lamassuiot/v3/aws"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	awsplatform_test "github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws/docker"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
@@ -106,7 +106,7 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 }
 
 func prepareKMSCryptoEngine(t *testing.T) cryptoengines.CryptoEngine {
-	containerCleanup, conf, err := awsplatform_test.RunAWSEmulationLocalStackDocker()
+	containerCleanup, conf, err := laws.RunAWSEmulationLocalStackDocker()
 	assert.NoError(t, err)
 
 	t.Cleanup(func() { _ = containerCleanup() })
@@ -115,7 +115,7 @@ func prepareKMSCryptoEngine(t *testing.T) cryptoengines.CryptoEngine {
 
 	metadata := map[string]interface{}{}
 
-	awsConf, err := cconfig.GetAwsSdkConfig(*conf)
+	awsConf, err := laws.GetAwsSdkConfig(*conf)
 	assert.NoError(t, err)
 
 	engine, err := NewAWSKMSEngine(logger, *awsConf, metadata)

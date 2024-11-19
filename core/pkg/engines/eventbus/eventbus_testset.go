@@ -21,19 +21,7 @@ func (h *basicTestHandler) HandleMessage(msg *message.Message) error {
 	return h.handler(msg)
 }
 
-func TestSuiteEventBus(t *testing.T, pub message.Publisher, subFunc func(serviceID string) message.Subscriber) {
-	t.Run("TestWildcardSubscribe", func(t *testing.T) {
-		testWildcardSubscribe(t, pub, subFunc)
-	})
-	t.Run("TestMultiServiceSubscribe", func(t *testing.T) {
-		testMultiServiceSubscribe(t, pub, subFunc)
-	})
-	t.Run("TestMultiConsumers", func(t *testing.T) {
-		testMultiConsumers(t, pub, subFunc)
-	})
-}
-
-func testWildcardSubscribe(t *testing.T, pub message.Publisher, subFunc func(serviceID string) message.Subscriber) {
+func TestWildcardSubscribe(t *testing.T, pub message.Publisher, subFunc func(serviceID string) message.Subscriber) {
 	testcases := []struct {
 		name            string
 		subscriptionKey string
@@ -117,7 +105,7 @@ func testWildcardSubscribe(t *testing.T, pub message.Publisher, subFunc func(ser
 	}
 }
 
-func testMultiServiceSubscribe(t *testing.T, pub message.Publisher, subFunc func(serviceID string) message.Subscriber) {
+func TestMultiServiceSubscribe(t *testing.T, pub message.Publisher, subFunc func(serviceID string) message.Subscriber) {
 	type subscriberTest struct {
 		serviceID       string
 		subscriptionKey string
@@ -268,7 +256,7 @@ func testMultiServiceSubscribe(t *testing.T, pub message.Publisher, subFunc func
 	}
 }
 
-func testMultiConsumers(t *testing.T, pub message.Publisher, subFunc func(serviceID string) message.Subscriber) {
+func TestMultiConsumers(t *testing.T, pub message.Publisher, subFunc func(serviceID string) message.Subscriber) {
 	type subscriberTest struct {
 		consumerID      string
 		serviceID       string

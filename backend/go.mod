@@ -1,6 +1,6 @@
 module github.com/lamassuiot/lamassuiot/v3/backend
 
-go 1.22.8
+go 1.22.0
 
 replace github.com/lamassuiot/lamassuiot/v3/core => ../core
 
@@ -67,7 +67,7 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/ThalesIgnite/crypto11 v1.2.5 // indirect
-	github.com/ThreeDotsLabs/watermill-amazonsqs v0.0.3 // indirect
+	github.com/ThreeDotsLabs/watermill-aws v1.0.0 // indirect
 	github.com/antonfisher/nested-logrus-formatter v1.3.1 // indirect
 	github.com/aws/aws-sdk-go-v2 v1.32.4 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.28.3 // indirect
