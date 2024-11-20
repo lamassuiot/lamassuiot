@@ -1,5 +1,4 @@
 //go:build experimental
-// +build experimental
 
 package couchdb_test
 
@@ -9,9 +8,9 @@ import (
 	"strconv"
 
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	dockerunner "github.com/lamassuiot/lamassuiot/v3/core/pkg/test/dockerrunner"
+	cdb_config "github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb/config"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	logger "github.com/sirupsen/logrus"
@@ -22,7 +21,7 @@ const (
 	passwd = "test"
 )
 
-func RunCouchDBDocker() (func() error, *config.CouchDBPSEConfig, error) {
+func RunCouchDBDocker() (func() error, *map[string]interface{}, error) {
 	containerCleanup, container, dockerHost, err := dockerunner.RunDocker(dockertest.RunOptions{
 		Repository: "couchdb", // image
 		Tag:        "3.3.3",   // version
@@ -39,13 +38,13 @@ func RunCouchDBDocker() (func() error, *config.CouchDBPSEConfig, error) {
 	p, _ := strconv.Atoi(container.GetPort("5984/tcp"))
 
 	address := fmt.Sprintf("%s://%s:%s@%s:%d%s", "http", admin, passwd, "localhost", p, "/_up")
-	httpCli, err := chelpers.BuildHTTPClientWithTLSOptions(&http.Client{}, cconfig.TLSConfig{})
+	httpCli, err := helpers.BuildHTTPClientWithTLSOptions(&http.Client{}, config.TLSConfig{})
 	if err != nil {
 		return nil, nil, err
 	}
 
 	lCouch := logger.WithField("subsystem-provider", "CouchDB")
-	httpCli, err = chelpers.BuildHTTPClientWithTracerLogger(httpCli, lCouch)
+	httpCli, err = helpers.BuildHTTPClientWithTracerLogger(httpCli, lCouch)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -61,17 +60,22 @@ func RunCouchDBDocker() (func() error, *config.CouchDBPSEConfig, error) {
 		return nil
 	})
 
-	return containerCleanup, &config.CouchDBPSEConfig{
-		HTTPConnection: cconfig.HTTPConnection{
+	config, err := config.EncodeStruct(&cdb_config.CouchDBPSEConfig{
+		HTTPConnection: config.HTTPConnection{
 			Protocol: "http",
 			BasePath: "/",
-			BasicConnection: cconfig.BasicConnection{
+			BasicConnection: config.BasicConnection{
 				Hostname: "localhost",
 				Port:     p,
 			},
 		},
 		Username: admin,
 		Password: passwd,
-	}, nil
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return containerCleanup, &config, nil
 
 }

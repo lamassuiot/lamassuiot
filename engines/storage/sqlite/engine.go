@@ -8,12 +8,17 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/storage"
+	lconfig "github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite/config"
 	log "github.com/sirupsen/logrus"
 )
 
 func Register() {
 	storage.RegisterStorageEngine(config.SQLite, func(logger *log.Entry, conf config.PluggableStorageEngine) (storage.StorageEngine, error) {
-		return NewStorageEngine(logger, conf.SQLite)
+		config, err := config.DecodeStruct[lconfig.SQLitePSEConfig](conf.Config)
+		if err != nil {
+			return nil, fmt.Errorf("could not decode couchdb config: %s", err)
+		}
+		return NewStorageEngine(logger, config)
 	})
 }
 
@@ -26,15 +31,19 @@ const (
 
 type SQLiteStorageEngine struct {
 	storage.CommonStorageEngine
-	Config config.SQLitePSEConfig
+	Config lconfig.SQLitePSEConfig
 	logger *log.Entry
 }
 
-func NewStorageEngine(logger *log.Entry, config config.SQLitePSEConfig) (storage.StorageEngine, error) {
+func NewStorageEngine(logger *log.Entry, config lconfig.SQLitePSEConfig) (storage.StorageEngine, error) {
 	return &SQLiteStorageEngine{
 		Config: config,
 		logger: logger,
 	}, nil
+}
+
+func (s *SQLiteStorageEngine) GetProvider() config.StorageProvider {
+	return config.SQLite
 }
 
 func (s *SQLiteStorageEngine) GetCAStorage() (storage.CACertificatesRepo, error) {

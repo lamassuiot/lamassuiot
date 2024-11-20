@@ -1,5 +1,4 @@
-//go:build experimental
-// +build experimental
+//go:build experimental || couchdb
 
 package builder
 
@@ -7,23 +6,22 @@ import (
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb"
-	couchdb_test "github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb/test"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/test/subsystems"
 	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestBuildStorageEngineCouchDB(t *testing.T) {
-	cleanfunc, cdbconfig, err := couchdb_test.RunCouchDBDocker()
+	builder := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.CouchDB)
+	backend, err := builder.Run()
 	if err != nil {
-		t.Fatalf("could not run couchdb docker container: %s", err)
+		t.Fatalf("could not run storage subsystem: %s", err)
 	}
-	t.Cleanup(func() { _ = cleanfunc() })
 
+	t.Cleanup(func() { backend.AfterSuite() })
 	logger := log.WithField("test", "BuildStorageEngine_CouchDB")
-	conf := config.PluggableStorageEngine{
-		Provider: config.CouchDB,
-		CouchDB:  *cdbconfig,
-	}
+
+	conf := backend.Config.(config.PluggableStorageEngine)
 
 	// Call the BuildStorageEngine function
 	storageEngine, err := BuildStorageEngine(logger, conf)
@@ -33,8 +31,5 @@ func TestBuildStorageEngineCouchDB(t *testing.T) {
 		t.Errorf("unexpected error: %s", err)
 	}
 
-	_, ok := storageEngine.(*couchdb.CouchDBStorageEngine)
-	if !ok {
-		t.Error("expected storage engine of type *couchdb.StorageEngine")
-	}
+	assert.Equal(t, storageEngine.GetProvider(), config.CouchDB)
 }

@@ -15,6 +15,7 @@ type CommonStorageEngine struct {
 }
 
 type StorageEngine interface {
+	GetProvider() config.StorageProvider
 	GetCAStorage() (CACertificatesRepo, error)
 	GetCertstorage() (CertificatesRepo, error)
 	GetDeviceStorage() (DeviceManagerRepo, error)

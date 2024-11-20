@@ -16,15 +16,7 @@ import (
 	laws "github.com/lamassuiot/lamassuiot/v3/aws"
 	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws"
-	fscengine "github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem"
-	pconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11/config"
-	softhsmv2_test "github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11/test"
-	vconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
-	keyvaultkv2_test "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/docker"
-	eventbus_amqp "github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/config"
-	rabbitmq_test "github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/test"
-	postgres_test "github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres/test"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/test/subsystems"
 	"github.com/lamassuiot/lamassuiot/v3/monolithic/pkg"
 	"github.com/lamassuiot/lamassuiot/v3/sdk"
 )
@@ -97,6 +89,7 @@ func main() {
 	sqliteOptions := flag.String("sqlite", "", "set path to sqlite database to enable sqlite storage engine")
 	disableMonitor := flag.Bool("disable-monitor", false, "disable crypto monitoring")
 	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
+	useAwsEventbus := flag.Bool("use-aws-eventbus", false, "use AWS Eventbus")
 	flag.Parse()
 
 	fmt.Println("===================== FLAGS ======================")
@@ -135,95 +128,130 @@ func main() {
 
 	fmt.Println("========== LAUNCHING AUXILIARY SERVICES ==========")
 	fmt.Println("Storage Engine")
-	pCleanup := func() error { return nil }
-	var postgresStorageConfig *cconfig.PostgresPSEConfig
+	pCleanup := func() { /* do nothing */ }
+	var postgresStorageConfig cconfig.PluggableStorageEngine
 	if *sqliteOptions == "" {
 		fmt.Println(">> launching docker: Postgres ...")
-		var err error
-		pCleanup, postgresStorageConfig, err = postgres_test.RunPostgresDocker(map[string]string{
-			"ca":            "",
-			"alerts":        "",
-			"dmsmanager":    "",
-			"devicemanager": "",
-		})
+		posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
+		posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager"})
+		backend, err := posgresSubsystem.Run()
 		if err != nil {
 			log.Fatalf("could not launch Postgres: %s", err)
 		}
 
-		fmt.Printf(" 	-- postgres port: %d\n", postgresStorageConfig.Port)
-		fmt.Printf(" 	-- postgres user: %s\n", postgresStorageConfig.Username)
-		fmt.Printf(" 	-- postgres pass: %s\n", postgresStorageConfig.Password)
+		pCleanup = backend.AfterSuite
+		postgresStorageConfig = backend.Config.(cconfig.PluggableStorageEngine)
+
+		fmt.Printf(" 	-- postgres port: %d\n", postgresStorageConfig.Config["port"].(int))
+		fmt.Printf(" 	-- postgres user: %s\n", postgresStorageConfig.Config["username"].(string))
+		fmt.Printf(" 	-- postgres pass: %s\n", postgresStorageConfig.Config["password"].(cconfig.Password))
 	} else {
 		fmt.Printf(">> using sqlite storage engine: %s", *sqliteOptions)
 	}
 
 	fmt.Println("Crypto Engines")
-	vCleanup := func() error { return nil }
-	vaultConfig := &vconfig.HashicorpVaultSDK{}
+	vCleanup := func() { /* do nothing */ }
+
+	var vaultCryptoEngine cconfig.CryptoEngine
 	rootToken := ""
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
 		fmt.Println(">> launching docker: Hashicorp Vault ...")
-		var err error
-		vCleanup, vaultConfig, rootToken, err = keyvaultkv2_test.RunHashicorpVaultDocker()
+		vaultSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Vault).Run()
 		if err != nil {
 			log.Fatalf("could not launch Hashicorp Vault: %s", err)
 		}
-		fmt.Printf(" 	-- vault port: %d\n", vaultConfig.Port)
+
+		vCleanup = vaultSubsystem.AfterSuite
+		vaultCryptoEngine := vaultSubsystem.Config.(cconfig.CryptoEngine)
+
+		port := (vaultCryptoEngine.Config)["port"].(int)
+		rootToken = (*vaultSubsystem.Extra)["rootToken"].(string)
+
+		fmt.Printf(" 	-- vault port: %d\n", port)
 		fmt.Printf(" 	-- vault root token: %s\n", rootToken)
 	}
 
 	_, awsSecretsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
-	_, awsKmsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
-	awsCleanup := func() error { return nil }
-	awsCfg := &laws.AWSSDKConfig{}
+	_, awsKmsEnabled := cryptoengineOptionsMap[AwsKms]
+	awsCleanup := func() { /* do nothing */ }
+	var awsBaseCryptoEngine cconfig.CryptoEngine
 	if awsSecretsEnabled || awsKmsEnabled {
-		var err error
 		fmt.Println(">> launching docker: AWS Platform (Secrets Manager + KMS) ...")
-		awsCleanup, awsCfg, err = laws.RunAWSEmulationLocalStackDocker()
+		awsSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Aws).Run()
 		if err != nil {
 			log.Fatalf("could not launch AWS Platform: %s", err)
 		}
+
+		awsCleanup = awsSubsystem.AfterSuite
+		awsBaseCryptoEngine = awsSubsystem.Config.(cconfig.CryptoEngine)
 	}
 
 	hsmModulePath := *hsmModule
-	var softhsmCleanup func() error
-	var pkcs11Cfg *pconfig.PKCS11Config
+	var softhsmCleanup func()
+	var pkcs11Cfg cconfig.CryptoEngine
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok && hsmModulePath != "" {
 		fmt.Println(">> launching docker: SoftHSM ...")
-		var err error
-		softhsmCleanup, pkcs11Cfg, err = softhsmv2_test.RunSoftHsmV2Docker(hsmModulePath)
+		pkcs11SubsystemBuilder := subsystems.GetSubsystemBuilder[subsystems.ParametrizedSubsystem](subsystems.Pkcs11)
+		pkcs11SubsystemBuilder.Prepare(map[string]interface{}{"hsmModulePath": hsmModulePath})
+		pkcs11Subsystem, err := pkcs11SubsystemBuilder.Run()
 		if err != nil {
 			log.Fatalf("could not launch SoftHSM: %s", err)
 		}
+		softhsmCleanup = pkcs11Subsystem.AfterSuite
+
+		pkcs11Cfg = pkcs11Subsystem.Config.(cconfig.CryptoEngine)
+
 	}
 
 	fmt.Println("Async Messaging Engine")
-	rmqCleanup := func() error { return nil }
-	rmqConfig := &eventbus_amqp.AMQPConnection{}
+	rmqCleanup := func() { /* do nothing */ }
 	adminPort := 0
-	if !*disableEventbus {
+	eventBus := cconfig.EventBusEngine{
+		LogLevel: cconfig.Trace,
+		Enabled:  false,
+		Provider: cconfig.Amqp,
+		Config:   make(map[string]interface{}),
+	}
+
+	if !*disableEventbus && !*useAwsEventbus {
 		fmt.Println(">> launching docker: RabbitMQ ...")
-		var err error
-		rmqCleanup, rmqConfig, adminPort, err = rabbitmq_test.RunRabbitMQDocker()
+		rabbitmqSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.RabbitMQ).Run()
 		if err != nil {
 			log.Fatalf("could not launch RabbitMQ: %s", err)
 		}
+
+		rmqCleanup = rabbitmqSubsystem.AfterSuite
+
+		eventBus = rabbitmqSubsystem.Config.(cconfig.EventBusEngine)
+
+		adminPort = (*rabbitmqSubsystem.Extra)["adminPort"].(int)
+		basicAuth := eventBus.Config["basic_auth"].(map[string]interface{})
+
 		fmt.Printf(" 	-- rabbitmq UI port: %d\n", adminPort)
-		fmt.Printf(" 	-- rabbitmq amqp port: %d\n", rmqConfig.Port)
-		fmt.Printf(" 	-- rabbitmq user: %s\n", rmqConfig.BasicAuth.Username)
-		fmt.Printf(" 	-- rabbitmq pass: %s\n", rmqConfig.BasicAuth.Password)
+		fmt.Printf(" 	-- rabbitmq amqp port: %d\n", eventBus.Config["port"].(int))
+		fmt.Printf(" 	-- rabbitmq user: %s\n", basicAuth["username"].(string))
+		fmt.Printf(" 	-- rabbitmq pass: %s\n", basicAuth["password"].(cconfig.Password))
+	}
+
+	if !*disableEventbus && *useAwsEventbus {
+		fmt.Println(">> using AWS Eventbus")
+		internalConfig := awsBaseCryptoEngine.Config
+
+		eventBus = cconfig.EventBusEngine{
+			LogLevel: cconfig.Trace,
+			Enabled:  true,
+			Provider: cconfig.AWSSqsSns,
+			Config:   internalConfig,
+		}
 	}
 
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
 
 	cleanup := func() {
 		fmt.Println("========== CLEANING UP ==========")
-		svcCleanup := func(svcName string, cleaner func() error) {
+		svcCleanup := func(svcName string, cleaner func()) {
 			fmt.Printf(">> Cleaning %s ...\n", svcName)
-			err := cleaner()
-			if err != nil {
-				fmt.Printf("could not cleanup %s: %s\n", svcName, err)
-			}
+			cleaner()
 		}
 
 		svcCleanup("Postgres", pCleanup)
@@ -259,93 +287,71 @@ func main() {
 		}
 	}()
 
-	eventBusConfig, _ := cconfig.EncodeStruct(rmqConfig)
-	eventBus := cconfig.EventBusEngine{
-		LogLevel: cconfig.Trace,
-		Enabled:  false,
-		Provider: cconfig.Amqp,
-		Config:   eventBusConfig,
-	}
-
-	if !*disableEventbus {
-		eventBus.Enabled = true
-	}
-
 	cryptoEnginesConfig := config.CryptoEngines{
 		LogLevel: cconfig.Info,
 	}
 
+	cryptoEngines := make([]cconfig.CryptoEngine, 1)
+
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
-		cryptoEnginesConfig.DefaultEngine = "dockertest-hcpvault-kvv2"
-		cryptoEnginesConfig.CryptoEngines = append(cryptoEnginesConfig.CryptoEngines, cconfig.CryptoEngine[any]{
-			ID:       "dockertest-hcpvault-kvv2",
-			Metadata: make(map[string]interface{}),
-			Type:     cconfig.HashicorpVaultProvider,
-			Config: vconfig.HashicorpVaultCryptoEngineConfig{
-				HashicorpVaultSDK: *vaultConfig,
-			},
-		})
+		vaultCryptoEngine.ID = "dockertest-hcpvault-kvv2"
+		cryptoEnginesConfig.DefaultEngine = vaultCryptoEngine.ID
+		cryptoEngines = append(cryptoEngines, vaultCryptoEngine)
 	}
 
 	if _, ok := cryptoengineOptionsMap[AwsKms]; ok {
-		cryptoEnginesConfig.DefaultEngine = "dockertest-localstack-kms"
-		cryptoEnginesConfig.CryptoEngines = append(cryptoEnginesConfig.CryptoEngines, cconfig.CryptoEngine[any]{
+		kmsCryptoEngine := cconfig.CryptoEngine{
 			ID:       "dockertest-localstack-kms",
 			Metadata: make(map[string]interface{}),
 			Type:     cconfig.AWSKMSProvider,
-			Config: aws.AWSCryptoEngine{
-				AWSSDKConfig: *awsCfg,
-			},
-		})
+			Config:   awsBaseCryptoEngine.Config,
+		}
+		cryptoEnginesConfig.DefaultEngine = kmsCryptoEngine.ID
+		cryptoEngines = append(cryptoEngines, kmsCryptoEngine)
 	}
 
 	if _, ok := cryptoengineOptionsMap[AwsSecretsManager]; ok {
-		cryptoEnginesConfig.DefaultEngine = "dockertest-localstack-smngr"
-		cryptoEnginesConfig.CryptoEngines = append(cryptoEnginesConfig.CryptoEngines, cconfig.CryptoEngine[any]{
+		secretsManagerCryptoEngine := cconfig.CryptoEngine{
 			ID:       "dockertest-localstack-smngr",
 			Metadata: make(map[string]interface{}),
 			Type:     cconfig.AWSSecretsManagerProvider,
-			Config: aws.AWSCryptoEngine{
-				AWSSDKConfig: *awsCfg,
-			},
-		})
+			Config:   awsBaseCryptoEngine.Config,
+		}
+		cryptoEnginesConfig.DefaultEngine = secretsManagerCryptoEngine.ID
+		cryptoEngines = append(cryptoEngines, secretsManagerCryptoEngine)
 	}
 
 	if _, ok := cryptoengineOptionsMap[GolangFS]; ok {
-		cryptoEnginesConfig.DefaultEngine = "golangfs-1"
-		cryptoEnginesConfig.CryptoEngines = append(cryptoEnginesConfig.CryptoEngines, cconfig.CryptoEngine[any]{
+
+		cryptoEngines = append(cryptoEngines, cconfig.CryptoEngine{
 			ID:       "golangfs-1",
 			Metadata: make(map[string]interface{}),
-			Type:     cconfig.AWSSecretsManagerProvider,
-			Config: fscengine.FilesystemEngineConfig{
-				StorageDirectory: "/tmp/gotest",
+			Type:     cconfig.FilesystemProvider,
+			Config: map[string]interface{}{
+				"storageDirectory": "/tmp/gotest",
 			},
 		})
+		cryptoEnginesConfig.DefaultEngine = "golangfs-1"
 	}
 
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok {
-		cryptoEnginesConfig.DefaultEngine = "pkcs11-1"
-		cryptoEnginesConfig.CryptoEngines = append(cryptoEnginesConfig.CryptoEngines, cconfig.CryptoEngine[any]{
-			ID:       "pkcs11-1",
-			Metadata: make(map[string]interface{}),
-			Type:     cconfig.AWSSecretsManagerProvider,
-			Config: pconfig.PKCS11EngineConfig{
-				PKCS11Config: *pkcs11Cfg,
-			},
-		})
+		pkcs11Cfg.ID = "pkcs11-1"
+		cryptoEnginesConfig.DefaultEngine = pkcs11Cfg.ID
+		cryptoEngines = append(cryptoEngines, pkcs11Cfg)
 	}
+
+	cryptoEnginesConfig.CryptoEngines = cryptoEngines
 
 	pluglableStorageConfig := &cconfig.PluggableStorageEngine{
 		LogLevel: cconfig.Trace,
 	}
 	if *sqliteOptions != "" {
 		pluglableStorageConfig.Provider = cconfig.SQLite
-		pluglableStorageConfig.SQLite = cconfig.SQLitePSEConfig{
-			DatabasePath: *sqliteOptions,
+		pluglableStorageConfig.Config = map[string]interface{}{
+			"databasePath": *sqliteOptions,
 		}
 	} else {
-		pluglableStorageConfig.Provider = cconfig.Postgres
-		pluglableStorageConfig.Postgres = *postgresStorageConfig
+		pluglableStorageConfig = &postgresStorageConfig
 	}
 
 	conf := pkg.MonolithicConfig{

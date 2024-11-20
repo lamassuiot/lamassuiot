@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/go-gormigrate/gormigrate/v2"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/resources"
+	lconfig "github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite/config"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -69,7 +69,7 @@ func (n *DBVersionMigrationNode) MigrationPlanTo(targetMigration int) []*DBVersi
 	return nodes
 }
 
-func CreateDBConnection(logger *logrus.Entry, cfg config.SQLitePSEConfig, database string) (*gorm.DB, error) {
+func CreateDBConnection(logger *logrus.Entry, cfg lconfig.SQLitePSEConfig, database string) (*gorm.DB, error) {
 	dbLogger := &GormLogger{
 		logger: logger,
 	}

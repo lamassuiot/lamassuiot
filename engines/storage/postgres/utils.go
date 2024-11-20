@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/go-gormigrate/gormigrate/v2"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/resources"
+	lconfig "github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres/config"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -66,7 +66,7 @@ func (n *DBVersionMigrationNode) MigrationPlanTo(targetMigration int) []*DBVersi
 	return nodes
 }
 
-func CreatePostgresDBConnection(logger *logrus.Entry, cfg config.PostgresPSEConfig, database string) (*gorm.DB, error) {
+func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSEConfig, database string) (*gorm.DB, error) {
 	dbLogger := &GormLogger{
 		logger: logger,
 	}

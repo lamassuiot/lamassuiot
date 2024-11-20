@@ -12,7 +12,7 @@ func TestBuildStorageEnginePostgres(t *testing.T) {
 	logger := log.WithField("test", "BuildStorageEngine_Postgres")
 	conf := config.PluggableStorageEngine{
 		Provider: config.Postgres,
-		Postgres: config.PostgresPSEConfig{
+		Config:   map[string]interface{}{
 			// Set Postgres configuration here
 		},
 	}

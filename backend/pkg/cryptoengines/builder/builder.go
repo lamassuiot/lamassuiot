@@ -8,9 +8,12 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws"
+	aws_subsystem "github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws/subsystem"
 	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem"
 	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11"
+	pkcs11_subsystem "github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11/subsystem"
 	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2"
+	vault_subsystem "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/subsystem"
 )
 
 func BuildCryptoEngine(logger *log.Entry, conf cconfig.CryptoEngine[any]) (cryptoengines.CryptoEngine, error) {
@@ -25,8 +28,14 @@ func BuildCryptoEngine(logger *log.Entry, conf cconfig.CryptoEngine[any]) (crypt
 func init() {
 	log.Info("Registering crypto engines")
 	filesystem.Register()
+
 	aws.RegisterAWSKMS()
 	aws.RegisterAWSSecrets()
+	aws_subsystem.Register()
+
 	vaultkv2.Register()
+	vault_subsystem.Register()
+
 	pkcs11.Register()
+	pkcs11_subsystem.Register()
 }

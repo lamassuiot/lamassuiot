@@ -21,10 +21,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/helpers"
 	identityextractors "github.com/lamassuiot/lamassuiot/v3/backend/pkg/routes/middlewares/identity-extractors"
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	cmodels "github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
 	"github.com/stretchr/testify/assert"
@@ -32,34 +30,20 @@ import (
 )
 
 func StartDMSManagerServiceTestServer(t *testing.T, withEventBus bool) (*DMSManagerTestServer, *TestServer, error) {
-	var err error
-	eventBusConf := &TestEventBusConfig{
-		config: cconfig.EventBusEngine{
-			Enabled: false,
-		},
-	}
+
+	builder := TestServiceBuilder{}.WithDatabase("ca", "devicemanager", "dmsmanager").WithService(CA, DEVICE_MANAGER, DMS_MANAGER)
 	if withEventBus {
-		eventBusConf, err = PrepareRabbitMQForTest()
-		if err != nil {
-			t.Fatalf("could not prepare RabbitMQ test server: %s", err)
-		}
+		builder = builder.WithEventBus()
+	}
+	testServer, err := builder.Build(t)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	storageConfig, err := PreparePostgresForTest([]string{"ca", "devicemanager", "dmsmanager"})
-	if err != nil {
-		t.Fatalf("could not prepare Postgres test server: %s", err)
-	}
-	cryptoConfig := PrepareCryptoEnginesForTest([]CryptoEngine{GOLANG})
-	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, []Service{CA, DEVICE_MANAGER, DMS_MANAGER})
-	if err != nil {
-		t.Fatalf("could not assemble Server with HTTP server: %s", err)
-	}
 	err = testServer.BeforeEach()
 	if err != nil {
 		t.Fatalf("could not run 'BeforeEach' cleanup func in test case: %s", err)
 	}
-
-	t.Cleanup(testServer.AfterSuite)
 
 	return testServer.DMSManager, testServer, nil
 }
@@ -173,8 +157,8 @@ func TestESTEnroll(t *testing.T) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
 		issuanceCABootDur, _ := models.ParseDuration(issuance)
 		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-			KeyMetadata:        cmodels.KeyMetadata{Type: cmodels.KeyType(x509.ECDSA), Bits: 224},
-			Subject:            cmodels.Subject{CommonName: name},
+			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
+			Subject:            models.Subject{CommonName: name},
 			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
 			IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
 			Metadata:           map[string]any{},
@@ -254,7 +238,7 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -274,7 +258,7 @@ func TestESTEnroll(t *testing.T) {
 
 				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
 				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
 				enrollCRT, err := estCli.Enroll(context.Background(), enrollCSR)
 				if err != nil {
@@ -331,7 +315,7 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -351,7 +335,7 @@ func TestESTEnroll(t *testing.T) {
 
 				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
 				enrollCRT, err := estCli.Enroll(context.Background(), enrollCSR)
 				if err != nil {
@@ -409,7 +393,7 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -429,7 +413,7 @@ func TestESTEnroll(t *testing.T) {
 
 				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
 				_, err = testServers.DeviceManager.Service.CreateDevice(ctx, services.CreateDeviceInput{
 					ID:        deviceID,
@@ -500,7 +484,7 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -520,7 +504,7 @@ func TestESTEnroll(t *testing.T) {
 
 				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
 				_, err = testServers.DeviceManager.Service.CreateDevice(ctx, services.CreateDeviceInput{
 					ID:        deviceID,
@@ -591,7 +575,7 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -611,7 +595,7 @@ func TestESTEnroll(t *testing.T) {
 
 				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
 				_, err = estCli.Enroll(context.Background(), enrollCSR)
 				return nil, nil, nil, err
@@ -662,7 +646,7 @@ func TestESTEnroll(t *testing.T) {
 
 				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
 				_, err = estCli.Enroll(context.Background(), enrollCSR)
 				return nil, nil, nil, err
@@ -702,7 +686,7 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -722,7 +706,7 @@ func TestESTEnroll(t *testing.T) {
 
 				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
 				// Wait for the certificate to expire
 				time.Sleep(2 * time.Second)
@@ -766,7 +750,7 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -786,7 +770,7 @@ func TestESTEnroll(t *testing.T) {
 
 				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
 				// Wait for the certificate to expire
 				time.Sleep(2 * time.Second)
@@ -847,7 +831,7 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -876,7 +860,7 @@ func TestESTEnroll(t *testing.T) {
 
 				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
 				_, err = estCli.Enroll(context.Background(), enrollCSR)
 				return nil, nil, nil, err
@@ -917,7 +901,7 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -946,7 +930,7 @@ func TestESTEnroll(t *testing.T) {
 
 				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
 				// Wait for the certificate to expire
 				time.Sleep(2 * time.Second)
@@ -990,7 +974,7 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -1010,7 +994,7 @@ func TestESTEnroll(t *testing.T) {
 
 				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
 				_, err = estCli.Enroll(context.Background(), enrollCSR)
 				if err != nil {
@@ -1067,7 +1051,7 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -1101,7 +1085,7 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
 				_, err = estCli.Enroll(context.Background(), enrollCSR)
 				return nil, nil, nil, err
@@ -1132,7 +1116,7 @@ func TestESTEnroll(t *testing.T) {
 		// 		issuanceCABootDur, _ := models.ParseDuration("1m")
 		// 		bootstrapCA, err := externalTestServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
 		// 			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
-		// 			Subject:            cmodels.Subject{CommonName: "ExternalCA"},
+		// 			Subject:            models.Subject{CommonName: "ExternalCA"},
 		// 			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
 		// 			IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
 		// 			Metadata:           map[string]any{},
@@ -1167,7 +1151,7 @@ func TestESTEnroll(t *testing.T) {
 		// 		}
 
 		// 		bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-		// 		bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+		// 		bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 		// 		bootCrt, err := externalTestServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 		// 			CAID:         bootstrapCA.ID,
 		// 			CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -1196,7 +1180,7 @@ func TestESTEnroll(t *testing.T) {
 
 		// 		deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
 		// 		enrollKey, _ := chelpers.GenerateRSAKey(2048)
-		// 		enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
+		// 		enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
 		// 		_, err = estCli.Enroll(context.Background(), enrollCSR)
 		// 		return nil, nil, nil, err
@@ -1236,7 +1220,7 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -1254,7 +1238,7 @@ func TestESTEnroll(t *testing.T) {
 
 				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
 				enrollKey, _ := chelpers.GenerateRSAKey(2048)
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
 				enrollCRT, err := estCli.Enroll(enrollCSR)
 				if err != nil {
@@ -1308,8 +1292,8 @@ func TestESTGetCACerts(t *testing.T) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
 		issuanceCABootDur, _ := models.ParseDuration(issuance)
 		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-			KeyMetadata:        cmodels.KeyMetadata{Type: cmodels.KeyType(x509.ECDSA), Bits: 224},
-			Subject:            cmodels.Subject{CommonName: name},
+			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
+			Subject:            models.Subject{CommonName: name},
 			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
 			IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
 			Metadata:           map[string]any{},
@@ -1535,8 +1519,8 @@ func TestESTServerKeyGen(t *testing.T) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
 		issuanceCABootDur, _ := models.ParseDuration(issuance)
 		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-			KeyMetadata:        cmodels.KeyMetadata{Type: cmodels.KeyType(x509.ECDSA), Bits: 224},
-			Subject:            cmodels.Subject{CommonName: name},
+			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
+			Subject:            models.Subject{CommonName: name},
 			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
 			IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
 			Metadata:           map[string]any{},
@@ -1552,7 +1536,7 @@ func TestESTServerKeyGen(t *testing.T) {
 				ServerKeyGen: &models.ServerKeyGenSettings{
 					Enabled: true,
 					Key: models.ServerKeyGenKey{
-						Type: cmodels.KeyType(x509.RSA),
+						Type: models.KeyType(x509.RSA),
 						Bits: 2048,
 					},
 				},
@@ -1614,7 +1598,7 @@ func TestESTServerKeyGen(t *testing.T) {
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.ServerKeyGen.Key = models.ServerKeyGenKey{
-						Type: cmodels.KeyType(x509.ECDSA),
+						Type: models.KeyType(x509.ECDSA),
 						Bits: 256,
 					}
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
@@ -1627,7 +1611,7 @@ func TestESTServerKeyGen(t *testing.T) {
 				}
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -1648,7 +1632,7 @@ func TestESTServerKeyGen(t *testing.T) {
 				//Generate a "generic" key pair
 				genericKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewString())
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, genericKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, genericKey)
 
 				enrollCRT, enrollKey, err := estCli.ServerKeyGen(ctx, enrollCSR)
 				if err != nil {
@@ -1712,7 +1696,7 @@ func TestESTServerKeyGen(t *testing.T) {
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.ServerKeyGen.Key = models.ServerKeyGenKey{
-						Type: cmodels.KeyType(x509.RSA),
+						Type: models.KeyType(x509.RSA),
 						Bits: 3072,
 					}
 
@@ -1726,7 +1710,7 @@ func TestESTServerKeyGen(t *testing.T) {
 				}
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -1747,7 +1731,7 @@ func TestESTServerKeyGen(t *testing.T) {
 				//Generate a "generic" key pair
 				genericKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewString())
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, genericKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, genericKey)
 
 				enrollCRT, enrollKey, err := estCli.ServerKeyGen(ctx, enrollCSR)
 				if err != nil {
@@ -1819,7 +1803,7 @@ func TestESTServerKeyGen(t *testing.T) {
 				}
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -1840,7 +1824,7 @@ func TestESTServerKeyGen(t *testing.T) {
 				//Generate a "generic" key pair
 				genericKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewString())
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, genericKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, genericKey)
 
 				_, _, err = estCli.ServerKeyGen(ctx, enrollCSR)
 
@@ -1880,7 +1864,7 @@ func TestESTServerKeyGen(t *testing.T) {
 				}
 
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
 					CAID:         bootstrapCA.ID,
 					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -1901,7 +1885,7 @@ func TestESTServerKeyGen(t *testing.T) {
 				//Generate a "generic" key pair
 				genericKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				deviceID := fmt.Sprintf("skeygen-enrolled-device-%s", uuid.NewString())
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, genericKey)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, genericKey)
 
 				_, _, err = estCli.ServerKeyGen(ctx, enrollCSR)
 
@@ -1937,8 +1921,8 @@ func TestESTReEnroll(t *testing.T) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
 		issuanceCABootDur, _ := models.ParseDuration(issuance)
 		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-			KeyMetadata:        cmodels.KeyMetadata{Type: cmodels.KeyType(x509.ECDSA), Bits: 224},
-			Subject:            cmodels.Subject{CommonName: name},
+			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
+			Subject:            models.Subject{CommonName: name},
 			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
 			IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
 			Metadata:           map[string]any{},
@@ -2012,7 +1996,7 @@ func TestESTReEnroll(t *testing.T) {
 		}
 
 		bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-		bootCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: "boot-cert"}, bootKey)
+		bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 		bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 			CAID:         bootstrapCA.ID,
 			CertRequest:  (*models.X509CertificateRequest)(bootCsr),
@@ -2032,7 +2016,7 @@ func TestESTReEnroll(t *testing.T) {
 
 		deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
 		enrollKey, _ := chelpers.GenerateRSAKey(2048)
-		enrollCSR, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceID}, enrollKey)
+		enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
 
 		enrollCRT, err := estCli.Enroll(context.Background(), enrollCSR)
 		if err != nil {
@@ -2081,7 +2065,7 @@ func TestESTReEnroll(t *testing.T) {
 					"1m",
 				)
 
-				newCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
 
 				estCli := est.Client{
 					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
@@ -2118,7 +2102,7 @@ func TestESTReEnroll(t *testing.T) {
 				fakeKey, _ := chelpers.GenerateRSAKey(2048)
 				fakeCert, _ := chelpers.GenerateSelfSignedCertificate(fakeKey, deviceCrt.Subject.CommonName)
 
-				newCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
 
 				estCli := est.Client{
 					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
@@ -2153,7 +2137,7 @@ func TestESTReEnroll(t *testing.T) {
 					"1m",
 				)
 
-				newCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
 
 				estCli := est.Client{
 					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
@@ -2188,7 +2172,7 @@ func TestESTReEnroll(t *testing.T) {
 					"2s",
 				)
 
-				newCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
 
 				estCli := est.Client{
 					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
@@ -2225,7 +2209,7 @@ func TestESTReEnroll(t *testing.T) {
 					"2s",
 				)
 
-				newCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
 
 				estCli := est.Client{
 					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
@@ -2262,7 +2246,7 @@ func TestESTReEnroll(t *testing.T) {
 					"2s",
 				)
 
-				newCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
 
 				estCli := est.Client{
 					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
@@ -2320,7 +2304,7 @@ func TestESTReEnroll(t *testing.T) {
 					t.Fatalf("could not create update DMS: %s", err)
 				}
 
-				newCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
 
 				estCli := est.Client{
 					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
@@ -2354,7 +2338,7 @@ func TestESTReEnroll(t *testing.T) {
 					"1m",
 				)
 
-				newCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceCrt.Subject.CommonName, Organization: "MyOrg"}, deviceKey)
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName, Organization: "MyOrg"}, deviceKey)
 
 				estCli := est.Client{
 					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
@@ -2388,7 +2372,7 @@ func TestESTReEnroll(t *testing.T) {
 					"1m",
 				)
 
-				newCsr, _ := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
 
 				estCli := pemESTClient{
 					baseEndpoint: fmt.Sprintf("https://localhost:%d/.well-known/est/%s", dmsMgr.Port, dms.ID),
