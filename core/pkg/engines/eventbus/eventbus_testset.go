@@ -21,7 +21,11 @@ func (h *basicTestHandler) HandleMessage(msg *message.Message) error {
 	return h.handler(msg)
 }
 
-func TestWildcardSubscribe(t *testing.T, pub message.Publisher, subFunc func(serviceID string) message.Subscriber) {
+type EventBusTestInput struct {
+	SetupEventBus func() (func() error, message.Publisher, func(serviceID string) message.Subscriber)
+}
+
+func TestWildcardSubscribe(t *testing.T, input EventBusTestInput) {
 	testcases := []struct {
 		name            string
 		subscriptionKey string
@@ -48,6 +52,9 @@ func TestWildcardSubscribe(t *testing.T, pub message.Publisher, subFunc func(ser
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
+			cleanup, pub, subFunc := input.SetupEventBus()
+			defer cleanup()
+
 			subAndPub := func(publishFunc func() error) error {
 				logger := helpers.SetupLogger(config.Debug, "Test Case", "sub")
 				resultChannel := make(chan int, 1)
@@ -105,7 +112,7 @@ func TestWildcardSubscribe(t *testing.T, pub message.Publisher, subFunc func(ser
 	}
 }
 
-func TestMultiServiceSubscribe(t *testing.T, pub message.Publisher, subFunc func(serviceID string) message.Subscriber) {
+func TestMultiServiceSubscribe(t *testing.T, input EventBusTestInput) {
 	type subscriberTest struct {
 		serviceID       string
 		subscriptionKey string
@@ -162,6 +169,9 @@ func TestMultiServiceSubscribe(t *testing.T, pub message.Publisher, subFunc func
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
+			cleanup, pub, subFunc := input.SetupEventBus()
+			defer cleanup()
+
 			subAndPub := func(publishFunc func() error) error {
 				logger := helpers.SetupLogger(config.Debug, "Test Case", "sub")
 
@@ -256,7 +266,7 @@ func TestMultiServiceSubscribe(t *testing.T, pub message.Publisher, subFunc func
 	}
 }
 
-func TestMultiConsumers(t *testing.T, pub message.Publisher, subFunc func(serviceID string) message.Subscriber) {
+func TestMultiConsumers(t *testing.T, input EventBusTestInput) {
 	type subscriberTest struct {
 		consumerID      string
 		serviceID       string
@@ -297,6 +307,9 @@ func TestMultiConsumers(t *testing.T, pub message.Publisher, subFunc func(servic
 	for _, tc := range testcases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			cleanup, pub, subFunc := input.SetupEventBus()
+			defer cleanup()
+
 			subAndPub := func(publishFunc func() error) error {
 				logger := helpers.SetupLogger(config.Debug, "Test Case", "sub")
 

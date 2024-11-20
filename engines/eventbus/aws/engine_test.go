@@ -10,7 +10,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 )
 
-func prepareEventBusForTest(t *testing.T) (message.Publisher, func(serviceID string) message.Subscriber) {
+func prepareEventBusForTest(t *testing.T) (func() error, message.Publisher, func(serviceID string) message.Subscriber) {
 	cleanup, conf, err := aws.RunAWSEmulationLocalStackDocker()
 	if err != nil {
 		t.Fatalf("could not run RabbitMQ docker: %s", err)
@@ -34,18 +34,32 @@ func prepareEventBusForTest(t *testing.T) (message.Publisher, func(serviceID str
 		return subscriber
 	}
 
-	return publisher, subFunc
+	return cleanup, publisher, subFunc
 }
 
 func TestMultiServiceSubscribe(t *testing.T) {
-	publisher, subFunc := prepareEventBusForTest(t)
-	eventbus.TestMultiServiceSubscribe(t, publisher, subFunc)
+	eventbus.TestMultiServiceSubscribe(t, eventbus.EventBusTestInput{
+		SetupEventBus: func() (func() error, message.Publisher, func(serviceID string) message.Subscriber) {
+			cleanup, publisher, subFunc := prepareEventBusForTest(t)
+			return cleanup, publisher, subFunc
+		},
+	})
 }
+
 func TestMultiConsumers(t *testing.T) {
-	publisher, subFunc := prepareEventBusForTest(t)
-	eventbus.TestMultiConsumers(t, publisher, subFunc)
+	eventbus.TestMultiConsumers(t, eventbus.EventBusTestInput{
+		SetupEventBus: func() (func() error, message.Publisher, func(serviceID string) message.Subscriber) {
+			cleanup, publisher, subFunc := prepareEventBusForTest(t)
+			return cleanup, publisher, subFunc
+		},
+	})
 }
+
 func TestWildcardSubscribe(t *testing.T) {
-	publisher, subFunc := prepareEventBusForTest(t)
-	eventbus.TestWildcardSubscribe(t, publisher, subFunc)
+	eventbus.TestWildcardSubscribe(t, eventbus.EventBusTestInput{
+		SetupEventBus: func() (func() error, message.Publisher, func(serviceID string) message.Subscriber) {
+			cleanup, publisher, subFunc := prepareEventBusForTest(t)
+			return cleanup, publisher, subFunc
+		},
+	})
 }
