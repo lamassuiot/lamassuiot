@@ -22,7 +22,7 @@ func (p *VaultKV2Subsystem) Run() (*subsystems.SubsystemBackend, error) {
 		return nil, err
 	}
 
-	config := config.CryptoEngine{
+	config := config.CryptoEngine[any]{
 		ID:       "vault-1",
 		Metadata: map[string]interface{}{},
 		Type:     config.HashicorpVaultProvider,

@@ -31,7 +31,7 @@ func (p *Pkcs11Subsystem) Run() (*subsystems.SubsystemBackend, error) {
 		return nil, err
 	}
 
-	config := config.CryptoEngine{
+	config := config.CryptoEngine[any]{
 		ID:       "pkcs11-1",
 		Metadata: map[string]interface{}{},
 		Type:     config.PKCS11Provider,

@@ -27,7 +27,7 @@ func (p *AwsSubsystem) Run() (*subsystems.SubsystemBackend, error) {
 		log.Fatalf("could not encode AWS Platform config: %s", err)
 	}
 
-	cryptoEngine := config.CryptoEngine{
+	cryptoEngine := config.CryptoEngine[any]{
 		ID:       "aws-1",
 		Metadata: make(map[string]interface{}),
 		Type:     config.AWSKMSProvider,

@@ -152,7 +152,7 @@ func main() {
 	fmt.Println("Crypto Engines")
 	vCleanup := func() { /* do nothing */ }
 
-	var vaultCryptoEngine cconfig.CryptoEngine
+	var vaultCryptoEngine cconfig.CryptoEngine[any]
 	rootToken := ""
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
 		fmt.Println(">> launching docker: Hashicorp Vault ...")
@@ -162,7 +162,7 @@ func main() {
 		}
 
 		vCleanup = vaultSubsystem.AfterSuite
-		vaultCryptoEngine := vaultSubsystem.Config.(cconfig.CryptoEngine)
+		vaultCryptoEngine := vaultSubsystem.Config.(cconfig.CryptoEngine[map[string]interface{}])
 
 		port := (vaultCryptoEngine.Config)["port"].(int)
 		rootToken = (*vaultSubsystem.Extra)["rootToken"].(string)
@@ -174,7 +174,7 @@ func main() {
 	_, awsSecretsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
 	_, awsKmsEnabled := cryptoengineOptionsMap[AwsKms]
 	awsCleanup := func() { /* do nothing */ }
-	var awsBaseCryptoEngine cconfig.CryptoEngine
+	var awsBaseCryptoEngine cconfig.CryptoEngine[map[string]interface{}]
 	if awsSecretsEnabled || awsKmsEnabled {
 		fmt.Println(">> launching docker: AWS Platform (Secrets Manager + KMS) ...")
 		awsSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Aws).Run()
@@ -183,12 +183,12 @@ func main() {
 		}
 
 		awsCleanup = awsSubsystem.AfterSuite
-		awsBaseCryptoEngine = awsSubsystem.Config.(cconfig.CryptoEngine)
+		awsBaseCryptoEngine = awsSubsystem.Config.(cconfig.CryptoEngine[map[string]interface{}])
 	}
 
 	hsmModulePath := *hsmModule
 	var softhsmCleanup func()
-	var pkcs11Cfg cconfig.CryptoEngine
+	var pkcs11Cfg cconfig.CryptoEngine[any]
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok && hsmModulePath != "" {
 		fmt.Println(">> launching docker: SoftHSM ...")
 		pkcs11SubsystemBuilder := subsystems.GetSubsystemBuilder[subsystems.ParametrizedSubsystem](subsystems.Pkcs11)
@@ -199,7 +199,7 @@ func main() {
 		}
 		softhsmCleanup = pkcs11Subsystem.AfterSuite
 
-		pkcs11Cfg = pkcs11Subsystem.Config.(cconfig.CryptoEngine)
+		pkcs11Cfg = pkcs11Subsystem.Config.(cconfig.CryptoEngine[any])
 
 	}
 
@@ -291,7 +291,7 @@ func main() {
 		LogLevel: cconfig.Info,
 	}
 
-	cryptoEngines := make([]cconfig.CryptoEngine, 1)
+	cryptoEngines := make([]cconfig.CryptoEngine[any], 1)
 
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
 		vaultCryptoEngine.ID = "dockertest-hcpvault-kvv2"
@@ -300,7 +300,7 @@ func main() {
 	}
 
 	if _, ok := cryptoengineOptionsMap[AwsKms]; ok {
-		kmsCryptoEngine := cconfig.CryptoEngine{
+		kmsCryptoEngine := cconfig.CryptoEngine[any]{
 			ID:       "dockertest-localstack-kms",
 			Metadata: make(map[string]interface{}),
 			Type:     cconfig.AWSKMSProvider,
@@ -311,7 +311,7 @@ func main() {
 	}
 
 	if _, ok := cryptoengineOptionsMap[AwsSecretsManager]; ok {
-		secretsManagerCryptoEngine := cconfig.CryptoEngine{
+		secretsManagerCryptoEngine := cconfig.CryptoEngine[any]{
 			ID:       "dockertest-localstack-smngr",
 			Metadata: make(map[string]interface{}),
 			Type:     cconfig.AWSSecretsManagerProvider,
@@ -323,7 +323,7 @@ func main() {
 
 	if _, ok := cryptoengineOptionsMap[GolangFS]; ok {
 
-		cryptoEngines = append(cryptoEngines, cconfig.CryptoEngine{
+		cryptoEngines = append(cryptoEngines, cconfig.CryptoEngine[any]{
 			ID:       "golangfs-1",
 			Metadata: make(map[string]interface{}),
 			Type:     cconfig.FilesystemProvider,

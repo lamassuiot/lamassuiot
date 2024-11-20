@@ -136,10 +136,10 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	cryptoEngineConf := config.CryptoEngines{
 		LogLevel:      cconfig.Info,
 		DefaultEngine: "filesystem-1",
-		CryptoEngines: []cconfig.CryptoEngine{},
+		CryptoEngines: []cconfig.CryptoEngine[any]{},
 	}
 
-	fsconfig := cconfig.CryptoEngine{
+	fsconfig := cconfig.CryptoEngine[any]{
 		ID:       "filesystem-1",
 		Metadata: map[string]interface{}{},
 		Type:     cconfig.FilesystemProvider,
@@ -164,7 +164,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 			panic(fmt.Sprintf("could not run Vault subsystem: %s", err))
 		}
 
-		cryptoEngineConf.CryptoEngines = append(cryptoEngineConf.CryptoEngines, backend.Config.(cconfig.CryptoEngine))
+		cryptoEngineConf.CryptoEngines = append(cryptoEngineConf.CryptoEngines, backend.Config.(cconfig.CryptoEngine[any]))
 
 		beforeEachActions = append(beforeEachActions, backend.BeforeEach)
 		afterSuiteActions = append(afterSuiteActions, backend.AfterSuite)
