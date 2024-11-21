@@ -19,9 +19,12 @@ import (
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	cmodels "github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem"
 )
 
 func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
+	filesystem.Register()
+
 	// Create a temporary directory for testing
 	tempDir := t.TempDir()
 
@@ -32,11 +35,13 @@ func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
 		Type:     config.FilesystemProvider,
 		Metadata: map[string]interface{}{},
 		Config: map[string]interface{}{
-			"StorageDirectory": tempDir,
+			"storage_directory": tempDir,
 		},
 	}
 
-	engine, _ := cryptoengines.GetEngineBuilder(config.FilesystemProvider)(log, conf)
+	builder := cryptoengines.GetEngineBuilder(config.FilesystemProvider)
+
+	engine, _ := builder(log, conf)
 
 	x509Engine := NewX509Engine(&engine, "ocsp.lamassu.io")
 
