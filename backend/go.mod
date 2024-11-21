@@ -3,8 +3,8 @@ module github.com/lamassuiot/lamassuiot/v3/backend
 go 1.22.0
 
 replace (
-	github.com/lamassuiot/lamassuiot/v3/aws => ../aws
-	github.com/lamassuiot/lamassuiot/v3/core => ../core
+	github.com/lamassuiot/lamassuiot/v3/aws => ../shared/aws
+	github.com/lamassuiot/lamassuiot/v3/core => ../shared/core
 	github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws => ../engines/crypto/aws
 	github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem => ../engines/crypto/filesystem
 	github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11 => ../engines/crypto/pkcs11
@@ -15,7 +15,9 @@ replace (
 	github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb => ../engines/storage/couchdb
 	github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres => ../engines/storage/postgres
 	github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite => ../engines/storage/sqlite
-	github.com/lamassuiot/lamassuiot/v3/sdk => ../sdk
+	github.com/lamassuiot/lamassuiot/v3/http => ../shared/http
+	github.com/lamassuiot/lamassuiot/v3/sdk => ../shared/sdk
+	github.com/lamassuiot/lamassuiot/v3/subsystems => ../shared/subsystems
 )
 
 require (
@@ -30,6 +32,7 @@ require (
 	github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/subsystems v0.0.0-00010101000000-000000000000
 )
 
 require (
@@ -42,6 +45,7 @@ require (
 	github.com/go-playground/validator/v10 v10.22.1
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/jakehl/goid v1.1.0
+	github.com/lamassuiot/lamassuiot/v3/http v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v3/sdk v0.0.0-00010101000000-000000000000
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sirupsen/logrus v1.9.3
@@ -179,6 +183,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.32.4 // indirect
 	github.com/lamassuiot/lamassuiot/v3/aws v0.0.0-00010101000000-000000000000 // indirect
 	github.com/ory/dockertest/v3 v3.11.0 // indirect
+	github.com/ugorji/go v1.2.12 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/net v0.30.0 // indirect

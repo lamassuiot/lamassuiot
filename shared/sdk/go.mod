@@ -4,8 +4,11 @@ go 1.22.0
 
 replace github.com/lamassuiot/lamassuiot/v3/core => ../core
 
+replace github.com/lamassuiot/lamassuiot/v3/http => ../http
+
 require (
 	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/http v0.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.9.3
 	golang.org/x/crypto v0.28.0
 	golang.org/x/oauth2 v0.23.0
@@ -27,7 +30,6 @@ require (
 	github.com/go-playground/validator/v10 v10.22.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
-	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-5 // indirect
 	github.com/jakehl/goid v1.1.0 // indirect
@@ -49,6 +51,7 @@ require (
 	github.com/spf13/viper v1.19.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
+	github.com/ugorji/go v1.2.12 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect

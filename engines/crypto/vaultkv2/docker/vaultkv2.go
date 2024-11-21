@@ -6,9 +6,9 @@ import (
 
 	vaultApi "github.com/hashicorp/vault/api"
 
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	dockerunner "github.com/lamassuiot/lamassuiot/v3/core/pkg/test/dockerrunner"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	vconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
+	dockerunner "github.com/lamassuiot/lamassuiot/v3/subsystems/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
@@ -105,15 +105,15 @@ func RunHashicorpVaultDocker() (func() error, *vconfig.HashicorpVaultSDK, string
 
 	return containerCleanup, &vconfig.HashicorpVaultSDK{
 		RoleID:    roleID,
-		SecretID:  cconfig.Password(secretID),
+		SecretID:  config.Password(secretID),
 		MountPath: mountPath,
-		HTTPConnection: cconfig.HTTPConnection{
-			Protocol: cconfig.HTTP,
+		HTTPConnection: config.HTTPConnection{
+			Protocol: config.HTTP,
 			BasePath: "",
-			BasicConnection: cconfig.BasicConnection{
+			BasicConnection: config.BasicConnection{
 				Hostname:  "127.0.0.1",
 				Port:      p,
-				TLSConfig: cconfig.TLSConfig{},
+				TLSConfig: config.TLSConfig{},
 			},
 		},
 	}, rootToken, nil

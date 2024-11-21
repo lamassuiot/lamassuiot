@@ -15,12 +15,10 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/helpers"
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	cmodels "github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem"
-	fscengine "github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem"
 )
 
 func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
@@ -28,12 +26,17 @@ func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
 	tempDir := t.TempDir()
 
 	// Create a new instance of GoCryptoEngine
-	log := chelpers.SetupLogger(cconfig.Info, "Test Case", "Golang Engine")
-	conf := cconfig.CryptoEngine[fscengine.FilesystemEngineConfig]{
-		Config: fscengine.FilesystemEngineConfig{StorageDirectory: tempDir},
+	log := chelpers.SetupLogger(config.Info, "Test Case", "Golang Engine")
+	conf := config.CryptoEngineConfig{
+		ID:       "test-engine",
+		Type:     config.FilesystemProvider,
+		Metadata: map[string]interface{}{},
+		Config: map[string]interface{}{
+			"StorageDirectory": tempDir,
+		},
 	}
 
-	engine, _ := filesystem.NewFilesystemPEMEngine(log, conf)
+	engine, _ := cryptoengines.GetEngineBuilder(config.FilesystemProvider)(log, conf)
 
 	x509Engine := NewX509Engine(&engine, "ocsp.lamassu.io")
 

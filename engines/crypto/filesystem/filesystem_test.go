@@ -23,11 +23,14 @@ func setup(t *testing.T) (string, *FilesystemCryptoEngine) {
 
 	// Create a new instance of GoCryptoEngine
 	log := helpers.SetupLogger(cconfig.Info, "CA TestCase", "Golang Engine")
-	engine, _ := NewFilesystemPEMEngine(log, cconfig.CryptoEngine[FilesystemEngineConfig]{
+	ceconfig := cconfig.CryptoEngineConfigAdapter[FilesystemEngineConfig]{
 		ID:       "test-engine",
 		Metadata: map[string]interface{}{},
+		Type:     cconfig.FilesystemProvider,
 		Config:   FilesystemEngineConfig{StorageDirectory: tempDir},
-	})
+	}
+
+	engine, _ := NewFilesystemPEMEngine(log, ceconfig)
 
 	return tempDir, engine.(*FilesystemCryptoEngine)
 }

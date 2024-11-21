@@ -2,8 +2,9 @@ package subsystem
 
 import (
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/test/subsystems"
+	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11"
 	pkcs11_test "github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11/test"
+	"github.com/lamassuiot/lamassuiot/v3/subsystems/pkg/test/subsystems"
 )
 
 func Register() {
@@ -26,20 +27,20 @@ func (p *Pkcs11Subsystem) Run() (*subsystems.SubsystemBackend, error) {
 		return nil, err
 	}
 
-	pkcs11Config, err := config.EncodeStruct(pkcs11Cfg)
+	configAdapter := config.CryptoEngineConfigAdapter[pkcs11.PKCS11Config]{
+		ID:       "pkcs11-1",
+		Metadata: map[string]interface{}{},
+		Type:     config.PKCS11Provider,
+		Config:   *pkcs11Cfg,
+	}
+
+	config, err := configAdapter.Unmarshal()
 	if err != nil {
 		return nil, err
 	}
 
-	config := config.CryptoEngine[any]{
-		ID:       "pkcs11-1",
-		Metadata: map[string]interface{}{},
-		Type:     config.PKCS11Provider,
-		Config:   pkcs11Config,
-	}
-
 	return &subsystems.SubsystemBackend{
-		Config:     config,
+		Config:     *config,
 		BeforeEach: func() error { return nil },
 		AfterSuite: func() { softhsmCleanup() },
 	}, nil

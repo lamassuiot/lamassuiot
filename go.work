@@ -1,10 +1,14 @@
 go 1.22.0
 
 use (
-	./aws
+	
 	./awsiotconnector
 	./backend
-	./core
+	./shared/aws
+	./shared/core
+	./shared/sdk
+	./shared/subsystems
+	./shared/http
 	./engines/crypto/aws
 	./engines/crypto/filesystem
 	./engines/crypto/pkcs11
@@ -16,5 +20,5 @@ use (
 	./engines/storage/postgres
 	./engines/storage/sqlite
 	./monolithic
-	./sdk
+	
 )

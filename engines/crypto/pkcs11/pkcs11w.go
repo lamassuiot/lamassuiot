@@ -11,6 +11,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewPKCS11Engine(logger *logrus.Entry, conf config.PKCS11EngineConfig) (cryptoengines.CryptoEngine, error) {
+func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter[PKCS11Config]) (cryptoengines.CryptoEngine, error) {
 	return nil, fmt.Errorf("PKCS11 engine is not supported on Windows")
 }

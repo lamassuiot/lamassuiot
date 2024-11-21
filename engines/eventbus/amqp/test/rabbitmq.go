@@ -8,8 +8,8 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill-amqp/v2/pkg/amqp"
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	dockerunner "github.com/lamassuiot/lamassuiot/v3/core/pkg/test/dockerrunner"
 	ampq "github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/config"
+	dockerunner "github.com/lamassuiot/lamassuiot/v3/subsystems/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	"github.com/sirupsen/logrus"

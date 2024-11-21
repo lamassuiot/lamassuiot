@@ -15,7 +15,7 @@ type CAConfig struct {
 }
 
 type CryptoEngines struct {
-	LogLevel      cconfig.LogLevel            `mapstructure:"log_level"`
-	DefaultEngine string                      `mapstructure:"default_id"`
-	CryptoEngines []cconfig.CryptoEngine[any] `mapstructure:"engines"`
+	LogLevel      cconfig.LogLevel             `mapstructure:"log_level"`
+	DefaultEngine string                       `mapstructure:"default_id"`
+	CryptoEngines []cconfig.CryptoEngineConfig `mapstructure:"engines"`
 }

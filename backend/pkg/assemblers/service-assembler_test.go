@@ -13,8 +13,8 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/test/subsystems"
 	"github.com/lamassuiot/lamassuiot/v3/sdk"
+	"github.com/lamassuiot/lamassuiot/v3/subsystems/pkg/test/subsystems"
 )
 
 type CryptoEngine int
@@ -136,10 +136,10 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	cryptoEngineConf := config.CryptoEngines{
 		LogLevel:      cconfig.Info,
 		DefaultEngine: "filesystem-1",
-		CryptoEngines: []cconfig.CryptoEngine[any]{},
+		CryptoEngines: []cconfig.CryptoEngineConfig{},
 	}
 
-	fsconfig := cconfig.CryptoEngine[any]{
+	fsconfig := cconfig.CryptoEngineConfig{
 		ID:       "filesystem-1",
 		Metadata: map[string]interface{}{},
 		Type:     cconfig.FilesystemProvider,
@@ -164,7 +164,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 			panic(fmt.Sprintf("could not run Vault subsystem: %s", err))
 		}
 
-		cryptoEngineConf.CryptoEngines = append(cryptoEngineConf.CryptoEngines, backend.Config.(cconfig.CryptoEngine[any]))
+		cryptoEngineConf.CryptoEngines = append(cryptoEngineConf.CryptoEngines, backend.Config.(cconfig.CryptoEngineConfig))
 
 		beforeEachActions = append(beforeEachActions, backend.BeforeEach)
 		afterSuiteActions = append(afterSuiteActions, backend.AfterSuite)

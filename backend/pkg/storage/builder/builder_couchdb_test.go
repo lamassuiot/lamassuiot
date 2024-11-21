@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/test/subsystems"
+	"github.com/lamassuiot/lamassuiot/v3/subsystems/pkg/test/subsystems"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

@@ -20,7 +20,7 @@ type MonolithicConfig struct {
 	PublisherEventBus  cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
 	SubscriberEventBus cconfig.EventBusEngine         `mapstructure:"subscriber_event_bus"`
 	Storage            cconfig.PluggableStorageEngine `mapstructure:"storage"`
-	CryptoEngines      []cconfig.CryptoEngine[any]    `mapstructure:"crypto_engines"`
+	CryptoEngines      []cconfig.CryptoEngineConfig   `mapstructure:"crypto_engines"`
 	CryptoMonitoring   cconfig.MonitoringJob          `mapstructure:"crypto_monitoring"`
 	Domain             string                         `mapstructure:"domain"`
 	AssemblyMode       LamassuMonolithicAssembleMode  `mapstructure:"assembly_mode"`

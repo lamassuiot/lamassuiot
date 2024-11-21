@@ -2,13 +2,17 @@ module github.com/lamassuiot/lamassuiot/v3/awsiotconnector
 
 go 1.22.0
 
-replace github.com/lamassuiot/lamassuiot/v3/core => ../core
+replace github.com/lamassuiot/lamassuiot/v3/core => ../shared/core
 
-replace github.com/lamassuiot/lamassuiot/v3/aws => ../aws
+replace github.com/lamassuiot/lamassuiot/v3/aws => ../shared/aws
+
+replace github.com/lamassuiot/lamassuiot/v3/http => ../shared/http
 
 replace github.com/lamassuiot/lamassuiot/v3/backend => ../backend
 
-replace github.com/lamassuiot/lamassuiot/v3/sdk => ../sdk
+replace github.com/lamassuiot/lamassuiot/v3/sdk => ../shared/sdk
+
+replace github.com/lamassuiot/lamassuiot/v3/subsystems => ../shared/subsystems
 
 replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws => ../engines/crypto/aws
 
@@ -35,6 +39,7 @@ require (
 	github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp v0.0.0-00010101000000-000000000000 // indirect
 	github.com/lamassuiot/lamassuiot/v3/engines/eventbus/aws v0.0.0-00010101000000-000000000000 // indirect
 	github.com/lamassuiot/lamassuiot/v3/engines/eventbus/channel v0.0.0-00010101000000-000000000000 // indirect
+	github.com/lamassuiot/lamassuiot/v3/http v0.0.0-00010101000000-000000000000 // indirect
 )
 
 require (
@@ -106,6 +111,7 @@ require (
 	github.com/jakehl/goid v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
+	github.com/lamassuiot/lamassuiot/v3/subsystems v0.0.0-00010101000000-000000000000 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
@@ -135,6 +141,7 @@ require (
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
+	github.com/ugorji/go v1.2.12 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect

@@ -1,4 +1,4 @@
-package config
+package pkcs11
 
 import (
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
@@ -9,12 +9,6 @@ type PKCS11Config struct {
 	TokenPin           config.Password          `mapstructure:"pin"`
 	ModulePath         string                   `mapstructure:"module_path"`
 	ModuleExtraOptions PKCS11ModuleExtraOptions `mapstructure:"module_extra_options"`
-}
-
-type PKCS11EngineConfig struct {
-	PKCS11Config `mapstructure:",squash"`
-	ID           string                 `mapstructure:"id"`
-	Metadata     map[string]interface{} `mapstructure:"metadata"`
 }
 
 type PKCS11ModuleExtraOptions struct {

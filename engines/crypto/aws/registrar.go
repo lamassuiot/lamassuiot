@@ -8,7 +8,7 @@ import (
 )
 
 func RegisterAWSKMS() {
-	cryptoengines.RegisterCryptoEngine(cconfig.AWSKMSProvider, func(logger *log.Entry, conf cconfig.CryptoEngine[any]) (cryptoengines.CryptoEngine, error) {
+	cryptoengines.RegisterCryptoEngine(cconfig.AWSKMSProvider, func(logger *log.Entry, conf cconfig.CryptoEngineConfig) (cryptoengines.CryptoEngine, error) {
 		ceConfig, _ := cconfig.DecodeStruct[AWSCryptoEngine](conf.Config)
 
 		awsCfg, err := laws.GetAwsSdkConfig(ceConfig.AWSSDKConfig)
@@ -21,7 +21,7 @@ func RegisterAWSKMS() {
 }
 
 func RegisterAWSSecrets() {
-	cryptoengines.RegisterCryptoEngine(cconfig.AWSSecretsManagerProvider, func(logger *log.Entry, conf cconfig.CryptoEngine[any]) (cryptoengines.CryptoEngine, error) {
+	cryptoengines.RegisterCryptoEngine(cconfig.AWSSecretsManagerProvider, func(logger *log.Entry, conf cconfig.CryptoEngineConfig) (cryptoengines.CryptoEngine, error) {
 		ceConfig, _ := cconfig.DecodeStruct[AWSCryptoEngine](conf.Config)
 
 		awsCfg, err := laws.GetAwsSdkConfig(ceConfig.AWSSDKConfig)

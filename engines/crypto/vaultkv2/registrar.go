@@ -1,19 +1,21 @@
 package vaultkv2
 
 import (
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
+	vconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
 
 	log "github.com/sirupsen/logrus"
 )
 
 func Register() {
-	cryptoengines.RegisterCryptoEngine(cconfig.HashicorpVaultProvider, func(logger *log.Entry, conf cconfig.CryptoEngine[any]) (cryptoengines.CryptoEngine, error) {
-		ceConfig, _ := cconfig.DecodeStruct[config.HashicorpVaultCryptoEngineConfig](conf.Config)
-		ceConfig.ID = conf.ID
-		ceConfig.Metadata = conf.Metadata
+	cryptoengines.RegisterCryptoEngine(config.HashicorpVaultProvider, func(logger *log.Entry, conf config.CryptoEngineConfig) (cryptoengines.CryptoEngine, error) {
 
-		return NewVaultKV2Engine(logger, ceConfig)
+		ceConfig, err := config.CryptoEngineConfigAdapter[vconfig.HashicorpVaultSDK]{}.Marshal(conf)
+		if err != nil {
+			return nil, err
+		}
+
+		return NewVaultKV2Engine(logger, *ceConfig)
 	})
 }

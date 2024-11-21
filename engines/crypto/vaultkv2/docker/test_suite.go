@@ -3,7 +3,7 @@ package docker
 import (
 	"log"
 
-	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
+	vconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
 )
 
 type VaultSuite struct {
@@ -11,7 +11,7 @@ type VaultSuite struct {
 	rootToken     string
 }
 
-func BeforeSuite() (config.HashicorpVaultSDK, VaultSuite) {
+func BeforeSuite() (vconfig.HashicorpVaultSDK, VaultSuite) {
 	// setup *gorm.Db with docker
 	cleanup, conf, rootToken, err := RunHashicorpVaultDocker()
 	if err != nil {

@@ -11,9 +11,10 @@ jobs:
     strategy:
       matrix:
         module: 
-          - core
-          - backend
-          - sdk
+          - shared/core
+          - shared/sdk
+          - shared/subsystems
+          - shared/http
           - engines/crypto/aws
           - engines/crypto/filesystem
           - engines/crypto/pkcs11
@@ -24,6 +25,10 @@ jobs:
           - engines/storage/couchdb
           - engines/storage/postgres
           - engines/storage/sqlite
+          - backend
+          - awsiotconnector
+          - monolithic
+          
     name: ${{ matrix.module }} - Tests
     runs-on: ubuntu-latest
     steps:

@@ -36,15 +36,15 @@ type VaultKV2Engine struct {
 	kvv2Client *api.KVv2
 }
 
-func NewVaultKV2Engine(logger *logrus.Entry, conf vconfig.HashicorpVaultCryptoEngineConfig) (cryptoengines.CryptoEngine, error) {
+func NewVaultKV2Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter[vconfig.HashicorpVaultSDK]) (cryptoengines.CryptoEngine, error) {
 	var err error
 	lVault = logger.WithField("subsystem-provider", "Vault-KV2")
-	address := fmt.Sprintf("%s://%s:%d", conf.Protocol, conf.Hostname, conf.Port)
+	address := fmt.Sprintf("%s://%s:%d", conf.Config.Protocol, conf.Config.Hostname, conf.Config.Port)
 
 	lVault.Debugf("configuring VaultKV2 Engine")
 
 	vaultClientConf := api.DefaultConfig()
-	httpClient, err := chelpers.BuildHTTPClientWithTLSOptions(&http.Client{}, conf.TLSConfig)
+	httpClient, err := chelpers.BuildHTTPClientWithTLSOptions(&http.Client{}, conf.Config.TLSConfig)
 
 	if err != nil {
 		return nil, err
@@ -64,15 +64,15 @@ func NewVaultKV2Engine(logger *logrus.Entry, conf vconfig.HashicorpVaultCryptoEn
 		return nil, errors.New("could not create Vault API client: " + err.Error())
 	}
 
-	if conf.AutoUnsealEnabled {
-		err = Unseal(vaultClient, conf.AutoUnsealKeys)
+	if conf.Config.AutoUnsealEnabled {
+		err = Unseal(vaultClient, conf.Config.AutoUnsealKeys)
 		if err != nil {
 			lVault.Errorf("could not unseal Vault: %s", err)
 			return nil, errors.New("could not unseal Vault: " + err.Error())
 		}
 	}
 
-	err = Login(vaultClient, conf.RoleID, string(conf.SecretID))
+	err = Login(vaultClient, conf.Config.RoleID, string(conf.Config.SecretID))
 	if err != nil {
 		lVault.Errorf("could not login into Vault: %s", err)
 		return nil, errors.New("could not login into Vault: " + err.Error())
@@ -86,13 +86,13 @@ func NewVaultKV2Engine(logger *logrus.Entry, conf vconfig.HashicorpVaultCryptoEn
 	hasMount := false
 
 	for mountPath := range mounts {
-		if mountPath == fmt.Sprintf("%s/", conf.MountPath) { //mountPath has a trailing slash
+		if mountPath == fmt.Sprintf("%s/", conf.Config.MountPath) { //mountPath has a trailing slash
 			hasMount = true
 		}
 	}
 
 	if !hasMount {
-		err = vaultClient.Sys().Mount(conf.MountPath, &api.MountInput{
+		err = vaultClient.Sys().Mount(conf.Config.MountPath, &api.MountInput{
 			Type: "kv-v2",
 		})
 
@@ -101,7 +101,7 @@ func NewVaultKV2Engine(logger *logrus.Entry, conf vconfig.HashicorpVaultCryptoEn
 		}
 	}
 
-	kv2 := vaultClient.KVv2(conf.MountPath)
+	kv2 := vaultClient.KVv2(conf.Config.MountPath)
 
 	return &VaultKV2Engine{
 		kvv2Client: kv2,

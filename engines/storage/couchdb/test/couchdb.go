@@ -9,8 +9,8 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
-	dockerunner "github.com/lamassuiot/lamassuiot/v3/core/pkg/test/dockerrunner"
 	cdb_config "github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb/config"
+	dockerunner "github.com/lamassuiot/lamassuiot/v3/subsystems/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	logger "github.com/sirupsen/logrus"

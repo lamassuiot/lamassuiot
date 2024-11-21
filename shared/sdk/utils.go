@@ -14,6 +14,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/resources"
 	cresources "github.com/lamassuiot/lamassuiot/v3/core/pkg/resources"
+	hhelpers "github.com/lamassuiot/lamassuiot/v3/http/pkg/helpers"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
@@ -128,7 +129,7 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 		}
 	}
 
-	return chelpers.BuildHTTPClientWithTracerLogger(client, logger)
+	return hhelpers.BuildHTTPClientWithTracerLogger(client, logger)
 }
 
 func Post[T any](ctx context.Context, client *http.Client, url string, data any, knownErrors map[int][]error) (T, error) {

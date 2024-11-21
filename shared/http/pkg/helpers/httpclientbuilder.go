@@ -7,12 +7,13 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/utils/gindump"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v3/http/pkg/utils/gindump"
 	"github.com/sirupsen/logrus"
 )
 
 func BuildHTTPClientWithTLSOptions(cli *http.Client, cfg config.TLSConfig) (*http.Client, error) {
-	caPool := LoadSytemCACertPool()
+	caPool := helpers.LoadSytemCACertPool()
 	tlsConfig := &tls.Config{}
 
 	if cfg.InsecureSkipVerify {
@@ -20,7 +21,7 @@ func BuildHTTPClientWithTLSOptions(cli *http.Client, cfg config.TLSConfig) (*htt
 	}
 
 	if cfg.CACertificateFile != "" {
-		cert, err := ReadCertificateFromFile(cfg.CACertificateFile)
+		cert, err := helpers.ReadCertificateFromFile(cfg.CACertificateFile)
 		if err != nil {
 			return nil, err
 		}

@@ -12,7 +12,7 @@ import (
 	"os"
 	"runtime"
 
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
@@ -26,11 +26,11 @@ type FilesystemCryptoEngine struct {
 	storageDirectory string
 }
 
-func NewFilesystemPEMEngine(logger *logrus.Entry, conf cconfig.CryptoEngine[FilesystemEngineConfig]) (cryptoengines.CryptoEngine, error) {
+func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter[FilesystemEngineConfig]) (cryptoengines.CryptoEngine, error) {
 	lGo = logger.WithField("subsystem-provider", "GoSoft")
 
 	defaultMeta := map[string]interface{}{
-		"lamassu.io/cryptoengine.golang.storage-path": conf.Config.StorageDirectory,
+		"lamassu.io/cryptoengine.golang.storage-path": conf,
 	}
 	meta := helpers.MergeMaps[interface{}](&defaultMeta, &conf.Metadata)
 	return &FilesystemCryptoEngine{

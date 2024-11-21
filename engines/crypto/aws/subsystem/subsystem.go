@@ -5,7 +5,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v3/aws"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/test/subsystems"
+	"github.com/lamassuiot/lamassuiot/v3/subsystems/pkg/test/subsystems"
 )
 
 func Register() {
@@ -22,20 +22,19 @@ func (p *AwsSubsystem) Run() (*subsystems.SubsystemBackend, error) {
 		log.Fatalf("could not launch AWS Platform: %s", err)
 	}
 
-	configMap, err := config.EncodeStruct(awsCfg)
-	if err != nil {
-		log.Fatalf("could not encode AWS Platform config: %s", err)
-	}
-
-	cryptoEngine := config.CryptoEngine[any]{
+	cryptoEngine, err := config.CryptoEngineConfigAdapter[aws.AWSSDKConfig]{
 		ID:       "aws-1",
 		Metadata: make(map[string]interface{}),
 		Type:     config.AWSKMSProvider,
-		Config:   configMap,
+		Config:   *awsCfg,
+	}.Unmarshal()
+
+	if err != nil {
+		log.Fatalf("could not marshal AWS Platform config: %s", err)
 	}
 
 	return &subsystems.SubsystemBackend{
-		Config:     cryptoEngine,
+		Config:     *cryptoEngine,
 		BeforeEach: func() error { return nil },
 		AfterSuite: func() { awsCleanup() },
 	}, nil

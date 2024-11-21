@@ -16,7 +16,7 @@ import (
 	vault_subsystem "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/subsystem"
 )
 
-func BuildCryptoEngine(logger *log.Entry, conf cconfig.CryptoEngine[any]) (cryptoengines.CryptoEngine, error) {
+func BuildCryptoEngine(logger *log.Entry, conf cconfig.CryptoEngineConfig) (cryptoengines.CryptoEngine, error) {
 
 	builder := cryptoengines.GetEngineBuilder(cconfig.CryptoEngineProvider(conf.Type))
 	if builder == nil {

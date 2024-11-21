@@ -22,7 +22,7 @@ import (
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/utils/gindump"
+	"github.com/lamassuiot/lamassuiot/v3/http/pkg/utils/gindump"
 	"github.com/sirupsen/logrus"
 )
 

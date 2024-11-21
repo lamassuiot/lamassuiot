@@ -18,16 +18,6 @@ func NewMessageRouter(logger *logrus.Entry) (*message.Router, error) {
 		return nil, fmt.Errorf("could not create event bus router: %s", err)
 	}
 
-	// deadLetterPub, err := NewEventBusPublisher(conf, serviceID, logger)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("could not create event bus publisher for unprocessable events: %s", err)
-	// }
-
-	// deadLetterMw, err := middleware.PoisonQueue(deadLetterPub, "errs")
-	// if err != nil {
-	// 	return nil, fmt.Errorf("could not create DeadLetter MW: %s", err)
-	// }
-
 	router.AddPlugin(plugin.SignalsHandler)
 	router.AddMiddleware(
 		// CorrelationID will copy the correlation id from the incoming message's metadata to the produced messages

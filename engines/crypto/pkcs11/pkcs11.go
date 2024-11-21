@@ -15,10 +15,10 @@ import (
 
 	"github.com/ThalesIgnite/crypto11"
 
+	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11/config"
 	"github.com/miekg/pkcs11"
 	"github.com/sirupsen/logrus"
 )
@@ -30,27 +30,27 @@ type pkcs11EngineContext struct {
 	config   models.CryptoEngineInfo
 }
 
-func NewPKCS11Engine(logger *logrus.Entry, conf config.PKCS11EngineConfig) (cryptoengines.CryptoEngine, error) {
+func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter[PKCS11Config]) (cryptoengines.CryptoEngine, error) {
 	lPkcs11 = logger.WithField("subsystem-provider", "PKCS11")
 	config := &crypto11.Config{
-		Path:       conf.ModulePath,
-		Pin:        string(conf.TokenPin),
-		TokenLabel: conf.TokenLabel,
+		Path:       conf.Config.ModulePath,
+		Pin:        string(conf.Config.TokenPin),
+		TokenLabel: conf.Config.TokenLabel,
 	}
 
-	for envKey, envVal := range conf.ModuleExtraOptions.Env {
+	for envKey, envVal := range conf.Config.ModuleExtraOptions.Env {
 		lPkcs11.Debugf("setting env variable %s=%s", envKey, envVal)
 		os.Setenv(envKey, envVal)
 	}
 
-	lPkcs11.Debugf("configuring pkcs11 module: \n - ModulePath: %s\n - TokenLabel: %s\n - Pin: ******\n", config.Path, conf.TokenLabel)
+	lPkcs11.Debugf("configuring pkcs11 module: \n - ModulePath: %s\n - TokenLabel: %s\n - Pin: ******\n", config.Path, conf.Config.TokenLabel)
 	instance, err := crypto11.Configure(config)
 	if err != nil {
 		lPkcs11.Errorf("could not configure pkcs11 module: %s", err)
 		return nil, errors.New("could not configure driver")
 	}
 
-	pkcs11ProviderContext := pkcs11.New(conf.ModulePath)
+	pkcs11ProviderContext := pkcs11.New(conf.Config.ModulePath)
 	pkcs11ProviderSlots, err := pkcs11ProviderContext.GetSlotList(true)
 	if err != nil {
 		lPkcs11.Errorf("could not get slot list: %s", err)
