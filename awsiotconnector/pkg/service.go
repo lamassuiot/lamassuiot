@@ -31,6 +31,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
 	cmodels "github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
+	hhelpers "github.com/lamassuiot/lamassuiot/v3/http/pkg/helpers"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )
@@ -128,25 +129,25 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (AWSCl
 	stsLogger := builder.Logger.WithField("sdk", "AWS STS Client")
 	sqsLogger := builder.Logger.WithField("sdk", "AWS SQS Client")
 
-	iotHttpCli, err := chelpers.BuildHTTPClientWithTracerLogger(&http.Client{}, iotLogger)
+	iotHttpCli, err := hhelpers.BuildHTTPClientWithTracerLogger(&http.Client{}, iotLogger)
 	if err != nil {
 		builder.Logger.Errorf("could not build IoT http client with tracer: %s", err)
 		return nil, err
 	}
 
-	idpHttpCli, err := chelpers.BuildHTTPClientWithTracerLogger(&http.Client{}, idpLogger)
+	idpHttpCli, err := hhelpers.BuildHTTPClientWithTracerLogger(&http.Client{}, idpLogger)
 	if err != nil {
 		builder.Logger.Errorf("could not build IoT Dataplane http client with tracer: %s", err)
 		return nil, err
 	}
 
-	stsHttpCli, err := chelpers.BuildHTTPClientWithTracerLogger(&http.Client{}, stsLogger)
+	stsHttpCli, err := hhelpers.BuildHTTPClientWithTracerLogger(&http.Client{}, stsLogger)
 	if err != nil {
 		builder.Logger.Errorf("could not build STS http client with tracer: %s", err)
 		return nil, err
 	}
 
-	sqsHttpCli, err := chelpers.BuildHTTPClientWithTracerLogger(&http.Client{}, sqsLogger)
+	sqsHttpCli, err := hhelpers.BuildHTTPClientWithTracerLogger(&http.Client{}, sqsLogger)
 	if err != nil {
 		builder.Logger.Errorf("could not build SQS http client with tracer: %s", err)
 		return nil, err

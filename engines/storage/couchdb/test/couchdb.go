@@ -8,8 +8,8 @@ import (
 	"strconv"
 
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	cdb_config "github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb/config"
+	hhelpers "github.com/lamassuiot/lamassuiot/v3/http/pkg/helpers"
 	dockerunner "github.com/lamassuiot/lamassuiot/v3/subsystems/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
@@ -38,13 +38,13 @@ func RunCouchDBDocker() (func() error, *map[string]interface{}, error) {
 	p, _ := strconv.Atoi(container.GetPort("5984/tcp"))
 
 	address := fmt.Sprintf("%s://%s:%s@%s:%d%s", "http", admin, passwd, "localhost", p, "/_up")
-	httpCli, err := helpers.BuildHTTPClientWithTLSOptions(&http.Client{}, config.TLSConfig{})
+	httpCli, err := hhelpers.BuildHTTPClientWithTLSOptions(&http.Client{}, config.TLSConfig{})
 	if err != nil {
 		return nil, nil, err
 	}
 
 	lCouch := logger.WithField("subsystem-provider", "CouchDB")
-	httpCli, err = helpers.BuildHTTPClientWithTracerLogger(httpCli, lCouch)
+	httpCli, err = hhelpers.BuildHTTPClientWithTracerLogger(httpCli, lCouch)
 	if err != nil {
 		return nil, nil, err
 	}

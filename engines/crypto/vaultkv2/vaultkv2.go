@@ -19,9 +19,9 @@ import (
 	"github.com/hashicorp/vault/api"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
-	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
 	vconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/config"
+	hhelpers "github.com/lamassuiot/lamassuiot/v3/http/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 
@@ -44,13 +44,13 @@ func NewVaultKV2Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapt
 	lVault.Debugf("configuring VaultKV2 Engine")
 
 	vaultClientConf := api.DefaultConfig()
-	httpClient, err := chelpers.BuildHTTPClientWithTLSOptions(&http.Client{}, conf.Config.TLSConfig)
+	httpClient, err := hhelpers.BuildHTTPClientWithTLSOptions(&http.Client{}, conf.Config.TLSConfig)
 
 	if err != nil {
 		return nil, err
 	}
 
-	httpClient, err = chelpers.BuildHTTPClientWithTracerLogger(httpClient, lVault)
+	httpClient, err = hhelpers.BuildHTTPClientWithTracerLogger(httpClient, lVault)
 	if err != nil {
 		return nil, err
 	}

@@ -17,8 +17,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
-	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
+	chelpers "github.com/lamassuiot/lamassuiot/v3/http/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 
