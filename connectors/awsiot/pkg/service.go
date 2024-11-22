@@ -29,7 +29,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/helpers"
 	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	cmodels "github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
 	hhelpers "github.com/lamassuiot/lamassuiot/v3/http/pkg/helpers"
 	"github.com/sirupsen/logrus"
@@ -789,7 +788,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 			return nil, err
 		}
 
-		regCodeCSR, err := chelpers.GenerateCertificateRequest(cmodels.Subject{CommonName: *regCode.RegistrationCode}, key)
+		regCodeCSR, err := chelpers.GenerateCertificateRequest(models.Subject{CommonName: *regCode.RegistrationCode}, key)
 		if err != nil {
 			return nil, err
 		}

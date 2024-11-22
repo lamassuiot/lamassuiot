@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	lamassu "github.com/lamassuiot/lamassuiot/v3/awsiotconnector/pkg"
+	lamassu "github.com/lamassuiot/lamassuiot/v3/connectors/awsiot/pkg"
 	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"

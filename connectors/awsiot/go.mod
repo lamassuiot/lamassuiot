@@ -1,45 +1,45 @@
-module github.com/lamassuiot/lamassuiot/v3/awsiotconnector
+module github.com/lamassuiot/lamassuiot/v3/connectors/awsiot
 
 go 1.22.0
 
-replace github.com/lamassuiot/lamassuiot/v3/core => ../shared/core
+replace github.com/lamassuiot/lamassuiot/v3/core => ../../shared/core
 
-replace github.com/lamassuiot/lamassuiot/v3/aws => ../shared/aws
+replace github.com/lamassuiot/lamassuiot/v3/aws => ../../shared/aws
 
-replace github.com/lamassuiot/lamassuiot/v3/http => ../shared/http
+replace github.com/lamassuiot/lamassuiot/v3/http => ../../shared/http
 
-replace github.com/lamassuiot/lamassuiot/v3/backend => ../backend
+replace github.com/lamassuiot/lamassuiot/v3/backend => ../../backend
 
-replace github.com/lamassuiot/lamassuiot/v3/sdk => ../shared/sdk
+replace github.com/lamassuiot/lamassuiot/v3/sdk => ../../shared/sdk
 
-replace github.com/lamassuiot/lamassuiot/v3/subsystems => ../shared/subsystems
+replace github.com/lamassuiot/lamassuiot/v3/subsystems => ../../shared/subsystems
 
-replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws => ../engines/crypto/aws
+replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws => ../../engines/crypto/aws
 
-replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem => ../engines/crypto/filesystem
+replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem => ../../engines/crypto/filesystem
 
-replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11 => ../engines/crypto/pkcs11
+replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11 => ../../engines/crypto/pkcs11
 
-replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2 => ../engines/crypto/vaultkv2
+replace github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2 => ../../engines/crypto/vaultkv2
 
-replace github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres => ../engines/storage/postgres
+replace github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres => ../../engines/storage/postgres
 
-replace github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite => ../engines/storage/sqlite
+replace github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite => ../../engines/storage/sqlite
 
-replace github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb => ../engines/storage/couchdb
+replace github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb => ../../engines/storage/couchdb
 
-replace github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp => ../engines/eventbus/amqp
+replace github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp => ../../engines/eventbus/amqp
 
-replace github.com/lamassuiot/lamassuiot/v3/engines/eventbus/aws => ../engines/eventbus/aws
+replace github.com/lamassuiot/lamassuiot/v3/engines/eventbus/aws => ../../engines/eventbus/aws
 
-replace github.com/lamassuiot/lamassuiot/v3/engines/eventbus/channel => ../engines/eventbus/channel
+replace github.com/lamassuiot/lamassuiot/v3/engines/eventbus/channel => ../../engines/eventbus/channel
 
 require (
 	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp v0.0.0-00010101000000-000000000000 // indirect
 	github.com/lamassuiot/lamassuiot/v3/engines/eventbus/aws v0.0.0-00010101000000-000000000000 // indirect
 	github.com/lamassuiot/lamassuiot/v3/engines/eventbus/channel v0.0.0-00010101000000-000000000000 // indirect
-	github.com/lamassuiot/lamassuiot/v3/http v0.0.0-00010101000000-000000000000 // indirect
+	github.com/lamassuiot/lamassuiot/v3/http v0.0.0-00010101000000-000000000000
 )
 
 require (

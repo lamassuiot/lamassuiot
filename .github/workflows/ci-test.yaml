@@ -26,7 +26,7 @@ jobs:
           - engines/storage/postgres
           - engines/storage/sqlite
           - backend
-          - awsiotconnector
+          - connectors/awsiot
           - monolithic
           
     name: ${{ matrix.module }} - Tests
