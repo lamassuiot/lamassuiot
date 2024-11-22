@@ -2,9 +2,10 @@ module github.com/lamassuiot/lamassuiot/v3/sdk
 
 go 1.22.0
 
-replace github.com/lamassuiot/lamassuiot/v3/core => ../core
-
-replace github.com/lamassuiot/lamassuiot/v3/http => ../http
+replace (
+	github.com/lamassuiot/lamassuiot/v3/core => ../core
+	github.com/lamassuiot/lamassuiot/v3/http => ../http
+)
 
 require (
 	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
@@ -51,7 +52,6 @@ require (
 	github.com/spf13/viper v1.19.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
-	github.com/ugorji/go v1.2.12 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect

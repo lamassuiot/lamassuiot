@@ -2,11 +2,13 @@ module github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2
 
 go 1.22.0
 
-replace github.com/lamassuiot/lamassuiot/v3/core => ../../../shared/core
+replace (
+	github.com/lamassuiot/lamassuiot/v3/core => ../../../shared/core
 
-replace github.com/lamassuiot/lamassuiot/v3/http => ../../../shared/http
+	github.com/lamassuiot/lamassuiot/v3/http => ../../../shared/http
 
-replace github.com/lamassuiot/lamassuiot/v3/subsystems => ../../../shared/subsystems
+	github.com/lamassuiot/lamassuiot/v3/subsystems => ../../../shared/subsystems
+)
 
 require (
 	github.com/hashicorp/vault/api v1.15.0
@@ -90,7 +92,6 @@ require (
 	github.com/spf13/viper v1.19.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
-	github.com/ugorji/go v1.2.12 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect

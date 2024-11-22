@@ -2,9 +2,11 @@ module github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11
 
 go 1.22.0
 
-replace github.com/lamassuiot/lamassuiot/v3/core => ../../../shared/core
+replace (
+	github.com/lamassuiot/lamassuiot/v3/core => ../../../shared/core
 
-replace github.com/lamassuiot/lamassuiot/v3/subsystems => ../../../shared/subsystems
+	github.com/lamassuiot/lamassuiot/v3/subsystems => ../../../shared/subsystems
+)
 
 require github.com/sirupsen/logrus v1.9.3
 
@@ -60,8 +62,6 @@ require (
 	github.com/stretchr/testify v1.9.0 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/thales-e-security/pool v0.0.2 // indirect
-	github.com/ugorji/go v1.2.12 // indirect
-	github.com/ugorji/go/codec v1.2.12 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
