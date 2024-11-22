@@ -4,6 +4,7 @@
 
 ### Chores
 
+* Chore: fix awsconnector dockerfile
 * Chore: ci update dockerfiles and gh workflow ([#177](https://github.com/lamassuiot/lamassuiot/issues/177))
 
 ### Refactor
