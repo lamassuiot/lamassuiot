@@ -18,7 +18,7 @@ directories="
 	./engines/storage/postgres
 	./engines/storage/sqlite
   	./backend
-  	./awsiotconnector
+  	./connectors/awsiot
 	./monolithic
   
 "

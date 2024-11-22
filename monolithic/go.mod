@@ -4,8 +4,8 @@ go 1.22.0
 
 replace (
 	github.com/lamassuiot/lamassuiot/v3/aws => ../shared/aws
-	github.com/lamassuiot/lamassuiot/v3/awsiotconnector => ../awsiotconnector
 	github.com/lamassuiot/lamassuiot/v3/backend => ../backend
+	github.com/lamassuiot/lamassuiot/v3/connectors/awsiot => ../connectors/awsiot
 	github.com/lamassuiot/lamassuiot/v3/core => ../shared/core
 	github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws => ../engines/crypto/aws
 	github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem => ../engines/crypto/filesystem
@@ -27,8 +27,8 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/uuid v1.6.0
 	github.com/lamassuiot/lamassuiot/v3/aws v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/awsiotconnector v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v3/backend v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/v3/connectors/awsiot v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v3/sdk v0.0.0-00010101000000-000000000000
 	github.com/lamassuiot/lamassuiot/v3/subsystems v0.0.0-00010101000000-000000000000

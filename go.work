@@ -1,11 +1,9 @@
 go 1.22.0
 
 use (
-	
-	./awsiotconnector
-	./backend
-	./shared/aws
+
 	./shared/core
+	./shared/aws
 	./shared/sdk
 	./shared/subsystems
 	./shared/http
@@ -19,6 +17,8 @@ use (
 	./engines/storage/couchdb
 	./engines/storage/postgres
 	./engines/storage/sqlite
+	./backend
+	./connectors/awsiot
 	./monolithic
 	
 )
