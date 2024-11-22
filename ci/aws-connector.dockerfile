@@ -19,8 +19,6 @@ RUN go work vendor
 
 ##############
 
-RUN go mod tidy
-
 ENV GOSUMDB=off
 RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ")&& \
     go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -mod vendor -o aws connectors/awsiot/cmd/main.go 
