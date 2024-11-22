@@ -134,7 +134,7 @@ jobs:
           go-version: '^1.20.0' # The Go version to download (if necessary) and use.
       - name: Build release assets # This would actually build your project, using zip for an example artifact
         run: |
-          go mod vendor
+          go work vendor
           zip -r vendor.zip vendor
       - name: Upload vendor dependencies
         uses: actions/upload-release-asset@v1
