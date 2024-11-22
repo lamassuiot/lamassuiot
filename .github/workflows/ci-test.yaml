@@ -8,7 +8,28 @@ on:
       - main
 jobs:
   test:
-    name: Run Tests
+    strategy:
+      matrix:
+        module: 
+          - core
+          - sdk
+          - shared/subsystems
+          - shared/http
+          - engines/crypto/aws
+          - engines/crypto/filesystem
+          - engines/crypto/pkcs11
+          - engines/crypto/vaultkv2
+          - engines/eventbus/amqp
+          - engines/eventbus/aws
+          - engines/eventbus/channel
+          - engines/storage/couchdb
+          - engines/storage/postgres
+          - engines/storage/sqlite
+          - backend
+          - connectors/awsiot
+          - monolithic
+          
+    name: ${{ matrix.module }} - Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -17,15 +38,17 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '^1.20.0' # The Go version to download (if necessary) and use.
+          go-version: '^1.22.0' # The Go version to download (if necessary) and use.
+          cache-dependency-path: "**/*.sum"
  
       - name: Install Dependencies
+        working-directory: ${{ matrix.module }}
         run: go mod download
- 
       - name: Run Golang Tests with coverage
         id: run
+        working-directory: ${{ matrix.module }}
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./pkg/... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4.2.0
         with:

@@ -1,7 +1,0 @@
-logs:
-  level: "info"
-connector_id:  aws.580561117445
-aws_config:
-  access_key_id: **** # This is a wrong value
-  secret_access_key:  "****"
-  region:  eu-west-1

@@ -14,6 +14,7 @@ options:
         - security
         - test
         - chore
+        - refactor
   commit_groups:
     title_maps:
       feat: Features
@@ -23,6 +24,7 @@ options:
       security: Security Fixes
       test: Tests
       chore: Chores
+      refactor: Refactor
   header:
     pattern: "^((\\w+)[\\s:]\\s.*)$"
     pattern_maps:

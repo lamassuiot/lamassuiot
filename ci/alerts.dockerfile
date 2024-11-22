@@ -15,7 +15,7 @@ RUN go mod tidy
 
 ENV GOSUMDB=off
 RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ")&& \
-    go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -o alerts cmd/alerts/main.go 
+    go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -o alerts backend/cmd/alerts/main.go 
 
 FROM ubuntu:20.04
 

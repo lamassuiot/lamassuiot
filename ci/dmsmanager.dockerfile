@@ -14,7 +14,7 @@ RUN go mod tidy
 
 ENV GOSUMDB=off
 RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ")&& \
-    go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -o dms-manager cmd/dms-manager/main.go 
+    go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -o dms-manager backend/cmd/dms-manager/main.go 
 
 FROM ubuntu:20.04
 
