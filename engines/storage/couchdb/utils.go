@@ -33,13 +33,7 @@ func CreateCouchDBConnection(logger *logrus.Entry, cfg cdb_config.CouchDBPSEConf
 	if err != nil {
 		return nil, err
 	}
-	/*
-	   	kiviOpts := kivik.Options{
-	   		couchdb.OptionHTTPClient: httpCli,
-	   	}
 
-	   client, err := kivik.New("couch", address, kivikOpts)
-	*/
 	client, err := kivik.New("couch", address, nil)
 	if err != nil {
 		return nil, err
@@ -214,20 +208,9 @@ func (db *couchDBQuerier[E]) SelectAll(queryParams *resources.QueryParameters, e
 func (db *couchDBQuerier[E]) SelectExists(elemID string) (bool, *E, error) {
 	doc := db.Get(context.Background(), elemID)
 	err := doc.Err()
-	return false, nil, err
-	/*
-		if err != nil {
-			switch err := err.(type) {
-			case *kivik.HTTPError:
-				if err.Response.StatusCode == http.StatusNotFound {
-					return false, nil, nil
-				} else {
-					return false, nil, err
-				}
-			default:
-				return false, nil, err
-			}
-		}*/
+	if err != nil {
+		return false, nil, err
+	}
 
 	var elem E
 	if err := doc.ScanDoc(&elem); err != nil {
