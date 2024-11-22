@@ -1,10 +1,9 @@
 DIR=$(pwd)
 
 directories="
-	
-	./shared/core
+	./core
+	./sdk
   	./shared/aws
-	./shared/sdk
 	./shared/subsystems
 	./shared/http
 	./engines/crypto/aws
@@ -20,7 +19,6 @@ directories="
   	./backend
   	./connectors/awsiot
 	./monolithic
-  
 "
 
 for dir in $directories; do

@@ -11,8 +11,8 @@ jobs:
     strategy:
       matrix:
         module: 
-          - shared/core
-          - shared/sdk
+          - core
+          - sdk
           - shared/subsystems
           - shared/http
           - engines/crypto/aws

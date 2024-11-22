@@ -3,7 +3,7 @@ module github.com/lamassuiot/lamassuiot/v3/aws
 go 1.22.0
 
 replace (
-	github.com/lamassuiot/lamassuiot/v3/core => ../core
+	github.com/lamassuiot/lamassuiot/v3/core => ../../core
 	github.com/lamassuiot/lamassuiot/v3/subsystems => ../subsystems
 )
 

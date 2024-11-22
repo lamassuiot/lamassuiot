@@ -2,7 +2,7 @@ module github.com/lamassuiot/lamassuiot/v3/http
 
 go 1.22.0
 
-replace github.com/lamassuiot/lamassuiot/v3/core => ../core
+replace github.com/lamassuiot/lamassuiot/v3/core => ../../core
 
 require (
 	github.com/gin-gonic/gin v1.10.0

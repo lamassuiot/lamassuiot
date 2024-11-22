@@ -3,7 +3,7 @@ module github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2
 go 1.22.0
 
 replace (
-	github.com/lamassuiot/lamassuiot/v3/core => ../../../shared/core
+	github.com/lamassuiot/lamassuiot/v3/core => ../../../core
 
 	github.com/lamassuiot/lamassuiot/v3/http => ../../../shared/http
 

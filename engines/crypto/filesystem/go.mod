@@ -2,7 +2,7 @@ module github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem
 
 go 1.22.0
 
-replace github.com/lamassuiot/lamassuiot/v3/core => ../../../shared/core
+replace github.com/lamassuiot/lamassuiot/v3/core => ../../../core
 
 require (
 	github.com/sirupsen/logrus v1.9.3

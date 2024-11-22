@@ -4,7 +4,7 @@ go 1.22.0
 
 replace (
 	github.com/lamassuiot/lamassuiot/v3/aws => ../shared/aws
-	github.com/lamassuiot/lamassuiot/v3/core => ../shared/core
+	github.com/lamassuiot/lamassuiot/v3/core => ../core
 	github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws => ../engines/crypto/aws
 	github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem => ../engines/crypto/filesystem
 	github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11 => ../engines/crypto/pkcs11
@@ -16,7 +16,7 @@ replace (
 	github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres => ../engines/storage/postgres
 	github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite => ../engines/storage/sqlite
 	github.com/lamassuiot/lamassuiot/v3/http => ../shared/http
-	github.com/lamassuiot/lamassuiot/v3/sdk => ../shared/sdk
+	github.com/lamassuiot/lamassuiot/v3/sdk => ../sdk
 	github.com/lamassuiot/lamassuiot/v3/subsystems => ../shared/subsystems
 )
 
