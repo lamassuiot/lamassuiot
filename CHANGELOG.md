@@ -1,6 +1,14 @@
 
-<a name="2.8.0"></a>
-## [2.8.0](https://github.com/lamassuiot/lamassuiot/compare/v2.7.0...2.8.0) (2024-10-14)
+<a name="3.0.0"></a>
+## [3.0.0](https://github.com/lamassuiot/lamassuiot/compare/v2.8.0...3.0.0) (2024-11-22)
+
+### Refactor
+
+* Refactor: major refactor v3 pakage - structured code into go submodules([#176](https://github.com/lamassuiot/lamassuiot/issues/176))
+
+
+<a name="v2.8.0"></a>
+## [v2.8.0](https://github.com/lamassuiot/lamassuiot/compare/v2.7.0...v2.8.0) (2024-10-25)
 
 ### Bug Fixes
 
@@ -58,6 +66,10 @@
 
 * Chore: customize codecov integration ([#133](https://github.com/lamassuiot/lamassuiot/issues/133))
 * Chore: remove unused swagger support ([#118](https://github.com/lamassuiot/lamassuiot/issues/118))
+
+### Refactor
+
+* Refactor: Make event handlers first-class citizens in our code ([#121](https://github.com/lamassuiot/lamassuiot/issues/121))
 
 ### Tests
 
