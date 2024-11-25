@@ -9,7 +9,6 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"math/big"
@@ -3332,7 +3331,6 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 }
 
 func TestSignatureVerify(t *testing.T) {
-	t.Skip("Skip until we have a reliable test for this")
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
@@ -3347,42 +3345,77 @@ func TestSignatureVerify(t *testing.T) {
 		resultCheck func(bool, error) error
 	}{
 		{
-			name:   "OK/TestSignatureVerifyPlainMes",
+			name:   "OK/TestSignatureVerifyPlainMessagePSS256",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (bool, error) {
-
 				messB := []byte("my Message")
-				messba64 := base64.StdEncoding.EncodeToString(messB)
 				sign, err := caSDK.SignatureSign(context.Background(), services.SignatureSignInput{
 					CAID:             DefaultCAID,
-					Message:          []byte(messba64),
+					Message:          []byte(messB),
 					MessageType:      models.Raw,
 					SigningAlgorithm: "RSASSA_PSS_SHA_256",
 				})
-
 				if err != nil {
 					return false, err
 				}
-				//cas := []*models.CACertificate{}
+
 				res, err := caSDK.SignatureVerify(context.Background(), services.SignatureVerifyInput{
 					CAID:             DefaultCAID,
 					Signature:        sign,
-					SigningAlgorithm: "RSASSA_PSS_SHA_512",
+					SigningAlgorithm: "RSASSA_PSS_SHA_256",
 					MessageType:      models.Raw,
-					Message:          []byte(messba64),
+					Message:          []byte(messB),
 				})
 				return res, err
 			},
-			resultCheck: func(bol bool, err error) error {
-				fmt.Println(bol)
-				if !errors.Is(err, errs.ErrCAStatus) {
+			resultCheck: func(valid bool, err error) error {
+				if err != nil {
 					return fmt.Errorf("got unexpected error: %s", err)
+				}
+
+				if !valid {
+					return fmt.Errorf("signature verification failed")
 				}
 				return nil
 			},
 		},
 		{
-			name:   "OK/TestSignatureVerifyHashMes",
+			name:   "OK/TestSignatureVerifyPlainMessagePKCS1V5",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (bool, error) {
+				messB := []byte("my Message")
+				sign, err := caSDK.SignatureSign(context.Background(), services.SignatureSignInput{
+					CAID:             DefaultCAID,
+					Message:          []byte(messB),
+					MessageType:      models.Raw,
+					SigningAlgorithm: "RSASSA_PKCS1_V1_5_SHA_384",
+				})
+				if err != nil {
+					return false, err
+				}
+
+				res, err := caSDK.SignatureVerify(context.Background(), services.SignatureVerifyInput{
+					CAID:             DefaultCAID,
+					Signature:        sign,
+					SigningAlgorithm: "RSASSA_PKCS1_V1_5_SHA_384",
+					MessageType:      models.Raw,
+					Message:          []byte(messB),
+				})
+				return res, err
+			},
+			resultCheck: func(valid bool, err error) error {
+				if err != nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+
+				if !valid {
+					return fmt.Errorf("signature verification failed")
+				}
+				return nil
+			},
+		},
+		{
+			name:   "OK/TestSignatureVerifyHashMessage",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (bool, error) {
 				h := sha256.New()
@@ -3390,32 +3423,33 @@ func TestSignatureVerify(t *testing.T) {
 				messB := []byte("my Message")
 				h.Write([]byte(messB))
 				messH := h.Sum(nil)
-				messba64 := base64.StdEncoding.EncodeToString(messH)
+
 				sign, err := caSDK.SignatureSign(context.Background(), services.SignatureSignInput{
 					CAID:             DefaultCAID,
-					Message:          []byte(messba64),
-					MessageType:      models.Raw,
+					Message:          []byte(messH),
+					MessageType:      models.Hashed,
 					SigningAlgorithm: "RSASSA_PSS_SHA_256",
 				})
-
 				if err != nil {
 					return false, err
 				}
 
-				//cas := []*models.CACertificate{}
 				res, err := caSDK.SignatureVerify(context.Background(), services.SignatureVerifyInput{
 					CAID:             DefaultCAID,
+					Message:          []byte(messH),
+					MessageType:      models.Hashed,
+					SigningAlgorithm: "RSASSA_PSS_SHA_256",
 					Signature:        sign,
-					SigningAlgorithm: "RSASSA_PSS_SHA_512",
-					MessageType:      models.Raw,
-					Message:          []byte(messba64),
 				})
 				return res, err
 			},
-			resultCheck: func(bol bool, err error) error {
-				fmt.Println(bol)
-				if !errors.Is(err, errs.ErrCAStatus) {
+			resultCheck: func(valid bool, err error) error {
+				if err != nil {
 					return fmt.Errorf("got unexpected error: %s", err)
+				}
+
+				if !valid {
+					return fmt.Errorf("signature verification failed")
 				}
 				return nil
 			},
