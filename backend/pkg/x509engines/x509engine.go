@@ -337,7 +337,7 @@ func (engine X509Engine) Sign(cAssetType CryptoAssetType, certificate *x509.Cert
 				Hash:       hashFunc,
 			})
 			if err != nil {
-				return nil, errs.ErrEngineHashAlgInconsistency
+				return nil, err
 			}
 			return signature, nil
 		} else {
