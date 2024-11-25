@@ -7,9 +7,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
-	svcmock "github.com/lamassuiot/lamassuiot/v3/core/pkg/services/mock"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	svcmock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

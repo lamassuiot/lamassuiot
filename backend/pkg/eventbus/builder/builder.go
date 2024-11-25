@@ -1,11 +1,11 @@
 package builder
 
 import (
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/eventbus"
-	"github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp"
-	ampq_subsystem "github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/subsystem"
-	"github.com/lamassuiot/lamassuiot/v3/engines/eventbus/aws"
-	"github.com/lamassuiot/lamassuiot/v3/engines/eventbus/channel"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
+	"github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3"
+	ampq_subsystem "github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3/subsystem"
+	"github.com/lamassuiot/lamassuiot/engines/eventbus/aws/v3"
+	"github.com/lamassuiot/lamassuiot/engines/eventbus/channel/v3"
 	"github.com/sirupsen/logrus"
 )
 

@@ -7,9 +7,9 @@ import (
 	"fmt"
 
 	kivik "github.com/go-kivik/kivik/v4"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/storage"
-	cdb_config "github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
+	cdb_config "github.com/lamassuiot/lamassuiot/engines/storage/couchdb/v3/config"
 	log "github.com/sirupsen/logrus"
 )
 

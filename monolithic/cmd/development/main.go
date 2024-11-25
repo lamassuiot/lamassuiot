@@ -13,12 +13,12 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	laws "github.com/lamassuiot/lamassuiot/v3/aws"
-	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/config"
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/monolithic/pkg"
-	"github.com/lamassuiot/lamassuiot/v3/sdk"
-	"github.com/lamassuiot/lamassuiot/v3/subsystems/pkg/test/subsystems"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg"
+	"github.com/lamassuiot/lamassuiot/sdk/v3"
+	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
 )
 
 const readyToPKI = ` 

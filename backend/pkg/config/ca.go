@@ -1,7 +1,7 @@
 package config
 
 import (
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 )
 
 type CAConfig struct {

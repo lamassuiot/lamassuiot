@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
-	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
+	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
 
 func generateAndImportCA(keyType x509.PublicKeyAlgorithm, engine cryptoengines.CryptoEngine) (*x509.Certificate, any, error) {

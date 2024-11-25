@@ -3,9 +3,9 @@ package subsystem
 import (
 	"log"
 
-	"github.com/lamassuiot/lamassuiot/v3/aws"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/subsystems/pkg/test/subsystems"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
 )
 
 func Register() {

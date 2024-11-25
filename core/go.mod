@@ -1,4 +1,4 @@
-module github.com/lamassuiot/lamassuiot/v3/core
+module github.com/lamassuiot/lamassuiot/core/v3
 
 go 1.22.0
 

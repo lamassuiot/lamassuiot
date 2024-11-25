@@ -15,8 +15,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
+	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
 	"go.mozilla.org/pkcs7"
 )

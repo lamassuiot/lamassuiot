@@ -1,4 +1,4 @@
-module github.com/lamassuiot/lamassuiot/v3/subsystems
+module github.com/lamassuiot/lamassuiot/shared/subsystems/v3
 
 go 1.22.0
 

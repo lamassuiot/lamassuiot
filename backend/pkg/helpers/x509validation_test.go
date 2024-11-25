@@ -3,7 +3,7 @@ package helpers
 import (
 	"testing"
 
-	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
+	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 )
 
 func TestValidateCertificate(t *testing.T) {

@@ -3,9 +3,9 @@ package postgres
 import (
 	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/storage"
-	lconfig "github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
+	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
 	log "github.com/sirupsen/logrus"
 )
 

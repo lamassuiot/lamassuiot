@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	smock "github.com/lamassuiot/lamassuiot/v3/core/pkg/services/mock"
+	smock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

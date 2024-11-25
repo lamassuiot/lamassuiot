@@ -1,11 +1,11 @@
-module github.com/lamassuiot/lamassuiot/v3/engines/eventbus/aws
+module github.com/lamassuiot/lamassuiot/engines/eventbus/aws/v3
 
 go 1.22.0
 
 replace (
-	github.com/lamassuiot/lamassuiot/v3/aws => ../../../shared/aws
-	github.com/lamassuiot/lamassuiot/v3/core => ../../../core
-	github.com/lamassuiot/lamassuiot/v3/subsystems => ../../../shared/subsystems
+	github.com/lamassuiot/lamassuiot/core/v3 => ../../../core
+	github.com/lamassuiot/lamassuiot/shared/aws/v3 => ../../../shared/aws
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 => ../../../shared/subsystems
 )
 
 require (
@@ -14,8 +14,8 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.32.4
 	github.com/aws/aws-sdk-go-v2/service/sns v1.31.4
 	github.com/aws/aws-sdk-go-v2/service/sts v1.32.4
-	github.com/lamassuiot/lamassuiot/v3/aws v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/core/v3 v3.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/shared/aws/v3 v3.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.9.3
 )
 
@@ -55,7 +55,7 @@ require (
 	github.com/hashicorp/hcl v1.0.1-vault-5 // indirect
 	github.com/jakehl/goid v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/lamassuiot/lamassuiot/v3/subsystems v0.0.0-00010101000000-000000000000 // indirect
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.0.0-00010101000000-000000000000 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect

@@ -16,9 +16,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	chelpers "github.com/lamassuiot/lamassuiot/v3/http/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	chelpers "github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 

@@ -1,12 +1,12 @@
-module github.com/lamassuiot/lamassuiot/v3/http
+module github.com/lamassuiot/lamassuiot/shared/http/v3
 
 go 1.22.0
 
-replace github.com/lamassuiot/lamassuiot/v3/core => ../../core
+replace github.com/lamassuiot/lamassuiot/core/v3 => ../../core
 
 require (
 	github.com/gin-gonic/gin v1.10.0
-	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/core/v3 v3.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.9.3
 )
 

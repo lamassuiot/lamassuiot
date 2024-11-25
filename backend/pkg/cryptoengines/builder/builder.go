@@ -3,17 +3,17 @@ package builder
 import (
 	"fmt"
 
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws"
-	aws_subsystem "github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws/subsystem"
-	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem"
-	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11"
-	pkcs11_subsystem "github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11/subsystem"
-	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2"
-	vault_subsystem "github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2/subsystem"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/aws/v3"
+	aws_subsystem "github.com/lamassuiot/lamassuiot/engines/crypto/aws/v3/subsystem"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3"
+	pkcs11_subsystem "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/subsystem"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3"
+	vault_subsystem "github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3/subsystem"
 )
 
 func BuildCryptoEngine(logger *log.Entry, conf cconfig.CryptoEngineConfig) (cryptoengines.CryptoEngine, error) {

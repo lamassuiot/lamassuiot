@@ -1,24 +1,24 @@
-module github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws
+module github.com/lamassuiot/lamassuiot/engines/crypto/aws/v3
 
 go 1.22.0
 
 replace (
-	github.com/lamassuiot/lamassuiot/v3/aws => ../../../shared/aws
-	github.com/lamassuiot/lamassuiot/v3/core => ../../../core
+	github.com/lamassuiot/lamassuiot/core/v3 => ../../../core
+	github.com/lamassuiot/lamassuiot/shared/aws/v3 => ../../../shared/aws
 
-	github.com/lamassuiot/lamassuiot/v3/http => ../../../shared/http
+	github.com/lamassuiot/lamassuiot/shared/http/v3 => ../../../shared/http
 
-	github.com/lamassuiot/lamassuiot/v3/subsystems => ../../../shared/subsystems
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 => ../../../shared/subsystems
 )
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.32.4
 	github.com/aws/aws-sdk-go-v2/service/kms v1.37.2
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.34.2
-	github.com/lamassuiot/lamassuiot/v3/aws v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/http v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/subsystems v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/core/v3 v3.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/shared/aws/v3 v3.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
 )

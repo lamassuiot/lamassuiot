@@ -1,10 +1,10 @@
 package subsystem
 
 import (
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11"
-	pkcs11_test "github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11/test"
-	"github.com/lamassuiot/lamassuiot/v3/subsystems/pkg/test/subsystems"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3"
+	pkcs11_test "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/test"
+	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
 )
 
 func Register() {

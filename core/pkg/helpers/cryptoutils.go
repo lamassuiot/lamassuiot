@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	cmodels "github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
+	cmodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	log "github.com/sirupsen/logrus"
 )
 

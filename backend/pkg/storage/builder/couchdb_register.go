@@ -3,8 +3,8 @@
 package builder
 
 import (
-	couchdb "github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb"
-	subsystem "github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb/subsystem"
+	couchdb "github.com/lamassuiot/lamassuiot/engines/storage/couchdb/v3"
+	subsystem "github.com/lamassuiot/lamassuiot/engines/storage/couchdb/v3/subsystem"
 )
 
 func init() {

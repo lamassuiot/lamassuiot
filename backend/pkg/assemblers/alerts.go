@@ -3,17 +3,17 @@ package assemblers
 import (
 	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/eventbus"
-	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/routes"
-	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/services"
-	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/services/handlers"
-	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/storage/builder"
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	ceventbus "github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/eventbus"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/handlers"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	ceventbus "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	log "github.com/sirupsen/logrus"
 )
 

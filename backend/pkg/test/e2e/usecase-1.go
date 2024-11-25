@@ -11,14 +11,14 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/globalsign/est"
-	identityextractors "github.com/lamassuiot/lamassuiot/v3/backend/pkg/routes/middlewares/identity-extractors"
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
-	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	cmodels "github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
-	"github.com/lamassuiot/lamassuiot/v3/sdk"
+	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	cmodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/sdk/v3"
 )
 
 type UseCase1Input struct {

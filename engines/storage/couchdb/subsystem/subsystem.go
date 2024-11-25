@@ -3,9 +3,9 @@
 package subsystem
 
 import (
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	couchdb_test "github.com/lamassuiot/lamassuiot/v3/engines/storage/couchdb/test"
-	"github.com/lamassuiot/lamassuiot/v3/subsystems/pkg/test/subsystems"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	couchdb_test "github.com/lamassuiot/lamassuiot/engines/storage/couchdb/v3/test"
+	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
 )
 
 func Register() {

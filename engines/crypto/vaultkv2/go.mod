@@ -1,13 +1,13 @@
-module github.com/lamassuiot/lamassuiot/v3/engines/crypto/vaultkv2
+module github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3
 
 go 1.22.0
 
 replace (
-	github.com/lamassuiot/lamassuiot/v3/core => ../../../core
+	github.com/lamassuiot/lamassuiot/core/v3 => ../../../core
 
-	github.com/lamassuiot/lamassuiot/v3/http => ../../../shared/http
+	github.com/lamassuiot/lamassuiot/shared/http/v3 => ../../../shared/http
 
-	github.com/lamassuiot/lamassuiot/v3/subsystems => ../../../shared/subsystems
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 => ../../../shared/subsystems
 )
 
 require (
@@ -18,9 +18,9 @@ require (
 )
 
 require (
-	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/http v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/subsystems v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/core/v3 v3.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.0.0-00010101000000-000000000000
 )
 
 require (

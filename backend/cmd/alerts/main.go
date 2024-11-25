@@ -1,11 +1,11 @@
 package main
 
 import (
-	lamassu "github.com/lamassuiot/lamassuiot/v3/backend/pkg/assemblers"
-	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/config"
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
+	lamassu "github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )

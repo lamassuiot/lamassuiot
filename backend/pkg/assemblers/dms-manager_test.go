@@ -19,12 +19,12 @@ import (
 
 	"github.com/globalsign/est"
 	"github.com/google/uuid"
-	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/helpers"
-	identityextractors "github.com/lamassuiot/lamassuiot/v3/backend/pkg/routes/middlewares/identity-extractors"
-	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
+	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
+	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/ocsp"
 )

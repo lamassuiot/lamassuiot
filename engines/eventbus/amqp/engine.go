@@ -2,9 +2,9 @@ package amqp
 
 import (
 	"github.com/ThreeDotsLabs/watermill/message"
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/eventbus"
-	"github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/config"
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
+	"github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3/config"
 	"github.com/sirupsen/logrus"
 )
 

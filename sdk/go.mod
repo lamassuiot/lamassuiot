@@ -1,15 +1,15 @@
-module github.com/lamassuiot/lamassuiot/v3/sdk
+module github.com/lamassuiot/lamassuiot/sdk/v3
 
 go 1.22.0
 
 replace (
-	github.com/lamassuiot/lamassuiot/v3/core => ../core
-	github.com/lamassuiot/lamassuiot/v3/http => ../shared/http
+	github.com/lamassuiot/lamassuiot/core/v3 => ../core
+	github.com/lamassuiot/lamassuiot/shared/http/v3 => ../shared/http
 )
 
 require (
-	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/http v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/core/v3 v3.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.9.3
 	golang.org/x/crypto v0.28.0
 	golang.org/x/oauth2 v0.23.0

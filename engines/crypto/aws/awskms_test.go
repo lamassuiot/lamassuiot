@@ -5,12 +5,12 @@ import (
 	"crypto/x509"
 	"testing"
 
-	laws "github.com/lamassuiot/lamassuiot/v3/aws"
+	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
-	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
+	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )

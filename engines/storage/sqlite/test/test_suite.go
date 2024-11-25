@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite"
-	lconfig "github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/engines/storage/sqlite/v3"
+	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/sqlite/v3/config"
 
 	"gorm.io/gorm"
 )

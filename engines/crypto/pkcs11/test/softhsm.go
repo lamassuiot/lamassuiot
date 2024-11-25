@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strconv"
 
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	pconfig "github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11"
-	dockerunner "github.com/lamassuiot/lamassuiot/v3/subsystems/pkg/test/dockerrunner"
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	pconfig "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3"
+	dockerunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )

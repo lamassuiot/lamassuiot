@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services/eventhandling"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services/eventhandling"
 	"github.com/sirupsen/logrus"
 )
 

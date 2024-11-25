@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/go-gormigrate/gormigrate/v2"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/resources"
-	lconfig "github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
