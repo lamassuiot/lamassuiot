@@ -4111,6 +4111,9 @@ func (b TestServiceBuilder) WithService(services ...Service) TestServiceBuilder 
 }
 
 func (b TestServiceBuilder) Build(t *testing.T) (*TestServer, error) {
+
+	LoadPlugins()
+
 	var err error
 	eventBusConf := &TestEventBusConfig{
 		config: config.EventBusEngine{

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
+	"plugin"
 	"slices"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
@@ -374,6 +376,9 @@ func BuildVATestServer(caTestServer *CATestServer) (*VATestServer, error) {
 }
 
 func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, cryptoEngines *TestCryptoEngineConfig, services []Service, monitor bool) (*TestServer, error) {
+	// Try to load plugins
+	LoadPlugins()
+
 	servicesMap := make(map[Service]interface{})
 
 	beforeEachActions := []func() error{}
@@ -493,4 +498,25 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 		BeforeEach: beforeEach,
 		AfterSuite: afterSuite,
 	}, nil
+}
+
+func LoadPlugins() {
+	// This function find .so files in the target/plugins directory and load them
+	path := "/mnt/c/Datos/LKS/Proyectos/LKS/lamassu/lamassuiot/lamassuiot/target/plugins"
+
+	files, err := os.ReadDir(path)
+	if err != nil {
+		return
+	}
+
+	for _, file := range files {
+		fmt.Printf("Loading plugin: %s\n", file.Name())
+		_, err := plugin.Open(filepath.Join(path, file.Name()))
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		file.Info()
+	}
+
 }

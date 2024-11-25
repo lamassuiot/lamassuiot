@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3/filesystem"
 	log "github.com/sirupsen/logrus"
 )
 
+// TODO: Remove filesystem dependency for this test
 func TestBuildStorageEnginePostgres(t *testing.T) {
 	logger := log.WithField("test", "BuildCryptoEngine_Filesystem")
 

@@ -19,7 +19,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	cmodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3/filesystem"
 )
 
 func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {

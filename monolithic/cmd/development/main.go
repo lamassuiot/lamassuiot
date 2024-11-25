@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"plugin"
 	"strings"
 	"time"
 
@@ -76,7 +78,30 @@ const (
 	Filesystem        CryptoEngineOption = "filesystem"
 )
 
+func loadPlugins() {
+	// This function find .so files in the target/plugins directory and load them
+	path := "/mnt/c/Datos/LKS/Proyectos/LKS/lamassu/lamassuiot/lamassuiot/target/plugins"
+
+	files, err := os.ReadDir(path)
+	if err != nil {
+		return
+	}
+
+	for _, file := range files {
+		fmt.Printf("Loading plugin: %s\n", file.Name())
+		_, err := plugin.Open(filepath.Join(path, file.Name()))
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		file.Info()
+	}
+
+}
+
 func main() {
+	loadPlugins()
+
 	hsmModule := flag.String("hsm-module-path", "", "enable HSM support")
 
 	awsIoTManager := flag.Bool("awsiot", false, "enable AWS IoT Manager")

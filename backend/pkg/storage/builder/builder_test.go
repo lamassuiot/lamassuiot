@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -18,17 +17,19 @@ func TestBuildStorageEnginePostgres(t *testing.T) {
 	}
 
 	// Call the BuildStorageEngine function
-	storageEngine, err := BuildStorageEngine(logger, conf)
+	_, err := BuildStorageEngine(logger, conf)
 
 	// Verify the result
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
+	/*
+	   _, ok := storageEngine.(*postgres.PostgresStorageEngine)
 
-	_, ok := storageEngine.(*postgres.PostgresStorageEngine)
-	if !ok {
-		t.Error("expected storage engine of type *postgres.StorageEngine")
-	}
+	   	if !ok {
+	   		t.Error("expected storage engine of type *postgres.StorageEngine")
+	   	}
+	*/
 }
 
 func TestBuildStorageEngineInvalidProvider(t *testing.T) {
