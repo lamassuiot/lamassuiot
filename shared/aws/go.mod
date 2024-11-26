@@ -1,10 +1,10 @@
-module github.com/lamassuiot/lamassuiot/v3/aws
+module github.com/lamassuiot/lamassuiot/shared/aws/v3
 
 go 1.22.0
 
 replace (
-	github.com/lamassuiot/lamassuiot/v3/core => ../../core
-	github.com/lamassuiot/lamassuiot/v3/subsystems => ../subsystems
+	github.com/lamassuiot/lamassuiot/core/v3 => ../../core
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 => ../subsystems
 )
 
 require (
@@ -12,8 +12,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.28.3
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.44
 	github.com/aws/aws-sdk-go-v2/service/sts v1.32.4
-	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/subsystems v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/core/v3 v3.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.0.0-00010101000000-000000000000
 	github.com/ory/dockertest/v3 v3.11.0
 )
 

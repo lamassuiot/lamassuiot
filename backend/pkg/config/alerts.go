@@ -1,6 +1,6 @@
 package config
 
-import cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+import cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 
 type AlertsConfig struct {
 	Logs               cconfig.Logging                `mapstructure:"logs"`

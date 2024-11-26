@@ -2,8 +2,8 @@ package controllers
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/services"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 )
 
 type alertsHttpRoutes struct {

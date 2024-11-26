@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/cryptoengines"
-	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
-	cmodels "github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/filesystem"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
+	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	cmodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3"
 )
 
 func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {

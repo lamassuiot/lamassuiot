@@ -1,15 +1,15 @@
-module github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite
+module github.com/lamassuiot/lamassuiot/engines/storage/sqlite/v3
 
 go 1.22.0
 
 replace (
-	github.com/lamassuiot/lamassuiot/v3/core => ../../../core
-	github.com/lamassuiot/lamassuiot/v3/subsystems => ../../../shared/subsystems
+	github.com/lamassuiot/lamassuiot/core/v3 => ../../../core
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 => ../../../shared/subsystems
 )
 
 require (
 	github.com/go-gormigrate/gormigrate/v2 v2.1.3
-	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/core/v3 v3.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.9.3
 	gorm.io/driver/sqlite v1.5.6
 	gorm.io/gorm v1.25.12

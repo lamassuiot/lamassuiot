@@ -8,7 +8,7 @@ import (
 	"crypto/x509"
 	"testing"
 
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
 
 func TestKeyStrengthMetadataFromCertificate(t *testing.T) {

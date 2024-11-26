@@ -2,8 +2,8 @@ package routes
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/v3/backend/pkg/controllers"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
 )
 

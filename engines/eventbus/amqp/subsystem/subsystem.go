@@ -1,9 +1,9 @@
 package subsystem
 
 import (
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	rabbitmq_test "github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/test"
-	"github.com/lamassuiot/lamassuiot/v3/subsystems/pkg/test/subsystems"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	rabbitmq_test "github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3/test"
+	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
 )
 
 func Register() {

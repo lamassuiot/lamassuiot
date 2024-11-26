@@ -7,9 +7,9 @@ import (
 	"strconv"
 
 	"github.com/ThreeDotsLabs/watermill-amqp/v2/pkg/amqp"
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
-	ampq "github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/config"
-	dockerunner "github.com/lamassuiot/lamassuiot/v3/subsystems/pkg/test/dockerrunner"
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	ampq "github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3/config"
+	dockerunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	"github.com/sirupsen/logrus"

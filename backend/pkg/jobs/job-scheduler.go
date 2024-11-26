@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	cconfig "github.com/lamassuiot/lamassuiot/v3/core/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
 )

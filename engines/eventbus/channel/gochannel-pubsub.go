@@ -3,7 +3,7 @@ package channel
 import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/eventbus"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
 	"github.com/sirupsen/logrus"
 )
 

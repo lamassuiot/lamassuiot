@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	headerextractors "github.com/lamassuiot/lamassuiot/v3/backend/pkg/routes/middlewares/basic-header-extractors"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
+	headerextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/basic-header-extractors"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/sirupsen/logrus"
 )
 

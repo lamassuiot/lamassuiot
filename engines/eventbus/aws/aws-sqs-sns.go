@@ -12,8 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
-	laws "github.com/lamassuiot/lamassuiot/v3/aws"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/engines/eventbus"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
+	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
 	"github.com/sirupsen/logrus"
 )
 

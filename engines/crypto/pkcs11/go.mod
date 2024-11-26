@@ -1,19 +1,19 @@
-module github.com/lamassuiot/lamassuiot/v3/engines/crypto/pkcs11
+module github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3
 
 go 1.22.0
 
 replace (
-	github.com/lamassuiot/lamassuiot/v3/core => ../../../core
+	github.com/lamassuiot/lamassuiot/core/v3 => ../../../core
 
-	github.com/lamassuiot/lamassuiot/v3/subsystems => ../../../shared/subsystems
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 => ../../../shared/subsystems
 )
 
 require github.com/sirupsen/logrus v1.9.3
 
 require (
 	github.com/ThalesIgnite/crypto11 v1.2.5
-	github.com/lamassuiot/lamassuiot/v3/core v0.0.0-00010101000000-000000000000
-	github.com/lamassuiot/lamassuiot/v3/subsystems v0.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/core/v3 v3.0.0-00010101000000-000000000000
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.0.0-00010101000000-000000000000
 	github.com/miekg/pkcs11 v1.1.1
 	github.com/ory/dockertest/v3 v3.11.0
 )

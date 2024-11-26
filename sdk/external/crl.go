@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/url"
 
-	chelpers "github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
+	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
 

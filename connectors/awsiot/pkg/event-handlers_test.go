@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	smock "github.com/lamassuiot/lamassuiot/v3/core/pkg/services/mock"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	smock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
 )

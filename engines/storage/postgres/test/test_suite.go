@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/lamassuiot/lamassuiot/v3/engines/storage/postgres/config"
+	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	gormLogger "gorm.io/gorm/logger"

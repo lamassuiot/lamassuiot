@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	lservices "github.com/lamassuiot/lamassuiot/v3/backend/pkg/services"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	cmodels "github.com/lamassuiot/lamassuiot/v3/core/pkg/models"
-	"github.com/lamassuiot/lamassuiot/v3/core/pkg/services"
+	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	cmodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
 type CAEventPublisher struct {
