@@ -73,7 +73,7 @@ const (
 	AwsKms            CryptoEngineOption = "aws-kms"
 	Vault             CryptoEngineOption = "vault"
 	Pkcs11            CryptoEngineOption = "pkcs11"
-	GolangFS          CryptoEngineOption = "golangfs"
+	Filesystem        CryptoEngineOption = "filesystem"
 )
 
 func main() {
@@ -85,7 +85,7 @@ func main() {
 	awsIoTManagerST := flag.String("awsiot-sessiontoken", "", "AWS IoT Manager SessionToken")
 	awsIoTManagerRegion := flag.String("awsiot-region", "eu-west-1", "AWS IoT Manager Region")
 	awsIoTManagerID := flag.String("awsiot-id", "", "AWS IoT Manager ConnectorID")
-	cryptoengineOptions := flag.String("cryptoengines", "golangfs", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','golangfs']")
+	cryptoengineOptions := flag.String("cryptoengines", "filesystem", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','filesystem']")
 	sqliteOptions := flag.String("sqlite", "", "set path to sqlite database to enable sqlite storage engine")
 	disableMonitor := flag.Bool("disable-monitor", false, "disable crypto monitoring")
 	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
@@ -114,7 +114,7 @@ func main() {
 		AwsKms:            {},
 		Vault:             {},
 		Pkcs11:            {},
-		GolangFS:          {},
+		Filesystem:        {},
 	}
 
 	if (*cryptoengineOptions) != "" {
@@ -291,7 +291,7 @@ func main() {
 		LogLevel: cconfig.Info,
 	}
 
-	cryptoEngines := make([]cconfig.CryptoEngineConfig, 1)
+	cryptoEngines := []cconfig.CryptoEngineConfig{}
 
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
 		vaultCryptoEngine.ID = "dockertest-hcpvault-kvv2"
@@ -321,17 +321,16 @@ func main() {
 		cryptoEngines = append(cryptoEngines, secretsManagerCryptoEngine)
 	}
 
-	if _, ok := cryptoengineOptionsMap[GolangFS]; ok {
-
+	if _, ok := cryptoengineOptionsMap[Filesystem]; ok {
 		cryptoEngines = append(cryptoEngines, cconfig.CryptoEngineConfig{
-			ID:       "golangfs-1",
+			ID:       "filesystem-1",
 			Metadata: make(map[string]interface{}),
 			Type:     cconfig.FilesystemProvider,
 			Config: map[string]interface{}{
 				"storageDirectory": "/tmp/gotest",
 			},
 		})
-		cryptoEnginesConfig.DefaultEngine = "golangfs-1"
+		cryptoEnginesConfig.DefaultEngine = "filesystem-1"
 	}
 
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok {
@@ -423,7 +422,7 @@ func parseCryptoEngineOptions(options string) (map[CryptoEngineOption]struct{}, 
 	opts := make(map[CryptoEngineOption]struct{})
 	for _, opt := range strings.Split(options, ",") {
 		switch CryptoEngineOption(opt) {
-		case AwsSecretsManager, AwsKms, Vault, Pkcs11, GolangFS:
+		case AwsSecretsManager, AwsKms, Vault, Pkcs11, Filesystem:
 			opts[CryptoEngineOption(opt)] = struct{}{}
 		default:
 			return nil, fmt.Errorf("invalid crypto engine option: %s", opt)
