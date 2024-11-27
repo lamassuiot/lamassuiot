@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/lamassuiot/lamassuiot/v3/engines/storage/sqlite/sqlite"
+	"github.com/lamassuiot/lamassuiot/engines/storage/sqlite/v3/sqlite"
 )
 
 func init() {

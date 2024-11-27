@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/amqp"
-	ampq_subsystem "github.com/lamassuiot/lamassuiot/v3/engines/eventbus/amqp/subsystem"
+	"github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3/amqp"
+	ampq_subsystem "github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3/subsystem"
 )
 
 func init() {

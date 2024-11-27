@@ -1,6 +1,6 @@
 package main
 
-import "github.com/lamassuiot/lamassuiot/v3/engines/eventbus/channel/channel"
+import "github.com/lamassuiot/lamassuiot/engines/eventbus/channel/v3/channel"
 
 func init() {
 	channel.Register()

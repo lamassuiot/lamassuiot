@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
+	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/postgres"
 	postgres_test "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/test"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
 )

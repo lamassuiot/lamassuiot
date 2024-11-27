@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	pconfig "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3"
+	pconfig "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/pkcs11"
 	dockerunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"

@@ -9,8 +9,8 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/engines/storage/sqlite/v3"
 	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/sqlite/v3/config"
+	"github.com/lamassuiot/lamassuiot/engines/storage/sqlite/v3/sqlite"
 
 	"gorm.io/gorm"
 )

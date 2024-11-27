@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/lamassuiot/lamassuiot/v3/engines/eventbus/aws/aws"
+	"github.com/lamassuiot/lamassuiot/engines/eventbus/aws/v3/aws"
 )
 
 func init() {

@@ -2,7 +2,7 @@ package subsystem
 
 import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/pkcs11"
 	pkcs11_test "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/test"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
 )

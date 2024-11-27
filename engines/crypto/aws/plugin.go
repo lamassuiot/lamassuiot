@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws/aws"
-	"github.com/lamassuiot/lamassuiot/v3/engines/crypto/aws/subsystem"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/aws/v3/aws"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/aws/v3/subsystem"
 )
 
 func init() {
