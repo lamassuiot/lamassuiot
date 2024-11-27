@@ -26,7 +26,7 @@ for dir in $directories; do
   if [ -n "$dir" ]; then
     echo "Tidying $dir"
     cd $DIR/$dir
-    go mod tidy
+    # go mod tidy
     go get github.com/ugorji/go
   fi
 done
