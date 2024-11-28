@@ -12,5 +12,8 @@ __debug_bin*
 *.html
 cmd/test
 init.sql
+0_init.sql
 *.logs
 .DS_Store
+target
+*.so
