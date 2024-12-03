@@ -135,12 +135,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: main
-      - name: Create Tag
-        run: |
-          git config user.name "Lamassu IoT Bot"
-          git config user.email "lamassuiot@lamassu.io"
-          git tag ${{ needs.version_info.outputs.release_version_with_v }} -m "Release ${{ needs.version_info.outputs.release_version_with_v }}"
-          git push origin ${{ needs.version_info.outputs.release_version_with_v }}
       
       - name: Create Tag
         run: |
@@ -196,13 +190,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: main
-      - name: Create Tag
-        run: |
-          git config user.name "Lamassu IoT Bot"
-          git config user.email "lamassuiot@lamassu.io"
-          git tag ${{ needs.version_info.outputs.release_version_with_v }} -m "Release ${{ needs.version_info.outputs.release_version_with_v }}"
-          git push origin ${{ needs.version_info.outputs.release_version_with_v }}
-      
+
       - name: Create Tag
         run: |
           git config user.name "Lamassu IoT Bot"
