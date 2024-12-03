@@ -19,7 +19,6 @@ env:
     shared/http
     engines/crypto/aws
     engines/crypto/filesystem
-    engines/crypto/filesystem-mldsa
     engines/crypto/pkcs11
     engines/crypto/vaultkv2
     engines/eventbus/amqp
