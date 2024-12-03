@@ -4,6 +4,7 @@
 
 ### Chores
 
+* Chore: remove duplicate tasks from release workflow
 * Chore: fix release workflow dependencies
 * Chore: fix release workflow
 * Chore: fix release workflow
