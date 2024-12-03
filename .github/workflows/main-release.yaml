@@ -10,6 +10,28 @@ on:
 run-name: >-
   ${{ format('Release {0}', github.event.inputs.release_version) }}
 
+env:
+  MODULES: |
+    core
+    sdk
+    shared/aws
+    shared/subsystems
+    shared/http
+    engines/crypto/aws
+    engines/crypto/filesystem
+    engines/crypto/filesystem-mldsa
+    engines/crypto/pkcs11
+    engines/crypto/vaultkv2
+    engines/eventbus/amqp
+    engines/eventbus/aws
+    engines/eventbus/channel
+    engines/storage/couchdb
+    engines/storage/postgres
+    engines/storage/sqlite
+    backend
+    connectors/awsiot
+    monolithic
+
 jobs:
   version_info:
     name: "Version Info"
@@ -38,10 +60,21 @@ jobs:
           echo "MAJOR_VERSION          = $MAJOR_VERSION"
           echo "RELEASE_VERSION        = $RELEASE_VERSION"
           echo "RELEASE_VERSION_WITH_V = $RELEASE_VERSION_WITH_V"
+      - name: Modules to release
+        id: matrix
+        run: |
+          IFS=$'\n' read -r -d '' -a go_modules <<< "$MODULES"
+          json_modules=$(printf '%s\n' "${go_modules[@]}" | jq -R . | jq -s .)
+          echo "JSON_MODULES=$json_modules" >> "$GITHUB_ENV"
+          for module in "${go_modules[@]}"; do
+            echo "Module: $module"
+          done
+          echo "JSON_MODULES = $json_modules"
     outputs:
       major_version: ${{ env.MAJOR_VERSION }}
       release_version: ${{ env.RELEASE_VERSION }}
       release_version_with_v: ${{ env.RELEASE_VERSION_WITH_V }}
+      json_modules: ${{ env.JSON_MODULES }}
  
   change_logs:
     name: "Generate Change Logs and Release Notes"
@@ -92,8 +125,8 @@ jobs:
           # Push changes to branch.          
           git push origin $GITHUB_REF_NAME
 
-  create_tag:
-    name: Create Tag
+  create_global_release:
+    name: Create Global Tag & Release
     needs: [change_logs, version_info]
     runs-on: ubuntu-latest
     steps:
@@ -107,16 +140,19 @@ jobs:
           git config user.email "lamassuiot@lamassu.io"
           git tag ${{ needs.version_info.outputs.release_version_with_v }} -m "Release ${{ needs.version_info.outputs.release_version_with_v }}"
           git push origin ${{ needs.version_info.outputs.release_version_with_v }}
+      
+      - name: Create Tag
+        run: |
+          git config user.name "Lamassu IoT Bot"
+          git config user.email "lamassuiot@lamassu.io"
+          git tag ${{ needs.version_info.outputs.release_version_with_v }} -m "Release ${{ needs.version_info.outputs.release_version_with_v }}"
+          git push origin ${{ needs.version_info.outputs.release_version_with_v }}
 
-  create_release:
-    name: Create Release
-    needs: [create_tag, version_info]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
+      - name: Checkout code to tag
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.version_info.outputs.release_version_with_v }}
+
       - name: Create Github Release
         uses: actions/create-release@v1
         id: create_release
@@ -146,9 +182,53 @@ jobs:
           asset_name: vendor.zip
           asset_content_type: application/zip
 
+  create_module_release:
+    name: "Create Module release"
+    needs: [create_global_release, version_info]
+    runs-on: ubuntu-latest
+    environment: release
+    strategy:
+      matrix:
+        module: ${{ fromJson(needs.version_info.outputs.json_modules) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Create Tag
+        run: |
+          git config user.name "Lamassu IoT Bot"
+          git config user.email "lamassuiot@lamassu.io"
+          git tag ${{ needs.version_info.outputs.release_version_with_v }} -m "Release ${{ needs.version_info.outputs.release_version_with_v }}"
+          git push origin ${{ needs.version_info.outputs.release_version_with_v }}
+      
+      - name: Create Tag
+        run: |
+          git config user.name "Lamassu IoT Bot"
+          git config user.email "lamassuiot@lamassu.io"
+          git tag ${{ matrix.module }}/${{ needs.version_info.outputs.release_version_with_v }} -m "Release ${{ matrix.module }}/${{ needs.version_info.outputs.release_version_with_v }}"
+          git push origin ${{ matrix.module }}/${{ needs.version_info.outputs.release_version_with_v }}
+
+      - name: Checkout code to tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.module }}/${{ needs.version_info.outputs.release_version_with_v }}
+
+      - name: Create Github Release
+        uses: actions/create-release@v1
+        id: create_release
+        with:
+          draft: false
+          prerelease: false
+          release_name: ${{ matrix.module }}/${{ needs.version_info.outputs.release_version_with_v }}
+          tag_name: ${{ matrix.module }}/${{ needs.version_info.outputs.release_version_with_v }}
+          body_path: RELEASE-NOTES.md
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
   create_gopkg_release:
     name: "Create Go package release"
-    needs: [create_tag, version_info]
+    needs: [create_global_release, version_info]
     runs-on: ubuntu-latest
     environment: release
     steps:
@@ -166,7 +246,7 @@ jobs:
           git push
 
   build_docker_image:
-    needs: [create_tag, version_info]
+    needs: [create_global_release, version_info]
     strategy:
       matrix:
         service: [ca, devmanager, dmsmanager, va, alerts, aws-connector]
