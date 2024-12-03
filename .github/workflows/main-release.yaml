@@ -10,27 +10,6 @@ on:
 run-name: >-
   ${{ format('Release {0}', github.event.inputs.release_version) }}
 
-env:
-  MODULES: |
-    core
-    sdk
-    shared/aws
-    shared/subsystems
-    shared/http
-    engines/crypto/aws
-    engines/crypto/filesystem
-    engines/crypto/pkcs11
-    engines/crypto/vaultkv2
-    engines/eventbus/amqp
-    engines/eventbus/aws
-    engines/eventbus/channel
-    engines/storage/couchdb
-    engines/storage/postgres
-    engines/storage/sqlite
-    backend
-    connectors/awsiot
-    monolithic
-
 jobs:
   version_info:
     name: "Version Info"
@@ -62,13 +41,33 @@ jobs:
       - name: Modules to release
         id: matrix
         run: |
-          IFS=$'\n' read -r -d '' -a go_modules <<< "$MODULES"
-          json_modules=$(printf '%s\n' "${go_modules[@]}" | jq -R . | jq -s .)
+          # Define MODULES as an array
+          MODULES=(
+            "core"
+            "sdk"
+            "shared/aws"
+            "shared/subsystems"
+            "shared/http"
+            "engines/crypto/aws"
+            "engines/crypto/filesystem"
+            "engines/crypto/pkcs11"
+            "engines/crypto/vaultkv2"
+            "engines/eventbus/amqp"
+            "engines/eventbus/aws"
+            "engines/eventbus/channel"
+            "engines/storage/couchdb"
+            "engines/storage/postgres"
+            "engines/storage/sqlite"
+            "backend"
+            "connectors/awsiot"
+            "monolithic"
+          )
+
+          # Convert the array into a JSON array
+          json_modules=$(printf '%s\n' "${MODULES[@]}" | jq -R . | jq -s .)
+
+          # Optionally, set the JSON array as an environment variable
           echo "JSON_MODULES=$json_modules" >> "$GITHUB_ENV"
-          for module in "${go_modules[@]}"; do
-            echo "Module: $module"
-          done
-          echo "JSON_MODULES = $json_modules"
     outputs:
       major_version: ${{ env.MAJOR_VERSION }}
       release_version: ${{ env.RELEASE_VERSION }}
@@ -227,7 +226,7 @@ jobs:
 
   create_gopkg_release:
     name: "Create Go package release"
-    needs: [create_module_release, version_info]
+    needs: [create_global_release, version_info]
     runs-on: ubuntu-latest
     environment: release
     steps:
@@ -245,7 +244,7 @@ jobs:
           git push
 
   build_docker_image:
-    needs: [create_module_release, version_info]
+    needs: [create_global_release, version_info]
     strategy:
       matrix:
         service: [ca, devmanager, dmsmanager, va, alerts, aws-connector]
