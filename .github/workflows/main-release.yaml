@@ -229,7 +229,7 @@ jobs:
 
   create_gopkg_release:
     name: "Create Go package release"
-    needs: [create_global_release, version_info]
+    needs: [create_module_release, version_info]
     runs-on: ubuntu-latest
     environment: release
     steps:
@@ -247,7 +247,7 @@ jobs:
           git push
 
   build_docker_image:
-    needs: [create_global_release, version_info]
+    needs: [create_module_release, version_info]
     strategy:
       matrix:
         service: [ca, devmanager, dmsmanager, va, alerts, aws-connector]
