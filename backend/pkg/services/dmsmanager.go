@@ -489,7 +489,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		lFunc.Errorf("aborting enrollment. DMS doesn't allow JustInTime registration. register the device manually or switch DMS JIT option ON")
 		return nil, fmt.Errorf("device not preregistered")
 	} else {
-		lFunc.Infof("device already preregistered. continuing enrollment process", device.ID)
+		lFunc.Infof("device %s already preregistered. continuing enrollment process", device.ID)
 	}
 
 	lFunc.Infof("device registration process completed successfully")
