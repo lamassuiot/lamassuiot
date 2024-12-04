@@ -327,7 +327,7 @@ func main() {
 			Metadata: make(map[string]interface{}),
 			Type:     cconfig.FilesystemProvider,
 			Config: map[string]interface{}{
-				"storageDirectory": "/tmp/gotest",
+				"storage_directory": "/tmp/gotest",
 			},
 		})
 		cryptoEnginesConfig.DefaultEngine = "filesystem-1"

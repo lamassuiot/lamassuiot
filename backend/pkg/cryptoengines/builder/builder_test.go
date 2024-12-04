@@ -12,7 +12,7 @@ func TestBuildStorageEnginePostgres(t *testing.T) {
 	logger := log.WithField("test", "BuildCryptoEngine_Filesystem")
 
 	cfg := map[string]interface{}{
-		"StorageDirectory": "filepath",
+		"storage_directory": "filepath",
 	}
 
 	conf := cconfig.CryptoEngineConfig{
@@ -39,7 +39,7 @@ func TestBuildStorageEngineInvalidProvider(t *testing.T) {
 	logger := log.WithField("test", "BuildCryptoEngine_InvalidProvider")
 
 	cfg := map[string]interface{}{
-		"StorageDirectory": "filepath",
+		"storage_directory": "filepath",
 	}
 
 	conf := cconfig.CryptoEngineConfig{
