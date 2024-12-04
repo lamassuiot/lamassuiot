@@ -3150,7 +3150,6 @@ func TestGetStatsByCAID(t *testing.T) {
 }
 
 func TestGetCertificatesByExpirationDate(t *testing.T) {
-
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
@@ -3183,9 +3182,11 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 			},
 			run: func(caSDK services.CAService) ([]*models.Certificate, error) {
 				cas := []*models.Certificate{}
+				now := time.Now()
+				before := time.Date(now.Year()+2, 0, 0, 0, 0, 0, 0, time.UTC)
 				res, err := caSDK.GetCertificatesByExpirationDate(context.Background(), services.GetCertificatesByExpirationDateInput{
-					ExpiresAfter:  time.Now(),
-					ExpiresBefore: time.Date(2025, 0, 0, 0, 0, 0, 0, time.UTC),
+					ExpiresAfter:  now,
+					ExpiresBefore: before,
 					ListInput: resources.ListInput[models.Certificate]{
 						ExhaustiveRun: true,
 						QueryParameters: &resources.QueryParameters{
@@ -3204,7 +3205,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 					return fmt.Errorf("got unexpected error: %s", err)
 				}
 				if len(cas) != 20 {
-					return fmt.Errorf("should've got only one CA and the received quantity is different.")
+					return fmt.Errorf("should've got 20 certs, but got %d.", len(cas))
 				}
 				return nil
 			},
@@ -3228,9 +3229,11 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 			},
 			run: func(caSDK services.CAService) ([]*models.Certificate, error) {
 				cas := []*models.Certificate{}
+				now := time.Now()
+				before := time.Date(now.Year()+2, 0, 0, 0, 0, 0, 0, time.UTC)
 				res, err := caSDK.GetCertificatesByExpirationDate(context.Background(), services.GetCertificatesByExpirationDateInput{
-					ExpiresAfter:  time.Now(),
-					ExpiresBefore: time.Date(2025, 0, 0, 0, 0, 0, 0, time.UTC),
+					ExpiresAfter:  now,
+					ExpiresBefore: before,
 					ListInput: resources.ListInput[models.Certificate]{
 						ExhaustiveRun: false,
 						QueryParameters: &resources.QueryParameters{
@@ -3249,7 +3252,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 					return fmt.Errorf("got unexpected error: %s", err)
 				}
 				if len(cas) != 2 {
-					return fmt.Errorf("should've got only one CA and the received quantity is different.")
+					return fmt.Errorf("should've got two certs, but got %d.", len(cas))
 				}
 				return nil
 			},
@@ -3294,7 +3297,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 					return fmt.Errorf("got unexpected error: %s", err)
 				}
 				if len(cas) != 0 {
-					return fmt.Errorf("should've got only one CA and the received quantity is different.")
+					return fmt.Errorf("should've got no cert, but got %d.", len(cas))
 				}
 				return nil
 			},

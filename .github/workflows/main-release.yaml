@@ -203,18 +203,6 @@ jobs:
         with:
           ref: ${{ matrix.module }}/${{ needs.version_info.outputs.release_version_with_v }}
 
-      - name: Create Github Release
-        uses: actions/create-release@v1
-        id: create_release
-        with:
-          draft: false
-          prerelease: false
-          release_name: ${{ matrix.module }}/${{ needs.version_info.outputs.release_version_with_v }}
-          tag_name: ${{ matrix.module }}/${{ needs.version_info.outputs.release_version_with_v }}
-          body_path: RELEASE-NOTES.md
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-
   create_gopkg_release:
     name: "Create Go package release"
     needs: [create_module_release, version_info]
