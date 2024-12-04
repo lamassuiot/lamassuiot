@@ -2,24 +2,6 @@ module github.com/lamassuiot/lamassuiot/backend/v3
 
 go 1.22.0
 
-replace (
-	github.com/lamassuiot/lamassuiot/core/v3 => ../core
-	github.com/lamassuiot/lamassuiot/engines/crypto/aws/v3 => ../engines/crypto/aws
-	github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3 => ../engines/crypto/filesystem
-	github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3 => ../engines/crypto/pkcs11
-	github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3 => ../engines/crypto/vaultkv2
-	github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3 => ../engines/eventbus/amqp
-	github.com/lamassuiot/lamassuiot/engines/eventbus/aws/v3 => ../engines/eventbus/aws
-	github.com/lamassuiot/lamassuiot/engines/eventbus/channel/v3 => ../engines/eventbus/channel
-	github.com/lamassuiot/lamassuiot/engines/storage/couchdb/v3 => ../engines/storage/couchdb
-	github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3 => ../engines/storage/postgres
-	github.com/lamassuiot/lamassuiot/engines/storage/sqlite/v3 => ../engines/storage/sqlite
-	github.com/lamassuiot/lamassuiot/sdk/v3 => ../sdk
-	github.com/lamassuiot/lamassuiot/shared/aws/v3 => ../shared/aws
-	github.com/lamassuiot/lamassuiot/shared/http/v3 => ../shared/http
-	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 => ../shared/subsystems
-)
-
 require (
 	github.com/ThreeDotsLabs/watermill v1.4.1
 	github.com/cloudevents/sdk-go/v2 v2.15.2
@@ -81,7 +63,6 @@ require (
 )
 
 require (
-	github.com/ugorji/go v1.2.12 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/net v0.30.0 // indirect

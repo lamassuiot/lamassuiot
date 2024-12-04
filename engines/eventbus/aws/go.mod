@@ -2,12 +2,6 @@ module github.com/lamassuiot/lamassuiot/engines/eventbus/aws/v3
 
 go 1.22.0
 
-replace (
-	github.com/lamassuiot/lamassuiot/core/v3 => ../../../core
-	github.com/lamassuiot/lamassuiot/shared/aws/v3 => ../../../shared/aws
-	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 => ../../../shared/subsystems
-)
-
 require (
 	github.com/ThreeDotsLabs/watermill v1.4.1
 	github.com/ThreeDotsLabs/watermill-aws v1.0.0
@@ -36,6 +30,4 @@ require (
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
-	github.com/ugorji/go v1.2.12 // indirect
-	github.com/ugorji/go/codec v1.2.12 // indirect
 )
