@@ -12,7 +12,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
-	"github.com/sirupsen/logrus"
 )
 
 func AssembleAWSIoTManagerService(conf ConnectorServiceConfig, caService services.CAService, dmsService services.DMSManagerService, deviceService services.DeviceManagerService) (*AWSCloudConnectorService, error) {
@@ -33,7 +32,7 @@ func AssembleAWSIoTManagerService(conf ConnectorServiceConfig, caService service
 		DeviceSDK:   deviceService,
 	})
 	if err != nil {
-		logrus.Fatal(err)
+		return nil, fmt.Errorf("could not create aws connector service: %s", err)
 	}
 
 	serviceID := fmt.Sprintf("aws-connector-%s", strings.ReplaceAll(conf.ConnectorID, "aws.", "-"))
