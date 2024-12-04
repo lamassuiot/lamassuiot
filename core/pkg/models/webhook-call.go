@@ -1,11 +1,11 @@
 package models
 
 import (
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 )
 
 type WebhookCall struct {
-	Name   string            `json:"name"`
-	Url    string            `json:"url"`
-	Config config.HTTPClient `json:"config"`
+	Name   string             `json:"name"`
+	Url    string             `json:"url"`
+	Config cconfig.HTTPClient `json:"config"`
 }
