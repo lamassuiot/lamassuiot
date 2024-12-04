@@ -168,7 +168,7 @@ func requestWithBody[T any](ctx context.Context, client *http.Client, method str
 		return m, nonOKResponseToError(res.StatusCode, body, knownErrors)
 	}
 
-	return parseJSON[T](body)
+	return ParseJSON[T](body)
 }
 
 func Get[T any](ctx context.Context, client *http.Client, url string, queryParams *cresources.QueryParameters, knownErrors map[int][]error) (T, error) {
@@ -206,7 +206,7 @@ func Get[T any](ctx context.Context, client *http.Client, url string, queryParam
 		return m, nonOKResponseToError(res.StatusCode, body, knownErrors)
 	}
 
-	return parseJSON[T](body)
+	return ParseJSON[T](body)
 }
 
 func Delete(ctx context.Context, client *http.Client, url string, knownErrors map[int][]error) error {
@@ -267,7 +267,7 @@ func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.C
 	return queryParams.NextBookmark, nil
 }
 
-func parseJSON[T any](s []byte) (T, error) {
+func ParseJSON[T any](s []byte) (T, error) {
 	var r T
 	if err := json.Unmarshal(s, &r); err != nil {
 		return r, err
@@ -284,7 +284,7 @@ func nonOKResponseToError(resStatusCode int, resBody []byte, knownErrors map[int
 		Err string `json:"err"`
 	}
 
-	decodedErr, err := parseJSON[errJson](resBody)
+	decodedErr, err := ParseJSON[errJson](resBody)
 	if err != nil {
 		return fmt.Errorf("unexpected status code %d. Body err msg could not be decoded: %s", resStatusCode, string(resBody))
 	}
