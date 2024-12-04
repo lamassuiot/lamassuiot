@@ -2,12 +2,6 @@ module github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3
 
 go 1.22.0
 
-replace (
-	github.com/lamassuiot/lamassuiot/core/v3 => ../../../core
-
-	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 => ../../../shared/subsystems
-)
-
 require (
 	github.com/ThreeDotsLabs/watermill v1.4.1
 	github.com/ThreeDotsLabs/watermill-amqp/v2 v2.1.3
@@ -45,8 +39,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/rabbitmq/amqp091-go v1.10.0 // indirect
 	github.com/rogpeppe/go-internal v1.10.0 // indirect
-	github.com/ugorji/go v1.2.12 // indirect
-	github.com/ugorji/go/codec v1.2.12 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
