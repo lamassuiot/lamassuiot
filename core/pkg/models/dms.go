@@ -41,7 +41,7 @@ type ServerKeyGenSettings struct {
 
 type ServerKeyGenKey struct {
 	Type KeyType `json:"type"`
-	Bits int             `json:"bits"`
+	Bits int     `json:"bits"`
 }
 
 type DeviceProvisionProfile struct {
@@ -68,8 +68,9 @@ type EnrollmentSettings struct {
 }
 
 type EnrollmentOptionsESTRFC7030 struct {
-	AuthMode        ESTAuthMode                  `json:"auth_mode"`
-	AuthOptionsMTLS AuthOptionsClientCertificate `json:"client_certificate_settings"`
+	AuthMode                   ESTAuthMode                  `json:"auth_mode"`
+	AuthOptionsMTLS            AuthOptionsClientCertificate `json:"client_certificate_settings"`
+	AuthOptionsExternalWebhook WebhookCall                  `json:"external_webhook"`
 }
 
 type AuthOptionsClientCertificate struct {
@@ -97,7 +98,7 @@ type DMSStats struct {
 }
 
 type BindIdentityToDeviceOutput struct {
-	Certificate *Certificate    `json:"certificate"`
-	DMS         *DMS            `json:"dms"`
-	Device      *Device `json:"device"`
+	Certificate *Certificate `json:"certificate"`
+	DMS         *DMS         `json:"dms"`
+	Device      *Device      `json:"device"`
 }
