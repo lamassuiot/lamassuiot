@@ -1,5 +1,141 @@
+coverage:
+  status:
+    project:
+      default: off
+      shared-aws:
+        target: auto
+        flags: 
+        - shared-aws
+      shared-http:
+        target: auto
+        flags: 
+        - shared-http
+      core:
+        target: auto
+        flags: 
+        - core
+      sdk:
+        target: auto
+        flags:
+        - sdk
+      crypto-aws:
+        target: auto
+        flags: 
+        - crypto-aws
+      crypto-filesystem:
+        target: auto
+        flags: 
+        - crypto-filesystem
+      crypto-vaultkv2:
+        target: auto
+        flags: 
+        - crypto-vaultkv2
+      crypto-pkc11:
+        target: auto
+        flags: 
+        - crypto-pkcs11
+      storage-postgres:
+        target: auto
+        flags: 
+        - storage-postgres
+      storage-sqlite:
+        target: auto
+        flags: 
+        - storage-sqlite
+      storage-couchdb:
+        target: auto
+        flags: 
+        - storage-couchdb
+      eventbus-amqp:
+        target: auto
+        flags: 
+        - eventbus-amqp
+      eventbus-aws:
+        target: auto
+        flags: 
+        - eventbus-aws
+      eventbus-channel:
+        target: auto
+        flags: 
+        - eventbus-channel
+      backend:
+        target: auto
+        flags: 
+        - backend
+      connector-aws:
+        target: auto
+        flags: 
+        - connector-aws
+    patch: off
+
+flags:
+  shared-aws:
+    paths:
+        - shared/aws/
+    carryforward: true
+  shared-http:
+    paths:
+        - shared/http/
+    carryforward: true
+  core:
+    paths:
+        - core/
+    carryforward: true
+  sdk:
+    paths:
+        - sdk/
+    carryforward: true
+  crypto-aws:
+    paths:
+        - engines/crypto/aws/
+    carryforward: true
+  crypto-filesystem:
+    paths:
+        - engines/crypto/filesystem/
+    carryforward: true
+  crypto-vaultkv2:
+    paths:
+        - engines/crypto/vaultkv2/
+    carryforward: true
+  crypto-pkcs11:
+    paths:
+        - engines/crypto/pkcs11/
+    carryforward: true
+  storage-postgres:
+    paths:
+        - engines/storage/postgres/
+    carryforward: true
+  storage-sqlite:
+      paths:
+          - engines/storage/sqlite/
+      carryforward: true
+  storage-couchdb:
+      paths:
+          - engines/storage/couchdb/
+      carryforward: true
+  eventbus-amqp:
+    paths:
+        - engines/eventbus/amqp/
+    carryforward: true
+  eventbus-aws:
+    paths:
+        - engines/eventbus/aws/
+    carryforward: true
+  eventbus-channel:
+      paths:
+          - engines/eventbus/channel/
+      carryforward: true
+  backend:
+    paths:
+        - backend/
+    carryforward: true
+  connector-aws:
+    paths:
+        - connector/aws/
+    carryforward: true
+
 ignore:
- - "pkg/test"
- - "pkg/storage/sqlite"
- - "pkg/storage/couchdb"
- - "pkg/services/mock"
+  - "**/*_mock.go"
+  - "**/*_test.go"
+  - "**/*_testset.go"
+
