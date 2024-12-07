@@ -11,25 +11,44 @@ jobs:
     strategy:
       matrix:
         module: 
-          - core
-          - sdk
-          - shared/subsystems
-          - shared/http
-          - engines/crypto/aws
-          - engines/crypto/filesystem
-          - engines/crypto/pkcs11
-          - engines/crypto/vaultkv2
-          - engines/eventbus/amqp
-          - engines/eventbus/aws
-          - engines/eventbus/channel
-          - engines/storage/couchdb
-          - engines/storage/postgres
-          - engines/storage/sqlite
-          - backend
-          - connectors/awsiot
-          - monolithic
+          - path: core
+            tag: core
+          - path: sdk
+            tag: sdk
+          - path: shared/subsystems 
+            tag: shared-subsystems
+          - path: shared/aws
+            tag: shared-aws
+          - path: shared/http
+            tag: shared-http
+          - path: engines/crypto/aws
+            tag: crypto-aws
+          - path: engines/crypto/filesystem
+            tag: crypto-filesystem
+          - path: engines/crypto/pkcs11
+            tag: crypto-pkcs11
+          - path: engines/crypto/vaultkv2
+            tag: crypto-vaultkv2
+          - path: engines/eventbus/amqp
+            tag: eventbus-amqp
+          - path: engines/eventbus/aws
+            tag: eventbus-aws
+          - path: engines/eventbus/channel
+            tag: eventbus-channel
+          - path: engines/storage/couchdb
+            tag: storage-couchdb
+          - path: engines/storage/postgres
+            tag: storage-postgres
+          - path: engines/storage/sqlite
+            tag: storage-sqlite
+          - path: backend
+            tag: backend
+          - path: connectors/awsiot
+            tag: connector-awsiot
+          - path: monolithic
+            tag: monolithic
           
-    name: ${{ matrix.module }} - Tests
+    name: ${{ matrix.module.path }} - Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -42,13 +61,15 @@ jobs:
           cache-dependency-path: "**/*.sum"
  
       - name: Install Dependencies
-        working-directory: ${{ matrix.module }}
+        working-directory: ${{ matrix.module.path }}
         run: go mod download
+
       - name: Run Golang Tests with coverage
         id: run
-        working-directory: ${{ matrix.module }}
+        working-directory: ${{ matrix.module.path }}
         run: |
           go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
+
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4.2.0
         with:
@@ -56,3 +77,4 @@ jobs:
           commit_parent: ${{ github.event.pull_request.base.sha }}
           fail_ci_if_error: true
           verbose: true
+          flags: ${{ matrix.module.tag }}
