@@ -91,7 +91,7 @@ jobs:
       
       - name: Install PKCS11 Proxy Dependencies
         run: |
-          apt-get install -y libseccomp-dev #Required for building pkcs11-proxy
+          sudo apt-get install -y libseccomp-dev #Required for building pkcs11-proxy
           git clone https://github.com/SUNET/pkcs11-proxy
           cd pkcs11-proxy
           cmake . 
