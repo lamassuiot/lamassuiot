@@ -165,7 +165,6 @@ func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string
 }
 
 func (p *AWSKMSCryptoEngine) createPrivateKey(keySpec types.KeySpec) (string, crypto.Signer, error) {
-
 	key, err := p.kmscli.CreateKey(context.Background(), &kms.CreateKeyInput{
 		KeyUsage: types.KeyUsageTypeSignVerify,
 		KeySpec:  keySpec,

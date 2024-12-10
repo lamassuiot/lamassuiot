@@ -63,6 +63,9 @@ func TestAWSSecretsManagerCryptoEngine(t *testing.T) {
 	}{
 		{"CreateECDSAPrivateKey", cryptoengines.SharedTestCreateECDSAPrivateKey},
 		{"CreateRSAPrivateKey", cryptoengines.SharedTestCreateRSAPrivateKey},
+		{"SignRSA_PSS", cryptoengines.SharedTestRSAPSSSignature},
+		{"SignRSA_PKCS1v1_5", cryptoengines.SharedTestRSAPKCS1v15Signature},
+		{"SignECDSA", cryptoengines.SharedTestECDSASignature},
 		// {"DeleteKey", cryptoengines.SharedTestDeleteKey},
 		{"GetPrivateKeyByID", cryptoengines.SharedGetKey},
 		{"GetPrivateKeyByIDNotFound", cryptoengines.SharedGetKeyNotFound},

@@ -13,6 +13,7 @@ import (
 )
 
 func TestPKCS11CryptoEngine(t *testing.T) {
+	os.Setenv("PKCS11_MODULE_PATH", "/usr/local/lib/libpkcs11-proxy.so")
 	engine := preparePKCS11CryptoEngine(t)
 
 	table := []struct {
@@ -21,6 +22,9 @@ func TestPKCS11CryptoEngine(t *testing.T) {
 	}{
 		{"CreateECDSAPrivateKey", cryptoengines.SharedTestCreateECDSAPrivateKey},
 		{"CreateRSAPrivateKey", cryptoengines.SharedTestCreateRSAPrivateKey},
+		{"SignRSA_PSS", cryptoengines.SharedTestRSAPSSSignature},
+		{"SignRSA_PKCS1v1_5", cryptoengines.SharedTestRSAPKCS1v15Signature},
+		{"SignECDSA", cryptoengines.SharedTestECDSASignature},
 		// {"DeleteKey", cryptoengines.SharedTestDeleteKey}, TODO
 		{"GetPrivateKeyByID", cryptoengines.SharedGetKey},
 		{"GetPrivateKeyByIDNotFound", cryptoengines.SharedGetKeyNotFound},
