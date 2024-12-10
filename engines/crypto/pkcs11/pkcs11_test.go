@@ -13,7 +13,6 @@ import (
 )
 
 func TestPKCS11CryptoEngine(t *testing.T) {
-	os.Setenv("PKCS11_MODULE_PATH", "/usr/local/lib/libpkcs11-proxy.so")
 	engine := preparePKCS11CryptoEngine(t)
 
 	table := []struct {
