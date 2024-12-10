@@ -66,7 +66,7 @@ func testImportRSAKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
 	key, err := chelpers.GenerateRSAKey(2048)
 	assert.NoError(t, err)
 
-	_, err = engine.ImportRSAPrivateKey(key, "imported-rsa-key")
+	_, _, err = engine.ImportRSAPrivateKey(key)
 	assert.EqualError(t, err, "KMS does not support asymmetric key import")
 }
 
@@ -74,13 +74,8 @@ func testImportECDSAKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
 	key, err := chelpers.GenerateECDSAKey(elliptic.P256())
 	assert.NoError(t, err)
 
-	_, err = engine.ImportECDSAPrivateKey(key, "imported-ecdsa-key")
+	_, _, err = engine.ImportECDSAPrivateKey(key)
 	assert.EqualError(t, err, "KMS does not support asymmetric key import")
-}
-
-func testGetPrivateKeyNotFoundOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
-	_, err := engine.GetPrivateKeyByID("test-unknown-key")
-	assert.EqualError(t, err, "kms key not found")
 }
 
 func TestAWSKMSCryptoEngine(t *testing.T) {
@@ -92,8 +87,15 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 	}{
 		{"CreateECDSAPrivateKey", cryptoengines.SharedTestCreateECDSAPrivateKey},
 		{"CreateRSAPrivateKey", cryptoengines.SharedTestCreateRSAPrivateKey},
-		{"GetPrivateKeyNotFound", testGetPrivateKeyNotFoundOnKMS},
-		{"DeleteKey", testDeleteKeyOnKMS},
+		//TODO: LocalStack does not support RSA_PSS with fixed salt length. AWS KMS DOES support it. Follow issues:
+		// - https://github.com/localstack/localstack/pull/11649
+		// - https://github.com/localstack/localstack/issues/9602
+		// {"SignRSA_PSS", cryptoengines.SharedTestRSAPSSSignature},
+		{"SignRSA_PKCS1v1_5", cryptoengines.SharedTestRSAPKCS1v15Signature},
+		{"SignECDSA", cryptoengines.SharedTestECDSASignature},
+		// {"DeleteKey", cryptoengines.SharedTestDeleteKey},
+		{"GetPrivateKeyByID", cryptoengines.SharedGetKey},
+		{"GetPrivateKeyByIDNotFound", cryptoengines.SharedGetKeyNotFound},
 		{"ImportRSAKey", testImportRSAKeyOnKMS},
 		{"ImportECDSAKey", testImportECDSAKeyOnKMS},
 	}

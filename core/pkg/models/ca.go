@@ -41,6 +41,7 @@ type Certificate struct {
 	RevocationReason    RevocationReason       `json:"revocation_reason"`
 	Type                CertificateType        `json:"type"`
 	EngineID            string                 `json:"engine_id"`
+	KeyID               string                 `json:"key_id"`
 }
 
 type Expiration struct {

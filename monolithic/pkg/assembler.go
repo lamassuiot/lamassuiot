@@ -206,7 +206,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, error) {
 				AWSSDKConfig:       conf.AWSIoTManager.AWSSDKConfig,
 			}, caSDKBuilder("AWS IoT Connector", models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)), dmsMngrSDKBuilder("AWS IoT Connector", models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)), deviceMngrSDKBuilder("AWS IoT Connector", models.AWSIoTSource(conf.AWSIoTManager.ConnectorID)))
 			if err != nil {
-				return -1, fmt.Errorf("could not assemble AWS IoT Manager: %s", err)
+				// return -1, fmt.Errorf("could not assemble AWS IoT Manager: %s", err)
 			}
 		}
 

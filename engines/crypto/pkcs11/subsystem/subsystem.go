@@ -2,8 +2,8 @@ package subsystem
 
 import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3"
-	pkcs11_test "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/test"
+	pconfig "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/config"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/docker"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
 )
 
@@ -22,12 +22,12 @@ func (p *Pkcs11Subsystem) Prepare(config map[string]interface{}) error {
 
 func (p *Pkcs11Subsystem) Run() (*subsystems.SubsystemBackend, error) {
 
-	softhsmCleanup, pkcs11Cfg, err := pkcs11_test.RunSoftHsmV2Docker(p.hsmModulePath)
+	softhsmCleanup, pkcs11Cfg, err := docker.RunSoftHsmV2Docker(p.hsmModulePath)
 	if err != nil {
 		return nil, err
 	}
 
-	configAdapter := config.CryptoEngineConfigAdapter[pkcs11.PKCS11Config]{
+	configAdapter := config.CryptoEngineConfigAdapter[pconfig.PKCS11Config]{
 		ID:       "pkcs11-1",
 		Metadata: map[string]interface{}{},
 		Type:     config.PKCS11Provider,
