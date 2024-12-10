@@ -25,8 +25,6 @@ jobs:
             tag: crypto-aws
           - path: engines/crypto/filesystem
             tag: crypto-filesystem
-          - path: engines/crypto/pkcs11
-            tag: crypto-pkcs11
           - path: engines/crypto/vaultkv2
             tag: crypto-vaultkv2
           - path: engines/eventbus/amqp
@@ -78,3 +76,46 @@ jobs:
           fail_ci_if_error: true
           verbose: true
           flags: ${{ matrix.module.tag }}
+  test-pkcs11:
+    name: engines/crypto/pkcs11 - Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+ 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.22.0' # The Go version to download (if necessary) and use.
+          cache-dependency-path: "**/*.sum"
+      
+      - name: Install PKCS11 Proxy Dependencies
+        run: |
+          git clone https://github.com/SUNET/pkcs11-proxy
+          cd pkcs11-proxy
+          cmake . 
+          make
+          make install 
+          cp pkcs11-daemon /usr/local/bin/
+          ls /usr/local/lib/libpkcs11-proxy.so
+ 
+      - name: Install Dependencies
+        working-directory: engines/crypto/pkcs11
+        run: go mod download
+
+      - name: Run Golang Tests with coverage
+        id: run
+        working-directory: engines/crypto/pkcs11
+        env:
+          PKCS11_MODULE_PATH: /usr/local/lib/libpkcs11-proxy.so
+        run: |
+          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v4.2.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          commit_parent: ${{ github.event.pull_request.base.sha }}
+          fail_ci_if_error: true
+          verbose: true
+          flags: crypto-pkcs11
