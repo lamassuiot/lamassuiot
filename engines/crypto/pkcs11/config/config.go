@@ -1,4 +1,4 @@
-package pkcs11
+package config
 
 import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"

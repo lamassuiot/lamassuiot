@@ -14,24 +14,28 @@ import (
 	"os"
 
 	"github.com/ThalesIgnite/crypto11"
+	"github.com/google/uuid"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	pconfig "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/config"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	"github.com/miekg/pkcs11"
 	"github.com/sirupsen/logrus"
 )
 
-var lPkcs11 *logrus.Entry
-
 type pkcs11EngineContext struct {
-	instance *crypto11.Context
-	config   models.CryptoEngineInfo
+	api    *crypto11.Context
+	slotID uint
+	lowApi *pkcs11.Ctx
+	config models.CryptoEngineInfo
+	logger *logrus.Entry
 }
 
-func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter[PKCS11Config]) (cryptoengines.CryptoEngine, error) {
-	lPkcs11 = logger.WithField("subsystem-provider", "PKCS11")
+func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter[pconfig.PKCS11Config]) (cryptoengines.CryptoEngine, error) {
+	lPkcs11 := logger.WithField("subsystem-provider", "PKCS11")
 	config := &crypto11.Config{
 		Path:       conf.Config.ModulePath,
 		Pin:        string(conf.Config.TokenPin),
@@ -59,6 +63,7 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 
 	lPkcs11.Debugf("pkcs11 provier has %d slots", len(pkcs11ProviderSlots))
 	var tokenInfo pkcs11.TokenInfo
+	var slotID uint
 	for _, slot := range pkcs11ProviderSlots {
 		lPkcs11.Tracef("geting slot '%d' info", slot)
 		tokenInfoResp, err := pkcs11ProviderContext.GetTokenInfo(slot)
@@ -70,6 +75,7 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 		lPkcs11.Tracef("slot '%d' has label '%s'", slot, tokenInfoResp.Label)
 		if config.TokenLabel == tokenInfoResp.Label {
 			tokenInfo = tokenInfoResp
+			slotID = slot
 		}
 	}
 
@@ -79,11 +85,11 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 		return nil, fmt.Errorf("could not get info")
 	}
 
-	pkcs11SupporedKeys := []models.SupportedKeyTypeInfo{}
+	pkcs11SupportedKeys := []models.SupportedKeyTypeInfo{}
 
 	rsaMechanismInfo, err := pkcs11ProviderContext.GetMechanismInfo(pkcs11ProviderSlots[0], []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_RSA_PKCS, nil)})
 	if err == nil {
-		pkcs11SupporedKeys = append(pkcs11SupporedKeys, models.SupportedKeyTypeInfo{
+		pkcs11SupportedKeys = append(pkcs11SupportedKeys, models.SupportedKeyTypeInfo{
 			Type:  models.KeyType(x509.RSA),
 			Sizes: helpers.CalculateRSAKeySizes(int(rsaMechanismInfo.MinKeySize), int(rsaMechanismInfo.MaxKeySize)),
 		})
@@ -94,7 +100,7 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 
 	ecdsaMechanismInfo, err := pkcs11ProviderContext.GetMechanismInfo(pkcs11ProviderSlots[0], []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_ECDSA, nil)})
 	if err == nil {
-		pkcs11SupporedKeys = append(pkcs11SupporedKeys, models.SupportedKeyTypeInfo{
+		pkcs11SupportedKeys = append(pkcs11SupportedKeys, models.SupportedKeyTypeInfo{
 			Type:  models.KeyType(x509.ECDSA),
 			Sizes: helpers.CalculateECDSAKeySizes(int(ecdsaMechanismInfo.MinKeySize), int(ecdsaMechanismInfo.MaxKeySize)),
 		})
@@ -113,12 +119,15 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 	meta := helpers.MergeMaps[interface{}](&defaultMeta, &conf.Metadata)
 
 	return &pkcs11EngineContext{
-		instance: instance,
+		logger: lPkcs11,
+		slotID: slotID,
+		api:    instance,
+		lowApi: pkcs11ProviderContext,
 		config: models.CryptoEngineInfo{
 			Type:              models.PKCS11,
 			SecurityLevel:     models.SL2,
 			Provider:          pkcs11ProviderInfo.ManufacturerID,
-			SupportedKeyTypes: pkcs11SupporedKeys,
+			SupportedKeyTypes: pkcs11SupportedKeys,
 			Name:              tokenInfo.Model,
 			Metadata:          *meta,
 		},
@@ -132,9 +141,9 @@ func (hsmContext *pkcs11EngineContext) GetEngineConfig() models.CryptoEngineInfo
 func (hsmContext *pkcs11EngineContext) GetPrivateKeys() []crypto.Signer {
 	keys := make([]crypto.Signer, 0)
 
-	hsmKeys, err := hsmContext.instance.FindAllKeyPairs()
+	hsmKeys, err := hsmContext.api.FindAllKeyPairs()
 	if err != nil {
-		lPkcs11.Errorf("could not get private keys from provider: %s", err)
+		hsmContext.logger.Errorf("could not get private keys from provider: %s", err)
 		return keys
 	}
 
@@ -146,41 +155,135 @@ func (hsmContext *pkcs11EngineContext) GetPrivateKeys() []crypto.Signer {
 }
 
 func (hsmContext *pkcs11EngineContext) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
-	lPkcs11.Debugf("reading %s Key", keyID)
-	hsmKey, err := hsmContext.instance.FindKeyPair([]byte(keyID), nil)
+	hsmContext.logger.Debugf("reading %s Key", keyID)
+	hsmKey, err := hsmContext.api.FindKeyPair(nil, []byte(keyID))
 	if err != nil {
-		lPkcs11.Errorf("could not get private key %s from provider: %s", keyID, err)
-		return nil, fmt.Errorf("could not get private key")
+		hsmContext.logger.Errorf("could not get private key %s. Got error: %s", keyID, err)
+		return nil, fmt.Errorf("could not get private key. Got error: %s", err)
+	}
+
+	if hsmKey == nil {
+		hsmContext.logger.Errorf("could not find private key %s", keyID)
+		return nil, fmt.Errorf("could not find private key")
 	}
 
 	return hsmKey, nil
 }
 
-func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error) {
-	lPkcs11.Debugf("creating RSA %d key for keyID: %s", keySize, keyID)
-	newSigner, err := hsmContext.instance.GenerateRSAKeyPair([]byte(keyID), keySize)
+func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
+	tmpKeyID := uuid.New().String()
+	hsmContext.logger.Debugf("creating RSA %d key", keySize)
+	newSigner, err := hsmContext.api.GenerateRSAKeyPair([]byte(tmpKeyID), keySize)
 	if err != nil {
-		lPkcs11.Errorf("could not create '%s' RSA Private Key: %s", keyID, err)
+		hsmContext.logger.Errorf("could not create '%s' RSA Private Key: %s", tmpKeyID, err)
+		return "", nil, err
+	}
+
+	keyID, err := software.NewSoftwareCryptoEngine(hsmContext.logger).EncodePKIXPublicKeyDigest(newSigner.Public())
+	if err != nil {
+		hsmContext.logger.Errorf("could not encode public key: %s", err)
+		return "", nil, err
+	}
+
+	err = hsmContext.renameKey(tmpKeyID, keyID)
+	if err != nil {
+		hsmContext.logger.Errorf("could not rename key: %s", err)
+		return "", nil, err
+	}
+
+	return keyID, newSigner, nil
+}
+
+func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(curve elliptic.Curve) (string, crypto.Signer, error) {
+	tmpKeyID := uuid.New().String()
+	hsmContext.logger.Debugf("creating ECDSA %d key", curve.Params().BitSize)
+	newSigner, err := hsmContext.api.GenerateECDSAKeyPair([]byte(tmpKeyID), curve)
+	if err != nil {
+		hsmContext.logger.Errorf("could not create '%s' ECDSA Private Key: %s", tmpKeyID, err)
+		return "", nil, err
+	}
+
+	keyID, err := software.NewSoftwareCryptoEngine(hsmContext.logger).EncodePKIXPublicKeyDigest(newSigner.Public())
+	if err != nil {
+		hsmContext.logger.Errorf("could not encode public key: %s", err)
+		return "", nil, err
+	}
+
+	err = hsmContext.renameKey(tmpKeyID, keyID)
+	if err != nil {
+		hsmContext.logger.Errorf("could not rename key: %s", err)
+		return "", nil, err
+	}
+
+	renamedSigner, err := hsmContext.GetPrivateKeyByID(keyID)
+	if err != nil {
+		hsmContext.logger.Errorf("could not get renamed key: %s", err)
+		return "", nil, err
+	}
+
+	return keyID, renamedSigner, nil
+}
+
+func (hsmContext *pkcs11EngineContext) renameKey(oldKeyID string, newKeyID string) error {
+	hsmSession, err := hsmContext.lowApi.OpenSession(hsmContext.slotID, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
+	if err != nil {
+		hsmContext.logger.Errorf("could not open session: %s", err)
+		return err
+	}
+	defer hsmContext.lowApi.CloseSession(hsmSession)
+
+	attrSet := crypto11.NewAttributeSet()
+	attrSet.Set(crypto11.CkaClass, pkcs11.CKO_PRIVATE_KEY)
+	attrSet.Set(pkcs11.CKA_ID, oldKeyID)
+
+	keyHandle, err := findKeyWithAttributes(*hsmContext.lowApi, hsmSession, attrSet.ToSlice())
+	if err != nil {
+		hsmContext.logger.Errorf("could not find key: %s", err)
+	}
+
+	err = hsmContext.lowApi.SetAttributeValue(hsmSession, *keyHandle, []*pkcs11.Attribute{
+		pkcs11.NewAttribute(pkcs11.CKA_LABEL, []byte(newKeyID)),
+		// pkcs11.NewAttribute(pkcs11.CKA_ID, []byte(newKeyID)),
+	})
+	if err != nil {
+		hsmContext.logger.Errorf("could not set key attributes: %s", err)
+		return err
+	}
+
+	return nil
+}
+
+func (hsmContext *pkcs11EngineContext) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("TODO")
+}
+
+func (hsmContext *pkcs11EngineContext) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("TODO")
+}
+
+func (hsmContext *pkcs11EngineContext) DeleteKey(keyID string) error {
+	return fmt.Errorf("TODO")
+}
+
+func findKeyWithAttributes(ctx pkcs11.Ctx, sh pkcs11.SessionHandle, template []*pkcs11.Attribute) (handle *pkcs11.ObjectHandle, err error) {
+	if err = ctx.FindObjectsInit(sh, template); err != nil {
+		return nil, err
+	}
+	defer func() {
+		finalErr := ctx.FindObjectsFinal(sh)
+		if err == nil {
+			err = finalErr
+		}
+	}()
+
+	newhandles, _, err := ctx.FindObjects(sh, 1)
+	if err != nil {
 		return nil, err
 	}
 
-	return newSigner, nil
-}
-
-func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(curve elliptic.Curve, keyID string) (crypto.Signer, error) {
-	lPkcs11.Debugf("creating ECDSA %d key for keyID: %s", curve.Params().BitSize, keyID)
-	newSigner, err := hsmContext.instance.GenerateECDSAKeyPair([]byte(keyID), curve)
-	if err != nil {
-		lPkcs11.Errorf("could not create '%s' ECDSA Private Key: %s", keyID, err)
-		return nil, err
+	for len(newhandles) > 0 {
+		return &newhandles[0], nil
 	}
 
-	return newSigner, nil
-}
-
-func (hsmContext *pkcs11EngineContext) ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) (crypto.Signer, error) {
-	return nil, fmt.Errorf("TODO")
-}
-func (hsmContext *pkcs11EngineContext) ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID string) (crypto.Signer, error) {
-	return nil, fmt.Errorf("TODO")
+	return nil, errors.New("object not found")
 }
