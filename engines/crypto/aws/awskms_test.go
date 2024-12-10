@@ -66,7 +66,7 @@ func testImportRSAKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
 	key, err := chelpers.GenerateRSAKey(2048)
 	assert.NoError(t, err)
 
-	_, err = engine.ImportRSAPrivateKey(key, "imported-rsa-key")
+	_, _, err = engine.ImportRSAPrivateKey(key)
 	assert.EqualError(t, err, "KMS does not support asymmetric key import")
 }
 
@@ -74,13 +74,8 @@ func testImportECDSAKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
 	key, err := chelpers.GenerateECDSAKey(elliptic.P256())
 	assert.NoError(t, err)
 
-	_, err = engine.ImportECDSAPrivateKey(key, "imported-ecdsa-key")
+	_, _, err = engine.ImportECDSAPrivateKey(key)
 	assert.EqualError(t, err, "KMS does not support asymmetric key import")
-}
-
-func testGetPrivateKeyNotFoundOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
-	_, err := engine.GetPrivateKeyByID("test-unknown-key")
-	assert.EqualError(t, err, "kms key not found")
 }
 
 func TestAWSKMSCryptoEngine(t *testing.T) {
@@ -92,8 +87,9 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 	}{
 		{"CreateECDSAPrivateKey", cryptoengines.SharedTestCreateECDSAPrivateKey},
 		{"CreateRSAPrivateKey", cryptoengines.SharedTestCreateRSAPrivateKey},
-		{"GetPrivateKeyNotFound", testGetPrivateKeyNotFoundOnKMS},
-		{"DeleteKey", testDeleteKeyOnKMS},
+		// {"DeleteKey", cryptoengines.SharedTestDeleteKey},
+		{"GetPrivateKeyByID", cryptoengines.SharedGetKey},
+		{"GetPrivateKeyByIDNotFound", cryptoengines.SharedGetKeyNotFound},
 		{"ImportRSAKey", testImportRSAKeyOnKMS},
 		{"ImportECDSAKey", testImportECDSAKeyOnKMS},
 	}

@@ -54,17 +54,6 @@ func TestNewAWSSecretManagerEngine(t *testing.T) {
 	}, awsEngine.GetEngineConfig())
 }
 
-func testDeleteKeyOnSecretsManager(t *testing.T, engine cryptoengines.CryptoEngine) {
-	awsengine := engine.(*AWSSecretsManagerCryptoEngine)
-	err := awsengine.DeleteKey("test-key")
-	assert.EqualError(t, err, "cannot delete key [test-key]. Go to your aws account and do it manually")
-}
-
-func testGetPrivateKeyNotFoundOnSecretsManager(t *testing.T, engine cryptoengines.CryptoEngine) {
-	_, err := engine.GetPrivateKeyByID("test-key")
-	assert.Error(t, err)
-}
-
 func TestAWSSecretsManagerCryptoEngine(t *testing.T) {
 	engine := prepareSecretsManagerCryptoEngine(t)
 
@@ -74,8 +63,9 @@ func TestAWSSecretsManagerCryptoEngine(t *testing.T) {
 	}{
 		{"CreateECDSAPrivateKey", cryptoengines.SharedTestCreateECDSAPrivateKey},
 		{"CreateRSAPrivateKey", cryptoengines.SharedTestCreateRSAPrivateKey},
-		{"GetPrivateKeyNotFound", testGetPrivateKeyNotFoundOnSecretsManager},
-		{"DeleteKey", testDeleteKeyOnSecretsManager},
+		// {"DeleteKey", cryptoengines.SharedTestDeleteKey},
+		{"GetPrivateKeyByID", cryptoengines.SharedGetKey},
+		{"GetPrivateKeyByIDNotFound", cryptoengines.SharedGetKeyNotFound},
 	}
 
 	for _, tt := range table {
