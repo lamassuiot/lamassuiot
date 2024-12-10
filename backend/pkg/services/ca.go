@@ -249,7 +249,7 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCA
 				x509Engine = x509ParentEngine
 			}
 			lFunc.Debugf("creating SUBORDINATE CA certificate.common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
-			keyID, caCert, err = x509Engine.CreateSubordinateCA(input.ParentCA.ID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), input.KeyMetadata, input.Subject, expiration, x509ParentEngine)
+			keyID, caCert, err = x509Engine.CreateSubordinateCA(input.ParentCA.Certificate.KeyID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), input.KeyMetadata, input.Subject, expiration, x509ParentEngine)
 			if err != nil {
 				lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
 				return nil, err

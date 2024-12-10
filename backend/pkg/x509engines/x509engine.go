@@ -255,9 +255,8 @@ func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata cmodels.KeyMet
 		lCEngine.Debugf("cryptoengine successfully generated ECDSA key")
 	}
 
-	ski := keyID
 	if aki == "" {
-		aki = ski
+		aki = keyID
 	}
 
 	now := time.Now()
@@ -266,12 +265,12 @@ func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata cmodels.KeyMet
 		SerialNumber:   sn,
 		Subject:        chelpers.SubjectToPkixName(subject),
 		AuthorityKeyId: []byte(aki),
-		SubjectKeyId:   []byte(ski),
+		SubjectKeyId:   []byte(keyID),
 		OCSPServer: []string{
 			fmt.Sprintf("https://%s/ocsp", engine.validationAuthorityDomain),
 		},
 		CRLDistributionPoints: []string{
-			fmt.Sprintf("https://%s/crl/%s", engine.validationAuthorityDomain, ski),
+			fmt.Sprintf("https://%s/crl/%s", engine.validationAuthorityDomain, keyID),
 		},
 		NotBefore:             now,
 		NotAfter:              expirationTime,
@@ -280,7 +279,7 @@ func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata cmodels.KeyMet
 		BasicConstraintsValid: true,
 	}
 
-	return "", &template, signer, nil
+	return keyID, &template, signer, nil
 }
 
 func (engine X509Engine) Sign(cAssetType CryptoAssetType, certificate *x509.Certificate, message []byte, messageType models.SignMessageType, signingAlgorithm string) ([]byte, error) {
