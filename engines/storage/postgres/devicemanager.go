@@ -6,6 +6,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -14,8 +15,8 @@ type PostgresDeviceManagerStore struct {
 	querier *postgresDBQuerier[models.Device]
 }
 
-func NewDeviceManagerRepository(db *gorm.DB) (storage.DeviceManagerRepo, error) {
-	querier, err := CheckAndCreateTable(db, "devices", "id", models.Device{})
+func NewDeviceManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.DeviceManagerRepo, error) {
+	querier, err := TableQuery(logger, db, "devices", "id", models.Device{})
 	if err != nil {
 		return nil, err
 	}

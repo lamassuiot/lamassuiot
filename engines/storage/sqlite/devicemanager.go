@@ -19,7 +19,7 @@ type SQLiteDeviceManagerStore struct {
 }
 
 func NewDeviceManagerRepository(db *gorm.DB) (storage.DeviceManagerRepo, error) {
-	querier, err := CheckAndCreateTable(db, "devices", "id", models.Device{})
+	querier, err := TableQuery(db, "devices", "id", models.Device{})
 	if err != nil {
 		return nil, err
 	}

@@ -141,6 +141,7 @@ func main() {
 
 		pCleanup = backend.AfterSuite
 		postgresStorageConfig = backend.Config.(cconfig.PluggableStorageEngine)
+		postgresStorageConfig.Config["migrations_directory"] = "../../../engines/storage/postgres/migrations"
 
 		fmt.Printf(" 	-- postgres port: %d\n", postgresStorageConfig.Config["port"].(int))
 		fmt.Printf(" 	-- postgres user: %s\n", postgresStorageConfig.Config["username"].(string))
@@ -330,7 +331,6 @@ func main() {
 				"storage_directory": "/tmp/gotest",
 			},
 		})
-		cryptoEnginesConfig.DefaultEngine = "filesystem-1"
 	}
 
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok {

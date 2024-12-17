@@ -16,11 +16,13 @@ type CryptoEngine interface {
 
 	GetPrivateKeyByID(keyID string) (crypto.Signer, error)
 
-	CreateRSAPrivateKey(keySize int, keyID string) (crypto.Signer, error)
-	CreateECDSAPrivateKey(curve elliptic.Curve, keyID string) (crypto.Signer, error)
+	CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error)
+	CreateECDSAPrivateKey(curve elliptic.Curve) (string, crypto.Signer, error)
 
-	ImportRSAPrivateKey(key *rsa.PrivateKey, keyID string) (crypto.Signer, error)
-	ImportECDSAPrivateKey(key *ecdsa.PrivateKey, keyID string) (crypto.Signer, error)
+	ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error)
+	ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error)
+
+	DeleteKey(keyID string) error
 }
 
 var cryptoEngineBuilders = make(map[config.CryptoEngineProvider]func(*logrus.Entry, config.CryptoEngineConfig) (CryptoEngine, error))

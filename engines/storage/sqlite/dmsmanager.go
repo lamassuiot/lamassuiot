@@ -19,7 +19,7 @@ type SQLiteDMSManagerStore struct {
 }
 
 func NewDMSManagerRepository(db *gorm.DB) (storage.DMSRepo, error) {
-	querier, err := CheckAndCreateTable(db, "dms", "id", models.DMS{})
+	querier, err := TableQuery(db, "dms", "id", models.DMS{})
 	if err != nil {
 		return nil, err
 	}

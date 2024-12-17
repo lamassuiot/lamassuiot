@@ -18,7 +18,7 @@ type SQLiteSubscriptionsStore struct {
 }
 
 func NewSubscriptionsSQLiteRepository(db *gorm.DB) (storage.SubscriptionsRepository, error) {
-	querier, err := CheckAndCreateTable(db, "subscriptions", "id", models.Subscription{})
+	querier, err := TableQuery(db, "subscriptions", "id", models.Subscription{})
 	if err != nil {
 		return nil, err
 	}

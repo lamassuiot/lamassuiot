@@ -5,6 +5,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -15,8 +16,8 @@ type PostgresCAStore struct {
 	querier *postgresDBQuerier[models.CACertificate]
 }
 
-func NewCAPostgresRepository(db *gorm.DB) (storage.CACertificatesRepo, error) {
-	querier, err := CheckAndCreateTable(db, caDBName, "id", models.CACertificate{})
+func NewCAPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.CACertificatesRepo, error) {
+	querier, err := TableQuery(log, db, caDBName, "id", models.CACertificate{})
 	if err != nil {
 		return nil, err
 	}

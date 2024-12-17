@@ -62,7 +62,7 @@ func RunHashicorpVaultDocker() (func() error, *vconfig.HashicorpVaultSDK, string
 	mountPath := "lamassu-pki-kvv2"
 	policyContent := fmt.Sprintf(`
 	path "%s/*" {
-		capabilities = [ "read", "create" ]
+		capabilities = [ "read", "create", "delete" ]
 	}  
 	
 	path "sys/mounts/%s" {

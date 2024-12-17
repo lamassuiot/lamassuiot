@@ -19,7 +19,7 @@ type SQLiteEventsStore struct {
 }
 
 func NewEventsSQLiteRepository(db *gorm.DB) (storage.EventRepository, error) {
-	querier, err := CheckAndCreateTable(db, "events", "event_type", models.AlertLatestEvent{})
+	querier, err := TableQuery(db, "events", "event_type", models.AlertLatestEvent{})
 	if err != nil {
 		return nil, err
 	}

@@ -86,7 +86,7 @@ func CreateDBConnection(logger *logrus.Entry, cfg lconfig.SQLitePSEConfig, datab
 	return db, err
 }
 
-func CheckAndCreateTable[E any](db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*sqliteDBQuerier[E], error) {
+func TableQuery[E any](db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*sqliteDBQuerier[E], error) {
 	schema.RegisterSerializer("json", JSONSerializer{})
 
 	err := db.Table(tableName).AutoMigrate(model)

@@ -215,6 +215,8 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCA
 	}
 
 	var caCert *x509.Certificate
+	var keyID string
+
 	expiration := time.Now()
 	if input.CAExpiration.Type == models.Duration {
 		expiration = expiration.Add(time.Duration(*input.CAExpiration.Duration))
@@ -224,7 +226,7 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCA
 
 	if input.ParentCA == nil {
 		lFunc.Debugf("creating ROOT CA certificate. common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
-		caCert, err = x509Engine.CreateRootCA(input.CAID, input.KeyMetadata, input.Subject, expiration)
+		keyID, caCert, err = x509Engine.CreateRootCA(input.KeyMetadata, input.Subject, expiration)
 		if err != nil {
 			lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
 			return nil, err
@@ -247,7 +249,7 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCA
 				x509Engine = x509ParentEngine
 			}
 			lFunc.Debugf("creating SUBORDINATE CA certificate.common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
-			caCert, err = x509Engine.CreateSubordinateCA(input.ParentCA.ID, input.CAID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), input.KeyMetadata, input.Subject, expiration, x509ParentEngine)
+			keyID, caCert, err = x509Engine.CreateSubordinateCA(input.ParentCA.Certificate.KeyID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), input.KeyMetadata, input.Subject, expiration, x509ParentEngine)
 			if err != nil {
 				lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
 				return nil, err
@@ -260,6 +262,7 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCA
 	}
 
 	return &services.IssueCAOutput{
+		KeyID:       keyID,
 		Certificate: caCert,
 	}, nil
 }
@@ -289,6 +292,8 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		lFunc.Tracef("ImportCA struct validation success")
 	}
 
+	var keyID string
+
 	caCert := input.CACertificate
 	var engineID string
 	if input.CAType != models.CertificateTypeExternal {
@@ -305,13 +310,9 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		}
 
 		if input.CARSAKey != nil {
-			_, err := engine.ImportRSAPrivateKey(input.CARSAKey, x509engines.CryptoAssetLRI(x509engines.CertificateAuthority, helpers.SerialNumberToString(input.CACertificate.SerialNumber)))
-			if err != nil {
-				lFunc.Errorf("could not imported  %s private key: %s", helpers.SerialNumberToString(input.CACertificate.SerialNumber), err)
-				return nil, fmt.Errorf("could not import key: %w", err)
-			}
+			keyID, _, err = engine.ImportRSAPrivateKey(input.CARSAKey)
 		} else if input.CAECKey != nil {
-			_, err = engine.ImportECDSAPrivateKey(input.CAECKey, x509engines.CryptoAssetLRI(x509engines.CertificateAuthority, helpers.SerialNumberToString(input.CACertificate.SerialNumber)))
+			keyID, _, err = engine.ImportECDSAPrivateKey(input.CAECKey)
 		} else {
 			lFunc.Errorf("key type %s not supported", input.KeyType)
 			return nil, fmt.Errorf("KeyType not supported")
@@ -357,12 +358,12 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 	ca := &models.CACertificate{
 		ID:                    caID,
-		Type:                  input.CAType,
 		Metadata:              map[string]interface{}{},
 		IssuanceExpirationRef: input.IssuanceExpiration,
 		CreationTS:            time.Now(),
 		Level:                 level,
 		Certificate: models.Certificate{
+			KeyID:               keyID,
 			Certificate:         input.CACertificate,
 			Status:              models.StatusActive,
 			SerialNumber:        helpers.SerialNumberToString(caCert.SerialNumber),
@@ -497,11 +498,11 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	ca := models.CACertificate{
 		ID:                    caID,
 		Metadata:              input.Metadata,
-		Type:                  models.CertificateTypeManaged,
 		IssuanceExpirationRef: input.IssuanceExpiration,
 		CreationTS:            time.Now(),
 		Level:                 caLevel,
 		Certificate: models.Certificate{
+			KeyID:        issuedCA.KeyID,
 			Certificate:  (*models.X509Certificate)(caCert),
 			Status:       models.StatusActive,
 			SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),

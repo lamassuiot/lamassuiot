@@ -41,6 +41,7 @@ type Certificate struct {
 	RevocationReason    RevocationReason       `json:"revocation_reason"`
 	Type                CertificateType        `json:"type"`
 	EngineID            string                 `json:"engine_id"`
+	KeyID               string                 `json:"key_id"`
 }
 
 type Expiration struct {
@@ -60,7 +61,6 @@ type CACertificate struct {
 	ID                    string                 `json:"id" gorm:"primaryKey"`
 	Metadata              map[string]interface{} `json:"metadata" gorm:"serializer:json"`
 	IssuanceExpirationRef Expiration             `json:"issuance_expiration" gorm:"serializer:json"`
-	Type                  CertificateType        `json:"type"`
 	CreationTS            time.Time              `json:"creation_ts"`
 	Level                 int                    `json:"level"`
 }

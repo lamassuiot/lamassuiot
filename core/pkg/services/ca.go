@@ -68,6 +68,7 @@ type IssueCAInput struct {
 }
 
 type IssueCAOutput struct {
+	KeyID       string
 	Certificate *x509.Certificate
 }
 

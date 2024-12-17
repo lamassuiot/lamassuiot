@@ -6,6 +6,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -14,8 +15,8 @@ type PostgresDMSManagerStore struct {
 	querier *postgresDBQuerier[models.DMS]
 }
 
-func NewDMSManagerRepository(db *gorm.DB) (storage.DMSRepo, error) {
-	querier, err := CheckAndCreateTable(db, "dms", "id", models.DMS{})
+func NewDMSManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.DMSRepo, error) {
+	querier, err := TableQuery(logger, db, "dms", "id", models.DMS{})
 	if err != nil {
 		return nil, err
 	}

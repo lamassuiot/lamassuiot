@@ -1,11 +1,12 @@
-package softhsmv2_test
+package docker
 
 import (
 	"fmt"
 	"strconv"
+	"time"
 
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	pconfig "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3"
+	pconfig "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3/config"
 	dockerunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
@@ -38,6 +39,8 @@ func RunSoftHsmV2Docker(pkcs11ProxyPath string) (func() error, *pconfig.PKCS11Co
 		containerCleanup()
 		return nil, nil, err
 	}
+
+	time.Sleep(5 * time.Second)
 
 	return containerCleanup, &pconfig.PKCS11Config{
 		TokenLabel: label,
