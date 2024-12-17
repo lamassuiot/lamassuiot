@@ -15,8 +15,8 @@ type PostgresEventsStore struct {
 	querier *postgresDBQuerier[models.AlertLatestEvent]
 }
 
-func NewEventsPostgresRepository(logger *logrus.Entry, db *gorm.DB, migrationsDir string) (storage.EventRepository, error) {
-	querier, err := CheckAndCreateTable(logger, db, "events", "event_type", models.AlertLatestEvent{}, migrationsDir)
+func NewEventsPostgresRepository(logger *logrus.Entry, db *gorm.DB) (storage.EventRepository, error) {
+	querier, err := TableQuery(logger, db, "events", "event_type", models.AlertLatestEvent{})
 	if err != nil {
 		return nil, err
 	}

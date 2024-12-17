@@ -37,7 +37,7 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 	return db, err
 }
 
-func CheckAndCreateTable[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumn string, model E, migrationsDir string) (*postgresDBQuerier[E], error) {
+func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*postgresDBQuerier[E], error) {
 	schema.RegisterSerializer("json", JSONSerializer{})
 
 	log.Infof("Planing migrations for %s", tableName)

@@ -20,7 +20,7 @@ type SQLiteCertificateStorage struct {
 }
 
 func NewCertificateRepository(db *gorm.DB) (storage.CertificatesRepo, error) {
-	querier, err := CheckAndCreateTable(db, certDBName, "serial_number", models.Certificate{})
+	querier, err := TableQuery(db, certDBName, "serial_number", models.Certificate{})
 	if err != nil {
 		return nil, err
 	}

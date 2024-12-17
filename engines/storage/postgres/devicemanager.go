@@ -15,8 +15,8 @@ type PostgresDeviceManagerStore struct {
 	querier *postgresDBQuerier[models.Device]
 }
 
-func NewDeviceManagerRepository(logger *logrus.Entry, db *gorm.DB, migrationsDir string) (storage.DeviceManagerRepo, error) {
-	querier, err := CheckAndCreateTable(logger, db, "devices", "id", models.Device{}, migrationsDir)
+func NewDeviceManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.DeviceManagerRepo, error) {
+	querier, err := TableQuery(logger, db, "devices", "id", models.Device{})
 	if err != nil {
 		return nil, err
 	}

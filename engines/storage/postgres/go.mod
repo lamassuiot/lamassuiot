@@ -3,12 +3,12 @@ module github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3
 go 1.22.0
 
 require (
-	github.com/go-gormigrate/gormigrate/v2 v2.1.3
 	github.com/lamassuiot/lamassuiot/core/v3 v3.1.0
 	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.1.0
 	github.com/ory/dockertest/v3 v3.11.0
 	github.com/pressly/goose/v3 v3.23.1
 	github.com/sirupsen/logrus v1.9.3
+	github.com/stretchr/testify v1.9.0
 	gorm.io/driver/postgres v1.5.9
 	gorm.io/gorm v1.25.12
 )
@@ -22,6 +22,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cloudevents/sdk-go/v2 v2.15.2 // indirect
 	github.com/containerd/continuity v0.4.3 // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/docker/cli v26.1.4+incompatible // indirect
 	github.com/docker/docker v27.1.1+incompatible // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
@@ -52,6 +53,7 @@ require (
 	github.com/opencontainers/runc v1.1.13 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/sagikazarmark/locafero v0.4.0 // indirect
 	github.com/sagikazarmark/slog-shim v0.1.0 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect

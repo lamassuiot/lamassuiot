@@ -33,8 +33,6 @@ func teardown(tempDir string) {
 }
 
 func TestVaultCryptoEngine(t *testing.T) {
-	tmpDir, engine := setup(t)
-
 	table := []struct {
 		name     string
 		function func(t *testing.T, engine cryptoengines.CryptoEngine)
@@ -51,8 +49,9 @@ func TestVaultCryptoEngine(t *testing.T) {
 
 	for _, tt := range table {
 		t.Run(tt.name, func(t *testing.T) {
-			setup(t)
+			tmpDir, engine := setup(t)
 			defer teardown(tmpDir)
+
 			tt.function(t, engine)
 		})
 	}

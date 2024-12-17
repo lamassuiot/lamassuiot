@@ -15,8 +15,8 @@ type PostgresSubscriptionsStore struct {
 	querier *postgresDBQuerier[models.Subscription]
 }
 
-func NewSubscriptionsPostgresRepository(logger *logrus.Entry, db *gorm.DB, migrationsDir string) (storage.SubscriptionsRepository, error) {
-	querier, err := CheckAndCreateTable(logger, db, "subscriptions", "id", models.Subscription{}, migrationsDir)
+func NewSubscriptionsPostgresRepository(logger *logrus.Entry, db *gorm.DB) (storage.SubscriptionsRepository, error) {
+	querier, err := TableQuery(logger, db, "subscriptions", "id", models.Subscription{})
 	if err != nil {
 		return nil, err
 	}

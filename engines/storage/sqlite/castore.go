@@ -19,7 +19,7 @@ type SQLiteCAStore struct {
 }
 
 func NewCARepository(db *gorm.DB) (storage.CACertificatesRepo, error) {
-	querier, err := CheckAndCreateTable(db, caDBName, "id", models.CACertificate{})
+	querier, err := TableQuery(db, caDBName, "id", models.CACertificate{})
 	if err != nil {
 		return nil, err
 	}

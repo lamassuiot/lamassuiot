@@ -63,14 +63,14 @@ func (s *PostgresStorageEngine) initialiceCACertStorage() error {
 	MigrateDB(s.logger, psqlCli, s.Config.MigrationsDir)
 
 	if s.CA == nil {
-		s.CA, err = NewCAPostgresRepository(s.logger, psqlCli, s.Config.MigrationsDir)
+		s.CA, err = NewCAPostgresRepository(s.logger, psqlCli)
 		if err != nil {
 			return err
 		}
 	}
 
 	if s.Cert == nil {
-		s.Cert, err = NewCertificateRepository(s.logger, psqlCli, s.Config.MigrationsDir)
+		s.Cert, err = NewCertificateRepository(s.logger, psqlCli)
 		if err != nil {
 			return err
 		}
@@ -98,7 +98,7 @@ func (s *PostgresStorageEngine) GetDeviceStorage() (storage.DeviceManagerRepo, e
 
 		MigrateDB(s.logger, psqlCli, s.Config.MigrationsDir)
 
-		deviceStore, err := NewDeviceManagerRepository(s.logger, psqlCli, s.Config.MigrationsDir)
+		deviceStore, err := NewDeviceManagerRepository(s.logger, psqlCli)
 		if err != nil {
 			return nil, fmt.Errorf("could not initialize postgres Device client: %s", err)
 		}
@@ -117,7 +117,7 @@ func (s *PostgresStorageEngine) GetDMSStorage() (storage.DMSRepo, error) {
 
 		MigrateDB(s.logger, psqlCli, s.Config.MigrationsDir)
 
-		dmsStore, err := NewDMSManagerRepository(s.logger, psqlCli, s.Config.MigrationsDir)
+		dmsStore, err := NewDMSManagerRepository(s.logger, psqlCli)
 		if err != nil {
 			return nil, fmt.Errorf("could not initialize postgres DMS client: %s", err)
 		}
@@ -149,14 +149,14 @@ func (s *PostgresStorageEngine) initialiceSubscriptionsStorage() error {
 	MigrateDB(s.logger, psqlCli, s.Config.MigrationsDir)
 
 	if s.Subscriptions == nil {
-		s.Subscriptions, err = NewSubscriptionsPostgresRepository(s.logger, psqlCli, s.Config.MigrationsDir)
+		s.Subscriptions, err = NewSubscriptionsPostgresRepository(s.logger, psqlCli)
 		if err != nil {
 			return err
 		}
 	}
 
 	if s.Events == nil {
-		s.Events, err = NewEventsPostgresRepository(s.logger, psqlCli, s.Config.MigrationsDir)
+		s.Events, err = NewEventsPostgresRepository(s.logger, psqlCli)
 		if err != nil {
 			return err
 		}

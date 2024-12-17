@@ -16,8 +16,8 @@ type PostgresCAStore struct {
 	querier *postgresDBQuerier[models.CACertificate]
 }
 
-func NewCAPostgresRepository(log *logrus.Entry, db *gorm.DB, migrationsDir string) (storage.CACertificatesRepo, error) {
-	querier, err := CheckAndCreateTable(log, db, caDBName, "id", models.CACertificate{}, migrationsDir)
+func NewCAPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.CACertificatesRepo, error) {
+	querier, err := TableQuery(log, db, caDBName, "id", models.CACertificate{})
 	if err != nil {
 		return nil, err
 	}

@@ -38,22 +38,22 @@ func (p *PostgresSubsystem) Run() (*subsystems.SubsystemBackend, error) {
 			postgresEngine.BeforeEach()
 			switch dbName {
 			case "ca":
-				_, err := postgres.NewCAPostgresRepository(logger, postgresEngine.DB[dbName], "")
+				_, err := postgres.NewCAPostgresRepository(logger, postgresEngine.DB[dbName])
 				if err != nil {
 					return fmt.Errorf("could not run reinitialize CA tables: %s", err)
 				}
 			case "certificates":
-				_, err := postgres.NewCertificateRepository(logger, postgresEngine.DB[dbName], "")
+				_, err := postgres.NewCertificateRepository(logger, postgresEngine.DB[dbName])
 				if err != nil {
 					return fmt.Errorf("could not run reinitialize Certificates tables: %s", err)
 				}
 			case "devicemanager":
-				_, err := postgres.NewDeviceManagerRepository(logger, postgresEngine.DB[dbName], "")
+				_, err := postgres.NewDeviceManagerRepository(logger, postgresEngine.DB[dbName])
 				if err != nil {
 					return fmt.Errorf("could not run reinitialize DeviceManager tables: %s", err)
 				}
 			case "dmsmanager":
-				_, err := postgres.NewDMSManagerRepository(logger, postgresEngine.DB[dbName], "")
+				_, err := postgres.NewDMSManagerRepository(logger, postgresEngine.DB[dbName])
 				if err != nil {
 					return fmt.Errorf("could not run reinitialize DMSManager tables: %s", err)
 				}

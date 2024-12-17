@@ -15,8 +15,8 @@ type PostgresCertificateStorage struct {
 	querier *postgresDBQuerier[models.Certificate]
 }
 
-func NewCertificateRepository(logger *logrus.Entry, db *gorm.DB, migrationsDir string) (storage.CertificatesRepo, error) {
-	querier, err := CheckAndCreateTable(logger, db, "certificates", "serial_number", models.Certificate{}, migrationsDir)
+func NewCertificateRepository(logger *logrus.Entry, db *gorm.DB) (storage.CertificatesRepo, error) {
+	querier, err := TableQuery(logger, db, "certificates", "serial_number", models.Certificate{})
 	if err != nil {
 		return nil, err
 	}

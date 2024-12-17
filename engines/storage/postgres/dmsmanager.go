@@ -15,8 +15,8 @@ type PostgresDMSManagerStore struct {
 	querier *postgresDBQuerier[models.DMS]
 }
 
-func NewDMSManagerRepository(logger *logrus.Entry, db *gorm.DB, migrationsDir string) (storage.DMSRepo, error) {
-	querier, err := CheckAndCreateTable(logger, db, "dms", "id", models.DMS{}, migrationsDir)
+func NewDMSManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.DMSRepo, error) {
+	querier, err := TableQuery(logger, db, "dms", "id", models.DMS{})
 	if err != nil {
 		return nil, err
 	}
