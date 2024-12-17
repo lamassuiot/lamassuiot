@@ -6,6 +6,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -14,8 +15,8 @@ type PostgresEventsStore struct {
 	querier *postgresDBQuerier[models.AlertLatestEvent]
 }
 
-func NewEventsPostgresRepository(db *gorm.DB) (storage.EventRepository, error) {
-	querier, err := CheckAndCreateTable(db, "events", "event_type", models.AlertLatestEvent{})
+func NewEventsPostgresRepository(logger *logrus.Entry, db *gorm.DB, migrationsDir string) (storage.EventRepository, error) {
+	querier, err := CheckAndCreateTable(logger, db, "events", "event_type", models.AlertLatestEvent{}, migrationsDir)
 	if err != nil {
 		return nil, err
 	}

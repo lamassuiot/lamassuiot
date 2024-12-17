@@ -6,6 +6,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -14,8 +15,8 @@ type PostgresSubscriptionsStore struct {
 	querier *postgresDBQuerier[models.Subscription]
 }
 
-func NewSubscriptionsPostgresRepository(db *gorm.DB) (storage.SubscriptionsRepository, error) {
-	querier, err := CheckAndCreateTable(db, "subscriptions", "id", models.Subscription{})
+func NewSubscriptionsPostgresRepository(logger *logrus.Entry, db *gorm.DB, migrationsDir string) (storage.SubscriptionsRepository, error) {
+	querier, err := CheckAndCreateTable(logger, db, "subscriptions", "id", models.Subscription{}, migrationsDir)
 	if err != nil {
 		return nil, err
 	}

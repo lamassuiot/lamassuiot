@@ -358,7 +358,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 	ca := &models.CACertificate{
 		ID:                    caID,
-		Type:                  input.CAType,
 		Metadata:              map[string]interface{}{},
 		IssuanceExpirationRef: input.IssuanceExpiration,
 		CreationTS:            time.Now(),
@@ -499,7 +498,6 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	ca := models.CACertificate{
 		ID:                    caID,
 		Metadata:              input.Metadata,
-		Type:                  models.CertificateTypeManaged,
 		IssuanceExpirationRef: input.IssuanceExpiration,
 		CreationTS:            time.Now(),
 		Level:                 caLevel,

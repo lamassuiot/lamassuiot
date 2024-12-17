@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
@@ -34,6 +35,36 @@ func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfig
 	defaultMeta := map[string]interface{}{
 		"lamassu.io/cryptoengine.golang.storage-path": conf,
 	}
+
+	err := checkAndCreateStorageDir(lGo, conf.Config.StorageDirectory)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update KeyIDs in folder and remove old naming
+	entries, err := os.ReadDir(conf.Config.StorageDirectory)
+	if err != nil {
+		return nil, err
+	}
+
+	lGo.Debugf("Starting key renaming to new format")
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		v1KeySuffix := "lms-caservice-certauth-keyid-"
+		if strings.HasSuffix(v1KeySuffix, entry.Name()) {
+			lGo.Debugf("Renaming key %s", entry.Name())
+			newName := strings.Replace(entry.Name(), v1KeySuffix, "", 1)
+			err := os.Rename(filepath.Join(conf.Config.StorageDirectory, entry.Name()), filepath.Join(conf.Config.StorageDirectory, newName))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	lGo.Debugf("Finished key renaming to new format")
+
 	meta := helpers.MergeMaps[interface{}](&defaultMeta, &conf.Metadata)
 	return &FilesystemCryptoEngine{
 		logger:           lGo,
@@ -188,8 +219,6 @@ func (engine *FilesystemCryptoEngine) importKey(key interface{}) (string, crypto
 		return "", nil, err
 	}
 
-	engine.checkAndCreateStorageDir()
-
 	file := filepath.Join(engine.storageDirectory, keyID)
 	err = os.WriteFile(file, pemKey, 0600)
 	if err != nil {
@@ -206,17 +235,17 @@ func (engine *FilesystemCryptoEngine) importKey(key interface{}) (string, crypto
 	return keyID, signer, nil
 }
 
-func (engine *FilesystemCryptoEngine) checkAndCreateStorageDir() error {
+func checkAndCreateStorageDir(logger *logrus.Entry, dir string) error {
 	var err error
-	if _, err = os.Stat(engine.storageDirectory); os.IsNotExist(err) {
-		engine.logger.Warnf("storage directory %s does not exist. Will create such directory", engine.storageDirectory)
-		err = os.MkdirAll(engine.storageDirectory, 0750)
+	if _, err = os.Stat(dir); os.IsNotExist(err) {
+		logger.Warnf("storage directory %s does not exist. Will create such directory", dir)
+		err = os.MkdirAll(dir, 0750)
 		if err != nil {
-			engine.logger.Errorf("something went wrong while creating storage path: %s", err)
+			logger.Errorf("something went wrong while creating storage path: %s", err)
 		}
 		return err
 	} else if err != nil {
-		engine.logger.Errorf("something went wrong while checking storage: %s", err)
+		logger.Errorf("something went wrong while checking storage: %s", err)
 		return err
 	}
 

@@ -6,18 +6,17 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
-
-const certDBName = "certificates"
 
 type PostgresCertificateStorage struct {
 	db      *gorm.DB
 	querier *postgresDBQuerier[models.Certificate]
 }
 
-func NewCertificateRepository(db *gorm.DB) (storage.CertificatesRepo, error) {
-	querier, err := CheckAndCreateTable(db, certDBName, "serial_number", models.Certificate{})
+func NewCertificateRepository(logger *logrus.Entry, db *gorm.DB, migrationsDir string) (storage.CertificatesRepo, error) {
+	querier, err := CheckAndCreateTable(logger, db, "certificates", "serial_number", models.Certificate{}, migrationsDir)
 	if err != nil {
 		return nil, err
 	}
