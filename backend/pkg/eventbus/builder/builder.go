@@ -5,7 +5,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3"
 	ampq_subsystem "github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3/subsystem"
 	"github.com/lamassuiot/lamassuiot/engines/eventbus/aws/v3"
-	"github.com/lamassuiot/lamassuiot/engines/eventbus/channel/v3"
 	"github.com/sirupsen/logrus"
 )
 
@@ -17,5 +16,4 @@ func init() {
 	amqp.Register()
 	ampq_subsystem.Register()
 	aws.Register()
-	channel.Register()
 }
