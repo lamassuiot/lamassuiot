@@ -33,14 +33,8 @@ jobs:
             tag: eventbus-amqp
           - path: engines/eventbus/aws
             tag: eventbus-aws
-          - path: engines/eventbus/channel
-            tag: eventbus-channel
-          - path: engines/storage/couchdb
-            tag: storage-couchdb
           - path: engines/storage/postgres
             tag: storage-postgres
-          - path: engines/storage/sqlite
-            tag: storage-sqlite
           - path: backend
             tag: backend
           - path: connectors/awsiot
