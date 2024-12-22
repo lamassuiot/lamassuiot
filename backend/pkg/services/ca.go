@@ -249,7 +249,7 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCA
 				x509Engine = x509ParentEngine
 			}
 			lFunc.Debugf("creating SUBORDINATE CA certificate.common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
-			keyID, caCert, err = x509Engine.CreateSubordinateCA(input.ParentCA.Certificate.KeyID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), input.KeyMetadata, input.Subject, expiration, x509ParentEngine)
+			keyID, caCert, err = x509Engine.CreateSubordinateCA(input.ParentCA.KeyID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), input.KeyMetadata, input.Subject, expiration, x509ParentEngine)
 			if err != nil {
 				lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
 				return nil, err
@@ -362,8 +362,8 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		IssuanceExpirationRef: input.IssuanceExpiration,
 		CreationTS:            time.Now(),
 		Level:                 level,
+		KeyID:                 keyID,
 		Certificate: models.Certificate{
-			KeyID:               keyID,
 			Certificate:         input.CACertificate,
 			Status:              models.StatusActive,
 			SerialNumber:        helpers.SerialNumberToString(caCert.SerialNumber),
@@ -501,8 +501,8 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		IssuanceExpirationRef: input.IssuanceExpiration,
 		CreationTS:            time.Now(),
 		Level:                 caLevel,
+		KeyID:                 issuedCA.KeyID,
 		Certificate: models.Certificate{
-			KeyID:        issuedCA.KeyID,
 			Certificate:  (*models.X509Certificate)(caCert),
 			Status:       models.StatusActive,
 			SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
