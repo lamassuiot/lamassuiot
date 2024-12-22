@@ -60,7 +60,8 @@ func (s *PostgresStorageEngine) initialiceCACertStorage() error {
 		return err
 	}
 
-	MigrateDB(s.logger, psqlCli, s.Config.MigrationsDir)
+	m := NewMigrator(s.logger, psqlCli)
+	m.MigrateToLatest()
 
 	if s.CA == nil {
 		s.CA, err = NewCAPostgresRepository(s.logger, psqlCli)
@@ -96,7 +97,8 @@ func (s *PostgresStorageEngine) GetDeviceStorage() (storage.DeviceManagerRepo, e
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
 
-		MigrateDB(s.logger, psqlCli, s.Config.MigrationsDir)
+		m := NewMigrator(s.logger, psqlCli)
+		m.MigrateToLatest()
 
 		deviceStore, err := NewDeviceManagerRepository(s.logger, psqlCli)
 		if err != nil {
@@ -115,7 +117,8 @@ func (s *PostgresStorageEngine) GetDMSStorage() (storage.DMSRepo, error) {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
 
-		MigrateDB(s.logger, psqlCli, s.Config.MigrationsDir)
+		m := NewMigrator(s.logger, psqlCli)
+		m.MigrateToLatest()
 
 		dmsStore, err := NewDMSManagerRepository(s.logger, psqlCli)
 		if err != nil {
@@ -146,7 +149,8 @@ func (s *PostgresStorageEngine) initialiceSubscriptionsStorage() error {
 		return err
 	}
 
-	MigrateDB(s.logger, psqlCli, s.Config.MigrationsDir)
+	m := NewMigrator(s.logger, psqlCli)
+	m.MigrateToLatest()
 
 	if s.Subscriptions == nil {
 		s.Subscriptions, err = NewSubscriptionsPostgresRepository(s.logger, psqlCli)

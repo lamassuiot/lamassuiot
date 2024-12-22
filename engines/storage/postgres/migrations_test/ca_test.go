@@ -1,15 +1,16 @@
 package migrationstest
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"regexp"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -70,14 +71,6 @@ func assertEqualD(t *testing.T, expected, actual time.Time) {
 }
 
 func ApplyMigration(t *testing.T, logger *logrus.Entry, con *gorm.DB, dbName string) {
-	tempDir := os.TempDir()
-	migrationsDir := tempDir + "/" + uuid.NewString() + "/migrations"
-	migrationsDirDB := migrationsDir + "/" + dbName
-	err := os.MkdirAll(migrationsDirDB, 0755)
-	if err != nil {
-		t.Fatalf("could not create migrations dir: %s", err)
-	}
-
 	pc, _, _, ok := runtime.Caller(1) // 1 indicates the caller of this function
 	if !ok {
 		fmt.Println("Unable to get caller information")
@@ -98,29 +91,25 @@ func ApplyMigration(t *testing.T, logger *logrus.Entry, con *gorm.DB, dbName str
 		t.Fatalf("could not find migration version")
 	}
 
-	//check if SQL or GO file exists
-	migrationPathName := "../migrations/" + dbName + "/" + migrationName
-	_, errSQL := os.Stat(migrationPathName + ".sql")
-	_, errGO := os.Stat(migrationPathName + ".go")
+	m := postgres.NewMigrator(logger, con)
+	src := m.Goose.ListSources()
 
-	if errSQL != nil && errGO != nil {
-		t.Fatalf("could not find migration file: %s", err)
+	applied := false
+	for _, s := range src {
+		if strings.Contains(s.Path, migrationName) {
+			logger.Infof("APPLYING MIGRATION %s: %d", s.Path, s.Version)
+			_, err := m.Goose.ApplyVersion(context.Background(), s.Version, true)
+			if err != nil {
+				t.Fatalf("could not apply migration: %s", err)
+			}
+
+			applied = true
+		}
 	}
 
-	if errSQL == nil {
-		err = copyFile(migrationPathName+".sql", migrationsDirDB+"/"+migrationName+".sql")
-
-	} else {
-		err = copyFile(migrationPathName+".go", migrationsDirDB+"/"+migrationName+".go")
+	if !applied {
+		t.Fatalf("could not find migration")
 	}
-
-	if err != nil {
-		t.Fatalf("could not copy migration file: %s", err)
-	}
-
-	logger.Infof("APPLYING MIGRATION %s", migrationName)
-	postgres.MigrateDB(logger, con, migrationsDir)
-	logger.Infof("APPLIED MIGRATION %s. Running Post Migration checks", migrationName)
 }
 
 func MigrationTest_CA_db_00000000000001_create_table(t *testing.T, logger *logrus.Entry, con *gorm.DB) {

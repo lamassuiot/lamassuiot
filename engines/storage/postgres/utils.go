@@ -2,11 +2,11 @@ package postgres
 
 import (
 	"context"
+	"embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -23,6 +23,9 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
 )
+
+//go:embed migrations/**
+var embedMigrations embed.FS
 
 func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSEConfig, database string) (*gorm.DB, error) {
 	dbLogger := &GormLogger{
@@ -46,49 +49,56 @@ func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primary
 	return &querier, nil
 }
 
-func MigrateDB(log *logrus.Entry, db *gorm.DB, migrationsDir string) {
+type migrator struct {
+	db     *gorm.DB
+	logger *logrus.Entry
+	Goose  *goose.Provider
+}
+
+func NewMigrator(log *logrus.Entry, db *gorm.DB) *migrator {
 	dbName := db.Migrator().CurrentDatabase()
 
 	log.Infof("Planing migrations")
 	lMig := log.WithField("migrations", dbName)
 
-	migrationsDirWTable := filepath.Join(migrationsDir, dbName)
-	absPath, err := filepath.Abs(migrationsDirWTable)
+	migrationsDir := filepath.Join("migrations", dbName)
+	migrationsFS, err := fs.Sub(embedMigrations, migrationsDir)
 	if err != nil {
-		lMig.Fatalf("could not get absolute path: %s", err)
+		lMig.Fatalf("could not obtain migrations subdirectory: %s", err)
 	}
-
-	lMig.Infof("Reading migrations dir %s (abs path: %s)", migrationsDirWTable, absPath)
 
 	sqlDB, err := db.DB()
 	if err != nil {
 		log.Fatalf("could not get db connection: %s", err)
 	}
 
-	fsys, err := fs.Sub(os.DirFS(migrationsDir), dbName)
-	if err != nil {
-		lMig.Fatalf("could not read migrations: %s", err)
-	}
-
-	migrator, err := goose.NewProvider(goose.DialectPostgres, sqlDB, fsys)
+	m, err := goose.NewProvider(goose.DialectPostgres, sqlDB, migrationsFS)
 	if err != nil {
 		lMig.Fatalf("could not create migrator: %s", err)
 	}
 
-	c, t, err := migrator.GetVersions(context.Background())
+	return &migrator{
+		db:     db,
+		logger: lMig,
+		Goose:  m,
+	}
+}
+
+func (migrator *migrator) MigrateToLatest() {
+	c, t, err := migrator.Goose.GetVersions(context.Background())
 	if err != nil {
-		lMig.Fatalf("could not get db version: %s", err)
+		migrator.logger.Fatalf("could not get db version: %s", err)
 	}
 
-	lMig.Infof("Current version: %d", c)
-	lMig.Infof("Target version: %d", t)
+	migrator.logger.Infof("Current version: %d", c)
+	migrator.logger.Infof("Target version: %d", t)
 
-	r, err := migrator.UpTo(context.Background(), t)
+	r, err := migrator.Goose.UpTo(context.Background(), t)
 	if err != nil {
-		lMig.Fatalf("could not migrate db: %s", err)
+		migrator.logger.Fatalf("could not migrate db: %s", err)
 	}
 
-	lMig.Infof("Migrated %d steps", len(r))
+	migrator.logger.Infof("Migrated %d steps", len(r))
 }
 
 type postgresDBQuerier[E any] struct {
