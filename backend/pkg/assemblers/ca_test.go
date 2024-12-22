@@ -174,8 +174,8 @@ func TestCreateCA(t *testing.T) {
 					return fmt.Errorf("should've created CA without error, but got error: %s", err)
 				}
 
-				if createdCA.ValidTo.Year() != 9999 {
-					t.Fatalf("CA certificate should expire on 9999 but got %d", createdCA.ValidTo.Year())
+				if createdCA.Certificate.ValidTo.Year() != 9999 {
+					t.Fatalf("CA certificate should expire on 9999 but got %d", createdCA.Certificate.ValidTo.Year())
 				}
 
 				return nil
@@ -283,7 +283,7 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				crt, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:        enrollCA.ID,
 					CertRequest: (*models.X509CertificateRequest)(enrollCSR),
-					Subject:     &enrollCA.Subject,
+					Subject:     &enrollCA.Certificate.Subject,
 				})
 				if err != nil {
 					t.Fatalf("could not sign the certificate: %s", err)
@@ -1067,8 +1067,8 @@ func TestImportCertificate(t *testing.T) {
 					return fmt.Errorf("imported certificate should have CAID %s but got %s", ca.ID, importedCert.IssuerCAMetadata.ID)
 				}
 
-				if importedCert.IssuerCAMetadata.SerialNumber != ca.SerialNumber {
-					return fmt.Errorf("imported certificate should have SerialNumber %s but got %s", ca.SerialNumber, importedCert.IssuerCAMetadata.SerialNumber)
+				if importedCert.IssuerCAMetadata.SerialNumber != ca.Certificate.SerialNumber {
+					return fmt.Errorf("imported certificate should have SerialNumber %s but got %s", ca.Certificate.SerialNumber, importedCert.IssuerCAMetadata.SerialNumber)
 				}
 
 				if importedCert.Status != models.StatusActive {
@@ -1284,12 +1284,12 @@ func TestRevokeCA(t *testing.T) {
 					return fmt.Errorf("should've got no error but got error: %s", err)
 				}
 
-				if revokedCA.Status != models.StatusRevoked {
-					return fmt.Errorf("CA should have Revoked status but is in %s status", revokedCA.Status)
+				if revokedCA.Certificate.Status != models.StatusRevoked {
+					return fmt.Errorf("CA should have Revoked status but is in %s status", revokedCA.Certificate.Status)
 				}
 
-				if revokedCA.RevocationReason != ocsp.AACompromise {
-					return fmt.Errorf("CA should have RevocationReason AACompromise status but is in %s reason", revokedCA.RevocationReason)
+				if revokedCA.Certificate.RevocationReason != ocsp.AACompromise {
+					return fmt.Errorf("CA should have RevocationReason AACompromise status but is in %s reason", revokedCA.Certificate.RevocationReason)
 				}
 
 				return nil
@@ -1331,8 +1331,8 @@ func TestRevokeCA(t *testing.T) {
 					return fmt.Errorf("should've got no error but got error: %s", err)
 				}
 
-				if revokedCA.Status != models.StatusRevoked {
-					return fmt.Errorf("CA should have Revoked status but is in %s status", revokedCA.Status)
+				if revokedCA.Certificate.Status != models.StatusRevoked {
+					return fmt.Errorf("CA should have Revoked status but is in %s status", revokedCA.Certificate.Status)
 				}
 
 				for _, crt := range issuedCerts {
@@ -1717,7 +1717,7 @@ func TestUpdateCAStatus(t *testing.T) {
 				if err != nil {
 					return nil, fmt.Errorf("Got error while checking the status of the CA %s", err)
 				}
-				if ca.Status != caStatus {
+				if ca.Certificate.Status != caStatus {
 					return nil, fmt.Errorf("The updating process does not gone well")
 				}
 				return res, err
@@ -1750,7 +1750,7 @@ func TestUpdateCAStatus(t *testing.T) {
 				if err != nil {
 					return nil, fmt.Errorf("Got error while checking the status of the CA %s", err)
 				}
-				if ca.Status != caStatus {
+				if ca.Certificate.Status != caStatus {
 					return nil, fmt.Errorf("The updating process does not gone well")
 				}
 				return res, err
@@ -1784,7 +1784,7 @@ func TestUpdateCAStatus(t *testing.T) {
 				if err != nil {
 					return nil, fmt.Errorf("Got error while checking the status of the CA %s", err)
 				}
-				if ca.Status != caStatus {
+				if ca.Certificate.Status != caStatus {
 					return nil, fmt.Errorf("The updating process does not gone well")
 				}
 				return res, err
@@ -3543,9 +3543,9 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 				}
 				cas = append(cas, *childCALvl1)
 				fmt.Println("=============================")
-				fmt.Println("CN:" + childCALvl1.Subject.CommonName)
+				fmt.Println("CN:" + childCALvl1.Certificate.Subject.CommonName)
 				fmt.Println("ID:" + childCALvl1.ID)
-				fmt.Println("SN:" + childCALvl1.SerialNumber)
+				fmt.Println("SN:" + childCALvl1.Certificate.SerialNumber)
 				fmt.Println("=============================")
 
 				//cas := []*models.CACertificate{}
@@ -3651,9 +3651,9 @@ func TestHierarchy(t *testing.T) {
 				}
 				cas = append(cas, *childCALvl1)
 				fmt.Println("=============================")
-				fmt.Println("CN:" + childCALvl1.Subject.CommonName)
+				fmt.Println("CN:" + childCALvl1.Certificate.Subject.CommonName)
 				fmt.Println("ID:" + childCALvl1.ID)
-				fmt.Println("SN:" + childCALvl1.SerialNumber)
+				fmt.Println("SN:" + childCALvl1.Certificate.SerialNumber)
 				fmt.Println("=============================")
 
 				childCALvl2, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
@@ -3669,9 +3669,9 @@ func TestHierarchy(t *testing.T) {
 				}
 
 				fmt.Println("=============================")
-				fmt.Println("CN:" + childCALvl2.Subject.CommonName)
+				fmt.Println("CN:" + childCALvl2.Certificate.Subject.CommonName)
 				fmt.Println("ID:" + childCALvl2.ID)
-				fmt.Println("SN:" + childCALvl2.SerialNumber)
+				fmt.Println("SN:" + childCALvl2.Certificate.SerialNumber)
 				fmt.Println("=============================")
 
 				//cas := []*models.CACertificate{}
@@ -3765,9 +3765,9 @@ func TestHierarchy(t *testing.T) {
 				cas = append(cas, *ca)
 
 				fmt.Println("=============================")
-				fmt.Println("CN:" + ca.Subject.CommonName)
+				fmt.Println("CN:" + ca.Certificate.Subject.CommonName)
 				fmt.Println("ID:" + ca.ID)
-				fmt.Println("SN:" + ca.SerialNumber)
+				fmt.Println("SN:" + ca.Certificate.SerialNumber)
 				fmt.Println("=============================")
 
 				caIss := time.Date(2030, 11, 20, 0, 0, 0, 0, time.Local)
@@ -3784,9 +3784,9 @@ func TestHierarchy(t *testing.T) {
 				}
 				cas = append(cas, *childCALvl1)
 				fmt.Println("=============================")
-				fmt.Println("CN:" + childCALvl1.Subject.CommonName)
+				fmt.Println("CN:" + childCALvl1.Certificate.Subject.CommonName)
 				fmt.Println("ID:" + childCALvl1.ID)
-				fmt.Println("SN:" + childCALvl1.SerialNumber)
+				fmt.Println("SN:" + childCALvl1.Certificate.SerialNumber)
 				fmt.Println("=============================")
 
 				childCALvl2, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
@@ -3801,9 +3801,9 @@ func TestHierarchy(t *testing.T) {
 				}
 
 				fmt.Println("=============================")
-				fmt.Println("CN:" + childCALvl2.Subject.CommonName)
+				fmt.Println("CN:" + childCALvl2.Certificate.Subject.CommonName)
 				fmt.Println("ID:" + childCALvl2.ID)
-				fmt.Println("SN:" + childCALvl2.SerialNumber)
+				fmt.Println("SN:" + childCALvl2.Certificate.SerialNumber)
 				fmt.Println("=============================")
 
 				//cas := []*models.CACertificate{}
@@ -4040,7 +4040,7 @@ func TestCAsAdditionalDeltasMonitoring(t *testing.T) {
 				elapsedSeconds++
 				now := time.Now()
 
-				caExpFromNow := ca.ValidTo.Sub(now)
+				caExpFromNow := ca.Certificate.ValidTo.Sub(now)
 				updatedCA, err := serverTest.CA.Service.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: ca.ID})
 				if err != nil {
 					t.Fatalf("unexpected error. Could not get an updated version for CA: %s", err)

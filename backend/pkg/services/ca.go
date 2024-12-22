@@ -232,9 +232,9 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCA
 			return nil, err
 		}
 	} else {
-		if parentEngine, ok := svc.cryptoEngines[input.ParentCA.EngineID]; ok {
+		if parentEngine, ok := svc.cryptoEngines[input.ParentCA.Certificate.EngineID]; ok {
 			x509ParentEngine := x509engines.NewX509Engine(parentEngine, svc.vaServerDomain)
-			if input.ParentCA.EngineID != input.EngineID {
+			if input.ParentCA.Certificate.EngineID != input.EngineID {
 				if input.EngineID == "" {
 					x509Engine = x509engines.NewX509Engine(svc.defaultCryptoEngine, svc.vaServerDomain)
 				} else {
@@ -255,7 +255,7 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCA
 				return nil, err
 			}
 		} else {
-			errMsg := fmt.Sprintf("parent engine ID %s not configured", input.ParentCA.EngineID)
+			errMsg := fmt.Sprintf("parent engine ID %s not configured", input.ParentCA.Certificate.EngineID)
 			lFunc.Error(errMsg)
 			return nil, fmt.Errorf(errMsg)
 		}
@@ -351,7 +351,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		level = parentCA.Level + 1
 		issuerMeta = models.IssuerCAMetadata{
 			ID:           input.ParentID,
-			SerialNumber: parentCA.SerialNumber,
+			SerialNumber: parentCA.Certificate.SerialNumber,
 			Level:        parentCA.Level,
 		}
 	}
@@ -489,7 +489,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	if parentCA != nil {
 		caLevel = parentCA.Level + 1
 		issuerCAMeta = models.IssuerCAMetadata{
-			SerialNumber: parentCA.SerialNumber,
+			SerialNumber: parentCA.Certificate.SerialNumber,
 			ID:           parentCA.ID,
 			Level:        parentCA.Level,
 		}
@@ -642,22 +642,22 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.
 		return nil, errs.ErrCANotFound
 	}
 
-	if ca.Status == models.StatusExpired {
+	if ca.Certificate.Status == models.StatusExpired {
 		lFunc.Errorf("cannot update an expired CA certificate")
 		return nil, errs.ErrCertificateStatusTransitionNotAllowed
 	}
 
-	if ca.Status == models.StatusRevoked && ca.RevocationReason != ocsp.CertificateHold {
-		lFunc.Errorf("cannot update a revoke CA certificate in %s status. Only a revoked CA certificate with reason '6 - CertificateHold' can be unrevoked", ca.RevocationReason.String())
+	if ca.Certificate.Status == models.StatusRevoked && ca.Certificate.RevocationReason != ocsp.CertificateHold {
+		lFunc.Errorf("cannot update a revoke CA certificate in %s status. Only a revoked CA certificate with reason '6 - CertificateHold' can be unrevoked", ca.Certificate.RevocationReason.String())
 		return nil, errs.ErrCertificateStatusTransitionNotAllowed
 	}
 
-	ca.Status = input.Status
-	if ca.Status == models.StatusRevoked {
+	ca.Certificate.Status = input.Status
+	if ca.Certificate.Status == models.StatusRevoked {
 		rrb, _ := input.RevocationReason.MarshalText()
 		lFunc.Infof("CA %s is being revoked with revocation reason %d - %s", input.CAID, input.RevocationReason, string(rrb))
-		ca.RevocationReason = input.RevocationReason
-		ca.RevocationTimestamp = time.Now()
+		ca.Certificate.RevocationReason = input.RevocationReason
+		ca.Certificate.RevocationTimestamp = time.Now()
 	}
 
 	lFunc.Debugf("updating the status of CA %s to %s", input.CAID, input.Status)
@@ -675,7 +675,7 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.
 				RevocationReason: ocsp.CessationOfOperation,
 			})
 			if err != nil {
-				lFunc.Errorf("could not revoke child CA Certificate %s issued by CA %s", ca.ID, ca.IssuerCAMetadata.ID)
+				lFunc.Errorf("could not revoke child CA Certificate %s issued by CA %s", ca.ID, ca.Certificate.IssuerCAMetadata.ID)
 			}
 		}
 
@@ -810,12 +810,12 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.Delete
 		return errs.ErrCANotFound
 	}
 
-	if ca.Type == models.CertificateTypeExternal {
+	if ca.Certificate.Type == models.CertificateTypeExternal {
 		lFunc.Debugf("External CA can be deleted. Proceeding")
-	} else if ca.Status == models.StatusExpired || ca.Status == models.StatusRevoked {
+	} else if ca.Certificate.Status == models.StatusExpired || ca.Certificate.Status == models.StatusRevoked {
 		lFunc.Debugf("Expired or revoked CA can be deleted. Proceeding")
 	} else {
-		lFunc.Errorf("CA %s can not be deleted while in status %s", input.CAID, ca.Status)
+		lFunc.Errorf("CA %s can not be deleted while in status %s", input.CAID, ca.Certificate.Status)
 		return errs.ErrCAStatus
 	}
 
@@ -839,7 +839,7 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.Delete
 		ExtraOpts:     map[string]interface{}{},
 	})
 	if err != nil {
-		lFunc.Errorf("could not revoke certificate %s issued by CA %s", ca.SerialNumber, ca.IssuerCAMetadata.ID)
+		lFunc.Errorf("could not revoke certificate %s issued by CA %s", ca.Certificate.SerialNumber, ca.Certificate.IssuerCAMetadata.ID)
 	}
 	err = svc.caStorage.Delete(ctx, input.CAID)
 	if err != nil {
@@ -878,7 +878,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		return nil, errs.ErrCANotFound
 	}
 
-	if ca.Status != models.StatusActive {
+	if ca.Certificate.Status != models.StatusActive {
 		lFunc.Errorf("%s CA is not active", ca.ID)
 		return nil, errs.ErrCAStatus
 	}
@@ -972,7 +972,7 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 
 	if parentCA != nil {
 		newCert.IssuerCAMetadata = models.IssuerCAMetadata{
-			SerialNumber: parentCA.SerialNumber,
+			SerialNumber: parentCA.Certificate.SerialNumber,
 			ID:           parentCA.ID,
 			Level:        parentCA.Level,
 		}

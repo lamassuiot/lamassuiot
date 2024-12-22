@@ -93,12 +93,12 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc AWSClo
 			RegisterConfiguration: awsIoTCoreCACfg,
 		})
 		if err != nil {
-			err = fmt.Errorf("could not register CA %s - %s: %s", ca.ID, ca.Subject.CommonName, err)
+			err = fmt.Errorf("could not register CA %s - %s: %s", ca.ID, ca.Certificate.Subject.CommonName, err)
 			logger.Error(err)
 			return err
 		}
 	} else {
-		logger.Infof("Not registering CA %s - %s: status is %s", ca.ID, ca.Subject.CommonName, awsIoTCoreCACfg.Registration.Status)
+		logger.Infof("Not registering CA %s - %s: status is %s", ca.ID, ca.Certificate.Subject.CommonName, awsIoTCoreCACfg.Registration.Status)
 	}
 
 	return nil

@@ -90,7 +90,7 @@ func (svc *CryptoMonitor) scanCAsForUpdate(ctx context.Context, now time.Time) {
 }
 
 func (svc *CryptoMonitor) updateCAIfNeeded(ca models.CACertificate, now time.Time, ctx context.Context) {
-	if ca.ValidTo.Before(now) && ca.Status == models.StatusActive {
+	if ca.Certificate.ValidTo.Before(now) && ca.Certificate.Status == models.StatusActive {
 		svc.service.UpdateCAStatus(ctx, services.UpdateCAStatusInput{
 			CAID:   ca.ID,
 			Status: models.StatusExpired,
