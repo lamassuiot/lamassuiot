@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 
+	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -139,12 +140,14 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 		CryptoEngines: []cconfig.CryptoEngineConfig{},
 	}
 
+	fsid := fmt.Sprintf("/tmp/%s", uuid.NewString())
+
 	fsconfig := cconfig.CryptoEngineConfig{
 		ID:       "filesystem-1",
 		Metadata: map[string]interface{}{},
 		Type:     cconfig.FilesystemProvider,
 		Config: map[string]interface{}{
-			"storage_directory": "/tmp/lms-test/",
+			"storage_directory": fsid,
 		},
 	}
 
@@ -154,7 +157,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 		return nil
 	})
 	afterSuiteActions = append(afterSuiteActions, func() {
-		os.RemoveAll("/tmp/lms-test/")
+		os.RemoveAll(fsid)
 	})
 
 	if slices.Contains(engines, VAULT) {
