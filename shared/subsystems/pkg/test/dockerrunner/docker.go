@@ -1,4 +1,4 @@
-package dockerunner
+package dockerrunner
 
 import (
 	"github.com/ory/dockertest/v3"

@@ -6,7 +6,7 @@ import (
 
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	pconfig "github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3"
-	dockerunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
+	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
@@ -17,7 +17,7 @@ func RunSoftHsmV2Docker(pkcs11ProxyPath string) (func() error, *pconfig.PKCS11Co
 	pin := "0123"
 	sopin := "9876"
 	proto := "tcp"
-	containerCleanup, container, _, err := dockerunner.RunDocker(dockertest.RunOptions{
+	containerCleanup, container, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
 		Repository: "ghcr.io/lamassuiot/softhsm", // image
 		Tag:        "latest",                     // version
 		Env: []string{

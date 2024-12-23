@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
-	dockerunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
+	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	"gorm.io/driver/postgres"
@@ -75,7 +75,7 @@ func RunPostgresDocker(dbs map[string]string) (func() error, *config.PostgresPSE
 		Source: initScriptFname,
 	})
 
-	containerCleanup, container, dockerHost, err := dockerunner.RunDocker(dockertest.RunOptions{
+	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker(dockertest.RunOptions{
 		Repository: "postgres", // image
 		Tag:        "14",       // version
 		Env:        []string{"POSTGRES_PASSWORD=" + passwd},
