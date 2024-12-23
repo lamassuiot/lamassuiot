@@ -86,7 +86,6 @@ func main() {
 	awsIoTManagerRegion := flag.String("awsiot-region", "eu-west-1", "AWS IoT Manager Region")
 	awsIoTManagerID := flag.String("awsiot-id", "", "AWS IoT Manager ConnectorID")
 	cryptoengineOptions := flag.String("cryptoengines", "filesystem", ", separated list of crypto engines to enable ['aws-secrets','aws-kms','vault','pkcs11','filesystem']")
-	sqliteOptions := flag.String("sqlite", "", "set path to sqlite database to enable sqlite storage engine")
 	disableMonitor := flag.Bool("disable-monitor", false, "disable crypto monitoring")
 	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
 	useAwsEventbus := flag.Bool("use-aws-eventbus", false, "use AWS Eventbus")
@@ -130,25 +129,21 @@ func main() {
 	fmt.Println("Storage Engine")
 	pCleanup := func() { /* do nothing */ }
 	var postgresStorageConfig cconfig.PluggableStorageEngine
-	if *sqliteOptions == "" {
-		fmt.Println(">> launching docker: Postgres ...")
-		posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
-		posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager"})
-		backend, err := posgresSubsystem.Run()
-		if err != nil {
-			log.Fatalf("could not launch Postgres: %s", err)
-		}
 
-		pCleanup = backend.AfterSuite
-		postgresStorageConfig = backend.Config.(cconfig.PluggableStorageEngine)
-		postgresStorageConfig.Config["migrations_directory"] = "../../../engines/storage/postgres/migrations"
-
-		fmt.Printf(" 	-- postgres port: %d\n", postgresStorageConfig.Config["port"].(int))
-		fmt.Printf(" 	-- postgres user: %s\n", postgresStorageConfig.Config["username"].(string))
-		fmt.Printf(" 	-- postgres pass: %s\n", postgresStorageConfig.Config["password"].(cconfig.Password))
-	} else {
-		fmt.Printf(">> using sqlite storage engine: %s", *sqliteOptions)
+	fmt.Println(">> launching docker: Postgres ...")
+	posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
+	posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager"})
+	backend, err := posgresSubsystem.Run()
+	if err != nil {
+		log.Fatalf("could not launch Postgres: %s", err)
 	}
+
+	pCleanup = backend.AfterSuite
+	postgresStorageConfig = backend.Config.(cconfig.PluggableStorageEngine)
+
+	fmt.Printf(" 	-- postgres port: %d\n", postgresStorageConfig.Config["port"].(int))
+	fmt.Printf(" 	-- postgres user: %s\n", postgresStorageConfig.Config["username"].(string))
+	fmt.Printf(" 	-- postgres pass: %s\n", postgresStorageConfig.Config["password"].(cconfig.Password))
 
 	fmt.Println("Crypto Engines")
 	vCleanup := func() { /* do nothing */ }
@@ -341,17 +336,7 @@ func main() {
 
 	cryptoEnginesConfig.CryptoEngines = cryptoEngines
 
-	pluglableStorageConfig := &cconfig.PluggableStorageEngine{
-		LogLevel: cconfig.Trace,
-	}
-	if *sqliteOptions != "" {
-		pluglableStorageConfig.Provider = cconfig.SQLite
-		pluglableStorageConfig.Config = map[string]interface{}{
-			"databasePath": *sqliteOptions,
-		}
-	} else {
-		pluglableStorageConfig = &postgresStorageConfig
-	}
+	pluglableStorageConfig := &postgresStorageConfig
 
 	conf := pkg.MonolithicConfig{
 		Logs:               cconfig.Logging{Level: cconfig.Debug},
@@ -379,7 +364,7 @@ func main() {
 		},
 	}
 
-	_, err := pkg.RunMonolithicLamassuPKI(conf)
+	_, err = pkg.RunMonolithicLamassuPKI(conf)
 	if err != nil {
 		fmt.Println("could not start monolithic PKI. Shuting down: ", err)
 		panic(err)

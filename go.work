@@ -13,10 +13,7 @@ use (
 	./engines/crypto/vaultkv2
 	./engines/eventbus/amqp
 	./engines/eventbus/aws
-	./engines/eventbus/channel
-	./engines/storage/couchdb
 	./engines/storage/postgres
-	./engines/storage/sqlite
 	./monolithic
 	./sdk
 	./shared/aws
