@@ -38,14 +38,6 @@ coverage:
         target: auto
         flags: 
         - storage-postgres
-      storage-sqlite:
-        target: auto
-        flags: 
-        - storage-sqlite
-      storage-couchdb:
-        target: auto
-        flags: 
-        - storage-couchdb
       eventbus-amqp:
         target: auto
         flags: 
@@ -54,10 +46,6 @@ coverage:
         target: auto
         flags: 
         - eventbus-aws
-      eventbus-channel:
-        target: auto
-        flags: 
-        - eventbus-channel
       backend:
         target: auto
         flags: 
@@ -105,14 +93,6 @@ flags:
     paths:
         - engines/storage/postgres/
     carryforward: true
-  storage-sqlite:
-      paths:
-          - engines/storage/sqlite/
-      carryforward: true
-  storage-couchdb:
-      paths:
-          - engines/storage/couchdb/
-      carryforward: true
   eventbus-amqp:
     paths:
         - engines/eventbus/amqp/
@@ -121,10 +101,6 @@ flags:
     paths:
         - engines/eventbus/aws/
     carryforward: true
-  eventbus-channel:
-      paths:
-          - engines/eventbus/channel/
-      carryforward: true
   backend:
     paths:
         - backend/
@@ -138,4 +114,7 @@ ignore:
   - "**/*_mock.go"
   - "**/*_test.go"
   - "**/*_testset.go"
+  - "**/test/**"
+  - "**/subsystem/**"
+  - "**/docker/**"
 
