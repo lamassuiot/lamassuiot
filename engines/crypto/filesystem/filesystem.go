@@ -138,7 +138,7 @@ func (engine *FilesystemCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Si
 func (engine *FilesystemCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
 	engine.logger.Debugf("creating RSA private key")
 
-	_, key, err := software.NewSoftwareCryptoEngine(engine.logger).CreateRSAPrivateKey(keySize)
+	_, key, err := engine.softCryptoEngine.CreateRSAPrivateKey(keySize)
 	if err != nil {
 		engine.logger.Errorf("could not create RSA private key: %s", err)
 		return "", nil, err
@@ -151,7 +151,7 @@ func (engine *FilesystemCryptoEngine) CreateRSAPrivateKey(keySize int) (string, 
 func (engine *FilesystemCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string, crypto.Signer, error) {
 	engine.logger.Debugf("creating ECDSA private key")
 
-	_, key, err := software.NewSoftwareCryptoEngine(engine.logger).CreateECDSAPrivateKey(curve)
+	_, key, err := engine.softCryptoEngine.CreateECDSAPrivateKey(curve)
 	if err != nil {
 		engine.logger.Errorf("could not create ECDSA private key: %s", err)
 		return "", nil, err
@@ -202,14 +202,13 @@ func (engine *FilesystemCryptoEngine) importKey(key interface{}) (string, crypto
 		return "", nil, errors.New("unsupported key type")
 	}
 
-	softEngine := software.NewSoftwareCryptoEngine(engine.logger)
-	keyID, err := softEngine.EncodePKIXPublicKeyDigest(pubKey)
+	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(pubKey)
 	if err != nil {
 		engine.logger.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
 	}
 
-	b64PemKey, err := softEngine.MarshalAndEncodePKIXPrivateKey(key)
+	b64PemKey, err := engine.softCryptoEngine.MarshalAndEncodePKIXPrivateKey(key)
 	if err != nil {
 		engine.logger.Errorf("could not marshal and encode private key: %s", err)
 		return "", nil, err

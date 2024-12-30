@@ -181,7 +181,7 @@ func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(keySize int) (string,
 		return "", nil, err
 	}
 
-	keyID, err := software.NewSoftwareCryptoEngine(hsmContext.logger).EncodePKIXPublicKeyDigest(newSigner.Public())
+	keyID, err := hsmContext.softCryptoEngine.EncodePKIXPublicKeyDigest(newSigner.Public())
 	if err != nil {
 		hsmContext.logger.Errorf("could not encode public key: %s", err)
 		return "", nil, err
@@ -205,7 +205,7 @@ func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(curve elliptic.Curv
 		return "", nil, err
 	}
 
-	keyID, err := software.NewSoftwareCryptoEngine(hsmContext.logger).EncodePKIXPublicKeyDigest(newSigner.Public())
+	keyID, err := hsmContext.softCryptoEngine.EncodePKIXPublicKeyDigest(newSigner.Public())
 	if err != nil {
 		hsmContext.logger.Errorf("could not encode public key: %s", err)
 		return "", nil, err
