@@ -24,9 +24,10 @@ import (
 )
 
 type AWSSecretsManagerCryptoEngine struct {
-	config    models.CryptoEngineInfo
-	smngerCli *secretsmanager.Client
-	logger    *logrus.Entry
+	softCryptoEngine *software.SoftwareCryptoEngine
+	config           models.CryptoEngineInfo
+	smngerCli        *secretsmanager.Client
+	logger           *logrus.Entry
 }
 
 func NewAWSSecretManagerEngine(logger *logrus.Entry, awsConf aws.Config, metadata map[string]any) (cryptoengines.CryptoEngine, error) {
@@ -42,8 +43,9 @@ func NewAWSSecretManagerEngine(logger *logrus.Entry, awsConf aws.Config, metadat
 	smCli := secretsmanager.NewFromConfig(awsConf)
 
 	return &AWSSecretsManagerCryptoEngine{
-		logger:    lAWSSM,
-		smngerCli: smCli,
+		logger:           lAWSSM,
+		softCryptoEngine: software.NewSoftwareCryptoEngine(lAWSSM),
+		smngerCli:        smCli,
 		config: models.CryptoEngineInfo{
 			Type:          models.AWSSecretsManager,
 			SecurityLevel: models.SL1,
@@ -132,7 +134,7 @@ func (engine *AWSSecretsManagerCryptoEngine) GetPrivateKeyByID(keyID string) (cr
 func (engine *AWSSecretsManagerCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
 	engine.logger.Debugf("creating RSA private key")
 
-	_, key, err := software.NewSoftwareCryptoEngine(engine.logger).CreateRSAPrivateKey(keySize)
+	_, key, err := engine.softCryptoEngine.CreateRSAPrivateKey(keySize)
 	if err != nil {
 		engine.logger.Errorf("could not create RSA private key: %s", err)
 		return "", nil, err
@@ -145,7 +147,7 @@ func (engine *AWSSecretsManagerCryptoEngine) CreateRSAPrivateKey(keySize int) (s
 func (engine *AWSSecretsManagerCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string, crypto.Signer, error) {
 	engine.logger.Debugf("creating ECDSA private key")
 
-	_, key, err := software.NewSoftwareCryptoEngine(engine.logger).CreateECDSAPrivateKey(curve)
+	_, key, err := engine.softCryptoEngine.CreateECDSAPrivateKey(curve)
 	if err != nil {
 		engine.logger.Errorf("could not create ECDSA private key: %s", err)
 		return "", nil, err
@@ -192,14 +194,13 @@ func (engine *AWSSecretsManagerCryptoEngine) importKey(key crypto.Signer) (strin
 		return "", nil, errors.New("unsupported key type")
 	}
 
-	softEngine := software.NewSoftwareCryptoEngine(engine.logger)
-	keyID, err := softEngine.EncodePKIXPublicKeyDigest(pubKey)
+	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(pubKey)
 	if err != nil {
 		engine.logger.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
 	}
 
-	b64PemKey, err := softEngine.MarshalAndEncodePKIXPrivateKey(key)
+	b64PemKey, err := engine.softCryptoEngine.MarshalAndEncodePKIXPrivateKey(key)
 	if err != nil {
 		engine.logger.Errorf("could not marshal and encode private key: %s", err)
 		return "", nil, err

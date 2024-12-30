@@ -11,7 +11,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/x509engines"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -129,8 +128,6 @@ func createCAStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEng
 }
 
 func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*lservices.Engine, error) {
-	x509engines.SetCryptoEngineLogger(logger) //Important!
-
 	engines := map[string]*lservices.Engine{}
 
 	for _, cfg := range conf.CryptoEngineConfig.CryptoEngines {

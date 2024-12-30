@@ -201,11 +201,11 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCA
 
 	var x509Engine x509engines.X509Engine
 	if input.EngineID == "" {
-		x509Engine = x509engines.NewX509Engine(svc.defaultCryptoEngine, svc.vaServerDomain)
+		x509Engine = x509engines.NewX509Engine(lFunc, svc.defaultCryptoEngine, svc.vaServerDomain)
 		lFunc.Infof("creating CA %s with default engine %s crypto engine", input.Subject.CommonName, x509Engine.GetEngineConfig().Provider)
 	} else {
 		if engine, ok := svc.cryptoEngines[input.EngineID]; ok {
-			x509Engine = x509engines.NewX509Engine(engine, svc.vaServerDomain)
+			x509Engine = x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomain)
 			lFunc.Infof("creating CA %s with %s crypto engine", input.Subject.CommonName, x509Engine.GetEngineConfig().Provider)
 		} else {
 			errMsg := fmt.Sprintf("engine ID %s not configured", input.EngineID)
@@ -233,17 +233,17 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCA
 		}
 	} else {
 		if parentEngine, ok := svc.cryptoEngines[input.ParentCA.Certificate.EngineID]; ok {
-			x509ParentEngine := x509engines.NewX509Engine(parentEngine, svc.vaServerDomain)
+			x509ParentEngine := x509engines.NewX509Engine(lFunc, parentEngine, svc.vaServerDomain)
 			if input.ParentCA.Certificate.EngineID != input.EngineID {
 				if input.EngineID == "" {
-					x509Engine = x509engines.NewX509Engine(svc.defaultCryptoEngine, svc.vaServerDomain)
+					x509Engine = x509engines.NewX509Engine(lFunc, svc.defaultCryptoEngine, svc.vaServerDomain)
 				} else {
 					childEngine, ok := svc.cryptoEngines[input.EngineID]
 					if !ok {
 						lFunc.Errorf("something went wrong while doing the cast")
 						return nil, nil
 					}
-					x509Engine = x509engines.NewX509Engine(childEngine, svc.vaServerDomain)
+					x509Engine = x509engines.NewX509Engine(lFunc, childEngine, svc.vaServerDomain)
 				}
 			} else {
 				x509Engine = x509ParentEngine
@@ -885,7 +885,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
 
-	x509Engine := x509engines.NewX509Engine(engine, svc.vaServerDomain)
+	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomain)
 
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
 	csr := (*x509.CertificateRequest)(input.CertRequest)
@@ -1014,7 +1014,7 @@ func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input services.S
 	}
 
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
-	x509Engine := x509engines.NewX509Engine(engine, svc.vaServerDomain)
+	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomain)
 	lFunc.Debugf("sign signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
 	signature, err := x509Engine.Sign(x509engines.CertificateAuthority, (*x509.Certificate)(ca.Certificate.Certificate), input.Message, input.MessageType, input.SigningAlgorithm)
 	if err != nil {
@@ -1044,7 +1044,7 @@ func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input services
 		return false, errs.ErrCANotFound
 	}
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
-	x509Engine := x509engines.NewX509Engine(engine, svc.vaServerDomain)
+	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomain)
 	lFunc.Debugf("verify signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
 	return x509Engine.Verify((*x509.Certificate)(ca.Certificate.Certificate), input.Signature, input.Message, input.MessageType, input.SigningAlgorithm)
 }

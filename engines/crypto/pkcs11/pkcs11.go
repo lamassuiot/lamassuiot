@@ -27,11 +27,12 @@ import (
 )
 
 type pkcs11EngineContext struct {
-	api    *crypto11.Context
-	slotID uint
-	lowApi *pkcs11.Ctx
-	config models.CryptoEngineInfo
-	logger *logrus.Entry
+	softCryptoEngine *software.SoftwareCryptoEngine
+	api              *crypto11.Context
+	slotID           uint
+	lowApi           *pkcs11.Ctx
+	config           models.CryptoEngineInfo
+	logger           *logrus.Entry
 }
 
 func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter[pconfig.PKCS11Config]) (cryptoengines.CryptoEngine, error) {
@@ -119,10 +120,11 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 	meta := helpers.MergeMaps[interface{}](&defaultMeta, &conf.Metadata)
 
 	return &pkcs11EngineContext{
-		logger: lPkcs11,
-		slotID: slotID,
-		api:    instance,
-		lowApi: pkcs11ProviderContext,
+		logger:           lPkcs11,
+		softCryptoEngine: software.NewSoftwareCryptoEngine(lPkcs11),
+		slotID:           slotID,
+		api:              instance,
+		lowApi:           pkcs11ProviderContext,
 		config: models.CryptoEngineInfo{
 			Type:              models.PKCS11,
 			SecurityLevel:     models.SL2,
@@ -179,7 +181,7 @@ func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(keySize int) (string,
 		return "", nil, err
 	}
 
-	keyID, err := software.NewSoftwareCryptoEngine(hsmContext.logger).EncodePKIXPublicKeyDigest(newSigner.Public())
+	keyID, err := hsmContext.softCryptoEngine.EncodePKIXPublicKeyDigest(newSigner.Public())
 	if err != nil {
 		hsmContext.logger.Errorf("could not encode public key: %s", err)
 		return "", nil, err
@@ -203,7 +205,7 @@ func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(curve elliptic.Curv
 		return "", nil, err
 	}
 
-	keyID, err := software.NewSoftwareCryptoEngine(hsmContext.logger).EncodePKIXPublicKeyDigest(newSigner.Public())
+	keyID, err := hsmContext.softCryptoEngine.EncodePKIXPublicKeyDigest(newSigner.Public())
 	if err != nil {
 		hsmContext.logger.Errorf("could not encode public key: %s", err)
 		return "", nil, err

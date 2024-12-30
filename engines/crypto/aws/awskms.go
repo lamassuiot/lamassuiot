@@ -26,9 +26,10 @@ import (
 var lAWSKMS *logrus.Entry
 
 type AWSKMSCryptoEngine struct {
-	config    models.CryptoEngineInfo
-	kmscli    *kms.Client
-	kmsConfig aws.Config
+	softCryptoEngine *software.SoftwareCryptoEngine
+	config           models.CryptoEngineInfo
+	kmscli           *kms.Client
+	kmsConfig        aws.Config
 }
 
 func NewAWSKMSEngine(logger *logrus.Entry, awsConf aws.Config, metadata map[string]any) (cryptoengines.CryptoEngine, error) {
@@ -43,8 +44,9 @@ func NewAWSKMSEngine(logger *logrus.Entry, awsConf aws.Config, metadata map[stri
 	kmscli := kms.NewFromConfig(awsConf)
 
 	return &AWSKMSCryptoEngine{
-		kmscli:    kmscli,
-		kmsConfig: awsConf,
+		kmscli:           kmscli,
+		kmsConfig:        awsConf,
+		softCryptoEngine: software.NewSoftwareCryptoEngine(lAWSKMS),
 		config: models.CryptoEngineInfo{
 			Type:          models.AWSKMS,
 			SecurityLevel: models.SL2,
@@ -182,7 +184,7 @@ func (p *AWSKMSCryptoEngine) createPrivateKey(keySpec types.KeySpec) (string, cr
 	}
 
 	lAWSKMS.Debugf("Key created with ARN [%s]", *key.KeyMetadata.Arn)
-	keyID, err := software.NewSoftwareCryptoEngine(lAWSKMS).EncodePKIXPublicKeyDigest(signer.Public())
+	keyID, err := p.softCryptoEngine.EncodePKIXPublicKeyDigest(signer.Public())
 	if err != nil {
 		lAWSKMS.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
