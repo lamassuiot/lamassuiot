@@ -6,19 +6,15 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 func TestEmptyDumpImport(t *testing.T) {
-	pCleanup, cfg, err := RunPostgresDocker(map[string]string{
-		"ca": "",
-	})
-	if err != nil {
-		t.Fatalf("could not launch Postgres: %s", err)
-	}
+	cfg, suite := BeforeSuite([]string{"ca"})
 
-	defer pCleanup()
+	defer suite.cleanupDocker()
 
 	// Check CA DB is empty
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%d sslmode=disable", cfg.Hostname, cfg.Username, cfg.Password, "ca", cfg.Port)
@@ -93,4 +89,41 @@ func TestDumpImport(t *testing.T) {
 	if count2 != 1 {
 		t.Fatalf("expected 1 row in certificates, but found %d rows", count2)
 	}
+}
+
+func TestBeforeSuite(t *testing.T) {
+	_, suite := BeforeSuite([]string{"ca"})
+	defer suite.cleanupDocker()
+
+	db := suite.DB["ca"]
+
+	db.Exec("CREATE TABLE test_table (id SERIAL PRIMARY KEY, name TEXT)")
+	db.Table("test_table").Create(&struct {
+		Name string
+	}{Name: "test"})
+
+	var tables []string
+	err := db.Table("information_schema.tables").Where("table_schema = ?", "public").Pluck("table_name", &tables).Error
+	if err != nil {
+		t.Fatalf("could not query information_schema.tables: %s", err)
+	}
+	assert.Equal(t, 1, len(tables))
+
+	var count int64
+	db.Table("test_table").Count(&count)
+	assert.Equal(t, int64(1), count)
+
+	suite.BeforeEach()
+
+	tables = []string{}
+	err = db.Table("information_schema.tables").Where("table_schema = ?", "public").Pluck("table_name", &tables).Error
+	if err != nil {
+		t.Fatalf("could not query information_schema.tables: %s", err)
+	}
+	assert.Equal(t, 1, len(tables))
+
+	count = 0
+	db.Table("test_table").Count(&count)
+	assert.Equal(t, int64(0), count)
+
 }

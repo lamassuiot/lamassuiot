@@ -26,8 +26,9 @@ import (
 )
 
 type VaultKV2Engine struct {
-	kvv2Client *api.KVv2
-	logger     *logrus.Entry
+	softCryptoEngine *software.SoftwareCryptoEngine
+	kvv2Client       *api.KVv2
+	logger           *logrus.Entry
 }
 
 func NewVaultKV2Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter[vconfig.HashicorpVaultSDK]) (cryptoengines.CryptoEngine, error) {
@@ -98,8 +99,9 @@ func NewVaultKV2Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapt
 	kv2 := vaultClient.KVv2(conf.Config.MountPath)
 
 	return &VaultKV2Engine{
-		logger:     lVault,
-		kvv2Client: kv2,
+		logger:           lVault,
+		softCryptoEngine: software.NewSoftwareCryptoEngine(lVault),
+		kvv2Client:       kv2,
 	}, nil
 }
 

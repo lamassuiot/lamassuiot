@@ -2,7 +2,10 @@ module github.com/lamassuiot/lamassuiot/shared/subsystems/v3
 
 go 1.22.0
 
-require github.com/ory/dockertest/v3 v3.11.0
+require (
+	github.com/ory/dockertest/v3 v3.11.0
+	github.com/stretchr/testify v1.9.0
+)
 
 require (
 	dario.cat/mergo v1.0.0 // indirect
@@ -35,4 +38,5 @@ require (
 	golang.org/x/sys v0.28.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -5,13 +5,13 @@ import (
 	"net/http"
 	"strconv"
 
-	dockerunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
+	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
 
 func RunAWSEmulationLocalStackDocker() (func() error, *AWSSDKConfig, error) {
-	containerCleanup, container, dockerHost, err := dockerunner.RunDocker(dockertest.RunOptions{
+	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker(dockertest.RunOptions{
 		Repository: "localstack/localstack", // image
 		Tag:        "latest",                // version
 	}, func(hc *docker.HostConfig) {})

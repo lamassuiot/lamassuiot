@@ -43,7 +43,7 @@ func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
 
 	engine, _ := builder(log, conf)
 
-	x509Engine := NewX509Engine(&engine, "ocsp.lamassu.io")
+	x509Engine := NewX509Engine(log, &engine, "ocsp.lamassu.io")
 
 	return tempDir, engine, x509Engine
 }
@@ -308,6 +308,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 		Type: cmodels.KeyType(x509.RSA),
 		Bits: 2048,
 	}
+
 	subject := cmodels.Subject{
 		CommonName:       "Root CA",
 		Organization:     "Lamassu IoT",
@@ -318,6 +319,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 	}
 
 	expirationTime := time.Now().AddDate(1, 0, 0) // Set expiration time to 1 year from now
+	logger := chelpers.SetupLogger(config.Info, "Test Case", "Golang Engine")
 
 	// Call the CreateRootCA method
 	_, rootCaCertRSA, err := x509Engine.CreateRootCA(keyMetadata, subject, expirationTime)
@@ -438,7 +440,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			aki, err := software.NewSoftwareCryptoEngine(lCEngine).EncodePKIXPublicKeyDigest(tc.rootCaCert.PublicKey)
+			aki, err := software.NewSoftwareCryptoEngine(logger).EncodePKIXPublicKeyDigest(tc.rootCaCert.PublicKey)
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
 			}

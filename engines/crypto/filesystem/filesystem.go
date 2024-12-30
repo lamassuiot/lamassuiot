@@ -24,6 +24,7 @@ import (
 )
 
 type FilesystemCryptoEngine struct {
+	softCryptoEngine *software.SoftwareCryptoEngine
 	config           models.CryptoEngineInfo
 	storageDirectory string
 	logger           *logrus.Entry
@@ -68,6 +69,7 @@ func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfig
 	meta := helpers.MergeMaps[interface{}](&defaultMeta, &conf.Metadata)
 	return &FilesystemCryptoEngine{
 		logger:           lGo,
+		softCryptoEngine: software.NewSoftwareCryptoEngine(lGo),
 		storageDirectory: conf.Config.StorageDirectory,
 		config: models.CryptoEngineInfo{
 			Type:          models.Golang,

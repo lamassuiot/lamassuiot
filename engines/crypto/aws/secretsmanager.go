@@ -24,9 +24,10 @@ import (
 )
 
 type AWSSecretsManagerCryptoEngine struct {
-	config    models.CryptoEngineInfo
-	smngerCli *secretsmanager.Client
-	logger    *logrus.Entry
+	softCryptoEngine *software.SoftwareCryptoEngine
+	config           models.CryptoEngineInfo
+	smngerCli        *secretsmanager.Client
+	logger           *logrus.Entry
 }
 
 func NewAWSSecretManagerEngine(logger *logrus.Entry, awsConf aws.Config, metadata map[string]any) (cryptoengines.CryptoEngine, error) {
@@ -42,8 +43,9 @@ func NewAWSSecretManagerEngine(logger *logrus.Entry, awsConf aws.Config, metadat
 	smCli := secretsmanager.NewFromConfig(awsConf)
 
 	return &AWSSecretsManagerCryptoEngine{
-		logger:    lAWSSM,
-		smngerCli: smCli,
+		logger:           lAWSSM,
+		softCryptoEngine: software.NewSoftwareCryptoEngine(lAWSSM),
+		smngerCli:        smCli,
 		config: models.CryptoEngineInfo{
 			Type:          models.AWSSecretsManager,
 			SecurityLevel: models.SL1,

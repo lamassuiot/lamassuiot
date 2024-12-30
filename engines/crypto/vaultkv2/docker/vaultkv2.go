@@ -8,14 +8,14 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	vconfig "github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3/config"
-	dockerunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
+	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 )
 
 func RunHashicorpVaultDocker() (func() error, *vconfig.HashicorpVaultSDK, string, error) {
 	rootToken := "root-token-dev"
-	containerCleanup, container, _, err := dockerunner.RunDocker(dockertest.RunOptions{
+	containerCleanup, container, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
 		Repository: "vault",  // image
 		Tag:        "1.13.3", // version
 		CapAdd:     []string{"IPC_LOCK"},

@@ -26,9 +26,10 @@ import (
 var lAWSKMS *logrus.Entry
 
 type AWSKMSCryptoEngine struct {
-	config    models.CryptoEngineInfo
-	kmscli    *kms.Client
-	kmsConfig aws.Config
+	softCryptoEngine *software.SoftwareCryptoEngine
+	config           models.CryptoEngineInfo
+	kmscli           *kms.Client
+	kmsConfig        aws.Config
 }
 
 func NewAWSKMSEngine(logger *logrus.Entry, awsConf aws.Config, metadata map[string]any) (cryptoengines.CryptoEngine, error) {
@@ -43,8 +44,9 @@ func NewAWSKMSEngine(logger *logrus.Entry, awsConf aws.Config, metadata map[stri
 	kmscli := kms.NewFromConfig(awsConf)
 
 	return &AWSKMSCryptoEngine{
-		kmscli:    kmscli,
-		kmsConfig: awsConf,
+		kmscli:           kmscli,
+		kmsConfig:        awsConf,
+		softCryptoEngine: software.NewSoftwareCryptoEngine(lAWSKMS),
 		config: models.CryptoEngineInfo{
 			Type:          models.AWSKMS,
 			SecurityLevel: models.SL2,

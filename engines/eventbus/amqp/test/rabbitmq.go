@@ -9,14 +9,14 @@ import (
 	"github.com/ThreeDotsLabs/watermill-amqp/v2/pkg/amqp"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	ampq "github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3/config"
-	dockerunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
+	dockerrunner "github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	"github.com/sirupsen/logrus"
 )
 
 func RunRabbitMQDocker() (func() error, *ampq.AMQPConnection, int, error) {
-	containerCleanup, container, dockerHost, err := dockerunner.RunDocker(dockertest.RunOptions{
+	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker(dockertest.RunOptions{
 		Repository: "rabbitmq",        // image
 		Tag:        "3.12-management", // version
 		Env: []string{
