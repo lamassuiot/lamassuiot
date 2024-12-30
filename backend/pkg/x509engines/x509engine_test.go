@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	cmodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 )
 
 func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
@@ -43,7 +43,7 @@ func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
 
 	engine, _ := builder(log, conf)
 
-	x509Engine := NewX509Engine(&engine, "ocsp.lamassu.io")
+	x509Engine := NewX509Engine(log, &engine, "ocsp.lamassu.io")
 
 	return tempDir, engine, x509Engine
 }
@@ -66,7 +66,7 @@ func TestGetCACryptoSigner(t *testing.T) {
 		t.Fatal("private key is not of type rsa.PrivateKey")
 	}
 
-	importedSigner, err := engine.ImportRSAPrivateKey(rsaPrivateKey, helpers.SerialNumberToString(caCertificate.SerialNumber))
+	_, importedSigner, err := engine.ImportRSAPrivateKey(rsaPrivateKey)
 	if err != nil {
 		t.Fatalf("failed to import private key: %s", err)
 	}
@@ -86,7 +86,6 @@ func TestGetCACryptoSigner(t *testing.T) {
 	if !reflect.DeepEqual(signer.Public(), importedSigner.Public()) {
 		t.Error("Public key does not match to the imported signer public key")
 	}
-
 }
 
 func TestGetCACryptoSignerNonExistentKey(t *testing.T) {
@@ -110,44 +109,19 @@ func TestGetCACryptoSignerNonExistentKey(t *testing.T) {
 	}
 }
 
-func TestCryptoAssetLRI(t *testing.T) {
-	cryptoAssetType := CryptoAssetType("sample")
-	keyID := "12345"
-
-	expected := "lms-caservice-sample-keyid-12345"
-	result := CryptoAssetLRI(cryptoAssetType, keyID)
-
-	if result != expected {
-		t.Errorf("unexpected result, got: %s, want: %s", result, expected)
-	}
-
-	cryptoAssetType = Certificate
-	expected = "lms-caservice-cert-keyid-12345"
-	result = CryptoAssetLRI(cryptoAssetType, keyID)
-
-	if result != expected {
-		t.Errorf("unexpected result, got: %s, want: %s", result, expected)
-	}
-
-	cryptoAssetType = CertificateAuthority
-	expected = "lms-caservice-certauth-keyid-12345"
-	result = CryptoAssetLRI(cryptoAssetType, keyID)
-
-	if result != expected {
-		t.Errorf("unexpected result, got: %s, want: %s", result, expected)
-	}
-}
-
 func checkCertificate(cert *x509.Certificate, tcSubject cmodels.Subject, tcKeyMetadata cmodels.KeyType, tcExpirationTime time.Time) error {
 	if cert.Subject.CommonName != tcSubject.CommonName {
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.Subject.CommonName, tcSubject.CommonName)
 	}
+
 	if cert.Subject.Organization[0] != tcSubject.Organization {
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.Subject.Organization, tcSubject.Organization)
 	}
+
 	if cert.Subject.OrganizationalUnit[0] != tcSubject.OrganizationUnit {
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.Subject.OrganizationalUnit, tcSubject.OrganizationUnit)
 	}
+
 	if cert.Subject.Country[0] != tcSubject.Country {
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.Subject.Country, tcSubject.Country)
 	}
@@ -314,7 +288,7 @@ func TestCreateRootCA(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			// Call the CreateRootCA method
-			cert, err := x509Engine.CreateRootCA(tc.caId, tc.keyMetadata, tc.subject, tc.expirationTime)
+			_, cert, err := x509Engine.CreateRootCA(tc.keyMetadata, tc.subject, tc.expirationTime)
 			err = tc.check(cert, tc.subject, tc.keyMetadata, tc.expirationTime, err)
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
@@ -330,11 +304,11 @@ func TestCreateSubordinateCA(t *testing.T) {
 	tempDir, _, x509Engine := setup(t)
 	defer teardown(tempDir)
 
-	caID := "rootCA"
 	keyMetadata := cmodels.KeyMetadata{
 		Type: cmodels.KeyType(x509.RSA),
 		Bits: 2048,
 	}
+
 	subject := cmodels.Subject{
 		CommonName:       "Root CA",
 		Organization:     "Lamassu IoT",
@@ -345,9 +319,10 @@ func TestCreateSubordinateCA(t *testing.T) {
 	}
 
 	expirationTime := time.Now().AddDate(1, 0, 0) // Set expiration time to 1 year from now
+	logger := chelpers.SetupLogger(config.Info, "Test Case", "Golang Engine")
 
 	// Call the CreateRootCA method
-	rootCaCertRSA, err := x509Engine.CreateRootCA(caID, keyMetadata, subject, expirationTime)
+	_, rootCaCertRSA, err := x509Engine.CreateRootCA(keyMetadata, subject, expirationTime)
 	// Verify the result
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
@@ -359,7 +334,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 	}
 
 	// Call the CreateRootCA method
-	rootCaCertEC, err := x509Engine.CreateRootCA(caID, keyMetadata, subject, expirationTime)
+	_, rootCaCertEC, err := x509Engine.CreateRootCA(keyMetadata, subject, expirationTime)
 	// Verify the result
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
@@ -398,7 +373,6 @@ func TestCreateSubordinateCA(t *testing.T) {
 	var testcases = []struct {
 		name            string
 		subordinateCAID string
-		aki             string
 		rootCaCert      *x509.Certificate
 		subject         cmodels.Subject
 		keyMetadata     cmodels.KeyMetadata
@@ -407,7 +381,6 @@ func TestCreateSubordinateCA(t *testing.T) {
 	}{
 		{name: "OK/RSA_RSA",
 			subordinateCAID: "subCA",
-			aki:             "12345",
 			rootCaCert:      rootCaCertRSA,
 			subject:         subordinateSubject,
 			keyMetadata: cmodels.KeyMetadata{
@@ -419,7 +392,6 @@ func TestCreateSubordinateCA(t *testing.T) {
 		},
 		{name: "OK/RSA_EC",
 			subordinateCAID: "subCA",
-			aki:             "12345",
 			rootCaCert:      rootCaCertRSA,
 			subject:         subordinateSubject,
 			keyMetadata: cmodels.KeyMetadata{
@@ -431,7 +403,6 @@ func TestCreateSubordinateCA(t *testing.T) {
 		},
 		{name: "OK/EC_RSA",
 			subordinateCAID: "subCA",
-			aki:             "12345",
 			rootCaCert:      rootCaCertEC,
 			subject:         subordinateSubject,
 			keyMetadata: cmodels.KeyMetadata{
@@ -443,7 +414,6 @@ func TestCreateSubordinateCA(t *testing.T) {
 		},
 		{name: "OK/EC_EC",
 			subordinateCAID: "subCA",
-			aki:             "12345",
 			rootCaCert:      rootCaCertEC,
 			subject:         subordinateSubject,
 			keyMetadata: cmodels.KeyMetadata{
@@ -455,7 +425,6 @@ func TestCreateSubordinateCA(t *testing.T) {
 		},
 		{name: "FAIL/ROOT_CA_NOT_FOUND",
 			subordinateCAID: "subCA",
-			aki:             "12345",
 			rootCaCert:      caCertificateNotImported,
 			subject:         subordinateSubject,
 			keyMetadata: cmodels.KeyMetadata{
@@ -471,9 +440,13 @@ func TestCreateSubordinateCA(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
+			aki, err := software.NewSoftwareCryptoEngine(logger).EncodePKIXPublicKeyDigest(tc.rootCaCert.PublicKey)
+			if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
 
 			// Call the CreateSubordinateCA method
-			cert, err := x509Engine.CreateSubordinateCA(tc.aki, tc.subordinateCAID, tc.rootCaCert, tc.keyMetadata, tc.subject, tc.expirationTime, x509Engine)
+			_, cert, err := x509Engine.CreateSubordinateCA(aki, tc.rootCaCert, tc.keyMetadata, tc.subject, tc.expirationTime, x509Engine)
 			err = tc.check(cert, tc.subject, tc.keyMetadata, tc.expirationTime, err)
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
@@ -487,7 +460,6 @@ func TestSignCertificateRequest(t *testing.T) {
 	tempDir, _, x509Engine := setup(t)
 	defer teardown(tempDir)
 
-	caID := "rootCA"
 	keyMetadata := cmodels.KeyMetadata{
 		Type: cmodels.KeyType(x509.RSA),
 		Bits: 2048,
@@ -499,7 +471,7 @@ func TestSignCertificateRequest(t *testing.T) {
 	expirationTime := time.Now().AddDate(1, 0, 0) // Set expiration time to 1 year from now
 
 	// Call the CreateRootCA method
-	caCertificateRSA, err := x509Engine.CreateRootCA(caID, keyMetadata, subject, expirationTime)
+	_, caCertificateRSA, err := x509Engine.CreateRootCA(keyMetadata, subject, expirationTime)
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -509,7 +481,7 @@ func TestSignCertificateRequest(t *testing.T) {
 		Bits: 256,
 	}
 
-	caCertificateEC, err := x509Engine.CreateRootCA(caID, keyMetadata, subject, expirationTime)
+	_, caCertificateEC, err := x509Engine.CreateRootCA(keyMetadata, subject, expirationTime)
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}

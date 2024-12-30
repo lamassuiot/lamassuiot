@@ -14,3 +14,4 @@ cmd/test
 init.sql
 *.logs
 .DS_Store
+testdata

@@ -60,15 +60,18 @@ func (s *PostgresStorageEngine) initialiceCACertStorage() error {
 		return err
 	}
 
+	m := NewMigrator(s.logger, psqlCli)
+	m.MigrateToLatest()
+
 	if s.CA == nil {
-		s.CA, err = NewCAPostgresRepository(psqlCli)
+		s.CA, err = NewCAPostgresRepository(s.logger, psqlCli)
 		if err != nil {
 			return err
 		}
 	}
 
 	if s.Cert == nil {
-		s.Cert, err = NewCertificateRepository(psqlCli)
+		s.Cert, err = NewCertificateRepository(s.logger, psqlCli)
 		if err != nil {
 			return err
 		}
@@ -88,19 +91,22 @@ func (s *PostgresStorageEngine) GetCertstorage() (storage.CertificatesRepo, erro
 }
 
 func (s *PostgresStorageEngine) GetDeviceStorage() (storage.DeviceManagerRepo, error) {
-
 	if s.Device == nil {
 		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, DEVICE_DB_NAME)
 		if err != nil {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
 
-		deviceStore, err := NewDeviceManagerRepository(psqlCli)
+		m := NewMigrator(s.logger, psqlCli)
+		m.MigrateToLatest()
+
+		deviceStore, err := NewDeviceManagerRepository(s.logger, psqlCli)
 		if err != nil {
 			return nil, fmt.Errorf("could not initialize postgres Device client: %s", err)
 		}
 		s.Device = deviceStore
 	}
+
 	return s.Device, nil
 }
 
@@ -111,7 +117,10 @@ func (s *PostgresStorageEngine) GetDMSStorage() (storage.DMSRepo, error) {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
 
-		dmsStore, err := NewDMSManagerRepository(psqlCli)
+		m := NewMigrator(s.logger, psqlCli)
+		m.MigrateToLatest()
+
+		dmsStore, err := NewDMSManagerRepository(s.logger, psqlCli)
 		if err != nil {
 			return nil, fmt.Errorf("could not initialize postgres DMS client: %s", err)
 		}
@@ -140,15 +149,18 @@ func (s *PostgresStorageEngine) initialiceSubscriptionsStorage() error {
 		return err
 	}
 
+	m := NewMigrator(s.logger, psqlCli)
+	m.MigrateToLatest()
+
 	if s.Subscriptions == nil {
-		s.Subscriptions, err = NewSubscriptionsPostgresRepository(psqlCli)
+		s.Subscriptions, err = NewSubscriptionsPostgresRepository(s.logger, psqlCli)
 		if err != nil {
 			return err
 		}
 	}
 
 	if s.Events == nil {
-		s.Events, err = NewEventsPostgresRepository(psqlCli)
+		s.Events, err = NewEventsPostgresRepository(s.logger, psqlCli)
 		if err != nil {
 			return err
 		}

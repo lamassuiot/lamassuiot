@@ -713,7 +713,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 
 	alreadyRegistered := false
 	idx := slices.IndexFunc(cas, func(c *models.CACertificate) bool {
-		if c.SerialNumber == input.SerialNumber {
+		if c.Certificate.SerialNumber == input.Certificate.SerialNumber {
 			return true
 		} else {
 			return false
@@ -725,9 +725,9 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 	}
 
 	if !alreadyRegistered {
-		lFunc.Infof("registering CA with SN '%s'", input.SerialNumber)
+		lFunc.Infof("registering CA with SN '%s'", input.Certificate.SerialNumber)
 	} else {
-		lFunc.Warnf("CA with SN '%s' is already registered in AWS IoT. Skipping registration process", input.SerialNumber)
+		lFunc.Warnf("CA with SN '%s' is already registered in AWS IoT. Skipping registration process", input.Certificate.SerialNumber)
 		return &input.CACertificate, nil
 	}
 
@@ -766,11 +766,11 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 			},
 			{
 				Key:   aws.String("LMS.CA.SN"),
-				Value: &input.SerialNumber,
+				Value: &input.Certificate.SerialNumber,
 			},
 			{
 				Key:   aws.String("LMS.CA.CN"),
-				Value: &input.Subject.CommonName,
+				Value: &input.Certificate.Subject.CommonName,
 			},
 		},
 		SetAsActive:           true,

@@ -326,7 +326,6 @@ func main() {
 				"storage_directory": "/tmp/gotest",
 			},
 		})
-		cryptoEnginesConfig.DefaultEngine = "filesystem-1"
 	}
 
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok {

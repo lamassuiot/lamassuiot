@@ -59,8 +59,8 @@ type CACertificate struct {
 	Certificate
 	ID                    string                 `json:"id" gorm:"primaryKey"`
 	Metadata              map[string]interface{} `json:"metadata" gorm:"serializer:json"`
+	KeyID                 string                 `json:"key_id"`
 	IssuanceExpirationRef Expiration             `json:"issuance_expiration" gorm:"serializer:json"`
-	Type                  CertificateType        `json:"type"`
 	CreationTS            time.Time              `json:"creation_ts"`
 	Level                 int                    `json:"level"`
 }

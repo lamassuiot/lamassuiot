@@ -2,18 +2,21 @@ package postgres
 
 import (
 	"context"
+	"embed"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/fs"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/go-gormigrate/gormigrate/v2"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
+	"github.com/pressly/goose/v3"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -21,50 +24,8 @@ import (
 	"gorm.io/gorm/schema"
 )
 
-type DBVersion struct {
-	CreationTS    time.Time
-	SchemaVersion int
-}
-
-type DBVersionMigrationNode struct {
-	next       *DBVersionMigrationNode
-	migrations []*gormigrate.Migration
-	label      string
-	id         int
-}
-
-type DBMigrationList struct {
-	head *DBVersionMigrationNode
-}
-
-func (l *DBMigrationList) Insert(id int, label string, migrations []*gormigrate.Migration) {
-	list := &DBVersionMigrationNode{migrations: migrations, id: id, label: label, next: nil}
-	if l.head == nil {
-		l.head = list
-	} else {
-		p := l.head
-		for p.next != nil {
-			p = p.next
-		}
-		p.next = list
-	}
-}
-
-func (n *DBVersionMigrationNode) MigrationPlanTo(targetMigration int) []*DBVersionMigrationNode {
-	nodes := []*DBVersionMigrationNode{}
-
-	node := n
-	for {
-		nodes = append(nodes, node)
-		if node.next != nil {
-			node = node.next
-		} else {
-			break
-		}
-	}
-
-	return nodes
-}
+//go:embed migrations/**
+var embedMigrations embed.FS
 
 func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSEConfig, database string) (*gorm.DB, error) {
 	dbLogger := &GormLogger{
@@ -79,16 +40,65 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 	return db, err
 }
 
-func CheckAndCreateTable[E any](db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*postgresDBQuerier[E], error) {
+func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*postgresDBQuerier[E], error) {
 	schema.RegisterSerializer("json", JSONSerializer{})
 
-	err := db.Table(tableName).AutoMigrate(model)
-	if err != nil {
-		return nil, err
-	}
+	log.Infof("Planing migrations for %s", tableName)
 
 	querier := newPostgresDBQuerier[E](db, tableName, primaryKeyColumn)
 	return &querier, nil
+}
+
+type migrator struct {
+	db     *gorm.DB
+	logger *logrus.Entry
+	Goose  *goose.Provider
+}
+
+func NewMigrator(log *logrus.Entry, db *gorm.DB) *migrator {
+	dbName := db.Migrator().CurrentDatabase()
+
+	log.Infof("Planing migrations")
+	lMig := log.WithField("migrations", dbName)
+
+	migrationsDir := filepath.Join("migrations", dbName)
+	migrationsFS, err := fs.Sub(embedMigrations, migrationsDir)
+	if err != nil {
+		lMig.Fatalf("could not obtain migrations subdirectory: %s", err)
+	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("could not get db connection: %s", err)
+	}
+
+	m, err := goose.NewProvider(goose.DialectPostgres, sqlDB, migrationsFS)
+	if err != nil {
+		lMig.Fatalf("could not create migrator: %s", err)
+	}
+
+	return &migrator{
+		db:     db,
+		logger: lMig,
+		Goose:  m,
+	}
+}
+
+func (migrator *migrator) MigrateToLatest() {
+	c, t, err := migrator.Goose.GetVersions(context.Background())
+	if err != nil {
+		migrator.logger.Fatalf("could not get db version: %s", err)
+	}
+
+	migrator.logger.Infof("Current version: %d", c)
+	migrator.logger.Infof("Target version: %d", t)
+
+	r, err := migrator.Goose.UpTo(context.Background(), t)
+	if err != nil {
+		migrator.logger.Fatalf("could not migrate db: %s", err)
+	}
+
+	migrator.logger.Infof("Migrated %d steps", len(r))
 }
 
 type postgresDBQuerier[E any] struct {

@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -27,14 +26,16 @@ func generateAndImportCA(keyType x509.PublicKeyAlgorithm, engine cryptoengines.C
 		if !ok {
 			return nil, nil, fmt.Errorf("private key is not of type rsa.PrivateKey")
 		}
-		key, err = engine.ImportRSAPrivateKey(rsaPrivateKey, CryptoAssetLRI(Certificate, helpers.SerialNumberToString(caCertificate.SerialNumber)))
+
+		_, key, err = engine.ImportRSAPrivateKey(rsaPrivateKey)
 		return caCertificate, key, err
 	case x509.ECDSA:
 		ecdsaPrivateKey, ok := key.(*ecdsa.PrivateKey)
 		if !ok {
 			return nil, nil, fmt.Errorf("private key is not of type ecdsa.PrivateKey")
 		}
-		key, err := engine.ImportECDSAPrivateKey(ecdsaPrivateKey, CryptoAssetLRI(Certificate, helpers.SerialNumberToString(caCertificate.SerialNumber)))
+
+		_, key, err := engine.ImportECDSAPrivateKey(ecdsaPrivateKey)
 		return caCertificate, key, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported key type")
