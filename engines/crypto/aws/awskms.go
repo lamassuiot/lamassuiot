@@ -184,7 +184,7 @@ func (p *AWSKMSCryptoEngine) createPrivateKey(keySpec types.KeySpec) (string, cr
 	}
 
 	lAWSKMS.Debugf("Key created with ARN [%s]", *key.KeyMetadata.Arn)
-	keyID, err := software.NewSoftwareCryptoEngine(lAWSKMS).EncodePKIXPublicKeyDigest(signer.Public())
+	keyID, err := p.softCryptoEngine.EncodePKIXPublicKeyDigest(signer.Public())
 	if err != nil {
 		lAWSKMS.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err

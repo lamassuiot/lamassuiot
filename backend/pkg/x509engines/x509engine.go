@@ -50,7 +50,7 @@ func (engine X509Engine) GetEngineConfig() cmodels.CryptoEngineInfo {
 }
 
 func (engine X509Engine) GetCACryptoSigner(caCertificate *x509.Certificate) (crypto.Signer, error) {
-	keyID, err := software.NewSoftwareCryptoEngine(engine.logger).EncodePKIXPublicKeyDigest(caCertificate.PublicKey)
+	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(caCertificate.PublicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +283,7 @@ func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata cmodels.KeyMet
 func (engine X509Engine) Sign(cAssetType CryptoAssetType, certificate *x509.Certificate, message []byte, messageType models.SignMessageType, signingAlgorithm string) ([]byte, error) {
 	engine.logger.Debugf("starting standard signing with certificate [%s]", certificate.Subject.CommonName)
 
-	keyID, err := software.NewSoftwareCryptoEngine(engine.logger).EncodePKIXPublicKeyDigest(certificate.PublicKey)
+	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(certificate.PublicKey)
 	if err != nil {
 		return nil, err
 	}
