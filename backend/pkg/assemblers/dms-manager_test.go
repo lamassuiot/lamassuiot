@@ -1299,7 +1299,7 @@ func TestESTGetCACerts(t *testing.T) {
 			Metadata:           map[string]any{},
 		})
 	}
-	enrollCA, err := createCA("enroll", "1y", "am")
+	enrollCA, err := createCA("enroll", "1y", "4w")
 	if err != nil {
 		t.Fatalf("could not create the enrollment CA: %s", err)
 	}
