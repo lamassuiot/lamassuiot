@@ -28,11 +28,11 @@ func NewDMSManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.DMSRepo
 }
 
 func (db *PostgresDMSManagerStore) Count(ctx context.Context) (int, error) {
-	return db.querier.Count(ctx, []gormWhereParams{})
+	return db.querier.Count(ctx, []gormExtraOps{})
 }
 
 func (db *PostgresDMSManagerStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.DMS), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
-	return db.querier.SelectAll(ctx, queryParams, []gormWhereParams{}, exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(ctx, queryParams, []gormExtraOps{}, exhaustiveRun, applyFunc)
 }
 
 func (db *PostgresDMSManagerStore) SelectExists(ctx context.Context, ID string) (bool, *models.DMS, error) {

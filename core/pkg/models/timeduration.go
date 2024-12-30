@@ -12,6 +12,21 @@ func (c TimeDuration) String() string {
 	return DurationToString(time.Duration(c))
 }
 
+func (c TimeDuration) MarshalText() ([]byte, error) {
+	text := []byte(DurationToString(time.Duration(c)))
+	return text, nil
+}
+
+func (c *TimeDuration) UnmarshalText(text []byte) error {
+	dur, err := ParseDuration(string(text))
+	if err != nil {
+		return err
+	}
+
+	*c = TimeDuration(dur)
+	return nil
+}
+
 func (c TimeDuration) MarshalJSON() ([]byte, error) {
 	return json.Marshal(DurationToString(time.Duration(c)))
 }

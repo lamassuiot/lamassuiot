@@ -3,8 +3,6 @@ package migrationstest
 import (
 	"context"
 	"fmt"
-	"io"
-	"os"
 	"regexp"
 	"runtime"
 	"strings"
@@ -45,23 +43,6 @@ func RunDB(t *testing.T, logger *logrus.Entry, dbName string) (func() error, *go
 	}
 
 	return cleanup, con
-}
-
-func copyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer sourceFile.Close()
-
-	destinationFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer destinationFile.Close()
-
-	_, err = io.Copy(destinationFile, sourceFile)
-	return err
 }
 
 func assertEqualD(t *testing.T, expected, actual time.Time) {

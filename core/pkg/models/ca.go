@@ -12,11 +12,11 @@ const (
 	CertificateTypeExternal        CertificateType = "EXTERNAL"
 )
 
-type ExpirationTimeRef string
+type ValidityType string
 
 var (
-	Duration ExpirationTimeRef = "Duration"
-	Time     ExpirationTimeRef = "Time"
+	Duration ValidityType = "Duration"
+	Time     ValidityType = "Time"
 )
 
 type CertificateStatus string
@@ -29,40 +29,41 @@ const (
 
 type Certificate struct {
 	SerialNumber        string                 `json:"serial_number" gorm:"primaryKey"`
+	KeyID               string                 `json:"key_id"`
 	Metadata            map[string]interface{} `json:"metadata" gorm:"serializer:json"`
-	IssuerCAMetadata    IssuerCAMetadata       `json:"issuer_metadata"  gorm:"embedded;embeddedPrefix:issuer_meta_"`
 	Status              CertificateStatus      `json:"status"`
 	Certificate         *X509Certificate       `json:"certificate"`
-	KeyMetadata         KeyStrengthMetadata    `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_strength_meta_"`
+	KeyMetadata         KeyStrengthMetadata    `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_meta_"`
 	Subject             Subject                `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
 	ValidFrom           time.Time              `json:"valid_from"`
+	IssuerCAMetadata    IssuerCAMetadata       `json:"issuer_metadata" gorm:"embedded;embeddedPrefix:issuer_meta_"`
 	ValidTo             time.Time              `json:"valid_to"`
 	RevocationTimestamp time.Time              `json:"revocation_timestamp"`
-	RevocationReason    RevocationReason       `json:"revocation_reason"`
+	RevocationReason    RevocationReason       `json:"revocation_reason" gorm:"serializer:text"`
 	Type                CertificateType        `json:"type"`
 	EngineID            string                 `json:"engine_id"`
 }
 
-type Expiration struct {
-	Type     ExpirationTimeRef `json:"type"`
-	Duration *TimeDuration     `json:"duration,omitempty"`
-	Time     *time.Time        `json:"time,omitempty"`
+type Validity struct {
+	Type     ValidityType `json:"type"`
+	Duration TimeDuration `json:"duration,omitempty" gorm:"serializer:text"`
+	Time     time.Time    `json:"time"`
 }
 
 type IssuerCAMetadata struct {
-	SerialNumber string `json:"serial_number"`
-	ID           string `json:"id"`
-	Level        int    `json:"level"`
+	SN    string `json:"serial_number" gorm:"column:serial_number"`
+	ID    string `json:"id"`
+	Level int    `json:"level"`
 }
 
 type CACertificate struct {
-	Certificate
-	ID                    string                 `json:"id" gorm:"primaryKey"`
-	Metadata              map[string]interface{} `json:"metadata" gorm:"serializer:json"`
-	KeyID                 string                 `json:"key_id"`
-	IssuanceExpirationRef Expiration             `json:"issuance_expiration" gorm:"serializer:json"`
-	CreationTS            time.Time              `json:"creation_ts"`
-	Level                 int                    `json:"level"`
+	ID                      string                 `json:"id"`
+	Certificate             Certificate            `gorm:"foreignKey:CertificateSerialNumber;references:SerialNumber"`
+	CertificateSerialNumber string                 `gorm:"column:serial_number"`
+	Metadata                map[string]interface{} `json:"metadata" gorm:"serializer:json"`
+	Validity                Validity               `json:"validity" gorm:"embedded;embeddedPrefix:validity_"`
+	CreationTS              time.Time              `json:"creation_ts"`
+	Level                   int                    `json:"level"`
 }
 
 type CAStats struct {

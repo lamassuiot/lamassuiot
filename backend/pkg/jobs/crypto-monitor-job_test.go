@@ -13,7 +13,6 @@ import (
 )
 
 func TestUpdateCertificateIfNeededExpiredNoMetadata(t *testing.T) {
-
 	mockService := new(svcmock.MockCAService)
 
 	// Create a new CryptoMonitor instance with the mock service
@@ -54,7 +53,6 @@ func TestUpdateCertificateIfNeededExpiredNoMetadata(t *testing.T) {
 }
 
 func TestUpdateCACertificateIfNeededExpiredNoMetadata(t *testing.T) {
-
 	mockService := new(svcmock.MockCAService)
 
 	// Create a new CryptoMonitor instance with the mock service
@@ -163,7 +161,6 @@ func TestShouldUpdateMonitoringDeltas(t *testing.T) {
 }
 
 func TestUpdateCertificateIfNeededExpiredwithMetadata(t *testing.T) {
-
 	mockService := new(svcmock.MockCAService)
 
 	// Create a new CryptoMonitor instance with the mock service
@@ -200,7 +197,6 @@ func TestUpdateCertificateIfNeededExpiredwithMetadata(t *testing.T) {
 }
 
 func TestUpdateCACertificateIfNeededNotExpiredWithMetadata(t *testing.T) {
-
 	mockService := new(svcmock.MockCAService)
 
 	// Create a new CryptoMonitor instance with the mock service

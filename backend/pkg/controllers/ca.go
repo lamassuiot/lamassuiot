@@ -74,7 +74,7 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAIssuanceExpiration:
 			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAIncompatibleExpirationTimeRef:
+		case errs.ErrCAIncompatibleValidity:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAAlreadyExists:
 			ctx.JSON(409, gin.H{"err": err.Error()})
@@ -189,7 +189,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAIssuanceExpiration:
 			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAIncompatibleExpirationTimeRef:
+		case errs.ErrCAIncompatibleValidity:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAValidCertAndPrivKey:
 			ctx.JSON(400, gin.H{"err": err.Error()})
@@ -268,7 +268,7 @@ func (r *caHttpRoutes) UpdateCAIssuanceExpiration(ctx *gin.Context) {
 
 	ca, err := r.svc.UpdateCAIssuanceExpiration(ctx, services.UpdateCAIssuanceExpirationInput{
 		CAID:               params.ID,
-		IssuanceExpiration: requestBody.Expiration,
+		IssuanceExpiration: requestBody.Validity,
 	})
 	if err != nil {
 		switch err {
@@ -479,6 +479,8 @@ func (r *caHttpRoutes) UpdateCAStatus(ctx *gin.Context) {
 		case errs.ErrCAAlreadyRevoked:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrCertificateStatusTransitionNotAllowed:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})
