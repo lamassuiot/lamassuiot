@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -255,142 +256,142 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 		run         func(caSDK services.CAService) (*x509.Certificate, error)
 		resultCheck func(caSDK services.CAService, cert *x509.Certificate, err error) error
 	}{
-		// {
-		// 	name:   "Err/DeletingCAAndIssuedCertificates",
-		// 	before: func(svc services.CAService) error { return nil },
-		// 	run: func(caSDK services.CAService) (*x509.Certificate, error) {
-		// 		enrollCA, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+		{
+			name:   "Err/DeletingCAAndIssuedCertificates",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*x509.Certificate, error) {
+				enrollCA, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
 
-		// 			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-		// 			Subject:            models.Subject{CommonName: "TestCA"},
-		// 			CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-		// 			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
-		// 		})
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: "TestCA"},
+					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
+					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
+				})
 
-		// 		if err != nil {
-		// 			t.Fatalf("could not create CA: %s", err)
-		// 		}
+				if err != nil {
+					t.Fatalf("could not create CA: %s", err)
+				}
 
-		// 		commonName := fmt.Sprintf("enrolled-%s", uuid.NewString())
-		// 		enrollKey, _ := chelpers.GenerateRSAKey(2048)
-		// 		enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: commonName}, enrollKey)
+				commonName := fmt.Sprintf("enrolled-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateRSAKey(2048)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: commonName}, enrollKey)
 
-		// 		crt, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-		// 			CAID:        enrollCA.ID,
-		// 			CertRequest: (*models.X509CertificateRequest)(enrollCSR),
-		// 			Subject:     &enrollCA.Certificate.Subject,
-		// 		})
-		// 		if err != nil {
-		// 			t.Fatalf("could not sign the certificate: %s", err)
-		// 		}
+				crt, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:        enrollCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(enrollCSR),
+					Subject:     &enrollCA.Certificate.Subject,
+				})
+				if err != nil {
+					t.Fatalf("could not sign the certificate: %s", err)
+				}
 
-		// 		_, err = caSDK.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
-		// 			CAID:             enrollCA.ID,
-		// 			Status:           models.StatusRevoked,
-		// 			RevocationReason: models.RevocationReason(0),
-		// 		})
+				_, err = caSDK.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+					CAID:             enrollCA.ID,
+					Status:           models.StatusRevoked,
+					RevocationReason: models.RevocationReason(0),
+				})
 
-		// 		if err != nil {
-		// 			t.Fatalf("could not update the status of the CA: %s", err)
-		// 		}
+				if err != nil {
+					t.Fatalf("could not update the status of the CA: %s", err)
+				}
 
-		// 		err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-		// 			CAID: enrollCA.ID,
-		// 		})
-		// 		return (*x509.Certificate)(crt.Certificate), err
-		// 	},
+				err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
+					CAID: enrollCA.ID,
+				})
+				return (*x509.Certificate)(crt.Certificate), err
+			},
 
-		// 	resultCheck: func(caSDK services.CAService, cert *x509.Certificate, err error) error {
-		// 		if err != nil {
-		// 			return fmt.Errorf("should've not got an error, but it has got an error: %s", err)
-		// 		}
-		// 		_, err = caSDK.GetCertificateBySerialNumber(context.Background(), services.GetCertificatesBySerialNumberInput{
-		// 			SerialNumber: cert.SerialNumber.String(),
-		// 		})
+			resultCheck: func(caSDK services.CAService, cert *x509.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've not got an error, but it has got an error: %s", err)
+				}
+				_, err = caSDK.GetCertificateBySerialNumber(context.Background(), services.GetCertificatesBySerialNumberInput{
+					SerialNumber: cert.SerialNumber.String(),
+				})
 
-		// 		if err == nil {
-		// 			return fmt.Errorf("should've got an error, but it has not an error: %s", err)
-		// 		}
+				if err == nil {
+					return fmt.Errorf("should've got an error, but it has not an error: %s", err)
+				}
 
-		// 		return nil
-		// 	},
-		// },
-		// {
-		// 	name:   "OK/ExternalCA",
-		// 	before: func(svc services.CAService) error { return nil },
-		// 	run: func(caSDK services.CAService) (*x509.Certificate, error) {
+				return nil
+			},
+		},
+		{
+			name:   "OK/ExternalCA",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*x509.Certificate, error) {
 
-		// 		duration := models.TimeDuration(time.Hour * 24)
-		// 		ca, _, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Duration(duration), "test")
-		// 		if err != nil {
-		// 			return nil, fmt.Errorf("error while importing self signed CA: %s", err)
-		// 		}
-		// 		importedCALvl1, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-		// 			CAType: models.CertificateTypeExternal,
-		// 			IssuanceExpiration: models.Validity{
-		// 				Type:     models.Duration,
-		// 				Duration: (models.TimeDuration)(duration),
-		// 			},
-		// 			CACertificate: (*models.X509Certificate)(ca),
-		// 		})
+				duration := models.TimeDuration(time.Hour * 24)
+				ca, _, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Duration(duration), "test")
+				if err != nil {
+					return nil, fmt.Errorf("error while importing self signed CA: %s", err)
+				}
+				importedCALvl1, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					CAType: models.CertificateTypeExternal,
+					IssuanceExpiration: models.Validity{
+						Type:     models.Duration,
+						Duration: (models.TimeDuration)(duration),
+					},
+					CACertificate: (*models.X509Certificate)(ca),
+				})
 
-		// 		if err != nil {
-		// 			return nil, fmt.Errorf("got unexpected error, while importing the CA: %s", err)
-		// 		}
+				if err != nil {
+					return nil, fmt.Errorf("got unexpected error, while importing the CA: %s", err)
+				}
 
-		// 		err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-		// 			CAID: importedCALvl1.ID,
-		// 		})
-		// 		return nil, err
-		// 	},
+				err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
+					CAID: importedCALvl1.ID,
+				})
+				return nil, err
+			},
 
-		// 	resultCheck: func(caSDK services.CAService, cert *x509.Certificate, err error) error {
-		// 		if err != nil {
-		// 			return fmt.Errorf("should've not got an error, but it has an error: %s", err)
-		// 		}
+			resultCheck: func(caSDK services.CAService, cert *x509.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've not got an error, but it has an error: %s", err)
+				}
 
-		// 		return nil
-		// 	},
-		// },
-		// {
-		// 	name:   "OK/RevokedCA",
-		// 	before: func(svc services.CAService) error { return nil },
-		// 	run: func(caSDK services.CAService) (*x509.Certificate, error) {
-		// 		ca1, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
+				return nil
+			},
+		},
+		{
+			name:   "OK/RevokedCA",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*x509.Certificate, error) {
+				ca1, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
 
-		// 			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-		// 			Subject:            models.Subject{CommonName: "TestCA"},
-		// 			CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-		// 			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
-		// 		})
+					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:            models.Subject{CommonName: "TestCA"},
+					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
+					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
+				})
 
-		// 		if err != nil {
-		// 			t.Fatalf("could not create CA: %s", err)
-		// 		}
+				if err != nil {
+					t.Fatalf("could not create CA: %s", err)
+				}
 
-		// 		_, err = caSDK.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
-		// 			CAID:             ca1.ID,
-		// 			Status:           models.StatusRevoked,
-		// 			RevocationReason: models.RevocationReason(0),
-		// 		})
-		// 		if err != nil {
-		// 			t.Fatalf("error while changing the status of the CA: %s", err)
-		// 		}
+				_, err = caSDK.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+					CAID:             ca1.ID,
+					Status:           models.StatusRevoked,
+					RevocationReason: models.RevocationReason(0),
+				})
+				if err != nil {
+					t.Fatalf("error while changing the status of the CA: %s", err)
+				}
 
-		// 		err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-		// 			CAID: ca1.ID,
-		// 		})
-		// 		return nil, err
-		// 	},
+				err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
+					CAID: ca1.ID,
+				})
+				return nil, err
+			},
 
-		// 	resultCheck: func(caSDK services.CAService, cert *x509.Certificate, err error) error {
-		// 		if err != nil {
-		// 			return fmt.Errorf("should've not got an error, but it has an error: %s", err)
-		// 		}
+			resultCheck: func(caSDK services.CAService, cert *x509.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've not got an error, but it has an error: %s", err)
+				}
 
-		// 		return nil
-		// 	},
-		// },
+				return nil
+			},
+		},
 		{
 			name:   "OK/ExpiredCA",
 			before: func(svc services.CAService) error { return nil },
