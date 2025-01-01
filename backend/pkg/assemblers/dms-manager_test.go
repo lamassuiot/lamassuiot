@@ -1533,7 +1533,7 @@ func TestESTServerKeyGen(t *testing.T) {
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
-				ServerKeyGen: &models.ServerKeyGenSettings{
+				ServerKeyGen: models.ServerKeyGenSettings{
 					Enabled: true,
 					Key: models.ServerKeyGenKey{
 						Type: models.KeyType(x509.RSA),
@@ -1791,8 +1791,7 @@ func TestESTServerKeyGen(t *testing.T) {
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.ServerKeyGen = nil
-
+					in.Settings.ServerKeyGen = models.ServerKeyGenSettings{}
 					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
@@ -1954,6 +1953,7 @@ func TestESTReEnroll(t *testing.T) {
 					EnableReplaceableEnrollment: true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
+					RevokeOnReEnrollment:        true,
 					AdditionalValidationCAs:     []string{},
 					ReEnrollmentDelta:           models.TimeDuration(time.Hour),
 					EnableExpiredRenewal:        true,
@@ -2392,6 +2392,85 @@ func TestESTReEnroll(t *testing.T) {
 					t.Fatalf("unexpected error: %s", err)
 				}
 				checkReEnroll(t, caCert, cert, key)
+			},
+		},
+		{
+			name: "OK/RevokeOnReEnroll",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				// First Create a DMS with RevokeOnReEnroll set to true. Old certificate should be revoked
+				dms1, _, deviceCrt1, deviceKey1 := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.RevokeOnReEnrollment = true
+					},
+					"1m",
+				)
+
+				newCsr1, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt1.Subject.CommonName}, deviceKey1)
+
+				estCli := pemESTClient{
+					baseEndpoint: fmt.Sprintf("https://localhost:%d/.well-known/est/%s", dmsMgr.Port, dms1.ID),
+					cert:         deviceCrt1,
+					key:          deviceKey1,
+				}
+
+				_, err = estCli.ReEnroll(newCsr1)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				crt1, err := testServers.CA.Service.GetCertificateBySerialNumber(context.Background(), services.GetCertificatesBySerialNumberInput{
+					SerialNumber: helpers.SerialNumberToString(deviceCrt1.SerialNumber),
+				})
+				if err != nil {
+					t.Fatalf("could not get certificate: %s", err)
+				}
+
+				if crt1.Status != models.StatusRevoked {
+					t.Fatalf("certificate should be revoked")
+				}
+
+				if crt1.RevocationReason != ocsp.Superseded {
+					t.Fatalf("certificate should be revoked with reason superseded")
+				}
+
+				// Second Create a DMS with RevokeOnReEnroll set to false. Old certificate should not be revoked
+				dms2, _, deviceCrt2, deviceKey2 := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.RevokeOnReEnrollment = false
+					},
+					"1m",
+				)
+
+				newCsr2, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt2.Subject.CommonName}, deviceKey1)
+
+				estCli = pemESTClient{
+					baseEndpoint: fmt.Sprintf("https://localhost:%d/.well-known/est/%s", dmsMgr.Port, dms2.ID),
+					cert:         deviceCrt2,
+					key:          deviceKey2,
+				}
+
+				_, err = estCli.ReEnroll(newCsr2)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				crt2, err := testServers.CA.Service.GetCertificateBySerialNumber(context.Background(), services.GetCertificatesBySerialNumberInput{
+					SerialNumber: helpers.SerialNumberToString(deviceCrt2.SerialNumber),
+				})
+				if err != nil {
+					t.Fatalf("could not get certificate: %s", err)
+				}
+
+				if crt2.Status != models.StatusActive {
+					t.Fatalf("certificate should be active")
+				}
+
+				return nil, nil, nil, nil
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
 			},
 		},
 	}
