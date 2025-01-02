@@ -1,4 +1,4 @@
-package migrations
+package dmsmanager
 
 import (
 	"context"
@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	mhelper "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations"
+	mhelper "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/helpers"
 	"github.com/pressly/goose/v3"
 )
 
-func init() {
+func Register_20241230124809_serverkeygen_revokereenroll() {
 	goose.AddMigrationContext(upRelationalDms, downRelationalDms)
 }
 

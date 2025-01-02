@@ -3,7 +3,6 @@ package models
 import (
 	"crypto/x509"
 	"encoding/json"
-	"fmt"
 )
 
 type KeyStrength string
@@ -60,7 +59,7 @@ func (kt *KeyType) UnmarshalJSON(data []byte) error {
 	case "Ed25519":
 		nkt = KeyType(x509.Ed25519)
 	default:
-		return fmt.Errorf("unknown key type")
+		nkt = KeyType(x509.UnknownPublicKeyAlgorithm)
 	}
 
 	*kt = nkt
