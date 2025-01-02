@@ -18,6 +18,7 @@ type CAService interface {
 	GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error)
 
 	CreateCA(ctx context.Context, input CreateCAInput) (*models.CACertificate, error)
+	RequestCACSR(ctx context.Context, input RequestCAInput) (*models.CACertificateRequest, error)
 	ImportCA(ctx context.Context, input ImportCAInput) (*models.CACertificate, error)
 	GetCAByID(ctx context.Context, input GetCAByIDInput) (*models.CACertificate, error)
 	GetCAs(ctx context.Context, input GetCAsInput) (string, error)
@@ -44,6 +45,10 @@ type CAService interface {
 	// GetCertificatesByStatusAndCA(input GetCertificatesByExpirationDateInput) (string, error)
 	UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) (*models.Certificate, error)
 	UpdateCertificateMetadata(ctx context.Context, input UpdateCertificateMetadataInput) (*models.Certificate, error)
+
+	GetCARequestByID(ctx context.Context, input GetByIDInput) (*models.CACertificateRequest, error)
+	DeleteCARequestByID(ctx context.Context, input GetByIDInput) error
+	GetCARequests(ctx context.Context, input GetItemsInput[models.CACertificateRequest]) (string, error)
 }
 
 type GetStatsByCAIDInput struct {
@@ -55,6 +60,15 @@ type SignInput struct {
 	Message            []byte
 	MessageType        models.SignMessageType
 	SignatureAlgorithm string
+}
+
+type IssueCACSRInput struct {
+	ParentCA    *models.CACertificate
+	KeyMetadata models.KeyMetadata     `validate:"required"`
+	Subject     models.Subject         `validate:"required"`
+	CAType      models.CertificateType `validate:"required"`
+	EngineID    string
+	CAID        string `validate:"required"`
 }
 
 type IssueCAInput struct {
@@ -72,6 +86,11 @@ type IssueCAOutput struct {
 	Certificate *x509.Certificate
 }
 
+type IssueCACSROutput struct {
+	KeyID string
+	CSR   *x509.CertificateRequest
+}
+
 type ImportCAInput struct {
 	ID                 string
 	CAType             models.CertificateType    `validate:"required,ne=MANAGED"`
@@ -83,6 +102,7 @@ type ImportCAInput struct {
 	KeyType            models.KeyType
 	EngineID           string
 	ParentID           string
+	CARequestID        string
 }
 
 type CreateCAInput struct {
@@ -96,6 +116,19 @@ type CreateCAInput struct {
 	Metadata           map[string]any
 }
 
+type RequestCAInput struct {
+	ID          string
+	ParentID    string
+	KeyMetadata models.KeyMetadata `validate:"required"`
+	Subject     models.Subject     `validate:"required"`
+	EngineID    string
+	Metadata    map[string]any
+}
+
+type GetByIDInput struct {
+	ID string `validate:"required"`
+}
+
 type GetCAByIDInput struct {
 	CAID string `validate:"required"`
 }
@@ -105,6 +138,13 @@ type GetCAsInput struct {
 
 	ExhaustiveRun bool //wether to iter all elems
 	ApplyFunc     func(ca models.CACertificate)
+}
+
+type GetItemsInput[T any] struct {
+	QueryParameters *resources.QueryParameters
+
+	ExhaustiveRun bool //wether to iter all elems
+	ApplyFunc     func(ca T)
 }
 
 type GetCABySerialNumberInput struct {

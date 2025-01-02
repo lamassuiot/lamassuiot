@@ -276,3 +276,22 @@ func CalculateECDSAKeySizes(keyMin int, KeyMax int) []int {
 	}
 	return keySizes
 }
+
+func EqualPublicKeys(pubKey1, pubKey2 any) bool {
+	switch pubKey1.(type) {
+	case *rsa.PublicKey:
+		pk2, ok := pubKey2.(*rsa.PublicKey)
+		if !ok {
+			return false
+		}
+		return pubKey1.(*rsa.PublicKey).Equal(pk2)
+	case *ecdsa.PublicKey:
+		pk2, ok := pubKey2.(*ecdsa.PublicKey)
+		if !ok {
+			return false
+		}
+		return pubKey1.(*ecdsa.PublicKey).Equal(pk2)
+	}
+
+	return false
+}

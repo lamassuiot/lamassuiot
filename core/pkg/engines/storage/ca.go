@@ -38,3 +38,11 @@ type CACertificatesRepo interface {
 	Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error)
 	Delete(ctx context.Context, caID string) error
 }
+
+type CACertificateRequestRepo interface {
+	Insert(ctx context.Context, caCertificateRequest *models.CACertificateRequest) (*models.CACertificateRequest, error)
+	SelectExistsByID(ctx context.Context, id string) (bool, *models.CACertificateRequest, error)
+	SelectAll(ctx context.Context, req StorageListRequest[models.CACertificateRequest]) (string, error)
+	Update(ctx context.Context, caCertificate *models.CACertificateRequest) (*models.CACertificateRequest, error)
+	Delete(ctx context.Context, caID string) error
+}

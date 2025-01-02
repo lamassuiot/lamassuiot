@@ -59,18 +59,19 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 		logEntry.Infof("loaded %s engine with id %s", engine.Service.GetEngineConfig().Type, engineID)
 	}
 
-	caStorage, certStorage, err := createCAStorageInstance(lStorage, conf.Storage)
+	caStorage, certStorage, caCertRequestStorage, err := createCAStorageInstance(lStorage, conf.Storage)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create CA storage instance: %s", err)
 	}
 
 	svc, err := lservices.NewCAService(lservices.CAServiceBuilder{
-		Logger:               lSvc,
-		CryptoEngines:        engines,
-		CAStorage:            caStorage,
-		CertificateStorage:   certStorage,
-		CryptoMonitoringConf: conf.CryptoMonitoring,
-		VAServerDomain:       conf.VAServerDomain,
+		Logger:                      lSvc,
+		CryptoEngines:               engines,
+		CAStorage:                   caStorage,
+		CertificateStorage:          certStorage,
+		CACertificateRequestStorage: caCertRequestStorage,
+		CryptoMonitoringConf:        conf.CryptoMonitoring,
+		VAServerDomain:              conf.VAServerDomain,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create CA service: %v", err)
@@ -108,23 +109,28 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 	return &svc, scheduler, nil
 }
 
-func createCAStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.CACertificatesRepo, storage.CertificatesRepo, error) {
+func createCAStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.CACertificatesRepo, storage.CertificatesRepo, storage.CACertificateRequestRepo, error) {
 	engine, err := builder.BuildStorageEngine(logger, conf)
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not create storage engine: %s", err)
+		return nil, nil, nil, fmt.Errorf("could not create storage engine: %s", err)
 	}
 
 	caStorage, err := engine.GetCAStorage()
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not get CA storage: %s", err)
+		return nil, nil, nil, fmt.Errorf("could not get CA storage: %s", err)
 	}
 
 	certStorage, err := engine.GetCertstorage()
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not get Cert storage: %s", err)
+		return nil, nil, nil, fmt.Errorf("could not get Cert storage: %s", err)
 	}
 
-	return caStorage, certStorage, nil
+	caCertRequestStorage, err := engine.GetCACertificateRequestStorage()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("could not get CA Certificate Request storage: %s", err)
+	}
+
+	return caStorage, certStorage, caCertRequestStorage, nil
 }
 
 func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*lservices.Engine, error) {

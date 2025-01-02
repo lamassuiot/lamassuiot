@@ -9,6 +9,7 @@ on:
 jobs:
   test:
     strategy:
+      max-parallel: 5
       matrix:
         module: 
           - path: core

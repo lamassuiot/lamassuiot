@@ -8,6 +8,7 @@ type CertificateType string
 
 const (
 	CertificateTypeManaged         CertificateType = "MANAGED"
+	CertificateTypeRequested       CertificateType = "REQUESTED"
 	CertificateTypeImportedWithKey CertificateType = "IMPORTED"
 	CertificateTypeExternal        CertificateType = "EXTERNAL"
 )
@@ -22,9 +23,10 @@ var (
 type CertificateStatus string
 
 const (
-	StatusActive  CertificateStatus = "ACTIVE"
-	StatusExpired CertificateStatus = "EXPIRED"
-	StatusRevoked CertificateStatus = "REVOKED"
+	StatusActive   CertificateStatus = "ACTIVE"
+	StatusExpired  CertificateStatus = "EXPIRED"
+	StatusRevoked  CertificateStatus = "REVOKED"
+	StatusInactive CertificateStatus = "INACTIVE"
 )
 
 type Certificate struct {
@@ -65,6 +67,28 @@ type CACertificate struct {
 	Validity                Validity               `json:"validity" gorm:"embedded;embeddedPrefix:validity_"`
 	CreationTS              time.Time              `json:"creation_ts"`
 	Level                   int                    `json:"level"`
+}
+
+type CertificateRequestStatus string
+
+const (
+	StatusRequestIssued  CertificateRequestStatus = "ISSUED"
+	StatusRequestRevoked CertificateRequestStatus = "REVOKED"
+	StatusRequestPending CertificateRequestStatus = "PENDING"
+)
+
+type CACertificateRequest struct {
+	ID               string                   `json:"id"`
+	KeyId            string                   `json:"key_id"`
+	Metadata         map[string]interface{}   `json:"metadata" gorm:"serializer:json"`
+	IssuerCAMetadata IssuerCAMetadata         `json:"issuer_metadata" gorm:"embedded;embeddedPrefix:issuer_meta_"`
+	Subject          Subject                  `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
+	CreationTS       time.Time                `json:"creation_ts"`
+	Level            int                      `json:"level"`
+	EngineID         string                   `json:"engine_id"`
+	KeyMetadata      KeyStrengthMetadata      `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_meta_"`
+	Status           CertificateRequestStatus `json:"status"`
+	CSR              X509CertificateRequest   `json:"csr"`
 }
 
 type CAStats struct {

@@ -15,7 +15,6 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) 
 	rv1.GET("/cas", routes.GetAllCAs)
 	rv1.POST("/cas", routes.CreateCA)
 	rv1.POST("/cas/import", routes.ImportCA)
-
 	rv1.GET("/cas/:id", routes.GetCAByID)
 	rv1.GET("/cas/cn/:cn", routes.GetCAsByCommonName)
 
@@ -29,6 +28,12 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) 
 	rv1.GET("/cas/:id/certificates/:sn", routes.GetCertificateBySerialNumber)
 	rv1.PUT("/cas/:id/issuance-expiration", routes.UpdateCAIssuanceExpiration)
 	rv1.DELETE("/cas/:id", routes.DeleteCA)
+	rv1.GET("/cas/:id/requests", routes.GetCARequests)
+
+	rv1.POST("/cas/requests", routes.RequestCA)
+	rv1.GET("/cas/requests", routes.GetAllRequests)
+	rv1.GET("/cas/requests/:id", routes.GetCARequestByID)
+	rv1.DELETE("/cas/requests/:id", routes.DeleteCARequestByID)
 
 	rv1.GET("/certificates", routes.GetCertificates)
 	rv1.GET("/certificates/status/:status", routes.GetCertificatesByStatus)

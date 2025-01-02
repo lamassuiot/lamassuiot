@@ -2,11 +2,14 @@ package migrationstest
 
 import (
 	"context"
+	"crypto/x509"
+	"encoding/base64"
 	"testing"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
 
 	"github.com/sirupsen/logrus"
@@ -139,6 +142,67 @@ func MigrationTest_CA_20241223183344_unified_ca_models(t *testing.T, logger *log
 	assert.Equal(t, 1, ctrCerts)
 }
 
+func MigrationTest_CA_20250105155900_create_requests_table(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, CADBName)
+
+	reqRepo, err := postgres.NewCACertRequestPostgresRepository(logger, con)
+	if err != nil {
+		t.Fatalf("could not create certificate repository: %s", err)
+	}
+
+	csrStr := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJQ1hUQ0NBVVVDQVFBd0dERVdNQlFHQTFVRUF4TU5UWGxTWlhGMVpYTjBaV1JEUVRDQ0FTSXdEUVlKS29aSQpodmNOQVFFQkJRQURnZ0VQQURDQ0FRb0NnZ0VCQUx4VmcxT2RrUjVScjAyMUJWQzB1SzdMMDhjUG9MTDlCd1lxCmNjaGJxOWtIYTZQS0NmZldRZ2ZhaHNSMy9oT2U4cXdmRFhjZnFXMS9rWnRHRnVjQkMwNVpnNG9ZaXVockwvb2EKa05DWGIvNlZRdjk3b2VqcXBFOHdwbzc3UlArN0RQYU51TXA5UGlrclRuYmVWdVhLTnBPUTcvZlpWQmpuMGxqcApSa3BMN1gwdE9QU1FRNzEyeHY3elhoVCtJL2hCODJ2ZkRWRFRmRzdOaHlycW1nSEsvWXFNUGVEcUIvNjQvb29xCm43anJabjFWbVpQRzVXcUkrVTltYmtHUGpQbjUxTGdheTE0NGFPajE2aW9Uak56Z05BRnhoRUVlcVB1bXRmSWcKS2kxTnZXMTI0dWJSOGpNandoMmF2RDYxYVhOTHlQaERiUm9VdG9OU29VQzlyS3pxRTRFQ0F3RUFBYUFBTUEwRwpDU3FHU0liM0RRRUJDd1VBQTRJQkFRQmJZUlZVZk44TG9nNisySlNPTTBSNTVINHZ3OGxPOWRNeFZOc01ibG5VCnBTR0FoM3k0WHFDTm0zTllORUJ4TFQ4eDdON0xlSWJZZTJiUGZXbWduc0crb0dKelBaeU5hUmNMd1d1N3R0VlMKbml2Y2t4Ums4MGV0ZGkxcUlyM2JBVmRjcHZkWWJ5N2FySjl1Z2ZUNlQ4N3p5Rk1Ka2RvZWV4b2J0dlJ6dnZEMQp3WW1aVzQwRE1HbHBlMllIZFd3dXBaejFTSENtODBmdGxUV3M5aG1jUW1GU2hOVHViRzllQjgxL3pTdXVLbTl0Cnl2ekM5MFd6LysvSjFicW1XejZwcU1xSXJkVGVNeFRST0hibG1WMWFIdWtzT2FESFljNStPVkV3YUQ0clF3ZEoKS3MxeGFWT2lIcjIvVDBadUYrdzJHNGFNQ1k3TUp0QW16QmVsbTAvVHJwUmUKLS0tLS1FTkQgQ0VSVElGSUNBVEUgUkVRVUVTVC0tLS0tCg=="
+	crtBytes, err := base64.StdEncoding.DecodeString(csrStr)
+	if err != nil {
+		t.Fatalf("could not decode certificate: %s", err)
+	}
+
+	csr, err := helpers.ParseCertificateRequest(string(crtBytes))
+	if err != nil {
+		t.Fatalf("could not parse certificate: %s", err)
+	}
+
+	_, err = reqRepo.Insert(context.Background(), &models.CACertificateRequest{
+		ID:       "1111-2222-3333-4444",
+		KeyId:    "1111-2222-3333-4444",
+		EngineID: "filesystem-1",
+		Status:   models.StatusRequestPending,
+		IssuerCAMetadata: models.IssuerCAMetadata{
+			SN:    "ef-6d-47-f4-e5-bd-c8-e3-81-67-74-60-12-c1-0f-47",
+			ID:    "1111-2222-3333-4444",
+			Level: 0,
+		},
+		Subject: models.Subject{
+			CommonName:       "test",
+			Organization:     "test",
+			OrganizationUnit: "test",
+			Country:          "test",
+			Locality:         "test",
+			State:            "test",
+		},
+		KeyMetadata: models.KeyStrengthMetadata{
+			Type:     models.KeyType(x509.RSA),
+			Bits:     4096,
+			Strength: models.KeyStrengthHigh,
+		},
+		CSR:        models.X509CertificateRequest(*csr),
+		Metadata:   map[string]interface{}{},
+		CreationTS: time.Date(2024, time.November, 25, 9, 45, 48, 0, time.UTC),
+	})
+
+	if err != nil {
+		t.Fatalf("could not insert certificate request: %s", err)
+	}
+
+	exists, _, err := reqRepo.SelectExistsByID(context.Background(), "1111-2222-3333-4444")
+	if err != nil {
+		t.Fatalf("could not check if certificate request exists: %s", err)
+	}
+
+	if !exists {
+		t.Fatalf("certificate request does not exist")
+	}
+}
+
 func MigrationTest_CA_20250107164937_add_is_ca(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
 	//Add 2 CAs (1 Root and SubCA)
 	con.Exec(`INSERT INTO certificates
@@ -228,6 +292,11 @@ func TestMigrations(t *testing.T) {
 	MigrationTest_CA_20241223183344_unified_ca_models(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20241223183344_unified_ca_models")
+	}
+
+	MigrationTest_CA_20250105155900_create_requests_table(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250105155900_create_requests_table")
 	}
 
 	CleanAllTables(t, logger, con)

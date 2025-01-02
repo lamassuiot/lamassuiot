@@ -304,3 +304,51 @@ func TestCalculateECDSAKeySizes(t *testing.T) {
 		t.Errorf("Unexpected key sizes. Expected: %v, Got: %v", expectedKeySizes, keySizes)
 	}
 }
+func TestEqualPublicKeys(t *testing.T) {
+	// Test case 1: Equal RSA public keys
+	rsaKey1, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("Failed to generate RSA key: %v", err)
+	}
+	rsaKey2 := &rsaKey1.PublicKey
+
+	if !EqualPublicKeys(&rsaKey1.PublicKey, rsaKey2) {
+		t.Errorf("Expected RSA public keys to be equal, but they were not")
+	}
+
+	// Test case 2: Different RSA public keys
+	rsaKey3, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("Failed to generate RSA key: %v", err)
+	}
+
+	if EqualPublicKeys(&rsaKey1.PublicKey, &rsaKey3.PublicKey) {
+		t.Errorf("Expected RSA public keys to be different, but they were equal")
+	}
+
+	// Test case 3: Equal ECDSA public keys
+	ecdsaKey1, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate ECDSA key: %v", err)
+	}
+	ecdsaKey2 := &ecdsaKey1.PublicKey
+
+	if !EqualPublicKeys(&ecdsaKey1.PublicKey, ecdsaKey2) {
+		t.Errorf("Expected ECDSA public keys to be equal, but they were not")
+	}
+
+	// Test case 4: Different ECDSA public keys
+	ecdsaKey3, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("Failed to generate ECDSA key: %v", err)
+	}
+
+	if EqualPublicKeys(&ecdsaKey1.PublicKey, &ecdsaKey3.PublicKey) {
+		t.Errorf("Expected ECDSA public keys to be different, but they were equal")
+	}
+
+	// Test case 5: Different types of public keys
+	if EqualPublicKeys(&rsaKey1.PublicKey, &ecdsaKey1.PublicKey) {
+		t.Errorf("Expected public keys of different types to be different, but they were equal")
+	}
+}
