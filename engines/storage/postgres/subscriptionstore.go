@@ -28,8 +28,8 @@ func NewSubscriptionsPostgresRepository(logger *logrus.Entry, db *gorm.DB) (stor
 }
 
 func (db *PostgresSubscriptionsStore) GetSubscriptions(ctx context.Context, userID string, exhaustiveRun bool, applyFunc func(models.Subscription), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
-	opts := []gormWhereParams{
-		{query: "user_id = ?", extraArgs: []any{userID}},
+	opts := []gormExtraOps{
+		{query: "user_id = ?", additionalWhere: []any{userID}},
 	}
 	return db.querier.SelectAll(ctx, queryParams, opts, exhaustiveRun, applyFunc)
 }
@@ -43,8 +43,8 @@ func (db *PostgresSubscriptionsStore) Unsubscribe(ctx context.Context, subscript
 }
 
 func (db *PostgresSubscriptionsStore) GetSubscriptionsByEventType(ctx context.Context, eventType string, exhaustiveRun bool, applyFunc func(models.Subscription), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
-	opts := []gormWhereParams{
-		{query: "event_type = ?", extraArgs: []any{eventType}},
+	opts := []gormExtraOps{
+		{query: "event_type = ?", additionalWhere: []any{eventType}},
 	}
 	return db.querier.SelectAll(ctx, queryParams, opts, exhaustiveRun, applyFunc)
 }

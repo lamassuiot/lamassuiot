@@ -219,9 +219,9 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCA
 
 	expiration := time.Now()
 	if input.CAExpiration.Type == models.Duration {
-		expiration = expiration.Add(time.Duration(*input.CAExpiration.Duration))
+		expiration = expiration.Add(time.Duration(input.CAExpiration.Duration))
 	} else {
-		expiration = *input.CAExpiration.Time
+		expiration = input.CAExpiration.Time
 	}
 
 	if input.ParentCA == nil {
@@ -249,7 +249,7 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCA
 				x509Engine = x509ParentEngine
 			}
 			lFunc.Debugf("creating SUBORDINATE CA certificate.common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
-			keyID, caCert, err = x509Engine.CreateSubordinateCA(input.ParentCA.KeyID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), input.KeyMetadata, input.Subject, expiration, x509ParentEngine)
+			keyID, caCert, err = x509Engine.CreateSubordinateCA(input.ParentCA.Certificate.KeyID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), input.KeyMetadata, input.Subject, expiration, x509ParentEngine)
 			if err != nil {
 				lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
 				return nil, err
@@ -268,7 +268,7 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCA
 }
 
 // Returned Error Codes:
-//   - ErrCAIncompatibleExpirationTimeRef
+//   - ErrCAIncompatibleValidity
 //     The Expiration time ref is incompatible with the selected variable, i.e. if the time ref is Duration the variable must be of type Duration not of type Time.
 //   - ErrCAIssuanceExpiration
 //     When creating a CA, the Issuance Expiration is greater than the CA Expiration.
@@ -341,29 +341,29 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	}
 
 	issuerMeta := models.IssuerCAMetadata{
-		ID:           caID,
-		SerialNumber: helpers.SerialNumberToString(input.CACertificate.SerialNumber),
-		Level:        0,
+		ID:    caID,
+		SN:    helpers.SerialNumberToString(input.CACertificate.SerialNumber),
+		Level: 0,
 	}
 	level := 0
 
 	if parentCA != nil {
 		level = parentCA.Level + 1
 		issuerMeta = models.IssuerCAMetadata{
-			ID:           input.ParentID,
-			SerialNumber: parentCA.Certificate.SerialNumber,
-			Level:        parentCA.Level,
+			ID:    input.ParentID,
+			SN:    parentCA.Certificate.SerialNumber,
+			Level: parentCA.Level,
 		}
 	}
 
 	ca := &models.CACertificate{
-		ID:                    caID,
-		Metadata:              map[string]interface{}{},
-		IssuanceExpirationRef: input.IssuanceExpiration,
-		CreationTS:            time.Now(),
-		Level:                 level,
-		KeyID:                 keyID,
+		ID:         caID,
+		Metadata:   map[string]interface{}{},
+		Validity:   input.IssuanceExpiration,
+		CreationTS: time.Now(),
+		Level:      level,
 		Certificate: models.Certificate{
+			KeyID:               keyID,
 			Certificate:         input.CACertificate,
 			Status:              models.StatusActive,
 			SerialNumber:        helpers.SerialNumberToString(caCert.SerialNumber),
@@ -384,7 +384,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 }
 
 // Returned Error Codes:
-//   - ErrCAIncompatibleExpirationTimeRef
+//   - ErrCAIncompatibleValidity
 //     The Expiration time ref is incompatible with the selected variable, i.e. if the time ref is Duration the variable must be of type Duration not of type Time.
 //   - ErrCAIssuanceExpiration
 //     When creating a CA, the Issuance Expiration is greater than the CA Expiration.
@@ -425,9 +425,9 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		var caExpiration time.Time
 
 		if input.IssuanceExpiration.Type == models.Duration {
-			caExpiration = time.Now().Add((time.Duration)(*input.CAExpiration.Duration))
+			caExpiration = time.Now().Add((time.Duration)(input.CAExpiration.Duration))
 		} else {
-			caExpiration = *input.CAExpiration.Time
+			caExpiration = input.CAExpiration.Time
 		}
 		parentCaExpiration := parentCA.Certificate.ValidTo
 
@@ -481,28 +481,28 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	caCert := issuedCA.Certificate
 	caLevel := 0
 	issuerCAMeta := models.IssuerCAMetadata{
-		SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
-		ID:           caID,
-		Level:        0,
+		SN:    helpers.SerialNumberToString(caCert.SerialNumber),
+		ID:    caID,
+		Level: 0,
 	}
 
 	if parentCA != nil {
 		caLevel = parentCA.Level + 1
 		issuerCAMeta = models.IssuerCAMetadata{
-			SerialNumber: parentCA.Certificate.SerialNumber,
-			ID:           parentCA.ID,
-			Level:        parentCA.Level,
+			SN:    parentCA.Certificate.SerialNumber,
+			ID:    parentCA.ID,
+			Level: parentCA.Level,
 		}
 	}
 
 	ca := models.CACertificate{
-		ID:                    caID,
-		Metadata:              input.Metadata,
-		IssuanceExpirationRef: input.IssuanceExpiration,
-		CreationTS:            time.Now(),
-		Level:                 caLevel,
-		KeyID:                 issuedCA.KeyID,
+		ID:         caID,
+		Metadata:   input.Metadata,
+		Validity:   input.IssuanceExpiration,
+		CreationTS: time.Now(),
+		Level:      caLevel,
 		Certificate: models.Certificate{
+			KeyID:        issuedCA.KeyID,
 			Certificate:  (*models.X509Certificate)(caCert),
 			Status:       models.StatusActive,
 			SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
@@ -743,7 +743,7 @@ func (svc *CAServiceBackend) UpdateCAIssuanceExpiration(ctx context.Context, inp
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	ca.IssuanceExpirationRef = input.IssuanceExpiration
+	ca.Validity = input.IssuanceExpiration
 
 	lFunc.Debugf("updating %s CA issuance expiration", input.CAID)
 	return svc.caStorage.Update(ctx, ca)
@@ -902,10 +902,10 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	}
 
 	expiration := time.Now()
-	if ca.IssuanceExpirationRef.Type == models.Duration {
-		expiration = expiration.Add(time.Duration(*ca.IssuanceExpirationRef.Duration))
+	if ca.Validity.Type == models.Duration {
+		expiration = expiration.Add(time.Duration(ca.Validity.Duration))
 	} else {
-		expiration = *ca.IssuanceExpirationRef.Time
+		expiration = ca.Validity.Time
 	}
 	lFunc.Debugf("sign certificate request with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
 	x509Cert, err := x509Engine.SignCertificateRequest(caCert, csr, expiration)
@@ -919,8 +919,8 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		Type:        models.CertificateTypeExternal,
 		Certificate: (*models.X509Certificate)(x509Cert),
 		IssuerCAMetadata: models.IssuerCAMetadata{
-			SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
-			ID:           ca.ID,
+			SN: helpers.SerialNumberToString(caCert.SerialNumber),
+			ID: ca.ID,
 		},
 		Status:              models.StatusActive,
 		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate(x509Cert),
@@ -972,15 +972,15 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 
 	if parentCA != nil {
 		newCert.IssuerCAMetadata = models.IssuerCAMetadata{
-			SerialNumber: parentCA.Certificate.SerialNumber,
-			ID:           parentCA.ID,
-			Level:        parentCA.Level,
+			SN:    parentCA.Certificate.SerialNumber,
+			ID:    parentCA.ID,
+			Level: parentCA.Level,
 		}
 	} else {
 		newCert.IssuerCAMetadata = models.IssuerCAMetadata{
-			SerialNumber: "-",
-			ID:           "-",
-			Level:        -1,
+			SN:    "-",
+			ID:    "-",
+			Level: -1,
 		}
 	}
 
@@ -1239,21 +1239,21 @@ func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, inpu
 
 func createCAValidation(sl validator.StructLevel) {
 	ca := sl.Current().Interface().(services.CreateCAInput)
-	if !helpers.ValidateExpirationTimeRef(ca.CAExpiration) {
+	if !helpers.ValidateValidity(ca.CAExpiration) {
 		// lFunc.Errorf("CA Expiration time ref is incompatible with the selected variable")
 		sl.ReportError(ca.CAExpiration, "CAExpiration", "CAExpiration", "InvalidCAExpiration", "")
 	}
 
-	if !helpers.ValidateExpirationTimeRef(ca.IssuanceExpiration) {
+	if !helpers.ValidateValidity(ca.IssuanceExpiration) {
 		// lFunc.Errorf("issuance expiration time ref is incompatible with the selected variable")
 		sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "InvalidIssuanceExpiration", "")
 	}
 
 	expiration := time.Now()
 	if ca.CAExpiration.Type == models.Duration {
-		expiration = expiration.Add(time.Duration(*ca.CAExpiration.Duration))
+		expiration = expiration.Add(time.Duration(ca.CAExpiration.Duration))
 	} else {
-		expiration = *ca.CAExpiration.Time
+		expiration = ca.CAExpiration.Time
 	}
 
 	if !helpers.ValidateCAExpiration(ca.IssuanceExpiration, expiration) {
@@ -1272,7 +1272,7 @@ func importCAValidation(sl validator.StructLevel) {
 			sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
 		}
 		// lFunc.Debugf("CA Type: %s", ca.CAType)
-		if !helpers.ValidateExpirationTimeRef(ca.IssuanceExpiration) {
+		if !helpers.ValidateValidity(ca.IssuanceExpiration) {
 			// lFunc.Errorf("expiration time ref is incompatible with the selected variable")
 			sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "InvalidIssuanceExpiration", "")
 		}

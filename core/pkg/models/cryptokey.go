@@ -16,12 +16,12 @@ const (
 type KeyType x509.PublicKeyAlgorithm
 
 type KeyMetadata struct {
-	Type KeyType `json:"type"`
+	Type KeyType `json:"type" gorm:"serializer:text"`
 	Bits int     `json:"bits"`
 }
 
 type KeyStrengthMetadata struct {
-	Type     KeyType     `json:"type"`
+	Type     KeyType     `json:"type" gorm:"serializer:text"`
 	Bits     int         `json:"bits"`
 	Strength KeyStrength `json:"strength"`
 }
@@ -31,6 +31,20 @@ type KeyStrengthMetadata struct {
 func (kt KeyType) String() string {
 	publicKeyAlg := x509.PublicKeyAlgorithm(kt)
 	return publicKeyAlg.String()
+}
+
+func (kt KeyType) MarshalText() ([]byte, error) {
+	return []byte(kt.String()), nil
+}
+
+func (kt *KeyType) UnmarshalText(text []byte) error {
+	k, err := ParseKeyType(string(text))
+	if err != nil {
+		return err
+	}
+
+	*kt = *k
+	return nil
 }
 
 func (kt KeyType) MarshalJSON() ([]byte, error) {
@@ -45,9 +59,19 @@ func (kt *KeyType) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
+	nkt, err := ParseKeyType(t)
+	if err != nil {
+		return err
+	}
+
+	*kt = *nkt
+	return nil
+}
+
+func ParseKeyType(s string) (*KeyType, error) {
 	var nkt KeyType
 
-	switch string(t) {
+	switch s {
 	case "UNKNOWN":
 		nkt = KeyType(x509.UnknownPublicKeyAlgorithm)
 	case "RSA":
@@ -62,6 +86,5 @@ func (kt *KeyType) UnmarshalJSON(data []byte) error {
 		nkt = KeyType(x509.UnknownPublicKeyAlgorithm)
 	}
 
-	*kt = nkt
-	return nil
+	return &nkt, nil
 }

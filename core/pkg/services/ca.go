@@ -62,7 +62,7 @@ type IssueCAInput struct {
 	KeyMetadata  models.KeyMetadata     `validate:"required"`
 	Subject      models.Subject         `validate:"required"`
 	CAType       models.CertificateType `validate:"required"`
-	CAExpiration models.Expiration
+	CAExpiration models.Validity
 	EngineID     string
 	CAID         string `validate:"required"`
 }
@@ -75,7 +75,7 @@ type IssueCAOutput struct {
 type ImportCAInput struct {
 	ID                 string
 	CAType             models.CertificateType    `validate:"required,ne=MANAGED"`
-	IssuanceExpiration models.Expiration         `validate:"required"`
+	IssuanceExpiration models.Validity           `validate:"required"`
 	CACertificate      *models.X509Certificate   `validate:"required"`
 	CAChain            []*models.X509Certificate //Parent CAs. They MUST be sorted as follows. 0: Root-CA; 1: Subordinate CA from Root-CA; ...
 	CARSAKey           *rsa.PrivateKey
@@ -90,8 +90,8 @@ type CreateCAInput struct {
 	ParentID           string
 	KeyMetadata        models.KeyMetadata `validate:"required"`
 	Subject            models.Subject     `validate:"required"`
-	IssuanceExpiration models.Expiration  `validate:"required"`
-	CAExpiration       models.Expiration  `validate:"required"`
+	IssuanceExpiration models.Validity    `validate:"required"`
+	CAExpiration       models.Validity    `validate:"required"`
 	EngineID           string
 	Metadata           map[string]any
 }
@@ -126,8 +126,8 @@ type UpdateCAStatusInput struct {
 }
 
 type UpdateCAIssuanceExpirationInput struct {
-	CAID               string            `validate:"required"`
-	IssuanceExpiration models.Expiration `validate:"required"`
+	CAID               string          `validate:"required"`
+	IssuanceExpiration models.Validity `validate:"required"`
 }
 
 type UpdateCAMetadataInput struct {

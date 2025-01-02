@@ -110,9 +110,9 @@ func RunUseCase1(input UseCase1Input) error {
 	ca2Iss := models.TimeDuration(time.Minute * 5)
 	ca1, err := caClient.ImportCA(context.Background(), services.ImportCAInput{
 		CAType: models.CertificateTypeImportedWithKey,
-		IssuanceExpiration: models.Expiration{
+		IssuanceExpiration: models.Validity{
 			Type:     models.Duration,
-			Duration: (*models.TimeDuration)(&ca2Iss),
+			Duration: (models.TimeDuration)(ca2Iss),
 		},
 		CACertificate: (*models.X509Certificate)(cert1),
 		KeyType:       cmodels.KeyType(x509.RSA),
@@ -139,8 +139,8 @@ func RunUseCase1(input UseCase1Input) error {
 	ca2, err := caClient.CreateCA(context.Background(), services.CreateCAInput{
 		KeyMetadata:        cmodels.KeyMetadata{Type: cmodels.KeyType(x509.RSA), Bits: 2048},
 		Subject:            cmodels.Subject{CommonName: "CA1"},
-		CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDur2},
-		IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &caIss2},
+		CAExpiration:       models.Validity{Type: models.Duration, Duration: caDur2},
+		IssuanceExpiration: models.Validity{Type: models.Duration, Duration: caIss2},
 		EngineID:           engine.ID,
 	})
 	if err != nil {

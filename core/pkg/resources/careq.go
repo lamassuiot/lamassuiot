@@ -26,8 +26,8 @@ type CreateCABody struct {
 	ParentID           string              `json:"parent_id"`
 	Subject            cmodels.Subject     `json:"subject"`
 	KeyMetadata        cmodels.KeyMetadata `json:"key_metadata"`
-	CAExpiration       models.Expiration   `json:"ca_expiration"`
-	IssuanceExpiration models.Expiration   `json:"issuance_expiration"`
+	CAExpiration       models.Validity     `json:"ca_expiration"`
+	IssuanceExpiration models.Validity     `json:"issuance_expiration"`
 	EngineID           string              `json:"engine_id"`
 	Metadata           map[string]any      `json:"metadata"`
 }
@@ -40,14 +40,14 @@ type ImportCABody struct {
 	CACertificate      *models.X509Certificate   `json:"ca"`
 	CAChain            []*models.X509Certificate `json:"ca_chain"`
 	CAType             models.CertificateType    `json:"ca_type"`
-	IssuanceExpiration models.Expiration         `json:"issuance_expiration"`
+	IssuanceExpiration models.Validity           `json:"issuance_expiration"`
 }
 
 type UpdateCAMetadataBody struct {
 	Metadata map[string]interface{} `json:"metadata"`
 }
 type UpdateCAIssuanceExpirationBody struct {
-	models.Expiration
+	models.Validity
 }
 
 type SignCertificateBody struct {

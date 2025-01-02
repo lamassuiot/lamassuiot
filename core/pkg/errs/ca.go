@@ -5,16 +5,15 @@ import "errors"
 var (
 	ErrCryptoEngineNotFound error = errors.New("crypto engine not found")
 
-	ErrCANotFound                      error = errors.New("CA not found")
-	ErrCAAlreadyExists                 error = errors.New("CA already exists")
-	ErrCAStatusTransitionNotAllowed    error = errors.New("status transition not allowed for CA")
-	ErrCAStatus                        error = errors.New("CA Status inconsistent")
-	ErrCAAlreadyRevoked                error = errors.New("CA already revoked")
-	ErrCAIncompatibleHashFunc          error = errors.New("incompatible hash function")
-	ErrCAIncompatibleExpirationTimeRef error = errors.New("incompatible expiration time ref")
-	ErrCAIssuanceExpiration            error = errors.New("issuance expiration greater than CA expiration")
-	ErrCAType                          error = errors.New("CA type inconsistent")
-	ErrCAValidCertAndPrivKey           error = errors.New("CA and the provided key don't match")
+	ErrCANotFound             error = errors.New("CA not found")
+	ErrCAAlreadyExists        error = errors.New("CA already exists")
+	ErrCAStatus               error = errors.New("CA Status inconsistent")
+	ErrCAAlreadyRevoked       error = errors.New("CA already revoked")
+	ErrCAIncompatibleHashFunc error = errors.New("incompatible hash function")
+	ErrCAIncompatibleValidity error = errors.New("incompatible expiration time ref")
+	ErrCAIssuanceExpiration   error = errors.New("issuance expiration greater than CA expiration")
+	ErrCAType                 error = errors.New("CA type inconsistent")
+	ErrCAValidCertAndPrivKey  error = errors.New("CA and the provided key don't match")
 
 	ErrValidateBadRequest error = errors.New("struct validation error")
 
