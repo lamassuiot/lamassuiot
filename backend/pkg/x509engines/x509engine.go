@@ -257,10 +257,6 @@ func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata cmodels.KeyMet
 		aki = keyID
 	}
 
-	if aki == "" {
-		aki = keyID
-	}
-
 	now := time.Now()
 
 	template := x509.Certificate{
