@@ -35,8 +35,8 @@ func TestBindIDEvent(t *testing.T) {
 		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
 			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
 			Subject:            models.Subject{CommonName: name},
-			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
-			IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
+			CAExpiration:       models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
+			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceCABootDur)},
 			Metadata:           map[string]any{},
 		})
 	}

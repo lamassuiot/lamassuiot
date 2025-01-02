@@ -56,7 +56,6 @@ func (svc *CryptoMonitor) scanCertificatesForUpdate(ctx context.Context, now tim
 }
 
 func (svc *CryptoMonitor) updateCertificateIfNeeded(cert models.Certificate, now time.Time, ctx context.Context) {
-
 	//check if should be updated to expired
 	if cert.ValidTo.Before(now) {
 		svc.service.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
@@ -77,7 +76,6 @@ func (svc *CryptoMonitor) updateCertificateIfNeeded(cert models.Certificate, now
 }
 
 func (svc *CryptoMonitor) scanCAsForUpdate(ctx context.Context, now time.Time) {
-
 	caScanFuncAdapter := func(ca models.CACertificate) {
 		svc.updateCAIfNeeded(ca, now, ctx)
 	}

@@ -159,8 +159,8 @@ func TestESTEnroll(t *testing.T) {
 		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
 			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
 			Subject:            models.Subject{CommonName: name},
-			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
-			IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
+			CAExpiration:       models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
+			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceCABootDur)},
 			Metadata:           map[string]any{},
 		})
 	}
@@ -1117,8 +1117,8 @@ func TestESTEnroll(t *testing.T) {
 		// 		bootstrapCA, err := externalTestServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
 		// 			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
 		// 			Subject:            models.Subject{CommonName: "ExternalCA"},
-		// 			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
-		// 			IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
+		// 			CAExpiration:       models.Validity{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
+		// 			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
 		// 			Metadata:           map[string]any{},
 		// 		})
 		// 		if err != nil {
@@ -1128,7 +1128,7 @@ func TestESTEnroll(t *testing.T) {
 		// 		importedBootstrapCA, err := testServers.CA.Service.ImportCA(context.Background(), services.ImportCAInput{
 		// 			ID:                 fmt.Sprintf("my-external-CA-%s", uuid.NewString()),
 		// 			CAType:             models.CertificateTypeExternal,
-		// 			IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
+		// 			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
 		// 			CACertificate:      bootstrapCA.Certificate.Certificate,
 		// 		})
 		// 		if err != nil {
@@ -1294,12 +1294,12 @@ func TestESTGetCACerts(t *testing.T) {
 		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
 			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
 			Subject:            models.Subject{CommonName: name},
-			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
-			IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
+			CAExpiration:       models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
+			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceCABootDur)},
 			Metadata:           map[string]any{},
 		})
 	}
-	enrollCA, err := createCA("enroll", "1y", "am")
+	enrollCA, err := createCA("enroll", "1y", "4w")
 	if err != nil {
 		t.Fatalf("could not create the enrollment CA: %s", err)
 	}
@@ -1521,8 +1521,8 @@ func TestESTServerKeyGen(t *testing.T) {
 		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
 			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
 			Subject:            models.Subject{CommonName: name},
-			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
-			IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
+			CAExpiration:       models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
+			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceCABootDur)},
 			Metadata:           map[string]any{},
 		})
 	}
@@ -1923,8 +1923,8 @@ func TestESTReEnroll(t *testing.T) {
 		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
 			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
 			Subject:            models.Subject{CommonName: name},
-			CAExpiration:       models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&lifespanCABootDur)},
-			IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
+			CAExpiration:       models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
+			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceCABootDur)},
 			Metadata:           map[string]any{},
 		})
 	}

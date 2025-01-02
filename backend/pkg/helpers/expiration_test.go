@@ -7,49 +7,54 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
 
-func TestValidateExpirationTimeRef(t *testing.T) {
-
-	input1 := models.Expiration{
+func TestValidateValidity(t *testing.T) {
+	// 0 duration
+	input1 := models.Validity{
 		Type:     models.Duration,
-		Duration: nil,
-		Time:     nil,
+		Duration: models.TimeDuration(0),
+		Time:     time.Time{},
 	}
+
 	expected1 := false
-	result1 := ValidateExpirationTimeRef(input1)
+	result1 := ValidateValidity(input1)
 	if result1 != expected1 {
 		t.Errorf("Expected %v, but got %v", expected1, result1)
 	}
 
-	input2 := models.Expiration{
+	// zero time
+	input2 := models.Validity{
 		Type:     models.Time,
-		Duration: nil,
-		Time:     nil,
+		Duration: models.TimeDuration(0),
+		Time:     time.Time{},
 	}
+
 	expected2 := false
-	result2 := ValidateExpirationTimeRef(input2)
+	result2 := ValidateValidity(input2)
 	if result2 != expected2 {
 		t.Errorf("Expected %v, but got %v", expected2, result2)
 	}
 
-	duration := models.TimeDuration(0) // Create a models.TimeDuration variable.
-	input3 := models.Expiration{
+	// 10 seconds duration
+	duration := models.TimeDuration(time.Second * 10) // Create a models.TimeDuration variable.
+	input3 := models.Validity{
 		Type:     models.Duration,
-		Duration: &duration, // Pass a pointer to the duration variable.
-		Time:     nil,
+		Duration: duration, // Pass a pointer to the duration variable.
+		Time:     time.Time{},
 	}
 	expected3 := true
-	result3 := ValidateExpirationTimeRef(input3)
+	result3 := ValidateValidity(input3)
 	if result3 != expected3 {
 		t.Errorf("Expected %v, but got %v", expected3, result3)
 	}
 
-	input4 := models.Expiration{
+	// now time
+	input4 := models.Validity{
 		Type:     models.Time,
-		Duration: nil,
-		Time:     &time.Time{},
+		Duration: models.TimeDuration(0),
+		Time:     time.Now(),
 	}
 	expected4 := true
-	result4 := ValidateExpirationTimeRef(input4)
+	result4 := ValidateValidity(input4)
 	if result4 != expected4 {
 		t.Errorf("Expected %v, but got %v", expected4, result4)
 	}
@@ -60,9 +65,9 @@ func TestValidateCAExpiration(t *testing.T) {
 
 	t.Run("Expiration type is Time and caExp is before expiration time", func(t *testing.T) {
 		newCaExp := caExp.Add(time.Minute)
-		expiration := models.Expiration{
+		expiration := models.Validity{
 			Type: models.Time,
-			Time: &newCaExp,
+			Time: newCaExp,
 		}
 		expected := false
 		result := ValidateCAExpiration(expiration, caExp)
@@ -73,9 +78,9 @@ func TestValidateCAExpiration(t *testing.T) {
 
 	t.Run("Expiration type is Time and caExp is after expiration time", func(t *testing.T) {
 		newCaExp := caExp.Add(-time.Minute)
-		expiration := models.Expiration{
+		expiration := models.Validity{
 			Type: models.Time,
-			Time: &newCaExp,
+			Time: newCaExp,
 		}
 		expected := true
 		result := ValidateCAExpiration(expiration, caExp)
@@ -86,9 +91,9 @@ func TestValidateCAExpiration(t *testing.T) {
 
 	t.Run("Expiration type is Duration and caExp is before expiration time", func(t *testing.T) {
 		duration := models.TimeDuration(time.Minute)
-		expiration := models.Expiration{
+		expiration := models.Validity{
 			Type:     models.Duration,
-			Duration: &duration,
+			Duration: duration,
 		}
 		expected := false
 		result := ValidateCAExpiration(expiration, caExp)
@@ -99,9 +104,9 @@ func TestValidateCAExpiration(t *testing.T) {
 
 	t.Run("Expiration type is Duration and caExp is after expiration time", func(t *testing.T) {
 		duration := models.TimeDuration(-time.Minute)
-		expiration := models.Expiration{
+		expiration := models.Validity{
 			Type:     models.Duration,
-			Duration: &duration,
+			Duration: duration,
 		}
 		expected := true
 		result := ValidateCAExpiration(expiration, caExp)

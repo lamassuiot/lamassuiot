@@ -33,6 +33,11 @@ func (p *PostgresSubsystem) Run() (*subsystems.SubsystemBackend, error) {
 	config := config.PluggableStorageEngine{LogLevel: config.Info, Provider: config.Postgres, Config: configMap}
 	logger := helpers.SetupLogger(config.LogLevel, "storage", "postgres")
 
+	for _, dbName := range p.dbs {
+		m := postgres.NewMigrator(logger, postgresEngine.DB[dbName])
+		m.MigrateToLatest()
+	}
+
 	beforeEach := func() error {
 		for _, dbName := range p.dbs {
 			postgresEngine.BeforeEach()
@@ -42,8 +47,8 @@ func (p *PostgresSubsystem) Run() (*subsystems.SubsystemBackend, error) {
 				if err != nil {
 					return fmt.Errorf("could not run reinitialize CA tables: %s", err)
 				}
-			case "certificates":
-				_, err := postgres.NewCertificateRepository(logger, postgresEngine.DB[dbName])
+
+				_, err = postgres.NewCertificateRepository(logger, postgresEngine.DB[dbName])
 				if err != nil {
 					return fmt.Errorf("could not run reinitialize Certificates tables: %s", err)
 				}

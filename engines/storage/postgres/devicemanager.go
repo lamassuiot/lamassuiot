@@ -28,24 +28,24 @@ func NewDeviceManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.Devi
 }
 
 func (db *PostgresDeviceManagerStore) Count(ctx context.Context) (int, error) {
-	return db.querier.Count(ctx, []gormWhereParams{})
+	return db.querier.Count(ctx, []gormExtraOps{})
 }
 
 func (db *PostgresDeviceManagerStore) CountByStatus(ctx context.Context, status models.DeviceStatus) (int, error) {
-	return db.querier.Count(ctx, []gormWhereParams{
+	return db.querier.Count(ctx, []gormExtraOps{
 		{
-			query: "status = ?", extraArgs: []any{status},
+			query: "status = ?", additionalWhere: []any{status},
 		},
 	})
 }
 
 func (db *PostgresDeviceManagerStore) SelectAll(ctx context.Context, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
-	return db.querier.SelectAll(ctx, queryParams, []gormWhereParams{}, exhaustiveRun, applyFunc)
+	return db.querier.SelectAll(ctx, queryParams, []gormExtraOps{}, exhaustiveRun, applyFunc)
 }
 
 func (db *PostgresDeviceManagerStore) SelectByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error) {
-	opts := []gormWhereParams{
-		{query: "dms_owner = ?", extraArgs: []any{dmsID}},
+	opts := []gormExtraOps{
+		{query: "dms_owner = ?", additionalWhere: []any{dmsID}},
 	}
 	return db.querier.SelectAll(ctx, queryParams, opts, exhaustiveRun, applyFunc)
 }

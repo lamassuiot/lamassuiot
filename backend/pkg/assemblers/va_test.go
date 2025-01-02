@@ -490,8 +490,8 @@ func initCAForVA(testServer *TestServer) (*models.CACertificate, error) {
 		ID:                 DefaultCAID,
 		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:            models.Subject{CommonName: "TestCA"},
-		CAExpiration:       models.Expiration{Type: models.Duration, Duration: &caDUr},
-		IssuanceExpiration: models.Expiration{Type: models.Duration, Duration: &issuanceDur},
+		CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
+		IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
 	})
 	if err != nil {
 		return nil, err

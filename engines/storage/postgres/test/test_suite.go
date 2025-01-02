@@ -3,6 +3,8 @@ package postgres_test
 import (
 	"fmt"
 	"log"
+	"slices"
+	"strings"
 
 	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
 	"gorm.io/driver/postgres"
@@ -60,12 +62,15 @@ func (st *PostgresSuite) BeforeEach() error {
 			panic(err)
 		}
 
-		for _, table := range tables {
-			tx := st.DB[dbName].Exec(fmt.Sprintf("TRUNCATE TABLE  %s;", table))
-			err := tx.Error
-			if err != nil {
-				return err
-			}
+		// Truncate all tables but not the migrations table
+		tables = slices.DeleteFunc(tables, func(s string) bool {
+			return s == "goose_db_version"
+		})
+
+		tx := st.DB[dbName].Exec(fmt.Sprintf("TRUNCATE TABLE %s CASCADE;", strings.Join(tables, ", ")))
+		err := tx.Error
+		if err != nil {
+			return err
 		}
 	}
 

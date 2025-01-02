@@ -87,14 +87,14 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 		Metadata:           input.Metadata,
 	}, map[int][]error{
 		400: {
-			errs.ErrCAIncompatibleExpirationTimeRef,
+			errs.ErrCAIncompatibleValidity,
 			errs.ErrCAIssuanceExpiration,
 		},
 		409: {
 			errs.ErrCAAlreadyExists,
 		},
 		500: {
-			errs.ErrCAIncompatibleExpirationTimeRef,
+			errs.ErrCAIncompatibleValidity,
 		},
 	})
 	if err != nil {
@@ -177,7 +177,11 @@ func (cli *httpCAClient) UpdateCAStatus(ctx context.Context, input services.Upda
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/status", resources.UpdateCertificateStatusBody{
 		NewStatus:        input.Status,
 		RevocationReason: input.RevocationReason,
-	}, map[int][]error{})
+	}, map[int][]error{
+		400: []error{
+			errs.ErrCertificateStatusTransitionNotAllowed,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +205,7 @@ func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.Up
 
 func (cli *httpCAClient) UpdateCAIssuanceExpiration(ctx context.Context, input services.UpdateCAIssuanceExpirationInput) (*models.CACertificate, error) {
 	response, err := Put[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/issuance-expiration", resources.UpdateCAIssuanceExpirationBody{
-		Expiration: input.IssuanceExpiration,
+		Validity: input.IssuanceExpiration,
 	}, map[int][]error{
 		404: {
 			errs.ErrCANotFound,

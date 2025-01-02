@@ -3,8 +3,8 @@ package postgres
 import (
 	"context"
 	"embed"
+	"encoding"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"path/filepath"
@@ -20,6 +20,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	gormlogger "gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
 )
@@ -41,12 +42,57 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 }
 
 func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*postgresDBQuerier[E], error) {
-	schema.RegisterSerializer("json", JSONSerializer{})
-
-	log.Infof("Planing migrations for %s", tableName)
-
+	schema.RegisterSerializer("text", TextSerializer{})
 	querier := newPostgresDBQuerier[E](db, tableName, primaryKeyColumn)
 	return &querier, nil
+}
+
+// TextSerializer string serializer
+type TextSerializer struct{}
+
+func (TextSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue interface{}) (err error) {
+	// Create a new instance of the field type
+	fieldValue := reflect.New(field.FieldType).Interface()
+
+	// Check if the fieldValue implements encoding.TextUnmarshaler
+	unmarshaler, ok := fieldValue.(encoding.TextUnmarshaler)
+	if !ok {
+		return fmt.Errorf("field type does not implement encoding.TextUnmarshaler")
+	}
+
+	// Convert dbValue to a string or []byte
+	var textData []byte
+	switch v := dbValue.(type) {
+	case string:
+		textData = []byte(v)
+	case []byte:
+		textData = v
+	default:
+		return fmt.Errorf("unsupported dbValue type: %T", dbValue)
+	}
+
+	// Use the UnmarshalText method to populate the field
+	if err := unmarshaler.UnmarshalText(textData); err != nil {
+		return fmt.Errorf("failed to unmarshal text: %w", err)
+	}
+
+	// Set the value back to the destination
+	field.ReflectValueOf(ctx, dst).Set(reflect.ValueOf(fieldValue).Elem())
+	return nil
+}
+
+// Value implements serializer interface
+func (TextSerializer) Value(ctx context.Context, field *schema.Field, dst reflect.Value, fieldValue interface{}) (interface{}, error) {
+	// Check if fieldValue implements encoding.TextMarshaler
+	if marshaler, ok := fieldValue.(encoding.TextMarshaler); ok {
+		text, err := marshaler.MarshalText()
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal text: %w", err)
+		}
+		return string(text), nil // Return the text representation as a string
+	}
+
+	return nil, fmt.Errorf("fieldValue does not implement encoding.TextMarshaler")
 }
 
 type migrator struct {
@@ -115,12 +161,31 @@ func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn
 	}
 }
 
-func (db *postgresDBQuerier[E]) Count(ctx context.Context, extraOpts []gormWhereParams) (int, error) {
+type gormExtraOps struct {
+	query           interface{}
+	additionalWhere []interface{}
+	joins           []string
+}
+
+func applyExtraOpts(tx *gorm.DB, extraOpts []gormExtraOps) *gorm.DB {
+	for _, join := range extraOpts {
+		for _, j := range join.joins {
+			tx = tx.Joins(j)
+		}
+	}
+
+	for _, whereQuery := range extraOpts {
+		tx = tx.Where(whereQuery.query, whereQuery.additionalWhere...)
+	}
+
+	return tx
+}
+
+func (db *postgresDBQuerier[E]) Count(ctx context.Context, extraOpts []gormExtraOps) (int, error) {
 	var count int64
 	tx := db.Table(db.tableName).WithContext(ctx)
-	for _, whereQuery := range extraOpts {
-		tx = tx.Where(whereQuery.query, whereQuery.extraArgs...)
-	}
+
+	tx = applyExtraOpts(tx, extraOpts)
 
 	tx.Count(&count)
 	if err := tx.Error; err != nil {
@@ -130,12 +195,7 @@ func (db *postgresDBQuerier[E]) Count(ctx context.Context, extraOpts []gormWhere
 	return int(count), nil
 }
 
-type gormWhereParams struct {
-	query     interface{}
-	extraArgs []interface{}
-}
-
-func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.QueryParameters, extraOpts []gormWhereParams, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
+func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.QueryParameters, extraOpts []gormExtraOps, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
 	var elems []E
 	tx := db.Table(db.tableName)
 
@@ -245,16 +305,15 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 			}
 		}
 	}
-	for _, whereQuery := range extraOpts {
-		tx = tx.Where(whereQuery.query, whereQuery.extraArgs...)
-	}
+
+	tx = applyExtraOpts(tx, extraOpts)
 
 	if offset > 0 {
 		tx.Offset(offset)
 	}
 
 	if exhaustiveRun {
-		res := tx.WithContext(ctx).FindInBatches(&elems, limit, func(tx *gorm.DB, batch int) error {
+		res := tx.WithContext(ctx).Preload(clause.Associations).FindInBatches(&elems, limit, func(tx *gorm.DB, batch int) error {
 			for _, elem := range elems {
 				applyFunc(elem)
 			}
@@ -269,7 +328,7 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 	} else {
 		tx.Offset(offset)
 		tx.Limit(limit)
-		rs := tx.WithContext(ctx).Find(&elems)
+		rs := tx.WithContext(ctx).Preload(clause.Associations).Find(&elems)
 		for _, elem := range elems {
 			// batch processing found records
 			applyFunc(elem)
@@ -285,7 +344,7 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 
 		//check if there are more records to fetch
 		var nextElem E
-		tx.Offset(offset + limit).First(&nextElem)
+		tx.Offset(offset + limit).Preload(clause.Associations).First(&nextElem)
 		if err := tx.Error; err != nil && err != gorm.ErrRecordNotFound {
 			return "", fmt.Errorf("error fetching next record: %v", err)
 		}
@@ -308,7 +367,7 @@ func (db *postgresDBQuerier[E]) SelectExists(ctx context.Context, queryID string
 	}
 
 	var elem E
-	tx := db.Table(db.tableName).WithContext(ctx).First(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
+	tx := db.Table(db.tableName).WithContext(ctx).Preload(clause.Associations).First(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
 	if err := tx.Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return false, nil, nil
@@ -330,7 +389,7 @@ func (db *postgresDBQuerier[E]) Insert(ctx context.Context, elem *E, elemID stri
 }
 
 func (db *postgresDBQuerier[E]) Update(ctx context.Context, elem *E, elemID string) (*E, error) {
-	tx := db.Table(db.tableName).WithContext(ctx).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID).Updates(elem)
+	tx := db.Session(&gorm.Session{FullSaveAssociations: true}).Table(db.tableName).WithContext(ctx).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID).Save(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
 	}
@@ -399,56 +458,10 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 	}
 }
 
-// // string_array json serializer
-// type StringArraySerializer struct{}
-
-// func (StringArraySerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue interface{}) (err error) {
-// 	switch dbValue.(type) {
-// 	case []pq.StringArray:
-// 		sarray := dbValue.(pq.StringArray)
-// 		var sa []string = sarray
-// 		src := reflect.ValueOf(sa)
-// 		field.ReflectValueOf(ctx, dst).Set(src)
-// 		return nil
-
-// 	default:
-// 		return fmt.Errorf("invalid value type")
-// 	}
-
-// }
-
-// // Value implements serializer interface
-// func (StringArraySerializer) Value(ctx context.Context, field *schema.Field, dst reflect.Value, fieldValue interface{}) (interface{}, error) {
-// 	return pq.Array(fieldValue), nil
-// }
-
-// JSONSerializer json serializer
-type JSONSerializer struct {
-}
-
-// Scan implements serializer interface
-func (JSONSerializer) Scan(ctx context.Context, field *schema.Field, dst reflect.Value, dbValue interface{}) (err error) {
-	fieldValue := reflect.New(field.FieldType)
-	var decodeVal string
-	switch dbValue := dbValue.(type) {
-	case string:
-		decodeVal = dbValue
-	default:
-		return fmt.Errorf("invalid value type")
+func NewGormLogger(logger *logrus.Entry) *GormLogger {
+	return &GormLogger{
+		logger: logger,
 	}
-
-	err = json.Unmarshal([]byte(decodeVal), fieldValue.Interface())
-	if err != nil {
-		return err
-	}
-
-	field.ReflectValueOf(ctx, dst).Set(fieldValue.Elem())
-	return
-}
-
-// Value implements serializer interface
-func (JSONSerializer) Value(ctx context.Context, field *schema.Field, dst reflect.Value, fieldValue interface{}) (interface{}, error) {
-	return json.Marshal(fieldValue)
 }
 
 // Logrus GORM iface implementation
