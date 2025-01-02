@@ -1239,11 +1239,6 @@ func TestImportCertificate(t *testing.T) {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
 			}
 
-			// _, err = initCA(caTest.Service)
-			// if err != nil {
-			// 	t.Fatalf("failed running 'initCA' func in test case: %s", err)
-			// }
-
 			err = tc.resultCheck(tc.run(caTest.HttpCASDK))
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
