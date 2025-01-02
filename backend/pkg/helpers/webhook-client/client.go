@@ -6,19 +6,50 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	"github.com/sirupsen/logrus"
 )
 
-func InvokeWebhook(logger *logrus.Entry, config models.WebhookCall, payload []byte) ([]byte, error) {
-	lCli := logger.WithField("webhook", fmt.Sprintf("webhook-cli: %s", config.Name))
-	cli, err := sdk.BuildHTTPClient(config.Config, lCli)
+func InvokeWebhook(logger *logrus.Entry, conf models.WebhookCall, payload []byte) ([]byte, error) {
+	clientConfig := config.HTTPClient{
+		LogLevel: config.LogLevel(conf.Config.LogLevel),
+		AuthMode: conf.Config.AuthMode,
+		HTTPConnection: config.HTTPConnection{
+			BasicConnection: config.BasicConnection{
+				TLSConfig: config.TLSConfig{
+					InsecureSkipVerify: !conf.Config.ValidateServerCert,
+				},
+			},
+		},
+	}
+
+	if conf.Config.AuthMode == config.JWT {
+		clientConfig.AuthJWTOptions = config.AuthJWTOptions{
+			ClientID:         conf.Config.OIDC.ClientID,
+			ClientSecret:     config.Password(conf.Config.OIDC.ClientSecret),
+			OIDCWellKnownURL: conf.Config.OIDC.OIDCWellKnownURL,
+		}
+	} else if conf.Config.AuthMode == config.ApiKey {
+		clientConfig.AuthApiKeyOptions = config.AuthApiKeyOptions{
+			Key:    conf.Config.ApiKey.Key,
+			Header: conf.Config.ApiKey.Header,
+		}
+	} else if conf.Config.AuthMode == config.MTLS {
+		clientConfig.AuthMTLSOptions = config.AuthMTLSOptions{
+			CertFile: conf.Config.MutualTLS.Cert,
+			KeyFile:  conf.Config.MutualTLS.Key,
+		}
+	}
+
+	lCli := logger.WithField("webhook", fmt.Sprintf("webhook-cli: %s", conf.Name))
+	cli, err := sdk.BuildHTTPClient(clientConfig, lCli)
 	if err != nil {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", config.Url, bytes.NewBuffer(payload))
+	req, err := http.NewRequest("POST", conf.Url, bytes.NewBuffer(payload))
 	if err != nil {
 		return nil, err
 	}

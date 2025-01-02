@@ -20,6 +20,10 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	l.Info("Request received")
 
+	for k, v := range r.Header {
+		l.Infof("Header %s: %s", k, v)
+	}
+
 	bodyBytes := new(bytes.Buffer)
 	_, err := bodyBytes.ReadFrom(r.Body)
 	if err != nil {
@@ -55,7 +59,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	deviceCN := request["device_cn"].(string)
 
 	l.Infof("Device CN: %s", deviceCN)
-	l.Infof("Enroll Headers: %v", enrollHeaders)
+	for k, v := range enrollHeaders {
+		l.Infof("Enroll Header %s: %s", k, v)
+	}
 
 	// // Call Sandgrain API to authorize the device
 
