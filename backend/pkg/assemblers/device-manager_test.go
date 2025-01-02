@@ -18,7 +18,6 @@ import (
 )
 
 func StartDeviceManagerServiceTestServer(t *testing.T, withEventBus bool) (*DeviceManagerTestServer, error) {
-
 	builder := TestServiceBuilder{}.WithDatabase("ca", "devicemanager").WithService(CA, DEVICE_MANAGER)
 	if withEventBus {
 		builder = builder.WithEventBus()
@@ -442,6 +441,9 @@ func TestGetDevicesByDMS(t *testing.T) {
 			Name:     "MyIotFleet",
 			Metadata: map[string]any{},
 			Settings: models.DMSSettings{
+				ServerKeyGen: models.ServerKeyGenSettings{
+					Enabled: false,
+				},
 				EnrollmentSettings: models.EnrollmentSettings{
 					EnrollmentProtocol: models.EST,
 					EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
@@ -489,9 +491,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 		{
 			name: "OK/PaginationWithoutExhaustiveRun",
 			run: func() ([]models.Device, error) {
-
 				devices := []models.Device{}
-
 				request := services.GetDevicesInput{
 					ListInput: resources.ListInput[models.Device]{
 						QueryParameters: &resources.QueryParameters{
@@ -814,7 +814,6 @@ func TestDecommissionDevice(t *testing.T) {
 		{
 			name: "OK/PaginationWithoutExhaustiveRun",
 			run: func() ([]models.Device, error) {
-
 				devices := []models.Device{}
 
 				request := services.GetDevicesInput{

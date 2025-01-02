@@ -638,14 +638,19 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 
 	//revoke superseded cert if active. Don't try revoking expired or already revoked since is not a valid transition for the CA service.
 	if currentDeviceCert.Status == models.StatusActive {
-		_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
-			SerialNumber:     currentDeviceCertSN,
-			NewStatus:        models.StatusRevoked,
-			RevocationReason: ocsp.Superseded,
-		})
-		if err != nil {
-			lFunc.Errorf("could not update superseded certificate status to revoked %s: %s", currentDeviceCert.SerialNumber, err)
-			return nil, err
+		if dms.Settings.ReEnrollmentSettings.RevokeOnReEnrollment {
+			lFunc.Infof("revoking superseded certificate %s", currentDeviceCertSN)
+			_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
+				SerialNumber:     currentDeviceCertSN,
+				NewStatus:        models.StatusRevoked,
+				RevocationReason: ocsp.Superseded,
+			})
+			if err != nil {
+				lFunc.Errorf("could not update superseded certificate status to revoked %s: %s", currentDeviceCert.SerialNumber, err)
+				return nil, err
+			}
+		} else {
+			lFunc.Infof("DMS %s is configured to not revoke superseded certificate %s. Skipping revocation", dms.ID, currentDeviceCertSN)
 		}
 	}
 
@@ -674,7 +679,7 @@ func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.
 		return nil, nil, err
 	}
 
-	if dms.Settings.ServerKeyGen == nil || !dms.Settings.ServerKeyGen.Enabled {
+	if !dms.Settings.ServerKeyGen.Enabled {
 		lFunc.Errorf("server key generation not enabled for DMS: %s", aps)
 		return nil, nil, fmt.Errorf("server key generation not enabled")
 	}

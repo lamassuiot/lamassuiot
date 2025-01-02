@@ -16,6 +16,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
+	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations"
 	"github.com/pressly/goose/v3"
 	"github.com/sirupsen/logrus"
 	"gorm.io/driver/postgres"
@@ -117,7 +118,11 @@ func NewMigrator(log *logrus.Entry, db *gorm.DB) *migrator {
 	if err != nil {
 		log.Fatalf("could not get db connection: %s", err)
 	}
+	// Reset migrations to avoid conflicts between different
+	// databases migrations (this is to prevent go based migrations from being registered multiple times for different databases)
+	goose.ResetGlobalMigrations()
 
+	migrations.RegisterGoMigrations(dbName)
 	m, err := goose.NewProvider(goose.DialectPostgres, sqlDB, migrationsFS)
 	if err != nil {
 		lMig.Fatalf("could not create migrator: %s", err)
@@ -131,6 +136,7 @@ func NewMigrator(log *logrus.Entry, db *gorm.DB) *migrator {
 }
 
 func (migrator *migrator) MigrateToLatest() {
+	//based on the current db version, get the target version
 	c, t, err := migrator.Goose.GetVersions(context.Background())
 	if err != nil {
 		migrator.logger.Fatalf("could not get db version: %s", err)

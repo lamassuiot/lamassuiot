@@ -22,7 +22,7 @@ type DMS struct {
 }
 
 type DMSSettings struct {
-	ServerKeyGen           *ServerKeyGenSettings  `json:"server_keygen_settings"`
+	ServerKeyGen           ServerKeyGenSettings   `json:"server_keygen_settings"`
 	EnrollmentSettings     EnrollmentSettings     `json:"enrollment_settings"`
 	ReEnrollmentSettings   ReEnrollmentSettings   `json:"reenrollment_settings"`
 	CADistributionSettings CADistributionSettings `json:"ca_distribution_settings"`
@@ -41,7 +41,7 @@ type ServerKeyGenSettings struct {
 
 type ServerKeyGenKey struct {
 	Type KeyType `json:"type"`
-	Bits int             `json:"bits"`
+	Bits int     `json:"bits"`
 }
 
 type DeviceProvisionProfile struct {
@@ -80,6 +80,7 @@ type AuthOptionsClientCertificate struct {
 
 type ReEnrollmentSettings struct {
 	AdditionalValidationCAs     []string     `json:"additional_validation_cas"`
+	RevokeOnReEnrollment        bool         `json:"revoke_on_reenrollment"`
 	ReEnrollmentDelta           TimeDuration `json:"reenrollment_delta"`
 	EnableExpiredRenewal        bool         `json:"enable_expired_renewal"`
 	PreventiveReEnrollmentDelta TimeDuration `json:"preventive_delta"` // (expiration time - delta < time.now) at witch point an event is issued notify its time to reenroll
@@ -97,7 +98,7 @@ type DMSStats struct {
 }
 
 type BindIdentityToDeviceOutput struct {
-	Certificate *Certificate    `json:"certificate"`
-	DMS         *DMS            `json:"dms"`
-	Device      *Device `json:"device"`
+	Certificate *Certificate `json:"certificate"`
+	DMS         *DMS         `json:"dms"`
+	Device      *Device      `json:"device"`
 }

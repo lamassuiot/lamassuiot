@@ -3,7 +3,6 @@ package models
 import (
 	"crypto/x509"
 	"encoding/json"
-	"fmt"
 )
 
 type KeyStrength string
@@ -84,7 +83,7 @@ func ParseKeyType(s string) (*KeyType, error) {
 	case "Ed25519":
 		nkt = KeyType(x509.Ed25519)
 	default:
-		return nil, fmt.Errorf("unknown key type")
+		nkt = KeyType(x509.UnknownPublicKeyAlgorithm)
 	}
 
 	return &nkt, nil
