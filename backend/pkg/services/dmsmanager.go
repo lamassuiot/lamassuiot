@@ -228,12 +228,7 @@ func (svc DMSManagerServiceBackend) CACerts(ctx context.Context, aps string) ([]
 	return cas, nil
 }
 
-// Validation:
-//   - Cert:
-//     Only Bootstrap cert (CA issued By Lamassu)
-func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-
+func getESTLogFormatter() logrus.Formatter {
 	formatter := *chelpers.LogFormatter
 	formatter.FieldsOrder = append(formatter.FieldsOrder, "func")
 	formatter.FieldsOrder = append(formatter.FieldsOrder, "dms")
@@ -242,7 +237,17 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	formatter.FieldsOrder = append(formatter.FieldsOrder, "auth-method")
 	formatter.FieldsOrder = append(formatter.FieldsOrder, "auth-status")
 	formatter.FieldsOrder = append(formatter.FieldsOrder, "auth-uri")
-	lFunc.Logger.SetFormatter(chelpers.LogFormatter)
+
+	return &formatter
+}
+
+// Validation:
+//   - Cert:
+//     Only Bootstrap cert (CA issued By Lamassu)
+func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	lFunc.Logger.SetFormatter(getESTLogFormatter())
 
 	lFunc = lFunc.WithField("func", "Enroll")
 	lFunc = lFunc.WithField("dms", aps)
@@ -538,15 +543,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	formatter := *chelpers.LogFormatter
-	formatter.FieldsOrder = append(formatter.FieldsOrder, "func")
-	formatter.FieldsOrder = append(formatter.FieldsOrder, "dms")
-	formatter.FieldsOrder = append(formatter.FieldsOrder, "device-cn")
-	formatter.FieldsOrder = append(formatter.FieldsOrder, "step")
-	formatter.FieldsOrder = append(formatter.FieldsOrder, "auth-method")
-	formatter.FieldsOrder = append(formatter.FieldsOrder, "auth-status")
-	formatter.FieldsOrder = append(formatter.FieldsOrder, "auth-uri")
-	lFunc.Logger.SetFormatter(chelpers.LogFormatter)
+	lFunc.Logger.SetFormatter(getESTLogFormatter())
 
 	lFunc = lFunc.WithField("func", "ReEnroll")
 	lFunc = lFunc.WithField("dms", aps)
