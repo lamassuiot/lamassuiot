@@ -16,7 +16,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	cmodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	models "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -180,12 +179,12 @@ func (svc *CAServiceBackend) GetStatsByCAID(ctx context.Context, input services.
 	return stats, nil
 }
 
-func (svc *CAServiceBackend) GetCryptoEngineProvider(ctx context.Context) ([]*cmodels.CryptoEngineProvider, error) {
-	info := []*cmodels.CryptoEngineProvider{}
+func (svc *CAServiceBackend) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
+	info := []*models.CryptoEngineProvider{}
 	for engineID, engine := range svc.cryptoEngines {
 		engineInstance := *engine
 		engineInfo := engineInstance.GetEngineConfig()
-		info = append(info, &cmodels.CryptoEngineProvider{
+		info = append(info, &models.CryptoEngineProvider{
 			CryptoEngineInfo: engineInfo,
 			ID:               engineID,
 			Default:          engineID == svc.defaultCryptoEngineID,
@@ -210,7 +209,7 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCA
 		} else {
 			errMsg := fmt.Sprintf("engine ID %s not configured", input.EngineID)
 			lFunc.Error(errMsg)
-			return nil, fmt.Errorf(errMsg)
+			return nil, fmt.Errorf("%s", errMsg)
 		}
 	}
 
@@ -257,7 +256,7 @@ func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCA
 		} else {
 			errMsg := fmt.Sprintf("parent engine ID %s not configured", input.ParentCA.Certificate.EngineID)
 			lFunc.Error(errMsg)
-			return nil, fmt.Errorf(errMsg)
+			return nil, fmt.Errorf("%s", errMsg)
 		}
 	}
 
@@ -506,10 +505,10 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 			Certificate:  (*models.X509Certificate)(caCert),
 			Status:       models.StatusActive,
 			SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
-			KeyMetadata: cmodels.KeyStrengthMetadata{
+			KeyMetadata: models.KeyStrengthMetadata{
 				Type:     input.KeyMetadata.Type,
 				Bits:     input.KeyMetadata.Bits,
-				Strength: cmodels.KeyStrengthHigh,
+				Strength: models.KeyStrengthHigh,
 			},
 			Subject:             input.Subject,
 			ValidFrom:           caCert.NotBefore,

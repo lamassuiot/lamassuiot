@@ -201,10 +201,10 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 
 	svc, scheduler, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
 		Logs: cconfig.Logging{
-			Level: cconfig.Info,
+			Level: cconfig.Debug,
 		},
 		Server: cconfig.HttpServer{
-			LogLevel:           cconfig.Info,
+			LogLevel:           cconfig.Debug,
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},

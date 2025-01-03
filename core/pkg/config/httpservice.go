@@ -47,11 +47,12 @@ const (
 // HTTPClient is the configuration for the HTTP client
 
 type HTTPClient struct {
-	LogLevel        LogLevel             `mapstructure:"log_level"`
-	AuthMode        HTTPClientAuthMethod `mapstructure:"auth_mode"`
-	AuthJWTOptions  AuthJWTOptions       `mapstructure:"jwt_options"`
-	AuthMTLSOptions AuthMTLSOptions      `mapstructure:"mtls_options"`
-	HTTPConnection  `mapstructure:",squash"`
+	LogLevel          LogLevel             `mapstructure:"log_level"`
+	AuthMode          HTTPClientAuthMethod `mapstructure:"auth_mode"`
+	AuthJWTOptions    AuthJWTOptions       `mapstructure:"jwt_options"`
+	AuthMTLSOptions   AuthMTLSOptions      `mapstructure:"mtls_options"`
+	AuthApiKeyOptions AuthApiKeyOptions    `mapstructure:"apikey_options"`
+	HTTPConnection    `mapstructure:",squash"`
 }
 
 // Authentication related config
@@ -66,10 +67,21 @@ type AuthMTLSOptions struct {
 	KeyFile  string `mapstructure:"key_file"`
 }
 
+type AuthMTLSInMemoryOptions struct {
+	CertPEM []byte `mapstructure:"cert"`
+	KeyPEM  []byte `mapstructure:"key"`
+}
+
+type AuthApiKeyOptions struct {
+	Key    string `mapstructure:"key"`
+	Header string `mapstructure:"header"`
+}
+
 type HTTPClientAuthMethod string
 
 const (
 	JWT    HTTPClientAuthMethod = "jwt"
+	ApiKey HTTPClientAuthMethod = "apikey"
 	MTLS   HTTPClientAuthMethod = "mtls"
 	NoAuth HTTPClientAuthMethod = "noauth"
 )

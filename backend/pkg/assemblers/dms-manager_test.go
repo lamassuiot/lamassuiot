@@ -11,16 +11,21 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"log"
+	"net"
 	"net/http"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/globalsign/est"
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
@@ -156,7 +161,7 @@ func TestESTEnroll(t *testing.T) {
 	createCA := func(name string, lifespan string, issuance string) (*models.CACertificate, error) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
 		issuanceCABootDur, _ := models.ParseDuration(issuance)
-		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+		return testServers.CA.Service.CreateCA(ctx, services.CreateCAInput{
 			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
 			Subject:            models.Subject{CommonName: name},
 			CAExpiration:       models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
@@ -1098,6 +1103,246 @@ func TestESTEnroll(t *testing.T) {
 				expectedErr := "device already registered to another DMS"
 				if !strings.Contains(err.Error(), expectedErr) {
 					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
+				}
+			},
+		},
+		{
+			name: "OK/ExternalWebHook",
+			run: func() (caCert, cert *x509.Certificate, key any, err error) {
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				router, url, cleanup, err := startWebhookServer()
+				if err != nil {
+					t.Fatalf("could not start webhook server: %s", err)
+				}
+
+				defer cleanup()
+
+				router.POST("/verify", func(c *gin.Context) {
+					var b map[string]interface{}
+					err := c.BindJSON(&b)
+					if err != nil {
+						c.JSON(400, gin.H{})
+						return
+					}
+
+					if b["csr"] == nil || b["csr"].(string) == "" {
+						c.JSON(400, gin.H{})
+						return
+					}
+					if b["aps"] == nil || b["aps"].(string) == "" {
+						c.JSON(400, gin.H{})
+						return
+					}
+					if b["device_cn"] == nil || b["device_cn"].(string) == "" {
+						c.JSON(400, gin.H{})
+						return
+					}
+					if b["http_request"] == nil {
+						c.JSON(400, gin.H{})
+						return
+					}
+
+					request := b["http_request"].(map[string]interface{})
+					if request["headers"] == nil || request["headers"].(map[string]interface{}) == nil {
+						c.JSON(400, gin.H{})
+						return
+					}
+					if request["url"] == nil || request["url"].(string) == "" {
+						c.JSON(400, gin.H{})
+						return
+					}
+
+					c.JSON(200, gin.H{"authorized": true})
+				})
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = "EXTERNAL_WEBHOOK"
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+						Name: "myHook",
+						Url:  url + "/verify",
+						Config: models.WebhookCallHttpClient{
+							ValidateServerCert: false,
+							LogLevel:           string(config.Debug),
+							AuthMode:           config.NoAuth,
+						},
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{},
+					PrivateKey:            nil,
+					InsecureSkipVerify:    true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateRSAKey(2048)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				enrollCRT, err := estCli.Enroll(context.Background(), enrollCSR)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, nil
+			},
+			resultCheck: func(caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+			},
+		},
+		{
+			name: "Err/ExternalWebHookUnauthorized",
+			run: func() (caCert, cert *x509.Certificate, key any, err error) {
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				router, url, cleanup, err := startWebhookServer()
+				if err != nil {
+					t.Fatalf("could not start webhook server: %s", err)
+				}
+
+				defer cleanup()
+
+				router.POST("/verify", func(c *gin.Context) {
+					c.JSON(200, gin.H{"authorized": false})
+				})
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = "EXTERNAL_WEBHOOK"
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+						Name: "myHook",
+						Url:  url + "/verify",
+						Config: models.WebhookCallHttpClient{
+							ValidateServerCert: false,
+							LogLevel:           string(config.Debug),
+							AuthMode:           config.NoAuth,
+						},
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{},
+					PrivateKey:            nil,
+					InsecureSkipVerify:    true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateRSAKey(2048)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+
+				if !strings.Contains(err.Error(), "external webhook denied enrollment") {
+					t.Fatalf("error should contain 'external webhook denied enrollment'. Got error %s", err.Error())
+				}
+			},
+		},
+		{
+			name: "OK/ExternalWebHook-WithApiKey",
+			run: func() (caCert, cert *x509.Certificate, key any, err error) {
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				router, url, cleanup, err := startWebhookServer()
+				if err != nil {
+					t.Fatalf("could not start webhook server: %s", err)
+				}
+
+				defer cleanup()
+
+				router.POST("/verify", func(c *gin.Context) {
+					apiKey := c.GetHeader("X-API-Key")
+					if apiKey != "mySecret" {
+						c.JSON(401, gin.H{})
+						return
+					}
+
+					c.JSON(200, gin.H{"authorized": true})
+				})
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = "EXTERNAL_WEBHOOK"
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
+						Name: "myHook",
+						Url:  url + "/verify",
+						Config: models.WebhookCallHttpClient{
+							ValidateServerCert: false,
+							LogLevel:           string(config.Debug),
+							AuthMode:           config.NoAuth,
+						},
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{},
+					PrivateKey:            nil,
+					InsecureSkipVerify:    true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateRSAKey(2048)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+				if !strings.Contains(err.Error(), "status code: 401") {
+					t.Fatalf("error should contain 'status code: 401'. Got error %s", err.Error())
+				}
+
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook.Config.AuthMode = config.ApiKey
+				dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook.Config.ApiKey = models.WebhookCallHttpClientApiKey{
+					Header: "X-API-Key",
+					Key:    "mySecret",
+				}
+
+				_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{
+					DMS: *dms,
+				})
+				if err != nil {
+					t.Fatalf("could not update DMS: %s", err)
+				}
+
+				enrollCRT, err := estCli.Enroll(context.Background(), enrollCSR)
+				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, err
+			},
+			resultCheck: func(caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
 				}
 			},
 		},
@@ -2737,4 +2982,45 @@ func (c *pemESTClient) commonEnrollPEM(r *x509.CertificateRequest, renew bool) (
 	}
 
 	return cert, nil
+}
+
+func startWebhookServer() (*gin.Engine, string, func(), error) {
+	// Create a custom HTTP handler
+	router := gin.Default()
+
+	// Listen on a random free port
+	listener, err := net.Listen("tcp", ":0") // :0 to choose a random port
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("failed to listen on a random port: %w", err)
+	}
+
+	addr := listener.Addr().String()
+	re := regexp.MustCompile(`:(\d+)$`)
+	match := re.FindStringSubmatch(addr)
+	var port string
+	if len(match) > 1 {
+		port = ":" + match[1] // Capture group 1
+	}
+
+	url := fmt.Sprintf("http://localhost%s", port)
+
+	// Create an HTTP server
+	server := &http.Server{
+		Handler: router,
+	}
+
+	go func() {
+		if err := server.Serve(listener); err != nil {
+			log.Printf("Server error: %v", err)
+		}
+	}()
+
+	shutdown := func() {
+		log.Println("Shutting down the server...")
+		if err := server.Shutdown(context.Background()); err != nil {
+			log.Printf("Server forced to shutdown: %v", err)
+		}
+	}
+
+	return router, url, shutdown, nil
 }

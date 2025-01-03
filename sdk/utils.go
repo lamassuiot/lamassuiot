@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -25,30 +26,37 @@ func BuildURL(cfg config.HTTPClient) string {
 }
 
 func HttpClientWithSourceHeaderInjector(cli *http.Client, sourceID string) *http.Client {
+	return HttpClientWithCustomHeaders(cli, models.HttpSourceHeader, sourceID)
+}
+
+func HttpClientWithCustomHeaders(cli *http.Client, header string, value string) *http.Client {
 	transport := http.DefaultTransport
 	if cli.Transport != nil {
 		transport = cli.Transport
 	}
 
-	cli.Transport = sourceRoundTripper{
+	cli.Transport = customHeaderRoundTripper{
 		transport: transport,
-		source:    sourceID,
+		header:    header,
+		value:     value,
 	}
 
 	return cli
 }
 
-type sourceRoundTripper struct {
+type customHeaderRoundTripper struct {
 	transport http.RoundTripper
-	source    string
+	header    string
+	value     string
 }
 
-func (lrt sourceRoundTripper) RoundTrip(req *http.Request) (res *http.Response, err error) {
-	req.Header.Add(models.HttpSourceHeader, lrt.source)
+func (lrt customHeaderRoundTripper) RoundTrip(req *http.Request) (res *http.Response, err error) {
+	req.Header.Add(lrt.header, lrt.value)
 	return lrt.transport.RoundTrip(req)
 }
 
 func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client, error) {
+	var err error
 	client := &http.Client{}
 	ctx := chelpers.InitContext()
 
@@ -73,9 +81,18 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 
 	switch cfg.AuthMode {
 	case config.MTLS:
-		cert, err := tls.LoadX509KeyPair(cfg.AuthMTLSOptions.CertFile, cfg.AuthMTLSOptions.KeyFile)
-		if err != nil {
-			return nil, err
+		var cert tls.Certificate
+		//Check If Cert and Key contain a string-like PEM
+		if strings.Contains(cfg.AuthMTLSOptions.CertFile, "-----BEGIN CERTIFICATE-----") {
+			cert, err = tls.X509KeyPair([]byte(cfg.AuthMTLSOptions.CertFile), []byte(cfg.AuthMTLSOptions.KeyFile))
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			cert, err = tls.LoadX509KeyPair(cfg.AuthMTLSOptions.CertFile, cfg.AuthMTLSOptions.KeyFile)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		tlsConfig.Certificates = []tls.Certificate{cert}
@@ -110,11 +127,6 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 			ClientID:     cfg.AuthJWTOptions.ClientID,
 			ClientSecret: string(cfg.AuthJWTOptions.ClientSecret),
 			TokenURL:     fmt.Sprintf(wellKnown.TokenURL),
-			// EndpointParams: url.Values{
-			// 	"grant_type": {"urn:ietf:params:oauth:grant-type:uma-ticket"},
-			// 	"permission": {*resourceProject1.Name + "#scope_read"},
-			// 	"audience":   {clientID},
-			// },
 		}
 
 		authHttpCli.Transport = &http.Transport{
@@ -123,6 +135,13 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 
 		httpCtx := context.WithValue(ctx, oauth2.HTTPClient, authHttpCli)
 		client = clientConfig.Client(httpCtx)
+	case config.ApiKey:
+		client.Transport = &http.Transport{
+			TLSClientConfig: tlsConfig,
+		}
+
+		client = HttpClientWithCustomHeaders(client, cfg.AuthApiKeyOptions.Header, cfg.AuthApiKeyOptions.Key)
+
 	default:
 		client.Transport = &http.Transport{
 			TLSClientConfig: tlsConfig,
@@ -168,7 +187,7 @@ func requestWithBody[T any](ctx context.Context, client *http.Client, method str
 		return m, nonOKResponseToError(res.StatusCode, body, knownErrors)
 	}
 
-	return parseJSON[T](body)
+	return ParseJSON[T](body)
 }
 
 func Get[T any](ctx context.Context, client *http.Client, url string, queryParams *cresources.QueryParameters, knownErrors map[int][]error) (T, error) {
@@ -206,7 +225,7 @@ func Get[T any](ctx context.Context, client *http.Client, url string, queryParam
 		return m, nonOKResponseToError(res.StatusCode, body, knownErrors)
 	}
 
-	return parseJSON[T](body)
+	return ParseJSON[T](body)
 }
 
 func Delete(ctx context.Context, client *http.Client, url string, knownErrors map[int][]error) error {
@@ -267,7 +286,7 @@ func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.C
 	return queryParams.NextBookmark, nil
 }
 
-func parseJSON[T any](s []byte) (T, error) {
+func ParseJSON[T any](s []byte) (T, error) {
 	var r T
 	if err := json.Unmarshal(s, &r); err != nil {
 		return r, err
@@ -284,7 +303,7 @@ func nonOKResponseToError(resStatusCode int, resBody []byte, knownErrors map[int
 		Err string `json:"err"`
 	}
 
-	decodedErr, err := parseJSON[errJson](resBody)
+	decodedErr, err := ParseJSON[errJson](resBody)
 	if err != nil {
 		return fmt.Errorf("unexpected status code %d. Body err msg could not be decoded: %s", resStatusCode, string(resBody))
 	}
