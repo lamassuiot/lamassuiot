@@ -259,7 +259,6 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		lFunc.Errorf("aborting enrollment. Could not get DMS '%s': %s", aps, err)
 		return nil, errs.ErrDMSNotFound
 	}
-	lFunc.Debugf("got DMS")
 
 	lFunc = lFunc.WithField("dms", dms.ID)
 	if dms.Settings.EnrollmentSettings.EnrollmentProtocol != models.EST {
