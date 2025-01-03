@@ -392,6 +392,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		if err != nil {
 			lFunc = lFunc.WithField("auth-status", "failed")
 			lFunc.Errorf("aborting enrollment. got error while calling external webhook: %s", err)
+			return nil, fmt.Errorf("error while calling external webhook: %s", err)
 		}
 
 		lFunc.Debugf("webhook response: %v", resp)
