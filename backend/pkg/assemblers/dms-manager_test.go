@@ -1122,6 +1122,40 @@ func TestESTEnroll(t *testing.T) {
 				defer cleanup()
 
 				router.POST("/verify", func(c *gin.Context) {
+					var b map[string]interface{}
+					err := c.BindJSON(&b)
+					if err != nil {
+						c.JSON(400, gin.H{})
+						return
+					}
+
+					if b["csr"] == nil || b["csr"].(string) == "" {
+						c.JSON(400, gin.H{})
+						return
+					}
+					if b["aps"] == nil || b["aps"].(string) == "" {
+						c.JSON(400, gin.H{})
+						return
+					}
+					if b["device_cn"] == nil || b["device_cn"].(string) == "" {
+						c.JSON(400, gin.H{})
+						return
+					}
+					if b["http_request"] == nil {
+						c.JSON(400, gin.H{})
+						return
+					}
+
+					request := b["http_request"].(map[string]interface{})
+					if request["headers"] == nil || request["headers"].(map[string]interface{}) == nil {
+						c.JSON(400, gin.H{})
+						return
+					}
+					if request["url"] == nil || request["url"].(string) == "" {
+						c.JSON(400, gin.H{})
+						return
+					}
+
 					c.JSON(200, gin.H{"authorized": true})
 				})
 
