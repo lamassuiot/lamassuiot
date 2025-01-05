@@ -58,8 +58,8 @@ type IssuerCAMetadata struct {
 
 type CACertificate struct {
 	ID                      string                 `json:"id"`
-	Certificate             Certificate            `gorm:"foreignKey:CertificateSerialNumber;references:SerialNumber"`
-	CertificateSerialNumber string                 `gorm:"column:serial_number"`
+	Certificate             Certificate            `json:"certificate" gorm:"foreignKey:CertificateSerialNumber;references:SerialNumber"`
+	CertificateSerialNumber string                 `json:"serial_number" gorm:"column:serial_number"`
 	Metadata                map[string]interface{} `json:"metadata" gorm:"serializer:json"`
 	Validity                Validity               `json:"validity" gorm:"embedded;embeddedPrefix:validity_"`
 	CreationTS              time.Time              `json:"creation_ts"`
