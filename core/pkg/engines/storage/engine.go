@@ -6,13 +6,13 @@ import (
 )
 
 type CommonStorageEngine struct {
-	CA                   CACertificatesRepo
-	CACertificateRequest CACertificateRequestRepo
-	Cert                 CertificatesRepo
-	Device               DeviceManagerRepo
-	DMS                  DMSRepo
-	Events               EventRepository
-	Subscriptions        SubscriptionsRepository
+	CA            CACertificatesRepo
+	Cert          CertificatesRepo
+	Device        DeviceManagerRepo
+	DeviceEvents  DeviceEventsRepo
+	DMS           DMSRepo
+	Events        EventRepository
+	Subscriptions SubscriptionsRepository
 }
 
 type StorageEngine interface {
