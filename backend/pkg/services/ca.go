@@ -375,6 +375,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			Type:                input.CAType,
 			IssuerCAMetadata:    issuerMeta,
 			EngineID:            engineID,
+			IsCA:                true,
 		},
 	}
 
@@ -518,6 +519,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 			Metadata:            map[string]interface{}{},
 			Type:                models.CertificateTypeManaged,
 			EngineID:            engineID,
+			IsCA:                true,
 		},
 	}
 
@@ -928,6 +930,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		ValidFrom:           x509Cert.NotBefore,
 		ValidTo:             x509Cert.NotAfter,
 		RevocationTimestamp: time.Time{},
+		IsCA:                false,
 	}
 	lFunc.Debugf("insert Certificate %s in storage engine", cert.SerialNumber)
 	return svc.certStorage.Insert(ctx, &cert)
@@ -940,6 +943,7 @@ func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input servic
 func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
+	x509Cert := (*x509.Certificate)(input.Certificate)
 	status := models.StatusActive
 	if input.Certificate.NotAfter.Before(time.Now()) {
 		status = models.StatusExpired
@@ -950,12 +954,13 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 		Type:                models.CertificateTypeExternal,
 		Certificate:         (*models.X509Certificate)(input.Certificate),
 		Status:              status,
-		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate((*x509.Certificate)(input.Certificate)),
+		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate(x509Cert),
 		Subject:             chelpers.PkixNameToSubject(input.Certificate.Subject),
 		SerialNumber:        helpers.SerialNumberToString(input.Certificate.SerialNumber),
 		ValidFrom:           input.Certificate.NotBefore,
 		ValidTo:             input.Certificate.NotAfter,
 		RevocationTimestamp: time.Time{},
+		IsCA:                x509Cert.IsCA,
 	}
 
 	var parentCA *models.CACertificate

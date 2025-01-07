@@ -42,6 +42,7 @@ type Certificate struct {
 	RevocationReason    RevocationReason       `json:"revocation_reason" gorm:"serializer:text"`
 	Type                CertificateType        `json:"type"`
 	EngineID            string                 `json:"engine_id"`
+	IsCA                bool                   `json:"is_ca"`
 }
 
 type Validity struct {
