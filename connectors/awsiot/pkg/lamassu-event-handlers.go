@@ -24,11 +24,14 @@ func NewAWSIoTEventHandler(l *logrus.Entry, svc AWSCloudConnectorService) *event
 			string(models.EventBindDeviceIdentityKey):        func(e *event.Event) error { return handlerWarpper(e, svc, l, bindDeviceIdentityHandler) },
 			string(models.EventUpdateDeviceMetadataKey):      func(e *event.Event) error { return handlerWarpper(e, svc, l, updateDeviceMetadataHandler) },
 			string(models.EventUpdateCertificateMetadataKey): func(e *event.Event) error { return handlerWarpper(e, svc, l, updateCertificateMetadataHandler) },
-			string(models.EventCreateDMSKey):                 func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateDMSHandler) },
-			string(models.EventUpdateDMSKey):                 func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateDMSHandler) },
-			string(models.EventCreateCAKey):                  func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateCAHandler) },
-			string(models.EventImportCAKey):                  func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateCAHandler) },
-			string(models.EventUpdateCAMetadataKey):          func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateCAHandler) },
+			// A DMS update can have multiple repercussions with regards to AWS IoT:
+			// - If the CA distribution settings change, the trust anchor list of all devices associated with the DMS must be updated -> Trigger a shadow update for all devices
+			// - If the Policy is updated, the policy of all devices associated with the DMS must be updated -> Update the policy document by name
+			string(models.EventCreateDMSKey):        func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateDMSHandler) },
+			string(models.EventUpdateDMSKey):        func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateDMSHandler) },
+			string(models.EventCreateCAKey):         func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateCAHandler) },
+			string(models.EventImportCAKey):         func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateCAHandler) },
+			string(models.EventUpdateCAMetadataKey): func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateCAHandler) },
 		},
 	}
 }
@@ -178,6 +181,16 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCl
 		return nil
 	}
 
+	var oldDmsAwsAutomationConfig models.IotAWSDMSMetadata
+	if isUpdateEvent {
+		_, err := helpers.GetMetadataToStruct(updatedDMS.Previous.Metadata, models.AWSIoTMetadataKey(svc.GetConnectorID()), &oldDmsAwsAutomationConfig)
+		if err != nil {
+			err = fmt.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
+			logger.Error(err)
+			return err
+		}
+	}
+
 	if dmsAwsAutomationConfig.RegistrationMode == models.JitpAWSIoTRegistrationMode {
 		err = svc.RegisterUpdateJITPProvisioner(context.Background(), RegisterUpdateJITPProvisionerInput{
 			DMS:           dms,
@@ -218,6 +231,19 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCl
 			}
 		}
 	}
+
+	changedPolicies := !lms_slices.UnorderedEqualContent(oldDmsAwsAutomationConfig.Policies, dmsAwsAutomationConfig.Policies, func(e1, e2 models.AWSIoTPolicy) bool { return e1.PolicyDocument == e2.PolicyDocument })
+	if changedPolicies {
+		err = svc.RegisterUpdatePolicies(ctx, RegisterUpdatePoliciesInput{
+			Policies: dmsAwsAutomationConfig.Policies,
+		})
+		if err != nil {
+			err = fmt.Errorf("something went wrong while updating policies: %s", err)
+			logger.Error(err)
+			return err
+		}
+	}
+
 	return nil
 }
 

@@ -98,6 +98,14 @@ type AWSIoTPolicy struct {
 }
 
 type DeviceAWSMetadata struct {
-	Registered bool                    `json:"thing_registered"`
-	Actions    []RemediationActionType `json:"actions"`
+	Registered        bool                       `json:"thing_registered"`
+	Actions           []RemediationActionType    `json:"actions"`
+	ConnectionDetails DeviceAWSConnectionDetails `json:"connection_details"`
+}
+
+type DeviceAWSConnectionDetails struct {
+	IsConnected            bool      `json:"is_connected"`
+	IPAddress              string    `json:"ip_address"`
+	DisconnectionReason    string    `json:"disconnection_reason"`
+	LatestConnectionUpdate time.Time `json:"latest_connection_update"`
 }

@@ -83,7 +83,8 @@ func (cli *deviceManagerClient) UpdateDeviceStatus(ctx context.Context, input se
 
 func (cli *deviceManagerClient) UpdateDeviceIdentitySlot(ctx context.Context, input services.UpdateDeviceIdentitySlotInput) (*models.Device, error) {
 	response, err := Put[*models.Device](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/idslot", resources.UpdateDeviceIdentitySlotBody{
-		Slot: input.Slot,
+		Slot:      input.Slot,
+		NewStatus: input.NewStatus,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err
@@ -101,4 +102,25 @@ func (cli *deviceManagerClient) UpdateDeviceMetadata(ctx context.Context, input 
 	}
 
 	return response, nil
+}
+
+func (cli *deviceManagerClient) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (*models.DeviceEvent, error) {
+	response, err := Post[*models.DeviceEvent](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.DeviceID+"/events", resources.CreateDeviceEventBody{
+		Timestamp:        input.Timestamp,
+		Type:             input.Type,
+		Description:      input.Description,
+		Source:           input.Source,
+		Status:           input.Status,
+		StructuredFields: input.StructuredFields,
+	}, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (cli *deviceManagerClient) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	url := cli.baseUrl + "/v1/devices/" + input.DeviceID + "/events"
+	return IterGet[models.DeviceEvent, *resources.GetDeviceEventsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
