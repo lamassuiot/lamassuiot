@@ -63,12 +63,11 @@ type SignInput struct {
 }
 
 type IssueCACSRInput struct {
-	ParentCA    *models.CACertificate
+	CAID        string                 `validate:"required"`
 	KeyMetadata models.KeyMetadata     `validate:"required"`
 	Subject     models.Subject         `validate:"required"`
 	CAType      models.CertificateType `validate:"required"`
 	EngineID    string
-	CAID        string `validate:"required"`
 }
 
 type IssueCAInput struct {

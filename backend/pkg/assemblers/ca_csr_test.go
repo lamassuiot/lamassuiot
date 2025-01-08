@@ -100,6 +100,79 @@ func TestRequestCAWithExternalParent(t *testing.T) {
 	assert.Equal(t, importedCertificate.Certificate.Certificate.Issuer.CommonName, ec.Subject.CommonName)
 }
 
+func TestImportCAWithNoParent(t *testing.T) {
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	externalCACert, privateKey, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
+	if err != nil {
+		t.Fatalf("could not generate external CA: %s", err)
+	}
+
+	ec := models.X509Certificate(*externalCACert)
+
+	requestedCACSR, err := serverTest.CA.Service.RequestCACSR(context.Background(), services.RequestCAInput{
+		KeyMetadata: models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+		Subject:     models.Subject{CommonName: "MyRequestedCA"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error. Could not request CA: %s", err)
+	}
+
+	csr := x509.CertificateRequest(requestedCACSR.CSR)
+
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	sn, _ := rand.Int(rand.Reader, serialNumberLimit)
+
+	certificateTemplate := x509.Certificate{
+		PublicKeyAlgorithm: csr.PublicKeyAlgorithm,
+		PublicKey:          csr.PublicKey,
+		AuthorityKeyId:     ec.SubjectKeyId,
+		SerialNumber:       sn,
+		Issuer:             ec.Subject,
+		Subject:            csr.Subject,
+		NotBefore:          time.Now(),
+		NotAfter:           time.Now().Add(time.Hour * 24),
+		ExtraExtensions:    []pkix.Extension{},
+		OCSPServer: []string{
+			fmt.Sprintf("https://%s/api/va/ocsp", "localhost"),
+		},
+		CRLDistributionPoints: []string{
+			fmt.Sprintf("https://%s/api/va/crl/%s", "localhost", string(ec.SubjectKeyId)),
+		},
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsage(x509.ExtKeyUsageOCSPSigning),
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	certificateTemplate.IsCA = true
+
+	certificateBytes, err := x509.CreateCertificate(rand.Reader, &certificateTemplate, externalCACert, csr.PublicKey, privateKey.(*rsa.PrivateKey))
+	if err != nil {
+		t.Fatalf("could not create the requested CA: %s", err)
+	}
+
+	requestedCertificate, err := x509.ParseCertificate(certificateBytes)
+	if err != nil {
+		t.Fatalf("could not parse the requested CA: %s", err)
+	}
+
+	rcert := models.X509Certificate(*requestedCertificate)
+	importedCertificate, err := serverTest.CA.Service.ImportCA(context.Background(), services.ImportCAInput{
+		CACertificate: &rcert,
+		CARequestID:   requestedCACSR.ID,
+		CAType:        models.CertificateTypeRequested,
+	})
+	if err != nil {
+		t.Fatalf("could not import the requested CA: %s", err)
+	}
+
+	assert.Equal(t, importedCertificate.Certificate.Subject.CommonName, csr.Subject.CommonName)
+	assert.Equal(t, importedCertificate.Certificate.Certificate.Issuer.CommonName, ec.Subject.CommonName)
+}
+
 func TestRequestCADoubleImportError(t *testing.T) {
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
 	if err != nil {
@@ -374,7 +447,7 @@ func TestImportNonExistentRequest(t *testing.T) {
 		CAType:        models.CertificateTypeRequested,
 	})
 
-	assert.Error(t, err, "CA Request not found")
+	assert.EqualError(t, err, "CA Request not found")
 }
 
 func TestRequestCAWithManagedParentError(t *testing.T) {
@@ -405,20 +478,25 @@ func TestRequestCAWithManagedParentError(t *testing.T) {
 		Subject:     models.Subject{CommonName: "MyRequestedCA"},
 		ParentID:    managedCA.ID,
 	})
-	assert.Error(t, err, "cannot request a CSR for a managed CA")
+	assert.EqualError(t, err, "cannot request a CSR for a managed CA")
 }
 
-func TestRequestCAWithoutParentError(t *testing.T) {
+func TestRequestCAWithoutParent(t *testing.T) {
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 
 	}
-	_, err = serverTest.CA.Service.RequestCACSR(context.Background(), services.RequestCAInput{
+	csr, err := serverTest.CA.Service.RequestCACSR(context.Background(), services.RequestCAInput{
 		KeyMetadata: models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 		Subject:     models.Subject{CommonName: "MyRequestedCA"},
 	})
-	assert.Error(t, err, "cannot request a CSR without a parent")
+	if err != nil {
+		t.Fatalf("unexpected error. Could not request CA: %s", err)
+	}
+
+	assert.Equal(t, csr.Subject.CommonName, "MyRequestedCA")
+	assert.Empty(t, csr.IssuerCAMetadata.ID)
 }
 
 func TestRequestCAWithDiferentExternalParentError(t *testing.T) {
@@ -501,7 +579,7 @@ func TestRequestCAWithDiferentExternalParentError(t *testing.T) {
 		CAType:        models.CertificateTypeRequested,
 	})
 
-	assert.Error(t, err, "Parent CA did not sign the certificate: crypto/rsa: verification error")
+	assert.EqualError(t, err, "parent CA did not sign the certificate: crypto/rsa: verification error")
 }
 
 func TestRequestCARetrieveAndFilterDelete(t *testing.T) {
@@ -636,6 +714,6 @@ func TestRequestCARetrieveAndFilterDelete(t *testing.T) {
 	_, err = serverTest.CA.Service.GetCARequestByID(context.Background(), services.GetByIDInput{
 		ID: requestedCACSR2.ID,
 	})
-	assert.Error(t, err, "CA Request not found")
+	assert.EqualError(t, err, "CA not found")
 
 }

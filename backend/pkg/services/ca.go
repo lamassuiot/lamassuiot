@@ -222,10 +222,6 @@ func (svc *CAServiceBackend) issueCACSR(ctx context.Context, input services.Issu
 		return nil, fmt.Errorf("%s", errMsg)
 	}
 
-	if input.ParentCA == nil {
-		return nil, fmt.Errorf("cannot issue a CA CSR for a root CA")
-	}
-
 	keyId, csr, err := x509Engine.CreateCertificateRequest(input.KeyMetadata, input.Subject)
 	if err != nil {
 		lFunc.Errorf("could not create CSR for CA %s: %s", input.Subject.CommonName, err)
@@ -508,29 +504,30 @@ func (svc *CAServiceBackend) RequestCACSR(ctx context.Context, input services.Re
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	if input.ParentID == "" {
-		lFunc.Errorf("cannot request a CSR for a root CA")
-		return nil, fmt.Errorf("cannot request a CSR for a root CA")
-	}
+	var parentCA *models.CACertificate
+	if input.ParentID != "" {
 
-	lFunc.Debugf("requesting CSR for CA %s", input.Subject.CommonName)
+		lFunc.Debugf("requesting CSR for CA %s", input.Subject.CommonName)
+		var exists bool
+		exists, parentCA, err = svc.caStorage.SelectExistsByID(ctx, input.ParentID)
+		if err != nil {
+			lFunc.Errorf("could not check if parent CA %s exists: %s", input.ParentID, err)
+			return nil, err
+		}
 
-	exists, parentCA, err := svc.caStorage.SelectExistsByID(ctx, input.ParentID)
-	if err != nil {
-		lFunc.Errorf("could not check if parent CA %s exists: %s", input.ParentID, err)
-		return nil, err
-	}
+		if !exists {
+			lFunc.Errorf("parent CA %s does not exist", input.ParentID)
+			return nil, fmt.Errorf("parent CA %s does not exist", input.ParentID)
+		}
 
-	if !exists {
-		lFunc.Errorf("parent CA %s does not exist", input.ParentID)
-		return nil, fmt.Errorf("parent CA %s does not exist", input.ParentID)
-	}
+		lFunc.Debugf("parent CA %s exists", input.ParentID)
 
-	lFunc.Debugf("parent CA %s exists", input.ParentID)
+		if parentCA.Certificate.Type != models.CertificateTypeExternal {
+			lFunc.Errorf("cannot request a CSR for a managed CA")
+			return nil, fmt.Errorf("cannot request a CSR for a managed CA")
 
-	if parentCA.Certificate.Type != models.CertificateTypeExternal {
-		lFunc.Errorf("cannot request a CSR for a managed CA")
-		return nil, fmt.Errorf("cannot request a CSR for a managed CA")
+		}
+
 	}
 
 	caID := input.ID
@@ -538,7 +535,7 @@ func (svc *CAServiceBackend) RequestCACSR(ctx context.Context, input services.Re
 		caID = goid.NewV4UUID().String()
 	}
 
-	exists, _, err = svc.caCertificateRequestStorage.SelectExistsByID(ctx, caID)
+	exists, _, err := svc.caCertificateRequestStorage.SelectExistsByID(ctx, caID)
 	if err != nil {
 		lFunc.Errorf("could not check if CA %s exists: %s", caID, err)
 		return nil, err
@@ -555,7 +552,6 @@ func (svc *CAServiceBackend) RequestCACSR(ctx context.Context, input services.Re
 	}
 
 	issuedCSR, err := svc.issueCACSR(ctx, services.IssueCACSRInput{
-		ParentCA:    parentCA,
 		KeyMetadata: input.KeyMetadata,
 		Subject:     input.Subject,
 		CAType:      models.CertificateTypeRequested,
@@ -568,11 +564,16 @@ func (svc *CAServiceBackend) RequestCACSR(ctx context.Context, input services.Re
 		return nil, err
 	}
 
-	caLevel := parentCA.Level + 1
-	issuerCAMeta := models.IssuerCAMetadata{
-		SN:    parentCA.Certificate.SerialNumber,
-		ID:    parentCA.ID,
-		Level: parentCA.Level,
+	caLevel := 0
+	issuerCAMeta := models.IssuerCAMetadata{}
+
+	if parentCA != nil {
+		caLevel = parentCA.Level + 1
+		issuerCAMeta = models.IssuerCAMetadata{
+			SN:    parentCA.Certificate.SerialNumber,
+			ID:    parentCA.ID,
+			Level: parentCA.Level,
+		}
 	}
 
 	caCSRModel := models.CACertificateRequest{
