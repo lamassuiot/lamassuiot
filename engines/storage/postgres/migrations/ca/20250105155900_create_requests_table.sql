@@ -24,6 +24,7 @@ CREATE TABLE ca_certificate_requests (
 	key_meta_bits int8 NULL,
 	key_meta_strength text NULL,
 	status text NULL,
+	fingerprint text NULL,
 	csr text NULL,
 	CONSTRAINT certificate_requests_pkey PRIMARY KEY (id)
 );

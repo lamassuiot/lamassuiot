@@ -43,6 +43,7 @@ type CACertificateRequestRepo interface {
 	Insert(ctx context.Context, caCertificateRequest *models.CACertificateRequest) (*models.CACertificateRequest, error)
 	SelectExistsByID(ctx context.Context, id string) (bool, *models.CACertificateRequest, error)
 	SelectAll(ctx context.Context, req StorageListRequest[models.CACertificateRequest]) (string, error)
+	SelectByFingerprint(ctx context.Context, fingerprint string, req StorageListRequest[models.CACertificateRequest]) (string, error)
 	Update(ctx context.Context, caCertificate *models.CACertificateRequest) (*models.CACertificateRequest, error)
 	Delete(ctx context.Context, caID string) error
 }

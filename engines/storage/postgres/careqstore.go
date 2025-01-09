@@ -47,3 +47,9 @@ func (db *PostgresCACertificateRequestStore) Delete(ctx context.Context, reqID s
 func (db *PostgresCACertificateRequestStore) SelectAll(ctx context.Context, req storage.StorageListRequest[models.CACertificateRequest]) (string, error) {
 	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{}, req.ExhaustiveRun, req.ApplyFunc)
 }
+
+func (db *PostgresCACertificateRequestStore) SelectByFingerprint(ctx context.Context, fingerprint string, req storage.StorageListRequest[models.CACertificateRequest]) (string, error) {
+	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{
+		{query: "fingerprint = ?", additionalWhere: []any{fingerprint}},
+	}, req.ExhaustiveRun, req.ApplyFunc)
+}

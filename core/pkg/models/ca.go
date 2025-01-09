@@ -88,6 +88,7 @@ type CACertificateRequest struct {
 	EngineID         string                   `json:"engine_id"`
 	KeyMetadata      KeyStrengthMetadata      `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_meta_"`
 	Status           CertificateRequestStatus `json:"status"`
+	Fingerprint      string                   `json:"fingerprint"`
 	CSR              X509CertificateRequest   `json:"csr"`
 }
 

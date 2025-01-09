@@ -361,27 +361,62 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	}
 
 	var caReq *models.CACertificateRequest
+
 	if input.CAType == models.CertificateTypeRequested {
 		lFunc.Debugf("importing CA %s - %s  from CSR. CA type: %s", helpers.SerialNumberToString(input.CACertificate.SerialNumber), input.CACertificate.Subject.CommonName, input.CAType)
 		if input.CARequestID == "" {
-			lFunc.Errorf("CA Request ID is required for requested CA")
-			return nil, fmt.Errorf("CA Request ID is required for requested CA")
-		}
-		var exists bool
-		exists, caReq, err = svc.caCertificateRequestStorage.SelectExistsByID(ctx, input.CARequestID)
-		if err != nil {
-			lFunc.Errorf("could not get CA Request %s: %s", input.CARequestID, err)
-			return nil, fmt.Errorf("could not get CA Request: %w", err)
-		}
+			fingerprint := chelpers.ComputePublicKeyFingerprint((*x509.Certificate)(input.CACertificate))
 
-		if !exists {
-			lFunc.Errorf("CA Request %s not found", input.CARequestID)
-			return nil, fmt.Errorf("CA Request not found")
-		}
+			queryParams := resources.QueryParameters{
+				Filters: append([]resources.FilterOption{}, resources.FilterOption{
+					Field:           "status",
+					FilterOperation: resources.StringEqual,
+					Value:           string(models.StatusRequestPending),
+				},
+					resources.FilterOption{
+						Field:           "subject_common_name",
+						FilterOperation: resources.StringEqual,
+						Value:           caCert.Subject.CommonName,
+					}),
+			}
 
-		if caReq.Status != models.StatusRequestPending {
-			lFunc.Errorf("CA Request %s is not pending", input.CARequestID)
-			return nil, fmt.Errorf("CA Request is not pending")
+			reqs := []models.CACertificateRequest{}
+			_, err = svc.caCertificateRequestStorage.SelectByFingerprint(ctx, fingerprint, storage.StorageListRequest[models.CACertificateRequest]{
+				QueryParams: &queryParams,
+				ApplyFunc: func(req models.CACertificateRequest) {
+					reqs = append(reqs, req)
+				},
+			})
+			if err != nil {
+				lFunc.Errorf("could not get CA Request by fingerprint %s: %s", fingerprint, err)
+				return nil, fmt.Errorf("could not get CA Request by fingerprint: %w", err)
+			}
+
+			if len(reqs) == 0 {
+				lFunc.Errorf("No pending CA Request found for fingerprint %s", fingerprint)
+				return nil, fmt.Errorf("no pending CA Request can be found")
+			}
+
+			caReq = &reqs[0]
+
+		} else {
+
+			var exists bool
+			exists, caReq, err = svc.caCertificateRequestStorage.SelectExistsByID(ctx, input.CARequestID)
+			if err != nil {
+				lFunc.Errorf("could not get CA Request %s: %s", input.CARequestID, err)
+				return nil, fmt.Errorf("could not get CA Request: %w", err)
+			}
+
+			if !exists {
+				lFunc.Errorf("CA Request %s not found", input.CARequestID)
+				return nil, fmt.Errorf("CA Request not found")
+			}
+
+			if caReq.Status != models.StatusRequestPending {
+				lFunc.Errorf("CA Request %s is not pending", input.CARequestID)
+				return nil, fmt.Errorf("CA Request is not pending")
+			}
 		}
 
 		caCSR := &caReq.CSR
@@ -587,6 +622,7 @@ func (svc *CAServiceBackend) RequestCACSR(ctx context.Context, input services.Re
 		Status:           models.StatusRequestPending,
 		EngineID:         engineID,
 		KeyMetadata:      helpers.KeyStrengthBuilder(input.KeyMetadata.Type, input.KeyMetadata.Bits),
+		Fingerprint:      chelpers.ComputePublicKeyFingerprint(issuedCSR.CSR),
 		CSR:              models.X509CertificateRequest(*issuedCSR.CSR),
 	}
 

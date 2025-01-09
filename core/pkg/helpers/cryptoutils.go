@@ -5,6 +5,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/sha512"
 	"crypto/tls"
 	"crypto/x509"
@@ -294,4 +295,23 @@ func EqualPublicKeys(pubKey1, pubKey2 any) bool {
 	}
 
 	return false
+}
+
+func ComputePublicKeyFingerprint[T *x509.Certificate | *x509.CertificateRequest](cert T) string {
+	switch v := any(cert).(type) {
+	case *x509.Certificate:
+		return PublicKeyFingerprint(v.PublicKey)
+	case *x509.CertificateRequest:
+		return PublicKeyFingerprint(v.PublicKey)
+	default:
+		return ""
+	}
+}
+
+func PublicKeyFingerprint(pubKey any) string {
+	pk, err := x509.MarshalPKIXPublicKey(pubKey)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%x", sha256.Sum256(pk))
 }
