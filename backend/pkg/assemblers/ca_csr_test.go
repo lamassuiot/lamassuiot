@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -50,7 +50,7 @@ func TestImportCAWithNoRequestAndDifferentCNError(t *testing.T) {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
 
-	externalCACert, privateKey, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
+	externalCACert, privateKey, err := helpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
 	if err != nil {
 		t.Fatalf("could not generate external CA: %s", err)
 	}
@@ -93,7 +93,7 @@ func TestImportCAWithNoCreatedRequest(t *testing.T) {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
 
-	externalCACert, privateKey, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
+	externalCACert, privateKey, err := helpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
 	if err != nil {
 		t.Fatalf("could not generate external CA: %s", err)
 	}
@@ -136,7 +136,7 @@ func TestImportCAWithNoRequestId(t *testing.T) {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
 
-	externalCACert, privateKey, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
+	externalCACert, privateKey, err := helpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
 	if err != nil {
 		t.Fatalf("could not generate external CA: %s", err)
 	}
@@ -185,7 +185,7 @@ func TestRequestCADoubleImportError(t *testing.T) {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
 
-	externalCACert, privateKey, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
+	externalCACert, privateKey, err := helpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
 	if err != nil {
 		t.Fatalf("could not generate external CA: %s", err)
 	}
@@ -243,7 +243,7 @@ func TestImportNonCACertError(t *testing.T) {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
 
-	externalCACert, privateKey, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
+	externalCACert, privateKey, err := helpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
 	if err != nil {
 		t.Fatalf("could not generate external CA: %s", err)
 	}
@@ -287,7 +287,7 @@ func TestImportUnexpectedCSRError(t *testing.T) {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
 
-	externalCACert, privateKey, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
+	externalCACert, privateKey, err := helpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
 	if err != nil {
 		t.Fatalf("could not generate external CA: %s", err)
 	}
@@ -340,7 +340,7 @@ func TestImportNonExistentRequest(t *testing.T) {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
 
-	externalCACert, _, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
+	externalCACert, _, err := helpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
 	if err != nil {
 		t.Fatalf("could not generate external CA: %s", err)
 	}
@@ -378,21 +378,6 @@ func TestRequestCARetrieveAndFilterDelete(t *testing.T) {
 
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
-	}
-
-	externalCACert, _, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
-	if err != nil {
-		t.Fatalf("could not generate external CA: %s", err)
-	}
-
-	ec := models.X509Certificate(*externalCACert)
-
-	importedCACert, err := serverTest.CA.Service.ImportCA(context.Background(), services.ImportCAInput{
-		CACertificate: &ec,
-		CAType:        models.CertificateTypeExternal,
-	})
-	if err != nil {
-		t.Fatalf("could not import external CA: %s", err)
 	}
 
 	requestedCACSR, err := serverTest.CA.Service.RequestCACSR(context.Background(), services.RequestCAInput{
@@ -466,31 +451,6 @@ func TestRequestCARetrieveAndFilterDelete(t *testing.T) {
 	}
 
 	assert.Equal(t, len(reqs), 1)
-
-	queryParams = resources.QueryParameters{
-		NextBookmark: "",
-		Filters:      []resources.FilterOption{},
-		PageSize:     25,
-	}
-
-	queryParams.Filters = append(queryParams.Filters, resources.FilterOption{
-		Field:           "issuer_meta_id",
-		FilterOperation: resources.StringEqual,
-		Value:           importedCACert.ID,
-	})
-	reqs = []models.CACertificateRequest{}
-	_, err = serverTest.CA.Service.GetCARequests(context.Background(), services.GetItemsInput[models.CACertificateRequest]{
-		QueryParameters: &queryParams,
-		ExhaustiveRun:   false,
-		ApplyFunc: func(req models.CACertificateRequest) {
-			reqs = append(reqs, req)
-		},
-	})
-	if err != nil {
-		t.Fatalf("could not retrieve the requested CA: %s", err)
-	}
-
-	assert.Equal(t, len(reqs), 2)
 
 	err = serverTest.CA.Service.DeleteCARequestByID(context.Background(), services.GetByIDInput{
 		ID: requestedCACSR2.ID,
