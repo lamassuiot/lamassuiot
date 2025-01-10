@@ -114,7 +114,6 @@ func (cli *httpCAClient) RequestCACSR(ctx context.Context, input services.Reques
 		Subject:     input.Subject,
 		KeyMetadata: input.KeyMetadata,
 		EngineID:    input.EngineID,
-		ParentID:    input.ParentID,
 		Metadata:    input.Metadata,
 	}, map[int][]error{
 		400: {
