@@ -196,7 +196,6 @@ func (r *caHttpRoutes) RequestCA(ctx *gin.Context) {
 
 	caRequest, err := r.svc.RequestCACSR(ctx, services.RequestCAInput{
 		ID:          requestBody.ID,
-		ParentID:    requestBody.ParentID,
 		KeyMetadata: requestBody.KeyMetadata,
 		Subject:     requestBody.Subject,
 		EngineID:    requestBody.EngineID,

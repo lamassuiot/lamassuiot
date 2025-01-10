@@ -78,18 +78,16 @@ const (
 )
 
 type CACertificateRequest struct {
-	ID               string                   `json:"id"`
-	KeyId            string                   `json:"key_id"`
-	Metadata         map[string]interface{}   `json:"metadata" gorm:"serializer:json"`
-	IssuerCAMetadata IssuerCAMetadata         `json:"issuer_metadata" gorm:"embedded;embeddedPrefix:issuer_meta_"`
-	Subject          Subject                  `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
-	CreationTS       time.Time                `json:"creation_ts"`
-	Level            int                      `json:"level"`
-	EngineID         string                   `json:"engine_id"`
-	KeyMetadata      KeyStrengthMetadata      `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_meta_"`
-	Status           CertificateRequestStatus `json:"status"`
-	Fingerprint      string                   `json:"fingerprint"`
-	CSR              X509CertificateRequest   `json:"csr"`
+	ID          string                   `json:"id"`
+	KeyId       string                   `json:"key_id"`
+	Metadata    map[string]interface{}   `json:"metadata" gorm:"serializer:json"`
+	Subject     Subject                  `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
+	CreationTS  time.Time                `json:"creation_ts"`
+	EngineID    string                   `json:"engine_id"`
+	KeyMetadata KeyStrengthMetadata      `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_meta_"`
+	Status      CertificateRequestStatus `json:"status"`
+	Fingerprint string                   `json:"fingerprint"`
+	CSR         X509CertificateRequest   `json:"csr"`
 }
 
 type CAStats struct {

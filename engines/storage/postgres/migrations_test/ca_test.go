@@ -166,11 +166,6 @@ func MigrationTest_CA_20250105155900_create_requests_table(t *testing.T, logger 
 		KeyId:    "1111-2222-3333-4444",
 		EngineID: "filesystem-1",
 		Status:   models.StatusRequestPending,
-		IssuerCAMetadata: models.IssuerCAMetadata{
-			SN:    "ef-6d-47-f4-e5-bd-c8-e3-81-67-74-60-12-c1-0f-47",
-			ID:    "1111-2222-3333-4444",
-			Level: 0,
-		},
 		Subject: models.Subject{
 			CommonName:       "test",
 			Organization:     "test",

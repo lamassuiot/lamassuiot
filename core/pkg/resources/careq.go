@@ -42,7 +42,6 @@ type CreateCABody struct {
 
 type RequestCABody struct {
 	ID          string             `json:"id"`
-	ParentID    string             `json:"parent_id"`
 	Subject     models.Subject     `json:"subject"`
 	KeyMetadata models.KeyMetadata `json:"key_metadata"`
 	EngineID    string             `json:"engine_id"`

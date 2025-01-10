@@ -117,7 +117,6 @@ type CreateCAInput struct {
 
 type RequestCAInput struct {
 	ID          string
-	ParentID    string
 	KeyMetadata models.KeyMetadata `validate:"required"`
 	Subject     models.Subject     `validate:"required"`
 	EngineID    string

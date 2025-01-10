@@ -442,7 +442,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		}
 
 		engineID = caReq.EngineID
-		parentID = caReq.IssuerCAMetadata.ID
 		keyID = caReq.KeyId
 	}
 
@@ -539,32 +538,6 @@ func (svc *CAServiceBackend) RequestCACSR(ctx context.Context, input services.Re
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	var parentCA *models.CACertificate
-	if input.ParentID != "" {
-
-		lFunc.Debugf("requesting CSR for CA %s", input.Subject.CommonName)
-		var exists bool
-		exists, parentCA, err = svc.caStorage.SelectExistsByID(ctx, input.ParentID)
-		if err != nil {
-			lFunc.Errorf("could not check if parent CA %s exists: %s", input.ParentID, err)
-			return nil, err
-		}
-
-		if !exists {
-			lFunc.Errorf("parent CA %s does not exist", input.ParentID)
-			return nil, fmt.Errorf("parent CA %s does not exist", input.ParentID)
-		}
-
-		lFunc.Debugf("parent CA %s exists", input.ParentID)
-
-		if parentCA.Certificate.Type != models.CertificateTypeExternal {
-			lFunc.Errorf("cannot request a CSR for a managed CA")
-			return nil, fmt.Errorf("cannot request a CSR for a managed CA")
-
-		}
-
-	}
-
 	caID := input.ID
 	if caID == "" {
 		caID = goid.NewV4UUID().String()
@@ -599,31 +572,17 @@ func (svc *CAServiceBackend) RequestCACSR(ctx context.Context, input services.Re
 		return nil, err
 	}
 
-	caLevel := 0
-	issuerCAMeta := models.IssuerCAMetadata{}
-
-	if parentCA != nil {
-		caLevel = parentCA.Level + 1
-		issuerCAMeta = models.IssuerCAMetadata{
-			SN:    parentCA.Certificate.SerialNumber,
-			ID:    parentCA.ID,
-			Level: parentCA.Level,
-		}
-	}
-
 	caCSRModel := models.CACertificateRequest{
-		ID:               caID,
-		Metadata:         input.Metadata,
-		CreationTS:       time.Now(),
-		Level:            caLevel,
-		KeyId:            issuedCSR.KeyID,
-		IssuerCAMetadata: issuerCAMeta,
-		Subject:          input.Subject,
-		Status:           models.StatusRequestPending,
-		EngineID:         engineID,
-		KeyMetadata:      helpers.KeyStrengthBuilder(input.KeyMetadata.Type, input.KeyMetadata.Bits),
-		Fingerprint:      chelpers.ComputePublicKeyFingerprint(issuedCSR.CSR),
-		CSR:              models.X509CertificateRequest(*issuedCSR.CSR),
+		ID:          caID,
+		Metadata:    input.Metadata,
+		CreationTS:  time.Now(),
+		KeyId:       issuedCSR.KeyID,
+		Subject:     input.Subject,
+		Status:      models.StatusRequestPending,
+		EngineID:    engineID,
+		KeyMetadata: helpers.KeyStrengthBuilder(input.KeyMetadata.Type, input.KeyMetadata.Bits),
+		Fingerprint: chelpers.ComputePublicKeyFingerprint(issuedCSR.CSR),
+		CSR:         models.X509CertificateRequest(*issuedCSR.CSR),
 	}
 
 	lFunc.Debugf("insert CA Request %s in storage engine", caID)
