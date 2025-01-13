@@ -75,15 +75,15 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc AWSClo
 	}
 
 	var awsIoTCoreCACfg models.IoTAWSCAMetadata
-	hasKey, err := helpers.GetMetadataToStruct(ca.Metadata, models.AWSIoTMetadataKey(svc.GetConnectorID()), &awsIoTCoreCACfg)
+	hasKey, err := helpers.GetMetadataToStruct(ca.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &awsIoTCoreCACfg)
 	if err != nil {
-		err = fmt.Errorf("error while getting %s key: %s", models.AWSIoTMetadataKey(svc.GetConnectorID()), err)
+		err = fmt.Errorf("error while getting %s key: %s", AWSIoTMetadataKey(svc.GetConnectorID()), err)
 		logger.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, CA doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
+		logrus.Warnf("skipping event %s, CA doesn't have %s key", event.Type(), AWSIoTMetadataKey(svc.GetConnectorID()))
 		return nil
 	}
 
@@ -116,15 +116,15 @@ func updateCertificateStatusHandler(ctx context.Context, event *event.Event, svc
 	cert = &updatedCert.Updated
 
 	var certIoTCoreMeta models.IoTAWSCertificateMetadata
-	hasKey, err := helpers.GetMetadataToStruct(cert.Metadata, models.AWSIoTMetadataKey(svc.GetConnectorID()), &certIoTCoreMeta)
+	hasKey, err := helpers.GetMetadataToStruct(cert.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &certIoTCoreMeta)
 	if err != nil {
-		err = fmt.Errorf("error while getting %s key: %s", models.AWSIoTMetadataKey(svc.GetConnectorID()), err)
+		err = fmt.Errorf("error while getting %s key: %s", AWSIoTMetadataKey(svc.GetConnectorID()), err)
 		logger.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, CA doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
+		logrus.Warnf("skipping event %s, CA doesn't have %s key", event.Type(), AWSIoTMetadataKey(svc.GetConnectorID()))
 		return nil
 	}
 
@@ -166,7 +166,7 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCl
 	}
 
 	var dmsAwsAutomationConfig models.IotAWSDMSMetadata
-	hasKey, err := helpers.GetMetadataToStruct(dms.Metadata, models.AWSIoTMetadataKey(svc.GetConnectorID()), &dmsAwsAutomationConfig)
+	hasKey, err := helpers.GetMetadataToStruct(dms.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &dmsAwsAutomationConfig)
 	if err != nil {
 		err = fmt.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
 		logger.Error(err)
@@ -174,7 +174,7 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCl
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
+		logrus.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), AWSIoTMetadataKey(svc.GetConnectorID()))
 		return nil
 	}
 
@@ -285,15 +285,15 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 	}
 
 	var dmsAWSConf models.IotAWSDMSMetadata
-	hasKey, err = helpers.GetMetadataToStruct(dms.Metadata, models.AWSIoTMetadataKey(svc.GetConnectorID()), &dmsAWSConf)
+	hasKey, err = helpers.GetMetadataToStruct(dms.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &dmsAWSConf)
 	if err != nil {
-		err = fmt.Errorf("could not decode metadata with key %s: %s", models.AWSIoTMetadataKey(svc.GetConnectorID()), err)
+		err = fmt.Errorf("could not decode metadata with key %s: %s", AWSIoTMetadataKey(svc.GetConnectorID()), err)
 		logger.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
+		logrus.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), AWSIoTMetadataKey(svc.GetConnectorID()))
 		return nil
 	}
 
@@ -325,15 +325,15 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc AW
 
 	device := deviceUpdate.Updated
 	var deviceMetaAWS models.DeviceAWSMetadata
-	hasKey, err := helpers.GetMetadataToStruct(device.Metadata, models.AWSIoTMetadataKey(svc.GetConnectorID()), &deviceMetaAWS)
+	hasKey, err := helpers.GetMetadataToStruct(device.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &deviceMetaAWS)
 	if err != nil {
-		err = fmt.Errorf("could not decode metadata with key %s: %s", models.AWSIoTMetadataKey(svc.GetConnectorID()), err)
+		err = fmt.Errorf("could not decode metadata with key %s: %s", AWSIoTMetadataKey(svc.GetConnectorID()), err)
 		logger.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, Device doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
+		logrus.Warnf("skipping event %s, Device doesn't have %s key", event.Type(), AWSIoTMetadataKey(svc.GetConnectorID()))
 		return nil
 	}
 
@@ -347,15 +347,15 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc AW
 	}
 
 	var dmsAWSConf models.IotAWSDMSMetadata
-	hasKey, err = helpers.GetMetadataToStruct(dms.Metadata, models.AWSIoTMetadataKey(svc.GetConnectorID()), &dmsAWSConf)
+	hasKey, err = helpers.GetMetadataToStruct(dms.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &dmsAWSConf)
 	if err != nil {
-		err = fmt.Errorf("could not decode metadata with key %s: %s", models.AWSIoTMetadataKey(svc.GetConnectorID()), err)
+		err = fmt.Errorf("could not decode metadata with key %s: %s", AWSIoTMetadataKey(svc.GetConnectorID()), err)
 		logger.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
+		logrus.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), AWSIoTMetadataKey(svc.GetConnectorID()))
 		return nil
 	}
 
@@ -385,7 +385,7 @@ func bindDeviceIdentityHandler(ctx context.Context, event *event.Event, svc AWSC
 	dms := bindEvent.DMS
 
 	var dmsAwsAutomationConfig models.IotAWSDMSMetadata
-	hasKey, err := helpers.GetMetadataToStruct(dms.Metadata, models.AWSIoTMetadataKey(svc.GetConnectorID()), &dmsAwsAutomationConfig)
+	hasKey, err := helpers.GetMetadataToStruct(dms.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &dmsAwsAutomationConfig)
 	if err != nil {
 		err = fmt.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
 		logger.Error(err)
@@ -393,7 +393,7 @@ func bindDeviceIdentityHandler(ctx context.Context, event *event.Event, svc AWSC
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), models.AWSIoTMetadataKey(svc.GetConnectorID()))
+		logrus.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), AWSIoTMetadataKey(svc.GetConnectorID()))
 		return nil
 	}
 

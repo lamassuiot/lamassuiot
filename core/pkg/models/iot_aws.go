@@ -1,7 +1,6 @@
 package models
 
 import (
-	"fmt"
 	"time"
 )
 
@@ -34,10 +33,6 @@ type DigitalTwinRemediationActionState struct {
 type LamassuConfiguration struct {
 	URL   string `json:"url"`
 	DMSID string `json:"dms_id"`
-}
-
-func AWSIoTMetadataKey(connectorID string) string {
-	return fmt.Sprintf("lamassu.io/iot/%s", connectorID)
 }
 
 type IoTAWSCAMetadataRegistrationStatus string

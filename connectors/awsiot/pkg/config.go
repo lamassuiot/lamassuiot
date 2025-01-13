@@ -30,4 +30,10 @@ type ConnectorServiceConfig struct {
 
 var ConnectorServiceConfigDefaults = ConnectorServiceConfig{}
 
-func AWSIoTSource(id string) string { return fmt.Sprintf("lrn://service/lamassuiot-awsiot/%s", id) }
+func AWSIoTSource(id string) string {
+	return fmt.Sprintf("lrn://service/lamassuiot-awsiot/%s", id)
+}
+
+func AWSIoTMetadataKey(connectorID string) string {
+	return fmt.Sprintf("lamassu.io/iot/%s", connectorID)
+}
