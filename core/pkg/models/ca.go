@@ -8,6 +8,7 @@ type CertificateType string
 
 const (
 	CertificateTypeManaged         CertificateType = "MANAGED"
+	CertificateTypeRequested       CertificateType = "REQUESTED"
 	CertificateTypeImportedWithKey CertificateType = "IMPORTED"
 	CertificateTypeExternal        CertificateType = "EXTERNAL"
 )
@@ -22,9 +23,10 @@ var (
 type CertificateStatus string
 
 const (
-	StatusActive  CertificateStatus = "ACTIVE"
-	StatusExpired CertificateStatus = "EXPIRED"
-	StatusRevoked CertificateStatus = "REVOKED"
+	StatusActive   CertificateStatus = "ACTIVE"
+	StatusExpired  CertificateStatus = "EXPIRED"
+	StatusRevoked  CertificateStatus = "REVOKED"
+	StatusInactive CertificateStatus = "INACTIVE"
 )
 
 type Certificate struct {
@@ -42,6 +44,7 @@ type Certificate struct {
 	RevocationReason    RevocationReason       `json:"revocation_reason" gorm:"serializer:text"`
 	Type                CertificateType        `json:"type"`
 	EngineID            string                 `json:"engine_id"`
+	IsCA                bool                   `json:"is_ca"`
 }
 
 type Validity struct {
@@ -64,6 +67,27 @@ type CACertificate struct {
 	Validity                Validity               `json:"validity" gorm:"embedded;embeddedPrefix:validity_"`
 	CreationTS              time.Time              `json:"creation_ts"`
 	Level                   int                    `json:"level"`
+}
+
+type CertificateRequestStatus string
+
+const (
+	StatusRequestIssued  CertificateRequestStatus = "ISSUED"
+	StatusRequestRevoked CertificateRequestStatus = "REVOKED"
+	StatusRequestPending CertificateRequestStatus = "PENDING"
+)
+
+type CACertificateRequest struct {
+	ID          string                   `json:"id"`
+	KeyId       string                   `json:"key_id"`
+	Metadata    map[string]interface{}   `json:"metadata" gorm:"serializer:json"`
+	Subject     Subject                  `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
+	CreationTS  time.Time                `json:"creation_ts"`
+	EngineID    string                   `json:"engine_id"`
+	KeyMetadata KeyStrengthMetadata      `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_meta_"`
+	Status      CertificateRequestStatus `json:"status"`
+	Fingerprint string                   `json:"fingerprint"`
+	CSR         X509CertificateRequest   `json:"csr"`
 }
 
 type CAStats struct {

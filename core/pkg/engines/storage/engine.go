@@ -6,18 +6,20 @@ import (
 )
 
 type CommonStorageEngine struct {
-	CA            CACertificatesRepo
-	Cert          CertificatesRepo
-	Device        DeviceManagerRepo
-	DMS           DMSRepo
-	Events        EventRepository
-	Subscriptions SubscriptionsRepository
+	CA                   CACertificatesRepo
+	CACertificateRequest CACertificateRequestRepo
+	Cert                 CertificatesRepo
+	Device               DeviceManagerRepo
+	DMS                  DMSRepo
+	Events               EventRepository
+	Subscriptions        SubscriptionsRepository
 }
 
 type StorageEngine interface {
 	GetProvider() config.StorageProvider
 	GetCAStorage() (CACertificatesRepo, error)
 	GetCertstorage() (CertificatesRepo, error)
+	GetCACertificateRequestStorage() (CACertificateRequestRepo, error)
 	GetDeviceStorage() (DeviceManagerRepo, error)
 	GetDMSStorage() (DMSRepo, error)
 	GetEnventsStorage() (EventRepository, error)

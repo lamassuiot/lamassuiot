@@ -20,6 +20,11 @@ func KeyStrengthMetadataFromCertificate(cert *x509.Certificate) models.KeyStreng
 		keyBits = cert.PublicKey.(*ecdsa.PublicKey).Params().BitSize
 	}
 
+	return KeyStrengthBuilder(keyType, keyBits)
+
+}
+
+func KeyStrengthBuilder(keyType models.KeyType, keyBits int) models.KeyStrengthMetadata {
 	var keyStrength models.KeyStrength = models.KeyStrengthLow
 	switch keyType {
 	case models.KeyType(x509.RSA):

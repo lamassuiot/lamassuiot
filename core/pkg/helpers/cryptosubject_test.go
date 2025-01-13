@@ -278,3 +278,187 @@ func TestPkixNameToString(t *testing.T) {
 		t.Errorf("Expected %v, but got %v", expected8, result8)
 	}
 }
+func TestPkixNameEqual(t *testing.T) {
+	tests := []struct {
+		name     string
+		a        pkix.Name
+		b        pkix.Name
+		expected bool
+	}{
+		{
+			name:     "both empty",
+			a:        pkix.Name{},
+			b:        pkix.Name{},
+			expected: true,
+		},
+		{
+			name: "different CommonName",
+			a: pkix.Name{
+				CommonName: "example.com",
+			},
+			b: pkix.Name{
+				CommonName: "example.org",
+			},
+			expected: false,
+		},
+		{
+			name: "same CommonName",
+			a: pkix.Name{
+				CommonName: "example.com",
+			},
+			b: pkix.Name{
+				CommonName: "example.com",
+			},
+			expected: true,
+		},
+		{
+			name: "different Country",
+			a: pkix.Name{
+				Country: []string{"US"},
+			},
+			b: pkix.Name{
+				Country: []string{"CA"},
+			},
+			expected: false,
+		},
+		{
+			name: "same Country",
+			a: pkix.Name{
+				Country: []string{"US"},
+			},
+			b: pkix.Name{
+				Country: []string{"US"},
+			},
+			expected: true,
+		},
+		{
+			name: "different Locality",
+			a: pkix.Name{
+				Locality: []string{"San Francisco"},
+			},
+			b: pkix.Name{
+				Locality: []string{"Los Angeles"},
+			},
+			expected: false,
+		},
+		{
+			name: "same Locality",
+			a: pkix.Name{
+				Locality: []string{"San Francisco"},
+			},
+			b: pkix.Name{
+				Locality: []string{"San Francisco"},
+			},
+			expected: true,
+		},
+		{
+			name: "different Organization",
+			a: pkix.Name{
+				Organization: []string{"Acme Corp"},
+			},
+			b: pkix.Name{
+				Organization: []string{"Globex Corp"},
+			},
+			expected: false,
+		},
+		{
+			name: "same Organization",
+			a: pkix.Name{
+				Organization: []string{"Acme Corp"},
+			},
+			b: pkix.Name{
+				Organization: []string{"Acme Corp"},
+			},
+			expected: true,
+		},
+		{
+			name: "different OrganizationalUnit",
+			a: pkix.Name{
+				OrganizationalUnit: []string{"IT"},
+			},
+			b: pkix.Name{
+				OrganizationalUnit: []string{"HR"},
+			},
+			expected: false,
+		},
+		{
+			name: "same OrganizationalUnit",
+			a: pkix.Name{
+				OrganizationalUnit: []string{"IT"},
+			},
+			b: pkix.Name{
+				OrganizationalUnit: []string{"IT"},
+			},
+			expected: true,
+		},
+		{
+			name: "different Province",
+			a: pkix.Name{
+				Province: []string{"California"},
+			},
+			b: pkix.Name{
+				Province: []string{"Nevada"},
+			},
+			expected: false,
+		},
+		{
+			name: "same Province",
+			a: pkix.Name{
+				Province: []string{"California"},
+			},
+			b: pkix.Name{
+				Province: []string{"California"},
+			},
+			expected: true,
+		},
+		{
+			name: "all fields same",
+			a: pkix.Name{
+				CommonName:         "example.com",
+				Country:            []string{"US"},
+				Locality:           []string{"San Francisco"},
+				Organization:       []string{"Acme Corp"},
+				OrganizationalUnit: []string{"IT"},
+				Province:           []string{"California"},
+			},
+			b: pkix.Name{
+				CommonName:         "example.com",
+				Country:            []string{"US"},
+				Locality:           []string{"San Francisco"},
+				Organization:       []string{"Acme Corp"},
+				OrganizationalUnit: []string{"IT"},
+				Province:           []string{"California"},
+			},
+			expected: true,
+		},
+		{
+			name: "all fields different",
+			a: pkix.Name{
+				CommonName:         "example.com",
+				Country:            []string{"US"},
+				Locality:           []string{"San Francisco"},
+				Organization:       []string{"Acme Corp"},
+				OrganizationalUnit: []string{"IT"},
+				Province:           []string{"California"},
+			},
+			b: pkix.Name{
+				CommonName:         "example.org",
+				Country:            []string{"CA"},
+				Locality:           []string{"Los Angeles"},
+				Organization:       []string{"Globex Corp"},
+				OrganizationalUnit: []string{"HR"},
+				Province:           []string{"Nevada"},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := PkixNameEqual(tt.a, tt.b)
+			if result != tt.expected {
+				t.Errorf("Expected %v, but got %v", tt.expected, result)
+			}
+		})
+	}
+}

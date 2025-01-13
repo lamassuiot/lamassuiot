@@ -62,6 +62,17 @@ func (c *X509Certificate) UnmarshalJSON(data []byte) error {
 // --------------------------------------------
 type X509CertificateRequest x509.CertificateRequest
 
+func (c *X509CertificateRequest) String() string {
+	res, err := c.MarshalJSON()
+	if err != nil {
+		return ""
+	}
+
+	certString := strings.ReplaceAll(string(res), "\"", "")
+
+	return string(certString)
+}
+
 func (c *X509CertificateRequest) MarshalJSON() ([]byte, error) {
 	data := []byte{}
 
@@ -120,5 +131,31 @@ func (c *X509Certificate) Scan(value interface{}) error {
 
 // Value return json value, implement driver.Valuer interface
 func (c X509Certificate) Value() (driver.Value, error) {
+	return c.String(), nil
+}
+
+// --------------------------------------------
+func (X509CertificateRequest) GormDataType() string {
+	return "text"
+}
+
+func (c *X509CertificateRequest) Scan(value interface{}) error {
+	crtString, ok := value.(string)
+	if !ok {
+		return errors.New(fmt.Sprint("Failed to unmarshal JSONB value:", value))
+	}
+
+	crtBytes := []byte(fmt.Sprintf("\"%s\"", crtString))
+
+	err := json.Unmarshal(crtBytes, &c)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Value return json value, implement driver.Valuer interface
+func (c X509CertificateRequest) Value() (driver.Value, error) {
 	return c.String(), nil
 }

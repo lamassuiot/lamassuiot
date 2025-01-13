@@ -33,6 +33,11 @@ func ParseCertificate(cert string) (*x509.Certificate, error) {
 	return x509.ParseCertificate(certDERBlock.Bytes)
 }
 
+func ParseCertificateRequest(cert string) (*x509.CertificateRequest, error) {
+	certDERBlock, _ := pem.Decode([]byte(cert))
+	return x509.ParseCertificateRequest(certDERBlock.Bytes)
+}
+
 func ReadPrivateKeyFromFile(filePath string) (interface{}, error) {
 	keyFileBytes, err := os.ReadFile(filePath)
 	if err != nil {

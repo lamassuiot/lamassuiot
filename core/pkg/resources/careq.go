@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	cmodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
 
 var CAFiltrableFields = map[string]FilterFieldType{
@@ -21,21 +20,39 @@ var CAFiltrableFields = map[string]FilterFieldType{
 	"subject.common_name":  StringFilterFieldType,
 }
 
+var CARequestFiltrableFields = map[string]FilterFieldType{
+	"id":                  StringFilterFieldType,
+	"level":               NumberFilterFieldType,
+	"status":              EnumFilterFieldType,
+	"engine_id":           StringFilterFieldType,
+	"subject_common_name": StringFilterFieldType,
+	"issuer_metadata_id":  StringFilterFieldType,
+}
+
 type CreateCABody struct {
-	ID                 string              `json:"id"`
-	ParentID           string              `json:"parent_id"`
-	Subject            cmodels.Subject     `json:"subject"`
-	KeyMetadata        cmodels.KeyMetadata `json:"key_metadata"`
-	CAExpiration       models.Validity     `json:"ca_expiration"`
-	IssuanceExpiration models.Validity     `json:"issuance_expiration"`
-	EngineID           string              `json:"engine_id"`
-	Metadata           map[string]any      `json:"metadata"`
+	ID                 string             `json:"id"`
+	ParentID           string             `json:"parent_id"`
+	Subject            models.Subject     `json:"subject"`
+	KeyMetadata        models.KeyMetadata `json:"key_metadata"`
+	CAExpiration       models.Validity    `json:"ca_expiration"`
+	IssuanceExpiration models.Validity    `json:"issuance_expiration"`
+	EngineID           string             `json:"engine_id"`
+	Metadata           map[string]any     `json:"metadata"`
+}
+
+type RequestCABody struct {
+	ID          string             `json:"id"`
+	Subject     models.Subject     `json:"subject"`
+	KeyMetadata models.KeyMetadata `json:"key_metadata"`
+	EngineID    string             `json:"engine_id"`
+	Metadata    map[string]any     `json:"metadata"`
 }
 
 type ImportCABody struct {
 	ID                 string                    `json:"id"`
 	EngineID           string                    `json:"engine_id"`
 	ParentID           string                    `json:"parent_id"`
+	CARequestID        string                    `json:"ca_request_id"`
 	CAPrivateKey       string                    `json:"private_key"` //b64 from PEM
 	CACertificate      *models.X509Certificate   `json:"ca"`
 	CAChain            []*models.X509Certificate `json:"ca_chain"`
@@ -53,7 +70,7 @@ type UpdateCAIssuanceExpirationBody struct {
 type SignCertificateBody struct {
 	SignVerbatim bool                           `json:"sign_verbatim"`
 	CertRequest  *models.X509CertificateRequest `json:"csr"`
-	Subject      *cmodels.Subject               `json:"subject"`
+	Subject      *models.Subject                `json:"subject"`
 }
 
 type SignatureSignBody struct {

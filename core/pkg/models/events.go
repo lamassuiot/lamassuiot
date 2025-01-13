@@ -22,6 +22,7 @@ type EventType string
 
 const (
 	EventCreateCAKey                   EventType = "ca.create"
+	EventRequestCAKey                  EventType = "ca.request"
 	EventImportCAKey                   EventType = "ca.import"
 	EventImportCACertificateKey        EventType = "ca.certificate.import"
 	EventUpdateCAStatusKey             EventType = "ca.status.update"

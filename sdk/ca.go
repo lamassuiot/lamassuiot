@@ -10,7 +10,6 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	cmodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
@@ -30,8 +29,13 @@ func NewHttpCAClient(client *http.Client, url string) services.CAService {
 	}
 }
 
-func (cli *httpCAClient) GetCryptoEngineProvider(ctx context.Context) ([]*cmodels.CryptoEngineProvider, error) {
-	engine, err := Get[[]*cmodels.CryptoEngineProvider](ctx, cli.httpClient, cli.baseUrl+"/v1/engines", nil, map[int][]error{})
+func (cli *httpCAClient) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
+	url := cli.baseUrl + "/v1/cas/requests"
+	return IterGet[models.CACertificateRequest, *resources.GetItemsResponse[models.CACertificateRequest]](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+}
+
+func (cli *httpCAClient) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
+	engine, err := Get[[]*models.CryptoEngineProvider](ctx, cli.httpClient, cli.baseUrl+"/v1/engines", nil, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
@@ -104,15 +108,41 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 	return response, nil
 }
 
+func (cli *httpCAClient) RequestCACSR(ctx context.Context, input services.RequestCAInput) (*models.CACertificateRequest, error) {
+	response, err := Post[*models.CACertificateRequest](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/request", resources.CreateCABody{
+		ID:          input.ID,
+		Subject:     input.Subject,
+		KeyMetadata: input.KeyMetadata,
+		EngineID:    input.EngineID,
+		Metadata:    input.Metadata,
+	}, map[int][]error{
+		400: {
+			errs.ErrCAIncompatibleValidity,
+			errs.ErrCAIssuanceExpiration,
+		},
+		409: {
+			errs.ErrCAAlreadyExists,
+		},
+		500: {
+			errs.ErrCAIncompatibleValidity,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
 	var privKey string
-	if input.KeyType == cmodels.KeyType(x509.RSA) {
+	if input.KeyType == models.KeyType(x509.RSA) {
 		rsaBytes := x509.MarshalPKCS1PrivateKey(input.CARSAKey)
 		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
 			Type:  "RSA PRIVATE KEY",
 			Bytes: rsaBytes,
 		}))
-	} else if input.KeyType == cmodels.KeyType(x509.ECDSA) {
+	} else if input.KeyType == models.KeyType(x509.ECDSA) {
 		ecBytes, err := x509.MarshalECPrivateKey(input.CAECKey)
 		if err != nil {
 			return nil, err
@@ -178,7 +208,7 @@ func (cli *httpCAClient) UpdateCAStatus(ctx context.Context, input services.Upda
 		NewStatus:        input.Status,
 		RevocationReason: input.RevocationReason,
 	}, map[int][]error{
-		400: []error{
+		400: {
 			errs.ErrCertificateStatusTransitionNotAllowed,
 		},
 	})
@@ -332,4 +362,22 @@ func (cli *httpCAClient) UpdateCertificateMetadata(ctx context.Context, input se
 		return nil, err
 	}
 	return response, nil
+}
+
+func (cli *httpCAClient) GetCARequestByID(ctx context.Context, input services.GetByIDInput) (*models.CACertificateRequest, error) {
+	response, err := Get[models.CACertificateRequest](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/requests/"+input.ID, nil, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+func (cli *httpCAClient) DeleteCARequestByID(ctx context.Context, input services.GetByIDInput) error {
+	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/cas/requests/"+input.ID, map[int][]error{})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
