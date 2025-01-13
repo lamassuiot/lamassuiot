@@ -331,12 +331,11 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 		}
 	}
 
-	aki := input.BindedIdentity.Certificate.Certificate.AuthorityKeyId
 	ca, err := svc.CaSDK.GetCAByID(context.Background(), services.GetCAByIDInput{
-		CAID: string(aki),
+		CAID: input.BindedIdentity.Certificate.IssuerCAMetadata.ID,
 	})
 	if err != nil {
-		lFunc.Errorf("could not get CA using AKI %s for device %s: Skipping: %s", string(aki), input.DeviceID, err)
+		lFunc.Errorf("could not get CA %s for device %s: Skipping: %s", input.BindedIdentity.Certificate.IssuerCAMetadata.ID, input.DeviceID, err)
 		return err
 	}
 
