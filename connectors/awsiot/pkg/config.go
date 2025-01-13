@@ -1,6 +1,8 @@
 package pkg
 
 import (
+	"fmt"
+
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
 )
@@ -27,3 +29,5 @@ type ConnectorServiceConfig struct {
 }
 
 var ConnectorServiceConfigDefaults = ConnectorServiceConfig{}
+
+func AWSIoTSource(id string) string { return fmt.Sprintf("lrn://service/lamassuiot-awsiot/%s", id) }

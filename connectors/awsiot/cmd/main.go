@@ -6,7 +6,6 @@ import (
 	lamassu "github.com/lamassuiot/lamassuiot/connectors/awsiot/v3/pkg"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
@@ -65,15 +64,15 @@ func main() {
 	}
 
 	dmsSDK := sdk.NewHttpDMSManagerClient(
-		sdk.HttpClientWithSourceHeaderInjector(dmsHttpCli, models.AWSIoTSource(conf.ConnectorID)),
+		sdk.HttpClientWithSourceHeaderInjector(dmsHttpCli, lamassu.AWSIoTSource(conf.ConnectorID)),
 		fmt.Sprintf("%s://%s:%d%s", conf.DMSManagerClient.Protocol, conf.DMSManagerClient.Hostname, conf.DMSManagerClient.Port, conf.DMSManagerClient.BasePath),
 	)
 	deviceSDK := sdk.NewHttpDeviceManagerClient(
-		sdk.HttpClientWithSourceHeaderInjector(deviceHttpCli, models.AWSIoTSource(conf.ConnectorID)),
+		sdk.HttpClientWithSourceHeaderInjector(deviceHttpCli, lamassu.AWSIoTSource(conf.ConnectorID)),
 		fmt.Sprintf("%s://%s:%d%s", conf.DevManagerClient.Protocol, conf.DevManagerClient.Hostname, conf.DevManagerClient.Port, conf.DevManagerClient.BasePath),
 	)
 	caSDK := sdk.NewHttpCAClient(
-		sdk.HttpClientWithSourceHeaderInjector(caHttpCli, models.AWSIoTSource(conf.ConnectorID)),
+		sdk.HttpClientWithSourceHeaderInjector(caHttpCli, lamassu.AWSIoTSource(conf.ConnectorID)),
 		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
 	)
 
