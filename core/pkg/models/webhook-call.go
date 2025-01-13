@@ -31,6 +31,6 @@ type WebhookCallHttpClientApiKey struct {
 }
 
 type WebhookCallHttpClientMutualTLS struct {
-	Cert string `json:"cert`
+	Cert string `json:"cert"`
 	Key  string `json:"key"`
 }

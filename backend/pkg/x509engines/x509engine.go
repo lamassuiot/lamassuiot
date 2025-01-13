@@ -133,6 +133,17 @@ func (engine X509Engine) CreateSubordinateCA(aki string, parentCACertificate *x5
 	return ski, certificate, nil
 }
 
+func (engine X509Engine) CreateCertificateRequest(keyMetadata cmodels.KeyMetadata, subject cmodels.Subject) (string, *x509.CertificateRequest, error) {
+	engine.logger.Debugf("starting CSR generation with key metadata [%v] and subject [%v]", keyMetadata, subject)
+	keyID, csrTemplate, _, err := engine.genCACSRTemplateAndPrivateKey(keyMetadata, subject)
+	if err != nil {
+		engine.logger.Errorf("could not generate CSR Template and Key: %s", err)
+		return "", nil, err
+	}
+
+	return keyID, csrTemplate, nil
+}
+
 func (engine X509Engine) SignCertificateRequest(caCertificate *x509.Certificate, csr *x509.CertificateRequest, expirationDate time.Time) (*x509.Certificate, error) {
 	engine.logger.Debugf("starting csr signing with CA [%s]", caCertificate.Subject.CommonName)
 	engine.logger.Debugf("csr cn is [%s]", csr.Subject.CommonName)
@@ -208,26 +219,17 @@ func (engine X509Engine) SignCertificateRequest(caCertificate *x509.Certificate,
 	return certificate, nil
 }
 
-func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata cmodels.KeyMetadata, subject cmodels.Subject, expirationTime time.Time, aki string) (string, *x509.Certificate, crypto.Signer, error) {
-	var err error
-	var signer crypto.Signer
-	var keyID string
-
-	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	sn, _ := rand.Int(rand.Reader, serialNumberLimit)
-
-	engine.logger.Debugf("generates serial number for root CA is [%s]", helpers.SerialNumberToString(sn))
-
+func (engine X509Engine) genPrivateKey(keyMetadata cmodels.KeyMetadata) (string, crypto.Signer, error) {
 	if cmodels.KeyType(keyMetadata.Type) == cmodels.KeyType(x509.RSA) {
 		engine.logger.Debugf("requesting cryptoengine instance for RSA key generation")
 
-		keyID, signer, err = engine.cryptoEngine.CreateRSAPrivateKey(keyMetadata.Bits)
+		keyID, signer, err := engine.cryptoEngine.CreateRSAPrivateKey(keyMetadata.Bits)
 		if err != nil {
 			engine.logger.Errorf("cryptoengine instance failed while generating RSA key: %s", err)
-			return "", nil, nil, err
+			return "", nil, err
 		}
-
 		engine.logger.Debugf("cryptoengine successfully generated RSA key")
+		return keyID, signer, nil
 	} else {
 		var curve elliptic.Curve
 		switch keyMetadata.Bits {
@@ -240,17 +242,54 @@ func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata cmodels.KeyMet
 		case 521:
 			curve = elliptic.P521()
 		default:
-			return "", nil, nil, errors.New("unsupported key size for ECDSA key")
+			return "", nil, errors.New("unsupported key size for ECDSA key")
 		}
 
 		engine.logger.Debugf("requesting cryptoengine instance for ECDSA key generation")
-		keyID, signer, err = engine.cryptoEngine.CreateECDSAPrivateKey(curve)
+		keyID, signer, err := engine.cryptoEngine.CreateECDSAPrivateKey(curve)
 		if err != nil {
 			engine.logger.Errorf("cryptoengine instance failed while generating ECDSA key: %s", err)
-			return "", nil, nil, err
+			return "", nil, err
 		}
 
 		engine.logger.Debugf("cryptoengine successfully generated ECDSA key")
+		return keyID, signer, nil
+	}
+}
+
+func (engine X509Engine) genCACSRTemplateAndPrivateKey(keyMetadata cmodels.KeyMetadata, subject cmodels.Subject) (string, *x509.CertificateRequest, crypto.Signer, error) {
+	var err error
+	var signer crypto.Signer
+	var keyID string
+
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	sn, _ := rand.Int(rand.Reader, serialNumberLimit)
+
+	engine.logger.Debugf("generates serial number for root CA is [%s]", helpers.SerialNumberToString(sn))
+
+	keyID, signer, err = engine.genPrivateKey(keyMetadata)
+	if err != nil {
+		return "", nil, nil, err
+	}
+
+	csr, _ := chelpers.GenerateCertificateRequest(subject, signer)
+
+	return keyID, csr, signer, nil
+}
+
+func (engine X509Engine) genCertTemplateAndPrivateKey(keyMetadata cmodels.KeyMetadata, subject cmodels.Subject, expirationTime time.Time, aki string) (string, *x509.Certificate, crypto.Signer, error) {
+	var err error
+	var signer crypto.Signer
+	var keyID string
+
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	sn, _ := rand.Int(rand.Reader, serialNumberLimit)
+
+	engine.logger.Debugf("generates serial number for root CA is [%s]", helpers.SerialNumberToString(sn))
+
+	keyID, signer, err = engine.genPrivateKey(keyMetadata)
+	if err != nil {
+		return "", nil, nil, err
 	}
 
 	if aki == "" {

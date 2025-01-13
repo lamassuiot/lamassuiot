@@ -74,3 +74,31 @@ func PkixNameToSubject(pkixName pkix.Name) cmodels.Subject {
 func PkixNameToString(subject pkix.Name) string {
 	return fmt.Sprintf("C=%v/ST=%v/L=%v/O=%v/OU=%v/CN=%s", subject.Country, subject.Province, subject.Locality, subject.Organization, subject.OrganizationalUnit, subject.CommonName)
 }
+
+func PkixNameEqual(a, b pkix.Name) bool {
+	if a.CommonName != b.CommonName {
+		return false
+	}
+
+	if len(a.Country) != len(b.Country) || (len(a.Country) > 0 && a.Country[0] != b.Country[0]) {
+		return false
+	}
+
+	if len(a.Locality) != len(b.Locality) || (len(a.Locality) > 0 && a.Locality[0] != b.Locality[0]) {
+		return false
+	}
+
+	if len(a.Organization) != len(b.Organization) || (len(a.Organization) > 0 && a.Organization[0] != b.Organization[0]) {
+		return false
+	}
+
+	if len(a.OrganizationalUnit) != len(b.OrganizationalUnit) || (len(a.OrganizationalUnit) > 0 && a.OrganizationalUnit[0] != b.OrganizationalUnit[0]) {
+		return false
+	}
+
+	if len(a.Province) != len(b.Province) || (len(a.Province) > 0 && a.Province[0] != b.Province[0]) {
+		return false
+	}
+
+	return true
+}

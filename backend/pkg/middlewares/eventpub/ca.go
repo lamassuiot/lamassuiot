@@ -6,7 +6,6 @@ import (
 
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	cmodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
@@ -24,7 +23,7 @@ func NewCAEventBusPublisher(eventMWPub ICloudEventMiddlewarePublisher) lservices
 	}
 }
 
-func (mw CAEventPublisher) GetCryptoEngineProvider(ctx context.Context) ([]*cmodels.CryptoEngineProvider, error) {
+func (mw CAEventPublisher) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
 	return mw.Next.GetCryptoEngineProvider(ctx)
 }
 
@@ -42,6 +41,15 @@ func (mw CAEventPublisher) CreateCA(ctx context.Context, input services.CreateCA
 		}
 	}()
 	return mw.Next.CreateCA(ctx, input)
+}
+
+func (mw CAEventPublisher) RequestCACSR(ctx context.Context, input services.RequestCAInput) (output *models.CACertificateRequest, err error) {
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventRequestCAKey, output)
+		}
+	}()
+	return mw.Next.RequestCACSR(ctx, input)
 }
 
 func (mw CAEventPublisher) ImportCA(ctx context.Context, input services.ImportCAInput) (output *models.CACertificate, err error) {
@@ -230,4 +238,16 @@ func (mw CAEventPublisher) UpdateCertificateMetadata(ctx context.Context, input 
 		}
 	}()
 	return mw.Next.UpdateCertificateMetadata(ctx, input)
+}
+
+func (mw CAEventPublisher) GetCARequestByID(ctx context.Context, input services.GetByIDInput) (*models.CACertificateRequest, error) {
+	return mw.Next.GetCARequestByID(ctx, input)
+}
+
+func (mw CAEventPublisher) DeleteCARequestByID(ctx context.Context, input services.GetByIDInput) error {
+	return mw.Next.DeleteCARequestByID(ctx, input)
+}
+
+func (mw CAEventPublisher) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
+	return mw.Next.GetCARequests(ctx, input)
 }

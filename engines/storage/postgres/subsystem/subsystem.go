@@ -52,6 +52,12 @@ func (p *PostgresSubsystem) Run() (*subsystems.SubsystemBackend, error) {
 				if err != nil {
 					return fmt.Errorf("could not run reinitialize Certificates tables: %s", err)
 				}
+
+				_, err = postgres.NewCACertRequestPostgresRepository(logger, postgresEngine.DB[dbName])
+				if err != nil {
+					return fmt.Errorf("could not run reinitialize CA Certificate Request tables: %s", err)
+				}
+
 			case "devicemanager":
 				_, err := postgres.NewDeviceManagerRepository(logger, postgresEngine.DB[dbName])
 				if err != nil {
