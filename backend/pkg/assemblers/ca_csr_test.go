@@ -356,24 +356,7 @@ func TestImportNonExistentRequest(t *testing.T) {
 	assert.EqualError(t, err, "CA Request not found")
 }
 
-func TestRequestCAWithoutParent(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-
-	}
-	csr, err := serverTest.CA.Service.RequestCACSR(context.Background(), services.RequestCAInput{
-		KeyMetadata: models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-		Subject:     models.Subject{CommonName: "MyRequestedCA"},
-	})
-	if err != nil {
-		t.Fatalf("unexpected error. Could not request CA: %s", err)
-	}
-
-	assert.Equal(t, csr.Subject.CommonName, "MyRequestedCA")
-}
-
-func TestRequestCARetrieveAndFilterDelete(t *testing.T) {
+func TestDeleteCARequest(t *testing.T) {
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
 
 	if err != nil {

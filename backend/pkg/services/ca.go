@@ -197,121 +197,7 @@ func (svc *CAServiceBackend) GetCryptoEngineProvider(ctx context.Context) ([]*mo
 	return info, nil
 }
 
-func (svc *CAServiceBackend) getX509CryptoEngineByID(_ context.Context, engineID string, logger *logrus.Entry) (x509engines.X509Engine, error) {
-	var x509Engine x509engines.X509Engine
-	if engineID == "" {
-		x509Engine = x509engines.NewX509Engine(logger, svc.defaultCryptoEngine, svc.vaServerDomain)
-		logger.Infof("selecting default crypto engine %s", x509Engine.GetEngineConfig().Provider)
-	} else {
-		if engine, ok := svc.cryptoEngines[engineID]; ok {
-			x509Engine = x509engines.NewX509Engine(logger, engine, svc.vaServerDomain)
-		} else {
-			return x509Engine, errs.ErrCryptoEngineNotFound
-		}
-	}
-	return x509Engine, nil
-}
-
-func (svc *CAServiceBackend) issueCACSR(ctx context.Context, input services.IssueCACSRInput) (*services.IssueCACSROutput, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-
-	x509Engine, err := svc.getX509CryptoEngineByID(ctx, input.EngineID, lFunc)
-	if err != nil {
-		errMsg := fmt.Sprintf("engine ID %s not configured", input.EngineID)
-		lFunc.Error(errMsg)
-		return nil, fmt.Errorf("%s", errMsg)
-	}
-
-	keyId, csr, err := x509Engine.CreateCertificateRequest(input.KeyMetadata, input.Subject)
-	if err != nil {
-		lFunc.Errorf("could not create CSR for CA %s: %s", input.Subject.CommonName, err)
-		return nil, err
-	}
-
-	return &services.IssueCACSROutput{
-		KeyID: keyId,
-		CSR:   csr,
-	}, nil
-
-}
-
-func (svc *CAServiceBackend) issueCA(ctx context.Context, input services.IssueCAInput) (*services.IssueCAOutput, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-
-	x509Engine, err := svc.getX509CryptoEngineByID(ctx, input.EngineID, lFunc)
-	if err != nil {
-		errMsg := fmt.Sprintf("engine ID %s not configured", input.EngineID)
-		lFunc.Error(errMsg)
-		return nil, fmt.Errorf("%s", errMsg)
-	}
-	lFunc.Infof("creating CA %s with %s crypto engine", input.Subject.CommonName, x509Engine.GetEngineConfig().Provider)
-
-	var caCert *x509.Certificate
-	var keyID string
-
-	expiration := time.Now()
-	if input.CAExpiration.Type == models.Duration {
-		expiration = expiration.Add(time.Duration(input.CAExpiration.Duration))
-	} else {
-		expiration = input.CAExpiration.Time
-	}
-
-	if input.ParentCA == nil {
-		lFunc.Debugf("creating ROOT CA certificate. common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
-		keyID, caCert, err = x509Engine.CreateRootCA(input.KeyMetadata, input.Subject, expiration)
-		if err != nil {
-			lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
-			return nil, err
-		}
-	} else {
-		if parentEngine, ok := svc.cryptoEngines[input.ParentCA.Certificate.EngineID]; ok {
-			x509ParentEngine := x509engines.NewX509Engine(lFunc, parentEngine, svc.vaServerDomain)
-			if input.ParentCA.Certificate.EngineID != input.EngineID {
-				if input.EngineID == "" {
-					x509Engine = x509engines.NewX509Engine(lFunc, svc.defaultCryptoEngine, svc.vaServerDomain)
-				} else {
-					childEngine, ok := svc.cryptoEngines[input.EngineID]
-					if !ok {
-						lFunc.Errorf("something went wrong while doing the cast")
-						return nil, nil
-					}
-					x509Engine = x509engines.NewX509Engine(lFunc, childEngine, svc.vaServerDomain)
-				}
-			} else {
-				x509Engine = x509ParentEngine
-			}
-			lFunc.Debugf("creating SUBORDINATE CA certificate.common name: %s. key type: %s. key bits: %d", input.Subject.CommonName, input.KeyMetadata.Type, input.KeyMetadata.Bits)
-			keyID, caCert, err = x509Engine.CreateSubordinateCA(input.ParentCA.Certificate.KeyID, (*x509.Certificate)(input.ParentCA.Certificate.Certificate), input.KeyMetadata, input.Subject, expiration, x509ParentEngine)
-			if err != nil {
-				lFunc.Errorf("something went wrong while creating CA '%s' Certificate: %s", input.Subject.CommonName, err)
-				return nil, err
-			}
-		} else {
-			errMsg := fmt.Sprintf("parent engine ID %s not configured", input.ParentCA.Certificate.EngineID)
-			lFunc.Error(errMsg)
-			return nil, fmt.Errorf("%s", errMsg)
-		}
-	}
-
-	return &services.IssueCAOutput{
-		KeyID:       keyID,
-		Certificate: caCert,
-	}, nil
-}
-
-// Returned Error Codes:
-//   - ErrCAIncompatibleValidity
-//     The Expiration time ref is incompatible with the selected variable, i.e. if the time ref is Duration the variable must be of type Duration not of type Time.
-//   - ErrCAIssuanceExpiration
-//     When creating a CA, the Issuance Expiration is greater than the CA Expiration.
-//   - ErrCAType
-//     The CA Type cannot have the value of MANAGED.
-//   - ErrCAValidCertAndPrivKey
-//     The CA certificate and the private key provided are not compatible.
-//   - ErrValidateBadRequest
-//     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
-
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	validate.RegisterStructValidation(importCAValidation, services.ImportCAInput{})
@@ -524,6 +410,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	return cert, err
 }
 
+// Generate a Key Pair and a CSR for a future CA
 func (svc *CAServiceBackend) RequestCACSR(ctx context.Context, input services.RequestCAInput) (*models.CACertificateRequest, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 	if input.Metadata == nil {
@@ -554,21 +441,20 @@ func (svc *CAServiceBackend) RequestCACSR(ctx context.Context, input services.Re
 		return nil, errs.ErrCAAlreadyExists
 	}
 
-	engineID, err := svc.getAvailableCryptoEngineId(input.EngineID)
+	engineID, engine, err := svc.getCryptoEngine(input.EngineID)
 	if err != nil {
 		lFunc.Errorf("could not get engine ID %s: %s", input.EngineID, err)
 	}
 
-	issuedCSR, err := svc.issueCACSR(ctx, services.IssueCACSRInput{
-		KeyMetadata: input.KeyMetadata,
-		Subject:     input.Subject,
-		CAType:      models.CertificateTypeRequested,
-		EngineID:    engineID,
-		CAID:        input.ID,
-	})
-
+	keyID, csrSigner, err := engine.GenerateKeyPair(ctx, input.KeyMetadata)
 	if err != nil {
-		lFunc.Errorf("could not create CA %s CSR: %s", input.Subject.CommonName, err)
+		lFunc.Errorf("could not generate CA %s private key: %s", input.Subject.CommonName, err)
+		return nil, err
+	}
+
+	csr, err := engine.GenerateCertificateRequest(ctx, csrSigner, input.Subject)
+	if err != nil {
+		lFunc.Errorf("could not generate CA %s CSR: %s", input.Subject.CommonName, err)
 		return nil, err
 	}
 
@@ -576,28 +462,19 @@ func (svc *CAServiceBackend) RequestCACSR(ctx context.Context, input services.Re
 		ID:          caID,
 		Metadata:    input.Metadata,
 		CreationTS:  time.Now(),
-		KeyId:       issuedCSR.KeyID,
+		KeyId:       keyID,
 		Subject:     input.Subject,
 		Status:      models.StatusRequestPending,
 		EngineID:    engineID,
 		KeyMetadata: helpers.KeyStrengthBuilder(input.KeyMetadata.Type, input.KeyMetadata.Bits),
-		Fingerprint: chelpers.ComputePublicKeyFingerprint(issuedCSR.CSR),
-		CSR:         models.X509CertificateRequest(*issuedCSR.CSR),
+		Fingerprint: chelpers.ComputePublicKeyFingerprint(csr),
+		CSR:         models.X509CertificateRequest(*csr),
 	}
 
 	lFunc.Debugf("insert CA Request %s in storage engine", caID)
 	return svc.caCertificateRequestStorage.Insert(ctx, &caCSRModel)
 }
 
-// Returned Error Codes:
-//   - ErrCAIncompatibleValidity
-//     The Expiration time ref is incompatible with the selected variable, i.e. if the time ref is Duration the variable must be of type Duration not of type Time.
-//   - ErrCAIssuanceExpiration
-//     When creating a CA, the Issuance Expiration is greater than the CA Expiration.
-//   - ErrCAType
-//     When creating the CA, the CA Type must have the value of MANAGED.
-//   - ErrValidateBadRequest
-//     The required variables of the data structure are not valid.
 func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 	if input.Metadata == nil {
@@ -612,40 +489,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	var parentCA *models.CACertificate
-	if input.ParentID != "" {
-		lFunc.Infof("request includes a parent CA id: %s", input.ParentID)
-		exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.ParentID)
-		if err != nil {
-			lFunc.Errorf("could not check if parent CA %s exists: %s", input.ParentID, err)
-			return nil, err
-		}
-
-		if !exists {
-			lFunc.Errorf("parent CA %s does not exist", input.ParentID)
-		}
-
-		lFunc.Debugf("parent CA %s exists", input.ParentID)
-
-		parentCA = ca
-		var caExpiration time.Time
-
-		if input.IssuanceExpiration.Type == models.Duration {
-			caExpiration = time.Now().Add((time.Duration)(input.CAExpiration.Duration))
-		} else {
-			caExpiration = input.CAExpiration.Time
-		}
-		parentCaExpiration := parentCA.Certificate.ValidTo
-
-		if parentCaExpiration.Before(caExpiration) {
-			lFunc.Errorf("requested CA would expire after parent CA")
-			return nil, fmt.Errorf("invalid expiration")
-		}
-
-		lFunc.Debugf("subordinated CA  expires before parent CA")
-
-	}
-
+	// Check if CA already exists
 	caID := input.ID
 	if caID == "" {
 		caID = goid.NewV4UUID().String()
@@ -663,34 +507,102 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	}
 
 	lFunc.Debugf("creating CA with common name: %s", input.Subject.CommonName)
-	issuedCA, err := svc.issueCA(ctx, services.IssueCAInput{
-		ParentCA:     parentCA,
-		KeyMetadata:  input.KeyMetadata,
-		Subject:      input.Subject,
-		CAType:       models.CertificateTypeManaged,
-		CAExpiration: input.CAExpiration,
-		EngineID:     input.EngineID,
-		CAID:         caID,
-	})
+	engineID, engine, err := svc.getCryptoEngine(input.EngineID)
 	if err != nil {
-		lFunc.Errorf("could not create CA %s certificate: %s", input.Subject.CommonName, err)
+		lFunc.Errorf("could not get engine %s: %s", input.EngineID, err)
+	}
+
+	// Generate Key Pair to be used by the new CA
+	keyID, signer, err := engine.GenerateKeyPair(ctx, input.KeyMetadata)
+	if err != nil {
+		lFunc.Errorf("could not generate CA %s private key: %s", input.Subject.CommonName, err)
 		return nil, err
 	}
 
-	engineID, err := svc.getAvailableCryptoEngineId(input.EngineID)
-	if err != nil {
-		lFunc.Errorf("could not get engine ID %s: %s", input.EngineID, err)
-	}
+	var ca *x509.Certificate
+	var caLevel int
+	var issuerCAMeta models.IssuerCAMetadata
 
-	caCert := issuedCA.Certificate
-	caLevel := 0
-	issuerCAMeta := models.IssuerCAMetadata{
-		SN:    helpers.SerialNumberToString(caCert.SerialNumber),
-		ID:    caID,
-		Level: 0,
-	}
+	// Check if CA is Root (self-signed) or Subordinate (signed by another CA). Non self-signed/root CAs require a parent CA
+	if input.ParentID == "" {
+		// Root CA. Root CAs can be generate directly
+		ca, err = engine.CreateRootCA(ctx, signer, keyID, input.Subject, input.CAExpiration)
+		if err != nil {
+			lFunc.Errorf("could not create CA %s certificate: %s", input.Subject.CommonName, err)
+			return nil, err
+		}
 
-	if parentCA != nil {
+		caLevel = 0
+		issuerCAMeta = models.IssuerCAMetadata{
+			SN:    helpers.SerialNumberToString(ca.SerialNumber),
+			ID:    caID,
+			Level: 0,
+		}
+	} else {
+		// Subordinate CA. Before creating a subordinate CA, it is required to check if the parent CA exists
+		exists, parentCA, err := svc.caStorage.SelectExistsByID(ctx, input.ParentID)
+		if err != nil {
+			lFunc.Errorf("could not check if parent CA %s exists: %s", input.ParentID, err)
+			return nil, err
+		}
+
+		if !exists {
+			lFunc.Errorf("parent CA %s does not exist", input.ParentID)
+			return nil, errs.ErrCANotFound
+		}
+
+		var caExpiration time.Time
+		if input.IssuanceExpiration.Type == models.Duration {
+			caExpiration = time.Now().Add((time.Duration)(input.CAExpiration.Duration))
+		} else {
+			caExpiration = input.CAExpiration.Time
+		}
+
+		parentCaExpiration := parentCA.Certificate.ValidTo
+		if parentCaExpiration.Before(caExpiration) {
+			lFunc.Errorf("requested CA would expire after parent CA")
+			return nil, fmt.Errorf("invalid expiration")
+		}
+
+		lFunc.Debugf("valid expiration. Subordinated CA expires before parent CA")
+
+		// Generate a new Key Pair and a CSR for the CA
+		caCSR, err := svc.RequestCACSR(ctx, services.RequestCAInput{
+			ID:          input.ID,
+			KeyMetadata: input.KeyMetadata,
+			Subject:     input.Subject,
+			EngineID:    input.EngineID,
+			Metadata:    input.Metadata,
+		})
+		if err != nil {
+			lFunc.Errorf("could not create CA %s CSR: %s", input.Subject.CommonName, err)
+			return nil, err
+		}
+
+		// Get the parent CA that will sign the new Sub CA
+		parentCACert := (*x509.Certificate)(parentCA.Certificate.Certificate)
+		_, parentEngine, err := svc.getCryptoEngine(parentCA.Certificate.EngineID)
+		if err != nil {
+			lFunc.Errorf("could not get parent engine %s: %s", input.EngineID, err)
+		}
+
+		parentCASigner, err := parentEngine.GetCASigner(ctx, parentCACert)
+		if err != nil {
+			lFunc.Errorf("could not get parent CA %s signer: %s", input.ParentID, err)
+			return nil, err
+		}
+
+		ca, err = engine.SignCertificateRequest(ctx, (*x509.CertificateRequest)(&caCSR.CSR), parentCACert, parentCASigner, models.IssuanceProfile{
+			Validity:        input.CAExpiration,
+			SignAsCA:        true,
+			HonorSubject:    true,
+			HonorExtensions: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		// Update the CA level and issuer metadata
 		caLevel = parentCA.Level + 1
 		issuerCAMeta = models.IssuerCAMetadata{
 			SN:    parentCA.Certificate.SerialNumber,
@@ -699,25 +611,30 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		}
 	}
 
-	ca := models.CACertificate{
+	if err != nil {
+		lFunc.Errorf("could not create CA %s certificate: %s", input.Subject.CommonName, err)
+		return nil, err
+	}
+
+	caCert := models.CACertificate{
 		ID:         caID,
 		Metadata:   input.Metadata,
 		Validity:   input.IssuanceExpiration,
 		CreationTS: time.Now(),
 		Level:      caLevel,
 		Certificate: models.Certificate{
-			KeyID:        issuedCA.KeyID,
-			Certificate:  (*models.X509Certificate)(caCert),
+			KeyID:        keyID,
+			Certificate:  (*models.X509Certificate)(ca),
 			Status:       models.StatusActive,
-			SerialNumber: helpers.SerialNumberToString(caCert.SerialNumber),
+			SerialNumber: helpers.SerialNumberToString(ca.SerialNumber),
 			KeyMetadata: models.KeyStrengthMetadata{
 				Type:     input.KeyMetadata.Type,
 				Bits:     input.KeyMetadata.Bits,
 				Strength: models.KeyStrengthHigh,
 			},
 			Subject:             input.Subject,
-			ValidFrom:           caCert.NotBefore,
-			ValidTo:             caCert.NotAfter,
+			ValidFrom:           ca.NotBefore,
+			ValidTo:             ca.NotAfter,
 			RevocationTimestamp: time.Time{},
 			IssuerCAMetadata:    issuerCAMeta,
 			Metadata:            map[string]interface{}{},
@@ -728,20 +645,20 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	}
 
 	lFunc.Debugf("insert CA %s in storage engine", caID)
-	return svc.caStorage.Insert(ctx, &ca)
+	return svc.caStorage.Insert(ctx, &caCert)
 }
 
-func (svc *CAServiceBackend) getAvailableCryptoEngineId(engineId string) (string, error) {
+func (svc *CAServiceBackend) getCryptoEngine(engineId string) (string, x509engines.X509Engine, error) {
 	availableEngineId := svc.defaultCryptoEngineID
 	if engineId != "" {
 		_, ok := svc.cryptoEngines[engineId]
 		if !ok {
-			return "", errs.ErrCryptoEngineNotFound
+			return "", x509engines.X509Engine{}, errs.ErrCryptoEngineNotFound
 		}
 		availableEngineId = engineId
 	}
 
-	return availableEngineId, nil
+	return availableEngineId, x509engines.NewX509Engine(svc.logger, svc.cryptoEngines[availableEngineId], svc.vaServerDomain), nil
 }
 
 func (svc *CAServiceBackend) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
@@ -1141,13 +1058,6 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.Delete
 	return err
 }
 
-// Returned Error Codes:
-//   - ErrCANotFound
-//     The specified CA can not be found in the Database
-//   - ErrValidateBadRequest
-//     The required variables of the data structure are not valid.
-//   - ErrCAStatus
-//     CA is not active
 func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services.SignCertificateInput) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -1175,7 +1085,6 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	}
 
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
-
 	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomain)
 
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
@@ -1198,8 +1107,28 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	} else {
 		expiration = ca.Validity.Time
 	}
+
+	caCertSigner, err := x509Engine.GetCASigner(ctx, caCert)
+	if err != nil {
+		lFunc.Errorf("could not get CA %s signer: %s", caCert.Subject.CommonName, err)
+		return nil, err
+	}
+
 	lFunc.Debugf("sign certificate request with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
-	x509Cert, err := x509Engine.SignCertificateRequest(caCert, csr, expiration)
+	x509Cert, err := x509Engine.SignCertificateRequest(ctx, csr, caCert, caCertSigner, models.IssuanceProfile{
+		Validity: models.Validity{
+			Type: models.Time,
+			Time: expiration,
+		},
+		SignAsCA:     false,
+		HonorSubject: true,
+		KeyUsage:     []models.X509KeyUsage{},
+		ExtendedKeyUsages: []models.X509ExtKeyUsage{
+			models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+			models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+		},
+		HonorExtensions: true,
+	})
 	if err != nil {
 		lFunc.Errorf("could not sign certificate request with %s CA", caCert.Subject.CommonName)
 		return nil, err
@@ -1226,6 +1155,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	return svc.certStorage.Insert(ctx, &cert)
 }
 
+// Generate a new Key Pair and Sign a CSR to create a new Certificate. The Keys are stored and can later be used to sign other material.
 func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (*models.Certificate, error) {
 	return nil, fmt.Errorf("TODO")
 }
@@ -1310,7 +1240,7 @@ func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input services.S
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
 	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomain)
 	lFunc.Debugf("sign signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
-	signature, err := x509Engine.Sign(x509engines.CertificateAuthority, (*x509.Certificate)(ca.Certificate.Certificate), input.Message, input.MessageType, input.SigningAlgorithm)
+	signature, err := x509Engine.Sign(ctx, (*x509.Certificate)(ca.Certificate.Certificate), input.Message, input.MessageType, input.SigningAlgorithm)
 	if err != nil {
 		return nil, err
 	}
@@ -1340,7 +1270,7 @@ func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input services
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
 	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomain)
 	lFunc.Debugf("verify signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
-	return x509Engine.Verify((*x509.Certificate)(ca.Certificate.Certificate), input.Signature, input.Message, input.MessageType, input.SigningAlgorithm)
+	return x509Engine.Verify(ctx, (*x509.Certificate)(ca.Certificate.Certificate), input.Signature, input.Message, input.MessageType, input.SigningAlgorithm)
 }
 
 // Returned Error Codes:

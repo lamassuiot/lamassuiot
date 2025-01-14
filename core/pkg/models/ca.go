@@ -127,3 +127,16 @@ type CAAttachedToDevice struct {
 	} `json:"authorized_by"`
 	DeviceID string `json:"device_id"`
 }
+
+type IssuanceProfile struct {
+	Validity Validity `json:"validity" gorm:"embedded;embeddedPrefix:validity_"`
+	SignAsCA bool     `json:"sign_as_ca"`
+
+	KeyUsage          []X509KeyUsage    `json:"key_usage"`
+	ExtendedKeyUsages []X509ExtKeyUsage `json:"extended_key_usage"`
+
+	HonorSubject bool    `json:"honor_subject"`
+	Subject      Subject `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
+
+	HonorExtensions bool `json:"honor_extensions"`
+}
