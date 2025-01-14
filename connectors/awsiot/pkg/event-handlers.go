@@ -74,7 +74,7 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc AWSClo
 		}
 	}
 
-	var awsIoTCoreCACfg models.IoTAWSCAMetadata
+	var awsIoTCoreCACfg IoTAWSCAMetadata
 	hasKey, err := helpers.GetMetadataToStruct(ca.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &awsIoTCoreCACfg)
 	if err != nil {
 		err = fmt.Errorf("error while getting %s key: %s", AWSIoTMetadataKey(svc.GetConnectorID()), err)
@@ -87,7 +87,7 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc AWSClo
 		return nil
 	}
 
-	if awsIoTCoreCACfg.Registration.Status == models.IoTAWSCAMetadataRegistrationRequested {
+	if awsIoTCoreCACfg.Registration.Status == IoTAWSCAMetadataRegistrationRequested {
 		_, err = svc.RegisterCA(context.Background(), RegisterCAInput{
 			CACertificate:         *ca,
 			RegisterConfiguration: awsIoTCoreCACfg,
@@ -115,7 +115,7 @@ func updateCertificateStatusHandler(ctx context.Context, event *event.Event, svc
 
 	cert = &updatedCert.Updated
 
-	var certIoTCoreMeta models.IoTAWSCertificateMetadata
+	var certIoTCoreMeta IoTAWSCertificateMetadata
 	hasKey, err := helpers.GetMetadataToStruct(cert.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &certIoTCoreMeta)
 	if err != nil {
 		err = fmt.Errorf("error while getting %s key: %s", AWSIoTMetadataKey(svc.GetConnectorID()), err)
@@ -165,7 +165,7 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCl
 		dms = &updatedDMS.Updated
 	}
 
-	var dmsAwsAutomationConfig models.IotAWSDMSMetadata
+	var dmsAwsAutomationConfig IotAWSDMSMetadata
 	hasKey, err := helpers.GetMetadataToStruct(dms.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &dmsAwsAutomationConfig)
 	if err != nil {
 		err = fmt.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
@@ -178,7 +178,7 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCl
 		return nil
 	}
 
-	if dmsAwsAutomationConfig.RegistrationMode == models.JitpAWSIoTRegistrationMode {
+	if dmsAwsAutomationConfig.RegistrationMode == JitpAWSIoTRegistrationMode {
 		err = svc.RegisterUpdateJITPProvisioner(context.Background(), RegisterUpdateJITPProvisionerInput{
 			DMS:           dms,
 			AwsJITPConfig: dmsAwsAutomationConfig,
@@ -200,7 +200,7 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCl
 					ApplyFunc: func(device models.Device) {
 						err = svc.UpdateDeviceShadow(ctx, UpdateDeviceShadowInput{
 							DeviceID:               device.ID,
-							RemediationActionsType: []models.RemediationActionType{models.RemediationActionUpdateTrustAnchorList},
+							RemediationActionsType: []RemediationActionType{RemediationActionUpdateTrustAnchorList},
 							DMSIoTAutomationConfig: dmsAwsAutomationConfig,
 						})
 						if err != nil {
@@ -284,7 +284,7 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 		return err
 	}
 
-	var dmsAWSConf models.IotAWSDMSMetadata
+	var dmsAWSConf IotAWSDMSMetadata
 	hasKey, err = helpers.GetMetadataToStruct(dms.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &dmsAWSConf)
 	if err != nil {
 		err = fmt.Errorf("could not decode metadata with key %s: %s", AWSIoTMetadataKey(svc.GetConnectorID()), err)
@@ -302,7 +302,7 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 		if (preventivePrevIdx >= 0 && !certPreviousExpirationDeltas[preventivePrevIdx].Triggered) || preventivePrevIdx == -1 {
 			err = svc.UpdateDeviceShadow(ctx, UpdateDeviceShadowInput{
 				DeviceID:               attachedBy.DeviceID,
-				RemediationActionsType: []models.RemediationActionType{models.RemediationActionUpdateCertificate},
+				RemediationActionsType: []RemediationActionType{RemediationActionUpdateCertificate},
 				DMSIoTAutomationConfig: dmsAWSConf,
 			})
 			if err != nil {
@@ -324,7 +324,7 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc AW
 	}
 
 	device := deviceUpdate.Updated
-	var deviceMetaAWS models.DeviceAWSMetadata
+	var deviceMetaAWS DeviceAWSMetadata
 	hasKey, err := helpers.GetMetadataToStruct(device.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &deviceMetaAWS)
 	if err != nil {
 		err = fmt.Errorf("could not decode metadata with key %s: %s", AWSIoTMetadataKey(svc.GetConnectorID()), err)
@@ -346,7 +346,7 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc AW
 		return err
 	}
 
-	var dmsAWSConf models.IotAWSDMSMetadata
+	var dmsAWSConf IotAWSDMSMetadata
 	hasKey, err = helpers.GetMetadataToStruct(dms.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &dmsAWSConf)
 	if err != nil {
 		err = fmt.Errorf("could not decode metadata with key %s: %s", AWSIoTMetadataKey(svc.GetConnectorID()), err)
@@ -384,7 +384,7 @@ func bindDeviceIdentityHandler(ctx context.Context, event *event.Event, svc AWSC
 
 	dms := bindEvent.DMS
 
-	var dmsAwsAutomationConfig models.IotAWSDMSMetadata
+	var dmsAwsAutomationConfig IotAWSDMSMetadata
 	hasKey, err := helpers.GetMetadataToStruct(dms.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &dmsAwsAutomationConfig)
 	if err != nil {
 		err = fmt.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
@@ -397,7 +397,7 @@ func bindDeviceIdentityHandler(ctx context.Context, event *event.Event, svc AWSC
 		return nil
 	}
 
-	if dmsAwsAutomationConfig.RegistrationMode == models.AutomaticAWSIoTRegistrationMode {
+	if dmsAwsAutomationConfig.RegistrationMode == AutomaticAWSIoTRegistrationMode {
 		thingID := bindEvent.Certificate.Subject.CommonName
 		logrus.Infof("registering %s device", thingID)
 		err = svc.RegisterAndAttachThing(ctx, RegisterAndAttachThingInput{

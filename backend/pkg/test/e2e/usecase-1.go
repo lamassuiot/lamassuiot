@@ -152,10 +152,10 @@ func RunUseCase1(input UseCase1Input) error {
 	//4.1 Update the ca status in order to define the ca metadata to connect to AWS
 	//Comment -> The functionality is not working due to aws-connector service is not working properly.
 	metaUpdateData := map[string]interface{}{
-		fmt.Sprintf("lamassu.io/iot/aws.%s", awsAccountID): models.IoTAWSCAMetadata{
-			Registration: models.IoTAWSCAMetadataRegistration{
-				RegistrationRequestTime: time.Now(),
-				Status:                  models.IoTAWSCAMetadataRegistrationRequested,
+		fmt.Sprintf("lamassu.io/iot/aws.%s", awsAccountID): map[string]interface{}{
+			"registration": map[string]interface{}{
+				"registration_request_time": time.Now(),
+				"status":                    "REQUESTED",
 			},
 		},
 	}
@@ -172,32 +172,30 @@ func RunUseCase1(input UseCase1Input) error {
 
 	//5. Create DMS with enrollment CA1 and validation CA2. Add CA1 in CACerts. Enable AWS Sync (RegMode: Auto)
 	log.Infof("5. Create DMS with enrollment CA1 and validation CA2. Add CA1 in CACerts. Enable AWS Sync (RegMode: Auto)")
+
+	policies := make([]map[string]any, 0)
+	policies = append(policies, map[string]any{
+		"policy_name":     "my-p",
+		"policy_document": p,
+	})
+
+	metadata := map[string]any{
+		"registration_mode": "auto",
+		"jitp_config": map[string]any{
+			"enable_template": false,
+		},
+		"groups":   []string{"TEST-LMS"},
+		"policies": policies,
+		"shadow_config": map[string]any{
+			"enable": true,
+		},
+	}
+
 	dmsCreateInput := services.CreateDMSInput{
 		Name: "My DMS",
 		ID:   dmsID,
 		Metadata: map[string]any{
-			fmt.Sprintf("lamassu.io/iot/aws.%s", awsAccountID): models.IotAWSDMSMetadata{
-				RegistrationMode: models.AutomaticAWSIoTRegistrationMode,
-				JITPProvisioningTemplate: struct {
-					ARN                 string "json:\"arn,omitempty\""
-					AWSCACertificateId  string "json:\"aws_ca_id,omitempty\""
-					ProvisioningRoleArn string "json:\"provisioning_role_arn\""
-					EnableTemplate      bool   "json:\"enable_template\""
-				}{
-					EnableTemplate: false,
-				},
-				GroupNames: []string{"TEST-LMS"},
-				Policies: []models.AWSIoTPolicy{
-					{PolicyName: "my-p", PolicyDocument: p},
-				},
-				ShadowConfig: struct {
-					Enable     bool   "json:\"enable\""
-					ShadowName string "json:\"shadow_name,omitempty\""
-				}{
-					Enable:     true,
-					ShadowName: "",
-				},
-			},
+			fmt.Sprintf("lamassu.io/iot/aws.%s", awsAccountID): metadata,
 		},
 		Settings: models.DMSSettings{
 			EnrollmentSettings: models.EnrollmentSettings{
