@@ -66,9 +66,10 @@ func (r *estHttpRoutes) GetCACerts(ctx *gin.Context) {
 			casPEM = append(casPEM, chelpers.CertificateToPEM(cert))
 		}
 
+		content := []byte(strings.Join(casPEM, "\n"))
 		ctx.Writer.Header().Set("Content-Type", "application/x-pem-file")
-		ctx.Writer.Header().Set("Content-Length", strconv.Itoa(len(casPEM)))
-		ctx.Writer.Write([]byte(strings.Join(casPEM, "\n")))
+		ctx.Writer.Header().Set("Content-Length", strconv.Itoa(len(content)))
+		ctx.Writer.Write(content)
 		return
 	}
 
