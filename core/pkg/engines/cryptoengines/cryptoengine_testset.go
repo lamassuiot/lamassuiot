@@ -53,6 +53,37 @@ func SharedGetKey(t *testing.T, engine CryptoEngine) {
 	assert.Equal(t, key, signer)
 }
 
+func SharedListKeys(t *testing.T, engine CryptoEngine) {
+	keyID1, _, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+	assert.NoError(t, err)
+
+	keyID2, _, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+	assert.NoError(t, err)
+
+	keys, err := engine.ListPrivateKeyIDs()
+	assert.NoError(t, err)
+
+	assert.Contains(t, keys, keyID1)
+	assert.Contains(t, keys, keyID2)
+
+	assert.Len(t, keys, 2)
+}
+
+func SharedRenameKey(t *testing.T, engine CryptoEngine) {
+	keyID, _, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+	assert.NoError(t, err)
+
+	err = engine.RenameKey(keyID, "new-key-id")
+	assert.NoError(t, err)
+
+	_, err = engine.GetPrivateKeyByID(keyID)
+	assert.Error(t, err)
+
+	signer, err := engine.GetPrivateKeyByID("new-key-id")
+	assert.NoError(t, err)
+	assert.NotNil(t, signer)
+}
+
 func SharedGetKeyNotFound(t *testing.T, engine CryptoEngine) {
 	_, err := engine.GetPrivateKeyByID("non-existing-key")
 	assert.Error(t, err)

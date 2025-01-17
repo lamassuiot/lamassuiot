@@ -68,9 +68,8 @@ type UpdateCAIssuanceExpirationBody struct {
 }
 
 type SignCertificateBody struct {
-	SignVerbatim bool                           `json:"sign_verbatim"`
-	CertRequest  *models.X509CertificateRequest `json:"csr"`
-	Subject      *models.Subject                `json:"subject"`
+	CertRequest *models.X509CertificateRequest `json:"csr"`
+	Profile     models.IssuanceProfile         `json:"profile"`
 }
 
 type SignatureSignBody struct {

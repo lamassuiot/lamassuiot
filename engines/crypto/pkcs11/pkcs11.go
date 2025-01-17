@@ -31,7 +31,8 @@ type pkcs11EngineContext struct {
 	api              *crypto11.Context
 	slotID           uint
 	lowApi           *pkcs11.Ctx
-	config           models.CryptoEngineInfo
+	engineInfo       models.CryptoEngineInfo
+	config           crypto11.Config
 	logger           *logrus.Entry
 }
 
@@ -42,6 +43,8 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 		Pin:        string(conf.Config.TokenPin),
 		TokenLabel: conf.Config.TokenLabel,
 	}
+
+	os.Clearenv()
 
 	for envKey, envVal := range conf.Config.ModuleExtraOptions.Env {
 		lPkcs11.Debugf("setting env variable %s=%s", envKey, envVal)
@@ -125,7 +128,7 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 		slotID:           slotID,
 		api:              instance,
 		lowApi:           pkcs11ProviderContext,
-		config: models.CryptoEngineInfo{
+		engineInfo: models.CryptoEngineInfo{
 			Type:              models.PKCS11,
 			SecurityLevel:     models.SL2,
 			Provider:          pkcs11ProviderInfo.ManufacturerID,
@@ -133,11 +136,12 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 			Name:              tokenInfo.Model,
 			Metadata:          *meta,
 		},
+		config: *config,
 	}, nil
 }
 
 func (hsmContext *pkcs11EngineContext) GetEngineConfig() models.CryptoEngineInfo {
-	return hsmContext.config
+	return hsmContext.engineInfo
 }
 
 func (hsmContext *pkcs11EngineContext) GetPrivateKeys() []crypto.Signer {
@@ -172,6 +176,35 @@ func (hsmContext *pkcs11EngineContext) GetPrivateKeyByID(keyID string) (crypto.S
 	return hsmKey, nil
 }
 
+func (hsmContext *pkcs11EngineContext) ListPrivateKeyIDs() ([]string, error) {
+	hsmContext.logger.Debugf("listing private keys")
+	keys, err := hsmContext.api.FindAllKeyPairs()
+	if err != nil {
+		hsmContext.logger.Errorf("could not list private keys: %s", err)
+	}
+
+	keyIDs := make([]string, 0)
+	for _, key := range keys {
+		attrs, err := hsmContext.api.GetAttributes(key, []uint{pkcs11.CKA_LABEL})
+		if err != nil {
+			hsmContext.logger.Errorf("could not get key attributes: %s", err)
+			continue
+		}
+
+		attrsSlice := attrs.ToSlice()
+		if len(attrsSlice) == 0 {
+			hsmContext.logger.Warnf("found a key with no attributes")
+			continue
+		}
+
+		attr := attrsSlice[0]
+		keyID := string(attr.Value)
+		keyIDs = append(keyIDs, keyID)
+	}
+
+	return keyIDs, nil
+}
+
 func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
 	tmpKeyID := uuid.New().String()
 	hsmContext.logger.Debugf("creating RSA %d key", keySize)
@@ -187,7 +220,7 @@ func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(keySize int) (string,
 		return "", nil, err
 	}
 
-	err = hsmContext.renameKey(tmpKeyID, keyID)
+	err = hsmContext.RenameKey(tmpKeyID, keyID)
 	if err != nil {
 		hsmContext.logger.Errorf("could not rename key: %s", err)
 		return "", nil, err
@@ -211,7 +244,7 @@ func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(curve elliptic.Curv
 		return "", nil, err
 	}
 
-	err = hsmContext.renameKey(tmpKeyID, keyID)
+	err = hsmContext.RenameKey(tmpKeyID, keyID)
 	if err != nil {
 		hsmContext.logger.Errorf("could not rename key: %s", err)
 		return "", nil, err
@@ -226,7 +259,7 @@ func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(curve elliptic.Curv
 	return keyID, renamedSigner, nil
 }
 
-func (hsmContext *pkcs11EngineContext) renameKey(oldKeyID string, newKeyID string) error {
+func (hsmContext *pkcs11EngineContext) RenameKey(oldKeyID string, newKeyID string) error {
 	hsmSession, err := hsmContext.lowApi.OpenSession(hsmContext.slotID, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
 	if err != nil {
 		hsmContext.logger.Errorf("could not open session: %s", err)

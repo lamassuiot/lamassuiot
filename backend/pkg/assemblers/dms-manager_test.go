@@ -245,9 +245,14 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -322,9 +327,14 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -400,9 +410,14 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -491,9 +506,14 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -582,9 +602,14 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -693,9 +718,14 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -757,9 +787,14 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -838,9 +873,14 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -908,9 +948,14 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -981,9 +1026,14 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -1058,9 +1108,14 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -1400,7 +1455,12 @@ func TestESTEnroll(t *testing.T) {
 		// 		bootCrt, err := externalTestServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
 		// 			CAID:         bootstrapCA.ID,
 		// 			CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-		// 			SignVerbatim: true,
+		// 			IssuanceProfile: models.IssuanceProfile{
+		// 				Validity:        bootstrapCA.Validity,
+		// 					SignAsCA:        false,
+		// 					HonorSubject:    true,
+		// 					HonorExtensions: true,
+		// 			},
 		// 		})
 		// 		if err != nil {
 		// 			t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -1467,9 +1527,14 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -1858,9 +1923,14 @@ func TestESTServerKeyGen(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -1957,9 +2027,14 @@ func TestESTServerKeyGen(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -2049,9 +2124,14 @@ func TestESTServerKeyGen(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -2110,9 +2190,14 @@ func TestESTServerKeyGen(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
-					CAID:         bootstrapCA.ID,
-					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-					SignVerbatim: true,
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
@@ -2243,9 +2328,14 @@ func TestESTReEnroll(t *testing.T) {
 		bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 		bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 		bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-			CAID:         bootstrapCA.ID,
-			CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-			SignVerbatim: true,
+			CAID:        bootstrapCA.ID,
+			CertRequest: (*models.X509CertificateRequest)(bootCsr),
+			IssuanceProfile: models.IssuanceProfile{
+				Validity:        bootstrapCA.Validity,
+				SignAsCA:        false,
+				HonorSubject:    true,
+				HonorExtensions: true,
+			},
 		})
 		if err != nil {
 			t.Fatalf("could not sign Bootstrap Certificate: %s", err)

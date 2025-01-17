@@ -131,6 +131,25 @@ func (engine *AWSSecretsManagerCryptoEngine) GetPrivateKeyByID(keyID string) (cr
 	}
 }
 
+func (engine *AWSSecretsManagerCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
+	engine.logger.Debugf("listing private key IDs")
+
+	keyRes, err := engine.smngerCli.ListSecrets(context.Background(), &secretsmanager.ListSecretsInput{})
+	if err != nil {
+		engine.logger.Errorf("could not list secrets: %s", err)
+		return nil, err
+	}
+
+	keys := []string{}
+	for _, secret := range keyRes.SecretList {
+		keys = append(keys, *secret.Name)
+	}
+
+	engine.logger.Debugf("private key IDs successfully listed")
+
+	return keys, nil
+}
+
 func (engine *AWSSecretsManagerCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
 	engine.logger.Debugf("creating RSA private key")
 
@@ -221,6 +240,48 @@ func (engine *AWSSecretsManagerCryptoEngine) importKey(key crypto.Signer) (strin
 	return keyID, key, nil
 }
 
+func (engine *AWSSecretsManagerCryptoEngine) RenameKey(oldID, newID string) error {
+	engine.logger.Debugf("renaming key with ID: %s to %s", oldID, newID)
+
+	result, err := engine.smngerCli.GetSecretValue(context.Background(), &secretsmanager.GetSecretValueInput{
+		SecretId: aws.String(oldID),
+	})
+	if err != nil {
+		engine.logger.Errorf("could not get Secret Value: %s", err)
+		return err
+	}
+
+	_, err = engine.smngerCli.CreateSecret(context.Background(), &secretsmanager.CreateSecretInput{
+		Name:         aws.String(newID),
+		SecretString: result.SecretString,
+	})
+	if err != nil {
+		engine.logger.Errorf("could not create Secret Value: %s", err)
+		return err
+	}
+
+	err = engine.DeleteKey(oldID)
+	if err != nil {
+		engine.logger.Errorf("could not delete old key: %s", err)
+	}
+
+	engine.logger.Debugf("key successfully renamed")
+	return nil
+}
+
 func (engine *AWSSecretsManagerCryptoEngine) DeleteKey(keyID string) error {
-	return fmt.Errorf("cannot delete key [%s]. Go to your aws account and do it manually", keyID)
+	engine.logger.Debugf("deleting key with ID: %s", keyID)
+
+	_, err := engine.smngerCli.DeleteSecret(context.Background(), &secretsmanager.DeleteSecretInput{
+		SecretId:             aws.String(keyID),
+		RecoveryWindowInDays: aws.Int64(7),
+	})
+
+	if err != nil {
+		engine.logger.Errorf("could not delete key: %s", err)
+		return err
+	}
+
+	engine.logger.Debugf("key successfully deleted")
+	return nil
 }

@@ -279,7 +279,12 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				crt, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:        enrollCA.ID,
 					CertRequest: (*models.X509CertificateRequest)(enrollCSR),
-					Subject:     &enrollCA.Certificate.Subject,
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        enrollCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign the certificate: %s", err)
@@ -651,13 +656,28 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 			name: "OK/Pagination10-pagesize5-without-pagination",
 			before: func(svc services.CAService) error {
 				certsToIssue := 10
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
+
 				for i := 0; i < certsToIssue; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
 						return fmt.Errorf("Error creating the private key: %s", err)
 					}
+
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", i)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        DefaultCAID,
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -697,11 +717,25 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 		{
 			name: "OK/Pagination15-pagesize5-with-pagination",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
+
 				certsToIssue := 15
 				for i := 0; i < certsToIssue; i++ {
 					key, _ := chelpers.GenerateRSAKey(2048)
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", i)}, key)
-					_, err := svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err := svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        DefaultCAID,
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -779,12 +813,12 @@ func TestSignCertificate(t *testing.T) {
 
 	var testcases = []struct {
 		name        string
-		run         func(caSDK services.CAService, caIDToSign string) (*models.Certificate, error)
+		run         func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error)
 		resultCheck func(issuedCerts *models.Certificate, err error) error
 	}{
 		{
 			name: "OK/SignCertificate",
-			run: func(caSDK services.CAService, caIDToSign string) (*models.Certificate, error) {
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
 				key, err := chelpers.GenerateRSAKey(2048)
 				if err != nil {
 					return nil, err
@@ -796,9 +830,14 @@ func TestSignCertificate(t *testing.T) {
 				}
 
 				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         caIDToSign,
-					CertRequest:  (*models.X509CertificateRequest)(csr),
-					SignVerbatim: true,
+					CAID:        caIDToSign,
+					CertRequest: (*models.X509CertificateRequest)(csr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 			},
 			resultCheck: func(issuedCert *models.Certificate, err error) error {
@@ -839,7 +878,7 @@ func TestSignCertificate(t *testing.T) {
 		},
 		{
 			name: "OK/SignCertificateWithAltSubject",
-			run: func(caSDK services.CAService, caIDToSign string) (*models.Certificate, error) {
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
 				key, err := chelpers.GenerateRSAKey(2048)
 				if err != nil {
 					return nil, err
@@ -851,16 +890,20 @@ func TestSignCertificate(t *testing.T) {
 				}
 
 				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         caIDToSign,
-					CertRequest:  (*models.X509CertificateRequest)(csr),
-					SignVerbatim: false,
-					Subject: &models.Subject{
-						CommonName:       "other-test",
-						Country:          "US",
-						Organization:     "other-lamassu",
-						OrganizationUnit: "other-iot",
-						State:            "other-lamassu-world",
-						Locality:         "other-lamassu-city",
+					CAID:        caIDToSign,
+					CertRequest: (*models.X509CertificateRequest)(csr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:     validity,
+						SignAsCA:     false,
+						HonorSubject: false,
+						Subject: models.Subject{
+							CommonName:       "other-test",
+							Country:          "US",
+							Organization:     "other-lamassu",
+							OrganizationUnit: "other-iot",
+							State:            "other-lamassu-world",
+							Locality:         "other-lamassu-city",
+						},
 					},
 				})
 			},
@@ -873,8 +916,8 @@ func TestSignCertificate(t *testing.T) {
 					return fmt.Errorf("should've got issued certificate but got nil")
 				}
 
-				if issuedCert.Subject.CommonName != "other-test" {
-					return fmt.Errorf("issued certificate should have CommonName 'other-test' but got %s", issuedCert.Subject.CommonName)
+				if issuedCert.Subject.CommonName == "other-test" {
+					return fmt.Errorf("issued certificate should respect CSR CN 'test' but got %s", issuedCert.Subject.CommonName)
 				}
 
 				if issuedCert.Subject.Country != "US" {
@@ -898,7 +941,7 @@ func TestSignCertificate(t *testing.T) {
 		},
 		{
 			name: "Err/CADoesNotExist",
-			run: func(caSDK services.CAService, caIDToSign string) (*models.Certificate, error) {
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
 				key, err := chelpers.GenerateRSAKey(2048)
 				if err != nil {
 					return nil, err
@@ -910,9 +953,14 @@ func TestSignCertificate(t *testing.T) {
 				}
 
 				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         "myCA",
-					CertRequest:  (*models.X509CertificateRequest)(csr),
-					SignVerbatim: true,
+					CAID:        "myCA",
+					CertRequest: (*models.X509CertificateRequest)(csr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 			},
 			resultCheck: func(issuedCert *models.Certificate, err error) error {
@@ -957,7 +1005,7 @@ func TestSignCertificate(t *testing.T) {
 				t.Fatalf("failed creating CA: %s", err)
 			}
 
-			err = tc.resultCheck(tc.run(caTest.HttpCASDK, ca.ID))
+			err = tc.resultCheck(tc.run(caTest.HttpCASDK, ca.ID, ca.Validity))
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
 			}
@@ -1288,6 +1336,11 @@ func TestRevokeCA(t *testing.T) {
 		{
 			name: "OK/RevokeWith20CertsIssued",
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				ca, err := caSDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return nil, err
+				}
+
 				issue20 := 20
 				for i := 0; i < issue20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
@@ -1301,9 +1354,14 @@ func TestRevokeCA(t *testing.T) {
 					}
 
 					caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-						CAID:         DefaultCAID,
-						CertRequest:  (*models.X509CertificateRequest)(csr),
-						SignVerbatim: true,
+						CAID:        DefaultCAID,
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
 					})
 				}
 				caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
@@ -1572,7 +1630,15 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 				}
 
 				csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-				cert, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+				cert, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:        DefaultCAID,
+					CertRequest: (*models.X509CertificateRequest)(csr),
+					IssuanceProfile: models.IssuanceProfile{
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
+				})
 				if err != nil {
 					return err
 				}
@@ -1909,6 +1975,10 @@ func TestGetCertificates(t *testing.T) {
 		{
 			name: "OK/GetsCertificatesEXRunTrue",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
 
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
@@ -1917,7 +1987,16 @@ func TestGetCertificates(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        "myCA",
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -1956,6 +2035,10 @@ func TestGetCertificates(t *testing.T) {
 		{
 			name: "OK/GetsCertificatesEXRunFalse",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
 
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
@@ -1964,7 +2047,16 @@ func TestGetCertificates(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        "myCA",
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -2005,7 +2097,6 @@ func TestGetCertificates(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			//
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
@@ -2050,6 +2141,10 @@ func TestGetCertificatesByCA(t *testing.T) {
 		{
 			name: "OK/GetCertificatesByCAExRunFalse",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
 
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
@@ -2058,7 +2153,16 @@ func TestGetCertificatesByCA(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        "myCA",
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -2097,6 +2201,10 @@ func TestGetCertificatesByCA(t *testing.T) {
 		{
 			name: "OK/GetCertificatesByCAExRunTrue",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
 
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
@@ -2105,7 +2213,16 @@ func TestGetCertificatesByCA(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        "myCA",
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -2144,6 +2261,11 @@ func TestGetCertificatesByCA(t *testing.T) {
 		{
 			name: "OK/GetCertificatesByCANotExistERunFalse",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
+
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
@@ -2151,7 +2273,16 @@ func TestGetCertificatesByCA(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        "myCA",
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -2190,6 +2321,11 @@ func TestGetCertificatesByCA(t *testing.T) {
 		{
 			name: "OK/GetCertificatesByCANotExistERunTrue",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
+
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
@@ -2197,7 +2333,16 @@ func TestGetCertificatesByCA(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        "myCA",
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -3052,8 +3197,22 @@ func TestGetStatsByCAID(t *testing.T) {
 					return fmt.Errorf("Error creating the private key: %s", err)
 				}
 
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: caID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
+
 				actCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "active-cert"}, actKey)
-				_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: caID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(actCSR)})
+				_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:        caID,
+					CertRequest: (*models.X509CertificateRequest)(actCSR),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        ca.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
+				})
 
 				if err != nil {
 					return fmt.Errorf("Error signing the active certificate: %s", err)
@@ -3065,7 +3224,16 @@ func TestGetStatsByCAID(t *testing.T) {
 				}
 
 				revCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "revoked-cert"}, revKey)
-				revCrt, err := svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: caID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(revCSR)})
+				revCrt, err := svc.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:        caID,
+					CertRequest: (*models.X509CertificateRequest)(revCSR),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        ca.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
+				})
 				if err != nil {
 					return fmt.Errorf("Error signing the revoked certificate: %s", err)
 				}
@@ -3165,6 +3333,11 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 		{
 			name: "Err/GetCAGertByExpDate",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: "myCA"})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
+
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
@@ -3172,7 +3345,16 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        "myCA",
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -3212,6 +3394,11 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 		{
 			name: "Err/GetCAGertByExpDateExhaustiveRun",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: "myCA"})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
+
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
@@ -3219,7 +3406,16 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        "myCA",
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -3259,6 +3455,11 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 		{
 			name: "Err/GetCAGertByExpDateIncDate",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: "myCA"})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
+
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
@@ -3266,7 +3467,16 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        "myCA",
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}

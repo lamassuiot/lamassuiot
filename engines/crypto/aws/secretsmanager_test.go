@@ -55,7 +55,10 @@ func TestNewAWSSecretManagerEngine(t *testing.T) {
 }
 
 func TestAWSSecretsManagerCryptoEngine(t *testing.T) {
-	engine := prepareSecretsManagerCryptoEngine(t)
+	cleanupBeforeTest, engine, err := prepareSecretsManagerCryptoEngine(t)
+	if err != nil {
+		t.Fatalf("Error preparing KMS engine: %v", err)
+	}
 
 	table := []struct {
 		name     string
@@ -66,33 +69,42 @@ func TestAWSSecretsManagerCryptoEngine(t *testing.T) {
 		{"SignRSA_PSS", cryptoengines.SharedTestRSAPSSSignature},
 		{"SignRSA_PKCS1v1_5", cryptoengines.SharedTestRSAPKCS1v15Signature},
 		{"SignECDSA", cryptoengines.SharedTestECDSASignature},
-		// {"DeleteKey", cryptoengines.SharedTestDeleteKey},
+		{"DeleteKey", cryptoengines.SharedTestDeleteKey},
 		{"GetPrivateKeyByID", cryptoengines.SharedGetKey},
 		{"GetPrivateKeyByIDNotFound", cryptoengines.SharedGetKeyNotFound},
+		{"ListPrivateKeyIDs", cryptoengines.SharedListKeys},
+		{"SharedRenameKey", cryptoengines.SharedRenameKey},
 	}
 
 	for _, tt := range table {
 		t.Run(tt.name, func(t *testing.T) {
+			defer cleanupBeforeTest()
 			tt.function(t, engine)
 		})
 	}
 }
 
-func prepareSecretsManagerCryptoEngine(t *testing.T) cryptoengines.CryptoEngine {
-	containerCleanup, conf, err := laws.RunAWSEmulationLocalStackDocker()
-	assert.NoError(t, err)
+func prepareSecretsManagerCryptoEngine(t *testing.T) (func() error, cryptoengines.CryptoEngine, error) {
+	beforeTestCleanup, containerCleanup, conf, err := laws.RunAWSEmulationLocalStackDocker()
+	if err != nil {
+		return nil, nil, err
+	}
 
 	t.Cleanup(func() { _ = containerCleanup() })
 
-	logger := logrus.New().WithField("test", "CreateRSAPrivateKey")
+	logger := logrus.New().WithField("test", "KMS")
 
 	metadata := map[string]interface{}{}
 
 	awsConf, err := laws.GetAwsSdkConfig(*conf)
-	assert.NoError(t, err)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	engine, err := NewAWSSecretManagerEngine(logger, *awsConf, metadata)
-	assert.NoError(t, err)
-	assert.NotNil(t, engine)
-	return engine
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return beforeTestCleanup, engine, nil
 }

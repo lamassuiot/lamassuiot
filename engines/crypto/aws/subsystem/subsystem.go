@@ -16,8 +16,7 @@ type AwsSubsystem struct {
 }
 
 func (p *AwsSubsystem) Run() (*subsystems.SubsystemBackend, error) {
-
-	awsCleanup, awsCfg, err := aws.RunAWSEmulationLocalStackDocker()
+	awsCleanup, _, awsCfg, err := aws.RunAWSEmulationLocalStackDocker()
 	if err != nil {
 		log.Fatalf("could not launch AWS Platform: %s", err)
 	}

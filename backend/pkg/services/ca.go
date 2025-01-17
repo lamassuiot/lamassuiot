@@ -3,9 +3,9 @@ package services
 import (
 	"context"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"fmt"
 	"time"
+	"unicode"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/jakehl/goid"
@@ -19,6 +19,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	"github.com/sirupsen/logrus"
 
 	"golang.org/x/crypto/ocsp"
@@ -62,11 +63,54 @@ func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
 	engines := map[string]*cryptoengines.CryptoEngine{}
 	var defaultCryptoEngine *cryptoengines.CryptoEngine
 	var defaultCryptoEngineID string
+
 	for engineID, engineInstance := range builder.CryptoEngines {
 		engines[engineID] = &engineInstance.Service
 		if engineInstance.Default {
 			defaultCryptoEngine = &engineInstance.Service
 			defaultCryptoEngineID = engineID
+		}
+
+		// Check if engine keys should be renamed
+		keyIDs, err := engineInstance.Service.ListPrivateKeyIDs()
+		if err != nil {
+			return nil, fmt.Errorf("could not list private keys for")
+		}
+
+		keyMigLog := builder.Logger.WithField("engine", engineID)
+		softCrypto := software.NewSoftwareCryptoEngine(keyMigLog)
+		keyMigLog.Infof("checking engine keys format")
+
+		for _, keyID := range keyIDs {
+			// check if they are in V1 format (serial number).
+			// V2 format is the hex encoded SHA256 of the public key, a string of 64 characters
+			containsNonHex := false
+			for _, char := range keyID {
+				if !unicode.IsLetter(char) && !unicode.IsDigit(char) {
+					// Not a hex character. Exit loop
+					containsNonHex = true
+					break
+				}
+			}
+
+			if len(keyID) != 64 || containsNonHex {
+				// Transform to V2 format
+				key, err := engineInstance.Service.GetPrivateKeyByID(keyID)
+				if err != nil {
+					return nil, fmt.Errorf("could not get key %s: %w", keyID, err)
+				}
+
+				newKeyID, err := softCrypto.EncodePKIXPublicKeyDigest(key.Public())
+				if err != nil {
+					return nil, fmt.Errorf("could not encode public key digest: %w", err)
+				}
+
+				keyMigLog.Debugf("renaming key %s to %s", keyID, newKeyID)
+				err = engineInstance.Service.RenameKey(keyID, fmt.Sprintf("%s-%s", engineID, keyID))
+				if err != nil {
+					return nil, fmt.Errorf("could not rename key %s: %w", keyID, err)
+				}
+			}
 		}
 	}
 
@@ -579,28 +623,17 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 			return nil, err
 		}
 
-		// Get the parent CA that will sign the new Sub CA
-		parentCACert := (*x509.Certificate)(parentCA.Certificate.Certificate)
-		_, parentEngine, err := svc.getCryptoEngine(parentCA.Certificate.EngineID)
-		if err != nil {
-			lFunc.Errorf("could not get parent engine %s: %s", input.EngineID, err)
-		}
-
-		parentCASigner, err := parentEngine.GetCASigner(ctx, parentCACert)
-		if err != nil {
-			lFunc.Errorf("could not get parent CA %s signer: %s", input.ParentID, err)
-			return nil, err
-		}
-
-		ca, err = engine.SignCertificateRequest(ctx, (*x509.CertificateRequest)(&caCSR.CSR), parentCACert, parentCASigner, models.IssuanceProfile{
-			Validity:        input.CAExpiration,
-			SignAsCA:        true,
-			HonorSubject:    true,
-			HonorExtensions: true,
+		signedCA, err := svc.SignCertificate(ctx, services.SignCertificateInput{
+			CAID:            input.ParentID,
+			CertRequest:     &caCSR.CSR,
+			IssuanceProfile: engine.GetDefaultCAIssuanceProfile(ctx, input.CAExpiration),
 		})
 		if err != nil {
+			lFunc.Errorf("could not sign CA %s certificate: %s", input.Subject.CommonName, err)
 			return nil, err
 		}
+
+		ca = (*x509.Certificate)(signedCA.Certificate)
 
 		// Update the CA level and issuer metadata
 		caLevel = parentCA.Level + 1
@@ -1090,45 +1123,14 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
 	csr := (*x509.CertificateRequest)(input.CertRequest)
 
-	if !input.SignVerbatim {
-		csr.Subject = pkix.Name{
-			CommonName:         input.Subject.CommonName,
-			Country:            []string{input.Subject.Country},
-			Province:           []string{input.Subject.State},
-			Locality:           []string{input.Subject.Locality},
-			Organization:       []string{input.Subject.Organization},
-			OrganizationalUnit: []string{input.Subject.OrganizationUnit},
-		}
-	}
-
-	expiration := time.Now()
-	if ca.Validity.Type == models.Duration {
-		expiration = expiration.Add(time.Duration(ca.Validity.Duration))
-	} else {
-		expiration = ca.Validity.Time
-	}
-
-	caCertSigner, err := x509Engine.GetCASigner(ctx, caCert)
+	caCertSigner, err := x509Engine.GetCertificateSigner(ctx, caCert)
 	if err != nil {
 		lFunc.Errorf("could not get CA %s signer: %s", caCert.Subject.CommonName, err)
 		return nil, err
 	}
 
 	lFunc.Debugf("sign certificate request with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
-	x509Cert, err := x509Engine.SignCertificateRequest(ctx, csr, caCert, caCertSigner, models.IssuanceProfile{
-		Validity: models.Validity{
-			Type: models.Time,
-			Time: expiration,
-		},
-		SignAsCA:     false,
-		HonorSubject: true,
-		KeyUsage:     []models.X509KeyUsage{},
-		ExtendedKeyUsages: []models.X509ExtKeyUsage{
-			models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
-			models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
-		},
-		HonorExtensions: true,
-	})
+	x509Cert, err := x509Engine.SignCertificateRequest(ctx, csr, caCert, caCertSigner, input.IssuanceProfile)
 	if err != nil {
 		lFunc.Errorf("could not sign certificate request with %s CA", caCert.Subject.CommonName)
 		return nil, err
@@ -1149,14 +1151,22 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		ValidFrom:           x509Cert.NotBefore,
 		ValidTo:             x509Cert.NotAfter,
 		RevocationTimestamp: time.Time{},
-		IsCA:                false,
+		IsCA:                x509Cert.IsCA,
+		KeyID:               "",
+		EngineID:            "",
 	}
+
 	lFunc.Debugf("insert Certificate %s in storage engine", cert.SerialNumber)
 	return svc.certStorage.Insert(ctx, &cert)
 }
 
 // Generate a new Key Pair and Sign a CSR to create a new Certificate. The Keys are stored and can later be used to sign other material.
 func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (*models.Certificate, error) {
+	// Generate a new Key Pair
+
+	// use svc.SignCertificate to sign the
+
+	//update the certificate with the KeyID and EngineID
 	return nil, fmt.Errorf("TODO")
 }
 

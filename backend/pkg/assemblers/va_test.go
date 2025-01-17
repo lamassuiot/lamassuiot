@@ -380,10 +380,20 @@ func generateCertificate(caSDK services.CAService) (*models.Certificate, error) 
 		return nil, fmt.Errorf("could not generate csr: %s", err)
 	}
 
+	ca, err := caSDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+	if err != nil {
+		return nil, fmt.Errorf("could not get CA: %s", err)
+	}
+
 	crt, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-		CAID:         DefaultCAID,
-		CertRequest:  (*models.X509CertificateRequest)(csr),
-		SignVerbatim: true,
+		CAID:        DefaultCAID,
+		CertRequest: (*models.X509CertificateRequest)(csr),
+		IssuanceProfile: models.IssuanceProfile{
+			Validity:        ca.Validity,
+			SignAsCA:        false,
+			HonorSubject:    true,
+			HonorExtensions: true,
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("could not sign csr: %s", err)

@@ -275,7 +275,7 @@ func (engine X509Engine) GenerateCertificateRequest(ctx context.Context, csrSign
 	return csr, nil
 }
 
-func (engine X509Engine) GetCASigner(ctx context.Context, caCertificate *x509.Certificate) (crypto.Signer, error) {
+func (engine X509Engine) GetCertificateSigner(ctx context.Context, caCertificate *x509.Certificate) (crypto.Signer, error) {
 	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(caCertificate.PublicKey)
 	if err != nil {
 		return nil, err

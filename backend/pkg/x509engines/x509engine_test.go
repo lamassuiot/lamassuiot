@@ -56,7 +56,7 @@ func teardown(tempDir string) {
 	os.RemoveAll(tempDir)
 }
 
-func TestGetCASigner(t *testing.T) {
+func TestGetCertificateSigner(t *testing.T) {
 	tempDir, engine, x509Engine := setup(t)
 	defer teardown(tempDir)
 	caCertificate, key, err := chelpers.GenerateSelfSignedCA(x509.RSA, 365*24*time.Hour, "MyCA")
@@ -76,8 +76,8 @@ func TestGetCASigner(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Call the GetCASigner method
-	signer, err := x509Engine.GetCASigner(ctx, caCertificate)
+	// Call the GetCertificateSigner method
+	signer, err := x509Engine.GetCertificateSigner(ctx, caCertificate)
 
 	// Verify the result
 	if err != nil {
@@ -103,8 +103,8 @@ func TestGetCACryptoSignerNonExistentKey(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Call the GetCASigner method
-	signer, err := x509Engine.GetCASigner(ctx, caCertificate)
+	// Call the GetCertificateSigner method
+	signer, err := x509Engine.GetCertificateSigner(ctx, caCertificate)
 
 	// Verify the result
 	if err == nil {
@@ -491,7 +491,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 				t.Fatalf("unexpected error in csr gen: %s", err)
 			}
 
-			parentCAsigner, err := x509Engine.GetCASigner(ctx, tc.rootCaCert)
+			parentCAsigner, err := x509Engine.GetCertificateSigner(ctx, tc.rootCaCert)
 			if err != nil {
 				t.Fatalf("unexpected error in get ca signer: %s", err)
 			}

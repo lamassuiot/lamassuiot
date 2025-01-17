@@ -320,11 +320,9 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 			}
 		}
 
-		clientSN := helpers.SerialNumberToString(clientCert.SerialNumber)
-
 		if !validCertificate {
 			lFunc = lFunc.WithField("auth-status", "failed")
-			lFunc.Errorf("aborting enrollment. used certificate not authorized for this DMS. certificate has SerialNumber %s issued by CA %s", clientSN, clientCert.Issuer.CommonName)
+			lFunc.Errorf("aborting enrollment. used certificate not authorized for this DMS")
 			return nil, errs.ErrDMSEnrollInvalidCert
 		}
 
@@ -502,12 +500,29 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	lFunc = lFunc.WithField("step", "Signature")
 	lFunc.Infof("starting signature process")
 
+	enrollCAID := dms.Settings.EnrollmentSettings.EnrollmentCA
+	enrollCA, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{
+		CAID: enrollCAID,
+	})
+	if err != nil {
+		lFunc.Errorf("could not get enroll CA with ID=%s: %s", enrollCAID, err)
+		return nil, err
+	}
+
 	lFunc.Infof("requesting certificate signature")
 	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
-		CAID:         dms.Settings.EnrollmentSettings.EnrollmentCA,
-		CertRequest:  (*models.X509CertificateRequest)(csr),
-		Subject:      nil,
-		SignVerbatim: true,
+		CAID:        dms.Settings.EnrollmentSettings.EnrollmentCA,
+		CertRequest: (*models.X509CertificateRequest)(csr),
+		IssuanceProfile: models.IssuanceProfile{
+			Validity: enrollCA.Validity,
+			SignAsCA: false,
+			ExtendedKeyUsages: []models.X509ExtKeyUsage{
+				models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+				models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+			},
+			HonorSubject:    true,
+			HonorExtensions: true,
+		},
 	})
 	if err != nil {
 		lFunc.Errorf("could issue certificate for device: %s", err)
@@ -772,10 +787,18 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	}
 
 	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
-		CAID:         dms.Settings.EnrollmentSettings.EnrollmentCA,
-		CertRequest:  (*models.X509CertificateRequest)(csr),
-		Subject:      nil,
-		SignVerbatim: true,
+		CAID:        dms.Settings.EnrollmentSettings.EnrollmentCA,
+		CertRequest: (*models.X509CertificateRequest)(csr),
+		IssuanceProfile: models.IssuanceProfile{
+			Validity: models.Validity{},
+			SignAsCA: false,
+			ExtendedKeyUsages: []models.X509ExtKeyUsage{
+				models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+				models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+			},
+			HonorSubject:    true,
+			HonorExtensions: true,
+		},
 	})
 	if err != nil {
 		lFunc.Errorf("could not issue certificate for device '%s': %s", csr.Subject.CommonName, err)

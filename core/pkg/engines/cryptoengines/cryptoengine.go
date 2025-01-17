@@ -14,6 +14,7 @@ import (
 type CryptoEngine interface {
 	GetEngineConfig() models.CryptoEngineInfo
 
+	ListPrivateKeyIDs() ([]string, error)
 	GetPrivateKeyByID(keyID string) (crypto.Signer, error)
 
 	CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error)
@@ -23,6 +24,8 @@ type CryptoEngine interface {
 	ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error)
 
 	DeleteKey(keyID string) error
+
+	RenameKey(oldID, newID string) error
 }
 
 var cryptoEngineBuilders = make(map[config.CryptoEngineProvider]func(*logrus.Entry, config.CryptoEngineConfig) (CryptoEngine, error))
