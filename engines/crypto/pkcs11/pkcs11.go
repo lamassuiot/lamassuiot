@@ -220,7 +220,7 @@ func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(keySize int) (string,
 		return "", nil, err
 	}
 
-	err = hsmContext.RenameKey(tmpKeyID, keyID)
+	err = hsmContext.UpdateKeyName(tmpKeyID, keyID, PKCS11_KEY_ID)
 	if err != nil {
 		hsmContext.logger.Errorf("could not rename key: %s", err)
 		return "", nil, err
@@ -244,7 +244,7 @@ func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(curve elliptic.Curv
 		return "", nil, err
 	}
 
-	err = hsmContext.RenameKey(tmpKeyID, keyID)
+	err = hsmContext.UpdateKeyName(tmpKeyID, keyID, PKCS11_KEY_ID)
 	if err != nil {
 		hsmContext.logger.Errorf("could not rename key: %s", err)
 		return "", nil, err
@@ -259,7 +259,16 @@ func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(curve elliptic.Curv
 	return keyID, renamedSigner, nil
 }
 
-func (hsmContext *pkcs11EngineContext) RenameKey(oldKeyID string, newKeyID string) error {
+// define a constant for the key ID using ints and iota
+
+type PKCS11KeyID int
+
+const (
+	PKCS11_KEY_ID PKCS11KeyID = iota
+	PKCS11_KEY_LABEL
+)
+
+func (hsmContext *pkcs11EngineContext) UpdateKeyName(oldKeyID string, newKeyID string, keyType PKCS11KeyID) error {
 	hsmSession, err := hsmContext.lowApi.OpenSession(hsmContext.slotID, pkcs11.CKF_SERIAL_SESSION|pkcs11.CKF_RW_SESSION)
 	if err != nil {
 		hsmContext.logger.Errorf("could not open session: %s", err)
@@ -269,7 +278,11 @@ func (hsmContext *pkcs11EngineContext) RenameKey(oldKeyID string, newKeyID strin
 
 	attrSet := crypto11.NewAttributeSet()
 	attrSet.Set(crypto11.CkaClass, pkcs11.CKO_PRIVATE_KEY)
-	attrSet.Set(pkcs11.CKA_ID, oldKeyID)
+	if keyType == PKCS11_KEY_LABEL {
+		attrSet.Set(pkcs11.CKA_LABEL, oldKeyID)
+	} else {
+		attrSet.Set(pkcs11.CKA_ID, oldKeyID)
+	}
 
 	keyHandle, err := findKeyWithAttributes(*hsmContext.lowApi, hsmSession, attrSet.ToSlice())
 	if err != nil {
@@ -286,6 +299,10 @@ func (hsmContext *pkcs11EngineContext) RenameKey(oldKeyID string, newKeyID strin
 	}
 
 	return nil
+}
+
+func (hsmContext *pkcs11EngineContext) RenameKey(oldKeyID string, newKeyID string) error {
+	return hsmContext.UpdateKeyName(oldKeyID, newKeyID, PKCS11_KEY_LABEL)
 }
 
 func (hsmContext *pkcs11EngineContext) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
