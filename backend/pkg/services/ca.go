@@ -74,7 +74,7 @@ func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
 		// Check if engine keys should be renamed
 		keyIDs, err := engineInstance.Service.ListPrivateKeyIDs()
 		if err != nil {
-			return nil, fmt.Errorf("could not list private keys for")
+			return nil, fmt.Errorf("could not list private keys for engine %s: %s", engineID, err)
 		}
 
 		keyMigLog := builder.Logger.WithField("engine", engineID)
@@ -615,7 +615,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 			ID:          input.ID,
 			KeyMetadata: input.KeyMetadata,
 			Subject:     input.Subject,
-			EngineID:    input.EngineID,
+			EngineID:    engineID,
 			Metadata:    input.Metadata,
 		})
 		if err != nil {
@@ -1156,8 +1156,13 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		EngineID:            "",
 	}
 
-	lFunc.Debugf("insert Certificate %s in storage engine", cert.SerialNumber)
-	return svc.certStorage.Insert(ctx, &cert)
+	// CAs get inserted into the CA storage engine by the CreateCA method. Don't insert them here.
+	if !x509Cert.IsCA {
+		lFunc.Debugf("insert Certificate %s in storage engine", cert.SerialNumber)
+		return svc.certStorage.Insert(ctx, &cert)
+	}
+
+	return &cert, nil
 }
 
 // Generate a new Key Pair and Sign a CSR to create a new Certificate. The Keys are stored and can later be used to sign other material.

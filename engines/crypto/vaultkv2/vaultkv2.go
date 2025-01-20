@@ -192,7 +192,7 @@ func (engine *VaultKV2Engine) ListPrivateKeyIDs() ([]string, error) {
 	}
 
 	if resp == nil {
-		return nil, errors.New("no response from vault")
+		return []string{}, nil
 	}
 
 	if resp.Data == nil {

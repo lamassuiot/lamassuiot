@@ -13,7 +13,7 @@ type VaultSuite struct {
 }
 
 func BeforeSuite() (vconfig.HashicorpVaultSDK, VaultSuite) {
-	cleanup, beforeEach, conf, rootToken, err := RunHashicorpVaultDocker()
+	beforeEach, cleanup, conf, rootToken, err := RunHashicorpVaultDocker()
 	if err != nil {
 		log.Fatal(err)
 	}

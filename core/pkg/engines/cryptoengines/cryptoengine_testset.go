@@ -54,13 +54,17 @@ func SharedGetKey(t *testing.T, engine CryptoEngine) {
 }
 
 func SharedListKeys(t *testing.T, engine CryptoEngine) {
+	keys, err := engine.ListPrivateKeyIDs()
+	assert.NoError(t, err)
+	assert.Len(t, keys, 0)
+
 	keyID1, _, err := engine.CreateECDSAPrivateKey(elliptic.P256())
 	assert.NoError(t, err)
 
 	keyID2, _, err := engine.CreateECDSAPrivateKey(elliptic.P256())
 	assert.NoError(t, err)
 
-	keys, err := engine.ListPrivateKeyIDs()
+	keys, err = engine.ListPrivateKeyIDs()
 	assert.NoError(t, err)
 
 	assert.Contains(t, keys, keyID1)

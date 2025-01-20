@@ -102,7 +102,7 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 		{"ImportRSAKey", testImportRSAKeyOnKMS},
 		{"ImportECDSAKey", testImportECDSAKeyOnKMS},
 		{"ListPrivateKeyIDs", cryptoengines.SharedListKeys},
-		{"SharedRenameKey", cryptoengines.SharedRenameKey},
+		{"RenameKey", cryptoengines.SharedRenameKey},
 	}
 
 	for _, tt := range table {

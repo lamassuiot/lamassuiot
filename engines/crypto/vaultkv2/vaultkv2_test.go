@@ -62,7 +62,7 @@ func TestVaultCryptoEngine(t *testing.T) {
 		{"GetPrivateKeyByID", cryptoengines.SharedGetKey},
 		{"GetPrivateKeyByIDNotFound", cryptoengines.SharedGetKeyNotFound},
 		{"ListPrivateKeyIDs", cryptoengines.SharedListKeys},
-		{"SharedRenameKey", cryptoengines.SharedRenameKey},
+		{"RenameKey", cryptoengines.SharedRenameKey},
 	}
 
 	for _, tt := range table {
