@@ -790,7 +790,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		CAID:        dms.Settings.EnrollmentSettings.EnrollmentCA,
 		CertRequest: (*models.X509CertificateRequest)(csr),
 		IssuanceProfile: models.IssuanceProfile{
-			Validity: models.Validity{},
+			Validity: enrollCA.Validity,
 			SignAsCA: false,
 			ExtendedKeyUsages: []models.X509ExtKeyUsage{
 				models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
