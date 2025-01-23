@@ -79,7 +79,10 @@ func testImportECDSAKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
 }
 
 func TestAWSKMSCryptoEngine(t *testing.T) {
-	engine := prepareKMSCryptoEngine(t)
+	cleanupBeforeTest, engine, err := prepareKMSCryptoEngine(t)
+	if err != nil {
+		t.Fatalf("Error preparing KMS engine: %v", err)
+	}
 
 	table := []struct {
 		name     string
@@ -98,18 +101,23 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 		{"GetPrivateKeyByIDNotFound", cryptoengines.SharedGetKeyNotFound},
 		{"ImportRSAKey", testImportRSAKeyOnKMS},
 		{"ImportECDSAKey", testImportECDSAKeyOnKMS},
+		{"ListPrivateKeyIDs", cryptoengines.SharedListKeys},
+		{"RenameKey", cryptoengines.SharedRenameKey},
 	}
 
 	for _, tt := range table {
 		t.Run(tt.name, func(t *testing.T) {
+			defer cleanupBeforeTest()
 			tt.function(t, engine)
 		})
 	}
 }
 
-func prepareKMSCryptoEngine(t *testing.T) cryptoengines.CryptoEngine {
-	containerCleanup, conf, err := laws.RunAWSEmulationLocalStackDocker()
-	assert.NoError(t, err)
+func prepareKMSCryptoEngine(t *testing.T) (func() error, cryptoengines.CryptoEngine, error) {
+	beforeTestCleanup, containerCleanup, conf, err := laws.RunAWSEmulationLocalStackDocker()
+	if err != nil {
+		return nil, nil, err
+	}
 
 	t.Cleanup(func() { _ = containerCleanup() })
 
@@ -118,10 +126,14 @@ func prepareKMSCryptoEngine(t *testing.T) cryptoengines.CryptoEngine {
 	metadata := map[string]interface{}{}
 
 	awsConf, err := laws.GetAwsSdkConfig(*conf)
-	assert.NoError(t, err)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	engine, err := NewAWSKMSEngine(logger, *awsConf, metadata)
-	assert.NoError(t, err)
-	assert.NotNil(t, engine)
-	return engine
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return beforeTestCleanup, engine, nil
 }

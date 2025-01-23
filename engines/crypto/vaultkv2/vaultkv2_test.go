@@ -44,7 +44,10 @@ func testGetEngineConfig(t *testing.T, engine cryptoengines.CryptoEngine) {
 }
 
 func TestVaultCryptoEngine(t *testing.T) {
-	engine := prepareVaultkv2CryptoEngine(t)
+	beforeEach, engine, err := prepareVaultkv2CryptoEngine(t)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	table := []struct {
 		name     string
@@ -58,20 +61,25 @@ func TestVaultCryptoEngine(t *testing.T) {
 		{"DeleteKey", cryptoengines.SharedTestDeleteKey},
 		{"GetPrivateKeyByID", cryptoengines.SharedGetKey},
 		{"GetPrivateKeyByIDNotFound", cryptoengines.SharedGetKeyNotFound},
+		{"ListPrivateKeyIDs", cryptoengines.SharedListKeys},
+		{"RenameKey", cryptoengines.SharedRenameKey},
 	}
 
 	for _, tt := range table {
 		t.Run(tt.name, func(t *testing.T) {
+			beforeEach()
 			tt.function(t, engine)
 		})
 	}
 
 }
 
-func prepareVaultkv2CryptoEngine(t *testing.T) cryptoengines.CryptoEngine {
-	vCleanup, vaultConfig, _, err := keyvaultkv2_test.RunHashicorpVaultDocker()
+func prepareVaultkv2CryptoEngine(t *testing.T) (func() error, cryptoengines.CryptoEngine, error) {
+	beforeEachCleanup, vCleanup, vaultConfig, _, err := keyvaultkv2_test.RunHashicorpVaultDocker()
 	t.Cleanup(func() { _ = vCleanup() })
-	assert.NoError(t, err)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	logger := logrus.New().WithField("test", "VaultKV2")
 
@@ -83,7 +91,9 @@ func prepareVaultkv2CryptoEngine(t *testing.T) cryptoengines.CryptoEngine {
 	}
 
 	engine, err := NewVaultKV2Engine(logger, ceConfig)
-	assert.NoError(t, err)
+	if err != nil {
+		return nil, nil, err
+	}
 
-	return engine
+	return beforeEachCleanup, engine, nil
 }

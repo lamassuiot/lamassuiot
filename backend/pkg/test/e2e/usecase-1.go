@@ -252,9 +252,18 @@ func RunUseCase1(input UseCase1Input) error {
 	}
 	log.Infof("6. Sign Bootstrap Cert with CA2")
 	bootSigedCrt, err := caClient.SignCertificate(context.Background(), services.SignCertificateInput{
-		CAID:         ca2.ID,
-		CertRequest:  (*models.X509CertificateRequest)(bootCsr),
-		SignVerbatim: true,
+		CAID:        ca2.ID,
+		CertRequest: (*models.X509CertificateRequest)(bootCsr),
+		IssuanceProfile: models.IssuanceProfile{
+			Validity: models.Validity{},
+			SignAsCA: false,
+			ExtendedKeyUsages: []models.X509ExtKeyUsage{
+				models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+				models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+			},
+			HonorSubject:    true,
+			HonorExtensions: true,
+		},
 	})
 	if err != nil {
 		return err

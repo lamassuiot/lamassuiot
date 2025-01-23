@@ -228,7 +228,7 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 			nextBookmark = fmt.Sprintf("off:%d;lim:%d;", limit+offset, limit)
 
 			if queryParams.Sort.SortField != "" {
-				sortBy = queryParams.Sort.SortField
+				sortBy = strings.ReplaceAll(queryParams.Sort.SortField, ".", "_")
 				nextBookmark = nextBookmark + fmt.Sprintf("sortM:%s;sortB:%s;", sortMode, sortBy)
 				tx = tx.Order(sortBy + " " + sortMode)
 			}
@@ -266,7 +266,7 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 						return "", fmt.Errorf("not a valid bookmark")
 					}
 				case "sortB":
-					sortBy = queryPart[1]
+					sortBy = strings.ReplaceAll(queryPart[1], ".", "_")
 					if err != nil {
 						return "", fmt.Errorf("not a valid bookmark")
 					}

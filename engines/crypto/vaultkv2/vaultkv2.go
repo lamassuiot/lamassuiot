@@ -28,6 +28,8 @@ import (
 type VaultKV2Engine struct {
 	softCryptoEngine *software.SoftwareCryptoEngine
 	kvv2Client       *api.KVv2
+	mountPath        string
+	vaultClient      *api.Client
 	logger           *logrus.Entry
 }
 
@@ -94,6 +96,7 @@ func NewVaultKV2Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapt
 		if err != nil {
 			return nil, err
 		}
+
 	}
 
 	kv2 := vaultClient.KVv2(conf.Config.MountPath)
@@ -101,6 +104,8 @@ func NewVaultKV2Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapt
 	return &VaultKV2Engine{
 		logger:           lVault,
 		softCryptoEngine: software.NewSoftwareCryptoEngine(lVault),
+		mountPath:        conf.Config.MountPath,
+		vaultClient:      vaultClient,
 		kvv2Client:       kv2,
 	}, nil
 }
@@ -175,6 +180,36 @@ func (engine *VaultKV2Engine) GetPrivateKeyByID(keyID string) (crypto.Signer, er
 	default:
 		return nil, errors.New("unsupported key type")
 	}
+}
+
+func (engine *VaultKV2Engine) ListPrivateKeyIDs() ([]string, error) {
+	engine.logger.Debugf("listing private keys")
+
+	// Send the LIST request
+	resp, err := engine.vaultClient.Logical().List(fmt.Sprintf("%s/metadata", engine.mountPath))
+	if err != nil {
+		return nil, fmt.Errorf("error making request to vault: %w", err)
+	}
+
+	if resp == nil {
+		return []string{}, nil
+	}
+
+	if resp.Data == nil {
+		return nil, errors.New("no data in response from vault")
+	}
+
+	if _, ok := resp.Data["keys"]; !ok {
+		return nil, errors.New("no keys in response from vault")
+	}
+
+	var keys []string
+	for _, key := range resp.Data["keys"].([]any) {
+		keys = append(keys, key.(string))
+	}
+
+	engine.logger.Debugf("successfully retrieved private keys")
+	return keys, nil
 }
 
 func (engine *VaultKV2Engine) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
@@ -269,6 +304,29 @@ func (engine *VaultKV2Engine) importKey(key any) (string, crypto.Signer, error) 
 	}
 
 	return keyID, signer, nil
+}
+
+func (engine *VaultKV2Engine) RenameKey(oldID, newID string) error {
+	key, err := engine.kvv2Client.Get(context.Background(), oldID)
+	if err != nil {
+		engine.logger.Errorf("could not get private key: %s", err)
+		return errors.New("could not get private key")
+	}
+
+	_, err = engine.kvv2Client.Put(context.Background(), newID, key.Data)
+	if err != nil {
+		engine.logger.Errorf("could not save the private key in vault: %s", err)
+		return err
+	}
+
+	// Delete the old key
+	err = engine.kvv2Client.Delete(context.Background(), oldID)
+	if err != nil {
+		engine.logger.Errorf("could not delete the old key: %s", err)
+		return err
+	}
+
+	return nil
 }
 
 func (engine *VaultKV2Engine) DeleteKey(keyID string) error {

@@ -1,6 +1,7 @@
 package x509engines
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/sha512"
@@ -271,13 +272,14 @@ func TestSignVerify(t *testing.T) {
 				}
 			}
 
+			ctx := context.Background()
 			// Call the Sign method
-			signature, errSignature := x509Engine.Sign(Certificate, tc.certificate, value, tc.msgType, tc.signingAlgorithm)
+			signature, errSignature := x509Engine.Sign(ctx, tc.certificate, value, tc.msgType, tc.signingAlgorithm)
 			verifyAlgorithm := tc.signingAlgorithm
 			if tc.verifyAlgorithm != "" {
 				verifyAlgorithm = tc.verifyAlgorithm
 			}
-			val, errValidation := x509Engine.Verify(tc.certificate, signature, value, tc.msgType, verifyAlgorithm)
+			val, errValidation := x509Engine.Verify(ctx, tc.certificate, signature, value, tc.msgType, verifyAlgorithm)
 			err := tc.check(val, errSignature, errValidation)
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)

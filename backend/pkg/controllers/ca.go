@@ -863,10 +863,9 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 	}
 
 	ca, err := r.svc.SignCertificate(ctx, services.SignCertificateInput{
-		CAID:         params.ID,
-		Subject:      requestBody.Subject,
-		CertRequest:  requestBody.CertRequest,
-		SignVerbatim: requestBody.SignVerbatim,
+		CAID:            params.ID,
+		CertRequest:     requestBody.CertRequest,
+		IssuanceProfile: requestBody.Profile,
 	})
 	if err != nil {
 		switch err {

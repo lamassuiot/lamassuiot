@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
@@ -41,30 +40,6 @@ func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfig
 	if err != nil {
 		return nil, err
 	}
-
-	// Update KeyIDs in folder and remove old naming
-	entries, err := os.ReadDir(conf.Config.StorageDirectory)
-	if err != nil {
-		return nil, err
-	}
-
-	lGo.Debugf("Starting key renaming to new format")
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		v1KeySuffix := "lms-caservice-certauth-keyid-"
-		if strings.HasSuffix(v1KeySuffix, entry.Name()) {
-			lGo.Debugf("Renaming key %s", entry.Name())
-			newName := strings.Replace(entry.Name(), v1KeySuffix, "", 1)
-			err := os.Rename(filepath.Join(conf.Config.StorageDirectory, entry.Name()), filepath.Join(conf.Config.StorageDirectory, newName))
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-	lGo.Debugf("Finished key renaming to new format")
 
 	meta := helpers.MergeMaps[interface{}](&defaultMeta, &conf.Metadata)
 	return &FilesystemCryptoEngine{
@@ -133,6 +108,37 @@ func (engine *FilesystemCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Si
 	default:
 		return nil, errors.New("unsupported key type")
 	}
+}
+
+func (engine *FilesystemCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
+	// Update KeyIDs in folder and remove old naming
+	entries, err := os.ReadDir(engine.storageDirectory)
+	if err != nil {
+		return nil, err
+	}
+
+	var keyIDs []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		keyIDs = append(keyIDs, entry.Name())
+	}
+
+	return keyIDs, nil
+}
+
+func (engine *FilesystemCryptoEngine) RenameKey(oldID, newID string) error {
+	engine.logger.Debugf("renaming key %s to %s", oldID, newID)
+	err := os.Rename(filepath.Join(engine.storageDirectory, oldID), filepath.Join(engine.storageDirectory, newID))
+	if err != nil {
+		engine.logger.Errorf("could not rename key %s to %s: %s", oldID, newID, err)
+		return err
+	}
+
+	engine.logger.Debugf("key %s successfully renamed to %s", oldID, newID)
+	return nil
 }
 
 func (engine *FilesystemCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {

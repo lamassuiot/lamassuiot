@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/hashicorp/vault/api"
 	vaultApi "github.com/hashicorp/vault/api"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -13,7 +14,7 @@ import (
 	"github.com/ory/dockertest/v3/docker"
 )
 
-func RunHashicorpVaultDocker() (func() error, *vconfig.HashicorpVaultSDK, string, error) {
+func RunHashicorpVaultDocker() (func() error, func() error, *vconfig.HashicorpVaultSDK, string, error) {
 	rootToken := "root-token-dev"
 	containerCleanup, container, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
 		Repository: "vault",  // image
@@ -27,7 +28,7 @@ func RunHashicorpVaultDocker() (func() error, *vconfig.HashicorpVaultSDK, string
 		// This function is intentionally left empty.
 	})
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, nil, "", err
 	}
 
 	p, _ := strconv.Atoi(container.GetPort("8200/tcp"))
@@ -37,7 +38,7 @@ func RunHashicorpVaultDocker() (func() error, *vconfig.HashicorpVaultSDK, string
 	client, err := vaultApi.NewClient(conf)
 	if err != nil {
 		containerCleanup()
-		return nil, nil, "", err
+		return nil, nil, nil, "", err
 	}
 
 	healthy := false
@@ -56,13 +57,13 @@ func RunHashicorpVaultDocker() (func() error, *vconfig.HashicorpVaultSDK, string
 	})
 	if err != nil {
 		containerCleanup()
-		return nil, nil, "", err
+		return nil, nil, nil, "", err
 	}
 
 	mountPath := "lamassu-pki-kvv2"
 	policyContent := fmt.Sprintf(`
 	path "%s/*" {
-		capabilities = [ "read", "create", "delete" ]
+		capabilities = [ "read", "create", "delete", "list" ]
 	}  
 	
 	path "sys/mounts/%s" {
@@ -76,7 +77,7 @@ func RunHashicorpVaultDocker() (func() error, *vconfig.HashicorpVaultSDK, string
 	err = client.Sys().PutPolicy("pki-kv", policyContent)
 	if err != nil {
 		containerCleanup()
-		return nil, nil, "", err
+		return nil, nil, nil, "", err
 	}
 
 	_, err = client.Logical().Write(fmt.Sprintf("auth/approle/role/%s", "lamassu-ca-client"), map[string]interface{}{
@@ -84,13 +85,13 @@ func RunHashicorpVaultDocker() (func() error, *vconfig.HashicorpVaultSDK, string
 	})
 	if err != nil {
 		containerCleanup()
-		return nil, nil, "", err
+		return nil, nil, nil, "", err
 	}
 
 	roleIDRaw, err := client.Logical().Read(fmt.Sprintf("auth/approle/role/%s/role-id", "lamassu-ca-client"))
 	if err != nil {
 		containerCleanup()
-		return nil, nil, "", err
+		return nil, nil, nil, "", err
 	}
 
 	roleID := roleIDRaw.Data["role_id"].(string)
@@ -98,23 +99,58 @@ func RunHashicorpVaultDocker() (func() error, *vconfig.HashicorpVaultSDK, string
 	secretIDRAW, err := client.Logical().Write(fmt.Sprintf("auth/approle/role/%s/secret-id", "lamassu-ca-client"), nil)
 	if err != nil {
 		containerCleanup()
-		return nil, nil, "", err
+		return nil, nil, nil, "", err
 	}
 
 	secretID := secretIDRAW.Data["secret_id"].(string)
 
-	return containerCleanup, &vconfig.HashicorpVaultSDK{
-		RoleID:    roleID,
-		SecretID:  config.Password(secretID),
-		MountPath: mountPath,
-		HTTPConnection: config.HTTPConnection{
-			Protocol: config.HTTP,
-			BasePath: "",
-			BasicConnection: config.BasicConnection{
-				Hostname:  "127.0.0.1",
-				Port:      p,
-				TLSConfig: config.TLSConfig{},
+	return func() error {
+			return cleanupKV2(client, mountPath)
+		},
+		containerCleanup, &vconfig.HashicorpVaultSDK{
+			RoleID:    roleID,
+			SecretID:  config.Password(secretID),
+			MountPath: mountPath,
+			HTTPConnection: config.HTTPConnection{
+				Protocol: config.HTTP,
+				BasePath: "",
+				BasicConnection: config.BasicConnection{
+					Hostname:  "127.0.0.1",
+					Port:      p,
+					TLSConfig: config.TLSConfig{},
+				},
 			},
 		},
-	}, rootToken, nil
+		rootToken,
+		nil
+}
+
+func cleanupKV2(client *api.Client, path string) error {
+	mounts, err := client.Sys().ListMounts()
+	if err != nil {
+		return err
+	}
+
+	hasMount := false
+	for mountPath := range mounts {
+		if mountPath == fmt.Sprintf("%s/", path) { //mountPath has a trailing slash
+			hasMount = true
+		}
+	}
+
+	if hasMount {
+		err := client.Sys().Unmount(path)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = client.Sys().Mount(path, &api.MountInput{
+		Type: "kv-v2",
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

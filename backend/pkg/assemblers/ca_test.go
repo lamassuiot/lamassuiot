@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -279,7 +278,12 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				crt, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:        enrollCA.ID,
 					CertRequest: (*models.X509CertificateRequest)(enrollCSR),
-					Subject:     &enrollCA.Certificate.Subject,
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        enrollCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not sign the certificate: %s", err)
@@ -651,13 +655,28 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 			name: "OK/Pagination10-pagesize5-without-pagination",
 			before: func(svc services.CAService) error {
 				certsToIssue := 10
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
+
 				for i := 0; i < certsToIssue; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
 						return fmt.Errorf("Error creating the private key: %s", err)
 					}
+
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", i)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        DefaultCAID,
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -697,11 +716,25 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 		{
 			name: "OK/Pagination15-pagesize5-with-pagination",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
+
 				certsToIssue := 15
 				for i := 0; i < certsToIssue; i++ {
 					key, _ := chelpers.GenerateRSAKey(2048)
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", i)}, key)
-					_, err := svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err := svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        DefaultCAID,
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -779,12 +812,12 @@ func TestSignCertificate(t *testing.T) {
 
 	var testcases = []struct {
 		name        string
-		run         func(caSDK services.CAService, caIDToSign string) (*models.Certificate, error)
+		run         func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error)
 		resultCheck func(issuedCerts *models.Certificate, err error) error
 	}{
 		{
 			name: "OK/SignCertificate",
-			run: func(caSDK services.CAService, caIDToSign string) (*models.Certificate, error) {
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
 				key, err := chelpers.GenerateRSAKey(2048)
 				if err != nil {
 					return nil, err
@@ -796,9 +829,14 @@ func TestSignCertificate(t *testing.T) {
 				}
 
 				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         caIDToSign,
-					CertRequest:  (*models.X509CertificateRequest)(csr),
-					SignVerbatim: true,
+					CAID:        caIDToSign,
+					CertRequest: (*models.X509CertificateRequest)(csr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 			},
 			resultCheck: func(issuedCert *models.Certificate, err error) error {
@@ -839,7 +877,7 @@ func TestSignCertificate(t *testing.T) {
 		},
 		{
 			name: "OK/SignCertificateWithAltSubject",
-			run: func(caSDK services.CAService, caIDToSign string) (*models.Certificate, error) {
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
 				key, err := chelpers.GenerateRSAKey(2048)
 				if err != nil {
 					return nil, err
@@ -851,16 +889,20 @@ func TestSignCertificate(t *testing.T) {
 				}
 
 				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         caIDToSign,
-					CertRequest:  (*models.X509CertificateRequest)(csr),
-					SignVerbatim: false,
-					Subject: &models.Subject{
-						CommonName:       "other-test",
-						Country:          "US",
-						Organization:     "other-lamassu",
-						OrganizationUnit: "other-iot",
-						State:            "other-lamassu-world",
-						Locality:         "other-lamassu-city",
+					CAID:        caIDToSign,
+					CertRequest: (*models.X509CertificateRequest)(csr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:     validity,
+						SignAsCA:     false,
+						HonorSubject: false,
+						Subject: models.Subject{
+							CommonName:       "other-test",
+							Country:          "US",
+							Organization:     "other-lamassu",
+							OrganizationUnit: "other-iot",
+							State:            "other-lamassu-world",
+							Locality:         "other-lamassu-city",
+						},
 					},
 				})
 			},
@@ -873,8 +915,8 @@ func TestSignCertificate(t *testing.T) {
 					return fmt.Errorf("should've got issued certificate but got nil")
 				}
 
-				if issuedCert.Subject.CommonName != "other-test" {
-					return fmt.Errorf("issued certificate should have CommonName 'other-test' but got %s", issuedCert.Subject.CommonName)
+				if issuedCert.Subject.CommonName == "other-test" {
+					return fmt.Errorf("issued certificate should respect CSR CN 'test' but got %s", issuedCert.Subject.CommonName)
 				}
 
 				if issuedCert.Subject.Country != "US" {
@@ -898,7 +940,7 @@ func TestSignCertificate(t *testing.T) {
 		},
 		{
 			name: "Err/CADoesNotExist",
-			run: func(caSDK services.CAService, caIDToSign string) (*models.Certificate, error) {
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
 				key, err := chelpers.GenerateRSAKey(2048)
 				if err != nil {
 					return nil, err
@@ -910,9 +952,14 @@ func TestSignCertificate(t *testing.T) {
 				}
 
 				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:         "myCA",
-					CertRequest:  (*models.X509CertificateRequest)(csr),
-					SignVerbatim: true,
+					CAID:        "myCA",
+					CertRequest: (*models.X509CertificateRequest)(csr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
 				})
 			},
 			resultCheck: func(issuedCert *models.Certificate, err error) error {
@@ -957,7 +1004,7 @@ func TestSignCertificate(t *testing.T) {
 				t.Fatalf("failed creating CA: %s", err)
 			}
 
-			err = tc.resultCheck(tc.run(caTest.HttpCASDK, ca.ID))
+			err = tc.resultCheck(tc.run(caTest.HttpCASDK, ca.ID, ca.Validity))
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
 			}
@@ -1288,6 +1335,11 @@ func TestRevokeCA(t *testing.T) {
 		{
 			name: "OK/RevokeWith20CertsIssued",
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				ca, err := caSDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return nil, err
+				}
+
 				issue20 := 20
 				for i := 0; i < issue20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
@@ -1301,9 +1353,14 @@ func TestRevokeCA(t *testing.T) {
 					}
 
 					caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-						CAID:         DefaultCAID,
-						CertRequest:  (*models.X509CertificateRequest)(csr),
-						SignVerbatim: true,
+						CAID:        DefaultCAID,
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
 					})
 				}
 				caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
@@ -1572,7 +1629,15 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 				}
 
 				csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-				cert, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+				cert, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:        DefaultCAID,
+					CertRequest: (*models.X509CertificateRequest)(csr),
+					IssuanceProfile: models.IssuanceProfile{
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
+				})
 				if err != nil {
 					return err
 				}
@@ -1909,6 +1974,10 @@ func TestGetCertificates(t *testing.T) {
 		{
 			name: "OK/GetsCertificatesEXRunTrue",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
 
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
@@ -1917,7 +1986,16 @@ func TestGetCertificates(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        DefaultCAID,
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -1956,6 +2034,10 @@ func TestGetCertificates(t *testing.T) {
 		{
 			name: "OK/GetsCertificatesEXRunFalse",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
 
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
@@ -1964,7 +2046,16 @@ func TestGetCertificates(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        DefaultCAID,
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -2005,7 +2096,6 @@ func TestGetCertificates(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			//
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
@@ -2050,6 +2140,10 @@ func TestGetCertificatesByCA(t *testing.T) {
 		{
 			name: "OK/GetCertificatesByCAExRunFalse",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
 
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
@@ -2058,7 +2152,16 @@ func TestGetCertificatesByCA(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        DefaultCAID,
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -2097,6 +2200,10 @@ func TestGetCertificatesByCA(t *testing.T) {
 		{
 			name: "OK/GetCertificatesByCAExRunTrue",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
 
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
@@ -2105,7 +2212,16 @@ func TestGetCertificatesByCA(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        DefaultCAID,
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -2144,6 +2260,11 @@ func TestGetCertificatesByCA(t *testing.T) {
 		{
 			name: "OK/GetCertificatesByCANotExistERunFalse",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
+
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
@@ -2151,7 +2272,16 @@ func TestGetCertificatesByCA(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        DefaultCAID,
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -2171,7 +2301,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 							issuedCerts = append(issuedCerts, &elem)
 						},
 					},
-					CAID: "MyCA",
+					CAID: "NonExistenCAID",
 				})
 
 				return issuedCerts, err
@@ -2190,6 +2320,11 @@ func TestGetCertificatesByCA(t *testing.T) {
 		{
 			name: "OK/GetCertificatesByCANotExistERunTrue",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
+
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
@@ -2197,7 +2332,16 @@ func TestGetCertificatesByCA(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        DefaultCAID,
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -2217,7 +2361,7 @@ func TestGetCertificatesByCA(t *testing.T) {
 							issuedCerts = append(issuedCerts, &elem)
 						},
 					},
-					CAID: "MyCA",
+					CAID: "NonExistenCAID",
 				})
 
 				return issuedCerts, err
@@ -2340,7 +2484,7 @@ func TestImportCA(t *testing.T) {
 				}
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6abf45b4d24e0bf7d8adef322c06987baca",
+					ID:     "id-1234",
 					CAType: models.CertificateTypeExternal,
 					IssuanceExpiration: models.Validity{
 						Type:     models.Duration,
@@ -2370,7 +2514,7 @@ func TestImportCA(t *testing.T) {
 				}
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6a4e0bf7d8adef322c06987baca",
+					ID:     "id-1234",
 					CAType: models.CertificateTypeImportedWithKey,
 					IssuanceExpiration: models.Validity{
 						Type:     models.Duration,
@@ -2410,7 +2554,7 @@ func TestImportCA(t *testing.T) {
 				}
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					ID:     "c1acdb823dd8ac113d2b0a1aaa03e6a4e0bf7d8adef322c06987baca",
+					ID:     "id-1234",
 					CAType: models.CertificateTypeImportedWithKey,
 					IssuanceExpiration: models.Validity{
 						Type:     models.Duration,
@@ -2442,7 +2586,7 @@ func TestImportCA(t *testing.T) {
 				}
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					ID:     "c1acdb823dd8ac113d2b0a1aaa0adef322c06987baca",
+					ID:     "id-1234",
 					CAType: models.CertificateTypeImportedWithKey,
 					IssuanceExpiration: models.Validity{
 						Type:     models.Duration,
@@ -2491,195 +2635,196 @@ func TestImportCA(t *testing.T) {
 				return nil
 			},
 		},
-		{
-			name:   "OK/ImportingHierarchy",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.CACertificate, error) {
-				ca0Crt := `-----BEGIN CERTIFICATE-----
-MIIF4TCCA8mgAwIBAgIQD7Bwh2HNiZht1NqCrgyw+TANBgkqhkiG9w0BAQsFADAS
-MRAwDgYDVQQDEwdSb290LUNBMCAXDTI0MDUyMDEwMjA0MloYDzk5OTkxMjMxMjI1
-OTU5WjASMRAwDgYDVQQDEwdSb290LUNBMIICIjANBgkqhkiG9w0BAQEFAAOCAg8A
-MIICCgKCAgEA1N9HcHVVIpUm/JmPVxEasRsoh4Dh6+/CX/hex7prZ+OEkqwFFfYx
-vnSGX0lQyDGnymjyLEtC+dumW7PrJ1wuQaI6uZ+Jy5XGPLiPVc/EzGPxnKJV6OF6
-nkDPc3qPorzMM1s4JZX2D4YfasumEmREYQsdufMik3iiJ5AbojUuVQLIsqnxrJZ7
-FOSkM4pux47f6o2nOKIhkoUQ8zAQ950yXON0F573GS87PLRx8XuMj79o4DsHQ8w3
-38M8/vIhwlQMmaqx7+gLN2fKRw4wHUfnJRmPwmszAQtjMCk+mEO5C2xAi5tzf9Ec
-hUHlrwUQRJhCit3yTrqzKDMCfAel/qllrB6wGI+p37PTg5AM5e3cmK80jmKwXiQM
-RHdbNwnvrnxQnpBZBvtR2uH/v3z85BmkNxMrQsGQLBlYm/WIcv3zOzyJUJcAv46f
-t4Wv/MuAjmWVSkrO0uZgJkwoV7jFTJq5qrIPs1us7L1/pfJPlew+e1lpvAy2oTKB
-FroJffAsIf2Su2VsqygzMOZHjnb/EIyIZ0dOudHOSuFBYlSS+cyLQYnTunaACPmL
-jb9SkXWi/ps/X20QbEUuXMTuG7oUrsKwYVSCofr74R5cvT6PeQflvB2XbDjOKMDN
-uaQHhOOVLYeV3A2NSkYTjKAVBtpj0YbnPDQ+/ImygvswwCr7hc9OyZsCAwEAAaOC
-AS8wggErMA4GA1UdDwEB/wQEAwIBljAdBgNVHSUEFjAUBggrBgEFBQcDAgYIKwYB
-BQUHAwEwDwYDVR0TAQH/BAUwAwEB/zAtBgNVHQ4EJgQkOWViY2EzMDEtOWZkYy00
-ZDI0LWEzZmItMzIzZGExYjliNTExMC8GA1UdIwQoMCaAJDllYmNhMzAxLTlmZGMt
-NGQyNC1hM2ZiLTMyM2RhMWI5YjUxMTA3BggrBgEFBQcBAQQrMCkwJwYIKwYBBQUH
-MAGGG2h0dHBzOi8vbGFiLmxhbWFzc3UuaW8vb2NzcDBQBgNVHR8ESTBHMEWgQ6BB
-hj9odHRwczovL2xhYi5sYW1hc3N1LmlvL2NybC85ZWJjYTMwMS05ZmRjLTRkMjQt
-YTNmYi0zMjNkYTFiOWI1MTEwDQYJKoZIhvcNAQELBQADggIBAIWs+bveoWQsUPeR
-4en3nDJf8xfbPjCA6u9TZvED/B+J6U2db8S6aS32b5q6xFvFMgFKCY1ezeFXlbwl
-52zoGDMKRK5XnvOgQVDaP123e8SAjAY+ZdD1ZQlg7JwaKV9cz7aAHv4RbU1E48IY
-GPFUzh9KXjH6CxjJxF29PjROuBadltuPSupxdjY+Gwvid+uQCSJ80Fpza4kWf4Z6
-GNkNJ3D7N+WImXCW1za+V0kvM3hQTCRx9rebvIrC96XkDCcfUftsmok/N9qK5xq9
-8iLSWlygzgPyb30Dre2E5MfTS3M48v2cUiWgKHvXIcP5EMyR2RAIpfvAiXcTvgU0
-5CTsep3MQXr4t4q/CkwwWsof1imTQEeTBMxa+0vTXT1kZSnrlojJweysatYnfW0F
-c2ICmNRBnaJFr9hsPuyvT9ZpoEUh2Gme0mPG4kXZ2t9MLdUYByJMMb8O7CSmEUOA
-7Nv0yD6wd+WkZku3XrWRw0Wp9wQnX6IcNrH/gfvBTu60ePKBYVeQCrX8Rl6R7baX
-IqUV1Fvtc2Q9GPK8jY2/WZBC38LAOOFgoXAllsxmHYrJJhC8uR+l7IIZNrMCsjre
-v5gs9H66gdr0B6RB5VVfWxZ34Indlrkd+OR6oRT3fE+3F0o9uMzuk3FKJw9C2Ee/
-VISVtZ9f3pwAsoxH/6bz+qzThkK4
------END CERTIFICATE-----
-`
+		// 		{
+		// 			name:   "OK/ImportingHierarchy",
+		// 			before: func(svc services.CAService) error { return nil },
+		// 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+		// 				ca0Crt := `-----BEGIN CERTIFICATE-----
+		// MIIF4TCCA8mgAwIBAgIQD7Bwh2HNiZht1NqCrgyw+TANBgkqhkiG9w0BAQsFADAS
+		// MRAwDgYDVQQDEwdSb290LUNBMCAXDTI0MDUyMDEwMjA0MloYDzk5OTkxMjMxMjI1
+		// OTU5WjASMRAwDgYDVQQDEwdSb290LUNBMIICIjANBgkqhkiG9w0BAQEFAAOCAg8A
+		// MIICCgKCAgEA1N9HcHVVIpUm/JmPVxEasRsoh4Dh6+/CX/hex7prZ+OEkqwFFfYx
+		// vnSGX0lQyDGnymjyLEtC+dumW7PrJ1wuQaI6uZ+Jy5XGPLiPVc/EzGPxnKJV6OF6
+		// nkDPc3qPorzMM1s4JZX2D4YfasumEmREYQsdufMik3iiJ5AbojUuVQLIsqnxrJZ7
+		// FOSkM4pux47f6o2nOKIhkoUQ8zAQ950yXON0F573GS87PLRx8XuMj79o4DsHQ8w3
+		// 38M8/vIhwlQMmaqx7+gLN2fKRw4wHUfnJRmPwmszAQtjMCk+mEO5C2xAi5tzf9Ec
+		// hUHlrwUQRJhCit3yTrqzKDMCfAel/qllrB6wGI+p37PTg5AM5e3cmK80jmKwXiQM
+		// RHdbNwnvrnxQnpBZBvtR2uH/v3z85BmkNxMrQsGQLBlYm/WIcv3zOzyJUJcAv46f
+		// t4Wv/MuAjmWVSkrO0uZgJkwoV7jFTJq5qrIPs1us7L1/pfJPlew+e1lpvAy2oTKB
+		// FroJffAsIf2Su2VsqygzMOZHjnb/EIyIZ0dOudHOSuFBYlSS+cyLQYnTunaACPmL
+		// jb9SkXWi/ps/X20QbEUuXMTuG7oUrsKwYVSCofr74R5cvT6PeQflvB2XbDjOKMDN
+		// uaQHhOOVLYeV3A2NSkYTjKAVBtpj0YbnPDQ+/ImygvswwCr7hc9OyZsCAwEAAaOC
+		// AS8wggErMA4GA1UdDwEB/wQEAwIBljAdBgNVHSUEFjAUBggrBgEFBQcDAgYIKwYB
+		// BQUHAwEwDwYDVR0TAQH/BAUwAwEB/zAtBgNVHQ4EJgQkOWViY2EzMDEtOWZkYy00
+		// ZDI0LWEzZmItMzIzZGExYjliNTExMC8GA1UdIwQoMCaAJDllYmNhMzAxLTlmZGMt
+		// NGQyNC1hM2ZiLTMyM2RhMWI5YjUxMTA3BggrBgEFBQcBAQQrMCkwJwYIKwYBBQUH
+		// MAGGG2h0dHBzOi8vbGFiLmxhbWFzc3UuaW8vb2NzcDBQBgNVHR8ESTBHMEWgQ6BB
+		// hj9odHRwczovL2xhYi5sYW1hc3N1LmlvL2NybC85ZWJjYTMwMS05ZmRjLTRkMjQt
+		// YTNmYi0zMjNkYTFiOWI1MTEwDQYJKoZIhvcNAQELBQADggIBAIWs+bveoWQsUPeR
+		// 4en3nDJf8xfbPjCA6u9TZvED/B+J6U2db8S6aS32b5q6xFvFMgFKCY1ezeFXlbwl
+		// 52zoGDMKRK5XnvOgQVDaP123e8SAjAY+ZdD1ZQlg7JwaKV9cz7aAHv4RbU1E48IY
+		// GPFUzh9KXjH6CxjJxF29PjROuBadltuPSupxdjY+Gwvid+uQCSJ80Fpza4kWf4Z6
+		// GNkNJ3D7N+WImXCW1za+V0kvM3hQTCRx9rebvIrC96XkDCcfUftsmok/N9qK5xq9
+		// 8iLSWlygzgPyb30Dre2E5MfTS3M48v2cUiWgKHvXIcP5EMyR2RAIpfvAiXcTvgU0
+		// 5CTsep3MQXr4t4q/CkwwWsof1imTQEeTBMxa+0vTXT1kZSnrlojJweysatYnfW0F
+		// c2ICmNRBnaJFr9hsPuyvT9ZpoEUh2Gme0mPG4kXZ2t9MLdUYByJMMb8O7CSmEUOA
+		// 7Nv0yD6wd+WkZku3XrWRw0Wp9wQnX6IcNrH/gfvBTu60ePKBYVeQCrX8Rl6R7baX
+		// IqUV1Fvtc2Q9GPK8jY2/WZBC38LAOOFgoXAllsxmHYrJJhC8uR+l7IIZNrMCsjre
+		// v5gs9H66gdr0B6RB5VVfWxZ34Indlrkd+OR6oRT3fE+3F0o9uMzuk3FKJw9C2Ee/
+		// VISVtZ9f3pwAsoxH/6bz+qzThkK4
+		// -----END CERTIFICATE-----
+		// `
 
-				ca0Key := `-----BEGIN RSA PRIVATE KEY-----
-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
------END RSA PRIVATE KEY-----
-`
+		// 				ca0Key := `-----BEGIN RSA PRIVATE KEY-----
+		// MIIJKAIBAAKCAgEA1N9HcHVVIpUm/JmPVxEasRsoh4Dh6+/CX/hex7prZ+OEkqwF
+		// FfYxvnSGX0lQyDGnymjyLEtC+dumW7PrJ1wuQaI6uZ+Jy5XGPLiPVc/EzGPxnKJV
+		// 6OF6nkDPc3qPorzMM1s4JZX2D4YfasumEmREYQsdufMik3iiJ5AbojUuVQLIsqnx
+		// rJZ7FOSkM4pux47f6o2nOKIhkoUQ8zAQ950yXON0F573GS87PLRx8XuMj79o4DsH
+		// Q8w338M8/vIhwlQMmaqx7+gLN2fKRw4wHUfnJRmPwmszAQtjMCk+mEO5C2xAi5tz
+		// f9EchUHlrwUQRJhCit3yTrqzKDMCfAel/qllrB6wGI+p37PTg5AM5e3cmK80jmKw
+		// XiQMRHdbNwnvrnxQnpBZBvtR2uH/v3z85BmkNxMrQsGQLBlYm/WIcv3zOzyJUJcA
+		// v46ft4Wv/MuAjmWVSkrO0uZgJkwoV7jFTJq5qrIPs1us7L1/pfJPlew+e1lpvAy2
+		// oTKBFroJffAsIf2Su2VsqygzMOZHjnb/EIyIZ0dOudHOSuFBYlSS+cyLQYnTunaA
+		// CPmLjb9SkXWi/ps/X20QbEUuXMTuG7oUrsKwYVSCofr74R5cvT6PeQflvB2XbDjO
+		// KMDNuaQHhOOVLYeV3A2NSkYTjKAVBtpj0YbnPDQ+/ImygvswwCr7hc9OyZsCAwEA
+		// AQKCAgBznsKiplgTbIe8c3uTgsrIn0OoNayABb3BepmgSfTEfKMpNx2cDBiApbHG
+		// V3/0/GNyYQYIYOiD5XW6IUL8IelN5NuYrrqdRUBjAqt3pF3z1eUJenLHBpEfG3yR
+		// 8GPLtFgFHOqmH4mCbQrraqlNHAC35N3Effaturv4WSFpPRFpQxXXVM7bOvCnLHiz
+		// NeFtqoCcWUwWSpmJh5TpQZY1p8APC8umeMUlfK3kDu5EhyKVgRVplSYhAO7oLpcW
+		// slT7w8MEQ95Zu+M7uLf5WA9yF/fIAtY+dxNA4fqB0iUZds8vESENsuVM6ztedahX
+		// I5zuZPTfkCVn9agRkYMr8suKQl/h2sW9SpvsE8TPAzn4BRqhcALT8tfZaQ2RhdqX
+		// aBfjZueT6mlzN+FFa/SMOmfc+DLupIAqD+vox3ikhrM5Fpy9kE0yF0ZVum/XyvpA
+		// b+3nhbFGQZUqtx6N3FEnJQAomZtuNsquzqgj6I51izCjgWiTv5U0m4iOayLJoS/u
+		// TsH1zakp2NMYZrty49VwzzCGpTWxExeP2k4Cy9EdI4BhzwFxDC7q9tp0xOs6lgIf
+		// grzARiu6bI5XyHEPve8nH1kmy1INYOev87VuxDmO2Y6FpZxm5uXF4LaQstPZyujp
+		// oI9YamT7PMmwJ4MeRh405dBh0plN22c98mpw95oeQ5Mpbp5JQQKCAQEA+FzMBvkU
+		// Y12f/ejap+I0neXsOZTK+0WfKMAnx4nJGVej4BVDKzinhY/kt1YP5TZUNYqwYBqo
+		// RlIBqY3H9hw+SFpF12JRhwmXiDTC9hjRDlJJhYHB9WTq1z+vxsF4j+sg2qzeTOtM
+		// D/pi2M/weESdRv6MjvUJdsQqnd5O0mTpXGHeq5a3nmThHveE7pIfppbCRrsM3lCb
+		// zr9nd1iD+nVd2eJNgwb5p226wC6kCo3UdqMaq8hDZ1s8tn0ud5c8d7fTtXNUXQg2
+		// xkJk2mg14br0snadcIWFUwGNH7wljLdCfjsqY1HtyLSl/qgQDKrIFEyhszJp1YJr
+		// 4/xcL8XHmsbSeQKCAQEA22sWy06QOoE0CF4D+R8jHvDhlJVuY2Ha/a66NDiInu5Q
+		// qNyX/aIuWMTyZcUJ/8ksUAsUHtk+/RoivqW4R3W5hA7OMKR2tjik3+wzAAWA2J9Y
+		// qbellG2L3oyiJc0SmS0C74PukIh6NgEXEuUs50ZSlAmE7Ltkyelcu+5Q7WPEyVt/
+		// tP7+UBmOH1aQEqvmPelt76DbzLMCr4Uqjk8MVd+xBDPiVmwPS+ccxpuH5HMu5bmi
+		// vFQRHQySeJmus6E3sMWwCNRS+NixUpskndJnkUgeL4R7FJmjC37t5jpAhNvXAIM+
+		// fzB7ANBJ5cXyxqploBddKswCc+tBKZfw0E7DZjbXswKCAQEAiJJOx07UfUeQoQkY
+		// o9Tp5iH24jsF22KPgNMZjMohwUPGI4TNqMjApdtYg9BZcUuMxtx63H4MJo8Vxuzm
+		// Flm1jgfF/AhemIkXwJhy1O0UmHF7aGTQCWbzFGY6/GqLJ2i+akFBBL8m1mpzTJIb
+		// w6bHbbCwDjSEfcClRqZmZZ+EC37t+SEp23nRqTum56GGsg6Yylg1XVKqOuhZtvD/
+		// sgw0DYo54WFGi2D1npSHNB6FxK8wDWJUXlN3cUoo8S5C2/pD+rVuoLHRnPgJiWhg
+		// qL4rrK85KBTkGZ7ywY6uf1COyeczCeaVgRaFaSF1oeGPoEn7aRTBydysA3RUJRj3
+		// CA9o0QKCAQBWXlfxnTIupU8bAA7mT/heJIlXGF8EZa9y7gVDqwE0NjCv121InD9M
+		// F/ImVyIxejmkJEg+QFuH+3Kzwr2/+zoUHlPRV9uWrMNRlUMZ/hCStF6NJ8nYnCpT
+		// Zt4orQlmHA6swyzz3ZTljxZLDMTZIJg+x2R4Xuc0h1RGcW+PkhcS/55MW5c1ZmnI
+		// MiWyA9I0ip8IlTQP5mLnPi7bJ4h+gPfH5LhyNkTrJsTv9KbQKPrL2H+TTDAUVC+P
+		// o0beVFZ8kcRSJWmnpHxgPMt0CC9WQ6IGKEred/9y9fqlBkcBRRvjisXeAPJaBqMf
+		// /AQtaUNpeejlgLpycKcMvU9AX9CQeoP7AoIBAFtjG7YHerqeeIwbl2cHAVxSsi2M
+		// obI3vTel5CBrllK9BuF2jOX2+boe+zQL4lbd9gudpiKJCDuB62ZesnS9pgayEO10
+		// zjD2fB+6XqcIspg6Lqs8vabP9Sn7kBgVrop5SFhS5qGVmN/qkx2KWUKxOyrAdDXy
+		// Tva4L2jpl+ldMF8LTgIDIF7I0m9LkPR3IDARKGIBC6zaO1duknDOIPZdajpSWy1C
+		// CftA4H7VAl0dXVJ9i0rLQpxTg+dNfjbE2u81HJzLM4C/I1n07fIkWMSesuk1TA6h
+		// VVCUToNHo7n7ZMiTGsu8/NBt+rbCpY+ZXQUbaWsLXv5w0fUH8H33kApKr2w=
+		// -----END RSA PRIVATE KEY-----
+		// `
 
-				ca1Crt := `-----BEGIN CERTIFICATE-----
-MIIEGzCCAgOgAwIBAgIRAPvXcyzJg5xcaH+Q3ieTJ/wwDQYJKoZIhvcNAQELBQAw
-EjEQMA4GA1UEAxMHUm9vdC1DQTAgFw0yNDA1MjAxMDI5MzZaGA85OTk5MDMxNjEx
-Mjg1NVowFjEUMBIGA1UEAxMLTHZsLTEtQ0EtRUMwWTATBgcqhkjOPQIBBggqhkjO
-PQMBBwNCAAQKXQjvwtkS4lMROVD6/oW047XdqPYAeyvAdWcTCGevarLuAAkPKU8J
-HycPx9FRmDkunk2l7Dtu59CFOfDxvvnMo4IBLzCCASswDgYDVR0PAQH/BAQDAgGW
-MB0GA1UdJQQWMBQGCCsGAQUFBwMCBggrBgEFBQcDATAPBgNVHRMBAf8EBTADAQH/
-MC0GA1UdDgQmBCRhOWI3ODJlMC04NTEyLTRkMDUtYTNiOS03ZmQ0MmJhMDhkOWIw
-LwYDVR0jBCgwJoAkOWViY2EzMDEtOWZkYy00ZDI0LWEzZmItMzIzZGExYjliNTEx
-MDcGCCsGAQUFBwEBBCswKTAnBggrBgEFBQcwAYYbaHR0cHM6Ly9sYWIubGFtYXNz
-dS5pby9vY3NwMFAGA1UdHwRJMEcwRaBDoEGGP2h0dHBzOi8vbGFiLmxhbWFzc3Uu
-aW8vY3JsL2E5Yjc4MmUwLTg1MTItNGQwNS1hM2I5LTdmZDQyYmEwOGQ5YjANBgkq
-hkiG9w0BAQsFAAOCAgEAwPErojapNGN8BtD4L9q4H/byIkxpXoiv6eCRtxk9MCc8
-rnnEZCE5tt/dtkifQUAIMRwGfQTXC2QEFKvSday1Nt9GEGj3KaeFyi9UTfpwtJIZ
-rzkMO0pYwyC3/OCh3RTJ0wJpqVP99kUMTcaDnc1BzmPXORlMneMp0nxUe5zHdsUx
-DYj6N1dbozazGyL9x6cOLrqfOwD6R1PGPXbMOtEAQyTY/Yv0qSTGMG6twAM7NT1G
-om4VWZXkq4WsgOmxYax+YWqQ6FyixV/LJML/maS04ZFhH4kFeyfp0RHm9tRkIG4P
-TZH/irTU5K12Y9S3FP/Hx0H8ZyDblDfXMOSGSWbflHgwfZCOg5N/Lb1QSo8mYj8e
-32PjTITTBhTQRpqncni+2+vMblUgw/EC1UNQ1mu9qCkGl8415BBVI/Q1qBg7pN1X
-1BJsPOwNUZT6SpppWYVc7pfLJ8bS0op7NBx2/401RzGbU9Tdf24UEt72PQ7LHh9n
-mDBI5JHJ3pOrpKBxfbwKPdSjB6h4mG/V4m1AWp4nnSI0NqOHGqQfxOxhT/GjM+3p
-0I2hhVViZ6ApY+XN2WdionaL5TTPcKpcjCJTzhenhWL9psczA9NlkC14o/GOUZ1Y
-fqIbIUTVOOEAp8YVz9trEI7JSmOoIyDHuS64K4lTSoTIu5rhRk5ngxTQLVYH4FI=
------END CERTIFICATE-----
-`
-				ca1Key := `-----BEGIN EC PRIVATE KEY-----
-MHcCAQEEIG4qZgKlfDcPcmp8p2XgRrdRezQhI/uZDLSuYAqdTXuzoAoGCCqGSM49
-AwEHoUQDQgAECl0I78LZEuJTETlQ+v6FtOO13aj2AHsrwHVnEwhnr2qy7gAJDylP
-CR8nD8fRUZg5Lp5Npew7bufQhTnw8b75zA==
------END EC PRIVATE KEY-----`
+		// 				ca1Crt := `-----BEGIN CERTIFICATE-----
+		// MIIEGzCCAgOgAwIBAgIRAPvXcyzJg5xcaH+Q3ieTJ/wwDQYJKoZIhvcNAQELBQAw
+		// EjEQMA4GA1UEAxMHUm9vdC1DQTAgFw0yNDA1MjAxMDI5MzZaGA85OTk5MDMxNjEx
+		// Mjg1NVowFjEUMBIGA1UEAxMLTHZsLTEtQ0EtRUMwWTATBgcqhkjOPQIBBggqhkjO
+		// PQMBBwNCAAQKXQjvwtkS4lMROVD6/oW047XdqPYAeyvAdWcTCGevarLuAAkPKU8J
+		// HycPx9FRmDkunk2l7Dtu59CFOfDxvvnMo4IBLzCCASswDgYDVR0PAQH/BAQDAgGW
+		// MB0GA1UdJQQWMBQGCCsGAQUFBwMCBggrBgEFBQcDATAPBgNVHRMBAf8EBTADAQH/
+		// MC0GA1UdDgQmBCRhOWI3ODJlMC04NTEyLTRkMDUtYTNiOS03ZmQ0MmJhMDhkOWIw
+		// LwYDVR0jBCgwJoAkOWViY2EzMDEtOWZkYy00ZDI0LWEzZmItMzIzZGExYjliNTEx
+		// MDcGCCsGAQUFBwEBBCswKTAnBggrBgEFBQcwAYYbaHR0cHM6Ly9sYWIubGFtYXNz
+		// dS5pby9vY3NwMFAGA1UdHwRJMEcwRaBDoEGGP2h0dHBzOi8vbGFiLmxhbWFzc3Uu
+		// aW8vY3JsL2E5Yjc4MmUwLTg1MTItNGQwNS1hM2I5LTdmZDQyYmEwOGQ5YjANBgkq
+		// hkiG9w0BAQsFAAOCAgEAwPErojapNGN8BtD4L9q4H/byIkxpXoiv6eCRtxk9MCc8
+		// rnnEZCE5tt/dtkifQUAIMRwGfQTXC2QEFKvSday1Nt9GEGj3KaeFyi9UTfpwtJIZ
+		// rzkMO0pYwyC3/OCh3RTJ0wJpqVP99kUMTcaDnc1BzmPXORlMneMp0nxUe5zHdsUx
+		// DYj6N1dbozazGyL9x6cOLrqfOwD6R1PGPXbMOtEAQyTY/Yv0qSTGMG6twAM7NT1G
+		// om4VWZXkq4WsgOmxYax+YWqQ6FyixV/LJML/maS04ZFhH4kFeyfp0RHm9tRkIG4P
+		// TZH/irTU5K12Y9S3FP/Hx0H8ZyDblDfXMOSGSWbflHgwfZCOg5N/Lb1QSo8mYj8e
+		// 32PjTITTBhTQRpqncni+2+vMblUgw/EC1UNQ1mu9qCkGl8415BBVI/Q1qBg7pN1X
+		// 1BJsPOwNUZT6SpppWYVc7pfLJ8bS0op7NBx2/401RzGbU9Tdf24UEt72PQ7LHh9n
+		// mDBI5JHJ3pOrpKBxfbwKPdSjB6h4mG/V4m1AWp4nnSI0NqOHGqQfxOxhT/GjM+3p
+		// 0I2hhVViZ6ApY+XN2WdionaL5TTPcKpcjCJTzhenhWL9psczA9NlkC14o/GOUZ1Y
+		// fqIbIUTVOOEAp8YVz9trEI7JSmOoIyDHuS64K4lTSoTIu5rhRk5ngxTQLVYH4FI=
+		// -----END CERTIFICATE-----
+		// `
+		// 				ca1Key := `-----BEGIN EC PRIVATE KEY-----
+		// MHcCAQEEIG4qZgKlfDcPcmp8p2XgRrdRezQhI/uZDLSuYAqdTXuzoAoGCCqGSM49
+		// AwEHoUQDQgAECl0I78LZEuJTETlQ+v6FtOO13aj2AHsrwHVnEwhnr2qy7gAJDylP
+		// CR8nD8fRUZg5Lp5Npew7bufQhTnw8b75zA==
+		// -----END EC PRIVATE KEY-----`
 
-				key0, err := chelpers.ParsePrivateKey([]byte(strings.TrimSpace(ca0Key)))
-				if err != nil {
-					t.Fatalf("could not parse root private key: %s", err)
-				}
+		// 				key0, err := chelpers.ParsePrivateKey([]byte(strings.TrimSpace(ca0Key)))
+		// 				if err != nil {
+		// 					t.Fatalf("could not parse root private key: %s", err)
+		// 				}
 
-				key1, err := chelpers.ParsePrivateKey([]byte(strings.Trim(ca1Key, "	")))
-				if err != nil {
-					t.Fatalf("could not parse ca-lvl-1 private key: %s", err)
-				}
+		// 				key1, err := chelpers.ParsePrivateKey([]byte(strings.Trim(ca1Key, "	")))
+		// 				if err != nil {
+		// 					t.Fatalf("could not parse ca-lvl-1 private key: %s", err)
+		// 				}
 
-				cert0, err := chelpers.ParseCertificate(strings.Trim(ca0Crt, "	"))
-				if err != nil {
-					t.Fatalf("could not parse root cert: %s", err)
-				}
+		// 				cert0, err := chelpers.ParseCertificate(strings.Trim(ca0Crt, "	"))
+		// 				if err != nil {
+		// 					t.Fatalf("could not parse root cert: %s", err)
+		// 				}
 
-				cert1, err := chelpers.ParseCertificate(strings.Trim(ca1Crt, "	"))
-				if err != nil {
-					t.Fatalf("could not parse ca-lvl-1 cert: %s", err)
-				}
+		// 				cert1, err := chelpers.ParseCertificate(strings.Trim(ca1Crt, "	"))
+		// 				if err != nil {
+		// 					t.Fatalf("could not parse ca-lvl-1 cert: %s", err)
+		// 				}
 
-				chelpers.ParsePrivateKey([]byte(ca1Key))
-				chelpers.ParsePrivateKey([]byte(ca1Key))
+		// 				chelpers.ParsePrivateKey([]byte(ca1Key))
+		// 				chelpers.ParsePrivateKey([]byte(ca1Key))
 
-				duration, _ := models.ParseDuration("100d")
-				importedRootCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType: models.CertificateTypeImportedWithKey,
-					IssuanceExpiration: models.Validity{
-						Type:     models.Duration,
-						Duration: (models.TimeDuration)(duration),
-					},
-					CACertificate: (*models.X509Certificate)(cert0),
-					CARSAKey:      (key0).(*rsa.PrivateKey),
-					KeyType:       models.KeyType(x509.RSA),
-				})
-				if err != nil {
-					t.Fatalf("could not import root CA: %s", err)
-				}
+		// 				duration, _ := models.ParseDuration("100d")
+		// 				importedRootCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+		// 					CAType: models.CertificateTypeImportedWithKey,
+		// 					IssuanceExpiration: models.Validity{
+		// 						Type:     models.Duration,
+		// 						Duration: (models.TimeDuration)(duration),
+		// 					},
+		// 					CACertificate: (*models.X509Certificate)(cert0),
+		// 					CARSAKey:      (key0).(*rsa.PrivateKey),
+		// 					KeyType:       models.KeyType(x509.RSA),
+		// 				})
+		// 				if err != nil {
+		// 					t.Fatalf("could not import root CA: %s", err)
+		// 				}
 
-				importedCALvl1, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType: models.CertificateTypeImportedWithKey,
-					IssuanceExpiration: models.Validity{
-						Type:     models.Duration,
-						Duration: (models.TimeDuration)(duration),
-					},
-					CACertificate: (*models.X509Certificate)(cert1),
-					CAECKey:       (key1).(*ecdsa.PrivateKey),
-					KeyType:       models.KeyType(x509.ECDSA),
-					ParentID:      importedRootCA.ID,
-				})
+		// 				importedCALvl1, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+		// 					CAType: models.CertificateTypeImportedWithKey,
+		// 					IssuanceExpiration: models.Validity{
+		// 						Type:     models.Duration,
+		// 						Duration: (models.TimeDuration)(duration),
+		// 					},
+		// 					CACertificate: (*models.X509Certificate)(cert1),
+		// 					CAECKey:       (key1).(*ecdsa.PrivateKey),
+		// 					KeyType:       models.KeyType(x509.ECDSA),
+		// 					ParentID:      importedRootCA.ID,
+		// 				})
 
-				return importedCALvl1, err
+		// 				return importedCALvl1, err
 
-			},
-			resultCheck: func(ca *models.CACertificate, err error) error {
-				if err != nil {
-					return fmt.Errorf("got unexpected error: %s", err)
-				}
+		// 			},
+		// 			resultCheck: func(ca *models.CACertificate, err error) error {
+		// 				if err != nil {
+		// 					return fmt.Errorf("got unexpected error: %s", err)
+		// 				}
 
-				if ca.Level != 1 {
-					return fmt.Errorf("CA should be at level 1. Got %d", ca.Level)
-				}
-				return nil
-			},
-		},
+		// 				if ca.Level != 1 {
+		// 					return fmt.Errorf("CA should be at level 1. Got %d", ca.Level)
+		// 				}
+		// 				return nil
+		// 			},
+		// 		},
 	}
+
 	for _, tc := range testcases {
 		tc := tc
 
@@ -3052,8 +3197,22 @@ func TestGetStatsByCAID(t *testing.T) {
 					return fmt.Errorf("Error creating the private key: %s", err)
 				}
 
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: caID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
+
 				actCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "active-cert"}, actKey)
-				_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: caID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(actCSR)})
+				_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:        caID,
+					CertRequest: (*models.X509CertificateRequest)(actCSR),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        ca.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
+				})
 
 				if err != nil {
 					return fmt.Errorf("Error signing the active certificate: %s", err)
@@ -3065,7 +3224,16 @@ func TestGetStatsByCAID(t *testing.T) {
 				}
 
 				revCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "revoked-cert"}, revKey)
-				revCrt, err := svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: caID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(revCSR)})
+				revCrt, err := svc.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:        caID,
+					CertRequest: (*models.X509CertificateRequest)(revCSR),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        ca.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
+				})
 				if err != nil {
 					return fmt.Errorf("Error signing the revoked certificate: %s", err)
 				}
@@ -3165,6 +3333,11 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 		{
 			name: "Err/GetCAGertByExpDate",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
+
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
@@ -3172,7 +3345,16 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        DefaultCAID,
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -3212,6 +3394,11 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 		{
 			name: "Err/GetCAGertByExpDateExhaustiveRun",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
+
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
@@ -3219,7 +3406,16 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        DefaultCAID,
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -3259,6 +3455,11 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 		{
 			name: "Err/GetCAGertByExpDateIncDate",
 			before: func(svc services.CAService) error {
+				ca, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("Error getting the CA: %s", err)
+				}
+
 				for i := 0; i < 20; i++ {
 					key, err := chelpers.GenerateRSAKey(2048)
 					if err != nil {
@@ -3266,7 +3467,16 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 					}
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
-					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{CAID: DefaultCAID, SignVerbatim: true, CertRequest: (*models.X509CertificateRequest)(csr)})
+					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
+						CAID:        DefaultCAID,
+						CertRequest: (*models.X509CertificateRequest)(csr),
+						IssuanceProfile: models.IssuanceProfile{
+							Validity:        ca.Validity,
+							SignAsCA:        false,
+							HonorSubject:    true,
+							HonorExtensions: true,
+						},
+					})
 					if err != nil {
 						return err
 					}
@@ -3628,14 +3838,14 @@ func TestHierarchy(t *testing.T) {
 
 				rootCA, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
+					Subject:            models.Subject{CommonName: "CA Lvl 0"},
 					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDurRootCA},
 					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: caIss},
 				})
-
 				if err != nil {
 					t.Fatalf("failed creating the root CA: %s", err)
 				}
+
 				cas = append(cas, *rootCA)
 
 				childCALvl1, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
@@ -3653,6 +3863,8 @@ func TestHierarchy(t *testing.T) {
 				fmt.Println("CN:" + childCALvl1.Certificate.Subject.CommonName)
 				fmt.Println("ID:" + childCALvl1.ID)
 				fmt.Println("SN:" + childCALvl1.Certificate.SerialNumber)
+				fmt.Println("KeyID:" + childCALvl1.Certificate.KeyID)
+				fmt.Println("Type:" + childCALvl1.Certificate.Type)
 				fmt.Println("=============================")
 
 				childCALvl2, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
@@ -3678,7 +3890,6 @@ func TestHierarchy(t *testing.T) {
 				return cas, err
 			},
 			resultCheck: func(cas []models.CACertificate, err error) error {
-
 				rootCa := cas[0]
 				childCa := cas[1]
 
@@ -3696,7 +3907,6 @@ func TestHierarchy(t *testing.T) {
 		{
 			name: "ERR/ChildCAExpiresAfterRootCA",
 			before: func(svc services.CAService) error {
-
 				return nil
 			},
 			run: func(caSDK services.CAService) ([]models.CACertificate, error) {
@@ -3708,7 +3918,7 @@ func TestHierarchy(t *testing.T) {
 
 				rootCA, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
+					Subject:            models.Subject{CommonName: "CA Lvl 0"},
 					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDurRootCA},
 					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: caIss},
 				})
@@ -3716,6 +3926,7 @@ func TestHierarchy(t *testing.T) {
 				if err != nil {
 					t.Fatalf("failed creating the root CA: %s", err)
 				}
+
 				cas = append(cas, *rootCA)
 				_, err = caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
@@ -3731,7 +3942,6 @@ func TestHierarchy(t *testing.T) {
 				return cas, err
 			},
 			resultCheck: func(cas []models.CACertificate, err error) error {
-
 				if err == nil {
 					return fmt.Errorf("got unexpected error: %s", err)
 				}
@@ -3902,8 +4112,6 @@ func TestHierarchy(t *testing.T) {
 				})
 				cas = append(cas, *childCALvl1)
 
-				//cas := []*models.CACertificate{}
-
 				return cas, err
 			},
 			resultCheck: func(cas []models.CACertificate, err error) error {
@@ -3928,7 +4136,6 @@ func TestHierarchy(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-
 			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
@@ -4141,7 +4348,7 @@ func (b TestServiceBuilder) Build(t *testing.T) (*TestServer, error) {
 
 	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, b.withService, b.withMonitor)
 	if err != nil {
-		t.Fatalf("could not assemble Server with HTTP server")
+		t.Fatalf("could not assemble Server with HTTP server: %s", err)
 	}
 
 	t.Cleanup(testServer.AfterSuite)

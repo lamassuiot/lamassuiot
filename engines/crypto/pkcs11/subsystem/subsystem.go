@@ -21,8 +21,7 @@ func (p *Pkcs11Subsystem) Prepare(config map[string]interface{}) error {
 }
 
 func (p *Pkcs11Subsystem) Run() (*subsystems.SubsystemBackend, error) {
-
-	softhsmCleanup, pkcs11Cfg, err := docker.RunSoftHsmV2Docker(p.hsmModulePath)
+	_, softhsmCleanup, pkcs11Cfg, err := docker.RunSoftHsmV2Docker(p.hsmModulePath)
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +30,7 @@ func (p *Pkcs11Subsystem) Run() (*subsystems.SubsystemBackend, error) {
 		ID:       "pkcs11-1",
 		Metadata: map[string]interface{}{},
 		Type:     config.PKCS11Provider,
-		Config:   *pkcs11Cfg,
+		Config:   pkcs11Cfg,
 	}
 
 	config, err := configAdapter.Unmarshal()
@@ -44,5 +43,4 @@ func (p *Pkcs11Subsystem) Run() (*subsystems.SubsystemBackend, error) {
 		BeforeEach: func() error { return nil },
 		AfterSuite: func() { softhsmCleanup() },
 	}, nil
-
 }

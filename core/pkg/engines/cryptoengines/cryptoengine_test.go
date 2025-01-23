@@ -24,6 +24,10 @@ func (m *mockCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error
 	return nil, nil
 }
 
+func (m *mockCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
+	return nil, nil
+}
+
 func (m *mockCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
 	key, err := rsa.GenerateKey(rand.Reader, keySize)
 	return "", key, err
@@ -43,6 +47,10 @@ func (m *mockCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string,
 }
 
 func (m *mockCryptoEngine) DeleteKey(keyID string) error {
+	return nil
+}
+
+func (m *mockCryptoEngine) RenameKey(keyID string, newKeyID string) error {
 	return nil
 }
 

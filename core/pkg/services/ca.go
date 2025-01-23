@@ -178,10 +178,9 @@ type DeleteCAInput struct {
 }
 
 type SignCertificateInput struct {
-	CAID         string                         `validate:"required"`
-	CertRequest  *models.X509CertificateRequest `validate:"required"`
-	Subject      *models.Subject
-	SignVerbatim bool
+	CAID            string                         `validate:"required"`
+	CertRequest     *models.X509CertificateRequest `validate:"required"`
+	IssuanceProfile models.IssuanceProfile         `validate:"required"`
 }
 
 type CreateCertificateInput struct {

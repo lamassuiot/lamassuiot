@@ -9,24 +9,24 @@ import (
 type VaultSuite struct {
 	cleanupDocker func() error
 	rootToken     string
+	beforeEach    func() error
 }
 
 func BeforeSuite() (vconfig.HashicorpVaultSDK, VaultSuite) {
-	// setup *gorm.Db with docker
-	cleanup, conf, rootToken, err := RunHashicorpVaultDocker()
+	beforeEach, cleanup, conf, rootToken, err := RunHashicorpVaultDocker()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	return *conf, VaultSuite{
 		cleanupDocker: cleanup,
+		beforeEach:    beforeEach,
 		rootToken:     rootToken,
 	}
 }
 
 func (st *VaultSuite) BeforeEach() error {
-	// clear db tables before each test
-	return nil
+	return st.beforeEach()
 }
 
 func (ts *VaultSuite) AfterSuite() {

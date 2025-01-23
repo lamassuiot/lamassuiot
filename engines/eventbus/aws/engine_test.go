@@ -11,7 +11,7 @@ import (
 )
 
 func prepareEventBusForTest(t *testing.T) (func() error, message.Publisher, func(serviceID string) message.Subscriber) {
-	cleanup, conf, err := aws.RunAWSEmulationLocalStackDocker()
+	cleanup, _, conf, err := aws.RunAWSEmulationLocalStackDocker()
 	if err != nil {
 		t.Fatalf("could not run RabbitMQ docker: %s", err)
 	}

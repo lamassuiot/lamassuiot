@@ -124,6 +124,35 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, 
 	return signer, err
 }
 
+func (p *AWSKMSCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
+	keys, err := p.kmscli.ListKeys(context.Background(), &kms.ListKeysInput{
+		Limit: aws.Int32(100),
+	})
+
+	if err != nil {
+		lAWSKMS.Errorf("could not get key list: %s", err)
+		return nil, err
+	}
+
+	var keyIDs []string
+	for _, key := range keys.Keys {
+		aliases, err := p.kmscli.ListAliases(context.Background(), &kms.ListAliasesInput{
+			KeyId: key.KeyId,
+		})
+		if err != nil {
+			lAWSKMS.Errorf("could not get aliases list: %s", err)
+			continue
+		}
+
+		for _, alias := range aliases.Aliases {
+			aliasName := strings.Replace(*alias.AliasName, "alias/", "", -1)
+			keyIDs = append(keyIDs, aliasName)
+		}
+	}
+
+	return keyIDs, nil
+}
+
 func (p *AWSKMSCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
 	lAWSKMS.Debugf("Creating RSA key with size %d", keySize)
 
@@ -210,6 +239,34 @@ func (p *AWSKMSCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, c
 func (p *AWSKMSCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
 	lAWSKMS.Warnf("KMS does not support asymmetric key import. See https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys.html")
 	return "", nil, fmt.Errorf("KMS does not support asymmetric key import")
+}
+
+func (p *AWSKMSCryptoEngine) RenameKey(oldID, newID string) error {
+	desc, err := p.kmscli.DescribeKey(context.Background(), &kms.DescribeKeyInput{
+		KeyId: aws.String(fmt.Sprintf("alias/%s", oldID)),
+	})
+	if err != nil {
+		lAWSKMS.Errorf("could not get key description: %s", err)
+		return err
+	}
+
+	_, err = p.kmscli.CreateAlias(context.Background(), &kms.CreateAliasInput{
+		AliasName:   aws.String(fmt.Sprintf("alias/%s", newID)),
+		TargetKeyId: desc.KeyMetadata.Arn,
+	})
+	if err != nil {
+		lAWSKMS.Errorf("could not create key: %s", err)
+		return err
+	}
+
+	_, err = p.kmscli.DeleteAlias(context.Background(), &kms.DeleteAliasInput{
+		AliasName: aws.String(fmt.Sprintf("alias/%s", oldID)),
+	})
+	if err != nil {
+		lAWSKMS.Errorf("could not delete key: %s", err)
+	}
+
+	return nil
 }
 
 func (p *AWSKMSCryptoEngine) DeleteKey(keyID string) error {
