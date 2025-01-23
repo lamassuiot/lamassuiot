@@ -51,8 +51,8 @@ func upCaAwsMetadata(ctx context.Context, tx *sql.Tx) error {
 					if registered.(bool) {
 						awsMeta["registration"] = map[string]interface{}{
 							"status":                    "SUCCEEDED",
-							"registration_request_time": time.Unix(0, 0),
-							"registration_time":         time.Unix(0, 0),
+							"registration_request_time": time.Unix(0, 0).In(time.UTC),
+							"registration_time":         time.Unix(0, 0).In(time.UTC),
 							"primary_account":           true,
 							"error":                     "",
 						}
