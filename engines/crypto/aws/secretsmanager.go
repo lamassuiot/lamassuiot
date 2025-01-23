@@ -9,8 +9,6 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -110,25 +108,7 @@ func (engine *AWSSecretsManagerCryptoEngine) GetPrivateKeyByID(keyID string) (cr
 		return nil, err
 	}
 
-	block, _ := pem.Decode([]byte(decodedPemBytes))
-	if block == nil {
-		engine.logger.Errorf("could not decode into PEM block")
-		return nil, errors.New("could not decode into PEM block")
-	}
-
-	genericKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, err
-	}
-
-	switch genericKey.(type) {
-	case *rsa.PrivateKey:
-		return genericKey.(*rsa.PrivateKey), nil
-	case *ecdsa.PrivateKey:
-		return genericKey.(*ecdsa.PrivateKey), nil
-	default:
-		return nil, errors.New("unsupported key type")
-	}
+	return engine.softCryptoEngine.ParsePrivateKey(decodedPemBytes)
 }
 
 func (engine *AWSSecretsManagerCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
@@ -203,15 +183,7 @@ func (engine *AWSSecretsManagerCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.Pr
 }
 
 func (engine *AWSSecretsManagerCryptoEngine) importKey(key crypto.Signer) (string, crypto.Signer, error) {
-	var pubKey any
-	switch k := key.(type) {
-	case *rsa.PrivateKey:
-		pubKey = &k.PublicKey
-	case *ecdsa.PrivateKey:
-		pubKey = &k.PublicKey
-	default:
-		return "", nil, errors.New("unsupported key type")
-	}
+	pubKey := key.Public()
 
 	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(pubKey)
 	if err != nil {
