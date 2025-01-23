@@ -106,7 +106,7 @@ func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
 				}
 
 				keyMigLog.Debugf("renaming key %s to %s", keyID, newKeyID)
-				err = engineInstance.Service.RenameKey(keyID, fmt.Sprintf("%s-%s", engineID, keyID))
+				err = engineInstance.Service.RenameKey(keyID, newKeyID)
 				if err != nil {
 					return nil, fmt.Errorf("could not rename key %s: %w", keyID, err)
 				}
