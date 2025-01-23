@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/base64"
+	"fmt"
 	"testing"
 	"time"
 
@@ -266,6 +267,33 @@ func MigrationTest_CA_20250115095852_create_requests_table(t *testing.T, logger 
 	}
 }
 
+func MigrationTest_CA_20250123125500_ca_aws_metadata(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	currentMeta := `{"lamassu.io/iot/aws.123456789012":{"account":"123456789012","arn":"arn:aws:iot:eu-west-1:123456789012:cacert/d0f877e36a96c93c00d1c6ba7470acc04d6d31e88bfe646735844a7918177c9e","certificate_id":"d0f877e36a96c93c00d1c6ba7470acc04d6d31e88bfe646735844a7918177c9e","mqtt_endpoint":"axxxxxxxxxx-ats.iot.eu-west-1.amazonaws.com","region":"eu-west-1","register":true}}`
+	expectedMeta := `{"lamassu.io/iot/aws.123456789012":{"account":"123456789012","arn":"arn:aws:iot:eu-west-1:123456789012:cacert/d0f877e36a96c93c00d1c6ba7470acc04d6d31e88bfe646735844a7918177c9e","certificate_id":"d0f877e36a96c93c00d1c6ba7470acc04d6d31e88bfe646735844a7918177c9e","mqtt_endpoint":"axxxxxxxxxx-ats.iot.eu-west-1.amazonaws.com","region":"eu-west-1","registration":{"error":"","primary_account":true,"registration_request_time":"1970-01-01T00:00:00Z","registration_time":"1970-01-01T00:00:00Z","status":"SUCCEEDED"}}}`
+
+	con.Exec(`INSERT INTO certificates
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, "type", engine_id, key_id, is_ca)
+		VALUES('99-e0-26-60-4b-90-8d-3e-50-97-98-b0-16-db-d6-79', '{}', '99-e0-26-60-4b-90-8d-3e-50-97-98-b0-16-db-d6-79', '8b600c60-9eb3-4251-b6ce-c92d1beccc63', 0, 'ACTIVE', 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUdPakNDQkNLZ0F3SUJBZ0lSQUpuZ0ptQkxrSTArVUplWXNCYmIxbmt3RFFZSktvWklodmNOQVFFTEJRQXcKRlRFVE1CRUdBMVVFQXhNS1VtOXZkQzFEUVMxV01UQWVGdzB5TlRBeE1EY3hORFV4TlRsYUZ3MHlOVEV4TURNeApORFV4TlRSYU1CVXhFekFSQmdOVkJBTVRDbEp2YjNRdFEwRXRWakV3Z2dJaU1BMEdDU3FHU0liM0RRRUJBUVVBCkE0SUNEd0F3Z2dJS0FvSUNBUUMzTTZYdDJNSWlVR21LNXpUUlVvZlZzazdtQ1ZZMWlkbXdLSythd0M0anZzWWoKM0JiZW5zZXVJaUo3NEg5TnZZdnhYZ0xDNVE3NXJ5UmJzNHN5TzBpV2YxUlJtamFVVUdxbHlkMmFLNVlIM3JWYgpXZ0htTkJMU2Q0dVlTRit3dno0Vk9Ic24zT1kvbFBTUkRwSm11ajJ3ekhYZ1p5RVR6M1Bzd1hhT0xXY3RsZFUvCm11eUJPWHE0bTFwNHh6dy83N0R2bW53Ni9mRXYwdG9iRVBYdVdvdlhSaS84NHQ2c0g5K1VDWmI5U3JTdFJWTHEKTGhsUEVQUC9SOXVveHBsVElTNllyQ2VHdWlPM2ViOGtmRVVETVdKS2pFbktueUx2b1RmbFVOMGE0K1docEFSSQp3WXgwSm9zQzhrb0xLV29ScFdJSlVlOC9hZStNWXRmWW1JNUdacGRIdnk1ZngzbXB5R2hseUJhWVRSOER2dkdvCmN1S0pabm16MVFuamYzM0syZFAxbk1RVHJhalJlWS9aMnd6bmRQbjg0SWdoWnJRc2NpSXYxcXg3Z3Y4Y3BuK0QKWTJuRUJUTHBPRHNIQXhKcmEyTGZZaXFYNnQzaUNCNEkrLzQ2djFBSitBWmJYMnRSVUpsakpSeHBqbkI5VnA1MApEQWFwNTN6dVhZdFhFYmJ0azI0djdodyt6cW5JYm9ueHZ6WVQ2c0Z4STdPYXdFNE5zQ2pjS2VOd2RBRmJPMmYzCkFqVURrUTdQTTE4OW9tRG5ZemxKWXFMWTFkZkNMcnhTTllZUzRwSUNPOE81dlVkQXJsWEI1MmhRWjcrLzdWWlYKOTRJbHpKVi9ZbzRGS2prMjJEZ0VyTk5sSGZHakhLbFBGMUhyUE81WkY2Z0ttTzd5SkJaeWx3SWVWODVoQXdJRApBUUFCbzRJQmd6Q0NBWDh3RGdZRFZSMFBBUUgvQkFRREFnR1dNQjBHQTFVZEpRUVdNQlFHQ0NzR0FRVUZCd01DCkJnZ3JCZ0VGQlFjREFUQVBCZ05WSFJNQkFmOEVCVEFEQVFIL01Fa0dBMVVkRGdSQ0JFQTROMlkyTURFelpHVXkKTW1GbU1tSm1NMlZqTm1GbU5XRmlNemc1WVRFek56STBaREJqT1RJM1lUTmxNamd3WVRobFlqQXhOVFU1TXpNNQpZakF5TnpjMk1Fc0dBMVVkSXdSRU1FS0FRRGczWmpZd01UTmtaVEl5WVdZeVltWXpaV00yWVdZMVlXSXpPRGxoCk1UTTNNalJrTUdNNU1qZGhNMlV5T0RCaE9HVmlNREUxTlRrek16bGlNREkzTnpZd053WUlLd1lCQlFVSEFRRUUKS3pBcE1DY0dDQ3NHQVFVRkJ6QUJoaHRvZEhSd2N6b3ZMMnhoWWk1c1lXMWhjM04xTG1sdkwyOWpjM0F3YkFZRApWUjBmQkdVd1l6QmhvRitnWFlaYmFIUjBjSE02THk5c1lXSXViR0Z0WVhOemRTNXBieTlqY213dk9EZG1OakF4Ck0yUmxNakpoWmpKaVpqTmxZelpoWmpWaFlqTTRPV0V4TXpjeU5HUXdZemt5TjJFelpUSTRNR0U0WldJd01UVTEKT1RNek9XSXdNamMzTmpBTkJna3Foa2lHOXcwQkFRc0ZBQU9DQWdFQUxpOGRBWHg3aGR3QmZtRDJSWjhxL2J2SQphN0dac0M2clQ2K05KaGxVVnI5cTZXWXBwYnV3VnJuTC81ZG01dTJ0bzBuVGIyQlQ1bXp1M2hFRkRGYlBFL1BWCmkxdGk2ZTdvdXVoNTFNc0c0ZEhCa2tRUjBUMDFjcnRURHBmU1VwTEREQXVDbU83OE0vMDFTcnV0UTk4ZE1WOHcKVkJqWTAzTTVoMEo3UWd5WjBTYmtXMFBYOTk5NEhUYnVMZXovaG9EVjZ1YmsxTU5Qa01UT2Y5T0V5dWViZzROWQpIM1FTdGxYV0FkMTFIM2U5a0UyVy9Jb2d1L3F5amRIK0RsLzM2WlhUMzdsRllnUUhOMHRTZ0FvQnAzRlQ2TDd2CnZNc1hkeGt1NGRLSHFOOG9RaHY5S09vM005d0cvV1NLUkVRZGdVc3dYOVRkRXBSS2FYMC9vb3RJYVFQTlE5TWIKeU9DMEhlN3g4ZUtVMHNFenBpZjV0cGJZNGxuNVplZXRPbyttampvb3N1Y0Q5SnhkK3BpRGlBay9NeTdJcjFZQQpDZ21ZcUxSZXJBdGFtVWw4TzNmSWg3Y1J0TDlqcVRhckM1TGp1bnV6cExZd2lHSWFUZkxCZGZrTFNkRDhHeXE3CmZvQ2IvbjBadEZaOENHTHJDZGd3N1Z6MmVQbUwvL3dva2s5SHUxbkVPQVJqTGM5SFV5OXlHTlU1UHkvRXJHKzEKUDNSNk9ieHNpMFVXS1oyT1BlRnpjeS94VGEwSlBjZzNUdXFrcmFacUlTOWovREEraEpkaVk2c0YxcW9KQk0rLwpoNy9IV3VBL2t5K3dnL2dlVWZCWHlxSmw3S1J3WklBVTRkYzl1TG00aE1LVDZxTFNBM1R4dzl1N3lVZHZlcFRMCk50OGtheVJCY0M0YmMxNkpucGs9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K', 'RSA', 4096, 'HIGH', 'Root-CA-V1', '', '', '', '', '', '2025-01-07 15:51:59.000', '2025-11-03 15:51:54.000', '0001-01-01 01:00:00.000', 'Unspecified', 'MANAGED', 'aws-sm-engine', '87f6013de22af2bf3ec6af5ab389a13724d0c927a3e280a8eb01559339b02776', true);
+	`)
+
+	con.Exec(fmt.Sprintf(`INSERT INTO ca_certificates
+		(serial_number, metadata, id, creation_ts, "level", validity_type, validity_time, validity_duration)
+		VALUES('99-e0-26-60-4b-90-8d-3e-50-97-98-b0-16-db-d6-79', '%s', '8b600c60-9eb3-4251-b6ce-c92d1beccc63', '2025-01-07 15:51:59.774', 0, 'Duration', '2025-11-03 15:51:41.000', '14w2d');
+	`, currentMeta))
+
+	ApplyMigration(t, logger, con, CADBName)
+
+	var result string
+
+	// Select iot1, should have the new keygen settings enabled and reenrollment_settings.revoke_on_reenrollment set to false
+	tx := con.Table("ca_certificates").Where("id = '8b600c60-9eb3-4251-b6ce-c92d1beccc63'").Select("metadata").Find(&result)
+	if tx.Error != nil {
+		t.Fatalf("failed to select row: %v", tx.Error)
+	}
+
+	assert.Equal(t, expectedMeta, result)
+}
+
 func TestMigrations(t *testing.T) {
 	logger := helpers.SetupLogger(config.Trace, "test", "test")
 	cleanup, con := RunDB(t, logger, CADBName)
@@ -299,5 +327,12 @@ func TestMigrations(t *testing.T) {
 	MigrationTest_CA_20250115095852_create_requests_table(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20250115095852_create_requests_table")
+	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_CA_20250123125500_ca_aws_metadata(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250123125500_ca_aws_metadata")
 	}
 }
