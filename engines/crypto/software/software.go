@@ -1,6 +1,7 @@
 package software
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -10,6 +11,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
+	"fmt"
 
 	"github.com/sirupsen/logrus"
 )
@@ -108,4 +111,34 @@ func (p *SoftwareCryptoEngine) EncodePKIXPublicKeyDigest(key interface{}) (strin
 	p.logger.Debugf("public key digest (hex encoded bytes): %s", hexDigest)
 
 	return hexDigest, nil
+}
+
+func (p *SoftwareCryptoEngine) ParsePrivateKey(pemBytes []byte) (crypto.Signer, error) {
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, fmt.Errorf("no key found")
+	}
+
+	// First try to parse as PKCS8
+	genericKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		// If it fails, try to parse as PKCS1
+		genericKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil {
+			// If it fails, try to parse as EC
+			genericKey, err = x509.ParseECPrivateKey(block.Bytes)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	switch key := genericKey.(type) {
+	case *rsa.PrivateKey:
+		return key, nil
+	case *ecdsa.PrivateKey:
+		return key, nil
+	default:
+		return nil, errors.New("unsupported key type")
+	}
 }

@@ -7,9 +7,6 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/pem"
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -90,24 +87,7 @@ func (engine *FilesystemCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Si
 		return nil, err
 	}
 
-	block, _ := pem.Decode(pemBytes)
-	if block == nil {
-		return nil, fmt.Errorf("no key found")
-	}
-
-	genericKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, err
-	}
-
-	switch genericKey.(type) {
-	case *rsa.PrivateKey:
-		return genericKey.(*rsa.PrivateKey), nil
-	case *ecdsa.PrivateKey:
-		return genericKey.(*ecdsa.PrivateKey), nil
-	default:
-		return nil, errors.New("unsupported key type")
-	}
+	return engine.softCryptoEngine.ParsePrivateKey(pemBytes)
 }
 
 func (engine *FilesystemCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
@@ -198,15 +178,7 @@ func (engine *FilesystemCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKe
 }
 
 func (engine *FilesystemCryptoEngine) importKey(key interface{}) (string, crypto.Signer, error) {
-	var pubKey any
-	switch k := key.(type) {
-	case *rsa.PrivateKey:
-		pubKey = &k.PublicKey
-	case *ecdsa.PrivateKey:
-		pubKey = &k.PublicKey
-	default:
-		return "", nil, errors.New("unsupported key type")
-	}
+	pubKey := key.(crypto.Signer).Public()
 
 	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(pubKey)
 	if err != nil {
