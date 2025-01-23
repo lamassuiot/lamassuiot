@@ -1,7 +1,5 @@
 package models
 
-import "fmt"
-
 const HttpSourceHeader = "x-lms-source"
 const HttpRequestIDHeader = "x-request-id"
 
@@ -10,8 +8,6 @@ const DMSManagerSource = "lrn://service/lamassuiot-ra"
 const DeviceManagerSource = "lrn://service/lamassuiot-devmanager"
 const VASource = "lrn://service/lamassuiot-va"
 const AlertsSource = "lrn://service/lamassuiot-alerts"
-
-func AWSIoTSource(id string) string { return fmt.Sprintf("lrn://service/lamassuiot-awsiot/%s", id) }
 
 type UpdateModel[E any] struct {
 	Previous E `json:"previous"`

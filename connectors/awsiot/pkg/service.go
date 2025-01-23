@@ -216,7 +216,7 @@ func NewAWSCloudConnectorServiceService(builder AWSCloudConnectorBuilder) (AWSCl
 type RegisterAndAttachThingInput struct {
 	DeviceID               string
 	BindedIdentity         models.BindIdentityToDeviceOutput
-	DMSIoTAutomationConfig models.IotAWSDMSMetadata
+	DMSIoTAutomationConfig IotAWSDMSMetadata
 }
 
 func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.Context, input RegisterAndAttachThingInput) error {
@@ -370,7 +370,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 		return err
 	}
 
-	cert.Metadata[models.AWSIoTMetadataKey(svc.ConnectorID)] = models.IoTAWSCertificateMetadata{
+	cert.Metadata[AWSIoTMetadataKey(svc.ConnectorID)] = IoTAWSCertificateMetadata{
 		ARN: registrationOutput.ResourceArns["certificate"],
 	}
 
@@ -391,9 +391,9 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 		return err
 	}
 
-	device.Metadata[models.AWSIoTMetadataKey(svc.ConnectorID)] = models.DeviceAWSMetadata{
+	device.Metadata[AWSIoTMetadataKey(svc.ConnectorID)] = DeviceAWSMetadata{
 		Registered: true,
-		Actions:    []models.RemediationActionType{},
+		Actions:    []RemediationActionType{},
 	}
 
 	_, err = svc.DeviceSDK.UpdateDeviceMetadata(ctx, services.UpdateDeviceMetadataInput{
@@ -415,16 +415,16 @@ type UpdateCertificateStatusInput struct {
 func (svc *AWSCloudConnectorServiceBackend) UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) error {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	var certIoTCoreMeta models.IoTAWSCertificateMetadata
+	var certIoTCoreMeta IoTAWSCertificateMetadata
 
-	hasKey, err := helpers.GetMetadataToStruct(input.Certificate.Metadata, models.AWSIoTMetadataKey(svc.ConnectorID), &certIoTCoreMeta)
+	hasKey, err := helpers.GetMetadataToStruct(input.Certificate.Metadata, AWSIoTMetadataKey(svc.ConnectorID), &certIoTCoreMeta)
 	if err != nil {
-		lFunc.Errorf("could not decode metadata with key %s: %s", models.AWSIoTMetadataKey(svc.ConnectorID), err)
+		lFunc.Errorf("could not decode metadata with key %s: %s", AWSIoTMetadataKey(svc.ConnectorID), err)
 		return err
 	}
 
 	if !hasKey {
-		lFunc.Warnf("Certificate doesn't have %s key", models.AWSIoTMetadataKey(svc.ConnectorID))
+		lFunc.Warnf("Certificate doesn't have %s key", AWSIoTMetadataKey(svc.ConnectorID))
 		return nil
 	}
 
@@ -467,8 +467,8 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateCertificateStatus(ctx context.
 
 type UpdateDeviceShadowInput struct {
 	DeviceID               string
-	RemediationActionsType []models.RemediationActionType
-	DMSIoTAutomationConfig models.IotAWSDMSMetadata
+	RemediationActionsType []RemediationActionType
+	DMSIoTAutomationConfig IotAWSDMSMetadata
 }
 
 func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Context, input UpdateDeviceShadowInput) error {
@@ -524,12 +524,12 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 	}
 
 	actionsLogs := []string{}
-	processedActions := []models.RemediationActionType{}
+	processedActions := []RemediationActionType{}
 	ts := int(time.Now().UnixMilli())
 
 	for key := range idShadow {
-		if slices.Contains(input.RemediationActionsType, models.RemediationActionType(key)) {
-			processedActions = append(processedActions, models.RemediationActionType(key))
+		if slices.Contains(input.RemediationActionsType, RemediationActionType(key)) {
+			processedActions = append(processedActions, RemediationActionType(key))
 			//action included in input actions. Check if should be added or updated
 			//update
 			idShadow[key] = ts
@@ -589,25 +589,25 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 		return err
 	}
 
-	var deviceMetaAWS models.DeviceAWSMetadata
-	hasKey, err := helpers.GetMetadataToStruct(device.Metadata, models.AWSIoTMetadataKey(svc.ConnectorID), &deviceMetaAWS)
+	var deviceMetaAWS DeviceAWSMetadata
+	hasKey, err := helpers.GetMetadataToStruct(device.Metadata, AWSIoTMetadataKey(svc.ConnectorID), &deviceMetaAWS)
 	if err != nil {
-		lFunc.Errorf("could not decode metadata with key %s: %s", models.AWSIoTMetadataKey(svc.ConnectorID), err)
+		lFunc.Errorf("could not decode metadata with key %s: %s", AWSIoTMetadataKey(svc.ConnectorID), err)
 		return err
 	}
 
 	if !hasKey {
-		lFunc.Warnf("Device doesn't have %s key", models.AWSIoTMetadataKey(svc.ConnectorID))
+		lFunc.Warnf("Device doesn't have %s key", AWSIoTMetadataKey(svc.ConnectorID))
 		return nil
 	}
 
-	deviceMetaAWS.Actions = slices.DeleteFunc(deviceMetaAWS.Actions, func(action models.RemediationActionType) bool {
-		return slices.ContainsFunc(input.RemediationActionsType, func(act models.RemediationActionType) bool {
+	deviceMetaAWS.Actions = slices.DeleteFunc(deviceMetaAWS.Actions, func(action RemediationActionType) bool {
+		return slices.ContainsFunc(input.RemediationActionsType, func(act RemediationActionType) bool {
 			return action == act
 		})
 	})
 
-	device.Metadata[models.AWSIoTMetadataKey(svc.ConnectorID)] = deviceMetaAWS
+	device.Metadata[AWSIoTMetadataKey(svc.ConnectorID)] = deviceMetaAWS
 
 	_, err = svc.DeviceSDK.UpdateDeviceMetadata(ctx, services.UpdateDeviceMetadataInput{
 		ID:       input.DeviceID,
@@ -697,7 +697,7 @@ func (svc *AWSCloudConnectorServiceBackend) GetRegisteredCAs(ctx context.Context
 
 type RegisterCAInput struct {
 	models.CACertificate
-	RegisterConfiguration models.IoTAWSCAMetadata
+	RegisterConfiguration IoTAWSCAMetadata
 }
 
 func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, input RegisterCAInput) (ca *models.CACertificate, err error) {
@@ -742,9 +742,9 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 			//report error in metadata
 			lFunc.Infof("updating CA %s metadata with error: %s", input.ID, err)
 			newMeta := input.CACertificate.Metadata
-			input.RegisterConfiguration.Registration.Status = models.IoTAWSCAMetadataRegistrationFailed
+			input.RegisterConfiguration.Registration.Status = IoTAWSCAMetadataRegistrationFailed
 			input.RegisterConfiguration.Registration.Error = err.Error()
-			newMeta[models.AWSIoTMetadataKey(svc.GetConnectorID())] = input.RegisterConfiguration
+			newMeta[AWSIoTMetadataKey(svc.GetConnectorID())] = input.RegisterConfiguration
 
 			_, err = svc.CaSDK.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
 				CAID:     input.ID,
@@ -832,15 +832,15 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 	}
 
 	newMeta := input.Metadata
-	newMeta[models.AWSIoTMetadataKey(svc.ConnectorID)] = models.IoTAWSCAMetadata{
+	newMeta[AWSIoTMetadataKey(svc.ConnectorID)] = IoTAWSCAMetadata{
 		Account:             svc.AccountID,
 		Region:              svc.Region,
 		ARN:                 *regResponse.CertificateArn,
 		CertificateID:       *regResponse.CertificateId,
 		IotCoreMQTTEndpoint: svc.endpointAddress,
-		Registration: models.IoTAWSCAMetadataRegistration{
+		Registration: IoTAWSCAMetadataRegistration{
 			RegistrationTime:        time.Now(),
-			Status:                  models.IoTAWSCAMetadataRegistrationSucceeded,
+			Status:                  IoTAWSCAMetadataRegistrationSucceeded,
 			Error:                   "",
 			RegistrationRequestTime: input.RegisterConfiguration.Registration.RegistrationRequestTime,
 			PrimaryAccount:          input.RegisterConfiguration.Registration.PrimaryAccount,
@@ -891,7 +891,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterGroups(ctx context.Context, 
 }
 
 type RegisterUpdatePoliciesInput struct {
-	Policies []models.AWSIoTPolicy
+	Policies []AWSIoTPolicy
 }
 
 func (svc *AWSCloudConnectorServiceBackend) RegisterUpdatePolicies(ctx context.Context, input RegisterUpdatePoliciesInput) error {
@@ -960,7 +960,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterUpdatePolicies(ctx context.C
 
 type RegisterUpdateJITPProvisionerInput struct {
 	DMS           *models.DMS
-	AwsJITPConfig models.IotAWSDMSMetadata
+	AwsJITPConfig IotAWSDMSMetadata
 }
 
 func (svc *AWSCloudConnectorServiceBackend) RegisterUpdateJITPProvisioner(ctx context.Context, input RegisterUpdateJITPProvisionerInput) error {
@@ -1039,7 +1039,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterUpdateJITPProvisioner(ctx co
 	dms := input.DMS
 	updatedJitpConf := input.AwsJITPConfig
 	updatedJitpConf.JITPProvisioningTemplate.ARN = *cpTemplate.TemplateArn
-	dms.Metadata[models.AWSIoTMetadataKey(svc.ConnectorID)] = updatedJitpConf
+	dms.Metadata[AWSIoTMetadataKey(svc.ConnectorID)] = updatedJitpConf
 
 	_, err = svc.DmsSDK.UpdateDMS(ctx, services.UpdateDMSInput{
 		DMS: *dms,

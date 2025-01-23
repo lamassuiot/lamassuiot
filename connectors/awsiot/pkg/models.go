@@ -1,4 +1,4 @@
-package models
+package pkg
 
 import (
 	"fmt"
@@ -34,10 +34,6 @@ type DigitalTwinRemediationActionState struct {
 type LamassuConfiguration struct {
 	URL   string `json:"url"`
 	DMSID string `json:"dms_id"`
-}
-
-func AWSIoTMetadataKey(connectorID string) string {
-	return fmt.Sprintf("lamassu.io/iot/%s", connectorID)
 }
 
 type IoTAWSCAMetadataRegistrationStatus string
@@ -100,4 +96,12 @@ type AWSIoTPolicy struct {
 type DeviceAWSMetadata struct {
 	Registered bool                    `json:"thing_registered"`
 	Actions    []RemediationActionType `json:"actions"`
+}
+
+func AWSIoTSource(id string) string {
+	return fmt.Sprintf("lrn://service/lamassuiot-awsiot/%s", id)
+}
+
+func AWSIoTMetadataKey(connectorID string) string {
+	return fmt.Sprintf("lamassu.io/iot/%s", connectorID)
 }
