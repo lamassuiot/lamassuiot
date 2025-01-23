@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -95,4 +96,12 @@ type AWSIoTPolicy struct {
 type DeviceAWSMetadata struct {
 	Registered bool                    `json:"thing_registered"`
 	Actions    []RemediationActionType `json:"actions"`
+}
+
+func AWSIoTSource(id string) string {
+	return fmt.Sprintf("lrn://service/lamassuiot-awsiot/%s", id)
+}
+
+func AWSIoTMetadataKey(connectorID string) string {
+	return fmt.Sprintf("lamassu.io/iot/%s", connectorID)
 }

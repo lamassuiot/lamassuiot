@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	lamassu "github.com/lamassuiot/lamassuiot/connectors/awsiot/v3/pkg"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	log "github.com/sirupsen/logrus"
@@ -21,7 +21,7 @@ func main() {
 	log.SetFormatter(helpers.LogFormatter)
 	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
 
-	conf, err := cconfig.LoadConfig[lamassu.ConnectorServiceConfig](&lamassu.ConnectorServiceConfigDefaults)
+	conf, err := config.LoadConfig[lamassu.ConnectorServiceConfig](&lamassu.ConnectorServiceConfigDefaults)
 	if err != nil {
 		log.Fatalf("something went wrong while loading config. Exiting: %s", err)
 	}
