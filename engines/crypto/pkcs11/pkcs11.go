@@ -44,8 +44,6 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 		TokenLabel: conf.Config.TokenLabel,
 	}
 
-	os.Clearenv()
-
 	for envKey, envVal := range conf.Config.ModuleExtraOptions.Env {
 		lPkcs11.Debugf("setting env variable %s=%s", envKey, envVal)
 		os.Setenv(envKey, envVal)
