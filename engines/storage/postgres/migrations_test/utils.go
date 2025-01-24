@@ -74,7 +74,7 @@ func ApplyMigration(t *testing.T, logger *logrus.Entry, con *gorm.DB, dbName str
 	applied := false
 	for _, s := range src {
 		if strings.Contains(s.Path, migrationName) {
-			logger.Infof("APPLYING MIGRATION %s: %d", s.Path, s.Version)
+			logger.Infof("APPLYING MIGRATION %s - %d", s.Path, s.Version)
 			_, err := m.Goose.ApplyVersion(context.Background(), s.Version, true)
 			if err != nil {
 				t.Fatalf("could not apply migration: %s", err)

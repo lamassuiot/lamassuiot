@@ -19,6 +19,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	cmodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3"
 	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
@@ -615,9 +616,7 @@ func TestSignCertificateRequest(t *testing.T) {
 		},
 		SignAsCA:     false,
 		HonorSubject: true,
-		KeyUsage: []cmodels.X509KeyUsage{
-			cmodels.X509KeyUsage(x509.KeyUsageKeyAgreement),
-		},
+		KeyUsage:     models.X509KeyUsage(x509.KeyUsageKeyAgreement),
 		ExtendedKeyUsages: []cmodels.X509ExtKeyUsage{
 			cmodels.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
 		},
@@ -753,12 +752,8 @@ func TestSignCertificateRequest(t *testing.T) {
 					Type: cmodels.Time,
 					Time: expirationTime,
 				},
-				SignAsCA: false,
-				KeyUsage: []cmodels.X509KeyUsage{
-					cmodels.X509KeyUsage(x509.KeyUsageDigitalSignature),
-					cmodels.X509KeyUsage(x509.KeyUsageDataEncipherment),
-					cmodels.X509KeyUsage(x509.KeyUsageContentCommitment),
-				},
+				SignAsCA:        false,
+				KeyUsage:        models.X509KeyUsage(x509.KeyUsageDigitalSignature | x509.KeyUsageDataEncipherment | x509.KeyUsageContentCommitment),
 				HonorSubject:    true,
 				HonorExtensions: true,
 			},
@@ -809,7 +804,6 @@ func TestSignCertificateRequest(t *testing.T) {
 				},
 				HonorSubject:    true,
 				HonorExtensions: true,
-				KeyUsage:        []cmodels.X509KeyUsage{},
 			},
 			subject: csrSubject,
 			keyType: cmodels.KeyType(x509.ECDSA),
