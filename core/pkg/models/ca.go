@@ -132,7 +132,7 @@ type IssuanceProfile struct {
 	Validity Validity `json:"validity" gorm:"embedded;embeddedPrefix:validity_"`
 	SignAsCA bool     `json:"sign_as_ca"`
 
-	KeyUsage          []X509KeyUsage    `json:"key_usage"`
+	KeyUsage          X509KeyUsage      `json:"key_usage"`
 	ExtendedKeyUsages []X509ExtKeyUsage `json:"extended_key_usage"`
 
 	HonorSubject bool    `json:"honor_subject"`

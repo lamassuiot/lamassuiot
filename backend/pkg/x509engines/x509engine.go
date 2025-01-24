@@ -208,12 +208,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 	}
 
 	// Define certificate key usage
-	var keyUsage x509.KeyUsage
-	for _, usage := range profile.KeyUsage {
-		keyUsage |= x509.KeyUsage(usage)
-	}
-
-	certificateTemplate.KeyUsage = keyUsage
+	certificateTemplate.KeyUsage = x509.KeyUsage(profile.KeyUsage)
 
 	// Define certificate extended key usage
 	var extKeyUsage []x509.ExtKeyUsage
@@ -286,14 +281,11 @@ func (engine X509Engine) GetCertificateSigner(ctx context.Context, caCertificate
 
 func (engine X509Engine) GetDefaultCAIssuanceProfile(ctx context.Context, validity cmodels.Validity) cmodels.IssuanceProfile {
 	return cmodels.IssuanceProfile{
-		Validity:        validity,
-		SignAsCA:        true,
-		HonorExtensions: true,
-		HonorSubject:    true,
-		KeyUsage: []cmodels.X509KeyUsage{
-			cmodels.X509KeyUsage(x509.KeyUsageCertSign),
-			cmodels.X509KeyUsage(x509.KeyUsageCRLSign),
-		},
+		Validity:          validity,
+		SignAsCA:          true,
+		HonorExtensions:   true,
+		HonorSubject:      true,
+		KeyUsage:          models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign),
 		ExtendedKeyUsages: []cmodels.X509ExtKeyUsage{},
 	}
 }

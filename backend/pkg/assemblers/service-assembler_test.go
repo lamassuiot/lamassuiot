@@ -253,7 +253,7 @@ func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig,
 		PublisherEventBus:  eventBus.config,
 		SubscriberEventBus: eventBus.config,
 		Storage:            storageEngine.config,
-	}, caTestServer.Service, models.APIServiceInfo{
+	}, caTestServer.HttpCASDK, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
 		BuildTime: "-",
@@ -314,7 +314,7 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 		Storage:                   storageEngine.config,
 		DownstreamCertificateFile: downstreamCertPath,
 	},
-		caTestServer.Service,
+		caTestServer.HttpCASDK,
 		deviceManagerTestServer.Service,
 		models.APIServiceInfo{
 			Version:   "test",

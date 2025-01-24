@@ -9,7 +9,7 @@ import (
 
 type X509KeyUsage x509.KeyUsage
 
-func (p X509KeyUsage) MarshalText() ([]byte, error) {
+func (p X509KeyUsage) MarshalJSON() ([]byte, error) {
 	usages := []string{}
 	if p&X509KeyUsage(x509.KeyUsageDigitalSignature) != 0 {
 		usages = append(usages, "DigitalSignature")
@@ -96,77 +96,54 @@ func (c *X509KeyUsage) UnmarshalJSON(data []byte) error {
 		}
 	}
 
+	*c = X509KeyUsage(usages)
 	return nil
 }
 
 type X509ExtKeyUsage x509.ExtKeyUsage
 
-func (p X509ExtKeyUsage) MarshalText() ([]byte, error) {
-	str := ""
-	switch p {
-	case X509ExtKeyUsage(x509.ExtKeyUsageAny):
-		str = "Any"
-	case X509ExtKeyUsage(x509.ExtKeyUsageServerAuth):
-		str = "ServerAuth"
-	case X509ExtKeyUsage(x509.ExtKeyUsageClientAuth):
-		str = "ClientAuth"
-	case X509ExtKeyUsage(x509.ExtKeyUsageCodeSigning):
-		str = "CodeSigning"
-	case X509ExtKeyUsage(x509.ExtKeyUsageEmailProtection):
-		str = "EmailProtection"
-	case X509ExtKeyUsage(x509.ExtKeyUsageIPSECEndSystem):
-		str = "IPSECEndSystem"
-	case X509ExtKeyUsage(x509.ExtKeyUsageIPSECTunnel):
-		str = "IPSECTunnel"
-	case X509ExtKeyUsage(x509.ExtKeyUsageIPSECUser):
-		str = "IPSECUser"
-	case X509ExtKeyUsage(x509.ExtKeyUsageTimeStamping):
-		str = "TimeStamping"
-	case X509ExtKeyUsage(x509.ExtKeyUsageOCSPSigning):
-		str = "OCSPSigning"
-	}
-
-	return json.Marshal(str)
+var X509ExtKeyUsageMap = map[x509.ExtKeyUsage]string{
+	x509.ExtKeyUsageAny:                            "Any",
+	x509.ExtKeyUsageServerAuth:                     "ServerAuth",
+	x509.ExtKeyUsageClientAuth:                     "ClientAuth",
+	x509.ExtKeyUsageCodeSigning:                    "CodeSigning",
+	x509.ExtKeyUsageEmailProtection:                "EmailProtection",
+	x509.ExtKeyUsageIPSECEndSystem:                 "IPSECEndSystem",
+	x509.ExtKeyUsageIPSECTunnel:                    "IPSECTunnel",
+	x509.ExtKeyUsageIPSECUser:                      "IPSECUser",
+	x509.ExtKeyUsageTimeStamping:                   "TimeStamping",
+	x509.ExtKeyUsageOCSPSigning:                    "OCSPSigning",
+	x509.ExtKeyUsageMicrosoftServerGatedCrypto:     "MicrosoftServerGatedCrypto",
+	x509.ExtKeyUsageNetscapeServerGatedCrypto:      "NetscapeServerGatedCrypto",
+	x509.ExtKeyUsageMicrosoftCommercialCodeSigning: "MicrosoftCommercialCodeSigning",
 }
 
-func (c *X509ExtKeyUsage) UnmarshalJSON(data []byte) error {
-	var usage X509ExtKeyUsage
+func (p X509ExtKeyUsage) MarshalText() ([]byte, error) {
+	if value, ok := X509ExtKeyUsageMap[x509.ExtKeyUsage(p)]; ok {
+		return []byte(value), nil
+	}
 
-	var singleUsage string
-	err := json.Unmarshal(data, &singleUsage)
-	if err != nil {
-		if err != nil {
-			return fmt.Errorf("invalid format")
+	return nil, fmt.Errorf("unsupported ext key usage")
+}
+
+func (p *X509ExtKeyUsage) UnmarshalText(text []byte) (err error) {
+	pw := string(text)
+
+	for k, v := range X509ExtKeyUsageMap {
+		if strings.EqualFold(strings.ToLower(v), strings.ToLower(pw)) {
+			*p = X509ExtKeyUsage(k)
+			return nil
 		}
-
 	}
 
-	switch singleUsage {
-	case "Any":
-		usage = X509ExtKeyUsage(x509.ExtKeyUsageAny)
-	case "ServerAuth":
-		usage = X509ExtKeyUsage(x509.ExtKeyUsageServerAuth)
-	case "ClientAuth":
-		usage = X509ExtKeyUsage(x509.ExtKeyUsageClientAuth)
-	case "CodeSigning":
-		usage = X509ExtKeyUsage(x509.ExtKeyUsageCodeSigning)
-	case "EmailProtection":
-		usage = X509ExtKeyUsage(x509.ExtKeyUsageEmailProtection)
-	case "IPSECEndSystem":
-		usage = X509ExtKeyUsage(x509.ExtKeyUsageIPSECEndSystem)
-	case "IPSECTunnel":
-		usage = X509ExtKeyUsage(x509.ExtKeyUsageIPSECTunnel)
-	case "IPSECUser":
-		usage = X509ExtKeyUsage(x509.ExtKeyUsageIPSECUser)
-	case "TimeStamping":
-		usage = X509ExtKeyUsage(x509.ExtKeyUsageTimeStamping)
-	case "OCSPSigning":
-		usage = X509ExtKeyUsage(x509.ExtKeyUsageOCSPSigning)
-	default:
-		return fmt.Errorf("unknown extended key usage: %s", singleUsage)
+	return fmt.Errorf("unsupported ext key usage")
+}
+
+func (c X509ExtKeyUsage) String() string {
+	r, err := c.MarshalText()
+	if err != nil {
+		return "-"
 	}
 
-	c = &usage
-
-	return nil
+	return string(r)
 }

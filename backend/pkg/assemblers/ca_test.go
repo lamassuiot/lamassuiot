@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -933,6 +934,65 @@ func TestSignCertificate(t *testing.T) {
 
 				if issuedCert.Subject.State != "other-lamassu-world" {
 					return fmt.Errorf("issued certificate should have State 'other-lamassu-world' but got %s", issuedCert.Subject.State)
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/KeyUsages",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				key, err := chelpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				csr, err := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test", Country: "ES", Organization: "lamassu", OrganizationUnit: "iot", State: "lamassu-world", Locality: "lamassu-city"}, key)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:        caIDToSign,
+					CertRequest: (*models.X509CertificateRequest)(csr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+						KeyUsage: models.X509KeyUsage(
+							models.X509KeyUsage(x509.KeyUsageDigitalSignature | x509.KeyUsageCRLSign),
+						),
+						ExtendedKeyUsages: []models.X509ExtKeyUsage{
+							models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+							models.X509ExtKeyUsage(x509.ExtKeyUsageCodeSigning),
+						},
+					},
+				})
+			},
+			resultCheck: func(issuedCert *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCert == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if issuedCert.Certificate.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
+					return fmt.Errorf("issued certificate should have KeyUsage 'DigitalSignature' but was not set")
+				}
+
+				if issuedCert.Certificate.KeyUsage&x509.KeyUsageCRLSign == 0 {
+					return fmt.Errorf("issued certificate should have KeyUsage 'CRLSign' but got was not set")
+				}
+
+				if !slices.Contains(issuedCert.Certificate.ExtKeyUsage, x509.ExtKeyUsageClientAuth) {
+					return fmt.Errorf("issued certificate should have ExtKeyUsage 'ClientAuth' but  was not set")
+				}
+
+				if !slices.Contains(issuedCert.Certificate.ExtKeyUsage, x509.ExtKeyUsageCodeSigning) {
+					return fmt.Errorf("issued certificate should have ExtKeyUsage 'CodeSigning' but was not set")
 				}
 
 				return nil
