@@ -1,4 +1,4 @@
-name: CI Launch Tests
+name: GO Unit Testing
  
 on:
   pull_request:
