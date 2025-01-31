@@ -11,7 +11,7 @@ type CAConfig struct {
 	Storage            cconfig.PluggableStorageEngine `mapstructure:"storage"`
 	CryptoEngineConfig CryptoEngines                  `mapstructure:"crypto_engines"`
 	CryptoMonitoring   cconfig.MonitoringJob          `mapstructure:"crypto_monitoring"`
-	VAServerDomain     string                         `mapstructure:"va_server_domain"`
+	VAServerDomains    []string                       `mapstructure:"va_server_domains"`
 }
 
 type CryptoEngines struct {

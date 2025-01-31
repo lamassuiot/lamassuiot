@@ -47,7 +47,7 @@ func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
 
 	engine, _ := builder(log, conf)
 
-	x509Engine := NewX509Engine(log, &engine, "ocsp.lamassu.io")
+	x509Engine := NewX509Engine(log, &engine, []string{"ocsp.lamassu.io", "va.lamassu.io"})
 
 	return tempDir, engine, x509Engine
 }
@@ -162,8 +162,12 @@ func checkCACertificate(cert *x509.Certificate, ca *x509.Certificate, tcSubject 
 		return fmt.Errorf("unexpected result, got: %t, want: %t", cert.IsCA, true)
 	}
 
-	if cert.OCSPServer[0] != "https://ocsp.lamassu.io/ocsp" {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer, "https://ocsp.lamassuiot.com/ocsp")
+	if cert.OCSPServer[0] != "http://ocsp.lamassu.io/ocsp" {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[0], "http://ocsp.lamassuiot.com/ocsp")
+	}
+
+	if cert.OCSPServer[1] != "http://va.lamassu.io/ocsp" {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[1], "http://va.lamassuiot.com/ocsp")
 	}
 
 	v2CrlID, err := software.NewSoftwareCryptoEngine(logrus.NewEntry(logrus.StandardLogger())).EncodePKIXPublicKeyDigest(ca.PublicKey)
@@ -171,8 +175,12 @@ func checkCACertificate(cert *x509.Certificate, ca *x509.Certificate, tcSubject 
 		return fmt.Errorf("unexpected error: %s", err)
 	}
 
-	if cert.CRLDistributionPoints[0] != "https://ocsp.lamassu.io/crl/"+v2CrlID {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints, "https://crl.lamassuiot.com/crl/"+v2CrlID)
+	if cert.CRLDistributionPoints[0] != "http://ocsp.lamassu.io/crl/"+v2CrlID {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[0], "http://crl.lamassuiot.com/crl/"+v2CrlID)
+	}
+
+	if cert.CRLDistributionPoints[1] != "http://va.lamassu.io/crl/"+v2CrlID {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[1], "http://va.lamassuiot.com/crl/"+v2CrlID)
 	}
 
 	return nil
