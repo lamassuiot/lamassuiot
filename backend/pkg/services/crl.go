@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"fmt"
 	"math/big"
 	"time"
@@ -101,6 +102,16 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input services.GetCRLInput
 	caSigner := NewCASigner(ctx, crlCA, svc.caSDK)
 	caCert := (*x509.Certificate)(crlCA.Certificate.Certificate)
 
+	extensions := []pkix.Extension{}
+
+	idp, err := getDistributionPointExtension()
+	if err != nil {
+		lFunc.Errorf("something went wrong while creating Issuing Distribution Point extension: %s", err)
+		return nil, err
+	}
+
+	extensions = append(extensions, *idp)
+
 	lFunc.Debugf("creating revocation list. CA %s", crlCA.ID)
 	now := time.Now()
 	crl, err := x509.CreateRevocationList(rand.Reader, &x509.RevocationList{
@@ -108,6 +119,7 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input services.GetCRLInput
 		Number:                    big.NewInt(time.Now().UnixMilli()),
 		ThisUpdate:                now,
 		NextUpdate:                now.Add(time.Hour * 48),
+		ExtraExtensions:           extensions,
 	}, caCert, caSigner)
 	if err != nil {
 		lFunc.Errorf("something went wrong while creating revocation list: %s", err)
@@ -115,4 +127,39 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input services.GetCRLInput
 	}
 
 	return crl, nil
+}
+
+func getDistributionPointExtension() (*pkix.Extension, error) {
+	type DistributionPointName struct { // CHOICE
+		FullName     []asn1.RawValue  `asn1:"optional,tag:0"`
+		RelativeName pkix.RDNSequence `asn1:"optional,tag:1"`
+	}
+
+	// RFC 5280. Section 5.2.5,
+	type IssuingDistributionPoint struct {
+		DistributionPoint          DistributionPointName `asn1:"tag:0,optional"`
+		OnlyContainsUserCerts      bool                  `asn1:"tag:1"`
+		OnlyContainsCACerts        bool                  `asn1:"tag:2"`
+		OnlySomeReasons            asn1.BitString        `asn1:"tag:3,optional"`
+		IndirectCRL                bool                  `asn1:"tag:4"`
+		OnlyContainsAttributeCerts bool                  `asn1:"tag:5"`
+	}
+
+	// Add Issuing Distribution Point
+	idp, err := asn1.Marshal(IssuingDistributionPoint{
+		DistributionPoint: DistributionPointName{
+			FullName: []asn1.RawValue{
+				{Tag: 6, Class: 2, Bytes: []byte("http://example.com")}, //Tag 6 is for URI (0 -> otherName, 1 -> rfc822Name, 2 -> dnsName, ..., 6 -> URI, ...). Same value used by x509 CRL
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &pkix.Extension{
+		Id:       []int{2, 5, 29, 28},
+		Critical: true,
+		Value:    idp,
+	}, nil
 }
