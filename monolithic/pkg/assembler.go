@@ -24,7 +24,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, error) {
+func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 	log.SetLevel(log.PanicLevel)
 	if conf.AssemblyMode == Http {
 		apiInfo := models.APIServiceInfo{
@@ -69,7 +69,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, error) {
 			},
 		}, apiInfo)
 		if err != nil {
-			return -1, fmt.Errorf("could not assemble CA Service: %s", err)
+			return -1, -1, fmt.Errorf("could not assemble CA Service: %s", err)
 		}
 
 		caConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: caPort}, Protocol: cconfig.HTTP, BasePath: ""}
@@ -103,7 +103,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, error) {
 			},
 		}, caSDKBuilder("VA", models.VASource), apiInfo)
 		if err != nil {
-			return -1, fmt.Errorf("could not assemble VA Service: %s", err)
+			return -1, -1, fmt.Errorf("could not assemble VA Service: %s", err)
 		}
 
 		_, devPort, err := lamassu.AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
@@ -122,7 +122,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, error) {
 			Storage:            conf.Storage,
 		}, caSDKBuilder("Device Manager", models.DeviceManagerSource), apiInfo)
 		if err != nil {
-			return -1, fmt.Errorf("could not assemble Device Manager Service: %s", err)
+			return -1, -1, fmt.Errorf("could not assemble Device Manager Service: %s", err)
 		}
 
 		devMngrConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: devPort}, Protocol: cconfig.HTTP, BasePath: ""}
@@ -159,7 +159,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, error) {
 			Storage:                   conf.Storage,
 		}, caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo)
 		if err != nil {
-			return -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
+			return -1, -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
 		}
 
 		dmsMngrConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: dmsPort}, Protocol: cconfig.HTTP, BasePath: ""}
@@ -195,7 +195,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, error) {
 			Storage:            conf.Storage,
 		}, apiInfo)
 		if err != nil {
-			return -1, fmt.Errorf("could not assemble Alerts Service: %s", err)
+			return -1, -1, fmt.Errorf("could not assemble Alerts Service: %s", err)
 		}
 
 		if conf.AWSIoTManager.Enabled {
@@ -208,7 +208,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, error) {
 				AWSSDKConfig:       conf.AWSIoTManager.AWSSDKConfig,
 			}, caSDKBuilder("AWS IoT Connector", awsiotconnector.AWSIoTSource(conf.AWSIoTManager.ConnectorID)), dmsMngrSDKBuilder("AWS IoT Connector", awsiotconnector.AWSIoTSource(conf.AWSIoTManager.ConnectorID)), deviceMngrSDKBuilder("AWS IoT Connector", awsiotconnector.AWSIoTSource(conf.AWSIoTManager.ConnectorID)))
 			if err != nil {
-				return -1, fmt.Errorf("could not assemble AWS IoT Manager: %s", err)
+				return -1, -1, fmt.Errorf("could not assemble AWS IoT Manager: %s", err)
 			}
 		}
 
@@ -220,7 +220,8 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, error) {
 
 			color.Set(color.BgCyan)
 			color.Set(color.FgWhite)
-			fmt.Printf("  0.0.0.0:%d%s*  --> %s 127.0.0.1:%d  ", conf.GatewayPort, servicePath, serviceName, servicePort)
+			fmt.Printf("  (HTTPS) 	0.0.0.0:%d%s*  --> %s 127.0.0.1:%d\n", conf.GatewayPortHttps, servicePath, serviceName, servicePort)
+			fmt.Printf("  (HTTP)	0.0.0.0:%d%s*  --> %s 127.0.0.1:%d\n", conf.GatewayPortHttp, servicePath, serviceName, servicePort)
 			color.Unset()
 			fmt.Printf("\n")
 
@@ -256,31 +257,44 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, error) {
 		buildReverseProxyHandler(engine, "VA", "/api/va/", vaPort)
 		buildReverseProxyHandler(engine, "Alerts", "/api/alerts/", alertsPort)
 
-		listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", conf.GatewayPort))
+		listenerHttps, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", conf.GatewayPortHttps))
 		if err != nil {
 			log.Fatalf("could not get Gateway net Listener: %s", err)
 		}
 
-		usedPort := listener.Addr().(*net.TCPAddr).Port
+		listenerHttp, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", conf.GatewayPortHttp))
+		if err != nil {
+			log.Fatalf("could not get Gateway net Listener: %s", err)
+		}
+
+		usedHttpsPort := listenerHttps.Addr().(*net.TCPAddr).Port
+		usedHttpPort := listenerHttps.Addr().(*net.TCPAddr).Port
 
 		go func() {
-			// log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", conf.GatewayPort), engine))
-
-			server := http.Server{
+			serverHttps := http.Server{
 				Handler: engine,
-				Addr:    fmt.Sprintf(":%d", conf.GatewayPort),
+				Addr:    fmt.Sprintf(":%d", conf.GatewayPortHttps),
 				TLSConfig: &tls.Config{
 					ClientAuth: tls.RequestClientCert,
 				},
 			}
 
-			log.Fatal(server.ServeTLS(listener, "proxy.crt", "proxy.key"))
+			log.Fatal(serverHttps.ServeTLS(listenerHttps, "proxy.crt", "proxy.key"))
 		}()
 
-		return usedPort, nil
+		go func() {
+			serverHttp := http.Server{
+				Handler: engine,
+				Addr:    fmt.Sprintf(":%d", conf.GatewayPortHttp),
+			}
+
+			log.Fatal(serverHttp.Serve(listenerHttp))
+		}()
+
+		return usedHttpPort, usedHttpsPort, nil
 	}
 
-	return -1, fmt.Errorf("unsupported mode")
+	return -1, -1, fmt.Errorf("unsupported mode")
 }
 
 func clientCertsToHeaderUsingEnvoyStyle() gin.HandlerFunc {

@@ -117,7 +117,7 @@ func TestBaseCRL(t *testing.T) {
 				t.Fatalf("could not run 'before' function:  %s", err)
 			}
 
-			crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, DefaultCAID), (*x509.Certificate)(issuerCA.Certificate.Certificate), nil, true)
+			crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, string(issuerCA.Certificate.Certificate.AuthorityKeyId)), (*x509.Certificate)(issuerCA.Certificate.Certificate), nil, true)
 			if err != nil {
 				t.Fatalf("could not get CRL: %s", err)
 			}
@@ -152,7 +152,7 @@ func TestCRLNumber(t *testing.T) {
 	iters := 15
 	var prevCrl *x509.RevocationList
 	for i := range iters {
-		crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, DefaultCAID), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
+		crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, string(ca.Certificate.Certificate.AuthorityKeyId)), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
 		if err != nil {
 			t.Fatalf("could not get CRL: %s", err)
 		}

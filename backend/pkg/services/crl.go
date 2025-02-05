@@ -46,10 +46,32 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input services.GetCRLInput
 		return nil, errs.ErrValidateBadRequest
 	}
 
+	var crlCA *models.CACertificate
+	_, err = svc.caSDK.GetCAs(ctx, services.GetCAsInput{
+		QueryParameters: &resources.QueryParameters{
+			Filters: []resources.FilterOption{},
+		},
+		ExhaustiveRun: true,
+		ApplyFunc: func(ca models.CACertificate) {
+			if slices.Equal(ca.Certificate.Certificate.AuthorityKeyId, []byte(input.AuthorityKeyId)) {
+				crlCA = &ca
+			}
+		},
+	})
+	if err != nil {
+		lFunc.Errorf("something went wrong while reading CA %s: %s", input.AuthorityKeyId, err)
+		return nil, err
+	}
+
+	if crlCA == nil {
+		lFunc.Errorf("CA %s not found", input.AuthorityKeyId)
+		return nil, fmt.Errorf("CA %s not found", input.AuthorityKeyId)
+	}
+
 	certList := []x509.RevocationListEntry{}
-	lFunc.Debugf("reading CA %s certificates", input.CAID)
+	lFunc.Debugf("reading CA %s certificates", crlCA.ID)
 	_, err = svc.caSDK.GetCertificatesByCaAndStatus(ctx, services.GetCertificatesByCaAndStatusInput{
-		CAID:   input.CAID,
+		CAID:   crlCA.ID,
 		Status: models.StatusRevoked,
 		ListInput: resources.ListInput[models.Certificate]{
 			ExhaustiveRun: true,
@@ -67,19 +89,14 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input services.GetCRLInput
 		},
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while reading CA %s certificates: %s", input.CAID, err)
+		lFunc.Errorf("something went wrong while reading CA %s certificates: %s", crlCA.ID, err)
 		return nil, err
 	}
 
-	ca, err := svc.caSDK.GetCAByID(ctx, services.GetCAByIDInput(input))
-	if err != nil {
-		return nil, err
-	}
+	caSigner := NewCASigner(ctx, crlCA, svc.caSDK)
+	caCert := (*x509.Certificate)(crlCA.Certificate.Certificate)
 
-	caSigner := NewCASigner(ctx, ca, svc.caSDK)
-	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
-
-	lFunc.Debugf("creating revocation list. CA %s", input.CAID)
+	lFunc.Debugf("creating revocation list. CA %s", crlCA.ID)
 	now := time.Now()
 	crl, err := x509.CreateRevocationList(rand.Reader, &x509.RevocationList{
 		RevokedCertificateEntries: certList,
