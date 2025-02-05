@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"fmt"
 	"math/big"
+	"slices"
 	"time"
 
 	"github.com/go-playground/validator/v10"
