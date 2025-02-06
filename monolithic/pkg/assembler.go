@@ -66,7 +66,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			},
 			CryptoMonitoring: conf.CryptoMonitoring,
 			VAServerDomains: []string{
-				fmt.Sprintf("%s/api/va", conf.Domain),
+				fmt.Sprintf("%s:%d/api/va", conf.Domain, conf.GatewayPortHttp),
 			},
 		}, apiInfo)
 		if err != nil {
@@ -103,7 +103,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				Protocol:           cconfig.HTTP,
 			},
 			VADomains: []string{
-				fmt.Sprintf("%s/api/va", conf.Domain),
+				fmt.Sprintf("%s:%d/api/va", conf.Domain, conf.GatewayPortHttp),
 			},
 		}, caSDKBuilder("VA", models.VASource), apiInfo)
 		if err != nil {

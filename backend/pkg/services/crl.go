@@ -107,7 +107,7 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input services.GetCRLInput
 
 	extensions := []pkix.Extension{}
 
-	idp, err := svc.getDistributionPointExtension(ca.Certificate.KeyID)
+	idp, err := svc.getDistributionPointExtension(crlCA.Certificate.KeyID)
 	if err != nil {
 		lFunc.Errorf("something went wrong while creating Issuing Distribution Point extension: %s", err)
 		return nil, err
