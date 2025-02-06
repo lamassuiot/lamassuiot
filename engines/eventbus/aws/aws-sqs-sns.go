@@ -37,6 +37,18 @@ func NewAwsSqsSub(conf laws.AWSSDKConfig, serviceID string, logger *logrus.Entry
 
 	lEventBus := eventbus.NewLoggerAdapter(logger.WithField("subsystem-provider", "AWS.SQS - Subscriber"))
 
+	// Ensure that the SNS topic exists before creating the subscription
+	internalPubResolver, err := NewAwsSnsPub(conf, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	snsPub := internalPubResolver.(*snsPublisher)
+	_, err = snsPub.sns.CreateTopic(context.Background(), "lamassu-events-v2")
+	if err != nil {
+		return nil, err
+	}
+
 	sub, err := wsns.NewSubscriber(
 		wsns.SubscriberConfig{
 			AWSConfig:     *awsConf,
