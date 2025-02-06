@@ -111,7 +111,7 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, input services.Ini
 		CRLOptions: models.VACRLRole{
 			Validity:           models.TimeDuration(24 * time.Hour * 7),            // 1 week
 			RefreshInterval:    models.TimeDuration(24*time.Hour*6 + 23*time.Hour), // 6 days, 23 hours
-			LatestCRLVersion:   big.NewInt(0),
+			LatestCRLVersion:   models.BigInt{big.NewInt(0)},
 			LastCRLTime:        time.Now(),
 			KeyIDSinger:        ca.Certificate.KeyID,
 			RegenerateOnRevoke: true,
@@ -189,7 +189,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 	now := time.Now()
 
 	crlVersion := big.NewInt(0)
-	crlVersion.Add(dbRole.CRLOptions.LatestCRLVersion, big.NewInt(1))
+	crlVersion.Add(dbRole.CRLOptions.LatestCRLVersion.Int, big.NewInt(1))
 	crlDer, err := x509.CreateRevocationList(rand.Reader, &x509.RevocationList{
 		RevokedCertificateEntries: certList,
 		Number:                    crlVersion,

@@ -2,8 +2,8 @@
 -- +goose StatementBegin
 CREATE TABLE va_role (
 	caid TEXT,
-	crl_refresh_interval INTERVAL,
-	crl_validity INTERVAL,
+	crl_refresh_interval TEXT,
+	crl_validity TEXT,
 	crl_latest_crl_version NUMERIC,
 	crl_last_crl_time TIMESTAMPTZ,
 	crl_key_id_singer TEXT,

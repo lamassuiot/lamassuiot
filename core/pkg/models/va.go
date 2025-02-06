@@ -1,7 +1,6 @@
 package models
 
 import (
-	"math/big"
 	"time"
 )
 
@@ -11,9 +10,9 @@ type VARole struct {
 }
 
 type VACRLRole struct {
-	RefreshInterval    TimeDuration
-	Validity           TimeDuration
-	LatestCRLVersion   *big.Int `gorm:"type:NUMERIC"`
+	RefreshInterval    TimeDuration `gorm:"serializer:text"`
+	Validity           TimeDuration `gorm:"serializer:text"`
+	LatestCRLVersion   BigInt       `gorm:"type:NUMERIC;serializer:text"`
 	LastCRLTime        time.Time
 	KeyIDSinger        string
 	RegenerateOnRevoke bool
