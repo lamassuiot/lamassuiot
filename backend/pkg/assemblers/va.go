@@ -34,8 +34,9 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService) (*ser
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
 
 	crl := lservices.NewCRLService(lservices.CRLServiceBuilder{
-		Logger:   lSvc,
-		CAClient: caService,
+		Logger:    lSvc,
+		CAClient:  caService,
+		VADomains: conf.VADomains,
 	})
 
 	ocsp := lservices.NewOCSPService(lservices.OCSPServiceBuilder{

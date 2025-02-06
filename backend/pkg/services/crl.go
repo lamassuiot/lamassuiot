@@ -22,20 +22,23 @@ import (
 var crlValidate *validator.Validate
 
 type crlServiceImpl struct {
-	caSDK  services.CAService
-	logger *logrus.Entry
+	caSDK     services.CAService
+	logger    *logrus.Entry
+	vaDomains []string
 }
 
 type CRLServiceBuilder struct {
-	Logger   *logrus.Entry
-	CAClient services.CAService
+	Logger    *logrus.Entry
+	CAClient  services.CAService
+	VADomains []string
 }
 
 func NewCRLService(builder CRLServiceBuilder) services.CRLService {
 	crlValidate = validator.New()
 	return &crlServiceImpl{
-		caSDK:  builder.CAClient,
-		logger: builder.Logger,
+		caSDK:     builder.CAClient,
+		logger:    builder.Logger,
+		vaDomains: builder.VADomains,
 	}
 }
 
@@ -104,7 +107,7 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input services.GetCRLInput
 
 	extensions := []pkix.Extension{}
 
-	idp, err := getDistributionPointExtension()
+	idp, err := svc.getDistributionPointExtension(ca.Certificate.KeyID)
 	if err != nil {
 		lFunc.Errorf("something went wrong while creating Issuing Distribution Point extension: %s", err)
 		return nil, err
@@ -129,7 +132,7 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input services.GetCRLInput
 	return crl, nil
 }
 
-func getDistributionPointExtension() (*pkix.Extension, error) {
+func (svc crlServiceImpl) getDistributionPointExtension(aki string) (*pkix.Extension, error) {
 	type DistributionPointName struct { // CHOICE
 		FullName     []asn1.RawValue  `asn1:"optional,tag:0"`
 		RelativeName pkix.RDNSequence `asn1:"optional,tag:1"`
@@ -145,12 +148,15 @@ func getDistributionPointExtension() (*pkix.Extension, error) {
 		OnlyContainsAttributeCerts bool                  `asn1:"tag:5"`
 	}
 
+	idpNames := []asn1.RawValue{}
+	for _, name := range svc.vaDomains {
+		idpNames = append(idpNames, asn1.RawValue{Tag: 6, Class: 2, Bytes: []byte(fmt.Sprintf("http://%s/crl/%s", name, aki))})
+	}
+
 	// Add Issuing Distribution Point
 	idp, err := asn1.Marshal(IssuingDistributionPoint{
 		DistributionPoint: DistributionPointName{
-			FullName: []asn1.RawValue{
-				{Tag: 6, Class: 2, Bytes: []byte("http://example.com")}, //Tag 6 is for URI (0 -> otherName, 1 -> rfc822Name, 2 -> dnsName, ..., 6 -> URI, ...). Same value used by x509 CRL
-			},
+			FullName: idpNames,
 		},
 	})
 	if err != nil {
