@@ -350,7 +350,7 @@ func BuildVATestServer(caTestServer *CATestServer) (*VATestServer, error) {
 			Level: cconfig.Info,
 		},
 		Server: cconfig.HttpServer{
-			LogLevel:           cconfig.Info,
+			LogLevel:           cconfig.Debug,
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},

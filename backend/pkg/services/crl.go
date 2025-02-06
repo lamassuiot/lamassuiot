@@ -7,7 +7,6 @@ import (
 	"crypto/x509/pkix"
 	"fmt"
 	"math/big"
-	"slices"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -51,13 +50,17 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input services.GetCRLInput
 	var crlCA *models.CACertificate
 	_, err = svc.caSDK.GetCAs(ctx, services.GetCAsInput{
 		QueryParameters: &resources.QueryParameters{
-			Filters: []resources.FilterOption{},
+			Filters: []resources.FilterOption{
+				{
+					Field:           "key_id", // since KeyID is used as the AKI, it should be used as the filter field
+					Value:           input.AuthorityKeyId,
+					FilterOperation: resources.StringEqual,
+				},
+			},
+			PageSize: 1,
 		},
-		ExhaustiveRun: true,
 		ApplyFunc: func(ca models.CACertificate) {
-			if slices.Equal(ca.Certificate.Certificate.AuthorityKeyId, []byte(input.AuthorityKeyId)) {
-				crlCA = &ca
-			}
+			crlCA = &ca
 		},
 	})
 	if err != nil {

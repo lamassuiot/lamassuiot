@@ -18,6 +18,7 @@ var CAFiltrableFields = map[string]FilterFieldType{
 	"revocation_timestamp": DateFilterFieldType,
 	"revocation_reason":    EnumFilterFieldType,
 	"subject.common_name":  StringFilterFieldType,
+	"key_id":               StringFilterFieldType,
 }
 
 var CARequestFiltrableFields = map[string]FilterFieldType{

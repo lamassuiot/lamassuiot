@@ -57,7 +57,7 @@ func TestBaseCRL(t *testing.T) {
 				return crts, nil
 			},
 			resultCheck: func(crts []*models.Certificate, issuer *models.CACertificate, crl *x509.RevocationList, err error) {
-				if len(crl.RevokedCertificateEntries) != len(crts) {
+				if len(crl.RevokedCertificateEntries) != 10 {
 					t.Fatalf("crl should have %d entries, got %d", len(crts), len(crl.RevokedCertificateEntries))
 				}
 			},

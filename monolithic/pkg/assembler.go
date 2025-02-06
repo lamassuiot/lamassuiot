@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
@@ -277,6 +278,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				TLSConfig: &tls.Config{
 					ClientAuth: tls.RequestClientCert,
 				},
+				ReadHeaderTimeout: time.Second * 10,
 			}
 
 			log.Fatal(serverHttps.ServeTLS(listenerHttps, "proxy.crt", "proxy.key"))
@@ -284,8 +286,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		go func() {
 			serverHttp := http.Server{
-				Handler: engine,
-				Addr:    fmt.Sprintf(":%d", conf.GatewayPortHttp),
+				Handler:           engine,
+				Addr:              fmt.Sprintf(":%d", conf.GatewayPortHttp),
+				ReadHeaderTimeout: time.Second * 10,
 			}
 
 			log.Fatal(serverHttp.Serve(listenerHttp))
