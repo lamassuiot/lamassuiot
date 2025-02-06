@@ -215,7 +215,7 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 			Enabled:   monitor,
 			Frequency: "* * * * * *", //this CRON-like expression will scan certificate each second.
 		},
-		VAServerDomain: "dev.lamassu.test",
+		VAServerDomains: []string{"dev.lamassu.test"},
 	}, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
@@ -350,7 +350,7 @@ func BuildVATestServer(caTestServer *CATestServer) (*VATestServer, error) {
 			Level: cconfig.Info,
 		},
 		Server: cconfig.HttpServer{
-			LogLevel:           cconfig.Info,
+			LogLevel:           cconfig.Debug,
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},

@@ -110,7 +110,7 @@ func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 
 func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
+		AuthorityKeyId string `uri:"aki" binding:"required"`
 	}
 
 	var params uriParams
@@ -120,7 +120,7 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 	}
 
 	crl, err := r.crl.GetCRL(ctx, services.GetCRLInput{
-		CAID: params.ID,
+		AuthorityKeyId: params.AuthorityKeyId,
 	})
 	if err != nil {
 		r.logger.Errorf("something went wrong while getting crl list: %s", err)

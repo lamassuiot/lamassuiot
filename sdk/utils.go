@@ -276,9 +276,7 @@ func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.C
 		queryParams.NextBookmark = response.GetNextBookmark()
 
 		for _, item := range response.GetList() {
-
 			applyFunc(item)
-
 		}
 	}
 

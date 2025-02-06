@@ -7,5 +7,5 @@ type CRLService interface {
 }
 
 type GetCRLInput struct {
-	CAID string `validate:"required"`
+	AuthorityKeyId string `validate:"required"`
 }

@@ -24,7 +24,8 @@ type MonolithicConfig struct {
 	CryptoMonitoring   cconfig.MonitoringJob          `mapstructure:"crypto_monitoring"`
 	Domain             string                         `mapstructure:"domain"`
 	AssemblyMode       LamassuMonolithicAssembleMode  `mapstructure:"assembly_mode"`
-	GatewayPort        int                            `mapstructure:"gateway_port"`
+	GatewayPortHttps   int                            `mapstructure:"gateway_port_https"`
+	GatewayPortHttp    int                            `mapstructure:"gateway_port_http"`
 	AWSIoTManager      MonolithicAWSIoTManagerConfig  `mapstructure:"aws_iot_manager"`
 }
 

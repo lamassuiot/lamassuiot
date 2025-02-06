@@ -31,18 +31,18 @@ import (
 )
 
 type X509Engine struct {
-	logger                    *logrus.Entry
-	cryptoEngine              cryptoengines.CryptoEngine
-	validationAuthorityDomain string
-	softCryptoEngine          *software.SoftwareCryptoEngine
+	logger           *logrus.Entry
+	cryptoEngine     cryptoengines.CryptoEngine
+	vaDomains        []string
+	softCryptoEngine *software.SoftwareCryptoEngine
 }
 
-func NewX509Engine(logger *logrus.Entry, cryptoEngine *cryptoengines.CryptoEngine, validationAuthorityDomain string) X509Engine {
+func NewX509Engine(logger *logrus.Entry, cryptoEngine *cryptoengines.CryptoEngine, vaDomains []string) X509Engine {
 	return X509Engine{
-		cryptoEngine:              *cryptoEngine,
-		validationAuthorityDomain: validationAuthorityDomain,
-		logger:                    logger,
-		softCryptoEngine:          software.NewSoftwareCryptoEngine(logger),
+		cryptoEngine:     *cryptoEngine,
+		vaDomains:        vaDomains,
+		logger:           logger,
+		softCryptoEngine: software.NewSoftwareCryptoEngine(logger),
 	}
 }
 
@@ -109,22 +109,23 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 	lFunc.Debugf("subject of root CA: %s", subject)
 
 	template := x509.Certificate{
-		SerialNumber:   sn,
-		Subject:        chelpers.SubjectToPkixName(subject),
-		AuthorityKeyId: []byte(keyID),
-		SubjectKeyId:   []byte(keyID),
-		OCSPServer: []string{
-			fmt.Sprintf("https://%s/ocsp", engine.validationAuthorityDomain),
-		},
-		CRLDistributionPoints: []string{
-			fmt.Sprintf("https://%s/crl/%s", engine.validationAuthorityDomain, keyID),
-		},
+		SerialNumber:          sn,
+		Subject:               chelpers.SubjectToPkixName(subject),
+		AuthorityKeyId:        []byte(keyID),
+		SubjectKeyId:          []byte(keyID),
+		OCSPServer:            []string{},
+		CRLDistributionPoints: []string{},
 		NotBefore:             time.Now(),
 		NotAfter:              caExpiration,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth | x509.ExtKeyUsageOCSPSigning},
 		BasicConstraintsValid: true,
 		IsCA:                  true,
+	}
+
+	for _, domain := range engine.vaDomains {
+		template.OCSPServer = append(template.OCSPServer, fmt.Sprintf("http://%s/ocsp", domain))
+		template.CRLDistributionPoints = append(template.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, keyID))
 	}
 
 	certificateBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, signer.Public(), signer)
@@ -168,19 +169,20 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 	}
 
 	certificateTemplate := x509.Certificate{
-		PublicKeyAlgorithm: csr.PublicKeyAlgorithm,
-		PublicKey:          csr.PublicKey,
-		AuthorityKeyId:     ca.SubjectKeyId,
-		SerialNumber:       sn,
-		Issuer:             ca.Subject,
-		NotBefore:          now,
-		NotAfter:           certExpiration,
-		OCSPServer: []string{
-			fmt.Sprintf("https://%s/ocsp", engine.validationAuthorityDomain),
-		},
-		CRLDistributionPoints: []string{
-			fmt.Sprintf("https://%s/crl/%s", engine.validationAuthorityDomain, keyID),
-		},
+		PublicKeyAlgorithm:    csr.PublicKeyAlgorithm,
+		PublicKey:             csr.PublicKey,
+		AuthorityKeyId:        ca.SubjectKeyId,
+		SerialNumber:          sn,
+		Issuer:                ca.Subject,
+		NotBefore:             now,
+		NotAfter:              certExpiration,
+		OCSPServer:            []string{},
+		CRLDistributionPoints: []string{},
+	}
+
+	for _, domain := range engine.vaDomains {
+		certificateTemplate.OCSPServer = append(certificateTemplate.OCSPServer, fmt.Sprintf("http://%s/ocsp", domain))
+		certificateTemplate.CRLDistributionPoints = append(certificateTemplate.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, keyID))
 	}
 
 	// Define certificate extra extensions
