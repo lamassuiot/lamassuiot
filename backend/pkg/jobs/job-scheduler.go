@@ -1,66 +1,55 @@
 package jobs
 
 import (
-	"strings"
-	"time"
-
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
 )
 
 type JobScheduler struct {
-	config       cconfig.MonitoringJob
-	cronInstance *cron.Cron
-	logger       *logrus.Entry
-	job          cron.Job
-	jobId        cron.EntryID
+	scheduler *cron.Cron
+	logger    *logrus.Entry
 }
 
-func NewJobScheduler(config cconfig.MonitoringJob, logger *logrus.Entry, job cron.Job) *JobScheduler {
+func NewJobScheduler(enableSecondLvlCron bool, logger *logrus.Entry) *JobScheduler {
 	cronInstance := cron.New()
-	var err error
-	var jobId cron.EntryID
-	if config.Enabled {
-		logger.Infof("enabling periodic monitoring with cron expression: '%s'", config.Frequency)
-		if strings.Count(config.Frequency, " ") == 5 {
-			logger.Warn("periodic monitoring system contains 'second level' scheduling. This may cause performance issues in production scenarios")
-			cronInstance = cron.New(cron.WithSeconds())
-		}
-
-		if job != nil {
-			jobId, err = cronInstance.AddJob(config.Frequency, job)
-			if err != nil {
-				logger.Errorf("could not add scheduled run for job: %v", err)
-			}
-		}
-
-	} else {
-		logger.Warn("certificate periodic monitoring is disabled")
+	if enableSecondLvlCron {
+		logger.Warn("periodic monitoring system contains 'second level' scheduling. This may cause performance issues in production scenarios")
+		cronInstance = cron.New(cron.WithSeconds())
 	}
 
-	return &JobScheduler{config: config,
-		cronInstance: cronInstance,
-		logger:       logger,
-		job:          job,
-		jobId:        jobId}
+	return &JobScheduler{
+		scheduler: cronInstance,
+		logger:    logger,
+	}
 }
 
 func (js *JobScheduler) Start() {
-	jobs := js.cronInstance.Entries()
+	jobs := js.scheduler.Entries()
 	if len(jobs) > 0 {
-		js.cronInstance.Start()
+		js.scheduler.Start()
 	} else {
 		js.logger.Warn("no scheduled jobs found")
 	}
 }
 
-func (js *JobScheduler) NextRun() time.Time {
-	return js.cronInstance.Entry(js.jobId).Next
+func (js *JobScheduler) AddJob(interval string, fn func()) cron.EntryID {
+	jobId, err := js.scheduler.AddJob(interval, cron.FuncJob(fn))
+	if err != nil {
+		js.logger.Errorf("could not add scheduled run for job: %v", err)
+	}
+
+	return jobId
+}
+
+func (js *JobScheduler) Schedule(schedule cron.Schedule, fn func()) cron.EntryID {
+	jobId := js.scheduler.Schedule(schedule, cron.FuncJob(fn))
+	return jobId
+}
+
+func (js *JobScheduler) RemoveJob(id cron.EntryID) {
+	js.scheduler.Remove(id)
 }
 
 func (js *JobScheduler) Stop() {
-	js.cronInstance.Remove(js.jobId)
-	<-js.cronInstance.Stop().Done()
-
+	<-js.scheduler.Stop().Done()
 }

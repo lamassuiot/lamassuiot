@@ -3,9 +3,14 @@ package assemblers
 import (
 	"fmt"
 
+	fsStorage "github.com/chartmuseum/storage"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/handlers"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
+	ceventbus "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -31,17 +36,53 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 }
 
 func AssembleVAService(conf config.VAconfig, caService services.CAService) (*services.CRLService, *services.OCSPService, error) {
+	serviceID := "va"
+
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
+	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "VA", "Storage")
+
+	storage, err := builder.BuildStorageEngine(lStorage, conf.Storage)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not create storage engine: %s", err)
+	}
+
+	vaRoleRepo, err := storage.GetVARoleStorage()
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not get device storage: %s", err)
+	}
 
 	crl := lservices.NewCRLService(lservices.CRLServiceBuilder{
-		Logger:   lSvc,
-		CAClient: caService,
+		Logger:    lSvc,
+		CAClient:  caService,
+		VARepo:    vaRoleRepo,
+		FsStorage: fsStorage.NewLocalFilesystemBackend("."),
 	})
 
 	ocsp := lservices.NewOCSPService(lservices.OCSPServiceBuilder{
 		Logger:   lSvc,
 		CAClient: caService,
 	})
+
+	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "VA", "Event Bus")
+	lMessaging.Infof("Subscriber Event Bus is enabled")
+
+	subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
+	if err != nil {
+		lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
+		return nil, nil, err
+	}
+
+	eventHandlers := handlers.NewVAEventHandler(lMessaging, crl)
+	subHandler, err := ceventbus.NewEventBusMessageHandler("VA-CA-DEFAULT", "ca.#", subscriber, lMessaging, *eventHandlers)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
+	}
+
+	err = subHandler.RunAsync()
+	if err != nil {
+		lMessaging.Errorf("could not run Event Bus Subscription Handler: %s", err)
+		return nil, nil, err
+	}
 
 	return &crl, &ocsp, nil
 }

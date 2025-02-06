@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"math/big"
 	"net/url"
 
 	"github.com/gin-gonic/gin"
@@ -120,7 +121,8 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 	}
 
 	crl, err := r.crl.GetCRL(ctx, services.GetCRLInput{
-		CAID: params.ID,
+		CAID:       params.ID,
+		CRLVersion: big.NewInt(0),
 	})
 	if err != nil {
 		r.logger.Errorf("something went wrong while getting crl list: %s", err)
@@ -128,5 +130,5 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 		return
 	}
 
-	ctx.Data(200, "application/pkix-crl", crl)
+	ctx.Data(200, "application/pkix-crl", crl.Raw)
 }

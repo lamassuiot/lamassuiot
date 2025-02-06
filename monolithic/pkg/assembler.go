@@ -99,6 +99,8 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, error) {
 				Port:               0,
 				Protocol:           cconfig.HTTP,
 			},
+			SubscriberEventBus: conf.SubscriberEventBus,
+			Storage:            conf.Storage,
 		}, caSDKBuilder("VA", models.VASource), apiInfo)
 		if err != nil {
 			return -1, fmt.Errorf("could not assemble VA Service: %s", err)

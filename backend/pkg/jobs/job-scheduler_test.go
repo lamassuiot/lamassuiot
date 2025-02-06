@@ -20,13 +20,13 @@ func TestNewJobSchedulerWithoutJob(t *testing.T) {
 	}
 	logger := logrus.New().WithField("test", "test")
 
-	js := NewJobScheduler(config, logger, nil)
+	js := NewJobScheduler(config, logger)
 	js.Start()
 	if len(js.cronInstance.Entries()) != 0 {
 		t.Error("expected no jobs to be scheduled")
 	}
 
-	if !js.NextRun().IsZero() {
+	if !js.cronInstance.NextRun().IsZero() {
 		t.Error("expected NextRun to be zero")
 	}
 
