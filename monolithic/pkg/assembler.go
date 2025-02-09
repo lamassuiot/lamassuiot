@@ -100,6 +100,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, error) {
 				Protocol:           cconfig.HTTP,
 			},
 			SubscriberEventBus: conf.SubscriberEventBus,
+			PublisherEventBus:  conf.PublisherEventBus,
 			Storage:            conf.Storage,
 		}, caSDKBuilder("VA", models.VASource), apiInfo)
 		if err != nil {

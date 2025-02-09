@@ -5,15 +5,19 @@ import (
 )
 
 type VARole struct {
-	CAID       string    `gorm:"column:caid;"`
-	CRLOptions VACRLRole `gorm:"embedded;embeddedPrefix:crl_"`
+	CAID       string        `gorm:"column:caid;"`
+	CRLOptions VACRLRole     `gorm:"embedded;embeddedPrefix:crl_"`
+	LatestCRL  LatestCRLMeta `gorm:"embedded;embeddedPrefix:latest_crl_"`
 }
 
 type VACRLRole struct {
 	RefreshInterval    TimeDuration `gorm:"serializer:text"`
 	Validity           TimeDuration `gorm:"serializer:text"`
-	LatestCRLVersion   BigInt       `gorm:"type:NUMERIC;serializer:text"`
-	LastCRLTime        time.Time
 	KeyIDSinger        string
 	RegenerateOnRevoke bool
+}
+type LatestCRLMeta struct {
+	Version    BigInt `gorm:"type:NUMERIC;serializer:text"`
+	ValidFrom  time.Time
+	ValidUntil time.Time
 }

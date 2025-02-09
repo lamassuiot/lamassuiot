@@ -32,6 +32,7 @@ type CRLServiceBackend struct {
 	vaRepo        storage.VARepo
 	scheduler     *jobs.JobScheduler
 	scheduledCRLs map[string]cron.EntryID // Map of CAID to CRL job ID
+	service       services.CRLService
 }
 
 type CRLServiceBuilder struct {
@@ -41,17 +42,73 @@ type CRLServiceBuilder struct {
 	CAClient  services.CAService
 }
 
-func NewCRLService(builder CRLServiceBuilder) services.CRLService {
+type CRLMiddleware func(services.CRLService) services.CRLService
+
+func NewCRLService(builder CRLServiceBuilder) (services.CRLService, error) {
 	crlValidate = validator.New()
 
-	return &CRLServiceBackend{
+	//TODO: Schedule first set of CRL jobs based on existing VARoles
+	svc := &CRLServiceBackend{
 		caSDK:         builder.CAClient,
 		logger:        builder.Logger,
-		scheduler:     jobs.NewJobScheduler(false, builder.Logger.WithField("service", "Scheduler")),
+		scheduler:     jobs.NewJobScheduler(true, builder.Logger.WithField("service", "Scheduler")),
 		vaRepo:        builder.VARepo,
 		fsStorage:     builder.FsStorage,
 		scheduledCRLs: map[string]cron.EntryID{},
 	}
+
+	svc.service = svc
+	svc.scheduler.Start()
+
+	_, err := svc.vaRepo.GetAll(context.Background(), storage.StorageListRequest[models.VARole]{
+		ExhaustiveRun: true,
+		ApplyFunc: func(v models.VARole) {
+			now := time.Now()
+			// Check if CRL is still valid
+			if v.LatestCRL.ValidUntil.After(now) {
+				// Schedule CRL update
+				delay := now.Sub(v.LatestCRL.ValidFrom.Add(time.Duration(v.CRLOptions.RefreshInterval)))
+				svc.scheduleCRL(context.Background(), v.CAID, delay)
+			} else {
+				// CRL is not valid anymore, calculate new CRL
+				_, err := svc.CalculateCRL(context.Background(), services.CalculateCRLInput{
+					CAID: v.CAID,
+				})
+				if err != nil {
+					builder.Logger.Warnf("something went wrong while calculating CRL for CA %s: %s", v.CAID, err)
+				}
+			}
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("something went wrong while initializing VA service and reading VA roles: %s", err)
+	}
+
+	return svc, nil
+}
+
+func (svc CRLServiceBackend) SetService(service services.CRLService) {
+	svc.service = service
+}
+
+func (svc CRLServiceBackend) scheduleCRL(ctx context.Context, caID string, delay time.Duration) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	lFunc.Infof("scheduling CRL update for CA %s in %s (%s aprox)", caID, delay, time.Now().Add(delay).Format("2006-01-02T15:04:05Z07:00"))
+
+	scheduleID := svc.scheduler.Schedule(cron.ConstantDelaySchedule{
+		Delay: delay,
+	}, func() {
+		fmt.Println("Calculating CRL")
+		_, err := svc.CalculateCRL(context.Background(), services.CalculateCRLInput{
+			CAID: caID,
+		})
+		if err != nil {
+			lFunc.Errorf("something went wrong while calculating CRL: %s", err)
+		}
+	})
+
+	svc.scheduledCRLs[caID] = scheduleID
 }
 
 func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLInput) (*x509.RevocationList, error) {
@@ -76,7 +133,7 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 			return nil, fmt.Errorf("VA role for CA %s does not exist", input.CAID)
 		}
 
-		versionStr = role.CRLOptions.LatestCRLVersion.String()
+		versionStr = role.LatestCRL.Version.String()
 	}
 
 	crlPem, err := svc.fsStorage.GetObject(fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CAID, versionStr))
@@ -96,25 +153,27 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 	return crl, nil
 }
 
-func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, input services.InitCRLRoleInput) (*models.VARole, error) {
+func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caID string) (*models.VARole, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	ca, err := svc.caSDK.GetCAByID(ctx, services.GetCAByIDInput{
-		CAID: input.CAID,
+		CAID: caID,
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	role, err := svc.vaRepo.Insert(ctx, &models.VARole{
-		CAID: input.CAID,
+		CAID: caID,
 		CRLOptions: models.VACRLRole{
-			Validity:           models.TimeDuration(24 * time.Hour * 7),            // 1 week
-			RefreshInterval:    models.TimeDuration(24*time.Hour*6 + 23*time.Hour), // 6 days, 23 hours
-			LatestCRLVersion:   models.BigInt{big.NewInt(0)},
-			LastCRLTime:        time.Now(),
+			Validity:           models.TimeDuration(24 * time.Hour * 7), // 1 week
+			RefreshInterval:    models.TimeDuration(10 * time.Second),   // 6 days, 23 hours
 			KeyIDSinger:        ca.Certificate.KeyID,
 			RegenerateOnRevoke: true,
+		},
+		LatestCRL: models.LatestCRLMeta{
+			Version:   models.BigInt{big.NewInt(0)},
+			ValidFrom: time.Now(),
 		},
 	})
 	if err != nil {
@@ -122,7 +181,7 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, input services.Ini
 	}
 
 	_, err = svc.CalculateCRL(ctx, services.CalculateCRLInput{
-		CAID: input.CAID,
+		CAID: caID,
 	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while calculating first CRL: %s", err)
@@ -141,7 +200,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	exists, dbRole, err := svc.vaRepo.Get(ctx, input.CAID)
+	exists, vaRole, err := svc.vaRepo.Get(ctx, input.CAID)
 	if err != nil {
 		lFunc.Errorf("something went wrong while reading VA role: %s", err)
 		return nil, err
@@ -189,12 +248,12 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 	now := time.Now()
 
 	crlVersion := big.NewInt(0)
-	crlVersion.Add(dbRole.CRLOptions.LatestCRLVersion.Int, big.NewInt(1))
+	crlVersion.Add(vaRole.LatestCRL.Version.Int, big.NewInt(1))
 	crlDer, err := x509.CreateRevocationList(rand.Reader, &x509.RevocationList{
 		RevokedCertificateEntries: certList,
 		Number:                    crlVersion,
 		ThisUpdate:                now,
-		NextUpdate:                now.Add(time.Duration(dbRole.CRLOptions.Validity)),
+		NextUpdate:                now.Add(time.Duration(vaRole.CRLOptions.Validity)),
 	}, caCert, caSigner)
 	if err != nil {
 		lFunc.Errorf("something went wrong while creating revocation list: %s", err)
@@ -213,26 +272,24 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		svc.scheduler.RemoveJob(svc.scheduledCRLs[input.CAID])
 	}
 
-	//since itr took time to calculate the CRL, its not possible to calculate the next update time accurately. Can give an aproximation
-	lFunc.Infof("scheduling CRL update for CA %s in %s (%s aprox)", input.CAID, dbRole.CRLOptions.RefreshInterval, now.Add(time.Duration(dbRole.CRLOptions.RefreshInterval)))
-
-	scheduleID := svc.scheduler.Schedule(cron.ConstantDelaySchedule{
-		Delay: time.Duration(dbRole.CRLOptions.RefreshInterval),
-	}, func() {
-		_, err := svc.CalculateCRL(ctx, services.CalculateCRLInput{
-			CAID: input.CAID,
-		})
-		if err != nil {
-			lFunc.Errorf("something went wrong while calculating CRL: %s", err)
-		}
-	})
-
-	svc.scheduledCRLs[input.CAID] = scheduleID
+	svc.scheduleCRL(ctx, input.CAID, time.Duration(vaRole.CRLOptions.RefreshInterval))
 
 	crlPem := pem.EncodeToMemory(&pem.Block{Type: "X509 CRL", Bytes: crlDer})
 	err = svc.fsStorage.PutObject(fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CAID, crl.Number), crlPem)
 	if err != nil {
 		lFunc.Errorf("something went wrong while saving CRL: %s", err)
+		return nil, err
+	}
+
+	vaRole.LatestCRL = models.LatestCRLMeta{
+		Version:    models.BigInt{crl.Number},
+		ValidFrom:  crl.ThisUpdate,
+		ValidUntil: crl.NextUpdate,
+	}
+
+	_, err = svc.vaRepo.Update(ctx, vaRole)
+	if err != nil {
+		lFunc.Errorf("something went wrong while updating VA role: %s", err)
 		return nil, err
 	}
 

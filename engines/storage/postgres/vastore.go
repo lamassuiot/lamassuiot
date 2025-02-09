@@ -30,6 +30,10 @@ func (db *PostgresVAStore) Get(ctx context.Context, caID string) (bool, *models.
 	return db.querier.SelectExists(ctx, caID, nil)
 }
 
+func (db *PostgresVAStore) GetAll(ctx context.Context, req storage.StorageListRequest[models.VARole]) (string, error) {
+	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{}, req.ExhaustiveRun, req.ApplyFunc)
+}
+
 func (db *PostgresVAStore) Update(ctx context.Context, role *models.VARole) (*models.VARole, error) {
 	return db.querier.Update(ctx, role, role.CAID)
 }

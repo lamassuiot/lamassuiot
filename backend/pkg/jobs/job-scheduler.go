@@ -24,12 +24,7 @@ func NewJobScheduler(enableSecondLvlCron bool, logger *logrus.Entry) *JobSchedul
 }
 
 func (js *JobScheduler) Start() {
-	jobs := js.scheduler.Entries()
-	if len(jobs) > 0 {
-		js.scheduler.Start()
-	} else {
-		js.logger.Warn("no scheduled jobs found")
-	}
+	js.scheduler.Start()
 }
 
 func (js *JobScheduler) AddJob(interval string, fn func()) cron.EntryID {

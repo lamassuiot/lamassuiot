@@ -6,8 +6,9 @@ import (
 	fsStorage "github.com/chartmuseum/storage"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
-	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	beService "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/handlers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
 	ceventbus "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
@@ -51,14 +52,17 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService) (*ser
 		return nil, nil, fmt.Errorf("could not get device storage: %s", err)
 	}
 
-	crl := lservices.NewCRLService(lservices.CRLServiceBuilder{
+	crl, err := beService.NewCRLService(beService.CRLServiceBuilder{
 		Logger:    lSvc,
 		CAClient:  caService,
 		VARepo:    vaRoleRepo,
 		FsStorage: fsStorage.NewLocalFilesystemBackend("."),
 	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not create CRL service: %s", err)
+	}
 
-	ocsp := lservices.NewOCSPService(lservices.OCSPServiceBuilder{
+	ocsp := beService.NewOCSPService(beService.OCSPServiceBuilder{
 		Logger:   lSvc,
 		CAClient: caService,
 	})
@@ -66,13 +70,27 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService) (*ser
 	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "VA", "Event Bus")
 	lMessaging.Infof("Subscriber Event Bus is enabled")
 
+	pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
+	}
+
+	crlSvc := crl.(*beService.CRLServiceBackend)
+	crl = eventpub.NewCRLEventPublisher(&eventpub.CloudEventMiddlewarePublisher{
+		Publisher: pub,
+		ServiceID: serviceID,
+		Logger:    lMessaging,
+	})(crl)
+
+	crlSvc.SetService(crl)
+
 	subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
 	if err != nil {
 		lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
 		return nil, nil, err
 	}
 
-	eventHandlers := handlers.NewVAEventHandler(lMessaging, crl)
+	eventHandlers := handlers.NewVAEventHandler(lMessaging, crl.(beService.CRLServiceBackend))
 	subHandler, err := ceventbus.NewEventBusMessageHandler("VA-CA-DEFAULT", "ca.#", subscriber, lMessaging, *eventHandlers)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
