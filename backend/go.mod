@@ -63,6 +63,7 @@ require (
 )
 
 require (
+	github.com/spyzhov/ajson v0.9.6
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/net v0.30.0 // indirect
