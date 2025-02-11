@@ -1,6 +1,9 @@
 package jobs
 
 import (
+	"strings"
+	"time"
+
 	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
 )
@@ -8,18 +11,34 @@ import (
 type JobScheduler struct {
 	scheduler *cron.Cron
 	logger    *logrus.Entry
+	job       cron.Job
+	jobId     cron.EntryID
 }
 
-func NewJobScheduler(enableSecondLvlCron bool, logger *logrus.Entry) *JobScheduler {
-	cronInstance := cron.New()
-	if enableSecondLvlCron {
+func NewJobScheduler(logger *logrus.Entry, frequency string, job cron.Job) *JobScheduler {
+	scheduler := cron.New()
+
+	var err error
+	var jobId cron.EntryID
+
+	logger.Infof("enabling periodic monitoring with cron expression: '%s'", frequency)
+	if strings.Count(frequency, " ") == 5 {
 		logger.Warn("periodic monitoring system contains 'second level' scheduling. This may cause performance issues in production scenarios")
-		cronInstance = cron.New(cron.WithSeconds())
+		scheduler = cron.New(cron.WithSeconds())
+	}
+
+	if job != nil {
+		jobId, err = scheduler.AddJob(frequency, job)
+		if err != nil {
+			logger.Errorf("could not add scheduled run for job: %v", err)
+		}
 	}
 
 	return &JobScheduler{
-		scheduler: cronInstance,
+		scheduler: scheduler,
 		logger:    logger,
+		job:       job,
+		jobId:     jobId,
 	}
 }
 
@@ -27,24 +46,11 @@ func (js *JobScheduler) Start() {
 	js.scheduler.Start()
 }
 
-func (js *JobScheduler) AddJob(interval string, fn func()) cron.EntryID {
-	jobId, err := js.scheduler.AddJob(interval, cron.FuncJob(fn))
-	if err != nil {
-		js.logger.Errorf("could not add scheduled run for job: %v", err)
-	}
-
-	return jobId
-}
-
-func (js *JobScheduler) Schedule(schedule cron.Schedule, fn func()) cron.EntryID {
-	jobId := js.scheduler.Schedule(schedule, cron.FuncJob(fn))
-	return jobId
-}
-
-func (js *JobScheduler) RemoveJob(id cron.EntryID) {
-	js.scheduler.Remove(id)
+func (js *JobScheduler) NextRun() time.Time {
+	return js.scheduler.Entry(js.jobId).Next
 }
 
 func (js *JobScheduler) Stop() {
+	js.scheduler.Remove(js.jobId)
 	<-js.scheduler.Stop().Done()
 }

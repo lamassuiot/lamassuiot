@@ -12,7 +12,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewVAEventHandler(l *logrus.Entry, crlSvc beService.CRLServiceBackend) *eventhandling.CloudEventHandler {
+func NewVAEventHandler(l *logrus.Entry, crlSvc *beService.CRLServiceBackend) *eventhandling.CloudEventHandler {
 	return &eventhandling.CloudEventHandler{
 		Logger: l,
 		DispatchMap: map[string]func(*event.Event) error{
@@ -21,7 +21,7 @@ func NewVAEventHandler(l *logrus.Entry, crlSvc beService.CRLServiceBackend) *eve
 	}
 }
 
-func createCAHandler(event *event.Event, crlSvc beService.CRLServiceBackend, lMessaging *logrus.Entry) error {
+func createCAHandler(event *event.Event, crlSvc *beService.CRLServiceBackend, lMessaging *logrus.Entry) error {
 	ctx := context.Background()
 
 	ca, err := chelpers.GetEventBody[models.CACertificate](event)

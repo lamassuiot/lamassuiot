@@ -27,6 +27,23 @@ func (mw *clrEventPublisher) GetCRL(ctx context.Context, input services.GetCRLIn
 	return mw.next.GetCRL(ctx, input)
 }
 
+func (mw *clrEventPublisher) GetVARole(ctx context.Context, input services.GetVARoleInput) (output *models.VARole, err error) {
+	return mw.next.GetVARole(ctx, input)
+}
+
+func (mw *clrEventPublisher) GetVARoles(ctx context.Context, input services.GetVARolesInput) (string, error) {
+	return mw.next.GetVARoles(ctx, input)
+}
+
+func (mw *clrEventPublisher) UpdateVARole(ctx context.Context, input services.UpdateVARoleInput) (output *models.VARole, err error) {
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(context.Background(), models.EventUpdateVARole, output)
+		}
+	}()
+	return mw.next.UpdateVARole(ctx, input)
+}
+
 func (mw *clrEventPublisher) CalculateCRL(ctx context.Context, input services.CalculateCRLInput) (output *x509.RevocationList, err error) {
 	defer func() {
 		if err == nil {

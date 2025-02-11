@@ -12,27 +12,23 @@ import (
 
 	goStore "github.com/chartmuseum/storage"
 	"github.com/go-playground/validator/v10"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
 )
 
 var crlValidate *validator.Validate
 
 type CRLServiceBackend struct {
-	caSDK         services.CAService
-	logger        *logrus.Entry
-	fsStorage     goStore.Backend
-	vaRepo        storage.VARepo
-	scheduler     *jobs.JobScheduler
-	scheduledCRLs map[string]cron.EntryID // Map of CAID to CRL job ID
-	service       services.CRLService
+	caSDK     services.CAService
+	logger    *logrus.Entry
+	fsStorage goStore.Backend
+	vaRepo    storage.VARepo
+	service   services.CRLService
 }
 
 type CRLServiceBuilder struct {
@@ -47,68 +43,20 @@ type CRLMiddleware func(services.CRLService) services.CRLService
 func NewCRLService(builder CRLServiceBuilder) (services.CRLService, error) {
 	crlValidate = validator.New()
 
-	//TODO: Schedule first set of CRL jobs based on existing VARoles
 	svc := &CRLServiceBackend{
-		caSDK:         builder.CAClient,
-		logger:        builder.Logger,
-		scheduler:     jobs.NewJobScheduler(true, builder.Logger.WithField("service", "Scheduler")),
-		vaRepo:        builder.VARepo,
-		fsStorage:     builder.FsStorage,
-		scheduledCRLs: map[string]cron.EntryID{},
+		caSDK:     builder.CAClient,
+		logger:    builder.Logger,
+		vaRepo:    builder.VARepo,
+		fsStorage: builder.FsStorage,
 	}
 
 	svc.service = svc
-	svc.scheduler.Start()
-
-	_, err := svc.vaRepo.GetAll(context.Background(), storage.StorageListRequest[models.VARole]{
-		ExhaustiveRun: true,
-		ApplyFunc: func(v models.VARole) {
-			now := time.Now()
-			// Check if CRL is still valid
-			if v.LatestCRL.ValidUntil.After(now) {
-				// Schedule CRL update
-				delay := now.Sub(v.LatestCRL.ValidFrom.Add(time.Duration(v.CRLOptions.RefreshInterval)))
-				svc.scheduleCRL(context.Background(), v.CAID, delay)
-			} else {
-				// CRL is not valid anymore, calculate new CRL
-				_, err := svc.CalculateCRL(context.Background(), services.CalculateCRLInput{
-					CAID: v.CAID,
-				})
-				if err != nil {
-					builder.Logger.Warnf("something went wrong while calculating CRL for CA %s: %s", v.CAID, err)
-				}
-			}
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("something went wrong while initializing VA service and reading VA roles: %s", err)
-	}
 
 	return svc, nil
 }
 
 func (svc CRLServiceBackend) SetService(service services.CRLService) {
 	svc.service = service
-}
-
-func (svc CRLServiceBackend) scheduleCRL(ctx context.Context, caID string, delay time.Duration) {
-	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-
-	lFunc.Infof("scheduling CRL update for CA %s in %s (%s aprox)", caID, delay, time.Now().Add(delay).Format("2006-01-02T15:04:05Z07:00"))
-
-	scheduleID := svc.scheduler.Schedule(cron.ConstantDelaySchedule{
-		Delay: delay,
-	}, func() {
-		fmt.Println("Calculating CRL")
-		_, err := svc.CalculateCRL(context.Background(), services.CalculateCRLInput{
-			CAID: caID,
-		})
-		if err != nil {
-			lFunc.Errorf("something went wrong while calculating CRL: %s", err)
-		}
-	})
-
-	svc.scheduledCRLs[caID] = scheduleID
 }
 
 func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLInput) (*x509.RevocationList, error) {
@@ -166,8 +114,8 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caID string) (*mod
 	role, err := svc.vaRepo.Insert(ctx, &models.VARole{
 		CAID: caID,
 		CRLOptions: models.VACRLRole{
-			Validity:           models.TimeDuration(24 * time.Hour * 7), // 1 week
-			RefreshInterval:    models.TimeDuration(10 * time.Second),   // 6 days, 23 hours
+			Validity:           models.TimeDuration(24 * time.Hour * 7),            // 1 week
+			RefreshInterval:    models.TimeDuration(24*time.Hour*6 + 23*time.Hour), // 6 days, 23 hours
 			KeyIDSinger:        ca.Certificate.KeyID,
 			RegenerateOnRevoke: true,
 		},
@@ -266,14 +214,6 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		return nil, err
 	}
 
-	// Check if Scheduler already has a job for this CA
-	if _, ok := svc.scheduledCRLs[input.CAID]; ok {
-		lFunc.Infof("removing previous CRL job for CA %s", input.CAID)
-		svc.scheduler.RemoveJob(svc.scheduledCRLs[input.CAID])
-	}
-
-	svc.scheduleCRL(ctx, input.CAID, time.Duration(vaRole.CRLOptions.RefreshInterval))
-
 	crlPem := pem.EncodeToMemory(&pem.Block{Type: "X509 CRL", Bytes: crlDer})
 	err = svc.fsStorage.PutObject(fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CAID, crl.Number), crlPem)
 	if err != nil {
@@ -294,4 +234,43 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 	}
 
 	return crl, nil
+}
+
+func (svc CRLServiceBackend) GetVARole(ctx context.Context, input services.GetVARoleInput) (*models.VARole, error) {
+	exists, role, err := svc.vaRepo.Get(ctx, input.CAID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !exists {
+		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CAID)
+	}
+
+	return role, nil
+}
+
+func (svc CRLServiceBackend) GetVARoles(ctx context.Context, input services.GetVARolesInput) (string, error) {
+	return svc.vaRepo.GetAll(ctx, storage.StorageListRequest[models.VARole]{
+		ExhaustiveRun: input.ExhaustiveRun,
+		QueryParams:   input.QueryParameters,
+		ExtraOpts:     map[string]interface{}{},
+		ApplyFunc: func(role models.VARole) {
+			input.ApplyFunc(role)
+		},
+	})
+}
+
+func (svc CRLServiceBackend) UpdateVARole(ctx context.Context, input services.UpdateVARoleInput) (*models.VARole, error) {
+	exists, role, err := svc.vaRepo.Get(ctx, input.CAID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !exists {
+		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CAID)
+	}
+
+	role.CRLOptions = input.CRLRole
+
+	return svc.vaRepo.Update(ctx, role)
 }

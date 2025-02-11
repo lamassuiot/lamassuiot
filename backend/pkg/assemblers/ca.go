@@ -2,7 +2,6 @@ package assemblers
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cebuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/cryptoengines/builder"
@@ -101,15 +100,7 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 		log.Infof("Crypto Monitoring is enabled")
 		monitorJob := jobs.NewCryptoMonitor(svc, lMonitor)
 
-		secondLvl := false
-		if strings.Count(conf.CryptoMonitoring.Frequency, " ") == 5 {
-			secondLvl = true
-		}
-
-		scheduler = jobs.NewJobScheduler(secondLvl, lMonitor)
-		scheduler.AddJob(conf.CryptoMonitoring.Frequency, monitorJob.Run)
-
-		scheduler.Start()
+		scheduler = jobs.NewJobScheduler(lMonitor, conf.CryptoMonitoring.Frequency, monitorJob)
 	}
 
 	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)

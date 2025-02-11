@@ -6,6 +6,7 @@ import (
 	fsStorage "github.com/chartmuseum/storage"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	beService "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
@@ -15,6 +16,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	log "github.com/sirupsen/logrus"
 )
 
 func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CAService, serviceInfo models.APIServiceInfo) (*services.CRLService, *services.OCSPService, int, error) {
@@ -90,7 +92,7 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService) (*ser
 		return nil, nil, err
 	}
 
-	eventHandlers := handlers.NewVAEventHandler(lMessaging, crl.(beService.CRLServiceBackend))
+	eventHandlers := handlers.NewVAEventHandler(lMessaging, crlSvc)
 	subHandler, err := ceventbus.NewEventBusMessageHandler("VA-CA-DEFAULT", "ca.#", subscriber, lMessaging, *eventHandlers)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
@@ -101,6 +103,14 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService) (*ser
 		lMessaging.Errorf("could not run Event Bus Subscription Handler: %s", err)
 		return nil, nil, err
 	}
+
+	lJob := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
+	frequency := "* * * * *"
+
+	log.Infof("VA CRL Monitoring is enabled")
+	monitorJob := jobs.NewVACrlMonitorJob(crl, frequency, lJob)
+
+	jobs.NewJobScheduler(lJob, frequency, monitorJob)
 
 	return &crl, &ocsp, nil
 }
