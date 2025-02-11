@@ -8,6 +8,7 @@ import (
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	lhelpers "github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	outputChannels "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/alerts/output_channels"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -77,7 +78,7 @@ func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *HandleE
 		return err
 	}
 
-	_, err = svc.subsStorage.GetSubscriptionsByEventType(ctx, input.Event.Type(), true, func(sub models.Subscription) {
+	sendAlert := func(sub models.Subscription) {
 		// Send alert
 		lFunc.Debugf("sending notification to user %s via %s", sub.UserID, sub.Channel.Type)
 		var outSvc outputChannels.NotificationSenderService
@@ -85,6 +86,33 @@ func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *HandleE
 		if err != nil {
 			lFunc.Errorf("cannot get channel config to bytes")
 		}
+
+		if len(sub.Conditions) > 0 {
+			lFunc.Debugf("subscription has conditions, evaluating conditions for user %s", sub.UserID)
+			conditionsMet := false
+			for _, condition := range sub.Conditions {
+
+				switch condition.Type {
+				case models.JSONSchema:
+					lFunc.Warnf("JSONSchema condition type not implemented")
+				case models.JSONPath:
+
+					conditionsMet, err = lhelpers.JsonPathExists(input.Event.Data(), condition.Condition)
+					if err != nil {
+						lFunc.Errorf("error while evaluating JSONPath condition for user %s: %s", sub.UserID, err)
+					}
+
+				default:
+					lFunc.Errorf("unsupported condition type. No implementation for %s", condition.Type)
+				}
+
+			}
+			if !conditionsMet {
+				lFunc.Debugf("conditions not met for user %s, skipping notification", sub.UserID)
+				return
+			}
+		}
+
 		switch sub.Channel.Type {
 		case models.ChannelTypeWebhook:
 			var webhookCfg models.WebhookChannelConfig
@@ -117,7 +145,9 @@ func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *HandleE
 		if err != nil {
 			lFunc.Errorf("error while sending notification to user %s via %s. Event ID '%s'. Event Type '%s'. Got error: %s", sub.UserID, sub.Channel.Type, input.Event.ID(), input.Event.Type(), err)
 		}
-	}, nil, nil)
+	}
+
+	_, err = svc.subsStorage.GetSubscriptionsByEventType(ctx, input.Event.Type(), true, sendAlert, nil, nil)
 
 	if err != nil {
 		lFunc.Errorf("could not get user subscriptions for event type %s: %s", input.Event.Type(), err)
