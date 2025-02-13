@@ -708,7 +708,7 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 		Timestamp:   time.Now(),
 		Type:        models.DeviceEventTypeShadowUpdated,
 		Description: fmt.Sprintf("Remediation Actions: %s", strings.Join(actionsLogs, ", ")),
-		Source:      models.AWSIoTSource(svc.ConnectorID),
+		Source:      AWSIoTSource(svc.ConnectorID),
 	})
 	if err != nil {
 		lFunc.Errorf("could not create device event: %s", err)

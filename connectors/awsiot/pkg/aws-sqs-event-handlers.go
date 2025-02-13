@@ -102,10 +102,10 @@ func (h *AWSIoTThingConnectionDisconnectionEventHandler) HandleMessage(msg *mess
 		return nil
 	}
 
-	var deviceMetaAWS models.DeviceAWSMetadata
-	hasKey, err := helpers.GetMetadataToStruct(device.Metadata, models.AWSIoTMetadataKey(h.svc.GetConnectorID()), &deviceMetaAWS)
+	var deviceMetaAWS DeviceAWSMetadata
+	hasKey, err := helpers.GetMetadataToStruct(device.Metadata, AWSIoTMetadataKey(h.svc.GetConnectorID()), &deviceMetaAWS)
 	if err != nil {
-		err = fmt.Errorf("could not decode metadata with key %s: %s", models.AWSIoTMetadataKey(h.svc.GetConnectorID()), err)
+		err = fmt.Errorf("could not decode metadata with key %s: %s", AWSIoTMetadataKey(h.svc.GetConnectorID()), err)
 		h.logger.Errorf(err.Error())
 		return err
 	}
@@ -118,7 +118,7 @@ func (h *AWSIoTThingConnectionDisconnectionEventHandler) HandleMessage(msg *mess
 
 	eventDescription := ""
 	if isConnectEvent {
-		deviceMetaAWS.ConnectionDetails = models.DeviceAWSConnectionDetails{
+		deviceMetaAWS.ConnectionDetails = DeviceAWSConnectionDetails{
 			IsConnected: true,
 			IPAddress:   connect.Event.IpAddress,
 			//second to millisecond rounding to 999
@@ -127,7 +127,7 @@ func (h *AWSIoTThingConnectionDisconnectionEventHandler) HandleMessage(msg *mess
 
 		eventDescription = fmt.Sprintf("Device connected from IP %s", connect.Event.IpAddress)
 	} else {
-		deviceMetaAWS.ConnectionDetails = models.DeviceAWSConnectionDetails{
+		deviceMetaAWS.ConnectionDetails = DeviceAWSConnectionDetails{
 			IsConnected:            false,
 			DisconnectionReason:    disconnect.Event.DisconnectReason,
 			LatestConnectionUpdate: time.Unix(0, disconnect.Event.Timestamp*int64(time.Millisecond)+999),
@@ -137,7 +137,7 @@ func (h *AWSIoTThingConnectionDisconnectionEventHandler) HandleMessage(msg *mess
 	}
 
 	newMeta := device.Metadata
-	newMeta[models.AWSIoTMetadataKey(h.svc.GetConnectorID())] = deviceMetaAWS
+	newMeta[AWSIoTMetadataKey(h.svc.GetConnectorID())] = deviceMetaAWS
 
 	_, err = h.svc.GetDeviceService().UpdateDeviceMetadata(context.Background(), services.UpdateDeviceMetadataInput{
 		ID:       device.ID,
@@ -155,7 +155,7 @@ func (h *AWSIoTThingConnectionDisconnectionEventHandler) HandleMessage(msg *mess
 		Timestamp:   deviceMetaAWS.ConnectionDetails.LatestConnectionUpdate,
 		Type:        models.DeviceEventTypeConnectionUpdate,
 		Description: eventDescription,
-		Source:      models.AWSIoTSource(h.svc.GetConnectorID()),
+		Source:      AWSIoTSource(h.svc.GetConnectorID()),
 		StructuredFields: map[string]any{
 			"principal_identifier": principalID,
 		},
@@ -279,7 +279,7 @@ func (h *AWSIoTThingShadowUpdateEventHandler) HandleMessage(msg *message.Message
 				Timestamp:   timestampTime,
 				Type:        models.DeviceEventTypeShadowUpdated,
 				Description: fmt.Sprintf("Device ACK: Identity action %s has changed", action),
-				Source:      models.AWSIoTSource(h.svc.GetConnectorID()),
+				Source:      AWSIoTSource(h.svc.GetConnectorID()),
 			})
 			if err != nil {
 				h.logger.Errorf("could not create device event: %s", err)
@@ -321,7 +321,7 @@ func (h *AWSIoTThingShadowUpdateEventHandler) HandleMessage(msg *message.Message
 				Timestamp:   timestampTime,
 				Type:        models.DeviceEventTypeShadowUpdated,
 				Description: fmt.Sprintf("Device ACK: Identity action %s has changed", action),
-				Source:      models.AWSIoTSource(h.svc.GetConnectorID()),
+				Source:      AWSIoTSource(h.svc.GetConnectorID()),
 				StructuredFields: map[string]interface{}{
 					"shadow_version": shadowUpdate.Event.Previous.Version,
 				},
