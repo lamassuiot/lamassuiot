@@ -10,6 +10,7 @@ type CommonStorageEngine struct {
 	CACertificateRequest CACertificateRequestRepo
 	Cert                 CertificatesRepo
 	Device               DeviceManagerRepo
+	DeviceEvents         DeviceEventsRepo
 	DMS                  DMSRepo
 	Events               EventRepository
 	Subscriptions        SubscriptionsRepository

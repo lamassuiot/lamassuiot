@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
@@ -16,6 +17,8 @@ type DeviceManagerService interface {
 	UpdateDeviceStatus(ctx context.Context, input UpdateDeviceStatusInput) (*models.Device, error)
 	UpdateDeviceIdentitySlot(ctx context.Context, input UpdateDeviceIdentitySlotInput) (*models.Device, error)
 	UpdateDeviceMetadata(ctx context.Context, input UpdateDeviceMetadataInput) (*models.Device, error)
+	GetDeviceEvents(ctx context.Context, input GetDeviceEventsInput) (string, error)
+	CreateDeviceEvent(ctx context.Context, input CreateDeviceEventInput) (*models.DeviceEvent, error)
 }
 
 type GetDevicesStatsInput struct {
@@ -60,6 +63,22 @@ type UpdateDeviceMetadataInput struct {
 }
 
 type UpdateDeviceIdentitySlotInput struct {
-	ID   string              `validate:"required"`
-	Slot models.Slot[string] `validate:"required"`
+	ID        string              `validate:"required"`
+	Slot      models.Slot[string] `validate:"required"`
+	NewStatus models.DeviceStatus
+}
+
+type GetDeviceEventsInput struct {
+	resources.ListInput[models.DeviceEvent]
+	DeviceID string
+}
+
+type CreateDeviceEventInput struct {
+	DeviceID         string
+	Timestamp        time.Time
+	Type             models.DeviceEventType
+	Description      string
+	Source           string
+	Status           models.DeviceStatus
+	StructuredFields map[string]any
 }
