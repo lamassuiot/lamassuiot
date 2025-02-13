@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
 
@@ -85,4 +86,19 @@ func (s *MSTeamsWebhookOutputService) SendNotification(ctx context.Context, even
 	_, err = http.DefaultClient.Do(req)
 
 	return err
+}
+
+func RegisterMSTeamsOutputServiceBuilder() {
+	RegisterOutputServiceBuilder(models.ChannelTypeMSTeams, func(c models.Channel, smtpServer config.SMTPServer) (NotificationSenderService, error) {
+		chanConfigBytes, err := json.Marshal(c.Config)
+		if err != nil {
+			return nil, err
+		}
+		var webhookCfg models.MSTeamsChannelConfig
+		err = json.Unmarshal(chanConfigBytes, &webhookCfg)
+		if err != nil {
+			return nil, err
+		}
+		return NewMSTeamsOutputService(webhookCfg), nil
+	})
 }

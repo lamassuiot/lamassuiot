@@ -175,3 +175,18 @@ const emailTemplate = `<!DOCTYPE html>
 </body>
 </html>
 `
+
+func RegisterSMTPOutputServiceBuilder() {
+	RegisterOutputServiceBuilder(models.ChannelTypeEmail, func(c models.Channel, smtpServerConfig config.SMTPServer) (NotificationSenderService, error) {
+		chanConfigBytes, err := json.Marshal(c.Config)
+		if err != nil {
+			return nil, err
+		}
+		var emailConf models.EmailConfig
+		err = json.Unmarshal(chanConfigBytes, &emailConf)
+		if err != nil {
+			return nil, err
+		}
+		return NewSMTPOutputService(emailConf, smtpServerConfig), nil
+	})
+}
