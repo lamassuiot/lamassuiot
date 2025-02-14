@@ -39,13 +39,9 @@ func NewAlertsService(builder AlertsServiceBuilder) services.AlertsService {
 	}
 }
 
-func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *services.HandleEventInput) error {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
-
-	lFunc.Infof("handling Event ID '%s'. Event Type '%s'", input.Event.ID(), input.Event.Type())
+func (svc *AlertsServiceBackend) storeLastEventInstance(ctx context.Context, input *services.HandleEventInput) error {
 	exists, storedEv, err := svc.eventStorage.GetLatestEventByEventType(ctx, models.EventType(input.Event.Type()))
 	if err != nil {
-		lFunc.Errorf("could not obtain last event stored for type %s", input.Event.Type())
 		return err
 	}
 
@@ -59,9 +55,16 @@ func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *service
 	storedEv.LastSeen = time.Now()
 
 	_, err = svc.eventStorage.InsertUpdateEvent(ctx, storedEv)
+	return err
+}
+
+func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *services.HandleEventInput) error {
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+
+	lFunc.Infof("handling Event ID '%s'. Event Type '%s'", input.Event.ID(), input.Event.Type())
+	err := svc.storeLastEventInstance(ctx, input)
 	if err != nil {
 		lFunc.Errorf("could not insert/update latest event: %s", err)
-		return err
 	}
 
 	sendAlert := func(sub models.Subscription) {
@@ -69,44 +72,24 @@ func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *service
 		lFunc.Debugf("sending notification to user %s via %s", sub.UserID, sub.Channel.Type)
 
 		// Evaluate conditions
-		if len(sub.Conditions) > 0 {
-			lFunc.Debugf("subscription has conditions, evaluating conditions for user %s", sub.UserID)
-			conditionsMet := false
-			for _, condition := range sub.Conditions {
-				result, err := eventfilters.EvalFilter(condition, input.Event)
-				if err != nil {
-					lFunc.Errorf("error while evaluating condition for user %s: %s", sub.UserID, err)
-				}
-
-				if result {
-					conditionsMet = true
-					break
-				}
-			}
-			if !conditionsMet {
-				lFunc.Debugf("conditions not met for user %s, skipping notification", sub.UserID)
-				return
-			}
-		}
-
-		// Send notification
-		outputServiceBuilder := outputchannels.GetOutputServiceBuilder(sub.Channel.Type)
-		if outputServiceBuilder == nil {
-			lFunc.Errorf("unsupported channel type. No implementation for %s", sub.Channel.Type)
-		}
-		outSvc, err := outputServiceBuilder(sub.Channel, svc.smtpServerConfig)
+		conditionsMet, err := eventfilters.EvalConditions(sub.Conditions, input.Event)
 		if err != nil {
-			lFunc.Errorf("cannot get output service for %s", sub.Channel.Type)
+			lFunc.Errorf("error while evaluating condition for user %s: %s", sub.UserID, err)
 		}
 
-		err = outSvc.SendNotification(ctx, input.Event)
-		if err != nil {
-			lFunc.Errorf("error while sending notification to user %s via %s. Event ID '%s'. Event Type '%s'. Got error: %s", sub.UserID, sub.Channel.Type, input.Event.ID(), input.Event.Type(), err)
+		if conditionsMet {
+			// Send notification
+			err = outputchannels.SendNotification(ctx, sub.Channel, svc.smtpServerConfig, input.Event)
+			if err != nil {
+				lFunc.Errorf("error while sending notification to user %s via %s. Event ID '%s'. Event Type '%s'. Got error: %s", sub.UserID, sub.Channel.Type, input.Event.ID(), input.Event.Type(), err)
+			}
+
+		} else {
+			lFunc.Debugf("conditions not met for user %s, skipping notification", sub.UserID)
 		}
 	}
 
 	_, err = svc.subsStorage.GetSubscriptionsByEventType(ctx, input.Event.Type(), true, sendAlert, nil, nil)
-
 	if err != nil {
 		lFunc.Errorf("could not get user subscriptions for event type %s: %s", input.Event.Type(), err)
 		return err
