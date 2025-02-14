@@ -300,9 +300,15 @@ func TestSubscriptionWithWebhookOutput(t *testing.T) {
 
 	isWebhookCalledPost := false
 	isWebhookCalledPut := false
+	isTeamsCalledPost := false
 
 	router.POST("/notify", func(c *gin.Context) {
 		isWebhookCalledPost = true
+		c.JSON(200, gin.H{"message": "ok"})
+	})
+
+	router.POST("/teams", func(c *gin.Context) {
+		isTeamsCalledPost = true
 		c.JSON(200, gin.H{"message": "ok"})
 	})
 
@@ -321,6 +327,20 @@ func TestSubscriptionWithWebhookOutput(t *testing.T) {
 				Config: models.WebhookChannelConfig{
 					WebhookURL:    url + "/notify",
 					WebhookMethod: "POST",
+				},
+			},
+		},
+	)
+
+	alertsTest.Service.Subscribe(context.TODO(),
+		&services.SubscribeInput{
+			UserID:    "user2",
+			EventType: models.EventCreateCAKey,
+			Channel: models.Channel{
+				Type: models.ChannelTypeMSTeams,
+				Name: "teams",
+				Config: models.MSTeamsChannelConfig{
+					WebhookURL: url + "/teams",
 				},
 			},
 		},
@@ -352,9 +372,11 @@ func TestSubscriptionWithWebhookOutput(t *testing.T) {
 	}
 
 	assert.True(t, isWebhookCalledPost, "POST webhook should be called")
+	assert.True(t, isTeamsCalledPost, "POST teams webhook should be called")
 	assert.False(t, isWebhookCalledPut, "PUT webhook should not be called")
 
 	isWebhookCalledPost = false
+	isTeamsCalledPost = false
 
 	event = helpers.BuildCloudEvent(string(models.EventCreateCertificateKey), eventSource, payload)
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
@@ -362,7 +384,7 @@ func TestSubscriptionWithWebhookOutput(t *testing.T) {
 		t.Fatalf("could not handle event: %s", err)
 	}
 
-	assert.False(t, isWebhookCalledPost, "POST webhook should be called")
+	assert.False(t, isWebhookCalledPost, "POST webhook should not be called")
+	assert.False(t, isTeamsCalledPost, "POST teams webhook should not be called")
 	assert.True(t, isWebhookCalledPut, "PUT webhook should not be called")
-
 }
