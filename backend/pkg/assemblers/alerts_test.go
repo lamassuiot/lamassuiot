@@ -11,6 +11,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	smtpmock "github.com/mocktools/go-smtp-mock/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -387,4 +388,72 @@ func TestSubscriptionWithWebhookOutput(t *testing.T) {
 	assert.False(t, isWebhookCalledPost, "POST webhook should not be called")
 	assert.False(t, isTeamsCalledPost, "POST teams webhook should not be called")
 	assert.True(t, isWebhookCalledPut, "PUT webhook should not be called")
+}
+
+func TestSubscriptionWithSMPTOutput(t *testing.T) {
+
+	// Start SMTP server using go-smtp-mock
+	server := smtpmock.New(smtpmock.ConfigurationAttr{
+		LogToStdout:       true,
+		LogServerActivity: true,
+	})
+	if err := server.Start(); err != nil {
+		t.Fatalf("could not start smtp server: %s", err)
+	}
+	defer server.Stop()
+
+	hostAddress, portNumber := "127.0.0.1", server.PortNumber()
+
+	smtpServer := &config.SMTPServer{
+		From:     "alerts@lamassu.io",
+		Host:     hostAddress,
+		Port:     portNumber,
+		Username: "lamassu",
+		Password: "",
+		SSL:      false,
+		Insecure: true,
+	}
+
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "alerts").WithSmtp(smtpServer).WithService(ALERTS).Build(t)
+	if err != nil {
+		t.Fatalf("could not create test service: %s", err)
+	}
+	alertsTest := serverTest.Alerts
+
+	alertsTest.Service.Subscribe(context.TODO(),
+		&services.SubscribeInput{
+			UserID:    "user1",
+			EventType: models.EventCreateCAKey,
+			Channel: models.Channel{
+				Type: models.ChannelTypeEmail,
+				Name: "smtp",
+				Config: models.EmailConfig{
+					Email: "user1@lamassu.io",
+				},
+			},
+		},
+	)
+
+	eventType := models.EventCreateCAKey
+	eventSource := "test://source"
+	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
+	event := helpers.BuildCloudEvent(string(eventType), eventSource, payload)
+
+	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	if err != nil {
+		t.Fatalf("could not handle event: %s", err)
+	}
+
+	messages := server.MessagesAndPurge()
+	assert.Equal(t, 1, len(messages), "should have 1 messages")
+
+	eventType = models.EventBindDeviceIdentityKey
+	event = helpers.BuildCloudEvent(string(eventType), eventSource, payload)
+
+	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	if err != nil {
+		t.Fatalf("could not handle event: %s", err)
+	}
+	messages = server.MessagesAndPurge()
+	assert.Equal(t, 0, len(messages), "should have 0 messages")
 }

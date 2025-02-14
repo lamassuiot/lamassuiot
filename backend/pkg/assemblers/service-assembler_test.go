@@ -386,7 +386,10 @@ func BuildVATestServer(caTestServer *CATestServer) (*VATestServer, error) {
 	}, nil
 }
 
-func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig) (*AlertsTestServer, error) {
+func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, smptConfig *config.SMTPServer) (*AlertsTestServer, error) {
+	if smptConfig == nil {
+		smptConfig = &config.SMTPServer{}
+	}
 	svc, port, err := AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
 		Logs: cconfig.Logging{
 			Level: cconfig.Info,
@@ -398,6 +401,7 @@ func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *Tes
 		},
 		SubscriberEventBus: eventBus.config,
 		Storage:            storageEngine.config,
+		SMTPConfig:         *smptConfig,
 	}, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
@@ -427,7 +431,7 @@ func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *Tes
 	}, nil
 }
 
-func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, cryptoEngines *TestCryptoEngineConfig, services []Service, monitor bool) (*TestServer, error) {
+func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, cryptoEngines *TestCryptoEngineConfig, smtpConfig *config.SMTPServer, services []Service, monitor bool) (*TestServer, error) {
 	servicesMap := make(map[Service]interface{})
 
 	beforeEachActions := []func() error{}
@@ -483,7 +487,7 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 	}
 
 	if slices.Contains(services, ALERTS) {
-		alertsTestServer, err := BuildAlertsTestServer(storageEngine, eventBus)
+		alertsTestServer, err := BuildAlertsTestServer(storageEngine, eventBus, smtpConfig)
 		if err != nil {
 			return nil, fmt.Errorf("could not build AlertsTestServer: %s", err)
 		}

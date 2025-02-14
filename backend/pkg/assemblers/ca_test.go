@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	lconfig "github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -4349,6 +4350,7 @@ type TestServiceBuilder struct {
 	withDatabase []string
 	withMonitor  bool
 	withService  []Service
+	withSmtp     *lconfig.SMTPServer
 }
 
 func (b TestServiceBuilder) WithEventBus() TestServiceBuilder {
@@ -4373,6 +4375,11 @@ func (b TestServiceBuilder) WithMonitor() TestServiceBuilder {
 
 func (b TestServiceBuilder) WithService(services ...Service) TestServiceBuilder {
 	b.withService = services
+	return b
+}
+
+func (b TestServiceBuilder) WithSmtp(config *lconfig.SMTPServer) TestServiceBuilder {
+	b.withSmtp = config
 	return b
 }
 
@@ -4406,7 +4413,7 @@ func (b TestServiceBuilder) Build(t *testing.T) (*TestServer, error) {
 		b.withService = []Service{CA}
 	}
 
-	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, b.withService, b.withMonitor)
+	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, b.withSmtp, b.withService, b.withMonitor)
 	if err != nil {
 		t.Fatalf("could not assemble Server with HTTP server: %s", err)
 	}
