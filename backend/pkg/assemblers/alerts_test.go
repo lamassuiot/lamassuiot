@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
+	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	outputchannels "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/alerts/output_channels"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -15,7 +16,7 @@ import (
 )
 
 func TestManageSuscriptions(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "alerts").WithEventBus().WithService(ALERTS).Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "alerts").WithService(ALERTS).Build(t)
 	if err != nil {
 		t.Fatalf("could not create test service: %s", err)
 	}
@@ -98,7 +99,7 @@ func TestManageSuscriptions(t *testing.T) {
 }
 
 func TestGetLastEvents(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "alerts").WithEventBus().WithService(ALERTS).Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "alerts").WithService(ALERTS).Build(t)
 	if err != nil {
 		t.Fatalf("could not create test service: %s", err)
 	}
@@ -168,7 +169,7 @@ func TestSubscriptionWithJSONPathFilter(t *testing.T) {
 	outChannelMock.On("SendNotification", mock.Anything, mock.Anything).Return(nil)
 
 	setupMockOutputChannel(outChannelMock)
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "alerts").WithEventBus().WithService(ALERTS).Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "alerts").WithService(ALERTS).Build(t)
 	if err != nil {
 		t.Fatalf("could not create test service: %s", err)
 	}
@@ -220,7 +221,7 @@ func TestSubscriptionWithJSONSchemaFilter(t *testing.T) {
 	outChannelMock.On("SendNotification", mock.Anything, mock.Anything).Return(nil)
 
 	setupMockOutputChannel(outChannelMock)
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "alerts").WithEventBus().WithService(ALERTS).Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "alerts").WithService(ALERTS).Build(t)
 	if err != nil {
 		t.Fatalf("could not create test service: %s", err)
 	}
@@ -280,4 +281,88 @@ func TestSubscriptionWithJSONSchemaFilter(t *testing.T) {
 	}
 
 	mock.AssertExpectationsForObjects(t, outChannelMock)
+}
+
+func TestSubscriptionWithWebhookOutput(t *testing.T) {
+
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "alerts").WithService(ALERTS).Build(t)
+	if err != nil {
+		t.Fatalf("could not create test service: %s", err)
+	}
+	alertsTest := serverTest.Alerts
+
+	router, url, cleanup, err := startWebhookServer()
+	if err != nil {
+		t.Fatalf("could not start webhook server: %s", err)
+	}
+
+	defer cleanup()
+
+	isWebhookCalledPost := false
+	isWebhookCalledPut := false
+
+	router.POST("/notify", func(c *gin.Context) {
+		isWebhookCalledPost = true
+		c.JSON(200, gin.H{"message": "ok"})
+	})
+
+	router.PUT("/notify", func(c *gin.Context) {
+		isWebhookCalledPut = true
+		c.JSON(200, gin.H{"message": "ok"})
+	})
+
+	alertsTest.Service.Subscribe(context.TODO(),
+		&services.SubscribeInput{
+			UserID:    "user1",
+			EventType: models.EventCreateCAKey,
+			Channel: models.Channel{
+				Type: models.ChannelTypeWebhook,
+				Name: "webhook",
+				Config: models.WebhookChannelConfig{
+					WebhookURL:    url + "/notify",
+					WebhookMethod: "POST",
+				},
+			},
+		},
+	)
+
+	alertsTest.Service.Subscribe(context.TODO(),
+		&services.SubscribeInput{
+			UserID:    "user1",
+			EventType: models.EventCreateCertificateKey,
+			Channel: models.Channel{
+				Type: models.ChannelTypeWebhook,
+				Name: "webhook",
+				Config: models.WebhookChannelConfig{
+					WebhookURL:    url + "/notify",
+					WebhookMethod: "PUT",
+				},
+			},
+		},
+	)
+
+	eventType := models.EventCreateCAKey
+	eventSource := "test://source"
+	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
+	event := helpers.BuildCloudEvent(string(eventType), eventSource, payload)
+
+	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	if err != nil {
+		t.Fatalf("could not handle event: %s", err)
+	}
+
+	assert.True(t, isWebhookCalledPost, "POST webhook should be called")
+	assert.False(t, isWebhookCalledPut, "PUT webhook should not be called")
+
+	isWebhookCalledPost = false
+
+	event = helpers.BuildCloudEvent(string(models.EventCreateCertificateKey), eventSource, payload)
+	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	if err != nil {
+		t.Fatalf("could not handle event: %s", err)
+	}
+
+	assert.False(t, isWebhookCalledPost, "POST webhook should be called")
+	assert.True(t, isWebhookCalledPut, "PUT webhook should not be called")
+
 }
