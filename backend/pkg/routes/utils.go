@@ -61,6 +61,7 @@ func RunHttpRouter(logger *logrus.Entry, routerEngine http.Handler, httpServerCf
 	}
 
 	healthEngine := NewGinEngine(mainLogger)
+
 	healthEngine.GET("/health", hCheckRoute.HealthCheck)
 
 	mainEngine := http.NewServeMux()

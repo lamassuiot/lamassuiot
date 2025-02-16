@@ -12,6 +12,7 @@ type CAConfig struct {
 	CryptoEngineConfig CryptoEngines                  `mapstructure:"crypto_engines"`
 	CryptoMonitoring   cconfig.MonitoringJob          `mapstructure:"crypto_monitoring"`
 	VAServerDomains    []string                       `mapstructure:"va_server_domains"`
+	Authorization      cconfig.Authorization          `mapstructure:"authorization"`
 }
 
 type CryptoEngines struct {
