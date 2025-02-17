@@ -79,7 +79,7 @@ func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *service
 
 		if conditionsMet {
 			// Send notification
-			err = outputchannels.SendNotification(ctx, sub.Channel, svc.smtpServerConfig, input.Event)
+			err = outputchannels.SendNotification(lFunc, ctx, sub.Channel, svc.smtpServerConfig, input.Event)
 			if err != nil {
 				lFunc.Errorf("error while sending notification to user %s via %s. Event ID '%s'. Event Type '%s'. Got error: %s", sub.UserID, sub.Channel.Type, input.Event.ID(), input.Event.Type(), err)
 			}

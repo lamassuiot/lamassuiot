@@ -12,6 +12,7 @@ import (
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"gopkg.in/gomail.v2"
@@ -29,7 +30,7 @@ func NewSMTPOutputService(config models.EmailConfig, smtpServer config.SMTPServe
 	}
 }
 
-func (s *SMTPOutputService) SendNotification(ctx context.Context, event cloudevents.Event) error {
+func (s *SMTPOutputService) SendNotification(logger *logrus.Entry, ctx context.Context, event cloudevents.Event) error {
 	humanEventNameFormat := cases.Title(language.Und).String(strings.Join(strings.Split(event.Type(), "."), " "))
 
 	t := template.New("eventmail")

@@ -1,14 +1,15 @@
 package outputchannels
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"net/http"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	lconfig "github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	webhookclient "github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers/webhook-client"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/sirupsen/logrus"
 )
 
 type MSTeamsWebhookSectionFact struct {
@@ -32,16 +33,18 @@ type MSTeamsWebhookMsg struct {
 }
 
 type MSTeamsWebhookOutputService struct {
+	name   string
 	config models.MSTeamsChannelConfig
 }
 
-func NewMSTeamsOutputService(config models.MSTeamsChannelConfig) NotificationSenderService {
+func NewMSTeamsOutputService(name string, config models.MSTeamsChannelConfig) NotificationSenderService {
 	return &MSTeamsWebhookOutputService{
+		name:   name,
 		config: config,
 	}
 }
 
-func (s *MSTeamsWebhookOutputService) SendNotification(ctx context.Context, event cloudevents.Event) error {
+func (s *MSTeamsWebhookOutputService) SendNotification(logger *logrus.Entry, ctx context.Context, event cloudevents.Event) error {
 	var eventDataMap map[string]any
 	json.Unmarshal(event.Data(), &eventDataMap)
 
@@ -78,18 +81,22 @@ func (s *MSTeamsWebhookOutputService) SendNotification(ctx context.Context, even
 		return err
 	}
 
-	req, err := http.NewRequest("POST", s.config.WebhookURL, bytes.NewBuffer(msBytes))
-	if err != nil {
-		return err
-	}
-
-	_, err = http.DefaultClient.Do(req)
+	_, err = webhookclient.InvokeWebhook(logger, models.WebhookCall{
+		Name:   s.name,
+		Url:    s.config.WebhookURL,
+		Method: "POST",
+		Config: models.WebhookCallHttpClient{
+			ValidateServerCert: false,
+			LogLevel:           "INFO",
+			AuthMode:           config.NoAuth,
+		},
+	}, msBytes)
 
 	return err
 }
 
 func RegisterMSTeamsOutputServiceBuilder() {
-	RegisterOutputServiceBuilder(models.ChannelTypeMSTeams, func(c models.Channel, smtpServer config.SMTPServer) (NotificationSenderService, error) {
+	RegisterOutputServiceBuilder(models.ChannelTypeMSTeams, func(c models.Channel, smtpServer lconfig.SMTPServer) (NotificationSenderService, error) {
 		chanConfigBytes, err := json.Marshal(c.Config)
 		if err != nil {
 			return nil, err
@@ -99,6 +106,6 @@ func RegisterMSTeamsOutputServiceBuilder() {
 		if err != nil {
 			return nil, err
 		}
-		return NewMSTeamsOutputService(webhookCfg), nil
+		return NewMSTeamsOutputService(c.Name, webhookCfg), nil
 	})
 }

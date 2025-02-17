@@ -12,6 +12,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	smtpmock "github.com/mocktools/go-smtp-mock/v2"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -158,7 +159,7 @@ type MockOutputService struct {
 	mock.Mock
 }
 
-func (m *MockOutputService) SendNotification(ctx context.Context, event cloudevents.Event) error {
+func (m *MockOutputService) SendNotification(logger *logrus.Entry, ctx context.Context, event cloudevents.Event) error {
 	args := m.Called(ctx, event)
 	return args.Error(0)
 }
@@ -167,7 +168,7 @@ func TestSubscriptionWithJSONPathFilter(t *testing.T) {
 
 	outChannelMock := new(MockOutputService)
 
-	outChannelMock.On("SendNotification", mock.Anything, mock.Anything).Return(nil)
+	outChannelMock.On("SendNotification", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	setupMockOutputChannel(outChannelMock)
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "alerts").WithService(ALERTS).Build(t)
@@ -202,7 +203,7 @@ func TestSubscriptionWithJSONPathFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
 	}
-	outChannelMock.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything)
+	outChannelMock.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 
 	payload = map[string]interface{}{"person": map[string]interface{}{"name": "John", "age": "30"}}
 	event = helpers.BuildCloudEvent(string(eventType), eventSource, payload)
@@ -219,7 +220,7 @@ func TestSubscriptionWithJSONSchemaFilter(t *testing.T) {
 
 	outChannelMock := new(MockOutputService)
 
-	outChannelMock.On("SendNotification", mock.Anything, mock.Anything).Return(nil)
+	outChannelMock.On("SendNotification", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	setupMockOutputChannel(outChannelMock)
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "alerts").WithService(ALERTS).Build(t)
@@ -271,7 +272,7 @@ func TestSubscriptionWithJSONSchemaFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
 	}
-	outChannelMock.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything)
+	outChannelMock.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 
 	payload = map[string]interface{}{"person": map[string]interface{}{"name": "John", "age": "30"}}
 	event = helpers.BuildCloudEvent(string(eventType), eventSource, payload)

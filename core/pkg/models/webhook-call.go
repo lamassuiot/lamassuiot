@@ -7,6 +7,7 @@ import (
 type WebhookCall struct {
 	Name   string                `json:"name"`
 	Url    string                `json:"url"`
+	Method string                `json:"method"`
 	Config WebhookCallHttpClient `json:"config"`
 }
 
