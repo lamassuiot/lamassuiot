@@ -703,6 +703,27 @@ type RegisterCAInput struct {
 func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, input RegisterCAInput) (ca *models.CACertificate, err error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
+	defer func() {
+		if err != nil {
+			//report error in metadata
+			lFunc.Infof("updating CA %s metadata with error: %s", input.ID, err)
+			newMeta := input.CACertificate.Metadata
+
+			input.RegisterConfiguration.Registration.Status = IoTAWSCAMetadataRegistrationFailed
+			input.RegisterConfiguration.Registration.Error = fmt.Sprintf("something went wrong while registering CA: %s", err)
+
+			newMeta[AWSIoTMetadataKey(svc.GetConnectorID())] = input.RegisterConfiguration
+
+			_, err = svc.CaSDK.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
+				CAID:     input.ID,
+				Metadata: newMeta,
+			})
+			if err != nil {
+				lFunc.Errorf("could not update CA metadata: %s", err)
+			}
+		}
+	}()
+
 	//check if CA already registered in AWS
 	cas, err := svc.GetRegisteredCAs(context.Background())
 	if err != nil {
