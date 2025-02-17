@@ -1,6 +1,6 @@
 Lamassu IoT
 ===================
-[![codecov](https://codecov.io/gh/lamassuiot/lamassuiot/graph/badge.svg?token=GBZQ1CNYHZ)](https://codecov.io/gh/lamassuiot/lamassuiot)
+[![codecov](https://codecov.io/gh/lamassuiot/lamassuiot/graph/badge.svg?token=GBZQ1CNYHZ&flag=backend)](https://codecov.io/gh/lamassuiot/lamassuiot)
 
 <img src="https://www.lamassu.io/assets/brand/lamassu-brand.png" alt="Lamassu App" title="Lamassu" />
 
