@@ -1,4 +1,4 @@
-package helpers
+package eventfilters
 
 import (
 	"encoding/json"
