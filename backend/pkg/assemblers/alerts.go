@@ -6,7 +6,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/handlers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -14,6 +14,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -46,7 +47,7 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 		return nil, fmt.Errorf("could not create alerts storage instance: %s", err)
 	}
 
-	svc := services.NewAlertsService(services.AlertsServiceBuilder{
+	svc := lservices.NewAlertsService(lservices.AlertsServiceBuilder{
 		Logger:           lSvc,
 		SubsStorage:      subStorage,
 		EventStorage:     eventStore,

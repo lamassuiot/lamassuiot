@@ -36,6 +36,7 @@ const (
 	DEVICE_MANAGER
 	VA
 	DMS_MANAGER
+	ALERTS
 )
 
 type TestEventBusConfig struct {
@@ -85,11 +86,20 @@ type VATestServer struct {
 	AfterSuite    func()
 }
 
+type AlertsTestServer struct {
+	Port                 int
+	Service              services.AlertsService
+	HttpAlertsManagerSDK services.AlertsService
+	BeforeEach           func() error
+	AfterSuite           func()
+}
+
 type TestServer struct {
 	CA            *CATestServer
 	VA            *VATestServer
 	DeviceManager *DeviceManagerTestServer
 	DMSManager    *DMSManagerTestServer
+	Alerts        *AlertsTestServer
 
 	EventBus *TestEventBusConfig
 
@@ -376,7 +386,52 @@ func BuildVATestServer(caTestServer *CATestServer) (*VATestServer, error) {
 	}, nil
 }
 
-func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, cryptoEngines *TestCryptoEngineConfig, services []Service, monitor bool) (*TestServer, error) {
+func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, smptConfig *config.SMTPServer) (*AlertsTestServer, error) {
+	if smptConfig == nil {
+		smptConfig = &config.SMTPServer{}
+	}
+	svc, port, err := AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
+		Logs: cconfig.Logging{
+			Level: cconfig.Info,
+		},
+		Server: cconfig.HttpServer{
+			LogLevel:           cconfig.Info,
+			HealthCheckLogging: false,
+			Protocol:           cconfig.HTTP,
+		},
+		SubscriberEventBus: eventBus.config,
+		Storage:            storageEngine.config,
+		SMTPConfig:         *smptConfig,
+	}, models.APIServiceInfo{
+		Version:   "test",
+		BuildSHA:  "-",
+		BuildTime: "-",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	httpCli := http.Client{}
+	httpCli.Transport = &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+
+	return &AlertsTestServer{
+		Port:                 port,
+		Service:              *svc,
+		HttpAlertsManagerSDK: sdk.NewHttpAlertsClient(&httpCli, fmt.Sprintf("https://127.0.0.1:%d", port)),
+		BeforeEach: func() error {
+			return nil
+		},
+		AfterSuite: func() {
+			fmt.Println("TEST CLEANUP ALERTS")
+		},
+	}, nil
+}
+
+func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, cryptoEngines *TestCryptoEngineConfig, smtpConfig *config.SMTPServer, services []Service, monitor bool) (*TestServer, error) {
 	servicesMap := make(map[Service]interface{})
 
 	beforeEachActions := []func() error{}
@@ -429,6 +484,16 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 		servicesMap[VA] = vaTestServer
 		beforeEachActions = append(beforeEachActions, vaTestServer.BeforeEach)
 		afterSuiteActions = append(afterSuiteActions, vaTestServer.AfterSuite)
+	}
+
+	if slices.Contains(services, ALERTS) {
+		alertsTestServer, err := BuildAlertsTestServer(storageEngine, eventBus, smtpConfig)
+		if err != nil {
+			return nil, fmt.Errorf("could not build AlertsTestServer: %s", err)
+		}
+		servicesMap[ALERTS] = alertsTestServer
+		beforeEachActions = append(beforeEachActions, alertsTestServer.BeforeEach)
+		afterSuiteActions = append(afterSuiteActions, alertsTestServer.AfterSuite)
 	}
 
 	if eventBus.BeforeEach != nil {
@@ -490,6 +555,12 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 		VA: func() *VATestServer {
 			if servicesMap[VA] != nil {
 				return servicesMap[VA].(*VATestServer)
+			}
+			return nil
+		}(),
+		Alerts: func() *AlertsTestServer {
+			if servicesMap[ALERTS] != nil {
+				return servicesMap[ALERTS].(*AlertsTestServer)
 			}
 			return nil
 		}(),

@@ -2,28 +2,19 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
-	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	outputChannels "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/alerts/output_channels"
+	eventfilters "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/alerts/event_filters"
+	outputchannels "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/alerts/output_channels"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
 )
-
-type AlertsService interface {
-	HandleEvent(ctx context.Context, input *HandleEventInput) error
-	GetUserSubscriptions(ctx context.Context, input *GetUserSubscriptionsInput) ([]*models.Subscription, error)
-	Subscribe(ctx context.Context, input *SubscribeInput) ([]*models.Subscription, error)
-	Unsubscribe(ctx context.Context, input *UnsubscribeInput) ([]*models.Subscription, error)
-
-	GetLatestEventsPerEventType(ctx context.Context, input *GetLatestEventsPerEventTypeInput) ([]*models.AlertLatestEvent, error)
-}
 
 type AlertsServiceBackend struct {
 	subsStorage      storage.SubscriptionsRepository
@@ -39,7 +30,7 @@ type AlertsServiceBuilder struct {
 	Logger           *logrus.Entry
 }
 
-func NewAlertsService(builder AlertsServiceBuilder) AlertsService {
+func NewAlertsService(builder AlertsServiceBuilder) services.AlertsService {
 	return &AlertsServiceBackend{
 		subsStorage:      builder.SubsStorage,
 		eventStorage:     builder.EventStorage,
@@ -48,17 +39,9 @@ func NewAlertsService(builder AlertsServiceBuilder) AlertsService {
 	}
 }
 
-type HandleEventInput struct {
-	Event cloudevents.Event
-}
-
-func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *HandleEventInput) error {
-	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
-
-	lFunc.Infof("handling Event ID '%s'. Event Type '%s'", input.Event.ID(), input.Event.Type())
+func (svc *AlertsServiceBackend) storeLastEventInstance(ctx context.Context, input *services.HandleEventInput) error {
 	exists, storedEv, err := svc.eventStorage.GetLatestEventByEventType(ctx, models.EventType(input.Event.Type()))
 	if err != nil {
-		lFunc.Errorf("could not obtain last event stored for type %s", input.Event.Type())
 		return err
 	}
 
@@ -72,53 +55,41 @@ func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *HandleE
 	storedEv.LastSeen = time.Now()
 
 	_, err = svc.eventStorage.InsertUpdateEvent(ctx, storedEv)
+	return err
+}
+
+func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *services.HandleEventInput) error {
+	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
+
+	lFunc.Infof("handling Event ID '%s'. Event Type '%s'", input.Event.ID(), input.Event.Type())
+	err := svc.storeLastEventInstance(ctx, input)
 	if err != nil {
 		lFunc.Errorf("could not insert/update latest event: %s", err)
-		return err
 	}
 
-	_, err = svc.subsStorage.GetSubscriptionsByEventType(ctx, input.Event.Type(), true, func(sub models.Subscription) {
+	sendAlert := func(sub models.Subscription) {
 		// Send alert
 		lFunc.Debugf("sending notification to user %s via %s", sub.UserID, sub.Channel.Type)
-		var outSvc outputChannels.NotificationSenderService
-		chanConfigBytes, err := json.Marshal(sub.Channel.Config)
+
+		// Evaluate conditions
+		conditionsMet, err := eventfilters.EvalConditions(sub.Conditions, input.Event)
 		if err != nil {
-			lFunc.Errorf("cannot get channel config to bytes")
-		}
-		switch sub.Channel.Type {
-		case models.ChannelTypeWebhook:
-			var webhookCfg models.WebhookChannelConfig
-			err = json.Unmarshal(chanConfigBytes, &webhookCfg)
-			if err != nil {
-				lFunc.Errorf("cannot get channel config to WebhookChannelConfig")
-			}
-			outSvc = outputChannels.NewWebhookOutputService(webhookCfg)
-		case models.ChannelTypeMSTeams:
-			var webhookCfg models.MSTeamsChannelConfig
-			err = json.Unmarshal(chanConfigBytes, &webhookCfg)
-			if err != nil {
-				lFunc.Errorf("cannot get channel config to MSTeamsChannelConfig")
-			}
-			outSvc = outputChannels.NewMSTeamsOutputService(webhookCfg)
-
-		case models.ChannelTypeEmail:
-			var emailConf models.EmailConfig
-			err = json.Unmarshal(chanConfigBytes, &emailConf)
-			if err != nil {
-				lFunc.Errorf("cannot get channel config to EmailConfig")
-			}
-			outSvc = outputChannels.NewSMTPOutputService(emailConf, svc.smtpServerConfig)
-
-		default:
-			lFunc.Errorf("unsupported channel type. No implementation for %s", sub.Channel.Type)
+			lFunc.Errorf("error while evaluating condition for user %s: %s", sub.UserID, err)
 		}
 
-		err = outSvc.SendNotification(ctx, input.Event)
-		if err != nil {
-			lFunc.Errorf("error while sending notification to user %s via %s. Event ID '%s'. Event Type '%s'. Got error: %s", sub.UserID, sub.Channel.Type, input.Event.ID(), input.Event.Type(), err)
-		}
-	}, nil, nil)
+		if conditionsMet {
+			// Send notification
+			err = outputchannels.SendNotification(lFunc, ctx, sub.Channel, svc.smtpServerConfig, input.Event)
+			if err != nil {
+				lFunc.Errorf("error while sending notification to user %s via %s. Event ID '%s'. Event Type '%s'. Got error: %s", sub.UserID, sub.Channel.Type, input.Event.ID(), input.Event.Type(), err)
+			}
 
+		} else {
+			lFunc.Debugf("conditions not met for user %s, skipping notification", sub.UserID)
+		}
+	}
+
+	_, err = svc.subsStorage.GetSubscriptionsByEventType(ctx, input.Event.Type(), true, sendAlert, nil, nil)
 	if err != nil {
 		lFunc.Errorf("could not get user subscriptions for event type %s: %s", input.Event.Type(), err)
 		return err
@@ -127,9 +98,7 @@ func (svc *AlertsServiceBackend) HandleEvent(ctx context.Context, input *HandleE
 	return nil
 }
 
-type GetLatestEventsPerEventTypeInput struct{}
-
-func (svc *AlertsServiceBackend) GetLatestEventsPerEventType(ctx context.Context, input *GetLatestEventsPerEventTypeInput) ([]*models.AlertLatestEvent, error) {
+func (svc *AlertsServiceBackend) GetLatestEventsPerEventType(ctx context.Context, input *services.GetLatestEventsPerEventTypeInput) ([]*models.AlertLatestEvent, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	events, err := svc.eventStorage.GetLatestEvents(ctx)
@@ -141,11 +110,7 @@ func (svc *AlertsServiceBackend) GetLatestEventsPerEventType(ctx context.Context
 	return events, nil
 }
 
-type GetUserSubscriptionsInput struct {
-	UserID string
-}
-
-func (svc *AlertsServiceBackend) GetUserSubscriptions(ctx context.Context, input *GetUserSubscriptionsInput) ([]*models.Subscription, error) {
+func (svc *AlertsServiceBackend) GetUserSubscriptions(ctx context.Context, input *services.GetUserSubscriptionsInput) ([]*models.Subscription, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	userSubs := []*models.Subscription{}
@@ -164,14 +129,7 @@ func (svc *AlertsServiceBackend) GetUserSubscriptions(ctx context.Context, input
 	return userSubs, nil
 }
 
-type SubscribeInput struct {
-	UserID     string
-	EventType  models.EventType
-	Conditions []models.SubscriptionCondition
-	Channel    models.Channel
-}
-
-func (svc *AlertsServiceBackend) Subscribe(ctx context.Context, input *SubscribeInput) ([]*models.Subscription, error) {
+func (svc *AlertsServiceBackend) Subscribe(ctx context.Context, input *services.SubscribeInput) ([]*models.Subscription, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	lFunc.Infof("subscribing user %s to event type %s with %d conditions over %s", input.UserID, input.EventType, len(input.Conditions), input.Channel.Type)
@@ -190,15 +148,10 @@ func (svc *AlertsServiceBackend) Subscribe(ctx context.Context, input *Subscribe
 		return nil, err
 	}
 
-	return svc.GetUserSubscriptions(ctx, &GetUserSubscriptionsInput{UserID: input.UserID})
+	return svc.GetUserSubscriptions(ctx, &services.GetUserSubscriptionsInput{UserID: input.UserID})
 }
 
-type UnsubscribeInput struct {
-	UserID         string
-	SubscriptionID string
-}
-
-func (svc *AlertsServiceBackend) Unsubscribe(ctx context.Context, input *UnsubscribeInput) ([]*models.Subscription, error) {
+func (svc *AlertsServiceBackend) Unsubscribe(ctx context.Context, input *services.UnsubscribeInput) ([]*models.Subscription, error) {
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
 
 	var loopError error
