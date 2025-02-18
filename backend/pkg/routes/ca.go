@@ -3,49 +3,106 @@ package routes
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/authz"
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/sirupsen/logrus"
 )
 
-func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) {
-	routes := controllers.NewCAHttpRoutes(svc)
+func NewCAHTTPLayer(logger *logrus.Entry, parentRouterGroup *gin.RouterGroup, routes controllers.CAHttpRoutes, authzConf cconfig.Authorization) error {
+	authzMW, err := authz.NewAuthorizationMiddleware(logger, authzConf.RolesClaim, authzConf.RoleMapping, authzConf.Enabled)
+	if err != nil {
+		return err
+	}
 
 	router := parentRouterGroup
 	rv1 := router.Group("/v1")
 
-	// GET CAS
-	rv1.GET("/cas", routes.GetAllCAs)
-	rv1.POST("/cas", routes.CreateCA)
+	// Get Crypto Engine Provider
+	rv1ViewEngines := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleCAAdmin, authz.RoleCAUser, authz.RoleCertAdmin, authz.RoleCertUser}))
+	rv1ViewEngines.GET("/engines", routes.GetCryptoEngineProvider)
 
-	rv1.POST("/cas/import", routes.ImportCA)
-	rv1.GET("/cas/:id", routes.GetCAByID)
-	rv1.GET("/cas/cn/:cn", routes.GetCAsByCommonName)
+	// Create CA
+	rv1CreateCA := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleCAAdmin}))
+	rv1CreateCA.POST("/cas", routes.CreateCA)
+	rv1CreateCA.POST("/cas/import", routes.ImportCA)
 
-	rv1.PUT("/cas/:id/metadata", routes.UpdateCAMetadata)
-	rv1.POST("/cas/:id/status", routes.UpdateCAStatus)
-	rv1.GET("/cas/:id/certificates", routes.GetCertificatesByCA)
-	rv1.GET("/cas/:id/certificates/status/:status", routes.GetCertificatesByCAAndStatus)
-	rv1.POST("/cas/:id/certificates/sign", routes.SignCertificate)
-	rv1.POST("/cas/:id/signature/sign", routes.SignatureSign)
-	rv1.POST("/cas/:id/signature/verify", routes.SignatureVerify)
-	rv1.GET("/cas/:id/certificates/:sn", routes.GetCertificateBySerialNumber)
-	rv1.PUT("/cas/:id/issuance-expiration", routes.UpdateCAIssuanceExpiration)
-	rv1.DELETE("/cas/:id", routes.DeleteCA)
-	rv1.GET("/cas/:id/requests", routes.GetCARequests)
+	// Edit CA
+	rv1EditCA := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleCAAdmin}))
+	rv1EditCA.PUT("/cas/:id/issuance-expiration", routes.UpdateCAIssuanceExpiration)
 
-	rv1.POST("/cas/requests", routes.RequestCA)
-	rv1.GET("/cas/requests", routes.GetAllRequests)
-	rv1.GET("/cas/requests/:id", routes.GetCARequestByID)
-	rv1.DELETE("/cas/requests/:id", routes.DeleteCARequestByID)
+	// View CA
+	rv1ViewCA := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleCAAdmin, authz.RoleCAUser}))
+	rv1ViewCA.GET("/cas", routes.GetAllCAs)
+	rv1ViewCA.GET("/cas/:id", routes.GetCAByID)
+	rv1ViewCA.GET("/cas/cn/:cn", routes.GetCAsByCommonName)
 
-	rv1.GET("/certificates", routes.GetCertificates)
-	rv1.GET("/certificates/status/:status", routes.GetCertificatesByStatus)
-	rv1.GET("/certificates/expiration", routes.GetCertificatesByExpirationDate)
-	rv1.GET("/certificates/:sn", routes.GetCertificateBySerialNumber)
-	rv1.PUT("/certificates/:sn/status", routes.UpdateCertificateStatus)
-	rv1.PUT("/certificates/:sn/metadata", routes.UpdateCertificateMetadata)
-	rv1.POST("/certificates/import", routes.ImportCertificate)
+	// Get CA Stats
+	rv1GetCAStats := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleCAAdmin, authz.RoleCAUser}))
+	rv1GetCAStats.GET("/stats", routes.GetStats)
+	rv1GetCAStats.GET("/stats/:id", routes.GetStatsByCAID)
 
-	rv1.GET("/engines", routes.GetCryptoEngineProvider)
-	rv1.GET("/stats", routes.GetStats)
-	rv1.GET("/stats/:id", routes.GetStatsByCAID)
+	// Issue Certificate
+	rv1IssueCertificate := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleCAAdmin, authz.RoleCAIssuer}))
+	rv1IssueCertificate.POST("/cas/:id/certificates/sign", routes.SignCertificate)
+
+	// Update CA Status (Revoke CA)
+	rv1UpdateCAStatus := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleCAAdmin}))
+	rv1UpdateCAStatus.POST("/cas/:id/status", routes.UpdateCAStatus)
+
+	// Delete CA
+	rv1DeleteCA := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleCAAdmin}))
+	rv1DeleteCA.DELETE("/cas/:id", routes.DeleteCA)
+
+	// Sign Arbitrary Data
+	rv1CASign := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleCAAdmin, authz.RoleCASigner}))
+	rv1CASign.POST("/cas/:id/signature/sign", routes.SignatureSign)
+
+	rv1.POST("/cas/:id/signature/verify", routes.SignatureVerify) // No authz
+
+	// CA Metadata
+	rv1EditCAMetadata := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleCAAdmin}))
+	rv1EditCAMetadata.PUT("/cas/:id/metadata", routes.UpdateCAMetadata)
+
+	//View Certificates
+	rv1ViewCerts := rv1.Group("/", authzMW.Use([]authz.Role{
+		authz.RoleCAAdmin,
+		authz.RoleCAUser,
+		authz.RoleCertAdmin,
+		authz.RoleCertUser,
+	}))
+	rv1ViewCerts.GET("/cas/:id/certificates", routes.GetCertificatesByCA)
+	rv1ViewCerts.GET("/cas/:id/certificates/status/:status", routes.GetCertificatesByCAAndStatus)
+	rv1ViewCerts.GET("/cas/:id/certificates/:sn", routes.GetCertificateBySerialNumber)
+	rv1ViewCerts.GET("/certificates", routes.GetCertificates)
+	rv1ViewCerts.GET("/certificates/status/:status", routes.GetCertificatesByStatus)
+	rv1ViewCerts.GET("/certificates/expiration", routes.GetCertificatesByExpirationDate)
+	rv1ViewCerts.GET("/certificates/:sn", routes.GetCertificateBySerialNumber)
+
+	// Update Certificate Status (Revoke Certificate)
+	rv1UpdateCertStatus := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleCAAdmin, authz.RoleCertAdmin}))
+	rv1UpdateCertStatus.PUT("/certificates/:sn/status", routes.UpdateCertificateStatus)
+
+	// Update Certificate Metadata
+	rv1UpdateCertMetadata := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleCAAdmin, authz.RoleCertAdmin}))
+	rv1UpdateCertMetadata.PUT("/certificates/:sn/metadata", routes.UpdateCertificateMetadata)
+
+	// Import Certificate
+	rv1ImportCert := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleCAAdmin, authz.RoleCertAdmin}))
+	rv1ImportCert.POST("/certificates/import", routes.ImportCertificate)
+
+	// Get CA Requests
+	rv1GetCARequests := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleCAAdmin, authz.RoleCAUser}))
+	rv1GetCARequests.GET("/cas/:id/requests", routes.GetCARequests)
+	rv1GetCARequests.GET("/cas/requests", routes.GetAllRequests)
+	rv1GetCARequests.GET("/cas/requests/:id", routes.GetCARequestByID)
+
+	// Request CA
+	rv1RequestCA := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleCAAdmin}))
+	rv1RequestCA.POST("/cas/requests", routes.RequestCA)
+
+	// Delete CA Request
+	rv1DeleteCARequest := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleCAAdmin}))
+	rv1DeleteCARequest.DELETE("/cas/requests/:id", routes.DeleteCARequestByID)
+
+	return nil
 }
