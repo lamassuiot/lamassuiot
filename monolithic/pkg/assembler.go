@@ -16,7 +16,6 @@ import (
 	"github.com/google/uuid"
 	lamassu "github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	awsiotconnector "github.com/lamassuiot/lamassuiot/connectors/awsiot/v3/pkg"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -203,14 +202,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		if conf.AWSIoTManager.Enabled {
-			_, err = awsiotconnector.AssembleAWSIoTManagerService(awsiotconnector.ConnectorServiceConfig{
-				Logs: cconfig.Logging{
-					Level: conf.Logs.Level,
-				},
-				SubscriberEventBus: conf.SubscriberEventBus,
-				ConnectorID:        conf.AWSIoTManager.ConnectorID,
-				AWSSDKConfig:       conf.AWSIoTManager.AWSSDKConfig,
-			}, caSDKBuilder("AWS IoT Connector", awsiotconnector.AWSIoTSource(conf.AWSIoTManager.ConnectorID)), dmsMngrSDKBuilder("AWS IoT Connector", awsiotconnector.AWSIoTSource(conf.AWSIoTManager.ConnectorID)), deviceMngrSDKBuilder("AWS IoT Connector", awsiotconnector.AWSIoTSource(conf.AWSIoTManager.ConnectorID)))
+			err = AssembleAWSIoT(conf, caSDKBuilder, dmsMngrSDKBuilder, deviceMngrSDKBuilder)
 			if err != nil {
 				return -1, -1, fmt.Errorf("could not assemble AWS IoT Manager: %s", err)
 			}
