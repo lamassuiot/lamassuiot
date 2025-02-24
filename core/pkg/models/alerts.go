@@ -25,6 +25,7 @@ type ConditionType string
 const (
 	JSONSchema ConditionType = "JSON-SCHEMA"
 	JSONPath   ConditionType = "JSON-PATH"
+	Javascript ConditionType = "JAVASCRIPT"
 )
 
 type ChannelType string

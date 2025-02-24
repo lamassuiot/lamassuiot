@@ -216,6 +216,58 @@ func TestSubscriptionWithJSONPathFilter(t *testing.T) {
 	mock.AssertExpectationsForObjects(t, outChannelMock)
 }
 
+func TestSubscriptionWithJavascriptFilter(t *testing.T) {
+
+	outChannelMock := new(MockOutputService)
+
+	outChannelMock.On("SendNotification", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+	setupMockOutputChannel(outChannelMock)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "alerts").WithService(ALERTS).Build(t)
+	if err != nil {
+		t.Fatalf("could not create test service: %s", err)
+	}
+
+	alertsTest := serverTest.Alerts
+
+	alertsTest.Service.Subscribe(context.TODO(),
+		&services.SubscribeInput{
+			UserID:    "user1",
+			EventType: models.EventCreateCAKey,
+			Channel: models.Channel{
+				Type: models.ChannelType("MOCK"),
+			},
+			Conditions: []models.SubscriptionCondition{
+				{
+					Condition: "function(event) { return event.person.name === 'John'; }",
+					Type:      models.Javascript,
+				},
+			},
+		},
+	)
+
+	eventType := models.EventCreateCAKey
+	eventSource := "test://source"
+	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
+	event := helpers.BuildCloudEvent(string(eventType), eventSource, payload)
+
+	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	if err != nil {
+		t.Fatalf("could not handle event: %s", err)
+	}
+	outChannelMock.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
+
+	payload = map[string]interface{}{"person": map[string]interface{}{"name": "John", "age": "30"}}
+	event = helpers.BuildCloudEvent(string(eventType), eventSource, payload)
+
+	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
+	if err != nil {
+		t.Fatalf("could not handle event: %s", err)
+	}
+
+	mock.AssertExpectationsForObjects(t, outChannelMock)
+}
+
 func TestSubscriptionWithJSONSchemaFilter(t *testing.T) {
 
 	outChannelMock := new(MockOutputService)

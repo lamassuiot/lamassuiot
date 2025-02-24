@@ -50,4 +50,5 @@ func EvalConditions(conditions []models.SubscriptionCondition, event cloudevents
 func init() {
 	RegisterJSONPathFilter()
 	RegisterJSONSchemaFilter()
+	RegisterJavascriptFilter()
 }
