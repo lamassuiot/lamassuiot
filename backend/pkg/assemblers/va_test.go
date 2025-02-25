@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	external_clients "github.com/lamassuiot/lamassuiot/sdk/v3/external"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/ocsp"
 )
 
@@ -127,7 +129,7 @@ func TestBaseCRL(t *testing.T) {
 	}
 }
 
-func TestCRLNumber(t *testing.T) {
+func TestCRLCertificateRevocation(t *testing.T) {
 	serverTest, err := StartVAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create VA test server")
@@ -142,29 +144,44 @@ func TestCRLNumber(t *testing.T) {
 	}
 
 	crtsToIssue := 10
+	issuedCertsSNs := []string{}
 	for i := 0; i < crtsToIssue; i++ {
-		_, err := generateCertificate(caSDK)
+		crt, err := generateCertificate(caSDK)
 		if err != nil {
 			t.Fatalf("could not generate certificate: %s", err)
 		}
+
+		issuedCertsSNs = append(issuedCertsSNs, crt.SerialNumber)
 	}
 
-	iters := 15
-	var prevCrl *x509.RevocationList
-	for i := range iters {
-		crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, DefaultCAID), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
-		if err != nil {
-			t.Fatalf("could not get CRL: %s", err)
-		}
-
-		if prevCrl != nil {
-			if crl.Number.Cmp(prevCrl.Number) <= 0 {
-				t.Fatalf("iter %d: new CRL has a lower number", i)
-			}
-		}
-
-		prevCrl = crl
+	// By Default, a VARole is created for the CA automatically setting the CRL to be regenerated on revoke
+	// First get v1 CRL and check that it has 0 entries
+	crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, DefaultCAID), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
+	if err != nil {
+		t.Fatalf("could not get CRL: %s", err)
 	}
+
+	assert.Equal(t, 0, len(crl.RevokedCertificateEntries), "CRL should have 0 entries")
+	assert.Equal(t, 1, crl.Number, "CRL should have version 1")
+
+	// Revoke a certificate
+	rndSN := issuedCertsSNs[rand.Intn(len(issuedCertsSNs))]
+	_, err = caSDK.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
+		SerialNumber:     rndSN,
+		NewStatus:        models.StatusRevoked,
+		RevocationReason: ocsp.CessationOfOperation,
+	})
+
+	assert.NoError(t, err, "could not revoke certificate: %s", err)
+
+	// Get v2 CRL and check that it has 1 entry
+	crl, err = external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, DefaultCAID), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
+	if err != nil {
+		t.Fatalf("could not get CRL: %s", err)
+	}
+
+	assert.Equal(t, 1, len(crl.RevokedCertificateEntries), "CRL should have 1 entry")
+	assert.Equal(t, 2, crl.Number, "CRL should have version 2")
 }
 
 func TestPostOCSP(t *testing.T) {

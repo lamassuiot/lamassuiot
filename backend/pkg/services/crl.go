@@ -116,7 +116,7 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caID string) (*mod
 		CRLOptions: models.VACRLRole{
 			Validity:           models.TimeDuration(24 * time.Hour * 7),            // 1 week
 			RefreshInterval:    models.TimeDuration(24*time.Hour*6 + 23*time.Hour), // 6 days, 23 hours
-			KeyIDSinger:        ca.Certificate.KeyID,
+			KeyIDSigner:        ca.Certificate.KeyID,
 			RegenerateOnRevoke: true,
 		},
 		LatestCRL: models.LatestCRLMeta{

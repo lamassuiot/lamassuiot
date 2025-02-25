@@ -13,7 +13,7 @@ type VARole struct {
 type VACRLRole struct {
 	RefreshInterval    TimeDuration `gorm:"serializer:text"`
 	Validity           TimeDuration `gorm:"serializer:text"`
-	KeyIDSinger        string
+	KeyIDSigner        string
 	RegenerateOnRevoke bool
 }
 type LatestCRLMeta struct {
