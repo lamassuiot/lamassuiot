@@ -8,68 +8,53 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/robfig/cron/v3"
 	"github.com/sirupsen/logrus"
 )
 
 type VACrlMonitor struct {
-	logger    *logrus.Entry
-	service   services.CRLService
-	frequency string
+	logger      *logrus.Entry
+	service     services.CRLService
+	blindPeriod time.Duration
 }
 
-func NewVACrlMonitorJob(service services.CRLService, frequency string, logger *logrus.Entry) *VACrlMonitor {
+func NewVACrlMonitorJob(logger *logrus.Entry, service services.CRLService, blindPeriod time.Duration) *VACrlMonitor {
 	return &VACrlMonitor{
-		service:   service,
-		logger:    logger,
-		frequency: frequency,
+		service:     service,
+		logger:      logger,
+		blindPeriod: blindPeriod,
 	}
 }
 
 func (svc *VACrlMonitor) Run() {
 	ctx := helpers.InitContext()
 	lFunc := helpers.ConfigureLogger(ctx, svc.logger)
-
-	now := time.Now()
 	lFunc.Info("starting periodic VA CRL check")
+	svc.processVARoles(ctx, lFunc)
+}
 
-	nextScheduledRun, err := cron.ParseStandard(svc.frequency)
-	if err != nil {
-		lFunc.Errorf("could not parse frequency %s: %s", svc.frequency, err)
-		return
-	}
-
-	nextRunTime := nextScheduledRun.Next(now)
-	nextRunTimeDelta := nextRunTime.Sub(now)
-
+func (svc *VACrlMonitor) processVARoles(ctx context.Context, lFunc *logrus.Entry) {
+	now := time.Now()
 	svc.service.GetVARoles(ctx, services.GetVARolesInput{
 		QueryParameters: &resources.QueryParameters{},
 		ExhaustiveRun:   true,
 		ApplyFunc: func(v models.VARole) {
 			lFunc.Infof("checking VA Role %s", v.CAID)
 			// Check if CRL is still valid
-			if v.LatestCRL.ValidUntil.Before(now) {
-				// CRL is not valid anymore, calculate new CRL
+			crlRemainDuration := v.LatestCRL.ValidUntil.Sub(now)
+
+			if crlRemainDuration < svc.blindPeriod {
+				// CRL is not valid anymore or will expire during the validityWindow, calculate new CRL
 				lFunc.Infof("CRL for CA %s expired at %s (%s)", v.CAID, v.LatestCRL.ValidUntil, v.LatestCRL.ValidUntil.Sub(now))
-				_, err := svc.service.CalculateCRL(context.Background(), services.CalculateCRLInput{
+				input := services.CalculateCRLInput{
 					CAID: v.CAID,
-				})
+				}
+				_, err := svc.service.CalculateCRL(context.Background(), input)
 				if err != nil {
 					lFunc.Warnf("something went wrong while calculating CRL for CA %s: %s", v.CAID, err)
 				}
 			} else {
-				// CRL is still valid
-				if v.LatestCRL.ValidUntil.Before(nextRunTime) {
-					// CRL will expire before the next check
-					delay := now.Sub(v.LatestCRL.ValidFrom.Add(time.Duration(v.CRLOptions.RefreshInterval)))
-					lFunc.Warnf("CRL for CA %s will expire in %s which is before next check at %s (%s)", v.CAID, delay, nextRunTime, nextRunTimeDelta)
-				} else {
-					lFunc.Infof("CRL for CA %s is valid until %s (%s)", v.CAID, v.LatestCRL.ValidUntil, v.LatestCRL.ValidUntil.Sub(now))
-				}
+				lFunc.Infof("CRL for CA %s is valid until %s (%s)", v.CAID, v.LatestCRL.ValidUntil, v.LatestCRL.ValidUntil.Sub(now))
 			}
 		},
 	})
-
-	end := time.Now()
-	lFunc.Infof("ending check. Took %v", end.Sub(now))
 }

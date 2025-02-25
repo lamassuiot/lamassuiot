@@ -120,7 +120,7 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caID string) (*mod
 			RegenerateOnRevoke: true,
 		},
 		LatestCRL: models.LatestCRLMeta{
-			Version:   models.BigInt{big.NewInt(0)},
+			Version:   models.BigInt{Int: big.NewInt(0)},
 			ValidFrom: time.Now(),
 		},
 	})

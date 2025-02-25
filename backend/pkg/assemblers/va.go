@@ -2,6 +2,7 @@ package assemblers
 
 import (
 	"fmt"
+	"time"
 
 	fsStorage "github.com/chartmuseum/storage"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
@@ -16,6 +17,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/robfig/cron/v3"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -107,10 +109,25 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService) (*ser
 	lJob := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
 	frequency := "* * * * *"
 
-	log.Infof("VA CRL Monitoring is enabled")
-	monitorJob := jobs.NewVACrlMonitorJob(crl, frequency, lJob)
+	blindPeriod, err := getSchedulerPeriod(frequency)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not parse scheduler period: %s", err)
+	}
 
+	log.Infof("VA CRL Monitoring is enabled")
+	monitorJob := jobs.NewVACrlMonitorJob(lJob, crl, blindPeriod)
 	jobs.NewJobScheduler(lJob, frequency, monitorJob)
 
 	return &crl, &ocsp, nil
+}
+
+func getSchedulerPeriod(frequency string) (time.Duration, error) {
+	schedule, err := cron.ParseStandard(frequency)
+	if err != nil {
+		return 0, err
+	}
+	now := time.Now()
+	nextFire := schedule.Next(now)
+	period := nextFire.Sub(now)
+	return period, nil
 }
