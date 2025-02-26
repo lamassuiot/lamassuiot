@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
 	cebuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/cryptoengines/builder"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
@@ -27,9 +28,16 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, serviceInfo models.AP
 
 	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "CA", "HTTP Server")
 
+	lHttp.Logger.SetLevel(log.TraceLevel)
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
-	routes.NewCAHTTPLayer(httpGrp, *caService)
+
+	caRoutes := controllers.NewBackendCAHttpRoutes(*caService)
+	err = routes.NewCAHTTPLayer(lHttp, httpGrp, caRoutes, conf.Authorization)
+	if err != nil {
+		return nil, nil, -1, fmt.Errorf("could not create CA HTTP routes: %s", err)
+	}
+
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not run CA Service http server: %s", err)
