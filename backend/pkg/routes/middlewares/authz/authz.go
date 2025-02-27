@@ -47,11 +47,12 @@ type LamassuAuthorizationMiddleware struct {
 	enforce      bool
 }
 
-func NewAuthorizationMiddleware(logger *logrus.Entry, roleClaim string, roleMappings map[Role]string, enforce bool) (LamassuAuthorizationMiddleware, error) {
+func NewAuthorizationMiddleware(logger *logrus.Entry, roleClaim string, roleMappings map[string]string, enforce bool) (LamassuAuthorizationMiddleware, error) {
 	roles := DefaultRoleMapping
 	for k, v := range roleMappings {
-		if _, exists := roles[k]; exists {
-			roles[k] = v
+		r := Role(k)
+		if _, exists := roles[r]; exists {
+			roles[r] = v
 		}
 	}
 

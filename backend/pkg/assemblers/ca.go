@@ -33,7 +33,7 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, serviceInfo models.AP
 	httpGrp := httpEngine.Group("/")
 
 	caRoutes := controllers.NewBackendCAHttpRoutes(*caService)
-	err = routes.NewCAHTTPLayer(lHttp, httpGrp, caRoutes, conf.Authorization)
+	err = routes.NewCAHTTPLayer(lHttp, httpGrp, caRoutes, conf.Server.Authorization)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not create CA HTTP routes: %s", err)
 	}

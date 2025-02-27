@@ -12,21 +12,26 @@ import (
 	"golang.org/x/crypto/ocsp"
 )
 
-type vaHttpRoutes struct {
+type VAHttpRoutes interface {
+	Verify(ctx *gin.Context)
+	CRL(ctx *gin.Context)
+}
+
+type backendVAHttpRoutes struct {
 	ocsp   services.OCSPService
 	crl    services.CRLService
 	logger *logrus.Entry
 }
 
-func NewVAHttpRoutes(logger *logrus.Entry, ocsp services.OCSPService, crl services.CRLService) *vaHttpRoutes {
-	return &vaHttpRoutes{
+func NewBackendVAHttpRoutes(logger *logrus.Entry, ocsp services.OCSPService, crl services.CRLService) VAHttpRoutes {
+	return &backendVAHttpRoutes{
 		ocsp:   ocsp,
 		crl:    crl,
 		logger: logger,
 	}
 }
 
-func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
+func (r *backendVAHttpRoutes) Verify(ctx *gin.Context) {
 	if ctx.Request.Header.Get("Content-Type") != "application/ocsp-request" {
 		r.logger.Warnf("request did not include 'application/ocsp-request' as the content-type")
 	}
@@ -108,7 +113,7 @@ func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 	ctx.Data(200, "application/ocsp-response", response)
 }
 
-func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
+func (r *backendVAHttpRoutes) CRL(ctx *gin.Context) {
 	type uriParams struct {
 		AuthorityKeyId string `uri:"aki" binding:"required"`
 	}

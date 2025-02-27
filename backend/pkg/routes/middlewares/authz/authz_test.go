@@ -148,7 +148,7 @@ func TestAuthzMiddlewareRoles(t *testing.T) {
 	tcases = append(tcases, caUserEndpointTestCases...)
 	tcases = append(tcases, caAdminEndpointTestCases...)
 
-	port := lunchAuthzServer(t, DefaultRoleMapping)
+	port := lunchAuthzServer(t, map[string]string{})
 
 	for _, tc := range tcases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -184,9 +184,9 @@ func TestAuthzMiddlewareRoles(t *testing.T) {
 func TestAuthzMiddlewareCustomRoles(t *testing.T) {
 	t.Parallel()
 
-	customRoleMapping := map[Role]string{
-		RoleSuperAdmin: "my_super_admin_role",
-		RoleCAAdmin:    "my_ca_admin_role",
+	customRoleMapping := map[string]string{
+		string(RoleSuperAdmin): "my_super_admin_role",
+		string(RoleCAAdmin):    "my_ca_admin_role",
 	}
 
 	type testCase struct {
@@ -281,7 +281,7 @@ func getToken(roles []string) string {
 	return tokenString
 }
 
-func lunchAuthzServer(t *testing.T, roleMapping map[Role]string) int {
+func lunchAuthzServer(t *testing.T, roleMapping map[string]string) int {
 	lgr := logrus.New()
 	lgr.SetOutput(io.Discard)
 	// lgr.SetLevel(logrus.TraceLevel)

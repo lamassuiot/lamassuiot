@@ -45,17 +45,17 @@ type CAHttpRoutes interface {
 	SignatureVerify(ctx *gin.Context)
 }
 
-type BackendCAHttpRoutes struct {
+type backendCAHttpRoutes struct {
 	svc services.CAService
 }
 
 func NewBackendCAHttpRoutes(svc services.CAService) CAHttpRoutes {
-	return &BackendCAHttpRoutes{
+	return &backendCAHttpRoutes{
 		svc: svc,
 	}
 }
 
-func (r *BackendCAHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
 	engine, err := r.svc.GetCryptoEngineProvider(ctx)
 	if err != nil {
 		switch err {
@@ -79,7 +79,7 @@ func (r *BackendCAHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
 // @Failure 400 {string} string "Struct Validation error || CA type inconsistent || Issuance expiration greater than CA expiration || Incompatible expiration time ref"
 // @Failure 500
 // @Router /cas [post]
-func (r *BackendCAHttpRoutes) CreateCA(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) CreateCA(ctx *gin.Context) {
 	var requestBody resources.CreateCABody
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
@@ -116,7 +116,7 @@ func (r *BackendCAHttpRoutes) CreateCA(ctx *gin.Context) {
 	ctx.JSON(201, ca)
 }
 
-func (r *BackendCAHttpRoutes) GetStats(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) GetStats(ctx *gin.Context) {
 	stats, err := r.svc.GetStats(ctx)
 	if err != nil {
 		switch err {
@@ -130,7 +130,7 @@ func (r *BackendCAHttpRoutes) GetStats(ctx *gin.Context) {
 	ctx.JSON(200, stats)
 }
 
-func (r *BackendCAHttpRoutes) GetStatsByCAID(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) GetStatsByCAID(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -157,7 +157,7 @@ func (r *BackendCAHttpRoutes) GetStatsByCAID(ctx *gin.Context) {
 	ctx.JSON(200, stats)
 }
 
-func (r *BackendCAHttpRoutes) GetCARequestByID(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) GetCARequestByID(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -188,7 +188,7 @@ func (r *BackendCAHttpRoutes) GetCARequestByID(ctx *gin.Context) {
 	ctx.JSON(200, ca)
 }
 
-func (r *BackendCAHttpRoutes) DeleteCARequestByID(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) DeleteCARequestByID(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -219,7 +219,7 @@ func (r *BackendCAHttpRoutes) DeleteCARequestByID(ctx *gin.Context) {
 	ctx.JSON(200, gin.H{})
 }
 
-func (r *BackendCAHttpRoutes) RequestCA(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) RequestCA(ctx *gin.Context) {
 	var requestBody resources.RequestCABody
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
@@ -257,7 +257,7 @@ func (r *BackendCAHttpRoutes) RequestCA(ctx *gin.Context) {
 // @Failure 400 {string} string "Struct Validation error || CA type inconsistent || Issuance expiration greater than CA expiration || Incompatible expiration time ref || CA and the provided key dont match"
 // @Failure 500
 // @Router /cas/import [post]
-func (r *BackendCAHttpRoutes) ImportCA(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) ImportCA(ctx *gin.Context) {
 	var requestBody resources.ImportCABody
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
@@ -334,7 +334,7 @@ func (r *BackendCAHttpRoutes) ImportCA(ctx *gin.Context) {
 // @Failure 400 {string} string "Struct Validation error"
 // @Failure 500
 // @Router /cas/{id}/metadata [put]
-func (r *BackendCAHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 	var requestBody resources.UpdateCAMetadataBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
@@ -370,7 +370,7 @@ func (r *BackendCAHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 	ctx.JSON(200, ca)
 }
 
-func (r *BackendCAHttpRoutes) UpdateCAIssuanceExpiration(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) UpdateCAIssuanceExpiration(ctx *gin.Context) {
 	var requestBody resources.UpdateCAIssuanceExpirationBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
@@ -406,7 +406,7 @@ func (r *BackendCAHttpRoutes) UpdateCAIssuanceExpiration(ctx *gin.Context) {
 	ctx.JSON(200, ca)
 }
 
-func (r *BackendCAHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, resources.CAFiltrableFields)
 
 	type uriParams struct {
@@ -455,7 +455,7 @@ func (r *BackendCAHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 // @Success 200 {array} models.CACertificate
 // @Failure 500
 // @Router /cas [get]
-func (r *BackendCAHttpRoutes) GetAllCAs(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) GetAllCAs(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, resources.CAFiltrableFields)
 
 	cas := []models.CACertificate{}
@@ -485,7 +485,7 @@ func (r *BackendCAHttpRoutes) GetAllCAs(ctx *gin.Context) {
 	})
 }
 
-func (r *BackendCAHttpRoutes) GetAllRequests(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) GetAllRequests(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, resources.CARequestFiltrableFields)
 
 	reqs := []models.CACertificateRequest{}
@@ -515,7 +515,7 @@ func (r *BackendCAHttpRoutes) GetAllRequests(ctx *gin.Context) {
 	})
 }
 
-func (r *BackendCAHttpRoutes) GetCARequests(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) GetCARequests(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, resources.CARequestFiltrableFields)
 
 	type uriParams struct {
@@ -571,7 +571,7 @@ func (r *BackendCAHttpRoutes) GetCARequests(ctx *gin.Context) {
 // @Failure 400 {string} string "Struct Validation error"
 // @Failure 500
 // @Router /cas/{id} [get]
-func (r *BackendCAHttpRoutes) GetCAByID(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) GetCAByID(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -612,7 +612,7 @@ func (r *BackendCAHttpRoutes) GetCAByID(ctx *gin.Context) {
 // @Failure 400 {string} string "Struct Validation error || CA Status inconsistent"
 // @Failure 500
 // @Router /cas/{id} [delete]
-func (r *BackendCAHttpRoutes) DeleteCA(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) DeleteCA(ctx *gin.Context) {
 
 	type uriParams struct {
 		CAId string `uri:"id" binding:"required"`
@@ -646,7 +646,7 @@ func (r *BackendCAHttpRoutes) DeleteCA(ctx *gin.Context) {
 	ctx.JSON(200, gin.H{})
 }
 
-func (r *BackendCAHttpRoutes) UpdateCAStatus(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) UpdateCAStatus(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -699,7 +699,7 @@ func (r *BackendCAHttpRoutes) UpdateCAStatus(ctx *gin.Context) {
 // @Failure 400 {string} string "Struct Validation error"
 // @Failure 500
 // @Router /cas/{id}/certificates/{sn} [get]
-func (r *BackendCAHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 	type uriParams struct {
 		SerialNumber string `uri:"sn" binding:"required"`
 	}
@@ -738,7 +738,7 @@ func (r *BackendCAHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 // @Success 200 {array} models.Certificate
 // @Failure 500
 // @Router /certificates [get]
-func (r *BackendCAHttpRoutes) GetCertificates(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) GetCertificates(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
 
 	certs := []models.Certificate{}
@@ -770,7 +770,7 @@ func (r *BackendCAHttpRoutes) GetCertificates(ctx *gin.Context) {
 	})
 }
 
-func (r *BackendCAHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 	var expirationQueryParams resources.GetCertificatesByExpirationDateQueryParams
 	if err := ctx.BindQuery(&expirationQueryParams); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
@@ -820,7 +820,7 @@ func (r *BackendCAHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) 
 // @Failure 400 {string} string "Struct Validation error"
 // @Failure 500
 // @Router /cas/{id}/certificates [get]
-func (r *BackendCAHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
 
 	type uriParams struct {
@@ -877,7 +877,7 @@ func (r *BackendCAHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 // @Failure 400 {string} string "Struct Validation error || CA Status inconsistent"
 // @Failure 500
 // @Router /cas/{id}/certificates/sign [post]
-func (r *BackendCAHttpRoutes) SignCertificate(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) SignCertificate(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -917,7 +917,7 @@ func (r *BackendCAHttpRoutes) SignCertificate(ctx *gin.Context) {
 	ctx.JSON(201, ca)
 }
 
-func (r *BackendCAHttpRoutes) SignatureSign(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) SignatureSign(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -962,7 +962,7 @@ func (r *BackendCAHttpRoutes) SignatureSign(ctx *gin.Context) {
 	})
 }
 
-func (r *BackendCAHttpRoutes) SignatureVerify(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) SignatureVerify(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -1014,7 +1014,7 @@ func (r *BackendCAHttpRoutes) SignatureVerify(ctx *gin.Context) {
 	})
 }
 
-func (r *BackendCAHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
 
 	type uriParams struct {
@@ -1065,7 +1065,7 @@ func (r *BackendCAHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 	})
 }
 
-func (r *BackendCAHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
 
 	type uriParams struct {
@@ -1121,7 +1121,7 @@ func (r *BackendCAHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
 // @Failure 400 {string} string "Struct Validation error || New status transition not allowed for certificate"
 // @Failure 500
 // @Router /certificates/{sn}/status [put]
-func (r *BackendCAHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
 	type uriParams struct {
 		SerialNumber string `uri:"sn" binding:"required"`
 	}
@@ -1161,7 +1161,7 @@ func (r *BackendCAHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
 	ctx.JSON(200, cert)
 }
 
-func (r *BackendCAHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
 	type uriParams struct {
 		SerialNumber string `uri:"sn" binding:"required"`
 	}
@@ -1199,7 +1199,7 @@ func (r *BackendCAHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
 	ctx.JSON(200, cert)
 }
 
-func (r *BackendCAHttpRoutes) ImportCertificate(ctx *gin.Context) {
+func (r *backendCAHttpRoutes) ImportCertificate(ctx *gin.Context) {
 	var requestBody resources.ImportCertificateBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})

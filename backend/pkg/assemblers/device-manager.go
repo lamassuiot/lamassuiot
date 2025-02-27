@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
@@ -29,7 +30,13 @@ func AssembleDeviceManagerServiceWithHTTPServer(conf config.DeviceManagerConfig,
 
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
-	routes.NewDeviceManagerHTTPLayer(httpGrp, *service)
+
+	r := controllers.NewBackendDeviceManagerHttpRoutes(*service)
+	err = routes.NewDeviceManagerHTTPLayer(lHttp, httpGrp, r, conf.Server.Authorization)
+	if err != nil {
+		return nil, -1, fmt.Errorf("could not create CA HTTP routes: %s", err)
+	}
+
 	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run Device Manager http server: %s", err)

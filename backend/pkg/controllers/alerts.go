@@ -6,17 +6,24 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 )
 
-type alertsHttpRoutes struct {
+type AlertsHttpRoutes interface {
+	GetUserSubscriptions(ctx *gin.Context)
+	GetLatestEventsPerEventType(ctx *gin.Context)
+	Subscribe(ctx *gin.Context)
+	Unsubscribe(ctx *gin.Context)
+}
+
+type backendAlertsHttpRoutes struct {
 	svc services.AlertsService
 }
 
-func NewAlertsHttpRoutes(svc services.AlertsService) *alertsHttpRoutes {
-	return &alertsHttpRoutes{
+func NewBackendAlertsHttpRoutes(svc services.AlertsService) *backendAlertsHttpRoutes {
+	return &backendAlertsHttpRoutes{
 		svc: svc,
 	}
 }
 
-func (r *alertsHttpRoutes) GetUserSubscriptions(ctx *gin.Context) {
+func (r *backendAlertsHttpRoutes) GetUserSubscriptions(ctx *gin.Context) {
 	type uriParams struct {
 		UserID string `uri:"userId" binding:"required"`
 	}
@@ -43,7 +50,7 @@ func (r *alertsHttpRoutes) GetUserSubscriptions(ctx *gin.Context) {
 	ctx.JSON(200, response)
 }
 
-func (r *alertsHttpRoutes) GetLatestEventsPerEventType(ctx *gin.Context) {
+func (r *backendAlertsHttpRoutes) GetLatestEventsPerEventType(ctx *gin.Context) {
 	response, err := r.svc.GetLatestEventsPerEventType(ctx, &services.GetLatestEventsPerEventTypeInput{})
 
 	if err != nil {
@@ -58,7 +65,7 @@ func (r *alertsHttpRoutes) GetLatestEventsPerEventType(ctx *gin.Context) {
 	ctx.JSON(200, response)
 }
 
-func (r *alertsHttpRoutes) Subscribe(ctx *gin.Context) {
+func (r *backendAlertsHttpRoutes) Subscribe(ctx *gin.Context) {
 	var requestBody resources.SubscribeBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
@@ -94,7 +101,7 @@ func (r *alertsHttpRoutes) Subscribe(ctx *gin.Context) {
 	ctx.JSON(200, response)
 }
 
-func (r *alertsHttpRoutes) Unsubscribe(ctx *gin.Context) {
+func (r *backendAlertsHttpRoutes) Unsubscribe(ctx *gin.Context) {
 	type uriParams struct {
 		UserID         string `uri:"userId" binding:"required"`
 		SubscriptionID string `uri:"subId" binding:"required"`
