@@ -72,6 +72,12 @@ func (mw *LamassuAuthorizationMiddleware) Use(allowedRoles []Role) func(c *gin.C
 			return
 		}
 
+		if c.Request.Header.Get(models.HttpSourceHeader) != "" {
+			// Skip authorization for internal requests
+			c.Next()
+			return
+		}
+
 		// Get the user
 		rawToken, exists := c.Get(string(identityextractors.IdentityExtractorJWT))
 		if !exists {
