@@ -161,7 +161,6 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 		CAChain:            input.CAChain,
 		CAPrivateKey:       privKey,
 		EngineID:           input.EngineID,
-		ParentID:           input.ParentID,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err

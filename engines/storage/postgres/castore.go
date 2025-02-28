@@ -72,6 +72,42 @@ func (db *PostgresCAStore) SelectByParentCA(ctx context.Context, parentCAID stri
 	}, req.ExhaustiveRun, req.ApplyFunc)
 }
 
+func (db *PostgresCAStore) SelectBySubjectAndSubjectKeyID(ctx context.Context, sub models.Subject, skid string, req storage.StorageListRequest[models.CACertificate]) (string, error) {
+	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{
+		{query: "certificates.subject_common_name = ? AND " +
+			"certificates.subject_organization = ? AND " +
+			"certificates.subject_organization_unit = ? AND " +
+			"certificates.subject_country = ? AND " +
+			"certificates.subject_state = ? AND " +
+			"certificates.subject_locality = ? AND " +
+			"subject_key_id = ?", additionalWhere: []any{sub.CommonName,
+			sub.Organization,
+			sub.OrganizationUnit,
+			sub.Country,
+			sub.State,
+			sub.Locality,
+			skid}, joins: []string{"JOIN certificates ON ca_certificates.serial_number = certificates.serial_number"}},
+	}, req.ExhaustiveRun, req.ApplyFunc)
+}
+
+func (db *PostgresCAStore) SelectByIssuerAndAuthorityKeyID(ctx context.Context, iss models.Subject, akid string, req storage.StorageListRequest[models.CACertificate]) (string, error) {
+	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{
+		{query: "certificates.issuer_common_name = ? AND " +
+			"certificates.issuer_organization = ? AND " +
+			"certificates.issuer_organization_unit = ? AND " +
+			"certificates.issuer_country = ? AND " +
+			"certificates.issuer_state = ? AND " +
+			"certificates.issuer_locality = ? AND " +
+			"authority_key_id = ?", additionalWhere: []any{iss.CommonName,
+			iss.Organization,
+			iss.OrganizationUnit,
+			iss.Country,
+			iss.State,
+			iss.Locality,
+			akid}, joins: []string{"JOIN certificates ON ca_certificates.serial_number = certificates.serial_number"}},
+	}, req.ExhaustiveRun, req.ApplyFunc)
+}
+
 func (db *PostgresCAStore) SelectExistsByID(ctx context.Context, id string) (bool, *models.CACertificate, error) {
 	return db.querier.SelectExists(ctx, id, nil)
 }

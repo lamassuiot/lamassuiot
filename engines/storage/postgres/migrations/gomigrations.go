@@ -10,6 +10,7 @@ func RegisterGoMigrations(dbname string) {
 	switch dbname {
 	case "ca":
 		ca.Register_20250123125500_ca_aws_metadata()
+		ca.Register_20250226114600_ca_add_kids()
 	case "dmsmanager":
 		dmsmanager.Register_20241230124809_serverkeygen_revokereenroll()
 	}
