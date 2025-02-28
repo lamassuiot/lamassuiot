@@ -43,7 +43,7 @@ func AssembleAWSIoTManagerService(conf ConnectorServiceConfig, caService service
 		return nil, err
 	}
 
-	routerHandler, err := ceventbus.NewEventBusMessageHandler("AWSConnector-DEFAULT", "#", subscriber, lMessaging, *eventHandlers)
+	routerHandler, err := ceventbus.NewEventBusMessageHandler("AWSConnector-DEFAULT", []string{"#"}, subscriber, lMessaging, *eventHandlers)
 	if err != nil {
 		lMessaging.Errorf("could not generate Event Bus Subscription Handler: %s", err)
 	}

@@ -1,7 +1,6 @@
 package jobs
 
 import (
-	"strings"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -22,16 +21,23 @@ func NewJobScheduler(logger *logrus.Entry, frequency string, job cron.Job) *JobS
 	var jobId cron.EntryID
 
 	logger.Infof("enabling periodic monitoring with cron expression: '%s'", frequency)
-	if strings.Count(frequency, " ") == 5 {
-		logger.Warn("periodic monitoring system contains 'second level' scheduling. This may cause performance issues in production scenarios")
+	f, err := GetSchedulerPeriod(frequency)
+	if err != nil {
+		f = time.Duration(30 * time.Minute)
+		logger.Warnf("could not parse frequency. defaulting to %s: %v", err, f)
+	}
+
+	if f < time.Minute {
+		logger.Warn("periodic monitoring system contains 'sub-minute' scheduling. This may cause performance issues in production scenarios")
 		scheduler = cron.New(cron.WithSeconds())
 	}
 
+	cds := cron.ConstantDelaySchedule{
+		Delay: f,
+	}
+
 	if job != nil {
-		jobId, err = scheduler.AddJob(frequency, job)
-		if err != nil {
-			logger.Errorf("could not add scheduled run for job: %v", err)
-		}
+		jobId = scheduler.Schedule(cds, job)
 	}
 
 	return &JobScheduler{
@@ -53,4 +59,23 @@ func (js *JobScheduler) NextRun() time.Time {
 func (js *JobScheduler) Stop() {
 	js.scheduler.Remove(js.jobId)
 	<-js.scheduler.Stop().Done()
+}
+
+func GetSchedulerPeriod(frequency string) (time.Duration, error) {
+	// First parse as regular duration
+	dur, err := time.ParseDuration(frequency)
+	if err == nil {
+		return dur, nil
+	}
+
+	// Fallback to parse as cron expression
+	schedule, err := cron.ParseStandard(frequency)
+	if err != nil {
+		return 0, err
+	}
+
+	now := time.Now()
+	nextFire := schedule.Next(now)
+	period := nextFire.Sub(now)
+	return period, nil
 }

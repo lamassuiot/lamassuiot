@@ -2,32 +2,36 @@ package eventbus
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services/eventhandling"
 	"github.com/sirupsen/logrus"
 )
 
 type EventSubscriptionHandler struct {
-	router      *message.Router
-	subscriber  *message.Subscriber
-	handlerName string
-	handler     *message.Handler
+	router     *message.Router
+	subscriber *message.Subscriber
+	handlers   []*message.Handler
 }
 
-func NewEventBusMessageHandler(handlerName string, topic string, sub message.Subscriber, lMessaging *logrus.Entry, handler eventhandling.EventHandler) (*EventSubscriptionHandler, error) {
+func NewEventBusMessageHandler(service models.ServiceName, topics []string, sub message.Subscriber, lMessaging *logrus.Entry, handler eventhandling.EventHandler) (*EventSubscriptionHandler, error) {
 	router, err := NewMessageRouter(lMessaging)
 	if err != nil {
 		return nil, err
 	}
 
-	mHandler := router.AddNoPublisherHandler(handlerName, topic, sub, handler.HandleMessage)
+	handlers := []*message.Handler{}
+	for _, topic := range topics {
+		mHandler := router.AddNoPublisherHandler(fmt.Sprintf("%s-%s", service, topic), topic, sub, handler.HandleMessage)
+		handlers = append(handlers, mHandler)
+	}
 
 	return &EventSubscriptionHandler{
-		router:      router,
-		subscriber:  &sub,
-		handlerName: handlerName,
-		handler:     mHandler,
+		router:     router,
+		subscriber: &sub,
+		handlers:   handlers,
 	}, nil
 }
 
@@ -51,6 +55,8 @@ func (s *EventSubscriptionHandler) RunAsync() error {
 }
 
 func (s *EventSubscriptionHandler) Stop() {
-	s.handler.Stop()
+	for _, handler := range s.handlers {
+		handler.Stop()
+	}
 	s.router.Close()
 }

@@ -19,7 +19,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -4341,77 +4340,4 @@ func initCA(caSDK services.CAService) (*models.CACertificate, error) {
 	})
 
 	return ca, err
-}
-
-type TestServiceBuilder struct {
-	withEventBus bool
-	withVault    bool
-	withDatabase []string
-	withMonitor  bool
-	withService  []Service
-}
-
-func (b TestServiceBuilder) WithEventBus() TestServiceBuilder {
-	b.withEventBus = true
-	return b
-}
-
-func (b TestServiceBuilder) WithVault() TestServiceBuilder {
-	b.withVault = true
-	return b
-}
-
-func (b TestServiceBuilder) WithDatabase(dbs ...string) TestServiceBuilder {
-	b.withDatabase = dbs
-	return b
-}
-
-func (b TestServiceBuilder) WithMonitor() TestServiceBuilder {
-	b.withMonitor = true
-	return b
-}
-
-func (b TestServiceBuilder) WithService(services ...Service) TestServiceBuilder {
-	b.withService = services
-	return b
-}
-
-func (b TestServiceBuilder) Build(t *testing.T) (*TestServer, error) {
-	var err error
-	eventBusConf := &TestEventBusConfig{
-		config: config.EventBusEngine{
-			Enabled: false,
-		},
-	}
-	if b.withEventBus {
-		eventBusConf, err = PrepareRabbitMQForTest()
-		if err != nil {
-			t.Fatalf("could not prepare RabbitMQ test server: %s", err)
-		}
-	}
-
-	storageConfig, err := PreparePostgresForTest(b.withDatabase)
-	if err != nil {
-		t.Fatalf("could not prepare Postgres test server: %s", err)
-	}
-
-	cryptoEngines := []CryptoEngine{GOLANG}
-	if b.withVault {
-		cryptoEngines = append(cryptoEngines, VAULT)
-	}
-
-	cryptoConfig := PrepareCryptoEnginesForTest(cryptoEngines)
-
-	if b.withService == nil {
-		b.withService = []Service{CA}
-	}
-
-	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, b.withService, b.withMonitor)
-	if err != nil {
-		t.Fatalf("could not assemble Server with HTTP server: %s", err)
-	}
-
-	t.Cleanup(testServer.AfterSuite)
-
-	return testServer, nil
 }

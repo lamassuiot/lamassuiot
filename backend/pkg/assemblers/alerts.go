@@ -63,7 +63,7 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 		}
 
 		eventHandlers := handlers.NewAlertsEventHandler(lMessaging, svc)
-		subHandler, err := ceventbus.NewEventBusMessageHandler("Alerts-DEFAULT", "#", subscriber, lMessaging, *eventHandlers)
+		subHandler, err := ceventbus.NewEventBusMessageHandler(models.AlertManagerServiceName, []string{"#"}, subscriber, lMessaging, *eventHandlers)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
 		}

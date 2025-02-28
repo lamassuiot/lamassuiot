@@ -11,7 +11,6 @@ import (
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/x509engines"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -42,7 +41,6 @@ type CAServiceBackend struct {
 	caStorage                   storage.CACertificatesRepo
 	certStorage                 storage.CertificatesRepo
 	caCertificateRequestStorage storage.CACertificateRequestRepo
-	cryptoMonitorConfig         cconfig.MonitoringJob
 	vaServerDomain              string
 	logger                      *logrus.Entry
 }
@@ -53,7 +51,6 @@ type CAServiceBuilder struct {
 	CAStorage                   storage.CACertificatesRepo
 	CertificateStorage          storage.CertificatesRepo
 	CACertificateRequestStorage storage.CACertificateRequestRepo
-	CryptoMonitoringConf        cconfig.MonitoringJob
 	VAServerDomain              string
 }
 
@@ -125,7 +122,6 @@ func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
 		caStorage:                   builder.CAStorage,
 		certStorage:                 builder.CertificateStorage,
 		caCertificateRequestStorage: builder.CACertificateRequestStorage,
-		cryptoMonitorConfig:         builder.CryptoMonitoringConf,
 		vaServerDomain:              builder.VAServerDomain,
 		logger:                      builder.Logger,
 	}

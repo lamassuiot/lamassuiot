@@ -48,6 +48,7 @@ func (svc *VACrlMonitor) processVARoles(ctx context.Context, lFunc *logrus.Entry
 				input := services.CalculateCRLInput{
 					CAID: v.CAID,
 				}
+
 				_, err := svc.service.CalculateCRL(context.Background(), input)
 				if err != nil {
 					lFunc.Warnf("something went wrong while calculating CRL for CA %s: %s", v.CAID, err)

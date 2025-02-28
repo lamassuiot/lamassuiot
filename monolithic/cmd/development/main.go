@@ -346,7 +346,7 @@ func main() {
 		GatewayPort:        8443,
 		AssemblyMode:       pkg.Http,
 		CryptoEngines:      cryptoEnginesConfig.CryptoEngines,
-		CryptoMonitoring: cconfig.MonitoringJob{
+		Monitoring: cconfig.MonitoringJob{
 			Enabled:   *disableMonitor,
 			Frequency: "* * * * *",
 		},

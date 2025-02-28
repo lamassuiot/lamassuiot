@@ -70,7 +70,6 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 		CAStorage:                   caStorage,
 		CertificateStorage:          certStorage,
 		CACertificateRequestStorage: caCertRequestStorage,
-		CryptoMonitoringConf:        conf.CryptoMonitoring,
 		VAServerDomain:              conf.VAServerDomain,
 	})
 	if err != nil {
@@ -96,11 +95,11 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 	}
 
 	var scheduler *jobs.JobScheduler
-	if conf.CryptoMonitoring.Enabled {
+	if conf.CertificateMonitoringJob.Enabled {
 		log.Infof("Crypto Monitoring is enabled")
 		monitorJob := jobs.NewCryptoMonitor(svc, lMonitor)
 
-		scheduler = jobs.NewJobScheduler(lMonitor, conf.CryptoMonitoring.Frequency, monitorJob)
+		scheduler = jobs.NewJobScheduler(lMonitor, conf.CertificateMonitoringJob.Frequency, monitorJob)
 	}
 
 	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)

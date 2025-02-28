@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
 
 type basicTestHandler struct {
@@ -59,7 +60,7 @@ func TestWildcardSubscribe(t *testing.T, input EventBusTestInput) {
 				logger := helpers.SetupLogger(config.Debug, "Test Case", "sub")
 				resultChannel := make(chan int, 1)
 				sub := subFunc(fmt.Sprintf("service-%d", idx))
-				subHandler, err := NewEventBusMessageHandler(fmt.Sprintf("handler-%d", idx), tc.subscriptionKey, sub, logger, &basicTestHandler{
+				subHandler, err := NewEventBusMessageHandler(models.ServiceName(fmt.Sprintf("handler-%d", idx)), []string{tc.subscriptionKey}, sub, logger, &basicTestHandler{
 					handler: func(msg *message.Message) error {
 						resultChannel <- 1
 						return nil
@@ -182,7 +183,7 @@ func TestMultiServiceSubscribe(t *testing.T, input EventBusTestInput) {
 
 				for idx, s := range tc.subscriptions {
 					sub := subFunc(s.serviceID)
-					subHandler, err := NewEventBusMessageHandler(fmt.Sprintf("handler-%d-%d", time.Now().UnixMilli(), idx), s.subscriptionKey, sub, logger, &basicTestHandler{
+					subHandler, err := NewEventBusMessageHandler(models.ServiceName(fmt.Sprintf("handler-%d-%d", time.Now().UnixMilli(), idx)), []string{s.subscriptionKey}, sub, logger, &basicTestHandler{
 						handler: func(msg *message.Message) error {
 							t.Logf("subscriber %s - %s message ACK", s.serviceID, s.subscriptionKey)
 							resultChannel <- s.serviceID
@@ -322,7 +323,7 @@ func TestMultiConsumers(t *testing.T, input EventBusTestInput) {
 					sub := subFunc(s.serviceID)
 
 					//SQS Can only include alphanumeric characters, hyphens, or underscores. 1 to 80 in length
-					subHandler, err := NewEventBusMessageHandler(fmt.Sprintf("handler-%d-%d", time.Now().UnixMilli(), idx), s.subscriptionKey, sub, logger, &basicTestHandler{
+					subHandler, err := NewEventBusMessageHandler(models.ServiceName(fmt.Sprintf("handler-%d-%d", time.Now().UnixMilli(), idx)), []string{s.subscriptionKey}, sub, logger, &basicTestHandler{
 						handler: func(msg *message.Message) error {
 							t.Logf("subscriber %s - %s message ACK", s.serviceID, s.subscriptionKey)
 							resultChannel <- s.serviceID

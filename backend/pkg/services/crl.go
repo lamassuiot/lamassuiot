@@ -10,7 +10,6 @@ import (
 	"math/big"
 	"time"
 
-	goStore "github.com/chartmuseum/storage"
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -19,23 +18,24 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
+	"gocloud.dev/blob"
 )
 
 var crlValidate *validator.Validate
 
 type CRLServiceBackend struct {
-	caSDK     services.CAService
-	logger    *logrus.Entry
-	fsStorage goStore.Backend
-	vaRepo    storage.VARepo
-	service   services.CRLService
+	caSDK   services.CAService
+	logger  *logrus.Entry
+	vaRepo  storage.VARepo
+	service services.CRLService
+	bucket  *blob.Bucket
 }
 
 type CRLServiceBuilder struct {
-	FsStorage goStore.Backend
-	VARepo    storage.VARepo
-	Logger    *logrus.Entry
-	CAClient  services.CAService
+	VARepo   storage.VARepo
+	Logger   *logrus.Entry
+	CAClient services.CAService
+	Bucket   *blob.Bucket
 }
 
 type CRLMiddleware func(services.CRLService) services.CRLService
@@ -44,10 +44,9 @@ func NewCRLService(builder CRLServiceBuilder) (services.CRLService, error) {
 	crlValidate = validator.New()
 
 	svc := &CRLServiceBackend{
-		caSDK:     builder.CAClient,
-		logger:    builder.Logger,
-		vaRepo:    builder.VARepo,
-		fsStorage: builder.FsStorage,
+		caSDK:  builder.CAClient,
+		logger: builder.Logger,
+		vaRepo: builder.VARepo,
 	}
 
 	svc.service = svc
@@ -84,7 +83,7 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 		versionStr = role.LatestCRL.Version.String()
 	}
 
-	crlPem, err := svc.fsStorage.GetObject(fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CAID, versionStr))
+	crlPem, err := svc.bucket.ReadAll(ctx, fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CAID, versionStr))
 	if err != nil {
 		lFunc.Errorf("something went wrong while reading CRL: %s", err)
 		return nil, err

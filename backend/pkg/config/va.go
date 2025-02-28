@@ -8,8 +8,8 @@ type VAconfig struct {
 	SubscriberEventBus cconfig.EventBusEngine `mapstructure:"subscriber_event_bus"`
 	PublisherEventBus  cconfig.EventBusEngine `mapstructure:"publisher_event_bus"`
 	Storage            cconfig.PluggableStorageEngine
-
-	CAClient CAClient `mapstructure:"ca_client"`
+	CRLMonitoringJob   cconfig.MonitoringJob `mapstructure:"crl_monitoring_job"`
+	CAClient           CAClient              `mapstructure:"ca_client"`
 }
 
 type CAClient struct {

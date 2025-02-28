@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"math/big"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -154,6 +155,8 @@ func TestCRLCertificateRevocation(t *testing.T) {
 		issuedCertsSNs = append(issuedCertsSNs, crt.SerialNumber)
 	}
 
+	time.Sleep(3 * time.Second) // Sleep to ensure that the CRL is generated (CRL is generated when the CA is created via event bus)
+
 	// By Default, a VARole is created for the CA automatically setting the CRL to be regenerated on revoke
 	// First get v1 CRL and check that it has 0 entries
 	crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, DefaultCAID), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
@@ -162,7 +165,7 @@ func TestCRLCertificateRevocation(t *testing.T) {
 	}
 
 	assert.Equal(t, 0, len(crl.RevokedCertificateEntries), "CRL should have 0 entries")
-	assert.Equal(t, 1, crl.Number, "CRL should have version 1")
+	assert.Equal(t, big.NewInt(1), crl.Number, "CRL should have version 1")
 
 	// Revoke a certificate
 	rndSN := issuedCertsSNs[rand.Intn(len(issuedCertsSNs))]
@@ -174,6 +177,9 @@ func TestCRLCertificateRevocation(t *testing.T) {
 
 	assert.NoError(t, err, "could not revoke certificate: %s", err)
 
+	// Sleep to ensure that the CRL is regenerated. Since the CRL is generated on revoke via event bus, it may take some time.
+	time.Sleep(2 * time.Second)
+
 	// Get v2 CRL and check that it has 1 entry
 	crl, err = external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, DefaultCAID), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
 	if err != nil {
@@ -181,7 +187,7 @@ func TestCRLCertificateRevocation(t *testing.T) {
 	}
 
 	assert.Equal(t, 1, len(crl.RevokedCertificateEntries), "CRL should have 1 entry")
-	assert.Equal(t, 2, crl.Number, "CRL should have version 2")
+	assert.Equal(t, big.NewInt(2), crl.Number, "CRL should have version 2")
 }
 
 func TestPostOCSP(t *testing.T) {
@@ -502,7 +508,7 @@ func getOCSPResponseGet(ocspServerURL string, crt *models.Certificate, issuer *m
 }
 
 func StartVAServiceTestServer(t *testing.T) (*TestServer, error) {
-	testServer, err := TestServiceBuilder{}.WithDatabase("ca").WithService(CA, VA).Build(t)
+	testServer, err := TestServiceBuilder{}.WithDatabase("ca", "va").WithService(CA, VA).WithMonitor().WithEventBus().Build(t)
 	if err != nil {
 		return nil, fmt.Errorf("could not create Device Manager test server: %s", err)
 	}
