@@ -3,9 +3,9 @@ package assemblers
 import (
 	"fmt"
 
-	fsStorage "github.com/chartmuseum/storage"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
+	fssBuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/fs-storage/builder"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
@@ -17,6 +17,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	log "github.com/sirupsen/logrus"
+	"gocloud.dev/blob"
 )
 
 func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CAService, serviceInfo models.APIServiceInfo) (*services.CRLService, *services.OCSPService, int, error) {
@@ -54,11 +55,16 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService) (*ser
 		return nil, nil, fmt.Errorf("could not get device storage: %s", err)
 	}
 
+	bucket, err := fssBuilder.BuildFSStorageEngine(lStorage, conf.FilesystemStorage)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not create filesystem storage engine: %s", err)
+	}
+
 	crl, err := beService.NewCRLService(beService.CRLServiceBuilder{
-		Logger:    lSvc,
-		CAClient:  caService,
-		VARepo:    vaRoleRepo,
-		FsStorage: fsStorage.NewLocalFilesystemBackend("."),
+		Logger:   lSvc,
+		CAClient: caService,
+		VARepo:   vaRoleRepo,
+		Bucket:   (*blob.Bucket)(bucket),
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create CRL service: %s", err)

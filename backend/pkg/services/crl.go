@@ -89,7 +89,7 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 		return nil, err
 	}
 
-	crlDer, _ := pem.Decode(crlPem.Content)
+	crlDer, _ := pem.Decode(crlPem)
 
 	crl, err := x509.ParseRevocationList(crlDer.Bytes)
 	if err != nil {
@@ -214,7 +214,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 	}
 
 	crlPem := pem.EncodeToMemory(&pem.Block{Type: "X509 CRL", Bytes: crlDer})
-	err = svc.fsStorage.PutObject(fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CAID, crl.Number), crlPem)
+	err = svc.bucket.WriteAll(ctx, fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CAID, crl.Number), crlPem, nil)
 	if err != nil {
 		lFunc.Errorf("something went wrong while saving CRL: %s", err)
 		return nil, err

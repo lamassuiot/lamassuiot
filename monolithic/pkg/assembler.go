@@ -99,6 +99,17 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, error) {
 				Port:               0,
 				Protocol:           cconfig.HTTP,
 			},
+			FilesystemStorage: cconfig.FSStorageConfig{
+				ID:   "fs",
+				Type: cconfig.LocalFilesystem,
+				Config: map[string]interface{}{
+					"storage_directory": "/home/ubuntu/dev/lamassuiot/gocloud",
+				},
+			},
+			CRLMonitoringJob: cconfig.MonitoringJob{
+				Enabled:   true,
+				Frequency: "30s",
+			},
 			SubscriberEventBus: conf.SubscriberEventBus,
 			PublisherEventBus:  conf.PublisherEventBus,
 			Storage:            conf.Storage,

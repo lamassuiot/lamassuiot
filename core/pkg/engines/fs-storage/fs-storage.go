@@ -1,4 +1,4 @@
-package cryptoengines
+package fsstorage
 
 import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -6,14 +6,12 @@ import (
 	"gocloud.dev/blob"
 )
 
-type FSStorageEngine blob.Bucket
+var fsStorageBuilders = make(map[config.FSStorageProvider]func(*logrus.Entry, config.FSStorageConfig) (*blob.Bucket, error))
 
-var fsStorageBuilders = make(map[config.CryptoEngineProvider]func(*logrus.Entry, config.FSStorageConfig) (blob.Bucket, error))
-
-func RegisterFSStorageEngine(name config.CryptoEngineProvider, builder func(*logrus.Entry, config.FSStorageConfig) (blob.Bucket, error)) {
+func RegisterFSStorageEngine(name config.FSStorageProvider, builder func(*logrus.Entry, config.FSStorageConfig) (*blob.Bucket, error)) {
 	fsStorageBuilders[name] = builder
 }
 
-func GetEngineBuilder(name config.CryptoEngineProvider) func(*logrus.Entry, config.FSStorageConfig) (blob.Bucket, error) {
+func GetEngineBuilder(name config.FSStorageProvider) func(*logrus.Entry, config.FSStorageConfig) (*blob.Bucket, error) {
 	return fsStorageBuilders[name]
 }

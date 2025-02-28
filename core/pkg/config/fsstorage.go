@@ -10,14 +10,14 @@ const (
 type FSStorageConfig struct {
 	ID       string                 `mapstructure:"id"`
 	Metadata map[string]interface{} `mapstructure:"metadata"`
-	Type     CryptoEngineProvider   `mapstructure:"type"`
+	Type     FSStorageProvider      `mapstructure:"type"`
 	Config   map[string]interface{} `mapstructure:",remain"`
 }
 
 type FSStorageConfigAdapter[E any] struct {
 	ID       string
 	Metadata map[string]interface{}
-	Type     CryptoEngineProvider
+	Type     FSStorageProvider
 	Config   E
 }
 
