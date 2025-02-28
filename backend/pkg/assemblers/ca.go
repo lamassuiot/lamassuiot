@@ -4,12 +4,11 @@ import (
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	cebuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/cryptoengines/builder"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
-	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	beService "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
@@ -42,31 +41,15 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "CA", "Service")
 	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Event Bus")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "CA", "Storage")
-	lCryptoEng := helpers.SetupLogger(conf.CryptoEngineConfig.LogLevel, "CA", "CryptoEngine")
 	lMonitor := helpers.SetupLogger(conf.Logs.Level, "CA", "Crypto Monitoring")
-
-	engines, err := createCryptoEngines(lCryptoEng, conf)
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not create crypto engines: %s", err)
-	}
-
-	for engineID, engine := range engines {
-		logEntry := log.NewEntry(log.StandardLogger())
-		if engine.Default {
-			logEntry = log.WithField("subsystem-provider", "DEFAULT ENGINE")
-
-		}
-		logEntry.Infof("loaded %s engine with id %s", engine.Service.GetEngineConfig().Type, engineID)
-	}
 
 	caStorage, certStorage, caCertRequestStorage, err := createCAStorageInstance(lStorage, conf.Storage)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create CA storage instance: %s", err)
 	}
 
-	svc, err := lservices.NewCAService(lservices.CAServiceBuilder{
+	svc, err := beService.NewCAService(beService.CAServiceBuilder{
 		Logger:                      lSvc,
-		CryptoEngines:               engines,
 		CAStorage:                   caStorage,
 		CertificateStorage:          certStorage,
 		CACertificateRequestStorage: caCertRequestStorage,
@@ -77,7 +60,7 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 		return nil, nil, fmt.Errorf("could not create CA service: %v", err)
 	}
 
-	caSvc := svc.(*lservices.CAServiceBackend)
+	caSvc := svc.(*beService.CAServiceBackend)
 
 	if conf.PublisherEventBus.Enabled {
 		log.Infof("Event Bus is enabled")
@@ -131,23 +114,4 @@ func createCAStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEng
 	}
 
 	return caStorage, certStorage, caCertRequestStorage, nil
-}
-
-func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*lservices.Engine, error) {
-	engines := map[string]*lservices.Engine{}
-
-	for _, cfg := range conf.CryptoEngineConfig.CryptoEngines {
-		engine, err := cebuilder.BuildCryptoEngine(logger, cfg)
-
-		if err != nil {
-			log.Warnf("skipping engine with id %s of type %s. Can not create engine: %s", cfg.ID, cfg.Type, err)
-		} else {
-			engines[cfg.ID] = &lservices.Engine{
-				Default: cfg.ID == conf.CryptoEngineConfig.DefaultEngine,
-				Service: engine,
-			}
-		}
-	}
-
-	return engines, nil
 }

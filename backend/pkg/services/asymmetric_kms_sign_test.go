@@ -1,56 +1,30 @@
-package x509engines
+package services
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/rsa"
 	"crypto/sha512"
 	"crypto/x509"
 	"fmt"
+	"os"
 	"testing"
-	"time"
 
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3"
 )
 
-func generateAndImportCA(keyType x509.PublicKeyAlgorithm, engine cryptoengines.CryptoEngine) (*x509.Certificate, any, error) {
-	caCertificate, key, err := chelpers.GenerateSelfSignedCA(keyType, 365*24*time.Hour, "MyCA")
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to generate self signed CA: %s", err)
-	}
-
-	switch keyType {
-	case x509.RSA:
-		rsaPrivateKey, ok := key.(*rsa.PrivateKey)
-		if !ok {
-			return nil, nil, fmt.Errorf("private key is not of type rsa.PrivateKey")
-		}
-
-		_, key, err = engine.ImportRSAPrivateKey(rsaPrivateKey)
-		return caCertificate, key, err
-	case x509.ECDSA:
-		ecdsaPrivateKey, ok := key.(*ecdsa.PrivateKey)
-		if !ok {
-			return nil, nil, fmt.Errorf("private key is not of type ecdsa.PrivateKey")
-		}
-
-		_, key, err := engine.ImportECDSAPrivateKey(ecdsaPrivateKey)
-		return caCertificate, key, err
-	default:
-		return nil, nil, fmt.Errorf("unsupported key type")
-	}
-}
-
 func checkValidSignature(validationResult bool, signatureError error, validationError error) error {
-
 	if signatureError != nil {
 		return fmt.Errorf("unexpected signature error %s", signatureError)
 	}
+
 	if validationError != nil {
 		return fmt.Errorf("unexpected validation error %s", validationError)
 	}
+
 	if !validationResult {
 		return fmt.Errorf("unexpected signature validation result, expected true, got false")
 	}
@@ -59,22 +33,58 @@ func checkValidSignature(validationResult bool, signatureError error, validation
 }
 
 func TestSignVerify(t *testing.T) {
-	tempDir, engine, x509Engine := setup(t)
-	defer teardown(tempDir)
+	filesystem.Register()
+	tempDir := t.TempDir()
+	log := chelpers.SetupLogger(config.Info, "Test Case", "Golang Engine")
+	conf := config.CryptoEngineConfig{
+		ID:       "test-engine",
+		Type:     config.FilesystemProvider,
+		Metadata: map[string]interface{}{},
+		Config: map[string]interface{}{
+			"storage_directory": tempDir,
+		},
+	}
 
-	caCertificateRSA, _, err := generateAndImportCA(x509.RSA, engine)
+	builder := cryptoengines.GetEngineBuilder(config.FilesystemProvider)
+	engine, _ := builder(log, conf)
+
+	defer os.RemoveAll(tempDir)
+
+	kms := AsymmetricKMSServiceBackend{
+		cryptoEngines: map[string]*cryptoengines.CryptoEngine{
+			"test-engine": &engine,
+		},
+		defaultCryptoEngine:   &engine,
+		defaultCryptoEngineID: "test-engine",
+		logger:                log,
+		kmsStore:              nil,
+	}
+
+	ecdsaKP, err := kms.CreateKeyPair(context.Background(), services.CreateKeyPairInput{
+		EngineID:  "test-engine",
+		Algorithm: x509.ECDSA,
+		KeySize:   256,
+	})
 	if err != nil {
 		t.Fatalf("failed to generate and import CA: %s", err)
 	}
-	caCertificateECDSA, _, err := generateAndImportCA(x509.ECDSA, engine)
+
+	rsaKP, err := kms.CreateKeyPair(context.Background(), services.CreateKeyPairInput{
+		Algorithm: x509.RSA,
+		KeySize:   2048,
+	})
+	if err != nil {
+		t.Fatalf("failed to generate and import CA: %s", err)
+	}
 
 	if err != nil {
 		t.Fatalf("failed to generate and import CA: %s", err)
 	}
 
-	caCertificateNotImported, _, err := chelpers.GenerateSelfSignedCA(x509.ECDSA, 365*24*time.Hour, "MyCA")
-	if err != nil {
-		t.Fatalf("failed to generate self signed CA: %s", err)
+	notImportedKP := models.KeyPair{
+		KeyID:     "not-imported",
+		Algorithm: x509.RSA,
+		KeySize:   2048,
 	}
 
 	// Create a sample message
@@ -82,81 +92,81 @@ func TestSignVerify(t *testing.T) {
 
 	var testcases = []struct {
 		name             string
-		certificate      *x509.Certificate
+		kp               models.KeyPair
 		msgType          models.SignMessageType
-		signingAlgorithm string
-		verifyAlgorithm  string
+		signingAlgorithm x509.SignatureAlgorithm
+		verifyAlgorithm  x509.SignatureAlgorithm
 		value            func() ([]byte, error)
 		check            func(validationResult bool, signatureError error, validationError error) error
 	}{
 		{
 			name:             "OK/RSASSA_PSS_SHA_256",
-			certificate:      caCertificateRSA,
+			kp:               *rsaKP,
 			msgType:          models.Raw,
-			signingAlgorithm: "RSASSA_PSS_SHA_256",
+			signingAlgorithm: x509.SHA256WithRSAPSS,
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/RSASSA_PKCS1_V1_5_SHA_256",
-			certificate:      caCertificateRSA,
+			kp:               *rsaKP,
 			msgType:          models.Raw,
-			signingAlgorithm: "RSASSA_PKCS1_V1_5_SHA_256",
+			signingAlgorithm: x509.SHA256WithRSA,
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/RSASSA_PSS_SHA_384",
-			certificate:      caCertificateRSA,
+			kp:               *rsaKP,
 			msgType:          models.Raw,
-			signingAlgorithm: "RSASSA_PSS_SHA_384",
+			signingAlgorithm: x509.SHA384WithRSAPSS,
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/RSASSA_PKCS1_V1_5_SHA_384",
-			certificate:      caCertificateRSA,
+			kp:               *rsaKP,
 			msgType:          models.Raw,
-			signingAlgorithm: "RSASSA_PKCS1_V1_5_SHA_384",
+			signingAlgorithm: x509.SHA384WithRSA,
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/RSASSA_PSS_SHA_512",
-			certificate:      caCertificateRSA,
+			kp:               *rsaKP,
 			msgType:          models.Raw,
-			signingAlgorithm: "RSASSA_PSS_SHA_512",
+			signingAlgorithm: x509.SHA512WithRSAPSS,
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/RSASSA_PKCS1_V1_5_SHA_512",
-			certificate:      caCertificateRSA,
+			kp:               *rsaKP,
 			msgType:          models.Raw,
-			signingAlgorithm: "RSASSA_PKCS1_V1_5_SHA_512",
+			signingAlgorithm: x509.SHA512WithRSA,
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/ECDSA_SHA_256",
-			certificate:      caCertificateECDSA,
+			kp:               *ecdsaKP,
 			msgType:          models.Raw,
-			signingAlgorithm: "ECDSA_SHA_256",
+			signingAlgorithm: x509.ECDSAWithSHA256,
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/ECDSA_SHA_384",
-			certificate:      caCertificateECDSA,
+			kp:               *ecdsaKP,
 			msgType:          models.Raw,
-			signingAlgorithm: "ECDSA_SHA_384",
+			signingAlgorithm: x509.ECDSAWithSHA384,
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/ECDSA_SHA_512",
-			certificate:      caCertificateECDSA,
+			kp:               *ecdsaKP,
 			msgType:          models.Raw,
-			signingAlgorithm: "ECDSA_SHA_512",
+			signingAlgorithm: x509.ECDSAWithSHA512,
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/DIGEST/RSASSA_PSS_SHA_512",
-			certificate:      caCertificateRSA,
+			kp:               *rsaKP,
 			msgType:          models.Hashed,
-			signingAlgorithm: "RSASSA_PSS_SHA_512",
+			signingAlgorithm: x509.SHA512WithRSAPSS,
 			check:            checkValidSignature,
 			value: func() ([]byte, error) {
 				h := sha512.New()
@@ -166,9 +176,9 @@ func TestSignVerify(t *testing.T) {
 		},
 		{
 			name:             "OK/DIGEST/ECDSA_SHA_512",
-			certificate:      caCertificateECDSA,
+			kp:               *ecdsaKP,
 			msgType:          models.Hashed,
-			signingAlgorithm: "ECDSA_SHA_512",
+			signingAlgorithm: x509.ECDSAWithSHA512,
 			check:            checkValidSignature,
 			value: func() ([]byte, error) {
 				h := sha512.New()
@@ -177,40 +187,10 @@ func TestSignVerify(t *testing.T) {
 			},
 		},
 		{
-			name:             "FAIL/ECDSA_UNKNOWN",
-			certificate:      caCertificateECDSA,
-			msgType:          models.Raw,
-			signingAlgorithm: "ECDSA_UNKNOWN",
-			check: func(validationResult bool, signatureError, validationError error) error {
-				if signatureError == nil {
-					return fmt.Errorf("expected signature error, got nil")
-				}
-				if validationError == nil {
-					return fmt.Errorf("expected validation error, got nil")
-				}
-				return nil
-			},
-		},
-		{
-			name:             "FAIL/RSA_UNKNOWN",
-			certificate:      caCertificateRSA,
-			msgType:          models.Raw,
-			signingAlgorithm: "RSA_UNKNOWN",
-			check: func(validationResult bool, signatureError, validationError error) error {
-				if signatureError == nil {
-					return fmt.Errorf("expected signature error, got nil")
-				}
-				if validationError == nil {
-					return fmt.Errorf("expected validation error, got nil")
-				}
-				return nil
-			},
-		},
-		{
 			name:             "FAIL/RSA_WITH_ECDSA_CA",
-			certificate:      caCertificateECDSA,
+			kp:               *ecdsaKP,
 			msgType:          models.Raw,
-			signingAlgorithm: "RSASSA_PSS_SHA_512",
+			signingAlgorithm: x509.SHA256WithRSA,
 			check: func(validationResult bool, signatureError, validationError error) error {
 				if signatureError == nil {
 					return fmt.Errorf("expected signature error, got nil")
@@ -223,10 +203,10 @@ func TestSignVerify(t *testing.T) {
 		},
 		{
 			name:             "FAIL/SIGN_AND_VERIFY_WITH_DIFFERENT_ALGORITHMS",
-			certificate:      caCertificateRSA,
+			kp:               *rsaKP,
 			msgType:          models.Raw,
-			signingAlgorithm: "RSASSA_PSS_SHA_256",
-			verifyAlgorithm:  "RSASSA_PSS_SHA_384",
+			signingAlgorithm: x509.SHA256WithRSA,
+			verifyAlgorithm:  x509.SHA384WithRSA,
 			check: func(validationResult bool, signatureError, validationError error) error {
 				if signatureError != nil {
 					return fmt.Errorf("unexpected signature error %s", signatureError)
@@ -243,10 +223,10 @@ func TestSignVerify(t *testing.T) {
 			},
 		},
 		{
-			name:             "FAIL/UNKOWN_CA",
-			certificate:      caCertificateNotImported,
+			name:             "FAIL/UNKNOWN_CA",
+			kp:               notImportedKP,
 			msgType:          models.Raw,
-			signingAlgorithm: "RSASSA_PSS_SHA_256",
+			signingAlgorithm: x509.SHA256WithRSA,
 			check: func(validationResult bool, signatureError, validationError error) error {
 				if signatureError == nil {
 					return fmt.Errorf("expected signature error, got nil")
@@ -274,12 +254,27 @@ func TestSignVerify(t *testing.T) {
 
 			ctx := context.Background()
 			// Call the Sign method
-			signature, errSignature := x509Engine.Sign(ctx, tc.certificate, value, tc.msgType, tc.signingAlgorithm)
+			signature, errSignature := kms.Sign(ctx, services.KMSSignInput{
+				KeyID:              tc.kp.KeyID,
+				Message:            value,
+				MessageType:        tc.msgType,
+				SignatureAlgorithm: tc.signingAlgorithm,
+			})
+
 			verifyAlgorithm := tc.signingAlgorithm
-			if tc.verifyAlgorithm != "" {
+			if tc.verifyAlgorithm != 0 {
 				verifyAlgorithm = tc.verifyAlgorithm
 			}
-			val, errValidation := x509Engine.Verify(ctx, tc.certificate, signature, value, tc.msgType, verifyAlgorithm)
+
+			// Call the Verify method
+			val, errValidation := kms.Verify(ctx, services.VerifyInput{
+				KeyID:              tc.kp.KeyID,
+				Message:            value,
+				MessageType:        tc.msgType,
+				SignatureAlgorithm: verifyAlgorithm,
+				Signature:          signature,
+			})
+
 			err := tc.check(val, errSignature, errValidation)
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)

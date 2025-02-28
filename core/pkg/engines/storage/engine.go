@@ -13,6 +13,7 @@ type CommonStorageEngine struct {
 	DMS                  DMSRepo
 	Events               EventRepository
 	Subscriptions        SubscriptionsRepository
+	AsymmetricKMS        AsymmetricKMSRepo
 }
 
 type StorageEngine interface {
@@ -24,6 +25,7 @@ type StorageEngine interface {
 	GetDMSStorage() (DMSRepo, error)
 	GetEnventsStorage() (EventRepository, error)
 	GetSubscriptionsStorage() (SubscriptionsRepository, error)
+	GetAsymmetricKMSStorage() (AsymmetricKMSRepo, error)
 }
 
 // map of available storage engines with config.StorageProvider as key and function to build the storage engine as value

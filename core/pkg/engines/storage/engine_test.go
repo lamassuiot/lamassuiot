@@ -42,6 +42,10 @@ func (m *MockStorageEngine) GetSubscriptionsStorage() (SubscriptionsRepository, 
 	return nil, nil
 }
 
+func (m *MockStorageEngine) GetAsymmetricKMSStorage() (AsymmetricKMSRepo, error) {
+	return nil, nil
+}
+
 func TestRegisterStorageEngine(t *testing.T) {
 	mockProvider := config.StorageProvider("mockProvider")
 	mockBuilder := func(logger *logrus.Entry, config config.PluggableStorageEngine) (StorageEngine, error) {

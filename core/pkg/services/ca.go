@@ -190,6 +190,8 @@ type CreateCertificateInput struct {
 
 type ImportCertificateInput struct {
 	Certificate *models.X509Certificate
+	EngineID    string
+	PrivateKey  *models.X509PrivateKey
 	Metadata    map[string]any
 }
 

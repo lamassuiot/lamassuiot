@@ -73,13 +73,13 @@ type SignCertificateBody struct {
 	Profile     models.IssuanceProfile         `json:"profile"`
 }
 
-type SignatureSignBody struct {
+type CASignatureSignBody struct {
 	Message          string                 `json:"message"`
 	MessageType      models.SignMessageType `json:"message_type"`
 	SigningAlgorithm string                 `json:"signature_algorithm"`
 }
 
-type SignatureVerifyBody struct {
+type CASignatureVerifyBody struct {
 	Signature        string                 `json:"signature"`
 	Message          string                 `json:"message"`
 	MessageType      models.SignMessageType `json:"message_type"`

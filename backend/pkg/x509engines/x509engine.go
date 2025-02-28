@@ -3,26 +3,16 @@ package x509engines
 import (
 	"context"
 	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
-	"crypto/sha512"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
-	"errors"
 	"fmt"
-	"hash"
 	"math/big"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	cmodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -31,62 +21,14 @@ import (
 )
 
 type X509Engine struct {
-	logger           *logrus.Entry
-	cryptoEngine     cryptoengines.CryptoEngine
-	vaDomains        []string
-	softCryptoEngine *software.SoftwareCryptoEngine
+	logger    *logrus.Entry
+	vaDomains []string
 }
 
-func NewX509Engine(logger *logrus.Entry, cryptoEngine *cryptoengines.CryptoEngine, vaDomains []string) X509Engine {
+func NewX509Engine(logger *logrus.Entry, vaDomains []string) X509Engine {
 	return X509Engine{
-		cryptoEngine:     *cryptoEngine,
-		vaDomains:        vaDomains,
-		logger:           logger,
-		softCryptoEngine: software.NewSoftwareCryptoEngine(logger),
-	}
-}
-
-func (engine X509Engine) GetEngineConfig() cmodels.CryptoEngineInfo {
-	return engine.cryptoEngine.GetEngineConfig()
-}
-
-func (engine X509Engine) GenerateKeyPair(ctx context.Context, keyMetadata cmodels.KeyMetadata) (string, crypto.Signer, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
-
-	if cmodels.KeyType(keyMetadata.Type) == cmodels.KeyType(x509.RSA) {
-		lFunc.Debugf("requesting cryptoengine instance for RSA key generation")
-
-		keyID, signer, err := engine.cryptoEngine.CreateRSAPrivateKey(keyMetadata.Bits)
-		if err != nil {
-			lFunc.Errorf("cryptoengine instance failed while generating RSA key: %s", err)
-			return "", nil, err
-		}
-		lFunc.Debugf("cryptoengine successfully generated RSA key")
-		return keyID, signer, nil
-	} else {
-		var curve elliptic.Curve
-		switch keyMetadata.Bits {
-		case 224:
-			curve = elliptic.P224()
-		case 256:
-			curve = elliptic.P256()
-		case 384:
-			curve = elliptic.P384()
-		case 521:
-			curve = elliptic.P521()
-		default:
-			return "", nil, errors.New("unsupported key size for ECDSA key")
-		}
-
-		lFunc.Debugf("requesting cryptoengine instance for ECDSA key generation")
-		keyID, signer, err := engine.cryptoEngine.CreateECDSAPrivateKey(curve)
-		if err != nil {
-			lFunc.Errorf("cryptoengine instance failed while generating ECDSA key: %s", err)
-			return "", nil, err
-		}
-
-		lFunc.Debugf("cryptoengine successfully generated ECDSA key")
-		return keyID, signer, nil
+		vaDomains: vaDomains,
+		logger:    logger,
 	}
 }
 
@@ -272,15 +214,6 @@ func (engine X509Engine) GenerateCertificateRequest(ctx context.Context, csrSign
 	return csr, nil
 }
 
-func (engine X509Engine) GetCertificateSigner(ctx context.Context, caCertificate *x509.Certificate) (crypto.Signer, error) {
-	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(caCertificate.PublicKey)
-	if err != nil {
-		return nil, err
-	}
-
-	return engine.cryptoEngine.GetPrivateKeyByID(keyID)
-}
-
 func (engine X509Engine) GetDefaultCAIssuanceProfile(ctx context.Context, validity cmodels.Validity) cmodels.IssuanceProfile {
 	return cmodels.IssuanceProfile{
 		Validity:          validity,
@@ -289,169 +222,5 @@ func (engine X509Engine) GetDefaultCAIssuanceProfile(ctx context.Context, validi
 		HonorSubject:      true,
 		KeyUsage:          models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign),
 		ExtendedKeyUsages: []cmodels.X509ExtKeyUsage{},
-	}
-}
-
-func (engine X509Engine) Sign(ctx context.Context, certificate *x509.Certificate, message []byte, messageType models.SignMessageType, signingAlgorithm string) ([]byte, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
-	lFunc.Debugf("starting standard signing with certificate [%s]", certificate.Subject.CommonName)
-
-	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(certificate.PublicKey)
-	if err != nil {
-		return nil, err
-	}
-
-	lFunc.Debugf("requesting signer object to crypto engine instance")
-	privkey, err := engine.cryptoEngine.GetPrivateKeyByID(keyID)
-	if err != nil {
-		return nil, err
-	}
-	lFunc.Debugf("successfully retrieved certificate signer object")
-
-	if certificate.PublicKeyAlgorithm == x509.ECDSA {
-		var digest []byte
-		var hashFunc crypto.Hash
-		var h hash.Hash
-		if signingAlgorithm == "ECDSA_SHA_256" {
-			h = sha256.New()
-			hashFunc = crypto.SHA256
-		} else if signingAlgorithm == "ECDSA_SHA_384" {
-			h = sha512.New384()
-			hashFunc = crypto.SHA384
-		} else if signingAlgorithm == "ECDSA_SHA_512" {
-			h = sha512.New()
-			hashFunc = crypto.SHA512
-		} else {
-			return nil, errs.ErrEngineAlgNotSupported
-		}
-		if messageType == models.Raw {
-			h.Write(message)
-			digest = h.Sum(nil)
-
-		} else {
-			digest = message
-		}
-		signature, err := privkey.Sign(rand.Reader, digest, hashFunc)
-		if err != nil {
-			return nil, err
-		}
-		return signature, nil
-	} else if certificate.PublicKeyAlgorithm == x509.RSA {
-		var digest []byte
-		var hashFunc crypto.Hash
-		var h hash.Hash
-		if signingAlgorithm == "RSASSA_PSS_SHA_256" || signingAlgorithm == "RSASSA_PKCS1_V1_5_SHA_256" {
-			h = sha256.New()
-			hashFunc = crypto.SHA256
-		} else if signingAlgorithm == "RSASSA_PSS_SHA_384" || signingAlgorithm == "RSASSA_PKCS1_V1_5_SHA_384" {
-			h = sha512.New384()
-			hashFunc = crypto.SHA384
-		} else if signingAlgorithm == "RSASSA_PSS_SHA_512" || signingAlgorithm == "RSASSA_PKCS1_V1_5_SHA_512" {
-			h = sha512.New()
-			hashFunc = crypto.SHA512
-		} else {
-			return nil, errs.ErrEngineAlgNotSupported
-		}
-		if messageType == models.Raw {
-			h.Write(message)
-			digest = h.Sum(nil)
-		} else {
-			digest = message
-		}
-
-		sigAlg := strings.Split(signingAlgorithm, "_")
-		if sigAlg[1] == "PSS" {
-			signature, err := privkey.Sign(rand.Reader, digest, &rsa.PSSOptions{
-				SaltLength: rsa.PSSSaltLengthEqualsHash,
-				Hash:       hashFunc,
-			})
-			if err != nil {
-				return nil, err
-			}
-			return signature, nil
-		} else {
-			signature, err := privkey.Sign(rand.Reader, digest, hashFunc)
-			if err != nil {
-				return nil, err
-			}
-			return signature, nil
-		}
-	} else {
-		return nil, fmt.Errorf("certificate has unsupported public key algorithm: %s", certificate.PublicKeyAlgorithm)
-	}
-}
-
-func (engine X509Engine) Verify(ctx context.Context, caCertificate *x509.Certificate, signature []byte, message []byte, messageType models.SignMessageType, signingAlgorithm string) (bool, error) {
-	var err error
-	if caCertificate.PublicKeyAlgorithm == x509.ECDSA {
-		var hasher []byte
-		var h hash.Hash
-		if signingAlgorithm == "ECDSA_SHA_256" {
-			h = sha256.New()
-		} else if signingAlgorithm == "ECDSA_SHA_384" {
-			h = sha512.New384()
-		} else if signingAlgorithm == "ECDSA_SHA_512" {
-			h = sha512.New()
-		} else {
-			return false, errs.ErrEngineAlgNotSupported
-		}
-
-		if messageType == models.Raw {
-			h.Write(message)
-			hasher = h.Sum(nil)
-		} else {
-			hasher = message
-		}
-		pubK := caCertificate.PublicKey
-		ecdsaKey, _ := pubK.(*ecdsa.PublicKey)
-
-		return ecdsa.VerifyASN1(ecdsaKey, hasher, signature), nil
-	} else if caCertificate.PublicKeyAlgorithm == x509.RSA {
-		var hasher []byte
-		var hashFunc crypto.Hash
-		var h hash.Hash
-		if signingAlgorithm == "RSASSA_PSS_SHA_256" || signingAlgorithm == "RSASSA_PKCS1_V1_5_SHA_256" {
-			h = sha256.New()
-			hashFunc = crypto.SHA256
-		} else if signingAlgorithm == "RSASSA_PSS_SHA_384" || signingAlgorithm == "RSASSA_PKCS1_V1_5_SHA_384" {
-			h = sha512.New384()
-			hashFunc = crypto.SHA384
-		} else if signingAlgorithm == "RSASSA_PSS_SHA_512" || signingAlgorithm == "RSASSA_PKCS1_V1_5_SHA_512" {
-			h = sha512.New()
-			hashFunc = crypto.SHA512
-		} else {
-
-			return false, errs.ErrEngineAlgNotSupported
-		}
-
-		if messageType == models.Raw {
-			h.Write(message)
-			hasher = h.Sum(nil)
-		} else {
-			hasher = message
-		}
-
-		pubK := caCertificate.PublicKey
-		rsaKey, _ := pubK.(*rsa.PublicKey)
-
-		sigAlg := strings.Split(signingAlgorithm, "_")
-		if sigAlg[1] == "PSS" {
-			err = rsa.VerifyPSS(rsaKey, hashFunc, hasher, signature, &rsa.PSSOptions{
-				SaltLength: rsa.PSSSaltLengthEqualsHash,
-				Hash:       hashFunc,
-			})
-			if err != nil {
-				return false, err
-			}
-			return true, nil
-		} else {
-			err = rsa.VerifyPKCS1v15(rsaKey, hashFunc, hasher, signature)
-			if err != nil {
-				return false, err
-			}
-			return true, nil
-		}
-	} else {
-		return false, fmt.Errorf("CA has unsupported public key algorithm: %s", caCertificate.PublicKeyAlgorithm)
 	}
 }

@@ -24,6 +24,7 @@ const (
 	DEVICE_DB_NAME = "devicemanager"
 	DMS_DB_NAME    = "dmsmanager"
 	ALERTS_DB_NAME = "alerts"
+	KMS_DB_NAME    = "kms"
 )
 
 type PostgresStorageEngine struct {
@@ -152,6 +153,24 @@ func (s *PostgresStorageEngine) GetEnventsStorage() (storage.EventRepository, er
 		s.initialiceSubscriptionsStorage()
 	}
 	return s.Events, nil
+}
+
+func (s *PostgresStorageEngine) GetAsymmetricKMSStorage() (storage.AsymmetricKMSRepo, error) {
+	if s.AsymmetricKMS == nil {
+		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, KMS_DB_NAME)
+		if err != nil {
+			return nil, fmt.Errorf("could not create postgres client: %s", err)
+		}
+
+		store, err := NewAsymmetricKMSPostgresRepository(s.logger, psqlCli)
+		if err != nil {
+			return nil, fmt.Errorf("could not initialize postgres DMS client: %s", err)
+		}
+
+		s.AsymmetricKMS = store
+	}
+
+	return s.AsymmetricKMS, nil
 }
 
 func (s *PostgresStorageEngine) GetSubscriptionsStorage() (storage.SubscriptionsRepository, error) {

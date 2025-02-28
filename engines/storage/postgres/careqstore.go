@@ -9,15 +9,13 @@ import (
 	"gorm.io/gorm"
 )
 
-const caRequestDBName = "ca_certificate_requests"
-
 type PostgresCACertificateRequestStore struct {
 	db      *gorm.DB
 	querier *postgresDBQuerier[models.CACertificateRequest]
 }
 
 func NewCACertRequestPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.CACertificateRequestRepo, error) {
-	querier, err := TableQuery(log, db, caRequestDBName, "id", models.CACertificateRequest{})
+	querier, err := TableQuery(log, db, "ca_certificate_requests", "id", models.CACertificateRequest{})
 	if err != nil {
 		return nil, err
 	}

@@ -56,6 +56,14 @@ type TestCryptoEngineConfig struct {
 	AfterSuite func()
 }
 
+type AsymmetricKMSTestServer struct {
+	HttpServerURL  string
+	Service        services.AsymmetricKMSService
+	HttpSDKService services.AsymmetricKMSService
+	BeforeEach     func() error
+	AfterSuite     func()
+}
+
 type CATestServer struct {
 	Service    services.CAService
 	HttpCASDK  services.CAService
@@ -86,6 +94,7 @@ type VATestServer struct {
 }
 
 type TestServer struct {
+	AsymmetricKMS *AsymmetricKMSTestServer
 	CA            *CATestServer
 	VA            *VATestServer
 	DeviceManager *DeviceManagerTestServer
@@ -208,9 +217,8 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},
-		PublisherEventBus:  eventBus.config,
-		Storage:            storageEngine.config,
-		CryptoEngineConfig: cryptoEngines.config,
+		PublisherEventBus: eventBus.config,
+		Storage:           storageEngine.config,
 		CryptoMonitoring: cconfig.MonitoringJob{
 			Enabled:   monitor,
 			Frequency: "* * * * * *", //this CRON-like expression will scan certificate each second.
@@ -237,6 +245,33 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 				scheduler.Stop()
 			}
 		},
+	}, nil
+}
+
+func BuildAsymmetricKMSTestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *TestCryptoEngineConfig, eventBus *TestEventBusConfig) (*AsymmetricKMSTestServer, error) {
+	svc, err := AssembleAsymmetricKMSService(config.AsymmetricKMSConfig{
+		Logs: cconfig.Logging{
+			Level: cconfig.Debug,
+		},
+		Server: cconfig.HttpServer{
+			LogLevel:           cconfig.Debug,
+			HealthCheckLogging: false,
+			Protocol:           cconfig.HTTP,
+		},
+		Storage:            storageEngine.config,
+		CryptoEngineConfig: cryptoEngines.config,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("could not assemble Asymmetric KMS Service. Exiting: %s", err)
+	}
+
+	return &AsymmetricKMSTestServer{
+		Service:        *svc,
+		HttpSDKService: nil,
+		BeforeEach: func() error {
+			return nil
+		},
+		AfterSuite: func() {},
 	}, nil
 }
 

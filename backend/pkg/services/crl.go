@@ -23,6 +23,7 @@ var crlValidate *validator.Validate
 
 type crlServiceImpl struct {
 	caSDK     services.CAService
+	kmsSDK    services.AsymmetricKMSService
 	logger    *logrus.Entry
 	vaDomains []string
 }
@@ -30,6 +31,7 @@ type crlServiceImpl struct {
 type CRLServiceBuilder struct {
 	Logger    *logrus.Entry
 	CAClient  services.CAService
+	KMSSDK    services.AsymmetricKMSService
 	VADomains []string
 }
 
@@ -102,7 +104,7 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input services.GetCRLInput
 		return nil, err
 	}
 
-	caSigner := NewCASigner(ctx, crlCA, svc.caSDK)
+	caSigner := NewKeyPairCryptoSigner(ctx, crlCA, svc.caSDK)
 	caCert := (*x509.Certificate)(crlCA.Certificate.Certificate)
 
 	extensions := []pkix.Extension{}

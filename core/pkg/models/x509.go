@@ -108,6 +108,120 @@ func (c *X509CertificateRequest) UnmarshalJSON(data []byte) error {
 }
 
 // --------------------------------------------
+type X509PublicKey struct {
+	Key any
+}
+
+func (c *X509PublicKey) String() string {
+	res, err := c.MarshalJSON()
+	if err != nil {
+		return ""
+	}
+
+	certString := strings.ReplaceAll(string(res), "\"", "")
+
+	return string(certString)
+}
+
+func (c *X509PublicKey) MarshalJSON() ([]byte, error) {
+	data := []byte{}
+
+	der, err := x509.MarshalPKIXPublicKey(c.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	if c != nil {
+		pemCert := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})
+		data = make([]byte, base64.StdEncoding.EncodedLen(len(pemCert)))
+		base64.StdEncoding.Encode(data, pemCert)
+		return json.Marshal(string(data))
+	}
+
+	return json.Marshal(data)
+}
+
+func (c *X509PublicKey) UnmarshalJSON(data []byte) error {
+	var decoded []byte
+	err := json.Unmarshal(data, &decoded)
+	if err != nil {
+		return err
+	}
+
+	block, _ := pem.Decode(decoded)
+	if block != nil {
+		key, err := x509.ParsePKIXPublicKey(block.Bytes)
+		if err != nil {
+			return err
+		}
+
+		*c = X509PublicKey{
+			Key: key,
+		}
+		return nil
+	}
+
+	return fmt.Errorf("missing block")
+}
+
+// --------------------------------------------
+type X509PrivateKey struct {
+	Key any
+}
+
+func (c *X509PrivateKey) String() string {
+	res, err := c.MarshalJSON()
+	if err != nil {
+		return ""
+	}
+
+	certString := strings.ReplaceAll(string(res), "\"", "")
+
+	return string(certString)
+}
+
+func (c *X509PrivateKey) MarshalJSON() ([]byte, error) {
+	data := []byte{}
+
+	der, err := x509.MarshalPKIXPublicKey(c.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	if c != nil {
+		pemCert := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+		data = make([]byte, base64.StdEncoding.EncodedLen(len(pemCert)))
+		base64.StdEncoding.Encode(data, pemCert)
+		return json.Marshal(string(data))
+	}
+
+	return json.Marshal(data)
+}
+
+func (c *X509PrivateKey) UnmarshalJSON(data []byte) error {
+	var decoded []byte
+	err := json.Unmarshal(data, &decoded)
+	if err != nil {
+		return err
+	}
+
+	block, _ := pem.Decode(decoded)
+	if block != nil {
+		key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return err
+		}
+
+		*c = X509PrivateKey{
+			Key: key,
+		}
+		return nil
+	}
+
+	return fmt.Errorf("missing block")
+}
+
+// --------------------------------------------
 
 func (X509Certificate) GormDataType() string {
 	return "text"

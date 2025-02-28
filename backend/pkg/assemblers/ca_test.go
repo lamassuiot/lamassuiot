@@ -2604,6 +2604,7 @@ func TestImportCA(t *testing.T) {
 				if err != nil {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
+
 				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
 				var engine *models.CryptoEngineProvider
 

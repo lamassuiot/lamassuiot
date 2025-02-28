@@ -95,9 +95,8 @@ type CAStats struct {
 	CertificatesStats   CertificatesStats   `json:"certificates"`
 }
 type CACertificatesStats struct {
-	TotalCAs                 int                       `json:"total"`
-	CAsDistributionPerEngine map[string]int            `json:"engine_distribution"`
-	CAsStatus                map[CertificateStatus]int `json:"status_distribution"`
+	TotalCAs  int                       `json:"total"`
+	CAsStatus map[CertificateStatus]int `json:"status_distribution"`
 }
 type CertificatesStats struct {
 	TotalCertificates            int                       `json:"total"`

@@ -30,6 +30,7 @@ func (mw CAEventPublisher) GetCryptoEngineProvider(ctx context.Context) ([]*mode
 func (mw CAEventPublisher) GetStats(ctx context.Context) (*models.CAStats, error) {
 	return mw.Next.GetStats(ctx)
 }
+
 func (mw CAEventPublisher) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
 	return mw.Next.GetStatsByCAID(ctx, input)
 }

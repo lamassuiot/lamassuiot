@@ -1,4 +1,4 @@
-package helpers
+package asymmetrickms
 
 import (
 	"crypto/ecdsa"
@@ -8,7 +8,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
 
-func KeyStrengthMetadataFromCertificate(cert *x509.Certificate) models.KeyStrengthMetadata {
+func KeyStrengthMetadataFromCertificate(cert *x509.Certificate) models.KeyStrength {
 	var keyType models.KeyType
 	var keyBits int
 	switch cert.PublicKeyAlgorithm {
@@ -21,10 +21,9 @@ func KeyStrengthMetadataFromCertificate(cert *x509.Certificate) models.KeyStreng
 	}
 
 	return KeyStrengthBuilder(keyType, keyBits)
-
 }
 
-func KeyStrengthBuilder(keyType models.KeyType, keyBits int) models.KeyStrengthMetadata {
+func KeyStrengthBuilder(keyType models.KeyType, keyBits int) models.KeyStrength {
 	var keyStrength models.KeyStrength = models.KeyStrengthLow
 	switch keyType {
 	case models.KeyType(x509.RSA):
@@ -45,9 +44,5 @@ func KeyStrengthBuilder(keyType models.KeyType, keyBits int) models.KeyStrengthM
 		}
 	}
 
-	return models.KeyStrengthMetadata{
-		Type:     keyType,
-		Bits:     keyBits,
-		Strength: keyStrength,
-	}
+	return keyStrength
 }
