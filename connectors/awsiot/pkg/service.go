@@ -874,7 +874,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 		},
 	}
 
-	lFunc.Infof("updating CA %s with new metadata: %s\n", input.ID, iotAWSCAMetadata)
+	lFunc.Infof("updating CA %s with new metadata: %v\n", input.ID, iotAWSCAMetadata)
 
 	ca, err = svc.CaSDK.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
 		CAID: input.ID,
