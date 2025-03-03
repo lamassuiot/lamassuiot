@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -369,6 +370,7 @@ func TestUpdateDeviceMetadata(t *testing.T) {
 	deviceUpdMeta := map[string]any{
 		"test":    "test",
 		"lamassu": "lamassu",
+		"arr":     []interface{}{"test", "test2"},
 	}
 	deviceSample1 := services.CreateDeviceInput{
 		ID:        "test",
@@ -394,8 +396,14 @@ func TestUpdateDeviceMetadata(t *testing.T) {
 			run: func() (*models.Device, error) {
 
 				device, err := dmgr.HttpDeviceManagerSDK.UpdateDeviceMetadata(context.Background(), services.UpdateDeviceMetadataInput{
-					ID:       "test",
-					Metadata: deviceUpdMeta,
+					ID: "test",
+					Patches: models.Patch{
+						models.PatchOperation{
+							Op:    models.OpAdd,
+							Path:  "",
+							Value: deviceUpdMeta,
+						},
+					},
 				})
 				if err != nil {
 					t.Fatalf("could not retrieve a device: %s", err)
@@ -404,8 +412,8 @@ func TestUpdateDeviceMetadata(t *testing.T) {
 			},
 			resultCheck: func(device *models.Device, err error) {
 				for key, value := range device.Metadata {
-					if val, ok := deviceUpdMeta[key]; !ok || val != value {
-						t.Fatalf("the device´s metadata is not correct: %s", err)
+					if val, ok := deviceUpdMeta[key]; !ok || !reflect.DeepEqual(val, value) {
+						t.Fatalf("the device´s metadata is not correct: %s != %s", val, value)
 					}
 				}
 			},
@@ -1169,8 +1177,14 @@ func checkUpdateDeviceMetadata(t *testing.T, dmgr *DeviceManagerTestServer, devi
 	ctx := context.Background()
 
 	request := services.UpdateDeviceMetadataInput{
-		ID:       deviceSample.ID,
-		Metadata: map[string]interface{}{"test": "test2"},
+		ID: deviceSample.ID,
+		Patches: models.Patch{
+			models.PatchOperation{
+				Op:    models.OpAdd,
+				Path:  "",
+				Value: map[string]interface{}{"test": "test2"},
+			},
+		},
 	}
 
 	device, err := dmgr.Service.UpdateDeviceMetadata(ctx, request)

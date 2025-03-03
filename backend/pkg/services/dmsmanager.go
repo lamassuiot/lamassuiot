@@ -806,11 +806,18 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	}
 
 	//detach certificate from meta
-	delete(currentDeviceCert.Metadata, models.CAAttachedToDeviceKey)
-	delete(currentDeviceCert.Metadata, models.CAMetadataMonitoringExpirationDeltasKey)
 	_, err = svc.caClient.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
 		SerialNumber: currentDeviceCertSN,
-		Metadata:     currentDeviceCert.Metadata,
+		Patches: models.Patch{
+			models.PatchOperation{
+				Op:   models.OpRemove,
+				Path: "/" + models.CAAttachedToDeviceKey,
+			},
+			models.PatchOperation{
+				Op:   models.OpRemove,
+				Path: "/" + models.CAMetadataMonitoringExpirationDeltasKey,
+			},
+		},
 	})
 	if err != nil {
 		lFunc.Errorf("could not update superseded certificate metadata %s: %s", currentDeviceCert.SerialNumber, err)
@@ -1026,8 +1033,7 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		return nil, err
 	}
 
-	newMeta := crt.Metadata
-	newMeta[models.CAMetadataMonitoringExpirationDeltasKey] = models.CAMetadataMonitoringExpirationDeltas{
+	expirationDeltas := models.CAMetadataMonitoringExpirationDeltas{
 		{
 			Delta:     dms.Settings.ReEnrollmentSettings.PreventiveReEnrollmentDelta,
 			Name:      "Preventive",
@@ -1039,7 +1045,7 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 			Triggered: false,
 		},
 	}
-	newMeta[models.CAAttachedToDeviceKey] = models.CAAttachedToDevice{
+	caAttachedToDevice := models.CAAttachedToDevice{
 		AuthorizedBy: struct {
 			RAID string "json:\"ra_id\""
 		}{RAID: dms.ID},
@@ -1048,7 +1054,18 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 
 	crt, err = svc.caClient.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
 		SerialNumber: crt.SerialNumber,
-		Metadata:     newMeta,
+		Patches: models.Patch{
+			models.PatchOperation{
+				Op:    models.OpAdd,
+				Path:  "/" + models.CAMetadataMonitoringExpirationDeltasKey,
+				Value: expirationDeltas,
+			},
+			models.PatchOperation{
+				Op:    models.OpAdd,
+				Path:  "/" + models.CAAttachedToDeviceKey,
+				Value: caAttachedToDevice,
+			},
+		},
 	})
 	if err != nil {
 		lFunc.Errorf("could not update certificate metadata with monitoring deltas for certificate with sn '%s': %s", crt.SerialNumber, err)
