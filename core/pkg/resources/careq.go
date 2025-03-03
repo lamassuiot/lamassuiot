@@ -62,7 +62,7 @@ type ImportCABody struct {
 }
 
 type UpdateCAMetadataBody struct {
-	Metadata map[string]interface{} `json:"metadata"`
+	Patches models.Patch `json:"patches"`
 }
 type UpdateCAIssuanceExpirationBody struct {
 	models.Validity
@@ -92,7 +92,7 @@ type UpdateCertificateStatusBody struct {
 }
 
 type UpdateCertificateMetadataBody struct {
-	Metadata map[string]interface{} `json:"metadata"`
+	Patches models.Patch `validate:"required"`
 }
 
 type GetCertificatesByExpirationDateQueryParams struct {

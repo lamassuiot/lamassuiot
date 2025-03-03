@@ -70,7 +70,13 @@ func (svc *CryptoMonitor) updateCertificateIfNeeded(cert models.Certificate, now
 	if shouldUpdateMeta {
 		svc.service.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
 			SerialNumber: cert.SerialNumber,
-			Metadata:     newMetadata,
+			Patches: models.Patch{
+				models.PatchOperation{
+					Op:    models.OpAdd,
+					Path:  "/" + models.CAMetadataMonitoringExpirationDeltasKey,
+					Value: newMetadata[models.CAMetadataMonitoringExpirationDeltasKey],
+				},
+			},
 		})
 	}
 }
@@ -99,8 +105,14 @@ func (svc *CryptoMonitor) updateCAIfNeeded(ca models.CACertificate, now time.Tim
 	shouldUpdateMeta, newMetadata := svc.shouldUpdateMonitoringDeltas(ca.Metadata, x509.Certificate(*ca.Certificate.Certificate))
 	if shouldUpdateMeta {
 		svc.service.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
-			CAID:     ca.ID,
-			Metadata: newMetadata,
+			CAID: ca.ID,
+			Patches: models.Patch{
+				models.PatchOperation{
+					Op:    models.OpAdd,
+					Path:  "/" + models.CAMetadataMonitoringExpirationDeltasKey,
+					Value: newMetadata[models.CAMetadataMonitoringExpirationDeltasKey],
+				},
+			},
 		})
 	}
 }
