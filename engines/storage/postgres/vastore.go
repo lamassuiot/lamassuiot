@@ -15,7 +15,7 @@ type PostgresVAStore struct {
 }
 
 func NewVARepository(logger *logrus.Entry, db *gorm.DB) (storage.VARepo, error) {
-	querier, err := TableQuery(logger, db, "va_role", "caid", models.VARole{})
+	querier, err := TableQuery(logger, db, "va_role", "ca_ski", models.VARole{})
 	if err != nil {
 		return nil, err
 	}
