@@ -5,7 +5,7 @@ go 1.22.0
 replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go/codec v0.0.0-20190204201341-e444a5086c43
 
 require (
-	github.com/fatih/color v1.16.0
+	github.com/fatih/color v1.18.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/google/uuid v1.6.0
 	github.com/lamassuiot/lamassuiot/backend/v3 v3.2.2

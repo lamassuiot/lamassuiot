@@ -333,29 +333,27 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 		return "", nil
 	} else {
 		tx.Offset(offset)
-		tx.Limit(limit)
+		tx.Limit(limit + 1)
 		rs := tx.WithContext(ctx).Preload(clause.Associations).Find(&elems)
-		for _, elem := range elems {
-			// batch processing found records
-			applyFunc(elem)
-		}
 
 		if rs.Error != nil {
 			return "", rs.Error
 		}
 
-		if rs.RowsAffected == 0 {
-			return "", nil
+		// Check if we got more than the requested limit
+		hasMore := len(elems) > limit
+
+		// Trim elems to the requested limit
+		if hasMore {
+			elems = elems[:limit] // Keep only the requested limit
 		}
 
-		//check if there are more records to fetch
-		var nextElem E
-		tx.Offset(offset + limit).Preload(clause.Associations).First(&nextElem)
-		if err := tx.Error; err != nil && err != gorm.ErrRecordNotFound {
-			return "", fmt.Errorf("error fetching next record: %v", err)
+		for _, elem := range elems {
+			// batch processing found records
+			applyFunc(elem)
 		}
 
-		if tx.RowsAffected == 0 {
+		if !hasMore {
 			// no more records to fetch. Reset nextBookmark to empty string
 			return "", nil
 		}
@@ -373,13 +371,13 @@ func (db *postgresDBQuerier[E]) SelectExists(ctx context.Context, queryID string
 	}
 
 	var elem E
-	tx := db.Table(db.tableName).WithContext(ctx).Preload(clause.Associations).First(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
-	if err := tx.Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return false, nil, nil
-		}
+	tx := db.Table(db.tableName).WithContext(ctx).Preload(clause.Associations).Limit(1).Find(&elem, fmt.Sprintf("%s = ?", searchCol), queryID)
+	if tx.Error != nil {
+		return false, nil, tx.Error
+	}
 
-		return false, nil, err
+	if tx.RowsAffected == 0 {
+		return false, nil, nil // No record found, but no error
 	}
 
 	return true, &elem, nil

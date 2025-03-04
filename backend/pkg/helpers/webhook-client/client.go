@@ -49,7 +49,16 @@ func InvokeWebhook(logger *logrus.Entry, conf models.WebhookCall, payload []byte
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", conf.Url, bytes.NewBuffer(payload))
+	method := "POST"
+	if conf.Method != "" {
+		// Allow only POST and PUT methods
+		if conf.Method != "POST" && conf.Method != "PUT" {
+			return nil, fmt.Errorf("invalid method: %s", conf.Method)
+		}
+		method = conf.Method
+	}
+
+	req, err := http.NewRequest(method, conf.Url, bytes.NewBuffer(payload))
 	if err != nil {
 		return nil, err
 	}

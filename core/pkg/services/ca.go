@@ -100,7 +100,6 @@ type ImportCAInput struct {
 	CAECKey            *ecdsa.PrivateKey
 	KeyType            models.KeyType
 	EngineID           string
-	ParentID           string
 	CARequestID        string
 }
 

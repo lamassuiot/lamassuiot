@@ -12,7 +12,7 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-func Register_20250123125500_ca_aws_metadata() {
+func Register20250123125500CaAwsMetadata() {
 	goose.AddMigrationContext(upCaAwsMetadata, downCaAwsMetadata)
 }
 

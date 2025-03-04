@@ -12,6 +12,7 @@ require (
 	github.com/go-playground/validator/v10 v10.22.1
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/jakehl/goid v1.1.0
+	github.com/kaptinlin/jsonschema v0.2.2
 	github.com/lamassuiot/lamassuiot/core/v3 v3.2.2
 	github.com/lamassuiot/lamassuiot/engines/crypto/aws/v3 v3.2.2
 	github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3 v3.2.2
@@ -24,6 +25,8 @@ require (
 	github.com/lamassuiot/lamassuiot/sdk/v3 v3.2.2
 	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.2.2
 	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.2.2
+	github.com/mocktools/go-smtp-mock/v2 v2.4.0
+	github.com/robertkrimen/otto v0.5.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
@@ -40,14 +43,20 @@ require (
 	github.com/cloudwego/base64x v0.1.4 // indirect
 	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/fatih/color v1.18.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.6 // indirect
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/go-chi/chi v4.1.2+incompatible // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
+	github.com/goccy/go-yaml v1.13.4 // indirect
 	github.com/google/go-tpm v0.3.2 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/gotnospirit/makeplural v0.0.0-20180622080156-a5f48d94d976 // indirect
+	github.com/gotnospirit/messageformat v0.0.0-20221001023931-dfe49f1eb092 // indirect
+	github.com/kaptinlin/go-i18n v0.1.3 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.8 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -58,6 +67,7 @@ require (
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240716161551-93cc26a95ae9 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
+	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 )
 
 require (
@@ -152,6 +162,7 @@ require (
 	github.com/spf13/cast v1.6.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.19.0 // indirect
+	github.com/spyzhov/ajson v0.9.6
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/thales-e-security/pool v0.0.2 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect

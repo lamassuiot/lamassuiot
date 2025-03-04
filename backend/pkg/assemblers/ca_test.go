@@ -2511,6 +2511,7 @@ func TestImportCA(t *testing.T) {
 			KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsage(x509.ExtKeyUsageOCSPSigning),
 			ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 			BasicConstraintsValid: true,
+			IsCA:                  true,
 		}
 
 		derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, pubKey, key)
@@ -2882,6 +2883,308 @@ func TestImportCA(t *testing.T) {
 		// 				return nil
 		// 			},
 		// 		},
+		{
+			name:   "OK/ImportingHierarchyBottomUp",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				ca0Crt := `
+-----BEGIN CERTIFICATE-----
+MIIDqzCCApOgAwIBAgIUY/29239q5Iz5/m2NGnFiQZCDeoswDQYJKoZIhvcNAQEL
+BQAwXTELMAkGA1UEBhMCVVMxFTATBgNVBAgMDEV4YW1wbGVTdGF0ZTEUMBIGA1UE
+BwwLRXhhbXBsZUNpdHkxDzANBgNVBAoMBlJvb3RDQTEQMA4GA1UEAwwHUm9vdCBD
+QTAeFw0yNTAyMjUxMzU0MDBaFw0zNTAyMjMxMzU0MDBaMF0xCzAJBgNVBAYTAlVT
+MRUwEwYDVQQIDAxFeGFtcGxlU3RhdGUxFDASBgNVBAcMC0V4YW1wbGVDaXR5MQ8w
+DQYDVQQKDAZSb290Q0ExEDAOBgNVBAMMB1Jvb3QgQ0EwggEiMA0GCSqGSIb3DQEB
+AQUAA4IBDwAwggEKAoIBAQDJgxeplksYYGm7ilnJYQMu2bUbv+rxgGCpfZlDlzRk
+3HBjt3Q0Xa8r1rBS1LI3iktBgUWiqBElqhYAX0d459Mko3J7dPAf+0mcPzYgGd8X
+5MoztHc+fpzht+Natpvm/ocp8lFoEt68SDGiG24sdhmbSTJPsU50JneO7LHK8YPL
+h5VL+4pu9dHrXgH6d7CK8bP25nCE90B4gpFKy2Oc9vIvAiZ0m31441ipOJqujsvm
+MsPAR/rsOBGVRqkvQ933BR3PwBm4nbMWPtbsg/OL5WgzoYs2wiRmaj3YvZoAAHzy
+c/2ntEh33hemHgKkI++mwDLxzDg+jhsod/gWPt9hTOljAgMBAAGjYzBhMA8GA1Ud
+EwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMB0GA1UdDgQWBBTkWLVA/xb37hGL
+/S1UTgJqJfmm/jAfBgNVHSMEGDAWgBTkWLVA/xb37hGL/S1UTgJqJfmm/jANBgkq
+hkiG9w0BAQsFAAOCAQEARBs3V/jUheZffb/9zfpo26e3e+whlXIcL6VjA94HWKXh
+FzdAbQfvQUQCfT/tRJzUE3MZoi6g0vtZmi3if3KA9Mb+zSmrfjgEtymGKAyaKzR6
+LSjt7RHRAXVjjnkNAmGZiVfi9rsslHr3WeVGwwNZGQQpZBN5Atcd7YSRWk9wuH+N
+ReLpV/Neg/wBMAxLgCBuvIfDQkSOsUwSmLMLzuRYqOMAyVR8bUiu9bxHOHaUQ6TI
+DruLxGHV4uOAx2SqBNr7XWKJyOZxMkmm0YnZWnIX6+uTHeGTdxgWuHLlkrUGVmaW
+Spj4CeR8GjWfp66G75tjuT5qpgFJ2yhnaDJ/JqNTrQ==
+-----END CERTIFICATE-----
+`
+
+				ca1Crt := `
+-----BEGIN CERTIFICATE-----
+MIIDlDCCAnygAwIBAgIUN2XNhvC/xcgbfxD4FU5ONYFM2HkwDQYJKoZIhvcNAQEL
+BQAwXTELMAkGA1UEBhMCVVMxFTATBgNVBAgMDEV4YW1wbGVTdGF0ZTEUMBIGA1UE
+BwwLRXhhbXBsZUNpdHkxDzANBgNVBAoMBlJvb3RDQTEQMA4GA1UEAwwHUm9vdCBD
+QTAeFw0yNTAyMjUxMzU0MThaFw0zNTAyMjMxMzU0MThaMEYxCzAJBgNVBAYTAlVT
+MRUwEwYDVQQIDAxFeGFtcGxlU3RhdGUxDzANBgNVBAoMBlJvb3RDQTEPMA0GA1UE
+AwwGU3ViIENBMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2Hk/uF/U
+RMtp3zx2bimRYoHAq1rz9H2/QwKgtE4dNI5GMHIHxeeIfOlbxxOhr1PaMKSoxIv1
+3Sj1arpIhQEFset42tYOEKgTO0x5KQHQRnsX9F5uuc5Drj6E4U1qAv0kqBS/7chm
+jszpsZ2+Q19j+v3G3CMkkpOOYZaTAo0ZPEtRBaNG3xX2X4jGbviM1aCx6v2cC3K8
+rfauh74xOyKjWM0MOVndKctUAs5oUrFcNC6spp8kjBMWpXcCtcY+YNnHH5aD7/LB
+jGZJlZNDNKCCtR0GNtwlqPvbCzTbuvPvjVF6hWPhB0dWXP5jE1nsNARLgYnuE2WM
+hAlyqOvmgehfUQIDAQABo2MwYTAPBgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQE
+AwIBBjAdBgNVHQ4EFgQUHuuPIC/kUYP60ysHiL19v51r1KEwHwYDVR0jBBgwFoAU
+5Fi1QP8W9+4Ri/0tVE4CaiX5pv4wDQYJKoZIhvcNAQELBQADggEBAIu1lAZteU+n
++6l/wuEoev+Ad8D3TvHDEjxyHnYtE4Mf+HLk2SguYvXJJRFFc9usG3FmmB0hTPmx
+KDrMk9QObgHsZHcNagwhB6Urn+EKrj/YUnIJE2TrX/blFYoMBPaxbWrwrmFAjKsl
+8uuJoNY64G6sOMzHBpeELhdZU/xgDsrNk+dGyVtYAjmfksQLOSgF14XZnXL9+wPc
+jSm4n8W5YQ0zsKAZ5TmB0VpTCkvVS/gGDHoZfdO38CSry4z8nM3W4zdkmvo76G8U
+2fvC11FSXxzRVQrbxfaOMEcdzT0u1wcsQQzM4+v0Njt3vVy+gRljm+Gmt0Dc9/Lb
+O3v2AfmhPiU=
+-----END CERTIFICATE-----
+`
+
+				ca2Crt := `-----BEGIN CERTIFICATE-----
+MIIDgTCCAmmgAwIBAgIUWb++79DZH43iqHeBItwkJYT5e+QwDQYJKoZIhvcNAQEL
+BQAwRjELMAkGA1UEBhMCVVMxFTATBgNVBAgMDEV4YW1wbGVTdGF0ZTEPMA0GA1UE
+CgwGUm9vdENBMQ8wDQYDVQQDDAZTdWIgQ0EwHhcNMjUwMjI1MTM1NTQ1WhcNMzUw
+MjIzMTM1NTQ1WjBKMQswCQYDVQQGEwJVUzEVMBMGA1UECAwMRXhhbXBsZVN0YXRl
+MQ8wDQYDVQQKDAZSb290Q0ExEzARBgNVBAMMClN1Yi1TdWIgQ0EwggEiMA0GCSqG
+SIb3DQEBAQUAA4IBDwAwggEKAoIBAQDhUi8oRQBDLAxKp74qGy3RbvgzaJxyxVSr
+U+N+l+iHJZ/N4K+papFnZGSc6TycJVW06msyvSdod/gaB3n6SfsOPjAFBGaDNFAz
+YHrIaQKPU/+uEQWMHekEqQmT3vdlgtl6vuBh3qjBKLUwCTwWdRhHckIgTgq7rMKW
+WT5Jsp5J0QSREIi5o99MILex+4p2OsAXC91a37snQ0HvzOsKoWilZvx/dpBCHWa8
+h8UlTo7bbttVCI2NbKXUMH3LNJBvO0gyysMhkEXIynNoZN3j0bxOHnm494wBN8bQ
+EEAb3ah9VEkN1EHXmoTwujQNL0YD9Us1Fv59Ff44EOW9uQn4nbK/AgMBAAGjYzBh
+MA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMB0GA1UdDgQWBBQNQvWi
+KOPK/XL5S7LAcEdBqkCxcjAfBgNVHSMEGDAWgBQe648gL+RRg/rTKweIvX2/nWvU
+oTANBgkqhkiG9w0BAQsFAAOCAQEAPjWq7neRIDnRO7DITs9YV97QW9TGfTWyIzhX
+f+SEi4q/OOuKz9lHFkL/aCQHcilmIn2dcBlQNJKW2w41fd7mB6AyM3b0qDvPAQkw
+xaLER5ox4EsIUJwpCjADCLIEEFQh1cjthiBI0tVuIAbUKoq08E+YdFutkMrnZuPs
+VnGK/wULw7ATS4jC+6wCfDQTCNuGWA7Fec/uznu4yyD5YNvBkSxk0fSn7B3uEe7c
+JzepKLZK9pKiq8PTzPOc/zGCRLF7qdquaeJkpRGI8a3pl3sUA521eYWjh6f+kkjf
+V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
+-----END CERTIFICATE-----
+`
+
+				cert0, err := chelpers.ParseCertificate(ca0Crt)
+				if err != nil {
+					t.Fatalf("could not parse root cert: %s", err)
+				}
+
+				cert1, err := chelpers.ParseCertificate(ca1Crt)
+				if err != nil {
+					t.Fatalf("could not parse ca-lvl-1 cert: %s", err)
+				}
+
+				cert2, err := chelpers.ParseCertificate(ca2Crt)
+				if err != nil {
+					t.Fatalf("could not parse ca-lvl-2 cert: %s", err)
+				}
+
+				duration, _ := models.ParseDuration("100d")
+
+				importedCALvl2, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					CAType: models.CertificateTypeExternal,
+					IssuanceExpiration: models.Validity{
+						Type:     models.Duration,
+						Duration: (models.TimeDuration)(duration),
+					},
+					CACertificate: (*models.X509Certificate)(cert2),
+				})
+				if err != nil {
+					t.Fatalf("could not import ca-lvl-2 CA: %s", err)
+				}
+
+				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					CAType: models.CertificateTypeExternal,
+					IssuanceExpiration: models.Validity{
+						Type:     models.Duration,
+						Duration: (models.TimeDuration)(duration),
+					},
+					CACertificate: (*models.X509Certificate)(cert1),
+				})
+				if err != nil {
+					t.Fatalf("could not import ca-lvl-1 CA: %s", err)
+				}
+
+				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					CAType: models.CertificateTypeExternal,
+					IssuanceExpiration: models.Validity{
+						Type:     models.Duration,
+						Duration: (models.TimeDuration)(duration),
+					},
+					CACertificate: (*models.X509Certificate)(cert0),
+				})
+				if err != nil {
+					t.Fatalf("could not import root CA: %s", err)
+				}
+
+				importedCALvl2Updated, err := caSDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: importedCALvl2.ID})
+				if err != nil {
+					t.Fatalf("could not retrieve ca-lvl-2 CA: %s", err)
+				}
+
+				return importedCALvl2Updated, err
+			},
+			resultCheck: func(ca *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+
+				if ca.Level != 2 {
+					return fmt.Errorf("CA should be at level 2. Got %d", ca.Level)
+				}
+
+				if ca.Certificate.IssuerCAMetadata.Level != 1 {
+					return fmt.Errorf("CA parent should be at level 1. Got %d", ca.Certificate.IssuerCAMetadata.Level)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/ImportingHierarchyTopDown",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				ca0Crt := `
+-----BEGIN CERTIFICATE-----
+MIIDqzCCApOgAwIBAgIUY/29239q5Iz5/m2NGnFiQZCDeoswDQYJKoZIhvcNAQEL
+BQAwXTELMAkGA1UEBhMCVVMxFTATBgNVBAgMDEV4YW1wbGVTdGF0ZTEUMBIGA1UE
+BwwLRXhhbXBsZUNpdHkxDzANBgNVBAoMBlJvb3RDQTEQMA4GA1UEAwwHUm9vdCBD
+QTAeFw0yNTAyMjUxMzU0MDBaFw0zNTAyMjMxMzU0MDBaMF0xCzAJBgNVBAYTAlVT
+MRUwEwYDVQQIDAxFeGFtcGxlU3RhdGUxFDASBgNVBAcMC0V4YW1wbGVDaXR5MQ8w
+DQYDVQQKDAZSb290Q0ExEDAOBgNVBAMMB1Jvb3QgQ0EwggEiMA0GCSqGSIb3DQEB
+AQUAA4IBDwAwggEKAoIBAQDJgxeplksYYGm7ilnJYQMu2bUbv+rxgGCpfZlDlzRk
+3HBjt3Q0Xa8r1rBS1LI3iktBgUWiqBElqhYAX0d459Mko3J7dPAf+0mcPzYgGd8X
+5MoztHc+fpzht+Natpvm/ocp8lFoEt68SDGiG24sdhmbSTJPsU50JneO7LHK8YPL
+h5VL+4pu9dHrXgH6d7CK8bP25nCE90B4gpFKy2Oc9vIvAiZ0m31441ipOJqujsvm
+MsPAR/rsOBGVRqkvQ933BR3PwBm4nbMWPtbsg/OL5WgzoYs2wiRmaj3YvZoAAHzy
+c/2ntEh33hemHgKkI++mwDLxzDg+jhsod/gWPt9hTOljAgMBAAGjYzBhMA8GA1Ud
+EwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMB0GA1UdDgQWBBTkWLVA/xb37hGL
+/S1UTgJqJfmm/jAfBgNVHSMEGDAWgBTkWLVA/xb37hGL/S1UTgJqJfmm/jANBgkq
+hkiG9w0BAQsFAAOCAQEARBs3V/jUheZffb/9zfpo26e3e+whlXIcL6VjA94HWKXh
+FzdAbQfvQUQCfT/tRJzUE3MZoi6g0vtZmi3if3KA9Mb+zSmrfjgEtymGKAyaKzR6
+LSjt7RHRAXVjjnkNAmGZiVfi9rsslHr3WeVGwwNZGQQpZBN5Atcd7YSRWk9wuH+N
+ReLpV/Neg/wBMAxLgCBuvIfDQkSOsUwSmLMLzuRYqOMAyVR8bUiu9bxHOHaUQ6TI
+DruLxGHV4uOAx2SqBNr7XWKJyOZxMkmm0YnZWnIX6+uTHeGTdxgWuHLlkrUGVmaW
+Spj4CeR8GjWfp66G75tjuT5qpgFJ2yhnaDJ/JqNTrQ==
+-----END CERTIFICATE-----
+`
+
+				ca1Crt := `
+-----BEGIN CERTIFICATE-----
+MIIDlDCCAnygAwIBAgIUN2XNhvC/xcgbfxD4FU5ONYFM2HkwDQYJKoZIhvcNAQEL
+BQAwXTELMAkGA1UEBhMCVVMxFTATBgNVBAgMDEV4YW1wbGVTdGF0ZTEUMBIGA1UE
+BwwLRXhhbXBsZUNpdHkxDzANBgNVBAoMBlJvb3RDQTEQMA4GA1UEAwwHUm9vdCBD
+QTAeFw0yNTAyMjUxMzU0MThaFw0zNTAyMjMxMzU0MThaMEYxCzAJBgNVBAYTAlVT
+MRUwEwYDVQQIDAxFeGFtcGxlU3RhdGUxDzANBgNVBAoMBlJvb3RDQTEPMA0GA1UE
+AwwGU3ViIENBMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2Hk/uF/U
+RMtp3zx2bimRYoHAq1rz9H2/QwKgtE4dNI5GMHIHxeeIfOlbxxOhr1PaMKSoxIv1
+3Sj1arpIhQEFset42tYOEKgTO0x5KQHQRnsX9F5uuc5Drj6E4U1qAv0kqBS/7chm
+jszpsZ2+Q19j+v3G3CMkkpOOYZaTAo0ZPEtRBaNG3xX2X4jGbviM1aCx6v2cC3K8
+rfauh74xOyKjWM0MOVndKctUAs5oUrFcNC6spp8kjBMWpXcCtcY+YNnHH5aD7/LB
+jGZJlZNDNKCCtR0GNtwlqPvbCzTbuvPvjVF6hWPhB0dWXP5jE1nsNARLgYnuE2WM
+hAlyqOvmgehfUQIDAQABo2MwYTAPBgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQE
+AwIBBjAdBgNVHQ4EFgQUHuuPIC/kUYP60ysHiL19v51r1KEwHwYDVR0jBBgwFoAU
+5Fi1QP8W9+4Ri/0tVE4CaiX5pv4wDQYJKoZIhvcNAQELBQADggEBAIu1lAZteU+n
++6l/wuEoev+Ad8D3TvHDEjxyHnYtE4Mf+HLk2SguYvXJJRFFc9usG3FmmB0hTPmx
+KDrMk9QObgHsZHcNagwhB6Urn+EKrj/YUnIJE2TrX/blFYoMBPaxbWrwrmFAjKsl
+8uuJoNY64G6sOMzHBpeELhdZU/xgDsrNk+dGyVtYAjmfksQLOSgF14XZnXL9+wPc
+jSm4n8W5YQ0zsKAZ5TmB0VpTCkvVS/gGDHoZfdO38CSry4z8nM3W4zdkmvo76G8U
+2fvC11FSXxzRVQrbxfaOMEcdzT0u1wcsQQzM4+v0Njt3vVy+gRljm+Gmt0Dc9/Lb
+O3v2AfmhPiU=
+-----END CERTIFICATE-----
+`
+
+				ca2Crt := `-----BEGIN CERTIFICATE-----
+MIIDgTCCAmmgAwIBAgIUWb++79DZH43iqHeBItwkJYT5e+QwDQYJKoZIhvcNAQEL
+BQAwRjELMAkGA1UEBhMCVVMxFTATBgNVBAgMDEV4YW1wbGVTdGF0ZTEPMA0GA1UE
+CgwGUm9vdENBMQ8wDQYDVQQDDAZTdWIgQ0EwHhcNMjUwMjI1MTM1NTQ1WhcNMzUw
+MjIzMTM1NTQ1WjBKMQswCQYDVQQGEwJVUzEVMBMGA1UECAwMRXhhbXBsZVN0YXRl
+MQ8wDQYDVQQKDAZSb290Q0ExEzARBgNVBAMMClN1Yi1TdWIgQ0EwggEiMA0GCSqG
+SIb3DQEBAQUAA4IBDwAwggEKAoIBAQDhUi8oRQBDLAxKp74qGy3RbvgzaJxyxVSr
+U+N+l+iHJZ/N4K+papFnZGSc6TycJVW06msyvSdod/gaB3n6SfsOPjAFBGaDNFAz
+YHrIaQKPU/+uEQWMHekEqQmT3vdlgtl6vuBh3qjBKLUwCTwWdRhHckIgTgq7rMKW
+WT5Jsp5J0QSREIi5o99MILex+4p2OsAXC91a37snQ0HvzOsKoWilZvx/dpBCHWa8
+h8UlTo7bbttVCI2NbKXUMH3LNJBvO0gyysMhkEXIynNoZN3j0bxOHnm494wBN8bQ
+EEAb3ah9VEkN1EHXmoTwujQNL0YD9Us1Fv59Ff44EOW9uQn4nbK/AgMBAAGjYzBh
+MA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMB0GA1UdDgQWBBQNQvWi
+KOPK/XL5S7LAcEdBqkCxcjAfBgNVHSMEGDAWgBQe648gL+RRg/rTKweIvX2/nWvU
+oTANBgkqhkiG9w0BAQsFAAOCAQEAPjWq7neRIDnRO7DITs9YV97QW9TGfTWyIzhX
+f+SEi4q/OOuKz9lHFkL/aCQHcilmIn2dcBlQNJKW2w41fd7mB6AyM3b0qDvPAQkw
+xaLER5ox4EsIUJwpCjADCLIEEFQh1cjthiBI0tVuIAbUKoq08E+YdFutkMrnZuPs
+VnGK/wULw7ATS4jC+6wCfDQTCNuGWA7Fec/uznu4yyD5YNvBkSxk0fSn7B3uEe7c
+JzepKLZK9pKiq8PTzPOc/zGCRLF7qdquaeJkpRGI8a3pl3sUA521eYWjh6f+kkjf
+V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
+-----END CERTIFICATE-----
+`
+
+				cert0, err := chelpers.ParseCertificate(ca0Crt)
+				if err != nil {
+					t.Fatalf("could not parse root cert: %s", err)
+				}
+
+				cert1, err := chelpers.ParseCertificate(ca1Crt)
+				if err != nil {
+					t.Fatalf("could not parse ca-lvl-1 cert: %s", err)
+				}
+
+				cert2, err := chelpers.ParseCertificate(ca2Crt)
+				if err != nil {
+					t.Fatalf("could not parse ca-lvl-2 cert: %s", err)
+				}
+
+				duration, _ := models.ParseDuration("100d")
+
+				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					CAType: models.CertificateTypeExternal,
+					IssuanceExpiration: models.Validity{
+						Type:     models.Duration,
+						Duration: (models.TimeDuration)(duration),
+					},
+					CACertificate: (*models.X509Certificate)(cert0),
+				})
+				if err != nil {
+					t.Fatalf("could not import root CA: %s", err)
+				}
+
+				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					CAType: models.CertificateTypeExternal,
+					IssuanceExpiration: models.Validity{
+						Type:     models.Duration,
+						Duration: (models.TimeDuration)(duration),
+					},
+					CACertificate: (*models.X509Certificate)(cert1),
+				})
+				if err != nil {
+					t.Fatalf("could not import ca-lvl-1 CA: %s", err)
+				}
+
+				importedCALvl2, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					CAType: models.CertificateTypeExternal,
+					IssuanceExpiration: models.Validity{
+						Type:     models.Duration,
+						Duration: (models.TimeDuration)(duration),
+					},
+					CACertificate: (*models.X509Certificate)(cert2),
+				})
+				if err != nil {
+					t.Fatalf("could not import ca-lvl-2 CA: %s", err)
+				}
+
+				return importedCALvl2, err
+
+			},
+			resultCheck: func(ca *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("got unexpected error: %s", err)
+				}
+
+				if ca.Level != 2 {
+					return fmt.Errorf("CA should be at level 2. Got %d", ca.Level)
+				}
+
+				if ca.Certificate.IssuerCAMetadata.Level != 1 {
+					return fmt.Errorf("CA parent should be at level 1. Got %d", ca.Certificate.IssuerCAMetadata.Level)
+				}
+
+				return nil
+			},
+		},
 	}
 
 	for _, tc := range testcases {
@@ -3922,7 +4225,8 @@ func TestHierarchy(t *testing.T) {
 				fmt.Println("CN:" + childCALvl1.Certificate.Subject.CommonName)
 				fmt.Println("ID:" + childCALvl1.ID)
 				fmt.Println("SN:" + childCALvl1.Certificate.SerialNumber)
-				fmt.Println("KeyID:" + childCALvl1.Certificate.KeyID)
+				fmt.Println("SKID:" + childCALvl1.Certificate.SubjectKeyID)
+				fmt.Println("AKID:" + childCALvl1.Certificate.AuthorityKeyID)
 				fmt.Println("Type:" + childCALvl1.Certificate.Type)
 				fmt.Println("=============================")
 
@@ -4009,7 +4313,7 @@ func TestHierarchy(t *testing.T) {
 			},
 		},
 		{
-			name: "OK/TesHightDateLimitRootCA",
+			name: "OK/TestHightDateLimitRootCA",
 			before: func(svc services.CAService) error {
 
 				return nil

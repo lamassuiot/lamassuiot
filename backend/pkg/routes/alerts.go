@@ -3,7 +3,7 @@ package routes
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
 func NewAlertsHTTPLayer(router *gin.RouterGroup, svc services.AlertsService) {
