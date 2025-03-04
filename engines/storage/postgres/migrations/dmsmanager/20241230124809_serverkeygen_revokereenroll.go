@@ -10,7 +10,7 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-func Register_20241230124809_serverkeygen_revokereenroll() {
+func Register20241230124809ServerkeygenRevokereenroll() {
 	goose.AddMigrationContext(upRelationalDms, downRelationalDms)
 }
 
