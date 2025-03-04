@@ -110,22 +110,50 @@ func (s *PostgresStorageEngine) GetCACertificateRequestStorage() (storage.CACert
 
 func (s *PostgresStorageEngine) GetDeviceStorage() (storage.DeviceManagerRepo, error) {
 	if s.Device == nil {
-		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, DEVICE_DB_NAME)
+		err := s.initializeDevicesStorage()
 		if err != nil {
-			return nil, fmt.Errorf("could not create postgres client: %s", err)
+			return nil, fmt.Errorf("could not initialize postgres Device clients: %s", err)
 		}
-
-		m := NewMigrator(s.logger, psqlCli)
-		m.MigrateToLatest()
-
-		deviceStore, err := NewDeviceManagerRepository(s.logger, psqlCli)
-		if err != nil {
-			return nil, fmt.Errorf("could not initialize postgres Device client: %s", err)
-		}
-		s.Device = deviceStore
 	}
 
 	return s.Device, nil
+}
+
+func (s *PostgresStorageEngine) GetDeviceEventsStorage() (storage.DeviceEventsRepo, error) {
+	if s.DeviceEvents == nil {
+		err := s.initializeDevicesStorage()
+		if err != nil {
+			return nil, fmt.Errorf("could not initialize postgres Device Events clients: %s", err)
+		}
+	}
+
+	return s.DeviceEvents, nil
+}
+
+func (s *PostgresStorageEngine) initializeDevicesStorage() error {
+	psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, DEVICE_DB_NAME)
+	if err != nil {
+		return err
+	}
+
+	m := NewMigrator(s.logger, psqlCli)
+	m.MigrateToLatest()
+
+	if s.DeviceEvents == nil {
+		s.DeviceEvents, err = NewDeviceEventsRepository(s.logger, psqlCli)
+		if err != nil {
+			return err
+		}
+	}
+
+	if s.Device == nil {
+		s.Device, err = NewDeviceManagerRepository(s.logger, psqlCli)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (s *PostgresStorageEngine) GetDMSStorage() (storage.DMSRepo, error) {

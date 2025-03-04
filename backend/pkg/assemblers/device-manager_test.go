@@ -1251,10 +1251,6 @@ func checkDevice(t *testing.T, device *models.Device, deviceSample services.Crea
 		t.Fatalf("device creation timestamp is zero")
 	}
 
-	if device.Events == nil {
-		t.Fatalf("device events is nil")
-	}
-
 	if device.IdentitySlot != nil {
 		t.Fatalf("device identity slot is not nil")
 	}

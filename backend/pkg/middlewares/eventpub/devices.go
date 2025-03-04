@@ -103,3 +103,16 @@ func (mw *deviceEventPublisher) UpdateDeviceMetadata(ctx context.Context, input 
 	}()
 	return mw.next.UpdateDeviceMetadata(ctx, input)
 }
+
+func (mw *deviceEventPublisher) CreateDeviceEvent(ctx context.Context, input services.CreateDeviceEventInput) (output *models.DeviceEvent, err error) {
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(context.Background(), models.EventCreateDeviceEventKey, output)
+		}
+	}()
+	return mw.next.CreateDeviceEvent(ctx, input)
+}
+
+func (mw *deviceEventPublisher) GetDeviceEvents(ctx context.Context, input services.GetDeviceEventsInput) (string, error) {
+	return mw.next.GetDeviceEvents(ctx, input)
+}

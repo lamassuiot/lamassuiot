@@ -16,3 +16,8 @@ type DeviceManagerRepo interface {
 	Update(ctx context.Context, device *models.Device) (*models.Device, error)
 	Insert(ctx context.Context, device *models.Device) (*models.Device, error)
 }
+
+type DeviceEventsRepo interface {
+	Select(ctx context.Context, deviceID string, exhaustiveRun bool, applyFunc func(models.DeviceEvent), queryParams *resources.QueryParameters, extraOpts map[string]interface{}) (string, error)
+	Insert(ctx context.Context, device *models.DeviceEvent) (*models.DeviceEvent, error)
+}
