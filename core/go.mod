@@ -6,6 +6,7 @@ require (
 	github.com/ThreeDotsLabs/watermill v1.4.1
 	github.com/antonfisher/nested-logrus-formatter v1.3.1
 	github.com/cloudevents/sdk-go/v2 v2.15.2
+	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/go-viper/mapstructure/v2 v2.2.1
 	github.com/google/uuid v1.6.0
 	github.com/jakehl/goid v1.1.0

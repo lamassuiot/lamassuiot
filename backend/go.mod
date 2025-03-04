@@ -6,7 +6,6 @@ require (
 	github.com/ThreeDotsLabs/watermill v1.4.1
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/eclipse/paho.mqtt.golang v1.5.0
-	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/gin-contrib/cors v1.6.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/globalsign/est v1.0.6
