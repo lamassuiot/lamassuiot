@@ -811,11 +811,11 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		Patches: models.Patch{
 			models.PatchOperation{
 				Op:   models.OpRemove,
-				Path: "/" + models.CAAttachedToDeviceKey,
+				Path: "/" + chelpers.EncodePatchKey(models.CAAttachedToDeviceKey),
 			},
 			models.PatchOperation{
 				Op:   models.OpRemove,
-				Path: "/" + models.CAMetadataMonitoringExpirationDeltasKey,
+				Path: "/" + chelpers.EncodePatchKey(models.CAMetadataMonitoringExpirationDeltasKey),
 			},
 		},
 	})
@@ -1057,12 +1057,12 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		Patches: models.Patch{
 			models.PatchOperation{
 				Op:    models.OpAdd,
-				Path:  "/" + models.CAMetadataMonitoringExpirationDeltasKey,
+				Path:  "/" + chelpers.EncodePatchKey(models.CAMetadataMonitoringExpirationDeltasKey),
 				Value: expirationDeltas,
 			},
 			models.PatchOperation{
 				Op:    models.OpAdd,
-				Path:  "/" + models.CAAttachedToDeviceKey,
+				Path:  "/" + chelpers.EncodePatchKey(models.CAAttachedToDeviceKey),
 				Value: caAttachedToDevice,
 			},
 		},

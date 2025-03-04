@@ -88,4 +88,14 @@ func TestApplyPatches(t *testing.T) {
 	}
 
 	checkValue(t, "Spec6", result6, "arr", []interface{}{"test3"})
+
+	// Spec7: Add element with key with "/"
+	result7, err := ApplyPatches(result3, models.Patch{
+		{Op: models.OpAdd, Path: "/" + EncodePatchKey("key/with/slash"), Value: "test4"},
+	})
+	if err != nil {
+		t.Fatalf("Spec7: failed to apply patches: %s", err)
+	}
+
+	checkValue(t, "Spec7", result7, "key/with/slash", "test4")
 }

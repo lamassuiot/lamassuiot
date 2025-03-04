@@ -3,10 +3,18 @@ package helpers
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
+
+// Encode JSON Pointer key
+func EncodePatchKey(k string) string {
+	// Replacer to encode JSON Pointer escaping (RFC 6901)
+	var rfc6901Encoder = strings.NewReplacer("~", "~0", "/", "~1")
+	return rfc6901Encoder.Replace(k)
+}
 
 // ApplyPatches applies patches to the provided metadata and returns the updated metadata or an error
 func ApplyPatches(metadata map[string]interface{}, patches models.Patch) (map[string]interface{}, error) {

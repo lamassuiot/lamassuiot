@@ -371,7 +371,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 		Patches: models.Patch{
 			models.PatchOperation{
 				Op:    models.OpAdd,
-				Path:  "/" + AWSIoTMetadataKey(svc.ConnectorID),
+				Path:  "/" + chelpers.EncodePatchKey(AWSIoTMetadataKey(svc.ConnectorID)),
 				Value: awsCertMetadata,
 			},
 		},
@@ -391,7 +391,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 		Patches: models.Patch{
 			models.PatchOperation{
 				Op:    models.OpAdd,
-				Path:  "/" + AWSIoTMetadataKey(svc.ConnectorID),
+				Path:  "/" + chelpers.EncodePatchKey(AWSIoTMetadataKey(svc.ConnectorID)),
 				Value: deviceAWSMetadata,
 			},
 		},
@@ -608,7 +608,7 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 		Patches: models.Patch{
 			models.PatchOperation{
 				Op:    models.OpAdd,
-				Path:  "/" + AWSIoTMetadataKey(svc.ConnectorID) + "/Actions",
+				Path:  "/" + chelpers.EncodePatchKey(AWSIoTMetadataKey(svc.ConnectorID)) + "/Actions",
 				Value: deviceMetaAWS.Actions,
 			},
 		},
@@ -716,7 +716,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 				Patches: models.Patch{
 					models.PatchOperation{
 						Op:    models.OpAdd,
-						Path:  "/" + AWSIoTMetadataKey(svc.GetConnectorID()),
+						Path:  "/" + chelpers.EncodePatchKey(AWSIoTMetadataKey(svc.GetConnectorID())),
 						Value: input.RegisterConfiguration,
 					},
 				},
@@ -773,7 +773,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 				Patches: models.Patch{
 					models.PatchOperation{
 						Op:    models.OpAdd,
-						Path:  "/" + AWSIoTMetadataKey(svc.GetConnectorID()),
+						Path:  "/" + chelpers.EncodePatchKey(AWSIoTMetadataKey(svc.GetConnectorID())),
 						Value: input.RegisterConfiguration,
 					},
 				},
@@ -881,7 +881,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 		Patches: models.Patch{
 			models.PatchOperation{
 				Op:    models.OpAdd,
-				Path:  "/" + AWSIoTMetadataKey(svc.ConnectorID),
+				Path:  "/" + chelpers.EncodePatchKey(AWSIoTMetadataKey(svc.ConnectorID)),
 				Value: iotAWSCAMetadata,
 			},
 		},

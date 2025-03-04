@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -261,7 +260,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context,
 		return nil, err
 	}
 
-	updatedMetadata, err := helpers.ApplyPatches(device.Metadata, input.Patches)
+	updatedMetadata, err := chelpers.ApplyPatches(device.Metadata, input.Patches)
 	if err != nil {
 		lFunc.Errorf("failed to apply patches to metadata for Device '%s': %v", input.ID, err)
 		return nil, err

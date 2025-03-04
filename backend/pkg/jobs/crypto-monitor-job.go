@@ -73,7 +73,7 @@ func (svc *CryptoMonitor) updateCertificateIfNeeded(cert models.Certificate, now
 			Patches: models.Patch{
 				models.PatchOperation{
 					Op:    models.OpAdd,
-					Path:  "/" + models.CAMetadataMonitoringExpirationDeltasKey,
+					Path:  "/" + helpers.EncodePatchKey(models.CAMetadataMonitoringExpirationDeltasKey),
 					Value: newMetadata[models.CAMetadataMonitoringExpirationDeltasKey],
 				},
 			},
@@ -109,7 +109,7 @@ func (svc *CryptoMonitor) updateCAIfNeeded(ca models.CACertificate, now time.Tim
 			Patches: models.Patch{
 				models.PatchOperation{
 					Op:    models.OpAdd,
-					Path:  "/" + models.CAMetadataMonitoringExpirationDeltasKey,
+					Path:  "/" + helpers.EncodePatchKey(models.CAMetadataMonitoringExpirationDeltasKey),
 					Value: newMetadata[models.CAMetadataMonitoringExpirationDeltasKey],
 				},
 			},

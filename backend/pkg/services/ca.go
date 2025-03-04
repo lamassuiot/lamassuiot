@@ -1017,7 +1017,7 @@ func (svc *CAServiceBackend) UpdateCAMetadata(ctx context.Context, input service
 		return nil, errs.ErrCANotFound
 	}
 
-	updatedMetadata, err := helpers.ApplyPatches(ca.Metadata, input.Patches)
+	updatedMetadata, err := chelpers.ApplyPatches(ca.Metadata, input.Patches)
 	if err != nil {
 		lFunc.Errorf("failed to apply patches to metadata for CA '%s': %v", input.CAID, err)
 		return nil, err
@@ -1477,7 +1477,7 @@ func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, inpu
 		return nil, errs.ErrCertificateNotFound
 	}
 
-	updatedMetadata, err := helpers.ApplyPatches(cert.Metadata, input.Patches)
+	updatedMetadata, err := chelpers.ApplyPatches(cert.Metadata, input.Patches)
 	if err != nil {
 		lFunc.Errorf("failed to apply patches to metadata for Certificate '%s': %v", input.SerialNumber, err)
 		return nil, err

@@ -163,7 +163,7 @@ func RunUseCase1(input UseCase1Input) error {
 		Patches: models.Patch{
 			models.PatchOperation{
 				Op:    models.OpAdd,
-				Path:  "/" + fmt.Sprintf("lamassu.io/iot/aws.%s", awsAccountID),
+				Path:  "/" + helpers.EncodePatchKey(fmt.Sprintf("lamassu.io/iot/aws.%s", awsAccountID)),
 				Value: regMetaDataUpdate,
 			},
 		},
