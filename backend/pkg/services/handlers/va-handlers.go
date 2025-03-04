@@ -33,7 +33,7 @@ func createCAHandler(event *event.Event, crlSvc *beService.CRLServiceBackend, lM
 		return err
 	}
 
-	_, err = crlSvc.InitCRLRole(ctx, ca.ID)
+	_, err = crlSvc.InitCRLRole(ctx, ca.Certificate.SubjectKeyID)
 
 	if err != nil {
 		err = fmt.Errorf("could not initialize CRL role: %s", err)

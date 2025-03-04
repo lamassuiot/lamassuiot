@@ -98,8 +98,8 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 	if conf.CertificateMonitoringJob.Enabled {
 		log.Infof("Crypto Monitoring is enabled")
 		monitorJob := jobs.NewCryptoMonitor(svc, lMonitor)
-
 		scheduler = jobs.NewJobScheduler(lMonitor, conf.CertificateMonitoringJob.Frequency, monitorJob)
+		scheduler.Start()
 	}
 
 	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)

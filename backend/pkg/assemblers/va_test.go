@@ -57,6 +57,9 @@ func TestBaseCRL(t *testing.T) {
 
 					crts = append(crts, crt)
 				}
+
+				// Sleep to ensure that the CRL is regenerated on revoke
+				time.Sleep(5 * time.Second)
 				return crts, nil
 			},
 			resultCheck: func(crts []*models.Certificate, issuer *models.CACertificate, crl *x509.RevocationList, err error) {

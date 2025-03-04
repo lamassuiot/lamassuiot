@@ -452,6 +452,13 @@ func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 			Enabled:   monitor,
 			Frequency: "1s",
 		},
+		FilesystemStorage: cconfig.FSStorageConfig{
+			ID:   "fs",
+			Type: cconfig.LocalFilesystem,
+			Config: map[string]interface{}{
+				"storage_directory": "/tmp/lamassuiot",
+			},
+		},
 	}, caTestServer.HttpCASDK, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",

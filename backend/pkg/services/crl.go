@@ -50,6 +50,7 @@ func NewCRLService(builder CRLServiceBuilder) (services.CRLService, error) {
 		caSDK:     builder.CAClient,
 		logger:    builder.Logger,
 		vaRepo:    builder.VARepo,
+		bucket:    builder.Bucket,
 		vaDomains: builder.VADomains,
 	}
 
