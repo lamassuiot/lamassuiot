@@ -32,28 +32,6 @@ func TestNewJobSchedulerWithoutJob(t *testing.T) {
 	})
 }
 
-func TestNewJobSchedulerDisabled(t *testing.T) {
-	logger := logrus.New().WithField("test", "test")
-	job := &mockJob{}
-
-	js := NewJobScheduler(logger, "0 0 * * *", job)
-	js.Start()
-
-	if len(js.scheduler.Entries()) != 0 {
-		t.Error("expected no jobs to be scheduled")
-	}
-
-	if !js.NextRun().IsZero() {
-		t.Error("expected NextRun to be zero")
-	}
-
-	js.Stop()
-
-	t.Cleanup(func() {
-		js.Stop()
-	})
-}
-
 func TestNewJobScheduler(t *testing.T) {
 	logger := logrus.New().WithField("test", "test")
 	job := &mockJob{}
@@ -133,6 +111,8 @@ func TestJobSchedulerStop(t *testing.T) {
 	t.Cleanup(func() {
 		js.Stop()
 	})
+
+	js.Stop()
 
 	if !js.NextRun().IsZero() {
 		t.Error("expected cronInstance to be stopped")

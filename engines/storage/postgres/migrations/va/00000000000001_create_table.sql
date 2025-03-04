@@ -9,7 +9,7 @@ CREATE TABLE va_role (
 	latest_crl_version NUMERIC,
 	latest_crl_valid_from TIMESTAMPTZ,
 	latest_crl_valid_until TIMESTAMPTZ,
-	CONSTRAINT caid_pkey PRIMARY KEY (caid)
+	CONSTRAINT ca_ski_pkey PRIMARY KEY (ca_ski)
 );
 -- +goose StatementEnd
 
