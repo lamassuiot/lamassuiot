@@ -6,13 +6,14 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/pem"
+	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	mhelper "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/helpers"
 	"github.com/pressly/goose/v3"
 )
 
-func Register_20250226114600_ca_add_kids() {
+func Register20250226114600CaAddKids() {
 	goose.AddMigrationContext(upCaAddKids, downCaAddKids)
 }
 
@@ -21,6 +22,20 @@ func getFirstElementOrEmpty(strSlice []string) string {
 		return strSlice[0]
 	}
 	return ""
+}
+
+func decodeCertificate(base64Cert string) (*x509.Certificate, error) {
+	decodedPEM, err := base64.StdEncoding.DecodeString(base64Cert)
+	if err != nil {
+		return nil, err
+	}
+
+	certBlock, _ := pem.Decode(decodedPEM)
+	if certBlock == nil {
+		return nil, fmt.Errorf("failed to decode PEM block")
+	}
+
+	return x509.ParseCertificate(certBlock.Bytes)
 }
 
 func upCaAddKids(ctx context.Context, tx *sql.Tx) error {
@@ -57,23 +72,13 @@ func upCaAddKids(ctx context.Context, tx *sql.Tx) error {
 
 	// Process each certificate
 	for _, r := range result {
-		base64Cert := r["certificate"].(string)
-
 		// Decode PEM certificate
-		decodedPEM, err := base64.StdEncoding.DecodeString(base64Cert)
+		certificate, err := decodeCertificate(r["certificate"].(string))
 		if err != nil {
 			return err
 		}
 
-		certBlock, _ := pem.Decode(decodedPEM)
-		if certBlock != nil {
-			// Parse the certificate and update the database
-			certificate, err := x509.ParseCertificate(certBlock.Bytes)
-			if err != nil {
-				return err
-			}
-
-			_, err = tx.ExecContext(ctx, `
+		_, err = tx.ExecContext(ctx, `
 				UPDATE certificates 
 				SET 
 					authority_key_id = $1,
@@ -85,18 +90,17 @@ func upCaAddKids(ctx context.Context, tx *sql.Tx) error {
 					issuer_locality = $7
 				WHERE serial_number = $8
 			`,
-				helpers.FormatHexWithColons(certificate.AuthorityKeyId),
-				certificate.Issuer.CommonName,
-				getFirstElementOrEmpty(certificate.Issuer.Organization),
-				getFirstElementOrEmpty(certificate.Issuer.OrganizationalUnit),
-				getFirstElementOrEmpty(certificate.Issuer.Country),
-				getFirstElementOrEmpty(certificate.Issuer.Province),
-				getFirstElementOrEmpty(certificate.Issuer.Locality),
-				r["serial_number"],
-			)
-			if err != nil {
-				return err
-			}
+			helpers.FormatHexWithColons(certificate.AuthorityKeyId),
+			certificate.Issuer.CommonName,
+			getFirstElementOrEmpty(certificate.Issuer.Organization),
+			getFirstElementOrEmpty(certificate.Issuer.OrganizationalUnit),
+			getFirstElementOrEmpty(certificate.Issuer.Country),
+			getFirstElementOrEmpty(certificate.Issuer.Province),
+			getFirstElementOrEmpty(certificate.Issuer.Locality),
+			r["serial_number"],
+		)
+		if err != nil {
+			return err
 		}
 	}
 

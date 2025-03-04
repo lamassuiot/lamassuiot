@@ -9,9 +9,9 @@ import (
 func RegisterGoMigrations(dbname string) {
 	switch dbname {
 	case "ca":
-		ca.Register_20250123125500_ca_aws_metadata()
-		ca.Register_20250226114600_ca_add_kids()
+		ca.Register20250123125500CaAwsMetadata()
+		ca.Register20250226114600CaAddKids()
 	case "dmsmanager":
-		dmsmanager.Register_20241230124809_serverkeygen_revokereenroll()
+		dmsmanager.Register20241230124809ServerkeygenRevokereenroll()
 	}
 }

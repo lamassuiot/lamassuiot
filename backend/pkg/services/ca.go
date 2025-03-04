@@ -387,8 +387,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	skid := helpers.FormatHexWithColons(input.CACertificate.SubjectKeyId)
 	akid := helpers.FormatHexWithColons(input.CACertificate.AuthorityKeyId)
 
-	isSelfSigned := (akid == "" || akid == skid) &&
-		(input.CACertificate.Subject.String() == input.CACertificate.Issuer.String())
+	isSelfSigned := helpers.IsSelfSignedCertificate(akid, skid, (*x509.Certificate)(input.CACertificate))
 
 	if !isSelfSigned {
 		var parentCAs []models.CACertificate
@@ -485,8 +484,8 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		svc.caStorage.SelectByIssuerAndAuthorityKeyID(ctx, parent.Certificate.Subject, parent.Certificate.SubjectKeyID, storage.StorageListRequest[models.CACertificate]{
 			ExhaustiveRun: true,
 			ApplyFunc: func(child models.CACertificate) {
-				isSelfSignedChild := (child.Certificate.AuthorityKeyID == "" || child.Certificate.AuthorityKeyID == child.Certificate.SubjectKeyID) &&
-					(input.CACertificate.Subject.String() == input.CACertificate.Issuer.String())
+				isSelfSignedChild := helpers.IsSelfSignedCertificate(child.Certificate.AuthorityKeyID, child.Certificate.SubjectKeyID, (*x509.Certificate)(input.CACertificate))
+
 				if !isSelfSignedChild {
 					if firstIteration { //Check also with crypto validation to ensure child is actually signed by parent?
 						p := x509.Certificate(*parent.Certificate.Certificate)
