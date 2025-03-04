@@ -61,10 +61,11 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService) (*ser
 	}
 
 	crl, err := beService.NewCRLService(beService.CRLServiceBuilder{
-		Logger:   lSvc,
-		CAClient: caService,
-		VARepo:   vaRoleRepo,
-		Bucket:   (*blob.Bucket)(bucket),
+		Logger:    lSvc,
+		CAClient:  caService,
+		VARepo:    vaRoleRepo,
+		VADomains: conf.VADomains,
+		Bucket:    (*blob.Bucket)(bucket),
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create CRL service: %s", err)

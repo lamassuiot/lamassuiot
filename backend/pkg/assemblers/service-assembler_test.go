@@ -289,7 +289,7 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 			Enabled:   monitor,
 			Frequency: "1s",
 		},
-		VAServerDomain: "dev.lamassu.test",
+		VAServerDomains: []string{"dev.lamassu.test/api/va"},
 	}, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
@@ -425,7 +425,7 @@ func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 		},
 		Storage: storageEngine.config,
 		Server: cconfig.HttpServer{
-			LogLevel:           cconfig.Info,
+			LogLevel:           cconfig.Debug,
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},

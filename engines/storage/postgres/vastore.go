@@ -26,8 +26,8 @@ func NewVARepository(logger *logrus.Entry, db *gorm.DB) (storage.VARepo, error) 
 	}, nil
 }
 
-func (db *PostgresVAStore) Get(ctx context.Context, caID string) (bool, *models.VARole, error) {
-	return db.querier.SelectExists(ctx, caID, nil)
+func (db *PostgresVAStore) Get(ctx context.Context, caSki string) (bool, *models.VARole, error) {
+	return db.querier.SelectExists(ctx, caSki, nil)
 }
 
 func (db *PostgresVAStore) GetAll(ctx context.Context, req storage.StorageListRequest[models.VARole]) (string, error) {
@@ -35,9 +35,9 @@ func (db *PostgresVAStore) GetAll(ctx context.Context, req storage.StorageListRe
 }
 
 func (db *PostgresVAStore) Update(ctx context.Context, role *models.VARole) (*models.VARole, error) {
-	return db.querier.Update(ctx, role, role.CAID)
+	return db.querier.Update(ctx, role, role.CASubjectKeyID)
 }
 
 func (db *PostgresVAStore) Insert(ctx context.Context, role *models.VARole) (*models.VARole, error) {
-	return db.querier.Insert(ctx, role, role.CAID)
+	return db.querier.Insert(ctx, role, role.CASubjectKeyID)
 }

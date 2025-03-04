@@ -113,7 +113,7 @@ func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 
 func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
+		CASubjectKeyID string `uri:"ca-ski" binding:"required"`
 	}
 
 	var params uriParams
@@ -123,8 +123,8 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 	}
 
 	crl, err := r.crl.GetCRL(ctx, services.GetCRLInput{
-		CAID:       params.ID,
-		CRLVersion: big.NewInt(0),
+		CRLVersion:     big.NewInt(0),
+		CASubjectKeyID: params.CASubjectKeyID,
 	})
 	if err != nil {
 		r.logger.Errorf("something went wrong while getting crl list: %s", err)
@@ -137,7 +137,7 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 
 func (r *vaHttpRoutes) GetRoleByID(ctx *gin.Context) {
 	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
+		CASubjectKeyID string `uri:"ca-ski" binding:"required"`
 	}
 
 	var params uriParams
@@ -147,7 +147,7 @@ func (r *vaHttpRoutes) GetRoleByID(ctx *gin.Context) {
 	}
 
 	role, err := r.crl.GetVARole(ctx, services.GetVARoleInput{
-		CAID: params.ID,
+		CASubjectKeyID: params.CASubjectKeyID,
 	})
 	if err != nil {
 		r.logger.Errorf("something went wrong while getting va role: %s", err)
@@ -187,7 +187,7 @@ func (r *vaHttpRoutes) GetRoles(ctx *gin.Context) {
 
 func (r *vaHttpRoutes) UpdateRole(ctx *gin.Context) {
 	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
+		CASubjectKeyID string `uri:"ca-ski" binding:"required"`
 	}
 
 	var params uriParams
@@ -203,8 +203,8 @@ func (r *vaHttpRoutes) UpdateRole(ctx *gin.Context) {
 	}
 
 	role, err := r.crl.UpdateVARole(ctx, services.UpdateVARoleInput{
-		CAID:    params.ID,
-		CRLRole: requestBody.VACRLRole,
+		CASubjectKeyID: params.CASubjectKeyID,
+		CRLRole:        requestBody.VACRLRole,
 	})
 	if err != nil {
 		r.logger.Errorf("something went wrong while updating va role: %s", err)

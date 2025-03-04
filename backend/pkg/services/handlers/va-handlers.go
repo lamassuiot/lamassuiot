@@ -62,7 +62,7 @@ func updateCertificateStatus(event *event.Event, crlSvc *beService.CRLServiceBac
 
 	if cert.Updated.Status == models.StatusRevoked {
 		role, err := crlSvc.GetVARole(ctx, services.GetVARoleInput{
-			CAID: cert.Updated.IssuerCAMetadata.ID,
+			CASubjectKeyID: string(aki),
 		})
 		if err != nil {
 			err = fmt.Errorf("could not get VA role for certificate %s %s - %s %s: %s", cn, ski, icn, aki, err)
@@ -72,7 +72,7 @@ func updateCertificateStatus(event *event.Event, crlSvc *beService.CRLServiceBac
 
 		if role.CRLOptions.RegenerateOnRevoke {
 			_, err = crlSvc.CalculateCRL(ctx, services.CalculateCRLInput{
-				CAID: role.CAID,
+				CASubjectKeyID: string(aki),
 			})
 			if err != nil {
 				err = fmt.Errorf("could not calculate CRL for certificate %s %s - %s %s: %s", cn, ski, icn, aki, err)

@@ -343,7 +343,8 @@ func main() {
 		SubscriberEventBus: eventBus,
 		PublisherEventBus:  eventBus,
 		Domain:             "dev.lamassu.test",
-		GatewayPort:        8443,
+		GatewayPortHttps:   8443,
+		GatewayPortHttp:    8080,
 		AssemblyMode:       pkg.Http,
 		CryptoEngines:      cryptoEnginesConfig.CryptoEngines,
 		Monitoring: cconfig.MonitoringJob{
@@ -364,7 +365,7 @@ func main() {
 		},
 	}
 
-	_, err = pkg.RunMonolithicLamassuPKI(conf)
+	_, _, err = pkg.RunMonolithicLamassuPKI(conf)
 	if err != nil {
 		fmt.Println("could not start monolithic PKI. Shuting down: ", err)
 		panic(err)
@@ -380,7 +381,7 @@ func main() {
 	}
 
 	time.Sleep(3 * time.Second)
-	caCli := sdk.NewHttpCAClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/ca", conf.GatewayPort))
+	caCli := sdk.NewHttpCAClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/ca", conf.GatewayPortHttps))
 	engines, err := caCli.GetCryptoEngineProvider(context.Background())
 	if err != nil {
 		panic(err)

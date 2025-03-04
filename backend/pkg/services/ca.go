@@ -41,7 +41,7 @@ type CAServiceBackend struct {
 	caStorage                   storage.CACertificatesRepo
 	certStorage                 storage.CertificatesRepo
 	caCertificateRequestStorage storage.CACertificateRequestRepo
-	vaServerDomain              string
+	vaServerDomains             []string
 	logger                      *logrus.Entry
 }
 
@@ -51,7 +51,7 @@ type CAServiceBuilder struct {
 	CAStorage                   storage.CACertificatesRepo
 	CertificateStorage          storage.CertificatesRepo
 	CACertificateRequestStorage storage.CACertificateRequestRepo
-	VAServerDomain              string
+	VAServerDomains             []string
 }
 
 func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
@@ -122,7 +122,7 @@ func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
 		caStorage:                   builder.CAStorage,
 		certStorage:                 builder.CertificateStorage,
 		caCertificateRequestStorage: builder.CACertificateRequestStorage,
-		vaServerDomain:              builder.VAServerDomain,
+		vaServerDomains:             builder.VAServerDomains,
 		logger:                      builder.Logger,
 	}
 
@@ -687,7 +687,7 @@ func (svc *CAServiceBackend) getCryptoEngine(engineId string) (string, x509engin
 		availableEngineId = engineId
 	}
 
-	return availableEngineId, x509engines.NewX509Engine(svc.logger, svc.cryptoEngines[availableEngineId], svc.vaServerDomain), nil
+	return availableEngineId, x509engines.NewX509Engine(svc.logger, svc.cryptoEngines[availableEngineId], svc.vaServerDomains), nil
 }
 
 func (svc *CAServiceBackend) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
@@ -1114,7 +1114,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	}
 
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
-	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomain)
+	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomains)
 
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
 	csr := (*x509.CertificateRequest)(input.CertRequest)
@@ -1249,7 +1249,7 @@ func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input services.S
 	}
 
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
-	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomain)
+	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomains)
 	lFunc.Debugf("sign signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
 	signature, err := x509Engine.Sign(ctx, (*x509.Certificate)(ca.Certificate.Certificate), input.Message, input.MessageType, input.SigningAlgorithm)
 	if err != nil {
@@ -1279,7 +1279,7 @@ func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input services
 		return false, errs.ErrCANotFound
 	}
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
-	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomain)
+	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomains)
 	lFunc.Debugf("verify signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
 	return x509Engine.Verify(ctx, (*x509.Certificate)(ca.Certificate.Certificate), input.Signature, input.Message, input.MessageType, input.SigningAlgorithm)
 }

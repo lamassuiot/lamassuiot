@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -24,18 +25,20 @@ import (
 var crlValidate *validator.Validate
 
 type CRLServiceBackend struct {
-	caSDK   services.CAService
-	logger  *logrus.Entry
-	vaRepo  storage.VARepo
-	service services.CRLService
-	bucket  *blob.Bucket
+	caSDK     services.CAService
+	logger    *logrus.Entry
+	vaRepo    storage.VARepo
+	service   services.CRLService
+	bucket    *blob.Bucket
+	vaDomains []string
 }
 
 type CRLServiceBuilder struct {
-	VARepo   storage.VARepo
-	Logger   *logrus.Entry
-	CAClient services.CAService
-	Bucket   *blob.Bucket
+	VARepo    storage.VARepo
+	Logger    *logrus.Entry
+	CAClient  services.CAService
+	Bucket    *blob.Bucket
+	VADomains []string
 }
 
 type CRLMiddleware func(services.CRLService) services.CRLService
@@ -44,9 +47,10 @@ func NewCRLService(builder CRLServiceBuilder) (services.CRLService, error) {
 	crlValidate = validator.New()
 
 	svc := &CRLServiceBackend{
-		caSDK:  builder.CAClient,
-		logger: builder.Logger,
-		vaRepo: builder.VARepo,
+		caSDK:     builder.CAClient,
+		logger:    builder.Logger,
+		vaRepo:    builder.VARepo,
+		vaDomains: builder.VADomains,
 	}
 
 	svc.service = svc
@@ -69,21 +73,21 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 
 	versionStr := input.CRLVersion.String()
 	if input.CRLVersion.Cmp(big.NewInt(0)) == 0 {
-		exists, role, err := svc.vaRepo.Get(ctx, input.CAID)
+		exists, role, err := svc.vaRepo.Get(ctx, input.CASubjectKeyID)
 		if err != nil {
 			lFunc.Errorf("something went wrong while reading VA role: %s", err)
 			return nil, err
 		}
 
 		if !exists {
-			lFunc.Errorf("VA role for CA %s does not exist", input.CAID)
-			return nil, fmt.Errorf("VA role for CA %s does not exist", input.CAID)
+			lFunc.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+			return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
 		}
 
 		versionStr = role.LatestCRL.Version.String()
 	}
 
-	crlPem, err := svc.bucket.ReadAll(ctx, fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CAID, versionStr))
+	crlPem, err := svc.bucket.ReadAll(ctx, fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CASubjectKeyID, versionStr))
 	if err != nil {
 		lFunc.Errorf("something went wrong while reading CRL: %s", err)
 		return nil, err
@@ -100,23 +104,39 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 	return crl, nil
 }
 
-func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caID string) (*models.VARole, error) {
+func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*models.VARole, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	ca, err := svc.caSDK.GetCAByID(ctx, services.GetCAByIDInput{
-		CAID: caID,
+	var ca *models.CACertificate
+	_, err := svc.caSDK.GetCAs(ctx, services.GetCAsInput{
+		QueryParameters: &resources.QueryParameters{
+			Filters: []resources.FilterOption{
+				{
+					Field:           "subject_key_id",
+					FilterOperation: resources.StringEqual,
+					Value:           caSki,
+				},
+			},
+		},
+		ApplyFunc: func(c models.CACertificate) {
+			ca = &c
+		},
 	})
 	if err != nil {
 		return nil, err
 	}
 
+	if ca == nil {
+		return nil, fmt.Errorf("CA %s not found", caSki)
+	}
+
 	role, err := svc.vaRepo.Insert(ctx, &models.VARole{
-		CAID: caID,
+		CASubjectKeyID: caSki,
 		CRLOptions: models.VACRLRole{
 			Validity:           models.TimeDuration(24 * time.Hour * 7),            // 1 week
 			RefreshInterval:    models.TimeDuration(24*time.Hour*6 + 23*time.Hour), // 6 days, 23 hours
-			KeyIDSigner:        ca.Certificate.KeyID,
 			RegenerateOnRevoke: true,
+			SubjectKeyIDSigner: caSki,
 		},
 		LatestCRL: models.LatestCRLMeta{
 			Version:   models.BigInt{Int: big.NewInt(0)},
@@ -128,7 +148,7 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caID string) (*mod
 	}
 
 	_, err = svc.CalculateCRL(ctx, services.CalculateCRLInput{
-		CAID: caID,
+		CASubjectKeyID: string(ca.Certificate.Certificate.SubjectKeyId),
 	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while calculating first CRL: %s", err)
@@ -147,21 +167,47 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	exists, vaRole, err := svc.vaRepo.Get(ctx, input.CAID)
+	exists, vaRole, err := svc.vaRepo.Get(ctx, input.CASubjectKeyID)
 	if err != nil {
 		lFunc.Errorf("something went wrong while reading VA role: %s", err)
 		return nil, err
 	}
 
 	if !exists {
-		lFunc.Errorf("VA role for CA %s does not exist", input.CAID)
-		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CAID)
+		lFunc.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+	}
+
+	var crlCA *models.CACertificate
+	_, err = svc.caSDK.GetCAs(ctx, services.GetCAsInput{
+		QueryParameters: &resources.QueryParameters{
+			Filters: []resources.FilterOption{
+				{
+					Field:           "subject_key_id",
+					Value:           input.CASubjectKeyID,
+					FilterOperation: resources.StringEqual,
+				},
+			},
+			PageSize: 1,
+		},
+		ApplyFunc: func(ca models.CACertificate) {
+			crlCA = &ca
+		},
+	})
+	if err != nil {
+		lFunc.Errorf("something went wrong while reading CA %s: %s", input.CASubjectKeyID, err)
+		return nil, err
+	}
+
+	if crlCA == nil {
+		lFunc.Errorf("CA %s not found", input.CASubjectKeyID)
+		return nil, fmt.Errorf("CA %s not found", input.CASubjectKeyID)
 	}
 
 	certList := []x509.RevocationListEntry{}
-	lFunc.Debugf("reading CA %s certificates", input.CAID)
+	lFunc.Debugf("reading CA %s certificates", crlCA.ID)
 	_, err = svc.caSDK.GetCertificatesByCaAndStatus(ctx, services.GetCertificatesByCaAndStatusInput{
-		CAID:   input.CAID,
+		CAID:   crlCA.ID,
 		Status: models.StatusRevoked,
 		ListInput: resources.ListInput[models.Certificate]{
 			ExhaustiveRun: true,
@@ -179,19 +225,24 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		},
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while reading CA %s certificates: %s", input.CAID, err)
+		lFunc.Errorf("something went wrong while reading CA %s certificates: %s", crlCA.ID, err)
 		return nil, err
 	}
 
-	ca, err := svc.caSDK.GetCAByID(ctx, services.GetCAByIDInput(input))
+	crlSigner := NewCASigner(ctx, crlCA, svc.caSDK)
+	caCert := (*x509.Certificate)(crlCA.Certificate.Certificate)
+
+	extensions := []pkix.Extension{}
+
+	idp, err := svc.getDistributionPointExtension(string(crlCA.Certificate.Certificate.SubjectKeyId))
 	if err != nil {
+		lFunc.Errorf("something went wrong while creating Issuing Distribution Point extension: %s", err)
 		return nil, err
 	}
 
-	caSigner := NewCASigner(ctx, ca, svc.caSDK)
-	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
+	extensions = append(extensions, *idp)
 
-	lFunc.Debugf("creating revocation list. CA %s", input.CAID)
+	lFunc.Debugf("creating revocation list. CA %s", crlCA.ID)
 	now := time.Now()
 
 	crlVersion := big.NewInt(0)
@@ -201,7 +252,8 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		Number:                    crlVersion,
 		ThisUpdate:                now,
 		NextUpdate:                now.Add(time.Duration(vaRole.CRLOptions.Validity)),
-	}, caCert, caSigner)
+		ExtraExtensions:           extensions,
+	}, caCert, crlSigner)
 	if err != nil {
 		lFunc.Errorf("something went wrong while creating revocation list: %s", err)
 		return nil, err
@@ -214,14 +266,14 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 	}
 
 	crlPem := pem.EncodeToMemory(&pem.Block{Type: "X509 CRL", Bytes: crlDer})
-	err = svc.bucket.WriteAll(ctx, fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CAID, crl.Number), crlPem, nil)
+	err = svc.bucket.WriteAll(ctx, fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CASubjectKeyID, crl.Number), crlPem, nil)
 	if err != nil {
 		lFunc.Errorf("something went wrong while saving CRL: %s", err)
 		return nil, err
 	}
 
 	vaRole.LatestCRL = models.LatestCRLMeta{
-		Version:    models.BigInt{crl.Number},
+		Version:    models.BigInt{Int: crl.Number},
 		ValidFrom:  crl.ThisUpdate,
 		ValidUntil: crl.NextUpdate,
 	}
@@ -236,13 +288,13 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 }
 
 func (svc CRLServiceBackend) GetVARole(ctx context.Context, input services.GetVARoleInput) (*models.VARole, error) {
-	exists, role, err := svc.vaRepo.Get(ctx, input.CAID)
+	exists, role, err := svc.vaRepo.Get(ctx, input.CASubjectKeyID)
 	if err != nil {
 		return nil, err
 	}
 
 	if !exists {
-		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CAID)
+		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
 	}
 
 	return role, nil
@@ -260,16 +312,54 @@ func (svc CRLServiceBackend) GetVARoles(ctx context.Context, input services.GetV
 }
 
 func (svc CRLServiceBackend) UpdateVARole(ctx context.Context, input services.UpdateVARoleInput) (*models.VARole, error) {
-	exists, role, err := svc.vaRepo.Get(ctx, input.CAID)
-	if err != nil {
-		return nil, err
+	exists, role, err := svc.vaRepo.Get(ctx, input.CASubjectKeyID)
+	if !exists {
+		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
 	}
 
-	if !exists {
-		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CAID)
+	if err != nil {
+		return nil, err
 	}
 
 	role.CRLOptions = input.CRLRole
 
 	return svc.vaRepo.Update(ctx, role)
+}
+
+func (svc CRLServiceBackend) getDistributionPointExtension(aki string) (*pkix.Extension, error) {
+	type DistributionPointName struct { // CHOICE
+		FullName     []asn1.RawValue  `asn1:"optional,tag:0"`
+		RelativeName pkix.RDNSequence `asn1:"optional,tag:1"`
+	}
+
+	// RFC 5280. Section 5.2.5,
+	type IssuingDistributionPoint struct {
+		DistributionPoint          DistributionPointName `asn1:"tag:0,optional"`
+		OnlyContainsUserCerts      bool                  `asn1:"tag:1"`
+		OnlyContainsCACerts        bool                  `asn1:"tag:2"`
+		OnlySomeReasons            asn1.BitString        `asn1:"tag:3,optional"`
+		IndirectCRL                bool                  `asn1:"tag:4"`
+		OnlyContainsAttributeCerts bool                  `asn1:"tag:5"`
+	}
+
+	idpNames := []asn1.RawValue{}
+	for _, name := range svc.vaDomains {
+		idpNames = append(idpNames, asn1.RawValue{Tag: 6, Class: 2, Bytes: []byte(fmt.Sprintf("http://%s/crl/%s", name, aki))})
+	}
+
+	// Add Issuing Distribution Point
+	idp, err := asn1.Marshal(IssuingDistributionPoint{
+		DistributionPoint: DistributionPointName{
+			FullName: idpNames,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &pkix.Extension{
+		Id:       []int{2, 5, 29, 28},
+		Critical: true,
+		Value:    idp,
+	}, nil
 }

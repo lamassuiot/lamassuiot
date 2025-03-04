@@ -18,16 +18,16 @@ type CRLService interface {
 }
 
 type GetCRLInput struct {
-	CAID       string   `validate:"required"`
-	CRLVersion *big.Int `validate:"required"`
+	CASubjectKeyID string   `validate:"required"`
+	CRLVersion     *big.Int `validate:"required"`
 }
 
 type CalculateCRLInput struct {
-	CAID string `validate:"required"`
+	CASubjectKeyID string
 }
 
 type GetVARoleInput struct {
-	CAID string `validate:"required"`
+	CASubjectKeyID string `validate:"required"`
 }
 
 type GetVARolesInput struct {
@@ -38,6 +38,6 @@ type GetVARolesInput struct {
 }
 
 type UpdateVARoleInput struct {
-	CAID    string           `validate:"required"`
-	CRLRole models.VACRLRole `validate:"required"`
+	CASubjectKeyID string           `validate:"required"`
+	CRLRole        models.VACRLRole `validate:"required"`
 }

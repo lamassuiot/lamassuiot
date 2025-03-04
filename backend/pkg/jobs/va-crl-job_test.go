@@ -24,7 +24,7 @@ func TestCreatePeriodicCRLExpired(t *testing.T) {
 	now := time.Now()
 	vaRoles := []*models.VARole{
 		{
-			CAID: "123456",
+			CASubjectKeyID: "123456",
 			LatestCRL: models.LatestCRLMeta{
 				Version:    models.BigInt{Int: big.NewInt(1)},
 				ValidFrom:  now.Add(-time.Second * 5),
@@ -32,7 +32,7 @@ func TestCreatePeriodicCRLExpired(t *testing.T) {
 			},
 			CRLOptions: models.VACRLRole{
 				Validity:           models.TimeDuration(10 * time.Second),
-				KeyIDSigner:        "123456",
+				SubjectKeyIDSigner: "123456",
 				RegenerateOnRevoke: false,
 			},
 		},
@@ -59,7 +59,7 @@ func TestCreatePeriodicCRLValid(t *testing.T) {
 	now := time.Now()
 	vaRoles := []*models.VARole{
 		{
-			CAID: "123456",
+			CASubjectKeyID: "123456",
 			LatestCRL: models.LatestCRLMeta{
 				Version:    models.BigInt{Int: big.NewInt(1)},
 				ValidFrom:  now.Add(-time.Second * 5),
@@ -67,7 +67,7 @@ func TestCreatePeriodicCRLValid(t *testing.T) {
 			},
 			CRLOptions: models.VACRLRole{
 				Validity:           models.TimeDuration(10 * time.Second),
-				KeyIDSigner:        "123456",
+				SubjectKeyIDSigner: "123456",
 				RegenerateOnRevoke: false,
 			},
 		},
