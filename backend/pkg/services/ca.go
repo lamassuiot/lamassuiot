@@ -1203,7 +1203,6 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		return nil, err
 	}
 
-	dbgakid := helpers.FormatHexWithColons(x509Cert.AuthorityKeyId)
 	cert := models.Certificate{
 		Metadata:    map[string]interface{}{},
 		Type:        models.CertificateTypeExternal,
@@ -1222,7 +1221,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		RevocationTimestamp: time.Time{},
 		IsCA:                x509Cert.IsCA,
 		SubjectKeyID:        helpers.FormatHexWithColons(x509Cert.SubjectKeyId),
-		AuthorityKeyID:      dbgakid,
+		AuthorityKeyID:      helpers.FormatHexWithColons(x509Cert.AuthorityKeyId),
 		EngineID:            "",
 	}
 
