@@ -629,6 +629,8 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	var caLevel int
 	var issuerCAMeta models.IssuerCAMetadata
 
+	skid := helpers.FormatHexWithColons([]byte(keyID))
+	akid := skid
 	// Check if CA is Root (self-signed) or Subordinate (signed by another CA). Non self-signed/root CAs require a parent CA
 	if input.ParentID == "" {
 		// Root CA. Root CAs can be generate directly
@@ -656,6 +658,8 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 			lFunc.Errorf("parent CA %s does not exist", input.ParentID)
 			return nil, errs.ErrCANotFound
 		}
+
+		akid = parentCA.Certificate.SubjectKeyID
 
 		var caExpiration time.Time
 		if input.IssuanceExpiration.Type == models.Duration {
@@ -718,10 +722,11 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		CreationTS: time.Now(),
 		Level:      caLevel,
 		Certificate: models.Certificate{
-			SubjectKeyID: keyID,
-			Certificate:  (*models.X509Certificate)(ca),
-			Status:       models.StatusActive,
-			SerialNumber: helpers.SerialNumberToString(ca.SerialNumber),
+			SubjectKeyID:   skid,
+			AuthorityKeyID: akid,
+			Certificate:    (*models.X509Certificate)(ca),
+			Status:         models.StatusActive,
+			SerialNumber:   helpers.SerialNumberToString(ca.SerialNumber),
 			KeyMetadata: models.KeyStrengthMetadata{
 				Type:     input.KeyMetadata.Type,
 				Bits:     input.KeyMetadata.Bits,
@@ -1198,6 +1203,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		return nil, err
 	}
 
+	dbgakid := helpers.FormatHexWithColons(x509Cert.AuthorityKeyId)
 	cert := models.Certificate{
 		Metadata:    map[string]interface{}{},
 		Type:        models.CertificateTypeExternal,
@@ -1216,7 +1222,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		RevocationTimestamp: time.Time{},
 		IsCA:                x509Cert.IsCA,
 		SubjectKeyID:        helpers.FormatHexWithColons(x509Cert.SubjectKeyId),
-		AuthorityKeyID:      helpers.FormatHexWithColons(x509Cert.AuthorityKeyId),
+		AuthorityKeyID:      dbgakid,
 		EngineID:            "",
 	}
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/cloudevents/sdk-go/v2/event"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	beService "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -55,14 +56,14 @@ func updateCertificateStatus(event *event.Event, crlSvc *beService.CRLServiceBac
 		return err
 	}
 
-	ski := cert.Updated.Certificate.SubjectKeyId
-	aki := cert.Updated.Certificate.AuthorityKeyId
+	ski := helpers.FormatHexWithColons(cert.Updated.Certificate.SubjectKeyId)
+	aki := helpers.FormatHexWithColons(cert.Updated.Certificate.AuthorityKeyId)
 	cn := cert.Updated.Certificate.Subject.CommonName
 	icn := cert.Updated.Certificate.Issuer.CommonName
 
 	if cert.Updated.Status == models.StatusRevoked {
 		role, err := crlSvc.GetVARole(ctx, services.GetVARoleInput{
-			CASubjectKeyID: string(aki),
+			CASubjectKeyID: aki,
 		})
 		if err != nil {
 			err = fmt.Errorf("could not get VA role for certificate %s %s - %s %s: %s", cn, ski, icn, aki, err)
@@ -72,7 +73,7 @@ func updateCertificateStatus(event *event.Event, crlSvc *beService.CRLServiceBac
 
 		if role.CRLOptions.RegenerateOnRevoke {
 			_, err = crlSvc.CalculateCRL(ctx, services.CalculateCRLInput{
-				CASubjectKeyID: string(aki),
+				CASubjectKeyID: aki,
 			})
 			if err != nil {
 				err = fmt.Errorf("could not calculate CRL for certificate %s %s - %s %s: %s", cn, ski, icn, aki, err)

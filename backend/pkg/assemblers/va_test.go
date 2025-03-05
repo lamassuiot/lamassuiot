@@ -183,7 +183,7 @@ func TestCRLCertificateRevocation(t *testing.T) {
 	assert.NoError(t, err, "could not revoke certificate: %s", err)
 
 	// Sleep to ensure that the CRL is regenerated. Since the CRL is generated on revoke via event bus, it may take some time.
-	time.Sleep(2 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	// Get v2 CRL and check that it has 1 entry
 	crl, err = external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, oneCrt.AuthorityKeyID), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
