@@ -161,7 +161,8 @@ type DeviceManagerTestServer struct {
 
 type VATestServer struct {
 	HttpServerURL string
-	CaSDK         services.CAService
+	HttpCASDK     services.CAService
+	HttpVASDK     services.VAService
 	BeforeEach    func() error
 	AfterSuite    func()
 }
@@ -470,7 +471,8 @@ func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 
 	return &VATestServer{
 		HttpServerURL: fmt.Sprintf("http://127.0.0.1:%d", port),
-		CaSDK:         caTestServer.HttpCASDK,
+		HttpCASDK:     caTestServer.HttpCASDK,
+		HttpVASDK:     sdk.NewHttpVAClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
 			return nil
 		},

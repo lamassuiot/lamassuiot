@@ -1,17 +1,11 @@
 package assemblers
 
 import (
-	"bytes"
 	"context"
-	"crypto"
 	"crypto/x509"
-	"encoding/base64"
 	"fmt"
-	"io"
 	"math/big"
 	"math/rand"
-	"net/http"
-	"net/url"
 	"testing"
 	"time"
 
@@ -19,7 +13,6 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	external_clients "github.com/lamassuiot/lamassuiot/sdk/v3/external"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/ocsp"
 )
@@ -125,7 +118,11 @@ func TestBaseCRL(t *testing.T) {
 
 			time.Sleep(5 * time.Second) // Sleep to ensure that the CRL is generated (CRL is generated when the CA is created via event bus)
 
-			crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, issuerCA.Certificate.AuthorityKeyID), (*x509.Certificate)(issuerCA.Certificate.Certificate), nil, true)
+			crl, err := serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
+				CASubjectKeyID: issuerCA.Certificate.AuthorityKeyID,
+				Issuer:         (*x509.Certificate)(issuerCA.Certificate.Certificate),
+				VerifyResponse: true,
+			})
 			if err != nil {
 				t.Fatalf("could not get CRL: %s", err)
 			}
@@ -166,7 +163,11 @@ func TestCRLCertificateRevocation(t *testing.T) {
 
 	// By Default, a VARole is created for the CA automatically setting the CRL to be regenerated on revoke
 	// First get v1 CRL and check that it has 0 entries
-	crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, oneCrt.AuthorityKeyID), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
+	crl, err := serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
+		CASubjectKeyID: oneCrt.AuthorityKeyID,
+		Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
+		VerifyResponse: true,
+	})
 	if err != nil {
 		t.Fatalf("could not get CRL: %s", err)
 	}
@@ -188,7 +189,11 @@ func TestCRLCertificateRevocation(t *testing.T) {
 	time.Sleep(5 * time.Second)
 
 	// Get v2 CRL and check that it has 1 entry
-	crl, err = external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, oneCrt.AuthorityKeyID), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
+	crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
+		CASubjectKeyID: oneCrt.AuthorityKeyID,
+		Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
+		VerifyResponse: true,
+	})
 	if err != nil {
 		t.Fatalf("could not get CRL: %s", err)
 	}
@@ -297,8 +302,11 @@ func TestPostOCSP(t *testing.T) {
 				t.Fatalf("could not run before OCSP Request-Response: %s", err)
 			}
 
-			response, err := getOCSPResponsePost(serverTest.VA.HttpServerURL, crt, issuerCA)
-
+			response, err := serverTest.VA.HttpVASDK.GetOCSPResponsePost(context.Background(), services.GetOCSPResponseInput{
+				Certificate:    (*x509.Certificate)(crt.Certificate),
+				Issuer:         (*x509.Certificate)(issuerCA.Certificate.Certificate),
+				VerifyResponse: true,
+			})
 			err = tc.resultCheck(crt, issuerCA, response, err)
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
@@ -328,7 +336,11 @@ func TestGetOCSP(t *testing.T) {
 		t.Fatalf("failed generating crt in test case: %s", err)
 	}
 
-	response, err := getOCSPResponseGet(serverTest.VA.HttpServerURL, crt, issuerCA)
+	response, err := serverTest.VA.HttpVASDK.GetOCSPResponseGet(context.Background(), services.GetOCSPResponseInput{
+		Certificate:    (*x509.Certificate)(crt.Certificate),
+		Issuer:         (*x509.Certificate)(issuerCA.Certificate.Certificate),
+		VerifyResponse: true,
+	})
 	if err != nil {
 		t.Fatalf("failed getting OCSP response: %s", err)
 	}
@@ -383,7 +395,11 @@ func TestCheckOCSPRevocationCodes(t *testing.T) {
 				t.Fatalf("failed revoking certificate: %s", err)
 			}
 
-			response, err := getOCSPResponsePost(serverTest.VA.HttpServerURL, crt, issuerCA)
+			response, err := serverTest.VA.HttpVASDK.GetOCSPResponsePost(context.Background(), services.GetOCSPResponseInput{
+				Certificate:    (*x509.Certificate)(crt.Certificate),
+				Issuer:         (*x509.Certificate)(issuerCA.Certificate.Certificate),
+				VerifyResponse: true,
+			})
 			if err != nil {
 				t.Fatalf("failed getting OCSP response: %s", err)
 			}
@@ -430,88 +446,6 @@ func generateCertificate(caSDK services.CAService) (*models.Certificate, error) 
 	}
 
 	return crt, nil
-}
-
-func getOCSPResponsePost(ocspServerURL string, crt *models.Certificate, issuer *models.CACertificate) (*ocsp.Response, error) {
-	opts := &ocsp.RequestOptions{Hash: crypto.SHA1}
-	buffer, err := ocsp.CreateRequest((*x509.Certificate)(crt.Certificate), (*x509.Certificate)(issuer.Certificate.Certificate), opts)
-	if err != nil {
-		return nil, fmt.Errorf("could not generate OCSP request: %s", err)
-	}
-
-	httpRequest, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/ocsp", ocspServerURL), bytes.NewBuffer(buffer))
-	if err != nil {
-		return nil, fmt.Errorf("could not generate HTTP OCSP request: %s", err)
-	}
-	ocspUrl, err := url.Parse(ocspServerURL)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse OCSP server URL: %s", err)
-	}
-
-	httpRequest.Header.Add("Content-Type", "application/ocsp-request")
-	httpRequest.Header.Add("Accept", "application/ocsp-response")
-	httpRequest.Header.Add("host", ocspUrl.Host)
-
-	httpClient := &http.Client{}
-	httpResponse, err := httpClient.Do(httpRequest)
-	if err != nil {
-		return nil, fmt.Errorf("could not DO OCSP request: %s", err)
-	}
-
-	defer httpResponse.Body.Close()
-	output, err := io.ReadAll(httpResponse.Body)
-	if err != nil {
-		return nil, fmt.Errorf("could not decode OCSP response: %s", err)
-	}
-
-	response, err := ocsp.ParseResponse(output, (*x509.Certificate)(issuer.Certificate.Certificate))
-	if err != nil {
-		return nil, fmt.Errorf("could not parse OCSP response: %s", err)
-	}
-
-	return response, nil
-}
-
-func getOCSPResponseGet(ocspServerURL string, crt *models.Certificate, issuer *models.CACertificate) (*ocsp.Response, error) {
-	opts := &ocsp.RequestOptions{Hash: crypto.SHA1}
-	buffer, err := ocsp.CreateRequest((*x509.Certificate)(crt.Certificate), (*x509.Certificate)(issuer.Certificate.Certificate), opts)
-	if err != nil {
-		return nil, fmt.Errorf("could not generate OCSP request: %s", err)
-	}
-
-	encOCSPReq := url.QueryEscape(base64.StdEncoding.EncodeToString(buffer))
-
-	httpRequest, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/ocsp/%s", ocspServerURL, encOCSPReq), bytes.NewBuffer(buffer))
-	if err != nil {
-		return nil, fmt.Errorf("could not generate HTTP OCSP request: %s", err)
-	}
-	ocspUrl, err := url.Parse(ocspServerURL)
-	if err != nil {
-		return nil, fmt.Errorf("could not parse OCSP server URL: %s", err)
-	}
-
-	httpRequest.Header.Add("Content-Type", "application/ocsp-request")
-	httpRequest.Header.Add("Accept", "application/ocsp-response")
-	httpRequest.Header.Add("host", ocspUrl.Host)
-
-	httpClient := &http.Client{}
-	httpResponse, err := httpClient.Do(httpRequest)
-	if err != nil {
-		return nil, fmt.Errorf("could not DO OCSP request: %s", err)
-	}
-
-	defer httpResponse.Body.Close()
-	output, err := io.ReadAll(httpResponse.Body)
-	if err != nil {
-		return nil, fmt.Errorf("could not decode OCSP response: %s", err)
-	}
-
-	response, err := ocsp.ParseResponse(output, (*x509.Certificate)(issuer.Certificate.Certificate))
-	if err != nil {
-		return nil, fmt.Errorf("could not parse OCSP response: %s", err)
-	}
-
-	return response, nil
 }
 
 func StartVAServiceTestServer(t *testing.T) (*TestServer, error) {

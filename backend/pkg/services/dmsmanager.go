@@ -946,7 +946,7 @@ func (svc DMSManagerServiceBackend) checkCertificateRevocation(ctx context.Conte
 		if len(cert.OCSPServer) > 0 {
 			//OCSP first
 			for _, ocspInstance := range cert.OCSPServer {
-				ocspResp, err := external_clients.GetOCSPResponse(ocspInstance, cert, validationCA, nil, true)
+				ocspResp, err := external_clients.GetOCSPResponsePost(ocspInstance, cert, validationCA, nil, true)
 				if err != nil {
 					lFunc.Warnf("could not get or validate ocsp response from server %s specified in the presented client certificate: %s", err, clientSN)
 					lFunc.Warnf("checking with next ocsp server")
