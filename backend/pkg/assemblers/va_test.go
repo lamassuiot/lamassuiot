@@ -537,20 +537,27 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("role CASubjectKeyID should be %s, got %s", helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId), role.CASubjectKeyID)
 	}
 
-	ctr = 0
-	_, err = serverTest.VA.CRLService.GetVARoles(context.Background(), services.GetVARolesInput{
-		ExhaustiveRun:   true,
-		QueryParameters: &resources.QueryParameters{},
-		ApplyFunc: func(role models.VARole) {
-			ctr++
-		},
+	SleepRetry(5, 3*time.Second, func() error {
+		ctr = 0
+		_, err = serverTest.VA.CRLService.GetVARoles(context.Background(), services.GetVARolesInput{
+			ExhaustiveRun:   true,
+			QueryParameters: &resources.QueryParameters{},
+			ApplyFunc: func(role models.VARole) {
+				ctr++
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		if ctr != 2 {
+			return fmt.Errorf("should've got 2 roles, got %d", ctr)
+		}
+
+		return nil
 	})
 	if err != nil {
 		t.Fatalf("could not get roles: %s", err)
-	}
-
-	if ctr != 2 {
-		t.Fatalf("should've got 2 roles, got %d", ctr)
 	}
 }
 
