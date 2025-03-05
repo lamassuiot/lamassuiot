@@ -149,8 +149,10 @@ func TestCRLCertificateRevocation(t *testing.T) {
 
 	crtsToIssue := 10
 	issuedCertsSNs := []string{}
+	var oneCrt *models.Certificate
 	for i := 0; i < crtsToIssue; i++ {
 		crt, err := generateCertificate(caSDK)
+		oneCrt = crt
 		if err != nil {
 			t.Fatalf("could not generate certificate: %s", err)
 		}
@@ -162,7 +164,7 @@ func TestCRLCertificateRevocation(t *testing.T) {
 
 	// By Default, a VARole is created for the CA automatically setting the CRL to be regenerated on revoke
 	// First get v1 CRL and check that it has 0 entries
-	crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, DefaultCAID), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
+	crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, oneCrt.AuthorityKeyID), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
 	if err != nil {
 		t.Fatalf("could not get CRL: %s", err)
 	}
@@ -184,7 +186,7 @@ func TestCRLCertificateRevocation(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// Get v2 CRL and check that it has 1 entry
-	crl, err = external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, DefaultCAID), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
+	crl, err = external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, oneCrt.AuthorityKeyID), (*x509.Certificate)(ca.Certificate.Certificate), nil, true)
 	if err != nil {
 		t.Fatalf("could not get CRL: %s", err)
 	}
