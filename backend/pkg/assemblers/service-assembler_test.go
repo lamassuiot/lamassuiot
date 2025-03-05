@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
@@ -663,4 +664,15 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 		BeforeEach: beforeEach,
 		AfterSuite: afterSuite,
 	}, nil
+}
+
+func SleepRetry(retry int, sleep time.Duration, f func() error) error {
+	for i := 0; i < retry; i++ {
+		err := f()
+		if err == nil {
+			return nil
+		}
+		time.Sleep(sleep)
+	}
+	return fmt.Errorf("could not execute function after %d retries", retry)
 }

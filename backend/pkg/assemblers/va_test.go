@@ -116,12 +116,15 @@ func TestBaseCRL(t *testing.T) {
 				t.Fatalf("could not run 'before' function:  %s", err)
 			}
 
-			time.Sleep(5 * time.Second) // Sleep to ensure that the CRL is generated (CRL is generated when the CA is created via event bus)
+			var crl *x509.RevocationList
+			err = SleepRetry(5, 5*time.Second, func() error {
+				crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
+					CASubjectKeyID: issuerCA.Certificate.AuthorityKeyID,
+					Issuer:         (*x509.Certificate)(issuerCA.Certificate.Certificate),
+					VerifyResponse: true,
+				})
 
-			crl, err := serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
-				CASubjectKeyID: issuerCA.Certificate.AuthorityKeyID,
-				Issuer:         (*x509.Certificate)(issuerCA.Certificate.Certificate),
-				VerifyResponse: true,
+				return err
 			})
 			if err != nil {
 				t.Fatalf("could not get CRL: %s", err)
@@ -159,15 +162,20 @@ func TestCRLCertificateRevocation(t *testing.T) {
 		issuedCertsSNs = append(issuedCertsSNs, crt.SerialNumber)
 	}
 
-	time.Sleep(3 * time.Second) // Sleep to ensure that the CRL is generated (CRL is generated when the CA is created via event bus)
+	var crl *x509.RevocationList
+	// Sleep to ensure that the CRL is generated (CRL is generated when the CA is created via event bus)
+	err = SleepRetry(5, 3*time.Second, func() error {
+		// By Default, a VARole is created for the CA automatically setting the CRL to be regenerated on revoke
+		// First get v1 CRL and check that it has 0 entries
+		crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
+			CASubjectKeyID: oneCrt.AuthorityKeyID,
+			Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
+			VerifyResponse: true,
+		})
 
-	// By Default, a VARole is created for the CA automatically setting the CRL to be regenerated on revoke
-	// First get v1 CRL and check that it has 0 entries
-	crl, err := serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
-		CASubjectKeyID: oneCrt.AuthorityKeyID,
-		Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
-		VerifyResponse: true,
+		return err
 	})
+
 	if err != nil {
 		t.Fatalf("could not get CRL: %s", err)
 	}
@@ -186,13 +194,15 @@ func TestCRLCertificateRevocation(t *testing.T) {
 	assert.NoError(t, err, "could not revoke certificate: %s", err)
 
 	// Sleep to ensure that the CRL is regenerated. Since the CRL is generated on revoke via event bus, it may take some time.
-	time.Sleep(5 * time.Second)
+	err = SleepRetry(5, 3*time.Second, func() error {
+		// Get v2 CRL and check that it has 1 entry
+		crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
+			CASubjectKeyID: oneCrt.AuthorityKeyID,
+			Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
+			VerifyResponse: true,
+		})
 
-	// Get v2 CRL and check that it has 1 entry
-	crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
-		CASubjectKeyID: oneCrt.AuthorityKeyID,
-		Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
-		VerifyResponse: true,
+		return err
 	})
 	if err != nil {
 		t.Fatalf("could not get CRL: %s", err)
