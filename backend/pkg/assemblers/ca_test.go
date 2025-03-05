@@ -1518,13 +1518,9 @@ func TestUpdateCAMetadata(t *testing.T) {
 				//cas := []*models.CACertificate{}
 				_, err := caSDK.UpdateCAMetadata(context.Background(), services.UpdateCAMetadataInput{
 					CAID: DefaultCAID,
-					Patches: models.Patch{
-						models.PatchOperation{
-							Op:    models.OpAdd,
-							Path:  "",
-							Value: ud,
-						},
-					},
+					Patches: chelpers.NewPatchBuilder().
+						Add(chelpers.JSONPointerBuilder(), ud).
+						Build(),
 				})
 				if err != nil {
 					t.Errorf("failed updating the metadata of the CA: %s", err)
@@ -1549,13 +1545,9 @@ func TestUpdateCAMetadata(t *testing.T) {
 				//cas := []*models.CACertificate{}
 				_, err := caSDK.UpdateCAMetadata(context.Background(), services.UpdateCAMetadataInput{
 					CAID: "sdfsfgsd",
-					Patches: models.Patch{
-						models.PatchOperation{
-							Op:    models.OpAdd,
-							Path:  "",
-							Value: ud,
-						},
-					},
+					Patches: chelpers.NewPatchBuilder().
+						Add(chelpers.JSONPointerBuilder(), ud).
+						Build(),
 				})
 				if err != nil {
 					t.Logf("failed updating the metadata of the CA: %s", err)
@@ -1718,13 +1710,9 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 				ud["userName"] = "anonymous"
 				_, err = caSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
 					SerialNumber: cert.SerialNumber,
-					Patches: models.Patch{
-						models.PatchOperation{
-							Op:    models.OpAdd,
-							Path:  "",
-							Value: ud,
-						},
-					},
+					Patches: chelpers.NewPatchBuilder().
+						Add(chelpers.JSONPointerBuilder(), ud).
+						Build(),
 				})
 				return err
 			},
@@ -1744,13 +1732,9 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 				ud["userName"] = "anonymous"
 				_, err = caSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
 					SerialNumber: "dadaafgsdtw",
-					Patches: models.Patch{
-						models.PatchOperation{
-							Op:    models.OpAdd,
-							Path:  "",
-							Value: ud,
-						},
-					},
+					Patches: chelpers.NewPatchBuilder().
+						Add(chelpers.JSONPointerBuilder(), ud).
+						Build(),
 				})
 				return err
 			},

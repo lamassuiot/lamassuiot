@@ -808,16 +808,10 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	//detach certificate from meta
 	_, err = svc.caClient.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
 		SerialNumber: currentDeviceCertSN,
-		Patches: models.Patch{
-			models.PatchOperation{
-				Op:   models.OpRemove,
-				Path: "/" + chelpers.EncodePatchKey(models.CAAttachedToDeviceKey),
-			},
-			models.PatchOperation{
-				Op:   models.OpRemove,
-				Path: "/" + chelpers.EncodePatchKey(models.CAMetadataMonitoringExpirationDeltasKey),
-			},
-		},
+		Patches: chelpers.NewPatchBuilder().
+			Remove(chelpers.JSONPointerBuilder(models.CAAttachedToDeviceKey)).
+			Remove(chelpers.JSONPointerBuilder(models.CAMetadataMonitoringExpirationDeltasKey)).
+			Build(),
 	})
 	if err != nil {
 		lFunc.Errorf("could not update superseded certificate metadata %s: %s", currentDeviceCert.SerialNumber, err)
@@ -1054,18 +1048,10 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 
 	crt, err = svc.caClient.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
 		SerialNumber: crt.SerialNumber,
-		Patches: models.Patch{
-			models.PatchOperation{
-				Op:    models.OpAdd,
-				Path:  "/" + chelpers.EncodePatchKey(models.CAMetadataMonitoringExpirationDeltasKey),
-				Value: expirationDeltas,
-			},
-			models.PatchOperation{
-				Op:    models.OpAdd,
-				Path:  "/" + chelpers.EncodePatchKey(models.CAAttachedToDeviceKey),
-				Value: caAttachedToDevice,
-			},
-		},
+		Patches: chelpers.NewPatchBuilder().
+			Add(chelpers.JSONPointerBuilder(models.CAMetadataMonitoringExpirationDeltasKey), expirationDeltas).
+			Add(chelpers.JSONPointerBuilder(models.CAAttachedToDeviceKey), caAttachedToDevice).
+			Build(),
 	})
 	if err != nil {
 		lFunc.Errorf("could not update certificate metadata with monitoring deltas for certificate with sn '%s': %s", crt.SerialNumber, err)

@@ -3,8 +3,6 @@ package helpers
 import (
 	"reflect"
 	"testing"
-
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
 
 func TestApplyPatches(t *testing.T) {
@@ -27,18 +25,22 @@ func TestApplyPatches(t *testing.T) {
 	}
 
 	// Spec1: Update existing key "test"
-	result1, err := ApplyPatches(meta, models.Patch{
-		{Op: models.OpAdd, Path: "/test", Value: "newVal"},
-	})
+	result1, err := ApplyPatches(
+		meta,
+		NewPatchBuilder().
+			Add(JSONPointerBuilder("test"), "newVal").
+			Build())
 	if err != nil {
 		t.Fatalf("Spec1: failed to apply patches: %s", err)
 	}
 	checkValue(t, "Spec1", result1, "test", "newVal")
 
 	// Spec2: Add nested key "NOTEXISTINGKEY2/MULTIPLELEVELS"
-	result2, err := ApplyPatches(result1, models.Patch{
-		{Op: models.OpAdd, Path: "/NOTEXISTINGKEY2/MULTIPLELEVELS", Value: "newVal"},
-	})
+	result2, err := ApplyPatches(
+		result1,
+		NewPatchBuilder().
+			Add(JSONPointerBuilder("NOTEXISTINGKEY2", "MULTIPLELEVELS"), "newVal").
+			Build())
 	if err != nil {
 		t.Fatalf("Spec2: failed to apply patches: %s", err)
 	}
@@ -55,9 +57,11 @@ func TestApplyPatches(t *testing.T) {
 	}
 
 	// Spec3: Remove "NOTEXISTINGKEY2"
-	result3, err := ApplyPatches(result2, models.Patch{
-		{Op: models.OpRemove, Path: "/NOTEXISTINGKEY2"},
-	})
+	result3, err := ApplyPatches(
+		result2,
+		NewPatchBuilder().
+			Remove(JSONPointerBuilder("NOTEXISTINGKEY2")).
+			Build())
 	if err != nil {
 		t.Fatalf("Spec3: failed to apply patches: %s", err)
 	}
@@ -66,23 +70,31 @@ func TestApplyPatches(t *testing.T) {
 	}
 
 	// Spec4: Remove non-existing key (should not fail)
-	if _, err := ApplyPatches(result3, models.Patch{
-		{Op: models.OpRemove, Path: "/NOTEXISTINGKEY!!"},
-	}); err != nil {
+	if _, err := ApplyPatches(
+		result3,
+		NewPatchBuilder().
+			Remove(JSONPointerBuilder("NOTEXISTINGKEY!!")).
+			Build(),
+	); err != nil {
 		t.Errorf("Spec4: failed to apply patches: %s", err)
 	}
 
 	// Spec5: Add a key with nil value (should fail)
-	if _, err := ApplyPatches(result3, models.Patch{
-		{Op: models.OpAdd, Path: "/dummy!!"},
-	}); err == nil {
+	if _, err := ApplyPatches(
+		result3,
+		NewPatchBuilder().
+			Add(JSONPointerBuilder("dummy!!"), nil).
+			Build(),
+	); err == nil {
 		t.Fatal("Spec5: adding a nil value should fail")
 	}
 
 	// Spec6: Append to array key "arr"
-	result6, err := ApplyPatches(result3, models.Patch{
-		{Op: models.OpAdd, Path: "/arr", Value: []string{"test3"}},
-	})
+	result6, err := ApplyPatches(
+		result3,
+		NewPatchBuilder().
+			Add(JSONPointerBuilder("arr"), []string{"test3"}).
+			Build())
 	if err != nil {
 		t.Fatalf("Spec6: failed to apply patches: %s", err)
 	}
@@ -90,9 +102,11 @@ func TestApplyPatches(t *testing.T) {
 	checkValue(t, "Spec6", result6, "arr", []interface{}{"test3"})
 
 	// Spec7: Add element with key with "/"
-	result7, err := ApplyPatches(result3, models.Patch{
-		{Op: models.OpAdd, Path: "/" + EncodePatchKey("key/with/slash"), Value: "test4"},
-	})
+	result7, err := ApplyPatches(
+		result3,
+		NewPatchBuilder().
+			Add(JSONPointerBuilder("key/with/slash"), "test4").
+			Build())
 	if err != nil {
 		t.Fatalf("Spec7: failed to apply patches: %s", err)
 	}

@@ -169,8 +169,8 @@ type UpdateCAIssuanceExpirationInput struct {
 }
 
 type UpdateCAMetadataInput struct {
-	CAID    string       `validate:"required"`
-	Patches models.Patch `validate:"required"`
+	CAID    string                  `validate:"required"`
+	Patches []models.PatchOperation `validate:"required"`
 }
 
 type DeleteCAInput struct {
@@ -245,6 +245,6 @@ type UpdateCertificateStatusInput struct {
 }
 
 type UpdateCertificateMetadataInput struct {
-	SerialNumber string       `validate:"required"`
-	Patches      models.Patch `validate:"required"`
+	SerialNumber string                  `validate:"required"`
+	Patches      []models.PatchOperation `validate:"required"`
 }

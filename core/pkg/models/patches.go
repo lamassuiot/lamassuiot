@@ -3,9 +3,9 @@ package models
 type PatchOp string
 
 const (
-	OpAdd     PatchOp = "add"
-	OpRemove  PatchOp = "remove"
-	OpReplace PatchOp = "replace"
+	PatchAdd     PatchOp = "add"
+	PatchRemove  PatchOp = "remove"
+	PatchReplace PatchOp = "replace"
 )
 
 // PatchOperation represents a single JSON Patch operation.
@@ -14,6 +14,3 @@ type PatchOperation struct {
 	Path  string      `json:"path"`            // JSON Pointer to the target field
 	Value interface{} `json:"value,omitempty"` // New value (for "add", "replace")
 }
-
-// Patch represents a collection of PatchOperations.
-type Patch []PatchOperation

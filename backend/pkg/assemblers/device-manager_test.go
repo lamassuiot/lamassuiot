@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -397,13 +398,9 @@ func TestUpdateDeviceMetadata(t *testing.T) {
 
 				device, err := dmgr.HttpDeviceManagerSDK.UpdateDeviceMetadata(context.Background(), services.UpdateDeviceMetadataInput{
 					ID: "test",
-					Patches: models.Patch{
-						models.PatchOperation{
-							Op:    models.OpAdd,
-							Path:  "",
-							Value: deviceUpdMeta,
-						},
-					},
+					Patches: helpers.NewPatchBuilder().
+						Add(helpers.JSONPointerBuilder(), deviceUpdMeta).
+						Build(),
 				})
 				if err != nil {
 					t.Fatalf("could not retrieve a device: %s", err)
@@ -1178,13 +1175,9 @@ func checkUpdateDeviceMetadata(t *testing.T, dmgr *DeviceManagerTestServer, devi
 
 	request := services.UpdateDeviceMetadataInput{
 		ID: deviceSample.ID,
-		Patches: models.Patch{
-			models.PatchOperation{
-				Op:    models.OpAdd,
-				Path:  "",
-				Value: map[string]interface{}{"test": "test2"},
-			},
-		},
+		Patches: helpers.NewPatchBuilder().
+			Add(helpers.JSONPointerBuilder(), map[string]interface{}{"test": "test2"}).
+			Build(),
 	}
 
 	device, err := dmgr.Service.UpdateDeviceMetadata(ctx, request)

@@ -368,13 +368,9 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 
 	_, err = svc.CaSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
 		SerialNumber: input.BindedIdentity.Certificate.SerialNumber,
-		Patches: models.Patch{
-			models.PatchOperation{
-				Op:    models.OpAdd,
-				Path:  "/" + chelpers.EncodePatchKey(AWSIoTMetadataKey(svc.ConnectorID)),
-				Value: awsCertMetadata,
-			},
-		},
+		Patches: chelpers.NewPatchBuilder().
+			Add(chelpers.JSONPointerBuilder(AWSIoTMetadataKey(svc.ConnectorID)), awsCertMetadata).
+			Build(),
 	})
 	if err != nil {
 		lFunc.Errorf("could not update certificate %s metadata: %s", input.BindedIdentity.Certificate.SerialNumber, err)
@@ -388,13 +384,9 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 
 	_, err = svc.DeviceSDK.UpdateDeviceMetadata(ctx, services.UpdateDeviceMetadataInput{
 		ID: input.DeviceID,
-		Patches: models.Patch{
-			models.PatchOperation{
-				Op:    models.OpAdd,
-				Path:  "/" + chelpers.EncodePatchKey(AWSIoTMetadataKey(svc.ConnectorID)),
-				Value: deviceAWSMetadata,
-			},
-		},
+		Patches: chelpers.NewPatchBuilder().
+			Add(chelpers.JSONPointerBuilder(AWSIoTMetadataKey(svc.ConnectorID)), deviceAWSMetadata).
+			Build(),
 	})
 	if err != nil {
 		lFunc.Errorf("could not update device metadata: %s", err)
@@ -605,13 +597,9 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 
 	_, err = svc.DeviceSDK.UpdateDeviceMetadata(ctx, services.UpdateDeviceMetadataInput{
 		ID: input.DeviceID,
-		Patches: models.Patch{
-			models.PatchOperation{
-				Op:    models.OpAdd,
-				Path:  "/" + chelpers.EncodePatchKey(AWSIoTMetadataKey(svc.ConnectorID)) + "/Actions",
-				Value: deviceMetaAWS.Actions,
-			},
-		},
+		Patches: chelpers.NewPatchBuilder().
+			Add(chelpers.JSONPointerBuilder(AWSIoTMetadataKey(svc.ConnectorID), "Actions"), deviceMetaAWS.Actions).
+			Build(),
 	})
 	if err != nil {
 		lFunc.Errorf("could not update device metadata: %s", err)
@@ -713,13 +701,9 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 
 			_, err = svc.CaSDK.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
 				CAID: input.ID,
-				Patches: models.Patch{
-					models.PatchOperation{
-						Op:    models.OpAdd,
-						Path:  "/" + chelpers.EncodePatchKey(AWSIoTMetadataKey(svc.GetConnectorID())),
-						Value: input.RegisterConfiguration,
-					},
-				},
+				Patches: chelpers.NewPatchBuilder().
+					Add(chelpers.JSONPointerBuilder(AWSIoTMetadataKey(svc.GetConnectorID())), input.RegisterConfiguration).
+					Build(),
 			})
 			if err != nil {
 				lFunc.Errorf("could not update CA metadata: %s", err)
@@ -770,13 +754,9 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 
 			_, err = svc.CaSDK.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
 				CAID: input.ID,
-				Patches: models.Patch{
-					models.PatchOperation{
-						Op:    models.OpAdd,
-						Path:  "/" + chelpers.EncodePatchKey(AWSIoTMetadataKey(svc.GetConnectorID())),
-						Value: input.RegisterConfiguration,
-					},
-				},
+				Patches: chelpers.NewPatchBuilder().
+					Add(chelpers.JSONPointerBuilder(AWSIoTMetadataKey(svc.ConnectorID)), input.RegisterConfiguration).
+					Build(),
 			})
 			if err != nil {
 				lFunc.Errorf("could not update CA metadata: %s", err)
@@ -878,13 +858,9 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 
 	ca, err = svc.CaSDK.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
 		CAID: input.ID,
-		Patches: models.Patch{
-			models.PatchOperation{
-				Op:    models.OpAdd,
-				Path:  "/" + chelpers.EncodePatchKey(AWSIoTMetadataKey(svc.ConnectorID)),
-				Value: iotAWSCAMetadata,
-			},
-		},
+		Patches: chelpers.NewPatchBuilder().
+			Add(chelpers.JSONPointerBuilder(AWSIoTMetadataKey(svc.ConnectorID)), iotAWSCAMetadata).
+			Build(),
 	})
 	if err != nil {
 		lFunc.Errorf("could not update CA metadata: %s", err)

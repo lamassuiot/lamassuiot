@@ -70,13 +70,9 @@ func (svc *CryptoMonitor) updateCertificateIfNeeded(cert models.Certificate, now
 	if shouldUpdateMeta {
 		svc.service.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
 			SerialNumber: cert.SerialNumber,
-			Patches: models.Patch{
-				models.PatchOperation{
-					Op:    models.OpAdd,
-					Path:  "/" + helpers.EncodePatchKey(models.CAMetadataMonitoringExpirationDeltasKey),
-					Value: newMetadata[models.CAMetadataMonitoringExpirationDeltasKey],
-				},
-			},
+			Patches: helpers.NewPatchBuilder().
+				Add(helpers.JSONPointerBuilder(models.CAMetadataMonitoringExpirationDeltasKey), newMetadata[models.CAMetadataMonitoringExpirationDeltasKey]).
+				Build(),
 		})
 	}
 }
@@ -106,13 +102,9 @@ func (svc *CryptoMonitor) updateCAIfNeeded(ca models.CACertificate, now time.Tim
 	if shouldUpdateMeta {
 		svc.service.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
 			CAID: ca.ID,
-			Patches: models.Patch{
-				models.PatchOperation{
-					Op:    models.OpAdd,
-					Path:  "/" + helpers.EncodePatchKey(models.CAMetadataMonitoringExpirationDeltasKey),
-					Value: newMetadata[models.CAMetadataMonitoringExpirationDeltasKey],
-				},
-			},
+			Patches: helpers.NewPatchBuilder().
+				Add(helpers.JSONPointerBuilder(models.CAMetadataMonitoringExpirationDeltasKey), newMetadata[models.CAMetadataMonitoringExpirationDeltasKey]).
+				Build(),
 		})
 	}
 }

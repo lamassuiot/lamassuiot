@@ -19,5 +19,5 @@ type UpdateDeviceIdentitySlotBody struct {
 }
 
 type UpdateDeviceMetadataBody struct {
-	Patches models.Patch `json:"patches"`
+	Patches []models.PatchOperation `json:"patches"`
 }

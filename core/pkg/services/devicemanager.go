@@ -55,8 +55,8 @@ type UpdateDeviceStatusInput struct {
 }
 
 type UpdateDeviceMetadataInput struct {
-	ID      string       `validate:"required"`
-	Patches models.Patch `validate:"required"`
+	ID      string                  `validate:"required"`
+	Patches []models.PatchOperation `validate:"required"`
 }
 
 type UpdateDeviceIdentitySlotInput struct {

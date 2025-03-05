@@ -160,13 +160,9 @@ func RunUseCase1(input UseCase1Input) error {
 
 	ca2Upd, err := caClient.UpdateCAMetadata(context.Background(), services.UpdateCAMetadataInput{
 		CAID: ca1.ID,
-		Patches: models.Patch{
-			models.PatchOperation{
-				Op:    models.OpAdd,
-				Path:  "/" + helpers.EncodePatchKey(fmt.Sprintf("lamassu.io/iot/aws.%s", awsAccountID)),
-				Value: regMetaDataUpdate,
-			},
-		},
+		Patches: helpers.NewPatchBuilder().
+			Add(helpers.JSONPointerBuilder(fmt.Sprintf("lamassu.io/iot/aws.%s", awsAccountID)), regMetaDataUpdate).
+			Build(),
 	})
 
 	fmt.Println(ca2Upd)
