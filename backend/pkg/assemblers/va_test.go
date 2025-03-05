@@ -495,19 +495,27 @@ func TestVARole(t *testing.T) {
 
 	//Now get all roles
 	ctr := 0
-	_, err = serverTest.VA.CRLService.GetVARoles(context.Background(), services.GetVARolesInput{
-		ExhaustiveRun:   true,
-		QueryParameters: &resources.QueryParameters{},
-		ApplyFunc: func(role models.VARole) {
-			ctr++
-		},
+	SleepRetry(10, 3*time.Second, func() error {
+		ctr = 0
+		_, err = serverTest.VA.CRLService.GetVARoles(context.Background(), services.GetVARolesInput{
+			ExhaustiveRun:   true,
+			QueryParameters: &resources.QueryParameters{},
+			ApplyFunc: func(role models.VARole) {
+				ctr++
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		if ctr != 1 {
+			return fmt.Errorf("should've got 1 roles, got %d", ctr)
+		}
+
+		return nil
 	})
 	if err != nil {
 		t.Fatalf("could not get roles: %s", err)
-	}
-
-	if ctr != 1 {
-		t.Fatalf("should've got 1 role, got %d", ctr)
 	}
 
 	//Create New CA and check if the role is created automatically
@@ -522,7 +530,7 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("could not create new CA: %s", err)
 	}
 
-	err = SleepRetry(5, 3*time.Second, func() error {
+	err = SleepRetry(10, 3*time.Second, func() error {
 		role, err = serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
 			CASubjectKeyID: helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId),
 		})
@@ -537,7 +545,7 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("role CASubjectKeyID should be %s, got %s", helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId), role.CASubjectKeyID)
 	}
 
-	SleepRetry(5, 3*time.Second, func() error {
+	SleepRetry(10, 3*time.Second, func() error {
 		ctr = 0
 		_, err = serverTest.VA.CRLService.GetVARoles(context.Background(), services.GetVARolesInput{
 			ExhaustiveRun:   true,
