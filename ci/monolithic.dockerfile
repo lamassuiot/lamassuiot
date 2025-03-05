@@ -20,5 +20,15 @@ RUN go work vendor
 RUN go build -mod vendor -o monolithic monolithic/cmd/development/main.go 
 
 FROM ubuntu:20.04
+
+ARG USERNAME=lamassu
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
+
+RUN groupadd --gid "$USER_GID" "$USERNAME" \
+    && useradd --uid "$USER_UID" --gid "$USER_GID" -m "$USERNAME" 
+
+USER $USERNAME
+
 COPY --from=0 /app/monolithic /
 CMD ["/monolithic"]
