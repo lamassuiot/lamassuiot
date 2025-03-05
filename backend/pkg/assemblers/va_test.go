@@ -123,7 +123,9 @@ func TestBaseCRL(t *testing.T) {
 				t.Fatalf("could not run 'before' function:  %s", err)
 			}
 
-			crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, string(issuerCA.Certificate.Certificate.AuthorityKeyId)), (*x509.Certificate)(issuerCA.Certificate.Certificate), nil, true)
+			time.Sleep(5 * time.Second) // Sleep to ensure that the CRL is generated (CRL is generated when the CA is created via event bus)
+
+			crl, err := external_clients.GetCRLResponse(fmt.Sprintf("%s/crl/%s", serverTest.VA.HttpServerURL, issuerCA.Certificate.AuthorityKeyID), (*x509.Certificate)(issuerCA.Certificate.Certificate), nil, true)
 			if err != nil {
 				t.Fatalf("could not get CRL: %s", err)
 			}
