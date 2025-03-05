@@ -162,6 +162,7 @@ type DeviceManagerTestServer struct {
 
 type VATestServer struct {
 	HttpServerURL string
+	CRLService    services.CRLService
 	HttpCASDK     services.CAService
 	HttpVASDK     services.VAService
 	BeforeEach    func() error
@@ -437,7 +438,7 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 }
 
 func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer, monitor bool) (*VATestServer, error) {
-	_, _, port, err := AssembleVAServiceWithHTTPServer(config.VAconfig{
+	crlSvc, _, port, err := AssembleVAServiceWithHTTPServer(config.VAconfig{
 		Logs: cconfig.Logging{
 			Level: cconfig.Info,
 		},
@@ -471,6 +472,7 @@ func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 	}
 
 	return &VATestServer{
+		CRLService:    *crlSvc,
 		HttpServerURL: fmt.Sprintf("http://127.0.0.1:%d", port),
 		HttpCASDK:     caTestServer.HttpCASDK,
 		HttpVASDK:     sdk.NewHttpVAClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),

@@ -12,6 +12,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/ocsp"
@@ -422,6 +423,134 @@ func TestCheckOCSPRevocationCodes(t *testing.T) {
 				t.Fatalf("should've got %s revocation reason, got status: %d", reasonName, response.RevocationReason)
 			}
 		})
+	}
+}
+
+func TestVARole(t *testing.T) {
+	serverTest, err := StartVAServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create VA test server")
+	}
+
+	serverTest.BeforeEach()
+	ca, err := initCAForVA(serverTest)
+	if err != nil {
+		t.Fatalf("could not init CA for VA: %s", err)
+	}
+
+	var role *models.VARole
+	err = SleepRetry(5, 3*time.Second, func() error {
+		role, err = serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
+			CASubjectKeyID: helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId),
+		})
+
+		return err
+	})
+	if err != nil {
+		t.Fatalf("could not get role: %s", err)
+	}
+
+	if role.CASubjectKeyID != helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId) {
+		t.Fatalf("role CASubjectKeyID should be %s, got %s", helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId), role.CASubjectKeyID)
+	}
+
+	if role.CRLOptions.RegenerateOnRevoke != true {
+		t.Fatalf("role CRLOptions.RegenerateOnRevoke should be true, got %t", role.CRLOptions.RegenerateOnRevoke)
+	}
+
+	if role.CRLOptions.SubjectKeyIDSigner != helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId) {
+		t.Fatalf("role CRLOptions.SubjectKeyIDSigner should be %s, got %s", helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId), role.CRLOptions.SubjectKeyIDSigner)
+	}
+
+	//Now Update the role
+
+	role.CRLOptions.RegenerateOnRevoke = false
+	role.CRLOptions.SubjectKeyIDSigner = "123"
+	role.CRLOptions.Validity = models.TimeDuration(time.Hour * 2)
+
+	role, err = serverTest.VA.CRLService.UpdateVARole(context.Background(), services.UpdateVARoleInput{
+		CASubjectKeyID: helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId),
+		CRLRole:        role.CRLOptions,
+	})
+
+	if err != nil {
+		t.Fatalf("could not update role: %s", err)
+	}
+
+	role, err = serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
+		CASubjectKeyID: helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId),
+	})
+
+	if err != nil {
+		t.Fatalf("could not get role: %s", err)
+	}
+
+	if role.CRLOptions.RegenerateOnRevoke != false {
+		t.Fatalf("role CRLOptions.RegenerateOnRevoke should be false, got %t", role.CRLOptions.RegenerateOnRevoke)
+	}
+
+	if role.CRLOptions.SubjectKeyIDSigner != "123" {
+		t.Fatalf("role CRLOptions.SubjectKeyIDSigner should be 123, got %s", role.CRLOptions.SubjectKeyIDSigner)
+	}
+
+	//Now get all roles
+	ctr := 0
+	_, err = serverTest.VA.CRLService.GetVARoles(context.Background(), services.GetVARolesInput{
+		ExhaustiveRun:   true,
+		QueryParameters: &resources.QueryParameters{},
+		ApplyFunc: func(role models.VARole) {
+			ctr++
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not get roles: %s", err)
+	}
+
+	if ctr != 1 {
+		t.Fatalf("should've got 1 role, got %d", ctr)
+	}
+
+	//Create New CA and check if the role is created automatically
+	ca, err = serverTest.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+		ID:                 "new-ca",
+		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+		Subject:            models.Subject{CommonName: "TestCA"},
+		CAExpiration:       models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 24)},
+		IssuanceExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+	})
+	if err != nil {
+		t.Fatalf("could not create new CA: %s", err)
+	}
+
+	err = SleepRetry(5, 3*time.Second, func() error {
+		role, err = serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
+			CASubjectKeyID: helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId),
+		})
+
+		return err
+	})
+	if err != nil {
+		t.Fatalf("could not get role: %s", err)
+	}
+
+	if role.CASubjectKeyID != helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId) {
+		t.Fatalf("role CASubjectKeyID should be %s, got %s", helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId), role.CASubjectKeyID)
+	}
+
+	ctr = 0
+	_, err = serverTest.VA.CRLService.GetVARoles(context.Background(), services.GetVARolesInput{
+		ExhaustiveRun:   true,
+		QueryParameters: &resources.QueryParameters{},
+		ApplyFunc: func(role models.VARole) {
+			ctr++
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not get roles: %s", err)
+	}
+
+	if ctr != 2 {
+		t.Fatalf("should've got 2 roles, got %d", ctr)
 	}
 }
 
