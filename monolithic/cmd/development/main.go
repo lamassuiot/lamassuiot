@@ -340,6 +340,7 @@ func main() {
 
 	conf := pkg.MonolithicConfig{
 		Logs:               cconfig.Logging{Level: cconfig.Debug},
+		VAStorageDir:       "/tmp/lamassuiot/va",
 		SubscriberEventBus: eventBus,
 		PublisherEventBus:  eventBus,
 		Domain:             "dev.lamassu.test",

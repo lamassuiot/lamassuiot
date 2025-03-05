@@ -6,7 +6,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	fsstorage "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/fs-storage"
 	"github.com/lamassuiot/lamassuiot/engines/fs-storage/localfs/v3"
-	"github.com/lamassuiot/lamassuiot/engines/fs-storage/s3/v3"
 	"github.com/sirupsen/logrus"
 	"gocloud.dev/blob"
 )
@@ -22,5 +21,4 @@ func BuildFSStorageEngine(logger *logrus.Entry, conf config.FSStorageConfig) (*b
 
 func init() {
 	localfs.Register()
-	s3.Register()
 }
