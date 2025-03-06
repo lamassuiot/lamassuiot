@@ -203,7 +203,19 @@ func TestCRLCertificateRevocation(t *testing.T) {
 			VerifyResponse: true,
 		})
 
-		return err
+		if err != nil {
+			return err
+		}
+
+		if len(crl.RevokedCertificateEntries) != 1 {
+			return fmt.Errorf("CRL should have 1 entry, got %d", len(crl.RevokedCertificateEntries))
+		}
+
+		if crl.Number != big.NewInt(2) {
+			return fmt.Errorf("CRL should have version 2, got %d", crl.Number)
+		}
+
+		return nil
 	})
 	if err != nil {
 		t.Fatalf("could not get CRL: %s", err)
