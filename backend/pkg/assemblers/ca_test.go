@@ -1512,11 +1512,13 @@ func TestUpdateCAMetadata(t *testing.T) {
 			run: func(caSDK services.CAService) error {
 
 				ud := make(map[string]interface{})
-				ud["userName"] = "noob"
+				ud["userName"] = "anonymous"
 				//cas := []*models.CACertificate{}
 				_, err := caSDK.UpdateCAMetadata(context.Background(), services.UpdateCAMetadataInput{
-					CAID:     DefaultCAID,
-					Metadata: ud,
+					CAID: DefaultCAID,
+					Patches: chelpers.NewPatchBuilder().
+						Add(chelpers.JSONPointerBuilder(), ud).
+						Build(),
 				})
 				if err != nil {
 					t.Errorf("failed updating the metadata of the CA: %s", err)
@@ -1537,11 +1539,13 @@ func TestUpdateCAMetadata(t *testing.T) {
 			run: func(caSDK services.CAService) error {
 
 				ud := make(map[string]interface{})
-				ud["userName"] = "noob"
+				ud["userName"] = "anonymous"
 				//cas := []*models.CACertificate{}
 				_, err := caSDK.UpdateCAMetadata(context.Background(), services.UpdateCAMetadataInput{
-					CAID:     "sdfsfgsd",
-					Metadata: ud,
+					CAID: "sdfsfgsd",
+					Patches: chelpers.NewPatchBuilder().
+						Add(chelpers.JSONPointerBuilder(), ud).
+						Build(),
 				})
 				if err != nil {
 					t.Logf("failed updating the metadata of the CA: %s", err)
@@ -1701,10 +1705,12 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 					return err
 				}
 				ud := make(map[string]interface{})
-				ud["userName"] = "noob"
+				ud["userName"] = "anonymous"
 				_, err = caSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
 					SerialNumber: cert.SerialNumber,
-					Metadata:     ud,
+					Patches: chelpers.NewPatchBuilder().
+						Add(chelpers.JSONPointerBuilder(), ud).
+						Build(),
 				})
 				return err
 			},
@@ -1721,10 +1727,12 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 			run: func(caSDK services.CAService) error {
 
 				ud := make(map[string]interface{})
-				ud["userName"] = "noob"
+				ud["userName"] = "anonymous"
 				_, err = caSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
 					SerialNumber: "dadaafgsdtw",
-					Metadata:     ud,
+					Patches: chelpers.NewPatchBuilder().
+						Add(chelpers.JSONPointerBuilder(), ud).
+						Build(),
 				})
 				return err
 			},
@@ -1746,10 +1754,10 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 			run: func(caSDK services.CAService) error {
 
 				ud := make(map[string]interface{})
-				ud["userName"] = "noob"
+				ud["userName"] = "anonymous"
 				_, err = caSDK.UpdateCertificateMetadata(context.Background(), services.UpdateCertificateMetadataInput{
 					SerialNumber: "dadaafgsdtw",
-					Metadata:     nil,
+					Patches:      nil,
 				})
 				return err
 			},

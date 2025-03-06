@@ -319,8 +319,8 @@ func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 	}
 
 	ca, err := r.svc.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
-		CAID:     params.ID,
-		Metadata: requestBody.Metadata,
+		CAID:    params.ID,
+		Patches: requestBody.Patches,
 	})
 	if err != nil {
 		switch err {
@@ -1147,7 +1147,7 @@ func (r *caHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
 
 	cert, err := r.svc.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
 		SerialNumber: params.SerialNumber,
-		Metadata:     requestBody.Metadata,
+		Patches:      requestBody.Patches,
 	})
 
 	if err != nil {
