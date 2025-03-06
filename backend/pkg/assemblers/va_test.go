@@ -174,7 +174,19 @@ func TestCRLCertificateRevocation(t *testing.T) {
 			VerifyResponse: true,
 		})
 
-		return err
+		if err != nil {
+			return err
+		}
+
+		if len(crl.RevokedCertificateEntries) != 0 {
+			return fmt.Errorf("CRL should have 0 entry, got %d", len(crl.RevokedCertificateEntries))
+		}
+
+		if big.NewInt(1).Cmp(crl.Number) != 0 {
+			return fmt.Errorf("CRL should have version 1, got %d", crl.Number)
+		}
+
+		return nil
 	})
 
 	if err != nil {
@@ -211,7 +223,7 @@ func TestCRLCertificateRevocation(t *testing.T) {
 			return fmt.Errorf("CRL should have 1 entry, got %d", len(crl.RevokedCertificateEntries))
 		}
 
-		if crl.Number != big.NewInt(2) {
+		if big.NewInt(2).Cmp(crl.Number) != 0 {
 			return fmt.Errorf("CRL should have version 2, got %d", crl.Number)
 		}
 
@@ -220,7 +232,6 @@ func TestCRLCertificateRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not get CRL: %s", err)
 	}
-
 	assert.Equal(t, 1, len(crl.RevokedCertificateEntries), "CRL should have 1 entry")
 	assert.Equal(t, big.NewInt(2), crl.Number, "CRL should have version 2")
 }

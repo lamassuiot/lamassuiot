@@ -669,12 +669,15 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 }
 
 func SleepRetry(retry int, sleep time.Duration, f func() error) error {
+	var err error
 	for i := 0; i < retry; i++ {
-		err := f()
+		err = f()
 		if err == nil {
 			return nil
 		}
+
 		time.Sleep(sleep)
 	}
-	return fmt.Errorf("could not execute function after %d retries", retry)
+
+	return fmt.Errorf("could not execute function after %d retries. Last error: %s", retry, err)
 }
