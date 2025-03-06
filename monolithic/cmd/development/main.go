@@ -132,7 +132,7 @@ func main() {
 
 	fmt.Println(">> launching docker: Postgres ...")
 	posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
-	posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager"})
+	posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va"})
 	backend, err := posgresSubsystem.Run()
 	if err != nil {
 		log.Fatalf("could not launch Postgres: %s", err)
@@ -340,6 +340,7 @@ func main() {
 
 	conf := pkg.MonolithicConfig{
 		Logs:               cconfig.Logging{Level: cconfig.Debug},
+		VAStorageDir:       "/tmp/lamassuiot/va",
 		SubscriberEventBus: eventBus,
 		PublisherEventBus:  eventBus,
 		Domain:             "dev.lamassu.test",
@@ -347,7 +348,7 @@ func main() {
 		GatewayPortHttp:    8080,
 		AssemblyMode:       pkg.Http,
 		CryptoEngines:      cryptoEnginesConfig.CryptoEngines,
-		CryptoMonitoring: cconfig.MonitoringJob{
+		Monitoring: cconfig.MonitoringJob{
 			Enabled:   *disableMonitor,
 			Frequency: "* * * * *",
 		},

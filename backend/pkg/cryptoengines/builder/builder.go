@@ -11,7 +11,6 @@ import (
 )
 
 func BuildCryptoEngine(logger *log.Entry, conf cconfig.CryptoEngineConfig) (cryptoengines.CryptoEngine, error) {
-
 	builder := cryptoengines.GetEngineBuilder(cconfig.CryptoEngineProvider(conf.Type))
 	if builder == nil {
 		return nil, fmt.Errorf("no crypto engine of type %s", conf.Type)

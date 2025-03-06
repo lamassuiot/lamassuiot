@@ -13,6 +13,8 @@ use (
 	./engines/crypto/vaultkv2
 	./engines/eventbus/amqp
 	./engines/eventbus/aws
+	./engines/fs-storage/localfs
+	./engines/fs-storage/s3
 	./engines/storage/postgres
 	./monolithic
 	./sdk

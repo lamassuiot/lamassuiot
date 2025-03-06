@@ -23,7 +23,7 @@ func GetCRLResponse(crlServerURL string, issuer *x509.Certificate, serverCertifi
 		return nil, fmt.Errorf("could not parse CRL server URL: %s", err)
 	}
 
-	httpRequest.Header.Add("host", crlURL.Host)
+	httpRequest.Header.Add("Host", crlURL.Host)
 
 	httpClient := &http.Client{}
 	if serverCertificate == nil {
@@ -46,9 +46,15 @@ func GetCRLResponse(crlServerURL string, issuer *x509.Certificate, serverCertifi
 
 	httpResponse, err := httpClient.Do(httpRequest)
 	if err != nil {
-		return nil, fmt.Errorf("could not do CRL request: %s", err)
+		return nil, fmt.Errorf("could not execute CRL request: %w; Request method: %s, URL: %s",
+			err, httpRequest.Method, httpRequest.URL)
 	}
 
+	// Check for a non-2xx status code (failure in request)
+	if httpResponse.StatusCode < 200 || httpResponse.StatusCode >= 300 {
+		return nil, fmt.Errorf("CRL request failed with status code %d: %s; Request method: %s, URL: %s",
+			httpResponse.StatusCode, httpResponse.Status, httpRequest.Method, httpRequest.URL)
+	}
 	defer httpResponse.Body.Close()
 	output, err := io.ReadAll(httpResponse.Body)
 	if err != nil {

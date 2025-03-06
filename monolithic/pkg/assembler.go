@@ -63,7 +63,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				DefaultEngine: conf.CryptoEngines[0].ID,
 				CryptoEngines: conf.CryptoEngines,
 			},
-			CryptoMonitoring: conf.CryptoMonitoring,
+			CertificateMonitoringJob: conf.Monitoring,
 			VAServerDomains: []string{
 				fmt.Sprintf("%s:%d/api/va", conf.Domain, conf.GatewayPortHttp),
 			},
@@ -101,6 +101,20 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				Port:               0,
 				Protocol:           cconfig.HTTP,
 			},
+			FilesystemStorage: cconfig.FSStorageConfig{
+				ID:   "fs",
+				Type: cconfig.LocalFilesystem,
+				Config: map[string]interface{}{
+					"storage_directory": conf.VAStorageDir,
+				},
+			},
+			CRLMonitoringJob: cconfig.MonitoringJob{
+				Enabled:   true,
+				Frequency: "30s",
+			},
+			SubscriberEventBus: conf.SubscriberEventBus,
+			PublisherEventBus:  conf.PublisherEventBus,
+			Storage:            conf.Storage,
 			VADomains: []string{
 				fmt.Sprintf("%s:%d/api/va", conf.Domain, conf.GatewayPortHttp),
 			},
