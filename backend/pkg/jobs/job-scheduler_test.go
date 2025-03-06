@@ -3,7 +3,6 @@ package jobs
 import (
 	"testing"
 
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/sirupsen/logrus"
 )
 
@@ -14,40 +13,11 @@ func (mj *mockJob) Run() {
 }
 
 func TestNewJobSchedulerWithoutJob(t *testing.T) {
-	config := cconfig.MonitoringJob{
-		Enabled:   true,
-		Frequency: "0 0 * * *",
-	}
 	logger := logrus.New().WithField("test", "test")
 
-	js := NewJobScheduler(config, logger, nil)
+	js := NewJobScheduler(logger, "0 0 * * *", nil)
 	js.Start()
-	if len(js.cronInstance.Entries()) != 0 {
-		t.Error("expected no jobs to be scheduled")
-	}
-
-	if !js.NextRun().IsZero() {
-		t.Error("expected NextRun to be zero")
-	}
-
-	js.Stop()
-
-	t.Cleanup(func() {
-		js.Stop()
-	})
-}
-
-func TestNewJobSchedulerDisabled(t *testing.T) {
-	config := cconfig.MonitoringJob{
-		Enabled:   false,
-		Frequency: "0 0 * * *",
-	}
-	logger := logrus.New().WithField("test", "test")
-	job := &mockJob{}
-
-	js := NewJobScheduler(config, logger, job)
-	js.Start()
-	if len(js.cronInstance.Entries()) != 0 {
+	if len(js.scheduler.Entries()) != 0 {
 		t.Error("expected no jobs to be scheduled")
 	}
 
@@ -63,18 +33,11 @@ func TestNewJobSchedulerDisabled(t *testing.T) {
 }
 
 func TestNewJobScheduler(t *testing.T) {
-	config := cconfig.MonitoringJob{
-		Enabled:   true,
-		Frequency: "0 0 * * *",
-	}
 	logger := logrus.New().WithField("test", "test")
 	job := &mockJob{}
 
-	js := NewJobScheduler(config, logger, job)
-
-	if js.config != config {
-		t.Errorf("unexpected config, got: %v, want: %v", js.config, config)
-	}
+	js := NewJobScheduler(logger, "0 0 * * *", job)
+	js.Start()
 
 	if js.logger != logger {
 		t.Errorf("unexpected logger, got: %v, want: %v", js.logger, logger)
@@ -90,16 +53,10 @@ func TestNewJobScheduler(t *testing.T) {
 }
 
 func TestJobSchedulerStart(t *testing.T) {
-
-	config := cconfig.MonitoringJob{
-		Enabled:   true,
-		Frequency: "0 0 * * *",
-	}
 	logger := logrus.New().WithField("test", "test")
 	job := &mockJob{}
 
-	js := NewJobScheduler(config, logger, job)
-
+	js := NewJobScheduler(logger, "0 0 * * *", job)
 	js.Start()
 
 	t.Cleanup(func() {
@@ -112,14 +69,10 @@ func TestJobSchedulerStart(t *testing.T) {
 }
 
 func TestJobSchedulerNextRun(t *testing.T) {
-	config := cconfig.MonitoringJob{
-		Enabled:   true,
-		Frequency: "0 0 * * *",
-	}
 	logger := logrus.New().WithField("test", "test")
 	job := &mockJob{}
 
-	js := NewJobScheduler(config, logger, job)
+	js := NewJobScheduler(logger, "0 0 * * *", job)
 	js.Start()
 	t.Cleanup(func() {
 		js.Stop()
@@ -133,14 +86,10 @@ func TestJobSchedulerNextRun(t *testing.T) {
 }
 
 func TestJobSchedulerInSeconds(t *testing.T) {
-	config := cconfig.MonitoringJob{
-		Enabled:   true,
-		Frequency: "0 0 * * * *",
-	}
 	logger := logrus.New().WithField("test", "test")
 	job := &mockJob{}
 
-	js := NewJobScheduler(config, logger, job)
+	js := NewJobScheduler(logger, "0 0 * * *", job)
 	js.Start()
 	t.Cleanup(func() {
 		js.Stop()
@@ -154,14 +103,10 @@ func TestJobSchedulerInSeconds(t *testing.T) {
 }
 
 func TestJobSchedulerStop(t *testing.T) {
-	config := cconfig.MonitoringJob{
-		Enabled:   true,
-		Frequency: "0 0 * * *",
-	}
 	logger := logrus.New().WithField("test", "test")
 	job := &mockJob{}
 
-	js := NewJobScheduler(config, logger, job)
+	js := NewJobScheduler(logger, "0 0 * * *", job)
 	js.Start()
 	t.Cleanup(func() {
 		js.Stop()

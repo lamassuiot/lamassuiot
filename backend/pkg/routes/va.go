@@ -12,5 +12,9 @@ func NewValidationRoutes(logger *logrus.Entry, httpGrp *gin.RouterGroup, ocsp se
 
 	httpGrp.GET("/ocsp/:ocsp_request", vaRoutes.Verify)
 	httpGrp.POST("/ocsp", vaRoutes.Verify)
-	httpGrp.GET("/crl/:aki", vaRoutes.CRL)
+	httpGrp.GET("/crl/:ca-ski", vaRoutes.CRL)
+
+	httpGrp.GET("/roles", vaRoutes.GetRoles)
+	httpGrp.GET("/roles/:ca-ski", vaRoutes.GetRoleByID)
+	httpGrp.PUT("/roles/:ca-ski", vaRoutes.UpdateRole)
 }

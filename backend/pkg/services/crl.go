@@ -6,43 +6,64 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"encoding/pem"
 	"fmt"
 	"math/big"
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
+	"gocloud.dev/blob"
 )
 
 var crlValidate *validator.Validate
 
-type crlServiceImpl struct {
+type CRLServiceBackend struct {
 	caSDK     services.CAService
 	logger    *logrus.Entry
+	vaRepo    storage.VARepo
+	service   services.CRLService
+	bucket    *blob.Bucket
 	vaDomains []string
 }
 
 type CRLServiceBuilder struct {
+	VARepo    storage.VARepo
 	Logger    *logrus.Entry
 	CAClient  services.CAService
+	Bucket    *blob.Bucket
 	VADomains []string
 }
 
-func NewCRLService(builder CRLServiceBuilder) services.CRLService {
+type CRLMiddleware func(services.CRLService) services.CRLService
+
+func NewCRLService(builder CRLServiceBuilder) (services.CRLService, error) {
 	crlValidate = validator.New()
-	return &crlServiceImpl{
+
+	svc := &CRLServiceBackend{
 		caSDK:     builder.CAClient,
 		logger:    builder.Logger,
+		vaRepo:    builder.VARepo,
+		bucket:    builder.Bucket,
 		vaDomains: builder.VADomains,
 	}
+
+	svc.service = svc
+
+	return svc, nil
 }
 
-func (svc crlServiceImpl) GetCRL(ctx context.Context, input services.GetCRLInput) ([]byte, error) {
+func (svc CRLServiceBackend) SetService(service services.CRLService) {
+	svc.service = service
+}
+
+func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLInput) (*x509.RevocationList, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := crlValidate.Struct(input)
@@ -51,13 +72,120 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input services.GetCRLInput
 		return nil, errs.ErrValidateBadRequest
 	}
 
+	versionStr := input.CRLVersion.String()
+	if input.CRLVersion.Cmp(big.NewInt(0)) == 0 {
+		exists, role, err := svc.vaRepo.Get(ctx, input.CASubjectKeyID)
+		if err != nil {
+			lFunc.Errorf("something went wrong while reading VA role: %s", err)
+			return nil, err
+		}
+
+		if !exists {
+			lFunc.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+			return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+		}
+
+		versionStr = role.LatestCRL.Version.String()
+	}
+
+	crlPem, err := svc.bucket.ReadAll(ctx, fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CASubjectKeyID, versionStr))
+	if err != nil {
+		lFunc.Errorf("something went wrong while reading CRL: %s", err)
+		return nil, err
+	}
+
+	crlDer, _ := pem.Decode(crlPem)
+
+	crl, err := x509.ParseRevocationList(crlDer.Bytes)
+	if err != nil {
+		lFunc.Errorf("something went wrong while parsing CRL: %s", err)
+		return nil, err
+	}
+
+	return crl, nil
+}
+
+func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*models.VARole, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	var ca *models.CACertificate
+	_, err := svc.caSDK.GetCAs(ctx, services.GetCAsInput{
+		QueryParameters: &resources.QueryParameters{
+			Filters: []resources.FilterOption{
+				{
+					Field:           "subject_key_id",
+					FilterOperation: resources.StringEqual,
+					Value:           caSki,
+				},
+			},
+		},
+		ApplyFunc: func(c models.CACertificate) {
+			ca = &c
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if ca == nil {
+		return nil, fmt.Errorf("CA %s not found", caSki)
+	}
+
+	role, err := svc.vaRepo.Insert(ctx, &models.VARole{
+		CASubjectKeyID: caSki,
+		CRLOptions: models.VACRLRole{
+			Validity:           models.TimeDuration(24 * time.Hour * 7),            // 1 week
+			RefreshInterval:    models.TimeDuration(24*time.Hour*6 + 23*time.Hour), // 6 days, 23 hours
+			RegenerateOnRevoke: true,
+			SubjectKeyIDSigner: caSki,
+		},
+		LatestCRL: models.LatestCRLMeta{
+			Version:   models.BigInt{Int: big.NewInt(0)},
+			ValidFrom: time.Now(),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = svc.CalculateCRL(ctx, services.CalculateCRLInput{
+		CASubjectKeyID: string(ca.Certificate.Certificate.SubjectKeyId),
+	})
+	if err != nil {
+		lFunc.Errorf("something went wrong while calculating first CRL: %s", err)
+		return nil, err
+	}
+
+	return role, nil
+}
+
+func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.CalculateCRLInput) (*x509.RevocationList, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := crlValidate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	exists, vaRole, err := svc.vaRepo.Get(ctx, input.CASubjectKeyID)
+	if err != nil {
+		lFunc.Errorf("something went wrong while reading VA role: %s", err)
+		return nil, err
+	}
+
+	if !exists {
+		lFunc.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+	}
+
 	var crlCA *models.CACertificate
 	_, err = svc.caSDK.GetCAs(ctx, services.GetCAsInput{
 		QueryParameters: &resources.QueryParameters{
 			Filters: []resources.FilterOption{
 				{
-					Field:           "key_id", // since KeyID is used as the AKI, it should be used as the filter field
-					Value:           input.AuthorityKeyId,
+					Field:           "subject_key_id",
+					Value:           input.CASubjectKeyID,
 					FilterOperation: resources.StringEqual,
 				},
 			},
@@ -68,13 +196,13 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input services.GetCRLInput
 		},
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while reading CA %s: %s", input.AuthorityKeyId, err)
+		lFunc.Errorf("something went wrong while reading CA %s: %s", input.CASubjectKeyID, err)
 		return nil, err
 	}
 
 	if crlCA == nil {
-		lFunc.Errorf("CA %s not found", input.AuthorityKeyId)
-		return nil, fmt.Errorf("CA %s not found", input.AuthorityKeyId)
+		lFunc.Errorf("CA %s not found", input.CASubjectKeyID)
+		return nil, fmt.Errorf("CA %s not found", input.CASubjectKeyID)
 	}
 
 	certList := []x509.RevocationListEntry{}
@@ -102,12 +230,12 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input services.GetCRLInput
 		return nil, err
 	}
 
-	caSigner := NewCASigner(ctx, crlCA, svc.caSDK)
+	crlSigner := NewCASigner(ctx, crlCA, svc.caSDK)
 	caCert := (*x509.Certificate)(crlCA.Certificate.Certificate)
 
 	extensions := []pkix.Extension{}
 
-	idp, err := svc.getDistributionPointExtension(crlCA.Certificate.SubjectKeyID)
+	idp, err := svc.getDistributionPointExtension(string(crlCA.Certificate.Certificate.SubjectKeyId))
 	if err != nil {
 		lFunc.Errorf("something went wrong while creating Issuing Distribution Point extension: %s", err)
 		return nil, err
@@ -117,22 +245,89 @@ func (svc crlServiceImpl) GetCRL(ctx context.Context, input services.GetCRLInput
 
 	lFunc.Debugf("creating revocation list. CA %s", crlCA.ID)
 	now := time.Now()
-	crl, err := x509.CreateRevocationList(rand.Reader, &x509.RevocationList{
+
+	crlVersion := big.NewInt(0)
+	crlVersion.Add(vaRole.LatestCRL.Version.Int, big.NewInt(1))
+	crlDer, err := x509.CreateRevocationList(rand.Reader, &x509.RevocationList{
 		RevokedCertificateEntries: certList,
-		Number:                    big.NewInt(time.Now().UnixMilli()),
+		Number:                    crlVersion,
 		ThisUpdate:                now,
-		NextUpdate:                now.Add(time.Hour * 48),
+		NextUpdate:                now.Add(time.Duration(vaRole.CRLOptions.Validity)),
 		ExtraExtensions:           extensions,
-	}, caCert, caSigner)
+	}, caCert, crlSigner)
 	if err != nil {
 		lFunc.Errorf("something went wrong while creating revocation list: %s", err)
+		return nil, err
+	}
+
+	crl, err := x509.ParseRevocationList(crlDer)
+	if err != nil {
+		lFunc.Errorf("something went wrong while parsing revocation list: %s", err)
+		return nil, err
+	}
+
+	crlPem := pem.EncodeToMemory(&pem.Block{Type: "X509 CRL", Bytes: crlDer})
+	err = svc.bucket.WriteAll(ctx, fmt.Sprintf("pki/va/crl/%s/%s.crl", input.CASubjectKeyID, crl.Number), crlPem, nil)
+	if err != nil {
+		lFunc.Errorf("something went wrong while saving CRL: %s", err)
+		return nil, err
+	}
+
+	vaRole.LatestCRL = models.LatestCRLMeta{
+		Version:    models.BigInt{Int: crl.Number},
+		ValidFrom:  crl.ThisUpdate,
+		ValidUntil: crl.NextUpdate,
+	}
+
+	_, err = svc.vaRepo.Update(ctx, vaRole)
+	if err != nil {
+		lFunc.Errorf("something went wrong while updating VA role: %s", err)
 		return nil, err
 	}
 
 	return crl, nil
 }
 
-func (svc crlServiceImpl) getDistributionPointExtension(aki string) (*pkix.Extension, error) {
+func (svc CRLServiceBackend) GetVARole(ctx context.Context, input services.GetVARoleInput) (*models.VARole, error) {
+	exists, role, err := svc.vaRepo.Get(ctx, input.CASubjectKeyID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !exists {
+		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+	}
+
+	return role, nil
+}
+
+func (svc CRLServiceBackend) GetVARoles(ctx context.Context, input services.GetVARolesInput) (string, error) {
+	return svc.vaRepo.GetAll(ctx, storage.StorageListRequest[models.VARole]{
+		ExhaustiveRun: input.ExhaustiveRun,
+		QueryParams:   input.QueryParameters,
+		ExtraOpts:     map[string]interface{}{},
+		ApplyFunc: func(role models.VARole) {
+			input.ApplyFunc(role)
+		},
+	})
+}
+
+func (svc CRLServiceBackend) UpdateVARole(ctx context.Context, input services.UpdateVARoleInput) (*models.VARole, error) {
+	exists, role, err := svc.vaRepo.Get(ctx, input.CASubjectKeyID)
+	if !exists {
+		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	role.CRLOptions = input.CRLRole
+
+	return svc.vaRepo.Update(ctx, role)
+}
+
+func (svc CRLServiceBackend) getDistributionPointExtension(aki string) (*pkix.Extension, error) {
 	type DistributionPointName struct { // CHOICE
 		FullName     []asn1.RawValue  `asn1:"optional,tag:0"`
 		RelativeName pkix.RDNSequence `asn1:"optional,tag:1"`

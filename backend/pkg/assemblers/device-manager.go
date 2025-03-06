@@ -85,7 +85,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 		}
 
 		eventHandlers := handlers.NewDeviceEventHandler(lMessaging, svc)
-		subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManger-DEFAULT", "certificate.#", subscriber, lMessaging, *eventHandlers)
+		subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManger-DEFAULT", []string{"certificate.#"}, subscriber, lMessaging, *eventHandlers)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
 		}

@@ -11,7 +11,6 @@ import (
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/x509engines"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -42,7 +41,6 @@ type CAServiceBackend struct {
 	caStorage                   storage.CACertificatesRepo
 	certStorage                 storage.CertificatesRepo
 	caCertificateRequestStorage storage.CACertificateRequestRepo
-	cryptoMonitorConfig         cconfig.MonitoringJob
 	vaServerDomains             []string
 	logger                      *logrus.Entry
 }
@@ -53,7 +51,6 @@ type CAServiceBuilder struct {
 	CAStorage                   storage.CACertificatesRepo
 	CertificateStorage          storage.CertificatesRepo
 	CACertificateRequestStorage storage.CACertificateRequestRepo
-	CryptoMonitoringConf        cconfig.MonitoringJob
 	VAServerDomains             []string
 }
 
@@ -125,7 +122,6 @@ func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
 		caStorage:                   builder.CAStorage,
 		certStorage:                 builder.CertificateStorage,
 		caCertificateRequestStorage: builder.CACertificateRequestStorage,
-		cryptoMonitorConfig:         builder.CryptoMonitoringConf,
 		vaServerDomains:             builder.VAServerDomains,
 		logger:                      builder.Logger,
 	}
@@ -633,6 +629,8 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	var caLevel int
 	var issuerCAMeta models.IssuerCAMetadata
 
+	skid := helpers.FormatHexWithColons([]byte(keyID))
+	akid := skid
 	// Check if CA is Root (self-signed) or Subordinate (signed by another CA). Non self-signed/root CAs require a parent CA
 	if input.ParentID == "" {
 		// Root CA. Root CAs can be generate directly
@@ -660,6 +658,8 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 			lFunc.Errorf("parent CA %s does not exist", input.ParentID)
 			return nil, errs.ErrCANotFound
 		}
+
+		akid = parentCA.Certificate.SubjectKeyID
 
 		var caExpiration time.Time
 		if input.IssuanceExpiration.Type == models.Duration {
@@ -722,10 +722,11 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		CreationTS: time.Now(),
 		Level:      caLevel,
 		Certificate: models.Certificate{
-			SubjectKeyID: keyID,
-			Certificate:  (*models.X509Certificate)(ca),
-			Status:       models.StatusActive,
-			SerialNumber: helpers.SerialNumberToString(ca.SerialNumber),
+			SubjectKeyID:   skid,
+			AuthorityKeyID: akid,
+			Certificate:    (*models.X509Certificate)(ca),
+			Status:         models.StatusActive,
+			SerialNumber:   helpers.SerialNumberToString(ca.SerialNumber),
 			KeyMetadata: models.KeyStrengthMetadata{
 				Type:     input.KeyMetadata.Type,
 				Bits:     input.KeyMetadata.Bits,
