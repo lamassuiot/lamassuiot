@@ -43,11 +43,6 @@ func (p *PostgresSubsystem) Run() (*subsystems.SubsystemBackend, error) {
 			postgresEngine.BeforeEach()
 			switch dbName {
 			case "ca":
-				_, err := postgres.NewCAPostgresRepository(logger, postgresEngine.DB[dbName])
-				if err != nil {
-					return fmt.Errorf("could not run reinitialize CA tables: %s", err)
-				}
-
 				_, err = postgres.NewCertificateRepository(logger, postgresEngine.DB[dbName])
 				if err != nil {
 					return fmt.Errorf("could not run reinitialize Certificates tables: %s", err)

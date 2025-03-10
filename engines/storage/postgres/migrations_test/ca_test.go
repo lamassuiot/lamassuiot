@@ -94,17 +94,12 @@ func MigrationTest_CA_20241215165048_add_key_id(t *testing.T, logger *logrus.Ent
 func MigrationTest_CA_20241223183344_unified_ca_models(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
 	ApplyMigration(t, logger, con, CADBName)
 
-	caRepo, err := postgres.NewCAPostgresRepository(logger, con)
-	if err != nil {
-		t.Fatalf("could not create ca repository: %s", err)
-	}
-
 	certRepo, err := postgres.NewCertificateRepository(logger, con)
 	if err != nil {
 		t.Fatalf("could not create certificate repository: %s", err)
 	}
 
-	ctrCAs, err := caRepo.Count(context.Background())
+	ctrCAs, err := certRepo.CountCA(context.Background())
 	if err != nil {
 		t.Fatalf("could not count certificates: %s", err)
 	}
@@ -128,7 +123,7 @@ func MigrationTest_CA_20241223183344_unified_ca_models(t *testing.T, logger *log
 	VALUES ('1111-2222-3333-4444','ef-6d-47-f4-e5-bd-c8-e3-81-67-74-60-12-c1-0f-47',NULL,'','0s',NULL,NULL,0)
 	`)
 
-	ctrCAs, err = caRepo.Count(context.Background())
+	ctrCAs, err = certRepo.CountCA(context.Background())
 	if err != nil {
 		t.Fatalf("could not count certificates: %s", err)
 	}

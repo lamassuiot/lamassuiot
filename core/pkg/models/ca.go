@@ -47,6 +47,7 @@ type Certificate struct {
 	Type                CertificateType        `json:"type"`
 	EngineID            string                 `json:"engine_id"`
 	IsCA                bool                   `json:"is_ca"`
+	Level               int                    `json:"level"`
 }
 
 type Validity struct {
@@ -59,16 +60,6 @@ type IssuerCAMetadata struct {
 	SN    string `json:"serial_number" gorm:"column:serial_number"`
 	ID    string `json:"id"`
 	Level int    `json:"level"`
-}
-
-type CACertificate struct {
-	ID                      string                 `json:"id"`
-	Certificate             Certificate            `json:"certificate" gorm:"foreignKey:CertificateSerialNumber;references:SerialNumber"`
-	CertificateSerialNumber string                 `json:"serial_number" gorm:"column:serial_number"`
-	Metadata                map[string]interface{} `json:"metadata" gorm:"serializer:json"`
-	Validity                Validity               `json:"validity" gorm:"embedded;embeddedPrefix:validity_"`
-	CreationTS              time.Time              `json:"creation_ts"`
-	Level                   int                    `json:"level"`
 }
 
 type CertificateRequestStatus string

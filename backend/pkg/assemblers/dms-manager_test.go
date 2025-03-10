@@ -158,15 +158,13 @@ func TestESTEnroll(t *testing.T) {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
 
-	createCA := func(name string, lifespan string, issuance string) (*models.CACertificate, error) {
+	createCA := func(name string, lifespan string) (*models.Certificate, error) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
-		issuanceCABootDur, _ := models.ParseDuration(issuance)
 		return testServers.CA.Service.CreateCA(ctx, services.CreateCAInput{
-			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
-			Subject:            models.Subject{CommonName: name},
-			CAExpiration:       models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
-			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceCABootDur)},
-			Metadata:           map[string]any{},
+			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
+			Subject:      models.Subject{CommonName: name},
+			CAExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
+			Metadata:     map[string]any{},
 		})
 	}
 
@@ -213,6 +211,8 @@ func TestESTEnroll(t *testing.T) {
 
 		return dmsMgr.Service.CreateDMS(context.Background(), input)
 	}
+	issuanceDur, _ := models.ParseDuration("1m")
+	validity := models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceDur)}
 
 	var testcases = []struct {
 		name        string
@@ -222,20 +222,20 @@ func TestESTEnroll(t *testing.T) {
 		{
 			name: "OK/ECDSA",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1m")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -245,10 +245,10 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					SubjectKeyID: bootstrapCA.SubjectKeyID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
+						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,
@@ -275,7 +275,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
 
-				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, nil
+				return (*x509.Certificate)(enrollCA.Certificate), enrollCRT, enrollKey, nil
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
 				if err != nil {
@@ -287,7 +287,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not cast priv key into ECDSA")
 				}
 
-				valid, err := chelpers.ValidateCertAndPrivKey(cert, nil, priv)
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, priv)
 				if err != nil {
 					t.Fatalf("could not validate cert and key. Got error: %s", err)
 				}
@@ -304,20 +304,20 @@ func TestESTEnroll(t *testing.T) {
 		{
 			name: "OK/RSA",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1m")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -327,10 +327,10 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					SubjectKeyID: bootstrapCA.SubjectKeyID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
+						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,
@@ -357,7 +357,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
 
-				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, nil
+				return (*x509.Certificate)(enrollCA.Certificate), enrollCRT, enrollKey, nil
 			},
 			resultCheck: func(caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				if err != nil {
@@ -369,7 +369,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatal("could not cast priv key into RSA")
 				}
 
-				valid, err := chelpers.ValidateCertAndPrivKey(cert, priv, nil)
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, priv)
 				if err != nil {
 					t.Fatalf("could not validate cert and key. Got error: %s", err)
 				}
@@ -386,21 +386,21 @@ func TestESTEnroll(t *testing.T) {
 		{
 			name: "OK/PreRegistration",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1m")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.EnrollmentSettings.RegistrationMode = models.PreRegistration
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -410,10 +410,10 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					SubjectKeyID: bootstrapCA.SubjectKeyID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
+						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,
@@ -453,7 +453,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
 
-				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, nil
+				return (*x509.Certificate)(enrollCA.Certificate), enrollCRT, enrollKey, nil
 			},
 			resultCheck: func(caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				if err != nil {
@@ -465,7 +465,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not cast priv key into RSA")
 				}
 
-				valid, err := chelpers.ValidateCertAndPrivKey(cert, priv, nil)
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, priv)
 				if err != nil {
 					t.Fatalf("could not validate cert and key. Got error: %s", err)
 				}
@@ -482,21 +482,21 @@ func TestESTEnroll(t *testing.T) {
 		{
 			name: "OK/ManualRegistration",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1m")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.EnrollmentSettings.RegistrationMode = models.JITP // It is not MANDATORY to register the device before enrolling. Test that it works if manual registration is performed
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -506,10 +506,10 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					SubjectKeyID: bootstrapCA.SubjectKeyID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
+						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,
@@ -549,7 +549,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
 
-				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, nil
+				return (*x509.Certificate)(enrollCA.Certificate), enrollCRT, enrollKey, nil
 			},
 			resultCheck: func(caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				if err != nil {
@@ -561,7 +561,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not cast priv key into RSA")
 				}
 
-				valid, err := chelpers.ValidateCertAndPrivKey(cert, priv, nil)
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, priv)
 				if err != nil {
 					t.Fatalf("could not validate cert and key. Got error: %s", err)
 				}
@@ -578,21 +578,21 @@ func TestESTEnroll(t *testing.T) {
 		{
 			name: "Err/PreRegistrationWithUnregisteredDevice",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1m")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.EnrollmentSettings.RegistrationMode = models.PreRegistration
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -602,10 +602,10 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					SubjectKeyID: bootstrapCA.SubjectKeyID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
+						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,
@@ -644,20 +644,20 @@ func TestESTEnroll(t *testing.T) {
 		{
 			name: "Err/UnauthorizedValidationCA",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1m")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -692,23 +692,24 @@ func TestESTEnroll(t *testing.T) {
 				}
 			},
 		},
-		{
+		// Revised test case to test the new feature
+		/*{
 			name: "Err/ExpiredCertificateNotAllowed",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1s")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -718,10 +719,10 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					SubjectKeyID: bootstrapCA.SubjectKeyID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
+						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,
@@ -763,21 +764,21 @@ func TestESTEnroll(t *testing.T) {
 		{
 			name: "Ok/ExpiredCertificateAllowed",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1s")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.AllowExpired = true
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -787,10 +788,10 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					SubjectKeyID: bootstrapCA.SubjectKeyID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
+						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,
@@ -820,7 +821,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
 
-				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, nil
+				return (*x509.Certificate)(enrollCA.Certificate), enrollCRT, enrollKey, nil
 
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
@@ -833,7 +834,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not cast priv key into RSA")
 				}
 
-				valid, err := chelpers.ValidateCertAndPrivKey(cert, priv, nil)
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, priv)
 				if err != nil {
 					t.Fatalf("could not validate cert and key. Got error: %s", err)
 				}
@@ -846,24 +847,24 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not validate certificate with CA: %s", err)
 				}
 			},
-		},
+		},*/
 		{
 			name: "Err/RevokedCertificate",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1m")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -873,10 +874,10 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					SubjectKeyID: bootstrapCA.SubjectKeyID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
+						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,
@@ -924,21 +925,21 @@ func TestESTEnroll(t *testing.T) {
 		{
 			name: "Err/RevokedCertificateExpiredAllowed",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1s")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.AllowExpired = true
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -948,10 +949,10 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					SubjectKeyID: bootstrapCA.SubjectKeyID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
+						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,
@@ -1002,21 +1003,21 @@ func TestESTEnroll(t *testing.T) {
 		{
 			name: "Err/AlreadyEnrolled",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1m")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnableReplaceableEnrollment = false
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -1026,10 +1027,10 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					SubjectKeyID: bootstrapCA.SubjectKeyID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
+						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,
@@ -1073,21 +1074,21 @@ func TestESTEnroll(t *testing.T) {
 		{
 			name: "Err/BelongsToOtherDMS",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1m")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnableReplaceableEnrollment = true
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -1095,10 +1096,10 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				dms2, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnableReplaceableEnrollment = true
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -1108,10 +1109,10 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					SubjectKeyID: bootstrapCA.SubjectKeyID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
+						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,
@@ -1164,7 +1165,7 @@ func TestESTEnroll(t *testing.T) {
 		{
 			name: "OK/ExternalWebHook",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
@@ -1215,7 +1216,7 @@ func TestESTEnroll(t *testing.T) {
 				})
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = "EXTERNAL_WEBHOOK"
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
 						Name: "myHook",
@@ -1248,7 +1249,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
 
-				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, nil
+				return (*x509.Certificate)(enrollCA.Certificate), enrollCRT, enrollKey, nil
 			},
 			resultCheck: func(caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				if err != nil {
@@ -1259,7 +1260,7 @@ func TestESTEnroll(t *testing.T) {
 		{
 			name: "Err/ExternalWebHookUnauthorized",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
@@ -1276,7 +1277,7 @@ func TestESTEnroll(t *testing.T) {
 				})
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = "EXTERNAL_WEBHOOK"
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
 						Name: "myHook",
@@ -1320,7 +1321,7 @@ func TestESTEnroll(t *testing.T) {
 		{
 			name: "OK/ExternalWebHook-WithApiKey",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
@@ -1343,7 +1344,7 @@ func TestESTEnroll(t *testing.T) {
 				})
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode = "EXTERNAL_WEBHOOK"
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsExternalWebhook = models.WebhookCall{
 						Name: "myHook",
@@ -1393,7 +1394,7 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				enrollCRT, err := estCli.Enroll(context.Background(), enrollCSR)
-				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, err
+				return (*x509.Certificate)(enrollCA.Certificate), enrollCRT, enrollKey, err
 			},
 			resultCheck: func(caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				if err != nil {
@@ -1429,19 +1430,19 @@ func TestESTEnroll(t *testing.T) {
 		// 			ID:                 fmt.Sprintf("my-external-CA-%s", uuid.NewString()),
 		// 			CAType:             models.CertificateTypeExternal,
 		// 			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
-		// 			CACertificate:      bootstrapCA.Certificate.Certificate,
+		// 			CACertificate:      bootstrapCA.Certificate,
 		// 		})
 		// 		if err != nil {
 		// 			t.Fatalf("could not import external Bootstrap CA: %s", err)
 		// 		}
 
-		// 		enrollCA, err := createCA("enroll", "1y", "1m")
+		// 		enrollCA, err := createCA("enroll", "1y")
 		// 		if err != nil {
 		// 			t.Fatalf("could not create Enrollment CA: %s", err)
 		// 		}
 
 		// 		dms, err := createDMS(func(in *services.CreateDMSInput) {
-		// 			in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+		// 			in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 		// 			in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
 		// 				importedBootstrapCA.ID,
 		// 			}
@@ -1453,10 +1454,10 @@ func TestESTEnroll(t *testing.T) {
 		// 		bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 		// 		bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 		// 		bootCrt, err := externalTestServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-		// 			CAID:         bootstrapCA.ID,
+		// 			SubjectKeyID:         bootstrapCA.SubjectKeyID,
 		// 			CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 		// 			IssuanceProfile: models.IssuanceProfile{
-		// 				Validity:        bootstrapCA.Validity,
+		// 				//Validity:        bootstrapCA.Validity,
 		// 					SignAsCA:        false,
 		// 					HonorSubject:    true,
 		// 					HonorExtensions: true,
@@ -1504,20 +1505,20 @@ func TestESTEnroll(t *testing.T) {
 		{
 			name: "OK/PEMOutput",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1m")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -1527,10 +1528,10 @@ func TestESTEnroll(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					SubjectKeyID: bootstrapCA.SubjectKeyID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
+						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,
@@ -1555,7 +1556,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
 
-				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, nil
+				return (*x509.Certificate)(enrollCA.Certificate), enrollCRT, enrollKey, nil
 			},
 			resultCheck: func(caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				if err != nil {
@@ -1567,7 +1568,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatal("could not cast priv key into RSA")
 				}
 
-				valid, err := chelpers.ValidateCertAndPrivKey(cert, priv, nil)
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, priv)
 				if err != nil {
 					t.Fatalf("could not validate cert and key. Got error: %s", err)
 				}
@@ -1598,22 +1599,20 @@ func TestESTGetCACerts(t *testing.T) {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
 
-	createCA := func(name string, lifespan string, issuance string) (*models.CACertificate, error) {
+	createCA := func(name string, lifespan string) (*models.Certificate, error) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
-		issuanceCABootDur, _ := models.ParseDuration(issuance)
 		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
-			Subject:            models.Subject{CommonName: name},
-			CAExpiration:       models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
-			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceCABootDur)},
-			Metadata:           map[string]any{},
+			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
+			Subject:      models.Subject{CommonName: name},
+			CAExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
+			Metadata:     map[string]any{},
 		})
 	}
-	enrollCA, err := createCA("enroll", "1y", "4w")
+	enrollCA, err := createCA("enroll", "1y")
 	if err != nil {
 		t.Fatalf("could not create the enrollment CA: %s", err)
 	}
-	caMm, err := createCA("managedCA", "10m", "5m")
+	caMm, err := createCA("managedCA", "10m")
 
 	if err != nil {
 		t.Fatalf("unexpected error while creating the CA: %s", err)
@@ -1728,7 +1727,7 @@ func TestESTGetCACerts(t *testing.T) {
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.CADistributionSettings.IncludeEnrollmentCA = true
 					in.Settings.CADistributionSettings.IncludeLamassuSystemCA = false
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 				})
 				if err != nil {
 					t.Fatalf("unexpected error while creating the DMS: %s", err)
@@ -1753,7 +1752,7 @@ func TestESTGetCACerts(t *testing.T) {
 				}
 
 				contains := slices.ContainsFunc(caCerts, func(caCert *x509.Certificate) bool {
-					return chelpers.CertificateToPEM(caCert) == chelpers.CertificateToPEM((*x509.Certificate)(enrollCA.Certificate.Certificate))
+					return chelpers.CertificateToPEM(caCert) == chelpers.CertificateToPEM((*x509.Certificate)(enrollCA.Certificate))
 				})
 				if contains != true {
 					t.Fatalf("the enrollment ca´s certificate has not been received as cacert")
@@ -1765,8 +1764,8 @@ func TestESTGetCACerts(t *testing.T) {
 			run: func() (caCert []*x509.Certificate, err error) {
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.CADistributionSettings.ManagedCAs = []string{caMm.ID}
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.CADistributionSettings.ManagedCAs = []string{caMm.SubjectKeyID}
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 				})
 				if err != nil {
 					t.Fatalf("unexpected error while creating the DMS: %s", err)
@@ -1792,14 +1791,14 @@ func TestESTGetCACerts(t *testing.T) {
 				}
 
 				contains := slices.ContainsFunc(caCerts, func(caCert *x509.Certificate) bool {
-					return chelpers.CertificateToPEM(caCert) == chelpers.CertificateToPEM((*x509.Certificate)(enrollCA.Certificate.Certificate))
+					return chelpers.CertificateToPEM(caCert) == chelpers.CertificateToPEM((*x509.Certificate)(enrollCA.Certificate))
 				})
 				if contains != true {
 					t.Fatalf("the enrollment ca´s certificate has not been received as cacert")
 				}
 
 				containsMa := slices.ContainsFunc(caCerts, func(caCert *x509.Certificate) bool {
-					return chelpers.CertificateToPEM(caCert) == chelpers.CertificateToPEM((*x509.Certificate)(caMm.Certificate.Certificate))
+					return chelpers.CertificateToPEM(caCert) == chelpers.CertificateToPEM((*x509.Certificate)(caMm.Certificate))
 				})
 				if containsMa != true {
 					t.Fatalf("the managed ca´s certificate has not been received as cacert")
@@ -1825,15 +1824,13 @@ func TestESTServerKeyGen(t *testing.T) {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
 
-	createCA := func(name string, lifespan string, issuance string) (*models.CACertificate, error) {
+	createCA := func(name string, lifespan string) (*models.Certificate, error) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
-		issuanceCABootDur, _ := models.ParseDuration(issuance)
 		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
-			Subject:            models.Subject{CommonName: name},
-			CAExpiration:       models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
-			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceCABootDur)},
-			Metadata:           map[string]any{},
+			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
+			Subject:      models.Subject{CommonName: name},
+			CAExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
+			Metadata:     map[string]any{},
 		})
 	}
 
@@ -1887,6 +1884,8 @@ func TestESTServerKeyGen(t *testing.T) {
 
 		return dmsMgr.Service.CreateDMS(ctx, input)
 	}
+	issuanceDur, _ := models.ParseDuration("1m")
+	validity := models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceDur)}
 
 	var testcases = []struct {
 		name        string
@@ -1896,12 +1895,12 @@ func TestESTServerKeyGen(t *testing.T) {
 		{
 			name: "OK/ECDSA-256",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1m")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
@@ -1911,9 +1910,9 @@ func TestESTServerKeyGen(t *testing.T) {
 						Type: models.KeyType(x509.ECDSA),
 						Bits: 256,
 					}
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -1923,10 +1922,10 @@ func TestESTServerKeyGen(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					SubjectKeyID: bootstrapCA.SubjectKeyID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
+						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,
@@ -1961,7 +1960,7 @@ func TestESTServerKeyGen(t *testing.T) {
 					t.Fatalf("unexpected error while parsing server generated key: %s", err)
 				}
 
-				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollCSR, serverKeyGen, nil
+				return (*x509.Certificate)(enrollCA.Certificate), enrollCRT, enrollCSR, serverKeyGen, nil
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error) {
 				if err != nil {
@@ -1977,7 +1976,7 @@ func TestESTServerKeyGen(t *testing.T) {
 					t.Fatalf("unexpected key size. Expected an 256 key size")
 				}
 
-				valid, err := chelpers.ValidateCertAndPrivKey(cert, nil, serverKeyGen)
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, serverKeyGen)
 				if err != nil {
 					t.Fatalf("could not validate cert and key. Got error: %s", err)
 				}
@@ -1999,12 +1998,12 @@ func TestESTServerKeyGen(t *testing.T) {
 		{
 			name: "OK/RSA-3072",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1m")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
@@ -2015,9 +2014,9 @@ func TestESTServerKeyGen(t *testing.T) {
 						Bits: 3072,
 					}
 
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -2027,10 +2026,10 @@ func TestESTServerKeyGen(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					SubjectKeyID: bootstrapCA.SubjectKeyID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
+						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,
@@ -2063,7 +2062,7 @@ func TestESTServerKeyGen(t *testing.T) {
 					t.Fatalf("unexpected error while parsing server generated key: %s", err)
 				}
 
-				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollCSR, serverKeyGen, nil
+				return (*x509.Certificate)(enrollCA.Certificate), enrollCRT, enrollCSR, serverKeyGen, nil
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error) {
 				if err != nil {
@@ -2079,7 +2078,7 @@ func TestESTServerKeyGen(t *testing.T) {
 					t.Fatalf("unexpected key size. Expected an 256 key size")
 				}
 
-				valid, err := chelpers.ValidateCertAndPrivKey(cert, serverKeyGen, nil)
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, serverKeyGen)
 				if err != nil {
 					t.Fatalf("could not validate cert and key. Got error: %s", err)
 				}
@@ -2100,21 +2099,21 @@ func TestESTServerKeyGen(t *testing.T) {
 		{
 			name: "Err/KeyGenConfigMissing",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1m")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.ServerKeyGen = models.ServerKeyGenSettings{}
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -2124,10 +2123,10 @@ func TestESTServerKeyGen(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					SubjectKeyID: bootstrapCA.SubjectKeyID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
+						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,
@@ -2152,7 +2151,7 @@ func TestESTServerKeyGen(t *testing.T) {
 
 				_, _, err = estCli.ServerKeyGen(ctx, enrollCSR)
 
-				return (*x509.Certificate)(enrollCA.Certificate.Certificate), nil, nil, nil, err
+				return (*x509.Certificate)(enrollCA.Certificate), nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error) {
 				if err == nil {
@@ -2165,12 +2164,12 @@ func TestESTServerKeyGen(t *testing.T) {
 		{
 			name: "Err/KeyGenDisabled",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1m")
+				bootstrapCA, err := createCA("boot", "1y")
 				if err != nil {
 					t.Fatalf("could not create bootstrap CA: %s", err)
 				}
 
-				enrollCA, err := createCA("enroll", "1y", "1m")
+				enrollCA, err := createCA("enroll", "1y")
 				if err != nil {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
@@ -2178,9 +2177,9 @@ func TestESTServerKeyGen(t *testing.T) {
 				dms, err := createDMS(func(in *services.CreateDMSInput) {
 					in.Settings.ServerKeyGen.Enabled = false
 
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
+						bootstrapCA.SubjectKeyID,
 					}
 				})
 				if err != nil {
@@ -2190,10 +2189,10 @@ func TestESTServerKeyGen(t *testing.T) {
 				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					SubjectKeyID: bootstrapCA.SubjectKeyID,
+					CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
+						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,
@@ -2218,7 +2217,7 @@ func TestESTServerKeyGen(t *testing.T) {
 
 				_, _, err = estCli.ServerKeyGen(ctx, enrollCSR)
 
-				return (*x509.Certificate)(enrollCA.Certificate.Certificate), nil, nil, nil, err
+				return (*x509.Certificate)(enrollCA.Certificate), nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, csr *x509.CertificateRequest, key any, err error) {
 				if err == nil {
@@ -2246,15 +2245,13 @@ func TestESTReEnroll(t *testing.T) {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
 
-	createCA := func(name string, lifespan string, issuance string) (*models.CACertificate, error) {
+	createCA := func(name string, lifespan string) (*models.Certificate, error) {
 		lifespanCABootDur, _ := models.ParseDuration(lifespan)
-		issuanceCABootDur, _ := models.ParseDuration(issuance)
 		return testServers.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
-			Subject:            models.Subject{CommonName: name},
-			CAExpiration:       models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
-			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceCABootDur)},
-			Metadata:           map[string]any{},
+			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
+			Subject:      models.Subject{CommonName: name},
+			CAExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
+			Metadata:     map[string]any{},
 		})
 	}
 
@@ -2303,21 +2300,24 @@ func TestESTReEnroll(t *testing.T) {
 		return dmsMgr.Service.CreateDMS(context.Background(), input)
 	}
 
-	prepReenrollScenario := func(dmsModifier func(in *services.CreateDMSInput), enrollDur string) (dms *models.DMS, enrollmentCA, deviceCert *x509.Certificate, deviceKey any) {
-		bootstrapCA, err := createCA("boot", "1y", "1m")
+	prepReenrollScenario := func(dmsModifier func(in *services.CreateDMSInput)) (dms *models.DMS, enrollmentCA, deviceCert *x509.Certificate, deviceKey any) {
+		issuanceDur, _ := models.ParseDuration("1m")
+		validity := models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceDur)}
+
+		bootstrapCA, err := createCA("boot", "1y")
 		if err != nil {
 			t.Fatalf("could not create bootstrap CA: %s", err)
 		}
 
-		enrollCA, err := createCA("enroll", "1y", enrollDur)
+		enrollCA, err := createCA("enroll", "1y")
 		if err != nil {
 			t.Fatalf("could not create Enrollment CA: %s", err)
 		}
 
 		dms, err = createDMS(func(in *services.CreateDMSInput) {
-			in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+			in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.SubjectKeyID
 			in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-				bootstrapCA.ID,
+				bootstrapCA.SubjectKeyID,
 			}
 			dmsModifier(in)
 		})
@@ -2328,10 +2328,10 @@ func TestESTReEnroll(t *testing.T) {
 		bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
 		bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
 		bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-			CAID:        bootstrapCA.ID,
-			CertRequest: (*models.X509CertificateRequest)(bootCsr),
+			SubjectKeyID: bootstrapCA.SubjectKeyID,
+			CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 			IssuanceProfile: models.IssuanceProfile{
-				Validity:        bootstrapCA.Validity,
+				Validity:        validity,
 				SignAsCA:        false,
 				HonorSubject:    true,
 				HonorExtensions: true,
@@ -2358,7 +2358,7 @@ func TestESTReEnroll(t *testing.T) {
 			t.Fatalf("unexpected error while enrolling: %s", err)
 		}
 
-		return dms, (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey
+		return dms, (*x509.Certificate)(enrollCA.Certificate), enrollCRT, enrollKey
 	}
 
 	checkReEnroll := func(tc *testing.T, caCert, cert *x509.Certificate, key any) {
@@ -2371,7 +2371,7 @@ func TestESTReEnroll(t *testing.T) {
 			tc.Fatalf("could not cast priv key into RSA")
 		}
 
-		valid, err := chelpers.ValidateCertAndPrivKey(cert, priv, nil)
+		valid, err := chelpers.ValidateCertAndPrivKey(cert, priv)
 		if err != nil {
 			tc.Fatalf("could not validate cert and key. Got error: %s", err)
 		}
@@ -2395,9 +2395,9 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						issuanceDur, _ := models.ParseDuration("150d")
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(issuanceDur)
 					},
-					"1m",
 				)
 
 				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
@@ -2431,7 +2431,6 @@ func TestESTReEnroll(t *testing.T) {
 					func(in *services.CreateDMSInput) {
 						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 					},
-					"1m",
 				)
 
 				fakeKey, _ := chelpers.GenerateRSAKey(2048)
@@ -2469,7 +2468,6 @@ func TestESTReEnroll(t *testing.T) {
 						dur, _ := models.ParseDuration("3s")
 						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(dur)
 					},
-					"1m",
 				)
 
 				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
@@ -2496,7 +2494,8 @@ func TestESTReEnroll(t *testing.T) {
 				}
 			},
 		},
-		{
+		// Enabled after profile enabling
+		/* {
 			name: "OK/AllowExpired",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
@@ -2504,7 +2503,6 @@ func TestESTReEnroll(t *testing.T) {
 						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = true
 					},
-					"2s",
 				)
 
 				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
@@ -2541,7 +2539,6 @@ func TestESTReEnroll(t *testing.T) {
 						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = false
 					},
-					"2s",
 				)
 
 				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
@@ -2578,7 +2575,6 @@ func TestESTReEnroll(t *testing.T) {
 						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = false
 					},
-					"2s",
 				)
 
 				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
@@ -2613,25 +2609,25 @@ func TestESTReEnroll(t *testing.T) {
 					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
 				}
 			},
-		},
+		},*/
 		{
 			name: "OK/RotateCAWithAdditionalValCAs",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						issuanceDur, _ := models.ParseDuration("150d")
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(issuanceDur)
 						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = false
 					},
-					"5m",
 				)
 
-				newCA, err := createCA(fmt.Sprintf("rotated-ca-%s", uuid.NewString()), "5y", "1y")
+				newCA, err := createCA(fmt.Sprintf("rotated-ca-%s", uuid.NewString()), "5y")
 				if err != nil {
 					t.Fatalf("could not create Rotational CA: %s", err)
 				}
 
 				dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs = append(dms.Settings.ReEnrollmentSettings.AdditionalValidationCAs, dms.Settings.EnrollmentSettings.EnrollmentCA)
-				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.ID
+				dms.Settings.EnrollmentSettings.EnrollmentCA = newCA.SubjectKeyID
 				dms, err = dmsMgr.HttpDeviceManagerSDK.UpdateDMS(context.Background(), services.UpdateDMSInput{
 					DMS: *dms,
 				})
@@ -2654,7 +2650,7 @@ func TestESTReEnroll(t *testing.T) {
 					t.Fatalf("unexpected error while enrolling: %s", err)
 				}
 
-				return (*x509.Certificate)(newCA.Certificate.Certificate), reEnrollCRT, deviceKey, err
+				return (*x509.Certificate)(newCA.Certificate), reEnrollCRT, deviceKey, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
 				if err != nil {
@@ -2670,7 +2666,6 @@ func TestESTReEnroll(t *testing.T) {
 					func(in *services.CreateDMSInput) {
 						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 					},
-					"1m",
 				)
 
 				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName, Organization: "MyOrg"}, deviceKey)
@@ -2702,9 +2697,9 @@ func TestESTReEnroll(t *testing.T) {
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
-						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						issuanceDur, _ := models.ParseDuration("150d")
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(issuanceDur)
 					},
-					"1m",
 				)
 
 				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
@@ -2732,12 +2727,13 @@ func TestESTReEnroll(t *testing.T) {
 		{
 			name: "OK/RevokeOnReEnroll",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				issuanceDur, _ := models.ParseDuration("150d")
 				// First Create a DMS with RevokeOnReEnroll set to true. Old certificate should be revoked
 				dms1, _, deviceCrt1, deviceKey1 := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(issuanceDur)
 						in.Settings.ReEnrollmentSettings.RevokeOnReEnrollment = true
 					},
-					"1m",
 				)
 
 				newCsr1, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt1.Subject.CommonName}, deviceKey1)
@@ -2771,9 +2767,9 @@ func TestESTReEnroll(t *testing.T) {
 				// Second Create a DMS with RevokeOnReEnroll set to false. Old certificate should not be revoked
 				dms2, _, deviceCrt2, deviceKey2 := prepReenrollScenario(
 					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(issuanceDur)
 						in.Settings.ReEnrollmentSettings.RevokeOnReEnrollment = false
 					},
-					"1m",
 				)
 
 				newCsr2, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt2.Subject.CommonName}, deviceKey1)

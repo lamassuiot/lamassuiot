@@ -2,8 +2,6 @@ package services
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/rsa"
 	"crypto/x509"
 	"time"
 
@@ -17,15 +15,13 @@ type CAService interface {
 
 	GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error)
 
-	CreateCA(ctx context.Context, input CreateCAInput) (*models.CACertificate, error)
+	CreateCA(ctx context.Context, input CreateCAInput) (*models.Certificate, error)
 	RequestCACSR(ctx context.Context, input RequestCAInput) (*models.CACertificateRequest, error)
-	ImportCA(ctx context.Context, input ImportCAInput) (*models.CACertificate, error)
-	GetCAByID(ctx context.Context, input GetCAByIDInput) (*models.CACertificate, error)
+	GetCAByID(ctx context.Context, input GetCAByIDInput) (*models.Certificate, error)
 	GetCAs(ctx context.Context, input GetCAsInput) (string, error)
 	GetCAsByCommonName(ctx context.Context, input GetCAsByCommonNameInput) (string, error)
-	UpdateCAStatus(ctx context.Context, input UpdateCAStatusInput) (*models.CACertificate, error)
-	UpdateCAMetadata(ctx context.Context, input UpdateCAMetadataInput) (*models.CACertificate, error)
-	UpdateCAIssuanceExpiration(ctx context.Context, input UpdateCAIssuanceExpirationInput) (*models.CACertificate, error)
+	UpdateCAStatus(ctx context.Context, input UpdateCAStatusInput) (*models.Certificate, error)
+	UpdateCAMetadata(ctx context.Context, input UpdateCAMetadataInput) (*models.Certificate, error)
 	DeleteCA(ctx context.Context, input DeleteCAInput) error
 
 	SignatureSign(ctx context.Context, input SignatureSignInput) ([]byte, error)
@@ -33,6 +29,7 @@ type CAService interface {
 
 	SignCertificate(ctx context.Context, input SignCertificateInput) (*models.Certificate, error)
 	CreateCertificate(ctx context.Context, input CreateCertificateInput) (*models.Certificate, error)
+
 	ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error)
 
 	GetCertificateBySerialNumber(ctx context.Context, input GetCertificatesBySerialNumberInput) (*models.Certificate, error)
@@ -52,26 +49,26 @@ type CAService interface {
 }
 
 type GetStatsByCAIDInput struct {
-	CAID string
+	SubjectKeyID string
 }
 
 type SignInput struct {
-	CAID               string
+	SubjectKeyID       string
 	Message            []byte
 	MessageType        models.SignMessageType
 	SignatureAlgorithm string
 }
 
 type IssueCACSRInput struct {
-	CAID        string                 `validate:"required"`
-	KeyMetadata models.KeyMetadata     `validate:"required"`
-	Subject     models.Subject         `validate:"required"`
-	CAType      models.CertificateType `validate:"required"`
-	EngineID    string
+	SubjectKeyID string                 `validate:"required"`
+	KeyMetadata  models.KeyMetadata     `validate:"required"`
+	Subject      models.Subject         `validate:"required"`
+	CAType       models.CertificateType `validate:"required"`
+	EngineID     string
 }
 
 type IssueCAInput struct {
-	ParentCA     *models.CACertificate
+	ParentCA     *models.Certificate
 	KeyMetadata  models.KeyMetadata     `validate:"required"`
 	Subject      models.Subject         `validate:"required"`
 	CAType       models.CertificateType `validate:"required"`
@@ -90,32 +87,16 @@ type IssueCACSROutput struct {
 	CSR   *x509.CertificateRequest
 }
 
-type ImportCAInput struct {
-	ID                 string
-	CAType             models.CertificateType    `validate:"required,ne=MANAGED"`
-	IssuanceExpiration models.Validity           `validate:"required"`
-	CACertificate      *models.X509Certificate   `validate:"required"`
-	CAChain            []*models.X509Certificate //Parent CAs. They MUST be sorted as follows. 0: Root-CA; 1: Subordinate CA from Root-CA; ...
-	CARSAKey           *rsa.PrivateKey
-	CAECKey            *ecdsa.PrivateKey
-	KeyType            models.KeyType
-	EngineID           string
-	CARequestID        string
-}
-
 type CreateCAInput struct {
-	ID                 string
-	ParentID           string
-	KeyMetadata        models.KeyMetadata `validate:"required"`
-	Subject            models.Subject     `validate:"required"`
-	IssuanceExpiration models.Validity    `validate:"required"`
-	CAExpiration       models.Validity    `validate:"required"`
-	EngineID           string
-	Metadata           map[string]any
+	ParentID     string
+	KeyMetadata  models.KeyMetadata `validate:"required"`
+	Subject      models.Subject     `validate:"required"`
+	CAExpiration models.Validity    `validate:"required"`
+	EngineID     string
+	Metadata     map[string]any
 }
 
 type RequestCAInput struct {
-	ID          string
 	KeyMetadata models.KeyMetadata `validate:"required"`
 	Subject     models.Subject     `validate:"required"`
 	EngineID    string
@@ -127,14 +108,14 @@ type GetByIDInput struct {
 }
 
 type GetCAByIDInput struct {
-	CAID string `validate:"required"`
+	SubjectKeyID string `validate:"required"`
 }
 
 type GetCAsInput struct {
 	QueryParameters *resources.QueryParameters
 
 	ExhaustiveRun bool //wether to iter all elems
-	ApplyFunc     func(ca models.CACertificate)
+	ApplyFunc     func(ca models.Certificate)
 }
 
 type GetItemsInput[T any] struct {
@@ -153,31 +134,26 @@ type GetCAsByCommonNameInput struct {
 
 	QueryParameters *resources.QueryParameters
 	ExhaustiveRun   bool //wether to iter all elems
-	ApplyFunc       func(cert models.CACertificate)
+	ApplyFunc       func(cert models.Certificate)
 }
 
 type UpdateCAStatusInput struct {
-	CAID             string                   `validate:"required"`
+	SubjectKeyID     string                   `validate:"required"`
 	Status           models.CertificateStatus `validate:"required"`
 	RevocationReason models.RevocationReason
 }
 
-type UpdateCAIssuanceExpirationInput struct {
-	CAID               string          `validate:"required"`
-	IssuanceExpiration models.Validity `validate:"required"`
-}
-
 type UpdateCAMetadataInput struct {
-	CAID    string                  `validate:"required"`
-	Patches []models.PatchOperation `validate:"required"`
+	SubjectKeyID string                  `validate:"required"`
+	Patches      []models.PatchOperation `validate:"required"`
 }
 
 type DeleteCAInput struct {
-	CAID string `validate:"required"`
+	SubjectKeyID string `validate:"required"`
 }
 
 type SignCertificateInput struct {
-	CAID            string                         `validate:"required"`
+	SubjectKeyID    string                         `validate:"required"`
 	CertRequest     *models.X509CertificateRequest `validate:"required"`
 	IssuanceProfile models.IssuanceProfile         `validate:"required"`
 }
@@ -188,19 +164,20 @@ type CreateCertificateInput struct {
 }
 
 type ImportCertificateInput struct {
-	Certificate *models.X509Certificate
-	Metadata    map[string]any
+	Certificate *x509.Certificate
+	PrivateKey  interface{} // RSA/ECDSA private key
+	EngineID    string      // Crypto engine identifier (HSM, TPM, etc.)
 }
 
 type SignatureSignInput struct {
-	CAID             string                 `validate:"required"`
+	SubjectKeyID     string                 `validate:"required"`
 	Message          []byte                 `validate:"required"`
 	MessageType      models.SignMessageType `validate:"required"`
 	SigningAlgorithm string                 `validate:"required"`
 }
 
 type SignatureVerifyInput struct {
-	CAID             string                 `validate:"required"`
+	SubjectKeyID     string                 `validate:"required"`
 	Signature        []byte                 `validate:"required"`
 	Message          []byte                 `validate:"required"`
 	MessageType      models.SignMessageType `validate:"required"`
@@ -216,7 +193,7 @@ type GetCertificatesInput struct {
 }
 
 type GetCertificatesByCAInput struct {
-	CAID string `validate:"required"`
+	SubjectKeyID string `validate:"required"`
 	resources.ListInput[models.Certificate]
 }
 
@@ -227,8 +204,8 @@ type GetCertificatesByExpirationDateInput struct {
 }
 
 type GetCertificatesByCaAndStatusInput struct {
-	CAID   string
-	Status models.CertificateStatus
+	SubjectKeyID string
+	Status       models.CertificateStatus
 	resources.ListInput[models.Certificate]
 }
 

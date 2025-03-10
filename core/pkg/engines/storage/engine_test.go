@@ -14,10 +14,6 @@ func (m *MockStorageEngine) GetProvider() config.StorageProvider {
 	return config.StorageProvider("mockProvider")
 }
 
-func (m *MockStorageEngine) GetCAStorage() (CACertificatesRepo, error) {
-	return nil, nil
-}
-
 func (m *MockStorageEngine) GetCertstorage() (CertificatesRepo, error) {
 	return nil, nil
 }

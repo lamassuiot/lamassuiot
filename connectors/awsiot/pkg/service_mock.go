@@ -27,9 +27,9 @@ func (m *mockAWSCloudConnectorService) UpdateDeviceShadow(ctx context.Context, i
 	args := m.Called(ctx, input)
 	return args.Error(0)
 }
-func (m *mockAWSCloudConnectorService) RegisterCA(ctx context.Context, input RegisterCAInput) (*models.CACertificate, error) {
+func (m *mockAWSCloudConnectorService) RegisterCA(ctx context.Context, input RegisterCAInput) (*models.Certificate, error) {
 	args := m.Called(ctx, input)
-	return args.Get(0).(*models.CACertificate), args.Error(1)
+	return args.Get(0).(*models.Certificate), args.Error(1)
 }
 func (m *mockAWSCloudConnectorService) RegisterGroups(ctx context.Context, input RegisterGroupsInput) error {
 	args := m.Called(ctx, input)
@@ -46,9 +46,9 @@ func (m *mockAWSCloudConnectorService) RegisterUpdateJITPProvisioner(ctx context
 	return args.Error(0)
 }
 
-func (m *mockAWSCloudConnectorService) GetRegisteredCAs(ctx context.Context) ([]*models.CACertificate, error) {
+func (m *mockAWSCloudConnectorService) GetRegisteredCAs(ctx context.Context) ([]*models.Certificate, error) {
 	args := m.Called(ctx)
-	return args.Get(0).([]*models.CACertificate), args.Error(1)
+	return args.Get(0).([]*models.Certificate), args.Error(1)
 }
 func (m *mockAWSCloudConnectorService) GetConnectorID() string {
 	args := m.Called()

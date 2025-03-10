@@ -44,17 +44,6 @@ func (s *PostgresStorageEngine) GetProvider() config.StorageProvider {
 	return config.Postgres
 }
 
-func (s *PostgresStorageEngine) GetCAStorage() (storage.CACertificatesRepo, error) {
-	if s.CA == nil {
-		err := s.initialiceCACertStorage()
-		if err != nil {
-			return nil, fmt.Errorf("could not initialize postgres CA and Cert clients: %s", err)
-		}
-	}
-
-	return s.CA, nil
-}
-
 func (s *PostgresStorageEngine) initialiceCACertStorage() error {
 	psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, CA_DB_NAME)
 	if err != nil {
@@ -63,13 +52,6 @@ func (s *PostgresStorageEngine) initialiceCACertStorage() error {
 
 	m := NewMigrator(s.logger, psqlCli)
 	m.MigrateToLatest()
-
-	if s.CA == nil {
-		s.CA, err = NewCAPostgresRepository(s.logger, psqlCli)
-		if err != nil {
-			return err
-		}
-	}
 
 	if s.Cert == nil {
 		s.Cert, err = NewCertificateRepository(s.logger, psqlCli)

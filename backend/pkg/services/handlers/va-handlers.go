@@ -27,21 +27,21 @@ func NewVAEventHandler(l *logrus.Entry, crlSvc *beService.CRLServiceBackend) *ev
 func createCAHandler(event *event.Event, crlSvc *beService.CRLServiceBackend, lMessaging *logrus.Entry) error {
 	ctx := context.Background()
 
-	ca, err := chelpers.GetEventBody[models.CACertificate](event)
+	ca, err := chelpers.GetEventBody[models.Certificate](event)
 	if err != nil {
 		err = fmt.Errorf("could not decode cloud event: %s", err)
 		lMessaging.Error(err)
 		return err
 	}
 
-	_, err = crlSvc.InitCRLRole(ctx, ca.Certificate.SubjectKeyID)
+	_, err = crlSvc.InitCRLRole(ctx, ca.SubjectKeyID)
 
 	if err != nil {
 		err = fmt.Errorf("could not initialize CRL role: %s", err)
 		lMessaging.Error(err)
 	}
 
-	lMessaging.Infof("CRL role initialized for CA %s", ca.ID)
+	lMessaging.Infof("CRL role initialized for CA %s", ca.SubjectKeyID)
 
 	return nil
 }

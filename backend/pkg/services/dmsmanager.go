@@ -29,6 +29,13 @@ import (
 	"golang.org/x/crypto/ocsp"
 )
 
+var DEFAULT_VALIDITY models.Validity
+
+func init() {
+	issuanceDur, _ := models.ParseDuration("100d")
+	DEFAULT_VALIDITY = models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceDur)}
+}
+
 var dmsValidate = validator.New()
 
 type DMSManagerMiddleware func(services.DMSManagerService) services.DMSManagerService
@@ -213,16 +220,16 @@ func (svc DMSManagerServiceBackend) CACerts(ctx context.Context, aps string) ([]
 	for _, ca := range reqCAs {
 		lFunc.Debugf("Reading CA %s Certificate", ca)
 		caResponse, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{
-			CAID: ca,
+			SubjectKeyID: ca,
 		})
 		if err != nil {
 			lFunc.Errorf("something went wrong while reading CA '%s' by ID: %s", ca, err)
 			return nil, err
 		}
 
-		lFunc.Debugf("got CA %s\n%s", caResponse.ID, chelpers.CertificateToPEM((*x509.Certificate)(caResponse.Certificate.Certificate)))
+		lFunc.Debugf("got CA %s\n%s", caResponse.SubjectKeyID, chelpers.CertificateToPEM((*x509.Certificate)(caResponse.Certificate)))
 
-		cas = append(cas, (*x509.Certificate)(caResponse.Certificate.Certificate))
+		cas = append(cas, (*x509.Certificate)(caResponse.Certificate))
 	}
 
 	return cas, nil
@@ -290,7 +297,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 
 		//check if certificate is a certificate issued by bootstrap CA
 		validCertificate := false
-		var validationCA *models.CACertificate
+		var validationCA *models.Certificate
 		estEnrollOpts := dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030
 
 		// Allow enrolment with expired certificates
@@ -303,15 +310,15 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		}
 
 		for _, caID := range estEnrollOpts.AuthOptionsMTLS.ValidationCAs {
-			ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: caID})
+			ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{SubjectKeyID: caID})
 			if err != nil {
 				lFunc.Warnf("could not obtain lamassu CA '%s'. Skipping to next validation CA: %s", caID, err)
 				continue
 			}
 
-			err = helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), clientCert, !allowExpiredEnroll)
+			err = helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate), clientCert, !allowExpiredEnroll)
 			if err != nil {
-				lFunc.Debugf("invalid validation using CA [%s] with CommonName '%s', SerialNumber '%s'", ca.ID, ca.Certificate.Subject.CommonName, ca.Certificate.SerialNumber)
+				lFunc.Debugf("invalid validation using CA [%s] with CommonName '%s', SerialNumber '%s'", ca.SubjectKeyID, ca.Certificate.Subject.CommonName, ca.Certificate.SerialNumber)
 			} else {
 				lFunc.Infof("certificate validated. Revocation check will be performed next")
 				validCertificate = true
@@ -327,7 +334,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		}
 
 		//checks against Lamassu, external OCSP or CRL
-		couldCheckRevocation, isRevoked, err := svc.checkCertificateRevocation(ctx, clientCert, (*x509.Certificate)(validationCA.Certificate.Certificate))
+		couldCheckRevocation, isRevoked, err := svc.checkCertificateRevocation(ctx, clientCert, (*x509.Certificate)(validationCA.Certificate))
 		if err != nil {
 			lFunc = lFunc.WithField("auth-status", "failed")
 			lFunc.Errorf("aborting enrollment. error while checking certificate revocation status: %s", err)
@@ -501,8 +508,8 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	lFunc.Infof("starting signature process")
 
 	enrollCAID := dms.Settings.EnrollmentSettings.EnrollmentCA
-	enrollCA, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{
-		CAID: enrollCAID,
+	_, err = svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{
+		SubjectKeyID: enrollCAID,
 	})
 	if err != nil {
 		lFunc.Errorf("could not get enroll CA with ID=%s: %s", enrollCAID, err)
@@ -511,10 +518,10 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 
 	lFunc.Infof("requesting certificate signature")
 	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
-		CAID:        dms.Settings.EnrollmentSettings.EnrollmentCA,
-		CertRequest: (*models.X509CertificateRequest)(csr),
+		SubjectKeyID: dms.Settings.EnrollmentSettings.EnrollmentCA,
+		CertRequest:  (*models.X509CertificateRequest)(csr),
 		IssuanceProfile: models.IssuanceProfile{
-			Validity: enrollCA.Validity,
+			Validity: DEFAULT_VALIDITY,
 			SignAsCA: false,
 			ExtendedKeyUsages: []models.X509ExtKeyUsage{
 				models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
@@ -583,7 +590,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 
 	enrollCAID := dms.Settings.EnrollmentSettings.EnrollmentCA
 	enrollCA, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{
-		CAID: enrollCAID,
+		SubjectKeyID: enrollCAID,
 	})
 	if err != nil {
 		lFunc.Errorf("could not get enroll CA with ID=%s: %s", enrollCAID, err)
@@ -607,12 +614,12 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 
 		//check if certificate is a certificate issued by Enroll CA
 		lFunc.Debugf("validating client certificate using EST Enrollment CA witch has ID=%s CN=%s SN=%s", enrollCAID, enrollCA.Certificate.Subject.CommonName, enrollCA.Certificate.SerialNumber)
-		err = helpers.ValidateCertificate((*x509.Certificate)(enrollCA.Certificate.Certificate), clientCert, false)
+		err = helpers.ValidateCertificate((*x509.Certificate)(enrollCA.Certificate), clientCert, false)
 		if err != nil {
 			lFunc.Warnf("invalid validation using enroll CA: %s", err)
 		} else {
 			lFunc.Infof("certificate validated. Revocation and Expiration (if needed) check will be performed next")
-			validationCA = (*x509.Certificate)(enrollCA.Certificate.Certificate)
+			validationCA = (*x509.Certificate)(enrollCA.Certificate)
 			validCertificate = true
 		}
 
@@ -626,17 +633,17 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 			//check if certificate is a certificate issued by Extra Val CAs
 			for idx, caID := range estReEnrollOpts.AdditionalValidationCAs {
 				lFunc.Debugf("[%d/%d] obtainig validation with ID %s", idx, aValCAsCtr, caID)
-				ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: caID})
+				ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{SubjectKeyID: caID})
 				if err != nil {
 					lFunc.Warnf("[%d/%d] could not obtain lamassu CA with ID %s. Skipping to next validation CA: %s", idx, aValCAsCtr, caID, err)
 					continue
 				}
 
-				err = helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate.Certificate), clientCert, false)
+				err = helpers.ValidateCertificate((*x509.Certificate)(ca.Certificate), clientCert, false)
 				if err != nil {
-					lFunc.Debugf("[%d/%d] invalid validation using CA [%s] with CommonName '%s', SerialNumber '%s'", idx, aValCAsCtr, ca.ID, ca.Certificate.Subject.CommonName, ca.Certificate.SerialNumber)
+					lFunc.Debugf("[%d/%d] invalid validation using CA [%s] with CommonName '%s', SerialNumber '%s'", idx, aValCAsCtr, ca.SubjectKeyID, ca.Certificate.Subject.CommonName, ca.Certificate.SerialNumber)
 				} else {
-					lFunc.Debugf("[%d/%d] OK validation using CA [%s] with CommonName '%s', SerialNumber '%s'", idx, aValCAsCtr, ca.ID, ca.Certificate.Subject.CommonName, ca.Certificate.SerialNumber)
+					lFunc.Debugf("[%d/%d] OK validation using CA [%s] with CommonName '%s', SerialNumber '%s'", idx, aValCAsCtr, ca.SubjectKeyID, ca.Certificate.Subject.CommonName, ca.Certificate.SerialNumber)
 					validCertificate = true
 					break
 				}
@@ -787,10 +794,10 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	}
 
 	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
-		CAID:        dms.Settings.EnrollmentSettings.EnrollmentCA,
-		CertRequest: (*models.X509CertificateRequest)(csr),
+		SubjectKeyID: dms.Settings.EnrollmentSettings.EnrollmentCA,
+		CertRequest:  (*models.X509CertificateRequest)(csr),
 		IssuanceProfile: models.IssuanceProfile{
-			Validity: enrollCA.Validity,
+			Validity: DEFAULT_VALIDITY,
 			SignAsCA: false,
 			ExtendedKeyUsages: []models.X509ExtKeyUsage{
 				models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),

@@ -108,7 +108,7 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*models.VARole, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	var ca *models.CACertificate
+	var ca *models.Certificate
 	_, err := svc.caSDK.GetCAs(ctx, services.GetCAsInput{
 		QueryParameters: &resources.QueryParameters{
 			Filters: []resources.FilterOption{
@@ -119,7 +119,7 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*mo
 				},
 			},
 		},
-		ApplyFunc: func(c models.CACertificate) {
+		ApplyFunc: func(c models.Certificate) {
 			ca = &c
 		},
 	})
@@ -149,7 +149,7 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*mo
 	}
 
 	_, err = svc.CalculateCRL(ctx, services.CalculateCRLInput{
-		CASubjectKeyID: string(ca.Certificate.Certificate.SubjectKeyId),
+		CASubjectKeyID: string(ca.Certificate.SubjectKeyId),
 	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while calculating first CRL: %s", err)
@@ -179,7 +179,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
 	}
 
-	var crlCA *models.CACertificate
+	var crlCA *models.Certificate
 	_, err = svc.caSDK.GetCAs(ctx, services.GetCAsInput{
 		QueryParameters: &resources.QueryParameters{
 			Filters: []resources.FilterOption{
@@ -191,7 +191,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 			},
 			PageSize: 1,
 		},
-		ApplyFunc: func(ca models.CACertificate) {
+		ApplyFunc: func(ca models.Certificate) {
 			crlCA = &ca
 		},
 	})
@@ -206,10 +206,10 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 	}
 
 	certList := []x509.RevocationListEntry{}
-	lFunc.Debugf("reading CA %s certificates", crlCA.ID)
+	lFunc.Debugf("reading CA %s certificates", crlCA.SubjectKeyID)
 	_, err = svc.caSDK.GetCertificatesByCaAndStatus(ctx, services.GetCertificatesByCaAndStatusInput{
-		CAID:   crlCA.ID,
-		Status: models.StatusRevoked,
+		SubjectKeyID: crlCA.SubjectKeyID,
+		Status:       models.StatusRevoked,
 		ListInput: resources.ListInput[models.Certificate]{
 			ExhaustiveRun: true,
 			QueryParameters: &resources.QueryParameters{
@@ -226,16 +226,16 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		},
 	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while reading CA %s certificates: %s", crlCA.ID, err)
+		lFunc.Errorf("something went wrong while reading CA %s certificates: %s", crlCA.SubjectKeyID, err)
 		return nil, err
 	}
 
 	crlSigner := NewCASigner(ctx, crlCA, svc.caSDK)
-	caCert := (*x509.Certificate)(crlCA.Certificate.Certificate)
+	caCert := (*x509.Certificate)(crlCA.Certificate)
 
 	extensions := []pkix.Extension{}
 
-	idp, err := svc.getDistributionPointExtension(string(crlCA.Certificate.Certificate.SubjectKeyId))
+	idp, err := svc.getDistributionPointExtension(string(crlCA.Certificate.SubjectKeyId))
 	if err != nil {
 		lFunc.Errorf("something went wrong while creating Issuing Distribution Point extension: %s", err)
 		return nil, err
@@ -243,7 +243,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 
 	extensions = append(extensions, *idp)
 
-	lFunc.Debugf("creating revocation list. CA %s", crlCA.ID)
+	lFunc.Debugf("creating revocation list. CA %s", crlCA.SubjectKeyID)
 	now := time.Now()
 
 	crlVersion := big.NewInt(0)

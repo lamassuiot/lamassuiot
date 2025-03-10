@@ -6,7 +6,6 @@ import (
 )
 
 type CommonStorageEngine struct {
-	CA                   CACertificatesRepo
 	CACertificateRequest CACertificateRequestRepo
 	Cert                 CertificatesRepo
 	Device               DeviceManagerRepo
@@ -18,7 +17,6 @@ type CommonStorageEngine struct {
 
 type StorageEngine interface {
 	GetProvider() config.StorageProvider
-	GetCAStorage() (CACertificatesRepo, error)
 	GetCertstorage() (CertificatesRepo, error)
 	GetCACertificateRequestStorage() (CACertificateRequestRepo, error)
 	GetDeviceStorage() (DeviceManagerRepo, error)

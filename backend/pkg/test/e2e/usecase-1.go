@@ -107,16 +107,9 @@ func RunUseCase1(input UseCase1Input) error {
 
 	//2. Import CA1 into lamassu (priv key + crt) (default CE) (issuance expiration: 5m)
 	log.Infof("2. Import CA1 into lamassu (priv key + crt) (default CE) (issuance expiration: 5m)")
-	ca2Iss := models.TimeDuration(time.Minute * 5)
-	ca1, err := caClient.ImportCA(context.Background(), services.ImportCAInput{
-		CAType: models.CertificateTypeImportedWithKey,
-		IssuanceExpiration: models.Validity{
-			Type:     models.Duration,
-			Duration: (models.TimeDuration)(ca2Iss),
-		},
-		CACertificate: (*models.X509Certificate)(cert1),
-		KeyType:       cmodels.KeyType(x509.RSA),
-		CARSAKey:      key1.(*rsa.PrivateKey),
+	ca1, err := caClient.ImportCertificate(context.Background(), services.ImportCertificateInput{
+		Certificate: cert1,
+		PrivateKey:  key1.(*rsa.PrivateKey),
 	})
 	if err != nil {
 		return err
@@ -126,7 +119,6 @@ func RunUseCase1(input UseCase1Input) error {
 	log.Infof("3. Create CA2 in Lamassu (Try engine different from default CE. If not possible, use default CE) -> Key Value - V2")
 	engines, _ := caClient.GetCryptoEngineProvider(context.Background())
 	caDur2 := models.TimeDuration(time.Hour * 10)
-	caIss2 := models.TimeDuration(time.Minute * 5)
 
 	var engine *cmodels.CryptoEngineProvider
 	for i := range engines {
@@ -137,11 +129,10 @@ func RunUseCase1(input UseCase1Input) error {
 	}
 
 	ca2, err := caClient.CreateCA(context.Background(), services.CreateCAInput{
-		KeyMetadata:        cmodels.KeyMetadata{Type: cmodels.KeyType(x509.RSA), Bits: 2048},
-		Subject:            cmodels.Subject{CommonName: "CA1"},
-		CAExpiration:       models.Validity{Type: models.Duration, Duration: caDur2},
-		IssuanceExpiration: models.Validity{Type: models.Duration, Duration: caIss2},
-		EngineID:           engine.ID,
+		KeyMetadata:  cmodels.KeyMetadata{Type: cmodels.KeyType(x509.RSA), Bits: 2048},
+		Subject:      cmodels.Subject{CommonName: "CA1"},
+		CAExpiration: models.Validity{Type: models.Duration, Duration: caDur2},
+		EngineID:     engine.ID,
 	})
 	if err != nil {
 		return err
@@ -159,7 +150,7 @@ func RunUseCase1(input UseCase1Input) error {
 	}
 
 	ca2Upd, err := caClient.UpdateCAMetadata(context.Background(), services.UpdateCAMetadataInput{
-		CAID: ca1.ID,
+		SubjectKeyID: ca1.SubjectKeyID,
 		Patches: helpers.NewPatchBuilder().
 			Add(helpers.JSONPointerBuilder(fmt.Sprintf("lamassu.io/iot/aws.%s", awsAccountID)), regMetaDataUpdate).
 			Build(),
@@ -203,7 +194,7 @@ func RunUseCase1(input UseCase1Input) error {
 				EnrollmentOptionsESTRFC7030: models.EnrollmentOptionsESTRFC7030{
 					AuthMode: models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate),
 					AuthOptionsMTLS: models.AuthOptionsClientCertificate{
-						ValidationCAs:        []string{ca2.ID},
+						ValidationCAs:        []string{ca2.SubjectKeyID},
 						ChainLevelValidation: -1,
 					},
 				},
@@ -213,7 +204,7 @@ func RunUseCase1(input UseCase1Input) error {
 					Metadata:  map[string]any{},
 					Tags:      []string{"iot", "testdms", "cloud"},
 				},
-				EnrollmentCA:                ca1.ID,
+				EnrollmentCA:                ca1.SubjectKeyID,
 				RegistrationMode:            models.JITP,
 				EnableReplaceableEnrollment: true,
 			},
@@ -250,8 +241,8 @@ func RunUseCase1(input UseCase1Input) error {
 	}
 	log.Infof("6. Sign Bootstrap Cert with CA2")
 	bootSigedCrt, err := caClient.SignCertificate(context.Background(), services.SignCertificateInput{
-		CAID:        ca2.ID,
-		CertRequest: (*models.X509CertificateRequest)(bootCsr),
+		SubjectKeyID: ca2.SubjectKeyID,
+		CertRequest:  (*models.X509CertificateRequest)(bootCsr),
 		IssuanceProfile: models.IssuanceProfile{
 			Validity: models.Validity{},
 			SignAsCA: false,

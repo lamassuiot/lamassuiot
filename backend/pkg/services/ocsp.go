@@ -39,7 +39,7 @@ func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) ([]byte,
 	}
 
 	ca, err := svc.caSDK.GetCAByID(ctx, services.GetCAByIDInput{
-		CAID: crt.IssuerCAMetadata.ID,
+		SubjectKeyID: crt.IssuerCAMetadata.ID,
 	})
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) ([]byte,
 	rtemplate := ocsp.Response{
 		Status:           status,
 		SerialNumber:     req.SerialNumber,
-		Certificate:      (*x509.Certificate)(ca.Certificate.Certificate),
+		Certificate:      (*x509.Certificate)(ca.Certificate),
 		RevocationReason: int(crt.RevocationReason),
 		IssuerHash:       req.HashAlgorithm,
 		RevokedAt:        revokedAt,
@@ -68,7 +68,7 @@ func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) ([]byte,
 	}
 
 	// make a response to return
-	rawResp, err := ocsp.CreateResponse((*x509.Certificate)(ca.Certificate.Certificate), (*x509.Certificate)(ca.Certificate.Certificate), rtemplate, NewCASigner(ctx, ca, svc.caSDK))
+	rawResp, err := ocsp.CreateResponse((*x509.Certificate)(ca.Certificate), (*x509.Certificate)(ca.Certificate), rtemplate, NewCASigner(ctx, ca, svc.caSDK))
 	if err != nil {
 		return nil, err
 	}

@@ -38,12 +38,12 @@ import (
 type AWSCloudConnectorService interface {
 	RegisterAndAttachThing(ctx context.Context, input RegisterAndAttachThingInput) error
 	UpdateDeviceShadow(ctx context.Context, input UpdateDeviceShadowInput) error
-	RegisterCA(ctx context.Context, input RegisterCAInput) (*models.CACertificate, error)
+	RegisterCA(ctx context.Context, input RegisterCAInput) (*models.Certificate, error)
 	RegisterGroups(ctx context.Context, input RegisterGroupsInput) error
 	RegisterUpdatePolicies(ctx context.Context, input RegisterUpdatePoliciesInput) error
 	RegisterUpdateJITPProvisioner(ctx context.Context, input RegisterUpdateJITPProvisionerInput) error
 	UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) error
-	GetRegisteredCAs(ctx context.Context) ([]*models.CACertificate, error)
+	GetRegisteredCAs(ctx context.Context) ([]*models.Certificate, error)
 	GetConnectorID() string
 	GetDMSService() services.DMSManagerService
 	GetDeviceService() services.DeviceManagerService
@@ -332,7 +332,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 	}
 
 	ca, err := svc.CaSDK.GetCAByID(context.Background(), services.GetCAByIDInput{
-		CAID: input.BindedIdentity.Certificate.IssuerCAMetadata.ID,
+		SubjectKeyID: input.BindedIdentity.Certificate.IssuerCAMetadata.ID,
 	})
 	if err != nil {
 		lFunc.Errorf("could not get CA %s for device %s: Skipping: %s", input.BindedIdentity.Certificate.IssuerCAMetadata.ID, input.DeviceID, err)
@@ -344,7 +344,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 		"SerialNumber":            helpers.SerialNumberToString(input.BindedIdentity.Certificate.Certificate.SerialNumber),
 		"DMS":                     input.BindedIdentity.DMS.ID,
 		"LamassuCertificate":      chelpers.CertificateToPEM((*x509.Certificate)(input.BindedIdentity.Certificate.Certificate)),
-		"LamassuCACertificatePem": chelpers.CertificateToPEM((*x509.Certificate)(ca.Certificate.Certificate)),
+		"LamassuCACertificatePem": chelpers.CertificateToPEM((*x509.Certificate)(ca.Certificate)),
 	}
 
 	templateB, err := json.Marshal(template)
@@ -623,10 +623,10 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 	return nil
 }
 
-func (svc *AWSCloudConnectorServiceBackend) GetRegisteredCAs(ctx context.Context) ([]*models.CACertificate, error) {
+func (svc *AWSCloudConnectorServiceBackend) GetRegisteredCAs(ctx context.Context) ([]*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	cas := []*models.CACertificate{}
+	cas := []*models.Certificate{}
 	lmsCAs := 0
 	totalAWSRegCAs := 0
 
@@ -670,7 +670,7 @@ func (svc *AWSCloudConnectorServiceBackend) GetRegisteredCAs(ctx context.Context
 				lFunc.Debugf("No marker")
 				continueIter = false
 			}
-			lmsCA, err := svc.CaSDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: string(descCrt.SubjectKeyId)})
+			lmsCA, err := svc.CaSDK.GetCAByID(context.Background(), services.GetCAByIDInput{SubjectKeyID: string(descCrt.SubjectKeyId)})
 			if err != nil {
 				lFunc.Warnf("skipping CA with ID AWS '%s' - LAMASSU '%s'. Could not get CA from CA service: %s", *caMeta.CertificateId, string(descCrt.SubjectKeyId), err)
 				continue
@@ -684,23 +684,23 @@ func (svc *AWSCloudConnectorServiceBackend) GetRegisteredCAs(ctx context.Context
 }
 
 type RegisterCAInput struct {
-	models.CACertificate
+	models.Certificate
 	RegisterConfiguration IoTAWSCAMetadata
 }
 
-func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, input RegisterCAInput) (ca *models.CACertificate, err error) {
+func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, input RegisterCAInput) (ca *models.Certificate, err error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	defer func() {
 		if err != nil {
 			//report error in metadata
-			lFunc.Infof("updating CA %s metadata with error: %s", input.ID, err)
+			lFunc.Infof("updating CA %s metadata with error: %s", input.SubjectKeyID, err)
 
 			input.RegisterConfiguration.Registration.Status = IoTAWSCAMetadataRegistrationFailed
 			input.RegisterConfiguration.Registration.Error = fmt.Sprintf("something went wrong while registering CA: %s", err)
 
 			_, err = svc.CaSDK.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
-				CAID: input.ID,
+				SubjectKeyID: input.SubjectKeyID,
 				Patches: chelpers.NewPatchBuilder().
 					Add(chelpers.JSONPointerBuilder(AWSIoTMetadataKey(svc.GetConnectorID())), input.RegisterConfiguration).
 					Build(),
@@ -719,8 +719,8 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 	}
 
 	alreadyRegistered := false
-	idx := slices.IndexFunc(cas, func(c *models.CACertificate) bool {
-		if c.Certificate.SerialNumber == input.Certificate.SerialNumber {
+	idx := slices.IndexFunc(cas, func(c *models.Certificate) bool {
+		if c.SerialNumber == input.Certificate.SerialNumber {
 			return true
 		} else {
 			return false
@@ -735,10 +735,10 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 		lFunc.Infof("registering CA with SN '%s'", input.Certificate.SerialNumber)
 	} else {
 		lFunc.Warnf("CA with SN '%s' is already registered in AWS IoT. Skipping registration process", input.Certificate.SerialNumber)
-		return &input.CACertificate, nil
+		return &input.Certificate, nil
 	}
 
-	caCert := input.CACertificate.Certificate.Certificate.String()
+	caCert := input.Certificate.Certificate.String()
 	caCertBytes, err := base64.StdEncoding.DecodeString(caCert)
 	if err != nil {
 		lFunc.Errorf("could not decode b64 CA certificate: %s", err)
@@ -748,12 +748,12 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 	defer func() {
 		if err != nil {
 			//report error in metadata
-			lFunc.Infof("updating CA %s metadata with error: %s", input.ID, err)
+			lFunc.Infof("updating CA %s metadata with error: %s", input.SubjectKeyID, err)
 			input.RegisterConfiguration.Registration.Status = IoTAWSCAMetadataRegistrationFailed
 			input.RegisterConfiguration.Registration.Error = err.Error()
 
 			_, err = svc.CaSDK.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
-				CAID: input.ID,
+				SubjectKeyID: input.SubjectKeyID,
 				Patches: chelpers.NewPatchBuilder().
 					Add(chelpers.JSONPointerBuilder(AWSIoTMetadataKey(svc.ConnectorID)), input.RegisterConfiguration).
 					Build(),
@@ -769,7 +769,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 		Tags: []types.Tag{
 			{
 				Key:   aws.String("LMS.CA.ID"),
-				Value: &input.ID,
+				Value: &input.SubjectKeyID,
 			},
 			{
 				Key:   aws.String("LMS.CA.SN"),
@@ -805,11 +805,11 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 		// Sign verification certificate CSR
 		lFunc.Debugf("signing validation csr with cn=%s", csr.Subject.CommonName)
 		singOutput, err := svc.CaSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-			CAID:        input.CACertificate.ID,
-			CertRequest: &csr,
+			SubjectKeyID: input.Certificate.SubjectKeyID,
+			CertRequest:  &csr,
 			IssuanceProfile: models.IssuanceProfile{
-				SignAsCA:        false,
-				Validity:        input.CACertificate.Validity,
+				SignAsCA: false,
+				//Validity:        input.Certificate.Validity,
 				HonorSubject:    true,
 				HonorExtensions: true,
 			},
@@ -828,11 +828,11 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 
 		registerInput.VerificationCertificate = aws.String(string(validationCertBytes))
 	} else {
-		lFunc.Debugf("CA %s is not the primary account. Skipping verification certificate registration. Using SNI mode", input.ID)
+		lFunc.Debugf("CA %s is not the primary account. Skipping verification certificate registration. Using SNI mode", input.SubjectKeyID)
 		registerInput.CertificateMode = types.CertificateModeSniOnly
 	}
 
-	lFunc.Debugf("registering id=%s cn=%s CA certificate in AWS", input.ID, input.Certificate.Subject.CommonName)
+	lFunc.Debugf("registering id=%s cn=%s CA certificate in AWS", input.SubjectKeyID, input.Certificate.Subject.CommonName)
 	regResponse, err := svc.iotSDK.RegisterCACertificate(context.Background(), registerInput)
 	if err != nil {
 		lFunc.Errorf("something went wrong while registering CA certificate in AWS IoT: %s", err)
@@ -854,10 +854,10 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 		},
 	}
 
-	lFunc.Infof("updating CA %s with new metadata: %v\n", input.ID, iotAWSCAMetadata)
+	lFunc.Infof("updating CA %s with new metadata: %v\n", input.SubjectKeyID, iotAWSCAMetadata)
 
 	ca, err = svc.CaSDK.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
-		CAID: input.ID,
+		SubjectKeyID: input.SubjectKeyID,
 		Patches: chelpers.NewPatchBuilder().
 			Add(chelpers.JSONPointerBuilder(AWSIoTMetadataKey(svc.ConnectorID)), iotAWSCAMetadata).
 			Build(),

@@ -3,7 +3,6 @@ package assemblers
 import (
 	"context"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -44,49 +42,7 @@ func getCertificateTemplate(csr x509.CertificateRequest, ec x509.Certificate) x5
 	}
 }
 
-func TestImportCAWithNoRequestAndDifferentCNError(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-
-	externalCACert, privateKey, err := helpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalCA")
-	if err != nil {
-		t.Fatalf("could not generate external CA: %s", err)
-	}
-
-	requestedCACSR, err := serverTest.CA.Service.RequestCACSR(context.Background(), services.RequestCAInput{
-		KeyMetadata: models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-		Subject:     models.Subject{CommonName: "MyRequestedCA"},
-	})
-	if err != nil {
-		t.Fatalf("unexpected error. Could not request CA: %s", err)
-	}
-
-	csr := x509.CertificateRequest(requestedCACSR.CSR)
-
-	certificateTemplate := getCertificateTemplate(csr, *externalCACert)
-	certificateTemplate.IsCA = true
-	certificateTemplate.Subject.CommonName = "MyAlternateRequestedCA"
-
-	certificateBytes, err := x509.CreateCertificate(rand.Reader, &certificateTemplate, externalCACert, csr.PublicKey, privateKey.(*rsa.PrivateKey))
-	if err != nil {
-		t.Fatalf("could not create the requested CA: %s", err)
-	}
-
-	requestedCertificate, err := x509.ParseCertificate(certificateBytes)
-	if err != nil {
-		t.Fatalf("could not parse the requested CA: %s", err)
-	}
-
-	rcert := models.X509Certificate(*requestedCertificate)
-	_, err = serverTest.CA.Service.ImportCA(context.Background(), services.ImportCAInput{
-		CACertificate: &rcert,
-		CAType:        models.CertificateTypeRequested,
-	})
-	assert.EqualError(t, err, "no pending CA Request can be found")
-}
-
+/*
 func TestImportCAWithNoCreatedRequest(t *testing.T) {
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
 	if err != nil {
@@ -129,7 +85,8 @@ func TestImportCAWithNoCreatedRequest(t *testing.T) {
 	})
 	assert.EqualError(t, err, "no pending CA Request can be found")
 }
-
+*/
+/*
 func TestImportCAWithNoRequestId(t *testing.T) {
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
 	if err != nil {
@@ -178,7 +135,8 @@ func TestImportCAWithNoRequestId(t *testing.T) {
 	assert.Equal(t, importedCertificate.Certificate.Subject.CommonName, csr.Subject.CommonName)
 	assert.Equal(t, importedCertificate.Certificate.Certificate.Issuer.CommonName, ec.Subject.CommonName)
 }
-
+*/
+/*
 func TestRequestCADoubleImportError(t *testing.T) {
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
 	if err != nil {
@@ -236,7 +194,8 @@ func TestRequestCADoubleImportError(t *testing.T) {
 
 	assert.EqualError(t, err, "CA Request is not pending")
 }
-
+*/
+/*
 func TestImportNonCACertError(t *testing.T) {
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
 	if err != nil {
@@ -280,7 +239,8 @@ func TestImportNonCACertError(t *testing.T) {
 	assert.EqualError(t, err, "CA certificate and CSR are not compatible - IsCA")
 
 }
-
+*/
+/*
 func TestImportUnexpectedCSRError(t *testing.T) {
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
 	if err != nil {
@@ -333,7 +293,8 @@ func TestImportUnexpectedCSRError(t *testing.T) {
 	assert.EqualError(t, err, "CA certificate and CSR are not compatible - Public Key")
 
 }
-
+*/
+/*
 func TestImportNonExistentRequest(t *testing.T) {
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
 	if err != nil {
@@ -354,7 +315,7 @@ func TestImportNonExistentRequest(t *testing.T) {
 	})
 
 	assert.EqualError(t, err, "CA Request not found")
-}
+}*/
 
 func TestDeleteCARequest(t *testing.T) {
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)

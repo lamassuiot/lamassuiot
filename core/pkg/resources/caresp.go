@@ -3,7 +3,7 @@ package resources
 import "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 
 type GetCAsResponse struct {
-	IterableList[models.CACertificate]
+	IterableList[models.Certificate]
 }
 
 type GetItemsResponse[T any] struct {

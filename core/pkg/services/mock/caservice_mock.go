@@ -26,11 +26,6 @@ func (m *MockCAService) UpdateCertificateMetadata(ctx context.Context, input ser
 	return args.Get(0).(*models.Certificate), args.Error(1)
 }
 
-func (m *MockCAService) UpdateCAIssuanceExpiration(ctx context.Context, input services.UpdateCAIssuanceExpirationInput) (*models.CACertificate, error) {
-	args := m.Called(ctx, input)
-	return args.Get(0).(*models.CACertificate), args.Error(1)
-}
-
 func (m *MockCAService) GetStats(ctx context.Context) (*models.CAStats, error) {
 	args := m.Called(ctx)
 	return args.Get(0).(*models.CAStats), args.Error(1)
@@ -46,9 +41,9 @@ func (m *MockCAService) GetCryptoEngineProvider(ctx context.Context) ([]*models.
 	return args.Get(0).([]*models.CryptoEngineProvider), args.Error(1)
 }
 
-func (m *MockCAService) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
+func (m *MockCAService) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.Certificate, error) {
 	args := m.Called(ctx, input)
-	return args.Get(0).(*models.CACertificate), args.Error(1)
+	return args.Get(0).(*models.Certificate), args.Error(1)
 }
 
 func (m *MockCAService) RequestCACSR(ctx context.Context, input services.RequestCAInput) (*models.CACertificateRequest, error) {
@@ -56,13 +51,9 @@ func (m *MockCAService) RequestCACSR(ctx context.Context, input services.Request
 	return args.Get(0).(*models.CACertificateRequest), args.Error(1)
 }
 
-func (m *MockCAService) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
+func (m *MockCAService) GetCAByID(ctx context.Context, input services.GetCAByIDInput) (*models.Certificate, error) {
 	args := m.Called(ctx, input)
-	return args.Get(0).(*models.CACertificate), args.Error(1)
-}
-func (m *MockCAService) GetCAByID(ctx context.Context, input services.GetCAByIDInput) (*models.CACertificate, error) {
-	args := m.Called(ctx, input)
-	return args.Get(0).(*models.CACertificate), args.Error(1)
+	return args.Get(0).(*models.Certificate), args.Error(1)
 }
 func (m *MockCAService) GetCAs(ctx context.Context, input services.GetCAsInput) (string, error) {
 	args := m.Called(ctx, input)
@@ -73,13 +64,13 @@ func (m *MockCAService) GetCAsByCommonName(ctx context.Context, input services.G
 	return args.String(0), args.Error(1)
 
 }
-func (m *MockCAService) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (*models.CACertificate, error) {
+func (m *MockCAService) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (*models.Certificate, error) {
 	args := m.Called(ctx, input)
-	return args.Get(0).(*models.CACertificate), args.Error(1)
+	return args.Get(0).(*models.Certificate), args.Error(1)
 }
-func (m *MockCAService) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (*models.CACertificate, error) {
+func (m *MockCAService) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (*models.Certificate, error) {
 	args := m.Called(ctx, input)
-	return args.Get(0).(*models.CACertificate), args.Error(1)
+	return args.Get(0).(*models.Certificate), args.Error(1)
 
 }
 func (m *MockCAService) DeleteCA(ctx context.Context, input services.DeleteCAInput) error {

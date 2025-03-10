@@ -78,7 +78,7 @@ func (svc *CryptoMonitor) updateCertificateIfNeeded(cert models.Certificate, now
 }
 
 func (svc *CryptoMonitor) scanCAsForUpdate(ctx context.Context, now time.Time) {
-	caScanFuncAdapter := func(ca models.CACertificate) {
+	caScanFuncAdapter := func(ca models.Certificate) {
 		svc.updateCAIfNeeded(ca, now, ctx)
 	}
 
@@ -89,19 +89,19 @@ func (svc *CryptoMonitor) scanCAsForUpdate(ctx context.Context, now time.Time) {
 	})
 }
 
-func (svc *CryptoMonitor) updateCAIfNeeded(ca models.CACertificate, now time.Time, ctx context.Context) {
-	if ca.Certificate.ValidTo.Before(now) && ca.Certificate.Status == models.StatusActive {
+func (svc *CryptoMonitor) updateCAIfNeeded(ca models.Certificate, now time.Time, ctx context.Context) {
+	if ca.ValidTo.Before(now) && ca.Status == models.StatusActive {
 		svc.service.UpdateCAStatus(ctx, services.UpdateCAStatusInput{
-			CAID:   ca.ID,
-			Status: models.StatusExpired,
+			SubjectKeyID: ca.SubjectKeyID,
+			Status:       models.StatusExpired,
 		})
 		return
 	}
 
-	shouldUpdateMeta, newMetadata := svc.shouldUpdateMonitoringDeltas(ca.Metadata, x509.Certificate(*ca.Certificate.Certificate))
+	shouldUpdateMeta, newMetadata := svc.shouldUpdateMonitoringDeltas(ca.Metadata, x509.Certificate(*ca.Certificate))
 	if shouldUpdateMeta {
 		svc.service.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
-			CAID: ca.ID,
+			SubjectKeyID: ca.SubjectKeyID,
 			Patches: helpers.NewPatchBuilder().
 				Add(helpers.JSONPointerBuilder(models.CAMetadataMonitoringExpirationDeltasKey), newMetadata[models.CAMetadataMonitoringExpirationDeltasKey]).
 				Build(),

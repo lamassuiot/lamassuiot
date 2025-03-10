@@ -55,11 +55,11 @@ func logDecodeError(logger *logrus.Entry, eventID string, eventType string, mode
 }
 
 func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error {
-	var ca *models.CACertificate
+	var ca *models.Certificate
 	var err error
 	switch event.Type() {
 	case string(models.EventUpdateCAMetadataKey):
-		updatedCA, err := chelpers.GetEventBody[models.UpdateModel[models.CACertificate]](event)
+		updatedCA, err := chelpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
 		if err != nil {
 			logDecodeError(logger, event.ID(), event.Type(), "UpdateModel CACertificate", err)
 			return nil
@@ -67,7 +67,7 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc AWSClo
 
 		ca = &updatedCA.Updated
 	default:
-		ca, err = chelpers.GetEventBody[models.CACertificate](event)
+		ca, err = chelpers.GetEventBody[models.Certificate](event)
 		if err != nil {
 			logDecodeError(logger, event.ID(), event.Type(), "CACertificate", err)
 			return nil
@@ -89,16 +89,16 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc AWSClo
 
 	if awsIoTCoreCACfg.Registration.Status == IoTAWSCAMetadataRegistrationRequested {
 		_, err = svc.RegisterCA(context.Background(), RegisterCAInput{
-			CACertificate:         *ca,
+			Certificate:           *ca,
 			RegisterConfiguration: awsIoTCoreCACfg,
 		})
 		if err != nil {
-			err = fmt.Errorf("could not register CA %s - %s: %s", ca.ID, ca.Certificate.Subject.CommonName, err)
+			err = fmt.Errorf("could not register CA %s - %s: %s", ca.SubjectKeyID, ca.Certificate.Subject.CommonName, err)
 			logger.Error(err)
 			return err
 		}
 	} else {
-		logger.Infof("Not registering CA %s - %s: status is %s", ca.ID, ca.Certificate.Subject.CommonName, awsIoTCoreCACfg.Registration.Status)
+		logger.Infof("Not registering CA %s - %s: status is %s", ca.SubjectKeyID, ca.Certificate.Subject.CommonName, awsIoTCoreCACfg.Registration.Status)
 	}
 
 	return nil

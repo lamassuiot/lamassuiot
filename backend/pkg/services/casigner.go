@@ -13,11 +13,11 @@ import (
 
 type caSignerImpl struct {
 	sdk services.CAService
-	ca  *models.CACertificate
+	ca  *models.Certificate
 	ctx context.Context
 }
 
-func NewCASigner(ctx context.Context, ca *models.CACertificate, caSDK services.CAService) crypto.Signer {
+func NewCASigner(ctx context.Context, ca *models.Certificate, caSDK services.CAService) crypto.Signer {
 	return &caSignerImpl{
 		ctx: ctx,
 		sdk: caSDK,
@@ -26,12 +26,12 @@ func NewCASigner(ctx context.Context, ca *models.CACertificate, caSDK services.C
 }
 
 func (s *caSignerImpl) Public() crypto.PublicKey {
-	return s.ca.Certificate.Certificate.PublicKey
+	return s.ca.Certificate.PublicKey
 }
 
 func (s *caSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
 	signAlg := "RSASSA_PKCS1_V1_5_SHA_256"
-	caKeyAlg := s.ca.Certificate.Certificate.PublicKeyAlgorithm
+	caKeyAlg := s.ca.Certificate.PublicKeyAlgorithm
 	if opts.HashFunc().Size()*8 == 256 {
 		if caKeyAlg == x509.ECDSA {
 			signAlg = "ECDSA_SHA_256"
@@ -43,7 +43,7 @@ func (s *caSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpt
 	}
 
 	return s.sdk.SignatureSign(s.ctx, services.SignatureSignInput{
-		CAID:             s.ca.ID,
+		SubjectKeyID:     s.ca.SubjectKeyID,
 		Message:          digest,
 		MessageType:      models.Hashed,
 		SigningAlgorithm: signAlg,

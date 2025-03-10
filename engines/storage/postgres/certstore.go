@@ -50,6 +50,71 @@ func (db *PostgresCertificateStorage) SelectAll(ctx context.Context, req storage
 	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{}, req.ExhaustiveRun, req.ApplyFunc)
 }
 
+func (db *PostgresCertificateStorage) SelectExistsCAByID(ctx context.Context, caID string) (bool, *models.Certificate, error) {
+	queryColumn := "subject_key_id"
+	exist, ca, err := db.querier.SelectExists(ctx, caID, &queryColumn)
+	if ca != nil && !ca.IsCA {
+		return false, nil, nil
+	}
+	return exist, ca, err
+}
+
+func (db *PostgresCertificateStorage) SelectExistsCABySerialNumber(ctx context.Context, serialNumber string) (bool, *models.Certificate, error) {
+	exist, ca, err := db.querier.SelectExists(ctx, serialNumber, nil)
+	if ca != nil && !ca.IsCA {
+		return false, nil, nil
+	}
+	return exist, ca, err
+}
+
+func (db *PostgresCertificateStorage) SelectCAByParentCA(ctx context.Context, parentCAID string, req storage.StorageListRequest[models.Certificate]) (string, error) {
+	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{
+		{query: "is_ca = ? AND issuer_meta_id = ? AND subject_key_id != ?", additionalWhere: []any{true, parentCAID, parentCAID}},
+	}, req.ExhaustiveRun, req.ApplyFunc)
+}
+
+func (db *PostgresCertificateStorage) SelectCAByCommonName(ctx context.Context, commonName string, req storage.StorageListRequest[models.Certificate]) (string, error) {
+	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{
+		{query: "is_ca = ? AND subject_common_name = ?", additionalWhere: []any{true, commonName}},
+	}, req.ExhaustiveRun, req.ApplyFunc)
+}
+
+func (db *PostgresCertificateStorage) SelectAllCA(ctx context.Context, req storage.StorageListRequest[models.Certificate]) (string, error) {
+	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{
+		{query: "is_ca = ?", additionalWhere: []any{true}},
+	}, req.ExhaustiveRun, req.ApplyFunc)
+}
+
+func (db *PostgresCertificateStorage) DeleteCA(ctx context.Context, id string) error {
+	queryColumn := "subject_key_id"
+	_, ca, err := db.querier.SelectExists(ctx, id, &queryColumn)
+	if err != nil {
+		return err
+	}
+	if ca == nil || !ca.IsCA {
+		return gorm.ErrRecordNotFound
+	}
+	return db.querier.Delete(ctx, ca.SerialNumber)
+}
+
+func (db *PostgresCertificateStorage) CountCA(ctx context.Context) (int, error) {
+	return db.querier.Count(ctx, []gormExtraOps{
+		{query: "is_ca = ?", additionalWhere: []any{true}},
+	})
+}
+
+func (db *PostgresCertificateStorage) CountCAByEngine(ctx context.Context, engineID string) (int, error) {
+	return db.querier.Count(ctx, []gormExtraOps{
+		{query: "is_ca = ? AND engine_id = ? ", additionalWhere: []any{true, engineID}},
+	})
+}
+
+func (db *PostgresCertificateStorage) CountCAByStatus(ctx context.Context, status models.CertificateStatus) (int, error) {
+	return db.querier.Count(ctx, []gormExtraOps{
+		{query: "is_ca = ? AND certificates.status = ?", additionalWhere: []any{true, status}},
+	})
+}
+
 func (db *PostgresCertificateStorage) SelectExistsBySerialNumber(ctx context.Context, id string) (bool, *models.Certificate, error) {
 	return db.querier.SelectExists(ctx, id, nil)
 }
@@ -101,4 +166,44 @@ func (db *PostgresCertificateStorage) CountByCA(ctx context.Context, CAID string
 	return db.querier.Count(ctx, []gormExtraOps{
 		{query: "issuer_meta_id = ?", additionalWhere: []any{CAID}},
 	})
+}
+
+func (db *PostgresCertificateStorage) SelectCAByIssuerAndAuthorityKeyID(ctx context.Context, iss models.Subject, akid string, req storage.StorageListRequest[models.Certificate]) (string, error) {
+	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{
+		{query: "is_ca = ? AND " +
+			"issuer_common_name = ? AND " +
+			"issuer_organization = ? AND " +
+			"issuer_organization_unit = ? AND " +
+			"issuer_country = ? AND " +
+			"issuer_state = ? AND " +
+			"issuer_locality = ? AND " +
+			"authority_key_id = ?", additionalWhere: []any{true,
+			iss.CommonName,
+			iss.Organization,
+			iss.OrganizationUnit,
+			iss.Country,
+			iss.State,
+			iss.Locality,
+			akid}},
+	}, req.ExhaustiveRun, req.ApplyFunc)
+}
+
+func (db *PostgresCertificateStorage) SelectCABySubjectAndSubjectKeyID(ctx context.Context, sub models.Subject, skid string, req storage.StorageListRequest[models.Certificate]) (string, error) {
+	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{
+		{query: "is_ca = ? AND " +
+			"subject_common_name = ? AND " +
+			"subject_organization = ? AND " +
+			"subject_organization_unit = ? AND " +
+			"subject_country = ? AND " +
+			"subject_state = ? AND " +
+			"subject_locality = ? AND " +
+			"subject_key_id = ?", additionalWhere: []any{true,
+			sub.CommonName,
+			sub.Organization,
+			sub.OrganizationUnit,
+			sub.Country,
+			sub.State,
+			sub.Locality,
+			skid}},
+	}, req.ExhaustiveRun, req.ApplyFunc)
 }

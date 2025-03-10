@@ -2,9 +2,7 @@ package sdk
 
 import (
 	"context"
-	"crypto/x509"
 	"encoding/base64"
-	"encoding/pem"
 	"fmt"
 	"net/http"
 
@@ -52,7 +50,7 @@ func (cli *httpCAClient) GetStats(ctx context.Context) (*models.CAStats, error) 
 	return stats, nil
 }
 func (cli *httpCAClient) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
-	stats, err := Get[map[models.CertificateStatus]int](ctx, cli.httpClient, cli.baseUrl+"/v1/stats/"+input.CAID, nil, map[int][]error{})
+	stats, err := Get[map[models.CertificateStatus]int](ctx, cli.httpClient, cli.baseUrl+"/v1/stats/"+input.SubjectKeyID, nil, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
@@ -62,11 +60,11 @@ func (cli *httpCAClient) GetStatsByCAID(ctx context.Context, input services.GetS
 
 func (cli *httpCAClient) GetCAs(ctx context.Context, input services.GetCAsInput) (string, error) {
 	url := cli.baseUrl + "/v1/cas"
-	return IterGet[models.CACertificate, *resources.GetCAsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+	return IterGet[models.Certificate, *resources.GetCAsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 
-func (cli *httpCAClient) GetCAByID(ctx context.Context, input services.GetCAByIDInput) (*models.CACertificate, error) {
-	response, err := Get[models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID, nil, map[int][]error{})
+func (cli *httpCAClient) GetCAByID(ctx context.Context, input services.GetCAByIDInput) (*models.Certificate, error) {
+	response, err := Get[models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.SubjectKeyID, nil, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
@@ -76,23 +74,20 @@ func (cli *httpCAClient) GetCAByID(ctx context.Context, input services.GetCAByID
 
 func (cli *httpCAClient) GetCAsByCommonName(ctx context.Context, input services.GetCAsByCommonNameInput) (string, error) {
 	url := cli.baseUrl + "/v1/cas/cn/" + input.CommonName
-	return IterGet[models.CACertificate, *resources.GetCAsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+	return IterGet[models.Certificate, *resources.GetCAsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 
-func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
-	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas", resources.CreateCABody{
-		ID:                 input.ID,
-		Subject:            input.Subject,
-		KeyMetadata:        input.KeyMetadata,
-		IssuanceExpiration: input.IssuanceExpiration,
-		CAExpiration:       input.CAExpiration,
-		EngineID:           input.EngineID,
-		ParentID:           input.ParentID,
-		Metadata:           input.Metadata,
+func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.Certificate, error) {
+	response, err := Post[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas", resources.CreateCABody{
+		Subject:      input.Subject,
+		KeyMetadata:  input.KeyMetadata,
+		CAExpiration: input.CAExpiration,
+		EngineID:     input.EngineID,
+		ParentID:     input.ParentID,
+		Metadata:     input.Metadata,
 	}, map[int][]error{
 		400: {
 			errs.ErrCAIncompatibleValidity,
-			errs.ErrCAIssuanceExpiration,
 		},
 		409: {
 			errs.ErrCAAlreadyExists,
@@ -110,7 +105,6 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 
 func (cli *httpCAClient) RequestCACSR(ctx context.Context, input services.RequestCAInput) (*models.CACertificateRequest, error) {
 	response, err := Post[*models.CACertificateRequest](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/request", resources.CreateCABody{
-		ID:          input.ID,
 		Subject:     input.Subject,
 		KeyMetadata: input.KeyMetadata,
 		EngineID:    input.EngineID,
@@ -134,43 +128,8 @@ func (cli *httpCAClient) RequestCACSR(ctx context.Context, input services.Reques
 	return response, nil
 }
 
-func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
-	var privKey string
-	if input.KeyType == models.KeyType(x509.RSA) {
-		rsaBytes := x509.MarshalPKCS1PrivateKey(input.CARSAKey)
-		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
-			Type:  "RSA PRIVATE KEY",
-			Bytes: rsaBytes,
-		}))
-	} else if input.KeyType == models.KeyType(x509.ECDSA) {
-		ecBytes, err := x509.MarshalECPrivateKey(input.CAECKey)
-		if err != nil {
-			return nil, err
-		}
-		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
-			Type:  "EC PRIVATE KEY",
-			Bytes: ecBytes,
-		}))
-	}
-
-	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/import", resources.ImportCABody{
-		ID:                 input.ID,
-		CAType:             models.CertificateType(input.CAType),
-		IssuanceExpiration: input.IssuanceExpiration,
-		CACertificate:      input.CACertificate,
-		CAChain:            input.CAChain,
-		CAPrivateKey:       privKey,
-		EngineID:           input.EngineID,
-	}, map[int][]error{})
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
-}
-
 func (cli *httpCAClient) SignCertificate(ctx context.Context, input services.SignCertificateInput) (*models.Certificate, error) {
-	response, err := Post[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/certificates/sign", resources.SignCertificateBody{
+	response, err := Post[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.SubjectKeyID+"/certificates/sign", resources.SignCertificateBody{
 		CertRequest: input.CertRequest,
 		Profile:     input.IssuanceProfile,
 	}, map[int][]error{
@@ -190,9 +149,9 @@ func (cli *httpCAClient) CreateCertificate(ctx context.Context, input services.C
 }
 
 func (cli *httpCAClient) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (*models.Certificate, error) {
+	cert := models.X509Certificate(*input.Certificate)
 	response, err := Post[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/certificates/import", resources.ImportCertificateBody{
-		Metadata:    input.Metadata,
-		Certificate: input.Certificate,
+		Certificate: &cert,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err
@@ -201,8 +160,8 @@ func (cli *httpCAClient) ImportCertificate(ctx context.Context, input services.I
 	return response, nil
 }
 
-func (cli *httpCAClient) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (*models.CACertificate, error) {
-	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/status", resources.UpdateCertificateStatusBody{
+func (cli *httpCAClient) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (*models.Certificate, error) {
+	response, err := Post[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.SubjectKeyID+"/status", resources.UpdateCertificateStatusBody{
 		NewStatus:        input.Status,
 		RevocationReason: input.RevocationReason,
 	}, map[int][]error{
@@ -216,8 +175,8 @@ func (cli *httpCAClient) UpdateCAStatus(ctx context.Context, input services.Upda
 	return response, nil
 }
 
-func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (*models.CACertificate, error) {
-	response, err := Put[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/metadata", resources.UpdateCAMetadataBody{
+func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (*models.Certificate, error) {
+	response, err := Put[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.SubjectKeyID+"/metadata", resources.UpdateCAMetadataBody{
 		Patches: input.Patches,
 	}, map[int][]error{
 		404: {
@@ -231,23 +190,8 @@ func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.Up
 	return response, nil
 }
 
-func (cli *httpCAClient) UpdateCAIssuanceExpiration(ctx context.Context, input services.UpdateCAIssuanceExpirationInput) (*models.CACertificate, error) {
-	response, err := Put[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/issuance-expiration", resources.UpdateCAIssuanceExpirationBody{
-		Validity: input.IssuanceExpiration,
-	}, map[int][]error{
-		404: {
-			errs.ErrCANotFound,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
-}
-
 func (cli *httpCAClient) DeleteCA(ctx context.Context, input services.DeleteCAInput) error {
-	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID, map[int][]error{
+	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.SubjectKeyID, map[int][]error{
 		404: {
 			errs.ErrCANotFound,
 		},
@@ -263,7 +207,7 @@ func (cli *httpCAClient) DeleteCA(ctx context.Context, input services.DeleteCAIn
 }
 
 func (cli *httpCAClient) SignatureSign(ctx context.Context, input services.SignatureSignInput) ([]byte, error) {
-	response, err := Post[*resources.SignResponse](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/signature/sign", resources.SignatureSignBody{
+	response, err := Post[*resources.SignResponse](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.SubjectKeyID+"/signature/sign", resources.SignatureSignBody{
 		Message:          base64.StdEncoding.EncodeToString(input.Message),
 		MessageType:      input.MessageType,
 		SigningAlgorithm: input.SigningAlgorithm,
@@ -276,7 +220,7 @@ func (cli *httpCAClient) SignatureSign(ctx context.Context, input services.Signa
 }
 
 func (cli *httpCAClient) SignatureVerify(ctx context.Context, input services.SignatureVerifyInput) (bool, error) {
-	response, err := Post[*resources.VerifyResponse](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/signature/verify", resources.SignatureVerifyBody{
+	response, err := Post[*resources.VerifyResponse](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.SubjectKeyID+"/signature/verify", resources.SignatureVerifyBody{
 		Signature:        base64.StdEncoding.EncodeToString(input.Signature),
 		Message:          base64.StdEncoding.EncodeToString(input.Message),
 		MessageType:      input.MessageType,
@@ -308,7 +252,7 @@ func (cli *httpCAClient) GetCertificates(ctx context.Context, input services.Get
 }
 
 func (cli *httpCAClient) GetCertificatesByCA(ctx context.Context, input services.GetCertificatesByCAInput) (string, error) {
-	url := cli.baseUrl + "/v1/cas/" + input.CAID + "/certificates"
+	url := cli.baseUrl + "/v1/cas/" + input.SubjectKeyID + "/certificates"
 	return IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{
 		404: {
 			errs.ErrCANotFound,
@@ -322,7 +266,7 @@ func (cli *httpCAClient) GetCertificatesByExpirationDate(ctx context.Context, in
 }
 
 func (cli *httpCAClient) GetCertificatesByCaAndStatus(ctx context.Context, input services.GetCertificatesByCaAndStatusInput) (string, error) {
-	url := fmt.Sprintf("%s/v1/cas/%s/certificates/status/%s", cli.baseUrl, input.CAID, input.Status)
+	url := fmt.Sprintf("%s/v1/cas/%s/certificates/status/%s", cli.baseUrl, input.SubjectKeyID, input.Status)
 
 	return IterGet[models.Certificate, *resources.GetCertsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }

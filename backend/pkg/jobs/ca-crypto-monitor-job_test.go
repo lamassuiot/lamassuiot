@@ -59,16 +59,12 @@ func TestUpdateCACertificateIfNeededExpiredNoMetadata(t *testing.T) {
 	cryptoMonitor := NewCryptoMonitor(mockService, nil)
 
 	// Create a sample expired certificate
-	certExpired := models.CACertificate{
-		ID:       "123456",
-		Metadata: map[string]interface{}{},
-		Certificate: models.Certificate{
-			Status:       models.StatusActive,
-			SerialNumber: "123456",
-			ValidTo:      time.Now().AddDate(0, 0, -1), // Expired in 1 day ago,
-			Metadata:     map[string]interface{}{},
-			Certificate:  &models.X509Certificate{},
-		},
+	certExpired := models.Certificate{
+		Status:       models.StatusActive,
+		SerialNumber: "123456",
+		ValidTo:      time.Now().AddDate(0, 0, -1), // Expired in 1 day ago,
+		Metadata:     map[string]interface{}{},
+		Certificate:  &models.X509Certificate{},
 	}
 
 	// Set up expectations for UpdateCertificateStatus
@@ -82,16 +78,12 @@ func TestUpdateCACertificateIfNeededExpiredNoMetadata(t *testing.T) {
 	mockService.AssertNotCalled(t, "UpdateCAMetadata", mock.Anything, mock.Anything)
 
 	// Create a sample expired certificate
-	certValid := models.CACertificate{
-		ID:       "123456",
-		Metadata: map[string]interface{}{},
-		Certificate: models.Certificate{
-			Status:       models.StatusActive,
-			SerialNumber: "123456",
-			ValidTo:      time.Now().AddDate(0, 0, -1), // Expired in 1 day ago,
-			Metadata:     map[string]interface{}{},
-			Certificate:  &models.X509Certificate{},
-		},
+	certValid := models.Certificate{
+		Status:       models.StatusActive,
+		SerialNumber: "123456",
+		ValidTo:      time.Now().AddDate(0, 0, -1), // Expired in 1 day ago,
+		Metadata:     map[string]interface{}{},
+		Certificate:  &models.X509Certificate{},
 	}
 
 	cryptoMonitor.updateCAIfNeeded(certValid, time.Now(), context.Background())
@@ -203,8 +195,10 @@ func TestUpdateCACertificateIfNeededNotExpiredWithMetadata(t *testing.T) {
 	cryptoMonitor := NewCryptoMonitor(mockService, nil)
 
 	// Create a sample expired certificate
-	certExpired := models.CACertificate{
-		ID: "123456",
+	certExpired := models.Certificate{
+		Status:       models.StatusActive,
+		SerialNumber: "123456",
+		ValidTo:      time.Now().AddDate(0, 0, 10), // Expired in 1 day ago,
 		Metadata: map[string]interface{}{
 			models.CAMetadataMonitoringExpirationDeltasKey: []models.MonitoringExpirationDelta{
 				{
@@ -214,13 +208,7 @@ func TestUpdateCACertificateIfNeededNotExpiredWithMetadata(t *testing.T) {
 				},
 			},
 		},
-		Certificate: models.Certificate{
-			Status:       models.StatusActive,
-			SerialNumber: "123456",
-			ValidTo:      time.Now().AddDate(0, 0, 10), // Expired in 1 day ago,
-			Metadata:     map[string]interface{}{},
-			Certificate:  &models.X509Certificate{},
-		},
+		Certificate: &models.X509Certificate{},
 	}
 
 	// Set up expectations for UpdateCertificateStatus

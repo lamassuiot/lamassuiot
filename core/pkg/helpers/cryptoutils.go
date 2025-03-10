@@ -190,14 +190,18 @@ func LoadSystemCACertPoolWithExtraCAsFromFiles(casToAdd []string) *x509.CertPool
 	return certPool
 }
 
-func ValidateCertAndPrivKey(cert *x509.Certificate, rsaKey *rsa.PrivateKey, ecKey *ecdsa.PrivateKey) (bool, error) {
+func ValidateCertAndPrivKey(cert *x509.Certificate, key interface{}) (bool, error) {
 	errs := []string{
 		"tls: private key type does not match public key type",
 		"tls: private key does not match public key",
 	}
 
 	pemCert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
-	if rsaKey != nil {
+	if cert.PublicKeyAlgorithm == x509.RSA {
+		rsaKey, ok := key.(*rsa.PrivateKey)
+		if !ok {
+			return false, fmt.Errorf("key is not of type *rsa.PrivateKey")
+		}
 		keyBytes := x509.MarshalPKCS1PrivateKey(rsaKey)
 		_, err := tls.X509KeyPair(pemCert, pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyBytes}))
 		if err == nil {
@@ -212,8 +216,12 @@ func ValidateCertAndPrivKey(cert *x509.Certificate, rsaKey *rsa.PrivateKey, ecKe
 		return false, err
 	}
 
-	if ecKey != nil {
-		keyBytes, err := x509.MarshalECPrivateKey(ecKey)
+	if cert.PublicKeyAlgorithm == x509.ECDSA {
+		eccKey, ok := key.(*ecdsa.PrivateKey)
+		if !ok {
+			return false, fmt.Errorf("key is not of type *ecdsa.PrivateKey")
+		}
+		keyBytes, err := x509.MarshalECPrivateKey(eccKey)
 		if err != nil {
 			return false, err
 		}

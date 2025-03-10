@@ -34,7 +34,7 @@ func (mw CAEventPublisher) GetStatsByCAID(ctx context.Context, input services.Ge
 	return mw.Next.GetStatsByCAID(ctx, input)
 }
 
-func (mw CAEventPublisher) CreateCA(ctx context.Context, input services.CreateCAInput) (output *models.CACertificate, err error) {
+func (mw CAEventPublisher) CreateCA(ctx context.Context, input services.CreateCAInput) (output *models.Certificate, err error) {
 	defer func() {
 		if err == nil {
 			mw.eventMWPub.PublishCloudEvent(ctx, models.EventCreateCAKey, output)
@@ -52,16 +52,7 @@ func (mw CAEventPublisher) RequestCACSR(ctx context.Context, input services.Requ
 	return mw.Next.RequestCACSR(ctx, input)
 }
 
-func (mw CAEventPublisher) ImportCA(ctx context.Context, input services.ImportCAInput) (output *models.CACertificate, err error) {
-	defer func() {
-		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventImportCAKey, output)
-		}
-	}()
-	return mw.Next.ImportCA(ctx, input)
-}
-
-func (mw CAEventPublisher) GetCAByID(ctx context.Context, input services.GetCAByIDInput) (*models.CACertificate, error) {
+func (mw CAEventPublisher) GetCAByID(ctx context.Context, input services.GetCAByIDInput) (*models.Certificate, error) {
 	return mw.Next.GetCAByID(ctx, input)
 }
 
@@ -73,17 +64,17 @@ func (mw CAEventPublisher) GetCAsByCommonName(ctx context.Context, input service
 	return mw.Next.GetCAsByCommonName(ctx, input)
 }
 
-func (mw CAEventPublisher) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (output *models.CACertificate, err error) {
+func (mw CAEventPublisher) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (output *models.Certificate, err error) {
 	prev, err := mw.GetCAByID(ctx, services.GetCAByIDInput{
-		CAID: input.CAID,
+		SubjectKeyID: input.SubjectKeyID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get CA %s: %w", input.CAID, err)
+		return nil, fmt.Errorf("mw error: could not get CA %s: %w", input.SubjectKeyID, err)
 	}
 
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateCAStatusKey, models.UpdateModel[models.CACertificate]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateCAStatusKey, models.UpdateModel[models.Certificate]{
 				Updated:  *output,
 				Previous: *prev,
 			})
@@ -91,42 +82,23 @@ func (mw CAEventPublisher) UpdateCAStatus(ctx context.Context, input services.Up
 	}()
 	return mw.Next.UpdateCAStatus(ctx, input)
 }
-func (mw CAEventPublisher) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (output *models.CACertificate, err error) {
+func (mw CAEventPublisher) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (output *models.Certificate, err error) {
 	prev, err := mw.GetCAByID(ctx, services.GetCAByIDInput{
-		CAID: input.CAID,
+		SubjectKeyID: input.SubjectKeyID,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get CA %s: %w", input.CAID, err)
+		return nil, fmt.Errorf("mw error: could not get CA %s: %w", input.SubjectKeyID, err)
 	}
 
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateCAMetadataKey, models.UpdateModel[models.CACertificate]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateCAMetadataKey, models.UpdateModel[models.Certificate]{
 				Updated:  *output,
 				Previous: *prev,
 			})
 		}
 	}()
 	return mw.Next.UpdateCAMetadata(ctx, input)
-}
-
-func (mw CAEventPublisher) UpdateCAIssuanceExpiration(ctx context.Context, input services.UpdateCAIssuanceExpirationInput) (output *models.CACertificate, err error) {
-	prev, err := mw.GetCAByID(ctx, services.GetCAByIDInput{
-		CAID: input.CAID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("mw error: could not get CA %s: %w", input.CAID, err)
-	}
-
-	defer func() {
-		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateCAIssuanceExpirationKey, models.UpdateModel[models.CACertificate]{
-				Updated:  *output,
-				Previous: *prev,
-			})
-		}
-	}()
-	return mw.Next.UpdateCAIssuanceExpiration(ctx, input)
 }
 
 func (mw CAEventPublisher) DeleteCA(ctx context.Context, input services.DeleteCAInput) (err error) {

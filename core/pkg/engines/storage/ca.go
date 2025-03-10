@@ -20,25 +20,18 @@ type CertificatesRepo interface {
 	SelectExistsBySerialNumber(ctx context.Context, serialNumber string) (bool, *models.Certificate, error)
 	Update(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error)
 	Insert(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error)
-}
 
-type CACertificatesRepo interface {
-	SelectByType(ctx context.Context, CAType models.CertificateType, req StorageListRequest[models.CACertificate]) (string, error)
-	Count(ctx context.Context) (int, error)
-	CountByEngine(ctx context.Context, engineID string) (int, error)
-	CountByStatus(ctx context.Context, status models.CertificateStatus) (int, error)
-	SelectAll(ctx context.Context, req StorageListRequest[models.CACertificate]) (string, error)
-
-	SelectExistsByID(ctx context.Context, id string) (bool, *models.CACertificate, error)
-	SelectExistsBySerialNumber(ctx context.Context, serialNumber string) (bool, *models.CACertificate, error)
-	SelectByCommonName(ctx context.Context, commonName string, req StorageListRequest[models.CACertificate]) (string, error)
-	SelectByParentCA(ctx context.Context, parentCAID string, req StorageListRequest[models.CACertificate]) (string, error)
-	SelectBySubjectAndSubjectKeyID(ctx context.Context, sub models.Subject, skid string, req StorageListRequest[models.CACertificate]) (string, error)
-	SelectByIssuerAndAuthorityKeyID(ctx context.Context, iss models.Subject, akid string, req StorageListRequest[models.CACertificate]) (string, error)
-
-	Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error)
-	Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error)
-	Delete(ctx context.Context, caID string) error
+	SelectExistsCAByID(ctx context.Context, id string) (bool, *models.Certificate, error)
+	SelectExistsCABySerialNumber(ctx context.Context, serialNumber string) (bool, *models.Certificate, error)
+	SelectCAByCommonName(ctx context.Context, commonName string, req StorageListRequest[models.Certificate]) (string, error)
+	SelectCAByParentCA(ctx context.Context, parentCAID string, req StorageListRequest[models.Certificate]) (string, error)
+	SelectAllCA(ctx context.Context, req StorageListRequest[models.Certificate]) (string, error)
+	DeleteCA(ctx context.Context, caID string) error
+	CountCA(ctx context.Context) (int, error)
+	CountCAByEngine(ctx context.Context, engineID string) (int, error)
+	CountCAByStatus(ctx context.Context, status models.CertificateStatus) (int, error)
+	SelectCAByIssuerAndAuthorityKeyID(ctx context.Context, iss models.Subject, akid string, req StorageListRequest[models.Certificate]) (string, error)
+	SelectCABySubjectAndSubjectKeyID(ctx context.Context, sub models.Subject, skid string, req StorageListRequest[models.Certificate]) (string, error)
 }
 
 type CACertificateRequestRepo interface {
