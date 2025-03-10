@@ -108,6 +108,8 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*models.VARole, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
+	lFunc.Infof("initializing CRL role for CA %s", caSki)
+
 	var ca *models.CACertificate
 	_, err := svc.caSDK.GetCAs(ctx, services.GetCAsInput{
 		QueryParameters: &resources.QueryParameters{
@@ -149,7 +151,7 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*mo
 	}
 
 	_, err = svc.CalculateCRL(ctx, services.CalculateCRLInput{
-		CASubjectKeyID: string(ca.Certificate.Certificate.SubjectKeyId),
+		CASubjectKeyID: caSki,
 	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while calculating first CRL: %s", err)

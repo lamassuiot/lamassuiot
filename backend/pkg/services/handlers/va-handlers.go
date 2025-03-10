@@ -35,10 +35,10 @@ func createCAHandler(event *event.Event, crlSvc *beService.CRLServiceBackend, lM
 	}
 
 	_, err = crlSvc.InitCRLRole(ctx, ca.Certificate.SubjectKeyID)
-
 	if err != nil {
 		err = fmt.Errorf("could not initialize CRL role: %s", err)
 		lMessaging.Error(err)
+		return err
 	}
 
 	lMessaging.Infof("CRL role initialized for CA %s", ca.ID)

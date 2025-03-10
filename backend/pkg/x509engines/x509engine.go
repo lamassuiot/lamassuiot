@@ -125,7 +125,7 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 
 	for _, domain := range engine.vaDomains {
 		template.OCSPServer = append(template.OCSPServer, fmt.Sprintf("http://%s/ocsp", domain))
-		template.CRLDistributionPoints = append(template.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, keyID))
+		template.CRLDistributionPoints = append(template.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, helpers.FormatHexWithColons([]byte(keyID))))
 	}
 
 	certificateBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, signer.Public(), signer)
@@ -183,7 +183,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 
 	for _, domain := range engine.vaDomains {
 		certificateTemplate.OCSPServer = append(certificateTemplate.OCSPServer, fmt.Sprintf("http://%s/ocsp", domain))
-		certificateTemplate.CRLDistributionPoints = append(certificateTemplate.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, ca.SubjectKeyId))
+		certificateTemplate.CRLDistributionPoints = append(certificateTemplate.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, helpers.FormatHexWithColons([]byte(ca.AuthorityKeyId))))
 	}
 
 	// Define certificate extra extensions
