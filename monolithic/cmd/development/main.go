@@ -18,7 +18,10 @@ import (
 	"github.com/lamassuiot/lamassuiot/monolithic/v3/pkg"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	laws "github.com/lamassuiot/lamassuiot/shared/aws/v3"
+	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/dockerrunner"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
+	"github.com/ory/dockertest/v3"
+	"github.com/ory/dockertest/v3/docker"
 )
 
 const readyToPKI = ` 
@@ -89,6 +92,7 @@ func main() {
 	disableMonitor := flag.Bool("disable-monitor", false, "disable crypto monitoring")
 	disableEventbus := flag.Bool("disable-eventbus", false, "disable eventbus")
 	useAwsEventbus := flag.Bool("use-aws-eventbus", false, "use AWS Eventbus")
+	disableUI := flag.Bool("disable-ui", false, "Disable UI docker loading")
 	flag.Parse()
 
 	fmt.Println("===================== FLAGS ======================")
@@ -241,6 +245,36 @@ func main() {
 		}
 	}
 
+	var uiCleanup func()
+	fmt.Printf(">> disableUI : %v\n", *disableUI)
+
+	cloudConnectors := "[]"
+	if *awsIoTManagerID != "" {
+		cloudConnectors = fmt.Sprintf("aws.%s", *awsIoTManagerID)
+	}
+
+	if !*disableUI {
+		containerCleanup, _, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
+			Repository:   "ghcr.io/lamassuiot/lamassu-ui", // image
+			Tag:          "latest",                        // version
+			Env:          []string{"OIDC_ENABLED=false", "DOMAIN=localhost:8443", "COGNITO_ENABLED=false", "CLOUD_CONNECTORS=" + cloudConnectors},
+			ExposedPorts: []string{"8080/tcp"},
+		}, func(hc *docker.HostConfig) {
+			hc.AutoRemove = true
+			hc.PortBindings = map[docker.Port][]docker.PortBinding{
+				"8080/tcp": {{HostPort: "8081"}},
+			}
+		})
+		uiCleanup = func() {
+			containerCleanup()
+		}
+		if err != nil {
+			containerCleanup()
+			log.Fatalf("could not launch ghcr.io/lamassuiot/lamassu-ui:latest: %s", err)
+		}
+		defer containerCleanup()
+	}
+
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
 
 	cleanup := func() {
@@ -256,6 +290,9 @@ func main() {
 		svcCleanup("AWS-LocalStack", awsCleanup)
 		if hsmModulePath != "" {
 			svcCleanup("SoftHSM V2", softhsmCleanup)
+		}
+		if !*disableUI {
+			svcCleanup("Lamassu-UI", uiCleanup)
 		}
 	}
 
@@ -338,6 +375,7 @@ func main() {
 
 	pluglableStorageConfig := &postgresStorageConfig
 
+	//TODO jurkiri revisar Enabled: *disableMonitor  --> se pasa el valor contrario
 	conf := pkg.MonolithicConfig{
 		Logs:               cconfig.Logging{Level: cconfig.Debug},
 		VAStorageDir:       "/tmp/lamassuiot/va",

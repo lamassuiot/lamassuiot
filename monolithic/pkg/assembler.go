@@ -21,6 +21,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
+	"github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/utils/gindump"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -224,7 +225,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 
 		engine := gin.New()
 		engine.Use(gin.Recovery(), clientCertsToHeaderUsingEnvoyStyle())
-		buildReverseProxyHandler := func(engine *gin.Engine, serviceName, servicePath string, servicePort int) {
+		/*buildReverseProxyHandler := func(engine *gin.Engine, serviceName, servicePath string, servicePort int) {
 			subpath := servicePath
 			subpath = strings.TrimSuffix(subpath, "/")
 
@@ -259,13 +260,104 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			}
 
 			engine.Any(fmt.Sprintf("%s/*proxyPath", subpath), proxy)
-		}
+		}*/
 
-		buildReverseProxyHandler(engine, "CA", "/api/ca/", caPort)
+		/*buildReverseProxyHandler(engine, "CA", "/api/ca/", caPort)
 		buildReverseProxyHandler(engine, "Dev Manager", "/api/devmanager/", devPort)
 		buildReverseProxyHandler(engine, "DMS Manager", "/api/dmsmanager/", dmsPort)
 		buildReverseProxyHandler(engine, "VA", "/api/va/", vaPort)
 		buildReverseProxyHandler(engine, "Alerts", "/api/alerts/", alertsPort)
+		//TODO jurkiri review port
+		buildReverseProxyHandler(engine, "UI", "/ui/", 8080)*/
+
+		routeMaps := make(map[string]func(c *gin.Context))
+		routeList := make([]string, 0)
+
+		addRouteMap := func(serviceName, servicePath string, servicePort int) {
+			subpath := servicePath
+			subpath = strings.TrimSuffix(subpath, "/")
+			color.Set(color.BgCyan)
+			color.Set(color.FgWhite)
+			fmt.Printf("  (HTTPS)  0.0.0.0:%d%s*  --> %s 127.0.0.1:%d\n", conf.GatewayPortHttps, servicePath, serviceName, servicePort)
+			fmt.Printf("  (HTTP)   0.0.0.0:%d%s*  --> %s 127.0.0.1:%d\n", conf.GatewayPortHttp, servicePath, serviceName, servicePort)
+			color.Unset()
+			fmt.Printf("\n")
+			routeMaps[servicePath] = func(c *gin.Context) {
+				remote, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", servicePort))
+				if err != nil {
+					panic(err)
+				}
+				proxyUrl := strings.TrimPrefix(c.Param("proxyPath"), subpath)
+				proxyUrl = strings.TrimSuffix(proxyUrl, "/")
+				fmt.Printf("Proxy URL: %s\n", proxyUrl)
+				//emulate envoy config by generating rand request id as HTTP header to the upstream service
+				c.Request.Header.Add("x-request-id", uuid.NewString())
+				proxy := httputil.NewSingleHostReverseProxy(remote)
+				//Define the director func
+				//This is a good place to log, for example
+				proxy.Director = func(req *http.Request) {
+					req.Header = c.Request.Header
+					req.Host = remote.Host
+					req.URL.Scheme = remote.Scheme
+					req.URL.Host = remote.Host
+					req.URL.Path = proxyUrl
+				}
+				proxy.ServeHTTP(c.Writer, c.Request)
+			}
+			for k := range routeMaps {
+				routeList = append(routeList, k)
+			}
+		}
+
+		defaultHander := func(c *gin.Context) {
+			remote, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", 8081))
+			if err != nil {
+				panic(err)
+			}
+			//emulate envoy config by generating rand request id as HTTP header to the upstream service
+			c.Request.Header.Add("x-request-id", uuid.NewString())
+			proxy := httputil.NewSingleHostReverseProxy(remote)
+			//Define the director func
+			//This is a good place to log, for example
+			proxy.Director = func(req *http.Request) {
+				req.Header = c.Request.Header
+				req.Host = remote.Host
+				req.URL.Scheme = remote.Scheme
+				req.URL.Host = remote.Host
+				req.URL.Path = c.Param("proxyPath")
+			}
+			proxy.ServeHTTP(c.Writer, c.Request)
+		}
+
+		addRouteMap("CA", "/api/ca/", caPort)
+		addRouteMap("Dev Manager", "/api/devmanager/", devPort)
+		addRouteMap("DMS Manager", "/api/dmsmanager/", dmsPort)
+		addRouteMap("VA", "/api/va/", vaPort)
+		addRouteMap("Alerts", "/api/alerts/", alertsPort)
+
+		buildReverseProxyGlobalHandler := func(engine *gin.Engine) {
+			proxy := func(c *gin.Context) {
+				var realProxy func(c *gin.Context)
+				foundPath := false
+				path := c.Param("proxyPath")
+				for _, route := range routeList {
+					if strings.HasPrefix(path, route) {
+						realProxy = routeMaps[route]
+						foundPath = true
+						break
+					}
+				}
+				gindump.Dump()
+				if foundPath {
+					realProxy(c)
+				} else {
+					defaultHander(c)
+				}
+			}
+			engine.Any("/*proxyPath", proxy)
+		}
+
+		buildReverseProxyGlobalHandler(engine)
 
 		listenerHttps, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", conf.GatewayPortHttps))
 		if err != nil {
