@@ -375,7 +375,6 @@ func main() {
 
 	pluglableStorageConfig := &postgresStorageConfig
 
-	//TODO jurkiri revisar Enabled: *disableMonitor  --> se pasa el valor contrario
 	conf := pkg.MonolithicConfig{
 		Logs:               cconfig.Logging{Level: cconfig.Debug},
 		VAStorageDir:       "/tmp/lamassuiot/va",
