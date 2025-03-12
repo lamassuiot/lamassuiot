@@ -386,7 +386,7 @@ func main() {
 		AssemblyMode:       pkg.Http,
 		CryptoEngines:      cryptoEnginesConfig.CryptoEngines,
 		Monitoring: cconfig.MonitoringJob{
-			Enabled:   *disableMonitor,
+			Enabled:   !*disableMonitor,
 			Frequency: "* * * * *",
 		},
 		Storage: *pluglableStorageConfig,
