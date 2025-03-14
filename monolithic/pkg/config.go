@@ -28,6 +28,7 @@ type MonolithicConfig struct {
 	GatewayPortHttp    int                            `mapstructure:"gateway_port_http"`
 	AWSIoTManager      MonolithicAWSIoTManagerConfig  `mapstructure:"aws_iot_manager"`
 	VAStorageDir       string                         `mapstructure:"va_storage_directory"`
+	UIPort             int                            `mapstructure:"ui_port"`
 }
 
 type MonolithicAWSIoTManagerConfig struct {
