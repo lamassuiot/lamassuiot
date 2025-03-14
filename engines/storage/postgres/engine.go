@@ -24,6 +24,7 @@ const (
 	DEVICE_DB_NAME = "devicemanager"
 	DMS_DB_NAME    = "dmsmanager"
 	ALERTS_DB_NAME = "alerts"
+	VA_DB_NAME     = "va"
 )
 
 type PostgresStorageEngine struct {
@@ -126,6 +127,26 @@ func (s *PostgresStorageEngine) GetDeviceStorage() (storage.DeviceManagerRepo, e
 	}
 
 	return s.Device, nil
+}
+
+func (s *PostgresStorageEngine) GetVARoleStorage() (storage.VARepo, error) {
+	if s.Device == nil {
+		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, VA_DB_NAME)
+		if err != nil {
+			return nil, fmt.Errorf("could not create postgres client: %s", err)
+		}
+
+		m := NewMigrator(s.logger, psqlCli)
+		m.MigrateToLatest()
+
+		store, err := NewVARepository(s.logger, psqlCli)
+		if err != nil {
+			return nil, fmt.Errorf("could not initialize postgres Device client: %s", err)
+		}
+		s.VA = store
+	}
+
+	return s.VA, nil
 }
 
 func (s *PostgresStorageEngine) GetDMSStorage() (storage.DMSRepo, error) {

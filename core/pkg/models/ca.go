@@ -31,12 +31,14 @@ const (
 
 type Certificate struct {
 	SerialNumber        string                 `json:"serial_number" gorm:"primaryKey"`
-	KeyID               string                 `json:"key_id"`
+	SubjectKeyID        string                 `json:"subject_key_id"`
+	AuthorityKeyID      string                 `json:"authority_key_id"`
 	Metadata            map[string]interface{} `json:"metadata" gorm:"serializer:json"`
 	Status              CertificateStatus      `json:"status"`
 	Certificate         *X509Certificate       `json:"certificate"`
 	KeyMetadata         KeyStrengthMetadata    `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_meta_"`
 	Subject             Subject                `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
+	Issuer              Subject                `json:"issuer" gorm:"embedded;embeddedPrefix:issuer_"`
 	ValidFrom           time.Time              `json:"valid_from"`
 	IssuerCAMetadata    IssuerCAMetadata       `json:"issuer_metadata" gorm:"embedded;embeddedPrefix:issuer_meta_"`
 	ValidTo             time.Time              `json:"valid_to"`

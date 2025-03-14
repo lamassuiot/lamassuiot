@@ -299,7 +299,6 @@ func (r *backendCAHttpRoutes) ImportCA(ctx *gin.Context) {
 		CARSAKey:           rsaKey,
 		CAECKey:            ecKey,
 		EngineID:           requestBody.EngineID,
-		ParentID:           requestBody.ParentID,
 		CARequestID:        requestBody.CARequestID,
 	})
 	if err != nil {
@@ -352,8 +351,8 @@ func (r *backendCAHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 	}
 
 	ca, err := r.svc.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
-		CAID:     params.ID,
-		Metadata: requestBody.Metadata,
+		CAID:    params.ID,
+		Patches: requestBody.Patches,
 	})
 	if err != nil {
 		switch err {
@@ -1180,7 +1179,7 @@ func (r *backendCAHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
 
 	cert, err := r.svc.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
 		SerialNumber: params.SerialNumber,
-		Metadata:     requestBody.Metadata,
+		Patches:      requestBody.Patches,
 	})
 
 	if err != nil {

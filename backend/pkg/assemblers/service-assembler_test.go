@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
@@ -17,6 +19,85 @@ import (
 	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
 )
+
+type TestServiceBuilder struct {
+	withEventBus bool
+	withVault    bool
+	withDatabase []string
+	withMonitor  bool
+	withService  []Service
+	withSmtp     *config.SMTPServer
+}
+
+func (b TestServiceBuilder) WithEventBus() TestServiceBuilder {
+	b.withEventBus = true
+	return b
+}
+
+func (b TestServiceBuilder) WithVault() TestServiceBuilder {
+	b.withVault = true
+	return b
+}
+
+func (b TestServiceBuilder) WithDatabase(dbs ...string) TestServiceBuilder {
+	b.withDatabase = dbs
+	return b
+}
+
+func (b TestServiceBuilder) WithMonitor() TestServiceBuilder {
+	b.withMonitor = true
+	return b
+}
+
+func (b TestServiceBuilder) WithService(services ...Service) TestServiceBuilder {
+	b.withService = services
+	return b
+}
+
+func (b TestServiceBuilder) WithSmtp(config *config.SMTPServer) TestServiceBuilder {
+	b.withSmtp = config
+	return b
+}
+
+func (b TestServiceBuilder) Build(t *testing.T) (*TestServer, error) {
+	var err error
+	eventBusConf := &TestEventBusConfig{
+		config: cconfig.EventBusEngine{
+			Enabled: false,
+		},
+	}
+	if b.withEventBus {
+		eventBusConf, err = PrepareRabbitMQForTest()
+		if err != nil {
+			t.Fatalf("could not prepare RabbitMQ test server: %s", err)
+		}
+	}
+
+	storageConfig, err := PreparePostgresForTest(b.withDatabase)
+	if err != nil {
+		t.Fatalf("could not prepare Postgres test server: %s", err)
+	}
+
+	cryptoEngines := []CryptoEngine{GOLANG}
+	if b.withVault {
+		cryptoEngines = append(cryptoEngines, VAULT)
+	}
+
+	cryptoConfig := PrepareCryptoEnginesForTest(cryptoEngines)
+
+	if b.withService == nil {
+		b.withService = []Service{CA}
+	}
+
+	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, b.withSmtp, b.withService, b.withMonitor)
+	if err != nil {
+		t.Fatalf("could not assemble Server with HTTP server: %s", err)
+	}
+
+	t.Cleanup(testServer.AfterSuite)
+
+	return testServer, nil
+}
 
 type CryptoEngine int
 
@@ -36,6 +117,7 @@ const (
 	DEVICE_MANAGER
 	VA
 	DMS_MANAGER
+	ALERTS
 )
 
 type TestEventBusConfig struct {
@@ -80,9 +162,19 @@ type DeviceManagerTestServer struct {
 
 type VATestServer struct {
 	HttpServerURL string
-	CaSDK         services.CAService
+	CRLService    services.CRLService
+	HttpCASDK     services.CAService
+	HttpVASDK     services.VAService
 	BeforeEach    func() error
 	AfterSuite    func()
+}
+
+type AlertsTestServer struct {
+	Port                 int
+	Service              services.AlertsService
+	HttpAlertsManagerSDK services.AlertsService
+	BeforeEach           func() error
+	AfterSuite           func()
 }
 
 type TestServer struct {
@@ -90,6 +182,7 @@ type TestServer struct {
 	VA            *VATestServer
 	DeviceManager *DeviceManagerTestServer
 	DMSManager    *DMSManagerTestServer
+	Alerts        *AlertsTestServer
 
 	EventBus *TestEventBusConfig
 
@@ -211,9 +304,9 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 		PublisherEventBus:  eventBus.config,
 		Storage:            storageEngine.config,
 		CryptoEngineConfig: cryptoEngines.config,
-		CryptoMonitoring: cconfig.MonitoringJob{
+		CertificateMonitoringJob: cconfig.MonitoringJob{
 			Enabled:   monitor,
-			Frequency: "* * * * * *", //this CRON-like expression will scan certificate each second.
+			Frequency: "1s",
 		},
 		VAServerDomains: []string{"dev.lamassu.test/api/va"},
 	}, models.APIServiceInfo{
@@ -344,17 +437,31 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 	}, nil
 }
 
-func BuildVATestServer(caTestServer *CATestServer) (*VATestServer, error) {
-	_, _, port, err := AssembleVAServiceWithHTTPServer(config.VAconfig{
+func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer, monitor bool) (*VATestServer, error) {
+	crlSvc, _, port, err := AssembleVAServiceWithHTTPServer(config.VAconfig{
 		Logs: cconfig.Logging{
 			Level: cconfig.Info,
 		},
+		Storage: storageEngine.config,
 		Server: cconfig.HttpServer{
 			LogLevel:           cconfig.Debug,
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},
-		CAClient: config.CAClient{},
+		SubscriberEventBus: eventBus.config,
+		PublisherEventBus:  eventBus.config,
+		CAClient:           config.CAClient{},
+		CRLMonitoringJob: cconfig.MonitoringJob{
+			Enabled:   monitor,
+			Frequency: "1s",
+		},
+		FilesystemStorage: cconfig.FSStorageConfig{
+			ID:   "fs",
+			Type: cconfig.LocalFilesystem,
+			Config: map[string]interface{}{
+				"storage_directory": "/tmp/lamassuiot",
+			},
+		},
 	}, caTestServer.HttpCASDK, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
@@ -365,8 +472,10 @@ func BuildVATestServer(caTestServer *CATestServer) (*VATestServer, error) {
 	}
 
 	return &VATestServer{
+		CRLService:    *crlSvc,
 		HttpServerURL: fmt.Sprintf("http://127.0.0.1:%d", port),
-		CaSDK:         caTestServer.HttpCASDK,
+		HttpCASDK:     caTestServer.HttpCASDK,
+		HttpVASDK:     sdk.NewHttpVAClient(http.DefaultClient, fmt.Sprintf("http://127.0.0.1:%d", port)),
 		BeforeEach: func() error {
 			return nil
 		},
@@ -376,7 +485,52 @@ func BuildVATestServer(caTestServer *CATestServer) (*VATestServer, error) {
 	}, nil
 }
 
-func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, cryptoEngines *TestCryptoEngineConfig, services []Service, monitor bool) (*TestServer, error) {
+func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, smptConfig *config.SMTPServer) (*AlertsTestServer, error) {
+	if smptConfig == nil {
+		smptConfig = &config.SMTPServer{}
+	}
+	svc, port, err := AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
+		Logs: cconfig.Logging{
+			Level: cconfig.Info,
+		},
+		Server: cconfig.HttpServer{
+			LogLevel:           cconfig.Info,
+			HealthCheckLogging: false,
+			Protocol:           cconfig.HTTP,
+		},
+		SubscriberEventBus: eventBus.config,
+		Storage:            storageEngine.config,
+		SMTPConfig:         *smptConfig,
+	}, models.APIServiceInfo{
+		Version:   "test",
+		BuildSHA:  "-",
+		BuildTime: "-",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	httpCli := http.Client{}
+	httpCli.Transport = &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+
+	return &AlertsTestServer{
+		Port:                 port,
+		Service:              *svc,
+		HttpAlertsManagerSDK: sdk.NewHttpAlertsClient(&httpCli, fmt.Sprintf("https://127.0.0.1:%d", port)),
+		BeforeEach: func() error {
+			return nil
+		},
+		AfterSuite: func() {
+			fmt.Println("TEST CLEANUP ALERTS")
+		},
+	}, nil
+}
+
+func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, cryptoEngines *TestCryptoEngineConfig, smtpConfig *config.SMTPServer, services []Service, monitor bool) (*TestServer, error) {
 	servicesMap := make(map[Service]interface{})
 
 	beforeEachActions := []func() error{}
@@ -422,13 +576,23 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 	}
 
 	if slices.Contains(services, VA) {
-		vaTestServer, err := BuildVATestServer(caTestServer)
+		vaTestServer, err := BuildVATestServer(storageEngine, eventBus, caTestServer, monitor)
 		if err != nil {
 			return nil, fmt.Errorf("could not build VATestServer: %s", err)
 		}
 		servicesMap[VA] = vaTestServer
 		beforeEachActions = append(beforeEachActions, vaTestServer.BeforeEach)
 		afterSuiteActions = append(afterSuiteActions, vaTestServer.AfterSuite)
+	}
+
+	if slices.Contains(services, ALERTS) {
+		alertsTestServer, err := BuildAlertsTestServer(storageEngine, eventBus, smtpConfig)
+		if err != nil {
+			return nil, fmt.Errorf("could not build AlertsTestServer: %s", err)
+		}
+		servicesMap[ALERTS] = alertsTestServer
+		beforeEachActions = append(beforeEachActions, alertsTestServer.BeforeEach)
+		afterSuiteActions = append(afterSuiteActions, alertsTestServer.AfterSuite)
 	}
 
 	if eventBus.BeforeEach != nil {
@@ -493,7 +657,27 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 			}
 			return nil
 		}(),
+		Alerts: func() *AlertsTestServer {
+			if servicesMap[ALERTS] != nil {
+				return servicesMap[ALERTS].(*AlertsTestServer)
+			}
+			return nil
+		}(),
 		BeforeEach: beforeEach,
 		AfterSuite: afterSuite,
 	}, nil
+}
+
+func SleepRetry(retry int, sleep time.Duration, f func() error) error {
+	var err error
+	for i := 0; i < retry; i++ {
+		err = f()
+		if err == nil {
+			return nil
+		}
+
+		time.Sleep(sleep)
+	}
+
+	return fmt.Errorf("could not execute function after %d retries. Last error: %s", retry, err)
 }

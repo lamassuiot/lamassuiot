@@ -105,7 +105,7 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 
 	lFunc.Debugf("generated serial number for root CA: %s", helpers.SerialNumberToString(sn))
 	lFunc.Debugf("validity of root CA: %s", caExpiration)
-	lFunc.Debugf("key ID of root CA: %s", keyID)
+	lFunc.Debugf("key ID of root CA: %s", helpers.FormatHexWithColons([]byte(keyID)))
 	lFunc.Debugf("subject of root CA: %s", subject)
 
 	template := x509.Certificate{
@@ -162,7 +162,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 		return nil, fmt.Errorf("invalid expiration")
 	}
 
-	keyID, err := software.NewSoftwareCryptoEngine(engine.logger).EncodePKIXPublicKeyDigest(ca.PublicKey)
+	skid, err := software.NewSoftwareCryptoEngine(engine.logger).EncodePKIXPublicKeyDigest(csr.PublicKey)
 	if err != nil {
 		lFunc.Errorf("could not encode public key digest: %s", err)
 		return nil, err
@@ -171,6 +171,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 	certificateTemplate := x509.Certificate{
 		PublicKeyAlgorithm:    csr.PublicKeyAlgorithm,
 		PublicKey:             csr.PublicKey,
+		SubjectKeyId:          []byte(skid),
 		AuthorityKeyId:        ca.SubjectKeyId,
 		SerialNumber:          sn,
 		Issuer:                ca.Subject,
@@ -182,7 +183,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 
 	for _, domain := range engine.vaDomains {
 		certificateTemplate.OCSPServer = append(certificateTemplate.OCSPServer, fmt.Sprintf("http://%s/ocsp", domain))
-		certificateTemplate.CRLDistributionPoints = append(certificateTemplate.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, keyID))
+		certificateTemplate.CRLDistributionPoints = append(certificateTemplate.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, ca.SubjectKeyId))
 	}
 
 	// Define certificate extra extensions

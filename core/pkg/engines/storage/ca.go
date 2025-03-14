@@ -33,6 +33,8 @@ type CACertificatesRepo interface {
 	SelectExistsBySerialNumber(ctx context.Context, serialNumber string) (bool, *models.CACertificate, error)
 	SelectByCommonName(ctx context.Context, commonName string, req StorageListRequest[models.CACertificate]) (string, error)
 	SelectByParentCA(ctx context.Context, parentCAID string, req StorageListRequest[models.CACertificate]) (string, error)
+	SelectBySubjectAndSubjectKeyID(ctx context.Context, sub models.Subject, skid string, req StorageListRequest[models.CACertificate]) (string, error)
+	SelectByIssuerAndAuthorityKeyID(ctx context.Context, iss models.Subject, akid string, req StorageListRequest[models.CACertificate]) (string, error)
 
 	Insert(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error)
 	Update(ctx context.Context, caCertificate *models.CACertificate) (*models.CACertificate, error)

@@ -260,7 +260,13 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context,
 		return nil, err
 	}
 
-	device.Metadata = input.Metadata
+	updatedMetadata, err := chelpers.ApplyPatches(device.Metadata, input.Patches)
+	if err != nil {
+		lFunc.Errorf("failed to apply patches to metadata for Device '%s': %v", input.ID, err)
+		return nil, err
+	}
+
+	device.Metadata = updatedMetadata
 
 	lFunc.Debugf("updating %s device metadata", input.ID)
 	return svc.devicesStorage.Update(ctx, device)

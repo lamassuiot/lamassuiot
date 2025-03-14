@@ -3,7 +3,7 @@ package controllers
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/resources"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
 type AlertsHttpRoutes interface {

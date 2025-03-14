@@ -206,8 +206,8 @@ func (r *backendDeviceManagerHttpRoutes) UpdateDeviceMetadata(ctx *gin.Context) 
 	}
 
 	dev, err := r.svc.UpdateDeviceMetadata(ctx, services.UpdateDeviceMetadataInput{
-		ID:       params.ID,
-		Metadata: requestBody.Metadata,
+		ID:      params.ID,
+		Patches: requestBody.Patches,
 	})
 
 	if err != nil {

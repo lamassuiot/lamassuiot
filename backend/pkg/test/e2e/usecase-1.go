@@ -151,18 +151,18 @@ func RunUseCase1(input UseCase1Input) error {
 	log.Infof("4. Sync CA1 with AWS")
 	//4.1 Update the ca status in order to define the ca metadata to connect to AWS
 	//Comment -> The functionality is not working due to aws-connector service is not working properly.
-	metaUpdateData := map[string]interface{}{
-		fmt.Sprintf("lamassu.io/iot/aws.%s", awsAccountID): map[string]interface{}{
-			"registration": map[string]interface{}{
-				"registration_request_time": time.Now(),
-				"status":                    "REQUESTED",
-			},
+	regMetaDataUpdate := map[string]any{
+		"registration": map[string]interface{}{
+			"registration_request_time": time.Now(),
+			"status":                    "REQUESTED",
 		},
 	}
 
 	ca2Upd, err := caClient.UpdateCAMetadata(context.Background(), services.UpdateCAMetadataInput{
-		CAID:     ca1.ID,
-		Metadata: metaUpdateData,
+		CAID: ca1.ID,
+		Patches: helpers.NewPatchBuilder().
+			Add(helpers.JSONPointerBuilder(fmt.Sprintf("lamassu.io/iot/aws.%s", awsAccountID)), regMetaDataUpdate).
+			Build(),
 	})
 
 	fmt.Println(ca2Upd)

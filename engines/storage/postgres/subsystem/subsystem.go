@@ -68,6 +68,11 @@ func (p *PostgresSubsystem) Run() (*subsystems.SubsystemBackend, error) {
 				if err != nil {
 					return fmt.Errorf("could not run reinitialize DMSManager tables: %s", err)
 				}
+			case "va":
+				_, err := postgres.NewVARepository(logger, postgresEngine.DB[dbName])
+				if err != nil {
+					return fmt.Errorf("could not run reinitialize VA tables: %s", err)
+				}
 			default:
 				return fmt.Errorf("unknown db name: %s", dbName)
 			}
