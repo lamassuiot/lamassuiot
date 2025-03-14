@@ -50,6 +50,7 @@ func (extractor ClientCertificateExtractor) getCertificateFromHeader(h http.Head
 	headerExtractors := []ClientCertificateReqExtractor{
 		clientcertificateextractor.NewEnvoyClientCertificateExtractor(extractor.logger),
 		clientcertificateextractor.NewNginxClientCertificateExtractor(extractor.logger),
+		clientcertificateextractor.NewAwsALBClientCertificateExtractor(extractor.logger),
 	}
 
 	for _, headerExtractor := range headerExtractors {
