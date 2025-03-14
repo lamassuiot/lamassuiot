@@ -24,6 +24,7 @@ type HttpServer struct {
 	CertFile           string                   `mapstructure:"cert_file"`
 	KeyFile            string                   `mapstructure:"key_file"`
 	Authentication     HttpServerAuthentication `mapstructure:"authentication"`
+	Authorization      Authorization            `mapstructure:"authorization"`
 }
 
 type HttpServerAuthentication struct {

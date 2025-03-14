@@ -9,17 +9,28 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
-type devManagerHttpRoutes struct {
+type DeviceManagerHttpRoutes interface {
+	GetStats(ctx *gin.Context)
+	GetAllDevices(ctx *gin.Context)
+	GetDevicesByDMS(ctx *gin.Context)
+	GetDeviceByID(ctx *gin.Context)
+	CreateDevice(ctx *gin.Context)
+	UpdateDeviceIdentitySlot(ctx *gin.Context)
+	UpdateDeviceMetadata(ctx *gin.Context)
+	DecommissionDevice(ctx *gin.Context)
+}
+
+type backendDeviceManagerHttpRoutes struct {
 	svc services.DeviceManagerService
 }
 
-func NewDeviceManagerHttpRoutes(svc services.DeviceManagerService) *devManagerHttpRoutes {
-	return &devManagerHttpRoutes{
+func NewBackendDeviceManagerHttpRoutes(svc services.DeviceManagerService) DeviceManagerHttpRoutes {
+	return &backendDeviceManagerHttpRoutes{
 		svc: svc,
 	}
 }
 
-func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
+func (r *backendDeviceManagerHttpRoutes) GetStats(ctx *gin.Context) {
 	stats, err := r.svc.GetDevicesStats(ctx, services.GetDevicesStatsInput{})
 
 	if err != nil {
@@ -30,7 +41,7 @@ func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
 	ctx.JSON(200, stats)
 }
 
-func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
+func (r *backendDeviceManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, cresources.DeviceFiltrableFields)
 
 	devices := []models.Device{}
@@ -57,7 +68,7 @@ func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
 	})
 }
 
-func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
+func (r *backendDeviceManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, cresources.DeviceFiltrableFields)
 	type uriParams struct {
 		DMSID string `uri:"id" binding:"required"`
@@ -94,7 +105,7 @@ func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
 	})
 }
 
-func (r *devManagerHttpRoutes) GetDeviceByID(ctx *gin.Context) {
+func (r *backendDeviceManagerHttpRoutes) GetDeviceByID(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -122,7 +133,7 @@ func (r *devManagerHttpRoutes) GetDeviceByID(ctx *gin.Context) {
 	ctx.JSON(200, dms)
 }
 
-func (r *devManagerHttpRoutes) CreateDevice(ctx *gin.Context) {
+func (r *backendDeviceManagerHttpRoutes) CreateDevice(ctx *gin.Context) {
 	var requestBody resources.CreateDeviceBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
@@ -147,7 +158,7 @@ func (r *devManagerHttpRoutes) CreateDevice(ctx *gin.Context) {
 	ctx.JSON(201, dev)
 }
 
-func (r *devManagerHttpRoutes) UpdateDeviceIdentitySlot(ctx *gin.Context) {
+func (r *backendDeviceManagerHttpRoutes) UpdateDeviceIdentitySlot(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -177,7 +188,7 @@ func (r *devManagerHttpRoutes) UpdateDeviceIdentitySlot(ctx *gin.Context) {
 	ctx.JSON(200, dev)
 }
 
-func (r *devManagerHttpRoutes) UpdateDeviceMetadata(ctx *gin.Context) {
+func (r *backendDeviceManagerHttpRoutes) UpdateDeviceMetadata(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -207,7 +218,7 @@ func (r *devManagerHttpRoutes) UpdateDeviceMetadata(ctx *gin.Context) {
 	ctx.JSON(200, dev)
 }
 
-func (r *devManagerHttpRoutes) DecommissionDevice(ctx *gin.Context) {
+func (r *backendDeviceManagerHttpRoutes) DecommissionDevice(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
