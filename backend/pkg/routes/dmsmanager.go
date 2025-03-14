@@ -9,7 +9,7 @@ import (
 )
 
 func NewDMSManagerHTTPLayer(logger *logrus.Entry, parentRouterGroup *gin.RouterGroup, routes controllers.DMSManagerHttpRoutes, authzConf cconfig.Authorization) error {
-	authzMW, err := authz.NewAuthorizationMiddleware(logger, authzConf.RolesClaim, authzConf.RoleMapping, authzConf.Enabled)
+	authzMW, err := authz.NewAuthorizationMiddleware(logger, authzConf.RolesClaim, authzConf.RoleMapping, !authzConf.Disable)
 	if err != nil {
 		return err
 	}

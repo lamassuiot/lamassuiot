@@ -9,7 +9,7 @@ import (
 )
 
 func NewDeviceManagerHTTPLayer(logger *logrus.Entry, parentRouterGroup *gin.RouterGroup, routes controllers.DeviceManagerHttpRoutes, authzConf cconfig.Authorization) error {
-	authzMW, err := authz.NewAuthorizationMiddleware(logger, authzConf.RolesClaim, authzConf.RoleMapping, authzConf.Enabled)
+	authzMW, err := authz.NewAuthorizationMiddleware(logger, authzConf.RolesClaim, authzConf.RoleMapping, !authzConf.Disable)
 	if err != nil {
 		return err
 	}
@@ -30,9 +30,9 @@ func NewDeviceManagerHTTPLayer(logger *logrus.Entry, parentRouterGroup *gin.Rout
 	rv1UpdateMetadata := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleDeviceAdmin}))
 	rv1UpdateMetadata.PUT("/devices/:id/metadata", routes.UpdateDeviceMetadata)
 
-	//Get device stats
+	//Get Global stats
 	rv1Stats := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleDeviceAdmin}))
-	rv1Stats.GET("/devices/:id/stats", routes.GetStats)
+	rv1Stats.GET("/stats", routes.GetStats)
 
 	//View device
 	rv1View := rv1.Group("/", authzMW.Use([]authz.Role{authz.RoleDeviceAdmin, authz.RoleDeviceUser}))

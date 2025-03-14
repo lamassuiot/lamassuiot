@@ -18,6 +18,9 @@ import (
 type VAHttpRoutes interface {
 	Verify(ctx *gin.Context)
 	CRL(ctx *gin.Context)
+	GetRoleByID(ctx *gin.Context)
+	GetRoles(ctx *gin.Context)
+	UpdateRole(ctx *gin.Context)
 }
 
 type backendVAHttpRoutes struct {
@@ -140,7 +143,7 @@ func (r *backendVAHttpRoutes) CRL(ctx *gin.Context) {
 	ctx.Data(200, "application/pkix-crl", crl.Raw)
 }
 
-func (r *vaHttpRoutes) GetRoleByID(ctx *gin.Context) {
+func (r *backendVAHttpRoutes) GetRoleByID(ctx *gin.Context) {
 	type uriParams struct {
 		CASubjectKeyID string `uri:"ca-ski" binding:"required"`
 	}
@@ -163,7 +166,7 @@ func (r *vaHttpRoutes) GetRoleByID(ctx *gin.Context) {
 	ctx.JSON(200, role)
 }
 
-func (r *vaHttpRoutes) GetRoles(ctx *gin.Context) {
+func (r *backendVAHttpRoutes) GetRoles(ctx *gin.Context) {
 	roles := []models.VARole{}
 	queryParams := FilterQuery(ctx.Request, map[string]resources.FilterFieldType{})
 
@@ -190,7 +193,7 @@ func (r *vaHttpRoutes) GetRoles(ctx *gin.Context) {
 	})
 }
 
-func (r *vaHttpRoutes) UpdateRole(ctx *gin.Context) {
+func (r *backendVAHttpRoutes) UpdateRole(ctx *gin.Context) {
 	type uriParams struct {
 		CASubjectKeyID string `uri:"ca-ski" binding:"required"`
 	}

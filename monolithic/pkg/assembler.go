@@ -56,6 +56,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				ListenAddress:      "0.0.0.0",
 				Port:               0,
 				Protocol:           cconfig.HTTP,
+				Authorization: cconfig.Authorization{
+					Disable: true,
+				},
 			},
 			PublisherEventBus: conf.PublisherEventBus,
 			Storage:           conf.Storage,
@@ -134,6 +137,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				ListenAddress:      "0.0.0.0",
 				Port:               0,
 				Protocol:           cconfig.HTTP,
+				Authorization: cconfig.Authorization{
+					Disable: true,
+				},
 			},
 			PublisherEventBus:  conf.PublisherEventBus,
 			SubscriberEventBus: conf.SubscriberEventBus,
@@ -171,6 +177,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				ListenAddress:      "0.0.0.0",
 				Port:               0,
 				Protocol:           cconfig.HTTP,
+				Authorization: cconfig.Authorization{
+					Disable: true,
+				},
 			},
 			PublisherEventBus:         conf.PublisherEventBus,
 			DownstreamCertificateFile: "proxy.crt",
