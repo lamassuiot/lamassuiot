@@ -266,7 +266,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		}
 
 		defaultHander := func(c *gin.Context) {
-			remote, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", 8081))
+			remote, err := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", conf.UIPort))
 			if err != nil {
 				panic(err)
 			}

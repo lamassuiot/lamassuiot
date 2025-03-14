@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"time"
 
@@ -246,7 +247,8 @@ func main() {
 	}
 
 	var uiCleanup func()
-	fmt.Printf(">> disableUI : %v\n", *disableUI)
+	var uiPort int
+	fmt.Printf(">> UI Enabled : %v\n", !*disableUI)
 
 	cloudConnectors := "[]"
 	if *awsIoTManagerID != "" {
@@ -254,17 +256,16 @@ func main() {
 	}
 
 	if !*disableUI {
-		containerCleanup, _, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
-			Repository:   "ghcr.io/lamassuiot/lamassu-ui", // image
-			Tag:          "latest",                        // version
-			Env:          []string{"OIDC_ENABLED=false", "DOMAIN=localhost:8443", "COGNITO_ENABLED=false", "CLOUD_CONNECTORS=" + cloudConnectors},
-			ExposedPorts: []string{"8080/tcp"},
+		containerCleanup, container, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
+			Repository: "ghcr.io/lamassuiot/lamassu-ui", // image
+			Tag:        "latest",                        // version
+			Env:        []string{"OIDC_ENABLED=false", "DOMAIN=localhost:8443", "COGNITO_ENABLED=false", "CLOUD_CONNECTORS=" + cloudConnectors},
 		}, func(hc *docker.HostConfig) {
 			hc.AutoRemove = true
-			hc.PortBindings = map[docker.Port][]docker.PortBinding{
-				"8080/tcp": {{HostPort: "8081"}},
-			}
 		})
+
+		uiPort, _ = strconv.Atoi(container.GetPort("4566/tcp"))
+
 		uiCleanup = func() {
 			containerCleanup()
 		}
@@ -272,7 +273,6 @@ func main() {
 			containerCleanup()
 			log.Fatalf("could not launch ghcr.io/lamassuiot/lamassu-ui:latest: %s", err)
 		}
-		defer containerCleanup()
 	}
 
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
@@ -377,6 +377,7 @@ func main() {
 
 	conf := pkg.MonolithicConfig{
 		Logs:               cconfig.Logging{Level: cconfig.Debug},
+		UIPort:             uiPort,
 		VAStorageDir:       "/tmp/lamassuiot/va",
 		SubscriberEventBus: eventBus,
 		PublisherEventBus:  eventBus,
