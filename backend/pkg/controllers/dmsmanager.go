@@ -8,17 +8,26 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
-type dmsManagerHttpRoutes struct {
+type DMSManagerHttpRoutes interface {
+	GetStats(ctx *gin.Context)
+	GetAllDMSs(ctx *gin.Context)
+	GetDMSByID(ctx *gin.Context)
+	CreateDMS(ctx *gin.Context)
+	UpdateDMS(ctx *gin.Context)
+	BindIdentityToDevice(ctx *gin.Context)
+}
+
+type backendDMSManagerHttpRoutes struct {
 	svc services.DMSManagerService
 }
 
-func NewDMSManagerHttpRoutes(svc services.DMSManagerService) *dmsManagerHttpRoutes {
-	return &dmsManagerHttpRoutes{
+func NewBackendDMSManagerHttpRoutes(svc services.DMSManagerService) DMSManagerHttpRoutes {
+	return &backendDMSManagerHttpRoutes{
 		svc: svc,
 	}
 }
 
-func (r *dmsManagerHttpRoutes) GetStats(ctx *gin.Context) {
+func (r *backendDMSManagerHttpRoutes) GetStats(ctx *gin.Context) {
 	stats, err := r.svc.GetDMSStats(ctx, services.GetDMSStatsInput{})
 
 	if err != nil {
@@ -29,7 +38,7 @@ func (r *dmsManagerHttpRoutes) GetStats(ctx *gin.Context) {
 	ctx.JSON(200, stats)
 }
 
-func (r *dmsManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
+func (r *backendDMSManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, cresources.DMSFiltrableFields)
 
 	dmss := []models.DMS{}
@@ -56,7 +65,7 @@ func (r *dmsManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
 	})
 }
 
-func (r *dmsManagerHttpRoutes) GetDMSByID(ctx *gin.Context) {
+func (r *backendDMSManagerHttpRoutes) GetDMSByID(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -78,7 +87,7 @@ func (r *dmsManagerHttpRoutes) GetDMSByID(ctx *gin.Context) {
 	ctx.JSON(200, dms)
 }
 
-func (r *dmsManagerHttpRoutes) CreateDMS(ctx *gin.Context) {
+func (r *backendDMSManagerHttpRoutes) CreateDMS(ctx *gin.Context) {
 	var requestBody resources.CreateDMSBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.AbortWithStatusJSON(400, gin.H{"err": err.Error()})
@@ -102,7 +111,7 @@ func (r *dmsManagerHttpRoutes) CreateDMS(ctx *gin.Context) {
 	ctx.JSON(201, dms)
 }
 
-func (r *dmsManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
+func (r *backendDMSManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
 	}
@@ -130,7 +139,7 @@ func (r *dmsManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
 	ctx.JSON(200, ca)
 }
 
-func (r *dmsManagerHttpRoutes) BindIdentityToDevice(ctx *gin.Context) {
+func (r *backendDMSManagerHttpRoutes) BindIdentityToDevice(ctx *gin.Context) {
 	var requestBody resources.BindIdentityToDeviceBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
