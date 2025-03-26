@@ -8,7 +8,6 @@ import (
 )
 
 type DMSManagerService interface {
-	ESTService
 	GetDMSStats(ctx context.Context, input GetDMSStatsInput) (*models.DMSStats, error)
 	CreateDMS(ctx context.Context, input CreateDMSInput) (*models.DMS, error)
 	UpdateDMS(ctx context.Context, input UpdateDMSInput) (*models.DMS, error)
