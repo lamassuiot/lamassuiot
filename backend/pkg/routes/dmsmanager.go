@@ -10,8 +10,6 @@ import (
 func NewDMSManagerHTTPLayer(logger *logrus.Entry, httpGrp *gin.RouterGroup, svc services.DMSManagerService) {
 	routes := controllers.NewDMSManagerHttpRoutes(svc)
 
-	NewESTHttpRoutes(logger, httpGrp, svc)
-
 	rv1 := httpGrp.Group("/v1")
 
 	rv1.GET("/stats", routes.GetStats)
@@ -20,5 +18,4 @@ func NewDMSManagerHTTPLayer(logger *logrus.Entry, httpGrp *gin.RouterGroup, svc 
 	rv1.GET("/dms/:id", routes.GetDMSByID)
 	rv1.PUT("/dms/:id", routes.UpdateDMS)
 	rv1.POST("/dms/bind-identity", routes.BindIdentityToDevice)
-
 }
