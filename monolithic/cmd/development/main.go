@@ -388,7 +388,7 @@ func main() {
 		CryptoEngines:      cryptoEnginesConfig.CryptoEngines,
 		Monitoring: cconfig.MonitoringJob{
 			Enabled:   !*disableMonitor,
-			Frequency: "* * * * *",
+			Frequency: "2m",
 		},
 		Storage: *pluglableStorageConfig,
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
