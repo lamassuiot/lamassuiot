@@ -89,7 +89,7 @@ jobs:
           sudo apt-get install -y libseccomp-dev #Required for building pkcs11-proxy
           git clone https://github.com/SUNET/pkcs11-proxy
           cd pkcs11-proxy
-          cmake . 
+          cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 . 
           make
           sudo make install 
           sudo cp pkcs11-daemon /usr/local/bin/
