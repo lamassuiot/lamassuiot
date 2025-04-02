@@ -1,6 +1,8 @@
 package eventfilters
 
 import (
+	"encoding/json"
+
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/spyzhov/ajson"
@@ -9,8 +11,16 @@ import (
 func RegisterJSONPathFilter() {
 	RegisterEventFilter(models.JSONPath,
 		func(c models.SubscriptionCondition, event cloudevents.Event) (bool, error) {
-			return JsonPathExists(event.Data(), c.Condition)
+			return jsonPathFilter(event, c.Condition)
 		})
+}
+
+func jsonPathFilter(event cloudevents.Event, path string) (bool, error) {
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		return false, err
+	}
+	return JsonPathExists(encoded, path)
 }
 
 func JsonPathExists(data []byte, path string) (bool, error) {

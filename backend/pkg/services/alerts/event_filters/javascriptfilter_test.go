@@ -23,7 +23,7 @@ func TestJavascriptFilter(t *testing.T) {
 				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "value"})
 				return e
 			}(),
-			script:   "function(event) { return event.key === 'value'; }",
+			script:   "function(event) { return event.data.key === 'value'; }",
 			expected: true,
 			wantErr:  false,
 		},
@@ -34,7 +34,7 @@ func TestJavascriptFilter(t *testing.T) {
 				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "other"})
 				return e
 			}(),
-			script:   "function(event) { return event.key === 'value'; }",
+			script:   "function(event) { return event.data.key === 'value'; }",
 			expected: false,
 			wantErr:  false,
 		},
@@ -45,7 +45,7 @@ func TestJavascriptFilter(t *testing.T) {
 				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "value"})
 				return e
 			}(),
-			script:  "function(event) { return event.key === 'value' ",
+			script:  "function(event) { return event.data.key === 'value' ",
 			wantErr: true,
 		},
 		{
@@ -55,7 +55,7 @@ func TestJavascriptFilter(t *testing.T) {
 				e.SetData(cloudevents.ApplicationJSON, map[string]interface{}{"key": "value"})
 				return e
 			}(),
-			script:   "function(event) { return event.key }",
+			script:   "function(event) { return event.data.key }",
 			expected: false,
 			wantErr:  true,
 		},
