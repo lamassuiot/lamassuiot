@@ -1,9 +1,9 @@
 package eventfilters
 
 import (
-	"encoding/json"
 	"testing"
 
+	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -21,7 +21,7 @@ func TestJsonPathExists(t *testing.T) {
 				"name": "John",
 				"age":  30,
 			},
-			path:     "$.name",
+			path:     "$.data.name",
 			expected: true,
 			wantErr:  false,
 		},
@@ -31,7 +31,7 @@ func TestJsonPathExists(t *testing.T) {
 				"name": "John",
 				"age":  30,
 			},
-			path:     "$.address",
+			path:     "$.data.address",
 			expected: false,
 			wantErr:  false,
 		},
@@ -53,7 +53,7 @@ func TestJsonPathExists(t *testing.T) {
 					"age":  30,
 				},
 			},
-			path:     "$.person.name",
+			path:     "$.data.person.name",
 			expected: true,
 			wantErr:  false,
 		},
@@ -65,7 +65,7 @@ func TestJsonPathExists(t *testing.T) {
 					"age":  30,
 				},
 			},
-			path:     "$.person.address",
+			path:     "$.data.person.address",
 			expected: false,
 			wantErr:  false,
 		},
@@ -77,7 +77,7 @@ func TestJsonPathExists(t *testing.T) {
 					"age":  30,
 				},
 			},
-			path:     "$.[?(@.name == 'John')]",
+			path:     "$.data[?(@.name == 'John')]",
 			expected: true,
 			wantErr:  false,
 		},
@@ -89,7 +89,7 @@ func TestJsonPathExists(t *testing.T) {
 					"age":  30,
 				},
 			},
-			path:     `$.[?(@.name=="James")]`,
+			path:     `$.data[?(@.name=="James")]`,
 			expected: false,
 			wantErr:  false,
 		},
@@ -97,9 +97,11 @@ func TestJsonPathExists(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
-			b, _ := json.Marshal(tt.data)
-			result, err := JsonPathExists(b, tt.path)
+			e := cloudevents.NewEvent()
+			e.SetData(cloudevents.ApplicationJSON, tt.data)
+			result, err := jsonPathFilter(e, tt.path)
+			// b, _ := json.Marshal(tt.data)
+			// result, err := JsonPathExists(b, tt.path)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {

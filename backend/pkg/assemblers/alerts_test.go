@@ -187,7 +187,7 @@ func TestSubscriptionWithJSONPathFilter(t *testing.T) {
 			},
 			Conditions: []models.SubscriptionCondition{
 				{
-					Condition: "$.[?(@.name == 'John')]",
+					Condition: "$.data[?(@.name == 'John')]",
 					Type:      models.JSONPath,
 				},
 			},
@@ -239,7 +239,7 @@ func TestSubscriptionWithJavascriptFilter(t *testing.T) {
 			},
 			Conditions: []models.SubscriptionCondition{
 				{
-					Condition: "function(event) { return event.person.name === 'John'; }",
+					Condition: "function(event) { return event.data.person.name === 'John'; }",
 					Type:      models.Javascript,
 				},
 			},
@@ -282,22 +282,27 @@ func TestSubscriptionWithJSONSchemaFilter(t *testing.T) {
 	alertsTest := serverTest.Alerts
 
 	schema := `{
-   "$schema":"https://json-schema.org/draft/2020-12/schema",
-   "type":"object",
-   "properties":{
-      "person":{
-	     "type": "object",
-         "properties":{
-            "name":{
-               "const":"John"
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "data": {
+      "type": "object",
+      "properties": {
+        "person": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "const": "John"
             }
-         },
-         "required":[
+          },
+          "required": [
             "name"
-         ]
-       }
-   	  }
-	}`
+          ]
+        }
+      }
+    }
+  }
+}`
 
 	alertsTest.Service.Subscribe(context.TODO(),
 		&services.SubscribeInput{

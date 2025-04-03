@@ -23,9 +23,13 @@ func RegisterJavascriptFilter() {
 // and false otherwise
 func javascriptFilter(event cloudevents.Event, script string) (bool, error) {
 	vm := otto.New()
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		return false, err
+	}
 
 	var parsed interface{}
-	if err := json.Unmarshal(event.Data(), &parsed); err != nil {
+	if err := json.Unmarshal(encoded, &parsed); err != nil {
 		return false, err
 	}
 	vm.Set("event", parsed)
