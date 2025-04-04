@@ -3,18 +3,21 @@ package routes
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/controllers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/sirupsen/logrus"
 )
 
-func NewValidationRoutes(logger *logrus.Entry, httpGrp *gin.RouterGroup, ocsp services.OCSPService, crl services.CRLService) {
-	vaRoutes := controllers.NewVAHttpRoutes(logger, ocsp, crl)
+func NewVAHTTPLayer(logger *logrus.Entry, parentRouterGroup *gin.RouterGroup, routes controllers.VAHttpRoutes, authzConf cconfig.Authorization) error {
+	router := parentRouterGroup
+	r := router.Group("/")
 
-	httpGrp.GET("/ocsp/:ocsp_request", vaRoutes.Verify)
-	httpGrp.POST("/ocsp", vaRoutes.Verify)
-	httpGrp.GET("/crl/:ca-ski", vaRoutes.CRL)
+	r.GET("/ocsp/:ocsp_request", routes.Verify)
+	r.POST("/ocsp", routes.Verify)
+	r.GET("/crl/:ca-ski", routes.CRL)
 
-	httpGrp.GET("/roles", vaRoutes.GetRoles)
-	httpGrp.GET("/roles/:ca-ski", vaRoutes.GetRoleByID)
-	httpGrp.PUT("/roles/:ca-ski", vaRoutes.UpdateRole)
+	r.GET("/roles", routes.GetRoles)
+	r.GET("/roles/:ca-ski", routes.GetRoleByID)
+	r.PUT("/roles/:ca-ski", routes.UpdateRole)
+
+	return nil
 }
