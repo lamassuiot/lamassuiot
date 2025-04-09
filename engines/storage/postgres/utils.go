@@ -13,12 +13,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/martian/v3/log"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	lconfig "github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/config"
 	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations"
 	"github.com/pressly/goose/v3"
 	"github.com/sirupsen/logrus"
+	"github.com/uptrace/opentelemetry-go-extra/otelgorm"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -118,6 +120,7 @@ func NewMigrator(log *logrus.Entry, db *gorm.DB) *migrator {
 	if err != nil {
 		log.Fatalf("could not get db connection: %s", err)
 	}
+
 	// Reset migrations to avoid conflicts between different
 	// databases migrations (this is to prevent go based migrations from being registered multiple times for different databases)
 	goose.ResetGlobalMigrations()
@@ -160,6 +163,10 @@ type postgresDBQuerier[E any] struct {
 }
 
 func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn string) postgresDBQuerier[E] {
+	if err := db.Use(otelgorm.NewPlugin()); err != nil {
+		log.Errorf("could not add otelgorm plugin: %s", err)
+	}
+
 	return postgresDBQuerier[E]{
 		DB:               db,
 		tableName:        tableName,

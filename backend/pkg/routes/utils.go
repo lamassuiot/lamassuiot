@@ -24,6 +24,8 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/utils/gindump"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 func NewGinEngine(logger *logrus.Entry) *gin.Engine {
@@ -42,6 +44,12 @@ func NewGinEngine(logger *logrus.Entry) *gin.Engine {
 		headerextractors.RequestMetadataToContextMiddleware(logger),
 		identityextractors.RequestMetadataToContextMiddleware(logger),
 		basiclogger.UseLogger(logger),
+		otelgin.Middleware("MonolithicPKI", otelgin.WithMetricAttributeFn(func(r *http.Request) []attribute.KeyValue {
+			return []attribute.KeyValue{
+				attribute.String("myhttp.method", r.Method),
+				attribute.String("myhttp.url", r.URL.String()),
+			}
+		})),
 		gindump.DumpWithOptions(true, true, true, true, func(dumpStr string) {
 			logger.Trace(dumpStr)
 		}),
