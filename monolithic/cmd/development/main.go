@@ -23,10 +23,14 @@ import (
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
+	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/bridges/otellogrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	otel_log "go.opentelemetry.io/otel/sdk/log"
 
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -282,6 +286,7 @@ func main() {
 		}
 	}
 
+	initLogger()
 	initTracer()
 
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
@@ -444,6 +449,37 @@ func main() {
 	forever := make(chan struct{})
 	<-forever
 
+}
+
+func initLogger() {
+	exporter, err := otlploghttp.New(
+		context.Background(),
+		otlploghttp.WithEndpoint("localhost:4318"),
+		otlploghttp.WithInsecure(),
+	)
+
+	if err != nil {
+		// handle error
+		log.Fatal(err)
+	}
+
+	// create log provider
+	log_provider := otel_log.NewLoggerProvider(
+		otel_log.WithProcessor(
+			otel_log.NewBatchProcessor(exporter),
+		),
+	)
+
+	defer log_provider.Shutdown(context.Background())
+
+	// Create an *otellogrus.Hook and use it in your application.
+	hook := otellogrus.NewHook("logrus", otellogrus.WithLoggerProvider(log_provider))
+
+	// Set the newly created hook as a global logrus hook
+	logrus.AddHook(hook)
+	// Set the log level to debug
+
+	logrus.Info("hello world")
 }
 
 func initTracer() func(context.Context) error {
