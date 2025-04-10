@@ -41,15 +41,15 @@ func NewGinEngine(logger *logrus.Entry) *gin.Engine {
 	router := gin.New()
 	router.Use(
 		cors.New(corsConfig),
-		headerextractors.RequestMetadataToContextMiddleware(logger),
-		identityextractors.RequestMetadataToContextMiddleware(logger),
-		basiclogger.UseLogger(logger),
 		otelgin.Middleware("MonolithicPKI", otelgin.WithMetricAttributeFn(func(r *http.Request) []attribute.KeyValue {
 			return []attribute.KeyValue{
 				attribute.String("myhttp.method", r.Method),
 				attribute.String("myhttp.url", r.URL.String()),
 			}
 		})),
+		headerextractors.RequestMetadataToContextMiddleware(logger),
+		identityextractors.RequestMetadataToContextMiddleware(logger),
+		basiclogger.UseLogger(logger),
 		gindump.DumpWithOptions(true, true, true, true, func(dumpStr string) {
 			logger.Trace(dumpStr)
 		}),

@@ -32,9 +32,8 @@ var LogFormatter = &formatter.Formatter{
 
 func SetupLogger(currentLevel config.LogLevel, serviceID string, subsystem string) *logrus.Entry {
 	var err error
-	logger := logrus.New()
-	logger.SetFormatter(LogFormatter)
-	lSubsystem := logger.WithFields(logrus.Fields{
+	logrus.SetFormatter(LogFormatter)
+	lSubsystem := logrus.WithFields(logrus.Fields{
 		"service":   serviceID,
 		"subsystem": subsystem,
 	})

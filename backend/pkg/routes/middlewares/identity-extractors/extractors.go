@@ -1,12 +1,14 @@
 package identityextractors
 
 import (
+	"context"
 	"crypto/x509"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const CtxAuthMode = "REQ_AUTH_MODE"
@@ -34,11 +36,29 @@ func RequestMetadataToContextMiddleware(logger *logrus.Entry) gin.HandlerFunc {
 	}
 
 	return func(c *gin.Context) {
+		parentTracer := c.Value("otel-go-contrib-tracer")
+		tracer, hasTracer := parentTracer.(trace.Tracer)
+		var opSpanCtx context.Context
+		var span trace.Span
+
+		if hasTracer {
+			opSpanCtx, span = tracer.Start(c.Request.Context(), "Identity Extractor Middleware")
+		}
+
 		for _, authExtractor := range authExtractors {
+			var authExtractorSpan trace.Span
+			if hasTracer {
+				_, authExtractorSpan = tracer.Start(opSpanCtx, "Auth Extractor")
+
+			}
+
 			authExtractor.ExtractAuthentication(c, *c.Request)
+			authExtractorSpan.End()
 		}
 
 		UpdateContextWithRequest(c, c.Request.Header)
+		span.End()
+
 		c.Next()
 	}
 }

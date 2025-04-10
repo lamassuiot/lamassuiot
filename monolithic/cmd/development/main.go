@@ -5,10 +5,10 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -23,17 +23,20 @@ import (
 	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/test/subsystems"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/bridges/otellogrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	otel_log "go.opentelemetry.io/otel/sdk/log"
-
+	"go.opentelemetry.io/otel/metric"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
+	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 const readyToPKI = ` 
@@ -108,6 +111,10 @@ func main() {
 	flag.Parse()
 
 	fmt.Println("===================== FLAGS ======================")
+
+	initMetrics()
+	initLogger()
+	initTracer()
 
 	fmt.Printf("AWS IoT Manager Enabled: %v\n", *awsIoTManager)
 	if *awsIoTManager {
@@ -286,9 +293,6 @@ func main() {
 		}
 	}
 
-	initLogger()
-	initTracer()
-
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
 
 	cleanup := func() {
@@ -464,22 +468,14 @@ func initLogger() {
 	}
 
 	// create log provider
-	log_provider := otel_log.NewLoggerProvider(
-		otel_log.WithProcessor(
-			otel_log.NewBatchProcessor(exporter),
+	log_provider := sdklog.NewLoggerProvider(
+		sdklog.WithProcessor(
+			sdklog.NewBatchProcessor(exporter),
 		),
 	)
 
-	defer log_provider.Shutdown(context.Background())
-
-	// Create an *otellogrus.Hook and use it in your application.
 	hook := otellogrus.NewHook("logrus", otellogrus.WithLoggerProvider(log_provider))
-
-	// Set the newly created hook as a global logrus hook
-	logrus.AddHook(hook)
-	// Set the log level to debug
-
-	logrus.Info("hello world")
+	log.AddHook(hook)
 }
 
 func initTracer() func(context.Context) error {
@@ -494,6 +490,7 @@ func initTracer() func(context.Context) error {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	resources, err := resource.New(
 		context.Background(),
 		resource.WithAttributes(
@@ -502,7 +499,7 @@ func initTracer() func(context.Context) error {
 		),
 	)
 	if err != nil {
-		log.Printf("Could not set resources: ", err)
+		log.Printf("Could not set resources: %s", err)
 	}
 
 	otel.SetTracerProvider(
@@ -513,6 +510,74 @@ func initTracer() func(context.Context) error {
 		),
 	)
 	return exporter.Shutdown
+}
+
+func initMetrics() {
+	exporter, err := otlpmetrichttp.New(
+		context.Background(),
+		otlpmetrichttp.WithEndpoint("localhost:4318"),
+		otlpmetrichttp.WithInsecure(),
+		otlpmetrichttp.WithCompression(otlpmetrichttp.GzipCompression),
+	)
+	if err != nil {
+		// handle error
+		log.Fatal(err)
+	}
+
+	resource, err := resource.Merge(
+		resource.Default(),
+		resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String("tracetest"),
+		),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Interval which the metrics will be reported to the collector
+	interval := 3 * time.Second
+
+	periodicReader := sdkmetrics.NewPeriodicReader(exporter,
+		sdkmetrics.WithInterval(interval),
+	)
+
+	provider := sdkmetrics.NewMeterProvider(
+		sdkmetrics.WithResource(resource),
+		sdkmetrics.WithReader(periodicReader),
+	)
+
+	go collectMachineResourceMetrics(provider.Meter("tracetest"))
+}
+
+// collectMachineResourceMetrics gets some important resource usage from time
+// to time and report metrics about it:
+func collectMachineResourceMetrics(meter metric.Meter) {
+	period := 5 * time.Second
+	ticker := time.NewTicker(period)
+
+	var Mb uint64 = 1_048_576 // number of bytes in a MB
+
+	for {
+		select {
+		case <-ticker.C:
+			// This will be executed every "period" of time passes
+			meter.Float64ObservableGauge(
+				"process.allocated_memory",
+				metric.WithFloat64Callback(
+					func(ctx context.Context, fo metric.Float64Observer) error {
+						var memStats runtime.MemStats
+						runtime.ReadMemStats(&memStats)
+
+						allocatedMemoryInMB := float64(memStats.Alloc) / float64(Mb)
+						fo.Observe(allocatedMemoryInMB)
+
+						return nil
+					},
+				),
+			)
+		}
+	}
 }
 
 func parseCryptoEngineOptions(options string) (map[CryptoEngineOption]struct{}, error) {
