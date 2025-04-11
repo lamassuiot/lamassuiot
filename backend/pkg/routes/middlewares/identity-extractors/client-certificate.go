@@ -17,6 +17,10 @@ type ClientCertificateExtractor struct {
 	logger *logrus.Entry
 }
 
+func (extractor ClientCertificateExtractor) Name() string {
+	return string(IdentityExtractorClientCertificate)
+}
+
 func (extractor ClientCertificateExtractor) ExtractAuthentication(ctx *gin.Context, req http.Request) {
 	var crt *x509.Certificate
 	var err error

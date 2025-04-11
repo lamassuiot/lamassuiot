@@ -3,6 +3,7 @@ package identityextractors
 import (
 	"context"
 	"crypto/x509"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -22,6 +23,7 @@ const (
 
 type HttpAuthReqExtractor interface {
 	ExtractAuthentication(ctx *gin.Context, req http.Request)
+	Name() string
 }
 
 func RequestMetadataToContextMiddleware(logger *logrus.Entry) gin.HandlerFunc {
@@ -48,8 +50,7 @@ func RequestMetadataToContextMiddleware(logger *logrus.Entry) gin.HandlerFunc {
 		for _, authExtractor := range authExtractors {
 			var authExtractorSpan trace.Span
 			if hasTracer {
-				_, authExtractorSpan = tracer.Start(opSpanCtx, "Auth Extractor")
-
+				_, authExtractorSpan = tracer.Start(opSpanCtx, fmt.Sprintf("Auth Extractor - %s", authExtractor.Name()))
 			}
 
 			authExtractor.ExtractAuthentication(c, *c.Request)

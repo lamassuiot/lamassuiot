@@ -17,6 +17,10 @@ type JWTExtractor struct {
 	logger *logrus.Entry
 }
 
+func (extractor JWTExtractor) Name() string {
+	return string(IdentityExtractorJWT)
+}
+
 func (extractor JWTExtractor) ExtractAuthentication(ctx *gin.Context, req http.Request) {
 	header := req.Header.Get("authorization")
 

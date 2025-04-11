@@ -16,6 +16,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	hhelpers "github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/helpers"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 )
@@ -147,7 +148,14 @@ func BuildHTTPClient(cfg config.HTTPClient, logger *logrus.Entry) (*http.Client,
 		}
 	}
 
-	return hhelpers.BuildHTTPClientWithTracerLogger(client, logger)
+	client.Transport = otelhttp.NewTransport(client.Transport)
+
+	client, err = hhelpers.BuildHTTPClientWithTracerLogger(client, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
 }
 
 func Post[T any](ctx context.Context, client *http.Client, url string, data any, knownErrors map[int][]error) (T, error) {
