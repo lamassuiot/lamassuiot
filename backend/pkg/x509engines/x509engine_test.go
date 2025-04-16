@@ -22,8 +22,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	cmodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
-	"github.com/sirupsen/logrus"
 )
 
 func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
@@ -170,16 +168,16 @@ func checkCACertificate(cert *x509.Certificate, ca *x509.Certificate, tcSubject 
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[1], "http://va.lamassuiot.com/ocsp")
 	}
 
-	v2CrlID, err := software.NewSoftwareCryptoEngine(logrus.NewEntry(logrus.StandardLogger())).EncodePKIXPublicKeyDigest(ca.PublicKey)
+	v2CrlID, err := cryptoengines.GetKeyLRN(ca.PublicKey)
 	if err != nil {
 		return fmt.Errorf("unexpected error: %s", err)
 	}
 
-	if cert.CRLDistributionPoints[0] != "http://ocsp.lamassu.io/crl/"+v2CrlID {
+	if cert.CRLDistributionPoints[0] != "http://ocsp.lamassu.io/crl/"+v2CrlID.GetBaseID() {
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[0], "http://crl.lamassuiot.com/crl/"+v2CrlID)
 	}
 
-	if cert.CRLDistributionPoints[1] != "http://va.lamassu.io/crl/"+v2CrlID {
+	if cert.CRLDistributionPoints[1] != "http://va.lamassu.io/crl/"+v2CrlID.GetBaseID() {
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[1], "http://va.lamassuiot.com/crl/"+v2CrlID)
 	}
 

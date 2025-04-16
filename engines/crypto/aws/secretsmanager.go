@@ -76,11 +76,11 @@ func (engine *AWSSecretsManagerCryptoEngine) GetEngineConfig() models.CryptoEngi
 	return engine.config
 }
 
-func (engine *AWSSecretsManagerCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
+func (engine *AWSSecretsManagerCryptoEngine) GetPrivateKeyByID(keyID cryptoengines.KeyID) (crypto.Signer, error) {
 	engine.logger.Debugf("Getting the private key with ID: %s", keyID)
 
 	result, err := engine.smngerCli.GetSecretValue(context.Background(), &secretsmanager.GetSecretValueInput{
-		SecretId: aws.String(keyID),
+		SecretId: aws.String(string(keyID)),
 	})
 	if err != nil {
 		engine.logger.Errorf("could not get Secret Value: %s", err)
@@ -111,7 +111,7 @@ func (engine *AWSSecretsManagerCryptoEngine) GetPrivateKeyByID(keyID string) (cr
 	return engine.softCryptoEngine.ParsePrivateKey(decodedPemBytes)
 }
 
-func (engine *AWSSecretsManagerCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
+func (engine *AWSSecretsManagerCryptoEngine) ListPrivateKeyIDs() ([]cryptoengines.KeyID, error) {
 	engine.logger.Debugf("listing private key IDs")
 
 	keyRes, err := engine.smngerCli.ListSecrets(context.Background(), &secretsmanager.ListSecretsInput{})
@@ -120,9 +120,9 @@ func (engine *AWSSecretsManagerCryptoEngine) ListPrivateKeyIDs() ([]string, erro
 		return nil, err
 	}
 
-	keys := []string{}
+	keys := []cryptoengines.KeyID{}
 	for _, secret := range keyRes.SecretList {
-		keys = append(keys, *secret.Name)
+		keys = append(keys, cryptoengines.KeyID(*secret.Name))
 	}
 
 	engine.logger.Debugf("private key IDs successfully listed")
@@ -130,7 +130,7 @@ func (engine *AWSSecretsManagerCryptoEngine) ListPrivateKeyIDs() ([]string, erro
 	return keys, nil
 }
 
-func (engine *AWSSecretsManagerCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
+func (engine *AWSSecretsManagerCryptoEngine) CreateRSAPrivateKey(keySize int) (cryptoengines.KeyID, crypto.Signer, error) {
 	engine.logger.Debugf("creating RSA private key")
 
 	_, key, err := engine.softCryptoEngine.CreateRSAPrivateKey(keySize)
@@ -143,7 +143,7 @@ func (engine *AWSSecretsManagerCryptoEngine) CreateRSAPrivateKey(keySize int) (s
 	return engine.importKey(key)
 }
 
-func (engine *AWSSecretsManagerCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string, crypto.Signer, error) {
+func (engine *AWSSecretsManagerCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (cryptoengines.KeyID, crypto.Signer, error) {
 	engine.logger.Debugf("creating ECDSA private key")
 
 	_, key, err := engine.softCryptoEngine.CreateECDSAPrivateKey(curve)
@@ -156,7 +156,7 @@ func (engine *AWSSecretsManagerCryptoEngine) CreateECDSAPrivateKey(curve ellipti
 	return engine.importKey(key)
 }
 
-func (engine *AWSSecretsManagerCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
+func (engine *AWSSecretsManagerCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (cryptoengines.KeyID, crypto.Signer, error) {
 	engine.logger.Debugf("importing RSA private key")
 
 	keyID, signer, err := engine.importKey(key)
@@ -169,7 +169,7 @@ func (engine *AWSSecretsManagerCryptoEngine) ImportRSAPrivateKey(key *rsa.Privat
 	return keyID, signer, nil
 }
 
-func (engine *AWSSecretsManagerCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
+func (engine *AWSSecretsManagerCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (cryptoengines.KeyID, crypto.Signer, error) {
 	engine.logger.Debugf("importing ECDSA private key")
 
 	keyID, signer, err := engine.importKey(key)
@@ -182,10 +182,10 @@ func (engine *AWSSecretsManagerCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.Pr
 	return keyID, signer, nil
 }
 
-func (engine *AWSSecretsManagerCryptoEngine) importKey(key crypto.Signer) (string, crypto.Signer, error) {
+func (engine *AWSSecretsManagerCryptoEngine) importKey(key crypto.Signer) (cryptoengines.KeyID, crypto.Signer, error) {
 	pubKey := key.Public()
 
-	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(pubKey)
+	keyID, err := cryptoengines.GetKeyLRN(pubKey)
 	if err != nil {
 		engine.logger.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
@@ -200,7 +200,7 @@ func (engine *AWSSecretsManagerCryptoEngine) importKey(key crypto.Signer) (strin
 	keyVal := `{"key": "` + b64PemKey + `"}`
 
 	_, err = engine.smngerCli.CreateSecret(context.Background(), &secretsmanager.CreateSecretInput{
-		Name:         aws.String(keyID),
+		Name:         aws.String(string(keyID)),
 		SecretString: aws.String(keyVal),
 	})
 
@@ -212,11 +212,11 @@ func (engine *AWSSecretsManagerCryptoEngine) importKey(key crypto.Signer) (strin
 	return keyID, key, nil
 }
 
-func (engine *AWSSecretsManagerCryptoEngine) RenameKey(oldID, newID string) error {
+func (engine *AWSSecretsManagerCryptoEngine) RenameKey(oldID, newID cryptoengines.KeyID) error {
 	engine.logger.Debugf("renaming key with ID: %s to %s", oldID, newID)
 
 	result, err := engine.smngerCli.GetSecretValue(context.Background(), &secretsmanager.GetSecretValueInput{
-		SecretId: aws.String(oldID),
+		SecretId: aws.String(string(oldID)),
 	})
 	if err != nil {
 		engine.logger.Errorf("could not get Secret Value: %s", err)
@@ -224,7 +224,7 @@ func (engine *AWSSecretsManagerCryptoEngine) RenameKey(oldID, newID string) erro
 	}
 
 	_, err = engine.smngerCli.CreateSecret(context.Background(), &secretsmanager.CreateSecretInput{
-		Name:         aws.String(newID),
+		Name:         aws.String(string(newID)),
 		SecretString: result.SecretString,
 	})
 	if err != nil {
@@ -241,11 +241,11 @@ func (engine *AWSSecretsManagerCryptoEngine) RenameKey(oldID, newID string) erro
 	return nil
 }
 
-func (engine *AWSSecretsManagerCryptoEngine) DeleteKey(keyID string) error {
+func (engine *AWSSecretsManagerCryptoEngine) DeleteKey(keyID cryptoengines.KeyID) error {
 	engine.logger.Debugf("deleting key with ID: %s", keyID)
 
 	_, err := engine.smngerCli.DeleteSecret(context.Background(), &secretsmanager.DeleteSecretInput{
-		SecretId:             aws.String(keyID),
+		SecretId:             aws.String(string(keyID)),
 		RecoveryWindowInDays: aws.Int64(7),
 	})
 

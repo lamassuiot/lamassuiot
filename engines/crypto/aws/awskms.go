@@ -80,7 +80,7 @@ func (p *AWSKMSCryptoEngine) GetEngineConfig() models.CryptoEngineInfo {
 	return p.config
 }
 
-func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, error) {
+func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias cryptoengines.KeyID) (crypto.Signer, error) {
 	lAWSKMS.Debugf("Getting the private key with Alias: %s", keyAlias)
 	var keyID = ""
 	keys, err := p.kmscli.ListKeys(context.Background(), &kms.ListKeysInput{
@@ -103,13 +103,13 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, 
 
 		for _, alias := range aliases.Aliases {
 			aliasName := strings.Replace(*alias.AliasName, "alias/", "", -1)
-			if aliasName == keyAlias {
+			if aliasName == string(keyAlias) {
 				keyID = *key.KeyArn
 				break
 			}
 		}
 
-		if keyID == keyAlias {
+		if keyID == string(keyAlias) {
 			break
 		}
 	}
@@ -124,7 +124,7 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, 
 	return signer, err
 }
 
-func (p *AWSKMSCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
+func (p *AWSKMSCryptoEngine) ListPrivateKeyIDs() ([]cryptoengines.KeyID, error) {
 	keys, err := p.kmscli.ListKeys(context.Background(), &kms.ListKeysInput{
 		Limit: aws.Int32(100),
 	})
@@ -134,7 +134,7 @@ func (p *AWSKMSCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
 		return nil, err
 	}
 
-	var keyIDs []string
+	var keyIDs []cryptoengines.KeyID
 	for _, key := range keys.Keys {
 		aliases, err := p.kmscli.ListAliases(context.Background(), &kms.ListAliasesInput{
 			KeyId: key.KeyId,
@@ -146,14 +146,14 @@ func (p *AWSKMSCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
 
 		for _, alias := range aliases.Aliases {
 			aliasName := strings.Replace(*alias.AliasName, "alias/", "", -1)
-			keyIDs = append(keyIDs, aliasName)
+			keyIDs = append(keyIDs, cryptoengines.KeyID(aliasName))
 		}
 	}
 
 	return keyIDs, nil
 }
 
-func (p *AWSKMSCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
+func (p *AWSKMSCryptoEngine) CreateRSAPrivateKey(keySize int) (cryptoengines.KeyID, crypto.Signer, error) {
 	lAWSKMS.Debugf("Creating RSA key with size %d", keySize)
 
 	var keySpec types.KeySpec
@@ -174,7 +174,7 @@ func (p *AWSKMSCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Si
 	return p.createPrivateKey(keySpec)
 }
 
-func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string, crypto.Signer, error) {
+func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (cryptoengines.KeyID, crypto.Signer, error) {
 	lAWSKMS.Debugf("Creating ECDSA key with curve %s", curve.Params().Name)
 
 	var keySpec types.KeySpec
@@ -195,7 +195,7 @@ func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string
 	return p.createPrivateKey(keySpec)
 }
 
-func (p *AWSKMSCryptoEngine) createPrivateKey(keySpec types.KeySpec) (string, crypto.Signer, error) {
+func (p *AWSKMSCryptoEngine) createPrivateKey(keySpec types.KeySpec) (cryptoengines.KeyID, crypto.Signer, error) {
 	key, err := p.kmscli.CreateKey(context.Background(), &kms.CreateKeyInput{
 		KeyUsage: types.KeyUsageTypeSignVerify,
 		KeySpec:  keySpec,
@@ -213,7 +213,7 @@ func (p *AWSKMSCryptoEngine) createPrivateKey(keySpec types.KeySpec) (string, cr
 	}
 
 	lAWSKMS.Debugf("Key created with ARN [%s]", *key.KeyMetadata.Arn)
-	keyID, err := p.softCryptoEngine.EncodePKIXPublicKeyDigest(signer.Public())
+	keyID, err := cryptoengines.GetKeyLRN(signer.Public())
 	if err != nil {
 		lAWSKMS.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
@@ -231,17 +231,17 @@ func (p *AWSKMSCryptoEngine) createPrivateKey(keySpec types.KeySpec) (string, cr
 	return keyID, signer, nil
 }
 
-func (p *AWSKMSCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
+func (p *AWSKMSCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (cryptoengines.KeyID, crypto.Signer, error) {
 	lAWSKMS.Warnf("KMS does not support asymmetric key import. See https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys.html")
 	return "", nil, fmt.Errorf("KMS does not support asymmetric key import")
 }
 
-func (p *AWSKMSCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
+func (p *AWSKMSCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (cryptoengines.KeyID, crypto.Signer, error) {
 	lAWSKMS.Warnf("KMS does not support asymmetric key import. See https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys.html")
 	return "", nil, fmt.Errorf("KMS does not support asymmetric key import")
 }
 
-func (p *AWSKMSCryptoEngine) RenameKey(oldID, newID string) error {
+func (p *AWSKMSCryptoEngine) RenameKey(oldID, newID cryptoengines.KeyID) error {
 	desc, err := p.kmscli.DescribeKey(context.Background(), &kms.DescribeKeyInput{
 		KeyId: aws.String(fmt.Sprintf("alias/%s", oldID)),
 	})
@@ -269,7 +269,7 @@ func (p *AWSKMSCryptoEngine) RenameKey(oldID, newID string) error {
 	return nil
 }
 
-func (p *AWSKMSCryptoEngine) DeleteKey(keyID string) error {
+func (p *AWSKMSCryptoEngine) DeleteKey(keyID cryptoengines.KeyID) error {
 	return fmt.Errorf("cannot delete key [%s]. Go to your aws account and do it manually", keyID)
 }
 

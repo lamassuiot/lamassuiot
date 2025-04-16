@@ -158,7 +158,7 @@ func (hsmContext *pkcs11EngineContext) GetPrivateKeys() []crypto.Signer {
 	return keys
 }
 
-func (hsmContext *pkcs11EngineContext) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
+func (hsmContext *pkcs11EngineContext) GetPrivateKeyByID(keyID cryptoengines.KeyID) (crypto.Signer, error) {
 	hsmContext.logger.Debugf("reading %s Key", keyID)
 	hsmKey, err := hsmContext.api.FindKeyPair(nil, []byte(keyID))
 	if err != nil {
@@ -174,14 +174,14 @@ func (hsmContext *pkcs11EngineContext) GetPrivateKeyByID(keyID string) (crypto.S
 	return hsmKey, nil
 }
 
-func (hsmContext *pkcs11EngineContext) ListPrivateKeyIDs() ([]string, error) {
+func (hsmContext *pkcs11EngineContext) ListPrivateKeyIDs() ([]cryptoengines.KeyID, error) {
 	hsmContext.logger.Debugf("listing private keys")
 	keys, err := hsmContext.api.FindAllKeyPairs()
 	if err != nil {
 		hsmContext.logger.Errorf("could not list private keys: %s", err)
 	}
 
-	keyIDs := make([]string, 0)
+	keyIDs := []cryptoengines.KeyID{}
 	for _, key := range keys {
 		attrs, err := hsmContext.api.GetAttributes(key, []uint{pkcs11.CKA_LABEL})
 		if err != nil {
@@ -196,14 +196,13 @@ func (hsmContext *pkcs11EngineContext) ListPrivateKeyIDs() ([]string, error) {
 		}
 
 		attr := attrsSlice[0]
-		keyID := string(attr.Value)
-		keyIDs = append(keyIDs, keyID)
+		keyIDs = append(keyIDs, cryptoengines.KeyID(string(attr.Value)))
 	}
 
 	return keyIDs, nil
 }
 
-func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
+func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(keySize int) (cryptoengines.KeyID, crypto.Signer, error) {
 	tmpKeyID := uuid.New().String()
 	hsmContext.logger.Debugf("creating RSA %d key", keySize)
 	newSigner, err := hsmContext.api.GenerateRSAKeyPair([]byte(tmpKeyID), keySize)
@@ -212,13 +211,13 @@ func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(keySize int) (string,
 		return "", nil, err
 	}
 
-	keyID, err := hsmContext.softCryptoEngine.EncodePKIXPublicKeyDigest(newSigner.Public())
+	keyID, err := cryptoengines.GetKeyLRN(newSigner.Public())
 	if err != nil {
 		hsmContext.logger.Errorf("could not encode public key: %s", err)
 		return "", nil, err
 	}
 
-	err = hsmContext.UpdateKeyName(tmpKeyID, keyID, PKCS11_KEY_ID)
+	err = hsmContext.UpdateKeyName(tmpKeyID, string(keyID), PKCS11_KEY_ID)
 	if err != nil {
 		hsmContext.logger.Errorf("could not rename key: %s", err)
 		return "", nil, err
@@ -227,7 +226,7 @@ func (hsmContext *pkcs11EngineContext) CreateRSAPrivateKey(keySize int) (string,
 	return keyID, newSigner, nil
 }
 
-func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(curve elliptic.Curve) (string, crypto.Signer, error) {
+func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(curve elliptic.Curve) (cryptoengines.KeyID, crypto.Signer, error) {
 	tmpKeyID := uuid.New().String()
 	hsmContext.logger.Debugf("creating ECDSA %d key", curve.Params().BitSize)
 	newSigner, err := hsmContext.api.GenerateECDSAKeyPair([]byte(tmpKeyID), curve)
@@ -236,13 +235,13 @@ func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(curve elliptic.Curv
 		return "", nil, err
 	}
 
-	keyID, err := hsmContext.softCryptoEngine.EncodePKIXPublicKeyDigest(newSigner.Public())
+	keyID, err := cryptoengines.GetKeyLRN(newSigner.Public())
 	if err != nil {
 		hsmContext.logger.Errorf("could not encode public key: %s", err)
 		return "", nil, err
 	}
 
-	err = hsmContext.UpdateKeyName(tmpKeyID, keyID, PKCS11_KEY_ID)
+	err = hsmContext.UpdateKeyName(tmpKeyID, string(keyID), PKCS11_KEY_ID)
 	if err != nil {
 		hsmContext.logger.Errorf("could not rename key: %s", err)
 		return "", nil, err
@@ -299,19 +298,19 @@ func (hsmContext *pkcs11EngineContext) UpdateKeyName(oldKeyID string, newKeyID s
 	return nil
 }
 
-func (hsmContext *pkcs11EngineContext) RenameKey(oldKeyID string, newKeyID string) error {
-	return hsmContext.UpdateKeyName(oldKeyID, newKeyID, PKCS11_KEY_LABEL)
+func (hsmContext *pkcs11EngineContext) RenameKey(oldKeyID cryptoengines.KeyID, newKeyID cryptoengines.KeyID) error {
+	return hsmContext.UpdateKeyName(string(oldKeyID), string(newKeyID), PKCS11_KEY_LABEL)
 }
 
-func (hsmContext *pkcs11EngineContext) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
+func (hsmContext *pkcs11EngineContext) ImportRSAPrivateKey(key *rsa.PrivateKey) (cryptoengines.KeyID, crypto.Signer, error) {
 	return "", nil, fmt.Errorf("TODO")
 }
 
-func (hsmContext *pkcs11EngineContext) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
+func (hsmContext *pkcs11EngineContext) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (cryptoengines.KeyID, crypto.Signer, error) {
 	return "", nil, fmt.Errorf("TODO")
 }
 
-func (hsmContext *pkcs11EngineContext) DeleteKey(keyID string) error {
+func (hsmContext *pkcs11EngineContext) DeleteKey(keyID cryptoengines.KeyID) error {
 	return fmt.Errorf("TODO")
 }
 
