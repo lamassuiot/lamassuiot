@@ -14,6 +14,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
@@ -80,7 +81,7 @@ func (engine *AWSSecretsManagerCryptoEngine) GetPrivateKeyByID(keyID cryptoengin
 	engine.logger.Debugf("Getting the private key with ID: %s", keyID)
 
 	result, err := engine.smngerCli.GetSecretValue(context.Background(), &secretsmanager.GetSecretValueInput{
-		SecretId: aws.String(string(keyID)),
+		SecretId: aws.String(keyID.GetBaseID()),
 	})
 	if err != nil {
 		engine.logger.Errorf("could not get Secret Value: %s", err)
@@ -114,7 +115,14 @@ func (engine *AWSSecretsManagerCryptoEngine) GetPrivateKeyByID(keyID cryptoengin
 func (engine *AWSSecretsManagerCryptoEngine) ListPrivateKeyIDs() ([]cryptoengines.KeyID, error) {
 	engine.logger.Debugf("listing private key IDs")
 
-	keyRes, err := engine.smngerCli.ListSecrets(context.Background(), &secretsmanager.ListSecretsInput{})
+	keyRes, err := engine.smngerCli.ListSecrets(context.Background(), &secretsmanager.ListSecretsInput{
+		Filters: []types.Filter{
+			{
+				Key:    types.FilterNameStringTypeTagKey,
+				Values: []string{"lrn"},
+			},
+		},
+	})
 	if err != nil {
 		engine.logger.Errorf("could not list secrets: %s", err)
 		return nil, err
@@ -200,8 +208,14 @@ func (engine *AWSSecretsManagerCryptoEngine) importKey(key crypto.Signer) (crypt
 	keyVal := `{"key": "` + b64PemKey + `"}`
 
 	_, err = engine.smngerCli.CreateSecret(context.Background(), &secretsmanager.CreateSecretInput{
-		Name:         aws.String(string(keyID)),
+		Name:         aws.String(keyID.GetBaseID()),
 		SecretString: aws.String(keyVal),
+		Tags: []types.Tag{
+			{
+				Key:   aws.String("lrn"),
+				Value: aws.String(string(keyID)),
+			},
+		},
 	})
 
 	if err != nil {
