@@ -32,7 +32,7 @@ func (s *WebhookOutputService) SendNotification(logger *logrus.Entry, ctx contex
 
 	if s.config.WebhookURL != "" {
 
-		_, err = webhookclient.InvokeWebhook(ctx, logger, models.WebhookCall{
+		_, err = webhookclient.InvokeWebhook(logger, models.WebhookCall{
 			Name:   s.name,
 			Url:    s.config.WebhookURL,
 			Method: s.config.WebhookMethod,

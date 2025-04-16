@@ -81,7 +81,7 @@ func (s *MSTeamsWebhookOutputService) SendNotification(logger *logrus.Entry, ctx
 		return err
 	}
 
-	_, err = webhookclient.InvokeWebhook(ctx, logger, models.WebhookCall{
+	_, err = webhookclient.InvokeWebhook(logger, models.WebhookCall{
 		Name:   s.name,
 		Url:    s.config.WebhookURL,
 		Method: "POST",
