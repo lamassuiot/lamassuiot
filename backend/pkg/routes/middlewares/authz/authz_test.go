@@ -166,7 +166,12 @@ func TestAuthzMiddlewareRoles(t *testing.T) {
 				}
 
 				token := getToken(roles)
+
+				t.Log("roles in token", roles)
+
 				req.Header.Set("Authorization", "Bearer "+token)
+			} else {
+				t.Log("no roles in token")
 			}
 
 			client := http.Client{}
@@ -251,6 +256,8 @@ func TestAuthzMiddlewareCustomRoles(t *testing.T) {
 				for _, role := range tc.rolesInToken {
 					roles = append(roles, string(role))
 				}
+
+				t.Log("roles in token", roles)
 
 				token := getToken(roles)
 				req.Header.Set("Authorization", "Bearer "+token)
