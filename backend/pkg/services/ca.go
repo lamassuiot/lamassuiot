@@ -11,7 +11,6 @@ import (
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/x509engines"
-	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -42,7 +41,6 @@ type CAServiceBackend struct {
 	caStorage                   storage.CACertificatesRepo
 	certStorage                 storage.CertificatesRepo
 	caCertificateRequestStorage storage.CACertificateRequestRepo
-	cryptoMonitorConfig         cconfig.MonitoringJob
 	vaServerDomains             []string
 	logger                      *logrus.Entry
 }
@@ -53,7 +51,6 @@ type CAServiceBuilder struct {
 	CAStorage                   storage.CACertificatesRepo
 	CertificateStorage          storage.CertificatesRepo
 	CACertificateRequestStorage storage.CACertificateRequestRepo
-	CryptoMonitoringConf        cconfig.MonitoringJob
 	VAServerDomains             []string
 }
 
@@ -125,7 +122,6 @@ func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
 		caStorage:                   builder.CAStorage,
 		certStorage:                 builder.CertificateStorage,
 		caCertificateRequestStorage: builder.CACertificateRequestStorage,
-		cryptoMonitorConfig:         builder.CryptoMonitoringConf,
 		vaServerDomains:             builder.VAServerDomains,
 		logger:                      builder.Logger,
 	}
@@ -253,10 +249,8 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		lFunc.Tracef("ImportCA struct validation success")
 	}
 
-	var keyID string
 	var engineID string
 	caCert := input.CACertificate
-	parentID := input.ParentID
 
 	if input.CAType == models.CertificateTypeImportedWithKey {
 		lFunc.Debugf("importing CA %s - %s  private key. CA type: %s", helpers.SerialNumberToString(input.CACertificate.SerialNumber), input.CACertificate.Subject.CommonName, input.CAType)
@@ -276,9 +270,9 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		}
 
 		if input.CARSAKey != nil {
-			keyID, _, err = engine.ImportRSAPrivateKey(input.CARSAKey)
+			_, _, err = engine.ImportRSAPrivateKey(input.CARSAKey)
 		} else if input.CAECKey != nil {
-			keyID, _, err = engine.ImportECDSAPrivateKey(input.CAECKey)
+			_, _, err = engine.ImportECDSAPrivateKey(input.CAECKey)
 		} else {
 			lFunc.Errorf("key type %s not supported", input.KeyType)
 			return nil, fmt.Errorf("KeyType not supported")
@@ -372,32 +366,11 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		}
 
 		engineID = caReq.EngineID
-		keyID = caReq.KeyId
 	}
 
 	caID := input.ID
 	if caID == "" {
 		caID = goid.NewV4UUID().String()
-	}
-
-	var parentCA *models.CACertificate
-	if parentID != "" {
-		parentCA, err = svc.service.GetCAByID(ctx, services.GetCAByIDInput{
-			CAID: parentID,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("parent CA not found: %w", err)
-		}
-
-		// Verify that the parent CA signed the certificate
-		parentCert := parentCA.Certificate.Certificate
-		p := x509.Certificate(*parentCert)
-		c := x509.Certificate(*caCert)
-		err = c.CheckSignatureFrom(&p)
-		if err != nil {
-			lFunc.Errorf("parent CA did not sign the certificate: %s", err)
-			return nil, fmt.Errorf("parent CA did not sign the certificate: %w", err)
-		}
 	}
 
 	issuerMeta := models.IssuerCAMetadata{
@@ -407,12 +380,53 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	}
 	level := 0
 
-	if parentCA != nil {
-		level = parentCA.Level + 1
-		issuerMeta = models.IssuerCAMetadata{
-			ID:    parentCA.ID,
-			SN:    parentCA.Certificate.SerialNumber,
-			Level: parentCA.Level,
+	skid := helpers.FormatHexWithColons(input.CACertificate.SubjectKeyId)
+	akid := helpers.FormatHexWithColons(input.CACertificate.AuthorityKeyId)
+
+	isSelfSigned := helpers.IsSelfSignedCertificate(akid, skid, (*x509.Certificate)(input.CACertificate))
+
+	if !isSelfSigned {
+		var parentCAs []models.CACertificate
+
+		svc.caStorage.SelectBySubjectAndSubjectKeyID(ctx, chelpers.PkixNameToSubject(input.CACertificate.Issuer), akid,
+			storage.StorageListRequest[models.CACertificate]{
+				ExhaustiveRun: true,
+				ApplyFunc: func(c models.CACertificate) {
+					parentCAs = append(parentCAs, c)
+				},
+			})
+
+		// Iterate over parent CAs to verify and assign values when found
+		for _, parentCA := range parentCAs {
+			p := x509.Certificate(*parentCA.Certificate.Certificate)
+			c := x509.Certificate(*caCert)
+			err = c.CheckSignatureFrom(&p)
+
+			if err != nil {
+				if akid != "" {
+					lFunc.Warnf("possible parent CA detected, but failed cryptographic validation: %s", err)
+				}
+				continue // Skip if verification fails
+			}
+
+			// When verification is successful, update the level and metadata
+			level = parentCA.Level + 1
+			issuerMeta = models.IssuerCAMetadata{
+				ID:    parentCA.ID,
+				SN:    parentCA.Certificate.SerialNumber,
+				Level: parentCA.Level,
+			}
+
+			break
+		}
+	} else {
+		// Verify that the parent CA signed the certificate
+		p := x509.Certificate(*caCert)
+		c := x509.Certificate(*caCert)
+		err = c.CheckSignatureFrom(&p)
+		if err != nil {
+			lFunc.Errorf("parent CA did not sign the certificate: %s", err)
+			return nil, fmt.Errorf("parent CA did not sign the certificate: %w", err)
 		}
 	}
 
@@ -423,12 +437,14 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		CreationTS: time.Now(),
 		Level:      level,
 		Certificate: models.Certificate{
-			KeyID:               keyID,
+			SubjectKeyID:        skid,
+			AuthorityKeyID:      akid,
 			Certificate:         input.CACertificate,
 			Status:              models.StatusActive,
 			SerialNumber:        helpers.SerialNumberToString(caCert.SerialNumber),
 			KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate((*x509.Certificate)(caCert)),
 			Subject:             chelpers.PkixNameToSubject(caCert.Subject),
+			Issuer:              chelpers.PkixNameToSubject(caCert.Issuer),
 			ValidFrom:           caCert.NotBefore,
 			ValidTo:             caCert.NotAfter,
 			RevocationTimestamp: time.Time{},
@@ -449,6 +465,52 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		if err != nil {
 			lFunc.Warnf("could not update CA Request %s: %s", input.CARequestID, err)
 		}
+	}
+
+	// Flag to check if it's the first iteration
+	firstIteration := true
+	queue := []models.CACertificate{*ca}
+
+	for len(queue) > 0 {
+		parent := queue[0]
+		queue = queue[1:] // Dequeue
+
+		// In the future if we plan to support Cross Signed certs, it is important not fetching just by AKI,
+		// since two cross signed certs (using the same SKI) are signed by different AKIs. Hence, we select by AKI AND Issuer DSN
+		svc.caStorage.SelectByIssuerAndAuthorityKeyID(ctx, parent.Certificate.Subject, parent.Certificate.SubjectKeyID, storage.StorageListRequest[models.CACertificate]{
+			ExhaustiveRun: true,
+			ApplyFunc: func(child models.CACertificate) {
+				isSelfSignedChild := helpers.IsSelfSignedCertificate(child.Certificate.AuthorityKeyID, child.Certificate.SubjectKeyID, (*x509.Certificate)(input.CACertificate))
+
+				if !isSelfSignedChild {
+					if firstIteration { //Check also with crypto validation to ensure child is actually signed by parent?
+						p := x509.Certificate(*parent.Certificate.Certificate)
+						c := x509.Certificate(*child.Certificate.Certificate)
+						err = c.CheckSignatureFrom(&p)
+
+						if err != nil {
+							if child.Certificate.AuthorityKeyID != "" {
+								lFunc.Warnf("possible child CA detected, but failed cryptographic validation: %s", err)
+							}
+							return // if verification fails, "tentative" parent CA did not sign the certificate being imported. skip update
+						}
+					}
+
+					// We are certain the parent CA did sign the certificate being imported
+					child.Level = parent.Level + 1
+					child.Certificate.IssuerCAMetadata.ID = parent.ID
+					child.Certificate.IssuerCAMetadata.Level = parent.Level
+					child.Certificate.IssuerCAMetadata.SN = parent.Certificate.SerialNumber
+
+					// Update the level in DB
+					svc.caStorage.Update(ctx, &child)
+
+					// Enqueue child for further processing
+					queue = append(queue, child)
+				}
+			},
+		})
+		firstIteration = false
 	}
 
 	return cert, err
@@ -567,6 +629,8 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	var caLevel int
 	var issuerCAMeta models.IssuerCAMetadata
 
+	skid := helpers.FormatHexWithColons([]byte(keyID))
+	akid := skid
 	// Check if CA is Root (self-signed) or Subordinate (signed by another CA). Non self-signed/root CAs require a parent CA
 	if input.ParentID == "" {
 		// Root CA. Root CAs can be generate directly
@@ -594,6 +658,8 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 			lFunc.Errorf("parent CA %s does not exist", input.ParentID)
 			return nil, errs.ErrCANotFound
 		}
+
+		akid = parentCA.Certificate.SubjectKeyID
 
 		var caExpiration time.Time
 		if input.IssuanceExpiration.Type == models.Duration {
@@ -656,10 +722,11 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		CreationTS: time.Now(),
 		Level:      caLevel,
 		Certificate: models.Certificate{
-			KeyID:        keyID,
-			Certificate:  (*models.X509Certificate)(ca),
-			Status:       models.StatusActive,
-			SerialNumber: helpers.SerialNumberToString(ca.SerialNumber),
+			SubjectKeyID:   skid,
+			AuthorityKeyID: akid,
+			Certificate:    (*models.X509Certificate)(ca),
+			Status:         models.StatusActive,
+			SerialNumber:   helpers.SerialNumberToString(ca.SerialNumber),
 			KeyMetadata: models.KeyStrengthMetadata{
 				Type:     input.KeyMetadata.Type,
 				Bits:     input.KeyMetadata.Bits,
@@ -1017,7 +1084,13 @@ func (svc *CAServiceBackend) UpdateCAMetadata(ctx context.Context, input service
 		return nil, errs.ErrCANotFound
 	}
 
-	ca.Metadata = input.Metadata
+	updatedMetadata, err := chelpers.ApplyPatches(ca.Metadata, input.Patches)
+	if err != nil {
+		lFunc.Errorf("failed to apply patches to metadata for CA '%s': %v", input.CAID, err)
+		return nil, err
+	}
+
+	ca.Metadata = updatedMetadata
 
 	lFunc.Debugf("updating %s CA metadata", input.CAID)
 	return svc.caStorage.Update(ctx, ca)
@@ -1147,12 +1220,14 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		Status:              models.StatusActive,
 		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate(x509Cert),
 		Subject:             chelpers.PkixNameToSubject(x509Cert.Subject),
+		Issuer:              chelpers.PkixNameToSubject(x509Cert.Issuer),
 		SerialNumber:        helpers.SerialNumberToString(x509Cert.SerialNumber),
 		ValidFrom:           x509Cert.NotBefore,
 		ValidTo:             x509Cert.NotAfter,
 		RevocationTimestamp: time.Time{},
 		IsCA:                x509Cert.IsCA,
-		KeyID:               "",
+		SubjectKeyID:        helpers.FormatHexWithColons(x509Cert.SubjectKeyId),
+		AuthorityKeyID:      helpers.FormatHexWithColons(x509Cert.AuthorityKeyId),
 		EngineID:            "",
 	}
 
@@ -1471,7 +1546,14 @@ func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, inpu
 		return nil, errs.ErrCertificateNotFound
 	}
 
-	cert.Metadata = input.Metadata
+	updatedMetadata, err := chelpers.ApplyPatches(cert.Metadata, input.Patches)
+	if err != nil {
+		lFunc.Errorf("failed to apply patches to metadata for Certificate '%s': %v", input.SerialNumber, err)
+		return nil, err
+	}
+
+	cert.Metadata = updatedMetadata
+
 	lFunc.Debugf("updating %s certificate metadata", input.SerialNumber)
 	return svc.certStorage.Update(ctx, cert)
 }

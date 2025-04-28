@@ -5,13 +5,13 @@ import (
 )
 
 type CAConfig struct {
-	Logs               cconfig.Logging                `mapstructure:"logs"`
-	Server             cconfig.HttpServer             `mapstructure:"server"`
-	PublisherEventBus  cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
-	Storage            cconfig.PluggableStorageEngine `mapstructure:"storage"`
-	CryptoEngineConfig CryptoEngines                  `mapstructure:"crypto_engines"`
-	CryptoMonitoring   cconfig.MonitoringJob          `mapstructure:"crypto_monitoring"`
-	VAServerDomains    []string                       `mapstructure:"va_server_domains"`
+	Logs                     cconfig.Logging                `mapstructure:"logs"`
+	Server                   cconfig.HttpServer             `mapstructure:"server"`
+	PublisherEventBus        cconfig.EventBusEngine         `mapstructure:"publisher_event_bus"`
+	Storage                  cconfig.PluggableStorageEngine `mapstructure:"storage"`
+	CryptoEngineConfig       CryptoEngines                  `mapstructure:"crypto_engines"`
+	CertificateMonitoringJob cconfig.MonitoringJob          `mapstructure:"certificate_monitoring_job"`
+	VAServerDomains          []string                       `mapstructure:"va_server_domains"`
 }
 
 type CryptoEngines struct {

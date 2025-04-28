@@ -161,7 +161,6 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 		CAChain:            input.CAChain,
 		CAPrivateKey:       privKey,
 		EngineID:           input.EngineID,
-		ParentID:           input.ParentID,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err
@@ -219,7 +218,7 @@ func (cli *httpCAClient) UpdateCAStatus(ctx context.Context, input services.Upda
 
 func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (*models.CACertificate, error) {
 	response, err := Put[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/metadata", resources.UpdateCAMetadataBody{
-		Metadata: input.Metadata,
+		Patches: input.Patches,
 	}, map[int][]error{
 		404: {
 			errs.ErrCANotFound,
@@ -347,7 +346,7 @@ func (cli *httpCAClient) UpdateCertificateStatus(ctx context.Context, input serv
 
 func (cli *httpCAClient) UpdateCertificateMetadata(ctx context.Context, input services.UpdateCertificateMetadataInput) (*models.Certificate, error) {
 	response, err := Put[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/certificates/"+input.SerialNumber+"/metadata", resources.UpdateCertificateMetadataBody{
-		Metadata: input.Metadata,
+		Patches: input.Patches,
 	}, map[int][]error{
 		404: {
 			errs.ErrCertificateNotFound,

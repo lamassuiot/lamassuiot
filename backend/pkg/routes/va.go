@@ -13,7 +13,11 @@ func NewVAHTTPLayer(logger *logrus.Entry, parentRouterGroup *gin.RouterGroup, ro
 
 	r.GET("/ocsp/:ocsp_request", routes.Verify)
 	r.POST("/ocsp", routes.Verify)
-	r.GET("/crl/:aki", routes.CRL)
+	r.GET("/crl/:ca-ski", routes.CRL)
+
+	r.GET("/roles", routes.GetRoles)
+	r.GET("/roles/:ca-ski", routes.GetRoleByID)
+	r.PUT("/roles/:ca-ski", routes.UpdateRole)
 
 	return nil
 }

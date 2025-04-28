@@ -94,7 +94,7 @@ func (cli *deviceManagerClient) UpdateDeviceIdentitySlot(ctx context.Context, in
 
 func (cli *deviceManagerClient) UpdateDeviceMetadata(ctx context.Context, input services.UpdateDeviceMetadataInput) (*models.Device, error) {
 	response, err := Put[*models.Device](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/metadata", resources.UpdateDeviceMetadataBody{
-		Metadata: input.Metadata,
+		Patches: input.Patches,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err

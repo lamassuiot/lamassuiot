@@ -9,7 +9,7 @@ import (
 )
 
 func NewCAHTTPLayer(logger *logrus.Entry, parentRouterGroup *gin.RouterGroup, routes controllers.CAHttpRoutes, authzConf cconfig.Authorization) error {
-	authzMW, err := authz.NewAuthorizationMiddleware(logger, authzConf.RolesClaim, authzConf.RoleMapping, authzConf.Enabled)
+	authzMW, err := authz.NewAuthorizationMiddleware(logger, authzConf.RolesClaim, authzConf.RoleMapping, !authzConf.Disable)
 	if err != nil {
 		return err
 	}

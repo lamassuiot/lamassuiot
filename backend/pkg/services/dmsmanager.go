@@ -806,11 +806,12 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	}
 
 	//detach certificate from meta
-	delete(currentDeviceCert.Metadata, models.CAAttachedToDeviceKey)
-	delete(currentDeviceCert.Metadata, models.CAMetadataMonitoringExpirationDeltasKey)
 	_, err = svc.caClient.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
 		SerialNumber: currentDeviceCertSN,
-		Metadata:     currentDeviceCert.Metadata,
+		Patches: chelpers.NewPatchBuilder().
+			Remove(chelpers.JSONPointerBuilder(models.CAAttachedToDeviceKey)).
+			Remove(chelpers.JSONPointerBuilder(models.CAMetadataMonitoringExpirationDeltasKey)).
+			Build(),
 	})
 	if err != nil {
 		lFunc.Errorf("could not update superseded certificate metadata %s: %s", currentDeviceCert.SerialNumber, err)
@@ -946,7 +947,7 @@ func (svc DMSManagerServiceBackend) checkCertificateRevocation(ctx context.Conte
 		if len(cert.OCSPServer) > 0 {
 			//OCSP first
 			for _, ocspInstance := range cert.OCSPServer {
-				ocspResp, err := external_clients.GetOCSPResponse(ocspInstance, cert, validationCA, nil, true)
+				ocspResp, err := external_clients.GetOCSPResponsePost(ocspInstance, cert, validationCA, nil, true)
 				if err != nil {
 					lFunc.Warnf("could not get or validate ocsp response from server %s specified in the presented client certificate: %s", err, clientSN)
 					lFunc.Warnf("checking with next ocsp server")
@@ -1026,8 +1027,7 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		return nil, err
 	}
 
-	newMeta := crt.Metadata
-	newMeta[models.CAMetadataMonitoringExpirationDeltasKey] = models.CAMetadataMonitoringExpirationDeltas{
+	expirationDeltas := models.CAMetadataMonitoringExpirationDeltas{
 		{
 			Delta:     dms.Settings.ReEnrollmentSettings.PreventiveReEnrollmentDelta,
 			Name:      "Preventive",
@@ -1039,7 +1039,7 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 			Triggered: false,
 		},
 	}
-	newMeta[models.CAAttachedToDeviceKey] = models.CAAttachedToDevice{
+	caAttachedToDevice := models.CAAttachedToDevice{
 		AuthorizedBy: struct {
 			RAID string "json:\"ra_id\""
 		}{RAID: dms.ID},
@@ -1048,7 +1048,10 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 
 	crt, err = svc.caClient.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
 		SerialNumber: crt.SerialNumber,
-		Metadata:     newMeta,
+		Patches: chelpers.NewPatchBuilder().
+			Add(chelpers.JSONPointerBuilder(models.CAMetadataMonitoringExpirationDeltasKey), expirationDeltas).
+			Add(chelpers.JSONPointerBuilder(models.CAAttachedToDeviceKey), caAttachedToDevice).
+			Build(),
 	})
 	if err != nil {
 		lFunc.Errorf("could not update certificate metadata with monitoring deltas for certificate with sn '%s': %s", crt.SerialNumber, err)

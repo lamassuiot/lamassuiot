@@ -78,7 +78,6 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 		CAStorage:                   caStorage,
 		CertificateStorage:          certStorage,
 		CACertificateRequestStorage: caCertRequestStorage,
-		CryptoMonitoringConf:        conf.CryptoMonitoring,
 		VAServerDomains:             conf.VAServerDomains,
 	})
 	if err != nil {
@@ -104,10 +103,10 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 	}
 
 	var scheduler *jobs.JobScheduler
-	if conf.CryptoMonitoring.Enabled {
+	if conf.CertificateMonitoringJob.Enabled {
 		log.Infof("Crypto Monitoring is enabled")
 		monitorJob := jobs.NewCryptoMonitor(svc, lMonitor)
-		scheduler = jobs.NewJobScheduler(conf.CryptoMonitoring, lMonitor, monitorJob)
+		scheduler = jobs.NewJobScheduler(lMonitor, conf.CertificateMonitoringJob.Frequency, monitorJob)
 		scheduler.Start()
 	}
 
