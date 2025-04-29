@@ -20,6 +20,8 @@ import (
 	"gocloud.dev/blob"
 )
 
+var serviceID = "va"
+
 func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CAService, serviceInfo models.APIServiceInfo) (*services.CRLService, *services.OCSPService, int, error) {
 	crl, ocsp, err := AssembleVAService(conf, caService)
 	if err != nil {
@@ -40,7 +42,6 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 }
 
 func AssembleVAService(conf config.VAconfig, caService services.CAService) (*services.CRLService, *services.OCSPService, error) {
-	serviceID := "va"
 
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "VA", "Storage")
@@ -76,53 +77,92 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService) (*ser
 		CAClient: caService,
 	})
 
-	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "VA", "Event Bus")
-	lMessaging.Infof("Subscriber Event Bus is enabled")
+	crlSvc := crl.(*beService.CRLServiceBackend)
 
-	pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
+	if conf.PublisherEventBus.Enabled {
+		crl, err = createPublisherEventBus(conf, crl)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
-	crlSvc := crl.(*beService.CRLServiceBackend)
+	crlSvc.SetService(crl)
+
+	if conf.SubscriberEventBus.Enabled {
+		err := createSubscriberEventBus(conf, crlSvc)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	if conf.CRLMonitoringJob.Enabled {
+		err := createCRLMonitoringJob(conf, crl)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	return &crl, &ocsp, nil
+}
+
+func createPublisherEventBus(conf config.VAconfig, crl services.CRLService) (services.CRLService, error) {
+
+	lMessaging := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "VA", "Event Bus")
+	lMessaging.Infof("Publisher Event Bus is enabled")
+	pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
+	if err != nil {
+		return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
+	}
+
 	crl = eventpub.NewCRLEventPublisher(&eventpub.CloudEventMiddlewarePublisher{
 		Publisher: pub,
 		ServiceID: serviceID,
 		Logger:    lMessaging,
 	})(crl)
 
-	crlSvc.SetService(crl)
+	return crl, nil
+}
+
+func createSubscriberEventBus(conf config.VAconfig, crlSvc *beService.CRLServiceBackend) error {
+
+	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "VA", "Event Bus")
+	lMessaging.Infof("Subscriber Event Bus is enabled")
 
 	subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
 	if err != nil {
 		lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
-		return nil, nil, err
+		return err
 	}
 
 	eventHandlers := handlers.NewVAEventHandler(lMessaging, crlSvc)
 	subHandler, err := ceventbus.NewEventBusMessageHandler("VA-CA-DEFAULT", []string{"ca.#", "certificate.#"}, subscriber, lMessaging, *eventHandlers)
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
+		return fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
 	}
 
 	err = subHandler.RunAsync()
 	if err != nil {
 		lMessaging.Errorf("could not run Event Bus Subscription Handler: %s", err)
-		return nil, nil, err
+		return err
 	}
 
-	lJob := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
-	frequency := conf.CRLMonitoringJob.Frequency
+	return nil
+}
 
-	blindPeriod, err := jobs.GetSchedulerPeriod(frequency)
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not parse scheduler period: %s", err)
-	}
+func createCRLMonitoringJob(conf config.VAconfig, crl services.CRLService) error {
 
 	log.Infof("VA CRL Monitoring is enabled")
+	lJob := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
+
+	frequency := conf.CRLMonitoringJob.Frequency
+	blindPeriod, err := jobs.GetSchedulerPeriod(frequency)
+	if err != nil {
+		return fmt.Errorf("could not parse scheduler period: %s", err)
+	}
+
 	monitorJob := jobs.NewVACrlMonitorJob(lJob, crl, blindPeriod)
 	scheduler := jobs.NewJobScheduler(lJob, frequency, monitorJob)
 	scheduler.Start()
 
-	return &crl, &ocsp, nil
+	return nil
 }
