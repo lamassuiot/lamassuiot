@@ -109,10 +109,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 					"storage_directory": conf.VAStorageDir,
 				},
 			},
-			CRLMonitoringJob: cconfig.MonitoringJob{
-				Enabled:   true,
-				Frequency: "30s",
-			},
+			CRLMonitoringJob:   conf.Monitoring,
 			SubscriberEventBus: conf.SubscriberEventBus,
 			PublisherEventBus:  conf.PublisherEventBus,
 			Storage:            conf.Storage,
