@@ -6,14 +6,13 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
 
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	"github.com/sirupsen/logrus"
 )
 
@@ -28,7 +27,7 @@ func NewSoftwareCryptoEngine(logger *logrus.Entry) *SoftwareCryptoEngine {
 }
 
 // CreateRSAPrivateKey creates a RSA private key with the specified key size
-func (p *SoftwareCryptoEngine) CreateRSAPrivateKey(keySize int) (string, *rsa.PrivateKey, error) {
+func (p *SoftwareCryptoEngine) CreateRSAPrivateKey(keySize int) (cryptoengines.KeyID, *rsa.PrivateKey, error) {
 	lFunc := p.logger.WithField("func", "RSA")
 	lFunc.Debugf("creating RSA %d bit key", keySize)
 	key, err := rsa.GenerateKey(rand.Reader, keySize)
@@ -38,7 +37,7 @@ func (p *SoftwareCryptoEngine) CreateRSAPrivateKey(keySize int) (string, *rsa.Pr
 		return "", nil, err
 	}
 
-	encDigest, err := p.EncodePKIXPublicKeyDigest(&key.PublicKey)
+	encDigest, err := cryptoengines.GetKeyLRN(&key.PublicKey)
 	if err != nil {
 		lFunc.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
@@ -47,7 +46,7 @@ func (p *SoftwareCryptoEngine) CreateRSAPrivateKey(keySize int) (string, *rsa.Pr
 	return encDigest, key, nil
 }
 
-func (p *SoftwareCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string, *ecdsa.PrivateKey, error) {
+func (p *SoftwareCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (cryptoengines.KeyID, *ecdsa.PrivateKey, error) {
 	lFunc := p.logger.WithField("func", "ECDSA")
 	lFunc.Debugf("creating ECDSA %s key", curve.Params().Name)
 	key, err := ecdsa.GenerateKey(curve, rand.Reader)
@@ -57,7 +56,7 @@ func (p *SoftwareCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (stri
 		return "", nil, err
 	}
 
-	encDigest, err := p.EncodePKIXPublicKeyDigest(&key.PublicKey)
+	encDigest, err := cryptoengines.GetKeyLRN(&key.PublicKey)
 	if err != nil {
 		lFunc.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
@@ -86,32 +85,27 @@ func (p *SoftwareCryptoEngine) MarshalAndEncodePKIXPrivateKey(key interface{}) (
 	return keyBase64, nil
 }
 
-func (p *SoftwareCryptoEngine) EncodePKIXPublicKeyDigest(key interface{}) (string, error) {
-	p.logger.Debugf("extracting and encoding public key")
-	var pubkeyBytes []byte
-	var err error
+// func (p *SoftwareCryptoEngine) EncodePKIXPublicKeyDigest(key interface{}) (string, error) {
+// 	p.logger.Debugf("extracting and encoding public key")
+// 	var pubkeyBytes []byte
+// 	var err error
 
-	pubkeyBytes, err = x509.MarshalPKIXPublicKey(key)
-	if err != nil {
-		p.logger.Errorf("could not marshal public key: %s", err)
-		return "", err
-	}
+// 	pubkeyBytes, err = x509.MarshalPKIXPublicKey(key)
+// 	if err != nil {
+// 		p.logger.Errorf("could not marshal public key: %s", err)
+// 		return "", err
+// 	}
 
-	if err != nil {
-		p.logger.Errorf("could not marshal public key: %s", err)
-		return "", err
-	}
+// 	hash := sha256.New()
+// 	hash.Write(pubkeyBytes)
+// 	digest := hash.Sum(nil)
+// 	p.logger.Tracef("public key digest (bytes): %x", digest)
 
-	hash := sha256.New()
-	hash.Write(pubkeyBytes)
-	digest := hash.Sum(nil)
-	p.logger.Tracef("public key digest (bytes): %x", digest)
+// 	hexDigest := hex.EncodeToString(digest)
+// 	p.logger.Debugf("public key digest (hex encoded bytes): %s", hexDigest)
 
-	hexDigest := hex.EncodeToString(digest)
-	p.logger.Debugf("public key digest (hex encoded bytes): %s", hexDigest)
-
-	return hexDigest, nil
-}
+// 	return hexDigest, nil
+// }
 
 func (p *SoftwareCryptoEngine) ParsePrivateKey(pemBytes []byte) (crypto.Signer, error) {
 	block, _ := pem.Decode(pemBytes)

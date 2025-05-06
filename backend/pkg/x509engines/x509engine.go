@@ -50,7 +50,7 @@ func (engine X509Engine) GetEngineConfig() cmodels.CryptoEngineInfo {
 	return engine.cryptoEngine.GetEngineConfig()
 }
 
-func (engine X509Engine) GenerateKeyPair(ctx context.Context, keyMetadata cmodels.KeyMetadata) (string, crypto.Signer, error) {
+func (engine X509Engine) GenerateKeyPair(ctx context.Context, keyMetadata cmodels.KeyMetadata) (cryptoengines.KeyID, crypto.Signer, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
 	if cmodels.KeyType(keyMetadata.Type) == cmodels.KeyType(x509.RSA) {
@@ -90,7 +90,7 @@ func (engine X509Engine) GenerateKeyPair(ctx context.Context, keyMetadata cmodel
 	}
 }
 
-func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer, keyID string, subject cmodels.Subject, validity cmodels.Validity) (*x509.Certificate, error) {
+func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer, keyID cryptoengines.KeyID, subject cmodels.Subject, validity cmodels.Validity) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
@@ -111,8 +111,8 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 	template := x509.Certificate{
 		SerialNumber:          sn,
 		Subject:               chelpers.SubjectToPkixName(subject),
-		AuthorityKeyId:        []byte(keyID),
-		SubjectKeyId:          []byte(keyID),
+		AuthorityKeyId:        []byte(keyID.GetBaseID()),
+		SubjectKeyId:          []byte(keyID.GetBaseID()),
 		OCSPServer:            []string{},
 		CRLDistributionPoints: []string{},
 		NotBefore:             time.Now(),
@@ -162,7 +162,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 		return nil, fmt.Errorf("invalid expiration")
 	}
 
-	skid, err := software.NewSoftwareCryptoEngine(engine.logger).EncodePKIXPublicKeyDigest(csr.PublicKey)
+	skid, err := cryptoengines.GetKeyLRN(csr.PublicKey)
 	if err != nil {
 		lFunc.Errorf("could not encode public key digest: %s", err)
 		return nil, err
@@ -171,7 +171,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 	certificateTemplate := x509.Certificate{
 		PublicKeyAlgorithm:    csr.PublicKeyAlgorithm,
 		PublicKey:             csr.PublicKey,
-		SubjectKeyId:          []byte(skid),
+		SubjectKeyId:          []byte(skid.GetBaseID()),
 		AuthorityKeyId:        ca.SubjectKeyId,
 		SerialNumber:          sn,
 		Issuer:                ca.Subject,
@@ -273,8 +273,8 @@ func (engine X509Engine) GenerateCertificateRequest(ctx context.Context, csrSign
 	return csr, nil
 }
 
-func (engine X509Engine) GetCertificateSigner(ctx context.Context, caCertificate *x509.Certificate) (crypto.Signer, error) {
-	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(caCertificate.PublicKey)
+func (engine X509Engine) GetCertificateSigner(ctx context.Context, certificate *x509.Certificate) (crypto.Signer, error) {
+	keyID, err := cryptoengines.GetKeyLRN(certificate.PublicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -297,16 +297,12 @@ func (engine X509Engine) Sign(ctx context.Context, certificate *x509.Certificate
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 	lFunc.Debugf("starting standard signing with certificate [%s]", certificate.Subject.CommonName)
 
-	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(certificate.PublicKey)
+	signer, err := engine.GetCertificateSigner(ctx, certificate)
 	if err != nil {
+		lFunc.Errorf("could not get certificate signer: %s", err)
 		return nil, err
 	}
 
-	lFunc.Debugf("requesting signer object to crypto engine instance")
-	privkey, err := engine.cryptoEngine.GetPrivateKeyByID(keyID)
-	if err != nil {
-		return nil, err
-	}
 	lFunc.Debugf("successfully retrieved certificate signer object")
 
 	if certificate.PublicKeyAlgorithm == x509.ECDSA {
@@ -332,7 +328,7 @@ func (engine X509Engine) Sign(ctx context.Context, certificate *x509.Certificate
 		} else {
 			digest = message
 		}
-		signature, err := privkey.Sign(rand.Reader, digest, hashFunc)
+		signature, err := signer.Sign(rand.Reader, digest, hashFunc)
 		if err != nil {
 			return nil, err
 		}
@@ -362,7 +358,7 @@ func (engine X509Engine) Sign(ctx context.Context, certificate *x509.Certificate
 
 		sigAlg := strings.Split(signingAlgorithm, "_")
 		if sigAlg[1] == "PSS" {
-			signature, err := privkey.Sign(rand.Reader, digest, &rsa.PSSOptions{
+			signature, err := signer.Sign(rand.Reader, digest, &rsa.PSSOptions{
 				SaltLength: rsa.PSSSaltLengthEqualsHash,
 				Hash:       hashFunc,
 			})
@@ -371,7 +367,7 @@ func (engine X509Engine) Sign(ctx context.Context, certificate *x509.Certificate
 			}
 			return signature, nil
 		} else {
-			signature, err := privkey.Sign(rand.Reader, digest, hashFunc)
+			signature, err := signer.Sign(rand.Reader, digest, hashFunc)
 			if err != nil {
 				return nil, err
 			}

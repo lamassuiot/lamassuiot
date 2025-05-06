@@ -20,37 +20,37 @@ func (m *mockCryptoEngine) GetEngineConfig() models.CryptoEngineInfo {
 	return models.CryptoEngineInfo{}
 }
 
-func (m *mockCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
+func (m *mockCryptoEngine) GetPrivateKeyByID(keyID KeyID) (crypto.Signer, error) {
 	return nil, nil
 }
 
-func (m *mockCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
+func (m *mockCryptoEngine) ListPrivateKeyIDs() ([]KeyID, error) {
 	return nil, nil
 }
 
-func (m *mockCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
+func (m *mockCryptoEngine) CreateRSAPrivateKey(keySize int) (KeyID, crypto.Signer, error) {
 	key, err := rsa.GenerateKey(rand.Reader, keySize)
 	return "", key, err
 }
 
-func (m *mockCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string, crypto.Signer, error) {
+func (m *mockCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (KeyID, crypto.Signer, error) {
 	key, err := ecdsa.GenerateKey(curve, rand.Reader)
 	return "", key, err
 }
 
-func (m *mockCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
+func (m *mockCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (KeyID, crypto.Signer, error) {
 	return "", key, nil
 }
 
-func (m *mockCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
+func (m *mockCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (KeyID, crypto.Signer, error) {
 	return "", key, nil
 }
 
-func (m *mockCryptoEngine) DeleteKey(keyID string) error {
+func (m *mockCryptoEngine) DeleteKey(keyID KeyID) error {
 	return nil
 }
 
-func (m *mockCryptoEngine) RenameKey(keyID string, newKeyID string) error {
+func (m *mockCryptoEngine) RenameKey(keyID KeyID, newKeyID KeyID) error {
 	return nil
 }
 

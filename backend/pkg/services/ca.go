@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"time"
-	"unicode"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/jakehl/goid"
@@ -18,7 +17,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	"github.com/sirupsen/logrus"
 
 	"golang.org/x/crypto/ocsp"
@@ -60,56 +58,6 @@ func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
 	engines := map[string]*cryptoengines.CryptoEngine{}
 	var defaultCryptoEngine *cryptoengines.CryptoEngine
 	var defaultCryptoEngineID string
-
-	for engineID, engineInstance := range builder.CryptoEngines {
-		engines[engineID] = &engineInstance.Service
-		if engineInstance.Default {
-			defaultCryptoEngine = &engineInstance.Service
-			defaultCryptoEngineID = engineID
-		}
-
-		// Check if engine keys should be renamed
-		keyIDs, err := engineInstance.Service.ListPrivateKeyIDs()
-		if err != nil {
-			return nil, fmt.Errorf("could not list private keys for engine %s: %s", engineID, err)
-		}
-
-		keyMigLog := builder.Logger.WithField("engine", engineID)
-		softCrypto := software.NewSoftwareCryptoEngine(keyMigLog)
-		keyMigLog.Infof("checking engine keys format")
-
-		for _, keyID := range keyIDs {
-			// check if they are in V1 format (serial number).
-			// V2 format is the hex encoded SHA256 of the public key, a string of 64 characters
-			containsNonHex := false
-			for _, char := range keyID {
-				if !unicode.IsLetter(char) && !unicode.IsDigit(char) {
-					// Not a hex character. Exit loop
-					containsNonHex = true
-					break
-				}
-			}
-
-			if len(keyID) != 64 || containsNonHex {
-				// Transform to V2 format
-				key, err := engineInstance.Service.GetPrivateKeyByID(keyID)
-				if err != nil {
-					return nil, fmt.Errorf("could not get key %s: %w", keyID, err)
-				}
-
-				newKeyID, err := softCrypto.EncodePKIXPublicKeyDigest(key.Public())
-				if err != nil {
-					return nil, fmt.Errorf("could not encode public key digest: %w", err)
-				}
-
-				keyMigLog.Debugf("renaming key %s to %s", keyID, newKeyID)
-				err = engineInstance.Service.RenameKey(keyID, newKeyID)
-				if err != nil {
-					return nil, fmt.Errorf("could not rename key %s: %w", keyID, err)
-				}
-			}
-		}
-	}
 
 	if defaultCryptoEngine == nil {
 		return nil, fmt.Errorf("could not find the default crypto engine")
@@ -568,7 +516,7 @@ func (svc *CAServiceBackend) RequestCACSR(ctx context.Context, input services.Re
 		ID:          caID,
 		Metadata:    input.Metadata,
 		CreationTS:  time.Now(),
-		KeyId:       keyID,
+		KeyId:       string(keyID),
 		Subject:     input.Subject,
 		Status:      models.StatusRequestPending,
 		EngineID:    engineID,

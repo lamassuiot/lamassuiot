@@ -77,9 +77,9 @@ func (engine *FilesystemCryptoEngine) GetEngineConfig() models.CryptoEngineInfo 
 	return engine.config
 }
 
-func (engine *FilesystemCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Signer, error) {
+func (engine *FilesystemCryptoEngine) GetPrivateKeyByID(keyID cryptoengines.KeyID) (crypto.Signer, error) {
 	engine.logger.Debugf("reading %s Key", keyID)
-	file := filepath.Join(engine.storageDirectory, keyID)
+	file := filepath.Join(engine.storageDirectory, string(keyID))
 
 	pemBytes, err := os.ReadFile(file)
 	if err != nil {
@@ -90,28 +90,28 @@ func (engine *FilesystemCryptoEngine) GetPrivateKeyByID(keyID string) (crypto.Si
 	return engine.softCryptoEngine.ParsePrivateKey(pemBytes)
 }
 
-func (engine *FilesystemCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
+func (engine *FilesystemCryptoEngine) ListPrivateKeyIDs() ([]cryptoengines.KeyID, error) {
 	// Update KeyIDs in folder and remove old naming
 	entries, err := os.ReadDir(engine.storageDirectory)
 	if err != nil {
 		return nil, err
 	}
 
-	var keyIDs []string
+	var keyIDs []cryptoengines.KeyID
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
 
-		keyIDs = append(keyIDs, entry.Name())
+		keyIDs = append(keyIDs, cryptoengines.KeyID(entry.Name()))
 	}
 
 	return keyIDs, nil
 }
 
-func (engine *FilesystemCryptoEngine) RenameKey(oldID, newID string) error {
+func (engine *FilesystemCryptoEngine) RenameKey(oldID, newID cryptoengines.KeyID) error {
 	engine.logger.Debugf("renaming key %s to %s", oldID, newID)
-	err := os.Rename(filepath.Join(engine.storageDirectory, oldID), filepath.Join(engine.storageDirectory, newID))
+	err := os.Rename(filepath.Join(engine.storageDirectory, string(oldID)), filepath.Join(engine.storageDirectory, string(newID)))
 	if err != nil {
 		engine.logger.Errorf("could not rename key %s to %s: %s", oldID, newID, err)
 		return err
@@ -121,7 +121,7 @@ func (engine *FilesystemCryptoEngine) RenameKey(oldID, newID string) error {
 	return nil
 }
 
-func (engine *FilesystemCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
+func (engine *FilesystemCryptoEngine) CreateRSAPrivateKey(keySize int) (cryptoengines.KeyID, crypto.Signer, error) {
 	engine.logger.Debugf("creating RSA private key")
 
 	_, key, err := engine.softCryptoEngine.CreateRSAPrivateKey(keySize)
@@ -134,7 +134,7 @@ func (engine *FilesystemCryptoEngine) CreateRSAPrivateKey(keySize int) (string, 
 	return engine.importKey(key)
 }
 
-func (engine *FilesystemCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string, crypto.Signer, error) {
+func (engine *FilesystemCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (cryptoengines.KeyID, crypto.Signer, error) {
 	engine.logger.Debugf("creating ECDSA private key")
 
 	_, key, err := engine.softCryptoEngine.CreateECDSAPrivateKey(curve)
@@ -147,11 +147,11 @@ func (engine *FilesystemCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve
 	return engine.importKey(key)
 }
 
-func (engine *FilesystemCryptoEngine) DeleteKey(keyID string) error {
-	return os.Remove(engine.storageDirectory + "/" + keyID)
+func (engine *FilesystemCryptoEngine) DeleteKey(keyID cryptoengines.KeyID) error {
+	return os.Remove(engine.storageDirectory + "/" + string(keyID))
 }
 
-func (engine *FilesystemCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
+func (engine *FilesystemCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (cryptoengines.KeyID, crypto.Signer, error) {
 	engine.logger.Debugf("importing RSA private key")
 
 	keyID, signer, err := engine.importKey(key)
@@ -164,7 +164,7 @@ func (engine *FilesystemCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (
 	return keyID, signer, nil
 }
 
-func (engine *FilesystemCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
+func (engine *FilesystemCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (cryptoengines.KeyID, crypto.Signer, error) {
 	engine.logger.Debugf("importing ECDSA private key")
 
 	keyID, signer, err := engine.importKey(key)
@@ -177,10 +177,10 @@ func (engine *FilesystemCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKe
 	return keyID, signer, nil
 }
 
-func (engine *FilesystemCryptoEngine) importKey(key interface{}) (string, crypto.Signer, error) {
+func (engine *FilesystemCryptoEngine) importKey(key interface{}) (cryptoengines.KeyID, crypto.Signer, error) {
 	pubKey := key.(crypto.Signer).Public()
 
-	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(pubKey)
+	keyID, err := cryptoengines.GetKeyLRN(pubKey)
 	if err != nil {
 		engine.logger.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
@@ -198,7 +198,7 @@ func (engine *FilesystemCryptoEngine) importKey(key interface{}) (string, crypto
 		return "", nil, err
 	}
 
-	file := filepath.Join(engine.storageDirectory, keyID)
+	file := filepath.Join(engine.storageDirectory, string(keyID))
 	err = os.WriteFile(file, pemKey, 0600)
 	if err != nil {
 		engine.logger.Errorf("could not store RSA private key: %s", err)

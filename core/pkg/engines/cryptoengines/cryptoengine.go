@@ -14,18 +14,18 @@ import (
 type CryptoEngine interface {
 	GetEngineConfig() models.CryptoEngineInfo
 
-	ListPrivateKeyIDs() ([]string, error)
-	GetPrivateKeyByID(keyID string) (crypto.Signer, error)
+	ListPrivateKeyIDs() ([]KeyID, error)
+	GetPrivateKeyByID(keyID KeyID) (crypto.Signer, error)
 
-	CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error)
-	CreateECDSAPrivateKey(curve elliptic.Curve) (string, crypto.Signer, error)
+	CreateRSAPrivateKey(keySize int) (KeyID, crypto.Signer, error)
+	CreateECDSAPrivateKey(curve elliptic.Curve) (KeyID, crypto.Signer, error)
 
-	ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error)
-	ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error)
+	ImportRSAPrivateKey(key *rsa.PrivateKey) (KeyID, crypto.Signer, error)
+	ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (KeyID, crypto.Signer, error)
 
-	DeleteKey(keyID string) error
+	DeleteKey(keyID KeyID) error
 
-	RenameKey(oldID, newID string) error
+	RenameKey(oldID, newID KeyID) error
 }
 
 var cryptoEngineBuilders = make(map[config.CryptoEngineProvider]func(*logrus.Entry, config.CryptoEngineConfig) (CryptoEngine, error))
