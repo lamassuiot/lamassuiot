@@ -228,9 +228,10 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	afterSuiteActions := []func(){}
 
 	cryptoEngineConf := config.CryptoEngines{
-		LogLevel:      cconfig.Info,
-		DefaultEngine: "filesystem-1",
-		CryptoEngines: []cconfig.CryptoEngineConfig{},
+		LogLevel:          cconfig.Info,
+		DefaultEngine:     "filesystem-1",
+		MigrateKeysFormat: true,
+		CryptoEngines:     []cconfig.CryptoEngineConfig{},
 	}
 
 	fsid := fmt.Sprintf("/tmp/%s", uuid.NewString())
