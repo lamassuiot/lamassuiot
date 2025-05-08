@@ -164,3 +164,31 @@ func SharedTestECDSASignature(t *testing.T, engine CryptoEngine) {
 	res := ecdsa.VerifyASN1(signer2.Public().(*ecdsa.PublicKey), hashed, signature)
 	assert.True(t, res)
 }
+
+func SharedTestImportRSAPrivateKey(t *testing.T, engine CryptoEngine) {
+	key, err := rsa.GenerateKey(rand.Reader, 3072)
+	assert.NoError(t, err)
+
+	pubKey := key.Public().(*rsa.PublicKey)
+
+	_, importedSigner, err := engine.ImportRSAPrivateKey(key)
+	assert.NoError(t, err)
+
+	importedPubKey := importedSigner.Public().(*rsa.PublicKey)
+	assert.Equal(t, pubKey.N, importedPubKey.N)
+	assert.Equal(t, pubKey.E, importedPubKey.E)
+}
+
+func SharedTestImportECDSAPrivateKey(t *testing.T, engine CryptoEngine) {
+	key, err := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
+	assert.NoError(t, err)
+
+	pubKey := key.Public().(*ecdsa.PublicKey)
+
+	_, importedSigner, err := engine.ImportECDSAPrivateKey(key)
+	assert.NoError(t, err)
+
+	importedPubKey := importedSigner.Public().(*ecdsa.PublicKey)
+	assert.Equal(t, pubKey.X, importedPubKey.X)
+	assert.Equal(t, pubKey.Y, importedPubKey.Y)
+}
