@@ -124,7 +124,7 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, 
 		return nil, errors.New("kms key not found")
 	}
 
-	signer, err := newKmsKeyCryptoSingerWrapper(p.kmscli, keyID)
+	signer, err := newKmsKeyCryptoSignerWrapper(p.kmscli, keyID)
 
 	return signer, err
 }
@@ -211,7 +211,7 @@ func (p *AWSKMSCryptoEngine) createPrivateKey(keySpec types.KeySpec) (string, cr
 		return "", nil, err
 	}
 
-	signer, err := newKmsKeyCryptoSingerWrapper(p.kmscli, *key.KeyMetadata.Arn)
+	signer, err := newKmsKeyCryptoSignerWrapper(p.kmscli, *key.KeyMetadata.Arn)
 	if err != nil {
 		lAWSKMS.Errorf("could not create private key: %s", err)
 		return "", nil, err
@@ -237,8 +237,9 @@ func (p *AWSKMSCryptoEngine) createPrivateKey(keySpec types.KeySpec) (string, cr
 }
 
 func (p *AWSKMSCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
-	var spec types.KeySpec
 	keySize := key.PublicKey.N.BitLen()
+	var spec types.KeySpec
+
 	switch keySize {
 	case 2048:
 		spec = types.KeySpecRsa2048
@@ -247,59 +248,17 @@ func (p *AWSKMSCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, c
 	case 4096:
 		spec = types.KeySpecRsa4096
 	default:
-		err := fmt.Errorf("key size not supported by AWS KMS")
+		err := fmt.Errorf("key size %d not supported by AWS KMS", keySize)
 		lAWSKMS.Error(err)
 		return "", nil, err
 	}
 
-	createKeyOut, err := p.kmscli.CreateKey(context.Background(), &kms.CreateKeyInput{
-		Origin:   types.OriginTypeExternal,
-		KeySpec:  spec,
-		KeyUsage: types.KeyUsageTypeSignVerify,
-	})
-	if err != nil {
-		lAWSKMS.Errorf("could not create key: %s", err)
-		return "", nil, err
-	}
-
-	keyID, err := p.softCryptoEngine.EncodePKIXPublicKeyDigest(key.Public())
-	if err != nil {
-		lAWSKMS.Errorf("could not encode public key digest: %s", err)
-		return "", nil, err
-	}
-
-	_, err = p.kmscli.CreateAlias(context.Background(), &kms.CreateAliasInput{
-		AliasName:   aws.String(fmt.Sprintf("alias/%s", keyID)),
-		TargetKeyId: createKeyOut.KeyMetadata.Arn,
-	})
-
-	if err != nil {
-		lAWSKMS.Warnf("Could not create alias for key ARN [%s]: %s", *createKeyOut.KeyMetadata.Arn, err)
-	}
-
-	der, err := x509.MarshalPKCS8PrivateKey(key)
-	if err != nil {
-		lAWSKMS.Errorf("could not marshal private key: %s", err)
-		return "", nil, err
-	}
-
-	err = p.importPrivateKeyDer(der, *createKeyOut.KeyMetadata.Arn)
-	if err != nil {
-		lAWSKMS.Errorf("could not import private key to AWS KMS Service: %s", err)
-		return "", nil, err
-	}
-
-	signer, err := newKmsKeyCryptoSingerWrapper(p.kmscli, *createKeyOut.KeyMetadata.Arn)
-	if err != nil {
-		lAWSKMS.Errorf("could not create private key: %s", err)
-		return "", nil, err
-	}
-
-	return keyID, signer, nil
+	return p.importKey(key, spec)
 }
 
 func (p *AWSKMSCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
 	var spec types.KeySpec
+
 	switch key.Curve {
 	case elliptic.P256():
 		spec = types.KeySpecEccNistP256
@@ -308,11 +267,16 @@ func (p *AWSKMSCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (strin
 	case elliptic.P521():
 		spec = types.KeySpecEccNistP521
 	default:
-		err := fmt.Errorf("key size not supported by AWS KMS")
+		err := fmt.Errorf("ECDSA curve not supported by AWS KMS")
 		lAWSKMS.Error(err)
 		return "", nil, err
 	}
 
+	return p.importKey(key, spec)
+}
+
+func (p *AWSKMSCryptoEngine) importKey(key crypto.Signer, spec types.KeySpec) (string, crypto.Signer, error) {
+	// 1. Create KMS key
 	createKeyOut, err := p.kmscli.CreateKey(context.Background(), &kms.CreateKeyInput{
 		Origin:   types.OriginTypeExternal,
 		KeySpec:  spec,
@@ -323,36 +287,40 @@ func (p *AWSKMSCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (strin
 		return "", nil, err
 	}
 
+	// 2. Encode public key to generate alias name
 	keyID, err := p.softCryptoEngine.EncodePKIXPublicKeyDigest(key.Public())
 	if err != nil {
 		lAWSKMS.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
 	}
 
+	// 3. Create alias (non-fatal)
 	_, err = p.kmscli.CreateAlias(context.Background(), &kms.CreateAliasInput{
 		AliasName:   aws.String(fmt.Sprintf("alias/%s", keyID)),
 		TargetKeyId: createKeyOut.KeyMetadata.Arn,
 	})
-
 	if err != nil {
 		lAWSKMS.Warnf("Could not create alias for key ARN [%s]: %s", *createKeyOut.KeyMetadata.Arn, err)
 	}
 
+	// 4. Marshal private key
 	der, err := x509.MarshalPKCS8PrivateKey(key)
 	if err != nil {
 		lAWSKMS.Errorf("could not marshal private key: %s", err)
 		return "", nil, err
 	}
 
+	// 5. Import into KMS
 	err = p.importPrivateKeyDer(der, *createKeyOut.KeyMetadata.Arn)
 	if err != nil {
-		lAWSKMS.Errorf("could not import private key to AWS KMS Service: %s", err)
+		lAWSKMS.Errorf("could not import private key to AWS KMS: %s", err)
 		return "", nil, err
 	}
 
-	signer, err := newKmsKeyCryptoSingerWrapper(p.kmscli, *createKeyOut.KeyMetadata.Arn)
+	// 6. Return signer
+	signer, err := newKmsKeyCryptoSignerWrapper(p.kmscli, *createKeyOut.KeyMetadata.Arn)
 	if err != nil {
-		lAWSKMS.Errorf("could not create private key: %s", err)
+		lAWSKMS.Errorf("could not create signer: %s", err)
 		return "", nil, err
 	}
 
@@ -442,14 +410,14 @@ func (p *AWSKMSCryptoEngine) DeleteKey(keyID string) error {
 	return fmt.Errorf("cannot delete key [%s]. Go to your aws account and do it manually", keyID)
 }
 
-type kmsKeyCryptoSingerWrapper struct {
+type kmsKeyCryptoSignerWrapper struct {
 	keyArn string
 	sdk    *kms.Client
 
 	publicKey crypto.PublicKey
 }
 
-func newKmsKeyCryptoSingerWrapper(sdk *kms.Client, keyArn string) (crypto.Signer, error) {
+func newKmsKeyCryptoSignerWrapper(sdk *kms.Client, keyArn string) (crypto.Signer, error) {
 	//preload PubKey from KMS
 	pubResp, err := sdk.GetPublicKey(context.TODO(), &kms.GetPublicKeyInput{
 		KeyId: &keyArn,
@@ -463,17 +431,17 @@ func newKmsKeyCryptoSingerWrapper(sdk *kms.Client, keyArn string) (crypto.Signer
 		return nil, err
 	}
 
-	return &kmsKeyCryptoSingerWrapper{
+	return &kmsKeyCryptoSignerWrapper{
 		sdk:       sdk,
 		keyArn:    keyArn,
 		publicKey: pubKey,
 	}, nil
 }
 
-func (k *kmsKeyCryptoSingerWrapper) Public() crypto.PublicKey {
+func (k *kmsKeyCryptoSignerWrapper) Public() crypto.PublicKey {
 	return k.publicKey
 }
-func (k *kmsKeyCryptoSingerWrapper) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
+func (k *kmsKeyCryptoSignerWrapper) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
 	alg, err := getSigningAlgorithm(k.Public(), opts)
 	if err != nil {
 		return nil, err
