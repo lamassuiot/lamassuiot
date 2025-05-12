@@ -2,6 +2,7 @@ package assemblers
 
 import (
 	"fmt"
+	"unicode"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cebuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/cryptoengines/builder"
@@ -16,6 +17,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -57,6 +59,12 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 
 		}
 		logEntry.Infof("loaded %s engine with id %s", engine.Service.GetEngineConfig().Type, engineID)
+		if conf.CryptoEngineConfig.MigrateKeysFormat {
+			err = migrateKeysToV2Format(lSvc, engine, engineID)
+			if err != nil {
+				return nil, nil, fmt.Errorf("could not migrate %s engine keys to v2 format: %s", engineID, err)
+			}
+		}
 	}
 
 	caStorage, certStorage, caCertRequestStorage, err := createCAStorageInstance(lStorage, conf.Storage)
@@ -149,4 +157,48 @@ func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*l
 	}
 
 	return engines, nil
+}
+
+func migrateKeysToV2Format(logger *log.Entry, engine *lservices.Engine, engineID string) error {
+	// Check if engine keys should be renamed
+	keyIDs, err := engine.Service.ListPrivateKeyIDs()
+	if err != nil {
+		return nil
+	}
+	keyMigLog := logger.WithField("engine", engineID)
+	softCrypto := software.NewSoftwareCryptoEngine(keyMigLog)
+	keyMigLog.Infof("checking engine keys format")
+
+	for _, keyID := range keyIDs {
+		// check if they are in V1 format (serial number).
+		// V2 format is the hex encoded SHA256 of the public key, a string of 64 characters
+		containsNonHex := false
+		for _, char := range keyID {
+			if !unicode.IsLetter(char) && !unicode.IsDigit(char) {
+				// Not a hex character. Exit loop
+				containsNonHex = true
+				break
+			}
+		}
+
+		if len(keyID) != 64 || containsNonHex {
+			// Transform to V2 format
+			key, err := engine.Service.GetPrivateKeyByID(keyID)
+			if err != nil {
+				return fmt.Errorf("could not get key %s: %w", keyID, err)
+			}
+
+			newKeyID, err := softCrypto.EncodePKIXPublicKeyDigest(key.Public())
+			if err != nil {
+				return fmt.Errorf("could not encode public key digest: %w", err)
+			}
+
+			keyMigLog.Debugf("renaming key %s to %s", keyID, newKeyID)
+			err = engine.Service.RenameKey(keyID, newKeyID)
+			if err != nil {
+				return fmt.Errorf("could not rename key %s: %w", keyID, err)
+			}
+		}
+	}
+	return nil
 }
