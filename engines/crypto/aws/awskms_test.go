@@ -1,7 +1,6 @@
 package aws
 
 import (
-	"crypto/elliptic"
 	"crypto/x509"
 	"testing"
 
@@ -9,7 +8,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -62,22 +60,6 @@ func testDeleteKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
 	assert.EqualError(t, err, "cannot delete key [test-key]. Go to your aws account and do it manually")
 }
 
-func testImportRSAKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
-	key, err := chelpers.GenerateRSAKey(2048)
-	assert.NoError(t, err)
-
-	_, _, err = engine.ImportRSAPrivateKey(key)
-	assert.EqualError(t, err, "KMS does not support asymmetric key import")
-}
-
-func testImportECDSAKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
-	key, err := chelpers.GenerateECDSAKey(elliptic.P256())
-	assert.NoError(t, err)
-
-	_, _, err = engine.ImportECDSAPrivateKey(key)
-	assert.EqualError(t, err, "KMS does not support asymmetric key import")
-}
-
 func TestAWSKMSCryptoEngine(t *testing.T) {
 	cleanupBeforeTest, engine, err := prepareKMSCryptoEngine(t)
 	if err != nil {
@@ -99,10 +81,12 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 		// {"DeleteKey", cryptoengines.SharedTestDeleteKey},
 		{"GetPrivateKeyByID", cryptoengines.SharedGetKey},
 		{"GetPrivateKeyByIDNotFound", cryptoengines.SharedGetKeyNotFound},
-		{"ImportRSAKey", testImportRSAKeyOnKMS},
-		{"ImportECDSAKey", testImportECDSAKeyOnKMS},
 		{"ListPrivateKeyIDs", cryptoengines.SharedListKeys},
 		{"RenameKey", cryptoengines.SharedRenameKey},
+		//TODO: LocalStack Has some open issues regarding KMS Import keys. Follow issues:
+		// - https://github.com/localstack/localstack/issues/10921
+		// {"ImportRSAPrivateKey", cryptoengines.SharedTestImportRSAPrivateKey},
+		// {"ImportECDSAPrivateKey", cryptoengines.SharedTestImportECDSAPrivateKey},
 	}
 
 	for _, tt := range table {

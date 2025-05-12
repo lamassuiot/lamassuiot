@@ -3,10 +3,15 @@ package aws
 import (
 	"context"
 	"crypto"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -119,7 +124,7 @@ func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, 
 		return nil, errors.New("kms key not found")
 	}
 
-	signer, err := newKmsKeyCryptoSingerWrapper(p.kmscli, keyID)
+	signer, err := newKmsKeyCryptoSignerWrapper(p.kmscli, keyID)
 
 	return signer, err
 }
@@ -206,7 +211,7 @@ func (p *AWSKMSCryptoEngine) createPrivateKey(keySpec types.KeySpec) (string, cr
 		return "", nil, err
 	}
 
-	signer, err := newKmsKeyCryptoSingerWrapper(p.kmscli, *key.KeyMetadata.Arn)
+	signer, err := newKmsKeyCryptoSignerWrapper(p.kmscli, *key.KeyMetadata.Arn)
 	if err != nil {
 		lAWSKMS.Errorf("could not create private key: %s", err)
 		return "", nil, err
@@ -232,13 +237,145 @@ func (p *AWSKMSCryptoEngine) createPrivateKey(keySpec types.KeySpec) (string, cr
 }
 
 func (p *AWSKMSCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
-	lAWSKMS.Warnf("KMS does not support asymmetric key import. See https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys.html")
-	return "", nil, fmt.Errorf("KMS does not support asymmetric key import")
+	keySize := key.PublicKey.N.BitLen()
+	var spec types.KeySpec
+
+	switch keySize {
+	case 2048:
+		spec = types.KeySpecRsa2048
+	case 3072:
+		spec = types.KeySpecRsa3072
+	case 4096:
+		spec = types.KeySpecRsa4096
+	default:
+		err := fmt.Errorf("key size %d not supported by AWS KMS", keySize)
+		lAWSKMS.Error(err)
+		return "", nil, err
+	}
+
+	return p.importKey(key, spec)
 }
 
 func (p *AWSKMSCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error) {
-	lAWSKMS.Warnf("KMS does not support asymmetric key import. See https://docs.aws.amazon.com/kms/latest/developerguide/importing-keys.html")
-	return "", nil, fmt.Errorf("KMS does not support asymmetric key import")
+	var spec types.KeySpec
+
+	switch key.Curve {
+	case elliptic.P256():
+		spec = types.KeySpecEccNistP256
+	case elliptic.P384():
+		spec = types.KeySpecEccNistP384
+	case elliptic.P521():
+		spec = types.KeySpecEccNistP521
+	default:
+		err := fmt.Errorf("ECDSA curve not supported by AWS KMS")
+		lAWSKMS.Error(err)
+		return "", nil, err
+	}
+
+	return p.importKey(key, spec)
+}
+
+func (p *AWSKMSCryptoEngine) importKey(key crypto.Signer, spec types.KeySpec) (string, crypto.Signer, error) {
+	// 1. Create KMS key
+	createKeyOut, err := p.kmscli.CreateKey(context.Background(), &kms.CreateKeyInput{
+		Origin:   types.OriginTypeExternal,
+		KeySpec:  spec,
+		KeyUsage: types.KeyUsageTypeSignVerify,
+	})
+	if err != nil {
+		lAWSKMS.Errorf("could not create key: %s", err)
+		return "", nil, err
+	}
+
+	// 2. Encode public key to generate alias name
+	keyID, err := p.softCryptoEngine.EncodePKIXPublicKeyDigest(key.Public())
+	if err != nil {
+		lAWSKMS.Errorf("could not encode public key digest: %s", err)
+		return "", nil, err
+	}
+
+	// 3. Create alias (non-fatal)
+	_, err = p.kmscli.CreateAlias(context.Background(), &kms.CreateAliasInput{
+		AliasName:   aws.String(fmt.Sprintf("alias/%s", keyID)),
+		TargetKeyId: createKeyOut.KeyMetadata.Arn,
+	})
+	if err != nil {
+		lAWSKMS.Warnf("Could not create alias for key ARN [%s]: %s", *createKeyOut.KeyMetadata.Arn, err)
+	}
+
+	// 4. Marshal private key
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		lAWSKMS.Errorf("could not marshal private key: %s", err)
+		return "", nil, err
+	}
+
+	// 5. Import into KMS
+	err = p.importPrivateKeyDer(der, *createKeyOut.KeyMetadata.Arn)
+	if err != nil {
+		lAWSKMS.Errorf("could not import private key to AWS KMS: %s", err)
+		return "", nil, err
+	}
+
+	// 6. Return signer
+	signer, err := newKmsKeyCryptoSignerWrapper(p.kmscli, *createKeyOut.KeyMetadata.Arn)
+	if err != nil {
+		lAWSKMS.Errorf("could not create signer: %s", err)
+		return "", nil, err
+	}
+
+	return keyID, signer, nil
+}
+
+func (p *AWSKMSCryptoEngine) importPrivateKeyDer(der []byte, arn string) error {
+	symmetricKey := make([]byte, 32)
+	_, err := rand.Read(symmetricKey)
+	if err != nil {
+		lAWSKMS.Errorf("could not generate symmetric encryption key: %s", err)
+		return err
+	}
+
+	lAWSKMS.Debugf("generated symmetric encryption wrapping key")
+
+	outImportParams, err := p.kmscli.GetParametersForImport(context.Background(), &kms.GetParametersForImportInput{
+		WrappingAlgorithm: types.AlgorithmSpecRsaAesKeyWrapSha256,
+		KeyId:             &arn,
+		WrappingKeySpec:   types.WrappingKeySpecRsa4096,
+	})
+
+	if err != nil {
+		lAWSKMS.Errorf("could not get import parameters: %s", err)
+		return err
+	}
+
+	// Encrypt the key material with the wrapping key using AES
+	encryptedPrivateKey, err := wrapAESKeyWithPad(symmetricKey, der)
+	if err != nil {
+		lAWSKMS.Errorf("could not encrypt private key with AES: %s", err)
+		return err
+	}
+
+	// Encrypt the symmetric key with the wrapping key
+	encryptedAesKey, err := encryptWithRSAOAEP(symmetricKey, outImportParams.PublicKey)
+	if err != nil {
+		lAWSKMS.Errorf("could not encrypt symmetric key with wrapping key: %s", err)
+		return err
+	}
+
+	combinedEncryptedMaterial := append(encryptedAesKey, encryptedPrivateKey...)
+
+	_, err = p.kmscli.ImportKeyMaterial(context.Background(), &kms.ImportKeyMaterialInput{
+		KeyId:                &arn,
+		ImportToken:          outImportParams.ImportToken,
+		EncryptedKeyMaterial: combinedEncryptedMaterial,
+		ExpirationModel:      types.ExpirationModelTypeKeyMaterialDoesNotExpire,
+	})
+	if err != nil {
+		lAWSKMS.Errorf("could not import key material: %s", err)
+		return err
+	}
+
+	return nil
 }
 
 func (p *AWSKMSCryptoEngine) RenameKey(oldID, newID string) error {
@@ -273,14 +410,14 @@ func (p *AWSKMSCryptoEngine) DeleteKey(keyID string) error {
 	return fmt.Errorf("cannot delete key [%s]. Go to your aws account and do it manually", keyID)
 }
 
-type kmsKeyCryptoSingerWrapper struct {
+type kmsKeyCryptoSignerWrapper struct {
 	keyArn string
 	sdk    *kms.Client
 
 	publicKey crypto.PublicKey
 }
 
-func newKmsKeyCryptoSingerWrapper(sdk *kms.Client, keyArn string) (crypto.Signer, error) {
+func newKmsKeyCryptoSignerWrapper(sdk *kms.Client, keyArn string) (crypto.Signer, error) {
 	//preload PubKey from KMS
 	pubResp, err := sdk.GetPublicKey(context.TODO(), &kms.GetPublicKeyInput{
 		KeyId: &keyArn,
@@ -294,17 +431,17 @@ func newKmsKeyCryptoSingerWrapper(sdk *kms.Client, keyArn string) (crypto.Signer
 		return nil, err
 	}
 
-	return &kmsKeyCryptoSingerWrapper{
+	return &kmsKeyCryptoSignerWrapper{
 		sdk:       sdk,
 		keyArn:    keyArn,
 		publicKey: pubKey,
 	}, nil
 }
 
-func (k *kmsKeyCryptoSingerWrapper) Public() crypto.PublicKey {
+func (k *kmsKeyCryptoSignerWrapper) Public() crypto.PublicKey {
 	return k.publicKey
 }
-func (k *kmsKeyCryptoSingerWrapper) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
+func (k *kmsKeyCryptoSignerWrapper) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
 	alg, err := getSigningAlgorithm(k.Public(), opts)
 	if err != nil {
 		return nil, err
@@ -363,4 +500,111 @@ func getSigningAlgorithm(key crypto.PublicKey, opts crypto.SignerOpts) (types.Si
 	default:
 		return "", fmt.Errorf("unsupported key type %T", key)
 	}
+}
+
+func encryptWithRSAOAEP(msg []byte, pubKeyDer []byte) ([]byte, error) {
+	// Parse public key
+	pubInterface, err := x509.ParsePKIXPublicKey(pubKeyDer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse DER public key: %w", err)
+	}
+
+	pubKey, ok := pubInterface.(*rsa.PublicKey)
+	if !ok {
+		return nil, fmt.Errorf("public key is not an RSA key")
+	}
+
+	// Encrypt using RSA-OAEP with SHA-256
+	label := []byte("") // no label
+	hash := sha256.New()
+	encryptedKey, err := rsa.EncryptOAEP(hash, rand.Reader, pubKey, msg, label)
+	if err != nil {
+		return nil, fmt.Errorf("RSA OAEP encryption failed: %w", err)
+	}
+
+	// Return the encrypted key
+	return encryptedKey, nil
+}
+
+// wrapWithPad implements AES-256 key wrap with padding
+func wrapAESKeyWithPad(kek, plaintext []byte) ([]byte, error) {
+	// Default IV for AES Key Wrap with Padding (RFC 5649)
+	var defaultIV = []byte{0xA6, 0x59, 0x59, 0xA6}
+
+	// padKey pads the input according to RFC 5649
+	padKey := func(key []byte) []byte {
+		m := len(key)
+		if m%8 == 0 && m >= 16 {
+			return key // No padding needed
+		}
+
+		// Append 0x00 padding to make it multiple of 8
+		padLen := 8 - (m % 8)
+		padded := make([]byte, m+padLen)
+		copy(padded, key)
+		return padded
+	}
+
+	// buildIV builds the 8-byte alternative initial value
+	buildIV := func(mli int) []byte {
+		iv := make([]byte, 8)
+		copy(iv[:4], defaultIV)
+		binary.BigEndian.PutUint32(iv[4:], uint32(mli))
+		return iv
+	}
+
+	// aesEncryptBlock performs ECB AES encryption for a single block
+	aesEncryptBlock := func(block cipher.Block, plaintext []byte) []byte {
+		dst := make([]byte, len(plaintext))
+		block.Encrypt(dst, plaintext)
+		return dst
+	}
+
+	// xorBlocks returns a ^ b (byte-wise)
+	xorBlocks := func(a, b []byte) []byte {
+		out := make([]byte, len(a))
+		for i := range a {
+			out[i] = a[i] ^ b[i]
+		}
+		return out
+	}
+
+	block, err := aes.NewCipher(kek)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	mli := len(plaintext)
+	padded := padKey(plaintext)
+	n := len(padded) / 8
+	r := make([][]byte, n)
+	for i := 0; i < n; i++ {
+		r[i] = make([]byte, 8)
+		copy(r[i], padded[i*8:(i+1)*8])
+	}
+
+	a := buildIV(mli)
+
+	// Perform 6 * n iterations
+	for j := 0; j < 6; j++ {
+		for i := 0; i < n; i++ {
+			b := append(a, r[i]...)
+			bEncrypted := aesEncryptBlock(block, b)
+
+			t := uint64(n*j + i + 1)
+			tBytes := make([]byte, 8)
+			binary.BigEndian.PutUint64(tBytes, t)
+
+			a = xorBlocks(bEncrypted[:8], tBytes)
+			copy(r[i], bEncrypted[8:])
+		}
+	}
+
+	// Output: A || R[0] || R[1] || ...
+	result := append(a, []byte{}...)
+	for _, block := range r {
+		result = append(result, block...)
+	}
+
+	return result, nil
 }
