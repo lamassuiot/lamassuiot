@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/cloudevents/sdk-go/v2/event"
+	beService "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -12,19 +13,18 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewVAEventHandler(l *logrus.Entry, crlSvc services.CRLService) *eventhandling.CloudEventHandler {
+func NewVAEventHandler(l *logrus.Entry, svc services.CRLService) *eventhandling.CloudEventHandler {
+	crlSvc := svc.(*beService.CRLServiceBackend)
 	return &eventhandling.CloudEventHandler{
 		Logger: l,
-		DispatchMap: map[string]func(*event.Event) error{
-			string(models.EventCreateCAKey):                func(m *event.Event) error { return createCAHandler(m, crlSvc, l) },
-			string(models.EventUpdateCertificateStatusKey): func(m *event.Event) error { return updateCertificateStatus(m, crlSvc, l) },
+		DispatchMap: map[string]func(context.Context, *event.Event) error{
+			string(models.EventCreateCAKey):                func(ctx context.Context, m *event.Event) error { return createCAHandler(ctx, m, crlSvc, l) },
+			string(models.EventUpdateCertificateStatusKey): func(ctx context.Context, m *event.Event) error { return updateCertificateStatus(ctx, m, crlSvc, l) },
 		},
 	}
 }
 
-func createCAHandler(event *event.Event, crlSvc services.CRLService, lMessaging *logrus.Entry) error {
-	ctx := context.Background()
-
+func createCAHandler(ctx context.Context, event *event.Event, crlSvc *beService.CRLServiceBackend, lMessaging *logrus.Entry) error {
 	ca, err := chelpers.GetEventBody[models.CACertificate](event)
 	if err != nil {
 		err = fmt.Errorf("could not decode cloud event: %s", err)
@@ -45,9 +45,7 @@ func createCAHandler(event *event.Event, crlSvc services.CRLService, lMessaging 
 	return nil
 }
 
-func updateCertificateStatus(event *event.Event, crlSvc services.CRLService, lMessaging *logrus.Entry) error {
-	ctx := context.Background()
-
+func updateCertificateStatus(ctx context.Context, event *event.Event, crlSvc *beService.CRLServiceBackend, lMessaging *logrus.Entry) error {
 	cert, err := chelpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
 	if err != nil {
 		err = fmt.Errorf("could not decode cloud event: %s", err)

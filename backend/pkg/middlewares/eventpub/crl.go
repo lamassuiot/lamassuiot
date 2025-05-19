@@ -3,18 +3,20 @@ package eventpub
 import (
 	"context"
 	"crypto/x509"
+	"fmt"
 
 	beService "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
 type clrEventPublisher struct {
 	next       services.CRLService
-	eventMWPub ICloudEventMiddlewarePublisher
+	eventMWPub ICloudEventPublisher
 }
 
-func NewCRLEventPublisher(eventMWPub ICloudEventMiddlewarePublisher) beService.CRLMiddleware {
+func NewCRLEventPublisher(eventMWPub ICloudEventPublisher) beService.CRLMiddleware {
 	return func(next services.CRLService) services.CRLService {
 		return &clrEventPublisher{
 			next:       next,
@@ -36,18 +38,24 @@ func (mw *clrEventPublisher) GetVARoles(ctx context.Context, input services.GetV
 }
 
 func (mw *clrEventPublisher) UpdateVARole(ctx context.Context, input services.UpdateVARoleInput) (output *models.VARole, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateVARole)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("crl/%s", input.CASubjectKeyID))
+
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(context.Background(), models.EventUpdateVARole, output)
+			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()
 	return mw.next.UpdateVARole(ctx, input)
 }
 
 func (mw *clrEventPublisher) CalculateCRL(ctx context.Context, input services.CalculateCRLInput) (output *x509.RevocationList, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateCRL)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("crl/%s", input.CASubjectKeyID))
+
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(context.Background(), models.EventCreateCRL, output)
+			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()
 	return mw.next.CalculateCRL(ctx, input)

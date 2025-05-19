@@ -8,6 +8,7 @@ import (
 	cebuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/cryptoengines/builder"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
+	auditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
@@ -43,6 +44,8 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, serviceInfo models.AP
 func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobScheduler, error) {
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "CA", "Service")
 	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Event Bus")
+	lAudit := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Audit Bus")
+
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "CA", "Storage")
 	lCryptoEng := helpers.SetupLogger(conf.CryptoEngineConfig.LogLevel, "CA", "CryptoEngine")
 	lMonitor := helpers.SetupLogger(conf.Logs.Level, "CA", "Crypto Monitoring")
@@ -94,13 +97,20 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 			return nil, nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
 
-		eventpublisher := &eventpub.CloudEventMiddlewarePublisher{
+		eventPublisher := &eventpub.CloudEventPublisher{
 			Publisher: pub,
 			ServiceID: "ca",
 			Logger:    lMessage,
 		}
 
-		svc = eventpub.NewCAEventBusPublisher(eventpublisher)(svc)
+		auditPublisher := &eventpub.CloudEventPublisher{
+			Publisher: pub,
+			ServiceID: "ca",
+			Logger:    lAudit,
+		}
+
+		svc = eventpub.NewCAEventBusPublisher(eventPublisher)(svc)
+		svc = auditpub.NewCAAuditEventBusPublisher(*auditpub.NewAuditPublisher(auditPublisher))(svc)
 	}
 
 	var scheduler *jobs.JobScheduler

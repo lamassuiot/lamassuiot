@@ -5,16 +5,17 @@ import (
 	"fmt"
 
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
 type CAEventPublisher struct {
 	Next       services.CAService
-	eventMWPub ICloudEventMiddlewarePublisher
+	eventMWPub ICloudEventPublisher
 }
 
-func NewCAEventBusPublisher(eventMWPub ICloudEventMiddlewarePublisher) lservices.CAMiddleware {
+func NewCAEventBusPublisher(eventMWPub ICloudEventPublisher) lservices.CAMiddleware {
 	return func(next services.CAService) services.CAService {
 		return &CAEventPublisher{
 			Next:       next,
@@ -35,27 +36,36 @@ func (mw CAEventPublisher) GetStatsByCAID(ctx context.Context, input services.Ge
 }
 
 func (mw CAEventPublisher) CreateCA(ctx context.Context, input services.CreateCAInput) (output *models.CACertificate, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateCAKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", input.ID))
+
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventCreateCAKey, output)
+			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()
 	return mw.Next.CreateCA(ctx, input)
 }
 
 func (mw CAEventPublisher) RequestCACSR(ctx context.Context, input services.RequestCAInput) (output *models.CACertificateRequest, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventRequestCAKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca-csr/%s", input.ID))
+
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventRequestCAKey, output)
+			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()
 	return mw.Next.RequestCACSR(ctx, input)
 }
 
 func (mw CAEventPublisher) ImportCA(ctx context.Context, input services.ImportCAInput) (output *models.CACertificate, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventImportCAKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", input.ID))
+
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventImportCAKey, output)
+			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()
 	return mw.Next.ImportCA(ctx, input)
@@ -74,6 +84,9 @@ func (mw CAEventPublisher) GetCAsByCommonName(ctx context.Context, input service
 }
 
 func (mw CAEventPublisher) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (output *models.CACertificate, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateCAStatusKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", input.CAID))
+
 	prev, err := mw.GetCAByID(ctx, services.GetCAByIDInput{
 		CAID: input.CAID,
 	})
@@ -83,7 +96,7 @@ func (mw CAEventPublisher) UpdateCAStatus(ctx context.Context, input services.Up
 
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateCAStatusKey, models.UpdateModel[models.CACertificate]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.CACertificate]{
 				Updated:  *output,
 				Previous: *prev,
 			})
@@ -112,6 +125,9 @@ func (mw CAEventPublisher) UpdateCAProfile(ctx context.Context, input services.U
 }
 
 func (mw CAEventPublisher) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (output *models.CACertificate, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateCAMetadataKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", input.CAID))
+
 	prev, err := mw.GetCAByID(ctx, services.GetCAByIDInput{
 		CAID: input.CAID,
 	})
@@ -121,7 +137,7 @@ func (mw CAEventPublisher) UpdateCAMetadata(ctx context.Context, input services.
 
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateCAMetadataKey, models.UpdateModel[models.CACertificate]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.CACertificate]{
 				Updated:  *output,
 				Previous: *prev,
 			})
@@ -131,45 +147,60 @@ func (mw CAEventPublisher) UpdateCAMetadata(ctx context.Context, input services.
 }
 
 func (mw CAEventPublisher) DeleteCA(ctx context.Context, input services.DeleteCAInput) (err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventDeleteCAKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", input.CAID))
+
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventDeleteCAKey, input)
+			mw.eventMWPub.PublishCloudEvent(ctx, input)
 		}
 	}()
 	return mw.Next.DeleteCA(ctx, input)
 }
 
 func (mw CAEventPublisher) SignCertificate(ctx context.Context, input services.SignCertificateInput) (output *models.Certificate, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventSignCertificateKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", input.CAID)) //@jjrodrig is this a CA entitiy or Certificate entity?
+
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventSignCertificateKey, output)
+			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()
 	return mw.Next.SignCertificate(ctx, input)
 }
 
 func (mw CAEventPublisher) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (output *models.Certificate, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateCertificateKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("certificate/%s", input.Subject.CommonName)) //@jjrodrig dont know if this ID is correct
+
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventCreateCertificateKey, output)
+			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()
 	return mw.Next.CreateCertificate(ctx, input)
 }
 
 func (mw CAEventPublisher) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (output *models.Certificate, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventImportCertificateKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("certificate/%s", input.Certificate.SerialNumber))
+
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventImportCACertificateKey, output)
+			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()
 	return mw.Next.ImportCertificate(ctx, input)
 }
 
 func (mw CAEventPublisher) SignatureSign(ctx context.Context, input services.SignatureSignInput) (output []byte, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventSignatureSignKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", input.CAID))
+
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventSignatureSignKey, output)
+			mw.eventMWPub.PublishCloudEvent(ctx, output)
 		}
 	}()
 	return mw.Next.SignatureSign(ctx, input)
@@ -196,6 +227,9 @@ func (mw CAEventPublisher) GetCertificatesByExpirationDate(ctx context.Context, 
 }
 
 func (mw CAEventPublisher) UpdateCertificateStatus(ctx context.Context, input services.UpdateCertificateStatusInput) (output *models.Certificate, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateCertificateStatusKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("certificate/%s", input.SerialNumber))
+
 	prev, err := mw.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
 		SerialNumber: input.SerialNumber,
 	})
@@ -205,7 +239,7 @@ func (mw CAEventPublisher) UpdateCertificateStatus(ctx context.Context, input se
 
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateCertificateStatusKey, models.UpdateModel[models.Certificate]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.Certificate]{
 				Previous: *prev,
 				Updated:  *output,
 			})
@@ -223,6 +257,9 @@ func (mw CAEventPublisher) GetCertificatesByStatus(ctx context.Context, input se
 }
 
 func (mw CAEventPublisher) UpdateCertificateMetadata(ctx context.Context, input services.UpdateCertificateMetadataInput) (output *models.Certificate, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateCertificateMetadataKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("certificate/%s", input.SerialNumber))
+
 	prev, err := mw.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
 		SerialNumber: input.SerialNumber,
 	})
@@ -232,7 +269,7 @@ func (mw CAEventPublisher) UpdateCertificateMetadata(ctx context.Context, input 
 
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateCertificateMetadataKey, models.UpdateModel[models.Certificate]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.Certificate]{
 				Previous: *prev,
 				Updated:  *output,
 			})

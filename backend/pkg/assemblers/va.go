@@ -114,7 +114,7 @@ func createPublisherEventBus(conf config.VAconfig, crl services.CRLService) (ser
 		return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 	}
 
-	crl = eventpub.NewCRLEventPublisher(&eventpub.CloudEventMiddlewarePublisher{
+	crl = eventpub.NewCRLEventPublisher(&eventpub.CloudEventPublisher{
 		Publisher: pub,
 		ServiceID: serviceID,
 		Logger:    lMessaging,

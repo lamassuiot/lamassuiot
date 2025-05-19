@@ -1,27 +1,26 @@
 package headerextractors
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/sirupsen/logrus"
 )
 
-const CtxSource = "REQ_SOURCE"
-const CtxRequestID = "REQ_ID"
-
 func updateContextWithRequestWithRequestID(ctx *gin.Context, headers http.Header) {
 	reqID := headers.Get("x-request-id")
 	if reqID != "" {
-		ctx.Set(CtxRequestID, reqID)
+		ctx.Set(core.LamassuContextKeyRequestID, reqID)
 	}
 }
 
 func updateContextWithRequestWithSource(ctx *gin.Context, headers http.Header) {
 	sourceHeader := headers.Get(models.HttpSourceHeader)
 	if sourceHeader != "" {
-		ctx.Set(CtxSource, sourceHeader)
+		ctx.Set(core.LamassuContextKeySource, fmt.Sprintf("http-%s", sourceHeader))
 	}
 }
 

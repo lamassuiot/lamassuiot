@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/sirupsen/logrus"
 )
 
@@ -32,7 +33,7 @@ func TestConfigureLoggerWithRequestID(t *testing.T) {
 
 	// Test case 2: Request ID exists in the context
 	reqID := "12345"
-	ctx = context.WithValue(ctx, CtxRequestID, reqID)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyRequestID, reqID)
 
 	result = configureLoggerWithRequestID(ctx, logger)
 
