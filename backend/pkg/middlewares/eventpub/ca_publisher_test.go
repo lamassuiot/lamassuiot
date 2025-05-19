@@ -13,17 +13,17 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-type CloudEventMiddlewarePublisherMock struct {
+type CloudEventPublisherMock struct {
 	mock.Mock
 }
 
-func (m *CloudEventMiddlewarePublisherMock) PublishCloudEvent(ctx context.Context, eventType models.EventType, payload interface{}) {
-	m.Called(ctx, eventType, payload)
+func (m *CloudEventPublisherMock) PublishCloudEvent(ctx context.Context, payload interface{}) {
+	m.Called(ctx, payload)
 }
 
-func eventChecker(event models.EventType, expectations []func(*svcmock.MockCAService), operation func(services.CAService), assertions func(*CloudEventMiddlewarePublisherMock, *svcmock.MockCAService)) {
+func eventChecker(event models.EventType, expectations []func(*svcmock.MockCAService), operation func(services.CAService), assertions func(*CloudEventPublisherMock, *svcmock.MockCAService)) {
 	mockCAService := new(svcmock.MockCAService)
-	mockEventMWPub := new(CloudEventMiddlewarePublisherMock)
+	mockEventMWPub := new(CloudEventPublisherMock)
 	caEventPublisherMw := NewCAEventBusPublisher(mockEventMWPub)
 	caEventPublisher := caEventPublisherMw(mockCAService)
 
@@ -51,7 +51,7 @@ func withoutErrors[E any, O any](t *testing.T, method string, input E, event mod
 		assert.Nil(t, r[1].Interface())
 	}
 
-	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockCAService) {
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockCAService) {
 		mockCAService.AssertExpectations(t)
 		mockEventMWPub.AssertExpectations(t)
 	}
@@ -72,7 +72,7 @@ func withErrors[E any, O any](t *testing.T, method string, input E, event models
 		assert.NotNil(t, r[1].Interface())
 	}
 
-	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockCAService) {
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockCAService) {
 		mockCAService.AssertExpectations(t)
 		mockEventMWPub.AssertNotCalled(t, "PublishCloudEvent")
 	}
@@ -94,7 +94,7 @@ func withoutErrorsSingleResult[E any](t *testing.T, method string, input E, even
 		assert.Nil(t, r[0].Interface())
 	}
 
-	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockCAService) {
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockCAService) {
 		mockCAService.AssertExpectations(t)
 		mockEventMWPub.AssertExpectations(t)
 	}
@@ -116,7 +116,7 @@ func withErrorsSingleResult[E any](t *testing.T, method string, input E, event m
 		assert.NotNil(t, r[0].Interface())
 	}
 
-	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockCAService) {
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockCAService) {
 		mockCAService.AssertExpectations(t)
 		mockEventMWPub.AssertNotCalled(t, "PublishCloudEvent")
 	}

@@ -6,11 +6,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
+	"github.com/lamassuiot/lamassuiot/core/v3"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/sirupsen/logrus"
 )
-
-const CtxAuthMode = "REQ_AUTH_MODE"
-const CtxAuthID = "REQ_AUTH_ID"
 
 type IdentityExtractor string
 
@@ -46,6 +45,7 @@ func RequestMetadataToContextMiddleware(logger *logrus.Entry) gin.HandlerFunc {
 func UpdateContextWithRequest(ctx *gin.Context, headers http.Header) {
 	authMode := ""
 	callerID := ""
+	var authCtx map[string]interface{}
 
 	jwtAny, hasValue := ctx.Get(string(IdentityExtractorJWT))
 	if hasValue {
@@ -53,6 +53,7 @@ func UpdateContextWithRequest(ctx *gin.Context, headers http.Header) {
 		// Access the claims
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if ok {
+			authCtx = claims
 			// Extract the sub claim
 			sub, ok := claims["sub"].(string)
 			if ok {
@@ -67,13 +68,22 @@ func UpdateContextWithRequest(ctx *gin.Context, headers http.Header) {
 		clientCert := clientCertAny.(*x509.Certificate)
 		authMode = "crt"
 		callerID = clientCert.Subject.CommonName
+
+		crt := models.X509Certificate(*clientCert)
+		authCtx = map[string]interface{}{
+			"crt": crt.String(),
+		}
 	}
 
 	if authMode != "" {
-		ctx.Set(CtxAuthMode, authMode)
+		ctx.Set(core.LamassuContextKeyAuthType, authMode)
 	}
 
 	if callerID != "" {
-		ctx.Set(CtxAuthID, callerID)
+		ctx.Set(core.LamassuContextKeyAuthID, callerID)
+	}
+
+	if authCtx != nil {
+		ctx.Set(core.LamassuContextKeyAuthContext, authCtx)
 	}
 }

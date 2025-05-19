@@ -277,7 +277,6 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				req.Host = remote.Host
 				req.URL.Scheme = remote.Scheme
 				req.URL.Host = remote.Host
-				req.URL.Path = c.Param("proxyPath")
 			}
 			proxy.ServeHTTP(c.Writer, c.Request)
 		}

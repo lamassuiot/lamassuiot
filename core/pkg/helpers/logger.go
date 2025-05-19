@@ -9,15 +9,10 @@ import (
 
 	formatter "github.com/antonfisher/nested-logrus-formatter"
 	"github.com/jakehl/goid"
+	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/sirupsen/logrus"
 )
-
-const CtxSource = "REQ_SOURCE"
-const CtxRequestID = "REQ_ID"
-
-const CtxAuthMode = "REQ_AUTH_MODE"
-const CtxAuthID = "REQ_AUTH_ID"
 
 var LogFormatter = &formatter.Formatter{
 	TimestampFormat: "2006-01-02 15:04:05",
@@ -72,23 +67,23 @@ func configureLoggerWitSourceAndCallerID(ctx context.Context, logger *logrus.Ent
 	authMode := ""
 	authID := ""
 
-	sourceCtx := ctx.Value(string(CtxSource))
+	sourceCtx := ctx.Value(core.LamassuContextKeySource)
 	if src, ok := sourceCtx.(string); ok {
 		source = src
 	}
 
-	authIDCtx := ctx.Value(string(CtxAuthID))
+	authIDCtx := ctx.Value(core.LamassuContextKeyAuthID)
 	if id, ok := authIDCtx.(string); ok {
 		authID = id
 	}
 
-	authModeCtx := ctx.Value(string(CtxAuthMode))
+	authModeCtx := ctx.Value(core.LamassuContextKeyAuthType)
 	if mode, ok := authModeCtx.(string); ok {
 		authMode = mode
 	}
 
 	logger = logger.WithField("src", source)
-	logger = logger.WithField("auth-mode", authMode)
+	logger = logger.WithField("auth-type", authMode)
 	logger = logger.WithField("auth-id", authID)
 
 	return logger
@@ -99,7 +94,7 @@ func configureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *lo
 		return logger
 	}
 
-	reqCtx := ctx.Value(CtxRequestID)
+	reqCtx := ctx.Value(core.LamassuContextKeyRequestID)
 	if reqID, ok := reqCtx.(string); ok {
 		return logger.WithField("req-id", reqID)
 	}
@@ -109,6 +104,6 @@ func configureLoggerWithRequestID(ctx context.Context, logger *logrus.Entry) *lo
 
 func InitContext() context.Context {
 	ctx := context.Background()
-	ctx = context.WithValue(ctx, CtxRequestID, fmt.Sprintf("internal.%s", goid.NewV4UUID()))
+	ctx = context.WithValue(ctx, core.LamassuContextKeyRequestID, fmt.Sprintf("internal.%s", goid.NewV4UUID()))
 	return ctx
 }

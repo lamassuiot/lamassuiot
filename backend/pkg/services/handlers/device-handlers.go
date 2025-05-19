@@ -17,16 +17,14 @@ import (
 func NewDeviceEventHandler(l *logrus.Entry, svc services.DeviceManagerService) *eventhandling.CloudEventHandler {
 	return &eventhandling.CloudEventHandler{
 		Logger: l,
-		DispatchMap: map[string]func(*event.Event) error{
-			string(models.EventUpdateCertificateMetadataKey): func(m *event.Event) error { return updateCertMetaHandler(m, svc, l) },
-			string(models.EventUpdateCertificateStatusKey):   func(m *event.Event) error { return updateCertStatusHandler(m, svc, l) },
+		DispatchMap: map[string]func(context.Context, *event.Event) error{
+			string(models.EventUpdateCertificateMetadataKey): func(ctx context.Context, m *event.Event) error { return updateCertMetaHandler(ctx, m, svc, l) },
+			string(models.EventUpdateCertificateStatusKey):   func(ctx context.Context, m *event.Event) error { return updateCertStatusHandler(ctx, m, svc, l) },
 		},
 	}
 }
 
-func updateCertStatusHandler(event *event.Event, svc services.DeviceManagerService, lMessaging *logrus.Entry) error {
-	ctx := context.Background()
-
+func updateCertStatusHandler(ctx context.Context, event *event.Event, svc services.DeviceManagerService, lMessaging *logrus.Entry) error {
 	cert, err := chelpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
 	if err != nil {
 		err = fmt.Errorf("could not decode cloud event: %s", err)
@@ -93,9 +91,7 @@ func updateCertStatusHandler(event *event.Event, svc services.DeviceManagerServi
 	return nil
 }
 
-func updateCertMetaHandler(event *event.Event, svc services.DeviceManagerService, lMessaging *logrus.Entry) error {
-	ctx := context.Background()
-
+func updateCertMetaHandler(ctx context.Context, event *event.Event, svc services.DeviceManagerService, lMessaging *logrus.Entry) error {
 	certUpdate, err := chelpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
 	if err != nil {
 		err = fmt.Errorf("could not decode cloud event: %s", err)

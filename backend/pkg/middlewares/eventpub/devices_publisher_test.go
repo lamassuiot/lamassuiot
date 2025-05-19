@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func devicesEventChecker(event models.EventType, expectations []func(*svcmock.MockDeviceManagerService), operation func(services.DeviceManagerService), assertions func(*CloudEventMiddlewarePublisherMock, *svcmock.MockDeviceManagerService)) {
+func devicesEventChecker(event models.EventType, expectations []func(*svcmock.MockDeviceManagerService), operation func(services.DeviceManagerService), assertions func(*CloudEventPublisherMock, *svcmock.MockDeviceManagerService)) {
 	mockDeviceManagerService := new(svcmock.MockDeviceManagerService)
-	mockEventMWPub := new(CloudEventMiddlewarePublisherMock)
+	mockEventMWPub := new(CloudEventPublisherMock)
 	caEventPublisherMw := NewDeviceEventPublisher(mockEventMWPub)
 	caEventPublisher := caEventPublisherMw(mockDeviceManagerService)
 
@@ -43,7 +43,7 @@ func devicesWithoutErrors[E any, O any](t *testing.T, method string, input E, ev
 		assert.Nil(t, r[1].Interface())
 	}
 
-	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockDeviceManagerService) {
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDeviceManagerService) {
 		mockCAService.AssertExpectations(t)
 		mockEventMWPub.AssertExpectations(t)
 	}
@@ -64,7 +64,7 @@ func devicesWithErrors[E any, O any](t *testing.T, method string, input E, event
 		assert.NotNil(t, r[1].Interface())
 	}
 
-	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockDeviceManagerService) {
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDeviceManagerService) {
 		mockCAService.AssertExpectations(t)
 		mockEventMWPub.AssertNotCalled(t, "PublishCloudEvent")
 	}
