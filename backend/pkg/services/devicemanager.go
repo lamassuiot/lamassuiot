@@ -196,29 +196,35 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 	}
 
 	if input.NewStatus == models.DeviceDecommissioned {
-		if device.IdentitySlot.Status == models.SlotExpired {
-			lFunc.Debugf("skipping slot update. Identity slot already expired")
-		} else if device.IdentitySlot.Status == models.SlotRevoke {
-			lFunc.Debugf("skipping slot update. Identity slot already revoked")
-		} else {
-			device.Events[time.Now()] = models.DeviceEvent{
-				EvenType: models.DeviceEventTypeStatusDecommissioned,
-			}
-			slot := device.IdentitySlot
-			slot.Status = models.SlotRevoke
-			defer func() {
-				//don't revoke IdSlot, this will be handled by revoking the attached certificate
-				_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
-					SerialNumber:     slot.Secrets[slot.ActiveVersion],
-					NewStatus:        models.StatusRevoked,
-					RevocationReason: ocsp.CessationOfOperation,
-				})
 
-				if err != nil {
-					lFunc.Errorf("error while updating IdentitySlot from device %s to revoked. could not update certificate %s status: %s", device.ID, slot.Secrets[slot.ActiveVersion], err)
-					return
-				}
-			}()
+		device.Events[time.Now()] = models.DeviceEvent{
+			EvenType: models.DeviceEventTypeStatusDecommissioned,
+		}
+
+		idSlot := device.IdentitySlot
+		if idSlot != nil {
+			if idSlot.Status == models.SlotExpired {
+				lFunc.Debugf("skipping slot update. Identity slot already expired")
+			} else if idSlot.Status == models.SlotRevoke {
+				lFunc.Debugf("skipping slot update. Identity slot already revoked")
+			} else {
+
+				idSlot.Status = models.SlotRevoke
+				defer func() {
+					certSN := idSlot.Secrets[idSlot.ActiveVersion]
+					//don't revoke IdSlot, this will be handled by revoking the attached certificate
+					_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
+						SerialNumber:     certSN,
+						NewStatus:        models.StatusRevoked,
+						RevocationReason: ocsp.CessationOfOperation,
+					})
+
+					if err != nil {
+						lFunc.Errorf("error while updating IdentitySlot from device %s to revoked. could not update certificate %s status: %s", device.ID, certSN, err)
+						return
+					}
+				}()
+			}
 		}
 	} else {
 		device.Events[time.Now()] = models.DeviceEvent{
