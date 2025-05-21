@@ -145,6 +145,35 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 	return svc.dmsStorage.Update(ctx, dms)
 }
 
+func (svc DMSManagerServiceBackend) DeleteDMS(ctx context.Context, input services.DeleteDMSInput) error {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := dmsValidate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("struct validation error: %s", err)
+		return errs.ErrValidateBadRequest
+	}
+
+	id := input.ID
+	lFunc.Debugf("checking if DMS '%s' exists", id)
+	exists, _, err := svc.dmsStorage.SelectExists(ctx, id)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if DMS '%s' exists in storage engine: %s", id, err)
+		return err
+	} else if !exists {
+		lFunc.Errorf("DMS '%s' does not exist in storage engine", id)
+		return errs.ErrDMSNotFound
+	}
+
+	err = svc.dmsStorage.Delete(ctx, id)
+	if err != nil {
+		lFunc.Errorf("something went wrong while deleting the DMS %s %s", id, err)
+		return err
+	}
+
+	return err
+}
+
 func (svc DMSManagerServiceBackend) GetDMSByID(ctx context.Context, input services.GetDMSByIDInput) (*models.DMS, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
