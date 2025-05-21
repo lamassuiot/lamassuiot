@@ -55,6 +55,15 @@ func (mw dmsEventPublisher) UpdateDMS(ctx context.Context, input services.Update
 	return mw.next.UpdateDMS(ctx, input)
 }
 
+func (mw dmsEventPublisher) DeleteDMS(ctx context.Context, input services.DeleteDMSInput) (err error) {
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventDeleteDMSKey, input)
+		}
+	}()
+	return mw.next.DeleteDMS(ctx, input)
+}
+
 func (mw dmsEventPublisher) GetDMSByID(ctx context.Context, input services.GetDMSByIDInput) (*models.DMS, error) {
 	return mw.next.GetDMSByID(ctx, input)
 }
