@@ -567,6 +567,11 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 
 	lFunc.Infof("starting reenrollment process for device")
 
+	if csr.Subject.CommonName == "" {
+		lFunc.Errorf("aborting reenrollment. No CommonName in CSR")
+		return nil, fmt.Errorf("no CommonName in CSR")
+	}
+
 	lFunc.Debugf("checking if DMS '%s' exists", aps)
 	dms, err := svc.service.GetDMSByID(ctx, services.GetDMSByIDInput{
 		ID: aps,
@@ -709,6 +714,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		switch err {
 		case errs.ErrDeviceNotFound:
 			lFunc.Debugf("device doesn't exist")
+			return nil, err
 		default:
 			lFunc.Errorf("could not get device: %s", err)
 			return nil, err
