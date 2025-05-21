@@ -23,7 +23,7 @@ func TestReadConfigWithDefaults(t *testing.T) {
 		SecretValue: Password("mysuperpass"),
 	}
 
-	config, err := readConfig[TestServiceConfig](configFilePath, &defaults)
+	config, err := readConfig(configFilePath, &defaults)
 	assert.NoError(t, err)
 	assert.NotEqual(t, defaults.HttpServer.Port, config.HttpServer.Port)
 	assert.Equal(t, config.HttpServer.Port, 7777)                //Make sure config file has precedence
