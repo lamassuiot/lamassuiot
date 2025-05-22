@@ -2,7 +2,6 @@ package eventpub
 
 import (
 	"context"
-	"crypto/x509"
 	"fmt"
 
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
@@ -61,38 +60,6 @@ func (mw dmsEventPublisher) GetDMSByID(ctx context.Context, input services.GetDM
 
 func (mw dmsEventPublisher) GetAll(ctx context.Context, input services.GetAllInput) (string, error) {
 	return mw.next.GetAll(ctx, input)
-}
-
-func (mw dmsEventPublisher) CACerts(ctx context.Context, aps string) ([]*x509.Certificate, error) {
-	return mw.next.CACerts(ctx, aps)
-}
-
-func (mw dmsEventPublisher) Enroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (out *x509.Certificate, err error) {
-	defer func() {
-		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventEnrollKey, models.EnrollReenrollEvent{
-				Certificate: (*models.X509Certificate)(out),
-				APS:         aps,
-			})
-		}
-	}()
-	return mw.next.Enroll(ctx, csr, aps)
-}
-
-func (mw dmsEventPublisher) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (out *x509.Certificate, err error) {
-	defer func() {
-		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventReEnrollKey, models.EnrollReenrollEvent{
-				Certificate: (*models.X509Certificate)(out),
-				APS:         aps,
-			})
-		}
-	}()
-	return mw.next.Reenroll(ctx, csr, aps)
-}
-
-func (mw dmsEventPublisher) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, interface{}, error) {
-	return mw.next.ServerKeyGen(ctx, csr, aps)
 }
 
 func (mw dmsEventPublisher) BindIdentityToDevice(ctx context.Context, input services.BindIdentityToDeviceInput) (output *models.BindIdentityToDeviceOutput, err error) {
