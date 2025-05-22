@@ -16,12 +16,13 @@ func NewAlertsHttpRoutes(svc services.AlertsService) *alertsHttpRoutes {
 	}
 }
 
-func (r *alertsHttpRoutes) GetUserSubscriptions(ctx *gin.Context) {
-	type uriParams struct {
-		UserID string `uri:"userId" binding:"required"`
-	}
+type uriUserIDParam struct {
+	UserID string `uri:"userId" binding:"required"`
+}
 
-	var params uriParams
+func (r *alertsHttpRoutes) GetUserSubscriptions(ctx *gin.Context) {
+
+	var params uriUserIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -65,11 +66,7 @@ func (r *alertsHttpRoutes) Subscribe(ctx *gin.Context) {
 		return
 	}
 
-	type uriParams struct {
-		UserID string `uri:"userId" binding:"required"`
-	}
-
-	var params uriParams
+	var params uriUserIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return

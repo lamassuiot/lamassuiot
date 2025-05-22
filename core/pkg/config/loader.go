@@ -79,7 +79,7 @@ func LoadConfig[E any](defaults *E) (*E, error) {
 	if configFileEnv != "" {
 		loadStandardPaths = false
 		log.Infof("loading config file from %s", configFileEnv)
-		conf, err = readConfig[E](configFileEnv, defaults)
+		conf, err = readConfig(configFileEnv, defaults)
 
 		if err != nil {
 			log.Warnf("failed to load config file specified in ENV '%s' variable. will try to load from standard paths: %s", configFileEnvVar, err)
@@ -90,7 +90,7 @@ func LoadConfig[E any](defaults *E) (*E, error) {
 	}
 
 	if loadStandardPaths {
-		conf, err = readConfig[E]("/etc/lamassuiot/config.yml", defaults)
+		conf, err = readConfig("/etc/lamassuiot/config.yml", defaults)
 	}
 	if err != nil {
 		return nil, err

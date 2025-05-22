@@ -29,6 +29,10 @@ func NewVAHttpRoutes(logger *logrus.Entry, ocsp services.OCSPService, crl servic
 	}
 }
 
+type uriSubjectKeyIDParam struct {
+	CASubjectKeyID string `uri:"ca-ski" binding:"required"`
+}
+
 func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 	if ctx.Request.Header.Get("Content-Type") != "application/ocsp-request" {
 		r.logger.Warnf("request did not include 'application/ocsp-request' as the content-type")
@@ -112,11 +116,8 @@ func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 }
 
 func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
-	type uriParams struct {
-		CASubjectKeyID string `uri:"ca-ski" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriSubjectKeyIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -136,11 +137,8 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 }
 
 func (r *vaHttpRoutes) GetRoleByID(ctx *gin.Context) {
-	type uriParams struct {
-		CASubjectKeyID string `uri:"ca-ski" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriSubjectKeyIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -186,11 +184,8 @@ func (r *vaHttpRoutes) GetRoles(ctx *gin.Context) {
 }
 
 func (r *vaHttpRoutes) UpdateRole(ctx *gin.Context) {
-	type uriParams struct {
-		CASubjectKeyID string `uri:"ca-ski" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriSubjectKeyIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return

@@ -35,6 +35,7 @@ const (
 
 	EventCreateDMSKey          EventType = "dms.create"
 	EventUpdateDMSKey          EventType = "dms.update"
+	EventDeleteDMSKey          EventType = "dms.delete"
 	EventEnrollKey             EventType = "dms.enroll"
 	EventReEnrollKey           EventType = "dms.reenroll"
 	EventBindDeviceIdentityKey EventType = "dms.bind-device-id"
