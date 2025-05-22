@@ -97,11 +97,6 @@ func (p *SoftwareCryptoEngine) EncodePKIXPublicKeyDigest(key interface{}) (strin
 		return "", err
 	}
 
-	if err != nil {
-		p.logger.Errorf("could not marshal public key: %s", err)
-		return "", err
-	}
-
 	hash := sha256.New()
 	hash.Write(pubkeyBytes)
 	digest := hash.Sum(nil)
