@@ -5,7 +5,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	cresources "github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
@@ -17,6 +16,10 @@ func NewDeviceManagerHttpRoutes(svc services.DeviceManagerService) *devManagerHt
 	return &devManagerHttpRoutes{
 		svc: svc,
 	}
+}
+
+type uriDeviceIDParam struct {
+	ID string `uri:"id" binding:"required"`
 }
 
 func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
@@ -31,11 +34,11 @@ func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, cresources.DeviceFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.DeviceFiltrableFields)
 
 	devices := []models.Device{}
 	nextBookmark, err := r.svc.GetDevices(ctx, services.GetDevicesInput{
-		ListInput: cresources.ListInput[models.Device]{
+		ListInput: resources.ListInput[models.Device]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(dev models.Device) {
@@ -58,7 +61,7 @@ func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, cresources.DeviceFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.DeviceFiltrableFields)
 	type uriParams struct {
 		DMSID string `uri:"id" binding:"required"`
 	}
@@ -72,7 +75,7 @@ func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
 	devices := []models.Device{}
 	nextBookmark, err := r.svc.GetDeviceByDMS(ctx, services.GetDevicesByDMSInput{
 		DMSID: params.DMSID,
-		ListInput: cresources.ListInput[models.Device]{
+		ListInput: resources.ListInput[models.Device]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(dev models.Device) {
@@ -95,11 +98,8 @@ func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetDeviceByID(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriDeviceIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -148,11 +148,8 @@ func (r *devManagerHttpRoutes) CreateDevice(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) UpdateDeviceIdentitySlot(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriDeviceIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -178,11 +175,8 @@ func (r *devManagerHttpRoutes) UpdateDeviceIdentitySlot(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) UpdateDeviceMetadata(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriDeviceIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -208,11 +202,8 @@ func (r *devManagerHttpRoutes) UpdateDeviceMetadata(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) DecommissionDevice(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriDeviceIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return

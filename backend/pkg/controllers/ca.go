@@ -23,6 +23,10 @@ func NewCAHttpRoutes(svc services.CAService) *caHttpRoutes {
 	}
 }
 
+type uriCAIDParam struct {
+	ID string `uri:"id" binding:"required"`
+}
+
 func (r *caHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
 	engine, err := r.svc.GetCryptoEngineProvider(ctx)
 	if err != nil {
@@ -99,11 +103,8 @@ func (r *caHttpRoutes) GetStats(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetStatsByCAID(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriCAIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -126,11 +127,8 @@ func (r *caHttpRoutes) GetStatsByCAID(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCARequestByID(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriCAIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -157,11 +155,8 @@ func (r *caHttpRoutes) GetCARequestByID(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) DeleteCARequestByID(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriCAIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -308,11 +303,7 @@ func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 		return
 	}
 
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
+	var params uriCAIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -344,11 +335,7 @@ func (r *caHttpRoutes) UpdateCAIssuanceExpiration(ctx *gin.Context) {
 		return
 	}
 
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
+	var params uriCAIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -485,11 +472,7 @@ func (r *caHttpRoutes) GetAllRequests(ctx *gin.Context) {
 func (r *caHttpRoutes) GetCARequests(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, resources.CARequestFiltrableFields)
 
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
+	var params uriCAIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -539,11 +522,8 @@ func (r *caHttpRoutes) GetCARequests(ctx *gin.Context) {
 // @Failure 500
 // @Router /cas/{id} [get]
 func (r *caHttpRoutes) GetCAByID(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriCAIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -614,11 +594,8 @@ func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) UpdateCAStatus(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriCAIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -790,11 +767,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
 
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
+	var params uriCAIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -845,11 +818,8 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 // @Failure 500
 // @Router /cas/{id}/certificates/sign [post]
 func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriCAIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -885,11 +855,8 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) SignatureSign(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriCAIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -930,11 +897,8 @@ func (r *caHttpRoutes) SignatureSign(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) SignatureVerify(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriCAIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
