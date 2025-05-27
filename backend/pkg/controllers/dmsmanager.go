@@ -13,7 +13,7 @@ type dmsManagerHttpRoutes struct {
 }
 
 type uriDMSIDParam struct {
-	id string `uri:"id" binding:"required"`
+	ID string `uri:"id" binding:"required"`
 }
 
 func NewDMSManagerHttpRoutes(svc services.DMSManagerService) *dmsManagerHttpRoutes {
@@ -69,7 +69,7 @@ func (r *dmsManagerHttpRoutes) GetDMSByID(ctx *gin.Context) {
 	}
 
 	dms, err := r.svc.GetDMSByID(ctx, services.GetDMSByIDInput{
-		ID: params.id,
+		ID: params.ID,
 	})
 	if err != nil {
 		ctx.JSON(500, err)
@@ -137,7 +137,7 @@ func (r *dmsManagerHttpRoutes) DeleteDMS(ctx *gin.Context) {
 	}
 
 	err := r.svc.DeleteDMS(ctx, services.DeleteDMSInput{
-		ID: params.id,
+		ID: params.ID,
 	})
 
 	if err != nil {
