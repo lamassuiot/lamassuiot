@@ -13,8 +13,8 @@ import (
 )
 
 func DumpRequest(req *http.Request, showHeaders bool, showBody bool) string {
-	headerHiddenFields := make([]string, 0)
-	bodyHiddenFields := make([]string, 0)
+	headerHiddenFields := []string{"Authorization", "Cookie"}
+	bodyHiddenFields := []string{"password", "token"}
 
 	var strB strings.Builder
 
