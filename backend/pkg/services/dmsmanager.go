@@ -171,7 +171,7 @@ func (svc DMSManagerServiceBackend) DeleteDMS(ctx context.Context, input service
 		return err
 	}
 
-	return err
+	return nil
 }
 
 func (svc DMSManagerServiceBackend) GetDMSByID(ctx context.Context, input services.GetDMSByIDInput) (*models.DMS, error) {
