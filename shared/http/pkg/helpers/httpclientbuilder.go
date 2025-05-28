@@ -64,7 +64,7 @@ func (lrt loggingRoundTripper) RoundTrip(req *http.Request) (res *http.Response,
 		lrt.logger.Errorf("%s: %s", req.URL.String(), err)
 	} else {
 		log := lrt.logger.WithField("response", fmt.Sprintf("%s %d: %s", req.Method, res.StatusCode, time.Since(start)))
-		log.Debugf(req.URL.String())
+		log.Debug(req.URL.String())
 		log.Tracef("%s\n%s", dReq, gindump.DumpResponse(res, true, true))
 	}
 
