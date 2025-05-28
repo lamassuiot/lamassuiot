@@ -43,7 +43,7 @@ func format(v interface{}, depth int) string {
 	case bool:
 		return fmt.Sprint(strconv.FormatBool(val))
 	case nil:
-		return fmt.Sprint("null")
+		return "null"
 	case map[string]interface{}:
 		return formatMap(val, depth)
 	case []interface{}:
@@ -63,7 +63,7 @@ func formatString(s string) string {
 	encoder := json.NewEncoder(buf)
 	encoder.SetEscapeHTML(false)
 	encoder.Encode(s)
-	s = string(buf.Bytes())
+	s = buf.String()
 	s = strings.TrimSuffix(s, "\n")
 
 	return fmt.Sprint(s)
@@ -132,7 +132,7 @@ func removeHiddenFields(v interface{}, hiddenFields []string) interface{} {
 	// case insensitive key deletion
 	for _, hiddenField := range hiddenFields {
 		for k := range m {
-			if strings.ToLower(k) == strings.ToLower(hiddenField) {
+			if strings.EqualFold(k, hiddenField) {
 				delete(m, k)
 			}
 		}

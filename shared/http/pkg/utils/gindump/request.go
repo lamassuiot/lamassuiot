@@ -3,7 +3,7 @@ package gindump
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"mime"
 	"net/http"
 	"net/url"
@@ -30,13 +30,13 @@ func DumpRequest(req *http.Request, showHeaders bool, showBody bool) string {
 	}
 
 	if showBody && req.Body != nil {
-		buf, err := ioutil.ReadAll(req.Body)
+		buf, err := io.ReadAll(req.Body)
 		if err != nil {
 			strB.WriteString(fmt.Sprintf("\nread bodyCache err: %s \n", err.Error()))
 			return strB.String()
 		}
-		rdr := ioutil.NopCloser(bytes.NewBuffer(buf))
-		req.Body = ioutil.NopCloser(bytes.NewBuffer(buf))
+		rdr := io.NopCloser(bytes.NewBuffer(buf))
+		req.Body = io.NopCloser(bytes.NewBuffer(buf))
 		ctGet := req.Header.Get("Content-Type")
 		ct, _, err := mime.ParseMediaType(ctGet)
 		if err != nil {
@@ -46,7 +46,7 @@ func DumpRequest(req *http.Request, showHeaders bool, showBody bool) string {
 
 		switch ct {
 		case gin.MIMEJSON:
-			bts, err := ioutil.ReadAll(rdr)
+			bts, err := io.ReadAll(rdr)
 			if err != nil {
 				strB.WriteString(fmt.Sprintf("\nread rdr err: %s \n", err.Error()))
 				return strB.String()
@@ -61,12 +61,17 @@ func DumpRequest(req *http.Request, showHeaders bool, showBody bool) string {
 			strB.WriteString("\nRequest-Body:\n")
 			strB.WriteString(string(s))
 		case gin.MIMEPOSTForm:
-			bts, err := ioutil.ReadAll(rdr)
+			bts, err := io.ReadAll(rdr)
 			if err != nil {
 				strB.WriteString(fmt.Sprintf("\nread rdr err: %s \n", err.Error()))
 				return strB.String()
 			}
+
 			val, err := url.ParseQuery(string(bts))
+			if err != nil {
+				strB.WriteString(fmt.Sprintf("\nparse req body err: %s \n", err.Error()))
+				return strB.String()
+			}
 
 			s, err := formatToBeautifulJson(val, bodyHiddenFields)
 			if err != nil {
@@ -77,7 +82,7 @@ func DumpRequest(req *http.Request, showHeaders bool, showBody bool) string {
 			strB.WriteString(string(s))
 		case gin.MIMEMultipartPOSTForm:
 		default:
-			bts, err := ioutil.ReadAll(rdr)
+			bts, err := io.ReadAll(rdr)
 			if err != nil {
 				strB.WriteString(fmt.Sprintf("\nread rdr err: %s \n", err.Error()))
 				return strB.String()
