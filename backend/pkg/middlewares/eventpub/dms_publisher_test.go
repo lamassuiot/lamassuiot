@@ -51,6 +51,7 @@ func dmsWithoutErrors[E any, O any](t *testing.T, method string, input E, event 
 
 	dmsEventChecker(event, expectations, operation, assertions)
 }
+
 func dmsWithErrors[E any, O any](t *testing.T, method string, input E, event models.EventType, expectedOutput O, extra ...func(*svcmock.MockDMSManagerService)) {
 	expectations := []func(*svcmock.MockDMSManagerService){
 		func(mockCAService *svcmock.MockDMSManagerService) {
@@ -63,6 +64,50 @@ func dmsWithErrors[E any, O any](t *testing.T, method string, input E, event mod
 		m := reflect.ValueOf(deviceMiddleware).MethodByName(method)
 		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
 		assert.NotNil(t, r[1].Interface())
+	}
+
+	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockDMSManagerService) {
+		mockCAService.AssertExpectations(t)
+		mockEventMWPub.AssertNotCalled(t, "PublishCloudEvent")
+	}
+
+	dmsEventChecker(event, expectations, operation, assertions)
+}
+
+func dmsWithoutErrorsSingleResult[E any](t *testing.T, method string, input E, event models.EventType, extra ...func(*svcmock.MockDMSManagerService)) {
+	expectations := []func(*svcmock.MockDMSManagerService){
+		func(mockCAService *svcmock.MockDMSManagerService) {
+			mockCAService.On(method, context.Background(), mock.Anything).Return(nil)
+		},
+	}
+	expectations = append(expectations, extra...)
+
+	operation := func(caMiddleware services.DMSManagerService) {
+		m := reflect.ValueOf(caMiddleware).MethodByName(method)
+		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
+		assert.Nil(t, r[0].Interface())
+	}
+
+	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockDMSManagerService) {
+		mockCAService.AssertExpectations(t)
+		mockEventMWPub.AssertExpectations(t)
+	}
+
+	dmsEventChecker(event, expectations, operation, assertions)
+}
+
+func dmsWithErrorsSingleResult[E any](t *testing.T, method string, input E, event models.EventType, extra ...func(*svcmock.MockDMSManagerService)) {
+	expectations := []func(*svcmock.MockDMSManagerService){
+		func(mockCAService *svcmock.MockDMSManagerService) {
+			mockCAService.On(method, context.Background(), mock.Anything).Return(errors.New("some error"))
+		},
+	}
+	expectations = append(expectations, extra...)
+
+	operation := func(deviceMiddleware services.DMSManagerService) {
+		m := reflect.ValueOf(deviceMiddleware).MethodByName(method)
+		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
+		assert.NotNil(t, r[0].Interface())
 	}
 
 	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockDMSManagerService) {
@@ -151,6 +196,18 @@ func TestDMSEventPublisher(t *testing.T) {
 					func(mockCAService *svcmock.MockDMSManagerService) {
 						mockCAService.On("GetDMSByID", context.Background(), mock.Anything).Return(&models.DMS{}, nil)
 					})
+			},
+		},
+		{
+			name: "DeleteDMS with errors - Not fire event",
+			test: func(t *testing.T) {
+				dmsWithErrorsSingleResult(t, "DeleteDMS", services.DeleteDMSInput{}, models.EventDeleteDMSKey)
+			},
+		},
+		{
+			name: "DeleteDMS without errors - fire event",
+			test: func(t *testing.T) {
+				dmsWithoutErrorsSingleResult(t, "DeleteDMS", services.DeleteDMSInput{}, models.EventDeleteDMSKey)
 			},
 		},
 		{

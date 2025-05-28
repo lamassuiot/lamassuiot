@@ -26,6 +26,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
@@ -53,6 +54,8 @@ func StartDMSManagerServiceTestServer(t *testing.T, withEventBus bool) (*DMSMana
 	return testServer.DMSManager, testServer, nil
 }
 
+const dmsID = "1234-5678"
+
 func TestCreateDMS(t *testing.T) {
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
@@ -60,7 +63,7 @@ func TestCreateDMS(t *testing.T) {
 	}
 
 	dmsSample := services.CreateDMSInput{
-		ID:   "1234-5678",
+		ID:   dmsID,
 		Name: "MyIotFleet",
 	}
 	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
@@ -88,7 +91,7 @@ func TestUpdateDMS(t *testing.T) {
 	}
 
 	dmsSample := services.CreateDMSInput{
-		ID:   "1234-5678",
+		ID:   dmsID,
 		Name: "MyIotFleet",
 	}
 	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
@@ -112,41 +115,100 @@ func TestUpdateDMS(t *testing.T) {
 	assert.Equal(t, dms.Name, dmsFromDB.Name)
 }
 
-func TestGetMissingDMSShouldFail(t *testing.T) {
+func TestDeleteDMS(t *testing.T) {
+
+	testcases := []struct {
+		name        string
+		setup       func(dmsMgr *DMSManagerTestServer)
+		resultCheck func(dmsMgr *DMSManagerTestServer, err error)
+	}{
+		{
+			name: "OK",
+			setup: func(dmsMgr *DMSManagerTestServer) {
+				dmsSample := services.CreateDMSInput{
+					ID:   dmsID,
+					Name: "MyIotFleet",
+				}
+				dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+				assert.Equal(t, dms.Name, dmsSample.Name)
+			},
+			resultCheck: func(dmsMgr *DMSManagerTestServer, err error) {
+				if err != nil {
+					t.Fatalf("could not delete DMS: %s", err)
+				}
+
+				_, err = dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: dmsID})
+				if err == nil {
+					t.Fatalf("Get DMS by ID should fail")
+				}
+
+				assert.ErrorIs(t, err, errs.ErrDMSNotFound)
+			},
+		},
+		{
+			name:  "Error - DMS not found",
+			setup: func(dmsMgr *DMSManagerTestServer) {},
+			resultCheck: func(dmsMgr *DMSManagerTestServer, err error) {
+				if err == nil {
+					t.Fatalf("Delete DMS should fail")
+				}
+
+				assert.ErrorIs(t, err, errs.ErrDMSNotFound)
+			},
+		},
+	}
+	for _, tc := range testcases {
+
+		t.Run(tc.name, func(t *testing.T) {
+
+			dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+			if err != nil {
+				t.Fatalf("could not create DMS Manager test server: %s", err)
+			}
+
+			tc.setup(dmsMgr)
+
+			err = dmsMgr.Service.DeleteDMS(context.Background(), services.DeleteDMSInput{ID: dmsID})
+
+			tc.resultCheck(dmsMgr, err)
+		})
+	}
+}
+
+func TestUpdateMissingDMSShouldFail(t *testing.T) {
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
 
 	dmsSample := models.DMS{
-		ID:   "1234-5678",
+		ID:   dmsID,
 		Name: "MyIotFleet",
 	}
 
 	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{DMS: dmsSample})
 	if err == nil {
-		t.Fatalf("Get DMS by ID should fail")
+		t.Fatalf("Update DMS should fail")
 	}
 
-	assert.Contains(t, err.Error(), "DMS not found")
+	assert.ErrorIs(t, err, errs.ErrDMSNotFound)
 }
 
-func TestUpdatetMissingDMSShouldFail(t *testing.T) {
+func TestGetMissingDMSShouldFail(t *testing.T) {
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
 
-	dmsSample := services.CreateDMSInput{
-		ID: "1234-5678",
-	}
-
-	_, err = dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: dmsSample.ID})
+	_, err = dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: dmsID})
 	if err == nil {
 		t.Fatalf("Get DMS by ID should fail")
 	}
 
-	assert.Contains(t, err.Error(), "DMS not found")
+	assert.ErrorIs(t, err, errs.ErrDMSNotFound)
 }
 
 func TestESTEnroll(t *testing.T) {

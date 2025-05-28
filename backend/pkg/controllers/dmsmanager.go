@@ -2,14 +2,18 @@ package controllers
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
-	cresources "github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
 type dmsManagerHttpRoutes struct {
 	svc services.DMSManagerService
+}
+
+type uriDMSIDParam struct {
+	ID string `uri:"id" binding:"required"`
 }
 
 func NewDMSManagerHttpRoutes(svc services.DMSManagerService) *dmsManagerHttpRoutes {
@@ -30,11 +34,11 @@ func (r *dmsManagerHttpRoutes) GetStats(ctx *gin.Context) {
 }
 
 func (r *dmsManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, cresources.DMSFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.DMSFiltrableFields)
 
 	dmss := []models.DMS{}
 	nextBookmark, err := r.svc.GetAll(ctx, services.GetAllInput{
-		ListInput: cresources.ListInput[models.DMS]{
+		ListInput: resources.ListInput[models.DMS]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
 			ApplyFunc: func(dms models.DMS) {
@@ -57,11 +61,8 @@ func (r *dmsManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
 }
 
 func (r *dmsManagerHttpRoutes) GetDMSByID(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriDMSIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -103,11 +104,8 @@ func (r *dmsManagerHttpRoutes) CreateDMS(ctx *gin.Context) {
 }
 
 func (r *dmsManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
 
-	var params uriParams
+	var params uriDMSIDParam
 	if err := ctx.ShouldBindUri(&params); err != nil {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
@@ -128,6 +126,34 @@ func (r *dmsManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, ca)
+}
+
+func (r *dmsManagerHttpRoutes) DeleteDMS(ctx *gin.Context) {
+
+	var params uriDMSIDParam
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	err := r.svc.DeleteDMS(ctx, services.DeleteDMSInput{
+		ID: params.ID,
+	})
+
+	if err != nil {
+		switch err {
+		case errs.ErrDMSNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+
+	ctx.Status(204)
 }
 
 func (r *dmsManagerHttpRoutes) BindIdentityToDevice(ctx *gin.Context) {
