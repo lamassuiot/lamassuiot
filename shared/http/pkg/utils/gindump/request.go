@@ -22,7 +22,7 @@ func DumpRequest(req *http.Request, showHeaders bool, showBody bool) string {
 	s, err := formatToBeautifulJson(req.Header, headerHiddenFields)
 	if showHeaders {
 		if err != nil {
-			strB.WriteString(fmt.Sprintf("\nparse req header err \n" + err.Error()))
+			strB.WriteString(fmt.Sprintf("\nparse req header err: %s \n", err.Error()))
 		} else {
 			strB.WriteString("Request-Header:\n")
 			strB.WriteString(string(s))
@@ -32,7 +32,7 @@ func DumpRequest(req *http.Request, showHeaders bool, showBody bool) string {
 	if showBody && req.Body != nil {
 		buf, err := ioutil.ReadAll(req.Body)
 		if err != nil {
-			strB.WriteString(fmt.Sprintf("\nread bodyCache err \n %s", err.Error()))
+			strB.WriteString(fmt.Sprintf("\nread bodyCache err: %s \n", err.Error()))
 			return strB.String()
 		}
 		rdr := ioutil.NopCloser(bytes.NewBuffer(buf))
@@ -48,13 +48,13 @@ func DumpRequest(req *http.Request, showHeaders bool, showBody bool) string {
 		case gin.MIMEJSON:
 			bts, err := ioutil.ReadAll(rdr)
 			if err != nil {
-				strB.WriteString(fmt.Sprintf("\nread rdr err \n %s", err.Error()))
+				strB.WriteString(fmt.Sprintf("\nread rdr err: %s \n", err.Error()))
 				return strB.String()
 			}
 
 			s, err := beautifyJsonBytes(bts, bodyHiddenFields)
 			if err != nil {
-				strB.WriteString(fmt.Sprintf("\nparse req body err \n" + err.Error()))
+				strB.WriteString(fmt.Sprintf("\nparse req body err: %s \n", err.Error()))
 				return strB.String()
 			}
 
@@ -63,14 +63,14 @@ func DumpRequest(req *http.Request, showHeaders bool, showBody bool) string {
 		case gin.MIMEPOSTForm:
 			bts, err := ioutil.ReadAll(rdr)
 			if err != nil {
-				strB.WriteString(fmt.Sprintf("\nread rdr err \n %s", err.Error()))
+				strB.WriteString(fmt.Sprintf("\nread rdr err: %s \n", err.Error()))
 				return strB.String()
 			}
 			val, err := url.ParseQuery(string(bts))
 
 			s, err := formatToBeautifulJson(val, bodyHiddenFields)
 			if err != nil {
-				strB.WriteString(fmt.Sprintf("\nparse req body err \n" + err.Error()))
+				strB.WriteString(fmt.Sprintf("\nparse req body err: %s \n", err.Error()))
 				return strB.String()
 			}
 			strB.WriteString("\nRequest-Body:\n")
@@ -79,7 +79,7 @@ func DumpRequest(req *http.Request, showHeaders bool, showBody bool) string {
 		default:
 			bts, err := ioutil.ReadAll(rdr)
 			if err != nil {
-				strB.WriteString(fmt.Sprintf("\nread rdr err \n %s", err.Error()))
+				strB.WriteString(fmt.Sprintf("\nread rdr err: %s \n", err.Error()))
 				return strB.String()
 			}
 			strB.WriteString("\nRequest-Body:\n")
