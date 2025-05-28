@@ -178,7 +178,7 @@ func TestDeleteDMS(t *testing.T) {
 	}
 }
 
-func TestUpdatetMissingDMSShouldFail(t *testing.T) {
+func TestUpdateMissingDMSShouldFail(t *testing.T) {
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
