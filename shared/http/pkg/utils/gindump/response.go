@@ -21,7 +21,7 @@ func DumpResponse(res *http.Response, showHeaders bool, showBody bool) string {
 	s, err := formatToBeautifulJson(res.Header, headerHiddenFields)
 	if showHeaders {
 		if err != nil {
-			strB.WriteString(fmt.Sprintf("\nparse resp header err \n" + err.Error()))
+			strB.WriteString(fmt.Sprintf("\nparse resp header err: %s\n", err.Error()))
 		} else {
 			strB.WriteString("Response-Header:\n")
 			strB.WriteString(string(s))
@@ -34,7 +34,7 @@ func DumpResponse(res *http.Response, showHeaders bool, showBody bool) string {
 		res.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 		if err != nil {
-			strB.WriteString(fmt.Sprintf("\nparse resp header err \n" + err.Error()))
+			strB.WriteString(fmt.Sprintf("\nparse resp header err: %s\n", err.Error()))
 		}
 		//dump res body
 		if bodyAllowedForStatus(res.StatusCode) && len(bodyBytes) > 0 {
@@ -48,7 +48,7 @@ func DumpResponse(res *http.Response, showHeaders bool, showBody bool) string {
 			case gin.MIMEJSON:
 				s, err := beautifyJsonBytes(bodyBytes, bodyHiddenFields)
 				if err != nil {
-					strB.WriteString(fmt.Sprintf("\nparse bodyCache err \n" + err.Error()))
+					strB.WriteString(fmt.Sprintf("\nparse bodyCache err: %s\n", err.Error()))
 					goto End
 				}
 				strB.WriteString("\nResponse-Body:\n")

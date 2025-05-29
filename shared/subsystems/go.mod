@@ -1,6 +1,6 @@
 module github.com/lamassuiot/lamassuiot/shared/subsystems/v3
 
-go 1.22.0
+go 1.24.0
 
 require (
 	github.com/ory/dockertest/v3 v3.11.0

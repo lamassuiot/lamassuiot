@@ -13,17 +13,17 @@ import (
 
 func TestKeyStrengthMetadataFromCertificate(t *testing.T) {
 
-	key128, _ := rsa.GenerateKey(rand.Reader, 128)
+	key1024, _ := rsa.GenerateKey(rand.Reader, 1024)
 	key2048, _ := rsa.GenerateKey(rand.Reader, 2048)
 	key3072, _ := rsa.GenerateKey(rand.Reader, 3072)
 
 	rsaCert := &x509.Certificate{
 		PublicKeyAlgorithm: x509.RSA,
-		PublicKey:          &key128.PublicKey,
+		PublicKey:          &key1024.PublicKey,
 	}
 	expected1 := models.KeyStrengthMetadata{
 		Type:     models.KeyType(x509.RSA),
-		Bits:     128,
+		Bits:     1024,
 		Strength: models.KeyStrengthLow,
 	}
 	result1 := KeyStrengthMetadataFromCertificate(rsaCert)

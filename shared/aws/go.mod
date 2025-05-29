@@ -1,6 +1,6 @@
 module github.com/lamassuiot/lamassuiot/shared/aws/v3
 
-go 1.22.0
+go 1.24.0
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.32.4
