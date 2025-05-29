@@ -162,7 +162,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '^1.20.0' # The Go version to download (if necessary) and use.
+          go-version: '^1.24.3' # The Go version to download (if necessary) and use.
       - name: Build release assets # This would actually build your project, using zip for an example artifact
         run: |
           go work vendor
