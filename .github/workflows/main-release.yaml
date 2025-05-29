@@ -1,5 +1,8 @@
 name: "Release Workflow: (create repo release, docker images and go packages)"
 
+permissions:
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
@@ -224,6 +227,9 @@ jobs:
 
   build_docker_image:
     needs: [create_module_release, version_info]
+    permissions:
+      contents: read
+      packages: write
     strategy:
       matrix:
         service: [ca, devmanager, dmsmanager, va, alerts, aws-connector]
