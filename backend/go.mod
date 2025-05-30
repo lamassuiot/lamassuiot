@@ -10,7 +10,7 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/globalsign/est v1.0.6
 	github.com/go-playground/validator/v10 v10.22.1
-	github.com/golang-jwt/jwt v3.2.2+incompatible
+	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/jakehl/goid v1.1.0
 	github.com/kaptinlin/jsonschema v0.2.2
 	github.com/mocktools/go-smtp-mock/v2 v2.4.0
