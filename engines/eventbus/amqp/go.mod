@@ -3,7 +3,7 @@ module github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3
 go 1.24.0
 
 require (
-	github.com/ThreeDotsLabs/watermill v1.4.1
+	github.com/ThreeDotsLabs/watermill v1.4.6
 	github.com/ThreeDotsLabs/watermill-amqp/v2 v2.1.3
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/sirupsen/logrus v1.9.3

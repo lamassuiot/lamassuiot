@@ -3,7 +3,7 @@ module github.com/lamassuiot/lamassuiot/engines/eventbus/aws/v3
 go 1.24.0
 
 require (
-	github.com/ThreeDotsLabs/watermill v1.4.1
+	github.com/ThreeDotsLabs/watermill v1.4.6
 	github.com/ThreeDotsLabs/watermill-aws v1.0.0
 	github.com/aws/aws-sdk-go-v2 v1.36.3
 	github.com/aws/aws-sdk-go-v2/service/sns v1.31.4
