@@ -52,7 +52,11 @@ func (db *PostgresCAStore) SelectByType(ctx context.Context, CAType models.Certi
 }
 
 func (db *PostgresCAStore) SelectAll(ctx context.Context, req storage.StorageListRequest[models.CACertificate]) (string, error) {
-	return db.querier.SelectAll(ctx, req.QueryParams, []gormExtraOps{}, req.ExhaustiveRun, req.ApplyFunc)
+	opts := []gormExtraOps{
+		{joins: []string{"JOIN certificates ON ca_certificates.serial_number = certificates.serial_number"}},
+	}
+
+	return db.querier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
 }
 
 func (db *PostgresCAStore) SelectByCommonName(ctx context.Context, commonName string, req storage.StorageListRequest[models.CACertificate]) (string, error) {
