@@ -1,28 +1,35 @@
 
-<a name="3.3.0"></a>
-## [3.3.0](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.2.2...3.3.0) (2025-03-18)
+<a name="3.4.0"></a>
+## [3.4.0](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.3.0...3.4.0) (2025-06-03)
 
 ### Bug Fixes
 
-* Fix: Monolithic: Enable MonitoringJob using negated value of disableMonitor flag ([#234](https://github.com/lamassuiot/lamassuiot/issues/234))
-* Fix: Improved gorm queries to reduce it and avoid recordNotFound errors ([#227](https://github.com/lamassuiot/lamassuiot/issues/227))
-* Fix: aws eventbus - ensure sns topic exists before subscribing to sns ([#215](https://github.com/lamassuiot/lamassuiot/issues/215))
+* Fix: CA:  fix filtering CAs by CN ([#265](https://github.com/lamassuiot/lamassuiot/issues/265))
+* Fix: CA: discard aws reserved kms aliases ([#266](https://github.com/lamassuiot/lamassuiot/issues/266))
+* Fix: DMS Manager: ReEnroll - Add a check to validate the presence of a CommonName in the CSR ([#251](https://github.com/lamassuiot/lamassuiot/issues/251))
+* Fix: DMS Manager: add a null check when decommissioning a device wihtout identity ([#250](https://github.com/lamassuiot/lamassuiot/issues/250))
+* Fix: monolithic ui port now being served correctly ([#240](https://github.com/lamassuiot/lamassuiot/issues/240))
+
+### Bump Versions
+
+* Bump: backend direct deps ([#264](https://github.com/lamassuiot/lamassuiot/issues/264))
+* Bump: go-jose to 4.0.5 ([#263](https://github.com/lamassuiot/lamassuiot/issues/263))
 
 ### Chores
 
-* Chore: launch monolithic UI in a random docker port ([#238](https://github.com/lamassuiot/lamassuiot/issues/238))
-* Chore: update contributing guidelines ([#233](https://github.com/lamassuiot/lamassuiot/issues/233))
-* Chore: modularize engine registration with build tags to favour custom builds ([#222](https://github.com/lamassuiot/lamassuiot/issues/222))
-* Chore: show codecov flag for backend module ([#220](https://github.com/lamassuiot/lamassuiot/issues/220))
+* Chore: bump x/net to 0.38.0 ([#262](https://github.com/lamassuiot/lamassuiot/issues/262))
+* Chore: bump go-playground/validator to v10.26.0 ([#261](https://github.com/lamassuiot/lamassuiot/issues/261))
+* Chore: bump aws sdk 1.36.3 ([#260](https://github.com/lamassuiot/lamassuiot/issues/260))
+* Chore: bump ory/dockertest 3.12.0 ([#259](https://github.com/lamassuiot/lamassuiot/issues/259))
+* Chore: Bump golang-jwt to 4.5.2 ([#258](https://github.com/lamassuiot/lamassuiot/issues/258))
+* Chore: bumping go version 1.24 ([#255](https://github.com/lamassuiot/lamassuiot/issues/255))
+* Chore: adjust monolithic monitoring job ([#239](https://github.com/lamassuiot/lamassuiot/issues/239))
 
 ### Features
 
-* Feat: DMS Manager: add AWS ALB identity extractor ([#237](https://github.com/lamassuiot/lamassuiot/issues/237))
-* Feat: Change device and CA metadata handling by using JSONPatch expressions ([#229](https://github.com/lamassuiot/lamassuiot/issues/229))
-* Feat: Add job for scheduled build of CAs CRLs ([#216](https://github.com/lamassuiot/lamassuiot/issues/216))
-* Feat: add javascript filters support to subscription conditions ([#221](https://github.com/lamassuiot/lamassuiot/issues/221))
-* Feat: aws-connector - report CA registration error in metadata ([#218](https://github.com/lamassuiot/lamassuiot/issues/218))
-* Feat: Implement JSONPath and JSONSchema filter options for alert subscriptions  ([#217](https://github.com/lamassuiot/lamassuiot/issues/217))
-* Feat: va - add Issuing Distribution Point extension to CRL ([#214](https://github.com/lamassuiot/lamassuiot/issues/214))
-* Feat: ca - Add multiple URLs to CRL and OCSP fields in certificates as well as accesing over http instead of https ([#213](https://github.com/lamassuiot/lamassuiot/issues/213))
+* Feat: DMS Manager: add DMS delete operation ([#252](https://github.com/lamassuiot/lamassuiot/issues/252))
+* Feat: CA: implement AWS KMS import keys ([#245](https://github.com/lamassuiot/lamassuiot/issues/245))
+* Feat: CA: refactor crypto engine keys migration ([#246](https://github.com/lamassuiot/lamassuiot/issues/246))
+* Feat: VA: assemble service conditionally based on config ([#244](https://github.com/lamassuiot/lamassuiot/issues/244))
+* Feat: enhance event filters to use full event data for processing ([#242](https://github.com/lamassuiot/lamassuiot/issues/242))
 
