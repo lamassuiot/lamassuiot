@@ -5,7 +5,6 @@ import (
 	"unicode"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	cebuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/cryptoengines/builder"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
@@ -47,7 +46,7 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 	lCryptoEng := helpers.SetupLogger(conf.CryptoEngineConfig.LogLevel, "CA", "CryptoEngine")
 	lMonitor := helpers.SetupLogger(conf.Logs.Level, "CA", "Crypto Monitoring")
 
-	engines, err := createCryptoEngines(lCryptoEng, conf)
+	engines, err := createCryptoEngines(lCryptoEng, &conf, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create crypto engines: %s", err)
 	}
@@ -138,25 +137,6 @@ func createCAStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEng
 	}
 
 	return caStorage, certStorage, caCertRequestStorage, nil
-}
-
-func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*lservices.Engine, error) {
-	engines := map[string]*lservices.Engine{}
-
-	for _, cfg := range conf.CryptoEngineConfig.CryptoEngines {
-		engine, err := cebuilder.BuildCryptoEngine(logger, cfg)
-
-		if err != nil {
-			log.Warnf("skipping engine with id %s of type %s. Can not create engine: %s", cfg.ID, cfg.Type, err)
-		} else {
-			engines[cfg.ID] = &lservices.Engine{
-				Default: cfg.ID == conf.CryptoEngineConfig.DefaultEngine,
-				Service: engine,
-			}
-		}
-	}
-
-	return engines, nil
 }
 
 func migrateKeysToV2Format(logger *log.Entry, engine *lservices.Engine, engineID string) error {
