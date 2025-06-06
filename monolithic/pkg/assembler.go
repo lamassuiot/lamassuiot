@@ -213,6 +213,47 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			return -1, -1, fmt.Errorf("could not assemble Alerts Service: %s", err)
 		}
 
+		_, kmsPort, err := lamassu.AssembleKMSServiceWithHTTPServer(config.KMSConfig{
+			Logs: cconfig.Logging{
+				Level: conf.Logs.Level,
+			},
+			Server: cconfig.HttpServer{
+				LogLevel:           conf.Logs.Level,
+				HealthCheckLogging: true,
+				ListenAddress:      "0.0.0.0",
+				Port:               0,
+				Protocol:           cconfig.HTTP,
+			},
+			PublisherEventBus: conf.PublisherEventBus,
+			Storage:           conf.Storage,
+			CryptoEngineConfig: config.CryptoEngines{
+				LogLevel:      cconfig.Info,
+				DefaultEngine: conf.CryptoEngines[0].ID,
+				CryptoEngines: conf.CryptoEngines,
+			},
+		}, apiInfo)
+		if err != nil {
+			return -1, -1, fmt.Errorf("could not assemble KMS Service: %s", err)
+		}
+
+		kmsConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: kmsPort}, Protocol: cconfig.HTTP, BasePath: ""}
+		_ = func(serviceID, src string) services.KMSService {
+			lKMSClient := chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - KMS Client")
+			kmsHttpCli, err := sdk.BuildHTTPClient(cconfig.HTTPClient{
+				LogLevel:       cconfig.Info,
+				AuthMode:       cconfig.NoAuth,
+				HTTPConnection: kmsConnection,
+			}, lKMSClient)
+			if err != nil {
+				log.Fatalf("could not build HTTP KMS Client: %s", err)
+			}
+
+			return sdk.NewHttpKMSClient(
+				sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, src),
+				fmt.Sprintf("%s://%s%s:%d", caConnection.Protocol, caConnection.Hostname, caConnection.BasePath, caConnection.Port),
+			)
+		}
+
 		if conf.AWSIoTManager.Enabled {
 			err = AssembleAWSIoT(conf, caSDKBuilder, dmsMngrSDKBuilder, deviceMngrSDKBuilder)
 			if err != nil {
@@ -287,6 +328,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		addRouteMap("DMS Manager", "/api/dmsmanager/", dmsPort)
 		addRouteMap("VA", "/api/va/", vaPort)
 		addRouteMap("Alerts", "/api/alerts/", alertsPort)
+		addRouteMap("KMS", "/api/kms/", kmsPort)
 
 		buildReverseProxyGlobalHandler := func(engine *gin.Engine) {
 			proxy := func(c *gin.Context) {
