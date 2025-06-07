@@ -372,25 +372,37 @@ func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.Si
 	}
 
 	var hash crypto.Hash
-	var isRSA bool
+	var isRSA, isPSS bool
 
 	switch input.Algorithm {
-	case "RSASSA_PKCS1_v1_5_SHA256":
+	case "RSASSA_PKCS1_v1_5_SHA_256":
 		isRSA = true
 		hash = crypto.SHA256
-	case "RSASSA_PKCS1_v1_5_SHA384":
+	case "RSASSA_PKCS1_v1_5_SHA_384":
 		isRSA = true
 		hash = crypto.SHA384
-	case "RSASSA_PKCS1_v1_5_SHA512":
+	case "RSASSA_PKCS1_v1_5_SHA_512":
 		isRSA = true
 		hash = crypto.SHA512
-	case "ECDSA_SHA256":
+	case "RSASSA_PSS_SHA_256":
+		isRSA = true
+		isPSS = true
+		hash = crypto.SHA256
+	case "RSASSA_PSS_SHA_384":
+		isRSA = true
+		isPSS = true
+		hash = crypto.SHA384
+	case "RSASSA_PSS_SHA_512":
+		isRSA = true
+		isPSS = true
+		hash = crypto.SHA512
+	case "ECDSA_SHA_256":
 		isRSA = false
 		hash = crypto.SHA256
-	case "ECDSA_SHA384":
+	case "ECDSA_SHA_384":
 		isRSA = false
 		hash = crypto.SHA384
-	case "ECDSA_SHA512":
+	case "ECDSA_SHA_512":
 		isRSA = false
 		hash = crypto.SHA512
 	default:
@@ -418,16 +430,19 @@ func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.Si
 		if !ok {
 			return nil, errors.New("key is not RSA private key")
 		}
-		// Sign the message using RSA PKCS#1 v1.5
-		// Note: RSA signatures are fixed length, depending on the key size.
-		// For example, a 2048-bit RSA key will produce a 256-byte signature.
-		// The signature is the result of signing the digest with the private key.
-		// The signature is returned as a byte slice.
-		// The signature is the result of signing the digest with the private key.
-		signature, err = rsa.SignPKCS1v15(nil, rsaPriv, hash, digest)
-		if err != nil {
-			lFunc.Errorf("SignMessage - RSA Sign error: %s", err)
-			return nil, err
+		if isPSS {
+			opts := &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: hash}
+			signature, err = rsa.SignPSS(rand.Reader, rsaPriv, hash, digest, opts)
+			if err != nil {
+				lFunc.Errorf("SignMessage - RSA-PSS Sign error: %s", err)
+				return nil, err
+			}
+		} else {
+			signature, err = rsa.SignPKCS1v15(nil, rsaPriv, hash, digest)
+			if err != nil {
+				lFunc.Errorf("SignMessage - RSA Sign error: %s", err)
+				return nil, err
+			}
 		}
 	} else {
 		ecdsaPriv, ok := signer.(*ecdsa.PrivateKey)
@@ -440,11 +455,6 @@ func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.Si
 		if digest == nil {
 			return nil, errors.New("digest is nil")
 		}
-		// Sign the message using ECDSA
-		// Note: ECDSA signatures are variable length, depending on the curve used.
-		// For example, a P256 curve will produce a 64-byte signature.
-		// The signature is the result of signing the digest with the private key.
-		// The signature is returned as a byte slice, which is the concatenation of the r and s values.
 		r, s, err := ecdsa.Sign(rand.Reader, ecdsaPriv, digest)
 		if err != nil {
 			lFunc.Errorf("SignMessage - ECDSA Sign error: %s", err)
@@ -473,25 +483,37 @@ func (svc *KMSServiceBackend) VerifySignature(ctx context.Context, input service
 	}
 
 	var hash crypto.Hash
-	var isRSA bool
+	var isRSA, isPSS bool
 
 	switch input.Algorithm {
-	case "RSASSA_PKCS1_v1_5_SHA256":
+	case "RSASSA_PKCS1_v1_5_SHA_256":
 		isRSA = true
 		hash = crypto.SHA256
-	case "RSASSA_PKCS1_v1_5_SHA384":
+	case "RSASSA_PKCS1_v1_5_SHA_384":
 		isRSA = true
 		hash = crypto.SHA384
-	case "RSASSA_PKCS1_v1_5_SHA512":
+	case "RSASSA_PKCS1_v1_5_SHA_512":
 		isRSA = true
 		hash = crypto.SHA512
-	case "ECDSA_SHA256":
+	case "RSASSA_PSS_SHA_256":
+		isRSA = true
+		isPSS = true
+		hash = crypto.SHA256
+	case "RSASSA_PSS_SHA_384":
+		isRSA = true
+		isPSS = true
+		hash = crypto.SHA384
+	case "RSASSA_PSS_SHA_512":
+		isRSA = true
+		isPSS = true
+		hash = crypto.SHA512
+	case "ECDSA_SHA_256":
 		isRSA = false
 		hash = crypto.SHA256
-	case "ECDSA_SHA384":
+	case "ECDSA_SHA_384":
 		isRSA = false
 		hash = crypto.SHA384
-	case "ECDSA_SHA512":
+	case "ECDSA_SHA_512":
 		isRSA = false
 		hash = crypto.SHA512
 	default:
@@ -520,12 +542,22 @@ func (svc *KMSServiceBackend) VerifySignature(ctx context.Context, input service
 		if !ok {
 			return false, errors.New("key is not RSA public key")
 		}
-		err = rsa.VerifyPKCS1v15(pub, hash, digest, input.Signature)
-		if err != nil {
-			lFunc.Errorf("VerifySignature - RSA verify error: %s", err)
-			return false, nil
+		if isPSS {
+			opts := &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: hash}
+			err = rsa.VerifyPSS(pub, hash, digest, input.Signature, opts)
+			if err != nil {
+				lFunc.Errorf("VerifySignature - RSA-PSS verify error: %s", err)
+				return false, nil
+			}
+			return true, nil
+		} else {
+			err = rsa.VerifyPKCS1v15(pub, hash, digest, input.Signature)
+			if err != nil {
+				lFunc.Errorf("VerifySignature - RSA verify error: %s", err)
+				return false, nil
+			}
+			return true, nil
 		}
-		return true, nil
 	} else {
 		pub, ok := publicKey.(*ecdsa.PublicKey)
 		if !ok {
@@ -558,8 +590,6 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 
 	// Validate PEM format
 	pemBlock, _ := pem.Decode(input.PrivateKey)
-	lFunc.Printf("ImportKey - PEM Block 1: %v", pemBlock.Type)
-	lFunc.Printf("ImportKey - PEM Block 2: %v", string(input.PrivateKey))
 	if pemBlock == nil || !strings.Contains(string(input.PrivateKey), "-----END "+pemBlock.Type+"-----") {
 		lFunc.Errorf("ImportKey - invalid PEM format for private key")
 		return nil, errors.New("invalid PEM format for private key")
