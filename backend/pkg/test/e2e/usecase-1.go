@@ -216,6 +216,7 @@ func RunUseCase1(input UseCase1Input) error {
 				EnrollmentCA:                ca1.ID,
 				RegistrationMode:            models.JITP,
 				EnableReplaceableEnrollment: true,
+				VerifyCSRSignature:          true,
 			},
 			ReEnrollmentSettings: models.ReEnrollmentSettings{
 				AdditionalValidationCAs:     []string{},

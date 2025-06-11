@@ -466,6 +466,7 @@ func TestGetDevicesByDMS(t *testing.T) {
 					},
 					RegistrationMode:            models.JITP,
 					EnableReplaceableEnrollment: true,
+					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
 					AdditionalValidationCAs:     []string{},
@@ -789,6 +790,7 @@ func TestDecommissionDevice(t *testing.T) {
 					},
 					RegistrationMode:            models.JITP,
 					EnableReplaceableEnrollment: true,
+					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
 					AdditionalValidationCAs:     []string{},

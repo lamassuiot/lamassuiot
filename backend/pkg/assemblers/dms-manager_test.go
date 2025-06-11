@@ -255,6 +255,7 @@ func TestESTEnroll(t *testing.T) {
 					},
 					RegistrationMode:            models.JITP,
 					EnableReplaceableEnrollment: true,
+					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
 					AdditionalValidationCAs:     []string{},
@@ -1705,6 +1706,7 @@ func TestESTGetCACerts(t *testing.T) {
 					},
 					RegistrationMode:            models.JITP,
 					EnableReplaceableEnrollment: true,
+					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
 					AdditionalValidationCAs:     []string{},
@@ -1929,6 +1931,7 @@ func TestESTServerKeyGen(t *testing.T) {
 					},
 					RegistrationMode:            models.JITP,
 					EnableReplaceableEnrollment: true,
+					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
 					AdditionalValidationCAs:     []string{},
@@ -2343,6 +2346,7 @@ func TestESTReEnroll(t *testing.T) {
 					},
 					RegistrationMode:            models.JITP,
 					EnableReplaceableEnrollment: true,
+					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
 					RevokeOnReEnrollment:        true,
@@ -2912,6 +2916,7 @@ func TestGetAllDMS(t *testing.T) {
 					},
 					RegistrationMode:            models.JITP,
 					EnableReplaceableEnrollment: true,
+					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
 					AdditionalValidationCAs:     []string{},

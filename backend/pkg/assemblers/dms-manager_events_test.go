@@ -64,6 +64,7 @@ func TestBindIDEvent(t *testing.T) {
 					},
 					RegistrationMode:            models.JITP,
 					EnableReplaceableEnrollment: true,
+					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
 					AdditionalValidationCAs:     []string{},
