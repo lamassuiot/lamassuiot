@@ -453,7 +453,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	if enrollSettings.VerifyCSRSignature {
 		err = checkCSRSignature(lFunc, csr, "enrollment")
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid CSR signature")
 		}
 	} else {
 		lFunc.Warn("DMS is configured with no CSR signature verification, allowing enrollment")
@@ -814,7 +814,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	if enrollSettings.VerifyCSRSignature {
 		err = checkCSRSignature(lFunc, csr, "reenrollment")
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid CSR signature")
 		}
 	} else {
 		lFunc.Warn("DMS is configured with no CSR signature verification, allowing reenrollment")
