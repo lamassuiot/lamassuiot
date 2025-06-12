@@ -36,8 +36,9 @@ func upDms(ctx context.Context, tx *sql.Tx) error {
 		}
 
 		// set enrollment_settings.verify_csr_signature to false
-		if _, ok := config["enrollment_settings"].(map[string]any); ok {
-			config["enrollment_settings"].(map[string]any)["verify_csr_signature"] = false
+		enrollmentSettings, ok := config["enrollment_settings"].(map[string]any)
+		if ok {
+			enrollmentSettings["verify_csr_signature"] = false
 		} else {
 			return fmt.Errorf("enrollment_settings not found")
 		}

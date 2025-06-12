@@ -674,7 +674,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 
 			//check if certificate is a certificate issued by Extra Val CAs
 			for idx, caID := range reEnrollSettings.AdditionalValidationCAs {
-				lFunc.Debugf("[%d/%d] obtainig validation with ID %s", idx, aValCAsCtr, caID)
+				lFunc.Debugf("[%d/%d] obtaining validation with ID %s", idx, aValCAsCtr, caID)
 				ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: caID})
 				if err != nil {
 					lFunc.Warnf("[%d/%d] could not obtain lamassu CA with ID %s. Skipping to next validation CA: %s", idx, aValCAsCtr, caID, err)
