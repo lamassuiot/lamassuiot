@@ -13,5 +13,6 @@ func RegisterGoMigrations(dbname string) {
 		ca.Register20250226114600CaAddKids()
 	case "dmsmanager":
 		dmsmanager.Register20241230124809ServerkeygenRevokereenroll()
+		dmsmanager.Register20250612100530ESTVerifyCSRSignature()
 	}
 }

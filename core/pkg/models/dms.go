@@ -65,6 +65,7 @@ type EnrollmentSettings struct {
 	EnrollmentCA                string                      `json:"enrollment_ca"`
 	EnableReplaceableEnrollment bool                        `json:"enable_replaceable_enrollment"` //switch-like option that enables enrolling, already enrolled devices
 	RegistrationMode            RegistrationMode            `json:"registration_mode"`
+	VerifyCSRSignature          bool                        `json:"verify_csr_signature"` //switch-like option that enables CSR signature verification
 }
 
 type EnrollmentOptionsESTRFC7030 struct {

@@ -16,10 +16,10 @@ import (
 	"gorm.io/gorm"
 )
 
-var DMSDBName = "dmsmanager"
+var dmsDBName = "dmsmanager"
 
-func MigrationTest_DMS_00000000000001_create_table(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
-	ApplyMigration(t, logger, con, DMSDBName)
+func migrationTest_DMS_00000000000001_create_table(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, dmsDBName)
 
 	con.Exec(`INSERT INTO dms
 		(id, "name", metadata, creation_date, settings)
@@ -39,7 +39,7 @@ func MigrationTest_DMS_00000000000001_create_table(t *testing.T, logger *logrus.
 	assert.Equal(t, `{"server_keygen_settings":{"enabled":true,"key":{"type":"RSA","bits":4096}},"enrollment_settings":{"protocol":"EST_RFC7030","est_rfc7030_settings":{"auth_mode":"CLIENT_CERTIFICATE","client_certificate_settings":{"validation_cas":["9beebc5b-ba8d-4fc0-9e97-58299d30ae9f"],"chain_level_validation":-1,"allow_expired":false}},"device_provisioning_profile":{"icon":"CgBatteryFull","icon_color":"#37d67a-#333333","metadata":{},"tags":["iot"]},"enrollment_ca":"fd10a299-7cc0-47de-9f48-cdc9d79a711c","enable_replaceable_enrollment":false,"registration_mode":"JITP"},"reenrollment_settings":{"additional_validation_cas":[],"reenrollment_delta":"14w2d","enable_expired_renewal":false,"preventive_delta":"4w3d","critical_delta":"1w"},"ca_distribution_settings":{"include_system_ca":true,"include_enrollment_ca":false,"managed_cas":[]}}`, result["settings"])
 }
 
-func MigrationTest_DMS_20241230124809_serverkeygen_revokereenroll(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+func migrationTest_DMS_20241230124809_serverkeygen_revokereenroll(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
 	tx := con.Exec(`INSERT INTO dms
 		(id, "name", metadata, creation_date, settings)
 		VALUES('iot2', 'IoTThings2', '{}', '2024-11-25 10:46:28.914', '{"enrollment_settings":{"protocol":"EST_RFC7030","est_rfc7030_settings":{"auth_mode":"CLIENT_CERTIFICATE","client_certificate_settings":{"validation_cas":["9beebc5b-ba8d-4fc0-9e97-58299d30ae9f"],"chain_level_validation":-1,"allow_expired":false}},"device_provisioning_profile":{"icon":"CgBatteryFull","icon_color":"#37d67a-#333333","metadata":{},"tags":["iot"]},"enrollment_ca":"fd10a299-7cc0-47de-9f48-cdc9d79a711c","enable_replaceable_enrollment":false,"registration_mode":"JITP"},"reenrollment_settings":{"additional_validation_cas":[],"reenrollment_delta":"14w2d","enable_expired_renewal":false,"preventive_delta":"4w3d","critical_delta":"1w"},"ca_distribution_settings":{"include_system_ca":true,"include_enrollment_ca":false,"managed_cas":[]}}');
@@ -52,7 +52,7 @@ func MigrationTest_DMS_20241230124809_serverkeygen_revokereenroll(t *testing.T, 
 		t.Fatalf("expected 1 row, got %d", tx.RowsAffected)
 	}
 
-	ApplyMigration(t, logger, con, DMSDBName)
+	ApplyMigration(t, logger, con, dmsDBName)
 
 	var result string
 	var config map[string]interface{}
@@ -84,19 +84,70 @@ func MigrationTest_DMS_20241230124809_serverkeygen_revokereenroll(t *testing.T, 
 	assert.Equal(t, false, config["reenrollment_settings"].(map[string]interface{})["revoke_on_reenrollment"])
 }
 
+func migrationTest_DMS_20250612100530_est_verify_csr_signature(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+
+	// Fetch all settings before migration
+	results := findAllDMSSettings(t, con)
+	assert.Len(t, results, 2)
+
+	// Assert 'verify_csr_signature' does not exist before migration
+	assertVerifyCSRSignature(t, results, false, nil)
+
+	ApplyMigration(t, logger, con, dmsDBName)
+
+	// Fetch all settings after migration
+	results = findAllDMSSettings(t, con)
+	assert.Len(t, results, 2)
+
+	// Assert 'verify_csr_signature' is set to false after migration
+	assertVerifyCSRSignature(t, results, true, false)
+}
+
+func findAllDMSSettings(t *testing.T, con *gorm.DB) []string {
+	var results []string
+	tx := con.Table("dms").Select("settings").Find(&results)
+	if tx.Error != nil {
+		t.Fatalf("failed to select rows: %v", tx.Error)
+	}
+	return results
+}
+
+func assertVerifyCSRSignature(t *testing.T, results []string, shouldExist bool, expectedValue any) {
+	for _, r := range results {
+		var config map[string]any
+		if err := json.Unmarshal([]byte(r), &config); err != nil {
+			t.Fatalf("Failed to unmarshal JSON: %v", err)
+		}
+		enrollmentSettings, ok := config["enrollment_settings"].(map[string]any)
+		assert.True(t, ok)
+		val, exists := enrollmentSettings["verify_csr_signature"]
+		if shouldExist {
+			assert.True(t, exists)
+			assert.Equal(t, expectedValue, val)
+		} else {
+			assert.False(t, exists)
+		}
+	}
+}
+
 func TestDMSMigrations(t *testing.T) {
 	logger := helpers.SetupLogger(config.Info, "test", "test")
-	cleanup, con := RunDB(t, logger, DMSDBName)
+	cleanup, con := RunDB(t, logger, dmsDBName)
 
 	defer cleanup()
 
-	MigrationTest_DMS_00000000000001_create_table(t, logger, con)
+	migrationTest_DMS_00000000000001_create_table(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v00000000000001_create_table")
 	}
 
-	MigrationTest_DMS_20241230124809_serverkeygen_revokereenroll(t, logger, con)
+	migrationTest_DMS_20241230124809_serverkeygen_revokereenroll(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20241230124809_relational_dms")
+	}
+
+	migrationTest_DMS_20250612100530_est_verify_csr_signature(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250612100530_relational_dms")
 	}
 }
