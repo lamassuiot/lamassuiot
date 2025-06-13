@@ -71,16 +71,28 @@ func FilterQuery(r *http.Request, filterFieldMap map[string]resources.FilterFiel
 							switch operand {
 							case "eq", "equal":
 								filterOperand = resources.StringEqual
+							case "eq_ic", "equal_ignorecase":
+								filterOperand = resources.StringEqualIgnoreCase
 							case "ne", "notequal":
 								filterOperand = resources.StringNotEqual
+							case "ne_ic", "notequal_ignorecase":
+								filterOperand = resources.StringNotEqualIgnoreCase
 							case "ct", "contains":
 								filterOperand = resources.StringContains
+							case "ct_ic", "contains_ignorecase":
+								filterOperand = resources.StringContainsIgnoreCase
 							case "nc", "notcontains":
 								filterOperand = resources.StringNotContains
+							case "nc_ic", "notcontains_ignorecase":
+								filterOperand = resources.StringNotContainsIgnoreCase
 							}
 
 						case resources.StringArrayFilterFieldType:
-							filterOperand = resources.StringArrayContains
+							if strings.Contains(operand, "ignorecase") {
+								filterOperand = resources.StringArrayContainsIgnoreCase
+							} else {
+								filterOperand = resources.StringArrayContains
+							}
 
 						case resources.DateFilterFieldType:
 							switch operand {
