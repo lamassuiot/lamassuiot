@@ -118,6 +118,7 @@ const (
 	VA
 	DMS_MANAGER
 	ALERTS
+	KMS
 )
 
 type TestEventBusConfig struct {
@@ -177,12 +178,20 @@ type AlertsTestServer struct {
 	AfterSuite           func()
 }
 
+type KMSTestServer struct {
+	Service    services.KMSService
+	HttpKMSSDK services.KMSService
+	BeforeEach func() error
+	AfterSuite func()
+}
+
 type TestServer struct {
 	CA            *CATestServer
 	VA            *VATestServer
 	DeviceManager *DeviceManagerTestServer
 	DMSManager    *DMSManagerTestServer
 	Alerts        *AlertsTestServer
+	KMS           *KMSTestServer
 
 	EventBus *TestEventBusConfig
 
@@ -531,6 +540,51 @@ func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *Tes
 	}, nil
 }
 
+func BuildKMSTestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *TestCryptoEngineConfig, eventBus *TestEventBusConfig) (*KMSTestServer, error) {
+
+	svc, port, err := AssembleKMSServiceWithHTTPServer(
+		config.KMSConfig{
+			Logs: cconfig.Logging{
+				Level: cconfig.Info,
+			},
+			Server: cconfig.HttpServer{
+				LogLevel:           cconfig.Info,
+				HealthCheckLogging: false,
+				Protocol:           cconfig.HTTP,
+			},
+			Storage:            storageEngine.config,
+			CryptoEngineConfig: cryptoEngines.config,
+			PublisherEventBus:  eventBus.config,
+		},
+		models.APIServiceInfo{
+			Version:   "test",
+			BuildSHA:  "-",
+			BuildTime: "-",
+		})
+
+	if err != nil {
+		return nil, err
+	}
+
+	httpCli := http.Client{}
+	httpCli.Transport = &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+
+	return &KMSTestServer{
+		Service:    *svc,
+		HttpKMSSDK: sdk.NewHttpKMSClient(&httpCli, fmt.Sprintf("https://127.0.0.1:%d", port)),
+		BeforeEach: func() error {
+			return nil
+		},
+		AfterSuite: func() {
+			fmt.Println("TEST CLEANUP KMS")
+		},
+	}, nil
+}
+
 func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, cryptoEngines *TestCryptoEngineConfig, smtpConfig *config.SMTPServer, services []Service, monitor bool) (*TestServer, error) {
 	servicesMap := make(map[Service]interface{})
 
@@ -594,6 +648,16 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 		servicesMap[ALERTS] = alertsTestServer
 		beforeEachActions = append(beforeEachActions, alertsTestServer.BeforeEach)
 		afterSuiteActions = append(afterSuiteActions, alertsTestServer.AfterSuite)
+	}
+
+	if slices.Contains(services, KMS) {
+		kmsTestServer, err := BuildKMSTestServer(storageEngine, cryptoEngines, eventBus)
+		if err != nil {
+			return nil, fmt.Errorf("could not build KMSTestServer: %s", err)
+		}
+		servicesMap[KMS] = kmsTestServer
+		beforeEachActions = append(beforeEachActions, kmsTestServer.BeforeEach)
+		afterSuiteActions = append(afterSuiteActions, kmsTestServer.AfterSuite)
 	}
 
 	if eventBus.BeforeEach != nil {
@@ -661,6 +725,12 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 		Alerts: func() *AlertsTestServer {
 			if servicesMap[ALERTS] != nil {
 				return servicesMap[ALERTS].(*AlertsTestServer)
+			}
+			return nil
+		}(),
+		KMS: func() *KMSTestServer {
+			if servicesMap[KMS] != nil {
+				return servicesMap[KMS].(*KMSTestServer)
 			}
 			return nil
 		}(),
