@@ -426,15 +426,26 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 	switch filter.FilterOperation {
 	case resources.StringEqual:
 		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
+	case resources.StringEqualIgnoreCase:
+		return tx.Where(fmt.Sprintf("%s ILIKE ?", filter.Field), filter.Value)
 	case resources.StringNotEqual:
 		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
+	case resources.StringNotEqualIgnoreCase:
+		return tx.Where(fmt.Sprintf("%s NOT ILIKE ?", filter.Field), filter.Value)
 	case resources.StringContains:
 		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+	case resources.StringContainsIgnoreCase:
+		return tx.Where(fmt.Sprintf("%s ILIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.StringArrayContains:
 		// return tx.Where(fmt.Sprintf("? = ANY(%s)", filter.Field), filter.Value)
 		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+	case resources.StringArrayContainsIgnoreCase:
+		// return tx.Where(fmt.Sprintf("? = ANY(%s)", filter.Field), filter.Value)
+		return tx.Where(fmt.Sprintf("%s ILIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.StringNotContains:
 		return tx.Where(fmt.Sprintf("%s NOT LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+	case resources.StringNotContainsIgnoreCase:
+		return tx.Where(fmt.Sprintf("%s NOT ILIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.DateEqual:
 		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
 	case resources.DateBefore:
