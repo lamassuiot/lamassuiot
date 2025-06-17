@@ -46,3 +46,8 @@ func (m *MockVAService) UpdateVARole(ctx context.Context, input services.UpdateV
 	args := m.Called(ctx, input)
 	return args.Get(0).(*models.VARole), args.Error(1)
 }
+
+func (m *MockVAService) InitCRLRole(ctx context.Context, caSki string) (*models.VARole, error) {
+	args := m.Called(ctx, caSki)
+	return args.Get(0).(*models.VARole), args.Error(1)
+}
