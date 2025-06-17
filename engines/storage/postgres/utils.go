@@ -240,14 +240,14 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 
 		} else {
 			nextBookmark = ""
-			decodedBookmark, err := base64.StdEncoding.DecodeString(queryParams.NextBookmark)
+			decodedBookmark, err := base64.RawURLEncoding.DecodeString(queryParams.NextBookmark)
 			if err != nil {
 				return "", fmt.Errorf("not a valid bookmark")
 			}
 
-			splits := strings.Split(string(decodedBookmark), ";")
+			splits := strings.SplitSeq(string(decodedBookmark), ";")
 
-			for _, splitPart := range splits {
+			for splitPart := range splits {
 				queryPart := strings.Split(splitPart, ":")
 				switch queryPart[0] {
 				case "off":
@@ -358,7 +358,7 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 			return "", nil
 		}
 
-		return base64.StdEncoding.EncodeToString([]byte(nextBookmark)), nil
+		return base64.RawURLEncoding.EncodeToString([]byte(nextBookmark)), nil
 	}
 }
 
