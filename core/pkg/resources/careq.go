@@ -112,3 +112,24 @@ type ImportCertificateBody struct {
 	Metadata    map[string]interface{}  `json:"metadata"`
 	Certificate *models.X509Certificate `json:"certificate"`
 }
+
+// KMS
+type CreateKeyBody struct {
+	Algorithm string `json:"algorithm"`
+	Size      string `json:"size"`
+}
+
+type SignMessageBody struct {
+	Algorithm string `json:"algorithm"`
+	Message   []byte `json:"message"`
+}
+
+type VerifySignBody struct {
+	Algorithm string `json:"algorithm"`
+	Message   []byte `json:"message"`
+	Signature []byte `json:"signature"`
+}
+
+type ImportKeyBody struct {
+	PrivateKey []byte `json:"private_key"`
+}
