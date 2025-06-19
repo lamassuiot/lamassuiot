@@ -13,3 +13,10 @@ type CAConfig struct {
 	CertificateMonitoringJob cconfig.MonitoringJob          `mapstructure:"certificate_monitoring_job"`
 	VAServerDomains          []string                       `mapstructure:"va_server_domains"`
 }
+
+type CryptoEngines struct {
+	LogLevel          cconfig.LogLevel             `mapstructure:"log_level"`
+	DefaultEngine     string                       `mapstructure:"default_id"`
+	MigrateKeysFormat bool                         `mapstructure:"migrate_keys_format"`
+	CryptoEngines     []cconfig.CryptoEngineConfig `mapstructure:"engines"`
+}

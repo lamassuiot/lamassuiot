@@ -14,5 +14,4 @@ const (
 	DeviceManagerServiceName ServiceName = "device-manager"
 	AlertManagerServiceName  ServiceName = "alert-manager"
 	VAServiceName            ServiceName = "va"
-	KMSServiceName           ServiceName = "kms"
 )
