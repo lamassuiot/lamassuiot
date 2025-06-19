@@ -31,8 +31,8 @@ func NewMessageRouter(logger *logrus.Entry) (*message.Router, error) {
 		// After MaxRetries, the message is Nacked and it's up to the PubSub to resend it.
 		middleware.Retry{
 			MaxRetries:      3,
-			InitialInterval: time.Second * 10,
-			MaxInterval:     time.Second * 30,
+			InitialInterval: time.Second * 2,
+			MaxInterval:     time.Second * 10,
 			Multiplier:      3,
 			Logger:          lEventBus,
 		}.Middleware,

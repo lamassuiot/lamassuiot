@@ -264,7 +264,7 @@ func main() {
 			hc.AutoRemove = true
 		})
 
-		uiPort, _ = strconv.Atoi(container.GetPort("80/tcp"))
+		uiPort, _ = strconv.Atoi(container.GetPort("8080/tcp"))
 
 		uiCleanup = func() {
 			containerCleanup()
