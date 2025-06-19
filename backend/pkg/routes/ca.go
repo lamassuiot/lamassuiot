@@ -48,4 +48,13 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) 
 	rv1.GET("/engines", routes.GetCryptoEngineProvider)
 	rv1.GET("/stats", routes.GetStats)
 	rv1.GET("/stats/:id", routes.GetStatsByCAID)
+
+	// KMS
+	rv1.GET("/kms/keys", routes.GetKeys)
+	rv1.GET("/kms/keys/:id", routes.GetKeyByID)
+	rv1.POST("/kms/keys", routes.CreateKey)
+	rv1.DELETE("/kms/keys/:id", routes.DeleteKeyByID)
+	rv1.POST("/kms/keys/import", routes.ImportKey)
+	rv1.POST("/kms/keys/:id/sign", routes.SignMessage)
+	rv1.POST("/kms/keys/:id/verify", routes.VerifySignature)
 }
