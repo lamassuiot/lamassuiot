@@ -270,11 +270,12 @@ func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.C
 		return "", fmt.Errorf("could not parse URL %s: %w", urlQuery, err)
 	}
 
-	queryParamsValues := encodeQueryParams(queryParams)
+	queryParamsValues := encodeQueryParams(u.Query(), queryParams)
 	u.RawQuery = queryParamsValues.Encode()
+	urlString := u.String()
 
 	for continueIter {
-		response, err := Get[T](ctx, client, u.String(), queryParams, knownErrors)
+		response, err := Get[T](ctx, client, urlString, queryParams, knownErrors)
 		if err != nil {
 			return "", err
 		}
@@ -325,8 +326,7 @@ func nonOKResponseToError(resStatusCode int, resBody []byte, knownErrors map[int
 	return fmt.Errorf("unexpected status code %d. No expected error matching found: %s", resStatusCode, string(resBody))
 }
 
-func encodeQueryParams(queryParams *resources.QueryParameters) url.Values {
-	query := url.Values{}
+func encodeQueryParams(query url.Values, queryParams *resources.QueryParameters) url.Values {
 	if queryParams.NextBookmark != "" {
 		query.Add("bookmark", queryParams.NextBookmark)
 	}
