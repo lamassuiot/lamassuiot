@@ -198,18 +198,8 @@ func Get[T any](ctx context.Context, client *http.Client, url string, queryParam
 		return m, err
 	}
 
-	if queryParams != nil {
-		query := r.URL.Query()
-		if queryParams.NextBookmark != "" {
-			query.Add("bookmark", queryParams.NextBookmark)
-		}
-
-		if queryParams.PageSize > 0 {
-			query.Add("page_size", fmt.Sprintf("%d", queryParams.PageSize))
-		}
-
-		r.URL.RawQuery = query.Encode()
-	}
+	queryParamsValues := encodeQueryParams(r.URL.Query(), queryParams)
+	r.URL.RawQuery = queryParamsValues.Encode()
 	// Important to set
 	r.Header.Add("Content-Type", "application/json")
 	res, err := client.Do(r)
@@ -270,15 +260,12 @@ func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.C
 		return "", fmt.Errorf("could not parse URL %s: %w", urlQuery, err)
 	}
 
-	queryParamsValues := encodeQueryParams(u.Query(), queryParams)
-	u.RawQuery = queryParamsValues.Encode()
-	urlString := u.String()
-
 	for continueIter {
-		response, err := Get[T](ctx, client, urlString, queryParams, knownErrors)
+		response, err := Get[T](ctx, client, u.String(), queryParams, knownErrors)
 		if err != nil {
 			return "", err
 		}
+		queryParams = &resources.QueryParameters{}
 
 		if response.GetNextBookmark() == "" || !exhaustiveRun {
 			continueIter = false
