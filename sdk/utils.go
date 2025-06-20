@@ -198,8 +198,11 @@ func Get[T any](ctx context.Context, client *http.Client, url string, queryParam
 		return m, err
 	}
 
-	queryParamsValues := encodeQueryParams(r.URL.Query(), queryParams)
-	r.URL.RawQuery = queryParamsValues.Encode()
+	if queryParams != nil {
+		queryParamsValues := encodeQueryParams(r.URL.Query(), queryParams)
+		r.URL.RawQuery = queryParamsValues.Encode()
+	}
+
 	// Important to set
 	r.Header.Add("Content-Type", "application/json")
 	res, err := client.Do(r)
