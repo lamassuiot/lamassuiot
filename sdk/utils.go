@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -197,17 +199,10 @@ func Get[T any](ctx context.Context, client *http.Client, url string, queryParam
 	}
 
 	if queryParams != nil {
-		query := r.URL.Query()
-		if queryParams.NextBookmark != "" {
-			query.Add("bookmark", queryParams.NextBookmark)
-		}
-
-		if queryParams.PageSize > 0 {
-			query.Add("page_size", fmt.Sprintf("%d", queryParams.PageSize))
-		}
-
-		r.URL.RawQuery = query.Encode()
+		queryParamsValues := encodeQueryParams(r.URL.Query(), queryParams)
+		r.URL.RawQuery = queryParamsValues.Encode()
 	}
+
 	// Important to set
 	r.Header.Add("Content-Type", "application/json")
 	res, err := client.Do(r)
@@ -253,7 +248,7 @@ func Delete(ctx context.Context, client *http.Client, url string, knownErrors ma
 	return nil
 }
 
-func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.Client, url string, exhaustiveRun bool, queryParams *resources.QueryParameters, applyFunc func(E), knownErrors map[int][]error) (string, error) {
+func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.Client, urlQuery string, exhaustiveRun bool, queryParams *resources.QueryParameters, applyFunc func(E), knownErrors map[int][]error) (string, error) {
 	continueIter := true
 	if queryParams == nil {
 		queryParams = &resources.QueryParameters{}
@@ -263,11 +258,17 @@ func IterGet[E any, T resources.Iterator[E]](ctx context.Context, client *http.C
 		queryParams.NextBookmark = ""
 	}
 
+	u, err := url.Parse(urlQuery)
+	if err != nil {
+		return "", fmt.Errorf("could not parse URL %s: %w", urlQuery, err)
+	}
+
 	for continueIter {
-		response, err := Get[T](ctx, client, url, queryParams, knownErrors)
+		response, err := Get[T](ctx, client, u.String(), queryParams, knownErrors)
 		if err != nil {
 			return "", err
 		}
+		queryParams = &resources.QueryParameters{}
 
 		if response.GetNextBookmark() == "" || !exhaustiveRun {
 			continueIter = false
@@ -313,4 +314,78 @@ func nonOKResponseToError(resStatusCode int, resBody []byte, knownErrors map[int
 	}
 
 	return fmt.Errorf("unexpected status code %d. No expected error matching found: %s", resStatusCode, string(resBody))
+}
+
+func encodeQueryParams(query url.Values, queryParams *resources.QueryParameters) url.Values {
+	if queryParams.NextBookmark != "" {
+		query.Add("bookmark", queryParams.NextBookmark)
+	}
+
+	if queryParams.Sort.SortField != "" {
+		query.Add("sort_by", queryParams.Sort.SortField)
+	}
+
+	if queryParams.Sort.SortMode != resources.SortModeAsc {
+		query.Add("sort_mode", "desc")
+	} else {
+		query.Add("sort_mode", "asc")
+	}
+
+	if queryParams.PageSize > 0 {
+		query.Add("page_size", strconv.Itoa(queryParams.PageSize))
+	}
+
+	for _, filter := range queryParams.Filters {
+		var op string
+		switch filter.FilterOperation {
+		case resources.StringEqual:
+			op = "eq"
+		case resources.StringEqualIgnoreCase:
+			op = "eq_ic"
+		case resources.StringNotEqual:
+			op = "ne"
+		case resources.StringNotEqualIgnoreCase:
+			op = "ne_ic"
+		case resources.StringContains:
+			op = "ct"
+		case resources.StringContainsIgnoreCase:
+			op = "ct_ic"
+		case resources.StringNotContains:
+			op = "nc"
+		case resources.StringNotContainsIgnoreCase:
+			op = "nc_ic"
+		case resources.StringArrayContains:
+			op = "ct"
+		case resources.StringArrayContainsIgnoreCase:
+			op = "ct_ic"
+		case resources.DateBefore:
+			op = "bf"
+		case resources.DateEqual:
+			op = "eq"
+		case resources.DateAfter:
+			op = "af"
+		case resources.NumberEqual:
+			op = "eq"
+		case resources.NumberNotEqual:
+			op = "ne"
+		case resources.NumberLessThan:
+			op = "lt"
+		case resources.NumberLessOrEqualThan:
+			op = "le"
+		case resources.NumberGreaterThan:
+			op = "gt"
+		case resources.NumberGreaterOrEqualThan:
+			op = "ge"
+		case resources.EnumEqual:
+			op = "eq"
+		case resources.EnumNotEqual:
+			op = "ne"
+		default:
+			continue // skip unsupported operations
+		}
+
+		query.Add("filter", filter.Field+"["+op+"]"+filter.Value)
+	}
+
+	return query
 }

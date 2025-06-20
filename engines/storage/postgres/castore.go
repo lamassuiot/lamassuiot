@@ -53,17 +53,19 @@ func (db *PostgresCAStore) SelectByType(ctx context.Context, CAType models.Certi
 }
 
 func (db *PostgresCAStore) SelectAll(ctx context.Context, req storage.StorageListRequest[models.CACertificate]) (string, error) {
-	opts := []gormExtraOps{}
-	if req.QueryParams != nil {
-		for _, filter := range req.QueryParams.Filters {
-			if filter.Field == "subject.common_name" {
-				opts = []gormExtraOps{
-					{joins: []string{caJoinCaCertificatesAndCertificates}},
-				}
-				break
-			}
-		}
+	opts := []gormExtraOps{
+		{joins: []string{caJoinCaCertificatesAndCertificates}},
 	}
+	// if req.QueryParams != nil {
+	// 	for _, filter := range req.QueryParams.Filters {
+	// 		if filter.Field == "subject.common_name" {
+	// 			opts = []gormExtraOps{
+	// 				{joins: []string{caJoinCaCertificatesAndCertificates}},
+	// 			}
+	// 			break
+	// 		}
+	// 	}
+	// }
 
 	return db.querier.SelectAll(ctx, req.QueryParams, opts, req.ExhaustiveRun, req.ApplyFunc)
 }
