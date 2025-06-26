@@ -56,6 +56,20 @@ func StartDMSManagerServiceTestServer(t *testing.T, withEventBus bool) (*DMSMana
 
 const dmsID = "1234-5678"
 
+var issuanceProfile = models.IssuanceProfile{
+	Validity: models.Validity{
+		Type:     models.Duration,
+		Duration: models.TimeDuration(time.Hour),
+	},
+	SignAsCA: false,
+	ExtendedKeyUsages: []models.X509ExtKeyUsage{
+		models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+		models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+	},
+	HonorSubject:    true,
+	HonorExtensions: true,
+}
+
 func TestCreateDMS(t *testing.T) {
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
@@ -269,6 +283,7 @@ func TestESTEnroll(t *testing.T) {
 					IncludeEnrollmentCA:    true,
 					ManagedCAs:             []string{},
 				},
+				IssuanceProfile: issuanceProfile,
 			},
 		}
 
@@ -1802,11 +1817,75 @@ func TestESTEnroll(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "Err/IssuanceProfileExpiresAfterEnrollmentCA",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+						bootstrapCA.ID,
+					}
+					in.Settings.IssuanceProfile.Validity.Duration = models.TimeDuration(time.Hour * 24 * 365) // 1 year
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{(*x509.Certificate)(bootCrt.Certificate)},
+					PrivateKey:            bootKey,
+					InsecureSkipVerify:    true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+
+				expectedErr := "invalid expiration"
+				if !strings.Contains(err.Error(), expectedErr) {
+					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
+				}
+			},
+		},
 	}
 
 	for _, tc := range testcases {
-		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
 			tc.resultCheck(tc.run())
 		})
@@ -1878,6 +1957,7 @@ func TestESTGetCACerts(t *testing.T) {
 					IncludeEnrollmentCA:    true,
 					ManagedCAs:             []string{},
 				},
+				IssuanceProfile: issuanceProfile,
 			},
 		}
 		modifier(&input)
@@ -2103,6 +2183,7 @@ func TestESTServerKeyGen(t *testing.T) {
 					IncludeEnrollmentCA:    true,
 					ManagedCAs:             []string{},
 				},
+				IssuanceProfile: issuanceProfile,
 			},
 		}
 
@@ -2519,6 +2600,7 @@ func TestESTReEnroll(t *testing.T) {
 					IncludeEnrollmentCA:    true,
 					ManagedCAs:             []string{},
 				},
+				IssuanceProfile: issuanceProfile,
 			},
 		}
 
@@ -2764,6 +2846,7 @@ func TestESTReEnroll(t *testing.T) {
 					func(in *services.CreateDMSInput) {
 						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = false
+						in.Settings.IssuanceProfile.Validity.Duration = models.TimeDuration(time.Second * 2)
 					},
 					"2s",
 				)
@@ -3112,8 +3195,6 @@ func TestESTReEnroll(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
 			tc.resultCheck(tc.run())
 		})
@@ -3165,6 +3246,7 @@ func TestGetAllDMS(t *testing.T) {
 					IncludeEnrollmentCA:    true,
 					ManagedCAs:             []string{},
 				},
+				IssuanceProfile: issuanceProfile,
 			},
 		}
 

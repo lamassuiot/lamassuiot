@@ -230,6 +230,19 @@ func RunUseCase1(input UseCase1Input) error {
 				IncludeEnrollmentCA:    true,
 				ManagedCAs:             []string{},
 			},
+			IssuanceProfile: models.IssuanceProfile{
+				Validity: models.Validity{
+					Type:     models.Duration,
+					Duration: models.TimeDuration(time.Hour),
+				},
+				SignAsCA: false,
+				ExtendedKeyUsages: []models.X509ExtKeyUsage{
+					models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+					models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+				},
+				HonorSubject:    true,
+				HonorExtensions: true,
+			},
 		},
 	}
 

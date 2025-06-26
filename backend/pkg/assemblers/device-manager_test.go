@@ -2,6 +2,7 @@ package assemblers
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"reflect"
@@ -480,6 +481,19 @@ func TestGetDevicesByDMS(t *testing.T) {
 					IncludeEnrollmentCA:    true,
 					ManagedCAs:             []string{},
 				},
+				IssuanceProfile: models.IssuanceProfile{
+					Validity: models.Validity{
+						Type:     models.Duration,
+						Duration: models.TimeDuration(time.Hour),
+					},
+					SignAsCA: false,
+					ExtendedKeyUsages: []models.X509ExtKeyUsage{
+						models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+						models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+					},
+					HonorSubject:    true,
+					HonorExtensions: true,
+				},
 			},
 		}
 
@@ -803,6 +817,19 @@ func TestDecommissionDevice(t *testing.T) {
 					IncludeLamassuSystemCA: true,
 					IncludeEnrollmentCA:    true,
 					ManagedCAs:             []string{},
+				},
+				IssuanceProfile: models.IssuanceProfile{
+					Validity: models.Validity{
+						Type:     models.Duration,
+						Duration: models.TimeDuration(time.Hour),
+					},
+					SignAsCA: false,
+					ExtendedKeyUsages: []models.X509ExtKeyUsage{
+						models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+						models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+					},
+					HonorSubject:    true,
+					HonorExtensions: true,
 				},
 			},
 		}
