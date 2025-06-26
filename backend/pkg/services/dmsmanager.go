@@ -541,29 +541,11 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	lFunc = lFunc.WithField("step", "Signature")
 	lFunc.Infof("starting signature process")
 
-	enrollCAID := enrollSettings.EnrollmentCA
-	enrollCA, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{
-		CAID: enrollCAID,
-	})
-	if err != nil {
-		lFunc.Errorf("could not get enroll CA with ID=%s: %s", enrollCAID, err)
-		return nil, err
-	}
-
 	lFunc.Infof("requesting certificate signature")
 	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
-		CAID:        enrollSettings.EnrollmentCA,
-		CertRequest: (*models.X509CertificateRequest)(csr),
-		IssuanceProfile: models.IssuanceProfile{
-			Validity: enrollCA.Validity,
-			SignAsCA: false,
-			ExtendedKeyUsages: []models.X509ExtKeyUsage{
-				models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
-				models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
-			},
-			HonorSubject:    true,
-			HonorExtensions: true,
-		},
+		CAID:            enrollSettings.EnrollmentCA,
+		CertRequest:     (*models.X509CertificateRequest)(csr),
+		IssuanceProfile: dms.Settings.IssuanceProfile,
 	})
 	if err != nil {
 		lFunc.Errorf("could not issue certificate for device: %s", err)
@@ -846,18 +828,9 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	}
 
 	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
-		CAID:        enrollSettings.EnrollmentCA,
-		CertRequest: (*models.X509CertificateRequest)(csr),
-		IssuanceProfile: models.IssuanceProfile{
-			Validity: enrollCA.Validity,
-			SignAsCA: false,
-			ExtendedKeyUsages: []models.X509ExtKeyUsage{
-				models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
-				models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
-			},
-			HonorSubject:    true,
-			HonorExtensions: true,
-		},
+		CAID:            enrollSettings.EnrollmentCA,
+		CertRequest:     (*models.X509CertificateRequest)(csr),
+		IssuanceProfile: dms.Settings.IssuanceProfile,
 	})
 	if err != nil {
 		lFunc.Errorf("could not issue certificate for device '%s': %s", csr.Subject.CommonName, err)
