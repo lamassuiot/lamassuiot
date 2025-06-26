@@ -41,7 +41,7 @@ func (s *caSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpt
 	case x509.RSA:
 		signAlg = fmt.Sprintf("RSASSA_PKCS1_V1_5_SHA_%d", caHashSize)
 	default:
-		logrus.Warnf("using default %s sing alg for client. '%s' no match", signAlg, caKeyAlg)
+		logrus.Warnf("using default %s sign alg for client. '%s' no match", signAlg, caKeyAlg)
 	}
 
 	return s.sdk.SignatureSign(s.ctx, services.SignatureSignInput{
