@@ -1705,7 +1705,7 @@ func (svc *CAServiceBackend) GetKeyByID(tx context.Context, input services.GetBy
 	signer, err := engineInstance.GetPrivateKeyByID(keyID)
 	if err != nil {
 		lFunc.Errorf("GetKey - GetPrivateKeyByID error: %s", err)
-		return nil, err
+		return nil, fmt.Errorf("key not found")
 	}
 	if signer == nil {
 		lFunc.Errorf("GetKey - GetPrivateKeyByID returned nil for keyID: %s", keyID)
@@ -1854,6 +1854,12 @@ func (svc *CAServiceBackend) DeleteKeyByID(tx context.Context, input services.Ge
 		return fmt.Errorf("engine with id %s not found", engineID)
 	}
 	engineInstance := *engine
+
+	_, err = engineInstance.GetPrivateKeyByID(keyID)
+	if err != nil {
+		lFunc.Errorf("GetKey - DeleteKeyByID error: %s", err)
+		return fmt.Errorf("key not found")
+	}
 
 	err = engineInstance.DeleteKey(keyID)
 	if err != nil {
