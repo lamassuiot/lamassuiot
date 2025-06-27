@@ -1607,9 +1607,50 @@ func buildPKCS11ID(engineID, keyID, keyType string) string {
 	return "pkcs11:token-id=" + engineID + ";id=" + keyID + ";type=" + keyType
 }
 
+// Helper to build KeyInfo from engine and keyID
+func buildKeyInfo(engineID, keyID, keyType string, signer crypto.Signer, lFunc *logrus.Entry) (*models.KeyInfo, error) {
+	publicKey := signer.Public()
+	var (
+		algorithm string
+		size      string
+		pubBytes  []byte
+		pemType   string
+		err       error
+	)
+
+	switch pk := publicKey.(type) {
+	case *rsa.PublicKey:
+		algorithm = "RSA"
+		size = fmt.Sprintf("%d", pk.Size()*8)
+		pubBytes, err = x509.MarshalPKIXPublicKey(pk)
+		pemType = "PUBLIC KEY"
+	case *ecdsa.PublicKey:
+		algorithm = "ECDSA"
+		size = fmt.Sprintf("%d", pk.Params().BitSize)
+		pubBytes, err = x509.MarshalPKIXPublicKey(pk)
+		pemType = "PUBLIC KEY"
+	default:
+		lFunc.Errorf("GetKeys - Unsupported public key type for keyID: %s", keyID)
+		return nil, nil
+	}
+	if err != nil {
+		lFunc.Errorf("GetKeys - Marshal public key error: %s", err)
+		return nil, err
+	}
+
+	pemBlock := pem.EncodeToMemory(&pem.Block{Type: pemType, Bytes: pubBytes})
+	base64PEM := base64.StdEncoding.EncodeToString(pemBlock)
+
+	return &models.KeyInfo{
+		ID:        buildPKCS11ID(engineID, keyID, keyType),
+		Algorithm: algorithm,
+		Size:      size,
+		PublicKey: base64PEM,
+	}, nil
+}
+
 func (svc *CAServiceBackend) GetKeys(tx context.Context) ([]*models.KeyInfo, error) {
 	lFunc := chelpers.ConfigureLogger(tx, svc.logger)
-
 	var keys []*models.KeyInfo
 
 	for engineID, engine := range svc.cryptoEngines {
@@ -1618,67 +1659,30 @@ func (svc *CAServiceBackend) GetKeys(tx context.Context) ([]*models.KeyInfo, err
 		if err != nil {
 			lFunc.Errorf("GetKeys - ListPrivateKeyIDs error: %s", err)
 			return nil, err
-		} else {
-			for _, keyID := range PrivateKeyIDs {
-				signer, err := engineInstance.GetPrivateKeyByID(keyID)
-				if err != nil {
-					lFunc.Errorf("GetKeys - GetPrivateKeyByID error: %s", err)
-					return nil, err
-				}
-				if signer == nil {
-					lFunc.Errorf("GetKeys - GetPrivateKeyByID returned nil for keyID: %s", keyID)
-					return nil, err
-				}
-
-				publicKey := signer.Public()
-
-				var (
-					algorithm string
-					size      string
-					pubBytes  []byte
-					pemType   string
-				)
-
-				keyType := "private"
-				switch pk := publicKey.(type) {
-				case *rsa.PublicKey:
-					algorithm = "RSA"
-					size = fmt.Sprintf("%d", pk.Size()*8)
-					pubBytes, err = x509.MarshalPKIXPublicKey(pk)
-					pemType = "PUBLIC KEY"
-				case *ecdsa.PublicKey:
-					algorithm = "ECDSA"
-					size = fmt.Sprintf("%d", pk.Params().BitSize)
-					pubBytes, err = x509.MarshalPKIXPublicKey(pk)
-					pemType = "PUBLIC KEY"
-				default:
-					lFunc.Errorf("GetKeys - Unsupported public key type for keyID: %s", keyID)
-					continue
-				}
-				if err != nil {
-					lFunc.Errorf("GetKeys - Marshal public key error: %s", err)
-					return nil, err
-				}
-
-				pemBlock := pem.EncodeToMemory(&pem.Block{Type: pemType, Bytes: pubBytes})
-				base64PEM := base64.StdEncoding.EncodeToString(pemBlock)
-
-				keys = append(keys, &models.KeyInfo{
-					ID:        buildPKCS11ID(engineID, keyID, keyType),
-					Algorithm: algorithm,
-					Size:      size,
-					PublicKey: base64PEM,
-				})
+		}
+		for _, keyID := range PrivateKeyIDs {
+			signer, err := engineInstance.GetPrivateKeyByID(keyID)
+			if err != nil {
+				lFunc.Errorf("GetKeys - GetPrivateKeyByID error: %s", err)
+				return nil, err
+			}
+			if signer == nil {
+				lFunc.Errorf("GetKeys - GetPrivateKeyByID returned nil for keyID: %s", keyID)
+				return nil, err
+			}
+			keyType := "private"
+			keyInfo, err := buildKeyInfo(engineID, keyID, keyType, signer, lFunc)
+			if err != nil {
+				return nil, err
+			}
+			if keyInfo != nil {
+				keys = append(keys, keyInfo)
 			}
 		}
 	}
-
-	// If no keys were found, return an empty slice instead of nil
-	// This is to ensure that the caller can always expect a slice, even if it's empty.
 	if keys == nil {
 		return []*models.KeyInfo{}, nil
 	}
-
 	return keys, nil
 }
 
@@ -1712,44 +1716,12 @@ func (svc *CAServiceBackend) GetKeyByID(tx context.Context, input services.GetBy
 		return nil, fmt.Errorf("key not found")
 	}
 
-	publicKey := signer.Public()
-
-	var (
-		algorithm string
-		size      string
-		pubBytes  []byte
-		pemType   string
-	)
-
-	switch pk := publicKey.(type) {
-	case *rsa.PublicKey:
-		algorithm = "RSA"
-		size = fmt.Sprintf("%d", pk.Size()*8)
-		pubBytes, err = x509.MarshalPKIXPublicKey(pk)
-		pemType = "PUBLIC KEY"
-	case *ecdsa.PublicKey:
-		algorithm = "ECDSA"
-		size = fmt.Sprintf("%d", pk.Params().BitSize)
-		pubBytes, err = x509.MarshalPKIXPublicKey(pk)
-		pemType = "PUBLIC KEY"
-	default:
-		lFunc.Errorf("GetKey - Unsupported public key type for keyID: %s", keyID)
-		return nil, fmt.Errorf("unsupported public key type")
-	}
+	keyInfo, err := buildKeyInfo(engineID, keyID, keyType, signer, lFunc)
 	if err != nil {
-		lFunc.Errorf("GetKey - Marshal public key error: %s", err)
 		return nil, err
 	}
 
-	pemBlock := pem.EncodeToMemory(&pem.Block{Type: pemType, Bytes: pubBytes})
-	base64PEM := base64.StdEncoding.EncodeToString(pemBlock)
-
-	return &models.KeyInfo{
-		ID:        buildPKCS11ID(engineID, keyID, keyType),
-		Algorithm: algorithm,
-		Size:      size,
-		PublicKey: base64PEM,
-	}, nil
+	return keyInfo, nil
 }
 
 func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.KeyInfo, error) {
@@ -1799,6 +1771,7 @@ func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.Creat
 			curve = elliptic.P224()
 		case "256":
 			curve = elliptic.P256()
+
 		case "384":
 			curve = elliptic.P384()
 		case "521":
