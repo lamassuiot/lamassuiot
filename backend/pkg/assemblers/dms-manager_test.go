@@ -56,20 +56,6 @@ func StartDMSManagerServiceTestServer(t *testing.T, withEventBus bool) (*DMSMana
 
 const dmsID = "1234-5678"
 
-var issuanceProfile = &models.IssuanceProfile{
-	Validity: models.Validity{
-		Type:     models.Duration,
-		Duration: models.TimeDuration(time.Hour),
-	},
-	SignAsCA: false,
-	ExtendedKeyUsages: []models.X509ExtKeyUsage{
-		models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
-		models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
-	},
-	HonorSubject:    true,
-	HonorExtensions: true,
-}
-
 func TestCreateDMS(t *testing.T) {
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
@@ -283,7 +269,6 @@ func TestESTEnroll(t *testing.T) {
 					IncludeEnrollmentCA:    true,
 					ManagedCAs:             []string{},
 				},
-				IssuanceProfile: issuanceProfile,
 			},
 		}
 
@@ -1818,7 +1803,7 @@ func TestESTEnroll(t *testing.T) {
 			},
 		},
 		{
-			name: "OK/EmptyIssuanceProfile",
+			name: "OK/IssuanceProfile",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
 				bootstrapCA, err := createCA("boot", "1y", "1m")
 				if err != nil {
@@ -1835,7 +1820,19 @@ func TestESTEnroll(t *testing.T) {
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
-					in.Settings.IssuanceProfile = nil // Empty Issuance Profile
+					in.Settings.IssuanceProfile = &models.IssuanceProfile{
+						Validity: models.Validity{
+							Type:     models.Duration,
+							Duration: models.TimeDuration(time.Hour * 24 * 30), // 30 days
+						},
+						SignAsCA: false,
+						ExtendedKeyUsages: []models.X509ExtKeyUsage{
+							models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+							models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+						},
+						HonorSubject:    true,
+						HonorExtensions: true,
+					}
 				})
 				if err != nil {
 					t.Fatalf("could not create DMS: %s", err)
@@ -1916,7 +1913,19 @@ func TestESTEnroll(t *testing.T) {
 					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
 						bootstrapCA.ID,
 					}
-					in.Settings.IssuanceProfile.Validity.Duration = models.TimeDuration(time.Hour * 24 * 365) // 1 year
+					in.Settings.IssuanceProfile = &models.IssuanceProfile{
+						Validity: models.Validity{
+							Type:     models.Duration,
+							Duration: models.TimeDuration(time.Hour * 24 * 365), // 1 year
+						},
+						SignAsCA: false,
+						ExtendedKeyUsages: []models.X509ExtKeyUsage{
+							models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+							models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+						},
+						HonorSubject:    true,
+						HonorExtensions: true,
+					}
 				})
 				if err != nil {
 					t.Fatalf("could not create DMS: %s", err)
@@ -2038,7 +2047,6 @@ func TestESTGetCACerts(t *testing.T) {
 					IncludeEnrollmentCA:    true,
 					ManagedCAs:             []string{},
 				},
-				IssuanceProfile: issuanceProfile,
 			},
 		}
 		modifier(&input)
@@ -2264,7 +2272,6 @@ func TestESTServerKeyGen(t *testing.T) {
 					IncludeEnrollmentCA:    true,
 					ManagedCAs:             []string{},
 				},
-				IssuanceProfile: issuanceProfile,
 			},
 		}
 
@@ -2681,7 +2688,6 @@ func TestESTReEnroll(t *testing.T) {
 					IncludeEnrollmentCA:    true,
 					ManagedCAs:             []string{},
 				},
-				IssuanceProfile: issuanceProfile,
 			},
 		}
 
@@ -2927,7 +2933,6 @@ func TestESTReEnroll(t *testing.T) {
 					func(in *services.CreateDMSInput) {
 						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
 						in.Settings.ReEnrollmentSettings.EnableExpiredRenewal = false
-						in.Settings.IssuanceProfile.Validity.Duration = models.TimeDuration(time.Second * 2)
 					},
 					"2s",
 				)
@@ -3327,7 +3332,6 @@ func TestGetAllDMS(t *testing.T) {
 					IncludeEnrollmentCA:    true,
 					ManagedCAs:             []string{},
 				},
-				IssuanceProfile: issuanceProfile,
 			},
 		}
 
