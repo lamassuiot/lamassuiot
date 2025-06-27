@@ -1939,19 +1939,21 @@ func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.Sig
 
 	var signature []byte
 	if isRSA {
-		rsaPriv, ok := signer.(*rsa.PrivateKey)
+		//rsaPriv, ok := signer.(*rsa.PrivateKey)
 		if !ok {
 			return nil, errors.New("key is not RSA private key")
 		}
 		if isPSS {
 			opts := &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: hash}
-			signature, err = rsa.SignPSS(rand.Reader, rsaPriv, hash, digest, opts)
+			//signature, err = rsa.SignPSS(rand.Reader, rsaPriv, hash, digest, opts)
+			signature, err = signer.Sign(rand.Reader, digest, opts)
 			if err != nil {
 				lFunc.Errorf("SignMessage - RSA-PSS Sign error: %s", err)
 				return nil, err
 			}
 		} else {
-			signature, err = rsa.SignPKCS1v15(nil, rsaPriv, hash, digest)
+			//signature, err = rsa.SignPKCS1v15(nil, rsaPriv, hash, digest)
+			signature, err = signer.Sign(rand.Reader, digest, hash)
 			if err != nil {
 				lFunc.Errorf("SignMessage - RSA Sign error: %s", err)
 				return nil, err
