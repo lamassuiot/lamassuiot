@@ -56,7 +56,7 @@ func StartDMSManagerServiceTestServer(t *testing.T, withEventBus bool) (*DMSMana
 
 const dmsID = "1234-5678"
 
-var issuanceProfile = models.IssuanceProfile{
+var issuanceProfile = &models.IssuanceProfile{
 	Validity: models.Validity{
 		Type:     models.Duration,
 		Duration: models.TimeDuration(time.Hour),
@@ -1814,6 +1814,87 @@ func TestESTEnroll(t *testing.T) {
 				expectedErr := "invalid CSR signature"
 				if !strings.Contains(err.Error(), expectedErr) {
 					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
+				}
+			},
+		},
+		{
+			name: "OK/EmptyIssuanceProfile",
+			run: func() (caCert, cert *x509.Certificate, key any, err error) {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+						bootstrapCA.ID,
+					}
+					in.Settings.IssuanceProfile = nil // Empty Issuance Profile
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				estCli := pemESTClient{
+					baseEndpoint: fmt.Sprintf("https://localhost:%d/.well-known/est/%s", dmsMgr.Port, dms.ID),
+					cert:         (*x509.Certificate)(bootCrt.Certificate),
+					key:          bootKey,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateRSAKey(2048)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				enrollCRT, err := estCli.Enroll(enrollCSR)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, nil
+			},
+			resultCheck: func(caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+
+				priv, ok := key.(*rsa.PrivateKey)
+				if !ok {
+					t.Fatal("could not cast priv key into RSA")
+				}
+
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, priv, nil)
+				if err != nil {
+					t.Fatalf("could not validate cert and key. Got error: %s", err)
+				}
+
+				if !valid {
+					t.Fatalf("private key does not match public key")
+				}
+
+				if err = helpers.ValidateCertificate(caCert, cert, true); err != nil {
+					t.Fatalf("could not validate certificate with CA: %s", err)
 				}
 			},
 		},
