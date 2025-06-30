@@ -52,3 +52,7 @@ func (mw *clrEventPublisher) CalculateCRL(ctx context.Context, input services.Ca
 	}()
 	return mw.next.CalculateCRL(ctx, input)
 }
+
+func (mw *clrEventPublisher) InitCRLRole(ctx context.Context, caSki string) (output *models.VARole, err error) {
+	return mw.next.InitCRLRole(ctx, caSki)
+}

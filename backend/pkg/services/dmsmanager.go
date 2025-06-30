@@ -145,6 +145,35 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 	return svc.dmsStorage.Update(ctx, dms)
 }
 
+func (svc DMSManagerServiceBackend) DeleteDMS(ctx context.Context, input services.DeleteDMSInput) error {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := dmsValidate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("struct validation error: %s", err)
+		return errs.ErrValidateBadRequest
+	}
+
+	id := input.ID
+	lFunc.Debugf("checking if DMS '%s' exists", id)
+	exists, _, err := svc.dmsStorage.SelectExists(ctx, id)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if DMS '%s' exists in storage engine: %s", id, err)
+		return err
+	} else if !exists {
+		lFunc.Errorf("DMS '%s' does not exist in storage engine", id)
+		return errs.ErrDMSNotFound
+	}
+
+	err = svc.dmsStorage.Delete(ctx, id)
+	if err != nil {
+		lFunc.Errorf("something went wrong while deleting the DMS %s %s", id, err)
+		return err
+	}
+
+	return nil
+}
+
 func (svc DMSManagerServiceBackend) GetDMSByID(ctx context.Context, input services.GetDMSByIDInput) (*models.DMS, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -266,12 +295,14 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	}
 
 	lFunc = lFunc.WithField("dms", dms.ID)
-	if dms.Settings.EnrollmentSettings.EnrollmentProtocol != models.EST {
+	enrollSettings := dms.Settings.EnrollmentSettings
+
+	if enrollSettings.EnrollmentProtocol != models.EST {
 		lFunc.Errorf("aborting enrollment. DMS doesn't support EST Protocol")
 		return nil, errs.ErrDMSOnlyEST
 	}
 
-	estAuthOptions := dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030
+	estAuthOptions := enrollSettings.EnrollmentOptionsESTRFC7030
 
 	lFunc = lFunc.WithField("step", "Authenticating")
 	lFunc.Infof("starting authentication process")
@@ -291,11 +322,11 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		//check if certificate is a certificate issued by bootstrap CA
 		validCertificate := false
 		var validationCA *models.CACertificate
-		estEnrollOpts := dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030
+		estEnrollOpts := enrollSettings.EnrollmentOptionsESTRFC7030
 
 		// Allow enrolment with expired certificates
 		allowExpiredEnroll := false
-		if dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.AllowExpired {
+		if enrollSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.AllowExpired {
 			lFunc.Warnf("enrollment with expired certificates is allowed by DMS")
 			allowExpiredEnroll = true
 		} else {
@@ -418,6 +449,16 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		lFunc.Errorf("aborting enrollment. DMS is not correctly configured. No auth method configured. Specify an authentication method")
 	}
 
+	lFunc = lFunc.WithField("step", "CSRCheck")
+	if enrollSettings.VerifyCSRSignature {
+		err = checkCSRSignature(lFunc, csr, "enrollment")
+		if err != nil {
+			return nil, fmt.Errorf("invalid CSR signature")
+		}
+	} else {
+		lFunc.Warn("DMS is configured with no CSR signature verification, allowing enrollment")
+	}
+
 	lFunc.Infof("authentication process completed successfully")
 	lFunc = lFunc.WithField("step", "DeviceReg")
 
@@ -440,7 +481,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 			return nil, fmt.Errorf("device already registered to another DMS")
 		}
 
-		if dms.Settings.EnrollmentSettings.EnableReplaceableEnrollment {
+		if enrollSettings.EnableReplaceableEnrollment {
 			lFunc.Debugf("DMS allows new enrollments. Continuing enrollment for device '%s'", csr.Subject.CommonName)
 			//revoke active certificate
 			defer func() {
@@ -468,17 +509,17 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		}
 	}
 
-	if dms.Settings.EnrollmentSettings.RegistrationMode == models.JITP {
+	if enrollSettings.RegistrationMode == models.JITP {
 		if device == nil {
 			lFunc.Debugf("DMS is configured with JustInTime registration. will create device with ID %s", csr.Subject.CommonName)
 			//contact device manager and register device first
 			device, err = svc.deviceManagerCli.CreateDevice(ctx, services.CreateDeviceInput{
 				ID:        csr.Subject.CommonName,
 				Alias:     csr.Subject.CommonName,
-				Tags:      dms.Settings.EnrollmentSettings.DeviceProvisionProfile.Tags,
-				Metadata:  dms.Settings.EnrollmentSettings.DeviceProvisionProfile.Metadata,
-				Icon:      dms.Settings.EnrollmentSettings.DeviceProvisionProfile.Icon,
-				IconColor: dms.Settings.EnrollmentSettings.DeviceProvisionProfile.IconColor,
+				Tags:      enrollSettings.DeviceProvisionProfile.Tags,
+				Metadata:  enrollSettings.DeviceProvisionProfile.Metadata,
+				Icon:      enrollSettings.DeviceProvisionProfile.Icon,
+				IconColor: enrollSettings.DeviceProvisionProfile.IconColor,
 				DMSID:     dms.ID,
 			})
 			if err != nil {
@@ -500,7 +541,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	lFunc = lFunc.WithField("step", "Signature")
 	lFunc.Infof("starting signature process")
 
-	enrollCAID := dms.Settings.EnrollmentSettings.EnrollmentCA
+	enrollCAID := enrollSettings.EnrollmentCA
 	enrollCA, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{
 		CAID: enrollCAID,
 	})
@@ -511,7 +552,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 
 	lFunc.Infof("requesting certificate signature")
 	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
-		CAID:        dms.Settings.EnrollmentSettings.EnrollmentCA,
+		CAID:        enrollSettings.EnrollmentCA,
 		CertRequest: (*models.X509CertificateRequest)(csr),
 		IssuanceProfile: models.IssuanceProfile{
 			Validity: enrollCA.Validity,
@@ -525,7 +566,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		},
 	})
 	if err != nil {
-		lFunc.Errorf("could issue certificate for device: %s", err)
+		lFunc.Errorf("could not issue certificate for device: %s", err)
 		return nil, err
 	}
 
@@ -567,6 +608,11 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 
 	lFunc.Infof("starting reenrollment process for device")
 
+	if csr.Subject.CommonName == "" {
+		lFunc.Errorf("aborting reenrollment. No CommonName in CSR")
+		return nil, fmt.Errorf("no CommonName in CSR")
+	}
+
 	lFunc.Debugf("checking if DMS '%s' exists", aps)
 	dms, err := svc.service.GetDMSByID(ctx, services.GetDMSByIDInput{
 		ID: aps,
@@ -576,12 +622,13 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		return nil, errs.ErrDMSNotFound
 	}
 
-	if dms.Settings.EnrollmentSettings.EnrollmentProtocol != models.EST {
+	enrollSettings := dms.Settings.EnrollmentSettings
+	if enrollSettings.EnrollmentProtocol != models.EST {
 		lFunc.Errorf("aborting reenrollment. DMS doesn't support EST Protocol")
 		return nil, errs.ErrDMSOnlyEST
 	}
 
-	enrollCAID := dms.Settings.EnrollmentSettings.EnrollmentCA
+	enrollCAID := enrollSettings.EnrollmentCA
 	enrollCA, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{
 		CAID: enrollCAID,
 	})
@@ -590,7 +637,9 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		return nil, err
 	}
 
-	if dms.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthMode == models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate) {
+	reEnrollSettings := dms.Settings.ReEnrollmentSettings
+
+	if enrollSettings.EnrollmentOptionsESTRFC7030.AuthMode == models.ESTAuthMode(identityextractors.IdentityExtractorClientCertificate) {
 		lFunc = lFunc.WithField("auth-method", identityextractors.IdentityExtractorClientCertificate)
 		clientCert, hasValue := ctx.Value(string(identityextractors.IdentityExtractorClientCertificate)).(*x509.Certificate)
 		if !hasValue {
@@ -618,14 +667,14 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 
 		//try secondary validation with additional CAs
 		if !validCertificate {
-			estReEnrollOpts := dms.Settings.ReEnrollmentSettings
-			aValCAsCtr := len(estReEnrollOpts.AdditionalValidationCAs)
+
+			aValCAsCtr := len(reEnrollSettings.AdditionalValidationCAs)
 			lFunc.Debugf("could not validate client certificate using enroll CA. Will try validating using Additional Validation CAs")
 			lFunc.Debugf("DMS has %d additional validation CAs", aValCAsCtr)
 
 			//check if certificate is a certificate issued by Extra Val CAs
-			for idx, caID := range estReEnrollOpts.AdditionalValidationCAs {
-				lFunc.Debugf("[%d/%d] obtainig validation with ID %s", idx, aValCAsCtr, caID)
+			for idx, caID := range reEnrollSettings.AdditionalValidationCAs {
+				lFunc.Debugf("[%d/%d] obtaining validation with ID %s", idx, aValCAsCtr, caID)
 				ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: caID})
 				if err != nil {
 					lFunc.Warnf("[%d/%d] could not obtain lamassu CA with ID %s. Skipping to next validation CA: %s", idx, aValCAsCtr, caID, err)
@@ -655,7 +704,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 			return nil, errs.ErrDMSEnrollInvalidCert
 		}
 
-		if dms.Settings.ReEnrollmentSettings.EnableExpiredRenewal {
+		if reEnrollSettings.EnableExpiredRenewal {
 			lFunc.Warnf("DMS configured to allow reenrollment with expired certificates")
 		} else {
 			lFunc.Info("DMS configured to NOT allow reenrollment with expired certificates")
@@ -664,7 +713,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		//Check if EXPIRED
 		now := time.Now()
 		if now.After(clientCert.NotAfter) {
-			if dms.Settings.ReEnrollmentSettings.EnableExpiredRenewal {
+			if reEnrollSettings.EnableExpiredRenewal {
 				lFunc.Warnf("presented an expired certificate: %s", now.Sub(clientCert.NotBefore))
 			} else {
 				lFunc = lFunc.WithField("auth-status", "failed")
@@ -709,6 +758,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		switch err {
 		case errs.ErrDeviceNotFound:
 			lFunc.Debugf("device doesn't exist")
+			return nil, err
 		default:
 			lFunc.Errorf("could not get device: %s", err)
 			return nil, err
@@ -761,6 +811,15 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 
 	}
 
+	if enrollSettings.VerifyCSRSignature {
+		err = checkCSRSignature(lFunc, csr, "reenrollment")
+		if err != nil {
+			return nil, fmt.Errorf("invalid CSR signature")
+		}
+	} else {
+		lFunc.Warn("DMS is configured with no CSR signature verification, allowing reenrollment")
+	}
+
 	now := time.Now()
 	lFunc.Debugf("checking if DMS allows enrollment at current delta for device %s", device.ID)
 
@@ -769,7 +828,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		"current device certificate expires at %s (%s duration). DMS allows reenrolling %s. Reenroll window opens %s. (delta=%s)",
 		currentDeviceCert.Certificate.NotAfter.UTC().Format("2006-01-02T15:04:05Z07:00"),
 		models.TimeDuration(currentDeviceCert.Certificate.NotAfter.Sub(now)).String(),
-		dms.Settings.ReEnrollmentSettings.ReEnrollmentDelta.String(),
+		reEnrollSettings.ReEnrollmentDelta.String(),
 		comparisonTimeThreshold.UTC().Format("2006-01-02T15:04:05Z07:00"),
 		models.TimeDuration(now.Sub(comparisonTimeThreshold)).String(),
 	)
@@ -787,7 +846,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	}
 
 	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
-		CAID:        dms.Settings.EnrollmentSettings.EnrollmentCA,
+		CAID:        enrollSettings.EnrollmentCA,
 		CertRequest: (*models.X509CertificateRequest)(csr),
 		IssuanceProfile: models.IssuanceProfile{
 			Validity: enrollCA.Validity,
@@ -820,7 +879,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 
 	//revoke superseded cert if active. Don't try revoking expired or already revoked since is not a valid transition for the CA service.
 	if currentDeviceCert.Status == models.StatusActive {
-		if dms.Settings.ReEnrollmentSettings.RevokeOnReEnrollment {
+		if reEnrollSettings.RevokeOnReEnrollment {
 			lFunc.Infof("revoking superseded certificate %s", currentDeviceCertSN)
 			_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
 				SerialNumber:     currentDeviceCertSN,
@@ -846,6 +905,18 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	}
 
 	return (*x509.Certificate)(crt.Certificate), nil
+}
+
+func checkCSRSignature(lFunc *logrus.Entry, csr *x509.CertificateRequest, operation string) error {
+
+	lFunc.Info("checking CSR signature")
+	if err := csr.CheckSignature(); err != nil {
+		lFunc.Errorf("aborting %s. Invalid CSR signature: %v", operation, err)
+		return err
+	}
+	lFunc.Info("Valid CSR signature")
+
+	return nil
 }
 
 func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, any, error) {

@@ -14,6 +14,7 @@ type DMSManagerService interface {
 	UpdateDMS(ctx context.Context, input UpdateDMSInput) (*models.DMS, error)
 	GetDMSByID(ctx context.Context, input GetDMSByIDInput) (*models.DMS, error)
 	GetAll(ctx context.Context, input GetAllInput) (string, error)
+	DeleteDMS(ctx context.Context, input DeleteDMSInput) error
 
 	BindIdentityToDevice(ctx context.Context, input BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error)
 }
@@ -37,6 +38,10 @@ type GetDMSByIDInput struct {
 
 type GetAllInput struct {
 	resources.ListInput[models.DMS]
+}
+
+type DeleteDMSInput struct {
+	ID string `validate:"required"`
 }
 
 type BindIdentityToDeviceInput struct {

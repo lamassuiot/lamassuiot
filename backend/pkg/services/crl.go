@@ -149,7 +149,7 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*mo
 	}
 
 	_, err = svc.CalculateCRL(ctx, services.CalculateCRLInput{
-		CASubjectKeyID: string(ca.Certificate.Certificate.SubjectKeyId),
+		CASubjectKeyID: caSki,
 	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while calculating first CRL: %s", err)

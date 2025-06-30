@@ -26,6 +26,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
@@ -53,6 +54,8 @@ func StartDMSManagerServiceTestServer(t *testing.T, withEventBus bool) (*DMSMana
 	return testServer.DMSManager, testServer, nil
 }
 
+const dmsID = "1234-5678"
+
 func TestCreateDMS(t *testing.T) {
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
@@ -60,7 +63,7 @@ func TestCreateDMS(t *testing.T) {
 	}
 
 	dmsSample := services.CreateDMSInput{
-		ID:   "1234-5678",
+		ID:   dmsID,
 		Name: "MyIotFleet",
 	}
 	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
@@ -88,7 +91,7 @@ func TestUpdateDMS(t *testing.T) {
 	}
 
 	dmsSample := services.CreateDMSInput{
-		ID:   "1234-5678",
+		ID:   dmsID,
 		Name: "MyIotFleet",
 	}
 	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
@@ -112,41 +115,100 @@ func TestUpdateDMS(t *testing.T) {
 	assert.Equal(t, dms.Name, dmsFromDB.Name)
 }
 
-func TestGetMissingDMSShouldFail(t *testing.T) {
+func TestDeleteDMS(t *testing.T) {
+
+	testcases := []struct {
+		name        string
+		setup       func(dmsMgr *DMSManagerTestServer)
+		resultCheck func(dmsMgr *DMSManagerTestServer, err error)
+	}{
+		{
+			name: "OK",
+			setup: func(dmsMgr *DMSManagerTestServer) {
+				dmsSample := services.CreateDMSInput{
+					ID:   dmsID,
+					Name: "MyIotFleet",
+				}
+				dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+				assert.Equal(t, dms.Name, dmsSample.Name)
+			},
+			resultCheck: func(dmsMgr *DMSManagerTestServer, err error) {
+				if err != nil {
+					t.Fatalf("could not delete DMS: %s", err)
+				}
+
+				_, err = dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: dmsID})
+				if err == nil {
+					t.Fatalf("Get DMS by ID should fail")
+				}
+
+				assert.ErrorIs(t, err, errs.ErrDMSNotFound)
+			},
+		},
+		{
+			name:  "Error - DMS not found",
+			setup: func(dmsMgr *DMSManagerTestServer) {},
+			resultCheck: func(dmsMgr *DMSManagerTestServer, err error) {
+				if err == nil {
+					t.Fatalf("Delete DMS should fail")
+				}
+
+				assert.ErrorIs(t, err, errs.ErrDMSNotFound)
+			},
+		},
+	}
+	for _, tc := range testcases {
+
+		t.Run(tc.name, func(t *testing.T) {
+
+			dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+			if err != nil {
+				t.Fatalf("could not create DMS Manager test server: %s", err)
+			}
+
+			tc.setup(dmsMgr)
+
+			err = dmsMgr.Service.DeleteDMS(context.Background(), services.DeleteDMSInput{ID: dmsID})
+
+			tc.resultCheck(dmsMgr, err)
+		})
+	}
+}
+
+func TestUpdateMissingDMSShouldFail(t *testing.T) {
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
 
 	dmsSample := models.DMS{
-		ID:   "1234-5678",
+		ID:   dmsID,
 		Name: "MyIotFleet",
 	}
 
 	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{DMS: dmsSample})
 	if err == nil {
-		t.Fatalf("Get DMS by ID should fail")
+		t.Fatalf("Update DMS should fail")
 	}
 
-	assert.Contains(t, err.Error(), "DMS not found")
+	assert.ErrorIs(t, err, errs.ErrDMSNotFound)
 }
 
-func TestUpdatetMissingDMSShouldFail(t *testing.T) {
+func TestGetMissingDMSShouldFail(t *testing.T) {
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
 	}
 
-	dmsSample := services.CreateDMSInput{
-		ID: "1234-5678",
-	}
-
-	_, err = dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: dmsSample.ID})
+	_, err = dmsMgr.Service.GetDMSByID(context.Background(), services.GetDMSByIDInput{ID: dmsID})
 	if err == nil {
 		t.Fatalf("Get DMS by ID should fail")
 	}
 
-	assert.Contains(t, err.Error(), "DMS not found")
+	assert.ErrorIs(t, err, errs.ErrDMSNotFound)
 }
 
 func TestESTEnroll(t *testing.T) {
@@ -193,6 +255,7 @@ func TestESTEnroll(t *testing.T) {
 					},
 					RegistrationMode:            models.JITP,
 					EnableReplaceableEnrollment: true,
+					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
 					AdditionalValidationCAs:     []string{},
@@ -761,7 +824,7 @@ func TestESTEnroll(t *testing.T) {
 			},
 		},
 		{
-			name: "Ok/ExpiredCertificateAllowed",
+			name: "OK/ExpiredCertificateAllowed",
 			run: func() (caCert, cert *x509.Certificate, key any, err error) {
 				bootstrapCA, err := createCA("boot", "1y", "1s")
 				if err != nil {
@@ -1581,6 +1644,164 @@ func TestESTEnroll(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "OK/SkipInvalidCSRSignature",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+						bootstrapCA.ID,
+					}
+					in.Settings.EnrollmentSettings.VerifyCSRSignature = false
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{(*x509.Certificate)(bootCrt.Certificate)},
+					PrivateKey:            bootKey,
+					InsecureSkipVerify:    true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				badCSR, err := corruptCSR(enrollCSR)
+				if err != nil {
+					t.Fatalf("failed to parse corrupted CSR: %v", err)
+				}
+
+				enrollCRT, err := estCli.Enroll(context.Background(), badCSR)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				return (*x509.Certificate)(enrollCA.Certificate.Certificate), enrollCRT, enrollKey, nil
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+
+				priv, ok := key.(*ecdsa.PrivateKey)
+				if !ok {
+					t.Fatalf("could not cast priv key into ECDSA")
+				}
+
+				valid, err := chelpers.ValidateCertAndPrivKey(cert, nil, priv)
+				if err != nil {
+					t.Fatalf("could not validate cert and key. Got error: %s", err)
+				}
+
+				if !valid {
+					t.Fatalf("private key does not match public key")
+				}
+
+				if err = helpers.ValidateCertificate(caCert, cert, true); err != nil {
+					t.Fatalf("could not validate certificate with CA: %s", err)
+				}
+			},
+		},
+		{
+			name: "Err/InvalidCSRSignature",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+						bootstrapCA.ID,
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:        bootstrapCA.ID,
+					CertRequest: (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        bootstrapCA.Validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{(*x509.Certificate)(bootCrt.Certificate)},
+					PrivateKey:            bootKey,
+					InsecureSkipVerify:    true,
+				}
+
+				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
+				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				badCSR, err := corruptCSR(enrollCSR)
+				if err != nil {
+					t.Fatalf("failed to parse corrupted CSR: %v", err)
+				}
+
+				_, err = estCli.Enroll(context.Background(), badCSR)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+
+				expectedErr := "invalid CSR signature"
+				if !strings.Contains(err.Error(), expectedErr) {
+					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
+				}
+			},
+		},
 	}
 
 	for _, tc := range testcases {
@@ -1643,6 +1864,7 @@ func TestESTGetCACerts(t *testing.T) {
 					},
 					RegistrationMode:            models.JITP,
 					EnableReplaceableEnrollment: true,
+					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
 					AdditionalValidationCAs:     []string{},
@@ -1867,6 +2089,7 @@ func TestESTServerKeyGen(t *testing.T) {
 					},
 					RegistrationMode:            models.JITP,
 					EnableReplaceableEnrollment: true,
+					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
 					AdditionalValidationCAs:     []string{},
@@ -2281,6 +2504,7 @@ func TestESTReEnroll(t *testing.T) {
 					},
 					RegistrationMode:            models.JITP,
 					EnableReplaceableEnrollment: true,
+					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
 					RevokeOnReEnrollment:        true,
@@ -2808,6 +3032,83 @@ func TestESTReEnroll(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "OK/SkipInvalidCSRSignature",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, enrollmentCA, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+						in.Settings.EnrollmentSettings.VerifyCSRSignature = false
+					},
+					"1m",
+				)
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+				badCSR, err := corruptCSR(newCsr)
+				if err != nil {
+					t.Fatalf("failed to parse corrupted CSR: %v", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{deviceCrt},
+					PrivateKey:            deviceKey,
+					InsecureSkipVerify:    true,
+				}
+
+				reEnrollCRT, err := estCli.Reenroll(context.Background(), badCSR)
+				if err != nil {
+					t.Fatalf("unexpected error while enrolling: %s", err)
+				}
+
+				return enrollmentCA, reEnrollCRT, deviceKey, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err != nil {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				checkReEnroll(t, caCert, cert, key)
+			},
+		},
+		{
+			name: "Err/InvalidCSRSignature",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+					},
+					"1m",
+				)
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceCrt.Subject.CommonName}, deviceKey)
+				badCSR, err := corruptCSR(newCsr)
+				if err != nil {
+					t.Fatalf("failed to parse corrupted CSR: %v", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{deviceCrt},
+					PrivateKey:            deviceKey,
+					InsecureSkipVerify:    true,
+				}
+
+				_, err = estCli.Reenroll(context.Background(), badCSR)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+
+				expectedErr := "invalid CSR signature"
+				if !strings.Contains(err.Error(), expectedErr) {
+					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
+				}
+			},
+		},
 	}
 
 	for _, tc := range testcases {
@@ -2850,6 +3151,7 @@ func TestGetAllDMS(t *testing.T) {
 					},
 					RegistrationMode:            models.JITP,
 					EnableReplaceableEnrollment: true,
+					VerifyCSRSignature:          true,
 				},
 				ReEnrollmentSettings: models.ReEnrollmentSettings{
 					AdditionalValidationCAs:     []string{},
@@ -3113,4 +3415,24 @@ func startWebhookServer() (*gin.Engine, string, func(), error) {
 	}
 
 	return router, url, shutdown, nil
+}
+
+func corruptCSR(csr *x509.CertificateRequest) (*x509.CertificateRequest, error) {
+
+	rawCSR := csr.Raw
+
+	// Corrupt the signature (flip some bits)
+	corruptDER := make([]byte, len(rawCSR))
+	copy(corruptDER, rawCSR)
+
+	// Flip a byte in the signature
+	corruptDER[len(corruptDER)-1] ^= 0xFF
+
+	// Parse the corrupted CSR
+	badCSR, err := x509.ParseCertificateRequest(corruptDER)
+	if err != nil {
+		return nil, err
+	}
+
+	return badCSR, nil
 }

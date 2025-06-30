@@ -6,7 +6,6 @@ import (
 
 	"github.com/cloudevents/sdk-go/v2/event"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	beService "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -14,7 +13,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewVAEventHandler(l *logrus.Entry, crlSvc *beService.CRLServiceBackend) *eventhandling.CloudEventHandler {
+func NewVAEventHandler(l *logrus.Entry, crlSvc services.CRLService) *eventhandling.CloudEventHandler {
 	return &eventhandling.CloudEventHandler{
 		Logger: l,
 		DispatchMap: map[string]func(*event.Event) error{
@@ -24,7 +23,7 @@ func NewVAEventHandler(l *logrus.Entry, crlSvc *beService.CRLServiceBackend) *ev
 	}
 }
 
-func createCAHandler(event *event.Event, crlSvc *beService.CRLServiceBackend, lMessaging *logrus.Entry) error {
+func createCAHandler(event *event.Event, crlSvc services.CRLService, lMessaging *logrus.Entry) error {
 	ctx := context.Background()
 
 	ca, err := chelpers.GetEventBody[models.CACertificate](event)
@@ -39,6 +38,7 @@ func createCAHandler(event *event.Event, crlSvc *beService.CRLServiceBackend, lM
 	if err != nil {
 		err = fmt.Errorf("could not initialize CRL role: %s", err)
 		lMessaging.Error(err)
+		return err
 	}
 
 	lMessaging.Infof("CRL role initialized for CA %s", ca.ID)
@@ -46,7 +46,7 @@ func createCAHandler(event *event.Event, crlSvc *beService.CRLServiceBackend, lM
 	return nil
 }
 
-func updateCertificateStatus(event *event.Event, crlSvc *beService.CRLServiceBackend, lMessaging *logrus.Entry) error {
+func updateCertificateStatus(event *event.Event, crlSvc services.CRLService, lMessaging *logrus.Entry) error {
 	ctx := context.Background()
 
 	cert, err := chelpers.GetEventBody[models.UpdateModel[models.Certificate]](event)

@@ -51,11 +51,16 @@ const (
 	UnspecifiedFilter FilterOperation = iota
 
 	StringEqual
+	StringEqualIgnoreCase
 	StringNotEqual
+	StringNotEqualIgnoreCase
 	StringContains
+	StringContainsIgnoreCase
 	StringNotContains
+	StringNotContainsIgnoreCase
 
 	StringArrayContains
+	StringArrayContainsIgnoreCase
 
 	DateEqual
 	DateBefore

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/x509"
+	"fmt"
 	"io"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -32,14 +33,15 @@ func (s *caSignerImpl) Public() crypto.PublicKey {
 func (s *caSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
 	signAlg := "RSASSA_PKCS1_V1_5_SHA_256"
 	caKeyAlg := s.ca.Certificate.Certificate.PublicKeyAlgorithm
-	if opts.HashFunc().Size()*8 == 256 {
-		if caKeyAlg == x509.ECDSA {
-			signAlg = "ECDSA_SHA_256"
-		} else if caKeyAlg == x509.RSA {
-			signAlg = "RSASSA_PKCS1_V1_5_SHA_256"
-		}
-	} else {
-		logrus.Warnf("using default %s sing alg for client. '%s' no match", signAlg, caKeyAlg)
+	caHashFunc := opts.HashFunc()
+	caHashSize := caHashFunc.Size() * 8
+	switch caKeyAlg {
+	case x509.ECDSA:
+		signAlg = fmt.Sprintf("ECDSA_SHA_%d", caHashSize)
+	case x509.RSA:
+		signAlg = fmt.Sprintf("RSASSA_PKCS1_V1_5_SHA_%d", caHashSize)
+	default:
+		logrus.Warnf("using default %s sign alg for client. '%s' no match", signAlg, caKeyAlg)
 	}
 
 	return s.sdk.SignatureSign(s.ctx, services.SignatureSignInput{

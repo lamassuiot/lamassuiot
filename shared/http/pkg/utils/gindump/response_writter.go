@@ -18,7 +18,7 @@ func DumpResponseWriter(res gin.ResponseWriter, showHeaders bool, showBody bool)
 	s, err := formatToBeautifulJson(res.Header(), headerHiddenFields)
 	if showHeaders {
 		if err != nil {
-			strB.WriteString(fmt.Sprintf("\nparse resp header err \n" + err.Error()))
+			strB.WriteString(fmt.Sprintf("\nparse resp header err: %s\n", err.Error()))
 		} else {
 			strB.WriteString("Response-Header:\n")
 			strB.WriteString(string(s))
@@ -42,7 +42,7 @@ func DumpResponseWriter(res gin.ResponseWriter, showHeaders bool, showBody bool)
 			case gin.MIMEJSON:
 				s, err := beautifyJsonBytes(bw.bodyCache.Bytes(), bodyHiddenFields)
 				if err != nil {
-					strB.WriteString(fmt.Sprintf("\nparse bodyCache err \n" + err.Error()))
+					strB.WriteString(fmt.Sprintf("\nparse bodyCache err: %s\n", err.Error()))
 					goto End
 				}
 				strB.WriteString("\nResponse-Body:\n")

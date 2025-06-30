@@ -46,3 +46,7 @@ func (db *PostgresDMSManagerStore) Update(ctx context.Context, DMS *models.DMS) 
 func (db *PostgresDMSManagerStore) Insert(ctx context.Context, DMS *models.DMS) (*models.DMS, error) {
 	return db.querier.Insert(ctx, DMS, DMS.ID)
 }
+
+func (db *PostgresDMSManagerStore) Delete(ctx context.Context, ID string) error {
+	return db.querier.Delete(ctx, ID)
+}

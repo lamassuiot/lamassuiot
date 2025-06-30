@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -51,6 +52,22 @@ func (cli *dmsManagerClient) UpdateDMS(ctx context.Context, input services.Updat
 	}
 
 	return response, nil
+}
+
+func (cli *dmsManagerClient) DeleteDMS(ctx context.Context, input services.DeleteDMSInput) error {
+	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/dms/"+input.ID, map[int][]error{
+		404: {
+			errs.ErrDMSNotFound,
+		},
+		400: {
+			errs.ErrValidateBadRequest,
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (cli *dmsManagerClient) GetDMSByID(ctx context.Context, input services.GetDMSByIDInput) (*models.DMS, error) {

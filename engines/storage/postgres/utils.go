@@ -240,14 +240,14 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 
 		} else {
 			nextBookmark = ""
-			decodedBookmark, err := base64.StdEncoding.DecodeString(queryParams.NextBookmark)
+			decodedBookmark, err := base64.RawURLEncoding.DecodeString(queryParams.NextBookmark)
 			if err != nil {
 				return "", fmt.Errorf("not a valid bookmark")
 			}
 
-			splits := strings.Split(string(decodedBookmark), ";")
+			splits := strings.SplitSeq(string(decodedBookmark), ";")
 
-			for _, splitPart := range splits {
+			for splitPart := range splits {
 				queryPart := strings.Split(splitPart, ":")
 				switch queryPart[0] {
 				case "off":
@@ -358,7 +358,7 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 			return "", nil
 		}
 
-		return base64.StdEncoding.EncodeToString([]byte(nextBookmark)), nil
+		return base64.RawURLEncoding.EncodeToString([]byte(nextBookmark)), nil
 	}
 }
 
@@ -426,15 +426,26 @@ func FilterOperandToWhereClause(filter resources.FilterOption, tx *gorm.DB) *gor
 	switch filter.FilterOperation {
 	case resources.StringEqual:
 		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
+	case resources.StringEqualIgnoreCase:
+		return tx.Where(fmt.Sprintf("%s ILIKE ?", filter.Field), filter.Value)
 	case resources.StringNotEqual:
 		return tx.Where(fmt.Sprintf("%s <> ?", filter.Field), filter.Value)
+	case resources.StringNotEqualIgnoreCase:
+		return tx.Where(fmt.Sprintf("%s NOT ILIKE ?", filter.Field), filter.Value)
 	case resources.StringContains:
 		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+	case resources.StringContainsIgnoreCase:
+		return tx.Where(fmt.Sprintf("%s ILIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.StringArrayContains:
 		// return tx.Where(fmt.Sprintf("? = ANY(%s)", filter.Field), filter.Value)
 		return tx.Where(fmt.Sprintf("%s LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+	case resources.StringArrayContainsIgnoreCase:
+		// return tx.Where(fmt.Sprintf("? = ANY(%s)", filter.Field), filter.Value)
+		return tx.Where(fmt.Sprintf("%s ILIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.StringNotContains:
 		return tx.Where(fmt.Sprintf("%s NOT LIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
+	case resources.StringNotContainsIgnoreCase:
+		return tx.Where(fmt.Sprintf("%s NOT ILIKE ?", filter.Field), fmt.Sprintf("%%%s%%", filter.Value))
 	case resources.DateEqual:
 		return tx.Where(fmt.Sprintf("%s = ?", filter.Field), filter.Value)
 	case resources.DateBefore:

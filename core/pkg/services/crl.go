@@ -15,6 +15,7 @@ type CRLService interface {
 	GetVARole(ctx context.Context, input GetVARoleInput) (*models.VARole, error)
 	GetVARoles(ctx context.Context, input GetVARolesInput) (string, error)
 	UpdateVARole(ctx context.Context, input UpdateVARoleInput) (*models.VARole, error)
+	InitCRLRole(ctx context.Context, caSki string) (*models.VARole, error)
 }
 
 type GetCRLInput struct {

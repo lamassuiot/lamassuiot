@@ -18,7 +18,7 @@ func Register() {
 
 		os.MkdirAll(engineConfig.Config.StorageDirectory, os.ModePerm)
 
-		uri := fmt.Sprintf("file://%s", engineConfig.Config.StorageDirectory)
+		uri := fmt.Sprintf("file://%s?no_tmp_dir", engineConfig.Config.StorageDirectory)
 		bucket, err := blob.OpenBucket(context.Background(), uri)
 		if err != nil {
 			return nil, err

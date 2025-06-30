@@ -150,6 +150,9 @@ func (p *AWSKMSCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
 		}
 
 		for _, alias := range aliases.Aliases {
+			if strings.HasPrefix(*alias.AliasName, "alias/aws/") {
+				continue
+			}
 			aliasName := strings.Replace(*alias.AliasName, "alias/", "", -1)
 			keyIDs = append(keyIDs, aliasName)
 		}
