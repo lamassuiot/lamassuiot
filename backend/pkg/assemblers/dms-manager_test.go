@@ -84,6 +84,53 @@ func TestCreateDMS(t *testing.T) {
 	checkDMS(t, dmsFromDB, dmsSample)
 }
 
+func TestCreateDMSWithInvalidIssuanceProfileShouldFail(t *testing.T) {
+
+	ctx := context.Background()
+
+	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	createCA := func(name string, lifespan string, issuance string) (*models.CACertificate, error) {
+		lifespanCABootDur, _ := models.ParseDuration(lifespan)
+		issuanceCABootDur, _ := models.ParseDuration(issuance)
+		return testServers.CA.Service.CreateCA(ctx, services.CreateCAInput{
+			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
+			Subject:            models.Subject{CommonName: name},
+			CAExpiration:       models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
+			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceCABootDur)},
+			Metadata:           map[string]any{},
+		})
+	}
+
+	caCert, err := createCA("boot", "1y", "1m")
+	if err != nil {
+		t.Fatalf("could not create bootstrap CA: %s", err)
+	}
+
+	dmsSample := services.CreateDMSInput{
+		ID:   dmsID,
+		Name: "MyIotFleet",
+		Settings: models.DMSSettings{
+			EnrollmentSettings: models.EnrollmentSettings{
+				EnrollmentProtocol: models.EST,
+				EnrollmentCA:       caCert.ID,
+			},
+			IssuanceProfile: &models.IssuanceProfile{
+				Validity: models.Validity{
+					Type:     models.Duration,
+					Duration: models.TimeDuration(time.Hour * 24 * 365), // 1 year
+				},
+			},
+		},
+	}
+
+	_, err = dmsMgr.Service.CreateDMS(context.Background(), dmsSample)
+	assert.ErrorIs(t, err, errs.ErrDMSIssuanceProfile)
+}
+
 func TestUpdateDMS(t *testing.T) {
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
 	if err != nil {
@@ -113,6 +160,61 @@ func TestUpdateDMS(t *testing.T) {
 	}
 
 	assert.Equal(t, dms.Name, dmsFromDB.Name)
+}
+
+func TestUpdateDMSWithInvalidIssuanceProfileShouldFail(t *testing.T) {
+
+	ctx := context.Background()
+
+	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	createCA := func(name string, lifespan string, issuance string) (*models.CACertificate, error) {
+		lifespanCABootDur, _ := models.ParseDuration(lifespan)
+		issuanceCABootDur, _ := models.ParseDuration(issuance)
+		return testServers.CA.Service.CreateCA(ctx, services.CreateCAInput{
+			KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 224},
+			Subject:            models.Subject{CommonName: name},
+			CAExpiration:       models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(lifespanCABootDur)},
+			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(issuanceCABootDur)},
+			Metadata:           map[string]any{},
+		})
+	}
+
+	caCert, err := createCA("boot", "1y", "1m")
+	if err != nil {
+		t.Fatalf("could not create bootstrap CA: %s", err)
+	}
+
+	dmsSample := services.CreateDMSInput{
+		ID:   dmsID,
+		Name: "MyIotFleet",
+	}
+	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
+	if err != nil {
+		t.Fatalf("could not create DMS: %s", err)
+	}
+	assert.Equal(t, dms.Name, dmsSample.Name)
+
+	dms.Name = "MyIotFleet2"
+	dms.Settings = models.DMSSettings{
+		EnrollmentSettings: models.EnrollmentSettings{
+			EnrollmentProtocol: models.EST,
+			EnrollmentCA:       caCert.ID,
+		},
+		IssuanceProfile: &models.IssuanceProfile{
+			Validity: models.Validity{
+				Type:     models.Duration,
+				Duration: models.TimeDuration(time.Hour * 24 * 365), // 1 year
+			},
+		},
+	}
+
+	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{DMS: *dms})
+	assert.ErrorIs(t, err, errs.ErrDMSIssuanceProfile)
+
 }
 
 func TestDeleteDMS(t *testing.T) {
@@ -1892,84 +1994,6 @@ func TestESTEnroll(t *testing.T) {
 
 				if err = helpers.ValidateCertificate(caCert, cert, true); err != nil {
 					t.Fatalf("could not validate certificate with CA: %s", err)
-				}
-			},
-		},
-		{
-			name: "Err/IssuanceProfileExpiresAfterEnrollmentCA",
-			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
-				bootstrapCA, err := createCA("boot", "1y", "1m")
-				if err != nil {
-					t.Fatalf("could not create bootstrap CA: %s", err)
-				}
-
-				enrollCA, err := createCA("enroll", "1y", "1m")
-				if err != nil {
-					t.Fatalf("could not create Enrollment CA: %s", err)
-				}
-
-				dms, err := createDMS(func(in *services.CreateDMSInput) {
-					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
-					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
-						bootstrapCA.ID,
-					}
-					in.Settings.IssuanceProfile = &models.IssuanceProfile{
-						Validity: models.Validity{
-							Type:     models.Duration,
-							Duration: models.TimeDuration(time.Hour * 24 * 365), // 1 year
-						},
-						SignAsCA: false,
-						ExtendedKeyUsages: []models.X509ExtKeyUsage{
-							models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
-							models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
-						},
-						HonorSubject:    true,
-						HonorExtensions: true,
-					}
-				})
-				if err != nil {
-					t.Fatalf("could not create DMS: %s", err)
-				}
-
-				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
-				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        bootstrapCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(bootCsr),
-					IssuanceProfile: models.IssuanceProfile{
-						Validity:        bootstrapCA.Validity,
-						SignAsCA:        false,
-						HonorSubject:    true,
-						HonorExtensions: true,
-					},
-				})
-				if err != nil {
-					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
-				}
-
-				estCli := est.Client{
-					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
-					AdditionalPathSegment: dms.ID,
-					Certificates:          []*x509.Certificate{(*x509.Certificate)(bootCrt.Certificate)},
-					PrivateKey:            bootKey,
-					InsecureSkipVerify:    true,
-				}
-
-				deviceID := fmt.Sprintf("enrolled-device-%s", uuid.NewString())
-				enrollKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
-				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
-
-				_, err = estCli.Enroll(context.Background(), enrollCSR)
-				return nil, nil, nil, err
-			},
-			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
-				if err == nil {
-					t.Fatalf("expected error. Got none")
-				}
-
-				expectedErr := "invalid expiration"
-				if !strings.Contains(err.Error(), expectedErr) {
-					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
 				}
 			},
 		},

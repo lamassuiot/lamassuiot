@@ -99,14 +99,23 @@ func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input service
 		return nil, errs.ErrDMSAlreadyExists
 	}
 
-	now := time.Now()
-
 	dms := &models.DMS{
 		ID:           input.ID,
 		Name:         input.Name,
 		Metadata:     input.Metadata,
-		CreationDate: now,
+		CreationDate: time.Now(),
 		Settings:     input.Settings,
+	}
+
+	// Issuance profile
+	issuanceProfile := dms.Settings.IssuanceProfile
+	if issuanceProfile != nil {
+		lFunc.Debugf("checking issuance profile validity for DMS '%s'", dms.ID)
+		enrollCAID := dms.Settings.EnrollmentSettings.EnrollmentCA
+		err = checkIssuanceProfileValidity(ctx, lFunc, svc.caClient, enrollCAID, issuanceProfile.Validity)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	dms, err = svc.dmsStorage.Insert(ctx, dms)
@@ -141,8 +150,44 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 	dms.Name = input.DMS.Name
 	dms.Settings = input.DMS.Settings
 
+	// Issuance profile
+	issuanceProfile := dms.Settings.IssuanceProfile
+	if issuanceProfile != nil {
+		lFunc.Debugf("checking issuance profile validity for DMS '%s'", dms.ID)
+		enrollCAID := dms.Settings.EnrollmentSettings.EnrollmentCA
+		err = checkIssuanceProfileValidity(ctx, lFunc, svc.caClient, enrollCAID, issuanceProfile.Validity)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	lFunc.Debugf("updating DMS %s", input.DMS.ID)
 	return svc.dmsStorage.Update(ctx, dms)
+}
+
+func checkIssuanceProfileValidity(ctx context.Context, lFunc *logrus.Entry, caClient services.CAService, enrollCAID string, profileValidity models.Validity) error {
+
+	enrollCA, err := caClient.GetCAByID(ctx, services.GetCAByIDInput{
+		CAID: enrollCAID,
+	})
+	if err != nil {
+		lFunc.Errorf("could not get enroll CA with ID=%s: %s", enrollCAID, err)
+		return err
+	}
+
+	var certExpiration time.Time
+	if profileValidity.Type == models.Duration {
+		certExpiration = time.Now().Add(time.Duration(profileValidity.Duration))
+	} else {
+		certExpiration = profileValidity.Time
+	}
+
+	caCert := enrollCA.Certificate.Certificate
+	if certExpiration.After(caCert.NotAfter) {
+		lFunc.Errorf("DMS owned devices certificates would expire after enrollment CA")
+		return errs.ErrDMSIssuanceProfile
+	}
+	return nil
 }
 
 func (svc DMSManagerServiceBackend) DeleteDMS(ctx context.Context, input services.DeleteDMSInput) error {
