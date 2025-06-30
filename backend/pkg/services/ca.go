@@ -1649,6 +1649,44 @@ func buildKeyInfo(engineID, keyID, keyType string, signer crypto.Signer, lFunc *
 	}, nil
 }
 
+func parseAlgorithm(inputAlgorithm string) (hash crypto.Hash, isRSA, isPSS bool, err error) {
+	switch inputAlgorithm {
+	case "RSASSA_PKCS1_v1_5_SHA_256":
+		isRSA = true
+		hash = crypto.SHA256
+	case "RSASSA_PKCS1_v1_5_SHA_384":
+		isRSA = true
+		hash = crypto.SHA384
+	case "RSASSA_PKCS1_v1_5_SHA_512":
+		isRSA = true
+		hash = crypto.SHA512
+	case "RSASSA_PSS_SHA_256":
+		isRSA = true
+		isPSS = true
+		hash = crypto.SHA256
+	case "RSASSA_PSS_SHA_384":
+		isRSA = true
+		isPSS = true
+		hash = crypto.SHA384
+	case "RSASSA_PSS_SHA_512":
+		isRSA = true
+		isPSS = true
+		hash = crypto.SHA512
+	case "ECDSA_SHA_256":
+		isRSA = false
+		hash = crypto.SHA256
+	case "ECDSA_SHA_384":
+		isRSA = false
+		hash = crypto.SHA384
+	case "ECDSA_SHA_512":
+		isRSA = false
+		hash = crypto.SHA512
+	default:
+		err = errors.New("unsupported algorithm")
+	}
+	return
+}
+
 func (svc *CAServiceBackend) GetKeys(tx context.Context) ([]*models.KeyInfo, error) {
 	lFunc := chelpers.ConfigureLogger(tx, svc.logger)
 	var keys []*models.KeyInfo
@@ -1860,39 +1898,9 @@ func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.Sig
 	var hash crypto.Hash
 	var isRSA, isPSS bool
 
-	switch input.Algorithm {
-	case "RSASSA_PKCS1_v1_5_SHA_256":
-		isRSA = true
-		hash = crypto.SHA256
-	case "RSASSA_PKCS1_v1_5_SHA_384":
-		isRSA = true
-		hash = crypto.SHA384
-	case "RSASSA_PKCS1_v1_5_SHA_512":
-		isRSA = true
-		hash = crypto.SHA512
-	case "RSASSA_PSS_SHA_256":
-		isRSA = true
-		isPSS = true
-		hash = crypto.SHA256
-	case "RSASSA_PSS_SHA_384":
-		isRSA = true
-		isPSS = true
-		hash = crypto.SHA384
-	case "RSASSA_PSS_SHA_512":
-		isRSA = true
-		isPSS = true
-		hash = crypto.SHA512
-	case "ECDSA_SHA_256":
-		isRSA = false
-		hash = crypto.SHA256
-	case "ECDSA_SHA_384":
-		isRSA = false
-		hash = crypto.SHA384
-	case "ECDSA_SHA_512":
-		isRSA = false
-		hash = crypto.SHA512
-	default:
-		return nil, errors.New("unsupported algorithm")
+	hash, isRSA, isPSS, err = parseAlgorithm(input.Algorithm)
+	if err != nil {
+		return nil, err
 	}
 
 	engine, ok := svc.cryptoEngines[engineID]
@@ -1970,39 +1978,9 @@ func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services
 	var hash crypto.Hash
 	var isRSA, isPSS bool
 
-	switch input.Algorithm {
-	case "RSASSA_PKCS1_v1_5_SHA_256":
-		isRSA = true
-		hash = crypto.SHA256
-	case "RSASSA_PKCS1_v1_5_SHA_384":
-		isRSA = true
-		hash = crypto.SHA384
-	case "RSASSA_PKCS1_v1_5_SHA_512":
-		isRSA = true
-		hash = crypto.SHA512
-	case "RSASSA_PSS_SHA_256":
-		isRSA = true
-		isPSS = true
-		hash = crypto.SHA256
-	case "RSASSA_PSS_SHA_384":
-		isRSA = true
-		isPSS = true
-		hash = crypto.SHA384
-	case "RSASSA_PSS_SHA_512":
-		isRSA = true
-		isPSS = true
-		hash = crypto.SHA512
-	case "ECDSA_SHA_256":
-		isRSA = false
-		hash = crypto.SHA256
-	case "ECDSA_SHA_384":
-		isRSA = false
-		hash = crypto.SHA384
-	case "ECDSA_SHA_512":
-		isRSA = false
-		hash = crypto.SHA512
-	default:
-		return false, errors.New("unsupported algorithm")
+	hash, isRSA, isPSS, err = parseAlgorithm(input.Algorithm)
+	if err != nil {
+		return false, err
 	}
 
 	engine, ok := svc.cryptoEngines[engineID]
