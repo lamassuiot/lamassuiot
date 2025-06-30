@@ -15,7 +15,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.ref_name }}
       - run: |
           echo "SHA1VER=dev-$(git rev-parse HEAD)" >> $GITHUB_ENV
           
