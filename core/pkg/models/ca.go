@@ -148,7 +148,7 @@ type KeyInfo struct {
 	ID        string `json:"id"`
 	Algorithm string `json:"algorithm"`
 	Size      string `json:"size"`
-	PublicKey string `json:"publicKey"`
+	PublicKey string `json:"public_key"`
 }
 
 type MessageSignature struct {

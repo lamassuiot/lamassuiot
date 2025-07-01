@@ -120,14 +120,16 @@ type CreateKeyBody struct {
 }
 
 type SignMessageBody struct {
-	Algorithm string `json:"algorithm"`
-	Message   []byte `json:"message"`
+	Algorithm   string                 `json:"algorithm"`
+	Message     []byte                 `json:"message"`
+	MessageType models.SignMessageType `json:"message_type"`
 }
 
 type VerifySignBody struct {
-	Algorithm string `json:"algorithm"`
-	Message   []byte `json:"message"`
-	Signature []byte `json:"signature"`
+	Algorithm   string                 `json:"algorithm"`
+	Message     []byte                 `json:"message"`
+	Signature   []byte                 `json:"signature"`
+	MessageType models.SignMessageType `json:"message_type"`
 }
 
 type ImportKeyBody struct {

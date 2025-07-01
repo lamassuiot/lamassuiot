@@ -264,16 +264,18 @@ type CreateKeyInput struct {
 }
 
 type SignMessageInput struct {
-	KeyID     string `validate:"required"`
-	Algorithm string `validate:"required"`
-	Message   []byte `validate:"required"`
+	KeyID       string                 `validate:"required"`
+	Algorithm   string                 `validate:"required"`
+	Message     []byte                 `validate:"required"`
+	MessageType models.SignMessageType `validate:"required"`
 }
 
 type VerifySignInput struct {
-	KeyID     string `validate:"required"`
-	Algorithm string `validate:"required"`
-	Signature []byte `validate:"required"`
-	Message   []byte `validate:"required"`
+	KeyID       string                 `validate:"required"`
+	Algorithm   string                 `validate:"required"`
+	Signature   []byte                 `validate:"required"`
+	Message     []byte                 `validate:"required"`
+	MessageType models.SignMessageType `validate:"required"`
 }
 
 type ImportKeyInput struct {

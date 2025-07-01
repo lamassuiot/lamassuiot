@@ -1687,6 +1687,32 @@ func parseAlgorithm(inputAlgorithm string) (hash crypto.Hash, isRSA, isPSS bool,
 	return
 }
 
+// Helper to get engine and signer
+func (svc *CAServiceBackend) getEngineAndSigner(engineID, keyID string) (*cryptoengines.CryptoEngine, crypto.Signer, error) {
+	engine, ok := svc.cryptoEngines[engineID]
+	if !ok {
+		return nil, nil, errors.New("engine not found")
+	}
+
+	engineInstance := *engine
+
+	signer, err := engineInstance.GetPrivateKeyByID(keyID)
+	if err != nil || signer == nil {
+		return nil, nil, errors.New("could not get signing key")
+	}
+	return engine, signer, nil
+}
+
+// Helper to calculate digest
+func calculateDigest(hash crypto.Hash, messageType models.SignMessageType, message []byte) []byte {
+	if messageType == models.Raw {
+		hasher := hash.New()
+		hasher.Write(message)
+		return hasher.Sum(nil)
+	}
+	return message
+}
+
 func (svc *CAServiceBackend) GetKeys(tx context.Context) ([]*models.KeyInfo, error) {
 	lFunc := chelpers.ConfigureLogger(tx, svc.logger)
 	var keys []*models.KeyInfo
@@ -1903,25 +1929,24 @@ func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.Sig
 		return nil, err
 	}
 
-	engine, ok := svc.cryptoEngines[engineID]
-	if !ok {
-		return nil, errors.New("engine not found")
-	}
-	engineInstance := *engine
-
-	signer, err := engineInstance.GetPrivateKeyByID(keyID)
-	if err != nil || signer == nil {
-		return nil, errors.New("could not get signing key")
+	_, signer, err := svc.getEngineAndSigner(engineID, keyID)
+	if err != nil {
+		return nil, err
 	}
 
-	hasher := hash.New()
-	hasher.Write(input.Message)
-	digest := hasher.Sum(nil)
+	digest := calculateDigest(hash, input.MessageType, input.Message)
 
 	var signature []byte
 	if isRSA {
+		rsaPriv, ok := signer.(*rsa.PrivateKey)
 		if !ok {
-			return nil, errors.New("key is not RSA private key")
+			return nil, errors.New("key is not RSA key")
+		}
+		if rsaPriv == nil {
+			return nil, errors.New("RSA key is nil")
+		}
+		if digest == nil {
+			return nil, errors.New("digest is nil")
 		}
 		if isPSS {
 			opts := &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: hash}
@@ -1940,10 +1965,10 @@ func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.Sig
 	} else {
 		ecdsaPriv, ok := signer.(*ecdsa.PrivateKey)
 		if !ok {
-			return nil, errors.New("key is not ECDSA private key")
+			return nil, errors.New("key is not ECDSA key")
 		}
 		if ecdsaPriv == nil {
-			return nil, errors.New("ecdsa private key is nil")
+			return nil, errors.New("ECDSA key is nil")
 		}
 		if digest == nil {
 			return nil, errors.New("digest is nil")
@@ -1983,27 +2008,19 @@ func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services
 		return false, err
 	}
 
-	engine, ok := svc.cryptoEngines[engineID]
-	if !ok {
-		return false, errors.New("engine not found")
-	}
-	engineInstance := *engine
-
-	signer, err := engineInstance.GetPrivateKeyByID(keyID)
-	if err != nil || signer == nil {
-		return false, errors.New("could not get signing key")
+	_, signer, err := svc.getEngineAndSigner(engineID, keyID)
+	if err != nil {
+		return false, err
 	}
 
 	publicKey := signer.Public()
 
-	hasher := hash.New()
-	hasher.Write(input.Message)
-	digest := hasher.Sum(nil)
+	digest := calculateDigest(hash, input.MessageType, input.Message)
 
 	if isRSA {
 		pub, ok := publicKey.(*rsa.PublicKey)
 		if !ok {
-			return false, errors.New("key is not RSA public key")
+			return false, errors.New("key is not RSA key")
 		}
 		if isPSS {
 			opts := &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: hash}
@@ -2024,7 +2041,7 @@ func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services
 	} else {
 		pub, ok := publicKey.(*ecdsa.PublicKey)
 		if !ok {
-			return false, errors.New("key is not ECDSA public key")
+			return false, errors.New("key is not ECDSA key")
 		}
 		// ECDSA signature is r||s, split in half
 		sigLen := len(input.Signature)

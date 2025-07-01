@@ -1307,9 +1307,10 @@ func (r *caHttpRoutes) SignMessage(ctx *gin.Context) {
 	}
 
 	signature, err := r.svc.SignMessage(ctx, services.SignMessageInput{
-		KeyID:     params.ID,
-		Algorithm: requestBody.Algorithm,
-		Message:   requestBody.Message,
+		KeyID:       params.ID,
+		Algorithm:   requestBody.Algorithm,
+		Message:     requestBody.Message,
+		MessageType: requestBody.MessageType,
 	})
 	if err != nil {
 		switch err {
@@ -1343,10 +1344,11 @@ func (r *caHttpRoutes) VerifySignature(ctx *gin.Context) {
 	}
 
 	valid, err := r.svc.VerifySignature(ctx, services.VerifySignInput{
-		KeyID:     params.ID,
-		Algorithm: requestBody.Algorithm,
-		Signature: requestBody.Signature,
-		Message:   requestBody.Message,
+		KeyID:       params.ID,
+		Algorithm:   requestBody.Algorithm,
+		Signature:   requestBody.Signature,
+		Message:     requestBody.Message,
+		MessageType: requestBody.MessageType,
 	})
 	if err != nil {
 		switch err {
