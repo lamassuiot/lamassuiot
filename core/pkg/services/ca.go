@@ -261,6 +261,7 @@ type UpdateCertificateMetadataInput struct {
 type CreateKeyInput struct {
 	Algorithm string `validate:"required"`
 	Size      string `validate:"required"`
+	EngineID  string
 }
 
 type SignMessageInput struct {
@@ -280,4 +281,5 @@ type VerifySignInput struct {
 
 type ImportKeyInput struct {
 	PrivateKey []byte `validate:"required"`
+	EngineID   string
 }

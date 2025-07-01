@@ -1802,10 +1802,18 @@ func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.Creat
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	engine, ok := svc.cryptoEngines[svc.defaultCryptoEngineID]
+	var engine *cryptoengines.CryptoEngine
+	var ok bool
+
+	if input.EngineID == "" {
+		engine, ok = svc.cryptoEngines[svc.defaultCryptoEngineID]
+	} else {
+		engine, ok = svc.cryptoEngines[input.EngineID]
+	}
+
 	if !ok {
-		lFunc.Errorf("CreateKey - Engine with id %s not found", svc.defaultCryptoEngineID)
-		return nil, fmt.Errorf("default crypto engine not found")
+		lFunc.Errorf("CreateKey - Engine with id %s not found", input.EngineID)
+		return nil, fmt.Errorf("crypto engine not found")
 	}
 
 	engineInstance := *engine
@@ -2082,7 +2090,21 @@ func (svc *CAServiceBackend) ImportKey(ctx context.Context, input services.Impor
 		return nil, errors.New("failed to parse private key")
 	}
 
-	engine := svc.defaultCryptoEngine
+	// Check if EngineID is provided, otherwise use default
+	var engine *cryptoengines.CryptoEngine
+	var ok bool
+
+	if input.EngineID == "" {
+		engine, ok = svc.cryptoEngines[svc.defaultCryptoEngineID]
+	} else {
+		engine, ok = svc.cryptoEngines[input.EngineID]
+	}
+
+	if !ok {
+		lFunc.Errorf("CreateKey - Engine with id %s not found", input.EngineID)
+		return nil, fmt.Errorf("Crypto engine not found")
+	}
+
 	engineInstance := *engine
 
 	var (

@@ -1243,6 +1243,7 @@ func (r *caHttpRoutes) CreateKey(ctx *gin.Context) {
 	key, err := r.svc.CreateKey(ctx, services.CreateKeyInput{
 		Algorithm: requestBody.Algorithm,
 		Size:      requestBody.Size,
+		EngineID:  requestBody.EngineID,
 	})
 
 	if err != nil {
@@ -1373,6 +1374,7 @@ func (r *caHttpRoutes) ImportKey(ctx *gin.Context) {
 
 	key, err := r.svc.ImportKey(ctx, services.ImportKeyInput{
 		PrivateKey: requestBody.PrivateKey,
+		EngineID:   requestBody.EngineID,
 	})
 
 	if err != nil {

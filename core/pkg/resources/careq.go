@@ -117,6 +117,7 @@ type ImportCertificateBody struct {
 type CreateKeyBody struct {
 	Algorithm string `json:"algorithm"`
 	Size      string `json:"size"`
+	EngineID  string `json:"engine_id"`
 }
 
 type SignMessageBody struct {
@@ -134,4 +135,5 @@ type VerifySignBody struct {
 
 type ImportKeyBody struct {
 	PrivateKey []byte `json:"private_key"`
+	EngineID   string `json:"engine_id"`
 }
