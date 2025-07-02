@@ -99,14 +99,23 @@ func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input service
 		return nil, errs.ErrDMSAlreadyExists
 	}
 
-	now := time.Now()
-
 	dms := &models.DMS{
 		ID:           input.ID,
 		Name:         input.Name,
 		Metadata:     input.Metadata,
-		CreationDate: now,
+		CreationDate: time.Now(),
 		Settings:     input.Settings,
+	}
+
+	// Issuance profile
+	issuanceProfile := dms.Settings.IssuanceProfile
+	if issuanceProfile != nil {
+		lFunc.Debugf("checking issuance profile validity for DMS '%s'", dms.ID)
+		enrollCAID := dms.Settings.EnrollmentSettings.EnrollmentCA
+		err = checkIssuanceProfileValidity(ctx, lFunc, svc.caClient, enrollCAID, issuanceProfile.Validity)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	dms, err = svc.dmsStorage.Insert(ctx, dms)
@@ -141,8 +150,44 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 	dms.Name = input.DMS.Name
 	dms.Settings = input.DMS.Settings
 
+	// Issuance profile
+	issuanceProfile := dms.Settings.IssuanceProfile
+	if issuanceProfile != nil {
+		lFunc.Debugf("checking issuance profile validity for DMS '%s'", dms.ID)
+		enrollCAID := dms.Settings.EnrollmentSettings.EnrollmentCA
+		err = checkIssuanceProfileValidity(ctx, lFunc, svc.caClient, enrollCAID, issuanceProfile.Validity)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	lFunc.Debugf("updating DMS %s", input.DMS.ID)
 	return svc.dmsStorage.Update(ctx, dms)
+}
+
+func checkIssuanceProfileValidity(ctx context.Context, lFunc *logrus.Entry, caClient services.CAService, enrollCAID string, profileValidity models.Validity) error {
+
+	enrollCA, err := caClient.GetCAByID(ctx, services.GetCAByIDInput{
+		CAID: enrollCAID,
+	})
+	if err != nil {
+		lFunc.Errorf("could not get enroll CA with ID=%s: %s", enrollCAID, err)
+		return err
+	}
+
+	var certExpiration time.Time
+	if profileValidity.Type == models.Duration {
+		certExpiration = time.Now().Add(time.Duration(profileValidity.Duration))
+	} else {
+		certExpiration = profileValidity.Time
+	}
+
+	caCert := enrollCA.Certificate.Certificate
+	if certExpiration.After(caCert.NotAfter) {
+		lFunc.Errorf("DMS owned devices certificates would expire after enrollment CA")
+		return errs.ErrDMSIssuanceProfile
+	}
+	return nil
 }
 
 func (svc DMSManagerServiceBackend) DeleteDMS(ctx context.Context, input services.DeleteDMSInput) error {
@@ -192,6 +237,15 @@ func (svc DMSManagerServiceBackend) GetDMSByID(ctx context.Context, input servic
 		return nil, errs.ErrDMSNotFound
 	}
 	lFunc.Debugf("read DMS %s", dms.ID)
+
+	// If not present, load issuance profile from CA
+	if dms.Settings.IssuanceProfile == nil {
+		lFunc.Debugf("DMS %s does not have an Issuance Profile set. Setting default Issuance Profile", dms.ID)
+		dms.Settings.IssuanceProfile, err = getDefaultIssuanceProfileFromCA(ctx, lFunc, svc.caClient, dms.Settings.EnrollmentSettings.EnrollmentCA)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	return dms, nil
 }
@@ -541,29 +595,21 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	lFunc = lFunc.WithField("step", "Signature")
 	lFunc.Infof("starting signature process")
 
-	enrollCAID := enrollSettings.EnrollmentCA
-	enrollCA, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{
-		CAID: enrollCAID,
-	})
-	if err != nil {
-		lFunc.Errorf("could not get enroll CA with ID=%s: %s", enrollCAID, err)
-		return nil, err
+	issuanceProfile := dms.Settings.IssuanceProfile
+	if issuanceProfile == nil {
+		lFunc.Debugf("DMS %s does not have an Issuance Profile set. Setting default Issuance Profile from CA", dms.ID)
+		issuanceProfile, err = getDefaultIssuanceProfileFromCA(ctx, lFunc, svc.caClient, enrollSettings.EnrollmentCA)
+		if err != nil {
+			lFunc.Errorf("could not get default Issuance Profile: %s", err)
+			return nil, err
+		}
 	}
 
 	lFunc.Infof("requesting certificate signature")
 	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
-		CAID:        enrollSettings.EnrollmentCA,
-		CertRequest: (*models.X509CertificateRequest)(csr),
-		IssuanceProfile: models.IssuanceProfile{
-			Validity: enrollCA.Validity,
-			SignAsCA: false,
-			ExtendedKeyUsages: []models.X509ExtKeyUsage{
-				models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
-				models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
-			},
-			HonorSubject:    true,
-			HonorExtensions: true,
-		},
+		CAID:            enrollSettings.EnrollmentCA,
+		CertRequest:     (*models.X509CertificateRequest)(csr),
+		IssuanceProfile: *issuanceProfile,
 	})
 	if err != nil {
 		lFunc.Errorf("could not issue certificate for device: %s", err)
@@ -845,19 +891,20 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		return nil, fmt.Errorf("invalid reenroll window")
 	}
 
+	issuanceProfile := dms.Settings.IssuanceProfile
+	if issuanceProfile == nil {
+		lFunc.Debugf("DMS %s does not have an Issuance Profile set. Setting default Issuance Profile from CA", dms.ID)
+		issuanceProfile, err = getDefaultIssuanceProfileFromCA(ctx, lFunc, svc.caClient, enrollSettings.EnrollmentCA)
+		if err != nil {
+			lFunc.Errorf("could not get default Issuance Profile: %s", err)
+			return nil, err
+		}
+	}
+
 	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
-		CAID:        enrollSettings.EnrollmentCA,
-		CertRequest: (*models.X509CertificateRequest)(csr),
-		IssuanceProfile: models.IssuanceProfile{
-			Validity: enrollCA.Validity,
-			SignAsCA: false,
-			ExtendedKeyUsages: []models.X509ExtKeyUsage{
-				models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
-				models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
-			},
-			HonorSubject:    true,
-			HonorExtensions: true,
-		},
+		CAID:            enrollSettings.EnrollmentCA,
+		CertRequest:     (*models.X509CertificateRequest)(csr),
+		IssuanceProfile: *issuanceProfile,
 	})
 	if err != nil {
 		lFunc.Errorf("could not issue certificate for device '%s': %s", csr.Subject.CommonName, err)
@@ -917,6 +964,28 @@ func checkCSRSignature(lFunc *logrus.Entry, csr *x509.CertificateRequest, operat
 	lFunc.Info("Valid CSR signature")
 
 	return nil
+}
+
+func getDefaultIssuanceProfileFromCA(ctx context.Context, logger *logrus.Entry, caClient services.CAService, enrollCAID string) (*models.IssuanceProfile, error) {
+
+	enrollCA, err := caClient.GetCAByID(ctx, services.GetCAByIDInput{
+		CAID: enrollCAID,
+	})
+	if err != nil {
+		logger.Errorf("could not get enroll CA with ID=%s: %s", enrollCAID, err)
+		return nil, err
+	}
+
+	return &models.IssuanceProfile{
+		Validity: enrollCA.Validity,
+		SignAsCA: false,
+		ExtendedKeyUsages: []models.X509ExtKeyUsage{
+			models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+			models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+		},
+		HonorSubject:    true,
+		HonorExtensions: true,
+	}, nil
 }
 
 func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, any, error) {
