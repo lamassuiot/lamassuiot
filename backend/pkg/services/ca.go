@@ -1651,13 +1651,13 @@ func buildKeyInfo(engineID, keyID, keyType string, signer crypto.Signer, lFunc *
 
 func parseAlgorithm(inputAlgorithm string) (hash crypto.Hash, isRSA, isPSS bool, err error) {
 	switch inputAlgorithm {
-	case "RSASSA_PKCS1_v1_5_SHA_256":
+	case "RSASSA_PKCS1_V1_5_SHA_256":
 		isRSA = true
 		hash = crypto.SHA256
-	case "RSASSA_PKCS1_v1_5_SHA_384":
+	case "RSASSA_PKCS1_V1_5_SHA_384":
 		isRSA = true
 		hash = crypto.SHA384
-	case "RSASSA_PKCS1_v1_5_SHA_512":
+	case "RSASSA_PKCS1_V1_5_SHA_512":
 		isRSA = true
 		hash = crypto.SHA512
 	case "RSASSA_PSS_SHA_256":
