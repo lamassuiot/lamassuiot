@@ -251,3 +251,31 @@ func (mw CAEventPublisher) DeleteCARequestByID(ctx context.Context, input servic
 func (mw CAEventPublisher) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
 	return mw.Next.GetCARequests(ctx, input)
 }
+
+func (mw CAEventPublisher) GetKeys(ctx context.Context) ([]*models.KeyInfo, error) {
+	return mw.Next.GetKeys(ctx)
+}
+
+func (mw CAEventPublisher) GetKeyByID(ctx context.Context, input services.GetByIDInput) (*models.KeyInfo, error) {
+	return mw.Next.GetKeyByID(ctx, input)
+}
+
+func (mw CAEventPublisher) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.KeyInfo, error) {
+	return mw.Next.CreateKey(ctx, input)
+}
+
+func (mw CAEventPublisher) DeleteKeyByID(ctx context.Context, input services.GetByIDInput) error {
+	return mw.Next.DeleteKeyByID(ctx, input)
+}
+
+func (mw CAEventPublisher) SignMessage(ctx context.Context, input services.SignMessageInput) (*models.MessageSignature, error) {
+	return mw.Next.SignMessage(ctx, input)
+}
+
+func (mw CAEventPublisher) VerifySignature(ctx context.Context, input services.VerifySignInput) (bool, error) {
+	return mw.Next.VerifySignature(ctx, input)
+}
+
+func (mw CAEventPublisher) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.KeyInfo, error) {
+	return mw.Next.ImportKey(ctx, input)
+}
