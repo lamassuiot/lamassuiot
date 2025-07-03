@@ -78,6 +78,13 @@ func (s *PostgresStorageEngine) initialiceCACertStorage() error {
 		}
 	}
 
+	if s.IssuanceProfile == nil {
+		s.IssuanceProfile, err = NewIssuanceProfileRepository(s.logger, psqlCli)
+		if err != nil {
+			return err
+		}
+	}
+
 	if s.CACertificateRequest == nil {
 		s.CACertificateRequest, err = NewCACertRequestPostgresRepository(s.logger, psqlCli)
 		if err != nil {

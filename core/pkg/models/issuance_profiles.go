@@ -9,10 +9,10 @@ type IssuanceProfile struct {
 	SignAsCA bool     `json:"sign_as_ca"`
 
 	HonorKeyUsage bool         `json:"honor_key_usage"`
-	KeyUsage      X509KeyUsage `json:"key_usage"`
+	KeyUsage      X509KeyUsage `json:"key_usage" gorm:"type:text;serializer:json"`
 
-	HonorExtendedKeyUsage bool              `json:"honor_extended_key_usage"`
-	ExtendedKeyUsages     []X509ExtKeyUsage `json:"extended_key_usage"`
+	HonorExtendedKeyUsages bool              `json:"honor_extended_key_usages"`
+	ExtendedKeyUsages      []X509ExtKeyUsage `json:"extended_key_usages" gorm:"type:text;serializer:json"`
 
 	HonorSubject bool    `json:"honor_subject"`
 	Subject      Subject `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
