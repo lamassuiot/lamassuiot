@@ -49,3 +49,12 @@ type CACertificateRequestRepo interface {
 	Update(ctx context.Context, caCertificate *models.CACertificateRequest) (*models.CACertificateRequest, error)
 	Delete(ctx context.Context, caID string) error
 }
+
+type IssuanceProfileRepo interface {
+	Count(ctx context.Context) (int, error)
+	SelectAll(ctx context.Context, req StorageListRequest[models.IssuanceProfile]) (string, error)
+	SelectByID(ctx context.Context, id string) (bool, *models.IssuanceProfile, error)
+	Insert(ctx context.Context, issuanceProfile *models.IssuanceProfile) (*models.IssuanceProfile, error)
+	Update(ctx context.Context, issuanceProfile *models.IssuanceProfile) (*models.IssuanceProfile, error)
+	Delete(ctx context.Context, id string) error
+}
