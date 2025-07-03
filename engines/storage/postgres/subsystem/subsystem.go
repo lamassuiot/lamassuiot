@@ -23,8 +23,8 @@ func (p *PostgresSubsystem) Prepare(dbs []string) error {
 	return nil
 }
 
-func (p *PostgresSubsystem) Run() (*subsystems.SubsystemBackend, error) {
-	pConfig, postgresEngine := postgres_test.BeforeSuite(p.dbs)
+func (p *PostgresSubsystem) Run(exposeAsStandardPort bool) (*subsystems.SubsystemBackend, error) {
+	pConfig, postgresEngine := postgres_test.BeforeSuite(p.dbs, exposeAsStandardPort)
 	configMap, err := config.EncodeStruct(pConfig)
 	if err != nil {
 		return nil, fmt.Errorf("could not encode postgres config: %s", err)
