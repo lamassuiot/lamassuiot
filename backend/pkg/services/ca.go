@@ -39,6 +39,7 @@ type CAServiceBackend struct {
 	caStorage                   storage.CACertificatesRepo
 	certStorage                 storage.CertificatesRepo
 	caCertificateRequestStorage storage.CACertificateRequestRepo
+	issuanceProfilesStorage     storage.IssuanceProfileRepo
 	vaServerDomains             []string
 	logger                      *logrus.Entry
 }
@@ -49,6 +50,7 @@ type CAServiceBuilder struct {
 	CAStorage                   storage.CACertificatesRepo
 	CertificateStorage          storage.CertificatesRepo
 	CACertificateRequestStorage storage.CACertificateRequestRepo
+	IssuanceProfileStorage      storage.IssuanceProfileRepo
 	VAServerDomains             []string
 }
 
@@ -1566,4 +1568,38 @@ func importCAValidation(sl validator.StructLevel) {
 			sl.ReportError(ca.CAECKey, "CAECKey", "CAECKey", "PrivateKeyAndCertificateNotMatch", "")
 		}
 	}
+}
+
+func (svc *CAServiceBackend) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {
+	return svc.issuanceProfilesStorage.SelectAll(ctx, storage.StorageListRequest[models.IssuanceProfile]{
+		ExhaustiveRun: input.ExhaustiveRun,
+		ApplyFunc:     input.ApplyFunc,
+		QueryParams:   input.QueryParameters,
+		ExtraOpts:     map[string]interface{}{},
+	})
+}
+
+func (svc *CAServiceBackend) GetIssuanceProfileByID(ctx context.Context, input services.GetIssuanceProfileByIDInput) (*models.IssuanceProfile, error) {
+	exists, profile, err := svc.issuanceProfilesStorage.SelectByID(ctx, input.ProfileID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !exists {
+		return nil, fmt.Errorf("issuance profile '%s' not found", input.ProfileID)
+	}
+
+	return profile, nil
+}
+
+func (svc *CAServiceBackend) CreateIssuanceProfile(ctx context.Context, input services.CreateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+	return svc.issuanceProfilesStorage.Insert(ctx, &input.Profile)
+}
+
+func (svc *CAServiceBackend) UpdateIssuanceProfile(ctx context.Context, input services.UpdateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+	return svc.issuanceProfilesStorage.Update(ctx, &input.Profile)
+}
+
+func (svc *CAServiceBackend) DeleteIssuanceProfile(ctx context.Context, input services.DeleteIssuanceProfileInput) error {
+	return svc.issuanceProfilesStorage.Delete(ctx, input.ProfileID)
 }

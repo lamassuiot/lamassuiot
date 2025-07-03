@@ -149,3 +149,28 @@ func (m *MockCAService) DeleteCARequestByID(ctx context.Context, input services.
 	args := m.Called(ctx, input)
 	return args.Error(0)
 }
+
+func (m *MockCAService) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {
+	args := m.Called(ctx, input)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockCAService) GetIssuanceProfileByID(ctx context.Context, input services.GetIssuanceProfileByIDInput) (*models.IssuanceProfile, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.IssuanceProfile), args.Error(1)
+}
+
+func (m *MockCAService) CreateIssuanceProfile(ctx context.Context, input services.CreateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.IssuanceProfile), args.Error(1)
+}
+
+func (m *MockCAService) UpdateIssuanceProfile(ctx context.Context, input services.UpdateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.IssuanceProfile), args.Error(1)
+}
+
+func (m *MockCAService) DeleteIssuanceProfile(ctx context.Context, input services.DeleteIssuanceProfileInput) error {
+	args := m.Called(ctx, input)
+	return args.Error(0)
+}

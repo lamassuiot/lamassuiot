@@ -251,3 +251,23 @@ func (mw CAEventPublisher) DeleteCARequestByID(ctx context.Context, input servic
 func (mw CAEventPublisher) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
 	return mw.Next.GetCARequests(ctx, input)
 }
+
+func (mw CAEventPublisher) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {
+	return mw.Next.GetIssuanceProfiles(ctx, input)
+}
+
+func (mw CAEventPublisher) GetIssuanceProfileByID(ctx context.Context, input services.GetIssuanceProfileByIDInput) (*models.IssuanceProfile, error) {
+	return mw.Next.GetIssuanceProfileByID(ctx, input)
+}
+
+func (mw CAEventPublisher) CreateIssuanceProfile(ctx context.Context, input services.CreateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+	return mw.Next.CreateIssuanceProfile(ctx, input)
+}
+
+func (mw CAEventPublisher) UpdateIssuanceProfile(ctx context.Context, input services.UpdateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+	return mw.Next.UpdateIssuanceProfile(ctx, input)
+}
+
+func (mw CAEventPublisher) DeleteIssuanceProfile(ctx context.Context, input services.DeleteIssuanceProfileInput) error {
+	return mw.Next.DeleteIssuanceProfile(ctx, input)
+}
