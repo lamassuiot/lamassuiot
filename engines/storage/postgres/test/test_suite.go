@@ -18,13 +18,13 @@ type PostgresSuite struct {
 	cleanupDocker func() error
 }
 
-func BeforeSuite(dbNames []string) (config.PostgresPSEConfig, PostgresSuite) {
+func BeforeSuite(dbNames []string, exposeAsStandardPort bool) (config.PostgresPSEConfig, PostgresSuite) {
 	dbs := make(map[string]string)
 	for _, dbName := range dbNames {
 		dbs[dbName] = ""
 	}
 
-	cleaner, conf, err := RunPostgresDocker(dbs)
+	cleaner, conf, err := RunPostgresDocker(dbs, exposeAsStandardPort)
 	if err != nil {
 		log.Fatal(err)
 	}

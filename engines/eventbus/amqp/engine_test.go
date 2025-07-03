@@ -11,7 +11,7 @@ import (
 )
 
 func prepareEventBusForTest(t *testing.T) (func() error, message.Publisher, func(serviceID string) message.Subscriber) {
-	cleanup, conf, _, err := rabbitmq_test.RunRabbitMQDocker()
+	cleanup, conf, _, err := rabbitmq_test.RunRabbitMQDocker(false)
 	if err != nil {
 		t.Fatalf("could not run RabbitMQ docker: %s", err)
 	}
