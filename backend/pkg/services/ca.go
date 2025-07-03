@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/x509engines"
@@ -80,6 +81,7 @@ func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
 		caStorage:                   builder.CAStorage,
 		certStorage:                 builder.CertificateStorage,
 		caCertificateRequestStorage: builder.CACertificateRequestStorage,
+		issuanceProfilesStorage:     builder.IssuanceProfileStorage,
 		vaServerDomains:             builder.VAServerDomains,
 		logger:                      builder.Logger,
 	}
@@ -1593,7 +1595,18 @@ func (svc *CAServiceBackend) GetIssuanceProfileByID(ctx context.Context, input s
 }
 
 func (svc *CAServiceBackend) CreateIssuanceProfile(ctx context.Context, input services.CreateIssuanceProfileInput) (*models.IssuanceProfile, error) {
-	return svc.issuanceProfilesStorage.Insert(ctx, &input.Profile)
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	id := uuid.NewString()
+	input.Profile.ID = id
+	lFunc.Infof("creating issuance profile '%s' with ID '%s'", input.Profile.Name, id)
+	p, err := svc.issuanceProfilesStorage.Insert(ctx, &input.Profile)
+	if err != nil {
+		lFunc.Errorf("could not create issuance profile '%s': %s", input.Profile.Name, err)
+		return nil, err
+	}
+
+	lFunc.Infof("issuance profile '%s' with ID '%s' created successfully", input.Profile.Name, id)
+	return p, nil
 }
 
 func (svc *CAServiceBackend) UpdateIssuanceProfile(ctx context.Context, input services.UpdateIssuanceProfileInput) (*models.IssuanceProfile, error) {
