@@ -583,21 +583,23 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		lFunc.Errorf("could not get engine %s: %s", input.EngineID, err)
 	}
 
-	// Generate Key Pair to be used by the new CA
-	keyID, signer, err := engine.GenerateKeyPair(ctx, input.KeyMetadata)
-	if err != nil {
-		lFunc.Errorf("could not generate CA %s private key: %s", input.Subject.CommonName, err)
-		return nil, err
-	}
-
 	var ca *x509.Certificate
 	var caLevel int
 	var issuerCAMeta models.IssuerCAMetadata
 
-	skid := keyID
-	akid := skid
+	var akid, skid string
 	// Check if CA is Root (self-signed) or Subordinate (signed by another CA). Non self-signed/root CAs require a parent CA
 	if input.ParentID == "" {
+		// Generate Key Pair to be used by the new CA
+		keyID, signer, err := engine.GenerateKeyPair(ctx, input.KeyMetadata)
+		if err != nil {
+			lFunc.Errorf("could not generate CA %s private key: %s", input.Subject.CommonName, err)
+			return nil, err
+		}
+
+		skid = keyID
+		akid = keyID
+
 		// Root CA. Root CAs can be generate directly
 		ca, err = engine.CreateRootCA(ctx, signer, keyID, input.Subject, input.CAExpiration)
 		if err != nil {
@@ -653,6 +655,8 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 			lFunc.Errorf("could not create CA %s CSR: %s", input.Subject.CommonName, err)
 			return nil, err
 		}
+
+		skid = caCSR.KeyId
 
 		signedCA, err := svc.SignCertificate(ctx, services.SignCertificateInput{
 			CAID:            input.ParentID,
