@@ -17,6 +17,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	"github.com/sirupsen/logrus"
 
 	"golang.org/x/crypto/ocsp"
@@ -336,7 +337,14 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	}
 	level := 0
 
-	skid := helpers.FormatHexWithColons(input.CACertificate.SubjectKeyId)
+	skid, err := software.NewSoftwareCryptoEngine(lFunc).EncodePKIXPublicKeyDigest(input.CACertificate.PublicKey)
+	if err != nil {
+		lFunc.Errorf("could not encode public key digest: %s", err)
+		return nil, fmt.Errorf("could not encode public key digest: %w", err)
+	}
+
+	// TODO when KMS is ready
+	// In order to import a CA, we need to verify that the PKI has "access" to the parent CA public key AKI
 	akid := helpers.FormatHexWithColons(input.CACertificate.AuthorityKeyId)
 
 	isSelfSigned := helpers.IsSelfSignedCertificate(akid, skid, (*x509.Certificate)(input.CACertificate))
@@ -393,6 +401,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		CreationTS: time.Now(),
 		Level:      level,
 		Certificate: models.Certificate{
+			VersionSchema:       "unknown",
 			SubjectKeyID:        skid,
 			AuthorityKeyID:      akid,
 			Certificate:         input.CACertificate,
@@ -585,7 +594,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	var caLevel int
 	var issuerCAMeta models.IssuerCAMetadata
 
-	skid := helpers.FormatHexWithColons([]byte(keyID))
+	skid := keyID
 	akid := skid
 	// Check if CA is Root (self-signed) or Subordinate (signed by another CA). Non self-signed/root CAs require a parent CA
 	if input.ParentID == "" {
@@ -678,6 +687,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		CreationTS: time.Now(),
 		Level:      caLevel,
 		Certificate: models.Certificate{
+			VersionSchema:  "1.0",
 			SubjectKeyID:   skid,
 			AuthorityKeyID: akid,
 			Certificate:    (*models.X509Certificate)(ca),
@@ -1165,10 +1175,23 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		return nil, err
 	}
 
+	ski, err := software.NewSoftwareCryptoEngine(lFunc).EncodePKIXPublicKeyDigest(x509Cert.PublicKey)
+	if err != nil {
+		lFunc.Errorf("could not encode public key digest for certificate %s: %s", x509Cert.Subject.CommonName, err)
+		return nil, err
+	}
+
+	aki, err := software.NewSoftwareCryptoEngine(lFunc).EncodePKIXPublicKeyDigest(caCert.PublicKey)
+	if err != nil {
+		lFunc.Errorf("could not encode authority key identifier for CA %s: %s", caCert.Subject.CommonName, err)
+		return nil, err
+	}
+
 	cert := models.Certificate{
-		Metadata:    map[string]interface{}{},
-		Type:        models.CertificateTypeExternal,
-		Certificate: (*models.X509Certificate)(x509Cert),
+		VersionSchema: "1.0",
+		Metadata:      map[string]interface{}{},
+		Type:          models.CertificateTypeExternal,
+		Certificate:   (*models.X509Certificate)(x509Cert),
 		IssuerCAMetadata: models.IssuerCAMetadata{
 			SN: helpers.SerialNumberToString(caCert.SerialNumber),
 			ID: ca.ID,
@@ -1182,8 +1205,8 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		ValidTo:             x509Cert.NotAfter,
 		RevocationTimestamp: time.Time{},
 		IsCA:                x509Cert.IsCA,
-		SubjectKeyID:        helpers.FormatHexWithColons(x509Cert.SubjectKeyId),
-		AuthorityKeyID:      helpers.FormatHexWithColons(x509Cert.AuthorityKeyId),
+		SubjectKeyID:        ski,
+		AuthorityKeyID:      aki,
 		EngineID:            "",
 	}
 
@@ -1215,7 +1238,14 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 		status = models.StatusExpired
 	}
 
+	skid, err := software.NewSoftwareCryptoEngine(lFunc).EncodePKIXPublicKeyDigest(x509Cert.PublicKey)
+	if err != nil {
+		lFunc.Errorf("could not encode public key digest for certificate %s: %s", x509Cert.Subject.CommonName, err)
+		return nil, err
+	}
+
 	newCert := models.Certificate{
+		VersionSchema:       "unknown",
 		Metadata:            input.Metadata,
 		Type:                models.CertificateTypeExternal,
 		Certificate:         (*models.X509Certificate)(input.Certificate),
@@ -1227,6 +1257,7 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 		ValidTo:             input.Certificate.NotAfter,
 		RevocationTimestamp: time.Time{},
 		IsCA:                x509Cert.IsCA,
+		SubjectKeyID:        skid,
 	}
 
 	var parentCA *models.CACertificate

@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"os"
@@ -16,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -148,6 +148,23 @@ func checkCertificate(cert *x509.Certificate, tcSubject cmodels.Subject, tcKeyMe
 	if !cert.NotAfter.Equal(tcExpirationTime.UTC().Truncate(time.Second)) {
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.NotAfter, tcExpirationTime.UTC().Truncate(time.Minute))
 	}
+
+	if cert.OCSPServer[0] != "http://ocsp.lamassu.io/ocsp" {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[0], "http://ocsp.lamassuiot.com/ocsp")
+	}
+
+	if cert.OCSPServer[1] != "http://va.lamassu.io/ocsp" {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[1], "http://va.lamassuiot.com/ocsp")
+	}
+
+	v2CrlID := hex.EncodeToString(cert.AuthorityKeyId)
+	if cert.CRLDistributionPoints[0] != "http://ocsp.lamassu.io/crl/"+v2CrlID {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[0], "http://crl.lamassuiot.com/crl/"+v2CrlID)
+	}
+
+	if cert.CRLDistributionPoints[1] != "http://va.lamassu.io/crl/"+v2CrlID {
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[1], "http://va.lamassuiot.com/crl/"+v2CrlID)
+	}
 	return nil
 }
 
@@ -169,7 +186,7 @@ func checkCACertificate(cert *x509.Certificate, ca *x509.Certificate, tcSubject 
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[1], "http://va.lamassuiot.com/ocsp")
 	}
 
-	v2CrlID := helpers.FormatHexWithColons([]byte(ca.SubjectKeyId))
+	v2CrlID := hex.EncodeToString(ca.SubjectKeyId)
 	if cert.CRLDistributionPoints[0] != "http://ocsp.lamassu.io/crl/"+v2CrlID {
 		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[0], "http://crl.lamassuiot.com/crl/"+v2CrlID)
 	}

@@ -670,6 +670,7 @@ func (svc *AWSCloudConnectorServiceBackend) GetRegisteredCAs(ctx context.Context
 				lFunc.Debugf("No marker")
 				continueIter = false
 			}
+
 			lmsCA, err := svc.CaSDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: string(descCrt.SubjectKeyId)})
 			if err != nil {
 				lFunc.Warnf("skipping CA with ID AWS '%s' - LAMASSU '%s'. Could not get CA from CA service: %s", *caMeta.CertificateId, string(descCrt.SubjectKeyId), err)
