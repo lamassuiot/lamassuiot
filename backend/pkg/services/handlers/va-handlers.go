@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/cloudevents/sdk-go/v2/event"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -56,8 +55,9 @@ func updateCertificateStatus(event *event.Event, crlSvc services.CRLService, lMe
 		return err
 	}
 
-	ski := helpers.FormatHexWithColons(cert.Updated.Certificate.SubjectKeyId)
-	aki := helpers.FormatHexWithColons(cert.Updated.Certificate.AuthorityKeyId)
+	ski := cert.Updated.SubjectKeyID
+	aki := cert.Updated.AuthorityKeyID
+
 	cn := cert.Updated.Certificate.Subject.CommonName
 	icn := cert.Updated.Certificate.Issuer.CommonName
 
