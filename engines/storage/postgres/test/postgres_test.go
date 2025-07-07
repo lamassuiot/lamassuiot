@@ -12,7 +12,7 @@ import (
 )
 
 func TestEmptyDumpImport(t *testing.T) {
-	cfg, suite := BeforeSuite([]string{"ca"})
+	cfg, suite := BeforeSuite([]string{"ca"}, false)
 
 	defer suite.cleanupDocker()
 
@@ -42,7 +42,7 @@ func TestDumpImport(t *testing.T) {
 
 	pCleanup, cfg, err := RunPostgresDocker(map[string]string{
 		"ca": string(dump),
-	})
+	}, false)
 	if err != nil {
 		t.Fatalf("could not launch Postgres: %s", err)
 	}
@@ -92,7 +92,7 @@ func TestDumpImport(t *testing.T) {
 }
 
 func TestBeforeSuite(t *testing.T) {
-	_, suite := BeforeSuite([]string{"ca"})
+	_, suite := BeforeSuite([]string{"ca"}, false)
 	defer suite.cleanupDocker()
 
 	db := suite.DB["ca"]

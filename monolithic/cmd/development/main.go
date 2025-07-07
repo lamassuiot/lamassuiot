@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/fatih/color"
@@ -81,6 +82,8 @@ const (
 )
 
 func main() {
+	standardDockerPorts := flag.Bool("standard-docker-ports", true, "use standard docker ports for services (RabbitMQ, Postgres, Vault, etc.)")
+
 	hsmModule := flag.String("hsm-module-path", "", "enable HSM support")
 
 	awsIoTManager := flag.Bool("awsiot", false, "enable AWS IoT Manager")
@@ -129,21 +132,92 @@ func main() {
 		}
 		fmt.Printf("Crypto Engines: %v\n", cryptoengineOptionsMap)
 	}
+	cleanup := func() {
+		fmt.Println("========== CLEANING UP ==========")
+
+		cli, err := docker.NewClientFromEnv()
+		if err != nil {
+			fmt.Println("could not create docker client: ", err)
+			return
+		}
+
+		// List all containers (running or not)
+		containers, err := cli.ListContainers(docker.ListContainersOptions{
+			All: true,
+		})
+		if err != nil {
+			log.Fatalf("Could not list containers: %s", err)
+		}
+
+		// Label to match
+		targetLabel := "group"
+		targetValue := "lamassuiot-monolithic"
+
+		for _, container := range containers {
+			labels := container.Labels
+			if val, ok := labels[targetLabel]; ok && val == targetValue {
+				log.Printf("Found container %s with label %s=%s", container.ID, targetLabel, targetValue)
+
+				// Stop the container
+				err := cli.StopContainer(container.ID, 10)
+				if err != nil {
+					log.Printf("Error stopping container %s: %v", container.ID, err)
+				} else {
+					log.Printf("Stopped container %s", container.ID)
+				}
+
+				// Remove the container
+				err = cli.RemoveContainer(docker.RemoveContainerOptions{
+					ID:    container.ID,
+					Force: true,
+				})
+				if err != nil {
+					log.Printf("Error removing container %s: %v", container.ID, err)
+				} else {
+					log.Printf("Removed container %s", container.ID)
+				}
+			}
+		}
+	}
+
+	//capture future panics
+	defer func() {
+		if err := recover(); err != nil {
+			printWColor(" !! Panic !! ", color.FgWhite, color.BgRed)
+			fmt.Println(err)
+			fmt.Println()
+
+			printWColor("cleaning up", color.FgRed, color.BgBlack)
+			fmt.Println()
+
+			cleanup()
+		}
+	}()
+
+	//capture CTRL+C
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		for range c {
+			// sig is a ^C, handle it
+			fmt.Println("ctrl+c triggered. Cleaning up")
+			cleanup()
+			os.Exit(0)
+		}
+	}()
 
 	fmt.Println("========== LAUNCHING AUXILIARY SERVICES ==========")
 	fmt.Println("Storage Engine")
-	pCleanup := func() { /* do nothing */ }
 	var postgresStorageConfig cconfig.PluggableStorageEngine
 
 	fmt.Println(">> launching docker: Postgres ...")
 	posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
 	posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va"})
-	backend, err := posgresSubsystem.Run()
+	backend, err := posgresSubsystem.Run(*standardDockerPorts)
 	if err != nil {
 		log.Fatalf("could not launch Postgres: %s", err)
 	}
 
-	pCleanup = backend.AfterSuite
 	postgresStorageConfig = backend.Config.(cconfig.PluggableStorageEngine)
 
 	fmt.Printf(" 	-- postgres port: %d\n", postgresStorageConfig.Config["port"].(int))
@@ -151,18 +225,16 @@ func main() {
 	fmt.Printf(" 	-- postgres pass: %s\n", postgresStorageConfig.Config["password"].(cconfig.Password))
 
 	fmt.Println("Crypto Engines")
-	vCleanup := func() { /* do nothing */ }
 
 	var vaultCryptoEngine cconfig.CryptoEngineConfig
 	rootToken := ""
 	if _, ok := cryptoengineOptionsMap[Vault]; ok {
 		fmt.Println(">> launching docker: Hashicorp Vault ...")
-		vaultSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Vault).Run()
+		vaultSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Vault).Run(*standardDockerPorts)
 		if err != nil {
 			log.Fatalf("could not launch Hashicorp Vault: %s", err)
 		}
 
-		vCleanup = vaultSubsystem.AfterSuite
 		vaultCryptoEngine := vaultSubsystem.Config.(cconfig.CryptoEngineConfig)
 
 		port := (vaultCryptoEngine.Config)["port"].(int)
@@ -174,38 +246,33 @@ func main() {
 
 	_, awsSecretsEnabled := cryptoengineOptionsMap[AwsSecretsManager]
 	_, awsKmsEnabled := cryptoengineOptionsMap[AwsKms]
-	awsCleanup := func() { /* do nothing */ }
 	var awsBaseCryptoEngine cconfig.CryptoEngineConfig
 	if awsSecretsEnabled || awsKmsEnabled {
 		fmt.Println(">> launching docker: AWS Platform (Secrets Manager + KMS) ...")
-		awsSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Aws).Run()
+		awsSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Aws).Run(*standardDockerPorts)
 		if err != nil {
 			log.Fatalf("could not launch AWS Platform: %s", err)
 		}
 
-		awsCleanup = awsSubsystem.AfterSuite
 		awsBaseCryptoEngine = awsSubsystem.Config.(cconfig.CryptoEngineConfig)
 	}
 
 	hsmModulePath := *hsmModule
-	var softhsmCleanup func()
 	var pkcs11Cfg cconfig.CryptoEngineConfig
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok && hsmModulePath != "" {
 		fmt.Println(">> launching docker: SoftHSM ...")
 		pkcs11SubsystemBuilder := subsystems.GetSubsystemBuilder[subsystems.ParametrizedSubsystem](subsystems.Pkcs11)
 		pkcs11SubsystemBuilder.Prepare(map[string]interface{}{"hsmModulePath": hsmModulePath})
-		pkcs11Subsystem, err := pkcs11SubsystemBuilder.Run()
+		pkcs11Subsystem, err := pkcs11SubsystemBuilder.Run(*standardDockerPorts)
 		if err != nil {
 			log.Fatalf("could not launch SoftHSM: %s", err)
 		}
-		softhsmCleanup = pkcs11Subsystem.AfterSuite
 
 		pkcs11Cfg = pkcs11Subsystem.Config.(cconfig.CryptoEngineConfig)
 
 	}
 
 	fmt.Println("Async Messaging Engine")
-	rmqCleanup := func() { /* do nothing */ }
 	adminPort := 0
 	eventBus := cconfig.EventBusEngine{
 		LogLevel: cconfig.Trace,
@@ -216,12 +283,10 @@ func main() {
 
 	if !*disableEventbus && !*useAwsEventbus {
 		fmt.Println(">> launching docker: RabbitMQ ...")
-		rabbitmqSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.RabbitMQ).Run()
+		rabbitmqSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.RabbitMQ).Run(*standardDockerPorts)
 		if err != nil {
 			log.Fatalf("could not launch RabbitMQ: %s", err)
 		}
-
-		rmqCleanup = rabbitmqSubsystem.AfterSuite
 
 		eventBus = rabbitmqSubsystem.Config.(cconfig.EventBusEngine)
 
@@ -246,7 +311,6 @@ func main() {
 		}
 	}
 
-	var uiCleanup func()
 	var uiPort int
 	fmt.Printf(">> UI Enabled : %v\n", !*disableUI)
 
@@ -260,15 +324,15 @@ func main() {
 			Repository: "ghcr.io/lamassuiot/lamassu-ui", // image
 			Tag:        "latest",                        // version
 			Env:        []string{"OIDC_ENABLED=false", "DOMAIN=localhost:8443", "COGNITO_ENABLED=false", "CLOUD_CONNECTORS=" + cloudConnectors},
+			Labels: map[string]string{
+				"group": "lamassuiot-monolithic",
+			},
 		}, func(hc *docker.HostConfig) {
 			hc.AutoRemove = true
 		})
 
 		uiPort, _ = strconv.Atoi(container.GetPort("8080/tcp"))
 
-		uiCleanup = func() {
-			containerCleanup()
-		}
 		if err != nil {
 			containerCleanup()
 			log.Fatalf("could not launch ghcr.io/lamassuiot/lamassu-ui:latest: %s", err)
@@ -276,49 +340,6 @@ func main() {
 	}
 
 	fmt.Println("========== READY TO LAUNCH MONOLITHIC PKI ==========")
-
-	cleanup := func() {
-		fmt.Println("========== CLEANING UP ==========")
-		svcCleanup := func(svcName string, cleaner func()) {
-			fmt.Printf(">> Cleaning %s ...\n", svcName)
-			cleaner()
-		}
-
-		svcCleanup("Postgres", pCleanup)
-		svcCleanup("Hashicorp Vault", vCleanup)
-		svcCleanup("RabbitMQ", rmqCleanup)
-		svcCleanup("AWS-LocalStack", awsCleanup)
-		if hsmModulePath != "" {
-			svcCleanup("SoftHSM V2", softhsmCleanup)
-		}
-		if !*disableUI {
-			svcCleanup("Lamassu-UI", uiCleanup)
-		}
-	}
-
-	//capture future panics
-	defer func() {
-		if err := recover(); err != nil {
-			printWColor(" !! Panic !! ", color.FgWhite, color.BgRed)
-			fmt.Println(err)
-			fmt.Println()
-
-			printWColor("cleaning up", color.FgRed, color.BgBlack)
-			fmt.Println()
-		}
-	}()
-
-	//capture CTRL+C
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	go func() {
-		for range c {
-			// sig is a ^C, handle it
-			fmt.Println("ctrl+c triggered. Cleaning up")
-			cleanup()
-			os.Exit(0)
-		}
-	}()
 
 	cryptoEnginesConfig := config.CryptoEngines{
 		LogLevel: cconfig.Info,

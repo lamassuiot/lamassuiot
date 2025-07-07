@@ -14,9 +14,8 @@ func Register() {
 type VaultKV2Subsystem struct {
 }
 
-func (p *VaultKV2Subsystem) Run() (*subsystems.SubsystemBackend, error) {
-
-	vaultSDKConf, vaultSuite := vault_test.BeforeSuite()
+func (p *VaultKV2Subsystem) Run(exposeAsStandardPort bool) (*subsystems.SubsystemBackend, error) {
+	vaultSDKConf, vaultSuite := vault_test.BeforeSuite(exposeAsStandardPort)
 
 	config, err := config.CryptoEngineConfigAdapter[vconfig.HashicorpVaultSDK]{
 		ID:       "vault-1",
