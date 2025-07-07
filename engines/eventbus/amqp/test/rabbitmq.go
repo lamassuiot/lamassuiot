@@ -15,7 +15,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func RunRabbitMQDocker() (func() error, *ampq.AMQPConnection, int, error) {
+func RunRabbitMQDocker(exposeAsStandardPort bool) (func() error, *ampq.AMQPConnection, int, error) {
 	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker(dockertest.RunOptions{
 		Repository: "rabbitmq",        // image
 		Tag:        "3.12-management", // version
@@ -23,7 +23,27 @@ func RunRabbitMQDocker() (func() error, *ampq.AMQPConnection, int, error) {
 			"RABBITMQ_DEFAULT_USER=user",
 			"RABBITMQ_DEFAULT_PASS=user",
 		},
-	}, func(hc *docker.HostConfig) {})
+		Labels: map[string]string{
+			"group": "lamassuiot-monolithic",
+		},
+	}, func(hc *docker.HostConfig) {
+		if exposeAsStandardPort {
+			hc.PortBindings = map[docker.Port][]docker.PortBinding{
+				"5672/tcp": {
+					{
+						HostIP:   "0.0.0.0",
+						HostPort: "5672", // random port
+					},
+				},
+				"15672/tcp": {
+					{
+						HostIP:   "0.0.0.0",
+						HostPort: "15672", // random port
+					},
+				},
+			}
+		}
+	})
 	if err != nil {
 		return nil, nil, -1, err
 	}

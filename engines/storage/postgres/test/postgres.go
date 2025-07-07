@@ -18,7 +18,7 @@ const (
 	passwd = "test"
 )
 
-func RunPostgresDocker(dbs map[string]string) (func() error, *config.PostgresPSEConfig, error) {
+func RunPostgresDocker(dbs map[string]string, exposeAsStandardPort bool) (func() error, *config.PostgresPSEConfig, error) {
 	pwd, err := os.Getwd()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get working directory: %s", err)
@@ -79,9 +79,24 @@ func RunPostgresDocker(dbs map[string]string) (func() error, *config.PostgresPSE
 		Repository: "postgres", // image
 		Tag:        "14",       // version
 		Env:        []string{"POSTGRES_PASSWORD=" + passwd},
+		Labels: map[string]string{
+			"group": "lamassuiot-monolithic",
+		},
+		PortBindings: map[docker.Port][]docker.PortBinding{},
 	}, func(hc *docker.HostConfig) {
 		hc.Mounts = mounts
 		hc.AutoRemove = false
+
+		if exposeAsStandardPort {
+			hc.PortBindings = map[docker.Port][]docker.PortBinding{
+				"5432/tcp": {
+					{
+						HostIP:   "0.0.0.0",
+						HostPort: "5432", // random port
+					},
+				},
+			}
+		}
 	})
 	if err != nil {
 		return nil, nil, err

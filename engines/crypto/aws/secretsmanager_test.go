@@ -85,7 +85,7 @@ func TestAWSSecretsManagerCryptoEngine(t *testing.T) {
 }
 
 func prepareSecretsManagerCryptoEngine(t *testing.T) (func() error, cryptoengines.CryptoEngine, error) {
-	beforeTestCleanup, containerCleanup, conf, err := laws.RunAWSEmulationLocalStackDocker()
+	beforeTestCleanup, containerCleanup, conf, err := laws.RunAWSEmulationLocalStackDocker(false)
 	if err != nil {
 		return nil, nil, err
 	}

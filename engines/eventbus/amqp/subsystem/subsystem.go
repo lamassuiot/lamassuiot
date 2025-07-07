@@ -13,9 +13,8 @@ func Register() {
 type RabbitMQSubsystem struct {
 }
 
-func (p *RabbitMQSubsystem) Run() (*subsystems.SubsystemBackend, error) {
-
-	cleanup, conf, adminPort, err := rabbitmq_test.RunRabbitMQDocker()
+func (p *RabbitMQSubsystem) Run(exposeAsStandardPort bool) (*subsystems.SubsystemBackend, error) {
+	cleanup, conf, adminPort, err := rabbitmq_test.RunRabbitMQDocker(exposeAsStandardPort)
 	if err != nil {
 		return nil, err
 	}
