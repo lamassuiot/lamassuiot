@@ -62,7 +62,7 @@ func preparePKCS11CryptoEngine(t *testing.T) (func() (cryptoengines.CryptoEngine
 		t.Skip("PKCS11_MODULE_PATH not set")
 	}
 
-	beforeEach, _, engineConf, err := docker.RunSoftHsmV2Docker(soPath)
+	beforeEach, _, engineConf, err := docker.RunSoftHsmV2Docker(false, soPath)
 	if err != nil {
 		return nil, err
 	}

@@ -11,7 +11,7 @@ import (
 	"github.com/ory/dockertest/v3/docker"
 )
 
-func RunSoftHsmV2Docker(pkcs11ProxyPath string) (func() error, func() error, pconfig.PKCS11Config, error) {
+func RunSoftHsmV2Docker(exposeAsStandardPort bool, pkcs11ProxyPath string) (func() error, func() error, pconfig.PKCS11Config, error) {
 	slot := "0"
 	label := "lamassuHSM"
 	pin := "0123"
@@ -27,7 +27,21 @@ func RunSoftHsmV2Docker(pkcs11ProxyPath string) (func() error, func() error, pco
 			fmt.Sprintf("SO_PIN=%s", sopin),
 			fmt.Sprintf("CONNECTION_PROTOCOL=%s", proto),
 		},
-	}, func(hc *docker.HostConfig) {})
+		Labels: map[string]string{
+			"group": "lamassuiot-monolithic",
+		},
+	}, func(hc *docker.HostConfig) {
+		if exposeAsStandardPort {
+			hc.PortBindings = map[docker.Port][]docker.PortBinding{
+				"5657/tcp": {
+					{
+						HostIP:   "0.0.0.0",
+						HostPort: "5657", // random port
+					},
+				},
+			}
+		}
+	})
 	if err != nil {
 		return nil, nil, pconfig.PKCS11Config{}, err
 	}

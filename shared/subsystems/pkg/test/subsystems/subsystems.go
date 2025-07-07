@@ -8,7 +8,7 @@ type SubsystemBackend struct {
 }
 
 type Subsystem interface {
-	Run() (*SubsystemBackend, error)
+	Run(exposeAsStandardPort bool) (*SubsystemBackend, error)
 }
 
 type StorageSubsystem interface {

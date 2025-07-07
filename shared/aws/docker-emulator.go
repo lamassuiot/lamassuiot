@@ -13,11 +13,22 @@ import (
 	"github.com/ory/dockertest/v3/docker"
 )
 
-func RunAWSEmulationLocalStackDocker() (func() error, func() error, *AWSSDKConfig, error) {
+func RunAWSEmulationLocalStackDocker(exposeAsStandardPort bool) (func() error, func() error, *AWSSDKConfig, error) {
 	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker(dockertest.RunOptions{
 		Repository: "localstack/localstack", // image
 		Tag:        "4.1",                   // version
-	}, func(hc *docker.HostConfig) {})
+	}, func(hc *docker.HostConfig) {
+		if exposeAsStandardPort {
+			hc.PortBindings = map[docker.Port][]docker.PortBinding{
+				"4566/tcp": {
+					{
+						HostIP:   "0.0.0.0",
+						HostPort: "4566", // random port
+					},
+				},
+			}
+		}
+	})
 	if err != nil {
 		return nil, nil, nil, err
 	}
