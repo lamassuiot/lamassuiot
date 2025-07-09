@@ -343,36 +343,55 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		return nil, fmt.Errorf("could not encode public key digest: %w", err)
 	}
 
-	// TODO when KMS is ready
-	// In order to import a CA, we need to verify that the PKI has "access" to the parent CA public key AKI
-	akid := helpers.FormatHexWithColons(input.CACertificate.AuthorityKeyId)
+	var akid string
 
-	isSelfSigned := helpers.IsSelfSignedCertificate(akid, skid, (*x509.Certificate)(input.CACertificate))
+	caCertX509 := (*x509.Certificate)(input.CACertificate)
+	isSelfSigned := false
+	if err := caCertX509.CheckSignatureFrom(caCertX509); err != nil {
+		isSelfSigned = false
+	} else {
+		isSelfSigned = true
+	}
 
 	if !isSelfSigned {
-		var parentCAs []models.CACertificate
+		var candidateParentCAs []models.CACertificate
 
+		findParentCAInArray := func(ca *models.X509Certificate, parentCAs []models.CACertificate) *models.CACertificate {
+			// Iterate over candidate parent CAs to verify and assign values when found
+			for _, parentCA := range parentCAs {
+				p := x509.Certificate(*parentCA.Certificate.Certificate)
+				c := x509.Certificate(*ca)
+				err = c.CheckSignatureFrom(&p)
+
+				if err != nil {
+					if akid != "" {
+						lFunc.Warnf("possible parent CA detected, but failed cryptographic validation: %s", err)
+					}
+					continue // Skip if verification fails
+				}
+
+				// If the signature is valid, return the parent CA
+				return &parentCA
+			}
+
+			// If no valid parent CA is found, return nil
+			return nil
+		}
+
+		// 1st Attempt: Check if the CA is signed by a parent CA using Authority Key Identifier (AKID)
+		lFunc.Debugf("checking if CA %s is signed by a parent CA using AKID", input.CACertificate.Subject.CommonName)
 		svc.caStorage.SelectBySubjectAndSubjectKeyID(ctx, chelpers.PkixNameToSubject(input.CACertificate.Issuer), akid,
 			storage.StorageListRequest[models.CACertificate]{
 				ExhaustiveRun: true,
 				ApplyFunc: func(c models.CACertificate) {
-					parentCAs = append(parentCAs, c)
+					candidateParentCAs = append(candidateParentCAs, c)
 				},
 			})
 
-		// Iterate over parent CAs to verify and assign values when found
-		for _, parentCA := range parentCAs {
-			p := x509.Certificate(*parentCA.Certificate.Certificate)
-			c := x509.Certificate(*caCert)
-			err = c.CheckSignatureFrom(&p)
-
-			if err != nil {
-				if akid != "" {
-					lFunc.Warnf("possible parent CA detected, but failed cryptographic validation: %s", err)
-				}
-				continue // Skip if verification fails
-			}
-
+		parentCA := findParentCAInArray(input.CACertificate, candidateParentCAs)
+		if parentCA != nil {
+			lFunc.Debugf("found parent CA %s with AKID %s", parentCA.ID, parentCA.Certificate.AuthorityKeyID)
+			akid = parentCA.Certificate.AuthorityKeyID
 			// When verification is successful, update the level and metadata
 			level = parentCA.Level + 1
 			issuerMeta = models.IssuerCAMetadata{
@@ -380,11 +399,44 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 				SN:    parentCA.Certificate.SerialNumber,
 				Level: parentCA.Level,
 			}
+		} else {
+			lFunc.Warnf("no parent CA found with AKID %s. Will attempt to find by Issuer Subject", akid)
 
-			break
+			// 2nd Attempt: Find all CAs based on the Issuer Subject of the certificate being imported
+			candidateParentCAs = []models.CACertificate{}
+			svc.caStorage.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{
+				ExhaustiveRun: true,
+				ApplyFunc: func(c models.CACertificate) {
+					if chelpers.PkixNameEqual(c.Certificate.Certificate.Subject, input.CACertificate.Issuer) {
+						candidateParentCAs = append(candidateParentCAs, c)
+					}
+				},
+			})
+
+			parentCA = findParentCAInArray(input.CACertificate, candidateParentCAs)
+			if parentCA != nil {
+				lFunc.Debugf("found parent CA %s with AKID %s", parentCA.ID, parentCA.Certificate.AuthorityKeyID)
+				akid = parentCA.Certificate.AuthorityKeyID
+				// When verification is successful, update the level and metadata
+				level = parentCA.Level + 1
+				issuerMeta = models.IssuerCAMetadata{
+					ID:    parentCA.ID,
+					SN:    parentCA.Certificate.SerialNumber,
+					Level: parentCA.Level,
+				}
+			} else {
+				lFunc.Warnf("no parent CA found with Issuer Subject %s in PKI.", input.CACertificate.Issuer.CommonName)
+				akid = helpers.FormatHexWithColons(input.CACertificate.AuthorityKeyId)
+				issuerMeta = models.IssuerCAMetadata{
+					ID:    "-",
+					SN:    helpers.SerialNumberToString(input.CACertificate.SerialNumber),
+					Level: -1,
+				}
+			}
 		}
+
 	} else {
-		// Verify that the parent CA signed the certificate
+		// Verify that the parent CA is in fact the CA that signed the certificate, which is the same as the CA being imported when self-signed
 		p := x509.Certificate(*caCert)
 		c := x509.Certificate(*caCert)
 		err = c.CheckSignatureFrom(&p)
@@ -445,7 +497,13 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		svc.caStorage.SelectByIssuerAndAuthorityKeyID(ctx, parent.Certificate.Subject, parent.Certificate.SubjectKeyID, storage.StorageListRequest[models.CACertificate]{
 			ExhaustiveRun: true,
 			ApplyFunc: func(child models.CACertificate) {
-				isSelfSignedChild := helpers.IsSelfSignedCertificate(child.Certificate.AuthorityKeyID, child.Certificate.SubjectKeyID, (*x509.Certificate)(input.CACertificate))
+				childCertX509 := (*x509.Certificate)(child.Certificate.Certificate)
+				isSelfSignedChild := false
+				if err := childCertX509.CheckSignatureFrom(childCertX509); err != nil {
+					isSelfSignedChild = false
+				} else {
+					isSelfSignedChild = true
+				}
 
 				if !isSelfSignedChild {
 					if firstIteration { //Check also with crypto validation to ensure child is actually signed by parent?
