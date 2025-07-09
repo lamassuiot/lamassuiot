@@ -20,8 +20,8 @@ func (p *Pkcs11Subsystem) Prepare(config map[string]interface{}) error {
 	return nil
 }
 
-func (p *Pkcs11Subsystem) Run() (*subsystems.SubsystemBackend, error) {
-	_, softhsmCleanup, pkcs11Cfg, err := docker.RunSoftHsmV2Docker(p.hsmModulePath)
+func (p *Pkcs11Subsystem) Run(exposeAsStandardPort bool) (*subsystems.SubsystemBackend, error) {
+	_, softhsmCleanup, pkcs11Cfg, err := docker.RunSoftHsmV2Docker(exposeAsStandardPort, p.hsmModulePath)
 	if err != nil {
 		return nil, err
 	}

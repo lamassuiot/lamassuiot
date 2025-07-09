@@ -75,7 +75,7 @@ func TestVaultCryptoEngine(t *testing.T) {
 }
 
 func prepareVaultkv2CryptoEngine(t *testing.T) (func() error, cryptoengines.CryptoEngine, error) {
-	beforeEachCleanup, vCleanup, vaultConfig, _, err := keyvaultkv2_test.RunHashicorpVaultDocker()
+	beforeEachCleanup, vCleanup, vaultConfig, _, err := keyvaultkv2_test.RunHashicorpVaultDocker(false)
 	t.Cleanup(func() { _ = vCleanup() })
 	if err != nil {
 		return nil, nil, err

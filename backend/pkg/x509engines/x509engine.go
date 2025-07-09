@@ -161,7 +161,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 	}
 
 	if ca.NotAfter.Before(certExpiration) {
-		lFunc.Errorf("requested CA would expire after parent CA")
+		lFunc.Errorf("requested certificate would expire after parent CA")
 		return nil, fmt.Errorf("invalid expiration")
 	}
 

@@ -12,8 +12,8 @@ type VaultSuite struct {
 	beforeEach    func() error
 }
 
-func BeforeSuite() (vconfig.HashicorpVaultSDK, VaultSuite) {
-	beforeEach, cleanup, conf, rootToken, err := RunHashicorpVaultDocker()
+func BeforeSuite(exposeAsStandardPort bool) (vconfig.HashicorpVaultSDK, VaultSuite) {
+	beforeEach, cleanup, conf, rootToken, err := RunHashicorpVaultDocker(exposeAsStandardPort)
 	if err != nil {
 		log.Fatal(err)
 	}

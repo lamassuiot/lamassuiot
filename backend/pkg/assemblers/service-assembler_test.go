@@ -193,7 +193,7 @@ type TestServer struct {
 func PrepareRabbitMQForTest() (*TestEventBusConfig, error) {
 	rabbitmqSubsystem := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.RabbitMQ)
 
-	backend, err := rabbitmqSubsystem.Run()
+	backend, err := rabbitmqSubsystem.Run(false)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +210,7 @@ func PreparePostgresForTest(dbs []string) (*TestStorageEngineConfig, error) {
 	postgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
 
 	postgresSubsystem.Prepare(dbs)
-	backend, err := postgresSubsystem.Run()
+	backend, err := postgresSubsystem.Run(false)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +256,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 
 	if slices.Contains(engines, VAULT) {
 
-		backend, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Vault).Run()
+		backend, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Vault).Run(false)
 		if err != nil {
 			panic(fmt.Sprintf("could not run Vault subsystem: %s", err))
 		}

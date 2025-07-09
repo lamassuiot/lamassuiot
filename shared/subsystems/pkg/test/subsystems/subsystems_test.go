@@ -9,7 +9,7 @@ import (
 
 type MockPostgresSubsystem struct{}
 
-func (m *MockPostgresSubsystem) Run() (*SubsystemBackend, error) {
+func (m *MockPostgresSubsystem) Run(bool) (*SubsystemBackend, error) {
 	return &SubsystemBackend{}, nil
 }
 
@@ -39,7 +39,7 @@ func TestPostgresSubsystemRun(t *testing.T) {
 	retrievedSubsystem := GetSubsystemBuilder[Subsystem](Postgres)
 
 	// Run the retrieved subsystem
-	backend, err := retrievedSubsystem.Run()
+	backend, err := retrievedSubsystem.Run(true)
 
 	// Verify the result
 	require.NoError(t, err)

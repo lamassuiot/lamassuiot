@@ -8,7 +8,6 @@ import (
 	"net/url"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -156,33 +155,6 @@ func (r *vaHttpRoutes) GetRoleByID(ctx *gin.Context) {
 	}
 
 	ctx.JSON(200, role)
-}
-
-func (r *vaHttpRoutes) GetRoles(ctx *gin.Context) {
-	roles := []models.VARole{}
-	queryParams := FilterQuery(ctx.Request, map[string]resources.FilterFieldType{})
-
-	nBMark, err := r.crl.GetVARoles(ctx, services.GetVARolesInput{
-		QueryParameters: queryParams,
-		ExhaustiveRun:   false,
-		ApplyFunc: func(v models.VARole) {
-			roles = append(roles, v)
-		},
-	})
-	if err != nil {
-		r.logger.Errorf("something went wrong while getting va roles list: %s", err)
-		switch err {
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
-		return
-	}
-
-	ctx.JSON(200, resources.IterableList[models.VARole]{
-		NextBookmark: nBMark,
-		List:         roles,
-	})
 }
 
 func (r *vaHttpRoutes) UpdateRole(ctx *gin.Context) {

@@ -20,7 +20,7 @@ import (
 func RunDB(t *testing.T, logger *logrus.Entry, dbName string) (func() error, *gorm.DB) {
 	cleanup, cfg, err := postgres_test.RunPostgresDocker(map[string]string{
 		dbName: "",
-	})
+	}, false)
 	if err != nil {
 		t.Fatalf("could not launch Postgres: %s", err)
 	}

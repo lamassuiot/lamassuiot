@@ -94,7 +94,6 @@ func (r *dmsManagerHttpRoutes) CreateDMS(ctx *gin.Context) {
 	}
 
 	dms, err := r.svc.CreateDMS(ctx, input)
-
 	if err != nil {
 		ctx.AbortWithStatusJSON(500, gin.H{"err": err.Error()})
 		return
@@ -121,7 +120,7 @@ func (r *dmsManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
 		DMS: requestBody,
 	})
 	if err != nil {
-		ctx.JSON(500, err)
+		ctx.JSON(500, gin.H{"err": err.Error()})
 		return
 	}
 
