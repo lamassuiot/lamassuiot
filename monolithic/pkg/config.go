@@ -22,7 +22,7 @@ type MonolithicConfig struct {
 	Storage            cconfig.PluggableStorageEngine `mapstructure:"storage"`
 	CryptoEngines      []cconfig.CryptoEngineConfig   `mapstructure:"crypto_engines"`
 	Monitoring         cconfig.MonitoringJob          `mapstructure:"monitoring"`
-	Domain             string                         `mapstructure:"domain"`
+	Domains            []string                       `mapstructure:"domains"`
 	AssemblyMode       LamassuMonolithicAssembleMode  `mapstructure:"assembly_mode"`
 	GatewayPortHttps   int                            `mapstructure:"gateway_port_https"`
 	GatewayPortHttp    int                            `mapstructure:"gateway_port_http"`

@@ -31,6 +31,7 @@ const (
 
 type Certificate struct {
 	SerialNumber        string                 `json:"serial_number" gorm:"primaryKey"`
+	VersionSchema       string                 `json:"version_schema"` // Indicates the lamassu schema when codifying the certificate. If some property is changed (added, removed, or changed), then it should change.
 	SubjectKeyID        string                 `json:"subject_key_id"`
 	AuthorityKeyID      string                 `json:"authority_key_id"`
 	Metadata            map[string]interface{} `json:"metadata" gorm:"serializer:json"`
