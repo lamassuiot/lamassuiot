@@ -12,6 +12,7 @@ type Key struct {
 	PublicKey  string            `json:"public_key"`
 	Status     CertificateStatus `json:"status"`
 	CreationTS time.Time         `json:"creation_ts"`
+	Name       string            `json:"name"`
 }
 
 type MessageSignature struct {

@@ -1848,6 +1848,7 @@ func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.Creat
 		PublicKey:  base64PEM,
 		Status:     models.StatusActive,
 		CreationTS: time.Now(),
+		Name:       input.Name,
 	}
 
 	return svc.kmsStorage.Insert(ctx, &kmsKey)
@@ -2155,6 +2156,7 @@ func (svc *CAServiceBackend) ImportKey(ctx context.Context, input services.Impor
 		PublicKey:  base64PEM,
 		Status:     models.StatusActive,
 		CreationTS: time.Now(),
+		Name:       input.Name,
 	}
 
 	return svc.kmsStorage.Insert(ctx, &kmsKey)

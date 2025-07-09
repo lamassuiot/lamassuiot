@@ -37,6 +37,7 @@ var KMSFiltrableFields = map[string]FilterFieldType{
 	"public_key":  StringFilterFieldType,
 	"status":      StringFilterFieldType,
 	"creation_ts": DateFilterFieldType,
+	"name":        StringFilterFieldType,
 }
 
 type CreateCABody struct {
@@ -127,6 +128,7 @@ type CreateKeyBody struct {
 	Algorithm string `json:"algorithm"`
 	Size      string `json:"size"`
 	EngineID  string `json:"engine_id"`
+	Name      string `json:"name"`
 }
 
 type SignMessageBody struct {
@@ -145,4 +147,5 @@ type VerifySignBody struct {
 type ImportKeyBody struct {
 	PrivateKey []byte `json:"private_key"`
 	EngineID   string `json:"engine_id"`
+	Name       string `json:"name"`
 }
