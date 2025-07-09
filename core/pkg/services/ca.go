@@ -51,13 +51,13 @@ type CAService interface {
 	GetCARequests(ctx context.Context, input GetItemsInput[models.CACertificateRequest]) (string, error)
 
 	// KMS
-	GetKeys(ctx context.Context) ([]*models.KeyInfo, error)
-	GetKeyByID(ctx context.Context, input GetByIDInput) (*models.KeyInfo, error)
-	CreateKey(ctx context.Context, input CreateKeyInput) (*models.KeyInfo, error)
+	GetKeys(ctx context.Context, input GetKeysInput) (string, error)
+	GetKeyByID(ctx context.Context, input GetByIDInput) (*models.Key, error)
+	CreateKey(ctx context.Context, input CreateKeyInput) (*models.Key, error)
 	DeleteKeyByID(ctx context.Context, input GetByIDInput) error
 	SignMessage(ctx context.Context, input SignMessageInput) (*models.MessageSignature, error)
 	VerifySignature(ctx context.Context, input VerifySignInput) (bool, error)
-	ImportKey(ctx context.Context, input ImportKeyInput) (*models.KeyInfo, error)
+	ImportKey(ctx context.Context, input ImportKeyInput) (*models.Key, error)
 }
 
 type GetStatsByCAIDInput struct {
@@ -258,6 +258,13 @@ type UpdateCertificateMetadataInput struct {
 }
 
 // KMS
+type GetKeysInput struct {
+	QueryParameters *resources.QueryParameters
+
+	ExhaustiveRun bool //wether to iter all elems
+	ApplyFunc     func(ca models.Key)
+}
+
 type CreateKeyInput struct {
 	Algorithm string `validate:"required"`
 	Size      string `validate:"required"`

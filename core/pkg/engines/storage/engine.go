@@ -14,6 +14,7 @@ type CommonStorageEngine struct {
 	VA                   VARepo
 	Events               EventRepository
 	Subscriptions        SubscriptionsRepository
+	KMS                  KMSKeysRepo
 }
 
 type StorageEngine interface {
@@ -26,6 +27,7 @@ type StorageEngine interface {
 	GetDMSStorage() (DMSRepo, error)
 	GetEnventsStorage() (EventRepository, error)
 	GetSubscriptionsStorage() (SubscriptionsRepository, error)
+	GetKMSStorage() (KMSKeysRepo, error)
 }
 
 // map of available storage engines with config.StorageProvider as key and function to build the storage engine as value

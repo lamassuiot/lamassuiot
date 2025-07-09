@@ -1,0 +1,19 @@
+package models
+
+import (
+	"time"
+)
+
+// KMS
+type Key struct {
+	ID         string            `json:"id"`
+	Algorithm  string            `json:"algorithm"`
+	Size       string            `json:"size"`
+	PublicKey  string            `json:"public_key"`
+	Status     CertificateStatus `json:"status"`
+	CreationTS time.Time         `json:"creation_ts"`
+}
+
+type MessageSignature struct {
+	Signature string `json:"signature"`
+}

@@ -49,6 +49,7 @@ type CAServiceBackend struct {
 	caStorage                   storage.CACertificatesRepo
 	certStorage                 storage.CertificatesRepo
 	caCertificateRequestStorage storage.CACertificateRequestRepo
+	kmsStorage                  storage.KMSKeysRepo
 	vaServerDomains             []string
 	logger                      *logrus.Entry
 }
@@ -59,6 +60,7 @@ type CAServiceBuilder struct {
 	CAStorage                   storage.CACertificatesRepo
 	CertificateStorage          storage.CertificatesRepo
 	CACertificateRequestStorage storage.CACertificateRequestRepo
+	KMSStorage                  storage.KMSKeysRepo
 	VAServerDomains             []string
 }
 
@@ -88,6 +90,7 @@ func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
 		caStorage:                   builder.CAStorage,
 		certStorage:                 builder.CertificateStorage,
 		caCertificateRequestStorage: builder.CACertificateRequestStorage,
+		kmsStorage:                  builder.KMSStorage,
 		vaServerDomains:             builder.VAServerDomains,
 		logger:                      builder.Logger,
 	}
@@ -1608,7 +1611,7 @@ func buildPKCS11ID(engineID, keyID, keyType string) string {
 }
 
 // Helper to build KeyInfo from engine and keyID
-func buildKeyInfo(engineID, keyID, keyType string, signer crypto.Signer, lFunc *logrus.Entry) (*models.KeyInfo, error) {
+func buildKeyInfo(engineID, keyID, keyType string, signer crypto.Signer, lFunc *logrus.Entry) (*models.Key, error) {
 	publicKey := signer.Public()
 	var (
 		algorithm string
@@ -1641,7 +1644,7 @@ func buildKeyInfo(engineID, keyID, keyType string, signer crypto.Signer, lFunc *
 	pemBlock := pem.EncodeToMemory(&pem.Block{Type: pemType, Bytes: pubBytes})
 	base64PEM := base64.StdEncoding.EncodeToString(pemBlock)
 
-	return &models.KeyInfo{
+	return &models.Key{
 		ID:        buildPKCS11ID(engineID, keyID, keyType),
 		Algorithm: algorithm,
 		Size:      size,
@@ -1713,45 +1716,25 @@ func calculateDigest(hash crypto.Hash, messageType models.SignMessageType, messa
 	return message
 }
 
-func (svc *CAServiceBackend) GetKeys(tx context.Context) ([]*models.KeyInfo, error) {
-	lFunc := chelpers.ConfigureLogger(tx, svc.logger)
-	var keys []*models.KeyInfo
+func (svc *CAServiceBackend) GetKeys(ctx context.Context, input services.GetKeysInput) (string, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	for engineID, engine := range svc.cryptoEngines {
-		engineInstance := *engine
-		PrivateKeyIDs, err := engineInstance.ListPrivateKeyIDs()
-		if err != nil {
-			lFunc.Errorf("GetKeys - ListPrivateKeyIDs error: %s", err)
-			return nil, err
-		}
-		for _, keyID := range PrivateKeyIDs {
-			signer, err := engineInstance.GetPrivateKeyByID(keyID)
-			if err != nil {
-				lFunc.Errorf("GetKeys - GetPrivateKeyByID error: %s", err)
-				return nil, err
-			}
-			if signer == nil {
-				lFunc.Errorf("GetKeys - GetPrivateKeyByID returned nil for keyID: %s", keyID)
-				return nil, err
-			}
-			keyType := "private"
-			keyInfo, err := buildKeyInfo(engineID, keyID, keyType, signer, lFunc)
-			if err != nil {
-				return nil, err
-			}
-			if keyInfo != nil {
-				keys = append(keys, keyInfo)
-			}
-		}
+	nextBookmark, err := svc.kmsStorage.SelectAll(ctx, storage.StorageListRequest[models.Key]{
+		ExhaustiveRun: input.ExhaustiveRun,
+		ApplyFunc:     input.ApplyFunc,
+		QueryParams:   input.QueryParameters,
+		ExtraOpts:     nil,
+	})
+	if err != nil {
+		lFunc.Errorf("something went wrong while reading all Requests from storage engine: %s", err)
+		return "", err
 	}
-	if keys == nil {
-		return []*models.KeyInfo{}, nil
-	}
-	return keys, nil
+
+	return nextBookmark, nil
 }
 
-func (svc *CAServiceBackend) GetKeyByID(tx context.Context, input services.GetByIDInput) (*models.KeyInfo, error) {
-	lFunc := chelpers.ConfigureLogger(tx, svc.logger)
+func (svc *CAServiceBackend) GetKeyByID(ctx context.Context, input services.GetByIDInput) (*models.Key, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := validate.Struct(input)
 	if err != nil {
@@ -1759,36 +1742,22 @@ func (svc *CAServiceBackend) GetKeyByID(tx context.Context, input services.GetBy
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	engineID, keyID, keyType, err := parsePKCS11ID(input.ID)
+	lFunc.Debugf("checking if Key '%s' exists", input.ID)
+	exists, key, err := svc.kmsStorage.SelectExistsByID(ctx, input.ID)
 	if err != nil {
-		return nil, fmt.Errorf("invalid key id format: %w", err)
-	}
-
-	engine, ok := svc.cryptoEngines[engineID]
-	if !ok {
-		return nil, fmt.Errorf("engine with id %s not found", engineID)
-	}
-	engineInstance := *engine
-
-	signer, err := engineInstance.GetPrivateKeyByID(keyID)
-	if err != nil {
-		lFunc.Errorf("GetKey - GetPrivateKeyByID error: %s", err)
-		return nil, fmt.Errorf("key not found")
-	}
-	if signer == nil {
-		lFunc.Errorf("GetKey - GetPrivateKeyByID returned nil for keyID: %s", keyID)
-		return nil, fmt.Errorf("key not found")
-	}
-
-	keyInfo, err := buildKeyInfo(engineID, keyID, keyType, signer, lFunc)
-	if err != nil {
+		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.ID, err)
 		return nil, err
 	}
 
-	return keyInfo, nil
+	if !exists {
+		lFunc.Errorf("Key %s can not be found in storage engine", input.ID)
+		return nil, errs.ErrKeyNotFound
+	}
+
+	return key, nil
 }
 
-func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.KeyInfo, error) {
+func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.Key, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := validate.Struct(input)
@@ -1872,12 +1841,16 @@ func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.Creat
 	pemBlock := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubBytes})
 	base64PEM := base64.StdEncoding.EncodeToString(pemBlock)
 
-	return &models.KeyInfo{
-		ID:        buildPKCS11ID(svc.defaultCryptoEngineID, keyID, "private"),
-		Algorithm: input.Algorithm,
-		Size:      input.Size,
-		PublicKey: base64PEM,
-	}, nil
+	kmsKey := models.Key{
+		ID:         buildPKCS11ID(svc.defaultCryptoEngineID, keyID, "private"),
+		Algorithm:  input.Algorithm,
+		Size:       input.Size,
+		PublicKey:  base64PEM,
+		Status:     models.StatusActive,
+		CreationTS: time.Now(),
+	}
+
+	return svc.kmsStorage.Insert(ctx, &kmsKey)
 }
 
 func (svc *CAServiceBackend) DeleteKeyByID(tx context.Context, input services.GetByIDInput) error {
@@ -1912,6 +1885,15 @@ func (svc *CAServiceBackend) DeleteKeyByID(tx context.Context, input services.Ge
 		return err
 	}
 
+	lFunc.Debugf("deleting Key %s from storage engine", input.ID)
+	err = svc.kmsStorage.Delete(tx, input.ID)
+	if err != nil {
+		lFunc.Errorf("DeleteKeyByID - DeleteByID error: %s", err)
+		return fmt.Errorf("failed to delete key from storage: %w", err)
+	}
+
+	lFunc.Infof("Key %s deleted successfully", input.ID)
+
 	return nil
 }
 
@@ -1927,6 +1909,18 @@ func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.Sig
 	engineID, keyID, _, err := parsePKCS11ID(input.KeyID)
 	if err != nil {
 		return nil, errors.New("invalid key id format, expected pkcs11:token-id=<engineID>;id=<keyID>;type=<type>")
+	}
+
+	lFunc.Debugf("checking if Key '%s' exists", input.KeyID)
+	exists, _, err := svc.kmsStorage.SelectExistsByID(ctx, input.KeyID)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.KeyID, err)
+		return nil, err
+	}
+
+	if !exists {
+		lFunc.Errorf("Key %s can not be found in storage engine", input.KeyID)
+		return nil, errs.ErrKeyNotFound
 	}
 
 	var hash crypto.Hash
@@ -2008,6 +2002,18 @@ func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services
 		return false, errors.New("invalid key id format, expected pkcs11:token-id=<engineID>;id=<keyID>;type=<type>")
 	}
 
+	lFunc.Debugf("checking if Key '%s' exists", input.KeyID)
+	exists, _, err := svc.kmsStorage.SelectExistsByID(ctx, input.KeyID)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.KeyID, err)
+		return false, err
+	}
+
+	if !exists {
+		lFunc.Errorf("Key %s can not be found in storage engine", input.KeyID)
+		return false, errs.ErrKeyNotFound
+	}
+
 	var hash crypto.Hash
 	var isRSA, isPSS bool
 
@@ -2067,7 +2073,7 @@ func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services
 	}
 }
 
-func (svc *CAServiceBackend) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.KeyInfo, error) {
+func (svc *CAServiceBackend) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.Key, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := validate.Struct(input)
@@ -2142,10 +2148,15 @@ func (svc *CAServiceBackend) ImportKey(ctx context.Context, input services.Impor
 	pemBlockPub := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubBytes})
 	base64PEM := base64.StdEncoding.EncodeToString(pemBlockPub)
 
-	return &models.KeyInfo{
-		ID:        buildPKCS11ID(svc.defaultCryptoEngineID, keyID, "private"),
-		Algorithm: algorithm,
-		Size:      size,
-		PublicKey: base64PEM,
-	}, nil
+	kmsKey := models.Key{
+		ID:         buildPKCS11ID(svc.defaultCryptoEngineID, keyID, "private"),
+		Algorithm:  algorithm,
+		Size:       size,
+		PublicKey:  base64PEM,
+		Status:     models.StatusActive,
+		CreationTS: time.Now(),
+	}
+
+	return svc.kmsStorage.Insert(ctx, &kmsKey)
+
 }

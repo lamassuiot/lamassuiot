@@ -381,17 +381,13 @@ func (cli *httpCAClient) DeleteCARequestByID(ctx context.Context, input services
 }
 
 // KMS
-func (cli *httpCAClient) GetKeys(ctx context.Context) ([]*models.KeyInfo, error) {
-	keys, err := Get[[]*models.KeyInfo](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys", nil, map[int][]error{})
-	if err != nil {
-		return nil, err
-	}
-
-	return keys, nil
+func (cli *httpCAClient) GetKeys(ctx context.Context, input services.GetKeysInput) (string, error) {
+	url := cli.baseUrl + "/v1/kms/keys"
+	return IterGet[models.Key, *resources.GetKeysResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 
-func (cli *httpCAClient) GetKeyByID(ctx context.Context, input services.GetByIDInput) (*models.KeyInfo, error) {
-	response, err := Get[*models.KeyInfo](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys/"+input.ID, nil, map[int][]error{})
+func (cli *httpCAClient) GetKeyByID(ctx context.Context, input services.GetByIDInput) (*models.Key, error) {
+	response, err := Get[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys/"+input.ID, nil, map[int][]error{})
 	if err != nil {
 		return nil, err
 	}
@@ -399,8 +395,8 @@ func (cli *httpCAClient) GetKeyByID(ctx context.Context, input services.GetByIDI
 	return response, nil
 }
 
-func (cli *httpCAClient) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.KeyInfo, error) {
-	response, err := Post[*models.KeyInfo](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys", resources.CreateKeyBody{
+func (cli *httpCAClient) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.Key, error) {
+	response, err := Post[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys", resources.CreateKeyBody{
 		Algorithm: input.Algorithm,
 		Size:      input.Size,
 	}, map[int][]error{})
@@ -445,8 +441,8 @@ func (cli *httpCAClient) VerifySignature(ctx context.Context, input services.Ver
 	return response, nil
 }
 
-func (cli *httpCAClient) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.KeyInfo, error) {
-	response, err := Post[*models.KeyInfo](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys/import", resources.ImportKeyBody{
+func (cli *httpCAClient) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.Key, error) {
+	response, err := Post[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys/import", resources.ImportKeyBody{
 		PrivateKey: input.PrivateKey,
 	}, map[int][]error{})
 	if err != nil {

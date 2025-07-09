@@ -252,15 +252,15 @@ func (mw CAEventPublisher) GetCARequests(ctx context.Context, input services.Get
 	return mw.Next.GetCARequests(ctx, input)
 }
 
-func (mw CAEventPublisher) GetKeys(ctx context.Context) ([]*models.KeyInfo, error) {
-	return mw.Next.GetKeys(ctx)
+func (mw CAEventPublisher) GetKeys(ctx context.Context, input services.GetKeysInput) (string, error) {
+	return mw.Next.GetKeys(ctx, input)
 }
 
-func (mw CAEventPublisher) GetKeyByID(ctx context.Context, input services.GetByIDInput) (*models.KeyInfo, error) {
+func (mw CAEventPublisher) GetKeyByID(ctx context.Context, input services.GetByIDInput) (*models.Key, error) {
 	return mw.Next.GetKeyByID(ctx, input)
 }
 
-func (mw CAEventPublisher) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.KeyInfo, error) {
+func (mw CAEventPublisher) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.Key, error) {
 	return mw.Next.CreateKey(ctx, input)
 }
 
@@ -276,6 +276,6 @@ func (mw CAEventPublisher) VerifySignature(ctx context.Context, input services.V
 	return mw.Next.VerifySignature(ctx, input)
 }
 
-func (mw CAEventPublisher) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.KeyInfo, error) {
+func (mw CAEventPublisher) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.Key, error) {
 	return mw.Next.ImportKey(ctx, input)
 }

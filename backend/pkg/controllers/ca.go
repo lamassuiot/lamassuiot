@@ -1190,7 +1190,17 @@ func (r *caHttpRoutes) ImportCertificate(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetKeys(ctx *gin.Context) {
-	keys, err := r.svc.GetKeys(ctx)
+	queryParams := FilterQuery(ctx.Request, resources.KMSFiltrableFields)
+
+	keys := []models.Key{}
+
+	nextBookmark, err := r.svc.GetKeys(ctx, services.GetKeysInput{
+		QueryParameters: queryParams,
+		ExhaustiveRun:   false,
+		ApplyFunc: func(ca models.Key) {
+			keys = append(keys, ca)
+		},
+	})
 	if err != nil {
 		switch err {
 		default:
@@ -1199,7 +1209,14 @@ func (r *caHttpRoutes) GetKeys(ctx *gin.Context) {
 
 		return
 	}
-	ctx.JSON(200, keys)
+
+	ctx.JSON(200, resources.GetKeysResponse{
+		IterableList: resources.IterableList[models.Key]{
+			NextBookmark: nextBookmark,
+			List:         keys,
+		},
+	})
+
 }
 
 func (r *caHttpRoutes) GetKeyByID(ctx *gin.Context) {

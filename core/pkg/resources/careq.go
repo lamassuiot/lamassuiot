@@ -30,6 +30,15 @@ var CARequestFiltrableFields = map[string]FilterFieldType{
 	"issuer_metadata_id":  StringFilterFieldType,
 }
 
+var KMSFiltrableFields = map[string]FilterFieldType{
+	"id":          StringFilterFieldType,
+	"algorithm":   StringFilterFieldType,
+	"size":        StringFilterFieldType,
+	"public_key":  StringFilterFieldType,
+	"status":      StringFilterFieldType,
+	"creation_ts": DateFilterFieldType,
+}
+
 type CreateCABody struct {
 	ID                 string             `json:"id"`
 	ParentID           string             `json:"parent_id"`

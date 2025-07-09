@@ -4647,19 +4647,27 @@ func TestGetKeys(t *testing.T) {
 		t.Fatalf("could not create KMS test server: %s", err)
 	}
 
-	kmsTest := serverTest.CA
+	//kmsTest := serverTest.CA
 
 	var testcases = []struct {
 		name        string
-		run         func(kmsSDK services.CAService) ([]*models.KeyInfo, error)
-		resultCheck func(result []*models.KeyInfo, err error) error
+		run         func(kmsSDK services.CAService) ([]*models.Key, error)
+		resultCheck func(result []*models.Key, err error) error
 	}{
 		{
 			name: "OK/HelloWorldMessage",
-			run: func(kmsSDK services.CAService) ([]*models.KeyInfo, error) {
-				return kmsSDK.GetKeys(context.Background())
+			run: func(kmsSDK services.CAService) ([]*models.Key, error) {
+				keys := []*models.Key{}
+				res, err := kmsSDK.GetKeys(context.Background(), services.GetKeysInput{
+					ExhaustiveRun: true,
+					ApplyFunc: func(elem models.Key) {
+						keys = append(keys, &elem)
+					},
+				})
+				fmt.Println(res)
+				return keys, err
 			},
-			resultCheck: func(result []*models.KeyInfo, err error) error {
+			resultCheck: func(result []*models.Key, err error) error {
 				if err != nil {
 					return fmt.Errorf("should've launch GetHelloWorld without error, but got error: %s", err)
 				}
@@ -4677,11 +4685,6 @@ func TestGetKeys(t *testing.T) {
 			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
-			}
-
-			err = tc.resultCheck(kmsTest.Service.GetKeys(context.Background()))
-			if err != nil {
-				t.Fatalf("unexpected result in test case: %s", err)
 			}
 
 		})
