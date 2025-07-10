@@ -1615,7 +1615,7 @@ func buildKeyInfo(engineID, keyID, keyType string, signer crypto.Signer, lFunc *
 	publicKey := signer.Public()
 	var (
 		algorithm string
-		size      string
+		size      int
 		pubBytes  []byte
 		pemType   string
 		err       error
@@ -1624,12 +1624,12 @@ func buildKeyInfo(engineID, keyID, keyType string, signer crypto.Signer, lFunc *
 	switch pk := publicKey.(type) {
 	case *rsa.PublicKey:
 		algorithm = "RSA"
-		size = fmt.Sprintf("%d", pk.Size()*8)
+		size = pk.Size() * 8
 		pubBytes, err = x509.MarshalPKIXPublicKey(pk)
 		pemType = "PUBLIC KEY"
 	case *ecdsa.PublicKey:
 		algorithm = "ECDSA"
-		size = fmt.Sprintf("%d", pk.Params().BitSize)
+		size = pk.Params().BitSize
 		pubBytes, err = x509.MarshalPKIXPublicKey(pk)
 		pemType = "PUBLIC KEY"
 	default:
@@ -1766,7 +1766,7 @@ func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.Creat
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	if input.Algorithm == "" || input.Size == "" {
+	if input.Algorithm == "" || input.Size == 0 {
 		lFunc.Error("CreateKey - Algorithm and Size are required")
 		return nil, errs.ErrValidateBadRequest
 	}
@@ -1794,9 +1794,8 @@ func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.Creat
 
 	switch input.Algorithm {
 	case "RSA":
-		var bits int
-		_, err = fmt.Sscanf(input.Size, "%d", &bits)
-		if err != nil || bits < 1024 {
+		bits := input.Size
+		if bits < 1024 {
 			lFunc.Error("CreateKey - Invalid RSA key size")
 			return nil, errors.New("invalid RSA key size, must be at least 1024 bits")
 		}
@@ -1808,14 +1807,14 @@ func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.Creat
 	case "ECDSA":
 		var curve elliptic.Curve
 		switch input.Size {
-		case "224":
+		case 224:
 			curve = elliptic.P224()
-		case "256":
+		case 256:
 			curve = elliptic.P256()
 
-		case "384":
+		case 384:
 			curve = elliptic.P384()
-		case "521":
+		case 521:
 			curve = elliptic.P521()
 		default:
 			lFunc.Error("CreateKey - Invalid ECDSA key size")
@@ -2109,7 +2108,7 @@ func (svc *CAServiceBackend) ImportKey(ctx context.Context, input services.Impor
 
 	if !ok {
 		lFunc.Errorf("CreateKey - Engine with id %s not found", input.EngineID)
-		return nil, fmt.Errorf("Crypto engine not found")
+		return nil, fmt.Errorf("crypto engine not found")
 	}
 
 	engineInstance := *engine
@@ -2118,18 +2117,18 @@ func (svc *CAServiceBackend) ImportKey(ctx context.Context, input services.Impor
 		keyID     string
 		signer    crypto.Signer
 		algorithm string
-		size      string
+		size      int
 	)
 
 	switch k := key.(type) {
 	case *rsa.PrivateKey:
 		keyID, signer, err = engineInstance.ImportRSAPrivateKey(k)
 		algorithm = "RSA"
-		size = fmt.Sprintf("%d", k.N.BitLen())
+		size = k.N.BitLen()
 	case *ecdsa.PrivateKey:
 		keyID, signer, err = engineInstance.ImportECDSAPrivateKey(k)
 		algorithm = "ECDSA"
-		size = fmt.Sprintf("%d", k.Params().BitSize)
+		size = k.Params().BitSize
 	default:
 		lFunc.Errorf("ImportKey - unsupported private key type")
 		return nil, errors.New("unsupported private key type")

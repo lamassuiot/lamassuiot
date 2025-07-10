@@ -126,7 +126,7 @@ type ImportCertificateBody struct {
 // KMS
 type CreateKeyBody struct {
 	Algorithm string `json:"algorithm"`
-	Size      string `json:"size"`
+	Size      int    `json:"size"`
 	EngineID  string `json:"engine_id"`
 	Name      string `json:"name"`
 }

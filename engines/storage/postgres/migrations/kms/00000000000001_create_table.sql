@@ -4,7 +4,7 @@ CREATE TABLE kms_keys (
 	id text NOT NULL,
     name text NOT NULL,
     algorithm text NOT NULL,
-    size text NOT NULL,
+    size int8 NOT NULL,
     public_key text NOT NULL,
     status text NOT NULL,
     creation_ts timestamptz NULL,

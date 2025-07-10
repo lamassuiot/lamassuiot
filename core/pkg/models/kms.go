@@ -8,7 +8,7 @@ import (
 type Key struct {
 	ID         string            `json:"id"`
 	Algorithm  string            `json:"algorithm"`
-	Size       string            `json:"size"`
+	Size       int               `json:"size"`
 	PublicKey  string            `json:"public_key"`
 	Status     CertificateStatus `json:"status"`
 	CreationTS time.Time         `json:"creation_ts"`
