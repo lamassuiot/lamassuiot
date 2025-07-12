@@ -20,7 +20,7 @@ import (
 )
 
 func StartDeviceManagerServiceTestServer(t *testing.T, withEventBus bool) (*DeviceManagerTestServer, error) {
-	builder := TestServiceBuilder{}.WithDatabase("ca", "devicemanager").WithService(CA, DEVICE_MANAGER)
+	builder := TestServiceBuilder{}.WithDatabase("ca", "devicemanager", "kms").WithService(CA, DEVICE_MANAGER)
 	if withEventBus {
 		builder = builder.WithEventBus()
 	}

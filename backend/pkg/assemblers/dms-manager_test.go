@@ -36,7 +36,7 @@ import (
 )
 
 func StartDMSManagerServiceTestServer(t *testing.T, withEventBus bool) (*DMSManagerTestServer, *TestServer, error) {
-	builder := TestServiceBuilder{}.WithDatabase("ca", "devicemanager", "dmsmanager").WithService(CA, DEVICE_MANAGER, DMS_MANAGER)
+	builder := TestServiceBuilder{}.WithDatabase("ca", "devicemanager", "dmsmanager", "kms").WithService(CA, DEVICE_MANAGER, DMS_MANAGER)
 	if withEventBus {
 		builder = builder.WithEventBus()
 	}

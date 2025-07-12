@@ -45,7 +45,7 @@ func getCertificateTemplate(csr x509.CertificateRequest, ec x509.Certificate) x5
 }
 
 func TestImportCAWithNoRequestAndDifferentCNError(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").WithMonitor().Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -88,7 +88,7 @@ func TestImportCAWithNoRequestAndDifferentCNError(t *testing.T) {
 }
 
 func TestImportCAWithNoCreatedRequest(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").WithMonitor().Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -131,7 +131,7 @@ func TestImportCAWithNoCreatedRequest(t *testing.T) {
 }
 
 func TestImportCAWithNoRequestId(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").WithMonitor().Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -180,7 +180,7 @@ func TestImportCAWithNoRequestId(t *testing.T) {
 }
 
 func TestRequestCADoubleImportError(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").WithMonitor().Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -238,7 +238,7 @@ func TestRequestCADoubleImportError(t *testing.T) {
 }
 
 func TestImportNonCACertError(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").WithMonitor().Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -282,7 +282,7 @@ func TestImportNonCACertError(t *testing.T) {
 }
 
 func TestImportUnexpectedCSRError(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").WithMonitor().Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -335,7 +335,7 @@ func TestImportUnexpectedCSRError(t *testing.T) {
 }
 
 func TestImportNonExistentRequest(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").WithMonitor().Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -357,7 +357,7 @@ func TestImportNonExistentRequest(t *testing.T) {
 }
 
 func TestDeleteCARequest(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").WithMonitor().Build(t)
 
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)

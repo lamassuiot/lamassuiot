@@ -175,9 +175,9 @@ func (m *MockCAService) SignMessage(ctx context.Context, input services.SignMess
 	return args.Get(0).(*models.MessageSignature), args.Error(1)
 }
 
-func (m *MockCAService) VerifySignature(ctx context.Context, input services.VerifySignInput) (bool, error) {
+func (m *MockCAService) VerifySignature(ctx context.Context, input services.VerifySignInput) (*models.MessageValidation, error) {
 	args := m.Called(ctx, input)
-	return args.Bool(0), args.Error(1)
+	return args.Get(0).(*models.MessageValidation), args.Error(1)
 }
 
 func (m *MockCAService) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.Key, error) {

@@ -272,7 +272,7 @@ func (mw CAEventPublisher) SignMessage(ctx context.Context, input services.SignM
 	return mw.Next.SignMessage(ctx, input)
 }
 
-func (mw CAEventPublisher) VerifySignature(ctx context.Context, input services.VerifySignInput) (bool, error) {
+func (mw CAEventPublisher) VerifySignature(ctx context.Context, input services.VerifySignInput) (*models.MessageValidation, error) {
 	return mw.Next.VerifySignature(ctx, input)
 }
 

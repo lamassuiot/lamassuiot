@@ -18,3 +18,8 @@ type Key struct {
 type MessageSignature struct {
 	Signature string `json:"signature"`
 }
+
+type MessageValidation struct {
+	Valid bool   `json:"valid"`
+	Error string `json:"error,omitempty"`
+}

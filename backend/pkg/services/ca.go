@@ -1988,30 +1988,30 @@ func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.Sig
 	}, nil
 }
 
-func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services.VerifySignInput) (bool, error) {
+func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services.VerifySignInput) (*models.MessageValidation, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := validate.Struct(input)
 	if err != nil {
 		lFunc.Errorf("VerifySignature struct validation error: %s", err)
-		return false, errs.ErrValidateBadRequest
+		return nil, errs.ErrValidateBadRequest
 	}
 
 	engineID, keyID, _, err := parsePKCS11ID(input.KeyID)
 	if err != nil {
-		return false, errors.New("invalid key id format, expected pkcs11:token-id=<engineID>;id=<keyID>;type=<type>")
+		return nil, errors.New("invalid key id format, expected pkcs11:token-id=<engineID>;id=<keyID>;type=<type>")
 	}
 
 	lFunc.Debugf("checking if Key '%s' exists", input.KeyID)
 	exists, _, err := svc.kmsStorage.SelectExistsByID(ctx, input.KeyID)
 	if err != nil {
 		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.KeyID, err)
-		return false, err
+		return nil, err
 	}
 
 	if !exists {
 		lFunc.Errorf("Key %s can not be found in storage engine", input.KeyID)
-		return false, errs.ErrKeyNotFound
+		return nil, errs.ErrKeyNotFound
 	}
 
 	var hash crypto.Hash
@@ -2019,12 +2019,12 @@ func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services
 
 	hash, isRSA, isPSS, err = parseAlgorithm(input.Algorithm)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	_, signer, err := svc.getEngineAndSigner(engineID, keyID)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
 	publicKey := signer.Public()
@@ -2034,42 +2034,54 @@ func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services
 	if isRSA {
 		pub, ok := publicKey.(*rsa.PublicKey)
 		if !ok {
-			return false, errors.New("key is not RSA key")
+			return nil, errors.New("key is not RSA key")
 		}
 		if isPSS {
 			opts := &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: hash}
 			err = rsa.VerifyPSS(pub, hash, digest, input.Signature, opts)
 			if err != nil {
 				lFunc.Errorf("VerifySignature - RSA-PSS verify error: %s", err)
-				return false, nil
+				return &models.MessageValidation{
+					Valid: false,
+				}, nil
 			}
-			return true, nil
+			return &models.MessageValidation{
+				Valid: true,
+			}, nil
 		} else {
 			err = rsa.VerifyPKCS1v15(pub, hash, digest, input.Signature)
 			if err != nil {
 				lFunc.Errorf("VerifySignature - RSA verify error: %s", err)
-				return false, nil
+				return &models.MessageValidation{
+					Valid: false,
+				}, nil
 			}
-			return true, nil
+			return &models.MessageValidation{
+				Valid: true,
+			}, nil
 		}
 	} else {
 		pub, ok := publicKey.(*ecdsa.PublicKey)
 		if !ok {
-			return false, errors.New("key is not ECDSA key")
+			return nil, errors.New("key is not ECDSA key")
 		}
 		// ECDSA signature is r||s, split in half
 		sigLen := len(input.Signature)
 		if sigLen%2 != 0 || sigLen == 0 {
-			return false, errors.New("invalid ECDSA signature length")
+			return nil, errors.New("invalid ECDSA signature length")
 		}
 		rBytes := input.Signature[:sigLen/2]
 		sBytes := input.Signature[sigLen/2:]
 		r := new(big.Int).SetBytes(rBytes)
 		s := new(big.Int).SetBytes(sBytes)
 		if !ecdsa.Verify(pub, digest, r, s) {
-			return false, nil
+			return &models.MessageValidation{
+				Valid: false,
+			}, nil
 		}
-		return true, nil
+		return &models.MessageValidation{
+			Valid: true,
+		}, nil
 	}
 }
 

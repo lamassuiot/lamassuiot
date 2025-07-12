@@ -56,7 +56,7 @@ type CAService interface {
 	CreateKey(ctx context.Context, input CreateKeyInput) (*models.Key, error)
 	DeleteKeyByID(ctx context.Context, input GetByIDInput) error
 	SignMessage(ctx context.Context, input SignMessageInput) (*models.MessageSignature, error)
-	VerifySignature(ctx context.Context, input VerifySignInput) (bool, error)
+	VerifySignature(ctx context.Context, input VerifySignInput) (*models.MessageValidation, error)
 	ImportKey(ctx context.Context, input ImportKeyInput) (*models.Key, error)
 }
 
@@ -259,10 +259,7 @@ type UpdateCertificateMetadataInput struct {
 
 // KMS
 type GetKeysInput struct {
-	QueryParameters *resources.QueryParameters
-
-	ExhaustiveRun bool //wether to iter all elems
-	ApplyFunc     func(ca models.Key)
+	resources.ListInput[models.Key]
 }
 
 type CreateKeyInput struct {

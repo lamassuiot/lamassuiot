@@ -33,7 +33,7 @@ var CARequestFiltrableFields = map[string]FilterFieldType{
 var KMSFiltrableFields = map[string]FilterFieldType{
 	"id":          StringFilterFieldType,
 	"algorithm":   StringFilterFieldType,
-	"size":        StringFilterFieldType,
+	"size":        NumberFilterFieldType,
 	"public_key":  StringFilterFieldType,
 	"status":      StringFilterFieldType,
 	"creation_ts": DateFilterFieldType,

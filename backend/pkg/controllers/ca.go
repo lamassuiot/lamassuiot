@@ -1195,10 +1195,12 @@ func (r *caHttpRoutes) GetKeys(ctx *gin.Context) {
 	keys := []models.Key{}
 
 	nextBookmark, err := r.svc.GetKeys(ctx, services.GetKeysInput{
-		QueryParameters: queryParams,
-		ExhaustiveRun:   false,
-		ApplyFunc: func(ca models.Key) {
-			keys = append(keys, ca)
+		ListInput: resources.ListInput[models.Key]{
+			QueryParameters: queryParams,
+			ExhaustiveRun:   false,
+			ApplyFunc: func(key models.Key) {
+				keys = append(keys, key)
+			},
 		},
 	})
 	if err != nil {
@@ -1380,7 +1382,7 @@ func (r *caHttpRoutes) VerifySignature(ctx *gin.Context) {
 		}
 		return
 	}
-	ctx.JSON(200, gin.H{"valid": valid})
+	ctx.JSON(200, valid)
 }
 
 func (r *caHttpRoutes) ImportKey(ctx *gin.Context) {
