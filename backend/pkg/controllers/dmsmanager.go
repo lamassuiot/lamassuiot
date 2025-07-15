@@ -127,6 +127,31 @@ func (r *dmsManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
 	ctx.JSON(200, ca)
 }
 
+func (r *dmsManagerHttpRoutes) UpdateDMSMetadata(ctx *gin.Context) {
+	var params uriDMSIDParam
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody resources.UpdateDMSMetadataBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	output, err := r.svc.UpdateDMSMetadata(ctx, services.UpdateDMSMetadataInput{
+		ID:      params.ID,
+		Patches: requestBody.Patches,
+	})
+	if err != nil {
+		ctx.JSON(500, gin.H{"err": err.Error()})
+		return
+	}
+
+	ctx.JSON(200, output)
+}
+
 func (r *dmsManagerHttpRoutes) DeleteDMS(ctx *gin.Context) {
 
 	var params uriDMSIDParam

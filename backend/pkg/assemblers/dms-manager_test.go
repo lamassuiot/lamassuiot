@@ -14,6 +14,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -215,6 +216,67 @@ func TestUpdateDMSWithInvalidIssuanceProfileShouldFail(t *testing.T) {
 	_, err = dmsMgr.Service.UpdateDMS(context.Background(), services.UpdateDMSInput{DMS: *dms})
 	assert.ErrorIs(t, err, errs.ErrDMSIssuanceProfile)
 
+}
+
+func TestUpdateDMSMetadata(t *testing.T) {
+
+	dmsMgr, _, err := StartDMSManagerServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create DMS Manager test server: %s", err)
+	}
+
+	dmsUpdMeta := map[string]any{
+		"test":    "test",
+		"lamassu": "lamassu",
+		"arr":     []any{"test", "test2"},
+	}
+	dmsSample := services.CreateDMSInput{
+		ID:       dmsID,
+		Name:     "MyIotFleet",
+		Metadata: map[string]any{"test": "test"},
+	}
+
+	dms, err := dmsMgr.HttpDeviceManagerSDK.CreateDMS(context.Background(), dmsSample)
+	if err != nil {
+		t.Fatalf("could not create DMS: %s", err)
+	}
+	assert.Equal(t, dms.Name, dmsSample.Name)
+
+	var testcases = []struct {
+		name        string
+		run         func() (*models.DMS, error)
+		resultCheck func(dms *models.DMS, err error)
+	}{
+		{
+			name: "OK",
+			run: func() (*models.DMS, error) {
+
+				dms, err := dmsMgr.Service.UpdateDMSMetadata(context.Background(), services.UpdateDMSMetadataInput{
+					ID: dmsID,
+					Patches: chelpers.NewPatchBuilder().
+						Add(chelpers.JSONPointerBuilder(), dmsUpdMeta).
+						Build(),
+				})
+				if err != nil {
+					t.Fatalf("could not retrieve a device: %s", err)
+				}
+				return dms, nil
+			},
+			resultCheck: func(dms *models.DMS, err error) {
+				for key, value := range dms.Metadata {
+					if val, ok := dmsUpdMeta[key]; !ok || !reflect.DeepEqual(val, value) {
+						t.Fatalf("the dms's metadata is not correct: %s != %s", val, value)
+					}
+				}
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.resultCheck(tc.run())
+		})
+	}
 }
 
 func TestDeleteDMS(t *testing.T) {

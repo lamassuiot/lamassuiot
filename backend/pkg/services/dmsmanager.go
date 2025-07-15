@@ -190,6 +190,39 @@ func checkIssuanceProfileValidity(ctx context.Context, lFunc *logrus.Entry, caCl
 	return nil
 }
 
+func (svc DMSManagerServiceBackend) UpdateDMSMetadata(ctx context.Context, input services.UpdateDMSMetadataInput) (*models.DMS, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := deviceValidate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("UpdateDMSMetadata struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	lFunc.Debugf("checking if DMS '%s' exists", input.ID)
+	exists, dms, err := svc.dmsStorage.SelectExists(ctx, input.ID)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if DMS '%s' exists in storage engine: %s", input.ID, err)
+		return nil, err
+	}
+
+	if !exists {
+		lFunc.Errorf("DMS %s can not be found in storage engine", input.ID)
+		return nil, errs.ErrDMSNotFound
+	}
+
+	updatedMetadata, err := chelpers.ApplyPatches(dms.Metadata, input.Patches)
+	if err != nil {
+		lFunc.Errorf("failed to apply patches to metadata for DMS '%s': %v", input.ID, err)
+		return nil, err
+	}
+
+	dms.Metadata = updatedMetadata
+
+	lFunc.Debugf("updating %s DMS metadata", input.ID)
+	return svc.dmsStorage.Update(ctx, dms)
+}
+
 func (svc DMSManagerServiceBackend) DeleteDMS(ctx context.Context, input services.DeleteDMSInput) error {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
