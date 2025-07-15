@@ -48,6 +48,11 @@ func (m *MockDMSManagerService) UpdateDMS(ctx context.Context, input services.Up
 	return args.Get(0).(*models.DMS), args.Error(1)
 }
 
+func (m *MockDMSManagerService) UpdateDMSMetadata(ctx context.Context, input services.UpdateDMSMetadataInput) (*models.DMS, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.DMS), args.Error(1)
+}
+
 func (m *MockDMSManagerService) DeleteDMS(ctx context.Context, input services.DeleteDMSInput) error {
 	args := m.Called(ctx, input)
 	return args.Error(0)
