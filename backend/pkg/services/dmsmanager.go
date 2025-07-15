@@ -208,7 +208,7 @@ func (svc DMSManagerServiceBackend) UpdateDMSMetadata(ctx context.Context, input
 
 	if !exists {
 		lFunc.Errorf("DMS %s can not be found in storage engine", input.ID)
-		return nil, err
+		return nil, errs.ErrDMSNotFound
 	}
 
 	updatedMetadata, err := chelpers.ApplyPatches(dms.Metadata, input.Patches)

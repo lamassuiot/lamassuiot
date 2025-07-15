@@ -26,6 +26,7 @@ func NewAWSIoTEventHandler(l *logrus.Entry, svc AWSCloudConnectorService) *event
 			string(models.EventUpdateCertificateMetadataKey): func(e *event.Event) error { return handlerWarpper(e, svc, l, updateCertificateMetadataHandler) },
 			string(models.EventCreateDMSKey):                 func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateDMSHandler) },
 			string(models.EventUpdateDMSKey):                 func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateDMSHandler) },
+			string(models.EventUpdateDMSMetadataKey):         func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateDMSHandler) },
 			string(models.EventCreateCAKey):                  func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateCAHandler) },
 			string(models.EventImportCAKey):                  func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateCAHandler) },
 			string(models.EventUpdateCAMetadataKey):          func(e *event.Event) error { return handlerWarpper(e, svc, l, createOrUpdateCAHandler) },
