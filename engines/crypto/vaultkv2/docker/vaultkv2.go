@@ -14,7 +14,7 @@ import (
 	"github.com/ory/dockertest/v3/docker"
 )
 
-func RunHashicorpVaultDocker() (func() error, func() error, *vconfig.HashicorpVaultSDK, string, error) {
+func RunHashicorpVaultDocker(exposeAsStandardPort bool) (func() error, func() error, *vconfig.HashicorpVaultSDK, string, error) {
 	rootToken := "root-token-dev"
 	containerCleanup, container, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
 		Repository: "vault",  // image
@@ -24,8 +24,20 @@ func RunHashicorpVaultDocker() (func() error, func() error, *vconfig.HashicorpVa
 			"VAULT_DEV_ROOT_TOKEN_ID=" + rootToken,
 			"VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200",
 		},
+		Labels: map[string]string{
+			"group": "lamassuiot-monolithic",
+		},
 	}, func(hc *docker.HostConfig) {
-		// This function is intentionally left empty.
+		if exposeAsStandardPort {
+			hc.PortBindings = map[docker.Port][]docker.PortBinding{
+				"8200/tcp": {
+					{
+						HostIP:   "0.0.0.0",
+						HostPort: "8200", // random port
+					},
+				},
+			}
+		}
 	})
 	if err != nil {
 		return nil, nil, nil, "", err
