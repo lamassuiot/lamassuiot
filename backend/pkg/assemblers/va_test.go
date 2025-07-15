@@ -3,6 +3,7 @@ package assemblers
 import (
 	"context"
 	"crypto/x509"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"math/rand"
@@ -464,7 +465,7 @@ func TestVARole(t *testing.T) {
 	var role *models.VARole
 	err = SleepRetry(5, 3*time.Second, func() error {
 		role, err = serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
-			CASubjectKeyID: helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId),
+			CASubjectKeyID: hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId),
 		})
 
 		return err
@@ -473,16 +474,16 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("could not get role: %s", err)
 	}
 
-	if role.CASubjectKeyID != helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId) {
-		t.Fatalf("role CASubjectKeyID should be %s, got %s", helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId), role.CASubjectKeyID)
+	if role.CASubjectKeyID != hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId) {
+		t.Fatalf("role CASubjectKeyID should be %s, got %s", hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId), role.CASubjectKeyID)
 	}
 
 	if role.CRLOptions.RegenerateOnRevoke != true {
 		t.Fatalf("role CRLOptions.RegenerateOnRevoke should be true, got %t", role.CRLOptions.RegenerateOnRevoke)
 	}
 
-	if role.CRLOptions.SubjectKeyIDSigner != helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId) {
-		t.Fatalf("role CRLOptions.SubjectKeyIDSigner should be %s, got %s", helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId), role.CRLOptions.SubjectKeyIDSigner)
+	if role.CRLOptions.SubjectKeyIDSigner != hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId) {
+		t.Fatalf("role CRLOptions.SubjectKeyIDSigner should be %s, got %s", hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId), role.CRLOptions.SubjectKeyIDSigner)
 	}
 
 	//Now Update the role
@@ -492,7 +493,7 @@ func TestVARole(t *testing.T) {
 	role.CRLOptions.Validity = models.TimeDuration(time.Hour * 2)
 
 	role, err = serverTest.VA.CRLService.UpdateVARole(context.Background(), services.UpdateVARoleInput{
-		CASubjectKeyID: helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId),
+		CASubjectKeyID: hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId),
 		CRLRole:        role.CRLOptions,
 	})
 
@@ -501,7 +502,7 @@ func TestVARole(t *testing.T) {
 	}
 
 	role, err = serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
-		CASubjectKeyID: helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId),
+		CASubjectKeyID: hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId),
 	})
 
 	if err != nil {
@@ -555,7 +556,7 @@ func TestVARole(t *testing.T) {
 
 	err = SleepRetry(10, 3*time.Second, func() error {
 		role, err = serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
-			CASubjectKeyID: helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId),
+			CASubjectKeyID: hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId),
 		})
 
 		return err
@@ -564,8 +565,8 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("could not get role: %s", err)
 	}
 
-	if role.CASubjectKeyID != helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId) {
-		t.Fatalf("role CASubjectKeyID should be %s, got %s", helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId), role.CASubjectKeyID)
+	if role.CASubjectKeyID != hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId) {
+		t.Fatalf("role CASubjectKeyID should be %s, got %s", hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId), role.CASubjectKeyID)
 	}
 
 	SleepRetry(10, 3*time.Second, func() error {
