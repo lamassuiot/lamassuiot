@@ -16,6 +16,7 @@ func NewDeviceManagerHTTPLayer(router *gin.RouterGroup, svc services.DeviceManag
 	rv1.GET("/devices/:id", routes.GetDeviceByID)
 	rv1.PUT("/devices/:id/idslot", routes.UpdateDeviceIdentitySlot)
 	rv1.PUT("/devices/:id/metadata", routes.UpdateDeviceMetadata)
+	rv1.PATCH("/devices/:id/metadata", routes.UpdateDeviceMetadata)
 	rv1.DELETE("/devices/:id/decommission", routes.DecommissionDevice)
 	rv1.GET("/devices/dms/:id", routes.GetDevicesByDMS)
 

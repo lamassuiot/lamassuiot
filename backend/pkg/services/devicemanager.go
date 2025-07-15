@@ -263,7 +263,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context,
 
 	if !exists {
 		lFunc.Errorf("device %s can not be found in storage engine", input.ID)
-		return nil, err
+		return nil, errs.ErrDeviceNotFound
 	}
 
 	updatedMetadata, err := chelpers.ApplyPatches(device.Metadata, input.Patches)
