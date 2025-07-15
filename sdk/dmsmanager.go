@@ -54,6 +54,17 @@ func (cli *dmsManagerClient) UpdateDMS(ctx context.Context, input services.Updat
 	return response, nil
 }
 
+func (cli *dmsManagerClient) UpdateDMSMetadata(ctx context.Context, input services.UpdateDMSMetadataInput) (*models.DMS, error) {
+	response, err := Put[*models.DMS](ctx, cli.httpClient, cli.baseUrl+"/v1/dms/"+input.ID+"/metadata", resources.UpdateDMSMetadataBody{
+		Patches: input.Patches,
+	}, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func (cli *dmsManagerClient) DeleteDMS(ctx context.Context, input services.DeleteDMSInput) error {
 	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/dms/"+input.ID, map[int][]error{
 		404: {

@@ -16,3 +16,7 @@ type BindIdentityToDeviceBody struct {
 	DeviceID                string                 `json:"device_id"`
 	CertificateSerialNumber string                 `json:"certificate_serial_number"`
 }
+
+type UpdateDMSMetadataBody struct {
+	Patches []models.PatchOperation `json:"patches"`
+}

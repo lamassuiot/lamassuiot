@@ -55,6 +55,25 @@ func (mw dmsEventPublisher) UpdateDMS(ctx context.Context, input services.Update
 	return mw.next.UpdateDMS(ctx, input)
 }
 
+func (mw dmsEventPublisher) UpdateDMSMetadata(ctx context.Context, input services.UpdateDMSMetadataInput) (output *models.DMS, err error) {
+	prev, err := mw.GetDMSByID(ctx, services.GetDMSByIDInput{
+		ID: input.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("mw error: could not get DMS %s: %w", input.ID, err)
+	}
+
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateDMSMetadataKey, models.UpdateModel[models.DMS]{
+				Updated:  *output,
+				Previous: *prev,
+			})
+		}
+	}()
+	return mw.next.UpdateDMSMetadata(ctx, input)
+}
+
 func (mw dmsEventPublisher) DeleteDMS(ctx context.Context, input services.DeleteDMSInput) (err error) {
 	defer func() {
 		if err == nil {
