@@ -1975,12 +1975,11 @@ func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.Sig
 		if digest == nil {
 			return nil, errors.New("digest is nil")
 		}
-		r, s, err := ecdsa.Sign(rand.Reader, ecdsaPriv, digest)
+		signature, err = ecdsa.SignASN1(rand.Reader, ecdsaPriv, digest)
 		if err != nil {
 			lFunc.Errorf("SignMessage - ECDSA Sign error: %s", err)
 			return nil, err
 		}
-		signature = append(r.Bytes(), s.Bytes()...)
 	}
 
 	return &models.MessageSignature{
