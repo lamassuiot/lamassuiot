@@ -12,7 +12,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"math/big"
 	"strings"
 	"time"
 
@@ -1975,7 +1974,7 @@ func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.Sig
 		if digest == nil {
 			return nil, errors.New("digest is nil")
 		}
-		signature, err = ecdsa.SignASN1(rand.Reader, ecdsaPriv, digest)
+		signature, err = signer.Sign(rand.Reader, digest, hash)
 		if err != nil {
 			lFunc.Errorf("SignMessage - ECDSA Sign error: %s", err)
 			return nil, err
@@ -2064,16 +2063,7 @@ func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services
 		if !ok {
 			return nil, errors.New("key is not ECDSA key")
 		}
-		// ECDSA signature is r||s, split in half
-		sigLen := len(input.Signature)
-		if sigLen%2 != 0 || sigLen == 0 {
-			return nil, errors.New("invalid ECDSA signature length")
-		}
-		rBytes := input.Signature[:sigLen/2]
-		sBytes := input.Signature[sigLen/2:]
-		r := new(big.Int).SetBytes(rBytes)
-		s := new(big.Int).SetBytes(sBytes)
-		if !ecdsa.Verify(pub, digest, r, s) {
+		if !ecdsa.VerifyASN1(pub, digest, input.Signature) {
 			return &models.MessageValidation{
 				Valid: false,
 			}, nil
