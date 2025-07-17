@@ -20,4 +20,7 @@ var (
 	ErrCertificateNotFound                   error = errors.New("certificate not found")
 	ErrCertificateAlreadyRevoked             error = errors.New("certificate already revoked")
 	ErrCertificateStatusTransitionNotAllowed error = errors.New("new status transition not allowed for certificate")
+
+	//KMS
+	ErrKeyNotFound error = errors.New("key not found")
 )

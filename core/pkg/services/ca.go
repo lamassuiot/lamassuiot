@@ -49,6 +49,15 @@ type CAService interface {
 	GetCARequestByID(ctx context.Context, input GetByIDInput) (*models.CACertificateRequest, error)
 	DeleteCARequestByID(ctx context.Context, input GetByIDInput) error
 	GetCARequests(ctx context.Context, input GetItemsInput[models.CACertificateRequest]) (string, error)
+
+	// KMS
+	GetKeys(ctx context.Context, input GetKeysInput) (string, error)
+	GetKeyByID(ctx context.Context, input GetByIDInput) (*models.Key, error)
+	CreateKey(ctx context.Context, input CreateKeyInput) (*models.Key, error)
+	DeleteKeyByID(ctx context.Context, input GetByIDInput) error
+	SignMessage(ctx context.Context, input SignMessageInput) (*models.MessageSignature, error)
+	VerifySignature(ctx context.Context, input VerifySignInput) (*models.MessageValidation, error)
+	ImportKey(ctx context.Context, input ImportKeyInput) (*models.Key, error)
 }
 
 type GetStatsByCAIDInput struct {
@@ -246,4 +255,37 @@ type UpdateCertificateStatusInput struct {
 type UpdateCertificateMetadataInput struct {
 	SerialNumber string                  `validate:"required"`
 	Patches      []models.PatchOperation `validate:"required"`
+}
+
+// KMS
+type GetKeysInput struct {
+	resources.ListInput[models.Key]
+}
+
+type CreateKeyInput struct {
+	Algorithm string `validate:"required"`
+	Size      int    `validate:"required"`
+	EngineID  string
+	Name      string `validate:"required"`
+}
+
+type SignMessageInput struct {
+	KeyID       string                 `validate:"required"`
+	Algorithm   string                 `validate:"required"`
+	Message     []byte                 `validate:"required"`
+	MessageType models.SignMessageType `validate:"required"`
+}
+
+type VerifySignInput struct {
+	KeyID       string                 `validate:"required"`
+	Algorithm   string                 `validate:"required"`
+	Signature   []byte                 `validate:"required"`
+	Message     []byte                 `validate:"required"`
+	MessageType models.SignMessageType `validate:"required"`
+}
+
+type ImportKeyInput struct {
+	PrivateKey []byte `validate:"required"`
+	EngineID   string
+	Name       string `validate:"required"`
 }

@@ -30,6 +30,16 @@ var CARequestFiltrableFields = map[string]FilterFieldType{
 	"issuer_metadata_id":  StringFilterFieldType,
 }
 
+var KMSFiltrableFields = map[string]FilterFieldType{
+	"id":          StringFilterFieldType,
+	"algorithm":   StringFilterFieldType,
+	"size":        NumberFilterFieldType,
+	"public_key":  StringFilterFieldType,
+	"status":      StringFilterFieldType,
+	"creation_ts": DateFilterFieldType,
+	"name":        StringFilterFieldType,
+}
+
 type CreateCABody struct {
 	ID                 string             `json:"id"`
 	ParentID           string             `json:"parent_id"`
@@ -111,4 +121,31 @@ type GetCertificateStatus struct {
 type ImportCertificateBody struct {
 	Metadata    map[string]interface{}  `json:"metadata"`
 	Certificate *models.X509Certificate `json:"certificate"`
+}
+
+// KMS
+type CreateKeyBody struct {
+	Algorithm string `json:"algorithm"`
+	Size      int    `json:"size"`
+	EngineID  string `json:"engine_id"`
+	Name      string `json:"name"`
+}
+
+type SignMessageBody struct {
+	Algorithm   string                 `json:"algorithm"`
+	Message     []byte                 `json:"message"`
+	MessageType models.SignMessageType `json:"message_type"`
+}
+
+type VerifySignBody struct {
+	Algorithm   string                 `json:"algorithm"`
+	Message     []byte                 `json:"message"`
+	Signature   []byte                 `json:"signature"`
+	MessageType models.SignMessageType `json:"message_type"`
+}
+
+type ImportKeyBody struct {
+	PrivateKey []byte `json:"private_key"`
+	EngineID   string `json:"engine_id"`
+	Name       string `json:"name"`
 }
