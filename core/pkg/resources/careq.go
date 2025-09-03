@@ -76,6 +76,7 @@ type UpdateCAIssuanceExpirationBody struct {
 type SignCertificateBody struct {
 	CertRequest *models.X509CertificateRequest `json:"csr"`
 	Profile     models.IssuanceProfile         `json:"profile"`
+	ProfileID   string                         `json:"profile_id"`
 }
 
 type SignatureSignBody struct {

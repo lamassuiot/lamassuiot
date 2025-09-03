@@ -183,9 +183,10 @@ type DeleteCAInput struct {
 }
 
 type SignCertificateInput struct {
-	CAID            string                         `validate:"required"`
-	CertRequest     *models.X509CertificateRequest `validate:"required"`
-	IssuanceProfile models.IssuanceProfile         `validate:"required"`
+	CAID              string                         `validate:"required"`
+	CertRequest       *models.X509CertificateRequest `validate:"required"`
+	IssuanceProfile   models.IssuanceProfile
+	IssuanceProfileID string
 }
 
 type CreateCertificateInput struct {
