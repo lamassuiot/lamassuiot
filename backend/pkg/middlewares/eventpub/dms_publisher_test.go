@@ -199,6 +199,24 @@ func TestDMSEventPublisher(t *testing.T) {
 			},
 		},
 		{
+			name: "UpdateDMSMetadata with errors - Not fire event",
+			test: func(t *testing.T) {
+				dmsWithErrors(t, "UpdateDMSMetadata", services.UpdateDMSMetadataInput{}, models.EventUpdateDMSMetadataKey, &models.DMS{},
+					func(mockCAService *svcmock.MockDMSManagerService) {
+						mockCAService.On("GetDMSByID", context.Background(), mock.Anything).Return(&models.DMS{}, nil)
+					})
+			},
+		},
+		{
+			name: "UpdateDMSMetadata without errors - fire event",
+			test: func(t *testing.T) {
+				dmsWithoutErrors(t, "UpdateDMSMetadata", services.UpdateDMSMetadataInput{}, models.EventUpdateDMSMetadataKey, &models.DMS{},
+					func(mockCAService *svcmock.MockDMSManagerService) {
+						mockCAService.On("GetDMSByID", context.Background(), mock.Anything).Return(&models.DMS{}, nil)
+					})
+			},
+		},
+		{
 			name: "DeleteDMS with errors - Not fire event",
 			test: func(t *testing.T) {
 				dmsWithErrorsSingleResult(t, "DeleteDMS", services.DeleteDMSInput{}, models.EventDeleteDMSKey)

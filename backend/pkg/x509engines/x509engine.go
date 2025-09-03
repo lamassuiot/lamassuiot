@@ -12,6 +12,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash"
@@ -105,14 +106,16 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 
 	lFunc.Debugf("generated serial number for root CA: %s", helpers.SerialNumberToString(sn))
 	lFunc.Debugf("validity of root CA: %s", caExpiration)
-	lFunc.Debugf("key ID of root CA: %s", helpers.FormatHexWithColons([]byte(keyID)))
+	lFunc.Debugf("key ID of root CA: %s", keyID)
 	lFunc.Debugf("subject of root CA: %s", subject)
+
+	rawHex, _ := hex.DecodeString(keyID)
 
 	template := x509.Certificate{
 		SerialNumber:          sn,
 		Subject:               chelpers.SubjectToPkixName(subject),
-		AuthorityKeyId:        []byte(keyID),
-		SubjectKeyId:          []byte(keyID),
+		AuthorityKeyId:        rawHex,
+		SubjectKeyId:          rawHex,
 		OCSPServer:            []string{},
 		CRLDistributionPoints: []string{},
 		NotBefore:             time.Now(),
@@ -168,10 +171,12 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 		return nil, err
 	}
 
+	rawHex, _ := hex.DecodeString(skid)
+
 	certificateTemplate := x509.Certificate{
 		PublicKeyAlgorithm:    csr.PublicKeyAlgorithm,
 		PublicKey:             csr.PublicKey,
-		SubjectKeyId:          []byte(skid),
+		SubjectKeyId:          rawHex,
 		AuthorityKeyId:        ca.SubjectKeyId,
 		SerialNumber:          sn,
 		Issuer:                ca.Subject,
@@ -183,7 +188,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 
 	for _, domain := range engine.vaDomains {
 		certificateTemplate.OCSPServer = append(certificateTemplate.OCSPServer, fmt.Sprintf("http://%s/ocsp", domain))
-		certificateTemplate.CRLDistributionPoints = append(certificateTemplate.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, ca.SubjectKeyId))
+		certificateTemplate.CRLDistributionPoints = append(certificateTemplate.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, hex.EncodeToString(ca.SubjectKeyId)))
 	}
 
 	// Define certificate extra extensions
