@@ -1266,8 +1266,11 @@ func (r *caHttpRoutes) CreateIssuanceProfile(ctx *gin.Context) {
 			HonorSubject:           requestBody.HonorSubject,
 			Subject:                requestBody.Subject,
 			HonorExtensions:        requestBody.HonorExtensions,
-			AllowRSAKeys:           requestBody.AllowRSAKeys,
-			AllowECDSAKeys:         requestBody.AllowECDSAKeys,
+			CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+				Enabled:        requestBody.CryptoEnforcement.Enabled,
+				AllowRSAKeys:   requestBody.CryptoEnforcement.AllowRSAKeys,
+				AllowECDSAKeys: requestBody.CryptoEnforcement.AllowECDSAKeys,
+			},
 		},
 	})
 
@@ -1315,8 +1318,11 @@ func (r *caHttpRoutes) UpdateIssuanceProfile(ctx *gin.Context) {
 			HonorSubject:           requestBody.HonorSubject,
 			Subject:                requestBody.Subject,
 			HonorExtensions:        requestBody.HonorExtensions,
-			AllowRSAKeys:           requestBody.AllowRSAKeys,
-			AllowECDSAKeys:         requestBody.AllowECDSAKeys,
+			CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+				Enabled:        requestBody.CryptoEnforcement.Enabled,
+				AllowRSAKeys:   requestBody.CryptoEnforcement.AllowRSAKeys,
+				AllowECDSAKeys: requestBody.CryptoEnforcement.AllowECDSAKeys,
+			},
 		},
 	})
 

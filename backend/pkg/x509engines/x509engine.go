@@ -149,18 +149,21 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caSigner crypto.Signer, profile cmodels.IssuanceProfile) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
-	// Check CSR Public Key Algorithm
-	if _, ok := csr.PublicKey.(*rsa.PublicKey); ok {
-		if !profile.AllowRSAKeys {
-			lFunc.Errorf("CSR uses RSA public key, but issuance profile does not allow RSA keys")
-			return nil, fmt.Errorf("CSR uses RSA public key, but issuance profile does not allow RSA keys")
+	// If crypto enforcement is enabled, check if the CSR public key algorithm is allowed
+	if profile.CryptoEnforcement.Enabled {
+		// Check CSR Public Key Algorithm
+		if _, ok := csr.PublicKey.(*rsa.PublicKey); ok {
+			if !profile.CryptoEnforcement.AllowRSAKeys {
+				lFunc.Errorf("CSR uses RSA public key, but issuance profile does not allow RSA keys")
+				return nil, fmt.Errorf("CSR uses RSA public key, but issuance profile does not allow RSA keys")
+			}
 		}
-	}
 
-	if _, ok := csr.PublicKey.(*ecdsa.PublicKey); ok {
-		if !profile.AllowECDSAKeys {
-			lFunc.Errorf("CSR uses ECDSA public key, but issuance profile does not allow ECDSA keys")
-			return nil, fmt.Errorf("CSR uses ECDSA public key, but issuance profile does not allow ECDSA keys")
+		if _, ok := csr.PublicKey.(*ecdsa.PublicKey); ok {
+			if !profile.CryptoEnforcement.AllowECDSAKeys {
+				lFunc.Errorf("CSR uses ECDSA public key, but issuance profile does not allow ECDSA keys")
+				return nil, fmt.Errorf("CSR uses ECDSA public key, but issuance profile does not allow ECDSA keys")
+			}
 		}
 	}
 

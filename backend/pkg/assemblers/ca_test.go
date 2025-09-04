@@ -1024,8 +1024,6 @@ func TestSignCertificate(t *testing.T) {
 						HonorExtensions: true,
 						Validity:        validity,
 						SignAsCA:        false,
-						AllowECDSAKeys:  true,
-						AllowRSAKeys:    true,
 					},
 				})
 				if err != nil {
@@ -1168,8 +1166,6 @@ func TestSignCertificate(t *testing.T) {
 						HonorExtensions: false,
 						Validity:        validity,
 						SignAsCA:        false,
-						AllowECDSAKeys:  true,
-						AllowRSAKeys:    true,
 					},
 				})
 				if err != nil {
@@ -1297,8 +1293,6 @@ func TestSignCertificate(t *testing.T) {
 						HonorExtensions:        true,
 						Validity:               validity,
 						SignAsCA:               true,
-						AllowECDSAKeys:         true,
-						AllowRSAKeys:           true,
 					},
 				})
 				if err != nil {
@@ -1360,8 +1354,11 @@ func TestSignCertificate(t *testing.T) {
 						HonorExtensions:        true,
 						Validity:               validity,
 						SignAsCA:               true,
-						AllowECDSAKeys:         false,
-						AllowRSAKeys:           true,
+						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+							Enabled:        true,
+							AllowECDSAKeys: false,
+							AllowRSAKeys:   true,
+						},
 					},
 				})
 				if err != nil {
@@ -1435,8 +1432,11 @@ func TestSignCertificate(t *testing.T) {
 						HonorExtensions:        true,
 						Validity:               validity,
 						SignAsCA:               true,
-						AllowECDSAKeys:         true,
-						AllowRSAKeys:           false,
+						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+							Enabled:        true,
+							AllowECDSAKeys: true,
+							AllowRSAKeys:   false,
+						},
 					},
 				})
 				if err != nil {

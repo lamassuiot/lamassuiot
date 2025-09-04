@@ -408,8 +408,11 @@ func (cli *httpCAClient) CreateIssuanceProfile(ctx context.Context, input servic
 		HonorSubject:           input.Profile.HonorSubject,
 		Subject:                input.Profile.Subject,
 		HonorExtensions:        input.Profile.HonorExtensions,
-		AllowRSAKeys:           input.Profile.AllowRSAKeys,
-		AllowECDSAKeys:         input.Profile.AllowECDSAKeys,
+		CryptoEnforcement: resources.CreateIssuanceProfileCryptoEnforcementBody{
+			Enabled:        input.Profile.CryptoEnforcement.Enabled,
+			AllowRSAKeys:   input.Profile.CryptoEnforcement.AllowRSAKeys,
+			AllowECDSAKeys: input.Profile.CryptoEnforcement.AllowECDSAKeys,
+		},
 	}, map[int][]error{
 		400: {
 			errs.ErrValidateBadRequest,
@@ -435,8 +438,11 @@ func (cli *httpCAClient) UpdateIssuanceProfile(ctx context.Context, input servic
 		HonorSubject:           input.Profile.HonorSubject,
 		Subject:                input.Profile.Subject,
 		HonorExtensions:        input.Profile.HonorExtensions,
-		AllowRSAKeys:           input.Profile.AllowRSAKeys,
-		AllowECDSAKeys:         input.Profile.AllowECDSAKeys,
+		CryptoEnforcement: resources.CreateIssuanceProfileCryptoEnforcementBody{
+			Enabled:        input.Profile.CryptoEnforcement.Enabled,
+			AllowRSAKeys:   input.Profile.CryptoEnforcement.AllowRSAKeys,
+			AllowECDSAKeys: input.Profile.CryptoEnforcement.AllowECDSAKeys,
+		},
 	}, map[int][]error{
 		400: {
 			errs.ErrValidateBadRequest,

@@ -22,8 +22,10 @@ CREATE TABLE issuance_profiles (
    subject_state text DEFAULT '',
    subject_locality text DEFAULT '',
    honor_extensions boolean NOT NULL DEFAULT true,
-   allow_rsa_keys boolean NOT NULL DEFAULT true,
-   allow_ecdsa_keys boolean NOT NULL DEFAULT true,
+   crypto_enforcement_enabled boolean NOT NULL DEFAULT false,
+   crypto_enforcement_allow_rsa_keys boolean NOT NULL DEFAULT true,
+   crypto_enforcement_allow_ecdsa_keys boolean NOT NULL DEFAULT true,
+
 	CONSTRAINT issuance_profiles_pkey PRIMARY KEY (id)
 );
 -- +goose StatementEnd

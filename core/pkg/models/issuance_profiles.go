@@ -19,6 +19,11 @@ type IssuanceProfile struct {
 
 	HonorExtensions bool `json:"honor_extensions"`
 
+	CryptoEnforcement IssuanceProfileCryptoEnforcement `json:"crypto_enforcement" gorm:"embedded;embeddedPrefix:crypto_enforcement_"`
+}
+
+type IssuanceProfileCryptoEnforcement struct {
+	Enabled        bool `json:"enabled"`
 	AllowRSAKeys   bool `json:"allow_rsa_keys"`
 	AllowECDSAKeys bool `json:"allow_ecdsa_keys"`
 }
