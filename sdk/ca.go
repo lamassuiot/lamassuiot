@@ -409,9 +409,11 @@ func (cli *httpCAClient) CreateIssuanceProfile(ctx context.Context, input servic
 		Subject:                input.Profile.Subject,
 		HonorExtensions:        input.Profile.HonorExtensions,
 		CryptoEnforcement: resources.CreateIssuanceProfileCryptoEnforcementBody{
-			Enabled:        input.Profile.CryptoEnforcement.Enabled,
-			AllowRSAKeys:   input.Profile.CryptoEnforcement.AllowRSAKeys,
-			AllowECDSAKeys: input.Profile.CryptoEnforcement.AllowECDSAKeys,
+			Enabled:              input.Profile.CryptoEnforcement.Enabled,
+			AllowRSAKeys:         input.Profile.CryptoEnforcement.AllowRSAKeys,
+			AllowECDSAKeys:       input.Profile.CryptoEnforcement.AllowECDSAKeys,
+			AllowedRSAKeySizes:   input.Profile.CryptoEnforcement.AllowedRSAKeySizes,
+			AllowedECDSAKeySizes: input.Profile.CryptoEnforcement.AllowedECDSAKeySizes,
 		},
 	}, map[int][]error{
 		400: {
@@ -439,9 +441,11 @@ func (cli *httpCAClient) UpdateIssuanceProfile(ctx context.Context, input servic
 		Subject:                input.Profile.Subject,
 		HonorExtensions:        input.Profile.HonorExtensions,
 		CryptoEnforcement: resources.CreateIssuanceProfileCryptoEnforcementBody{
-			Enabled:        input.Profile.CryptoEnforcement.Enabled,
-			AllowRSAKeys:   input.Profile.CryptoEnforcement.AllowRSAKeys,
-			AllowECDSAKeys: input.Profile.CryptoEnforcement.AllowECDSAKeys,
+			Enabled:              input.Profile.CryptoEnforcement.Enabled,
+			AllowRSAKeys:         input.Profile.CryptoEnforcement.AllowRSAKeys,
+			AllowECDSAKeys:       input.Profile.CryptoEnforcement.AllowECDSAKeys,
+			AllowedRSAKeySizes:   input.Profile.CryptoEnforcement.AllowedRSAKeySizes,
+			AllowedECDSAKeySizes: input.Profile.CryptoEnforcement.AllowedECDSAKeySizes,
 		},
 	}, map[int][]error{
 		400: {

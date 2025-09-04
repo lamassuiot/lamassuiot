@@ -1267,9 +1267,11 @@ func (r *caHttpRoutes) CreateIssuanceProfile(ctx *gin.Context) {
 			Subject:                requestBody.Subject,
 			HonorExtensions:        requestBody.HonorExtensions,
 			CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
-				Enabled:        requestBody.CryptoEnforcement.Enabled,
-				AllowRSAKeys:   requestBody.CryptoEnforcement.AllowRSAKeys,
-				AllowECDSAKeys: requestBody.CryptoEnforcement.AllowECDSAKeys,
+				Enabled:              requestBody.CryptoEnforcement.Enabled,
+				AllowRSAKeys:         requestBody.CryptoEnforcement.AllowRSAKeys,
+				AllowECDSAKeys:       requestBody.CryptoEnforcement.AllowECDSAKeys,
+				AllowedRSAKeySizes:   requestBody.CryptoEnforcement.AllowedRSAKeySizes,
+				AllowedECDSAKeySizes: requestBody.CryptoEnforcement.AllowedECDSAKeySizes,
 			},
 		},
 	})
@@ -1319,9 +1321,11 @@ func (r *caHttpRoutes) UpdateIssuanceProfile(ctx *gin.Context) {
 			Subject:                requestBody.Subject,
 			HonorExtensions:        requestBody.HonorExtensions,
 			CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
-				Enabled:        requestBody.CryptoEnforcement.Enabled,
-				AllowRSAKeys:   requestBody.CryptoEnforcement.AllowRSAKeys,
-				AllowECDSAKeys: requestBody.CryptoEnforcement.AllowECDSAKeys,
+				Enabled:              requestBody.CryptoEnforcement.Enabled,
+				AllowRSAKeys:         requestBody.CryptoEnforcement.AllowRSAKeys,
+				AllowECDSAKeys:       requestBody.CryptoEnforcement.AllowECDSAKeys,
+				AllowedRSAKeySizes:   requestBody.CryptoEnforcement.AllowedRSAKeySizes,
+				AllowedECDSAKeySizes: requestBody.CryptoEnforcement.AllowedECDSAKeySizes,
 			},
 		},
 	})

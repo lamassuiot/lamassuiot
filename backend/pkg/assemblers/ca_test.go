@@ -877,7 +877,7 @@ func TestSignCertificate(t *testing.T) {
 			},
 		},
 		{
-			name: "OK/SignCertificateWithAltSubject",
+			name: "OK/SignWithProfileSubject",
 			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
 				key, err := chelpers.GenerateRSAKey(2048)
 				if err != nil {
@@ -993,6 +993,114 @@ func TestSignCertificate(t *testing.T) {
 
 				if !slices.Contains(issuedCert.Certificate.ExtKeyUsage, x509.ExtKeyUsageCodeSigning) {
 					return fmt.Errorf("issued certificate should have ExtKeyUsage 'CodeSigning' but was not set")
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/SignCertificateWithAltSubject",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				key, err := chelpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				template := x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName: "test",
+					},
+					DNSNames: []string{"example.com", "www.example.com"},
+				}
+
+				csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &template, key)
+				if err != nil {
+					return nil, err
+				}
+
+				csr, err := x509.ParseCertificateRequest(csrBytes)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:        caIDToSign,
+					CertRequest: (*models.X509CertificateRequest)(csr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
+				})
+			},
+			resultCheck: func(issuedCert *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCert == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if !slices.Contains(issuedCert.Certificate.DNSNames, "example.com") {
+					return fmt.Errorf("issued certificate should have DNSName 'example.com' but was not set")
+				}
+
+				if !slices.Contains(issuedCert.Certificate.DNSNames, "www.example.com") {
+					return fmt.Errorf("issued certificate should have DNSName 'www.example.com' but was not set")
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/SignCertificateWithoutAltSubject",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				key, err := chelpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				template := x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName: "test",
+					},
+					DNSNames: []string{"example.com", "www.example.com"},
+				}
+
+				csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &template, key)
+				if err != nil {
+					return nil, err
+				}
+
+				csr, err := x509.ParseCertificateRequest(csrBytes)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:        caIDToSign,
+					CertRequest: (*models.X509CertificateRequest)(csr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: false,
+					},
+				})
+			},
+			resultCheck: func(issuedCert *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCert == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if len(issuedCert.Certificate.DNSNames) != 0 {
+					return fmt.Errorf("issued certificate should not have any DNSNames, but got %v", issuedCert.Certificate.DNSNames)
 				}
 
 				return nil
@@ -1494,6 +1602,132 @@ func TestSignCertificate(t *testing.T) {
 				}
 
 				return nil
+			},
+		},
+		{
+			name: "OK/IssuanceProfile-OnlySignEcdsa256And384Csrs",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				//first create profile
+				p, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:                   "test-profile",
+						Description:            "my test profile",
+						HonorKeyUsage:          true,
+						HonorExtendedKeyUsages: true,
+						HonorSubject:           true,
+						HonorExtensions:        true,
+						Validity:               validity,
+						SignAsCA:               true,
+						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+							Enabled:              true,
+							AllowECDSAKeys:       true,
+							AllowedECDSAKeySizes: []int{256, 384},
+							AllowRSAKeys:         false,
+						},
+					},
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				profileID := p.ID
+				key256, _ := chelpers.GenerateECDSAKey(elliptic.P256())
+				csr256, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, key256)
+
+				key384, _ := chelpers.GenerateECDSAKey(elliptic.P384())
+				csr384, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, key384)
+
+				key521, _ := chelpers.GenerateECDSAKey(elliptic.P521())
+				csr521, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, key521)
+
+				_, err = caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csr256),
+					IssuanceProfileID: profileID,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				_, err = caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csr384),
+					IssuanceProfileID: profileID,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				_, err = caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csr521),
+					IssuanceProfileID: profileID,
+				})
+				if err == nil {
+					return nil, fmt.Errorf("should've got error but got none")
+				}
+
+				return nil, nil
+			},
+			resultCheck: func(issuedCerts *models.Certificate, err error) error {
+				return err
+			},
+		},
+		{
+			name: "OK/IssuanceProfile-OnlySignRsa2048Csrs",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				//first create profile
+				p, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:                   "test-profile",
+						Description:            "my test profile",
+						HonorKeyUsage:          true,
+						HonorExtendedKeyUsages: true,
+						HonorSubject:           true,
+						HonorExtensions:        true,
+						Validity:               validity,
+						SignAsCA:               true,
+						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+							Enabled:            true,
+							AllowECDSAKeys:     true,
+							AllowedRSAKeySizes: []int{2048},
+							AllowRSAKeys:       true,
+						},
+					},
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				profileID := p.ID
+				key2048, _ := chelpers.GenerateRSAKey(2048)
+				csr2048, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, key2048)
+
+				key3072, _ := chelpers.GenerateRSAKey(3072)
+				csr3072, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, key3072)
+
+				_, err = caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csr2048),
+					IssuanceProfileID: profileID,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				_, err = caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csr3072),
+					IssuanceProfileID: profileID,
+				})
+				if err == nil {
+					return nil, fmt.Errorf("should've got error but got none")
+				}
+
+				return nil, nil
+			},
+			resultCheck: func(issuedCerts *models.Certificate, err error) error {
+				return err
 			},
 		},
 		{

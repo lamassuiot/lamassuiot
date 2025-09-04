@@ -23,7 +23,9 @@ type IssuanceProfile struct {
 }
 
 type IssuanceProfileCryptoEnforcement struct {
-	Enabled        bool `json:"enabled"`
-	AllowRSAKeys   bool `json:"allow_rsa_keys"`
-	AllowECDSAKeys bool `json:"allow_ecdsa_keys"`
+	Enabled              bool  `json:"enabled"`
+	AllowRSAKeys         bool  `json:"allow_rsa_keys"`
+	AllowedRSAKeySizes   []int `json:"allowed_rsa_key_sizes" gorm:"type:text;serializer:json"`
+	AllowECDSAKeys       bool  `json:"allow_ecdsa_keys"`
+	AllowedECDSAKeySizes []int `json:"allowed_ecdsa_key_sizes" gorm:"type:text;serializer:json"`
 }

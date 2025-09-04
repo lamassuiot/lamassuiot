@@ -152,17 +152,27 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 	// If crypto enforcement is enabled, check if the CSR public key algorithm is allowed
 	if profile.CryptoEnforcement.Enabled {
 		// Check CSR Public Key Algorithm
-		if _, ok := csr.PublicKey.(*rsa.PublicKey); ok {
+		if rsa, ok := csr.PublicKey.(*rsa.PublicKey); ok {
 			if !profile.CryptoEnforcement.AllowRSAKeys {
 				lFunc.Errorf("CSR uses RSA public key, but issuance profile does not allow RSA keys")
 				return nil, fmt.Errorf("CSR uses RSA public key, but issuance profile does not allow RSA keys")
+			} else if profile.CryptoEnforcement.AllowedRSAKeySizes != nil {
+				if !slices.Contains(profile.CryptoEnforcement.AllowedRSAKeySizes, rsa.N.BitLen()) {
+					lFunc.Errorf("CSR uses RSA key with size %d, but issuance profile does not allow this key size", rsa.N.BitLen())
+					return nil, fmt.Errorf("CSR uses RSA key with size %d, but issuance profile does not allow this key size", rsa.N.BitLen())
+				}
 			}
 		}
 
-		if _, ok := csr.PublicKey.(*ecdsa.PublicKey); ok {
+		if ecdsa, ok := csr.PublicKey.(*ecdsa.PublicKey); ok {
 			if !profile.CryptoEnforcement.AllowECDSAKeys {
 				lFunc.Errorf("CSR uses ECDSA public key, but issuance profile does not allow ECDSA keys")
 				return nil, fmt.Errorf("CSR uses ECDSA public key, but issuance profile does not allow ECDSA keys")
+			} else if profile.CryptoEnforcement.AllowedECDSAKeySizes != nil {
+				if !slices.Contains(profile.CryptoEnforcement.AllowedECDSAKeySizes, ecdsa.Params().BitSize) {
+					lFunc.Errorf("CSR uses ECDSA key with size %d, but issuance profile does not allow this key size", ecdsa.Params().BitSize)
+					return nil, fmt.Errorf("CSR uses ECDSA key with size %d, but issuance profile does not allow this key size", ecdsa.Params().BitSize)
+				}
 			}
 		}
 	}

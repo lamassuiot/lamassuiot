@@ -24,7 +24,9 @@ CREATE TABLE issuance_profiles (
    honor_extensions boolean NOT NULL DEFAULT true,
    crypto_enforcement_enabled boolean NOT NULL DEFAULT false,
    crypto_enforcement_allow_rsa_keys boolean NOT NULL DEFAULT true,
+   crypto_enforcement_allowed_rsa_key_sizes text DEFAULT '{}',
    crypto_enforcement_allow_ecdsa_keys boolean NOT NULL DEFAULT true,
+   crypto_enforcement_allowed_ecdsa_key_sizes text DEFAULT '{}',
 
 	CONSTRAINT issuance_profiles_pkey PRIMARY KEY (id)
 );
