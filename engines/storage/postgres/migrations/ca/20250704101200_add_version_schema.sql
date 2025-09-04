@@ -8,5 +8,5 @@
 
 -- +goose Down
 -- +goose StatementBegin
-	DROP COLUMN version_schema FROM certificates;
+	ALTER TABLE certificates DROP COLUMN version_schema;
 -- +goose StatementEnd
