@@ -1168,8 +1168,6 @@ func TestSignCertificate(t *testing.T) {
 				}
 
 				pemB := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr.Raw})
-				fmt.Println(string(pemB))
-
 				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:              caIDToSign,
 					CertRequest:       (*models.X509CertificateRequest)(csr),
