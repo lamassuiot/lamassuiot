@@ -149,6 +149,21 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caSigner crypto.Signer, profile cmodels.IssuanceProfile) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
+	// Check CSR Public Key Algorithm
+	if _, ok := csr.PublicKey.(*rsa.PublicKey); ok {
+		if !profile.AllowRSAKeys {
+			lFunc.Errorf("CSR uses RSA public key, but issuance profile does not allow RSA keys")
+			return nil, fmt.Errorf("CSR uses RSA public key, but issuance profile does not allow RSA keys")
+		}
+	}
+
+	if _, ok := csr.PublicKey.(*ecdsa.PublicKey); ok {
+		if !profile.AllowECDSAKeys {
+			lFunc.Errorf("CSR uses ECDSA public key, but issuance profile does not allow ECDSA keys")
+			return nil, fmt.Errorf("CSR uses ECDSA public key, but issuance profile does not allow ECDSA keys")
+		}
+	}
+
 	now := time.Now()
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	sn, _ := rand.Int(rand.Reader, serialNumberLimit)
@@ -215,13 +230,29 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 		certificateTemplate.ExtraExtensions = exts
 	}
 
-	// Define certificate key usage
-	certificateTemplate.KeyUsage = x509.KeyUsage(profile.KeyUsage)
+	ku, extKu, err := chelpers.ExtractKeyUsageFromCSR(csr)
+	if err != nil {
+		lFunc.Errorf("could not extract key usage and extended key usage from CSR: %s", err)
+		return nil, err
+	}
+
+	if !profile.HonorKeyUsage {
+		// Use profile key usage
+		certificateTemplate.KeyUsage = x509.KeyUsage(profile.KeyUsage)
+	} else {
+		// Use CSR key usage
+		certificateTemplate.KeyUsage = ku
+	}
 
 	// Define certificate extended key usage
 	var extKeyUsage []x509.ExtKeyUsage
-	for _, usage := range profile.ExtendedKeyUsages {
-		extKeyUsage = append(extKeyUsage, x509.ExtKeyUsage(usage))
+	if !profile.HonorExtendedKeyUsages {
+		// Use profile extended key usage
+		for _, usage := range profile.ExtendedKeyUsages {
+			extKeyUsage = append(extKeyUsage, x509.ExtKeyUsage(usage))
+		}
+	} else {
+		extKeyUsage = extKu
 	}
 
 	certificateTemplate.ExtKeyUsage = extKeyUsage

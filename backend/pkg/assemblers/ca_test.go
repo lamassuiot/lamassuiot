@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"math/big"
@@ -992,6 +993,504 @@ func TestSignCertificate(t *testing.T) {
 
 				if !slices.Contains(issuedCert.Certificate.ExtKeyUsage, x509.ExtKeyUsageCodeSigning) {
 					return fmt.Errorf("issued certificate should have ExtKeyUsage 'CodeSigning' but was not set")
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/BaseIssuanceProfile",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				//first create profile
+				p, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:                   "test-profile",
+						Description:            "my test profile",
+						HonorKeyUsage:          true,
+						KeyUsage:               models.X509KeyUsage(x509.KeyUsageCRLSign | x509.KeyUsageEncipherOnly), // KeyUsage should be ignored since HonorKeyUsage is true
+						HonorExtendedKeyUsages: true,
+						ExtendedKeyUsages: []models.X509ExtKeyUsage{ // ExtendedKeyUsages should be ignored since HonorExtendedKeyUsages is true
+							models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+							models.X509ExtKeyUsage(x509.ExtKeyUsageOCSPSigning),
+						},
+						HonorSubject: true,
+						Subject: models.Subject{ // these values should be ignored since HonorSubject is true
+							Country:          "US",
+							Organization:     "other-lamassu",
+							OrganizationUnit: "other-iot",
+							State:            "other-lamassu-world",
+							Locality:         "other-lamassu-city",
+						},
+						HonorExtensions: true,
+						Validity:        validity,
+						SignAsCA:        false,
+						AllowECDSAKeys:  true,
+						AllowRSAKeys:    true,
+					},
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				profileID := p.ID
+
+				key, err := chelpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				extensions := []pkix.Extension{}
+				kuExt, err := chelpers.GenerateKeyUsagePKIExtension(x509.KeyUsageContentCommitment | x509.KeyUsageKeyEncipherment | x509.KeyUsageDecipherOnly)
+				if err != nil {
+					return nil, fmt.Errorf("error generating KeyUsage extension: %s", err)
+				}
+
+				ekuExt, err := chelpers.GenerateExtendedKeyUsagePKIExtension([]x509.ExtKeyUsage{x509.ExtKeyUsageEmailProtection, x509.ExtKeyUsageCodeSigning})
+				if err != nil {
+					return nil, fmt.Errorf("error generating ExtendedKeyUsage extension: %s", err)
+				}
+
+				extensions = append(extensions, kuExt, ekuExt)
+
+				csr, err := chelpers.GenerateCertificateRequestWithExtensions(
+					models.Subject{CommonName: "test", Country: "ES", Organization: "lamassu", OrganizationUnit: "iot", State: "lamassu-world", Locality: "lamassu-city"},
+					extensions,
+					key,
+				)
+				if err != nil {
+					return nil, err
+				}
+
+				pemB := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr.Raw})
+				fmt.Println(string(pemB))
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csr),
+					IssuanceProfileID: profileID,
+				})
+			},
+			resultCheck: func(issuedCerts *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCerts == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if issuedCerts.Subject.CommonName != "test" {
+					return fmt.Errorf("issued certificate should have CommonName 'test' but got '%s'", issuedCerts.Subject.CommonName)
+				}
+
+				if issuedCerts.Subject.Country != "ES" {
+					return fmt.Errorf("issued certificate should have Country 'ES' but got '%s'", issuedCerts.Subject.Country)
+				}
+
+				if issuedCerts.Subject.Organization != "lamassu" {
+					return fmt.Errorf("issued certificate should have Organization 'lamassu' but got '%s'", issuedCerts.Subject.Organization)
+				}
+
+				if issuedCerts.Subject.OrganizationUnit != "iot" {
+					return fmt.Errorf("issued certificate should have OrganizationUnit 'iot' but got '%s'", issuedCerts.Subject.OrganizationUnit)
+				}
+
+				if issuedCerts.Subject.State != "lamassu-world" {
+					return fmt.Errorf("issued certificate should have State 'lamassu-world' but got '%s'", issuedCerts.Subject.State)
+				}
+
+				if issuedCerts.Subject.Locality != "lamassu-city" {
+					return fmt.Errorf("issued certificate should have Locality 'lamassu-city' but got '%s'", issuedCerts.Subject.Locality)
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageContentCommitment == 0 {
+					return fmt.Errorf("issued certificate should have KeyUsage 'ContentCommitment' but was not set")
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageKeyEncipherment == 0 {
+					return fmt.Errorf("issued certificate should have KeyUsage 'KeyEncipherment' but was not set")
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageCRLSign != 0 {
+					return fmt.Errorf("issued certificate should NOT have KeyUsage 'CRLSign' but it was set")
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageEncipherOnly != 0 {
+					return fmt.Errorf("issued certificate should NOT have KeyUsage 'EncipherOnly' but it was set")
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageDecipherOnly == 0 {
+					return fmt.Errorf("issued certificate should have KeyUsage 'DecipherOnly' but was not set")
+				}
+
+				if !slices.Contains(issuedCerts.Certificate.ExtKeyUsage, x509.ExtKeyUsageEmailProtection) {
+					return fmt.Errorf("issued certificate should have ExtKeyUsage 'EmailProtection' but was not set")
+				}
+
+				if !slices.Contains(issuedCerts.Certificate.ExtKeyUsage, x509.ExtKeyUsageCodeSigning) {
+					return fmt.Errorf("issued certificate should have ExtKeyUsage 'CodeSigning' but was not set")
+				}
+
+				if slices.Contains(issuedCerts.Certificate.ExtKeyUsage, x509.ExtKeyUsageServerAuth) {
+					return fmt.Errorf("issued certificate should NOT have ExtKeyUsage 'ServerAuth' but it was set")
+				}
+
+				if slices.Contains(issuedCerts.Certificate.ExtKeyUsage, x509.ExtKeyUsageOCSPSigning) {
+					return fmt.Errorf("issued certificate should NOT have ExtKeyUsage 'OCSPSigning' but it was set")
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/IssuanceProfile-DontHonor",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				//first create profile
+				p, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:                   "test-profile",
+						Description:            "my test profile",
+						HonorKeyUsage:          false,
+						KeyUsage:               models.X509KeyUsage(x509.KeyUsageCRLSign | x509.KeyUsageEncipherOnly), // KeyUsage should be ignored since HonorKeyUsage is true
+						HonorExtendedKeyUsages: false,
+						ExtendedKeyUsages: []models.X509ExtKeyUsage{ // ExtendedKeyUsages should be ignored since HonorExtendedKeyUsages is true
+							models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+							models.X509ExtKeyUsage(x509.ExtKeyUsageEmailProtection),
+						},
+						HonorSubject: false,
+						Subject: models.Subject{ // these values should be ignored since HonorSubject is true
+							Country:          "US",
+							Organization:     "other-lamassu",
+							OrganizationUnit: "other-iot",
+							State:            "other-lamassu-world",
+							Locality:         "other-lamassu-city",
+						},
+						HonorExtensions: false,
+						Validity:        validity,
+						SignAsCA:        false,
+						AllowECDSAKeys:  true,
+						AllowRSAKeys:    true,
+					},
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				profileID := p.ID
+
+				key, err := chelpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				extensions := []pkix.Extension{}
+				kuExt, err := chelpers.GenerateKeyUsagePKIExtension(x509.KeyUsageContentCommitment | x509.KeyUsageKeyEncipherment | x509.KeyUsageDecipherOnly)
+				if err != nil {
+					return nil, fmt.Errorf("error generating KeyUsage extension: %s", err)
+				}
+
+				ekuExt, err := chelpers.GenerateExtendedKeyUsagePKIExtension([]x509.ExtKeyUsage{x509.ExtKeyUsageIPSECEndSystem, x509.ExtKeyUsageCodeSigning})
+				if err != nil {
+					return nil, fmt.Errorf("error generating ExtendedKeyUsage extension: %s", err)
+				}
+
+				extensions = append(extensions, kuExt, ekuExt)
+
+				csr, err := chelpers.GenerateCertificateRequestWithExtensions(
+					models.Subject{CommonName: "test", Country: "ES", Organization: "lamassu", OrganizationUnit: "iot", State: "lamassu-world", Locality: "lamassu-city"},
+					extensions,
+					key,
+				)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csr),
+					IssuanceProfileID: profileID,
+				})
+			},
+			resultCheck: func(issuedCerts *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCerts == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if issuedCerts.Subject.CommonName != "test" {
+					return fmt.Errorf("issued certificate should have CommonName 'test' but got '%s'", issuedCerts.Subject.CommonName)
+				}
+
+				if issuedCerts.Subject.Country != "US" {
+					return fmt.Errorf("issued certificate should have Country 'US' but got '%s'", issuedCerts.Subject.Country)
+				}
+
+				if issuedCerts.Subject.Organization != "other-lamassu" {
+					return fmt.Errorf("issued certificate should have Organization 'other-lamassu' but got '%s'", issuedCerts.Subject.Organization)
+				}
+
+				if issuedCerts.Subject.OrganizationUnit != "other-iot" {
+					return fmt.Errorf("issued certificate should have OrganizationUnit 'other-iot' but got '%s'", issuedCerts.Subject.OrganizationUnit)
+				}
+
+				if issuedCerts.Subject.State != "other-lamassu-world" {
+					return fmt.Errorf("issued certificate should have State 'other-lamassu-world' but got '%s'", issuedCerts.Subject.State)
+				}
+
+				if issuedCerts.Subject.Locality != "other-lamassu-city" {
+					return fmt.Errorf("issued certificate should have Locality 'other-lamassu-city' but got '%s'", issuedCerts.Subject.Locality)
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageContentCommitment != 0 {
+					return fmt.Errorf("issued certificate should NOT have KeyUsage 'ContentCommitment' but it was set")
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageKeyEncipherment != 0 {
+					return fmt.Errorf("issued certificate should NOT have KeyUsage 'KeyEncipherment' but it was set")
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageDecipherOnly != 0 {
+					return fmt.Errorf("issued certificate should NOT have KeyUsage 'DecipherOnly' but it was set")
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageCRLSign == 0 {
+					return fmt.Errorf("issued certificate should have KeyUsage 'CRLSign' but got was not set")
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageEncipherOnly == 0 {
+					return fmt.Errorf("issued certificate should have KeyUsage 'EncipherOnly' but was not set")
+				}
+
+				if slices.Contains(issuedCerts.Certificate.ExtKeyUsage, x509.ExtKeyUsageIPSECEndSystem) {
+					return fmt.Errorf("issued certificate should NOT have ExtKeyUsage 'IPSECEndSystem' but it was set")
+				}
+
+				if slices.Contains(issuedCerts.Certificate.ExtKeyUsage, x509.ExtKeyUsageCodeSigning) {
+					return fmt.Errorf("issued certificate should NOT have ExtKeyUsage 'CodeSigning' but it was set")
+				}
+
+				if !slices.Contains(issuedCerts.Certificate.ExtKeyUsage, x509.ExtKeyUsageServerAuth) {
+					return fmt.Errorf("issued certificate should have ExtKeyUsage 'ServerAuth' but was not set")
+				}
+
+				if !slices.Contains(issuedCerts.Certificate.ExtKeyUsage, x509.ExtKeyUsageEmailProtection) {
+					return fmt.Errorf("issued certificate should have ExtKeyUsage 'EmailProtection' but was not set")
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/IssuanceProfile-IsCATrue",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				//first create profile
+				p, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:                   "test-profile",
+						Description:            "my test profile",
+						HonorKeyUsage:          true,
+						HonorExtendedKeyUsages: true,
+						HonorSubject:           true,
+						HonorExtensions:        true,
+						Validity:               validity,
+						SignAsCA:               true,
+						AllowECDSAKeys:         true,
+						AllowRSAKeys:           true,
+					},
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				profileID := p.ID
+
+				key, err := chelpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				csr, err := chelpers.GenerateCertificateRequest(
+					models.Subject{CommonName: "test", Country: "ES", Organization: "lamassu", OrganizationUnit: "iot", State: "lamassu-world", Locality: "lamassu-city"},
+					key,
+				)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csr),
+					IssuanceProfileID: profileID,
+				})
+			},
+			resultCheck: func(issuedCerts *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCerts == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if issuedCerts.Subject.CommonName != "test" {
+					return fmt.Errorf("issued certificate should have CommonName 'test' but got '%s'", issuedCerts.Subject.CommonName)
+				}
+
+				if issuedCerts.IsCA != true {
+					return fmt.Errorf("issued certificate should be a CA but IsCA is false")
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/IssuanceProfile-OnlySignRsaCsrs",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				//first create profile
+				p, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:                   "test-profile",
+						Description:            "my test profile",
+						HonorKeyUsage:          true,
+						HonorExtendedKeyUsages: true,
+						HonorSubject:           true,
+						HonorExtensions:        true,
+						Validity:               validity,
+						SignAsCA:               true,
+						AllowECDSAKeys:         false,
+						AllowRSAKeys:           true,
+					},
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				profileID := p.ID
+
+				ecdsaKey, err := chelpers.GenerateECDSAKey(elliptic.P256())
+				if err != nil {
+					return nil, err
+				}
+
+				csrECDSA, err := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, ecdsaKey)
+				if err != nil {
+					return nil, err
+				}
+
+				_, err = caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csrECDSA),
+					IssuanceProfileID: profileID,
+				})
+				if err == nil {
+					return nil, fmt.Errorf("should've got error but got none")
+				}
+
+				rsaKey, err := chelpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				csrRSA, err := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, rsaKey)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csrRSA),
+					IssuanceProfileID: profileID,
+				})
+			},
+			resultCheck: func(issuedCerts *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCerts == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if issuedCerts.Subject.CommonName != "test" {
+					return fmt.Errorf("issued certificate should have CommonName 'test' but got '%s'", issuedCerts.Subject.CommonName)
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/IssuanceProfile-OnlySignEcdsaCsrs",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				//first create profile
+				p, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:                   "test-profile",
+						Description:            "my test profile",
+						HonorKeyUsage:          true,
+						HonorExtendedKeyUsages: true,
+						HonorSubject:           true,
+						HonorExtensions:        true,
+						Validity:               validity,
+						SignAsCA:               true,
+						AllowECDSAKeys:         true,
+						AllowRSAKeys:           false,
+					},
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				profileID := p.ID
+
+				rsaKey, err := chelpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				csrRSA, err := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, rsaKey)
+				if err != nil {
+					return nil, err
+				}
+
+				_, err = caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csrRSA),
+					IssuanceProfileID: profileID,
+				})
+				if err == nil {
+					return nil, fmt.Errorf("should've got error but got none")
+				}
+
+				ecdsaKey, err := chelpers.GenerateECDSAKey(elliptic.P256())
+				if err != nil {
+					return nil, err
+				}
+
+				csrECDSA, err := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, ecdsaKey)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csrECDSA),
+					IssuanceProfileID: profileID,
+				})
+			},
+			resultCheck: func(issuedCerts *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCerts == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if issuedCerts.Subject.CommonName != "test" {
+					return fmt.Errorf("issued certificate should have CommonName 'test' but got '%s'", issuedCerts.Subject.CommonName)
 				}
 
 				return nil

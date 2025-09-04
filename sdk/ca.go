@@ -173,6 +173,7 @@ func (cli *httpCAClient) SignCertificate(ctx context.Context, input services.Sig
 	response, err := Post[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/certificates/sign", resources.SignCertificateBody{
 		CertRequest: input.CertRequest,
 		Profile:     input.IssuanceProfile,
+		ProfileID:   input.IssuanceProfileID,
 	}, map[int][]error{
 		404: {
 			errs.ErrCANotFound,

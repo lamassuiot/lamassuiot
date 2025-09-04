@@ -1236,12 +1236,12 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 
 	profile := &input.IssuanceProfile
 
-	if input.IssuanceProfile.ID != "" {
+	if input.IssuanceProfileID != "" {
 		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
 			ProfileID: input.IssuanceProfileID,
 		})
 		if err != nil {
-			lFunc.Errorf("could not get issuance profile %s: %s", input.IssuanceProfile.ID, err)
+			lFunc.Errorf("could not get issuance profile %s: %s", input.IssuanceProfileID, err)
 			return nil, err
 		}
 	}
@@ -1704,6 +1704,11 @@ func (svc *CAServiceBackend) CreateIssuanceProfile(ctx context.Context, input se
 	id := uuid.NewString()
 	input.Profile.ID = id
 	lFunc.Infof("creating issuance profile '%s' with ID '%s'", input.Profile.Name, id)
+
+	if input.Profile.ExtendedKeyUsages == nil {
+		input.Profile.ExtendedKeyUsages = []models.X509ExtKeyUsage{}
+	}
+
 	p, err := svc.issuanceProfilesStorage.Insert(ctx, &input.Profile)
 	if err != nil {
 		lFunc.Errorf("could not create issuance profile '%s': %s", input.Profile.Name, err)
