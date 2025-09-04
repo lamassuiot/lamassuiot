@@ -103,7 +103,7 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 		caExpiration = validity.Time
 	}
 
-	lFunc.Debugf("generated serial number for root CA: %s", helpers.SerialNumberToString(sn))
+	lFunc.Debugf("generated serial number for root CA: %s", helpers.SerialNumberToHexString(sn))
 	lFunc.Debugf("validity of root CA: %s", caExpiration)
 	lFunc.Debugf("key ID of root CA: %s", keyID)
 	lFunc.Debugf("subject of root CA: %s", subject)

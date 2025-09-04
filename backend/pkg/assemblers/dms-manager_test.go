@@ -2904,7 +2904,7 @@ func TestESTReEnroll(t *testing.T) {
 				}
 
 				_, err = testServers.CA.Service.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
-					SerialNumber:     helpers.SerialNumberToString(deviceCrt.SerialNumber),
+					SerialNumber:     helpers.SerialNumberToHexString(deviceCrt.SerialNumber),
 					NewStatus:        models.StatusRevoked,
 					RevocationReason: ocsp.Superseded,
 				})
@@ -3066,7 +3066,7 @@ func TestESTReEnroll(t *testing.T) {
 				}
 
 				crt1, err := testServers.CA.Service.GetCertificateBySerialNumber(context.Background(), services.GetCertificatesBySerialNumberInput{
-					SerialNumber: helpers.SerialNumberToString(deviceCrt1.SerialNumber),
+					SerialNumber: helpers.SerialNumberToHexString(deviceCrt1.SerialNumber),
 				})
 				if err != nil {
 					t.Fatalf("could not get certificate: %s", err)
@@ -3102,7 +3102,7 @@ func TestESTReEnroll(t *testing.T) {
 				}
 
 				crt2, err := testServers.CA.Service.GetCertificateBySerialNumber(context.Background(), services.GetCertificatesBySerialNumberInput{
-					SerialNumber: helpers.SerialNumberToString(deviceCrt2.SerialNumber),
+					SerialNumber: helpers.SerialNumberToHexString(deviceCrt2.SerialNumber),
 				})
 				if err != nil {
 					t.Fatalf("could not get certificate: %s", err)

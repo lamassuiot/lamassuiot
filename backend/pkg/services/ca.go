@@ -212,14 +212,15 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 	var engineID string
 	caCert := input.CACertificate
+	caCertSN := helpers.SerialNumberToHexString(caCert.SerialNumber)
 
 	if input.CAType == models.CertificateTypeImportedWithKey {
-		lFunc.Debugf("importing CA %s - %s  private key. CA type: %s", helpers.SerialNumberToString(input.CACertificate.SerialNumber), input.CACertificate.Subject.CommonName, input.CAType)
+		lFunc.Debugf("importing CA %s - %s  private key. CA type: %s", caCertSN, caCert.Subject.CommonName, input.CAType)
 		var engine cryptoengines.CryptoEngine
 		if input.EngineID == "" {
 			engine = *svc.defaultCryptoEngine
 			engineID = svc.defaultCryptoEngineID
-			lFunc.Infof("importing CA %s - %s  with %s crypto engine", helpers.SerialNumberToString(input.CACertificate.SerialNumber), input.CACertificate.Subject.CommonName, engine.GetEngineConfig().Provider)
+			lFunc.Infof("importing CA %s - %s  with %s crypto engine", caCertSN, caCert.Subject.CommonName, engine.GetEngineConfig().Provider)
 		} else {
 			engine = *svc.cryptoEngines[input.EngineID]
 			if engine == nil {
@@ -227,7 +228,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 				return nil, fmt.Errorf("engine ID %s not configured", input.EngineID)
 			}
 			engineID = input.EngineID
-			lFunc.Infof("importing CA %s - %s with %s crypto engine", helpers.SerialNumberToString(input.CACertificate.SerialNumber), input.CACertificate.Subject.CommonName, engine.GetEngineConfig().Provider)
+			lFunc.Infof("importing CA %s - %s with %s crypto engine", caCertSN, caCert.Subject.CommonName, engine.GetEngineConfig().Provider)
 		}
 
 		if input.CARSAKey != nil {
@@ -240,7 +241,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		}
 
 		if err != nil {
-			lFunc.Errorf("could not import CA %s private key: %s", helpers.SerialNumberToString(input.CACertificate.SerialNumber), err)
+			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
 			return nil, fmt.Errorf("could not import key: %w", err)
 		}
 	}
@@ -248,7 +249,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	var caReq *models.CACertificateRequest
 
 	if input.CAType == models.CertificateTypeRequested {
-		lFunc.Debugf("importing CA %s - %s  from CSR. CA type: %s", helpers.SerialNumberToString(input.CACertificate.SerialNumber), input.CACertificate.Subject.CommonName, input.CAType)
+		lFunc.Debugf("importing CA %s - %s  from CSR. CA type: %s", caCertSN, caCert.Subject.CommonName, input.CAType)
 		if input.CARequestID == "" {
 			fingerprint := chelpers.ComputePublicKeyFingerprint((*x509.Certificate)(input.CACertificate))
 
@@ -336,7 +337,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 
 	issuerMeta := models.IssuerCAMetadata{
 		ID:    caID,
-		SN:    helpers.SerialNumberToString(input.CACertificate.SerialNumber),
+		SN:    caCertSN,
 		Level: 0,
 	}
 	level := 0
@@ -433,7 +434,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 				akid = helpers.FormatHexWithColons(input.CACertificate.AuthorityKeyId)
 				issuerMeta = models.IssuerCAMetadata{
 					ID:    "-",
-					SN:    helpers.SerialNumberToString(input.CACertificate.SerialNumber),
+					SN:    caCertSN,
 					Level: -1,
 				}
 			}
@@ -462,7 +463,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			AuthorityKeyID:      akid,
 			Certificate:         input.CACertificate,
 			Status:              models.StatusActive,
-			SerialNumber:        helpers.SerialNumberToString(caCert.SerialNumber),
+			SerialNumber:        helpers.SerialNumberToHexString(caCert.SerialNumber),
 			KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate((*x509.Certificate)(caCert)),
 			Subject:             chelpers.PkixNameToSubject(caCert.Subject),
 			Issuer:              chelpers.PkixNameToSubject(caCert.Issuer),
@@ -671,7 +672,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 
 		caLevel = 0
 		issuerCAMeta = models.IssuerCAMetadata{
-			SN:    helpers.SerialNumberToString(ca.SerialNumber),
+			SN:    helpers.SerialNumberToHexString(ca.SerialNumber),
 			ID:    caID,
 			Level: 0,
 		}
@@ -743,7 +744,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 			AuthorityKeyID: akid,
 			Certificate:    (*models.X509Certificate)(ca),
 			Status:         models.StatusActive,
-			SerialNumber:   helpers.SerialNumberToString(ca.SerialNumber),
+			SerialNumber:   helpers.SerialNumberToHexString(ca.SerialNumber),
 			KeyMetadata: models.KeyStrengthMetadata{
 				Type:     input.KeyMetadata.Type,
 				Bits:     input.KeyMetadata.Bits,
@@ -1228,14 +1229,14 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		Type:          models.CertificateTypeExternal,
 		Certificate:   (*models.X509Certificate)(x509Cert),
 		IssuerCAMetadata: models.IssuerCAMetadata{
-			SN: helpers.SerialNumberToString(caCert.SerialNumber),
+			SN: helpers.SerialNumberToHexString(caCert.SerialNumber),
 			ID: ca.ID,
 		},
 		Status:              models.StatusActive,
 		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate(x509Cert),
 		Subject:             chelpers.PkixNameToSubject(x509Cert.Subject),
 		Issuer:              chelpers.PkixNameToSubject(x509Cert.Issuer),
-		SerialNumber:        helpers.SerialNumberToString(x509Cert.SerialNumber),
+		SerialNumber:        helpers.SerialNumberToHexString(x509Cert.SerialNumber),
 		ValidFrom:           x509Cert.NotBefore,
 		ValidTo:             x509Cert.NotAfter,
 		RevocationTimestamp: time.Time{},
@@ -1287,7 +1288,7 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 		Status:              status,
 		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate(x509Cert),
 		Subject:             chelpers.PkixNameToSubject(input.Certificate.Subject),
-		SerialNumber:        helpers.SerialNumberToString(input.Certificate.SerialNumber),
+		SerialNumber:        helpers.SerialNumberToHexString(input.Certificate.SerialNumber),
 		ValidFrom:           input.Certificate.NotBefore,
 		ValidTo:             input.Certificate.NotAfter,
 		RevocationTimestamp: time.Time{},

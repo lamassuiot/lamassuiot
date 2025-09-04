@@ -341,7 +341,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 
 	params := map[string]string{
 		"ThingName":               input.DeviceID,
-		"SerialNumber":            helpers.SerialNumberToString(input.BindedIdentity.Certificate.Certificate.SerialNumber),
+		"SerialNumber":            helpers.SerialNumberToHexString(input.BindedIdentity.Certificate.Certificate.SerialNumber),
 		"DMS":                     input.BindedIdentity.DMS.ID,
 		"LamassuCertificate":      chelpers.CertificateToPEM((*x509.Certificate)(input.BindedIdentity.Certificate.Certificate)),
 		"LamassuCACertificatePem": chelpers.CertificateToPEM((*x509.Certificate)(ca.Certificate.Certificate)),
@@ -662,7 +662,7 @@ func (svc *AWSCloudConnectorServiceBackend) GetRegisteredCAs(ctx context.Context
 				return cas, err
 			}
 
-			lFunc.Debugf("requesting CA with ID '%s' which has SN '%s' to CA service", *caMeta.CertificateId, helpers.SerialNumberToString(descCrt.SerialNumber))
+			lFunc.Debugf("requesting CA with ID '%s' which has SN '%s' to CA service", *caMeta.CertificateId, helpers.SerialNumberToHexString(descCrt.SerialNumber))
 			if res.NextMarker != nil && *res.NextMarker != "" {
 				lFunc.Debugf("Next marker: %s", *res.NextMarker)
 				nextMarker = *res.NextMarker
