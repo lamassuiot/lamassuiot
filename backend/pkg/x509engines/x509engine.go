@@ -26,7 +26,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	cmodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	"github.com/sirupsen/logrus"
 )
@@ -47,14 +46,14 @@ func NewX509Engine(logger *logrus.Entry, cryptoEngine *cryptoengines.CryptoEngin
 	}
 }
 
-func (engine X509Engine) GetEngineConfig() cmodels.CryptoEngineInfo {
+func (engine X509Engine) GetEngineConfig() models.CryptoEngineInfo {
 	return engine.cryptoEngine.GetEngineConfig()
 }
 
-func (engine X509Engine) GenerateKeyPair(ctx context.Context, keyMetadata cmodels.KeyMetadata) (string, crypto.Signer, error) {
+func (engine X509Engine) GenerateKeyPair(ctx context.Context, keyMetadata models.KeyMetadata) (string, crypto.Signer, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
-	if cmodels.KeyType(keyMetadata.Type) == cmodels.KeyType(x509.RSA) {
+	if models.KeyType(keyMetadata.Type) == models.KeyType(x509.RSA) {
 		lFunc.Debugf("requesting cryptoengine instance for RSA key generation")
 
 		keyID, signer, err := engine.cryptoEngine.CreateRSAPrivateKey(keyMetadata.Bits)
@@ -91,14 +90,14 @@ func (engine X509Engine) GenerateKeyPair(ctx context.Context, keyMetadata cmodel
 	}
 }
 
-func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer, keyID string, subject cmodels.Subject, validity cmodels.Validity) (*x509.Certificate, error) {
+func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer, keyID string, subject models.Subject, validity models.Validity) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	sn, _ := rand.Int(rand.Reader, serialNumberLimit)
 
 	var caExpiration time.Time
-	if validity.Type == cmodels.Duration {
+	if validity.Type == models.Duration {
 		caExpiration = time.Now().Add(time.Duration(validity.Duration))
 	} else {
 		caExpiration = validity.Time
@@ -146,7 +145,7 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 	return certificate, nil
 }
 
-func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caSigner crypto.Signer, profile cmodels.IssuanceProfile) (*x509.Certificate, error) {
+func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
 	now := time.Now()
@@ -154,7 +153,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 	sn, _ := rand.Int(rand.Reader, serialNumberLimit)
 
 	var certExpiration time.Time
-	if profile.Validity.Type == cmodels.Duration {
+	if profile.Validity.Type == models.Duration {
 		certExpiration = now.Add(time.Duration(profile.Validity.Duration))
 	} else {
 		certExpiration = profile.Validity.Time
@@ -257,7 +256,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 	return certificate, nil
 }
 
-func (engine X509Engine) GenerateCertificateRequest(ctx context.Context, csrSigner crypto.Signer, subject cmodels.Subject) (*x509.CertificateRequest, error) {
+func (engine X509Engine) GenerateCertificateRequest(ctx context.Context, csrSigner crypto.Signer, subject models.Subject) (*x509.CertificateRequest, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 	lFunc.Infof("generating certificate request for subject: %s", subject)
 
@@ -287,14 +286,14 @@ func (engine X509Engine) GetCertificateSigner(ctx context.Context, caCertificate
 	return engine.cryptoEngine.GetPrivateKeyByID(keyID)
 }
 
-func (engine X509Engine) GetDefaultCAIssuanceProfile(ctx context.Context, validity cmodels.Validity) cmodels.IssuanceProfile {
-	return cmodels.IssuanceProfile{
+func (engine X509Engine) GetDefaultCAIssuanceProfile(ctx context.Context, validity models.Validity) models.IssuanceProfile {
+	return models.IssuanceProfile{
 		Validity:          validity,
 		SignAsCA:          true,
 		HonorExtensions:   true,
 		HonorSubject:      true,
 		KeyUsage:          models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign),
-		ExtendedKeyUsages: []cmodels.X509ExtKeyUsage{},
+		ExtendedKeyUsages: []models.X509ExtKeyUsage{},
 	}
 }
 

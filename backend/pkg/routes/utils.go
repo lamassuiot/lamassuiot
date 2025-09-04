@@ -199,7 +199,7 @@ func LogRequest(logger *logrus.Entry, logResponse bool) gin.HandlerFunc {
 
 		c.Next()
 
-		latency := time.Now().Sub(start)
+		latency := time.Since(start)
 		fields := make(map[string]interface{})
 
 		logger.WithFields(fields).Infof("[Request] %v |%3d| %13v | %15s |%-7s %s",
