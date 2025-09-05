@@ -379,3 +379,81 @@ func (cli *httpCAClient) DeleteCARequestByID(ctx context.Context, input services
 
 	return nil
 }
+
+// KMS
+func (cli *httpCAClient) GetKeys(ctx context.Context, input services.GetKeysInput) (string, error) {
+	url := cli.baseUrl + "/v1/kms/keys"
+	return IterGet[models.Key, *resources.GetKeysResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+}
+
+func (cli *httpCAClient) GetKeyByID(ctx context.Context, input services.GetByIDInput) (*models.Key, error) {
+	response, err := Get[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys/"+input.ID, nil, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (cli *httpCAClient) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.Key, error) {
+	response, err := Post[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys", resources.CreateKeyBody{
+		Algorithm: input.Algorithm,
+		Size:      input.Size,
+		EngineID:  input.EngineID,
+		Name:      input.Name,
+	}, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (cli *httpCAClient) DeleteKeyByID(ctx context.Context, input services.GetByIDInput) error {
+	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys/"+input.ID, map[int][]error{})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (cli *httpCAClient) SignMessage(ctx context.Context, input services.SignMessageInput) (*models.MessageSignature, error) {
+	response, err := Post[*models.MessageSignature](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys/"+input.KeyID+"/sign", resources.SignMessageBody{
+		Algorithm:   input.Algorithm,
+		Message:     input.Message,
+		MessageType: input.MessageType,
+	}, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (cli *httpCAClient) VerifySignature(ctx context.Context, input services.VerifySignInput) (*models.MessageValidation, error) {
+	response, err := Post[*models.MessageValidation](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys/"+input.KeyID+"/verify", resources.VerifySignBody{
+		Algorithm:   input.Algorithm,
+		Message:     input.Message,
+		Signature:   input.Signature,
+		MessageType: input.MessageType,
+	}, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (cli *httpCAClient) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.Key, error) {
+	response, err := Post[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys/import", resources.ImportKeyBody{
+		PrivateKey: input.PrivateKey,
+		EngineID:   input.EngineID,
+		Name:       input.Name,
+	}, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
