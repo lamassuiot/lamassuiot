@@ -30,7 +30,7 @@ func NewOCSPService(builder OCSPServiceBuilder) services.OCSPService {
 }
 
 func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) ([]byte, error) {
-	ocspCrtSN := helpers.SerialNumberToString(req.SerialNumber)
+	ocspCrtSN := helpers.SerialNumberToHexString(req.SerialNumber)
 	crt, err := svc.caSDK.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
 		SerialNumber: ocspCrtSN,
 	})

@@ -264,8 +264,8 @@ func TestPostOCSP(t *testing.T) {
 					return fmt.Errorf("should've got OCSP Response, but got error: %s", err)
 				}
 
-				if helpers.SerialNumberToString(response.SerialNumber) != crt.SerialNumber {
-					return fmt.Errorf("ocsp response has different serial number than the certificate. Got %s, should've got %s", helpers.SerialNumberToString(response.SerialNumber), crt.SerialNumber)
+				if helpers.SerialNumberToHexString(response.SerialNumber) != crt.SerialNumber {
+					return fmt.Errorf("ocsp response has different serial number than the certificate. Got %s, should've got %s", helpers.SerialNumberToHexString(response.SerialNumber), crt.SerialNumber)
 				}
 
 				if err = response.CheckSignatureFrom((*x509.Certificate)(issuer.Certificate.Certificate)); err != nil {

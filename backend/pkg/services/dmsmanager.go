@@ -403,7 +403,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		}
 
 		lFunc = lFunc.WithField("auth-status", "verifying")
-		lFunc = lFunc.WithField("auth-uri", fmt.Sprintf("CN=%s, SN=%s, Issuer=%s", clientCert.Subject.CommonName, helpers.SerialNumberToString(clientCert.SerialNumber), clientCert.Issuer.CommonName))
+		lFunc = lFunc.WithField("auth-uri", fmt.Sprintf("CN=%s, SN=%s, Issuer=%s", clientCert.Subject.CommonName, helpers.SerialNumberToHexString(clientCert.SerialNumber), clientCert.Issuer.CommonName))
 		lFunc.Debugf("presented client certificate")
 
 		//check if certificate is a certificate issued by bootstrap CA
@@ -727,7 +727,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		}
 
 		lFunc = lFunc.WithField("auth-status", "verifying")
-		lFunc = lFunc.WithField("auth-uri", fmt.Sprintf("CN=%s, SN=%s, Issuer=%s", clientCert.Subject.CommonName, helpers.SerialNumberToString(clientCert.SerialNumber), clientCert.Issuer.CommonName))
+		lFunc = lFunc.WithField("auth-uri", fmt.Sprintf("CN=%s, SN=%s, Issuer=%s", clientCert.Subject.CommonName, helpers.SerialNumberToHexString(clientCert.SerialNumber), clientCert.Issuer.CommonName))
 		lFunc.Debugf("presented client certificate")
 
 		validCertificate := false
@@ -1103,7 +1103,7 @@ func (svc DMSManagerServiceBackend) checkCertificateRevocation(ctx context.Conte
 
 	revocationChecked := false
 	revoked := true
-	clientSN := helpers.SerialNumberToString(cert.SerialNumber)
+	clientSN := helpers.SerialNumberToHexString(cert.SerialNumber)
 	//check if revoked
 	//  If cert is in Lamassu: check status
 	//  If cert NOT in Lamassu (i.e. Issued Offline/Outside Lamassu), check if the certificate has CRL/OCSP in presented CRT.
