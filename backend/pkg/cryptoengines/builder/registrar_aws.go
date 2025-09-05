@@ -9,7 +9,7 @@ import (
 )
 
 func init() {
-	log.Info("Registering  AWS crypto engines")
+	log.Info("Registering AWS crypto engines")
 	aws.RegisterAWSKMS()
 	aws.RegisterAWSSecrets()
 	aws_subsystem.Register()

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/hashicorp/vault/api"
 	vaultApi "github.com/hashicorp/vault/api"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -137,7 +136,7 @@ func RunHashicorpVaultDocker(exposeAsStandardPort bool) (func() error, func() er
 		nil
 }
 
-func cleanupKV2(client *api.Client, path string) error {
+func cleanupKV2(client *vaultApi.Client, path string) error {
 	mounts, err := client.Sys().ListMounts()
 	if err != nil {
 		return err
@@ -157,7 +156,7 @@ func cleanupKV2(client *api.Client, path string) error {
 		}
 	}
 
-	err = client.Sys().Mount(path, &api.MountInput{
+	err = client.Sys().Mount(path, &vaultApi.MountInput{
 		Type: "kv-v2",
 	})
 	if err != nil {
