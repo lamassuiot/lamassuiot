@@ -43,10 +43,10 @@ func RunPostgresDocker(dbs map[string]string, exposeAsStandardPort bool) (func()
 		sqlStatements = sqlStatements + fmt.Sprintf("CREATE DATABASE %s;\n", dbName)
 		if dbInitScript != "" {
 			initScript := "#!/bin/bash"
-			initScript = initScript + fmt.Sprintf("\nset -e")
+			initScript = initScript + "\nset -e"
 			initScript = initScript + fmt.Sprintf("\npsql -v ON_ERROR_STOP=1 --username \"$POSTGRES_USER\" --dbname %s <<-EOSQL", dbName)
 			initScript = initScript + fmt.Sprintf("\n%s", dbInitScript)
-			initScript = initScript + fmt.Sprintf("\nEOSQL")
+			initScript = initScript + "\nEOSQL"
 			fname := fmt.Sprintf("%d_%s.sh", idx, dbName)
 			fullpath, err := createTmpFile(fname, initScript)
 			if err != nil {

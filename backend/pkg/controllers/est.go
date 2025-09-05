@@ -21,10 +21,9 @@ import (
 	"go.mozilla.org/pkcs7"
 )
 
-var lEst *logrus.Entry
-
 type estHttpRoutes struct {
-	svc services.ESTService
+	svc    services.ESTService
+	logger *logrus.Entry
 }
 
 var (
@@ -36,9 +35,9 @@ var (
 )
 
 func NewESTHttpRoutes(logger *logrus.Entry, svc services.ESTService) *estHttpRoutes {
-	lEst = logger
 	return &estHttpRoutes{
-		svc: svc,
+		svc:    svc,
+		logger: logger,
 	}
 }
 
