@@ -243,7 +243,6 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				}
 				proxyUrl := strings.TrimPrefix(c.Param("proxyPath"), subpath)
 				proxyUrl = strings.TrimSuffix(proxyUrl, "/")
-				fmt.Printf("Proxy URL: %s\n", proxyUrl)
 				//emulate envoy config by generating rand request id as HTTP header to the upstream service
 				c.Request.Header.Add("x-request-id", uuid.NewString())
 				proxy := httputil.NewSingleHostReverseProxy(remote)

@@ -30,6 +30,11 @@ var CARequestFiltrableFields = map[string]FilterFieldType{
 	"issuer_metadata_id":  StringFilterFieldType,
 }
 
+var IssuanceProfileFiltrableFields = map[string]FilterFieldType{
+	"id":   StringFilterFieldType,
+	"name": StringFilterFieldType,
+}
+
 type CreateCABody struct {
 	ID                 string             `json:"id"`
 	ParentID           string             `json:"parent_id"`
@@ -71,6 +76,7 @@ type UpdateCAIssuanceExpirationBody struct {
 type SignCertificateBody struct {
 	CertRequest *models.X509CertificateRequest `json:"csr"`
 	Profile     models.IssuanceProfile         `json:"profile"`
+	ProfileID   string                         `json:"profile_id"`
 }
 
 type SignatureSignBody struct {
@@ -111,4 +117,27 @@ type GetCertificateStatus struct {
 type ImportCertificateBody struct {
 	Metadata    map[string]interface{}  `json:"metadata"`
 	Certificate *models.X509Certificate `json:"certificate"`
+}
+
+type CreateUpdateIssuanceProfileBody struct {
+	Name                   string                                     `json:"name"`
+	Description            string                                     `json:"description"`
+	Validity               models.Validity                            `json:"validity"`
+	SignAsCA               bool                                       `json:"sign_as_ca"`
+	HonorKeyUsage          bool                                       `json:"honor_key_usage"`
+	KeyUsage               models.X509KeyUsage                        `json:"key_usage"`
+	HonorExtendedKeyUsages bool                                       `json:"honor_extended_key_usages"`
+	ExtendedKeyUsages      []models.X509ExtKeyUsage                   `json:"extended_key_usages"`
+	HonorSubject           bool                                       `json:"honor_subject"`
+	Subject                models.Subject                             `json:"subject"`
+	HonorExtensions        bool                                       `json:"honor_extensions"`
+	CryptoEnforcement      CreateIssuanceProfileCryptoEnforcementBody `json:"crypto_enforcement"`
+}
+
+type CreateIssuanceProfileCryptoEnforcementBody struct {
+	Enabled              bool  `json:"enabled"`
+	AllowRSAKeys         bool  `json:"allow_rsa_keys"`
+	AllowedRSAKeySizes   []int `json:"allowed_rsa_key_sizes"`
+	AllowECDSAKeys       bool  `json:"allow_ecdsa_keys"`
+	AllowedECDSAKeySizes []int `json:"allowed_ecdsa_key_sizes"`
 }

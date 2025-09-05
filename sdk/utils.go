@@ -241,7 +241,7 @@ func Delete(ctx context.Context, client *http.Client, url string, knownErrors ma
 		return err
 	}
 
-	if res.StatusCode != 200 {
+	if res.StatusCode != 200 && res.StatusCode != 204 {
 		return nonOKResponseToError(res.StatusCode, body, knownErrors)
 	}
 

@@ -49,6 +49,12 @@ type CAService interface {
 	GetCARequestByID(ctx context.Context, input GetByIDInput) (*models.CACertificateRequest, error)
 	DeleteCARequestByID(ctx context.Context, input GetByIDInput) error
 	GetCARequests(ctx context.Context, input GetItemsInput[models.CACertificateRequest]) (string, error)
+
+	GetIssuanceProfiles(ctx context.Context, input GetIssuanceProfilesInput) (string, error)
+	GetIssuanceProfileByID(ctx context.Context, input GetIssuanceProfileByIDInput) (*models.IssuanceProfile, error)
+	CreateIssuanceProfile(ctx context.Context, input CreateIssuanceProfileInput) (*models.IssuanceProfile, error)
+	UpdateIssuanceProfile(ctx context.Context, input UpdateIssuanceProfileInput) (*models.IssuanceProfile, error)
+	DeleteIssuanceProfile(ctx context.Context, input DeleteIssuanceProfileInput) error
 }
 
 type GetStatsByCAIDInput struct {
@@ -177,9 +183,10 @@ type DeleteCAInput struct {
 }
 
 type SignCertificateInput struct {
-	CAID            string                         `validate:"required"`
-	CertRequest     *models.X509CertificateRequest `validate:"required"`
-	IssuanceProfile models.IssuanceProfile         `validate:"required"`
+	CAID              string                         `validate:"required"`
+	CertRequest       *models.X509CertificateRequest `validate:"required"`
+	IssuanceProfile   models.IssuanceProfile
+	IssuanceProfileID string
 }
 
 type CreateCertificateInput struct {
@@ -246,4 +253,25 @@ type UpdateCertificateStatusInput struct {
 type UpdateCertificateMetadataInput struct {
 	SerialNumber string                  `validate:"required"`
 	Patches      []models.PatchOperation `validate:"required"`
+}
+
+type GetIssuanceProfilesInput struct {
+	QueryParameters *resources.QueryParameters
+	ExhaustiveRun   bool //wether to iter all elems
+	ApplyFunc       func(profile models.IssuanceProfile)
+}
+
+type CreateIssuanceProfileInput struct {
+	Profile models.IssuanceProfile `validate:"required"`
+}
+type UpdateIssuanceProfileInput struct {
+	Profile models.IssuanceProfile `validate:"required"`
+}
+
+type GetIssuanceProfileByIDInput struct {
+	ProfileID string `validate:"required"`
+}
+
+type DeleteIssuanceProfileInput struct {
+	ProfileID string `validate:"required"`
 }

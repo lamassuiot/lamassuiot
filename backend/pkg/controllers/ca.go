@@ -862,9 +862,10 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 	}
 
 	ca, err := r.svc.SignCertificate(ctx, services.SignCertificateInput{
-		CAID:            params.ID,
-		CertRequest:     requestBody.CertRequest,
-		IssuanceProfile: requestBody.Profile,
+		CAID:              params.ID,
+		CertRequest:       requestBody.CertRequest,
+		IssuanceProfile:   requestBody.Profile,
+		IssuanceProfileID: requestBody.ProfileID,
 	})
 	if err != nil {
 		switch err {
@@ -1187,4 +1188,183 @@ func (r *caHttpRoutes) ImportCertificate(ctx *gin.Context) {
 	}
 
 	ctx.JSON(201, cert)
+}
+
+func (r *caHttpRoutes) GetIssuanceProfiles(ctx *gin.Context) {
+	queryParams := FilterQuery(ctx.Request, resources.IssuanceProfileFiltrableFields)
+
+	items := []models.IssuanceProfile{}
+	nextBookmark, err := r.svc.GetIssuanceProfiles(ctx, services.GetIssuanceProfilesInput{
+		QueryParameters: queryParams,
+		ExhaustiveRun:   false,
+		ApplyFunc: func(item models.IssuanceProfile) {
+			items = append(items, item)
+		},
+	})
+
+	if err != nil {
+		switch err {
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+
+	ctx.JSON(200, resources.GetItemsResponse[models.IssuanceProfile]{
+		IterableList: resources.IterableList[models.IssuanceProfile]{
+			NextBookmark: nextBookmark,
+			List:         items,
+		},
+	})
+}
+
+func (r *caHttpRoutes) GetIssuanceProfileByID(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	profile, err := r.svc.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+		ProfileID: params.ID,
+	})
+
+	if err != nil {
+		switch err {
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+
+	ctx.JSON(200, profile)
+}
+
+func (r *caHttpRoutes) CreateIssuanceProfile(ctx *gin.Context) {
+	var requestBody resources.CreateUpdateIssuanceProfileBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	profile, err := r.svc.CreateIssuanceProfile(ctx, services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Name:                   requestBody.Name,
+			Description:            requestBody.Description,
+			Validity:               requestBody.Validity,
+			SignAsCA:               requestBody.SignAsCA,
+			HonorKeyUsage:          requestBody.HonorKeyUsage,
+			KeyUsage:               requestBody.KeyUsage,
+			HonorExtendedKeyUsages: requestBody.HonorExtendedKeyUsages,
+			ExtendedKeyUsages:      requestBody.ExtendedKeyUsages,
+			HonorSubject:           requestBody.HonorSubject,
+			Subject:                requestBody.Subject,
+			HonorExtensions:        requestBody.HonorExtensions,
+			CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+				Enabled:              requestBody.CryptoEnforcement.Enabled,
+				AllowRSAKeys:         requestBody.CryptoEnforcement.AllowRSAKeys,
+				AllowECDSAKeys:       requestBody.CryptoEnforcement.AllowECDSAKeys,
+				AllowedRSAKeySizes:   requestBody.CryptoEnforcement.AllowedRSAKeySizes,
+				AllowedECDSAKeySizes: requestBody.CryptoEnforcement.AllowedECDSAKeySizes,
+			},
+		},
+	})
+
+	if err != nil {
+		switch err {
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+
+	ctx.JSON(201, profile)
+}
+
+func (r *caHttpRoutes) UpdateIssuanceProfile(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody resources.CreateUpdateIssuanceProfileBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	profile, err := r.svc.UpdateIssuanceProfile(ctx, services.UpdateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			ID: params.ID,
+
+			Name:                   requestBody.Name,
+			Description:            requestBody.Description,
+			Validity:               requestBody.Validity,
+			SignAsCA:               requestBody.SignAsCA,
+			HonorKeyUsage:          requestBody.HonorKeyUsage,
+			KeyUsage:               requestBody.KeyUsage,
+			HonorExtendedKeyUsages: requestBody.HonorExtendedKeyUsages,
+			ExtendedKeyUsages:      requestBody.ExtendedKeyUsages,
+			HonorSubject:           requestBody.HonorSubject,
+			Subject:                requestBody.Subject,
+			HonorExtensions:        requestBody.HonorExtensions,
+			CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+				Enabled:              requestBody.CryptoEnforcement.Enabled,
+				AllowRSAKeys:         requestBody.CryptoEnforcement.AllowRSAKeys,
+				AllowECDSAKeys:       requestBody.CryptoEnforcement.AllowECDSAKeys,
+				AllowedRSAKeySizes:   requestBody.CryptoEnforcement.AllowedRSAKeySizes,
+				AllowedECDSAKeySizes: requestBody.CryptoEnforcement.AllowedECDSAKeySizes,
+			},
+		},
+	})
+
+	if err != nil {
+		switch err {
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+
+	ctx.JSON(200, profile)
+}
+
+func (r *caHttpRoutes) DeleteIssuanceProfile(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	err := r.svc.DeleteIssuanceProfile(ctx, services.DeleteIssuanceProfileInput{
+		ProfileID: params.ID,
+	})
+
+	if err != nil {
+		switch err {
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+
+	ctx.JSON(204, gin.H{})
 }

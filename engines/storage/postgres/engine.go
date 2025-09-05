@@ -78,6 +78,13 @@ func (s *PostgresStorageEngine) initialiceCACertStorage() error {
 		}
 	}
 
+	if s.IssuanceProfile == nil {
+		s.IssuanceProfile, err = NewIssuanceProfileRepository(s.logger, psqlCli)
+		if err != nil {
+			return err
+		}
+	}
+
 	if s.CACertificateRequest == nil {
 		s.CACertificateRequest, err = NewCACertRequestPostgresRepository(s.logger, psqlCli)
 		if err != nil {
@@ -88,7 +95,7 @@ func (s *PostgresStorageEngine) initialiceCACertStorage() error {
 	return nil
 }
 
-func (s *PostgresStorageEngine) GetCertstorage() (storage.CertificatesRepo, error) {
+func (s *PostgresStorageEngine) GetCertStorage() (storage.CertificatesRepo, error) {
 	if s.Cert == nil {
 		err := s.initialiceCACertStorage()
 		if err != nil {
@@ -97,6 +104,17 @@ func (s *PostgresStorageEngine) GetCertstorage() (storage.CertificatesRepo, erro
 	}
 
 	return s.Cert, nil
+}
+
+func (s *PostgresStorageEngine) GetIssuanceProfileStorage() (storage.IssuanceProfileRepo, error) {
+	if s.IssuanceProfile == nil {
+		err := s.initialiceCACertStorage()
+		if err != nil {
+			return nil, fmt.Errorf("could not intialize Issuance profile: %s", err)
+		}
+	}
+
+	return s.IssuanceProfile, nil
 }
 
 func (s *PostgresStorageEngine) GetCACertificateRequestStorage() (storage.CACertificateRequestRepo, error) {

@@ -148,6 +148,34 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
+	// If crypto enforcement is enabled, check if the CSR public key algorithm is allowed
+	if profile.CryptoEnforcement.Enabled {
+		// Check CSR Public Key Algorithm
+		if rsa, ok := csr.PublicKey.(*rsa.PublicKey); ok {
+			if !profile.CryptoEnforcement.AllowRSAKeys {
+				lFunc.Errorf("CSR uses RSA public key, but issuance profile does not allow RSA keys")
+				return nil, fmt.Errorf("CSR uses RSA public key, but issuance profile does not allow RSA keys")
+			} else if profile.CryptoEnforcement.AllowedRSAKeySizes != nil {
+				if !slices.Contains(profile.CryptoEnforcement.AllowedRSAKeySizes, rsa.N.BitLen()) {
+					lFunc.Errorf("CSR uses RSA key with size %d, but issuance profile does not allow this key size", rsa.N.BitLen())
+					return nil, fmt.Errorf("CSR uses RSA key with size %d, but issuance profile does not allow this key size", rsa.N.BitLen())
+				}
+			}
+		}
+
+		if ecdsa, ok := csr.PublicKey.(*ecdsa.PublicKey); ok {
+			if !profile.CryptoEnforcement.AllowECDSAKeys {
+				lFunc.Errorf("CSR uses ECDSA public key, but issuance profile does not allow ECDSA keys")
+				return nil, fmt.Errorf("CSR uses ECDSA public key, but issuance profile does not allow ECDSA keys")
+			} else if profile.CryptoEnforcement.AllowedECDSAKeySizes != nil {
+				if !slices.Contains(profile.CryptoEnforcement.AllowedECDSAKeySizes, ecdsa.Params().BitSize) {
+					lFunc.Errorf("CSR uses ECDSA key with size %d, but issuance profile does not allow this key size", ecdsa.Params().BitSize)
+					return nil, fmt.Errorf("CSR uses ECDSA key with size %d, but issuance profile does not allow this key size", ecdsa.Params().BitSize)
+				}
+			}
+		}
+	}
+
 	now := time.Now()
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	sn, _ := rand.Int(rand.Reader, serialNumberLimit)
@@ -214,13 +242,29 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 		certificateTemplate.ExtraExtensions = exts
 	}
 
-	// Define certificate key usage
-	certificateTemplate.KeyUsage = x509.KeyUsage(profile.KeyUsage)
+	ku, extKu, err := chelpers.ExtractKeyUsageFromCSR(csr)
+	if err != nil {
+		lFunc.Errorf("could not extract key usage and extended key usage from CSR: %s", err)
+		return nil, err
+	}
+
+	if !profile.HonorKeyUsage {
+		// Use profile key usage
+		certificateTemplate.KeyUsage = x509.KeyUsage(profile.KeyUsage)
+	} else {
+		// Use CSR key usage
+		certificateTemplate.KeyUsage = ku
+	}
 
 	// Define certificate extended key usage
 	var extKeyUsage []x509.ExtKeyUsage
-	for _, usage := range profile.ExtendedKeyUsages {
-		extKeyUsage = append(extKeyUsage, x509.ExtKeyUsage(usage))
+	if !profile.HonorExtendedKeyUsages {
+		// Use profile extended key usage
+		for _, usage := range profile.ExtendedKeyUsages {
+			extKeyUsage = append(extKeyUsage, x509.ExtKeyUsage(usage))
+		}
+	} else {
+		extKeyUsage = extKu
 	}
 
 	certificateTemplate.ExtKeyUsage = extKeyUsage

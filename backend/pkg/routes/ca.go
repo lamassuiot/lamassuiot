@@ -50,4 +50,10 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) 
 	rv1.GET("/engines", routes.GetCryptoEngineProvider)
 	rv1.GET("/stats", routes.GetStats)
 	rv1.GET("/stats/:id", routes.GetStatsByCAID)
+
+	rv1.GET("/profiles", routes.GetIssuanceProfiles)
+	rv1.GET("/profiles/:id", routes.GetIssuanceProfileByID)
+	rv1.POST("/profiles", routes.CreateIssuanceProfile)
+	rv1.PUT("/profiles/:id", routes.UpdateIssuanceProfile)
+	rv1.DELETE("/profiles/:id", routes.DeleteIssuanceProfile)
 }

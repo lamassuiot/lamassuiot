@@ -173,6 +173,7 @@ func (cli *httpCAClient) SignCertificate(ctx context.Context, input services.Sig
 	response, err := Post[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/certificates/sign", resources.SignCertificateBody{
 		CertRequest: input.CertRequest,
 		Profile:     input.IssuanceProfile,
+		ProfileID:   input.IssuanceProfileID,
 	}, map[int][]error{
 		404: {
 			errs.ErrCANotFound,
@@ -373,6 +374,93 @@ func (cli *httpCAClient) GetCARequestByID(ctx context.Context, input services.Ge
 
 func (cli *httpCAClient) DeleteCARequestByID(ctx context.Context, input services.GetByIDInput) error {
 	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/cas/requests/"+input.ID, map[int][]error{})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (cli *httpCAClient) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {
+	url := cli.baseUrl + "/v1/profiles"
+	return IterGet[models.IssuanceProfile, resources.IterableList[models.IssuanceProfile]](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+}
+
+func (cli *httpCAClient) GetIssuanceProfileByID(ctx context.Context, input services.GetIssuanceProfileByIDInput) (*models.IssuanceProfile, error) {
+	response, err := Get[models.IssuanceProfile](ctx, cli.httpClient, cli.baseUrl+"/v1/profiles/"+input.ProfileID, nil, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+func (cli *httpCAClient) CreateIssuanceProfile(ctx context.Context, input services.CreateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+	response, err := Post[*models.IssuanceProfile](ctx, cli.httpClient, cli.baseUrl+"/v1/profiles", resources.CreateUpdateIssuanceProfileBody{
+		Name:                   input.Profile.Name,
+		Description:            input.Profile.Description,
+		Validity:               input.Profile.Validity,
+		SignAsCA:               input.Profile.SignAsCA,
+		HonorKeyUsage:          input.Profile.HonorKeyUsage,
+		KeyUsage:               input.Profile.KeyUsage,
+		HonorExtendedKeyUsages: input.Profile.HonorExtendedKeyUsages,
+		ExtendedKeyUsages:      input.Profile.ExtendedKeyUsages,
+		HonorSubject:           input.Profile.HonorSubject,
+		Subject:                input.Profile.Subject,
+		HonorExtensions:        input.Profile.HonorExtensions,
+		CryptoEnforcement: resources.CreateIssuanceProfileCryptoEnforcementBody{
+			Enabled:              input.Profile.CryptoEnforcement.Enabled,
+			AllowRSAKeys:         input.Profile.CryptoEnforcement.AllowRSAKeys,
+			AllowECDSAKeys:       input.Profile.CryptoEnforcement.AllowECDSAKeys,
+			AllowedRSAKeySizes:   input.Profile.CryptoEnforcement.AllowedRSAKeySizes,
+			AllowedECDSAKeySizes: input.Profile.CryptoEnforcement.AllowedECDSAKeySizes,
+		},
+	}, map[int][]error{
+		400: {
+			errs.ErrValidateBadRequest,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (cli *httpCAClient) UpdateIssuanceProfile(ctx context.Context, input services.UpdateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+	response, err := Put[*models.IssuanceProfile](ctx, cli.httpClient, cli.baseUrl+"/v1/profiles/"+input.Profile.ID, resources.CreateUpdateIssuanceProfileBody{
+		Name:                   input.Profile.Name,
+		Description:            input.Profile.Description,
+		Validity:               input.Profile.Validity,
+		SignAsCA:               input.Profile.SignAsCA,
+		HonorKeyUsage:          input.Profile.HonorKeyUsage,
+		KeyUsage:               input.Profile.KeyUsage,
+		HonorExtendedKeyUsages: input.Profile.HonorExtendedKeyUsages,
+		ExtendedKeyUsages:      input.Profile.ExtendedKeyUsages,
+		HonorSubject:           input.Profile.HonorSubject,
+		Subject:                input.Profile.Subject,
+		HonorExtensions:        input.Profile.HonorExtensions,
+		CryptoEnforcement: resources.CreateIssuanceProfileCryptoEnforcementBody{
+			Enabled:              input.Profile.CryptoEnforcement.Enabled,
+			AllowRSAKeys:         input.Profile.CryptoEnforcement.AllowRSAKeys,
+			AllowECDSAKeys:       input.Profile.CryptoEnforcement.AllowECDSAKeys,
+			AllowedRSAKeySizes:   input.Profile.CryptoEnforcement.AllowedRSAKeySizes,
+			AllowedECDSAKeySizes: input.Profile.CryptoEnforcement.AllowedECDSAKeySizes,
+		},
+	}, map[int][]error{
+		400: {
+			errs.ErrValidateBadRequest,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (cli *httpCAClient) DeleteIssuanceProfile(ctx context.Context, input services.DeleteIssuanceProfileInput) error {
+	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/profiles/"+input.ProfileID, map[int][]error{})
 	if err != nil {
 		return err
 	}

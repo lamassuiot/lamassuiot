@@ -149,20 +149,20 @@ func checkCertificate(cert *x509.Certificate, tcSubject models.Subject, tcKeyMet
 	}
 
 	if cert.OCSPServer[0] != "http://ocsp.lamassu.io/ocsp" {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[0], "http://ocsp.lamassuiot.com/ocsp")
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[0], "http://ocsp.lamassu.io/ocsp")
 	}
 
 	if cert.OCSPServer[1] != "http://va.lamassu.io/ocsp" {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[1], "http://va.lamassuiot.com/ocsp")
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[1], "http://va.lamassu.io/ocsp")
 	}
 
 	v2CrlID := hex.EncodeToString(cert.AuthorityKeyId)
 	if cert.CRLDistributionPoints[0] != "http://ocsp.lamassu.io/crl/"+v2CrlID {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[0], "http://crl.lamassuiot.com/crl/"+v2CrlID)
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[0], "http://crl.lamassu.io/crl/"+v2CrlID)
 	}
 
 	if cert.CRLDistributionPoints[1] != "http://va.lamassu.io/crl/"+v2CrlID {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[1], "http://va.lamassuiot.com/crl/"+v2CrlID)
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[1], "http://va.lamassu.io/crl/"+v2CrlID)
 	}
 	return nil
 }
@@ -178,20 +178,20 @@ func checkCACertificate(cert *x509.Certificate, ca *x509.Certificate, tcSubject 
 	}
 
 	if cert.OCSPServer[0] != "http://ocsp.lamassu.io/ocsp" {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[0], "http://ocsp.lamassuiot.com/ocsp")
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[0], "http://ocsp.lamassu.io/ocsp")
 	}
 
 	if cert.OCSPServer[1] != "http://va.lamassu.io/ocsp" {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[1], "http://va.lamassuiot.com/ocsp")
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.OCSPServer[1], "http://va.lamassu.io/ocsp")
 	}
 
 	v2CrlID := hex.EncodeToString(ca.SubjectKeyId)
 	if cert.CRLDistributionPoints[0] != "http://ocsp.lamassu.io/crl/"+v2CrlID {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[0], "http://crl.lamassuiot.com/crl/"+v2CrlID)
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[0], "http://crl.lamassu.io/crl/"+v2CrlID)
 	}
 
 	if cert.CRLDistributionPoints[1] != "http://va.lamassu.io/crl/"+v2CrlID {
-		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[1], "http://va.lamassuiot.com/crl/"+v2CrlID)
+		return fmt.Errorf("unexpected result, got: %s, want: %s", cert.CRLDistributionPoints[1], "http://va.lamassu.io/crl/"+v2CrlID)
 	}
 
 	return nil

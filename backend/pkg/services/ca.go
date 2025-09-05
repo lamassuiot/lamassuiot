@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/google/uuid"
 	"github.com/jakehl/goid"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/x509engines"
@@ -40,6 +41,7 @@ type CAServiceBackend struct {
 	caStorage                   storage.CACertificatesRepo
 	certStorage                 storage.CertificatesRepo
 	caCertificateRequestStorage storage.CACertificateRequestRepo
+	issuanceProfilesStorage     storage.IssuanceProfileRepo
 	vaServerDomains             []string
 	logger                      *logrus.Entry
 }
@@ -50,6 +52,7 @@ type CAServiceBuilder struct {
 	CAStorage                   storage.CACertificatesRepo
 	CertificateStorage          storage.CertificatesRepo
 	CACertificateRequestStorage storage.CACertificateRequestRepo
+	IssuanceProfileStorage      storage.IssuanceProfileRepo
 	VAServerDomains             []string
 }
 
@@ -79,6 +82,7 @@ func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
 		caStorage:                   builder.CAStorage,
 		certStorage:                 builder.CertificateStorage,
 		caCertificateRequestStorage: builder.CACertificateRequestStorage,
+		issuanceProfilesStorage:     builder.IssuanceProfileStorage,
 		vaServerDomains:             builder.VAServerDomains,
 		logger:                      builder.Logger,
 	}
@@ -1230,8 +1234,20 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		return nil, err
 	}
 
+	profile := &input.IssuanceProfile
+
+	if input.IssuanceProfileID != "" {
+		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+			ProfileID: input.IssuanceProfileID,
+		})
+		if err != nil {
+			lFunc.Errorf("could not get issuance profile %s: %s", input.IssuanceProfileID, err)
+			return nil, err
+		}
+	}
+
 	lFunc.Debugf("sign certificate request with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
-	x509Cert, err := x509Engine.SignCertificateRequest(ctx, csr, caCert, caCertSigner, input.IssuanceProfile)
+	x509Cert, err := x509Engine.SignCertificateRequest(ctx, csr, caCert, caCertSigner, *profile)
 	if err != nil {
 		lFunc.Errorf("could not sign certificate request with %s CA", caCert.Subject.CommonName)
 		return nil, err
@@ -1659,4 +1675,54 @@ func importCAValidation(sl validator.StructLevel) {
 			sl.ReportError(ca.CAECKey, "CAECKey", "CAECKey", "PrivateKeyAndCertificateNotMatch", "")
 		}
 	}
+}
+
+func (svc *CAServiceBackend) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {
+	return svc.issuanceProfilesStorage.SelectAll(ctx, storage.StorageListRequest[models.IssuanceProfile]{
+		ExhaustiveRun: input.ExhaustiveRun,
+		ApplyFunc:     input.ApplyFunc,
+		QueryParams:   input.QueryParameters,
+		ExtraOpts:     map[string]interface{}{},
+	})
+}
+
+func (svc *CAServiceBackend) GetIssuanceProfileByID(ctx context.Context, input services.GetIssuanceProfileByIDInput) (*models.IssuanceProfile, error) {
+	exists, profile, err := svc.issuanceProfilesStorage.SelectByID(ctx, input.ProfileID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !exists {
+		return nil, fmt.Errorf("issuance profile '%s' not found", input.ProfileID)
+	}
+
+	return profile, nil
+}
+
+func (svc *CAServiceBackend) CreateIssuanceProfile(ctx context.Context, input services.CreateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	id := uuid.NewString()
+	input.Profile.ID = id
+	lFunc.Infof("creating issuance profile '%s' with ID '%s'", input.Profile.Name, id)
+
+	if input.Profile.ExtendedKeyUsages == nil {
+		input.Profile.ExtendedKeyUsages = []models.X509ExtKeyUsage{}
+	}
+
+	p, err := svc.issuanceProfilesStorage.Insert(ctx, &input.Profile)
+	if err != nil {
+		lFunc.Errorf("could not create issuance profile '%s': %s", input.Profile.Name, err)
+		return nil, err
+	}
+
+	lFunc.Infof("issuance profile '%s' with ID '%s' created successfully", input.Profile.Name, id)
+	return p, nil
+}
+
+func (svc *CAServiceBackend) UpdateIssuanceProfile(ctx context.Context, input services.UpdateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+	return svc.issuanceProfilesStorage.Update(ctx, &input.Profile)
+}
+
+func (svc *CAServiceBackend) DeleteIssuanceProfile(ctx context.Context, input services.DeleteIssuanceProfileInput) error {
+	return svc.issuanceProfilesStorage.Delete(ctx, input.ProfileID)
 }
