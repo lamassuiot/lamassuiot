@@ -542,13 +542,22 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("could not get roles: %s", err)
 	}
 
+	profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not create issuance profile: %s", err)
+	}
+
 	//Create New CA and check if the role is created automatically
 	ca, err = serverTest.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-		ID:                 "new-ca",
-		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-		Subject:            models.Subject{CommonName: "TestCA"},
-		CAExpiration:       models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 24)},
-		IssuanceExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+		ID:           "new-ca",
+		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+		Subject:      models.Subject{CommonName: "TestCA"},
+		CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 24)},
+		ProfileID:    profile.ID,
 	})
 	if err != nil {
 		t.Fatalf("could not create new CA: %s", err)
@@ -610,14 +619,9 @@ func generateCertificate(caSDK services.CAService) (*models.Certificate, error) 
 	}
 
 	crt, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-		CAID:        DefaultCAID,
-		CertRequest: (*models.X509CertificateRequest)(csr),
-		IssuanceProfile: models.IssuanceProfile{
-			Validity:        ca.Validity,
-			SignAsCA:        false,
-			HonorSubject:    true,
-			HonorExtensions: true,
-		},
+		CAID:              DefaultCAID,
+		CertRequest:       (*models.X509CertificateRequest)(csr),
+		IssuanceProfileID: ca.ProfileID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("could not sign csr: %s", err)
@@ -638,16 +642,27 @@ func initCAForVA(testServer *TestServer) (*models.CACertificate, error) {
 	//Init CA Server with 1 CA
 	caDUr := models.TimeDuration(time.Hour * 24)
 	issuanceDur := models.TimeDuration(time.Hour * 12)
-	ca, err := testServer.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-		ID:                 DefaultCAID,
-		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-		Subject:            models.Subject{CommonName: "TestCA"},
-		CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-		IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
+
+	profile, err := testServer.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+		},
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	ca, err := testServer.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+		ID:           DefaultCAID,
+		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+		Subject:      models.Subject{CommonName: "TestCA"},
+		CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+		ProfileID:    profile.ID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return ca, nil
 }
 

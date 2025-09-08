@@ -55,14 +55,14 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 	}
 
 	ca, err := r.svc.CreateCA(ctx, services.CreateCAInput{
-		ParentID:           requestBody.ParentID,
-		ID:                 requestBody.ID,
-		KeyMetadata:        requestBody.KeyMetadata,
-		Subject:            requestBody.Subject,
-		CAExpiration:       requestBody.CAExpiration,
-		IssuanceExpiration: requestBody.IssuanceExpiration,
-		EngineID:           requestBody.EngineID,
-		Metadata:           requestBody.Metadata,
+		ParentID:     requestBody.ParentID,
+		ID:           requestBody.ID,
+		KeyMetadata:  requestBody.KeyMetadata,
+		Subject:      requestBody.Subject,
+		CAExpiration: requestBody.CAExpiration,
+		ProfileID:    requestBody.ProfileID,
+		EngineID:     requestBody.EngineID,
+		Metadata:     requestBody.Metadata,
 	})
 	if err != nil {
 		switch err {
@@ -259,15 +259,15 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 	}
 
 	ca, err := r.svc.ImportCA(ctx, services.ImportCAInput{
-		ID:                 requestBody.ID,
-		IssuanceExpiration: requestBody.IssuanceExpiration,
-		CAType:             requestBody.CAType,
-		CACertificate:      requestBody.CACertificate,
-		KeyType:            keyType,
-		CARSAKey:           rsaKey,
-		CAECKey:            ecKey,
-		EngineID:           requestBody.EngineID,
-		CARequestID:        requestBody.CARequestID,
+		ID:            requestBody.ID,
+		ProfileID:     requestBody.ProfileID,
+		CAType:        requestBody.CAType,
+		CACertificate: requestBody.CACertificate,
+		KeyType:       keyType,
+		CARSAKey:      rsaKey,
+		CAECKey:       ecKey,
+		EngineID:      requestBody.EngineID,
+		CARequestID:   requestBody.CARequestID,
 	})
 	if err != nil {
 		switch err {
@@ -321,42 +321,6 @@ func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 	ca, err := r.svc.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
 		CAID:    params.ID,
 		Patches: requestBody.Patches,
-	})
-	if err != nil {
-		switch err {
-		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
-		return
-	}
-	ctx.JSON(200, ca)
-}
-
-func (r *caHttpRoutes) UpdateCAIssuanceExpiration(ctx *gin.Context) {
-	var requestBody resources.UpdateCAIssuanceExpirationBody
-	if err := ctx.BindJSON(&requestBody); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
-	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	ca, err := r.svc.UpdateCAIssuanceExpiration(ctx, services.UpdateCAIssuanceExpirationInput{
-		CAID:               params.ID,
-		IssuanceExpiration: requestBody.Validity,
 	})
 	if err != nil {
 		switch err {
