@@ -188,10 +188,21 @@ func TestImportCAWithNoRequestId(t *testing.T) {
 		t.Fatalf("could not parse the requested CA: %s", err)
 	}
 
+	profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Name:     "TestProfile",
+			Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not create issuance profile: %s", err)
+	}
+
 	rcert := models.X509Certificate(*requestedCertificate)
 	importedCertificate, err := serverTest.CA.Service.ImportCA(context.Background(), services.ImportCAInput{
 		CACertificate: &rcert,
 		CAType:        models.CertificateTypeRequested,
+		ProfileID:     profile.ID,
 	})
 	if err != nil {
 		t.Fatalf("could not import the requested CA: %s", err)
