@@ -224,6 +224,9 @@ func (cli *httpCAClient) UpdateCAProfile(ctx context.Context, input services.Upd
 		400: {
 			errs.ErrCertificateStatusTransitionNotAllowed,
 		},
+		404: {
+			errs.ErrCANotFound,
+		},
 	})
 	if err != nil {
 		return nil, err
