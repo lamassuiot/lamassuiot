@@ -97,10 +97,85 @@ func upAddProfileId(ctx context.Context, tx *sql.Tx) error {
 
 func downAddProfileId(ctx context.Context, tx *sql.Tx) error {
 	// This code is executed when the migration is rolled back.
-	_, err := tx.Exec("ALTER TABLE ca_certificates DROP COLUMN profile_id;")
+
+	// First, restore the original columns that were dropped in the up migration
+	queries := []string{
+		"ALTER TABLE ca_certificates ADD COLUMN validity_type VARCHAR;",
+		"ALTER TABLE ca_certificates ADD COLUMN validity_duration VARCHAR;",
+		"ALTER TABLE ca_certificates ADD COLUMN validity_time TIMESTAMP;",
+	}
+
+	// Execute each query to restore the columns
+	for _, query := range queries {
+		_, err := tx.Exec(query)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	// Get all CA certificates with their profile information to restore the original data
+	rows, err := tx.QueryContext(ctx, `
+		SELECT 
+			ca.id,
+			ip.validity_type,
+			ip.validity_duration,
+			ip.validity_time
+		FROM ca_certificates ca
+		LEFT JOIN issuance_profiles ip ON ca.profile_id = ip.id
+		WHERE ca.profile_id IS NOT NULL;
+	`)
+	if err != nil {
+		return err
+	}
+
+	result, err := mhelper.RowsToMap(rows)
+	if err != nil {
+		return err
+	}
+
+	// Restore the original validity data for each CA certificate
+	for _, row := range result {
+		caID := row["id"].(string)
+		validityType := row["validity_type"]
+		validityDuration := row["validity_duration"]
+		validityTime := row["validity_time"]
+
+		_, err = tx.ExecContext(ctx, `
+			UPDATE ca_certificates 
+			SET 
+				validity_type = $1,
+				validity_duration = $2,
+				validity_time = $3
+			WHERE id = $4
+		`,
+			validityType,
+			validityDuration,
+			validityTime,
+			caID,
+		)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	// Delete the auto-created issuance profiles
+	_, err = tx.ExecContext(ctx, `
+		DELETE FROM issuance_profiles 
+		WHERE name LIKE 'Auto Profile for CA %';
+	`)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
+
+	// Finally, drop the profile_id column
+	_, err = tx.Exec("ALTER TABLE ca_certificates DROP COLUMN profile_id;")
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
 	return nil
 }
