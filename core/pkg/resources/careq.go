@@ -94,6 +94,10 @@ type UpdateCertificateStatusBody struct {
 	RevocationReason models.RevocationReason  `json:"revocation_reason"`
 }
 
+type UpdateCAProfileBody struct {
+	ProfileID string `json:"profile_id" validate:"required"`
+}
+
 type UpdateCertificateMetadataBody struct {
 	Patches []models.PatchOperation `validate:"required"`
 }

@@ -21,6 +21,7 @@ const (
 	EventRequestCAKey           EventType = "ca.request"
 	EventImportCAKey            EventType = "ca.import"
 	EventImportCACertificateKey EventType = "ca.certificate.import"
+	EventUpdateCAProfileKey     EventType = "ca.profile.update"
 	EventUpdateCAStatusKey      EventType = "ca.status.update"
 	EventUpdateCAMetadataKey    EventType = "ca.metadata.update"
 	EventSignCertificateKey     EventType = "ca.sign.certificate"

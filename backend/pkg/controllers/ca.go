@@ -620,6 +620,44 @@ func (r *caHttpRoutes) UpdateCAStatus(ctx *gin.Context) {
 	ctx.JSON(201, ca)
 }
 
+func (r *caHttpRoutes) UpdateCAProfile(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody resources.UpdateCAProfileBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	ca, err := r.svc.UpdateCAProfile(ctx, services.UpdateCAProfileInput{
+		CAID:      params.ID,
+		ProfileID: requestBody.ProfileID,
+	})
+
+	if err != nil {
+		switch err {
+		case errs.ErrCANotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+
+	ctx.JSON(200, ca)
+}
+
 // @Summary Get Certificate by Serial Number
 // @Description Get Certificate by Serial Number
 // @Accept json

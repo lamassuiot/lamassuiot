@@ -217,6 +217,20 @@ func (cli *httpCAClient) UpdateCAStatus(ctx context.Context, input services.Upda
 	return response, nil
 }
 
+func (cli *httpCAClient) UpdateCAProfile(ctx context.Context, input services.UpdateCAProfileInput) (*models.CACertificate, error) {
+	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/profile", resources.UpdateCAProfileBody{
+		ProfileID: input.ProfileID,
+	}, map[int][]error{
+		400: {
+			errs.ErrCertificateStatusTransitionNotAllowed,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (*models.CACertificate, error) {
 	response, err := Put[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/metadata", resources.UpdateCAMetadataBody{
 		Patches: input.Patches,

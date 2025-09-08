@@ -24,6 +24,7 @@ type CAService interface {
 	GetCAs(ctx context.Context, input GetCAsInput) (string, error)
 	GetCAsByCommonName(ctx context.Context, input GetCAsByCommonNameInput) (string, error)
 	UpdateCAStatus(ctx context.Context, input UpdateCAStatusInput) (*models.CACertificate, error)
+	UpdateCAProfile(ctx context.Context, input UpdateCAProfileInput) (*models.CACertificate, error)
 	UpdateCAMetadata(ctx context.Context, input UpdateCAMetadataInput) (*models.CACertificate, error)
 	DeleteCA(ctx context.Context, input DeleteCAInput) error
 
@@ -165,6 +166,11 @@ type UpdateCAStatusInput struct {
 	CAID             string                   `validate:"required"`
 	Status           models.CertificateStatus `validate:"required"`
 	RevocationReason models.RevocationReason
+}
+
+type UpdateCAProfileInput struct {
+	CAID      string `validate:"required"`
+	ProfileID string `validate:"required"`
 }
 
 type UpdateCAMetadataInput struct {

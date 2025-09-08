@@ -1042,6 +1042,33 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.
 	return ca, err
 }
 
+func (svc *CAServiceBackend) UpdateCAProfile(ctx context.Context, input services.UpdateCAProfileInput) (*models.CACertificate, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := validate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("UpdateCAProfileInput struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
+	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
+		return nil, err
+	}
+
+	if !exists {
+		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
+		return nil, errs.ErrCANotFound
+	}
+
+	ca.ProfileID = input.ProfileID
+
+	lFunc.Debugf("updating %s CA profile to %s", input.CAID, input.ProfileID)
+	return svc.caStorage.Update(ctx, ca)
+}
+
 // Returned Error Codes:
 //   - ErrCANotFound
 //     The specified CA can not be found in the Database
