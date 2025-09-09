@@ -41,22 +41,67 @@ func upAddProfileId(ctx context.Context, tx *sql.Tx) error {
 		validityDurationStr := row["validity_duration"].(string)
 		validityTimeStr := row["validity_time"].(time.Time)
 
-		uuid := goid.NewV4UUID().String()
-		_, err := tx.ExecContext(ctx,
-			`INSERT INTO issuance_profiles
-				(id, "name", description, validity_type, validity_time, validity_duration, sign_as_ca, honor_key_usage, key_usage, honor_extended_key_usages, extended_key_usages, honor_subject, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, honor_extensions, crypto_enforcement_enabled, crypto_enforcement_allow_rsa_keys, crypto_enforcement_allowed_rsa_key_sizes, crypto_enforcement_allow_ecdsa_keys, crypto_enforcement_allowed_ecdsa_key_sizes)
-				VALUES
-				($1, $2, $3, $4, $5, $6, false, true, '["DigitalSignature","KeyEncipherment"]', false, '["ClientAuth","ServerAuth"]', true, '', '', '', '', '', '', true, true, true, '[2048,3072,4096]', true, '[256,384,521]');`,
-			uuid,
-			fmt.Sprintf("Auto Profile for CA %s", caID),
-			fmt.Sprintf("Default Profile created automatically for CA %s", caID),
+		// Check if a profile with the same characteristics already exists
+		profileRow := tx.QueryRowContext(ctx, `
+			SELECT id FROM issuance_profiles 
+			WHERE validity_type = $1 
+			AND validity_duration = $2 
+			AND validity_time = $3
+			AND sign_as_ca = false
+			AND honor_key_usage = true
+			AND key_usage = '["DigitalSignature","KeyEncipherment"]'
+			AND honor_extended_key_usages = false
+			AND extended_key_usages = '["ClientAuth","ServerAuth"]'
+			AND honor_subject = true
+			AND subject_common_name = ''
+			AND subject_organization = ''
+			AND subject_organization_unit = ''
+			AND subject_country = ''
+			AND subject_state = ''
+			AND subject_locality = ''
+			AND honor_extensions = true
+			AND crypto_enforcement_enabled = true
+			AND crypto_enforcement_allow_rsa_keys = true
+			AND crypto_enforcement_allowed_rsa_key_sizes = '[2048,3072,4096]'
+			AND crypto_enforcement_allow_ecdsa_keys = true
+			AND crypto_enforcement_allowed_ecdsa_key_sizes = '[256,384,521]'
+			LIMIT 1;`,
 			validityType,
-			validityTimeStr,
 			validityDurationStr,
+			validityTimeStr,
 		)
-		if err != nil {
+
+		var existingProfileID string
+		err := profileRow.Scan(&existingProfileID)
+
+		var profileID string
+		if err == sql.ErrNoRows {
+			// No existing profile found, create a new one
+			profileID = goid.NewV4UUID().String()
+			_, err := tx.ExecContext(ctx,
+				`INSERT INTO issuance_profiles
+					(id, "name", description, validity_type, validity_time, validity_duration, sign_as_ca, honor_key_usage, key_usage, honor_extended_key_usages, extended_key_usages, honor_subject, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, honor_extensions, crypto_enforcement_enabled, crypto_enforcement_allow_rsa_keys, crypto_enforcement_allowed_rsa_key_sizes, crypto_enforcement_allow_ecdsa_keys, crypto_enforcement_allowed_ecdsa_key_sizes)
+					VALUES
+					($1, $2, $3, $4, $5, $6, false, true, '["DigitalSignature","KeyEncipherment"]', false, '["ClientAuth","ServerAuth"]', true, '', '', '', '', '', '', true, true, true, '[2048,3072,4096]', true, '[256,384,521]');`,
+				profileID,
+				fmt.Sprintf("Auto Profile for CA %s", caID),
+				fmt.Sprintf("Default Profile created automatically for CA %s", caID),
+				validityType,
+				validityTimeStr,
+				validityDurationStr,
+			)
+			if err != nil {
+				tx.Rollback()
+				return err
+			}
+			fmt.Printf("Created new issuance profile %s for CA %s\n", profileID, caID)
+		} else if err != nil {
 			tx.Rollback()
 			return err
+		} else {
+			// Use existing profile
+			profileID = existingProfileID
+			fmt.Printf("Using existing issuance profile %s for CA %s\n", profileID, caID)
 		}
 
 		_, err = tx.ExecContext(ctx, `
@@ -65,15 +110,13 @@ func upAddProfileId(ctx context.Context, tx *sql.Tx) error {
 					profile_id = $1
 				WHERE id = $2
 			`,
-			uuid,
+			profileID,
 			caID,
 		)
 		if err != nil {
 			tx.Rollback()
 			return err
 		}
-
-		fmt.Printf("Created issuance profile %s for CA %s\n", uuid, caID)
 
 	}
 
