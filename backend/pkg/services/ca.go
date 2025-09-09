@@ -1169,16 +1169,9 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		return nil, errs.ErrCANotFound
 	}
 
-	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
-	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
+	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
 		return nil, err
-	}
-
-	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
-		return nil, errs.ErrCANotFound
 	}
 
 	if ca.Certificate.Status != models.StatusActive {

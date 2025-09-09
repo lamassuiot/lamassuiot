@@ -573,26 +573,9 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	lFunc = lFunc.WithField("step", "Signature")
 	lFunc.Infof("starting signature process")
 
-	issuanceProfile := dms.Settings.IssuanceProfile
-	if dms.Settings.IssuanceProfileID != "" {
-		issuanceProfile, err = svc.caClient.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
-			ProfileID: dms.Settings.IssuanceProfileID,
-		})
-		if err != nil {
-			lFunc.Errorf("could not get issuance profile with ID=%s: %s", dms.Settings.IssuanceProfileID, err)
-			return nil, err
-		}
-	}
-
-	if issuanceProfile == nil {
-		lFunc.Warnf("no issuance profile configured for DMS. using default profile from CA")
-		profile, err := svc.getProfileForCA(ctx, enrollSettings.EnrollmentCA)
-		if err != nil {
-			lFunc.Errorf("could not get default issuance profile from CA: %s", err)
-			return nil, err
-		}
-
-		issuanceProfile = profile
+	issuanceProfile, err := svc.resolveIssuanceProfile(ctx, lFunc, dms, enrollSettings.EnrollmentCA)
+	if err != nil {
+		return nil, err
 	}
 
 	lFunc.Infof("requesting certificate signature")
@@ -881,26 +864,9 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		return nil, fmt.Errorf("invalid reenroll window")
 	}
 
-	issuanceProfile := dms.Settings.IssuanceProfile
-	if dms.Settings.IssuanceProfileID != "" {
-		issuanceProfile, err = svc.caClient.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
-			ProfileID: dms.Settings.IssuanceProfileID,
-		})
-		if err != nil {
-			lFunc.Errorf("could not get issuance profile with ID=%s: %s", dms.Settings.IssuanceProfileID, err)
-			return nil, err
-		}
-	}
-
-	if issuanceProfile == nil {
-		lFunc.Warnf("no issuance profile configured for DMS. using default profile from CA")
-		profile, err := svc.getProfileForCA(ctx, enrollSettings.EnrollmentCA)
-		if err != nil {
-			lFunc.Errorf("could not get default issuance profile from CA: %s", err)
-			return nil, err
-		}
-
-		issuanceProfile = profile
+	issuanceProfile, err := svc.resolveIssuanceProfile(ctx, lFunc, dms, enrollSettings.EnrollmentCA)
+	if err != nil {
+		return nil, err
 	}
 
 	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
@@ -1217,6 +1183,32 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		DMS:         dms,
 		Device:      device,
 	}, nil
+}
+
+func (svc DMSManagerServiceBackend) resolveIssuanceProfile(ctx context.Context, lFunc *logrus.Entry, dms *models.DMS, enrollmentCA string) (*models.IssuanceProfile, error) {
+	issuanceProfile := dms.Settings.IssuanceProfile
+	if dms.Settings.IssuanceProfileID != "" {
+		profile, err := svc.caClient.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+			ProfileID: dms.Settings.IssuanceProfileID,
+		})
+		if err != nil {
+			lFunc.Errorf("could not get issuance profile with ID=%s: %s", dms.Settings.IssuanceProfileID, err)
+			return nil, err
+		}
+		issuanceProfile = profile
+	}
+
+	if issuanceProfile == nil {
+		lFunc.Warnf("no issuance profile configured for DMS. using default profile from CA")
+		profile, err := svc.getProfileForCA(ctx, enrollmentCA)
+		if err != nil {
+			lFunc.Errorf("could not get default issuance profile from CA: %s", err)
+			return nil, err
+		}
+		issuanceProfile = profile
+	}
+
+	return issuanceProfile, nil
 }
 
 func (svc DMSManagerServiceBackend) getProfileForCA(ctx context.Context, caID string) (*models.IssuanceProfile, error) {
