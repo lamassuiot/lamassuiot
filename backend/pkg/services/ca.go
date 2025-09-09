@@ -778,6 +778,26 @@ func (svc *CAServiceBackend) getCryptoEngine(engineId string) (string, x509engin
 	return availableEngineId, x509engines.NewX509Engine(svc.logger, svc.cryptoEngines[availableEngineId], svc.vaServerDomains), nil
 }
 
+// getCACertificateIfExists retrieves the CA certificate for the given caID if it exists.
+// Returns the CA certificate and nil error if found, or nil certificate and ErrCANotFound if not found.
+func (svc *CAServiceBackend) getCACertificateIfExists(ctx context.Context, caID string) (*models.CACertificate, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	lFunc.Debugf("checking if CA '%s' exists", caID)
+	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, caID)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", caID, err)
+		return nil, err
+	}
+
+	if !exists {
+		lFunc.Errorf("CA %s can not be found in storage engine", caID)
+		return nil, errs.ErrCANotFound
+	}
+
+	return ca, nil
+}
+
 func (svc *CAServiceBackend) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -865,19 +885,12 @@ func (svc *CAServiceBackend) GetCAByID(ctx context.Context, input services.GetCA
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
-	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
+	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
 		return nil, err
 	}
 
-	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
-		return nil, errs.ErrCANotFound
-	}
-
-	return ca, err
+	return ca, nil
 }
 
 func (svc *CAServiceBackend) GetCAs(ctx context.Context, input services.GetCAsInput) (string, error) {
@@ -955,16 +968,9 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
-	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
+	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
 		return nil, err
-	}
-
-	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
-		return nil, errs.ErrCANotFound
 	}
 
 	if ca.Certificate.Status == models.StatusExpired {
@@ -1051,16 +1057,9 @@ func (svc *CAServiceBackend) UpdateCAProfile(ctx context.Context, input services
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
-	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
+	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
 		return nil, err
-	}
-
-	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
-		return nil, errs.ErrCANotFound
 	}
 
 	ca.ProfileID = input.ProfileID
@@ -1083,16 +1082,9 @@ func (svc *CAServiceBackend) UpdateCAMetadata(ctx context.Context, input service
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
-	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
+	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
 		return nil, err
-	}
-
-	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
-		return nil, errs.ErrCANotFound
 	}
 
 	updatedMetadata, err := chelpers.ApplyPatches(ca.Metadata, input.Patches)
@@ -1123,16 +1115,9 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.Delete
 		return errs.ErrValidateBadRequest
 	}
 
-	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
-	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
+	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
 		return err
-	}
-
-	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
-		return errs.ErrCANotFound
 	}
 
 	if ca.Certificate.Type == models.CertificateTypeExternal {
