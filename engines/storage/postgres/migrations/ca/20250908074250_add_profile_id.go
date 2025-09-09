@@ -46,7 +46,7 @@ func upAddProfileId(ctx context.Context, tx *sql.Tx) error {
 			`INSERT INTO issuance_profiles
 				(id, "name", description, validity_type, validity_time, validity_duration, sign_as_ca, honor_key_usage, key_usage, honor_extended_key_usages, extended_key_usages, honor_subject, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, honor_extensions, crypto_enforcement_enabled, crypto_enforcement_allow_rsa_keys, crypto_enforcement_allowed_rsa_key_sizes, crypto_enforcement_allow_ecdsa_keys, crypto_enforcement_allowed_ecdsa_key_sizes)
 				VALUES
-				($1, $2, $3, $4, $5, $6, false, true, '["DigitalSignature","KeyEncipherment"]', false, '[]', true, '', '', '', '', '', '', true, true, true, '[2048,3072,4096]', true, '[256,384,521]');`,
+				($1, $2, $3, $4, $5, $6, false, true, '["DigitalSignature","KeyEncipherment"]', false, '["ClientAuth","ServerAuth"]', true, '', '', '', '', '', '', true, true, true, '[2048,3072,4096]', true, '[256,384,521]');`,
 			uuid,
 			fmt.Sprintf("Auto Profile for CA %s", caID),
 			fmt.Sprintf("Default Profile created automatically for CA %s", caID),

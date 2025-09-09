@@ -29,9 +29,16 @@ func TestEditCAProfiles(t *testing.T) {
 	createProfile := func(t *testing.T, name, description string, validity models.Validity) *models.IssuanceProfile {
 		profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
 			Profile: models.IssuanceProfile{
-				Name:        name,
-				Description: description,
-				Validity:    validity,
+				Name:                   name,
+				Description:            description,
+				Validity:               validity,
+				HonorKeyUsage:          true,
+				KeyUsage:               models.X509KeyUsage(x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment),
+				HonorExtendedKeyUsages: true,
+				ExtendedKeyUsages: []models.X509ExtKeyUsage{
+					models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+					models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+				},
 			},
 		})
 		if err != nil {
@@ -462,6 +469,139 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 
 				if originalProfile.Validity.Type != models.Duration {
 					return fmt.Errorf("original validity type should have been Duration")
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/UpdateIssuanceProfile-ChangeKeyUsageAndExtendedKeyUsage",
+			before: func(svc services.CAService) (*models.IssuanceProfile, error) {
+				return svc.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:                   "KeyUsageChangeProfile",
+						Description:            "Profile for testing key usage changes",
+						Validity:               models.Validity{Type: models.Duration, Duration: issuanceDur},
+						HonorKeyUsage:          true,
+						KeyUsage:               models.X509KeyUsage(x509.KeyUsageDigitalSignature),
+						HonorExtendedKeyUsages: true,
+						ExtendedKeyUsages:      []models.X509ExtKeyUsage{models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth)},
+					},
+				})
+			},
+			run: func(caSDK services.CAService, profile *models.IssuanceProfile) (*models.IssuanceProfile, error) {
+				// Make a copy to avoid modifying the original
+				updatedProfile := *profile
+				// Change key usage to include multiple usages
+				updatedProfile.KeyUsage = models.X509KeyUsage(x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageDataEncipherment)
+				// Change extended key usages to include different ones
+				updatedProfile.ExtendedKeyUsages = []models.X509ExtKeyUsage{
+					models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+					models.X509ExtKeyUsage(x509.ExtKeyUsageCodeSigning),
+					models.X509ExtKeyUsage(x509.ExtKeyUsageEmailProtection),
+				}
+
+				return caSDK.UpdateIssuanceProfile(context.Background(), services.UpdateIssuanceProfileInput{
+					Profile: updatedProfile,
+				})
+			},
+			resultCheck: func(originalProfile *models.IssuanceProfile, updatedProfile *models.IssuanceProfile, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've updated issuance profile without error, but got error: %s", err)
+				}
+
+				// Verify key usage changed
+				expectedKeyUsage := models.X509KeyUsage(x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageDataEncipherment)
+				if updatedProfile.KeyUsage != expectedKeyUsage {
+					return fmt.Errorf("expected key usage to be %d, but got %d", expectedKeyUsage, updatedProfile.KeyUsage)
+				}
+
+				// Verify original key usage was different
+				originalKeyUsage := models.X509KeyUsage(x509.KeyUsageDigitalSignature)
+				if originalProfile.KeyUsage != originalKeyUsage {
+					return fmt.Errorf("original key usage should have been %d, but was %d", originalKeyUsage, originalProfile.KeyUsage)
+				}
+
+				// Verify extended key usages changed
+				if len(updatedProfile.ExtendedKeyUsages) != 3 {
+					return fmt.Errorf("expected 3 extended key usages, but got %d", len(updatedProfile.ExtendedKeyUsages))
+				}
+
+				// Check specific extended key usages
+				expectedExtKeyUsages := []models.X509ExtKeyUsage{
+					models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+					models.X509ExtKeyUsage(x509.ExtKeyUsageCodeSigning),
+					models.X509ExtKeyUsage(x509.ExtKeyUsageEmailProtection),
+				}
+
+				for i, expected := range expectedExtKeyUsages {
+					if updatedProfile.ExtendedKeyUsages[i] != expected {
+						return fmt.Errorf("expected extended key usage at index %d to be %d, but got %d", i, expected, updatedProfile.ExtendedKeyUsages[i])
+					}
+				}
+
+				// Verify original extended key usage was different
+				if len(originalProfile.ExtendedKeyUsages) != 1 {
+					return fmt.Errorf("original profile should have had 1 extended key usage, but had %d", len(originalProfile.ExtendedKeyUsages))
+				}
+
+				if originalProfile.ExtendedKeyUsages[0] != models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth) {
+					return fmt.Errorf("original extended key usage should have been ServerAuth")
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/UpdateIssuanceProfile-DisableKeyUsageHonoring",
+			before: func(svc services.CAService) (*models.IssuanceProfile, error) {
+				return svc.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:                   "DisableKeyUsageProfile",
+						Description:            "Profile for testing disabling key usage honoring",
+						Validity:               models.Validity{Type: models.Duration, Duration: issuanceDur},
+						HonorKeyUsage:          true,
+						KeyUsage:               models.X509KeyUsage(x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment),
+						HonorExtendedKeyUsages: true,
+						ExtendedKeyUsages: []models.X509ExtKeyUsage{
+							models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+							models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+						},
+					},
+				})
+			},
+			run: func(caSDK services.CAService, profile *models.IssuanceProfile) (*models.IssuanceProfile, error) {
+				// Make a copy to avoid modifying the original
+				updatedProfile := *profile
+				// Disable honoring of key usages
+				updatedProfile.HonorKeyUsage = false
+				updatedProfile.HonorExtendedKeyUsages = false
+
+				return caSDK.UpdateIssuanceProfile(context.Background(), services.UpdateIssuanceProfileInput{
+					Profile: updatedProfile,
+				})
+			},
+			resultCheck: func(originalProfile *models.IssuanceProfile, updatedProfile *models.IssuanceProfile, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've updated issuance profile without error, but got error: %s", err)
+				}
+
+				// Verify key usage honoring is disabled
+				if updatedProfile.HonorKeyUsage {
+					return fmt.Errorf("expected HonorKeyUsage to be false")
+				}
+
+				if updatedProfile.HonorExtendedKeyUsages {
+					return fmt.Errorf("expected HonorExtendedKeyUsages to be false")
+				}
+
+				// Verify original had honoring enabled
+				if !originalProfile.HonorKeyUsage {
+					return fmt.Errorf("original profile should have had HonorKeyUsage enabled")
+				}
+
+				if !originalProfile.HonorExtendedKeyUsages {
+					return fmt.Errorf("original profile should have had HonorExtendedKeyUsages enabled")
 				}
 
 				return nil
