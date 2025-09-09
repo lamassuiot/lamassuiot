@@ -453,7 +453,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	ca := &models.CACertificate{
 		ID:         caID,
 		Metadata:   map[string]interface{}{},
-		Validity:   input.IssuanceExpiration,
+		ProfileID:  input.ProfileID,
 		CreationTS: time.Now(),
 		Level:      level,
 		Certificate: models.Certificate{
@@ -690,21 +690,6 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 
 		akid = parentCA.Certificate.SubjectKeyID
 
-		var caExpiration time.Time
-		if input.IssuanceExpiration.Type == models.Duration {
-			caExpiration = time.Now().Add((time.Duration)(input.CAExpiration.Duration))
-		} else {
-			caExpiration = input.CAExpiration.Time
-		}
-
-		parentCaExpiration := parentCA.Certificate.ValidTo
-		if parentCaExpiration.Before(caExpiration) {
-			lFunc.Errorf("requested CA would expire after parent CA")
-			return nil, fmt.Errorf("invalid expiration")
-		}
-
-		lFunc.Debugf("valid expiration. Subordinated CA expires before parent CA")
-
 		// Generate a new Key Pair and a CSR for the CA
 		caCSR, err := svc.RequestCACSR(ctx, services.RequestCAInput{
 			ID:          input.ID,
@@ -749,7 +734,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	caCert := models.CACertificate{
 		ID:         caID,
 		Metadata:   input.Metadata,
-		Validity:   input.IssuanceExpiration,
+		ProfileID:  input.ProfileID,
 		CreationTS: time.Now(),
 		Level:      caLevel,
 		Certificate: models.Certificate{
@@ -791,6 +776,26 @@ func (svc *CAServiceBackend) getCryptoEngine(engineId string) (string, x509engin
 	}
 
 	return availableEngineId, x509engines.NewX509Engine(svc.logger, svc.cryptoEngines[availableEngineId], svc.vaServerDomains), nil
+}
+
+// getCACertificateIfExists retrieves the CA certificate for the given caID if it exists.
+// Returns the CA certificate and nil error if found, or nil certificate and ErrCANotFound if not found.
+func (svc *CAServiceBackend) getCACertificateIfExists(ctx context.Context, caID string) (*models.CACertificate, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	lFunc.Debugf("checking if CA '%s' exists", caID)
+	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, caID)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", caID, err)
+		return nil, err
+	}
+
+	if !exists {
+		lFunc.Errorf("CA %s can not be found in storage engine", caID)
+		return nil, errs.ErrCANotFound
+	}
+
+	return ca, nil
 }
 
 func (svc *CAServiceBackend) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
@@ -880,19 +885,12 @@ func (svc *CAServiceBackend) GetCAByID(ctx context.Context, input services.GetCA
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
-	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
+	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
 		return nil, err
 	}
 
-	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
-		return nil, errs.ErrCANotFound
-	}
-
-	return ca, err
+	return ca, nil
 }
 
 func (svc *CAServiceBackend) GetCAs(ctx context.Context, input services.GetCAsInput) (string, error) {
@@ -970,16 +968,9 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
-	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
+	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
 		return nil, err
-	}
-
-	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
-		return nil, errs.ErrCANotFound
 	}
 
 	if ca.Certificate.Status == models.StatusExpired {
@@ -1057,37 +1048,24 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.
 	return ca, err
 }
 
-func (svc *CAServiceBackend) UpdateCAIssuanceExpiration(ctx context.Context, input services.UpdateCAIssuanceExpirationInput) (*models.CACertificate, error) {
+func (svc *CAServiceBackend) UpdateCAProfile(ctx context.Context, input services.UpdateCAProfileInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-	var err error
-	err = validate.Struct(input)
+
+	err := validate.Struct(input)
 	if err != nil {
-		lFunc.Errorf("UpdateIssuanceExpirationInput struct validation error: %s", err)
+		lFunc.Errorf("UpdateCAProfileInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
-	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
+	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
 		return nil, err
 	}
 
-	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
-		return nil, errs.ErrCANotFound
-	}
+	ca.ProfileID = input.ProfileID
 
-	if !helpers.ValidateCAExpiration(input.IssuanceExpiration, ca.Certificate.ValidTo) {
-		lFunc.Errorf("issuance expiration is greater than the CA expiration")
-		return nil, errs.ErrValidateBadRequest
-	}
-
-	ca.Validity = input.IssuanceExpiration
-
-	lFunc.Debugf("updating %s CA issuance expiration", input.CAID)
+	lFunc.Debugf("updating %s CA profile to %s", input.CAID, input.ProfileID)
 	return svc.caStorage.Update(ctx, ca)
-
 }
 
 // Returned Error Codes:
@@ -1104,16 +1082,9 @@ func (svc *CAServiceBackend) UpdateCAMetadata(ctx context.Context, input service
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
-	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
+	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
 		return nil, err
-	}
-
-	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
-		return nil, errs.ErrCANotFound
 	}
 
 	updatedMetadata, err := chelpers.ApplyPatches(ca.Metadata, input.Patches)
@@ -1144,16 +1115,9 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.Delete
 		return errs.ErrValidateBadRequest
 	}
 
-	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
-	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
+	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
 		return err
-	}
-
-	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
-		return errs.ErrCANotFound
 	}
 
 	if ca.Certificate.Type == models.CertificateTypeExternal {
@@ -1205,16 +1169,9 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		return nil, errs.ErrCANotFound
 	}
 
-	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
-	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
+	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
 		return nil, err
-	}
-
-	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
-		return nil, errs.ErrCANotFound
 	}
 
 	if ca.Certificate.Status != models.StatusActive {
@@ -1629,23 +1586,6 @@ func createCAValidation(sl validator.StructLevel) {
 		// lFunc.Errorf("CA Expiration time ref is incompatible with the selected variable")
 		sl.ReportError(ca.CAExpiration, "CAExpiration", "CAExpiration", "InvalidCAExpiration", "")
 	}
-
-	if !helpers.ValidateValidity(ca.IssuanceExpiration) {
-		// lFunc.Errorf("issuance expiration time ref is incompatible with the selected variable")
-		sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "InvalidIssuanceExpiration", "")
-	}
-
-	expiration := time.Now()
-	if ca.CAExpiration.Type == models.Duration {
-		expiration = expiration.Add(time.Duration(ca.CAExpiration.Duration))
-	} else {
-		expiration = ca.CAExpiration.Time
-	}
-
-	if !helpers.ValidateCAExpiration(ca.IssuanceExpiration, expiration) {
-		// lFunc.Errorf("issuance expiration is greater than the CA expiration")
-		sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
-	}
 }
 
 func importCAValidation(sl validator.StructLevel) {
@@ -1653,16 +1593,6 @@ func importCAValidation(sl validator.StructLevel) {
 	caCert := ca.CACertificate
 
 	if ca.CAType == models.CertificateTypeImportedWithKey {
-		if !helpers.ValidateCAExpiration(ca.IssuanceExpiration, caCert.NotAfter) {
-			// lFunc.Errorf("issuance expiration is greater than the CA expiration")
-			sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "IssuanceExpirationGreaterThanCAExpiration", "")
-		}
-		// lFunc.Debugf("CA Type: %s", ca.CAType)
-		if !helpers.ValidateValidity(ca.IssuanceExpiration) {
-			// lFunc.Errorf("expiration time ref is incompatible with the selected variable")
-			sl.ReportError(ca.IssuanceExpiration, "IssuanceExpiration", "IssuanceExpiration", "InvalidIssuanceExpiration", "")
-		}
-
 		valid, err := chelpers.ValidateCertAndPrivKey((*x509.Certificate)(caCert), ca.CARSAKey, ca.CAECKey)
 		if err != nil {
 			sl.ReportError(ca.CARSAKey, "CARSAKey", "CARSAKey", "PrivateKeyAndCertificateNotMatch", "")

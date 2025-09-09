@@ -24,8 +24,8 @@ type CAService interface {
 	GetCAs(ctx context.Context, input GetCAsInput) (string, error)
 	GetCAsByCommonName(ctx context.Context, input GetCAsByCommonNameInput) (string, error)
 	UpdateCAStatus(ctx context.Context, input UpdateCAStatusInput) (*models.CACertificate, error)
+	UpdateCAProfile(ctx context.Context, input UpdateCAProfileInput) (*models.CACertificate, error)
 	UpdateCAMetadata(ctx context.Context, input UpdateCAMetadataInput) (*models.CACertificate, error)
-	UpdateCAIssuanceExpiration(ctx context.Context, input UpdateCAIssuanceExpirationInput) (*models.CACertificate, error)
 	DeleteCA(ctx context.Context, input DeleteCAInput) error
 
 	SignatureSign(ctx context.Context, input SignatureSignInput) ([]byte, error)
@@ -97,27 +97,27 @@ type IssueCACSROutput struct {
 }
 
 type ImportCAInput struct {
-	ID                 string
-	CAType             models.CertificateType    `validate:"required,ne=MANAGED"`
-	IssuanceExpiration models.Validity           `validate:"required"`
-	CACertificate      *models.X509Certificate   `validate:"required"`
-	CAChain            []*models.X509Certificate //Parent CAs. They MUST be sorted as follows. 0: Root-CA; 1: Subordinate CA from Root-CA; ...
-	CARSAKey           *rsa.PrivateKey
-	CAECKey            *ecdsa.PrivateKey
-	KeyType            models.KeyType
-	EngineID           string
-	CARequestID        string
+	ID            string
+	CAType        models.CertificateType    `validate:"required,ne=MANAGED"`
+	ProfileID     string                    `validate:"required"`
+	CACertificate *models.X509Certificate   `validate:"required"`
+	CAChain       []*models.X509Certificate //Parent CAs. They MUST be sorted as follows. 0: Root-CA; 1: Subordinate CA from Root-CA; ...
+	CARSAKey      *rsa.PrivateKey
+	CAECKey       *ecdsa.PrivateKey
+	KeyType       models.KeyType
+	EngineID      string
+	CARequestID   string
 }
 
 type CreateCAInput struct {
-	ID                 string
-	ParentID           string
-	KeyMetadata        models.KeyMetadata `validate:"required"`
-	Subject            models.Subject     `validate:"required"`
-	IssuanceExpiration models.Validity    `validate:"required"`
-	CAExpiration       models.Validity    `validate:"required"`
-	EngineID           string
-	Metadata           map[string]any
+	ID           string
+	ParentID     string
+	KeyMetadata  models.KeyMetadata `validate:"required"`
+	Subject      models.Subject     `validate:"required"`
+	ProfileID    string             `validate:"required"`
+	CAExpiration models.Validity    `validate:"required"`
+	EngineID     string
+	Metadata     map[string]any
 }
 
 type RequestCAInput struct {
@@ -168,9 +168,9 @@ type UpdateCAStatusInput struct {
 	RevocationReason models.RevocationReason
 }
 
-type UpdateCAIssuanceExpirationInput struct {
-	CAID               string          `validate:"required"`
-	IssuanceExpiration models.Validity `validate:"required"`
+type UpdateCAProfileInput struct {
+	CAID      string `validate:"required"`
+	ProfileID string `validate:"required"`
 }
 
 type UpdateCAMetadataInput struct {

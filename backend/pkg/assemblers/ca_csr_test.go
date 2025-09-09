@@ -79,10 +79,21 @@ func TestImportCAWithNoRequestAndDifferentCNError(t *testing.T) {
 		t.Fatalf("could not parse the requested CA: %s", err)
 	}
 
+	profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Name:     "TestProfile",
+			Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not create issuance profile: %s", err)
+	}
+
 	rcert := models.X509Certificate(*requestedCertificate)
 	_, err = serverTest.CA.Service.ImportCA(context.Background(), services.ImportCAInput{
 		CACertificate: &rcert,
 		CAType:        models.CertificateTypeRequested,
+		ProfileID:     profile.ID,
 	})
 	assert.EqualError(t, err, "no pending CA Request can be found")
 }
@@ -122,10 +133,21 @@ func TestImportCAWithNoCreatedRequest(t *testing.T) {
 		t.Fatalf("could not parse the requested CA: %s", err)
 	}
 
+	profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Name:     "TestProfile",
+			Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not create issuance profile: %s", err)
+	}
+
 	rcert := models.X509Certificate(*requestedCertificate)
 	_, err = serverTest.CA.Service.ImportCA(context.Background(), services.ImportCAInput{
 		CACertificate: &rcert,
 		CAType:        models.CertificateTypeRequested,
+		ProfileID:     profile.ID,
 	})
 	assert.EqualError(t, err, "no pending CA Request can be found")
 }
@@ -166,10 +188,21 @@ func TestImportCAWithNoRequestId(t *testing.T) {
 		t.Fatalf("could not parse the requested CA: %s", err)
 	}
 
+	profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Name:     "TestProfile",
+			Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not create issuance profile: %s", err)
+	}
+
 	rcert := models.X509Certificate(*requestedCertificate)
 	importedCertificate, err := serverTest.CA.Service.ImportCA(context.Background(), services.ImportCAInput{
 		CACertificate: &rcert,
 		CAType:        models.CertificateTypeRequested,
+		ProfileID:     profile.ID,
 	})
 	if err != nil {
 		t.Fatalf("could not import the requested CA: %s", err)
@@ -215,11 +248,22 @@ func TestRequestCADoubleImportError(t *testing.T) {
 		t.Fatalf("could not parse the requested CA: %s", err)
 	}
 
+	profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Name:     "TestProfile",
+			Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not create issuance profile: %s", err)
+	}
+
 	rcert := models.X509Certificate(*requestedCertificate)
 	importedCertificate, err := serverTest.CA.Service.ImportCA(context.Background(), services.ImportCAInput{
 		CACertificate: &rcert,
 		CARequestID:   requestedCACSR.ID,
 		CAType:        models.CertificateTypeRequested,
+		ProfileID:     profile.ID,
 	})
 	if err != nil {
 		t.Fatalf("could not import the requested CA: %s", err)
@@ -232,6 +276,7 @@ func TestRequestCADoubleImportError(t *testing.T) {
 		CACertificate: &rcert,
 		CARequestID:   requestedCACSR.ID,
 		CAType:        models.CertificateTypeRequested,
+		ProfileID:     profile.ID,
 	})
 
 	assert.EqualError(t, err, "CA Request is not pending")
@@ -270,11 +315,22 @@ func TestImportNonCACertError(t *testing.T) {
 		t.Fatalf("could not parse the requested CA: %s", err)
 	}
 
+	profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Name:     "TestProfile",
+			Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not create issuance profile: %s", err)
+	}
+
 	rcert := models.X509Certificate(*requestedCertificate)
 	_, err = serverTest.CA.Service.ImportCA(context.Background(), services.ImportCAInput{
 		CACertificate: &rcert,
 		CARequestID:   requestedCACSR.ID,
 		CAType:        models.CertificateTypeRequested,
+		ProfileID:     profile.ID,
 	})
 
 	assert.EqualError(t, err, "CA certificate and CSR are not compatible - IsCA")
@@ -323,11 +379,22 @@ func TestImportUnexpectedCSRError(t *testing.T) {
 		t.Fatalf("could not parse the requested CA: %s", err)
 	}
 
+	profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Name:     "TestProfile",
+			Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not create issuance profile: %s", err)
+	}
+
 	rcert := models.X509Certificate(*requestedCertificate)
 	_, err = serverTest.CA.Service.ImportCA(context.Background(), services.ImportCAInput{
 		CACertificate: &rcert,
 		CARequestID:   requestedCACSR.ID,
 		CAType:        models.CertificateTypeRequested,
+		ProfileID:     profile.ID,
 	})
 
 	assert.EqualError(t, err, "CA certificate and CSR are not compatible - Public Key")
@@ -346,11 +413,21 @@ func TestImportNonExistentRequest(t *testing.T) {
 	}
 
 	ec := models.X509Certificate(*externalCACert)
+	profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Name:     "TestProfile",
+			Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not create issuance profile: %s", err)
+	}
 
 	_, err = serverTest.CA.Service.ImportCA(context.Background(), services.ImportCAInput{
 		CACertificate: &ec,
 		CARequestID:   "unknown",
 		CAType:        models.CertificateTypeRequested,
+		ProfileID:     profile.ID,
 	})
 
 	assert.EqualError(t, err, "CA Request not found")

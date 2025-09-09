@@ -26,11 +26,6 @@ func (m *MockCAService) UpdateCertificateMetadata(ctx context.Context, input ser
 	return args.Get(0).(*models.Certificate), args.Error(1)
 }
 
-func (m *MockCAService) UpdateCAIssuanceExpiration(ctx context.Context, input services.UpdateCAIssuanceExpirationInput) (*models.CACertificate, error) {
-	args := m.Called(ctx, input)
-	return args.Get(0).(*models.CACertificate), args.Error(1)
-}
-
 func (m *MockCAService) GetStats(ctx context.Context) (*models.CAStats, error) {
 	args := m.Called(ctx)
 	return args.Get(0).(*models.CAStats), args.Error(1)
@@ -74,6 +69,10 @@ func (m *MockCAService) GetCAsByCommonName(ctx context.Context, input services.G
 
 }
 func (m *MockCAService) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (*models.CACertificate, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.CACertificate), args.Error(1)
+}
+func (m *MockCAService) UpdateCAProfile(ctx context.Context, input services.UpdateCAProfileInput) (*models.CACertificate, error) {
 	args := m.Called(ctx, input)
 	return args.Get(0).(*models.CACertificate), args.Error(1)
 }

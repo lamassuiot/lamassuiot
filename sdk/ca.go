@@ -81,14 +81,14 @@ func (cli *httpCAClient) GetCAsByCommonName(ctx context.Context, input services.
 
 func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas", resources.CreateCABody{
-		ID:                 input.ID,
-		Subject:            input.Subject,
-		KeyMetadata:        input.KeyMetadata,
-		IssuanceExpiration: input.IssuanceExpiration,
-		CAExpiration:       input.CAExpiration,
-		EngineID:           input.EngineID,
-		ParentID:           input.ParentID,
-		Metadata:           input.Metadata,
+		ID:           input.ID,
+		Subject:      input.Subject,
+		KeyMetadata:  input.KeyMetadata,
+		ProfileID:    input.ProfileID,
+		CAExpiration: input.CAExpiration,
+		EngineID:     input.EngineID,
+		ParentID:     input.ParentID,
+		Metadata:     input.Metadata,
 	}, map[int][]error{
 		400: {
 			errs.ErrCAIncompatibleValidity,
@@ -154,13 +154,13 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 	}
 
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/import", resources.ImportCABody{
-		ID:                 input.ID,
-		CAType:             models.CertificateType(input.CAType),
-		IssuanceExpiration: input.IssuanceExpiration,
-		CACertificate:      input.CACertificate,
-		CAChain:            input.CAChain,
-		CAPrivateKey:       privKey,
-		EngineID:           input.EngineID,
+		ID:            input.ID,
+		CAType:        models.CertificateType(input.CAType),
+		ProfileID:     input.ProfileID,
+		CACertificate: input.CACertificate,
+		CAChain:       input.CAChain,
+		CAPrivateKey:  privKey,
+		EngineID:      input.EngineID,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err
@@ -217,10 +217,13 @@ func (cli *httpCAClient) UpdateCAStatus(ctx context.Context, input services.Upda
 	return response, nil
 }
 
-func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (*models.CACertificate, error) {
-	response, err := Put[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/metadata", resources.UpdateCAMetadataBody{
-		Patches: input.Patches,
+func (cli *httpCAClient) UpdateCAProfile(ctx context.Context, input services.UpdateCAProfileInput) (*models.CACertificate, error) {
+	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/profile", resources.UpdateCAProfileBody{
+		ProfileID: input.ProfileID,
 	}, map[int][]error{
+		400: {
+			errs.ErrCertificateStatusTransitionNotAllowed,
+		},
 		404: {
 			errs.ErrCANotFound,
 		},
@@ -228,13 +231,12 @@ func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.Up
 	if err != nil {
 		return nil, err
 	}
-
 	return response, nil
 }
 
-func (cli *httpCAClient) UpdateCAIssuanceExpiration(ctx context.Context, input services.UpdateCAIssuanceExpirationInput) (*models.CACertificate, error) {
-	response, err := Put[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/issuance-expiration", resources.UpdateCAIssuanceExpirationBody{
-		Validity: input.IssuanceExpiration,
+func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (*models.CACertificate, error) {
+	response, err := Put[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/metadata", resources.UpdateCAMetadataBody{
+		Patches: input.Patches,
 	}, map[int][]error{
 		404: {
 			errs.ErrCANotFound,

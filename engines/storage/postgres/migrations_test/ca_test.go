@@ -318,6 +318,29 @@ func MigrationTest_CA_20250226114600_ca_add_kids(t *testing.T, logger *logrus.En
 	assert.Equal(t, "ExampleCity", result["issuer_locality"])
 }
 
+func MigrationTest_CA_20250702124800_create_issuance_profile(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, CADBName)
+
+}
+
+func MigrationTest_CA_20250704101200_add_version_schema(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	ApplyMigration(t, logger, con, CADBName)
+}
+
+func MigrationTest_CA_20250908074250_add_profile_id(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	con.Exec(`INSERT INTO public.certificates 
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, type, engine_id, key_id, is_ca) 
+		VALUES ('37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79', '{}', '37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79', '8b600c60-9eb3-4251-b6ce-c92d1beccc63', 0, 'ACTIVE', 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURsRENDQW55Z0F3SUJBZ0lVTjJYTmh2Qy94Y2diZnhENEZVNU9OWUZNMkhrd0RRWUpLb1pJaHZjTkFRRUwKQlFBd1hURUxNQWtHQTFVRUJoTUNWVk14RlRBVEJnTlZCQWdNREVWNFlXMXdiR1ZUZEdGMFpURVVNQklHQTFVRQpCd3dMUlhoaGJYQnNaVU5wZEhreER6QU5CZ05WQkFvTUJsSnZiM1JEUVRFUU1BNEdBMVVFQXd3SFVtOXZkQ0JEClFUQWVGdzB5TlRBeU1qVXhNelUwTVRoYUZ3MHpOVEF5TWpNeE16VTBNVGhhTUVZeEN6QUpCZ05WQkFZVEFsVlQKTVJVd0V3WURWUVFJREF4RmVHRnRjR3hsVTNSaGRHVXhEekFOQmdOVkJBb01CbEp2YjNSRFFURVBNQTBHQTFVRQpBd3dHVTNWaUlFTkJNSUlCSWpBTkJna3Foa2lHOXcwQkFRRUZBQU9DQVE4QU1JSUJDZ0tDQVFFQTJIay91Ri9VClJNdHAzengyYmltUllvSEFxMXJ6OUgyL1F3S2d0RTRkTkk1R01ISUh4ZWVJZk9sYnh4T2hyMVBhTUtTb3hJdjEKM1NqMWFycEloUUVGc2V0NDJ0WU9FS2dUTzB4NUtRSFFSbnNYOUY1dXVjNURyajZFNFUxcUF2MGtxQlMvN2NobQpqc3pwc1oyK1ExOWordjNHM0NNa2twT09ZWmFUQW8wWlBFdFJCYU5HM3hYMlg0akdidmlNMWFDeDZ2MmNDM0s4CnJmYXVoNzR4T3lLaldNME1PVm5kS2N0VUFzNW9VckZjTkM2c3BwOGtqQk1XcFhjQ3RjWStZTm5ISDVhRDcvTEIKakdaSmxaTkROS0NDdFIwR050d2xxUHZiQ3pUYnV2UHZqVkY2aFdQaEIwZFdYUDVqRTFuc05BUkxnWW51RTJXTQpoQWx5cU92bWdlaGZVUUlEQVFBQm8yTXdZVEFQQmdOVkhSTUJBZjhFQlRBREFRSC9NQTRHQTFVZER3RUIvd1FFCkF3SUJCakFkQmdOVkhRNEVGZ1FVSHV1UElDL2tVWVA2MHlzSGlMMTl2NTFyMUtFd0h3WURWUjBqQkJnd0ZvQVUKNUZpMVFQOFc5KzRSaS8wdFZFNENhaVg1cHY0d0RRWUpLb1pJaHZjTkFRRUxCUUFEZ2dFQkFJdTFsQVp0ZVUrbgorNmwvd3VFb2V2K0FkOEQzVHZIREVqeHlIbll0RTRNZitITGsyU2d1WXZYSkpSRkZjOXVzRzNGbW1CMGhUUG14CktEck1rOVFPYmdIc1pIY05hZ3doQjZVcm4rRUtyai9ZVW5JSkUyVHJYL2JsRllvTUJQYXhiV3J3cm1GQWpLc2wKOHV1Sm9OWTY0RzZzT016SEJwZUVMaGRaVS94Z0Rzck5rK2RHeVZ0WUFqbWZrc1FMT1NnRjE0WFpuWEw5K3dQYwpqU200bjhXNVlRMHpzS0FaNVRtQjBWcFRDa3ZWUy9nR0RIb1pmZE8zOENTcnk0ejhuTTNXNHpka212bzc2RzhVCjJmdkMxMUZTWHh6UlZRcmJ4ZmFPTUVjZHpUMHUxd2NzUVF6TTQrdjBOanQzdlZ5K2dSbGptK0dtdDBEYzkvTGIKTzN2MkFmbWhQaVU9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K', 'RSA', 2048, 'MEDIUM', 'Sub CA', 'RootCA', '', 'US', 'ExampleState', '', '2025-02-25 13:54:18+00', '2035-02-23 13:54:18+00', '0001-01-01 00:00:00+00', 'Unspecified', 'EXTERNAL', '', '1E:EB:8F:20:2F:E4:51:83:FA:D3:2B:07:88:BD:7D:BF:9D:6B:D4:A1', true);
+	`)
+
+	con.Exec(`INSERT INTO ca_certificates
+		(serial_number, metadata, id, creation_ts, "level", validity_type, validity_time, validity_duration)
+		VALUES('37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79', '{}', '8b600c60-9eb3-4251-b6ce-c92d1beccc63', '2025-01-07 15:51:59.774', 0, 'Duration', '2025-11-03 15:51:41.000', '14w2d');
+	`)
+
+	ApplyMigration(t, logger, con, CADBName)
+}
+
 func TestMigrations(t *testing.T) {
 	logger := helpers.SetupLogger(config.Trace, "test", "test")
 	cleanup, con := RunDB(t, logger, CADBName)
@@ -365,5 +388,20 @@ func TestMigrations(t *testing.T) {
 	MigrationTest_CA_20250226114600_ca_add_kids(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20250226114600_ca_add_kids")
+	}
+
+	MigrationTest_CA_20250704101200_add_version_schema(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250704101200_add_version_schema")
+	}
+
+	MigrationTest_CA_20250702124800_create_issuance_profile(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250702124800_create_issuance_profile")
+	}
+
+	MigrationTest_CA_20250908074250_add_profile_id(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250908074250_add_profile_id")
 	}
 }

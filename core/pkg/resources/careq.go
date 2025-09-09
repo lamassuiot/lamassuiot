@@ -36,14 +36,14 @@ var IssuanceProfileFiltrableFields = map[string]FilterFieldType{
 }
 
 type CreateCABody struct {
-	ID                 string             `json:"id"`
-	ParentID           string             `json:"parent_id"`
-	Subject            models.Subject     `json:"subject"`
-	KeyMetadata        models.KeyMetadata `json:"key_metadata"`
-	CAExpiration       models.Validity    `json:"ca_expiration"`
-	IssuanceExpiration models.Validity    `json:"issuance_expiration"`
-	EngineID           string             `json:"engine_id"`
-	Metadata           map[string]any     `json:"metadata"`
+	ID           string             `json:"id"`
+	ParentID     string             `json:"parent_id"`
+	Subject      models.Subject     `json:"subject"`
+	KeyMetadata  models.KeyMetadata `json:"key_metadata"`
+	CAExpiration models.Validity    `json:"ca_expiration"`
+	ProfileID    string             `json:"profile_id"`
+	EngineID     string             `json:"engine_id"`
+	Metadata     map[string]any     `json:"metadata"`
 }
 
 type RequestCABody struct {
@@ -55,22 +55,19 @@ type RequestCABody struct {
 }
 
 type ImportCABody struct {
-	ID                 string                    `json:"id"`
-	EngineID           string                    `json:"engine_id"`
-	ParentID           string                    `json:"parent_id"`
-	CARequestID        string                    `json:"ca_request_id"`
-	CAPrivateKey       string                    `json:"private_key"` //b64 from PEM
-	CACertificate      *models.X509Certificate   `json:"ca"`
-	CAChain            []*models.X509Certificate `json:"ca_chain"`
-	CAType             models.CertificateType    `json:"ca_type"`
-	IssuanceExpiration models.Validity           `json:"issuance_expiration"`
+	ID            string                    `json:"id"`
+	EngineID      string                    `json:"engine_id"`
+	ParentID      string                    `json:"parent_id"`
+	CARequestID   string                    `json:"ca_request_id"`
+	CAPrivateKey  string                    `json:"private_key"` //b64 from PEM
+	CACertificate *models.X509Certificate   `json:"ca"`
+	CAChain       []*models.X509Certificate `json:"ca_chain"`
+	CAType        models.CertificateType    `json:"ca_type"`
+	ProfileID     string                    `json:"profile_id"`
 }
 
 type UpdateCAMetadataBody struct {
 	Patches []models.PatchOperation `json:"patches"`
-}
-type UpdateCAIssuanceExpirationBody struct {
-	models.Validity
 }
 
 type SignCertificateBody struct {
@@ -95,6 +92,10 @@ type SignatureVerifyBody struct {
 type UpdateCertificateStatusBody struct {
 	NewStatus        models.CertificateStatus `json:"status"`
 	RevocationReason models.RevocationReason  `json:"revocation_reason"`
+}
+
+type UpdateCAProfileBody struct {
+	ProfileID string `json:"profile_id" validate:"required"`
 }
 
 type UpdateCertificateMetadataBody struct {

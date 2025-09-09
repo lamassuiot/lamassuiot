@@ -106,15 +106,22 @@ func RunUseCase1(input UseCase1Input) error {
 	//2. Import CA1 into lamassu (priv key + crt) (default CE) (issuance expiration: 5m)
 	log.Infof("2. Import CA1 into lamassu (priv key + crt) (default CE) (issuance expiration: 5m)")
 	ca2Iss := models.TimeDuration(time.Minute * 5)
-	ca1, err := caClient.ImportCA(context.Background(), services.ImportCAInput{
-		CAType: models.CertificateTypeImportedWithKey,
-		IssuanceExpiration: models.Validity{
-			Type:     models.Duration,
-			Duration: (models.TimeDuration)(ca2Iss),
+	profile, err := caClient.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Name:     "MyProfile",
+			Validity: models.Validity{Type: models.Duration, Duration: ca2Iss},
 		},
+	})
+	if err != nil {
+		return err
+	}
+
+	ca1, err := caClient.ImportCA(context.Background(), services.ImportCAInput{
+		CAType:        models.CertificateTypeImportedWithKey,
 		CACertificate: (*models.X509Certificate)(cert1),
 		KeyType:       models.KeyType(x509.RSA),
 		CARSAKey:      key1.(*rsa.PrivateKey),
+		ProfileID:     profile.ID,
 	})
 	if err != nil {
 		return err
@@ -124,7 +131,6 @@ func RunUseCase1(input UseCase1Input) error {
 	log.Infof("3. Create CA2 in Lamassu (Try engine different from default CE. If not possible, use default CE) -> Key Value - V2")
 	engines, _ := caClient.GetCryptoEngineProvider(context.Background())
 	caDur2 := models.TimeDuration(time.Hour * 10)
-	caIss2 := models.TimeDuration(time.Minute * 5)
 
 	var engine *models.CryptoEngineProvider
 	for i := range engines {
@@ -135,11 +141,11 @@ func RunUseCase1(input UseCase1Input) error {
 	}
 
 	ca2, err := caClient.CreateCA(context.Background(), services.CreateCAInput{
-		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-		Subject:            models.Subject{CommonName: "CA1"},
-		CAExpiration:       models.Validity{Type: models.Duration, Duration: caDur2},
-		IssuanceExpiration: models.Validity{Type: models.Duration, Duration: caIss2},
-		EngineID:           engine.ID,
+		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+		Subject:      models.Subject{CommonName: "CA1"},
+		CAExpiration: models.Validity{Type: models.Duration, Duration: caDur2},
+		ProfileID:    profile.ID,
+		EngineID:     engine.ID,
 	})
 	if err != nil {
 		return err

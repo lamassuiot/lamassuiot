@@ -806,14 +806,9 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 		// Sign verification certificate CSR
 		lFunc.Debugf("signing validation csr with cn=%s", csr.Subject.CommonName)
 		singOutput, err := svc.CaSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-			CAID:        input.CACertificate.ID,
-			CertRequest: &csr,
-			IssuanceProfile: models.IssuanceProfile{
-				SignAsCA:        false,
-				Validity:        input.CACertificate.Validity,
-				HonorSubject:    true,
-				HonorExtensions: true,
-			},
+			CAID:              input.CACertificate.ID,
+			CertRequest:       &csr,
+			IssuanceProfileID: input.CACertificate.ProfileID,
 		})
 		if err != nil {
 			lFunc.Errorf("something went wrong while requesting sign certificate: %s", err)
