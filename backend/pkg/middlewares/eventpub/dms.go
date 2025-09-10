@@ -63,6 +63,9 @@ func (mw dmsEventPublisher) UpdateDMS(ctx context.Context, input services.Update
 }
 
 func (mw dmsEventPublisher) UpdateDMSMetadata(ctx context.Context, input services.UpdateDMSMetadataInput) (output *models.DMS, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateDMSMetadataKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("dms/%s", input.ID))
+
 	prev, err := mw.GetDMSByID(ctx, services.GetDMSByIDInput{
 		ID: input.ID,
 	})
@@ -72,7 +75,7 @@ func (mw dmsEventPublisher) UpdateDMSMetadata(ctx context.Context, input service
 
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateDMSMetadataKey, models.UpdateModel[models.DMS]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.DMS]{
 				Updated:  *output,
 				Previous: *prev,
 			})
@@ -82,9 +85,12 @@ func (mw dmsEventPublisher) UpdateDMSMetadata(ctx context.Context, input service
 }
 
 func (mw dmsEventPublisher) DeleteDMS(ctx context.Context, input services.DeleteDMSInput) (err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventDeleteDMSKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("dms/%s", input.ID))
+
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventDeleteDMSKey, input)
+			mw.eventMWPub.PublishCloudEvent(ctx, input)
 		}
 	}()
 	return mw.next.DeleteDMS(ctx, input)

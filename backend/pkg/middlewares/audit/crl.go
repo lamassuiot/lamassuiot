@@ -50,3 +50,11 @@ func (mw *CRLAuditEventPublisher) CalculateCRL(ctx context.Context, input servic
 
 	return mw.next.CalculateCRL(ctx, input)
 }
+
+func (mw *CRLAuditEventPublisher) InitCRLRole(ctx context.Context, caSKI string) (output *models.VARole, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventInitCRLRole, caSKI, err, output)
+	}()
+
+	return mw.next.InitCRLRole(ctx, caSKI)
+}

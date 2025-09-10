@@ -88,7 +88,7 @@ func dmsWithoutErrorsSingleResult[E any](t *testing.T, method string, input E, e
 		assert.Nil(t, r[0].Interface())
 	}
 
-	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockDMSManagerService) {
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDMSManagerService) {
 		mockCAService.AssertExpectations(t)
 		mockEventMWPub.AssertExpectations(t)
 	}
@@ -110,7 +110,7 @@ func dmsWithErrorsSingleResult[E any](t *testing.T, method string, input E, even
 		assert.NotNil(t, r[0].Interface())
 	}
 
-	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockDMSManagerService) {
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDMSManagerService) {
 		mockCAService.AssertExpectations(t)
 		mockEventMWPub.AssertNotCalled(t, "PublishCloudEvent")
 	}

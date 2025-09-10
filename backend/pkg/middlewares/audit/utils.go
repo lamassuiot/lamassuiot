@@ -27,11 +27,11 @@ func NewAuditPublisher(publisher eventpub.ICloudEventPublisher) *AuditPublisher 
 
 func (audit *AuditPublisher) HandleServiceOutputAndPublishAuditRecord(ctx context.Context, eventType models.EventType, input interface{}, err error, output interface{}) {
 	var auditBody AuditBody
-	var newEventType = string(eventType)
+	var auditEventType = fmt.Sprintf("adudit.%s", eventType)
 
 	if err != nil {
-		newEventType = fmt.Sprintf("%s.error", eventType)
-		ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, newEventType)
+		auditEventType = fmt.Sprintf("%s.error", eventType)
+		ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, auditEventType)
 
 		auditBody = AuditBody{
 			Input:    input,
@@ -39,6 +39,7 @@ func (audit *AuditPublisher) HandleServiceOutputAndPublishAuditRecord(ctx contex
 			Output:   err.Error(),
 		}
 	} else {
+		ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, auditEventType)
 		auditBody = AuditBody{
 			Input:    input,
 			HasError: false,

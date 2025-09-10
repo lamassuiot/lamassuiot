@@ -28,6 +28,10 @@ const (
 	EventSignatureSignKey       EventType = "ca.sign.signature"
 	EventDeleteCAKey            EventType = "ca.delete"
 
+	EventCreateIssuanceProfileKey EventType = "profile.issuance.create"
+	EventUpdateIssuanceProfileKey EventType = "profile.issuance.update"
+	EventDeleteIssuanceProfileKey EventType = "profile.issuance.delete"
+
 	EventCreateCertificateKey         EventType = "certificate.create"
 	EventImportCertificateKey         EventType = "certificate.import"
 	EventUpdateCertificateStatusKey   EventType = "certificate.status.update"
@@ -47,7 +51,8 @@ const (
 	EventUpdateDeviceMetadataKey EventType = "device.metadata.update"
 
 	EventUpdateVARole EventType = "va.role.update"
-	EventCreateCRL    EventType = "va.crl.create"
+	EventInitCRLRole  EventType = "va.role.crl.init"
+	EventCreateCRL    EventType = "va.role.crl.create"
 
 	EventAnyKey EventType = "any"
 )

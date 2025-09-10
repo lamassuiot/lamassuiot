@@ -106,6 +106,9 @@ func (mw CAEventPublisher) UpdateCAStatus(ctx context.Context, input services.Up
 }
 
 func (mw CAEventPublisher) UpdateCAProfile(ctx context.Context, input services.UpdateCAProfileInput) (output *models.CACertificate, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateCAProfileKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", input.CAID))
+
 	prev, err := mw.GetCAByID(ctx, services.GetCAByIDInput{
 		CAID: input.CAID,
 	})
@@ -115,12 +118,13 @@ func (mw CAEventPublisher) UpdateCAProfile(ctx context.Context, input services.U
 
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateCAProfileKey, models.UpdateModel[models.CACertificate]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.CACertificate]{
 				Updated:  *output,
 				Previous: *prev,
 			})
 		}
 	}()
+
 	return mw.Next.UpdateCAProfile(ctx, input)
 }
 
@@ -298,14 +302,50 @@ func (mw CAEventPublisher) GetIssuanceProfileByID(ctx context.Context, input ser
 	return mw.Next.GetIssuanceProfileByID(ctx, input)
 }
 
-func (mw CAEventPublisher) CreateIssuanceProfile(ctx context.Context, input services.CreateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+func (mw CAEventPublisher) CreateIssuanceProfile(ctx context.Context, input services.CreateIssuanceProfileInput) (output *models.IssuanceProfile, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateIssuanceProfileKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, "profile/unknown")
+
+	defer func() {
+		ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("profile/%s", output.ID))
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, output)
+		}
+	}()
 	return mw.Next.CreateIssuanceProfile(ctx, input)
+
 }
 
-func (mw CAEventPublisher) UpdateIssuanceProfile(ctx context.Context, input services.UpdateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+func (mw CAEventPublisher) UpdateIssuanceProfile(ctx context.Context, input services.UpdateIssuanceProfileInput) (output *models.IssuanceProfile, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateIssuanceProfileKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("profile/%s", input.Profile.ID))
+
+	prev, err := mw.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+		ProfileID: input.Profile.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("mw error: could not get IssuanceProfile %s: %w", input.Profile.ID, err)
+	}
+
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.IssuanceProfile]{
+				Previous: *prev,
+				Updated:  *output,
+			})
+		}
+	}()
 	return mw.Next.UpdateIssuanceProfile(ctx, input)
+
 }
 
-func (mw CAEventPublisher) DeleteIssuanceProfile(ctx context.Context, input services.DeleteIssuanceProfileInput) error {
+func (mw CAEventPublisher) DeleteIssuanceProfile(ctx context.Context, input services.DeleteIssuanceProfileInput) (err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventDeleteIssuanceProfileKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("profile/%s", input.ProfileID))
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, input)
+		}
+	}()
 	return mw.Next.DeleteIssuanceProfile(ctx, input)
 }

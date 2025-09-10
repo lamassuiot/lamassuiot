@@ -89,3 +89,19 @@ func (mw DmsAuditEventPublisher) BindIdentityToDevice(ctx context.Context, input
 
 	return mw.next.BindIdentityToDevice(ctx, input)
 }
+
+func (mw DmsAuditEventPublisher) UpdateDMSMetadata(ctx context.Context, input services.UpdateDMSMetadataInput) (output *models.DMS, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventUpdateDMSMetadataKey, input, err, output)
+	}()
+
+	return mw.next.UpdateDMSMetadata(ctx, input)
+}
+
+func (mw DmsAuditEventPublisher) DeleteDMS(ctx context.Context, input services.DeleteDMSInput) (err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventDeleteDMSKey, input, err, nil)
+	}()
+
+	return mw.next.DeleteDMS(ctx, input)
+}

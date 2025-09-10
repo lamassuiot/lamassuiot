@@ -77,20 +77,20 @@ func (mw CAAuditEventPublisher) UpdateCAStatus(ctx context.Context, input servic
 	return mw.next.UpdateCAStatus(ctx, input)
 }
 
+func (mw CAAuditEventPublisher) UpdateCAProfile(ctx context.Context, input services.UpdateCAProfileInput) (output *models.CACertificate, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventUpdateCAProfileKey, input, err, output)
+	}()
+
+	return mw.next.UpdateCAProfile(ctx, input)
+}
+
 func (mw CAAuditEventPublisher) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (output *models.CACertificate, err error) {
 	defer func() {
 		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventUpdateCAMetadataKey, input, err, output)
 	}()
 
 	return mw.next.UpdateCAMetadata(ctx, input)
-}
-
-func (mw CAAuditEventPublisher) UpdateCAIssuanceExpiration(ctx context.Context, input services.UpdateCAIssuanceExpirationInput) (output *models.CACertificate, err error) {
-	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventUpdateCAIssuanceExpirationKey, input, err, output)
-	}()
-
-	return mw.next.UpdateCAIssuanceExpiration(ctx, input)
 }
 
 func (mw CAAuditEventPublisher) DeleteCA(ctx context.Context, input services.DeleteCAInput) (err error) {
@@ -186,4 +186,36 @@ func (mw CAAuditEventPublisher) DeleteCARequestByID(ctx context.Context, input s
 
 func (mw CAAuditEventPublisher) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
 	return mw.next.GetCARequests(ctx, input)
+}
+
+func (mw CAAuditEventPublisher) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {
+	return mw.next.GetIssuanceProfiles(ctx, input)
+}
+
+func (mw CAAuditEventPublisher) GetIssuanceProfileByID(ctx context.Context, input services.GetIssuanceProfileByIDInput) (*models.IssuanceProfile, error) {
+	return mw.next.GetIssuanceProfileByID(ctx, input)
+}
+
+func (mw CAAuditEventPublisher) CreateIssuanceProfile(ctx context.Context, input services.CreateIssuanceProfileInput) (output *models.IssuanceProfile, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventCreateIssuanceProfileKey, input, err, output)
+	}()
+
+	return mw.next.CreateIssuanceProfile(ctx, input)
+}
+
+func (mw CAAuditEventPublisher) UpdateIssuanceProfile(ctx context.Context, input services.UpdateIssuanceProfileInput) (output *models.IssuanceProfile, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventUpdateIssuanceProfileKey, input, err, output)
+	}()
+
+	return mw.next.UpdateIssuanceProfile(ctx, input)
+}
+
+func (mw CAAuditEventPublisher) DeleteIssuanceProfile(ctx context.Context, input services.DeleteIssuanceProfileInput) (err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventDeleteIssuanceProfileKey, input, err, nil)
+	}()
+
+	return mw.next.DeleteIssuanceProfile(ctx, input)
 }
