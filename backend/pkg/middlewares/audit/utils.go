@@ -27,7 +27,7 @@ func NewAuditPublisher(publisher eventpub.ICloudEventPublisher) *AuditPublisher 
 
 func (audit *AuditPublisher) HandleServiceOutputAndPublishAuditRecord(ctx context.Context, eventType models.EventType, input interface{}, err error, output interface{}) {
 	var auditBody AuditBody
-	var auditEventType = fmt.Sprintf("adudit.%s", eventType)
+	var auditEventType = fmt.Sprintf("audit.%s", eventType)
 
 	if err != nil {
 		auditEventType = fmt.Sprintf("%s.error", eventType)
