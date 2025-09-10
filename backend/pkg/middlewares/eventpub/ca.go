@@ -188,7 +188,11 @@ func (mw CAEventPublisher) CreateCertificate(ctx context.Context, input services
 
 func (mw CAEventPublisher) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (output *models.Certificate, err error) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventImportCertificateKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("certificate/%s", input.Certificate.SerialNumber))
+	serialNumber := ""
+	if input.Certificate != nil && input.Certificate.SerialNumber != nil {
+		serialNumber = input.Certificate.SerialNumber.String()
+	}
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("certificate/%s", serialNumber))
 
 	defer func() {
 		if err == nil {

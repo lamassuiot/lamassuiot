@@ -31,7 +31,7 @@ func eventChecker(event models.EventType, expectations []func(*svcmock.MockCASer
 		expectation(mockCAService)
 	}
 
-	mockEventMWPub.On("PublishCloudEvent", context.Background(), event, mock.Anything)
+	mockEventMWPub.On("PublishCloudEvent", mock.Anything, mock.Anything)
 	operation(caEventPublisher)
 
 	assertions(mockEventMWPub, mockCAService)
@@ -40,7 +40,7 @@ func eventChecker(event models.EventType, expectations []func(*svcmock.MockCASer
 func withoutErrors[E any, O any](t *testing.T, method string, input E, event models.EventType, expectedOutput O, extra ...func(*svcmock.MockCAService)) {
 	expectations := []func(*svcmock.MockCAService){
 		func(mockCAService *svcmock.MockCAService) {
-			mockCAService.On(method, context.Background(), mock.Anything).Return(expectedOutput, nil)
+			mockCAService.On(method, mock.Anything, mock.Anything).Return(expectedOutput, nil)
 		},
 	}
 	expectations = append(expectations, extra...)
@@ -61,7 +61,7 @@ func withoutErrors[E any, O any](t *testing.T, method string, input E, event mod
 func withErrors[E any, O any](t *testing.T, method string, input E, event models.EventType, expectedOutput O, extra ...func(*svcmock.MockCAService)) {
 	expectations := []func(*svcmock.MockCAService){
 		func(mockCAService *svcmock.MockCAService) {
-			mockCAService.On(method, context.Background(), mock.Anything).Return(expectedOutput, errors.New("some error"))
+			mockCAService.On(method, mock.Anything, mock.Anything).Return(expectedOutput, errors.New("some error"))
 		},
 	}
 	expectations = append(expectations, extra...)
@@ -83,7 +83,7 @@ func withErrors[E any, O any](t *testing.T, method string, input E, event models
 func withoutErrorsSingleResult[E any](t *testing.T, method string, input E, event models.EventType, extra ...func(*svcmock.MockCAService)) {
 	expectations := []func(*svcmock.MockCAService){
 		func(mockCAService *svcmock.MockCAService) {
-			mockCAService.On(method, context.Background(), mock.Anything).Return(nil)
+			mockCAService.On(method, mock.Anything, mock.Anything).Return(nil)
 		},
 	}
 	expectations = append(expectations, extra...)
@@ -105,7 +105,7 @@ func withoutErrorsSingleResult[E any](t *testing.T, method string, input E, even
 func withErrorsSingleResult[E any](t *testing.T, method string, input E, event models.EventType, extra ...func(*svcmock.MockCAService)) {
 	expectations := []func(*svcmock.MockCAService){
 		func(mockCAService *svcmock.MockCAService) {
-			mockCAService.On(method, context.Background(), mock.Anything).Return(errors.New("some error"))
+			mockCAService.On(method, mock.Anything, mock.Anything).Return(errors.New("some error"))
 		},
 	}
 	expectations = append(expectations, extra...)
@@ -125,7 +125,6 @@ func withErrorsSingleResult[E any](t *testing.T, method string, input E, event m
 }
 
 func TestCAEventPublisher(t *testing.T) {
-
 	var testcases = []struct {
 		name string
 		test func(t *testing.T)
@@ -207,7 +206,7 @@ func TestCAEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				withErrors(t, "UpdateCAStatus", services.UpdateCAStatusInput{}, models.EventUpdateCAStatusKey, &models.CACertificate{},
 					func(mockCAService *svcmock.MockCAService) {
-						mockCAService.On("GetCAByID", context.Background(), mock.Anything).Return(&models.CACertificate{}, nil)
+						mockCAService.On("GetCAByID", mock.Anything, mock.Anything).Return(&models.CACertificate{}, nil)
 					})
 			},
 		},
@@ -216,7 +215,7 @@ func TestCAEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				withoutErrors(t, "UpdateCAStatus", services.UpdateCAStatusInput{}, models.EventUpdateCAStatusKey, &models.CACertificate{},
 					func(mockCAService *svcmock.MockCAService) {
-						mockCAService.On("GetCAByID", context.Background(), mock.Anything).Return(&models.CACertificate{}, nil)
+						mockCAService.On("GetCAByID", mock.Anything, mock.Anything).Return(&models.CACertificate{}, nil)
 					})
 			},
 		},
@@ -225,7 +224,7 @@ func TestCAEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				withErrors(t, "UpdateCAMetadata", services.UpdateCAMetadataInput{}, models.EventUpdateCAMetadataKey, &models.CACertificate{},
 					func(mockCAService *svcmock.MockCAService) {
-						mockCAService.On("GetCAByID", context.Background(), mock.Anything).Return(&models.CACertificate{}, nil)
+						mockCAService.On("GetCAByID", mock.Anything, mock.Anything).Return(&models.CACertificate{}, nil)
 					})
 			},
 		},
@@ -234,7 +233,7 @@ func TestCAEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				withoutErrors(t, "UpdateCAMetadata", services.UpdateCAMetadataInput{}, models.EventUpdateCAMetadataKey, &models.CACertificate{},
 					func(mockCAService *svcmock.MockCAService) {
-						mockCAService.On("GetCAByID", context.Background(), mock.Anything).Return(&models.CACertificate{}, nil)
+						mockCAService.On("GetCAByID", mock.Anything, mock.Anything).Return(&models.CACertificate{}, nil)
 					})
 			},
 		},
@@ -243,7 +242,7 @@ func TestCAEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				withErrors(t, "UpdateCertificateStatus", services.UpdateCertificateStatusInput{}, models.EventUpdateCertificateStatusKey, &models.Certificate{},
 					func(mockCAService *svcmock.MockCAService) {
-						mockCAService.On("GetCertificateBySerialNumber", context.Background(), mock.Anything).Return(&models.Certificate{}, nil)
+						mockCAService.On("GetCertificateBySerialNumber", mock.Anything, mock.Anything).Return(&models.Certificate{}, nil)
 					})
 			},
 		},
@@ -252,7 +251,7 @@ func TestCAEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				withoutErrors(t, "UpdateCertificateStatus", services.UpdateCertificateStatusInput{}, models.EventUpdateCertificateStatusKey, &models.Certificate{},
 					func(mockCAService *svcmock.MockCAService) {
-						mockCAService.On("GetCertificateBySerialNumber", context.Background(), mock.Anything).Return(&models.Certificate{}, nil)
+						mockCAService.On("GetCertificateBySerialNumber", mock.Anything, mock.Anything).Return(&models.Certificate{}, nil)
 					})
 			},
 		},
@@ -261,7 +260,7 @@ func TestCAEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				withErrors(t, "UpdateCertificateMetadata", services.UpdateCertificateMetadataInput{}, models.EventUpdateCertificateMetadataKey, &models.Certificate{},
 					func(mockCAService *svcmock.MockCAService) {
-						mockCAService.On("GetCertificateBySerialNumber", context.Background(), mock.Anything).Return(&models.Certificate{}, nil)
+						mockCAService.On("GetCertificateBySerialNumber", mock.Anything, mock.Anything).Return(&models.Certificate{}, nil)
 					})
 			},
 		},
@@ -270,7 +269,7 @@ func TestCAEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				withoutErrors(t, "UpdateCertificateMetadata", services.UpdateCertificateMetadataInput{}, models.EventUpdateCertificateMetadataKey, &models.Certificate{},
 					func(mockCAService *svcmock.MockCAService) {
-						mockCAService.On("GetCertificateBySerialNumber", context.Background(), mock.Anything).Return(&models.Certificate{}, nil)
+						mockCAService.On("GetCertificateBySerialNumber", mock.Anything, mock.Anything).Return(&models.Certificate{}, nil)
 					})
 			},
 		},
@@ -291,7 +290,7 @@ func TestCAEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				withErrors(t, "UpdateCAProfile", services.UpdateCAProfileInput{}, models.EventUpdateCAProfileKey, &models.CACertificate{},
 					func(mockCAService *svcmock.MockCAService) {
-						mockCAService.On("GetCAByID", context.Background(), mock.Anything).Return(&models.CACertificate{}, nil)
+						mockCAService.On("GetCAByID", mock.Anything, mock.Anything).Return(&models.CACertificate{}, nil)
 					})
 			},
 		},
@@ -300,7 +299,7 @@ func TestCAEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				withoutErrors(t, "UpdateCAProfile", services.UpdateCAProfileInput{}, models.EventUpdateCAProfileKey, &models.CACertificate{},
 					func(mockCAService *svcmock.MockCAService) {
-						mockCAService.On("GetCAByID", context.Background(), mock.Anything).Return(&models.CACertificate{}, nil)
+						mockCAService.On("GetCAByID", mock.Anything, mock.Anything).Return(&models.CACertificate{}, nil)
 					})
 			},
 		},
