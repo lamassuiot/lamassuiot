@@ -365,3 +365,40 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 
 	return device, nil
 }
+
+func (svc DeviceManagerServiceBackend) DeleteDevice(ctx context.Context, input services.DeleteDeviceInput) error {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := deviceValidate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("struct validation error: %s", err)
+		return errs.ErrValidateBadRequest
+	}
+
+	id := input.ID
+	lFunc.Debugf("checking if device '%s' exists", id)
+	exists, device, err := svc.devicesStorage.SelectExists(ctx, id)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if device '%s' exists in storage engine: %s", id, err)
+		return err
+	} else if !exists {
+		lFunc.Errorf("device '%s' does not exist in storage engine", id)
+		return errs.ErrDeviceNotFound
+	}
+
+	// Only allow deletion of decommissioned devices
+	if device.Status != models.DeviceDecommissioned {
+		lFunc.Errorf("cannot delete device '%s': device must be decommissioned first. Current status: %s", id, device.Status)
+		return errs.ErrDeviceInvalidStatus
+	}
+
+	lFunc.Debugf("deleting device '%s'", id)
+	err = svc.devicesStorage.Delete(ctx, id)
+	if err != nil {
+		lFunc.Errorf("something went wrong while deleting device '%s' from storage engine: %s", id, err)
+		return err
+	}
+
+	lFunc.Infof("device '%s' deleted successfully", id)
+	return nil
+}

@@ -15,4 +15,5 @@ type DeviceManagerRepo interface {
 	SelectExists(ctx context.Context, ID string) (bool, *models.Device, error)
 	Update(ctx context.Context, device *models.Device) (*models.Device, error)
 	Insert(ctx context.Context, device *models.Device) (*models.Device, error)
+	Delete(ctx context.Context, ID string) error
 }
