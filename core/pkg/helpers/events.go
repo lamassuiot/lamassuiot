@@ -62,7 +62,6 @@ func BuildCloudEvent(ctx context.Context, payload interface{}) event.Event {
 
 func ParseCloudEvent(msg []byte) (*event.Event, error) {
 	var event cloudevents.Event
-	fmt.Println(string(msg))
 	err := json.Unmarshal(msg, &event)
 	if err != nil {
 		return nil, err
