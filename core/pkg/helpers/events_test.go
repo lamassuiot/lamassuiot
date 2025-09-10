@@ -13,7 +13,7 @@ import (
 
 func TestBuildCloudEvent(t *testing.T) {
 	eventType := "com.example.event"
-	eventSource := "/my/source"
+	eventSource := "my/source"
 	payload := map[string]string{"key": "value"}
 
 	ctx := context.Background()
@@ -23,7 +23,7 @@ func TestBuildCloudEvent(t *testing.T) {
 	event := BuildCloudEvent(ctx, payload)
 
 	assert.Equal(t, "1.0", event.SpecVersion())
-	assert.Equal(t, eventSource, event.Source())
+	assert.Equal(t, "source://lamassu.io/ctx/source/my/source", event.Source())
 	assert.Equal(t, eventType, event.Type())
 	assert.WithinDuration(t, time.Now(), event.Time(), time.Second)
 	assert.NotEmpty(t, event.ID())
