@@ -103,3 +103,19 @@ func (mw *deviceEventPublisher) UpdateDeviceMetadata(ctx context.Context, input 
 	}()
 	return mw.next.UpdateDeviceMetadata(ctx, input)
 }
+
+func (mw *deviceEventPublisher) DeleteDevice(ctx context.Context, input services.DeleteDeviceInput) (err error) {
+	deviceToDelete, err := mw.GetDeviceByID(ctx, services.GetDeviceByIDInput{
+		ID: input.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("mw error: could not get Device %s: %w", input.ID, err)
+	}
+
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(context.Background(), models.EventDeleteDeviceKey, deviceToDelete)
+		}
+	}()
+	return mw.next.DeleteDevice(ctx, input)
+}

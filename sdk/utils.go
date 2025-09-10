@@ -222,6 +222,33 @@ func Get[T any](ctx context.Context, client *http.Client, url string, queryParam
 	return ParseJSON[T](body)
 }
 
+func DeleteWithBody[T any](ctx context.Context, client *http.Client, url string, data any, knownErrors map[int][]error) (T, error) {
+	var m T
+	r, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+	if err != nil {
+		return m, err
+	}
+
+	// Important to set
+	r.Header.Add("Content-Type", "application/json")
+	res, err := client.Do(r)
+	if err != nil {
+		return m, err
+	}
+
+	body, err := io.ReadAll(res.Body)
+	res.Body.Close()
+	if err != nil {
+		return m, err
+	}
+
+	if res.StatusCode != 200 && res.StatusCode != 204 {
+		return m, nonOKResponseToError(res.StatusCode, body, knownErrors)
+	}
+
+	return ParseJSON[T](body)
+}
+
 func Delete(ctx context.Context, client *http.Client, url string, knownErrors map[int][]error) error {
 	r, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
 	if err != nil {

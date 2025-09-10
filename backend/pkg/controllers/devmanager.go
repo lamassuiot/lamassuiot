@@ -229,3 +229,35 @@ func (r *devManagerHttpRoutes) DecommissionDevice(ctx *gin.Context) {
 
 	ctx.JSON(200, dev)
 }
+
+func (r *devManagerHttpRoutes) DeleteDevice(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	err := r.svc.DeleteDevice(ctx, services.DeleteDeviceInput{
+		ID: params.ID,
+	})
+
+	if err != nil {
+		switch err {
+		case errs.ErrDeviceNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrDeviceInvalidStatus:
+			ctx.JSON(422, gin.H{"err": err.Error()}) // Unprocessable Entity for invalid state
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ctx.Status(204) // No Content for successful deletion
+}

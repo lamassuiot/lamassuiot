@@ -3,6 +3,7 @@ module github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3
 go 1.24.0
 
 require (
+	github.com/jakehl/goid v1.1.0
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/pressly/goose/v3 v3.23.1
 	github.com/sirupsen/logrus v1.9.3

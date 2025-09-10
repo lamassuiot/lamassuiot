@@ -61,3 +61,7 @@ func (db *PostgresDeviceManagerStore) Update(ctx context.Context, device *models
 func (db *PostgresDeviceManagerStore) Insert(ctx context.Context, device *models.Device) (*models.Device, error) {
 	return db.querier.Insert(ctx, device, device.ID)
 }
+
+func (db *PostgresDeviceManagerStore) Delete(ctx context.Context, ID string) error {
+	return db.querier.Delete(ctx, ID)
+}
