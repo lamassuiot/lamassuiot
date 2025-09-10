@@ -45,7 +45,7 @@ func BuildCloudEvent(ctx context.Context, payload interface{}) event.Event {
 	}
 
 	if eventAuthID, ok := ctx.Value(core.LamassuContextKeyAuthID).(string); ok && eventAuthID != "" {
-		event.SetExtension("authtid", eventAuthID)
+		event.SetExtension("authid", eventAuthID)
 	}
 
 	if eventAuthCtx, ok := ctx.Value(core.LamassuContextKeyAuthContext).(map[string]interface{}); ok && eventAuthCtx != nil {
