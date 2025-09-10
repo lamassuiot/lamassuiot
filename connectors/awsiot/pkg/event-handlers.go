@@ -21,37 +21,37 @@ func NewAWSIoTEventHandler(l *logrus.Entry, svc AWSCloudConnectorService) *event
 		Logger: l,
 		DispatchMap: map[string]func(context.Context, *event.Event) error{
 			string(models.EventUpdateCertificateStatusKey): func(ctx context.Context, e *event.Event) error {
-				return handlerWarpper(ctx, e, svc, l, updateCertificateStatusHandler)
+				return handlerWrapper(ctx, e, svc, l, updateCertificateStatusHandler)
 			},
 			string(models.EventBindDeviceIdentityKey): func(ctx context.Context, e *event.Event) error {
-				return handlerWarpper(ctx, e, svc, l, bindDeviceIdentityHandler)
+				return handlerWrapper(ctx, e, svc, l, bindDeviceIdentityHandler)
 			},
 			string(models.EventUpdateDeviceMetadataKey): func(ctx context.Context, e *event.Event) error {
-				return handlerWarpper(ctx, e, svc, l, updateDeviceMetadataHandler)
+				return handlerWrapper(ctx, e, svc, l, updateDeviceMetadataHandler)
 			},
 			string(models.EventUpdateCertificateMetadataKey): func(ctx context.Context, e *event.Event) error {
-				return handlerWarpper(ctx, e, svc, l, updateCertificateMetadataHandler)
+				return handlerWrapper(ctx, e, svc, l, updateCertificateMetadataHandler)
 			},
 			string(models.EventCreateDMSKey): func(ctx context.Context, e *event.Event) error {
-				return handlerWarpper(ctx, e, svc, l, createOrUpdateDMSHandler)
+				return handlerWrapper(ctx, e, svc, l, createOrUpdateDMSHandler)
 			},
 			string(models.EventUpdateDMSKey): func(ctx context.Context, e *event.Event) error {
-				return handlerWarpper(ctx, e, svc, l, createOrUpdateDMSHandler)
+				return handlerWrapper(ctx, e, svc, l, createOrUpdateDMSHandler)
 			},
 			string(models.EventCreateCAKey): func(ctx context.Context, e *event.Event) error {
-				return handlerWarpper(ctx, e, svc, l, createOrUpdateCAHandler)
+				return handlerWrapper(ctx, e, svc, l, createOrUpdateCAHandler)
 			},
 			string(models.EventImportCAKey): func(ctx context.Context, e *event.Event) error {
-				return handlerWarpper(ctx, e, svc, l, createOrUpdateCAHandler)
+				return handlerWrapper(ctx, e, svc, l, createOrUpdateCAHandler)
 			},
 			string(models.EventUpdateCAMetadataKey): func(ctx context.Context, e *event.Event) error {
-				return handlerWarpper(ctx, e, svc, l, createOrUpdateCAHandler)
+				return handlerWrapper(ctx, e, svc, l, createOrUpdateCAHandler)
 			},
 		},
 	}
 }
 
-func handlerWarpper(ctx context.Context, event *event.Event,
+func handlerWrapper(ctx context.Context, event *event.Event,
 	svc AWSCloudConnectorService,
 	logger *logrus.Entry,
 	handler func(ctx context.Context, e *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error) error {
