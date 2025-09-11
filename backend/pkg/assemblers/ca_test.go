@@ -474,7 +474,6 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-
 			err = serverTest.BeforeEach()
 			if err != nil {
 				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
