@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -14,11 +15,13 @@ type DmsAuditEventPublisher struct {
 	auditPub AuditPublisher
 }
 
-func NewDmsAuditEventPublisher(auditPub AuditPublisher) lservices.DMSManagerMiddleware {
+func NewDmsAuditEventPublisher(audit AuditPublisher) lservices.DMSManagerMiddleware {
 	return func(next services.DMSManagerService) services.DMSManagerService {
 		return &DmsAuditEventPublisher{
-			next:     next,
-			auditPub: auditPub,
+			next: next,
+			auditPub: AuditPublisher{
+				ICloudEventPublisher: eventpub.NewEventPublisherWithSourceMiddleware(audit, models.DMSManagerSource),
+			},
 		}
 	}
 }

@@ -20,7 +20,7 @@ func NewDMSEventPublisher(eventMWPub ICloudEventPublisher) lservices.DMSManagerM
 	return func(next services.DMSManagerService) services.DMSManagerService {
 		return &dmsEventPublisher{
 			next:       next,
-			eventMWPub: eventMWPub,
+			eventMWPub: NewEventPublisherWithSourceMiddleware(eventMWPub, models.DMSManagerSource),
 		}
 	}
 }

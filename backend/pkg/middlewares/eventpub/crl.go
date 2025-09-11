@@ -20,7 +20,7 @@ func NewCRLEventPublisher(eventMWPub ICloudEventPublisher) beService.CRLMiddlewa
 	return func(next services.CRLService) services.CRLService {
 		return &clrEventPublisher{
 			next:       next,
-			eventMWPub: eventMWPub,
+			eventMWPub: NewEventPublisherWithSourceMiddleware(eventMWPub, models.VASource),
 		}
 	}
 }

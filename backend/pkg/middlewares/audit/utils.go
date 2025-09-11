@@ -16,12 +16,12 @@ type AuditBody struct {
 }
 
 type AuditPublisher struct {
-	pub eventpub.ICloudEventPublisher
+	eventpub.ICloudEventPublisher
 }
 
 func NewAuditPublisher(publisher eventpub.ICloudEventPublisher) *AuditPublisher {
 	return &AuditPublisher{
-		pub: publisher,
+		ICloudEventPublisher: publisher,
 	}
 }
 
@@ -47,5 +47,5 @@ func (audit *AuditPublisher) HandleServiceOutputAndPublishAuditRecord(ctx contex
 		}
 	}
 
-	audit.pub.PublishCloudEvent(ctx, auditBody)
+	audit.PublishCloudEvent(ctx, auditBody)
 }

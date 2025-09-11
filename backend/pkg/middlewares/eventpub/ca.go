@@ -19,7 +19,7 @@ func NewCAEventBusPublisher(eventMWPub ICloudEventPublisher) lservices.CAMiddlew
 	return func(next services.CAService) services.CAService {
 		return &CAEventPublisher{
 			Next:       next,
-			eventMWPub: eventMWPub,
+			eventMWPub: NewEventPublisherWithSourceMiddleware(eventMWPub, models.CASource),
 		}
 	}
 }

@@ -3,11 +3,11 @@ package models
 const HttpSourceHeader = "x-lms-source"
 const HttpRequestIDHeader = "x-request-id"
 
-const CASource = "lrn://service/lamassuiot-ca"
-const DMSManagerSource = "lrn://service/lamassuiot-ra"
-const DeviceManagerSource = "lrn://service/lamassuiot-devmanager"
-const VASource = "lrn://service/lamassuiot-va"
-const AlertsSource = "lrn://service/lamassuiot-alerts"
+const CASource = "service/ca"
+const DMSManagerSource = "service/ra"
+const DeviceManagerSource = "service/devmanager"
+const VASource = "service/va"
+const AlertsSource = "service/alerts"
 
 type UpdateModel[E any] struct {
 	Previous E `json:"previous"`

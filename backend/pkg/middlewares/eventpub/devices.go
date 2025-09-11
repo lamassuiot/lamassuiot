@@ -19,7 +19,7 @@ func NewDeviceEventPublisher(eventMWPub ICloudEventPublisher) lservices.DeviceMi
 	return func(next services.DeviceManagerService) services.DeviceManagerService {
 		return &deviceEventPublisher{
 			next:       next,
-			eventMWPub: eventMWPub,
+			eventMWPub: NewEventPublisherWithSourceMiddleware(eventMWPub, models.DeviceManagerSource),
 		}
 	}
 }

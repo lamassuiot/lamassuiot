@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/sirupsen/logrus"
 )
@@ -30,4 +31,21 @@ func (cemp *CloudEventPublisher) PublishCloudEvent(ctx context.Context, payload 
 
 	cemp.Logger.Tracef("publishing event: Type=%s Source=%s \n%s", event.Type(), event.Source(), string(eventBytes))
 	cemp.Publisher.Publish(event.Type(), message.NewMessage(event.ID(), eventBytes))
+}
+
+type EventPublisherWithSourceMiddleware struct {
+	Publisher ICloudEventPublisher
+	Source    string
+}
+
+func NewEventPublisherWithSourceMiddleware(publisher ICloudEventPublisher, source string) ICloudEventPublisher {
+	return &EventPublisherWithSourceMiddleware{
+		Publisher: publisher,
+		Source:    source,
+	}
+}
+
+func (epws *EventPublisherWithSourceMiddleware) PublishCloudEvent(ctx context.Context, payload interface{}) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeySource, epws.Source)
+	epws.Publisher.PublishCloudEvent(ctx, payload)
 }

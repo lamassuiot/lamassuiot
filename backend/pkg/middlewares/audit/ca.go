@@ -3,6 +3,7 @@ package auditpub
 import (
 	"context"
 
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -16,8 +17,10 @@ type CAAuditEventPublisher struct {
 func NewCAAuditEventBusPublisher(audit AuditPublisher) lservices.CAMiddleware {
 	return func(next services.CAService) services.CAService {
 		return &CAAuditEventPublisher{
-			next:     next,
-			auditPub: audit,
+			next: next,
+			auditPub: AuditPublisher{
+				ICloudEventPublisher: eventpub.NewEventPublisherWithSourceMiddleware(audit, models.CASource),
+			},
 		}
 	}
 }

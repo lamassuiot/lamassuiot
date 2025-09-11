@@ -73,7 +73,6 @@ func devicesWithErrors[E any, O any](t *testing.T, method string, input E, event
 }
 
 func TestDevicesEventPublisher(t *testing.T) {
-
 	var testcases = []struct {
 		name string
 		test func(t *testing.T)
