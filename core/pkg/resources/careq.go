@@ -6,7 +6,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
 
-var CAFiltrableFields = map[string]FilterFieldType{
+var CAFilterableFields = map[string]FilterFieldType{
 	"id":                   StringFilterFieldType,
 	"level":                NumberFilterFieldType,
 	"type":                 EnumFilterFieldType,
@@ -21,7 +21,7 @@ var CAFiltrableFields = map[string]FilterFieldType{
 	"subject_key_id":       StringFilterFieldType,
 }
 
-var CARequestFiltrableFields = map[string]FilterFieldType{
+var CARequestFilterableFields = map[string]FilterFieldType{
 	"id":                  StringFilterFieldType,
 	"level":               NumberFilterFieldType,
 	"status":              EnumFilterFieldType,
@@ -30,7 +30,7 @@ var CARequestFiltrableFields = map[string]FilterFieldType{
 	"issuer_metadata_id":  StringFilterFieldType,
 }
 
-var KMSFiltrableFields = map[string]FilterFieldType{
+var KMSFilterableFields = map[string]FilterFieldType{
 	"id":          StringFilterFieldType,
 	"algorithm":   StringFilterFieldType,
 	"size":        NumberFilterFieldType,

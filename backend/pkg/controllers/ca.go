@@ -374,7 +374,7 @@ func (r *caHttpRoutes) UpdateCAIssuanceExpiration(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CAFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.CAFilterableFields)
 
 	type uriParams struct {
 		CommonName string `uri:"cn" binding:"required"`
@@ -423,7 +423,7 @@ func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 // @Failure 500
 // @Router /cas [get]
 func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CAFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.CAFilterableFields)
 
 	cas := []models.CACertificate{}
 
@@ -453,7 +453,7 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetAllRequests(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CARequestFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.CARequestFilterableFields)
 
 	reqs := []models.CACertificateRequest{}
 
@@ -483,7 +483,7 @@ func (r *caHttpRoutes) GetAllRequests(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCARequests(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CARequestFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.CARequestFilterableFields)
 
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
@@ -706,7 +706,7 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 // @Failure 500
 // @Router /certificates [get]
 func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 
 	certs := []models.Certificate{}
 
@@ -744,7 +744,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 		return
 	}
 
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 
 	certs := []models.Certificate{}
 
@@ -788,7 +788,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 // @Failure 500
 // @Router /cas/{id}/certificates [get]
 func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
@@ -982,7 +982,7 @@ func (r *caHttpRoutes) SignatureVerify(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 
 	type uriParams struct {
 		CAID   string `uri:"id" binding:"required"`
@@ -1033,7 +1033,7 @@ func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 
 	type uriParams struct {
 		Status string `uri:"status" binding:"required"`
@@ -1190,7 +1190,7 @@ func (r *caHttpRoutes) ImportCertificate(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetKeys(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.KMSFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.KMSFilterableFields)
 
 	keys := []models.Key{}
 
