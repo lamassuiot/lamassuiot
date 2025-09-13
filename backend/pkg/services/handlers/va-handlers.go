@@ -10,6 +10,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services/eventhandling"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/crypto/ocsp"
 )
 
 func NewVAEventHandler(l *logrus.Entry, crlSvc services.CRLService) *eventhandling.CloudEventHandler {
@@ -61,7 +62,23 @@ func updateCertificateStatus(event *event.Event, crlSvc services.CRLService, lMe
 	cn := cert.Updated.Certificate.Subject.CommonName
 	icn := cert.Updated.Certificate.Issuer.CommonName
 
-	if cert.Updated.Status == models.StatusRevoked {
+	// Check if this is a certificate being reactivated from CertificateHold
+	isReactivationFromHold := cert.Previous.Status == models.StatusRevoked &&
+		cert.Previous.RevocationReason == ocsp.CertificateHold &&
+		cert.Updated.Status == models.StatusActive
+
+	// Check if this is a normal revocation
+	isRevocation := cert.Updated.Status == models.StatusRevoked
+
+	// Regenerate CRL if certificate is revoked OR reactivated from CertificateHold
+	if isRevocation || isReactivationFromHold {
+		action := "revocation"
+		if isReactivationFromHold {
+			action = "reactivation from CertificateHold"
+		}
+
+		lMessaging.Infof("Certificate %s %s - %s %s is being processed for CRL update due to %s", cn, ski, icn, aki, action)
+
 		role, err := crlSvc.GetVARole(ctx, services.GetVARoleInput{
 			CASubjectKeyID: aki,
 		})
@@ -80,6 +97,9 @@ func updateCertificateStatus(event *event.Event, crlSvc services.CRLService, lMe
 				lMessaging.Error(err)
 				return err
 			}
+			lMessaging.Infof("CRL regenerated for CA %s due to certificate %s", aki, action)
+		} else {
+			lMessaging.Infof("CRL regeneration disabled for CA %s, skipping CRL update", aki)
 		}
 	}
 
