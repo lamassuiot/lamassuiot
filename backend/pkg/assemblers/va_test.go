@@ -666,4 +666,145 @@ func initCAForVA(testServer *TestServer) (*models.CACertificate, error) {
 	return ca, nil
 }
 
+func TestCRLCertificateReactivationFromHold(t *testing.T) {
+	t.Parallel()
+
+	serverTest, err := StartVAServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create VA test server")
+	}
+
+	serverTest.BeforeEach()
+	ca, err := initCAForVA(serverTest)
+	if err != nil {
+		t.Fatalf("could not initialize CA: %s", err)
+	}
+
+	// Issue a test certificate
+	oneCrt, err := generateCertificate(serverTest.CA.Service)
+	if err != nil {
+		t.Fatalf("could not generate certificate: %s", err)
+	}
+
+	// Sleep to ensure that the CRL is generated (CRL is generated when the CA is created via event bus)
+	var crl *x509.RevocationList
+	err = SleepRetry(5, 3*time.Second, func() error {
+		// First get v1 CRL and check that it has 0 entries
+		crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
+			CASubjectKeyID: oneCrt.AuthorityKeyID,
+			Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
+			VerifyResponse: true,
+		})
+
+		if err != nil {
+			return err
+		}
+
+		if len(crl.RevokedCertificateEntries) != 0 {
+			return fmt.Errorf("CRL should have 0 entry, got %d", len(crl.RevokedCertificateEntries))
+		}
+
+		if big.NewInt(1).Cmp(crl.Number) != 0 {
+			return fmt.Errorf("CRL should have version 1, got %d", crl.Number)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		t.Fatalf("could not get initial CRL: %s", err)
+	}
+
+	assert.Equal(t, 0, len(crl.RevokedCertificateEntries), "CRL should have 0 entries initially")
+	assert.Equal(t, big.NewInt(1), crl.Number, "CRL should have version 1 initially")
+
+	// Revoke the certificate with CertificateHold reason
+	_, err = serverTest.CA.Service.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
+		SerialNumber:     oneCrt.SerialNumber,
+		NewStatus:        models.StatusRevoked,
+		RevocationReason: ocsp.CertificateHold,
+	})
+
+	assert.NoError(t, err, "could not revoke certificate with CertificateHold: %s", err)
+
+	// Sleep to ensure that the CRL is regenerated after revocation
+	err = SleepRetry(5, 3*time.Second, func() error {
+		// Get v2 CRL and check that it has 1 entry
+		crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
+			CASubjectKeyID: oneCrt.AuthorityKeyID,
+			Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
+			VerifyResponse: true,
+		})
+
+		if err != nil {
+			return err
+		}
+
+		if len(crl.RevokedCertificateEntries) != 1 {
+			return fmt.Errorf("CRL should have 1 entry after revocation, got %d", len(crl.RevokedCertificateEntries))
+		}
+
+		if big.NewInt(2).Cmp(crl.Number) != 0 {
+			return fmt.Errorf("CRL should have version 2 after revocation, got %d", crl.Number)
+		}
+
+		// Verify the revoked certificate is in the CRL with correct reason
+		revokedEntry := crl.RevokedCertificateEntries[0]
+		if revokedEntry.SerialNumber.Cmp(oneCrt.Certificate.SerialNumber) != 0 {
+			return fmt.Errorf("revoked certificate serial number mismatch")
+		}
+
+		if revokedEntry.ReasonCode != int(ocsp.CertificateHold) {
+			return fmt.Errorf("expected revocation reason CertificateHold (%d), got %d", int(ocsp.CertificateHold), revokedEntry.ReasonCode)
+		}
+
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("could not get CRL after revocation: %s", err)
+	}
+
+	assert.Equal(t, 1, len(crl.RevokedCertificateEntries), "CRL should have 1 entry after revocation")
+	assert.Equal(t, big.NewInt(2), crl.Number, "CRL should have version 2 after revocation")
+
+	// Now reactivate the certificate (remove from CertificateHold)
+	_, err = serverTest.CA.Service.UpdateCertificateStatus(context.Background(), services.UpdateCertificateStatusInput{
+		SerialNumber: oneCrt.SerialNumber,
+		NewStatus:    models.StatusActive,
+		// No revocation reason needed when reactivating
+	})
+
+	assert.NoError(t, err, "could not reactivate certificate from CertificateHold: %s", err)
+
+	// Sleep to ensure that the CRL is regenerated after reactivation
+	err = SleepRetry(5, 3*time.Second, func() error {
+		// Get v3 CRL and check that it has 0 entries (certificate should be removed)
+		crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
+			CASubjectKeyID: oneCrt.AuthorityKeyID,
+			Issuer:         (*x509.Certificate)(ca.Certificate.Certificate),
+			VerifyResponse: true,
+		})
+
+		if err != nil {
+			return err
+		}
+
+		if len(crl.RevokedCertificateEntries) != 0 {
+			return fmt.Errorf("CRL should have 0 entries after reactivation, got %d", len(crl.RevokedCertificateEntries))
+		}
+
+		if big.NewInt(3).Cmp(crl.Number) != 0 {
+			return fmt.Errorf("CRL should have version 3 after reactivation, got %d", crl.Number)
+		}
+
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("could not get CRL after reactivation: %s", err)
+	}
+
+	assert.Equal(t, 0, len(crl.RevokedCertificateEntries), "CRL should have 0 entries after reactivation - certificate should be removed from CRL")
+	assert.Equal(t, big.NewInt(3), crl.Number, "CRL should have version 3 after reactivation")
+}
+
 //Hacer la función de test de getCRL
