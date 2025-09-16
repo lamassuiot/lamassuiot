@@ -45,7 +45,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
  
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -55,7 +57,7 @@ jobs:
  
       - name: Install Dependencies
         working-directory: ${{ matrix.module.path }}
-        run: go mod download
+        run: go work sync
 
       - name: Run Golang Tests with coverage
         id: run
@@ -97,7 +99,7 @@ jobs:
  
       - name: Install Dependencies
         working-directory: engines/crypto/pkcs11
-        run: go mod download
+        run: go work sync
 
       - name: Run Golang Tests with coverage
         id: run

@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func dmsEventChecker(event models.EventType, expectations []func(*svcmock.MockDMSManagerService), operation func(services.DMSManagerService), assertions func(*CloudEventMiddlewarePublisherMock, *svcmock.MockDMSManagerService)) {
+func dmsEventChecker(event models.EventType, expectations []func(*svcmock.MockDMSManagerService), operation func(services.DMSManagerService), assertions func(*CloudEventPublisherMock, *svcmock.MockDMSManagerService)) {
 	mockDMSManagerService := new(svcmock.MockDMSManagerService)
-	mockEventMWPub := new(CloudEventMiddlewarePublisherMock)
+	mockEventMWPub := new(CloudEventPublisherMock)
 	caEventPublisherMw := NewDMSEventPublisher(mockEventMWPub)
 	dmsEventPublisher := caEventPublisherMw(mockDMSManagerService)
 
@@ -24,7 +24,7 @@ func dmsEventChecker(event models.EventType, expectations []func(*svcmock.MockDM
 		expectation(mockDMSManagerService)
 	}
 
-	mockEventMWPub.On("PublishCloudEvent", context.Background(), event, mock.Anything)
+	mockEventMWPub.On("PublishCloudEvent", mock.Anything, mock.Anything)
 	operation(dmsEventPublisher)
 
 	assertions(mockEventMWPub, mockDMSManagerService)
@@ -33,7 +33,7 @@ func dmsEventChecker(event models.EventType, expectations []func(*svcmock.MockDM
 func dmsWithoutErrors[E any, O any](t *testing.T, method string, input E, event models.EventType, expectedOutput O, extra ...func(*svcmock.MockDMSManagerService)) {
 	expectations := []func(*svcmock.MockDMSManagerService){
 		func(mockCAService *svcmock.MockDMSManagerService) {
-			mockCAService.On(method, context.Background(), mock.Anything).Return(expectedOutput, nil)
+			mockCAService.On(method, mock.Anything, mock.Anything).Return(expectedOutput, nil)
 		},
 	}
 	expectations = append(expectations, extra...)
@@ -44,7 +44,7 @@ func dmsWithoutErrors[E any, O any](t *testing.T, method string, input E, event 
 		assert.Nil(t, r[1].Interface())
 	}
 
-	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockDMSManagerService) {
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDMSManagerService) {
 		mockCAService.AssertExpectations(t)
 		mockEventMWPub.AssertExpectations(t)
 	}
@@ -55,7 +55,7 @@ func dmsWithoutErrors[E any, O any](t *testing.T, method string, input E, event 
 func dmsWithErrors[E any, O any](t *testing.T, method string, input E, event models.EventType, expectedOutput O, extra ...func(*svcmock.MockDMSManagerService)) {
 	expectations := []func(*svcmock.MockDMSManagerService){
 		func(mockCAService *svcmock.MockDMSManagerService) {
-			mockCAService.On(method, context.Background(), mock.Anything).Return(expectedOutput, errors.New("some error"))
+			mockCAService.On(method, mock.Anything, mock.Anything).Return(expectedOutput, errors.New("some error"))
 		},
 	}
 	expectations = append(expectations, extra...)
@@ -66,7 +66,7 @@ func dmsWithErrors[E any, O any](t *testing.T, method string, input E, event mod
 		assert.NotNil(t, r[1].Interface())
 	}
 
-	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockDMSManagerService) {
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDMSManagerService) {
 		mockCAService.AssertExpectations(t)
 		mockEventMWPub.AssertNotCalled(t, "PublishCloudEvent")
 	}
@@ -77,7 +77,7 @@ func dmsWithErrors[E any, O any](t *testing.T, method string, input E, event mod
 func dmsWithoutErrorsSingleResult[E any](t *testing.T, method string, input E, event models.EventType, extra ...func(*svcmock.MockDMSManagerService)) {
 	expectations := []func(*svcmock.MockDMSManagerService){
 		func(mockCAService *svcmock.MockDMSManagerService) {
-			mockCAService.On(method, context.Background(), mock.Anything).Return(nil)
+			mockCAService.On(method, mock.Anything, mock.Anything).Return(nil)
 		},
 	}
 	expectations = append(expectations, extra...)
@@ -88,7 +88,7 @@ func dmsWithoutErrorsSingleResult[E any](t *testing.T, method string, input E, e
 		assert.Nil(t, r[0].Interface())
 	}
 
-	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockDMSManagerService) {
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDMSManagerService) {
 		mockCAService.AssertExpectations(t)
 		mockEventMWPub.AssertExpectations(t)
 	}
@@ -99,7 +99,7 @@ func dmsWithoutErrorsSingleResult[E any](t *testing.T, method string, input E, e
 func dmsWithErrorsSingleResult[E any](t *testing.T, method string, input E, event models.EventType, extra ...func(*svcmock.MockDMSManagerService)) {
 	expectations := []func(*svcmock.MockDMSManagerService){
 		func(mockCAService *svcmock.MockDMSManagerService) {
-			mockCAService.On(method, context.Background(), mock.Anything).Return(errors.New("some error"))
+			mockCAService.On(method, mock.Anything, mock.Anything).Return(errors.New("some error"))
 		},
 	}
 	expectations = append(expectations, extra...)
@@ -110,7 +110,7 @@ func dmsWithErrorsSingleResult[E any](t *testing.T, method string, input E, even
 		assert.NotNil(t, r[0].Interface())
 	}
 
-	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockDMSManagerService) {
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDMSManagerService) {
 		mockCAService.AssertExpectations(t)
 		mockEventMWPub.AssertNotCalled(t, "PublishCloudEvent")
 	}
@@ -121,7 +121,7 @@ func dmsWithErrorsSingleResult[E any](t *testing.T, method string, input E, even
 func estWithoutErrors[E any, O any](t *testing.T, method string, input E, event models.EventType, expectedOutput O, extra ...func(*svcmock.MockDMSManagerService)) {
 	expectations := []func(*svcmock.MockDMSManagerService){
 		func(mockCAService *svcmock.MockDMSManagerService) {
-			mockCAService.On(method, context.Background(), mock.Anything, "").Return(expectedOutput, nil)
+			mockCAService.On(method, mock.Anything, mock.Anything, "").Return(expectedOutput, nil)
 		},
 	}
 	expectations = append(expectations, extra...)
@@ -132,7 +132,7 @@ func estWithoutErrors[E any, O any](t *testing.T, method string, input E, event 
 		assert.Nil(t, r[1].Interface())
 	}
 
-	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockDMSManagerService) {
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDMSManagerService) {
 		mockCAService.AssertExpectations(t)
 		mockEventMWPub.AssertExpectations(t)
 	}
@@ -143,7 +143,7 @@ func estWithoutErrors[E any, O any](t *testing.T, method string, input E, event 
 func estWithErrors[E any, O any](t *testing.T, method string, input E, event models.EventType, expectedOutput O, extra ...func(*svcmock.MockDMSManagerService)) {
 	expectations := []func(*svcmock.MockDMSManagerService){
 		func(mockCAService *svcmock.MockDMSManagerService) {
-			mockCAService.On(method, context.Background(), mock.Anything, "").Return(expectedOutput, errors.New("some error"))
+			mockCAService.On(method, mock.Anything, mock.Anything, "").Return(expectedOutput, errors.New("some error"))
 		},
 	}
 	expectations = append(expectations, extra...)
@@ -154,7 +154,7 @@ func estWithErrors[E any, O any](t *testing.T, method string, input E, event mod
 		assert.NotNil(t, r[1].Interface())
 	}
 
-	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockDMSManagerService) {
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDMSManagerService) {
 		mockCAService.AssertExpectations(t)
 		mockEventMWPub.AssertNotCalled(t, "PublishCloudEvent")
 	}
@@ -185,7 +185,7 @@ func TestDMSEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				dmsWithErrors(t, "UpdateDMS", services.UpdateDMSInput{}, models.EventUpdateDMSKey, &models.DMS{},
 					func(mockCAService *svcmock.MockDMSManagerService) {
-						mockCAService.On("GetDMSByID", context.Background(), mock.Anything).Return(&models.DMS{}, nil)
+						mockCAService.On("GetDMSByID", mock.Anything, mock.Anything).Return(&models.DMS{}, nil)
 					})
 			},
 		},
@@ -194,7 +194,7 @@ func TestDMSEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				dmsWithoutErrors(t, "UpdateDMS", services.UpdateDMSInput{}, models.EventUpdateDMSKey, &models.DMS{},
 					func(mockCAService *svcmock.MockDMSManagerService) {
-						mockCAService.On("GetDMSByID", context.Background(), mock.Anything).Return(&models.DMS{}, nil)
+						mockCAService.On("GetDMSByID", mock.Anything, mock.Anything).Return(&models.DMS{}, nil)
 					})
 			},
 		},
@@ -203,7 +203,7 @@ func TestDMSEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				dmsWithErrors(t, "UpdateDMSMetadata", services.UpdateDMSMetadataInput{}, models.EventUpdateDMSMetadataKey, &models.DMS{},
 					func(mockCAService *svcmock.MockDMSManagerService) {
-						mockCAService.On("GetDMSByID", context.Background(), mock.Anything).Return(&models.DMS{}, nil)
+						mockCAService.On("GetDMSByID", mock.Anything, mock.Anything).Return(&models.DMS{}, nil)
 					})
 			},
 		},
@@ -212,7 +212,7 @@ func TestDMSEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				dmsWithoutErrors(t, "UpdateDMSMetadata", services.UpdateDMSMetadataInput{}, models.EventUpdateDMSMetadataKey, &models.DMS{},
 					func(mockCAService *svcmock.MockDMSManagerService) {
-						mockCAService.On("GetDMSByID", context.Background(), mock.Anything).Return(&models.DMS{}, nil)
+						mockCAService.On("GetDMSByID", mock.Anything, mock.Anything).Return(&models.DMS{}, nil)
 					})
 			},
 		},

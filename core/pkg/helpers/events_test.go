@@ -1,23 +1,29 @@
 package helpers
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
+	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestBuildCloudEvent(t *testing.T) {
 	eventType := "com.example.event"
-	eventSource := "/my/source"
+	eventSource := "my/source"
 	payload := map[string]string{"key": "value"}
 
-	event := BuildCloudEvent(eventType, eventSource, payload)
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
+	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
+
+	event := BuildCloudEvent(ctx, payload)
 
 	assert.Equal(t, "1.0", event.SpecVersion())
-	assert.Equal(t, eventSource, event.Source())
+	assert.Equal(t, "source://lamassu.io/ctx/source/my/source", event.Source())
 	assert.Equal(t, eventType, event.Type())
 	assert.WithinDuration(t, time.Now(), event.Time(), time.Second)
 	assert.NotEmpty(t, event.ID())
@@ -34,7 +40,11 @@ func TestParseCloudEvent(t *testing.T) {
 	eventSource := "/my/source"
 	payload := map[string]string{"key": "value"}
 
-	originalEvent := BuildCloudEvent(eventType, eventSource, payload)
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
+	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
+
+	originalEvent := BuildCloudEvent(ctx, payload)
 	eventBytes, err := json.Marshal(originalEvent)
 	assert.NoError(t, err)
 
@@ -53,7 +63,11 @@ func TestGetEventBody(t *testing.T) {
 	eventSource := "/my/source"
 	payload := map[string]string{"key": "value"}
 
-	event := BuildCloudEvent(eventType, eventSource, payload)
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
+	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
+
+	event := BuildCloudEvent(ctx, payload)
 
 	var eventData map[string]string
 	err := json.Unmarshal(event.Data(), &eventData)

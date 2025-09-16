@@ -3,11 +3,11 @@ package models
 const HttpSourceHeader = "x-lms-source"
 const HttpRequestIDHeader = "x-request-id"
 
-const CASource = "lrn://service/lamassuiot-ca"
-const DMSManagerSource = "lrn://service/lamassuiot-ra"
-const DeviceManagerSource = "lrn://service/lamassuiot-devmanager"
-const VASource = "lrn://service/lamassuiot-va"
-const AlertsSource = "lrn://service/lamassuiot-alerts"
+const CASource = "service/ca"
+const DMSManagerSource = "service/ra"
+const DeviceManagerSource = "service/devmanager"
+const VASource = "service/va"
+const AlertsSource = "service/alerts"
 
 type UpdateModel[E any] struct {
 	Previous E `json:"previous"`
@@ -27,6 +27,10 @@ const (
 	EventSignCertificateKey     EventType = "ca.sign.certificate"
 	EventSignatureSignKey       EventType = "ca.sign.signature"
 	EventDeleteCAKey            EventType = "ca.delete"
+
+	EventCreateIssuanceProfileKey EventType = "profile.issuance.create"
+	EventUpdateIssuanceProfileKey EventType = "profile.issuance.update"
+	EventDeleteIssuanceProfileKey EventType = "profile.issuance.delete"
 
 	EventCreateCertificateKey         EventType = "certificate.create"
 	EventImportCertificateKey         EventType = "certificate.import"
@@ -48,7 +52,8 @@ const (
 	EventDeleteDeviceKey         EventType = "device.delete"
 
 	EventUpdateVARole EventType = "va.role.update"
-	EventCreateCRL    EventType = "va.crl.create"
+	EventInitCRLRole  EventType = "va.role.crl.init"
+	EventCreateCRL    EventType = "va.role.crl.create"
 
 	EventAnyKey EventType = "any"
 )

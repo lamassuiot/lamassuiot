@@ -13,9 +13,9 @@ import (
 func NewAlertsEventHandler(l *logrus.Entry, svc services.AlertsService) *eventhandling.CloudEventHandler {
 	return &eventhandling.CloudEventHandler{
 		Logger: l,
-		DispatchMap: map[string]func(*event.Event) error{
-			string(models.EventAnyKey): func(e *event.Event) error {
-				return svc.HandleEvent(context.Background(), &services.HandleEventInput{
+		DispatchMap: map[string]func(context.Context, *event.Event) error{
+			string(models.EventAnyKey): func(ctx context.Context, e *event.Event) error {
+				return svc.HandleEvent(ctx, &services.HandleEventInput{
 					Event: *e,
 				})
 			},
