@@ -50,6 +50,7 @@ func devicesWithoutErrors[E any, O any](t *testing.T, method string, input E, ev
 
 	devicesEventChecker(event, expectations, operation, assertions)
 }
+
 func devicesWithErrors[E any, O any](t *testing.T, method string, input E, event models.EventType, expectedOutput O, extra ...func(*svcmock.MockDeviceManagerService)) {
 	expectations := []func(*svcmock.MockDeviceManagerService){
 		func(mockCAService *svcmock.MockDeviceManagerService) {
@@ -62,6 +63,50 @@ func devicesWithErrors[E any, O any](t *testing.T, method string, input E, event
 		m := reflect.ValueOf(deviceMiddleware).MethodByName(method)
 		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
 		assert.NotNil(t, r[1].Interface())
+	}
+
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDeviceManagerService) {
+		mockCAService.AssertExpectations(t)
+		mockEventMWPub.AssertNotCalled(t, "PublishCloudEvent")
+	}
+
+	devicesEventChecker(event, expectations, operation, assertions)
+}
+
+func devicesWithoutErrorsSingleResult[E any](t *testing.T, method string, input E, event models.EventType, extra ...func(*svcmock.MockDeviceManagerService)) {
+	expectations := []func(*svcmock.MockDeviceManagerService){
+		func(mockCAService *svcmock.MockDeviceManagerService) {
+			mockCAService.On(method, mock.Anything, mock.Anything).Return(nil)
+		},
+	}
+	expectations = append(expectations, extra...)
+
+	operation := func(caMiddleware services.DeviceManagerService) {
+		m := reflect.ValueOf(caMiddleware).MethodByName(method)
+		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
+		assert.Nil(t, r[0].Interface())
+	}
+
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDeviceManagerService) {
+		mockCAService.AssertExpectations(t)
+		mockEventMWPub.AssertExpectations(t)
+	}
+
+	devicesEventChecker(event, expectations, operation, assertions)
+}
+
+func devicesWithErrorsSingleResult[E any](t *testing.T, method string, input E, event models.EventType, extra ...func(*svcmock.MockDeviceManagerService)) {
+	expectations := []func(*svcmock.MockDeviceManagerService){
+		func(mockCAService *svcmock.MockDeviceManagerService) {
+			mockCAService.On(method, mock.Anything, mock.Anything).Return(errors.New("some error"))
+		},
+	}
+	expectations = append(expectations, extra...)
+
+	operation := func(deviceMiddleware services.DeviceManagerService) {
+		m := reflect.ValueOf(deviceMiddleware).MethodByName(method)
+		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
+		assert.NotNil(t, r[0].Interface())
 	}
 
 	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDeviceManagerService) {
@@ -143,10 +188,21 @@ func TestDevicesEventPublisher(t *testing.T) {
 					})
 			},
 		},
+		{
+			name: "DeleteDevice with errors - Not fire event",
+			test: func(t *testing.T) {
+				devicesWithErrorsSingleResult(t, "DeleteDevice", services.DeleteDeviceInput{}, models.EventDeleteDeviceKey)
+			},
+		},
+		{
+			name: "DeleteDevice without errors - fire event",
+			test: func(t *testing.T) {
+				devicesWithoutErrorsSingleResult(t, "DeleteDevice", services.DeleteDeviceInput{}, models.EventDeleteDeviceKey)
+			},
+		},
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.name, tc.test)
 	}
 }
