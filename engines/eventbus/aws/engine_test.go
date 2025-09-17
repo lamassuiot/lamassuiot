@@ -63,3 +63,12 @@ func TestWildcardSubscribe(t *testing.T) {
 		},
 	})
 }
+
+func TestErrorHandling(t *testing.T) {
+	eventbus.TestErrorHandling(t, eventbus.EventBusTestInput{
+		SetupEventBus: func() (func() error, message.Publisher, func(serviceID string) message.Subscriber) {
+			cleanup, publisher, subFunc := prepareEventBusForTest(t)
+			return cleanup, publisher, subFunc
+		},
+	})
+}
