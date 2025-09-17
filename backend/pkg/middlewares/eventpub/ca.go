@@ -286,6 +286,18 @@ func (mw CAEventPublisher) UpdateCertificateMetadata(ctx context.Context, input 
 	return mw.Next.UpdateCertificateMetadata(ctx, input)
 }
 
+func (mw CAEventPublisher) DeleteCertificate(ctx context.Context, input services.DeleteCertificateInput) (err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventDeleteCertificateKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("certificate/%s", input.SerialNumber))
+
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, input)
+		}
+	}()
+	return mw.Next.DeleteCertificate(ctx, input)
+}
+
 func (mw CAEventPublisher) GetCARequestByID(ctx context.Context, input services.GetByIDInput) (*models.CACertificateRequest, error) {
 	return mw.Next.GetCARequestByID(ctx, input)
 }

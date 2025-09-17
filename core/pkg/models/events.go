@@ -36,6 +36,7 @@ const (
 	EventImportCertificateKey         EventType = "certificate.import"
 	EventUpdateCertificateStatusKey   EventType = "certificate.status.update"
 	EventUpdateCertificateMetadataKey EventType = "certificate.metadata.update"
+	EventDeleteCertificateKey         EventType = "certificate.delete"
 
 	EventCreateDMSKey          EventType = "dms.create"
 	EventUpdateDMSKey          EventType = "dms.update"
