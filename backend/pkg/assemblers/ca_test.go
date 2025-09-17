@@ -4753,7 +4753,7 @@ func TestHierarchy(t *testing.T) {
 			},
 		},
 		{
-			name: "ERR/ChildCAExpiresAfterRootCA",
+			name: "OK/ChildCAExpiresAfterRootCA",
 			before: func(svc services.CAService) error {
 				return nil
 			},
@@ -4811,8 +4811,8 @@ func TestHierarchy(t *testing.T) {
 				return cas, err
 			},
 			resultCheck: func(cas []models.CACertificate, err error) error {
-				if err == nil {
-					return fmt.Errorf("got unexpected error: %s", err)
+				if err != nil {
+					return fmt.Errorf("expected success when child CA expires after root CA, but got error: %s", err)
 				}
 
 				return nil
@@ -4921,7 +4921,7 @@ func TestHierarchy(t *testing.T) {
 			},
 		},
 		{
-			name: "ERR/ChildCAExpiresAfterParentCA-UsingFixedDates",
+			name: "OK/ChildCAExpiresAfterParentCA-UsingFixedDates",
 			before: func(svc services.CAService) error {
 				return nil
 			},
@@ -4966,8 +4966,8 @@ func TestHierarchy(t *testing.T) {
 			},
 			resultCheck: func(cas []models.CACertificate, err error) error {
 
-				if err == nil {
-					return fmt.Errorf("got unexpected error: %s", err)
+				if err != nil {
+					return fmt.Errorf("expected success when child CA expires after parent CA using fixed dates, but got error: %s", err)
 				}
 
 				return nil
