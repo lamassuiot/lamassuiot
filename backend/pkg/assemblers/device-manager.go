@@ -57,14 +57,14 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 
 	deviceSvc := svc.(*lservices.DeviceManagerServiceBackend)
 
-	if conf.PublisherEventBus.Enabled {
-		lMessaging := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "Device Manager", "Event Bus")
-		lMessaging.Infof("Publisher Event Bus is enabled")
-		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
-		if err != nil {
-			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
-		}
+	lMessaging := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "Device Manager", "Event Bus")
+	lMessaging.Infof("Publisher Event Bus is enabled")
+	pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
+	if err != nil {
+		return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
+	}
 
+	if conf.PublisherEventBus.Enabled {
 		svc = eventpub.NewDeviceEventPublisher(&eventpub.CloudEventPublisher{
 			Publisher: pub,
 			ServiceID: serviceID,
@@ -85,7 +85,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 		}
 
 		eventHandlers := handlers.NewDeviceEventHandler(lMessaging, svc)
-		subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManger-DEFAULT", []string{"certificate.#"}, subscriber, lMessaging, *eventHandlers)
+		subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManger-DEFAULT", []string{"certificate.#"}, pub, subscriber, lMessaging, *eventHandlers)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
 		}
