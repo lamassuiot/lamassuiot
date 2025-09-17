@@ -13,7 +13,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
-func TestDeleteCertificate(t *testing.T) {
+func TestDeleteCertificateSDK(t *testing.T) {
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
@@ -114,6 +114,37 @@ func TestDeleteCertificate(t *testing.T) {
 				return err
 			},
 		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			certSerialNumber, _, err := testcase.before(caTest.HttpCASDK)
+			if err != nil {
+				t.Fatalf("failed running 'before' func in test case: %s", err)
+			}
+
+			err = testcase.resultCheck(testcase.run(caTest.HttpCASDK, certSerialNumber))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+		})
+	}
+}
+
+func TestDeleteCertificateService(t *testing.T) {
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	caTest := serverTest.CA
+
+	var testcases = []struct {
+		name        string
+		before      func(caSDK services.CAService) (string, string, error) // returns certificateSerialNumber, caID, error
+		run         func(caSDK services.CAService, certSerialNumber string) error
+		resultCheck func(err error) error
+	}{
 		{
 			name: "ERR/DeleteCertificate_ValidationError",
 			before: func(caSDK services.CAService) (string, string, error) {
@@ -186,12 +217,12 @@ func createCAAndCertificate(caSDK services.CAService) (*models.CACertificate, *m
 
 	csr, err := chelpers.GenerateCertificateRequest(
 		models.Subject{
-			CommonName: "test-cert",
-			Country:    "ES",
-			Organization: "lamassu",
+			CommonName:       "test-cert",
+			Country:          "ES",
+			Organization:     "lamassu",
 			OrganizationUnit: "iot",
-			State: "lamassu-world",
-			Locality: "lamassu-city",
+			State:            "lamassu-world",
+			Locality:         "lamassu-city",
 		},
 		key,
 	)
