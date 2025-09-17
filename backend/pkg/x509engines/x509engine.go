@@ -187,11 +187,6 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 		certExpiration = profile.Validity.Time
 	}
 
-	if ca.NotAfter.Before(certExpiration) {
-		lFunc.Errorf("requested certificate would expire after parent CA")
-		return nil, fmt.Errorf("invalid expiration")
-	}
-
 	skid, err := software.NewSoftwareCryptoEngine(engine.logger).EncodePKIXPublicKeyDigest(csr.PublicKey)
 	if err != nil {
 		lFunc.Errorf("could not encode public key digest: %s", err)

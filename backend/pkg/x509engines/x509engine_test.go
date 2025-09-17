@@ -847,6 +847,58 @@ func TestSignCertificateRequest(t *testing.T) {
 			},
 		},
 		{
+			name:          "OK/CERT_EXPIRES_AFTER_CA",
+			caCertificate: caCertificateRSA,
+			caSigner:      caSignerRSA,
+			profile: models.IssuanceProfile{
+				Validity: models.Validity{
+					Type: models.Time,
+					Time: caExpirationTime.AddDate(1, 0, 0), // Certificate expires 1 year after CA
+				},
+				SignAsCA:     false,
+				HonorSubject: true,
+				KeyUsage:     models.X509KeyUsage(x509.KeyUsageKeyAgreement),
+				ExtendedKeyUsages: []models.X509ExtKeyUsage{
+					models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+				},
+				HonorExtensions: true,
+			},
+			subject:    csrSubject,
+			keyType:    models.KeyType(x509.RSA),
+			extensions: func() []pkix.Extension { return []pkix.Extension{} },
+			key: func() any {
+				key, _ := chelpers.GenerateRSAKey(2048)
+				return key
+			},
+			check: func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr error, errSign error) error {
+				if errCsr != nil {
+					return fmt.Errorf("unexpected error in csr gen: %s", errCsr)
+				}
+
+				if errSign != nil {
+					return fmt.Errorf("unexpected error in signature: %s", errSign)
+				}
+
+				// Check that the certificate was created successfully
+				if cert == nil {
+					return fmt.Errorf("expected certificate to be created, got nil")
+				}
+
+				// Verify that the certificate expires after the CA (this is the main test)
+				if !cert.NotAfter.After(caCertificateRSA.NotAfter) {
+					return fmt.Errorf("certificate should expire after CA. CA expires: %s, Cert expires: %s", caCertificateRSA.NotAfter, cert.NotAfter)
+				}
+
+				// Check that the certificate expiration is roughly 1 year after CA expiration (within a minute tolerance)
+				expectedCertExpiration := caExpirationTime.AddDate(1, 0, 0)
+				timeDiff := cert.NotAfter.Sub(expectedCertExpiration)
+				if timeDiff < -time.Minute || timeDiff > time.Minute {
+					return fmt.Errorf("certificate expiration time should be within 1 minute of expected time. Expected: %s, got: %s, diff: %s", expectedCertExpiration, cert.NotAfter, timeDiff)
+				}
+				return nil
+			},
+		},
+		{
 			name:          "FAIL/NOT_EXISTENT_CA",
 			caCertificate: caCertificateNotImported,
 			profile:       certProfile,
