@@ -214,6 +214,14 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	caCert := input.CACertificate
 	caCertSN := helpers.SerialNumberToHexString(caCert.SerialNumber)
 
+	caCertX509 := (*x509.Certificate)(input.CACertificate)
+
+	skid, err := helpers.GetSubjectKeyID(lFunc, caCertX509)
+	if err != nil {
+		lFunc.Errorf("could not get Subject Key Identifier for certificate: %s: %s", caCertX509.Subject.CommonName, err)
+		return nil, err
+	}
+
 	if input.CAType == models.CertificateTypeImportedWithKey {
 		lFunc.Debugf("importing CA %s - %s  private key. CA type: %s", caCertSN, caCert.Subject.CommonName, input.CAType)
 		var engine cryptoengines.CryptoEngine
@@ -231,10 +239,13 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			lFunc.Infof("importing CA %s - %s with %s crypto engine", caCertSN, caCert.Subject.CommonName, engine.GetEngineConfig().Provider)
 		}
 
+		var keyID string
 		if input.CARSAKey != nil {
-			_, _, err = engine.ImportRSAPrivateKey(input.CARSAKey)
+			keyID, _, err = engine.ImportRSAPrivateKey(input.CARSAKey)
+			engine.RenameKey(keyID, skid)
 		} else if input.CAECKey != nil {
-			_, _, err = engine.ImportECDSAPrivateKey(input.CAECKey)
+			keyID, _, err = engine.ImportECDSAPrivateKey(input.CAECKey)
+			engine.RenameKey(keyID, skid)
 		} else {
 			lFunc.Errorf("key type %s not supported", input.KeyType)
 			return nil, fmt.Errorf("KeyType not supported")
@@ -341,14 +352,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		Level: 0,
 	}
 	level := 0
-
-	caCertX509 := (*x509.Certificate)(input.CACertificate)
-
-	skid, err := helpers.GetSubjectKeyID(lFunc, caCertX509)
-	if err != nil {
-		lFunc.Errorf("could not get Subject Key Identifier for certificate: %s: %s", caCertX509.Subject.CommonName, err)
-		return nil, err
-	}
 
 	akid := hex.EncodeToString(caCertX509.AuthorityKeyId)
 
