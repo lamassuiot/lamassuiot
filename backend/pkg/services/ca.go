@@ -1586,6 +1586,8 @@ func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, inpu
 //     The specified Certificate can not be found in the Database
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
+//   - ErrCertificateIssuerCAExists
+//     Cannot delete certificate because the issuer CA still exists in the system.
 func (svc *CAServiceBackend) DeleteCertificate(ctx context.Context, input services.DeleteCertificateInput) error {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -1596,7 +1598,7 @@ func (svc *CAServiceBackend) DeleteCertificate(ctx context.Context, input servic
 	}
 
 	lFunc.Debugf("checking if certificate '%s' exists", input.SerialNumber)
-	exists, _, err := svc.certStorage.SelectExistsBySerialNumber(ctx, input.SerialNumber)
+	exists, cert, err := svc.certStorage.SelectExistsBySerialNumber(ctx, input.SerialNumber)
 	if err != nil {
 		lFunc.Errorf("something went wrong while checking if certificate '%s' exists in storage engine: %s", input.SerialNumber, err)
 		return err
@@ -1607,6 +1609,21 @@ func (svc *CAServiceBackend) DeleteCertificate(ctx context.Context, input servic
 		return errs.ErrCertificateNotFound
 	}
 
+	// Check if the issuer CA still exists in the system
+	lFunc.Debugf("checking if issuer CA '%s' still exists for certificate '%s'", cert.IssuerCAMetadata.ID, input.SerialNumber)
+	_, err = svc.getCACertificateIfExists(ctx, cert.IssuerCAMetadata.ID)
+	if err == nil {
+		// Issuer CA exists, reject deletion
+		lFunc.Errorf("cannot delete certificate %s: issuer CA %s still exists in the system", input.SerialNumber, cert.IssuerCAMetadata.ID)
+		return errs.ErrCertificateIssuerCAExists
+	} else if err != errs.ErrCANotFound {
+		// Some other error occurred while checking CA existence
+		lFunc.Errorf("error while checking if issuer CA '%s' exists: %s", cert.IssuerCAMetadata.ID, err)
+		return err
+	}
+
+	// Issuer CA does not exist, proceed with deletion
+	lFunc.Debugf("issuer CA '%s' not found, proceeding with certificate deletion", cert.IssuerCAMetadata.ID)
 	lFunc.Debugf("deleting certificate %s from storage engine", input.SerialNumber)
 	err = svc.certStorage.Delete(ctx, input.SerialNumber)
 	if err != nil {

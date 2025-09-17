@@ -1170,13 +1170,13 @@ func (r *caHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
 }
 
 // @Summary Delete Certificate
-// @Description Delete Certificate by Serial Number
+// @Description Delete Certificate by Serial Number (only when issuer CA no longer exists)
 // @Accept json
 // @Produce json
 // @Security OAuth2Password
 // @Success 204
 // @Failure 404 {string} string "Certificate not found"
-// @Failure 400 {string} string "Struct Validation error"
+// @Failure 400 {string} string "Struct Validation error || Issuer CA still exists"
 // @Failure 500
 // @Router /certificates/{sn} [delete]
 func (r *caHttpRoutes) DeleteCertificate(ctx *gin.Context) {
@@ -1198,6 +1198,8 @@ func (r *caHttpRoutes) DeleteCertificate(ctx *gin.Context) {
 		switch err {
 		case errs.ErrCertificateNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrCertificateIssuerCAExists:
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:

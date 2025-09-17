@@ -372,6 +372,7 @@ func (cli *httpCAClient) DeleteCertificate(ctx context.Context, input services.D
 		},
 		400: {
 			errs.ErrValidateBadRequest,
+			errs.ErrCertificateIssuerCAExists,
 		},
 	})
 	if err != nil {
