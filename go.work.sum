@@ -948,6 +948,13 @@ github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3 v3.8.1/go.mod h1:ZnX
 github.com/lamassuiot/lamassuiot/engines/fs-storage/localfs/v3 v3.8.1/go.mod h1:PYRUH7Y0h9E/6NdnaqMzId3EQshcKfsO0GLjv5eoavk=
 github.com/lamassuiot/lamassuiot/engines/fs-storage/s3/v3 v3.8.1/go.mod h1:xsd6+OyYU3rI6Y8pakDTSPse+QivH3CNED5UmZTquAk=
 github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3 v3.8.1/go.mod h1:gIyAxun5zWZzXiyHiOPAZ4yz/pNRO6ibg7gya6SlgbQ=
+github.com/lamassuiot/lamassuiot/connectors/awsiot/v3 v3.8.0/go.mod h1:lTqvQLQvAQ+cakQbREDRY6Qrqx81rCID+PR+vAXbDtg=
+github.com/lamassuiot/lamassuiot/engines/crypto/aws/v3 v3.8.0/go.mod h1:AQysineef/1vm3dV5IXRbls+OYmYEyyOach7v3lLkno=
+github.com/lamassuiot/lamassuiot/engines/crypto/pkcs11/v3 v3.8.0/go.mod h1:wr3aeU/ZJh/6XkbRCDsip1BcIpFvEHv/4rd8KezJuSU=
+github.com/lamassuiot/lamassuiot/engines/crypto/software/v3 v3.0.0-20250125081925-9d327c393cdb/go.mod h1:KRYPhh319Zwrp0Es0ZtnuBzCOMJshMIsnN5DniR8DPY=
+github.com/lamassuiot/lamassuiot/engines/crypto/vaultkv2/v3 v3.8.0/go.mod h1:aHKYdzVtQ7sXoNCOhme0kfmbZX19xi88Qu0snGGV7Ek=
+github.com/lamassuiot/lamassuiot/engines/fs-storage/localfs/v3 v3.8.0/go.mod h1:AdcwcS97I8U3DEs4Sz+FxECtwgA/XBUPFdCKtvVQmbI=
+github.com/lamassuiot/lamassuiot/engines/fs-storage/s3/v3 v3.8.0/go.mod h1:PA36BYXpMacfIha1wejFdIelEvL14aSVD2zzGdm4chA=
 github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0/go.mod h1:zJYVVT2jmtg6P3p1VtQj7WsuWi/y4VnjVBn7F8KPB3I=
 github.com/lyft/protoc-gen-star/v2 v2.0.4-0.20230330145011-496ad1ac90a4/go.mod h1:amey7yeodaJhXSbf/TlLvWiqQfLOSpEk//mLlc+axEk=
 github.com/magiconair/properties v1.8.10/go.mod h1:Dhd985XPs7jluiymwWYZ0G4Z61jb3vdS329zhj2hYo0=
