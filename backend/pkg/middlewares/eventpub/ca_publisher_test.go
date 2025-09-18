@@ -286,6 +286,18 @@ func TestCAEventPublisher(t *testing.T) {
 			},
 		},
 		{
+			name: "DeleteCertificate with errors - Not fire event",
+			test: func(t *testing.T) {
+				withErrorsSingleResult(t, "DeleteCertificate", services.DeleteCertificateInput{}, models.EventDeleteCertificateKey)
+			},
+		},
+		{
+			name: "DeleteCertificate without errors - fire event",
+			test: func(t *testing.T) {
+				withoutErrorsSingleResult(t, "DeleteCertificate", services.DeleteCertificateInput{}, models.EventDeleteCertificateKey)
+			},
+		},
+		{
 			name: "UpdateCAProfile with errors - Not fire event",
 			test: func(t *testing.T) {
 				withErrors(t, "UpdateCAProfile", services.UpdateCAProfileInput{}, models.EventUpdateCAProfileKey, &models.CACertificate{},
