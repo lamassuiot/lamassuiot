@@ -1169,6 +1169,49 @@ func (r *caHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
 	ctx.JSON(200, cert)
 }
 
+// @Summary Delete Certificate
+// @Description Delete Certificate by Serial Number (only when issuer CA no longer exists)
+// @Accept json
+// @Produce json
+// @Security OAuth2Password
+// @Success 204
+// @Failure 404 {string} string "Certificate not found"
+// @Failure 400 {string} string "Struct Validation error || Issuer CA still exists"
+// @Failure 500
+// @Router /certificates/{sn} [delete]
+func (r *caHttpRoutes) DeleteCertificate(ctx *gin.Context) {
+	type uriParams struct {
+		SerialNumber string `uri:"sn" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	err := r.svc.DeleteCertificate(ctx, services.DeleteCertificateInput{
+		SerialNumber: params.SerialNumber,
+	})
+
+	if err != nil {
+		switch err {
+		case errs.ErrCertificateNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrCertificateIssuerCAExists:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+
+	ctx.JSON(204, gin.H{})
+}
+
 func (r *caHttpRoutes) ImportCertificate(ctx *gin.Context) {
 	var requestBody resources.ImportCertificateBody
 	if err := ctx.BindJSON(&requestBody); err != nil {
