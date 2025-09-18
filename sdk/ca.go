@@ -495,6 +495,8 @@ func (cli *httpCAClient) DeleteKeyByID(ctx context.Context, input services.GetBy
 	if err != nil {
 		return err
 	}
+
+	return nil
 }
 
 func (cli *httpCAClient) DeleteIssuanceProfile(ctx context.Context, input services.DeleteIssuanceProfileInput) error {
