@@ -127,7 +127,7 @@ func createSubscriberEventBus(conf config.VAconfig, crlSvc *beService.CRLService
 	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "VA", "Event Bus")
 	lMessaging.Infof("Subscriber Event Bus is enabled")
 
-	publisher, err := eventbus.NewEventBusPublisher(conf.SubscriberEventBus, serviceID, lMessaging)
+	dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberEventBus, serviceID, lMessaging)
 	if err != nil {
 		return fmt.Errorf("could not create Event Bus publisher: %s", err)
 	}
@@ -139,7 +139,7 @@ func createSubscriberEventBus(conf config.VAconfig, crlSvc *beService.CRLService
 	}
 
 	eventHandlers := handlers.NewVAEventHandler(lMessaging, crlSvc)
-	subHandler, err := ceventbus.NewEventBusMessageHandler("VA-CA-DEFAULT", []string{"ca.#", "certificate.#"}, publisher, subscriber, lMessaging, *eventHandlers)
+	subHandler, err := ceventbus.NewEventBusMessageHandler("VA-CA-DEFAULT", []string{"ca.#", "certificate.#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
 	if err != nil {
 		return fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
 	}
