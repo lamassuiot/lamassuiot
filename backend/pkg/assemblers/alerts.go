@@ -57,7 +57,7 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 	if conf.SubscriberEventBus.Enabled {
 		log.Infof("Event Bus is enabled")
 
-		publisher, err := eventbus.NewEventBusPublisher(conf.SubscriberEventBus, "alerts", lMessaging)
+		dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberEventBus, "alerts", lMessaging)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
@@ -69,7 +69,7 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 		}
 
 		eventHandlers := handlers.NewAlertsEventHandler(lMessaging, svc)
-		subHandler, err := ceventbus.NewEventBusMessageHandler(models.AlertManagerServiceName, []string{"#"}, publisher, subscriber, lMessaging, *eventHandlers)
+		subHandler, err := ceventbus.NewEventBusMessageHandler(models.AlertManagerServiceName, []string{"#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
 		}
