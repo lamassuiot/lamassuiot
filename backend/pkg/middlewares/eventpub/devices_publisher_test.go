@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func devicesEventChecker(event models.EventType, expectations []func(*svcmock.MockDeviceManagerService), operation func(services.DeviceManagerService), assertions func(*CloudEventMiddlewarePublisherMock, *svcmock.MockDeviceManagerService)) {
+func devicesEventChecker(event models.EventType, expectations []func(*svcmock.MockDeviceManagerService), operation func(services.DeviceManagerService), assertions func(*CloudEventPublisherMock, *svcmock.MockDeviceManagerService)) {
 	mockDeviceManagerService := new(svcmock.MockDeviceManagerService)
-	mockEventMWPub := new(CloudEventMiddlewarePublisherMock)
+	mockEventMWPub := new(CloudEventPublisherMock)
 	caEventPublisherMw := NewDeviceEventPublisher(mockEventMWPub)
 	caEventPublisher := caEventPublisherMw(mockDeviceManagerService)
 
@@ -23,7 +23,7 @@ func devicesEventChecker(event models.EventType, expectations []func(*svcmock.Mo
 		expectation(mockDeviceManagerService)
 	}
 
-	mockEventMWPub.On("PublishCloudEvent", context.Background(), event, mock.Anything)
+	mockEventMWPub.On("PublishCloudEvent", mock.Anything, mock.Anything)
 	operation(caEventPublisher)
 
 	assertions(mockEventMWPub, mockDeviceManagerService)
@@ -32,7 +32,7 @@ func devicesEventChecker(event models.EventType, expectations []func(*svcmock.Mo
 func devicesWithoutErrors[E any, O any](t *testing.T, method string, input E, event models.EventType, expectedOutput O, extra ...func(*svcmock.MockDeviceManagerService)) {
 	expectations := []func(*svcmock.MockDeviceManagerService){
 		func(mockCAService *svcmock.MockDeviceManagerService) {
-			mockCAService.On(method, context.Background(), mock.Anything).Return(expectedOutput, nil)
+			mockCAService.On(method, mock.Anything, mock.Anything).Return(expectedOutput, nil)
 		},
 	}
 	expectations = append(expectations, extra...)
@@ -43,17 +43,18 @@ func devicesWithoutErrors[E any, O any](t *testing.T, method string, input E, ev
 		assert.Nil(t, r[1].Interface())
 	}
 
-	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockDeviceManagerService) {
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDeviceManagerService) {
 		mockCAService.AssertExpectations(t)
 		mockEventMWPub.AssertExpectations(t)
 	}
 
 	devicesEventChecker(event, expectations, operation, assertions)
 }
+
 func devicesWithErrors[E any, O any](t *testing.T, method string, input E, event models.EventType, expectedOutput O, extra ...func(*svcmock.MockDeviceManagerService)) {
 	expectations := []func(*svcmock.MockDeviceManagerService){
 		func(mockCAService *svcmock.MockDeviceManagerService) {
-			mockCAService.On(method, context.Background(), mock.Anything).Return(expectedOutput, errors.New("some error"))
+			mockCAService.On(method, mock.Anything, mock.Anything).Return(expectedOutput, errors.New("some error"))
 		},
 	}
 	expectations = append(expectations, extra...)
@@ -64,7 +65,51 @@ func devicesWithErrors[E any, O any](t *testing.T, method string, input E, event
 		assert.NotNil(t, r[1].Interface())
 	}
 
-	assertions := func(mockEventMWPub *CloudEventMiddlewarePublisherMock, mockCAService *svcmock.MockDeviceManagerService) {
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDeviceManagerService) {
+		mockCAService.AssertExpectations(t)
+		mockEventMWPub.AssertNotCalled(t, "PublishCloudEvent")
+	}
+
+	devicesEventChecker(event, expectations, operation, assertions)
+}
+
+func devicesWithoutErrorsSingleResult[E any](t *testing.T, method string, input E, event models.EventType, extra ...func(*svcmock.MockDeviceManagerService)) {
+	expectations := []func(*svcmock.MockDeviceManagerService){
+		func(mockCAService *svcmock.MockDeviceManagerService) {
+			mockCAService.On(method, mock.Anything, mock.Anything).Return(nil)
+		},
+	}
+	expectations = append(expectations, extra...)
+
+	operation := func(caMiddleware services.DeviceManagerService) {
+		m := reflect.ValueOf(caMiddleware).MethodByName(method)
+		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
+		assert.Nil(t, r[0].Interface())
+	}
+
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDeviceManagerService) {
+		mockCAService.AssertExpectations(t)
+		mockEventMWPub.AssertExpectations(t)
+	}
+
+	devicesEventChecker(event, expectations, operation, assertions)
+}
+
+func devicesWithErrorsSingleResult[E any](t *testing.T, method string, input E, event models.EventType, extra ...func(*svcmock.MockDeviceManagerService)) {
+	expectations := []func(*svcmock.MockDeviceManagerService){
+		func(mockCAService *svcmock.MockDeviceManagerService) {
+			mockCAService.On(method, mock.Anything, mock.Anything).Return(errors.New("some error"))
+		},
+	}
+	expectations = append(expectations, extra...)
+
+	operation := func(deviceMiddleware services.DeviceManagerService) {
+		m := reflect.ValueOf(deviceMiddleware).MethodByName(method)
+		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
+		assert.NotNil(t, r[0].Interface())
+	}
+
+	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockDeviceManagerService) {
 		mockCAService.AssertExpectations(t)
 		mockEventMWPub.AssertNotCalled(t, "PublishCloudEvent")
 	}
@@ -73,7 +118,6 @@ func devicesWithErrors[E any, O any](t *testing.T, method string, input E, event
 }
 
 func TestDevicesEventPublisher(t *testing.T) {
-
 	var testcases = []struct {
 		name string
 		test func(t *testing.T)
@@ -95,7 +139,7 @@ func TestDevicesEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				devicesWithErrors(t, "UpdateDeviceStatus", services.UpdateDeviceStatusInput{}, models.EventUpdateDeviceStatusKey, &models.Device{},
 					func(mockCAService *svcmock.MockDeviceManagerService) {
-						mockCAService.On("GetDeviceByID", context.Background(), mock.Anything).Return(&models.Device{}, nil)
+						mockCAService.On("GetDeviceByID", mock.Anything, mock.Anything).Return(&models.Device{}, nil)
 					})
 			},
 		},
@@ -104,7 +148,7 @@ func TestDevicesEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				devicesWithoutErrors(t, "UpdateDeviceStatus", services.UpdateDeviceStatusInput{}, models.EventUpdateDeviceStatusKey, &models.Device{},
 					func(mockCAService *svcmock.MockDeviceManagerService) {
-						mockCAService.On("GetDeviceByID", context.Background(), mock.Anything).Return(&models.Device{}, nil)
+						mockCAService.On("GetDeviceByID", mock.Anything, mock.Anything).Return(&models.Device{}, nil)
 					})
 			},
 		},
@@ -113,7 +157,7 @@ func TestDevicesEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				devicesWithErrors(t, "UpdateDeviceIdentitySlot", services.UpdateDeviceIdentitySlotInput{}, models.EventUpdateDeviceIDSlotKey, &models.Device{},
 					func(mockCAService *svcmock.MockDeviceManagerService) {
-						mockCAService.On("GetDeviceByID", context.Background(), mock.Anything).Return(&models.Device{}, nil)
+						mockCAService.On("GetDeviceByID", mock.Anything, mock.Anything).Return(&models.Device{}, nil)
 					})
 			},
 		},
@@ -122,7 +166,7 @@ func TestDevicesEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				devicesWithoutErrors(t, "UpdateDeviceIdentitySlot", services.UpdateDeviceIdentitySlotInput{}, models.EventUpdateDeviceIDSlotKey, &models.Device{},
 					func(mockCAService *svcmock.MockDeviceManagerService) {
-						mockCAService.On("GetDeviceByID", context.Background(), mock.Anything).Return(&models.Device{}, nil)
+						mockCAService.On("GetDeviceByID", mock.Anything, mock.Anything).Return(&models.Device{}, nil)
 					})
 			},
 		},
@@ -131,7 +175,7 @@ func TestDevicesEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				devicesWithErrors(t, "UpdateDeviceMetadata", services.UpdateDeviceMetadataInput{}, models.EventUpdateDeviceMetadataKey, &models.Device{},
 					func(mockCAService *svcmock.MockDeviceManagerService) {
-						mockCAService.On("GetDeviceByID", context.Background(), mock.Anything).Return(&models.Device{}, nil)
+						mockCAService.On("GetDeviceByID", mock.Anything, mock.Anything).Return(&models.Device{}, nil)
 					})
 			},
 		},
@@ -140,14 +184,25 @@ func TestDevicesEventPublisher(t *testing.T) {
 			test: func(t *testing.T) {
 				devicesWithoutErrors(t, "UpdateDeviceMetadata", services.UpdateDeviceMetadataInput{}, models.EventUpdateDeviceMetadataKey, &models.Device{},
 					func(mockCAService *svcmock.MockDeviceManagerService) {
-						mockCAService.On("GetDeviceByID", context.Background(), mock.Anything).Return(&models.Device{}, nil)
+						mockCAService.On("GetDeviceByID", mock.Anything, mock.Anything).Return(&models.Device{}, nil)
 					})
+			},
+		},
+		{
+			name: "DeleteDevice with errors - Not fire event",
+			test: func(t *testing.T) {
+				devicesWithErrorsSingleResult(t, "DeleteDevice", services.DeleteDeviceInput{}, models.EventDeleteDeviceKey)
+			},
+		},
+		{
+			name: "DeleteDevice without errors - fire event",
+			test: func(t *testing.T) {
+				devicesWithoutErrorsSingleResult(t, "DeleteDevice", services.DeleteDeviceInput{}, models.EventDeleteDeviceKey)
 			},
 		},
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.name, tc.test)
 	}
 }

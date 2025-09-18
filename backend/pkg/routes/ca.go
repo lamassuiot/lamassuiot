@@ -45,6 +45,7 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) 
 	rv1.PUT("/certificates/:sn/status", routes.UpdateCertificateStatus)
 	rv1.PUT("/certificates/:sn/metadata", routes.UpdateCertificateMetadata)
 	rv1.PATCH("/certificates/:sn/metadata", routes.UpdateCertificateMetadata)
+	rv1.DELETE("/certificates/:sn", routes.DeleteCertificate)
 	rv1.POST("/certificates/import", routes.ImportCertificate)
 
 	rv1.GET("/engines", routes.GetCryptoEngineProvider)

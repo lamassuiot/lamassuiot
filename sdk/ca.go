@@ -365,6 +365,23 @@ func (cli *httpCAClient) UpdateCertificateMetadata(ctx context.Context, input se
 	return response, nil
 }
 
+func (cli *httpCAClient) DeleteCertificate(ctx context.Context, input services.DeleteCertificateInput) error {
+	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/certificates/"+input.SerialNumber, map[int][]error{
+		404: {
+			errs.ErrCertificateNotFound,
+		},
+		400: {
+			errs.ErrValidateBadRequest,
+			errs.ErrCertificateIssuerCAExists,
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (cli *httpCAClient) GetCARequestByID(ctx context.Context, input services.GetByIDInput) (*models.CACertificateRequest, error) {
 	response, err := Get[models.CACertificateRequest](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/requests/"+input.ID, nil, map[int][]error{})
 	if err != nil {

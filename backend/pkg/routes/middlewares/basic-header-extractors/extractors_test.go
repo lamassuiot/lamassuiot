@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/core/v3"
 )
 
 func TestUpdateContextWithRequest(t *testing.T) {
@@ -19,14 +20,14 @@ func TestUpdateContextWithRequest(t *testing.T) {
 	updateContextWithRequestWithSource(&ctx, headers)
 
 	// Verify that the request ID is correctly set in the context
-	reqID := ctx.Value(string(CtxRequestID))
+	reqID := ctx.Value(core.LamassuContextKeyRequestID)
 	if reqID != "12345" {
 		t.Errorf("UpdateContextWithRequest did not set the correct request ID in the context. Expected: %s, Got: %v", "12345", reqID)
 	}
 
 	// Verify that the source is correctly set in the context
-	source := ctx.Value(string(CtxSource))
-	if !strings.HasPrefix(source.(string), "test-source") {
+	source := ctx.Value(core.LamassuContextKeySource)
+	if !strings.HasPrefix(source.(string), "http-test-source") {
 		t.Errorf("UpdateContextWithRequest did not set the correct source in the context. Expected: %s, Got: %v", "test-source", source)
 	}
 

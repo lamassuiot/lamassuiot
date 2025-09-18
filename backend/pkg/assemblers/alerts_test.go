@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	outputchannels "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/alerts/output_channels"
+	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -116,7 +117,10 @@ func TestGetLastEvents(t *testing.T) {
 	eventType := models.EventCreateCAKey
 	eventSource := "test://source"
 	payload := map[string]string{"key": "value"}
-	event := helpers.BuildCloudEvent(string(eventType), eventSource, payload)
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
+	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
+	event := helpers.BuildCloudEvent(ctx, payload)
 
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
 	if err != nil {
@@ -135,7 +139,10 @@ func TestGetLastEvents(t *testing.T) {
 	assert.Equal(t, 1, len(eventSamples), "should have 1 events")
 	assert.Equal(t, eventType, eventSamples[0].EventType, "should have the same event type")
 
-	event = helpers.BuildCloudEvent(string(models.EventCreateDMSKey), eventSource, payload)
+	ctx = context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateDMSKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
+	event = helpers.BuildCloudEvent(ctx, payload)
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
@@ -196,8 +203,13 @@ func TestSubscriptionWithJSONPathFilter(t *testing.T) {
 
 	eventType := models.EventCreateCAKey
 	eventSource := "test://source"
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
+	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
+
 	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
-	event := helpers.BuildCloudEvent(string(eventType), eventSource, payload)
+
+	event := helpers.BuildCloudEvent(ctx, payload)
 
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
 	if err != nil {
@@ -206,7 +218,10 @@ func TestSubscriptionWithJSONPathFilter(t *testing.T) {
 	outChannelMock.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 
 	payload = map[string]interface{}{"person": map[string]interface{}{"name": "John", "age": "30"}}
-	event = helpers.BuildCloudEvent(string(eventType), eventSource, payload)
+	ctx = context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
+	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
+	event = helpers.BuildCloudEvent(ctx, payload)
 
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
 	if err != nil {
@@ -248,8 +263,12 @@ func TestSubscriptionWithJavascriptFilter(t *testing.T) {
 
 	eventType := models.EventCreateCAKey
 	eventSource := "test://source"
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
+	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
+
 	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
-	event := helpers.BuildCloudEvent(string(eventType), eventSource, payload)
+	event := helpers.BuildCloudEvent(ctx, payload)
 
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
 	if err != nil {
@@ -257,8 +276,12 @@ func TestSubscriptionWithJavascriptFilter(t *testing.T) {
 	}
 	outChannelMock.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 
+	ctx = context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
+	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
+
 	payload = map[string]interface{}{"person": map[string]interface{}{"name": "John", "age": "30"}}
-	event = helpers.BuildCloudEvent(string(eventType), eventSource, payload)
+	event = helpers.BuildCloudEvent(ctx, payload)
 
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
 	if err != nil {
@@ -323,7 +346,11 @@ func TestSubscriptionWithJSONSchemaFilter(t *testing.T) {
 	eventType := models.EventCreateCAKey
 	eventSource := "test://source"
 	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
-	event := helpers.BuildCloudEvent(string(eventType), eventSource, payload)
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
+	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
+	event := helpers.BuildCloudEvent(ctx, payload)
 
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
 	if err != nil {
@@ -332,7 +359,10 @@ func TestSubscriptionWithJSONSchemaFilter(t *testing.T) {
 	outChannelMock.AssertNotCalled(t, "SendNotification", mock.Anything, mock.Anything, mock.Anything)
 
 	payload = map[string]interface{}{"person": map[string]interface{}{"name": "John", "age": "30"}}
-	event = helpers.BuildCloudEvent(string(eventType), eventSource, payload)
+	ctx = context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
+	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
+	event = helpers.BuildCloudEvent(ctx, payload)
 
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
 	if err != nil {
@@ -423,7 +453,12 @@ func TestSubscriptionWithWebhookOutput(t *testing.T) {
 	eventType := models.EventCreateCAKey
 	eventSource := "test://source"
 	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
-	event := helpers.BuildCloudEvent(string(eventType), eventSource, payload)
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
+	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
+
+	event := helpers.BuildCloudEvent(ctx, payload)
 
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
 	if err != nil {
@@ -437,7 +472,11 @@ func TestSubscriptionWithWebhookOutput(t *testing.T) {
 	isWebhookCalledPost = false
 	isTeamsCalledPost = false
 
-	event = helpers.BuildCloudEvent(string(models.EventCreateCertificateKey), eventSource, payload)
+	ctx = context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateCertificateKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
+
+	event = helpers.BuildCloudEvent(ctx, payload)
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
 	if err != nil {
 		t.Fatalf("could not handle event: %s", err)
@@ -495,7 +534,12 @@ func TestSubscriptionWithSMPTOutput(t *testing.T) {
 	eventType := models.EventCreateCAKey
 	eventSource := "test://source"
 	payload := map[string]interface{}{"person": map[string]interface{}{"name": "James", "age": "30"}}
-	event := helpers.BuildCloudEvent(string(eventType), eventSource, payload)
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
+	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
+
+	event := helpers.BuildCloudEvent(ctx, payload)
 
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
 	if err != nil {
@@ -506,7 +550,11 @@ func TestSubscriptionWithSMPTOutput(t *testing.T) {
 	assert.Equal(t, 1, len(messages), "should have 1 messages")
 
 	eventType = models.EventBindDeviceIdentityKey
-	event = helpers.BuildCloudEvent(string(eventType), eventSource, payload)
+	ctx = context.Background()
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, eventType)
+	ctx = context.WithValue(ctx, core.LamassuContextKeySource, eventSource)
+
+	event = helpers.BuildCloudEvent(ctx, payload)
 
 	err = alertsTest.Service.HandleEvent(context.TODO(), &services.HandleEventInput{Event: event})
 	if err != nil {

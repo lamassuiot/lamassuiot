@@ -1,6 +1,7 @@
 package eventhandling
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -36,11 +37,11 @@ func TestHandleMessage(t *testing.T) {
 	svc.On("Event1", mock.Anything).Return(nil)
 	svc.On("Event2", mock.Anything).Return(errors.New("error handling event"))
 
-	dispatchMap := map[string]func(*event.Event) error{
-		"event_type_1": func(event *event.Event) error {
+	dispatchMap := map[string]func(context.Context, *event.Event) error{
+		"event_type_1": func(ctx context.Context, event *event.Event) error {
 			return svc.Event1(event)
 		},
-		"event_type_2": func(event *event.Event) error {
+		"event_type_2": func(ctx context.Context, event *event.Event) error {
 			return svc.Event2(event)
 		},
 	}
@@ -104,8 +105,8 @@ func TestHandleAnyEvent(t *testing.T) {
 
 	svc.On("Event1", mock.Anything).Return(nil)
 
-	dispatchMap := map[string]func(*event.Event) error{
-		string(models.EventAnyKey): func(event *event.Event) error {
+	dispatchMap := map[string]func(context.Context, *event.Event) error{
+		string(models.EventAnyKey): func(ctx context.Context, event *event.Event) error {
 			return svc.Event1(event)
 		},
 	}

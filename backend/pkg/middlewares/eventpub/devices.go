@@ -5,20 +5,21 @@ import (
 	"fmt"
 
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
 type deviceEventPublisher struct {
 	next       services.DeviceManagerService
-	eventMWPub ICloudEventMiddlewarePublisher
+	eventMWPub ICloudEventPublisher
 }
 
-func NewDeviceEventPublisher(eventMWPub ICloudEventMiddlewarePublisher) lservices.DeviceMiddleware {
+func NewDeviceEventPublisher(eventMWPub ICloudEventPublisher) lservices.DeviceMiddleware {
 	return func(next services.DeviceManagerService) services.DeviceManagerService {
 		return &deviceEventPublisher{
 			next:       next,
-			eventMWPub: eventMWPub,
+			eventMWPub: NewEventPublisherWithSourceMiddleware(eventMWPub, models.DeviceManagerSource),
 		}
 	}
 }
@@ -28,9 +29,12 @@ func (mw *deviceEventPublisher) GetDevicesStats(ctx context.Context, input servi
 }
 
 func (mw *deviceEventPublisher) CreateDevice(ctx context.Context, input services.CreateDeviceInput) (output *models.Device, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateDeviceKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s", input.ID))
+
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(context.Background(), models.EventCreateDeviceKey, output)
+			mw.eventMWPub.PublishCloudEvent(context.Background(), output)
 		}
 	}()
 	return mw.next.CreateDevice(ctx, input)
@@ -49,6 +53,9 @@ func (mw *deviceEventPublisher) GetDeviceByDMS(ctx context.Context, input servic
 }
 
 func (mw *deviceEventPublisher) UpdateDeviceStatus(ctx context.Context, input services.UpdateDeviceStatusInput) (output *models.Device, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateDeviceStatusKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s", input.ID))
+
 	prev, err := mw.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: input.ID,
 	})
@@ -58,7 +65,7 @@ func (mw *deviceEventPublisher) UpdateDeviceStatus(ctx context.Context, input se
 
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(context.Background(), models.EventUpdateDeviceStatusKey, models.UpdateModel[models.Device]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.Device]{
 				Updated:  *output,
 				Previous: *prev,
 			})
@@ -68,6 +75,9 @@ func (mw *deviceEventPublisher) UpdateDeviceStatus(ctx context.Context, input se
 }
 
 func (mw *deviceEventPublisher) UpdateDeviceIdentitySlot(ctx context.Context, input services.UpdateDeviceIdentitySlotInput) (output *models.Device, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateDeviceIDSlotKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s", input.ID))
+
 	prev, err := mw.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: input.ID,
 	})
@@ -76,7 +86,7 @@ func (mw *deviceEventPublisher) UpdateDeviceIdentitySlot(ctx context.Context, in
 	}
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(context.Background(), models.EventUpdateDeviceIDSlotKey, models.UpdateModel[models.Device]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.Device]{
 				Updated:  *output,
 				Previous: *prev,
 			})
@@ -86,6 +96,9 @@ func (mw *deviceEventPublisher) UpdateDeviceIdentitySlot(ctx context.Context, in
 }
 
 func (mw *deviceEventPublisher) UpdateDeviceMetadata(ctx context.Context, input services.UpdateDeviceMetadataInput) (output *models.Device, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateDeviceMetadataKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s", input.ID))
+
 	prev, err := mw.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: input.ID,
 	})
@@ -95,7 +108,7 @@ func (mw *deviceEventPublisher) UpdateDeviceMetadata(ctx context.Context, input 
 
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, models.EventUpdateDeviceMetadataKey, models.UpdateModel[models.Device]{
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.Device]{
 				Updated:  *output,
 				Previous: *prev,
 			})
@@ -105,16 +118,12 @@ func (mw *deviceEventPublisher) UpdateDeviceMetadata(ctx context.Context, input 
 }
 
 func (mw *deviceEventPublisher) DeleteDevice(ctx context.Context, input services.DeleteDeviceInput) (err error) {
-	deviceToDelete, err := mw.GetDeviceByID(ctx, services.GetDeviceByIDInput{
-		ID: input.ID,
-	})
-	if err != nil {
-		return fmt.Errorf("mw error: could not get Device %s: %w", input.ID, err)
-	}
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventDeleteDeviceKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s", input.ID))
 
 	defer func() {
 		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(context.Background(), models.EventDeleteDeviceKey, deviceToDelete)
+			mw.eventMWPub.PublishCloudEvent(ctx, input)
 		}
 	}()
 	return mw.next.DeleteDevice(ctx, input)

@@ -45,6 +45,7 @@ type CAService interface {
 	// GetCertificatesByStatusAndCA(input GetCertificatesByExpirationDateInput) (string, error)
 	UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) (*models.Certificate, error)
 	UpdateCertificateMetadata(ctx context.Context, input UpdateCertificateMetadataInput) (*models.Certificate, error)
+	DeleteCertificate(ctx context.Context, input DeleteCertificateInput) error
 
 	GetCARequestByID(ctx context.Context, input GetByIDInput) (*models.CACertificateRequest, error)
 	DeleteCARequestByID(ctx context.Context, input GetByIDInput) error
@@ -263,6 +264,10 @@ type UpdateCertificateStatusInput struct {
 type UpdateCertificateMetadataInput struct {
 	SerialNumber string                  `validate:"required"`
 	Patches      []models.PatchOperation `validate:"required"`
+}
+
+type DeleteCertificateInput struct {
+	SerialNumber string `validate:"required"`
 }
 
 // KMS

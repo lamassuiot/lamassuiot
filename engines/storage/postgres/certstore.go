@@ -62,6 +62,10 @@ func (db *PostgresCertificateStorage) Update(ctx context.Context, certificate *m
 	return db.querier.Update(ctx, certificate, certificate.SerialNumber)
 }
 
+func (db *PostgresCertificateStorage) Delete(ctx context.Context, serialNumber string) error {
+	return db.querier.Delete(ctx, serialNumber)
+}
+
 func (db *PostgresCertificateStorage) SelectByCA(ctx context.Context, caID string, req storage.StorageListRequest[models.Certificate]) (string, error) {
 	opts := []gormExtraOps{
 		{query: "issuer_meta_id = ?", additionalWhere: []any{caID}},

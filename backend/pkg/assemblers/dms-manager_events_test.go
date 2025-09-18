@@ -5,7 +5,6 @@ import (
 	"crypto/elliptic"
 	"crypto/x509"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -23,7 +22,6 @@ import (
 )
 
 func TestBindIDEvent(t *testing.T) {
-	ctx := context.Background()
 	dmsMgr, testServers, err := StartDMSManagerServiceTestServer(t, true)
 	if err != nil {
 		t.Fatalf("could not create DMS Manager test server: %s", err)
@@ -109,7 +107,7 @@ func TestBindIDEvent(t *testing.T) {
 		}
 	}
 	standardEvCheck := func(event event.Event) error {
-		if !strings.HasPrefix(event.Source(), "lrn://dms-manager") {
+		if event.Source() != "source://lamassu.io/ctx/source/service/ra" {
 			return fmt.Errorf("unexpected event source")
 		}
 
@@ -273,7 +271,7 @@ func TestBindIDEvent(t *testing.T) {
 
 					if ev.Type() == string(models.EventBindDeviceIdentityKey) {
 						ctr++
-						if ctr == 2 {
+						if ctr == 2 { // since an enroll and a re-enroll are expected, we want to catch 2 events
 							foundChan <- ev
 						}
 					}
@@ -308,7 +306,7 @@ func TestBindIDEvent(t *testing.T) {
 					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
 				}
 
-				device, err := testServers.DeviceManager.HttpDeviceManagerSDK.CreateDevice(ctx, services.CreateDeviceInput{
+				device, err := testServers.DeviceManager.HttpDeviceManagerSDK.CreateDevice(context.Background(), services.CreateDeviceInput{
 					ID:        deviceCert.Subject.CommonName,
 					Alias:     "",
 					Tags:      dms.Settings.EnrollmentSettings.DeviceProvisionProfile.Tags,
@@ -486,7 +484,7 @@ func TestBindIDEvent(t *testing.T) {
 					if ev.Type() == string(models.EventBindDeviceIdentityKey) {
 						ctr++
 						if ctr == 2 {
-							foundChan <- ev
+							foundChan <- ev // since an enroll and a re-enroll are expected, we should expect 2 events. But since the reenroll fails, we should never reach here
 						}
 					}
 				}
