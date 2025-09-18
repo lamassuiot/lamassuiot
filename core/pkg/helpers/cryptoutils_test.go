@@ -7,6 +7,8 @@ import (
 	"crypto/rsa"
 	"crypto/sha512"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"reflect"
 	"testing"
 	"time"
@@ -350,5 +352,112 @@ func TestEqualPublicKeys(t *testing.T) {
 	// Test case 5: Different types of public keys
 	if EqualPublicKeys(&rsaKey1.PublicKey, &ecdsaKey1.PublicKey) {
 		t.Errorf("Expected public keys of different types to be different, but they were equal")
+	}
+}
+
+func TestExtractKeyUsageFromCSR_KeyUsageOnly(t *testing.T) {
+	priv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	subject := cmodels.Subject{CommonName: "test"}
+	kuExt, err := GenerateKeyUsagePKIExtension(x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign)
+	if err != nil {
+		t.Fatalf("failed to generate key usage extension: %v", err)
+	}
+	csr, err := GenerateCertificateRequestWithExtensions(subject, []pkix.Extension{kuExt}, priv)
+	if err != nil {
+		t.Fatalf("failed to generate CSR: %v", err)
+	}
+	ku, eku, err := ExtractKeyUsageFromCSR(csr)
+	if err != nil {
+		t.Fatalf("ExtractKeyUsageFromCSR error: %v", err)
+	}
+	if ku&x509.KeyUsageDigitalSignature == 0 || ku&x509.KeyUsageCertSign == 0 {
+		t.Errorf("unexpected key usage bits: %v", ku)
+	}
+	if len(eku) != 0 {
+		t.Errorf("expected no extended key usage, got: %v", eku)
+	}
+}
+
+func TestExtractKeyUsageFromCSR_ExtendedKeyUsageOnly(t *testing.T) {
+	priv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	subject := cmodels.Subject{CommonName: "test"}
+	ekuExt, err := GenerateExtendedKeyUsagePKIExtension([]x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+	if err != nil {
+		t.Fatalf("failed to generate extended key usage extension: %v", err)
+	}
+	csr, err := GenerateCertificateRequestWithExtensions(subject, []pkix.Extension{ekuExt}, priv)
+	if err != nil {
+		t.Fatalf("failed to generate CSR: %v", err)
+	}
+	ku, eku, err := ExtractKeyUsageFromCSR(csr)
+	if err != nil {
+		t.Fatalf("ExtractKeyUsageFromCSR error: %v", err)
+	}
+	if ku != 0 {
+		t.Errorf("expected key usage to be zero, got: %v", ku)
+	}
+	if len(eku) != 2 {
+		t.Errorf("expected 2 extended key usages, got: %v", eku)
+	}
+}
+
+func TestExtractKeyUsageFromCSR_BothExtensions(t *testing.T) {
+	priv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	subject := cmodels.Subject{CommonName: "test"}
+	kuExt, _ := GenerateKeyUsagePKIExtension(x509.KeyUsageDigitalSignature)
+	ekuExt, _ := GenerateExtendedKeyUsagePKIExtension([]x509.ExtKeyUsage{x509.ExtKeyUsageCodeSigning})
+	csr, err := GenerateCertificateRequestWithExtensions(subject, []pkix.Extension{kuExt, ekuExt}, priv)
+	if err != nil {
+		t.Fatalf("failed to generate CSR: %v", err)
+	}
+	ku, eku, err := ExtractKeyUsageFromCSR(csr)
+	if err != nil {
+		t.Fatalf("ExtractKeyUsageFromCSR error: %v", err)
+	}
+	if ku&x509.KeyUsageDigitalSignature == 0 {
+		t.Errorf("expected digital signature key usage, got: %v", ku)
+	}
+	if len(eku) != 1 || eku[0] != x509.ExtKeyUsageCodeSigning {
+		t.Errorf("expected code signing EKU, got: %v", eku)
+	}
+}
+
+func TestExtractKeyUsageFromCSR_InvalidKeyUsageExtension(t *testing.T) {
+	priv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	subject := cmodels.Subject{CommonName: "test"}
+	// Invalid ASN.1 for KeyUsage
+	invalidKU := pkix.Extension{
+		Id:    asn1.ObjectIdentifier{2, 5, 29, 15},
+		Value: []byte{0x01, 0x02, 0x03},
+	}
+	csr, err := GenerateCertificateRequestWithExtensions(subject, []pkix.Extension{invalidKU}, priv)
+	if err != nil {
+		t.Fatalf("failed to generate CSR: %v", err)
+	}
+	_, _, err = ExtractKeyUsageFromCSR(csr)
+	if err == nil {
+		t.Errorf("expected error for invalid key usage extension")
+	}
+}
+
+func TestExtractKeyUsageFromCSR_UnknownEKUOID(t *testing.T) {
+	priv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	subject := cmodels.Subject{CommonName: "test"}
+	// Use a made-up OID for EKU
+	ekuASN1, _ := asn1.Marshal([]asn1.ObjectIdentifier{{1, 2, 3, 4, 5}})
+	ekuExt := pkix.Extension{
+		Id:    asn1.ObjectIdentifier{2, 5, 29, 37},
+		Value: ekuASN1,
+	}
+	csr, err := GenerateCertificateRequestWithExtensions(subject, []pkix.Extension{ekuExt}, priv)
+	if err != nil {
+		t.Fatalf("failed to generate CSR: %v", err)
+	}
+	_, eku, err := ExtractKeyUsageFromCSR(csr)
+	if err != nil {
+		t.Fatalf("ExtractKeyUsageFromCSR error: %v", err)
+	}
+	if len(eku) != 0 {
+		t.Errorf("expected no recognized EKU, got: %v", eku)
 	}
 }

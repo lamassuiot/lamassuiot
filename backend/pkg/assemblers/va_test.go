@@ -3,6 +3,7 @@ package assemblers
 import (
 	"context"
 	"crypto/x509"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"math/rand"
@@ -263,8 +264,8 @@ func TestPostOCSP(t *testing.T) {
 					return fmt.Errorf("should've got OCSP Response, but got error: %s", err)
 				}
 
-				if helpers.SerialNumberToString(response.SerialNumber) != crt.SerialNumber {
-					return fmt.Errorf("ocsp response has different serial number than the certificate. Got %s, should've got %s", helpers.SerialNumberToString(response.SerialNumber), crt.SerialNumber)
+				if helpers.SerialNumberToHexString(response.SerialNumber) != crt.SerialNumber {
+					return fmt.Errorf("ocsp response has different serial number than the certificate. Got %s, should've got %s", helpers.SerialNumberToHexString(response.SerialNumber), crt.SerialNumber)
 				}
 
 				if err = response.CheckSignatureFrom((*x509.Certificate)(issuer.Certificate.Certificate)); err != nil {
@@ -464,7 +465,7 @@ func TestVARole(t *testing.T) {
 	var role *models.VARole
 	err = SleepRetry(5, 3*time.Second, func() error {
 		role, err = serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
-			CASubjectKeyID: helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId),
+			CASubjectKeyID: hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId),
 		})
 
 		return err
@@ -473,16 +474,16 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("could not get role: %s", err)
 	}
 
-	if role.CASubjectKeyID != helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId) {
-		t.Fatalf("role CASubjectKeyID should be %s, got %s", helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId), role.CASubjectKeyID)
+	if role.CASubjectKeyID != hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId) {
+		t.Fatalf("role CASubjectKeyID should be %s, got %s", hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId), role.CASubjectKeyID)
 	}
 
 	if role.CRLOptions.RegenerateOnRevoke != true {
 		t.Fatalf("role CRLOptions.RegenerateOnRevoke should be true, got %t", role.CRLOptions.RegenerateOnRevoke)
 	}
 
-	if role.CRLOptions.SubjectKeyIDSigner != helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId) {
-		t.Fatalf("role CRLOptions.SubjectKeyIDSigner should be %s, got %s", helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId), role.CRLOptions.SubjectKeyIDSigner)
+	if role.CRLOptions.SubjectKeyIDSigner != hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId) {
+		t.Fatalf("role CRLOptions.SubjectKeyIDSigner should be %s, got %s", hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId), role.CRLOptions.SubjectKeyIDSigner)
 	}
 
 	//Now Update the role
@@ -492,7 +493,7 @@ func TestVARole(t *testing.T) {
 	role.CRLOptions.Validity = models.TimeDuration(time.Hour * 2)
 
 	role, err = serverTest.VA.CRLService.UpdateVARole(context.Background(), services.UpdateVARoleInput{
-		CASubjectKeyID: helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId),
+		CASubjectKeyID: hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId),
 		CRLRole:        role.CRLOptions,
 	})
 
@@ -501,7 +502,7 @@ func TestVARole(t *testing.T) {
 	}
 
 	role, err = serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
-		CASubjectKeyID: helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId),
+		CASubjectKeyID: hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId),
 	})
 
 	if err != nil {
@@ -541,13 +542,22 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("could not get roles: %s", err)
 	}
 
+	profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not create issuance profile: %s", err)
+	}
+
 	//Create New CA and check if the role is created automatically
 	ca, err = serverTest.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-		ID:                 "new-ca",
-		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-		Subject:            models.Subject{CommonName: "TestCA"},
-		CAExpiration:       models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 24)},
-		IssuanceExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+		ID:           "new-ca",
+		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+		Subject:      models.Subject{CommonName: "TestCA"},
+		CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 24)},
+		ProfileID:    profile.ID,
 	})
 	if err != nil {
 		t.Fatalf("could not create new CA: %s", err)
@@ -555,7 +565,7 @@ func TestVARole(t *testing.T) {
 
 	err = SleepRetry(10, 3*time.Second, func() error {
 		role, err = serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
-			CASubjectKeyID: helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId),
+			CASubjectKeyID: hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId),
 		})
 
 		return err
@@ -564,8 +574,8 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("could not get role: %s", err)
 	}
 
-	if role.CASubjectKeyID != helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId) {
-		t.Fatalf("role CASubjectKeyID should be %s, got %s", helpers.FormatHexWithColons(ca.Certificate.Certificate.SubjectKeyId), role.CASubjectKeyID)
+	if role.CASubjectKeyID != hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId) {
+		t.Fatalf("role CASubjectKeyID should be %s, got %s", hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId), role.CASubjectKeyID)
 	}
 
 	SleepRetry(10, 3*time.Second, func() error {
@@ -609,14 +619,9 @@ func generateCertificate(caSDK services.CAService) (*models.Certificate, error) 
 	}
 
 	crt, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-		CAID:        DefaultCAID,
-		CertRequest: (*models.X509CertificateRequest)(csr),
-		IssuanceProfile: models.IssuanceProfile{
-			Validity:        ca.Validity,
-			SignAsCA:        false,
-			HonorSubject:    true,
-			HonorExtensions: true,
-		},
+		CAID:              DefaultCAID,
+		CertRequest:       (*models.X509CertificateRequest)(csr),
+		IssuanceProfileID: ca.ProfileID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("could not sign csr: %s", err)
@@ -637,16 +642,27 @@ func initCAForVA(testServer *TestServer) (*models.CACertificate, error) {
 	//Init CA Server with 1 CA
 	caDUr := models.TimeDuration(time.Hour * 24)
 	issuanceDur := models.TimeDuration(time.Hour * 12)
-	ca, err := testServer.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-		ID:                 DefaultCAID,
-		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-		Subject:            models.Subject{CommonName: "TestCA"},
-		CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-		IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
+
+	profile, err := testServer.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+		},
 	})
 	if err != nil {
 		return nil, err
 	}
+
+	ca, err := testServer.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
+		ID:           DefaultCAID,
+		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+		Subject:      models.Subject{CommonName: "TestCA"},
+		CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+		ProfileID:    profile.ID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return ca, nil
 }
 

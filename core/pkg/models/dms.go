@@ -26,6 +26,7 @@ type DMSSettings struct {
 	EnrollmentSettings     EnrollmentSettings     `json:"enrollment_settings"`
 	ReEnrollmentSettings   ReEnrollmentSettings   `json:"reenrollment_settings"`
 	CADistributionSettings CADistributionSettings `json:"ca_distribution_settings"`
+	IssuanceProfileID      string                 `json:"issuance_profile_id"`
 	IssuanceProfile        *IssuanceProfile       `json:"issuance_profile"`
 }
 

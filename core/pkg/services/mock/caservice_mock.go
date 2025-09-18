@@ -26,11 +26,6 @@ func (m *MockCAService) UpdateCertificateMetadata(ctx context.Context, input ser
 	return args.Get(0).(*models.Certificate), args.Error(1)
 }
 
-func (m *MockCAService) UpdateCAIssuanceExpiration(ctx context.Context, input services.UpdateCAIssuanceExpirationInput) (*models.CACertificate, error) {
-	args := m.Called(ctx, input)
-	return args.Get(0).(*models.CACertificate), args.Error(1)
-}
-
 func (m *MockCAService) GetStats(ctx context.Context) (*models.CAStats, error) {
 	args := m.Called(ctx)
 	return args.Get(0).(*models.CAStats), args.Error(1)
@@ -74,6 +69,10 @@ func (m *MockCAService) GetCAsByCommonName(ctx context.Context, input services.G
 
 }
 func (m *MockCAService) UpdateCAStatus(ctx context.Context, input services.UpdateCAStatusInput) (*models.CACertificate, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.CACertificate), args.Error(1)
+}
+func (m *MockCAService) UpdateCAProfile(ctx context.Context, input services.UpdateCAProfileInput) (*models.CACertificate, error) {
 	args := m.Called(ctx, input)
 	return args.Get(0).(*models.CACertificate), args.Error(1)
 }
@@ -183,4 +182,30 @@ func (m *MockCAService) VerifySignature(ctx context.Context, input services.Veri
 func (m *MockCAService) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.Key, error) {
 	args := m.Called(ctx, input)
 	return args.Get(0).(*models.Key), args.Error(1)
+}
+
+// Issuance Profiles
+func (m *MockCAService) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {
+	args := m.Called(ctx, input)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockCAService) GetIssuanceProfileByID(ctx context.Context, input services.GetIssuanceProfileByIDInput) (*models.IssuanceProfile, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.IssuanceProfile), args.Error(1)
+}
+
+func (m *MockCAService) CreateIssuanceProfile(ctx context.Context, input services.CreateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.IssuanceProfile), args.Error(1)
+}
+
+func (m *MockCAService) UpdateIssuanceProfile(ctx context.Context, input services.UpdateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.IssuanceProfile), args.Error(1)
+}
+
+func (m *MockCAService) DeleteIssuanceProfile(ctx context.Context, input services.DeleteIssuanceProfileInput) error {
+	args := m.Called(ctx, input)
+	return args.Error(0)
 }

@@ -1,31 +1,16 @@
 package helpers
 
 import (
-	"bytes"
-	"fmt"
+	"encoding/hex"
 	"math/big"
 )
 
-func insertNth(s string, n int, sep rune) string {
-	if len(s)%2 != 0 {
-		s = "0" + s
+// SerialNumberToHexString converts a big.Int serial number to its hexadecimal string representation.
+// It ensures that the output is in lowercase and has an even length by padding with a leading zero if necessary.
+func SerialNumberToHexString(n *big.Int) string {
+	n = new(big.Int).Abs(n)
+	if n.Sign() == 0 {
+		return "00"
 	}
-	var buffer bytes.Buffer
-	var n1 = n - 1
-	var l1 = len(s) - 1
-	for i, rune := range s {
-		buffer.WriteRune(rune)
-		if i%n == n1 && i != l1 {
-			buffer.WriteRune(sep)
-		}
-	}
-	return buffer.String()
-}
-
-func toHexInt(n *big.Int) string {
-	return fmt.Sprintf("%x", n) // or %X or upper case
-}
-
-func SerialNumberToString(n *big.Int) string {
-	return insertNth(toHexInt(new(big.Int).Abs(n)), 2, '-')
+	return hex.EncodeToString(n.Bytes())
 }

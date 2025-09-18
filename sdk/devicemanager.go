@@ -73,7 +73,11 @@ func (cli *deviceManagerClient) GetDeviceByDMS(ctx context.Context, input servic
 }
 
 func (cli *deviceManagerClient) UpdateDeviceStatus(ctx context.Context, input services.UpdateDeviceStatusInput) (*models.Device, error) {
-	response, err := Post[*models.Device](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/decommission", "", map[int][]error{})
+	response, err := DeleteWithBody[*models.Device](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/decommission", "", map[int][]error{
+		404: {errs.ErrDeviceNotFound},
+		422: {errs.ErrDeviceInvalidStatus},
+		400: {errs.ErrValidateBadRequest},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -101,4 +105,12 @@ func (cli *deviceManagerClient) UpdateDeviceMetadata(ctx context.Context, input 
 	}
 
 	return response, nil
+}
+
+func (cli *deviceManagerClient) DeleteDevice(ctx context.Context, input services.DeleteDeviceInput) error {
+	return Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID, map[int][]error{
+		404: {errs.ErrDeviceNotFound},
+		422: {errs.ErrDeviceInvalidStatus},
+		400: {errs.ErrValidateBadRequest},
+	})
 }

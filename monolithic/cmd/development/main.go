@@ -376,14 +376,16 @@ func main() {
 	}
 
 	if _, ok := cryptoengineOptionsMap[Filesystem]; ok {
+		engineId := "filesystem-test-1"
 		cryptoEngines = append(cryptoEngines, cconfig.CryptoEngineConfig{
-			ID:       "filesystem-1",
+			ID:       engineId,
 			Metadata: make(map[string]interface{}),
 			Type:     cconfig.FilesystemProvider,
 			Config: map[string]interface{}{
 				"storage_directory": "/tmp/gotest",
 			},
 		})
+		cryptoEnginesConfig.DefaultEngine = engineId
 	}
 
 	if _, ok := cryptoengineOptionsMap[Pkcs11]; ok {
@@ -402,7 +404,7 @@ func main() {
 		VAStorageDir:       "/tmp/lamassuiot/va",
 		SubscriberEventBus: eventBus,
 		PublisherEventBus:  eventBus,
-		Domain:             "dev.lamassu.test",
+		Domains:            []string{"dev.lamassu.test", "localhost"},
 		GatewayPortHttps:   8443,
 		GatewayPortHttp:    8080,
 		AssemblyMode:       pkg.Http,

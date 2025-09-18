@@ -17,16 +17,16 @@ type UpdateModel[E any] struct {
 type EventType string
 
 const (
-	EventCreateCAKey                   EventType = "ca.create"
-	EventRequestCAKey                  EventType = "ca.request"
-	EventImportCAKey                   EventType = "ca.import"
-	EventImportCACertificateKey        EventType = "ca.certificate.import"
-	EventUpdateCAStatusKey             EventType = "ca.status.update"
-	EventUpdateCAMetadataKey           EventType = "ca.metadata.update"
-	EventUpdateCAIssuanceExpirationKey EventType = "ca.issuance-expiration.update"
-	EventSignCertificateKey            EventType = "ca.sign.certificate"
-	EventSignatureSignKey              EventType = "ca.sign.signature"
-	EventDeleteCAKey                   EventType = "ca.delete"
+	EventCreateCAKey            EventType = "ca.create"
+	EventRequestCAKey           EventType = "ca.request"
+	EventImportCAKey            EventType = "ca.import"
+	EventImportCACertificateKey EventType = "ca.certificate.import"
+	EventUpdateCAProfileKey     EventType = "ca.profile.update"
+	EventUpdateCAStatusKey      EventType = "ca.status.update"
+	EventUpdateCAMetadataKey    EventType = "ca.metadata.update"
+	EventSignCertificateKey     EventType = "ca.sign.certificate"
+	EventSignatureSignKey       EventType = "ca.sign.signature"
+	EventDeleteCAKey            EventType = "ca.delete"
 
 	EventCreateCertificateKey         EventType = "certificate.create"
 	EventImportCertificateKey         EventType = "certificate.import"
@@ -35,6 +35,7 @@ const (
 
 	EventCreateDMSKey          EventType = "dms.create"
 	EventUpdateDMSKey          EventType = "dms.update"
+	EventUpdateDMSMetadataKey  EventType = "dms.metadata.update"
 	EventDeleteDMSKey          EventType = "dms.delete"
 	EventEnrollKey             EventType = "dms.enroll"
 	EventReEnrollKey           EventType = "dms.reenroll"
@@ -44,6 +45,7 @@ const (
 	EventUpdateDeviceIDSlotKey   EventType = "device.identity.update"
 	EventUpdateDeviceStatusKey   EventType = "device.status.update"
 	EventUpdateDeviceMetadataKey EventType = "device.metadata.update"
+	EventDeleteDeviceKey         EventType = "device.delete"
 
 	EventUpdateVARole EventType = "va.role.update"
 	EventCreateCRL    EventType = "va.crl.create"

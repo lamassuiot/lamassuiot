@@ -81,14 +81,14 @@ func (cli *httpCAClient) GetCAsByCommonName(ctx context.Context, input services.
 
 func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas", resources.CreateCABody{
-		ID:                 input.ID,
-		Subject:            input.Subject,
-		KeyMetadata:        input.KeyMetadata,
-		IssuanceExpiration: input.IssuanceExpiration,
-		CAExpiration:       input.CAExpiration,
-		EngineID:           input.EngineID,
-		ParentID:           input.ParentID,
-		Metadata:           input.Metadata,
+		ID:           input.ID,
+		Subject:      input.Subject,
+		KeyMetadata:  input.KeyMetadata,
+		ProfileID:    input.ProfileID,
+		CAExpiration: input.CAExpiration,
+		EngineID:     input.EngineID,
+		ParentID:     input.ParentID,
+		Metadata:     input.Metadata,
 	}, map[int][]error{
 		400: {
 			errs.ErrCAIncompatibleValidity,
@@ -154,13 +154,13 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 	}
 
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/import", resources.ImportCABody{
-		ID:                 input.ID,
-		CAType:             models.CertificateType(input.CAType),
-		IssuanceExpiration: input.IssuanceExpiration,
-		CACertificate:      input.CACertificate,
-		CAChain:            input.CAChain,
-		CAPrivateKey:       privKey,
-		EngineID:           input.EngineID,
+		ID:            input.ID,
+		CAType:        models.CertificateType(input.CAType),
+		ProfileID:     input.ProfileID,
+		CACertificate: input.CACertificate,
+		CAChain:       input.CAChain,
+		CAPrivateKey:  privKey,
+		EngineID:      input.EngineID,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err
@@ -173,6 +173,7 @@ func (cli *httpCAClient) SignCertificate(ctx context.Context, input services.Sig
 	response, err := Post[*models.Certificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/certificates/sign", resources.SignCertificateBody{
 		CertRequest: input.CertRequest,
 		Profile:     input.IssuanceProfile,
+		ProfileID:   input.IssuanceProfileID,
 	}, map[int][]error{
 		404: {
 			errs.ErrCANotFound,
@@ -216,10 +217,13 @@ func (cli *httpCAClient) UpdateCAStatus(ctx context.Context, input services.Upda
 	return response, nil
 }
 
-func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (*models.CACertificate, error) {
-	response, err := Put[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/metadata", resources.UpdateCAMetadataBody{
-		Patches: input.Patches,
+func (cli *httpCAClient) UpdateCAProfile(ctx context.Context, input services.UpdateCAProfileInput) (*models.CACertificate, error) {
+	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/profile", resources.UpdateCAProfileBody{
+		ProfileID: input.ProfileID,
 	}, map[int][]error{
+		400: {
+			errs.ErrCertificateStatusTransitionNotAllowed,
+		},
 		404: {
 			errs.ErrCANotFound,
 		},
@@ -227,13 +231,12 @@ func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.Up
 	if err != nil {
 		return nil, err
 	}
-
 	return response, nil
 }
 
-func (cli *httpCAClient) UpdateCAIssuanceExpiration(ctx context.Context, input services.UpdateCAIssuanceExpirationInput) (*models.CACertificate, error) {
-	response, err := Put[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/issuance-expiration", resources.UpdateCAIssuanceExpirationBody{
-		Validity: input.IssuanceExpiration,
+func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.UpdateCAMetadataInput) (*models.CACertificate, error) {
+	response, err := Put[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID+"/metadata", resources.UpdateCAMetadataBody{
+		Patches: input.Patches,
 	}, map[int][]error{
 		404: {
 			errs.ErrCANotFound,
@@ -395,6 +398,52 @@ func (cli *httpCAClient) GetKeyByID(ctx context.Context, input services.GetByIDI
 	return response, nil
 }
 
+func (cli *httpCAClient) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {
+	url := cli.baseUrl + "/v1/profiles"
+	return IterGet[models.IssuanceProfile, resources.IterableList[models.IssuanceProfile]](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
+}
+
+func (cli *httpCAClient) GetIssuanceProfileByID(ctx context.Context, input services.GetIssuanceProfileByIDInput) (*models.IssuanceProfile, error) {
+	response, err := Get[models.IssuanceProfile](ctx, cli.httpClient, cli.baseUrl+"/v1/profiles/"+input.ProfileID, nil, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+func (cli *httpCAClient) CreateIssuanceProfile(ctx context.Context, input services.CreateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+	response, err := Post[*models.IssuanceProfile](ctx, cli.httpClient, cli.baseUrl+"/v1/profiles", resources.CreateUpdateIssuanceProfileBody{
+		Name:                   input.Profile.Name,
+		Description:            input.Profile.Description,
+		Validity:               input.Profile.Validity,
+		SignAsCA:               input.Profile.SignAsCA,
+		HonorKeyUsage:          input.Profile.HonorKeyUsage,
+		KeyUsage:               input.Profile.KeyUsage,
+		HonorExtendedKeyUsages: input.Profile.HonorExtendedKeyUsages,
+		ExtendedKeyUsages:      input.Profile.ExtendedKeyUsages,
+		HonorSubject:           input.Profile.HonorSubject,
+		Subject:                input.Profile.Subject,
+		HonorExtensions:        input.Profile.HonorExtensions,
+		CryptoEnforcement: resources.CreateIssuanceProfileCryptoEnforcementBody{
+			Enabled:              input.Profile.CryptoEnforcement.Enabled,
+			AllowRSAKeys:         input.Profile.CryptoEnforcement.AllowRSAKeys,
+			AllowECDSAKeys:       input.Profile.CryptoEnforcement.AllowECDSAKeys,
+			AllowedRSAKeySizes:   input.Profile.CryptoEnforcement.AllowedRSAKeySizes,
+			AllowedECDSAKeySizes: input.Profile.CryptoEnforcement.AllowedECDSAKeySizes,
+		},
+	}, map[int][]error{
+		400: {
+			errs.ErrValidateBadRequest,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func (cli *httpCAClient) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.Key, error) {
 	response, err := Post[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys", resources.CreateKeyBody{
 		Algorithm: input.Algorithm,
@@ -409,8 +458,47 @@ func (cli *httpCAClient) CreateKey(ctx context.Context, input services.CreateKey
 	return response, nil
 }
 
+func (cli *httpCAClient) UpdateIssuanceProfile(ctx context.Context, input services.UpdateIssuanceProfileInput) (*models.IssuanceProfile, error) {
+	response, err := Put[*models.IssuanceProfile](ctx, cli.httpClient, cli.baseUrl+"/v1/profiles/"+input.Profile.ID, resources.CreateUpdateIssuanceProfileBody{
+		Name:                   input.Profile.Name,
+		Description:            input.Profile.Description,
+		Validity:               input.Profile.Validity,
+		SignAsCA:               input.Profile.SignAsCA,
+		HonorKeyUsage:          input.Profile.HonorKeyUsage,
+		KeyUsage:               input.Profile.KeyUsage,
+		HonorExtendedKeyUsages: input.Profile.HonorExtendedKeyUsages,
+		ExtendedKeyUsages:      input.Profile.ExtendedKeyUsages,
+		HonorSubject:           input.Profile.HonorSubject,
+		Subject:                input.Profile.Subject,
+		HonorExtensions:        input.Profile.HonorExtensions,
+		CryptoEnforcement: resources.CreateIssuanceProfileCryptoEnforcementBody{
+			Enabled:              input.Profile.CryptoEnforcement.Enabled,
+			AllowRSAKeys:         input.Profile.CryptoEnforcement.AllowRSAKeys,
+			AllowECDSAKeys:       input.Profile.CryptoEnforcement.AllowECDSAKeys,
+			AllowedRSAKeySizes:   input.Profile.CryptoEnforcement.AllowedRSAKeySizes,
+			AllowedECDSAKeySizes: input.Profile.CryptoEnforcement.AllowedECDSAKeySizes,
+		},
+	}, map[int][]error{
+		400: {
+			errs.ErrValidateBadRequest,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func (cli *httpCAClient) DeleteKeyByID(ctx context.Context, input services.GetByIDInput) error {
 	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys/"+input.ID, map[int][]error{})
+	if err != nil {
+		return err
+	}
+}
+
+func (cli *httpCAClient) DeleteIssuanceProfile(ctx context.Context, input services.DeleteIssuanceProfileInput) error {
+	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/profiles/"+input.ProfileID, map[int][]error{})
 	if err != nil {
 		return err
 	}

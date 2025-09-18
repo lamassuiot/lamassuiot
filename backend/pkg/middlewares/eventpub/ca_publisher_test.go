@@ -286,6 +286,24 @@ func TestCAEventPublisher(t *testing.T) {
 				withoutErrorsSingleResult(t, "DeleteCA", services.DeleteCAInput{}, models.EventDeleteCAKey)
 			},
 		},
+		{
+			name: "UpdateCAProfile with errors - Not fire event",
+			test: func(t *testing.T) {
+				withErrors(t, "UpdateCAProfile", services.UpdateCAProfileInput{}, models.EventUpdateCAProfileKey, &models.CACertificate{},
+					func(mockCAService *svcmock.MockCAService) {
+						mockCAService.On("GetCAByID", context.Background(), mock.Anything).Return(&models.CACertificate{}, nil)
+					})
+			},
+		},
+		{
+			name: "UpdateCAProfile without errors - fire event",
+			test: func(t *testing.T) {
+				withoutErrors(t, "UpdateCAProfile", services.UpdateCAProfileInput{}, models.EventUpdateCAProfileKey, &models.CACertificate{},
+					func(mockCAService *svcmock.MockCAService) {
+						mockCAService.On("GetCAByID", context.Background(), mock.Anything).Return(&models.CACertificate{}, nil)
+					})
+			},
+		},
 	}
 
 	for _, tc := range testcases {

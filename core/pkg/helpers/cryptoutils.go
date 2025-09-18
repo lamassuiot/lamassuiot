@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -20,6 +21,51 @@ import (
 	cmodels "github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	log "github.com/sirupsen/logrus"
 )
+
+// Map x509.ExtKeyUsage to their corresponding OIDs (this is a copy of the internal mapping in crypto/x509, but we need the OIDs here.
+// So we replicate it here since it's not exposed)
+
+var oidExtKeyUsage = asn1.ObjectIdentifier{2, 5, 29, 15}
+var oidExtExtendedKeyUsage = asn1.ObjectIdentifier{2, 5, 29, 37}
+
+var oidExtKeyUsageAny = asn1.ObjectIdentifier{2, 5, 29, 37, 0}
+var oidExtKeyUsageServerAuth = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 1}
+var oidExtKeyUsageClientAuth = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 2}
+var oidExtKeyUsageCodeSigning = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 3}
+var oidExtKeyUsageEmailProtection = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 4}
+var oidExtKeyUsageIPSECEndSystem = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 5}
+var oidExtKeyUsageIPSECTunnel = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 6}
+var oidExtKeyUsageIPSECUser = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 7}
+var oidExtKeyUsageTimeStamping = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 8}
+var oidExtKeyUsageOCSPSigning = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 9}
+var oidExtKeyUsageMicrosoftServerGatedCrypto = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 311, 10, 3, 3}
+var oidExtKeyUsageNetscapeServerGatedCrypto = asn1.ObjectIdentifier{2, 16, 840, 1, 113730, 4, 1}
+var oidExtKeyUsageMicrosoftCommercialCodeSigning = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 311, 2, 1, 22}
+var oidExtKeyUsageMicrosoftKernelCodeSigning = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 311, 61, 1, 1}
+var extKeyUsageOIDs = map[x509.ExtKeyUsage]asn1.ObjectIdentifier{
+	x509.ExtKeyUsageAny:                            oidExtKeyUsageAny,
+	x509.ExtKeyUsageServerAuth:                     oidExtKeyUsageServerAuth,
+	x509.ExtKeyUsageClientAuth:                     oidExtKeyUsageClientAuth,
+	x509.ExtKeyUsageCodeSigning:                    oidExtKeyUsageCodeSigning,
+	x509.ExtKeyUsageEmailProtection:                oidExtKeyUsageEmailProtection,
+	x509.ExtKeyUsageIPSECEndSystem:                 oidExtKeyUsageIPSECEndSystem,
+	x509.ExtKeyUsageIPSECTunnel:                    oidExtKeyUsageIPSECTunnel,
+	x509.ExtKeyUsageIPSECUser:                      oidExtKeyUsageIPSECUser,
+	x509.ExtKeyUsageTimeStamping:                   oidExtKeyUsageTimeStamping,
+	x509.ExtKeyUsageOCSPSigning:                    oidExtKeyUsageOCSPSigning,
+	x509.ExtKeyUsageMicrosoftServerGatedCrypto:     oidExtKeyUsageMicrosoftServerGatedCrypto,
+	x509.ExtKeyUsageNetscapeServerGatedCrypto:      oidExtKeyUsageNetscapeServerGatedCrypto,
+	x509.ExtKeyUsageMicrosoftCommercialCodeSigning: oidExtKeyUsageMicrosoftCommercialCodeSigning,
+	x509.ExtKeyUsageMicrosoftKernelCodeSigning:     oidExtKeyUsageMicrosoftKernelCodeSigning,
+}
+
+var ekuOIDToExt = func() map[string]x509.ExtKeyUsage {
+	m := make(map[string]x509.ExtKeyUsage, len(extKeyUsageOIDs))
+	for ext, oid := range extKeyUsageOIDs {
+		m[oid.String()] = ext
+	}
+	return m
+}()
 
 //Cammbio de la función para definir la longevidad de la expiración de la CA.
 
@@ -110,6 +156,125 @@ func GenerateCertificateRequestWithExtensions(subject cmodels.Subject, extension
 	}
 
 	return csr, err
+}
+
+func ExtractKeyUsageFromCSR(csr *x509.CertificateRequest) (x509.KeyUsage, []x509.ExtKeyUsage, error) {
+	// BIT STRING (MSB-first) -> Go x509.KeyUsage bitmask.
+	// Only decodes the 9 RFC 5280 bits [0..8].
+	bitStringToKeyUsage := func(bs asn1.BitString) x509.KeyUsage {
+		var ku x509.KeyUsage
+		for i := 0; i <= 8 && i < bs.BitLength; i++ {
+			byteIdx := i / 8
+			if byteIdx >= len(bs.Bytes) {
+				break
+			}
+			bitInByte := 7 - (i % 8) // MSB-first within each byte
+			if bs.Bytes[byteIdx]&(1<<uint(bitInByte)) != 0 {
+				ku |= 1 << uint(i)
+			}
+		}
+		return ku
+	}
+
+	var kuMask x509.KeyUsage
+	var ekuList []x509.ExtKeyUsage
+
+	all := append([]pkix.Extension{}, csr.Extensions...)
+	all = append(all, csr.ExtraExtensions...)
+
+	for _, e := range all {
+		switch {
+		case e.Id.Equal(oidExtKeyUsage):
+			var bs asn1.BitString
+			if _, err := asn1.Unmarshal(e.Value, &bs); err != nil {
+				return 0, nil, fmt.Errorf("unmarshal KeyUsage: %w", err)
+			}
+			kuMask = bitStringToKeyUsage(bs)
+
+		case e.Id.Equal(oidExtExtendedKeyUsage):
+			var oids []asn1.ObjectIdentifier
+			if _, err := asn1.Unmarshal(e.Value, &oids); err != nil {
+				return 0, nil, fmt.Errorf("unmarshal ExtendedKeyUsage: %w", err)
+			}
+			for _, oid := range oids {
+				if ext, ok := ekuOIDToExt[oid.String()]; ok {
+					ekuList = append(ekuList, ext)
+				}
+				// else: unknown/custom EKU OID -> silently skip
+			}
+		}
+	}
+
+	return kuMask, ekuList, nil
+}
+
+func GenerateKeyUsagePKIExtension(keyUsage x509.KeyUsage) (pkix.Extension, error) {
+	if keyUsage == 0 {
+		return pkix.Extension{}, fmt.Errorf("key usage cannot be zero")
+	}
+
+	// RFC 5280 defines KeyUsage bits 0..8 (encipherOnly..decipherOnly via mapping below).
+	// If anything above bit 8 is set, reject to avoid emitting non-standard bits.
+	const maxBit = 8
+	if keyUsage&(^(x509.KeyUsage((1 << (maxBit + 1)) - 1))) != 0 {
+		return pkix.Extension{}, fmt.Errorf("unsupported key usage bits above %d set", maxBit)
+	}
+
+	// Find highest set bit (0..8)
+	highest := -1
+	for i := 0; i <= maxBit; i++ {
+		if keyUsage&(1<<uint(i)) != 0 {
+			highest = i
+		}
+	}
+	if highest < 0 {
+		return pkix.Extension{}, fmt.Errorf("key usage had no recognized bits")
+	}
+
+	// Bytes needed and MSB-first packing per DER BIT STRING rules
+	n := (highest/8 + 1)
+	b := make([]byte, n)
+	for i := 0; i <= highest; i++ {
+		if keyUsage&(1<<uint(i)) == 0 {
+			continue
+		}
+		byteIdx := i / 8
+		bitInByte := 7 - (i % 8) // MSB-first
+		b[byteIdx] |= 1 << uint(bitInByte)
+	}
+
+	bitLen := highest + 1
+	der, err := asn1.Marshal(asn1.BitString{Bytes: b, BitLength: bitLen})
+	if err != nil {
+		return pkix.Extension{}, fmt.Errorf("failed to marshal key usage: %w", err)
+	}
+
+	return pkix.Extension{
+		Id:       asn1.ObjectIdentifier{2, 5, 29, 15}, // keyUsage
+		Critical: true,
+		Value:    der,
+	}, nil
+}
+
+func GenerateExtendedKeyUsagePKIExtension(extKeyUsages []x509.ExtKeyUsage) (pkix.Extension, error) {
+	var extKeyUsageOIDsList []asn1.ObjectIdentifier
+	for _, eku := range extKeyUsages {
+		if oid, found := extKeyUsageOIDs[eku]; found {
+			extKeyUsageOIDsList = append(extKeyUsageOIDsList, oid)
+		}
+	}
+
+	// Marshal to ASN.1 SEQUENCE
+	extKeyUsageASN1, err := asn1.Marshal(extKeyUsageOIDsList)
+	if err != nil {
+		return pkix.Extension{}, fmt.Errorf("failed to marshal extended key usage: %v", err)
+	}
+
+	return pkix.Extension{
+		Id:       asn1.ObjectIdentifier{2, 5, 29, 37}, // Extended Key Usage OID
+		Critical: false,
+		Value:    extKeyUsageASN1,
+	}, nil
 }
 
 func GenerateRSAKey(bits int) (*rsa.PrivateKey, error) {

@@ -46,6 +46,11 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 		crtPem := chelpers.CertificateToPEM(crt)
 		os.WriteFile("proxy.crt", []byte(crtPem), 0600)
 
+		vaDomains := []string{}
+		for _, domain := range conf.Domains {
+			vaDomains = append(vaDomains, fmt.Sprintf("%s:%d/api/va", domain, conf.GatewayPortHttp))
+		}
+
 		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
 			Logs: cconfig.Logging{
 				Level: conf.Logs.Level,
@@ -65,9 +70,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				CryptoEngines: conf.CryptoEngines,
 			},
 			CertificateMonitoringJob: conf.Monitoring,
-			VAServerDomains: []string{
-				fmt.Sprintf("%s:%d/api/va", conf.Domain, conf.GatewayPortHttp),
-			},
+			VAServerDomains:          vaDomains,
 		}, apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble CA Service: %s", err)
@@ -113,9 +116,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			SubscriberEventBus: conf.SubscriberEventBus,
 			PublisherEventBus:  conf.PublisherEventBus,
 			Storage:            conf.Storage,
-			VADomains: []string{
-				fmt.Sprintf("%s:%d/api/va", conf.Domain, conf.GatewayPortHttp),
-			},
+			VADomains:          vaDomains,
 		}, caSDKBuilder("VA", models.VASource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble VA Service: %s", err)
@@ -242,7 +243,6 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				}
 				proxyUrl := strings.TrimPrefix(c.Param("proxyPath"), subpath)
 				proxyUrl = strings.TrimSuffix(proxyUrl, "/")
-				fmt.Printf("Proxy URL: %s\n", proxyUrl)
 				//emulate envoy config by generating rand request id as HTTP header to the upstream service
 				c.Request.Header.Add("x-request-id", uuid.NewString())
 				proxy := httputil.NewSingleHostReverseProxy(remote)

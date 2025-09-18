@@ -51,3 +51,8 @@ func (dm *MockDeviceManagerService) UpdateDeviceMetadata(ctx context.Context, in
 	args := dm.Called(ctx, input)
 	return args.Get(0).(*models.Device), args.Error(1)
 }
+
+func (dm *MockDeviceManagerService) DeleteDevice(ctx context.Context, input services.DeleteDeviceInput) error {
+	args := dm.Called(ctx, input)
+	return args.Error(0)
+}

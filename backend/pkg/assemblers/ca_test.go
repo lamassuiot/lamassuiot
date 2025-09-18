@@ -88,6 +88,15 @@ func TestCreateCA(t *testing.T) {
 	caDUr := models.TimeDuration(time.Hour * 24)
 	issuanceDur := models.TimeDuration(time.Hour * 12)
 
+	profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed creating issuance profile: %s", err)
+	}
+
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
@@ -98,12 +107,13 @@ func TestCreateCA(t *testing.T) {
 			name:   "OK/KeyType-RSA",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                 caID,
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    profile.ID,
 				})
 			},
 			resultCheck: func(createdCA *models.CACertificate, err error) error {
@@ -119,11 +129,11 @@ func TestCreateCA(t *testing.T) {
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                 caID,
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    profile.ID,
 				})
 			},
 			resultCheck: func(createdCA *models.CACertificate, err error) error {
@@ -139,11 +149,11 @@ func TestCreateCA(t *testing.T) {
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                 caID,
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    profile.ID,
 				})
 			},
 			resultCheck: func(createdCA *models.CACertificate, err error) error {
@@ -160,12 +170,22 @@ func TestCreateCA(t *testing.T) {
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				tCA := time.Date(9999, 11, 31, 23, 59, 59, 0, time.UTC)
 				tIssue := time.Date(9999, 11, 30, 23, 59, 59, 0, time.UTC)
+
+				profile2, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Time, Time: tIssue},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating issuance profile: %s", err)
+				}
+
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                 caID,
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Validity{Type: models.Time, Time: tCA},
-					IssuanceExpiration: models.Validity{Type: models.Time, Time: tIssue},
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Time, Time: tCA},
+					ProfileID:    profile2.ID,
 				})
 			},
 			resultCheck: func(createdCA *models.CACertificate, err error) error {
@@ -184,11 +204,11 @@ func TestCreateCA(t *testing.T) {
 			name: "Error/Duplicate-CA-ID",
 			before: func(svc services.CAService) error {
 				_, err := svc.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                 caID,
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    profile.ID,
 				})
 				if err != nil {
 					return err
@@ -197,11 +217,11 @@ func TestCreateCA(t *testing.T) {
 			},
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                 caID,
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    profile.ID,
 				})
 			},
 			resultCheck: func(createdCA *models.CACertificate, err error) error {
@@ -249,6 +269,19 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 	caDUr := models.TimeDuration(time.Hour * 24)
 	issuanceDur := models.TimeDuration(time.Hour * 12)
 
+	createProfile := func(t *testing.T) *models.IssuanceProfile {
+		profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+			Profile: models.IssuanceProfile{
+				Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+			},
+		})
+		if err != nil {
+			t.Fatalf("failed creating issuance profile: %s", err)
+		}
+
+		return profile
+	}
+
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
@@ -259,12 +292,12 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 			name:   "Err/DeletingCAAndIssuedCertificates",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*x509.Certificate, error) {
+				profile := createProfile(t)
 				enrollCA, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    profile.ID,
 				})
 
 				if err != nil {
@@ -276,14 +309,9 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: commonName}, enrollKey)
 
 				crt, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        enrollCA.ID,
-					CertRequest: (*models.X509CertificateRequest)(enrollCSR),
-					IssuanceProfile: models.IssuanceProfile{
-						Validity:        enrollCA.Validity,
-						SignAsCA:        false,
-						HonorSubject:    true,
-						HonorExtensions: true,
-					},
+					CAID:              enrollCA.ID,
+					CertRequest:       (*models.X509CertificateRequest)(enrollCSR),
+					IssuanceProfileID: profile.ID,
 				})
 				if err != nil {
 					t.Fatalf("could not sign the certificate: %s", err)
@@ -324,18 +352,24 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 			name:   "OK/ExternalCA",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*x509.Certificate, error) {
-
 				duration := models.TimeDuration(time.Hour * 24)
 				ca, _, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Duration(duration), "test")
 				if err != nil {
 					return nil, fmt.Errorf("error while importing self signed CA: %s", err)
 				}
-				importedCALvl1, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType: models.CertificateTypeExternal,
-					IssuanceExpiration: models.Validity{
-						Type:     models.Duration,
-						Duration: (models.TimeDuration)(duration),
+
+				profile2, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: duration},
 					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating issuance profile: %s", err)
+				}
+
+				importedCALvl1, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					CAType:        models.CertificateTypeExternal,
+					ProfileID:     profile2.ID,
 					CACertificate: (*models.X509Certificate)(ca),
 				})
 
@@ -361,12 +395,12 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 			name:   "OK/RevokedCA",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*x509.Certificate, error) {
+				profile := createProfile(t)
 				ca1, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    profile.ID,
 				})
 
 				if err != nil {
@@ -400,11 +434,12 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 			name:   "OK/ExpiredCA",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*x509.Certificate, error) {
+				profile := createProfile(t)
 				ca1, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    profile.ID,
 				})
 
 				if err != nil {
@@ -459,182 +494,6 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 	}
 }
 
-func TestUpdateCAIssuanceExpiration(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-
-	caTest := serverTest.CA
-
-	caDUr := models.TimeDuration(time.Hour * 24)
-
-	var testcases = []struct {
-		name        string
-		before      func(svc services.CAService) error
-		run         func(caSDK services.CAService) error
-		resultCheck func(err error) error
-	}{
-		{
-			name:   "OK/ChangingCAIssuanceExpiration",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) error {
-				issuanceDur := models.TimeDuration(time.Hour * 12)
-				issuanceDurNew := models.TimeDuration(time.Hour * 6)
-				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
-				})
-				if err != nil {
-					t.Fatalf("could not create CA: %s", err)
-				}
-
-				_, err = caSDK.UpdateCAIssuanceExpiration(context.Background(), services.UpdateCAIssuanceExpirationInput{
-					CAID:               ca.ID,
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDurNew},
-				})
-				return err
-			},
-
-			resultCheck: func(err error) error {
-				if err != nil {
-					return fmt.Errorf("should've not got an error, but it has got an error: %s", err)
-				}
-				return nil
-			},
-		},
-		{
-			name:   "Err/TooLargeIssuanceExpiration",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) error {
-				issuanceDur := models.TimeDuration(time.Hour * 12)
-				issuanceDurNew := models.TimeDuration(time.Hour * 2000)
-
-				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
-				})
-				if err != nil {
-					t.Fatalf("could not create CA: %s", err)
-				}
-
-				_, err = caSDK.UpdateCAIssuanceExpiration(context.Background(), services.UpdateCAIssuanceExpirationInput{
-					CAID:               ca.ID,
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDurNew},
-				})
-				return err
-			},
-
-			resultCheck: func(err error) error {
-				if err == nil {
-					return fmt.Errorf("should've got an error, but got no error")
-				}
-
-				return nil
-			},
-		},
-		{
-			name:   "Err/TooLargeIssuanceExpirationDate",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) error {
-
-				tCA := time.Date(2024, 11, 31, 23, 59, 59, 0, time.UTC)
-				tIssue := time.Date(2024, 8, 30, 23, 59, 59, 0, time.UTC)
-				tIssueNew := time.Date(2025, 8, 30, 23, 59, 59, 0, time.UTC)
-
-				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Validity{Type: models.Time, Time: tCA},
-					IssuanceExpiration: models.Validity{Type: models.Time, Time: tIssue},
-				})
-
-				if err != nil {
-					t.Fatalf("could not create CA: %s", err)
-				}
-
-				_, err = caSDK.UpdateCAIssuanceExpiration(context.Background(), services.UpdateCAIssuanceExpirationInput{
-					CAID:               ca.ID,
-					IssuanceExpiration: models.Validity{Type: models.Time, Time: tIssueNew},
-				})
-				return err
-			},
-
-			resultCheck: func(err error) error {
-
-				if err == nil {
-					return fmt.Errorf("should've got an error, but got no error")
-				}
-
-				return nil
-			},
-		},
-		{
-			name:   "OK/IssuanceExpirationDate",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) error {
-
-				tCA := time.Date(2024, 11, 31, 23, 59, 59, 0, time.UTC)
-				tIssue := time.Date(2024, 8, 30, 23, 59, 59, 0, time.UTC)
-				tIssueNew := time.Date(2024, 7, 30, 23, 59, 59, 0, time.UTC)
-
-				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "TestCA"},
-					CAExpiration:       models.Validity{Type: models.Time, Time: tCA},
-					IssuanceExpiration: models.Validity{Type: models.Time, Time: tIssue},
-				})
-
-				if err != nil {
-					t.Fatalf("could not create CA: %s", err)
-				}
-
-				_, err = caSDK.UpdateCAIssuanceExpiration(context.Background(), services.UpdateCAIssuanceExpirationInput{
-					CAID:               ca.ID,
-					IssuanceExpiration: models.Validity{Type: models.Time, Time: tIssueNew},
-				})
-				return err
-			},
-
-			resultCheck: func(err error) error {
-
-				if err != nil {
-					return fmt.Errorf("should've not got an error, but it has got an error: %s", err)
-				}
-
-				return nil
-			},
-		},
-	}
-
-	for _, tc := range testcases {
-		tc := tc
-
-		t.Run(tc.name, func(t *testing.T) {
-
-			err = serverTest.BeforeEach()
-			if err != nil {
-				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
-			}
-
-			err = tc.before(caTest.Service)
-			if err != nil {
-				t.Fatalf("failed running 'before' func in test case: %s", err)
-			}
-			err = tc.run(caTest.HttpCASDK)
-			err = tc.resultCheck(err)
-			if err != nil {
-				t.Fatalf("unexpected result in test case: %s", err)
-			}
-
-		})
-	}
-}
-
 func TestGetCertificatesByCaAndStatus(t *testing.T) {
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
@@ -668,14 +527,9 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", i)}, key)
 					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
-						CAID:        DefaultCAID,
-						CertRequest: (*models.X509CertificateRequest)(csr),
-						IssuanceProfile: models.IssuanceProfile{
-							Validity:        ca.Validity,
-							SignAsCA:        false,
-							HonorSubject:    true,
-							HonorExtensions: true,
-						},
+						CAID:              DefaultCAID,
+						CertRequest:       (*models.X509CertificateRequest)(csr),
+						IssuanceProfileID: ca.ProfileID,
 					})
 					if err != nil {
 						return err
@@ -726,14 +580,9 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 					key, _ := chelpers.GenerateRSAKey(2048)
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", i)}, key)
 					_, err := svc.SignCertificate(context.Background(), services.SignCertificateInput{
-						CAID:        DefaultCAID,
-						CertRequest: (*models.X509CertificateRequest)(csr),
-						IssuanceProfile: models.IssuanceProfile{
-							Validity:        ca.Validity,
-							SignAsCA:        false,
-							HonorSubject:    true,
-							HonorExtensions: true,
-						},
+						CAID:              DefaultCAID,
+						CertRequest:       (*models.X509CertificateRequest)(csr),
+						IssuanceProfileID: ca.ProfileID,
 					})
 					if err != nil {
 						return err
@@ -876,7 +725,7 @@ func TestSignCertificate(t *testing.T) {
 			},
 		},
 		{
-			name: "OK/SignCertificateWithAltSubject",
+			name: "OK/SignWithProfileSubject",
 			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
 				key, err := chelpers.GenerateRSAKey(2048)
 				if err != nil {
@@ -998,6 +847,735 @@ func TestSignCertificate(t *testing.T) {
 			},
 		},
 		{
+			name: "OK/SignCertificateWithAltSubject",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				key, err := chelpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				template := x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName: "test",
+					},
+					DNSNames: []string{"example.com", "www.example.com"},
+				}
+
+				csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &template, key)
+				if err != nil {
+					return nil, err
+				}
+
+				csr, err := x509.ParseCertificateRequest(csrBytes)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:        caIDToSign,
+					CertRequest: (*models.X509CertificateRequest)(csr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: true,
+					},
+				})
+			},
+			resultCheck: func(issuedCert *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCert == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if !slices.Contains(issuedCert.Certificate.DNSNames, "example.com") {
+					return fmt.Errorf("issued certificate should have DNSName 'example.com' but was not set")
+				}
+
+				if !slices.Contains(issuedCert.Certificate.DNSNames, "www.example.com") {
+					return fmt.Errorf("issued certificate should have DNSName 'www.example.com' but was not set")
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/SignCertificateWithoutAltSubject",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				key, err := chelpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				template := x509.CertificateRequest{
+					Subject: pkix.Name{
+						CommonName: "test",
+					},
+					DNSNames: []string{"example.com", "www.example.com"},
+				}
+
+				csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &template, key)
+				if err != nil {
+					return nil, err
+				}
+
+				csr, err := x509.ParseCertificateRequest(csrBytes)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:        caIDToSign,
+					CertRequest: (*models.X509CertificateRequest)(csr),
+					IssuanceProfile: models.IssuanceProfile{
+						Validity:        validity,
+						SignAsCA:        false,
+						HonorSubject:    true,
+						HonorExtensions: false,
+					},
+				})
+			},
+			resultCheck: func(issuedCert *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCert == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if len(issuedCert.Certificate.DNSNames) != 0 {
+					return fmt.Errorf("issued certificate should not have any DNSNames, but got %v", issuedCert.Certificate.DNSNames)
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/BaseIssuanceProfile",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				//first create profile
+				p, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:                   "test-profile",
+						Description:            "my test profile",
+						HonorKeyUsage:          true,
+						KeyUsage:               models.X509KeyUsage(x509.KeyUsageCRLSign | x509.KeyUsageEncipherOnly), // KeyUsage should be ignored since HonorKeyUsage is true
+						HonorExtendedKeyUsages: true,
+						ExtendedKeyUsages: []models.X509ExtKeyUsage{ // ExtendedKeyUsages should be ignored since HonorExtendedKeyUsages is true
+							models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+							models.X509ExtKeyUsage(x509.ExtKeyUsageOCSPSigning),
+						},
+						HonorSubject: true,
+						Subject: models.Subject{ // these values should be ignored since HonorSubject is true
+							Country:          "US",
+							Organization:     "other-lamassu",
+							OrganizationUnit: "other-iot",
+							State:            "other-lamassu-world",
+							Locality:         "other-lamassu-city",
+						},
+						HonorExtensions: true,
+						Validity:        validity,
+						SignAsCA:        false,
+					},
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				profileID := p.ID
+
+				key, err := chelpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				extensions := []pkix.Extension{}
+				kuExt, err := chelpers.GenerateKeyUsagePKIExtension(x509.KeyUsageContentCommitment | x509.KeyUsageKeyEncipherment | x509.KeyUsageDecipherOnly)
+				if err != nil {
+					return nil, fmt.Errorf("error generating KeyUsage extension: %s", err)
+				}
+
+				ekuExt, err := chelpers.GenerateExtendedKeyUsagePKIExtension([]x509.ExtKeyUsage{x509.ExtKeyUsageEmailProtection, x509.ExtKeyUsageCodeSigning})
+				if err != nil {
+					return nil, fmt.Errorf("error generating ExtendedKeyUsage extension: %s", err)
+				}
+
+				extensions = append(extensions, kuExt, ekuExt)
+
+				csr, err := chelpers.GenerateCertificateRequestWithExtensions(
+					models.Subject{CommonName: "test", Country: "ES", Organization: "lamassu", OrganizationUnit: "iot", State: "lamassu-world", Locality: "lamassu-city"},
+					extensions,
+					key,
+				)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csr),
+					IssuanceProfileID: profileID,
+				})
+			},
+			resultCheck: func(issuedCerts *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCerts == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if issuedCerts.Subject.CommonName != "test" {
+					return fmt.Errorf("issued certificate should have CommonName 'test' but got '%s'", issuedCerts.Subject.CommonName)
+				}
+
+				if issuedCerts.Subject.Country != "ES" {
+					return fmt.Errorf("issued certificate should have Country 'ES' but got '%s'", issuedCerts.Subject.Country)
+				}
+
+				if issuedCerts.Subject.Organization != "lamassu" {
+					return fmt.Errorf("issued certificate should have Organization 'lamassu' but got '%s'", issuedCerts.Subject.Organization)
+				}
+
+				if issuedCerts.Subject.OrganizationUnit != "iot" {
+					return fmt.Errorf("issued certificate should have OrganizationUnit 'iot' but got '%s'", issuedCerts.Subject.OrganizationUnit)
+				}
+
+				if issuedCerts.Subject.State != "lamassu-world" {
+					return fmt.Errorf("issued certificate should have State 'lamassu-world' but got '%s'", issuedCerts.Subject.State)
+				}
+
+				if issuedCerts.Subject.Locality != "lamassu-city" {
+					return fmt.Errorf("issued certificate should have Locality 'lamassu-city' but got '%s'", issuedCerts.Subject.Locality)
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageContentCommitment == 0 {
+					return fmt.Errorf("issued certificate should have KeyUsage 'ContentCommitment' but was not set")
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageKeyEncipherment == 0 {
+					return fmt.Errorf("issued certificate should have KeyUsage 'KeyEncipherment' but was not set")
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageCRLSign != 0 {
+					return fmt.Errorf("issued certificate should NOT have KeyUsage 'CRLSign' but it was set")
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageEncipherOnly != 0 {
+					return fmt.Errorf("issued certificate should NOT have KeyUsage 'EncipherOnly' but it was set")
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageDecipherOnly == 0 {
+					return fmt.Errorf("issued certificate should have KeyUsage 'DecipherOnly' but was not set")
+				}
+
+				if !slices.Contains(issuedCerts.Certificate.ExtKeyUsage, x509.ExtKeyUsageEmailProtection) {
+					return fmt.Errorf("issued certificate should have ExtKeyUsage 'EmailProtection' but was not set")
+				}
+
+				if !slices.Contains(issuedCerts.Certificate.ExtKeyUsage, x509.ExtKeyUsageCodeSigning) {
+					return fmt.Errorf("issued certificate should have ExtKeyUsage 'CodeSigning' but was not set")
+				}
+
+				if slices.Contains(issuedCerts.Certificate.ExtKeyUsage, x509.ExtKeyUsageServerAuth) {
+					return fmt.Errorf("issued certificate should NOT have ExtKeyUsage 'ServerAuth' but it was set")
+				}
+
+				if slices.Contains(issuedCerts.Certificate.ExtKeyUsage, x509.ExtKeyUsageOCSPSigning) {
+					return fmt.Errorf("issued certificate should NOT have ExtKeyUsage 'OCSPSigning' but it was set")
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/IssuanceProfile-DontHonor",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				//first create profile
+				p, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:                   "test-profile",
+						Description:            "my test profile",
+						HonorKeyUsage:          false,
+						KeyUsage:               models.X509KeyUsage(x509.KeyUsageCRLSign | x509.KeyUsageEncipherOnly), // KeyUsage should be ignored since HonorKeyUsage is true
+						HonorExtendedKeyUsages: false,
+						ExtendedKeyUsages: []models.X509ExtKeyUsage{ // ExtendedKeyUsages should be ignored since HonorExtendedKeyUsages is true
+							models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+							models.X509ExtKeyUsage(x509.ExtKeyUsageEmailProtection),
+						},
+						HonorSubject: false,
+						Subject: models.Subject{ // these values should be ignored since HonorSubject is true
+							Country:          "US",
+							Organization:     "other-lamassu",
+							OrganizationUnit: "other-iot",
+							State:            "other-lamassu-world",
+							Locality:         "other-lamassu-city",
+						},
+						HonorExtensions: false,
+						Validity:        validity,
+						SignAsCA:        false,
+					},
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				profileID := p.ID
+
+				key, err := chelpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				extensions := []pkix.Extension{}
+				kuExt, err := chelpers.GenerateKeyUsagePKIExtension(x509.KeyUsageContentCommitment | x509.KeyUsageKeyEncipherment | x509.KeyUsageDecipherOnly)
+				if err != nil {
+					return nil, fmt.Errorf("error generating KeyUsage extension: %s", err)
+				}
+
+				ekuExt, err := chelpers.GenerateExtendedKeyUsagePKIExtension([]x509.ExtKeyUsage{x509.ExtKeyUsageIPSECEndSystem, x509.ExtKeyUsageCodeSigning})
+				if err != nil {
+					return nil, fmt.Errorf("error generating ExtendedKeyUsage extension: %s", err)
+				}
+
+				extensions = append(extensions, kuExt, ekuExt)
+
+				csr, err := chelpers.GenerateCertificateRequestWithExtensions(
+					models.Subject{CommonName: "test", Country: "ES", Organization: "lamassu", OrganizationUnit: "iot", State: "lamassu-world", Locality: "lamassu-city"},
+					extensions,
+					key,
+				)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csr),
+					IssuanceProfileID: profileID,
+				})
+			},
+			resultCheck: func(issuedCerts *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCerts == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if issuedCerts.Subject.CommonName != "test" {
+					return fmt.Errorf("issued certificate should have CommonName 'test' but got '%s'", issuedCerts.Subject.CommonName)
+				}
+
+				if issuedCerts.Subject.Country != "US" {
+					return fmt.Errorf("issued certificate should have Country 'US' but got '%s'", issuedCerts.Subject.Country)
+				}
+
+				if issuedCerts.Subject.Organization != "other-lamassu" {
+					return fmt.Errorf("issued certificate should have Organization 'other-lamassu' but got '%s'", issuedCerts.Subject.Organization)
+				}
+
+				if issuedCerts.Subject.OrganizationUnit != "other-iot" {
+					return fmt.Errorf("issued certificate should have OrganizationUnit 'other-iot' but got '%s'", issuedCerts.Subject.OrganizationUnit)
+				}
+
+				if issuedCerts.Subject.State != "other-lamassu-world" {
+					return fmt.Errorf("issued certificate should have State 'other-lamassu-world' but got '%s'", issuedCerts.Subject.State)
+				}
+
+				if issuedCerts.Subject.Locality != "other-lamassu-city" {
+					return fmt.Errorf("issued certificate should have Locality 'other-lamassu-city' but got '%s'", issuedCerts.Subject.Locality)
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageContentCommitment != 0 {
+					return fmt.Errorf("issued certificate should NOT have KeyUsage 'ContentCommitment' but it was set")
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageKeyEncipherment != 0 {
+					return fmt.Errorf("issued certificate should NOT have KeyUsage 'KeyEncipherment' but it was set")
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageDecipherOnly != 0 {
+					return fmt.Errorf("issued certificate should NOT have KeyUsage 'DecipherOnly' but it was set")
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageCRLSign == 0 {
+					return fmt.Errorf("issued certificate should have KeyUsage 'CRLSign' but got was not set")
+				}
+
+				if issuedCerts.Certificate.KeyUsage&x509.KeyUsageEncipherOnly == 0 {
+					return fmt.Errorf("issued certificate should have KeyUsage 'EncipherOnly' but was not set")
+				}
+
+				if slices.Contains(issuedCerts.Certificate.ExtKeyUsage, x509.ExtKeyUsageIPSECEndSystem) {
+					return fmt.Errorf("issued certificate should NOT have ExtKeyUsage 'IPSECEndSystem' but it was set")
+				}
+
+				if slices.Contains(issuedCerts.Certificate.ExtKeyUsage, x509.ExtKeyUsageCodeSigning) {
+					return fmt.Errorf("issued certificate should NOT have ExtKeyUsage 'CodeSigning' but it was set")
+				}
+
+				if !slices.Contains(issuedCerts.Certificate.ExtKeyUsage, x509.ExtKeyUsageServerAuth) {
+					return fmt.Errorf("issued certificate should have ExtKeyUsage 'ServerAuth' but was not set")
+				}
+
+				if !slices.Contains(issuedCerts.Certificate.ExtKeyUsage, x509.ExtKeyUsageEmailProtection) {
+					return fmt.Errorf("issued certificate should have ExtKeyUsage 'EmailProtection' but was not set")
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/IssuanceProfile-IsCATrue",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				//first create profile
+				p, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:                   "test-profile",
+						Description:            "my test profile",
+						HonorKeyUsage:          true,
+						HonorExtendedKeyUsages: true,
+						HonorSubject:           true,
+						HonorExtensions:        true,
+						Validity:               validity,
+						SignAsCA:               true,
+					},
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				profileID := p.ID
+
+				key, err := chelpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				csr, err := chelpers.GenerateCertificateRequest(
+					models.Subject{CommonName: "test", Country: "ES", Organization: "lamassu", OrganizationUnit: "iot", State: "lamassu-world", Locality: "lamassu-city"},
+					key,
+				)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csr),
+					IssuanceProfileID: profileID,
+				})
+			},
+			resultCheck: func(issuedCerts *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCerts == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if issuedCerts.Subject.CommonName != "test" {
+					return fmt.Errorf("issued certificate should have CommonName 'test' but got '%s'", issuedCerts.Subject.CommonName)
+				}
+
+				if issuedCerts.IsCA != true {
+					return fmt.Errorf("issued certificate should be a CA but IsCA is false")
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/IssuanceProfile-OnlySignRsaCsrs",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				//first create profile
+				p, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:                   "test-profile",
+						Description:            "my test profile",
+						HonorKeyUsage:          true,
+						HonorExtendedKeyUsages: true,
+						HonorSubject:           true,
+						HonorExtensions:        true,
+						Validity:               validity,
+						SignAsCA:               true,
+						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+							Enabled:        true,
+							AllowECDSAKeys: false,
+							AllowRSAKeys:   true,
+						},
+					},
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				profileID := p.ID
+
+				ecdsaKey, err := chelpers.GenerateECDSAKey(elliptic.P256())
+				if err != nil {
+					return nil, err
+				}
+
+				csrECDSA, err := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, ecdsaKey)
+				if err != nil {
+					return nil, err
+				}
+
+				_, err = caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csrECDSA),
+					IssuanceProfileID: profileID,
+				})
+				if err == nil {
+					return nil, fmt.Errorf("should've got error but got none")
+				}
+
+				rsaKey, err := chelpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				csrRSA, err := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, rsaKey)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csrRSA),
+					IssuanceProfileID: profileID,
+				})
+			},
+			resultCheck: func(issuedCerts *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCerts == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if issuedCerts.Subject.CommonName != "test" {
+					return fmt.Errorf("issued certificate should have CommonName 'test' but got '%s'", issuedCerts.Subject.CommonName)
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/IssuanceProfile-OnlySignEcdsaCsrs",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				//first create profile
+				p, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:                   "test-profile",
+						Description:            "my test profile",
+						HonorKeyUsage:          true,
+						HonorExtendedKeyUsages: true,
+						HonorSubject:           true,
+						HonorExtensions:        true,
+						Validity:               validity,
+						SignAsCA:               true,
+						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+							Enabled:        true,
+							AllowECDSAKeys: true,
+							AllowRSAKeys:   false,
+						},
+					},
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				profileID := p.ID
+
+				rsaKey, err := chelpers.GenerateRSAKey(2048)
+				if err != nil {
+					return nil, err
+				}
+
+				csrRSA, err := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, rsaKey)
+				if err != nil {
+					return nil, err
+				}
+
+				_, err = caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csrRSA),
+					IssuanceProfileID: profileID,
+				})
+				if err == nil {
+					return nil, fmt.Errorf("should've got error but got none")
+				}
+
+				ecdsaKey, err := chelpers.GenerateECDSAKey(elliptic.P256())
+				if err != nil {
+					return nil, err
+				}
+
+				csrECDSA, err := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, ecdsaKey)
+				if err != nil {
+					return nil, err
+				}
+
+				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csrECDSA),
+					IssuanceProfileID: profileID,
+				})
+			},
+			resultCheck: func(issuedCerts *models.Certificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				if issuedCerts == nil {
+					return fmt.Errorf("should've got issued certificate but got nil")
+				}
+
+				if issuedCerts.Subject.CommonName != "test" {
+					return fmt.Errorf("issued certificate should have CommonName 'test' but got '%s'", issuedCerts.Subject.CommonName)
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/IssuanceProfile-OnlySignEcdsa256And384Csrs",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				//first create profile
+				p, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:                   "test-profile",
+						Description:            "my test profile",
+						HonorKeyUsage:          true,
+						HonorExtendedKeyUsages: true,
+						HonorSubject:           true,
+						HonorExtensions:        true,
+						Validity:               validity,
+						SignAsCA:               true,
+						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+							Enabled:              true,
+							AllowECDSAKeys:       true,
+							AllowedECDSAKeySizes: []int{256, 384},
+							AllowRSAKeys:         false,
+						},
+					},
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				profileID := p.ID
+				key256, _ := chelpers.GenerateECDSAKey(elliptic.P256())
+				csr256, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, key256)
+
+				key384, _ := chelpers.GenerateECDSAKey(elliptic.P384())
+				csr384, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, key384)
+
+				key521, _ := chelpers.GenerateECDSAKey(elliptic.P521())
+				csr521, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, key521)
+
+				_, err = caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csr256),
+					IssuanceProfileID: profileID,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				_, err = caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csr384),
+					IssuanceProfileID: profileID,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				_, err = caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csr521),
+					IssuanceProfileID: profileID,
+				})
+				if err == nil {
+					return nil, fmt.Errorf("should've got error but got none")
+				}
+
+				return nil, nil
+			},
+			resultCheck: func(issuedCerts *models.Certificate, err error) error {
+				return err
+			},
+		},
+		{
+			name: "OK/IssuanceProfile-OnlySignRsa2048Csrs",
+			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
+				//first create profile
+				p, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:                   "test-profile",
+						Description:            "my test profile",
+						HonorKeyUsage:          true,
+						HonorExtendedKeyUsages: true,
+						HonorSubject:           true,
+						HonorExtensions:        true,
+						Validity:               validity,
+						SignAsCA:               true,
+						CryptoEnforcement: models.IssuanceProfileCryptoEnforcement{
+							Enabled:            true,
+							AllowECDSAKeys:     true,
+							AllowedRSAKeySizes: []int{2048},
+							AllowRSAKeys:       true,
+						},
+					},
+				})
+				if err != nil {
+					return nil, err
+				}
+
+				profileID := p.ID
+				key2048, _ := chelpers.GenerateRSAKey(2048)
+				csr2048, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, key2048)
+
+				key3072, _ := chelpers.GenerateRSAKey(3072)
+				csr3072, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "test"}, key3072)
+
+				_, err = caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csr2048),
+					IssuanceProfileID: profileID,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("should've got no error but got error: %s", err)
+				}
+
+				_, err = caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              caIDToSign,
+					CertRequest:       (*models.X509CertificateRequest)(csr3072),
+					IssuanceProfileID: profileID,
+				})
+				if err == nil {
+					return nil, fmt.Errorf("should've got error but got none")
+				}
+
+				return nil, nil
+			},
+			resultCheck: func(issuedCerts *models.Certificate, err error) error {
+				return err
+			},
+		},
+		{
 			name: "Err/CADoesNotExist",
 			run: func(caSDK services.CAService, caIDToSign string, validity models.Validity) (*models.Certificate, error) {
 				key, err := chelpers.GenerateRSAKey(2048)
@@ -1053,17 +1631,26 @@ func TestSignCertificate(t *testing.T) {
 			caExpiration := models.TimeDuration(time.Hour * 24)
 			issuanceExpiration := models.TimeDuration(time.Hour * 2)
 
+			profile, err := caTest.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+				Profile: models.IssuanceProfile{
+					Validity: models.Validity{Type: models.Duration, Duration: issuanceExpiration},
+				},
+			})
+			if err != nil {
+				t.Fatalf("failed creating issuance profile: %s", err)
+			}
+
 			ca, err := caTest.Service.CreateCA(context.Background(), services.CreateCAInput{
-				KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-				Subject:            models.Subject{CommonName: "TestCA"},
-				CAExpiration:       models.Validity{Type: models.Duration, Duration: caExpiration},
-				IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceExpiration},
+				KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+				Subject:      models.Subject{CommonName: "TestCA"},
+				CAExpiration: models.Validity{Type: models.Duration, Duration: caExpiration},
+				ProfileID:    profile.ID,
 			})
 			if err != nil {
 				t.Fatalf("failed creating CA: %s", err)
 			}
 
-			err = tc.resultCheck(tc.run(caTest.HttpCASDK, ca.ID, ca.Validity))
+			err = tc.resultCheck(tc.run(caTest.HttpCASDK, ca.ID, profile.Validity))
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
 			}
@@ -1127,12 +1714,18 @@ func TestImportCertificate(t *testing.T) {
 
 				//Import CA
 				issuanceDur := models.TimeDuration(time.Hour * 2)
-				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType: models.CertificateTypeImportedWithKey,
-					IssuanceExpiration: models.Validity{
-						Type:     models.Duration,
-						Duration: issuanceDur,
+				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
 					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating issuance profile: %s", err)
+				}
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					CAType:        models.CertificateTypeImportedWithKey,
+					ProfileID:     profile.ID,
 					CAECKey:       caKey.(*ecdsa.PrivateKey),
 					CACertificate: (*models.X509Certificate)(ca),
 					KeyType:       models.KeyType(x509.ECDSA),
@@ -1226,12 +1819,18 @@ func TestImportCertificate(t *testing.T) {
 
 				//Import CA
 				issuanceDur := models.TimeDuration(time.Hour * 2)
-				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType: models.CertificateTypeImportedWithKey,
-					IssuanceExpiration: models.Validity{
-						Type:     models.Duration,
-						Duration: issuanceDur,
+				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
 					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating issuance profile: %s", err)
+				}
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					CAType:        models.CertificateTypeImportedWithKey,
+					ProfileID:     profile.ID,
 					CAECKey:       caKey.(*ecdsa.PrivateKey),
 					CACertificate: (*models.X509Certificate)(ca),
 					KeyType:       models.KeyType(x509.ECDSA),
@@ -1412,18 +2011,14 @@ func TestRevokeCA(t *testing.T) {
 					}
 
 					caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-						CAID:        DefaultCAID,
-						CertRequest: (*models.X509CertificateRequest)(csr),
-						IssuanceProfile: models.IssuanceProfile{
-							Validity:        ca.Validity,
-							SignAsCA:        false,
-							HonorSubject:    true,
-							HonorExtensions: true,
-						},
+						CAID:              DefaultCAID,
+						CertRequest:       (*models.X509CertificateRequest)(csr),
+						IssuanceProfileID: ca.ProfileID,
 					})
 				}
 				caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID: DefaultCAID,
+					CAID:              DefaultCAID,
+					IssuanceProfileID: ca.ProfileID,
 				})
 
 				return caSDK.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
@@ -1639,7 +2234,6 @@ func TestGetCAsByCommonName(t *testing.T) {
 
 	for _, tc := range testcases {
 		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
 
 			err = serverTest.BeforeEach()
@@ -1822,13 +2416,22 @@ func TestUpdateCAStatus(t *testing.T) {
 			name: "OK/UpdateExpiredCAStatus",
 			before: func(svc services.CAService) error {
 				//Create Out of Band CA
-				_, err := svc.CreateCA(context.Background(), services.CreateCAInput{
-					ID:                 "myCA",
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
-					Subject:            models.Subject{CommonName: "myCA"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Second * 2)},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Second * 1)},
-					Metadata:           map[string]any{},
+				profile, err := svc.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Second * 1)},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating issuance profile: %s", err)
+				}
+
+				_, err = svc.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           "myCA",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
+					Subject:      models.Subject{CommonName: "myCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Second * 2)},
+					ProfileID:    profile.ID,
+					Metadata:     map[string]any{},
 				})
 				if err != nil {
 					return fmt.Errorf("Got error while creating the CA %s", err)
@@ -2054,14 +2657,9 @@ func TestGetCertificates(t *testing.T) {
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
 					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
-						CAID:        DefaultCAID,
-						CertRequest: (*models.X509CertificateRequest)(csr),
-						IssuanceProfile: models.IssuanceProfile{
-							Validity:        ca.Validity,
-							SignAsCA:        false,
-							HonorSubject:    true,
-							HonorExtensions: true,
-						},
+						CAID:              DefaultCAID,
+						CertRequest:       (*models.X509CertificateRequest)(csr),
+						IssuanceProfileID: ca.ProfileID,
 					})
 					if err != nil {
 						return err
@@ -2114,14 +2712,9 @@ func TestGetCertificates(t *testing.T) {
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
 					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
-						CAID:        DefaultCAID,
-						CertRequest: (*models.X509CertificateRequest)(csr),
-						IssuanceProfile: models.IssuanceProfile{
-							Validity:        ca.Validity,
-							SignAsCA:        false,
-							HonorSubject:    true,
-							HonorExtensions: true,
-						},
+						CAID:              DefaultCAID,
+						CertRequest:       (*models.X509CertificateRequest)(csr),
+						IssuanceProfileID: ca.ProfileID,
 					})
 					if err != nil {
 						return err
@@ -2220,14 +2813,9 @@ func TestGetCertificatesByCA(t *testing.T) {
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
 					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
-						CAID:        DefaultCAID,
-						CertRequest: (*models.X509CertificateRequest)(csr),
-						IssuanceProfile: models.IssuanceProfile{
-							Validity:        ca.Validity,
-							SignAsCA:        false,
-							HonorSubject:    true,
-							HonorExtensions: true,
-						},
+						CAID:              DefaultCAID,
+						CertRequest:       (*models.X509CertificateRequest)(csr),
+						IssuanceProfileID: ca.ProfileID,
 					})
 					if err != nil {
 						return err
@@ -2280,14 +2868,9 @@ func TestGetCertificatesByCA(t *testing.T) {
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
 					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
-						CAID:        DefaultCAID,
-						CertRequest: (*models.X509CertificateRequest)(csr),
-						IssuanceProfile: models.IssuanceProfile{
-							Validity:        ca.Validity,
-							SignAsCA:        false,
-							HonorSubject:    true,
-							HonorExtensions: true,
-						},
+						CAID:              DefaultCAID,
+						CertRequest:       (*models.X509CertificateRequest)(csr),
+						IssuanceProfileID: ca.ProfileID,
 					})
 					if err != nil {
 						return err
@@ -2340,14 +2923,9 @@ func TestGetCertificatesByCA(t *testing.T) {
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
 					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
-						CAID:        DefaultCAID,
-						CertRequest: (*models.X509CertificateRequest)(csr),
-						IssuanceProfile: models.IssuanceProfile{
-							Validity:        ca.Validity,
-							SignAsCA:        false,
-							HonorSubject:    true,
-							HonorExtensions: true,
-						},
+						CAID:              DefaultCAID,
+						CertRequest:       (*models.X509CertificateRequest)(csr),
+						IssuanceProfileID: ca.ProfileID,
 					})
 					if err != nil {
 						return err
@@ -2400,14 +2978,9 @@ func TestGetCertificatesByCA(t *testing.T) {
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
 					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
-						CAID:        DefaultCAID,
-						CertRequest: (*models.X509CertificateRequest)(csr),
-						IssuanceProfile: models.IssuanceProfile{
-							Validity:        ca.Validity,
-							SignAsCA:        false,
-							HonorSubject:    true,
-							HonorExtensions: true,
-						},
+						CAID:              DefaultCAID,
+						CertRequest:       (*models.X509CertificateRequest)(csr),
+						IssuanceProfileID: ca.ProfileID,
 					})
 					if err != nil {
 						return err
@@ -2551,13 +3124,19 @@ func TestImportCA(t *testing.T) {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
 
-				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					ID:     "id-1234",
-					CAType: models.CertificateTypeExternal,
-					IssuanceExpiration: models.Validity{
-						Type:     models.Duration,
-						Duration: (models.TimeDuration)(duration),
+				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(duration)},
 					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating issuance profile: %s", err)
+				}
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:            "id-1234",
+					CAType:        models.CertificateTypeExternal,
+					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
 				})
 
@@ -2581,13 +3160,19 @@ func TestImportCA(t *testing.T) {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
 
-				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					ID:     "id-1234",
-					CAType: models.CertificateTypeImportedWithKey,
-					IssuanceExpiration: models.Validity{
-						Type:     models.Duration,
-						Duration: (models.TimeDuration)(duration),
+				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(duration)},
 					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating issuance profile: %s", err)
+				}
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:            "id-1234",
+					CAType:        models.CertificateTypeImportedWithKey,
+					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
 					CARSAKey:      (key).(*rsa.PrivateKey),
 					KeyType:       models.KeyType(x509.RSA),
@@ -2621,13 +3206,19 @@ func TestImportCA(t *testing.T) {
 					engine = engines[1]
 				}
 
-				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					ID:     "id-1234",
-					CAType: models.CertificateTypeImportedWithKey,
-					IssuanceExpiration: models.Validity{
-						Type:     models.Duration,
-						Duration: (models.TimeDuration)(duration),
+				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(duration)},
 					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating issuance profile: %s", err)
+				}
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:            "id-1234",
+					CAType:        models.CertificateTypeImportedWithKey,
+					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
 					CARSAKey:      (key).(*rsa.PrivateKey),
 					KeyType:       models.KeyType(x509.RSA),
@@ -2653,13 +3244,19 @@ func TestImportCA(t *testing.T) {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
 
-				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					ID:     "id-1234",
-					CAType: models.CertificateTypeImportedWithKey,
-					IssuanceExpiration: models.Validity{
-						Type:     models.Duration,
-						Duration: (models.TimeDuration)(duration),
+				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(duration)},
 					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating issuance profile: %s", err)
+				}
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:            "id-1234",
+					CAType:        models.CertificateTypeImportedWithKey,
+					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
 					CAECKey:       (key).(*ecdsa.PrivateKey),
 					KeyType:       models.KeyType(x509.ECDSA),
@@ -2683,12 +3280,18 @@ func TestImportCA(t *testing.T) {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
 
-				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType: models.CertificateTypeImportedWithKey,
-					IssuanceExpiration: models.Validity{
-						Type:     models.Duration,
-						Duration: (models.TimeDuration)(duration),
+				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(duration)},
 					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating issuance profile: %s", err)
+				}
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					CAType:        models.CertificateTypeImportedWithKey,
+					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
 					CARSAKey:      (key).(*rsa.PrivateKey),
 					KeyType:       models.KeyType(x509.RSA),
@@ -2704,346 +3307,158 @@ func TestImportCA(t *testing.T) {
 			},
 		},
 		// 		{
-		// 			name:   "OK/ImportingHierarchy",
+		// 			name:   "OK/ImportingHierarchyBottomUp",
 		// 			before: func(svc services.CAService) error { return nil },
 		// 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
-		// 				ca0Crt := `-----BEGIN CERTIFICATE-----
-		// MIIF4TCCA8mgAwIBAgIQD7Bwh2HNiZht1NqCrgyw+TANBgkqhkiG9w0BAQsFADAS
-		// MRAwDgYDVQQDEwdSb290LUNBMCAXDTI0MDUyMDEwMjA0MloYDzk5OTkxMjMxMjI1
-		// OTU5WjASMRAwDgYDVQQDEwdSb290LUNBMIICIjANBgkqhkiG9w0BAQEFAAOCAg8A
-		// MIICCgKCAgEA1N9HcHVVIpUm/JmPVxEasRsoh4Dh6+/CX/hex7prZ+OEkqwFFfYx
-		// vnSGX0lQyDGnymjyLEtC+dumW7PrJ1wuQaI6uZ+Jy5XGPLiPVc/EzGPxnKJV6OF6
-		// nkDPc3qPorzMM1s4JZX2D4YfasumEmREYQsdufMik3iiJ5AbojUuVQLIsqnxrJZ7
-		// FOSkM4pux47f6o2nOKIhkoUQ8zAQ950yXON0F573GS87PLRx8XuMj79o4DsHQ8w3
-		// 38M8/vIhwlQMmaqx7+gLN2fKRw4wHUfnJRmPwmszAQtjMCk+mEO5C2xAi5tzf9Ec
-		// hUHlrwUQRJhCit3yTrqzKDMCfAel/qllrB6wGI+p37PTg5AM5e3cmK80jmKwXiQM
-		// RHdbNwnvrnxQnpBZBvtR2uH/v3z85BmkNxMrQsGQLBlYm/WIcv3zOzyJUJcAv46f
-		// t4Wv/MuAjmWVSkrO0uZgJkwoV7jFTJq5qrIPs1us7L1/pfJPlew+e1lpvAy2oTKB
-		// FroJffAsIf2Su2VsqygzMOZHjnb/EIyIZ0dOudHOSuFBYlSS+cyLQYnTunaACPmL
-		// jb9SkXWi/ps/X20QbEUuXMTuG7oUrsKwYVSCofr74R5cvT6PeQflvB2XbDjOKMDN
-		// uaQHhOOVLYeV3A2NSkYTjKAVBtpj0YbnPDQ+/ImygvswwCr7hc9OyZsCAwEAAaOC
-		// AS8wggErMA4GA1UdDwEB/wQEAwIBljAdBgNVHSUEFjAUBggrBgEFBQcDAgYIKwYB
-		// BQUHAwEwDwYDVR0TAQH/BAUwAwEB/zAtBgNVHQ4EJgQkOWViY2EzMDEtOWZkYy00
-		// ZDI0LWEzZmItMzIzZGExYjliNTExMC8GA1UdIwQoMCaAJDllYmNhMzAxLTlmZGMt
-		// NGQyNC1hM2ZiLTMyM2RhMWI5YjUxMTA3BggrBgEFBQcBAQQrMCkwJwYIKwYBBQUH
-		// MAGGG2h0dHBzOi8vbGFiLmxhbWFzc3UuaW8vb2NzcDBQBgNVHR8ESTBHMEWgQ6BB
-		// hj9odHRwczovL2xhYi5sYW1hc3N1LmlvL2NybC85ZWJjYTMwMS05ZmRjLTRkMjQt
-		// YTNmYi0zMjNkYTFiOWI1MTEwDQYJKoZIhvcNAQELBQADggIBAIWs+bveoWQsUPeR
-		// 4en3nDJf8xfbPjCA6u9TZvED/B+J6U2db8S6aS32b5q6xFvFMgFKCY1ezeFXlbwl
-		// 52zoGDMKRK5XnvOgQVDaP123e8SAjAY+ZdD1ZQlg7JwaKV9cz7aAHv4RbU1E48IY
-		// GPFUzh9KXjH6CxjJxF29PjROuBadltuPSupxdjY+Gwvid+uQCSJ80Fpza4kWf4Z6
-		// GNkNJ3D7N+WImXCW1za+V0kvM3hQTCRx9rebvIrC96XkDCcfUftsmok/N9qK5xq9
-		// 8iLSWlygzgPyb30Dre2E5MfTS3M48v2cUiWgKHvXIcP5EMyR2RAIpfvAiXcTvgU0
-		// 5CTsep3MQXr4t4q/CkwwWsof1imTQEeTBMxa+0vTXT1kZSnrlojJweysatYnfW0F
-		// c2ICmNRBnaJFr9hsPuyvT9ZpoEUh2Gme0mPG4kXZ2t9MLdUYByJMMb8O7CSmEUOA
-		// 7Nv0yD6wd+WkZku3XrWRw0Wp9wQnX6IcNrH/gfvBTu60ePKBYVeQCrX8Rl6R7baX
-		// IqUV1Fvtc2Q9GPK8jY2/WZBC38LAOOFgoXAllsxmHYrJJhC8uR+l7IIZNrMCsjre
-		// v5gs9H66gdr0B6RB5VVfWxZ34Indlrkd+OR6oRT3fE+3F0o9uMzuk3FKJw9C2Ee/
-		// VISVtZ9f3pwAsoxH/6bz+qzThkK4
+		// 				ca0Crt := `
+		// -----BEGIN CERTIFICATE-----
+		// MIIDqzCCApOgAwIBAgIUY/29239q5Iz5/m2NGnFiQZCDeoswDQYJKoZIhvcNAQEL
+		// BQAwXTELMAkGA1UEBhMCVVMxFTATBgNVBAgMDEV4YW1wbGVTdGF0ZTEUMBIGA1UE
+		// BwwLRXhhbXBsZUNpdHkxDzANBgNVBAoMBlJvb3RDQTEQMA4GA1UEAwwHUm9vdCBD
+		// QTAeFw0yNTAyMjUxMzU0MDBaFw0zNTAyMjMxMzU0MDBaMF0xCzAJBgNVBAYTAlVT
+		// MRUwEwYDVQQIDAxFeGFtcGxlU3RhdGUxFDASBgNVBAcMC0V4YW1wbGVDaXR5MQ8w
+		// DQYDVQQKDAZSb290Q0ExEDAOBgNVBAMMB1Jvb3QgQ0EwggEiMA0GCSqGSIb3DQEB
+		// AQUAA4IBDwAwggEKAoIBAQDJgxeplksYYGm7ilnJYQMu2bUbv+rxgGCpfZlDlzRk
+		// 3HBjt3Q0Xa8r1rBS1LI3iktBgUWiqBElqhYAX0d459Mko3J7dPAf+0mcPzYgGd8X
+		// 5MoztHc+fpzht+Natpvm/ocp8lFoEt68SDGiG24sdhmbSTJPsU50JneO7LHK8YPL
+		// h5VL+4pu9dHrXgH6d7CK8bP25nCE90B4gpFKy2Oc9vIvAiZ0m31441ipOJqujsvm
+		// MsPAR/rsOBGVRqkvQ933BR3PwBm4nbMWPtbsg/OL5WgzoYs2wiRmaj3YvZoAAHzy
+		// c/2ntEh33hemHgKkI++mwDLxzDg+jhsod/gWPt9hTOljAgMBAAGjYzBhMA8GA1Ud
+		// EwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMB0GA1UdDgQWBBTkWLVA/xb37hGL
+		// /S1UTgJqJfmm/jAfBgNVHSMEGDAWgBTkWLVA/xb37hGL/S1UTgJqJfmm/jANBgkq
+		// hkiG9w0BAQsFAAOCAQEARBs3V/jUheZffb/9zfpo26e3e+whlXIcL6VjA94HWKXh
+		// FzdAbQfvQUQCfT/tRJzUE3MZoi6g0vtZmi3if3KA9Mb+zSmrfjgEtymGKAyaKzR6
+		// LSjt7RHRAXVjjnkNAmGZiVfi9rsslHr3WeVGwwNZGQQpZBN5Atcd7YSRWk9wuH+N
+		// ReLpV/Neg/wBMAxLgCBuvIfDQkSOsUwSmLMLzuRYqOMAyVR8bUiu9bxHOHaUQ6TI
+		// DruLxGHV4uOAx2SqBNr7XWKJyOZxMkmm0YnZWnIX6+uTHeGTdxgWuHLlkrUGVmaW
+		// Spj4CeR8GjWfp66G75tjuT5qpgFJ2yhnaDJ/JqNTrQ==
 		// -----END CERTIFICATE-----
 		// `
 
-		// 				ca0Key := `-----BEGIN RSA PRIVATE KEY-----
-		// MIIJKAIBAAKCAgEA1N9HcHVVIpUm/JmPVxEasRsoh4Dh6+/CX/hex7prZ+OEkqwF
-		// FfYxvnSGX0lQyDGnymjyLEtC+dumW7PrJ1wuQaI6uZ+Jy5XGPLiPVc/EzGPxnKJV
-		// 6OF6nkDPc3qPorzMM1s4JZX2D4YfasumEmREYQsdufMik3iiJ5AbojUuVQLIsqnx
-		// rJZ7FOSkM4pux47f6o2nOKIhkoUQ8zAQ950yXON0F573GS87PLRx8XuMj79o4DsH
-		// Q8w338M8/vIhwlQMmaqx7+gLN2fKRw4wHUfnJRmPwmszAQtjMCk+mEO5C2xAi5tz
-		// f9EchUHlrwUQRJhCit3yTrqzKDMCfAel/qllrB6wGI+p37PTg5AM5e3cmK80jmKw
-		// XiQMRHdbNwnvrnxQnpBZBvtR2uH/v3z85BmkNxMrQsGQLBlYm/WIcv3zOzyJUJcA
-		// v46ft4Wv/MuAjmWVSkrO0uZgJkwoV7jFTJq5qrIPs1us7L1/pfJPlew+e1lpvAy2
-		// oTKBFroJffAsIf2Su2VsqygzMOZHjnb/EIyIZ0dOudHOSuFBYlSS+cyLQYnTunaA
-		// CPmLjb9SkXWi/ps/X20QbEUuXMTuG7oUrsKwYVSCofr74R5cvT6PeQflvB2XbDjO
-		// KMDNuaQHhOOVLYeV3A2NSkYTjKAVBtpj0YbnPDQ+/ImygvswwCr7hc9OyZsCAwEA
-		// AQKCAgBznsKiplgTbIe8c3uTgsrIn0OoNayABb3BepmgSfTEfKMpNx2cDBiApbHG
-		// V3/0/GNyYQYIYOiD5XW6IUL8IelN5NuYrrqdRUBjAqt3pF3z1eUJenLHBpEfG3yR
-		// 8GPLtFgFHOqmH4mCbQrraqlNHAC35N3Effaturv4WSFpPRFpQxXXVM7bOvCnLHiz
-		// NeFtqoCcWUwWSpmJh5TpQZY1p8APC8umeMUlfK3kDu5EhyKVgRVplSYhAO7oLpcW
-		// slT7w8MEQ95Zu+M7uLf5WA9yF/fIAtY+dxNA4fqB0iUZds8vESENsuVM6ztedahX
-		// I5zuZPTfkCVn9agRkYMr8suKQl/h2sW9SpvsE8TPAzn4BRqhcALT8tfZaQ2RhdqX
-		// aBfjZueT6mlzN+FFa/SMOmfc+DLupIAqD+vox3ikhrM5Fpy9kE0yF0ZVum/XyvpA
-		// b+3nhbFGQZUqtx6N3FEnJQAomZtuNsquzqgj6I51izCjgWiTv5U0m4iOayLJoS/u
-		// TsH1zakp2NMYZrty49VwzzCGpTWxExeP2k4Cy9EdI4BhzwFxDC7q9tp0xOs6lgIf
-		// grzARiu6bI5XyHEPve8nH1kmy1INYOev87VuxDmO2Y6FpZxm5uXF4LaQstPZyujp
-		// oI9YamT7PMmwJ4MeRh405dBh0plN22c98mpw95oeQ5Mpbp5JQQKCAQEA+FzMBvkU
-		// Y12f/ejap+I0neXsOZTK+0WfKMAnx4nJGVej4BVDKzinhY/kt1YP5TZUNYqwYBqo
-		// RlIBqY3H9hw+SFpF12JRhwmXiDTC9hjRDlJJhYHB9WTq1z+vxsF4j+sg2qzeTOtM
-		// D/pi2M/weESdRv6MjvUJdsQqnd5O0mTpXGHeq5a3nmThHveE7pIfppbCRrsM3lCb
-		// zr9nd1iD+nVd2eJNgwb5p226wC6kCo3UdqMaq8hDZ1s8tn0ud5c8d7fTtXNUXQg2
-		// xkJk2mg14br0snadcIWFUwGNH7wljLdCfjsqY1HtyLSl/qgQDKrIFEyhszJp1YJr
-		// 4/xcL8XHmsbSeQKCAQEA22sWy06QOoE0CF4D+R8jHvDhlJVuY2Ha/a66NDiInu5Q
-		// qNyX/aIuWMTyZcUJ/8ksUAsUHtk+/RoivqW4R3W5hA7OMKR2tjik3+wzAAWA2J9Y
-		// qbellG2L3oyiJc0SmS0C74PukIh6NgEXEuUs50ZSlAmE7Ltkyelcu+5Q7WPEyVt/
-		// tP7+UBmOH1aQEqvmPelt76DbzLMCr4Uqjk8MVd+xBDPiVmwPS+ccxpuH5HMu5bmi
-		// vFQRHQySeJmus6E3sMWwCNRS+NixUpskndJnkUgeL4R7FJmjC37t5jpAhNvXAIM+
-		// fzB7ANBJ5cXyxqploBddKswCc+tBKZfw0E7DZjbXswKCAQEAiJJOx07UfUeQoQkY
-		// o9Tp5iH24jsF22KPgNMZjMohwUPGI4TNqMjApdtYg9BZcUuMxtx63H4MJo8Vxuzm
-		// Flm1jgfF/AhemIkXwJhy1O0UmHF7aGTQCWbzFGY6/GqLJ2i+akFBBL8m1mpzTJIb
-		// w6bHbbCwDjSEfcClRqZmZZ+EC37t+SEp23nRqTum56GGsg6Yylg1XVKqOuhZtvD/
-		// sgw0DYo54WFGi2D1npSHNB6FxK8wDWJUXlN3cUoo8S5C2/pD+rVuoLHRnPgJiWhg
-		// qL4rrK85KBTkGZ7ywY6uf1COyeczCeaVgRaFaSF1oeGPoEn7aRTBydysA3RUJRj3
-		// CA9o0QKCAQBWXlfxnTIupU8bAA7mT/heJIlXGF8EZa9y7gVDqwE0NjCv121InD9M
-		// F/ImVyIxejmkJEg+QFuH+3Kzwr2/+zoUHlPRV9uWrMNRlUMZ/hCStF6NJ8nYnCpT
-		// Zt4orQlmHA6swyzz3ZTljxZLDMTZIJg+x2R4Xuc0h1RGcW+PkhcS/55MW5c1ZmnI
-		// MiWyA9I0ip8IlTQP5mLnPi7bJ4h+gPfH5LhyNkTrJsTv9KbQKPrL2H+TTDAUVC+P
-		// o0beVFZ8kcRSJWmnpHxgPMt0CC9WQ6IGKEred/9y9fqlBkcBRRvjisXeAPJaBqMf
-		// /AQtaUNpeejlgLpycKcMvU9AX9CQeoP7AoIBAFtjG7YHerqeeIwbl2cHAVxSsi2M
-		// obI3vTel5CBrllK9BuF2jOX2+boe+zQL4lbd9gudpiKJCDuB62ZesnS9pgayEO10
-		// zjD2fB+6XqcIspg6Lqs8vabP9Sn7kBgVrop5SFhS5qGVmN/qkx2KWUKxOyrAdDXy
-		// Tva4L2jpl+ldMF8LTgIDIF7I0m9LkPR3IDARKGIBC6zaO1duknDOIPZdajpSWy1C
-		// CftA4H7VAl0dXVJ9i0rLQpxTg+dNfjbE2u81HJzLM4C/I1n07fIkWMSesuk1TA6h
-		// VVCUToNHo7n7ZMiTGsu8/NBt+rbCpY+ZXQUbaWsLXv5w0fUH8H33kApKr2w=
-		// -----END RSA PRIVATE KEY-----
-		// `
-
-		// 				ca1Crt := `-----BEGIN CERTIFICATE-----
-		// MIIEGzCCAgOgAwIBAgIRAPvXcyzJg5xcaH+Q3ieTJ/wwDQYJKoZIhvcNAQELBQAw
-		// EjEQMA4GA1UEAxMHUm9vdC1DQTAgFw0yNDA1MjAxMDI5MzZaGA85OTk5MDMxNjEx
-		// Mjg1NVowFjEUMBIGA1UEAxMLTHZsLTEtQ0EtRUMwWTATBgcqhkjOPQIBBggqhkjO
-		// PQMBBwNCAAQKXQjvwtkS4lMROVD6/oW047XdqPYAeyvAdWcTCGevarLuAAkPKU8J
-		// HycPx9FRmDkunk2l7Dtu59CFOfDxvvnMo4IBLzCCASswDgYDVR0PAQH/BAQDAgGW
-		// MB0GA1UdJQQWMBQGCCsGAQUFBwMCBggrBgEFBQcDATAPBgNVHRMBAf8EBTADAQH/
-		// MC0GA1UdDgQmBCRhOWI3ODJlMC04NTEyLTRkMDUtYTNiOS03ZmQ0MmJhMDhkOWIw
-		// LwYDVR0jBCgwJoAkOWViY2EzMDEtOWZkYy00ZDI0LWEzZmItMzIzZGExYjliNTEx
-		// MDcGCCsGAQUFBwEBBCswKTAnBggrBgEFBQcwAYYbaHR0cHM6Ly9sYWIubGFtYXNz
-		// dS5pby9vY3NwMFAGA1UdHwRJMEcwRaBDoEGGP2h0dHBzOi8vbGFiLmxhbWFzc3Uu
-		// aW8vY3JsL2E5Yjc4MmUwLTg1MTItNGQwNS1hM2I5LTdmZDQyYmEwOGQ5YjANBgkq
-		// hkiG9w0BAQsFAAOCAgEAwPErojapNGN8BtD4L9q4H/byIkxpXoiv6eCRtxk9MCc8
-		// rnnEZCE5tt/dtkifQUAIMRwGfQTXC2QEFKvSday1Nt9GEGj3KaeFyi9UTfpwtJIZ
-		// rzkMO0pYwyC3/OCh3RTJ0wJpqVP99kUMTcaDnc1BzmPXORlMneMp0nxUe5zHdsUx
-		// DYj6N1dbozazGyL9x6cOLrqfOwD6R1PGPXbMOtEAQyTY/Yv0qSTGMG6twAM7NT1G
-		// om4VWZXkq4WsgOmxYax+YWqQ6FyixV/LJML/maS04ZFhH4kFeyfp0RHm9tRkIG4P
-		// TZH/irTU5K12Y9S3FP/Hx0H8ZyDblDfXMOSGSWbflHgwfZCOg5N/Lb1QSo8mYj8e
-		// 32PjTITTBhTQRpqncni+2+vMblUgw/EC1UNQ1mu9qCkGl8415BBVI/Q1qBg7pN1X
-		// 1BJsPOwNUZT6SpppWYVc7pfLJ8bS0op7NBx2/401RzGbU9Tdf24UEt72PQ7LHh9n
-		// mDBI5JHJ3pOrpKBxfbwKPdSjB6h4mG/V4m1AWp4nnSI0NqOHGqQfxOxhT/GjM+3p
-		// 0I2hhVViZ6ApY+XN2WdionaL5TTPcKpcjCJTzhenhWL9psczA9NlkC14o/GOUZ1Y
-		// fqIbIUTVOOEAp8YVz9trEI7JSmOoIyDHuS64K4lTSoTIu5rhRk5ngxTQLVYH4FI=
+		// 				ca1Crt := `
+		// -----BEGIN CERTIFICATE-----
+		// MIIDlDCCAnygAwIBAgIUN2XNhvC/xcgbfxD4FU5ONYFM2HkwDQYJKoZIhvcNAQEL
+		// BQAwXTELMAkGA1UEBhMCVVMxFTATBgNVBAgMDEV4YW1wbGVTdGF0ZTEUMBIGA1UE
+		// BwwLRXhhbXBsZUNpdHkxDzANBgNVBAoMBlJvb3RDQTEQMA4GA1UEAwwHUm9vdCBD
+		// QTAeFw0yNTAyMjUxMzU0MThaFw0zNTAyMjMxMzU0MThaMEYxCzAJBgNVBAYTAlVT
+		// MRUwEwYDVQQIDAxFeGFtcGxlU3RhdGUxDzANBgNVBAoMBlJvb3RDQTEPMA0GA1UE
+		// AwwGU3ViIENBMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2Hk/uF/U
+		// RMtp3zx2bimRYoHAq1rz9H2/QwKgtE4dNI5GMHIHxeeIfOlbxxOhr1PaMKSoxIv1
+		// 3Sj1arpIhQEFset42tYOEKgTO0x5KQHQRnsX9F5uuc5Drj6E4U1qAv0kqBS/7chm
+		// jszpsZ2+Q19j+v3G3CMkkpOOYZaTAo0ZPEtRBaNG3xX2X4jGbviM1aCx6v2cC3K8
+		// rfauh74xOyKjWM0MOVndKctUAs5oUrFcNC6spp8kjBMWpXcCtcY+YNnHH5aD7/LB
+		// jGZJlZNDNKCCtR0GNtwlqPvbCzTbuvPvjVF6hWPhB0dWXP5jE1nsNARLgYnuE2WM
+		// hAlyqOvmgehfUQIDAQABo2MwYTAPBgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQE
+		// AwIBBjAdBgNVHQ4EFgQUHuuPIC/kUYP60ysHiL19v51r1KEwHwYDVR0jBBgwFoAU
+		// 5Fi1QP8W9+4Ri/0tVE4CaiX5pv4wDQYJKoZIhvcNAQELBQADggEBAIu1lAZteU+n
+		// +6l/wuEoev+Ad8D3TvHDEjxyHnYtE4Mf+HLk2SguYvXJJRFFc9usG3FmmB0hTPmx
+		// KDrMk9QObgHsZHcNagwhB6Urn+EKrj/YUnIJE2TrX/blFYoMBPaxbWrwrmFAjKsl
+		// 8uuJoNY64G6sOMzHBpeELhdZU/xgDsrNk+dGyVtYAjmfksQLOSgF14XZnXL9+wPc
+		// jSm4n8W5YQ0zsKAZ5TmB0VpTCkvVS/gGDHoZfdO38CSry4z8nM3W4zdkmvo76G8U
+		// 2fvC11FSXxzRVQrbxfaOMEcdzT0u1wcsQQzM4+v0Njt3vVy+gRljm+Gmt0Dc9/Lb
+		// O3v2AfmhPiU=
 		// -----END CERTIFICATE-----
 		// `
-		// 				ca1Key := `-----BEGIN EC PRIVATE KEY-----
-		// MHcCAQEEIG4qZgKlfDcPcmp8p2XgRrdRezQhI/uZDLSuYAqdTXuzoAoGCCqGSM49
-		// AwEHoUQDQgAECl0I78LZEuJTETlQ+v6FtOO13aj2AHsrwHVnEwhnr2qy7gAJDylP
-		// CR8nD8fRUZg5Lp5Npew7bufQhTnw8b75zA==
-		// -----END EC PRIVATE KEY-----`
 
-		// 				key0, err := chelpers.ParsePrivateKey([]byte(strings.TrimSpace(ca0Key)))
-		// 				if err != nil {
-		// 					t.Fatalf("could not parse root private key: %s", err)
-		// 				}
+		// 				ca2Crt := `-----BEGIN CERTIFICATE-----
+		// MIIDgTCCAmmgAwIBAgIUWb++79DZH43iqHeBItwkJYT5e+QwDQYJKoZIhvcNAQEL
+		// BQAwRjELMAkGA1UEBhMCVVMxFTATBgNVBAgMDEV4YW1wbGVTdGF0ZTEPMA0GA1UE
+		// CgwGUm9vdENBMQ8wDQYDVQQDDAZTdWIgQ0EwHhcNMjUwMjI1MTM1NTQ1WhcNMzUw
+		// MjIzMTM1NTQ1WjBKMQswCQYDVQQGEwJVUzEVMBMGA1UECAwMRXhhbXBsZVN0YXRl
+		// MQ8wDQYDVQQKDAZSb290Q0ExEzARBgNVBAMMClN1Yi1TdWIgQ0EwggEiMA0GCSqG
+		// SIb3DQEBAQUAA4IBDwAwggEKAoIBAQDhUi8oRQBDLAxKp74qGy3RbvgzaJxyxVSr
+		// U+N+l+iHJZ/N4K+papFnZGSc6TycJVW06msyvSdod/gaB3n6SfsOPjAFBGaDNFAz
+		// YHrIaQKPU/+uEQWMHekEqQmT3vdlgtl6vuBh3qjBKLUwCTwWdRhHckIgTgq7rMKW
+		// WT5Jsp5J0QSREIi5o99MILex+4p2OsAXC91a37snQ0HvzOsKoWilZvx/dpBCHWa8
+		// h8UlTo7bbttVCI2NbKXUMH3LNJBvO0gyysMhkEXIynNoZN3j0bxOHnm494wBN8bQ
+		// EEAb3ah9VEkN1EHXmoTwujQNL0YD9Us1Fv59Ff44EOW9uQn4nbK/AgMBAAGjYzBh
+		// MA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMB0GA1UdDgQWBBQNQvWi
+		// KOPK/XL5S7LAcEdBqkCxcjAfBgNVHSMEGDAWgBQe648gL+RRg/rTKweIvX2/nWvU
+		// oTANBgkqhkiG9w0BAQsFAAOCAQEAPjWq7neRIDnRO7DITs9YV97QW9TGfTWyIzhX
+		// f+SEi4q/OOuKz9lHFkL/aCQHcilmIn2dcBlQNJKW2w41fd7mB6AyM3b0qDvPAQkw
+		// xaLER5ox4EsIUJwpCjADCLIEEFQh1cjthiBI0tVuIAbUKoq08E+YdFutkMrnZuPs
+		// VnGK/wULw7ATS4jC+6wCfDQTCNuGWA7Fec/uznu4yyD5YNvBkSxk0fSn7B3uEe7c
+		// JzepKLZK9pKiq8PTzPOc/zGCRLF7qdquaeJkpRGI8a3pl3sUA521eYWjh6f+kkjf
+		// V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
+		// -----END CERTIFICATE-----
+		// `
 
-		// 				key1, err := chelpers.ParsePrivateKey([]byte(strings.Trim(ca1Key, "	")))
-		// 				if err != nil {
-		// 					t.Fatalf("could not parse ca-lvl-1 private key: %s", err)
-		// 				}
-
-		// 				cert0, err := chelpers.ParseCertificate(strings.Trim(ca0Crt, "	"))
+		// 				cert0, err := chelpers.ParseCertificate(ca0Crt)
 		// 				if err != nil {
 		// 					t.Fatalf("could not parse root cert: %s", err)
 		// 				}
 
-		// 				cert1, err := chelpers.ParseCertificate(strings.Trim(ca1Crt, "	"))
+		// 				cert1, err := chelpers.ParseCertificate(ca1Crt)
 		// 				if err != nil {
 		// 					t.Fatalf("could not parse ca-lvl-1 cert: %s", err)
 		// 				}
 
-		// 				chelpers.ParsePrivateKey([]byte(ca1Key))
-		// 				chelpers.ParsePrivateKey([]byte(ca1Key))
+		// 				cert2, err := chelpers.ParseCertificate(ca2Crt)
+		// 				if err != nil {
+		// 					t.Fatalf("could not parse ca-lvl-2 cert: %s", err)
+		// 				}
 
 		// 				duration, _ := models.ParseDuration("100d")
-		// 				importedRootCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-		// 					CAType: models.CertificateTypeImportedWithKey,
+
+		// 				importedCALvl2, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+		// 					CAType: models.CertificateTypeExternal,
 		// 					IssuanceExpiration: models.Validity{
 		// 						Type:     models.Duration,
 		// 						Duration: (models.TimeDuration)(duration),
 		// 					},
-		// 					CACertificate: (*models.X509Certificate)(cert0),
-		// 					CARSAKey:      (key0).(*rsa.PrivateKey),
-		// 					KeyType:       models.KeyType(x509.RSA),
+		// 					CACertificate: (*models.X509Certificate)(cert2),
 		// 				})
 		// 				if err != nil {
-		// 					t.Fatalf("could not import root CA: %s", err)
+		// 					t.Fatalf("could not import ca-lvl-2 CA: %s", err)
 		// 				}
 
-		// 				importedCALvl1, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-		// 					CAType: models.CertificateTypeImportedWithKey,
+		// 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
+		// 					CAType: models.CertificateTypeExternal,
 		// 					IssuanceExpiration: models.Validity{
 		// 						Type:     models.Duration,
 		// 						Duration: (models.TimeDuration)(duration),
 		// 					},
 		// 					CACertificate: (*models.X509Certificate)(cert1),
-		// 					CAECKey:       (key1).(*ecdsa.PrivateKey),
-		// 					KeyType:       models.KeyType(x509.ECDSA),
-		// 					ParentID:      importedRootCA.ID,
 		// 				})
+		// 				if err != nil {
+		// 					t.Fatalf("could not import ca-lvl-1 CA: %s", err)
+		// 				}
 
-		// 				return importedCALvl1, err
+		// 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
+		// 					CAType: models.CertificateTypeExternal,
+		// 					IssuanceExpiration: models.Validity{
+		// 						Type:     models.Duration,
+		// 						Duration: (models.TimeDuration)(duration),
+		// 					},
+		// 					CACertificate: (*models.X509Certificate)(cert0),
+		// 				})
+		// 				if err != nil {
+		// 					t.Fatalf("could not import root CA: %s", err)
+		// 				}
 
+		// 				importedCALvl2Updated, err := caSDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: importedCALvl2.ID})
+		// 				if err != nil {
+		// 					t.Fatalf("could not retrieve ca-lvl-2 CA: %s", err)
+		// 				}
+
+		// 				return importedCALvl2Updated, err
 		// 			},
 		// 			resultCheck: func(ca *models.CACertificate, err error) error {
 		// 				if err != nil {
 		// 					return fmt.Errorf("got unexpected error: %s", err)
 		// 				}
 
-		// 				if ca.Level != 1 {
-		// 					return fmt.Errorf("CA should be at level 1. Got %d", ca.Level)
+		// 				if ca.Level != 2 {
+		// 					return fmt.Errorf("CA should be at level 2. Got %d", ca.Level)
 		// 				}
+
+		// 				if ca.Certificate.IssuerCAMetadata.Level != 1 {
+		// 					return fmt.Errorf("CA parent should be at level 1. Got %d", ca.Certificate.IssuerCAMetadata.Level)
+		// 				}
+
 		// 				return nil
 		// 			},
 		// 		},
-		{
-			name:   "OK/ImportingHierarchyBottomUp",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.CACertificate, error) {
-				ca0Crt := `
------BEGIN CERTIFICATE-----
-MIIDqzCCApOgAwIBAgIUY/29239q5Iz5/m2NGnFiQZCDeoswDQYJKoZIhvcNAQEL
-BQAwXTELMAkGA1UEBhMCVVMxFTATBgNVBAgMDEV4YW1wbGVTdGF0ZTEUMBIGA1UE
-BwwLRXhhbXBsZUNpdHkxDzANBgNVBAoMBlJvb3RDQTEQMA4GA1UEAwwHUm9vdCBD
-QTAeFw0yNTAyMjUxMzU0MDBaFw0zNTAyMjMxMzU0MDBaMF0xCzAJBgNVBAYTAlVT
-MRUwEwYDVQQIDAxFeGFtcGxlU3RhdGUxFDASBgNVBAcMC0V4YW1wbGVDaXR5MQ8w
-DQYDVQQKDAZSb290Q0ExEDAOBgNVBAMMB1Jvb3QgQ0EwggEiMA0GCSqGSIb3DQEB
-AQUAA4IBDwAwggEKAoIBAQDJgxeplksYYGm7ilnJYQMu2bUbv+rxgGCpfZlDlzRk
-3HBjt3Q0Xa8r1rBS1LI3iktBgUWiqBElqhYAX0d459Mko3J7dPAf+0mcPzYgGd8X
-5MoztHc+fpzht+Natpvm/ocp8lFoEt68SDGiG24sdhmbSTJPsU50JneO7LHK8YPL
-h5VL+4pu9dHrXgH6d7CK8bP25nCE90B4gpFKy2Oc9vIvAiZ0m31441ipOJqujsvm
-MsPAR/rsOBGVRqkvQ933BR3PwBm4nbMWPtbsg/OL5WgzoYs2wiRmaj3YvZoAAHzy
-c/2ntEh33hemHgKkI++mwDLxzDg+jhsod/gWPt9hTOljAgMBAAGjYzBhMA8GA1Ud
-EwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMB0GA1UdDgQWBBTkWLVA/xb37hGL
-/S1UTgJqJfmm/jAfBgNVHSMEGDAWgBTkWLVA/xb37hGL/S1UTgJqJfmm/jANBgkq
-hkiG9w0BAQsFAAOCAQEARBs3V/jUheZffb/9zfpo26e3e+whlXIcL6VjA94HWKXh
-FzdAbQfvQUQCfT/tRJzUE3MZoi6g0vtZmi3if3KA9Mb+zSmrfjgEtymGKAyaKzR6
-LSjt7RHRAXVjjnkNAmGZiVfi9rsslHr3WeVGwwNZGQQpZBN5Atcd7YSRWk9wuH+N
-ReLpV/Neg/wBMAxLgCBuvIfDQkSOsUwSmLMLzuRYqOMAyVR8bUiu9bxHOHaUQ6TI
-DruLxGHV4uOAx2SqBNr7XWKJyOZxMkmm0YnZWnIX6+uTHeGTdxgWuHLlkrUGVmaW
-Spj4CeR8GjWfp66G75tjuT5qpgFJ2yhnaDJ/JqNTrQ==
------END CERTIFICATE-----
-`
-
-				ca1Crt := `
------BEGIN CERTIFICATE-----
-MIIDlDCCAnygAwIBAgIUN2XNhvC/xcgbfxD4FU5ONYFM2HkwDQYJKoZIhvcNAQEL
-BQAwXTELMAkGA1UEBhMCVVMxFTATBgNVBAgMDEV4YW1wbGVTdGF0ZTEUMBIGA1UE
-BwwLRXhhbXBsZUNpdHkxDzANBgNVBAoMBlJvb3RDQTEQMA4GA1UEAwwHUm9vdCBD
-QTAeFw0yNTAyMjUxMzU0MThaFw0zNTAyMjMxMzU0MThaMEYxCzAJBgNVBAYTAlVT
-MRUwEwYDVQQIDAxFeGFtcGxlU3RhdGUxDzANBgNVBAoMBlJvb3RDQTEPMA0GA1UE
-AwwGU3ViIENBMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2Hk/uF/U
-RMtp3zx2bimRYoHAq1rz9H2/QwKgtE4dNI5GMHIHxeeIfOlbxxOhr1PaMKSoxIv1
-3Sj1arpIhQEFset42tYOEKgTO0x5KQHQRnsX9F5uuc5Drj6E4U1qAv0kqBS/7chm
-jszpsZ2+Q19j+v3G3CMkkpOOYZaTAo0ZPEtRBaNG3xX2X4jGbviM1aCx6v2cC3K8
-rfauh74xOyKjWM0MOVndKctUAs5oUrFcNC6spp8kjBMWpXcCtcY+YNnHH5aD7/LB
-jGZJlZNDNKCCtR0GNtwlqPvbCzTbuvPvjVF6hWPhB0dWXP5jE1nsNARLgYnuE2WM
-hAlyqOvmgehfUQIDAQABo2MwYTAPBgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQE
-AwIBBjAdBgNVHQ4EFgQUHuuPIC/kUYP60ysHiL19v51r1KEwHwYDVR0jBBgwFoAU
-5Fi1QP8W9+4Ri/0tVE4CaiX5pv4wDQYJKoZIhvcNAQELBQADggEBAIu1lAZteU+n
-+6l/wuEoev+Ad8D3TvHDEjxyHnYtE4Mf+HLk2SguYvXJJRFFc9usG3FmmB0hTPmx
-KDrMk9QObgHsZHcNagwhB6Urn+EKrj/YUnIJE2TrX/blFYoMBPaxbWrwrmFAjKsl
-8uuJoNY64G6sOMzHBpeELhdZU/xgDsrNk+dGyVtYAjmfksQLOSgF14XZnXL9+wPc
-jSm4n8W5YQ0zsKAZ5TmB0VpTCkvVS/gGDHoZfdO38CSry4z8nM3W4zdkmvo76G8U
-2fvC11FSXxzRVQrbxfaOMEcdzT0u1wcsQQzM4+v0Njt3vVy+gRljm+Gmt0Dc9/Lb
-O3v2AfmhPiU=
------END CERTIFICATE-----
-`
-
-				ca2Crt := `-----BEGIN CERTIFICATE-----
-MIIDgTCCAmmgAwIBAgIUWb++79DZH43iqHeBItwkJYT5e+QwDQYJKoZIhvcNAQEL
-BQAwRjELMAkGA1UEBhMCVVMxFTATBgNVBAgMDEV4YW1wbGVTdGF0ZTEPMA0GA1UE
-CgwGUm9vdENBMQ8wDQYDVQQDDAZTdWIgQ0EwHhcNMjUwMjI1MTM1NTQ1WhcNMzUw
-MjIzMTM1NTQ1WjBKMQswCQYDVQQGEwJVUzEVMBMGA1UECAwMRXhhbXBsZVN0YXRl
-MQ8wDQYDVQQKDAZSb290Q0ExEzARBgNVBAMMClN1Yi1TdWIgQ0EwggEiMA0GCSqG
-SIb3DQEBAQUAA4IBDwAwggEKAoIBAQDhUi8oRQBDLAxKp74qGy3RbvgzaJxyxVSr
-U+N+l+iHJZ/N4K+papFnZGSc6TycJVW06msyvSdod/gaB3n6SfsOPjAFBGaDNFAz
-YHrIaQKPU/+uEQWMHekEqQmT3vdlgtl6vuBh3qjBKLUwCTwWdRhHckIgTgq7rMKW
-WT5Jsp5J0QSREIi5o99MILex+4p2OsAXC91a37snQ0HvzOsKoWilZvx/dpBCHWa8
-h8UlTo7bbttVCI2NbKXUMH3LNJBvO0gyysMhkEXIynNoZN3j0bxOHnm494wBN8bQ
-EEAb3ah9VEkN1EHXmoTwujQNL0YD9Us1Fv59Ff44EOW9uQn4nbK/AgMBAAGjYzBh
-MA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMB0GA1UdDgQWBBQNQvWi
-KOPK/XL5S7LAcEdBqkCxcjAfBgNVHSMEGDAWgBQe648gL+RRg/rTKweIvX2/nWvU
-oTANBgkqhkiG9w0BAQsFAAOCAQEAPjWq7neRIDnRO7DITs9YV97QW9TGfTWyIzhX
-f+SEi4q/OOuKz9lHFkL/aCQHcilmIn2dcBlQNJKW2w41fd7mB6AyM3b0qDvPAQkw
-xaLER5ox4EsIUJwpCjADCLIEEFQh1cjthiBI0tVuIAbUKoq08E+YdFutkMrnZuPs
-VnGK/wULw7ATS4jC+6wCfDQTCNuGWA7Fec/uznu4yyD5YNvBkSxk0fSn7B3uEe7c
-JzepKLZK9pKiq8PTzPOc/zGCRLF7qdquaeJkpRGI8a3pl3sUA521eYWjh6f+kkjf
-V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
------END CERTIFICATE-----
-`
-
-				cert0, err := chelpers.ParseCertificate(ca0Crt)
-				if err != nil {
-					t.Fatalf("could not parse root cert: %s", err)
-				}
-
-				cert1, err := chelpers.ParseCertificate(ca1Crt)
-				if err != nil {
-					t.Fatalf("could not parse ca-lvl-1 cert: %s", err)
-				}
-
-				cert2, err := chelpers.ParseCertificate(ca2Crt)
-				if err != nil {
-					t.Fatalf("could not parse ca-lvl-2 cert: %s", err)
-				}
-
-				duration, _ := models.ParseDuration("100d")
-
-				importedCALvl2, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType: models.CertificateTypeExternal,
-					IssuanceExpiration: models.Validity{
-						Type:     models.Duration,
-						Duration: (models.TimeDuration)(duration),
-					},
-					CACertificate: (*models.X509Certificate)(cert2),
-				})
-				if err != nil {
-					t.Fatalf("could not import ca-lvl-2 CA: %s", err)
-				}
-
-				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType: models.CertificateTypeExternal,
-					IssuanceExpiration: models.Validity{
-						Type:     models.Duration,
-						Duration: (models.TimeDuration)(duration),
-					},
-					CACertificate: (*models.X509Certificate)(cert1),
-				})
-				if err != nil {
-					t.Fatalf("could not import ca-lvl-1 CA: %s", err)
-				}
-
-				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType: models.CertificateTypeExternal,
-					IssuanceExpiration: models.Validity{
-						Type:     models.Duration,
-						Duration: (models.TimeDuration)(duration),
-					},
-					CACertificate: (*models.X509Certificate)(cert0),
-				})
-				if err != nil {
-					t.Fatalf("could not import root CA: %s", err)
-				}
-
-				importedCALvl2Updated, err := caSDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: importedCALvl2.ID})
-				if err != nil {
-					t.Fatalf("could not retrieve ca-lvl-2 CA: %s", err)
-				}
-
-				return importedCALvl2Updated, err
-			},
-			resultCheck: func(ca *models.CACertificate, err error) error {
-				if err != nil {
-					return fmt.Errorf("got unexpected error: %s", err)
-				}
-
-				if ca.Level != 2 {
-					return fmt.Errorf("CA should be at level 2. Got %d", ca.Level)
-				}
-
-				if ca.Certificate.IssuerCAMetadata.Level != 1 {
-					return fmt.Errorf("CA parent should be at level 1. Got %d", ca.Certificate.IssuerCAMetadata.Level)
-				}
-
-				return nil
-			},
-		},
 		{
 			name:   "OK/ImportingHierarchyTopDown",
 			before: func(svc services.CAService) error { return nil },
@@ -3137,37 +3552,39 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 				}
 
 				duration, _ := models.ParseDuration("100d")
+				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{
+							Type:     models.Duration,
+							Duration: (models.TimeDuration)(duration),
+						},
+					},
+				})
+				if err != nil {
+					t.Fatalf("could not create profile: %s", err)
+				}
 
 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType: models.CertificateTypeExternal,
-					IssuanceExpiration: models.Validity{
-						Type:     models.Duration,
-						Duration: (models.TimeDuration)(duration),
-					},
+					CAType:        models.CertificateTypeExternal,
 					CACertificate: (*models.X509Certificate)(cert0),
+					ProfileID:     profile.ID,
 				})
 				if err != nil {
 					t.Fatalf("could not import root CA: %s", err)
 				}
 
 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType: models.CertificateTypeExternal,
-					IssuanceExpiration: models.Validity{
-						Type:     models.Duration,
-						Duration: (models.TimeDuration)(duration),
-					},
+					CAType:        models.CertificateTypeExternal,
 					CACertificate: (*models.X509Certificate)(cert1),
+					ProfileID:     profile.ID,
 				})
 				if err != nil {
 					t.Fatalf("could not import ca-lvl-1 CA: %s", err)
 				}
 
 				importedCALvl2, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType: models.CertificateTypeExternal,
-					IssuanceExpiration: models.Validity{
-						Type:     models.Duration,
-						Duration: (models.TimeDuration)(duration),
-					},
+					CAType:        models.CertificateTypeExternal,
+					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(cert2),
 				})
 				if err != nil {
@@ -3225,7 +3642,6 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 }
 
 func TestDeleteCA(t *testing.T) {
-
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
@@ -3402,14 +3818,27 @@ func TestGetCAs(t *testing.T) {
 				var caName string
 				caDUr := models.TimeDuration(time.Hour * 24)
 				issuanceDur := models.TimeDuration(time.Hour * 12)
+
+				profile, err := svc.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{
+							Type:     models.Duration,
+							Duration: issuanceDur,
+						},
+					},
+				})
+				if err != nil {
+					t.Fatalf("could not create profile: %s", err)
+				}
+
 				for i := 0; i < 5; i++ {
 					caName = DefaultCAID + strconv.Itoa(i)
 					res, _ := svc.CreateCA(context.Background(), services.CreateCAInput{
-						ID:                 caName,
-						KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-						Subject:            models.Subject{CommonName: DefaultCACN},
-						CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-						IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
+						ID:           caName,
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+						Subject:      models.Subject{CommonName: DefaultCACN},
+						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+						ProfileID:    profile.ID,
 					})
 					fmt.Println(res)
 				}
@@ -3446,14 +3875,26 @@ func TestGetCAs(t *testing.T) {
 				var caName string
 				caDUr := models.TimeDuration(time.Hour * 24)
 				issuanceDur := models.TimeDuration(time.Hour * 12)
+
+				profile, err := svc.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{
+							Type:     models.Duration,
+							Duration: issuanceDur,
+						},
+					},
+				})
+				if err != nil {
+					t.Fatalf("could not create profile: %s", err)
+				}
 				for i := 0; i < 5; i++ {
 					caName = DefaultCAID + strconv.Itoa(i)
 					res, _ := svc.CreateCA(context.Background(), services.CreateCAInput{
-						ID:                 caName,
-						KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-						Subject:            models.Subject{CommonName: DefaultCACN},
-						CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-						IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
+						ID:           caName,
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+						Subject:      models.Subject{CommonName: DefaultCACN},
+						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+						ProfileID:    profile.ID,
 					})
 					fmt.Println(res)
 				}
@@ -3574,14 +4015,9 @@ func TestGetStatsByCAID(t *testing.T) {
 
 				actCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "active-cert"}, actKey)
 				_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        caID,
-					CertRequest: (*models.X509CertificateRequest)(actCSR),
-					IssuanceProfile: models.IssuanceProfile{
-						Validity:        ca.Validity,
-						SignAsCA:        false,
-						HonorSubject:    true,
-						HonorExtensions: true,
-					},
+					CAID:              caID,
+					CertRequest:       (*models.X509CertificateRequest)(actCSR),
+					IssuanceProfileID: ca.ProfileID,
 				})
 
 				if err != nil {
@@ -3595,14 +4031,9 @@ func TestGetStatsByCAID(t *testing.T) {
 
 				revCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "revoked-cert"}, revKey)
 				revCrt, err := svc.SignCertificate(context.Background(), services.SignCertificateInput{
-					CAID:        caID,
-					CertRequest: (*models.X509CertificateRequest)(revCSR),
-					IssuanceProfile: models.IssuanceProfile{
-						Validity:        ca.Validity,
-						SignAsCA:        false,
-						HonorSubject:    true,
-						HonorExtensions: true,
-					},
+					CAID:              caID,
+					CertRequest:       (*models.X509CertificateRequest)(revCSR),
+					IssuanceProfileID: ca.ProfileID,
 				})
 				if err != nil {
 					return fmt.Errorf("Error signing the revoked certificate: %s", err)
@@ -3663,11 +4094,23 @@ func TestGetStatsByCAID(t *testing.T) {
 			exp := models.TimeDuration(time.Hour * 25)
 			iss := models.TimeDuration(time.Hour * 24)
 
+			profile, err := caTest.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+				Profile: models.IssuanceProfile{
+					Validity: models.Validity{
+						Type:     models.Duration,
+						Duration: iss,
+					},
+				},
+			})
+			if err != nil {
+				t.Fatalf("could not create profile: %s", err)
+			}
+
 			rootCA, err := caTest.Service.CreateCA(context.Background(), services.CreateCAInput{
-				KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-				Subject:            models.Subject{CommonName: "CA Lvl 1"},
-				CAExpiration:       models.Validity{Type: models.Duration, Duration: exp},
-				IssuanceExpiration: models.Validity{Type: models.Duration, Duration: iss},
+				KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+				Subject:      models.Subject{CommonName: "CA Lvl 1"},
+				CAExpiration: models.Validity{Type: models.Duration, Duration: exp},
+				ProfileID:    profile.ID,
 			})
 			if err != nil {
 				t.Fatalf("failed creating root CA: %s", err)
@@ -3716,14 +4159,9 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
 					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
-						CAID:        DefaultCAID,
-						CertRequest: (*models.X509CertificateRequest)(csr),
-						IssuanceProfile: models.IssuanceProfile{
-							Validity:        ca.Validity,
-							SignAsCA:        false,
-							HonorSubject:    true,
-							HonorExtensions: true,
-						},
+						CAID:              DefaultCAID,
+						CertRequest:       (*models.X509CertificateRequest)(csr),
+						IssuanceProfileID: ca.ProfileID,
 					})
 					if err != nil {
 						return err
@@ -3777,14 +4215,9 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
 					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
-						CAID:        DefaultCAID,
-						CertRequest: (*models.X509CertificateRequest)(csr),
-						IssuanceProfile: models.IssuanceProfile{
-							Validity:        ca.Validity,
-							SignAsCA:        false,
-							HonorSubject:    true,
-							HonorExtensions: true,
-						},
+						CAID:              DefaultCAID,
+						CertRequest:       (*models.X509CertificateRequest)(csr),
+						IssuanceProfileID: ca.ProfileID,
 					})
 					if err != nil {
 						return err
@@ -3838,14 +4271,9 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 
 					csr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: fmt.Sprintf("cert-%d", 1)}, key)
 					_, err = svc.SignCertificate(context.Background(), services.SignCertificateInput{
-						CAID:        DefaultCAID,
-						CertRequest: (*models.X509CertificateRequest)(csr),
-						IssuanceProfile: models.IssuanceProfile{
-							Validity:        ca.Validity,
-							SignAsCA:        false,
-							HonorSubject:    true,
-							HonorExtensions: true,
-						},
+						CAID:              DefaultCAID,
+						CertRequest:       (*models.X509CertificateRequest)(csr),
+						IssuanceProfileID: ca.ProfileID,
 					})
 					if err != nil {
 						return err
@@ -4097,12 +4525,22 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 				caIss := models.TimeDuration(time.Minute * 3)
 				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
 
+				// Create issuance profile for root CA
+				rootProfile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: caIss},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating root CA issuance profile: %s", err)
+				}
+
 				rootCA, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDurRootCA},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: caIss},
-					EngineID:           engines[0].ID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDurRootCA},
+					ProfileID:    rootProfile.ID,
+					EngineID:     engines[0].ID,
 				})
 
 				if err != nil {
@@ -4110,12 +4548,22 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 				}
 				cas = append(cas, *rootCA)
 
+				// Create issuance profile for child CA
+				childProfile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: caIss},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating child CA issuance profile: %s", err)
+				}
+
 				childCALvl1, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDurChild1},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: caIss},
-					ParentID:           rootCA.ID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDurChild1},
+					ProfileID:    childProfile.ID,
+					ParentID:     rootCA.ID,
 				})
 				if err != nil {
 					t.Fatalf("failed creating the first CA child: %s", err)
@@ -4206,11 +4654,21 @@ func TestHierarchy(t *testing.T) {
 				caDurChild2 := models.TimeDuration(time.Hour * 23)
 				caIss := models.TimeDuration(time.Minute * 3)
 
+				// Create issuance profile for root CA
+				rootProfile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: caIss},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating root CA issuance profile: %s", err)
+				}
+
 				rootCA, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 0"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDurRootCA},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: caIss},
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 0"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDurRootCA},
+					ProfileID:    rootProfile.ID,
 				})
 				if err != nil {
 					t.Fatalf("failed creating the root CA: %s", err)
@@ -4218,12 +4676,22 @@ func TestHierarchy(t *testing.T) {
 
 				cas = append(cas, *rootCA)
 
+				// Create issuance profile for child CA level 1
+				child1Profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: caIss},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating child CA level 1 issuance profile: %s", err)
+				}
+
 				childCALvl1, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDurChild1},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: caIss},
-					ParentID:           rootCA.ID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDurChild1},
+					ProfileID:    child1Profile.ID,
+					ParentID:     rootCA.ID,
 				})
 				if err != nil {
 					t.Fatalf("failed creating the first CA child: %s", err)
@@ -4238,13 +4706,23 @@ func TestHierarchy(t *testing.T) {
 				fmt.Println("Type:" + childCALvl1.Certificate.Type)
 				fmt.Println("=============================")
 
+				// Create issuance profile for child CA level 2
+				child2Profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: caIss},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating child CA level 2 issuance profile: %s", err)
+				}
+
 				childCALvl2, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 2"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDurChild2},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: caIss},
-					ParentID:           childCALvl1.ID,
-					ID:                 "Lvl2",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 2"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDurChild2},
+					ProfileID:    child2Profile.ID,
+					ParentID:     childCALvl1.ID,
+					ID:           "Lvl2",
 				})
 				if err != nil {
 					t.Fatalf("failed creating the second CA child: %s", err)
@@ -4287,11 +4765,21 @@ func TestHierarchy(t *testing.T) {
 
 				caIss := models.TimeDuration(time.Minute * 3)
 
+				// Create issuance profile for root CA
+				rootProfile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: caIss},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating root CA issuance profile: %s", err)
+				}
+
 				rootCA, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 0"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDurRootCA},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: caIss},
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 0"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDurRootCA},
+					ProfileID:    rootProfile.ID,
 				})
 
 				if err != nil {
@@ -4299,13 +4787,24 @@ func TestHierarchy(t *testing.T) {
 				}
 
 				cas = append(cas, *rootCA)
+
+				// Create issuance profile for child CA
+				childProfile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: caIss},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating child CA issuance profile: %s", err)
+				}
+
 				_, err = caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDurChild1},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: caIss},
-					ParentID:           rootCA.ID,
-					ID:                 "Lvl1",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDurChild1},
+					ProfileID:    childProfile.ID,
+					ParentID:     rootCA.ID,
+					ID:           "Lvl1",
 				})
 
 				//cas := []*models.CACertificate{}
@@ -4333,11 +4832,20 @@ func TestHierarchy(t *testing.T) {
 				caCDLim2 := time.Date(3000, 11, 27, 0, 0, 0, 0, time.Local) // expires the 27 of november of 3000
 
 				issuanceDur := time.Date(3000, 11, 20, 0, 0, 0, 0, time.Local) // fixed issuance: the 20 of november of 3000
+				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Time, Time: issuanceDur},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating root CA issuance profile: %s", err)
+				}
+
 				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: DefaultCACN},
-					CAExpiration:       models.Validity{Type: models.Time, Time: caRDLim},
-					IssuanceExpiration: models.Validity{Type: models.Time, Time: issuanceDur},
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: DefaultCACN},
+					CAExpiration: models.Validity{Type: models.Time, Time: caRDLim},
+					ProfileID:    profile.ID,
 				})
 				if err != nil {
 					t.Fatalf("failed creating the first CA child: %s", err)
@@ -4351,13 +4859,21 @@ func TestHierarchy(t *testing.T) {
 				fmt.Println("=============================")
 
 				caIss := time.Date(2030, 11, 20, 0, 0, 0, 0, time.Local)
+				profile2, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Time, Time: caIss},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating child CA issuance profile: %s", err)
+				}
 
 				childCALvl1, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Validity{Type: models.Time, Time: caCDLim1},
-					IssuanceExpiration: models.Validity{Type: models.Time, Time: caIss},
-					ParentID:           ca.ID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Validity{Type: models.Time, Time: caCDLim1},
+					ProfileID:    profile2.ID,
+					ParentID:     ca.ID,
 				})
 				if err != nil {
 					t.Fatalf("failed creating the first CA child: %s", err)
@@ -4370,11 +4886,11 @@ func TestHierarchy(t *testing.T) {
 				fmt.Println("=============================")
 
 				childCALvl2, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Validity{Type: models.Time, Time: caCDLim2},
-					IssuanceExpiration: models.Validity{Type: models.Time, Time: caIss},
-					ParentID:           childCALvl1.ID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Validity{Type: models.Time, Time: caCDLim2},
+					ProfileID:    profile.ID,
+					ParentID:     childCALvl1.ID,
 				})
 				if err != nil {
 					t.Fatalf("failed creating the first CA child: %s", err)
@@ -4416,11 +4932,20 @@ func TestHierarchy(t *testing.T) {
 				caCDLim1 := time.Date(2030, 12, 2, 0, 0, 0, 0, time.Local)
 
 				caIss := time.Date(2030, 11, 20, 0, 0, 0, 0, time.Local)
+				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Time, Time: caIss},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating root CA issuance profile: %s", err)
+				}
+
 				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: DefaultCACN},
-					CAExpiration:       models.Validity{Type: models.Time, Time: caRDLim},
-					IssuanceExpiration: models.Validity{Type: models.Time, Time: caIss},
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: DefaultCACN},
+					CAExpiration: models.Validity{Type: models.Time, Time: caRDLim},
+					ProfileID:    profile.ID,
 				})
 
 				if err != nil {
@@ -4429,11 +4954,11 @@ func TestHierarchy(t *testing.T) {
 
 				cas = append(cas, *ca)
 				_, err = caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Validity{Type: models.Time, Time: caCDLim1},
-					IssuanceExpiration: models.Validity{Type: models.Time, Time: caIss},
-					ParentID:           ca.ID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Validity{Type: models.Time, Time: caCDLim1},
+					ProfileID:    profile.ID,
+					ParentID:     ca.ID,
 				})
 
 				//cas := []*models.CACertificate{}
@@ -4460,11 +4985,20 @@ func TestHierarchy(t *testing.T) {
 				caDurChild1 := models.TimeDuration(time.Hour * 26)
 
 				caIss := time.Date(3000, 11, 20, 0, 0, 0, 0, time.Local)
+				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Time, Time: caIss},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating root CA issuance profile: %s", err)
+				}
+
 				ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: DefaultCACN},
-					CAExpiration:       models.Validity{Type: models.Time, Time: caRDLim},
-					IssuanceExpiration: models.Validity{Type: models.Time, Time: caIss},
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: DefaultCACN},
+					CAExpiration: models.Validity{Type: models.Time, Time: caRDLim},
+					ProfileID:    profile.ID,
 				})
 
 				if err != nil {
@@ -4473,13 +5007,21 @@ func TestHierarchy(t *testing.T) {
 
 				cas = append(cas, *ca)
 				caIss2 := models.TimeDuration(time.Minute * 3)
+				profile2, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Validity: models.Validity{Type: models.Duration, Duration: caIss2},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating root CA issuance profile: %s", err)
+				}
 
 				childCALvl1, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-					KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-					Subject:            models.Subject{CommonName: "CA Lvl 1"},
-					CAExpiration:       models.Validity{Type: models.Duration, Duration: caDurChild1},
-					IssuanceExpiration: models.Validity{Type: models.Duration, Duration: caIss2},
-					ParentID:           ca.ID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "CA Lvl 1"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDurChild1},
+					ProfileID:    profile2.ID,
+					ParentID:     ca.ID,
 				})
 				cas = append(cas, *childCALvl1)
 
@@ -4595,12 +5137,20 @@ func TestCAsAdditionalDeltasMonitoring(t *testing.T) {
 			caLifespan := 3*time.Second + maxDeltaDur
 			caDur := models.TimeDuration(caLifespan)
 			issuanceDur := models.TimeDuration(maxDeltaDur)
+			profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+				Profile: models.IssuanceProfile{
+					Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+				},
+			})
+			if err != nil {
+				t.Fatalf("failed creating root CA issuance profile: %s", err)
+			}
 
 			ca, err := serverTest.CA.Service.CreateCA(context.Background(), services.CreateCAInput{
-				KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
-				Subject:            models.Subject{CommonName: "MyCA"},
-				CAExpiration:       models.Validity{Type: models.Duration, Duration: caDur},
-				IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
+				KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
+				Subject:      models.Subject{CommonName: "MyCA"},
+				CAExpiration: models.Validity{Type: models.Duration, Duration: caDur},
+				ProfileID:    profile.ID,
 				Metadata: map[string]any{
 					models.CAMetadataMonitoringExpirationDeltasKey: models.CAMetadataMonitoringExpirationDeltas(caDeltas),
 				},
@@ -4643,12 +5193,22 @@ func TestCAsAdditionalDeltasMonitoring(t *testing.T) {
 func initCA(caSDK services.CAService) (*models.CACertificate, error) {
 	caDUr := models.TimeDuration(time.Hour * 25)
 	issuanceDur := models.TimeDuration(time.Minute * 12)
+
+	profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	ca, err := caSDK.CreateCA(context.Background(), services.CreateCAInput{
-		ID:                 DefaultCAID,
-		KeyMetadata:        models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
-		Subject:            models.Subject{CommonName: DefaultCACN},
-		CAExpiration:       models.Validity{Type: models.Duration, Duration: caDUr},
-		IssuanceExpiration: models.Validity{Type: models.Duration, Duration: issuanceDur},
+		ID:           DefaultCAID,
+		KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+		Subject:      models.Subject{CommonName: DefaultCACN},
+		CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+		ProfileID:    profile.ID,
 	})
 
 	return ca, err

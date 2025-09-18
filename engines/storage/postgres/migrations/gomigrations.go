@@ -11,6 +11,7 @@ func RegisterGoMigrations(dbname string) {
 	case "ca":
 		ca.Register20250123125500CaAwsMetadata()
 		ca.Register20250226114600CaAddKids()
+		ca.Register20250908074250AddProfileId()
 	case "dmsmanager":
 		dmsmanager.Register20241230124809ServerkeygenRevokereenroll()
 		dmsmanager.Register20250612100530ESTVerifyCSRSignature()

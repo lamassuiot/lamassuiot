@@ -9,6 +9,7 @@ type CommonStorageEngine struct {
 	CA                   CACertificatesRepo
 	CACertificateRequest CACertificateRequestRepo
 	Cert                 CertificatesRepo
+	IssuanceProfile      IssuanceProfileRepo
 	Device               DeviceManagerRepo
 	DMS                  DMSRepo
 	VA                   VARepo
@@ -20,7 +21,8 @@ type CommonStorageEngine struct {
 type StorageEngine interface {
 	GetProvider() config.StorageProvider
 	GetCAStorage() (CACertificatesRepo, error)
-	GetCertstorage() (CertificatesRepo, error)
+	GetCertStorage() (CertificatesRepo, error)
+	GetIssuanceProfileStorage() (IssuanceProfileRepo, error)
 	GetCACertificateRequestStorage() (CACertificateRequestRepo, error)
 	GetDeviceStorage() (DeviceManagerRepo, error)
 	GetVARoleStorage() (VARepo, error)

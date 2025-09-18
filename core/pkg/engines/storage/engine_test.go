@@ -18,7 +18,11 @@ func (m *MockStorageEngine) GetCAStorage() (CACertificatesRepo, error) {
 	return nil, nil
 }
 
-func (m *MockStorageEngine) GetCertstorage() (CertificatesRepo, error) {
+func (m *MockStorageEngine) GetCertStorage() (CertificatesRepo, error) {
+	return nil, nil
+}
+
+func (m *MockStorageEngine) GetIssuanceProfileStorage() (IssuanceProfileRepo, error) {
 	return nil, nil
 }
 

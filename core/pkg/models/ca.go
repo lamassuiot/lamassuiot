@@ -31,6 +31,7 @@ const (
 
 type Certificate struct {
 	SerialNumber        string                 `json:"serial_number" gorm:"primaryKey"`
+	VersionSchema       string                 `json:"version_schema"` // Indicates the lamassu schema when codifying the certificate. If some property is changed (added, removed, or changed), then it should change.
 	SubjectKeyID        string                 `json:"subject_key_id"`
 	AuthorityKeyID      string                 `json:"authority_key_id"`
 	Metadata            map[string]interface{} `json:"metadata" gorm:"serializer:json"`
@@ -66,9 +67,9 @@ type CACertificate struct {
 	Certificate             Certificate            `json:"certificate" gorm:"foreignKey:CertificateSerialNumber;references:SerialNumber"`
 	CertificateSerialNumber string                 `json:"serial_number" gorm:"column:serial_number"`
 	Metadata                map[string]interface{} `json:"metadata" gorm:"serializer:json"`
-	Validity                Validity               `json:"validity" gorm:"embedded;embeddedPrefix:validity_"`
 	CreationTS              time.Time              `json:"creation_ts"`
 	Level                   int                    `json:"level"`
+	ProfileID               string                 `json:"profile_id"`
 }
 
 type CertificateRequestStatus string
@@ -128,17 +129,4 @@ type CAAttachedToDevice struct {
 		RAID string `json:"ra_id"`
 	} `json:"authorized_by"`
 	DeviceID string `json:"device_id"`
-}
-
-type IssuanceProfile struct {
-	Validity Validity `json:"validity" gorm:"embedded;embeddedPrefix:validity_"`
-	SignAsCA bool     `json:"sign_as_ca"`
-
-	KeyUsage          X509KeyUsage      `json:"key_usage"`
-	ExtendedKeyUsages []X509ExtKeyUsage `json:"extended_key_usage"`
-
-	HonorSubject bool    `json:"honor_subject"`
-	Subject      Subject `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
-
-	HonorExtensions bool `json:"honor_extensions"`
 }

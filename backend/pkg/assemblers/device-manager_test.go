@@ -1319,3 +1319,123 @@ func checkSelectAll(t *testing.T, dmgr *DeviceManagerTestServer) {
 		t.Fatalf("could not retrieve device: %s", err)
 	}
 }
+
+func TestDeleteDevice(t *testing.T) {
+	deviceID := "test-delete-device"
+	ctx := context.Background()
+	
+	testcases := []struct {
+		name        string
+		setup       func(dmgr *DeviceManagerTestServer)
+		resultCheck func(dmgr *DeviceManagerTestServer, err error)
+	}{
+		{
+			name: "OK - Delete decommissioned device",
+			setup: func(dmgr *DeviceManagerTestServer) {
+				// Create device
+				deviceSample := services.CreateDeviceInput{
+					ID:        deviceID,
+					Alias:     "test",
+					Tags:      []string{"test"},
+					Metadata:  map[string]interface{}{"test": "test"},
+					DMSID:     "test",
+					Icon:      "test",
+					IconColor: "#000000",
+				}
+				dev, err := dmgr.HttpDeviceManagerSDK.CreateDevice(ctx, deviceSample)
+				if err != nil {
+					t.Fatalf("could not create device: %s", err)
+				}
+				if dev.Status != models.DeviceNoIdentity {
+					t.Fatalf("expected device status to be NO_IDENTITY, got %s", dev.Status)
+				}
+				
+				// Decommission the device
+				_, err = dmgr.HttpDeviceManagerSDK.UpdateDeviceStatus(ctx, services.UpdateDeviceStatusInput{
+					ID:        deviceID,
+					NewStatus: models.DeviceDecommissioned,
+				})
+				if err != nil {
+					t.Fatalf("could not decommission device: %s", err)
+				}
+			},
+			resultCheck: func(dmgr *DeviceManagerTestServer, err error) {
+				if err != nil {
+					t.Fatalf("could not delete device: %s", err)
+				}
+				
+				// Verify device no longer exists
+				_, err = dmgr.Service.GetDeviceByID(ctx, services.GetDeviceByIDInput{ID: deviceID})
+				if err == nil {
+					t.Fatalf("device should have been deleted")
+				}
+				if !errors.Is(err, errs.ErrDeviceNotFound) {
+					t.Fatalf("expected ErrDeviceNotFound, got %s", err)
+				}
+			},
+		},
+		{
+			name: "Error - Try to delete non-decommissioned device",
+			setup: func(dmgr *DeviceManagerTestServer) {
+				// Create device but don't decommission it
+				deviceSample := services.CreateDeviceInput{
+					ID:        deviceID,
+					Alias:     "test",
+					Tags:      []string{"test"},
+					Metadata:  map[string]interface{}{"test": "test"},
+					DMSID:     "test",
+					Icon:      "test",
+					IconColor: "#000000",
+				}
+				_, err := dmgr.HttpDeviceManagerSDK.CreateDevice(ctx, deviceSample)
+				if err != nil {
+					t.Fatalf("could not create device: %s", err)
+				}
+			},
+			resultCheck: func(dmgr *DeviceManagerTestServer, err error) {
+				if err == nil {
+					t.Fatalf("delete should have failed")
+				}
+				if !errors.Is(err, errs.ErrDeviceInvalidStatus) {
+					t.Fatalf("expected ErrDeviceInvalidStatus, got %s", err)
+				}
+				
+				// Verify device still exists
+				dev, err := dmgr.Service.GetDeviceByID(ctx, services.GetDeviceByIDInput{ID: deviceID})
+				if err != nil {
+					t.Fatalf("device should still exist: %s", err)
+				}
+				if dev.Status != models.DeviceNoIdentity {
+					t.Fatalf("expected device status to be NO_IDENTITY, got %s", dev.Status)
+				}
+			},
+		},
+		{
+			name:  "Error - Try to delete non-existent device",
+			setup: func(dmgr *DeviceManagerTestServer) {},
+			resultCheck: func(dmgr *DeviceManagerTestServer, err error) {
+				if err == nil {
+					t.Fatalf("delete should have failed")
+				}
+				if !errors.Is(err, errs.ErrDeviceNotFound) {
+					t.Fatalf("expected ErrDeviceNotFound, got %s", err)
+				}
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			dmgr, err := StartDeviceManagerServiceTestServer(t, false)
+			if err != nil {
+				t.Fatalf("could not create Device Manager test server: %s", err)
+			}
+
+			tc.setup(dmgr)
+
+			err = dmgr.Service.DeleteDevice(ctx, services.DeleteDeviceInput{ID: deviceID})
+
+			tc.resultCheck(dmgr, err)
+		})
+	}
+}

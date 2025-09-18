@@ -40,15 +40,20 @@ var KMSFilterableFields = map[string]FilterFieldType{
 	"name":        StringFilterFieldType,
 }
 
+var IssuanceProfileFiltrableFields = map[string]FilterFieldType{
+	"id":   StringFilterFieldType,
+	"name": StringFilterFieldType,
+}
+
 type CreateCABody struct {
-	ID                 string             `json:"id"`
-	ParentID           string             `json:"parent_id"`
-	Subject            models.Subject     `json:"subject"`
-	KeyMetadata        models.KeyMetadata `json:"key_metadata"`
-	CAExpiration       models.Validity    `json:"ca_expiration"`
-	IssuanceExpiration models.Validity    `json:"issuance_expiration"`
-	EngineID           string             `json:"engine_id"`
-	Metadata           map[string]any     `json:"metadata"`
+	ID           string             `json:"id"`
+	ParentID     string             `json:"parent_id"`
+	Subject      models.Subject     `json:"subject"`
+	KeyMetadata  models.KeyMetadata `json:"key_metadata"`
+	CAExpiration models.Validity    `json:"ca_expiration"`
+	ProfileID    string             `json:"profile_id"`
+	EngineID     string             `json:"engine_id"`
+	Metadata     map[string]any     `json:"metadata"`
 }
 
 type RequestCABody struct {
@@ -60,27 +65,25 @@ type RequestCABody struct {
 }
 
 type ImportCABody struct {
-	ID                 string                    `json:"id"`
-	EngineID           string                    `json:"engine_id"`
-	ParentID           string                    `json:"parent_id"`
-	CARequestID        string                    `json:"ca_request_id"`
-	CAPrivateKey       string                    `json:"private_key"` //b64 from PEM
-	CACertificate      *models.X509Certificate   `json:"ca"`
-	CAChain            []*models.X509Certificate `json:"ca_chain"`
-	CAType             models.CertificateType    `json:"ca_type"`
-	IssuanceExpiration models.Validity           `json:"issuance_expiration"`
+	ID            string                    `json:"id"`
+	EngineID      string                    `json:"engine_id"`
+	ParentID      string                    `json:"parent_id"`
+	CARequestID   string                    `json:"ca_request_id"`
+	CAPrivateKey  string                    `json:"private_key"` //b64 from PEM
+	CACertificate *models.X509Certificate   `json:"ca"`
+	CAChain       []*models.X509Certificate `json:"ca_chain"`
+	CAType        models.CertificateType    `json:"ca_type"`
+	ProfileID     string                    `json:"profile_id"`
 }
 
 type UpdateCAMetadataBody struct {
 	Patches []models.PatchOperation `json:"patches"`
 }
-type UpdateCAIssuanceExpirationBody struct {
-	models.Validity
-}
 
 type SignCertificateBody struct {
 	CertRequest *models.X509CertificateRequest `json:"csr"`
 	Profile     models.IssuanceProfile         `json:"profile"`
+	ProfileID   string                         `json:"profile_id"`
 }
 
 type SignatureSignBody struct {
@@ -99,6 +102,10 @@ type SignatureVerifyBody struct {
 type UpdateCertificateStatusBody struct {
 	NewStatus        models.CertificateStatus `json:"status"`
 	RevocationReason models.RevocationReason  `json:"revocation_reason"`
+}
+
+type UpdateCAProfileBody struct {
+	ProfileID string `json:"profile_id" validate:"required"`
 }
 
 type UpdateCertificateMetadataBody struct {
@@ -148,4 +155,27 @@ type ImportKeyBody struct {
 	PrivateKey []byte `json:"private_key"`
 	EngineID   string `json:"engine_id"`
 	Name       string `json:"name"`
+}
+
+type CreateUpdateIssuanceProfileBody struct {
+	Name                   string                                     `json:"name"`
+	Description            string                                     `json:"description"`
+	Validity               models.Validity                            `json:"validity"`
+	SignAsCA               bool                                       `json:"sign_as_ca"`
+	HonorKeyUsage          bool                                       `json:"honor_key_usage"`
+	KeyUsage               models.X509KeyUsage                        `json:"key_usage"`
+	HonorExtendedKeyUsages bool                                       `json:"honor_extended_key_usages"`
+	ExtendedKeyUsages      []models.X509ExtKeyUsage                   `json:"extended_key_usages"`
+	HonorSubject           bool                                       `json:"honor_subject"`
+	Subject                models.Subject                             `json:"subject"`
+	HonorExtensions        bool                                       `json:"honor_extensions"`
+	CryptoEnforcement      CreateIssuanceProfileCryptoEnforcementBody `json:"crypto_enforcement"`
+}
+
+type CreateIssuanceProfileCryptoEnforcementBody struct {
+	Enabled              bool  `json:"enabled"`
+	AllowRSAKeys         bool  `json:"allow_rsa_keys"`
+	AllowedRSAKeySizes   []int `json:"allowed_rsa_key_sizes"`
+	AllowECDSAKeys       bool  `json:"allow_ecdsa_keys"`
+	AllowedECDSAKeySizes []int `json:"allowed_ecdsa_key_sizes"`
 }

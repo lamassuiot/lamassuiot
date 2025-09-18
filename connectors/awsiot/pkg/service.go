@@ -341,7 +341,7 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterAndAttachThing(ctx context.C
 
 	params := map[string]string{
 		"ThingName":               input.DeviceID,
-		"SerialNumber":            helpers.SerialNumberToString(input.BindedIdentity.Certificate.Certificate.SerialNumber),
+		"SerialNumber":            helpers.SerialNumberToHexString(input.BindedIdentity.Certificate.Certificate.SerialNumber),
 		"DMS":                     input.BindedIdentity.DMS.ID,
 		"LamassuCertificate":      chelpers.CertificateToPEM((*x509.Certificate)(input.BindedIdentity.Certificate.Certificate)),
 		"LamassuCACertificatePem": chelpers.CertificateToPEM((*x509.Certificate)(ca.Certificate.Certificate)),
@@ -662,7 +662,7 @@ func (svc *AWSCloudConnectorServiceBackend) GetRegisteredCAs(ctx context.Context
 				return cas, err
 			}
 
-			lFunc.Debugf("requesting CA with ID '%s' which has SN '%s' to CA service", *caMeta.CertificateId, helpers.SerialNumberToString(descCrt.SerialNumber))
+			lFunc.Debugf("requesting CA with ID '%s' which has SN '%s' to CA service", *caMeta.CertificateId, helpers.SerialNumberToHexString(descCrt.SerialNumber))
 			if res.NextMarker != nil && *res.NextMarker != "" {
 				lFunc.Debugf("Next marker: %s", *res.NextMarker)
 				nextMarker = *res.NextMarker
@@ -670,6 +670,7 @@ func (svc *AWSCloudConnectorServiceBackend) GetRegisteredCAs(ctx context.Context
 				lFunc.Debugf("No marker")
 				continueIter = false
 			}
+
 			lmsCA, err := svc.CaSDK.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: string(descCrt.SubjectKeyId)})
 			if err != nil {
 				lFunc.Warnf("skipping CA with ID AWS '%s' - LAMASSU '%s'. Could not get CA from CA service: %s", *caMeta.CertificateId, string(descCrt.SubjectKeyId), err)
@@ -805,14 +806,9 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 		// Sign verification certificate CSR
 		lFunc.Debugf("signing validation csr with cn=%s", csr.Subject.CommonName)
 		singOutput, err := svc.CaSDK.SignCertificate(context.Background(), services.SignCertificateInput{
-			CAID:        input.CACertificate.ID,
-			CertRequest: &csr,
-			IssuanceProfile: models.IssuanceProfile{
-				SignAsCA:        false,
-				Validity:        input.CACertificate.Validity,
-				HonorSubject:    true,
-				HonorExtensions: true,
-			},
+			CAID:              input.CACertificate.ID,
+			CertRequest:       &csr,
+			IssuanceProfileID: input.CACertificate.ProfileID,
 		})
 		if err != nil {
 			lFunc.Errorf("something went wrong while requesting sign certificate: %s", err)
