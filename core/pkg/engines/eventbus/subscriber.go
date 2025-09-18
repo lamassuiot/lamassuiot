@@ -16,8 +16,8 @@ type EventSubscriptionHandler struct {
 	handlers   []*message.Handler
 }
 
-func NewEventBusMessageHandler(service models.ServiceName, topics []string, sub message.Subscriber, lMessaging *logrus.Entry, handler eventhandling.EventHandler) (*EventSubscriptionHandler, error) {
-	router, err := NewMessageRouter(lMessaging)
+func NewEventBusMessageHandler(service models.ServiceName, topics []string, poisonPub message.Publisher, sub message.Subscriber, lMessaging *logrus.Entry, handler eventhandling.EventHandler) (*EventSubscriptionHandler, error) {
+	router, err := NewMessageRouter(lMessaging, poisonPub)
 	if err != nil {
 		return nil, err
 	}

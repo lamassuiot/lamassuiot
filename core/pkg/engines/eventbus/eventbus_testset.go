@@ -60,7 +60,7 @@ func TestWildcardSubscribe(t *testing.T, input EventBusTestInput) {
 				logger := helpers.SetupLogger(config.Debug, "Test Case", "sub")
 				resultChannel := make(chan int, 1)
 				sub := subFunc(fmt.Sprintf("service-%d", idx))
-				subHandler, err := NewEventBusMessageHandler(models.ServiceName(fmt.Sprintf("handler-%d", idx)), []string{tc.subscriptionKey}, sub, logger, &basicTestHandler{
+				subHandler, err := NewEventBusMessageHandler(models.ServiceName(fmt.Sprintf("handler-%d", idx)), []string{tc.subscriptionKey}, pub, sub, logger, &basicTestHandler{
 					handler: func(msg *message.Message) error {
 						resultChannel <- 1
 						return nil
@@ -183,7 +183,7 @@ func TestMultiServiceSubscribe(t *testing.T, input EventBusTestInput) {
 
 				for idx, s := range tc.subscriptions {
 					sub := subFunc(s.serviceID)
-					subHandler, err := NewEventBusMessageHandler(models.ServiceName(fmt.Sprintf("handler-%d-%d", time.Now().UnixMilli(), idx)), []string{s.subscriptionKey}, sub, logger, &basicTestHandler{
+					subHandler, err := NewEventBusMessageHandler(models.ServiceName(fmt.Sprintf("handler-%d-%d", time.Now().UnixMilli(), idx)), []string{s.subscriptionKey}, pub, sub, logger, &basicTestHandler{
 						handler: func(msg *message.Message) error {
 							t.Logf("subscriber %s - %s message ACK", s.serviceID, s.subscriptionKey)
 							resultChannel <- s.serviceID
@@ -323,7 +323,7 @@ func TestMultiConsumers(t *testing.T, input EventBusTestInput) {
 					sub := subFunc(s.serviceID)
 
 					//SQS Can only include alphanumeric characters, hyphens, or underscores. 1 to 80 in length
-					subHandler, err := NewEventBusMessageHandler(models.ServiceName(fmt.Sprintf("handler-%d-%d", time.Now().UnixMilli(), idx)), []string{s.subscriptionKey}, sub, logger, &basicTestHandler{
+					subHandler, err := NewEventBusMessageHandler(models.ServiceName(fmt.Sprintf("handler-%d-%d", time.Now().UnixMilli(), idx)), []string{s.subscriptionKey}, pub, sub, logger, &basicTestHandler{
 						handler: func(msg *message.Message) error {
 							t.Logf("subscriber %s - %s message ACK", s.serviceID, s.subscriptionKey)
 							resultChannel <- s.serviceID
@@ -400,5 +400,50 @@ func TestMultiConsumers(t *testing.T, input EventBusTestInput) {
 				t.Fatalf("unexpected error: %s", err)
 			}
 		})
+	}
+}
+
+func TestErrorHandling(t *testing.T, input EventBusTestInput) {
+	cleanup, pub, subFunc := input.SetupEventBus()
+	defer cleanup()
+
+	sub := subFunc("error-handling-service")
+	logger := helpers.SetupLogger(config.Debug, "Test Case", "sub")
+
+	errorCount := 0
+	subHandler, err := NewEventBusMessageHandler(models.ServiceName("error-handling-handler"), []string{"error.topic"}, pub, sub, logger, &basicTestHandler{
+		handler: func(msg *message.Message) error {
+			errorCount++
+			return fmt.Errorf("simulated error %d", errorCount)
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not create subscription handler: %s", err)
+	}
+
+	err = subHandler.RunAsync()
+	if err != nil {
+		t.Fatalf("could not run subscription handler: %s", err)
+	}
+
+	time.Sleep(3 * time.Second)
+
+	err = pub.Publish("error.topic", message.NewMessage(uuid.NewString(), []byte("test msg")))
+	if err != nil {
+		t.Fatalf("could not publish message: %s", err)
+	}
+
+	ctxTimeout, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	select {
+	case <-ctxTimeout.Done():
+		subHandler.Stop()
+	}
+
+	errorCount = errorCount - 1 // Last error is when we stop the handler
+
+	if errorCount != 3 { // We have configured Watermill router with MW of 3 retries
+		t.Fatalf("expected 3 errors before success, got %d", errorCount)
 	}
 }
