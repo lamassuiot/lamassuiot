@@ -426,6 +426,23 @@ func TestErrorHandling(t *testing.T, input EventBusTestInput) {
 		t.Fatalf("could not run subscription handler: %s", err)
 	}
 
+	dlqMssgCount := 0
+	dlqSubHandler, err := NewEventBusMessageHandler(models.ServiceName("error-handling-dlq-handler"), []string{"lamassu-dlq"}, pub, sub, logger, &basicTestHandler{
+		handler: func(msg *message.Message) error {
+			logger.Infof("DLQ received message: %s", string(msg.Payload))
+			dlqMssgCount++
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not create DLQ subscription handler: %s", err)
+	}
+
+	err = dlqSubHandler.RunAsync()
+	if err != nil {
+		t.Fatalf("could not run DLQ subscription handler: %s", err)
+	}
+
 	time.Sleep(3 * time.Second)
 
 	err = pub.Publish("error.topic", message.NewMessage(uuid.NewString(), []byte("test msg")))
@@ -436,14 +453,18 @@ func TestErrorHandling(t *testing.T, input EventBusTestInput) {
 	ctxTimeout, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	select {
-	case <-ctxTimeout.Done():
-		subHandler.Stop()
-	}
+	// Block until timeout
+	<-ctxTimeout.Done()
+	subHandler.Stop()
+	dlqSubHandler.Stop()
 
 	errorCount = errorCount - 1 // Last error is when we stop the handler
 
 	if errorCount != 3 { // We have configured Watermill router with MW of 3 retries
 		t.Fatalf("expected 3 errors before success, got %d", errorCount)
+	}
+
+	if dlqMssgCount != 1 {
+		t.Fatalf("expected 1 DLQ message, got %d", dlqMssgCount)
 	}
 }
