@@ -86,7 +86,7 @@ func (p *SoftwareCryptoEngine) MarshalAndEncodePKIXPrivateKey(key interface{}) (
 	return keyBase64, nil
 }
 
-func (p *SoftwareCryptoEngine) EncodePKIXPublicKeyDigest(key interface{}) (string, error) {
+func (p *SoftwareCryptoEngine) EncodePKIXPublicKeyDigest(key any) (string, error) {
 	p.logger.Debugf("extracting and encoding public key")
 	var pubkeyBytes []byte
 	var err error

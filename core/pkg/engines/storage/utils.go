@@ -8,5 +8,5 @@ type StorageListRequest[E any] struct {
 	ExhaustiveRun bool
 	ApplyFunc     func(E)
 	QueryParams   *resources.QueryParameters
-	ExtraOpts     map[string]interface{}
+	ExtraOpts     map[string]any
 }
