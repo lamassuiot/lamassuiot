@@ -190,7 +190,8 @@ type UpdateCAMetadataInput struct {
 }
 
 type DeleteCAInput struct {
-	CAID string `validate:"required"`
+	CAID          string `validate:"required"`
+	CascadeDelete bool
 }
 
 type SignCertificateInput struct {

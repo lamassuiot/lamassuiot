@@ -328,7 +328,8 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				}
 
 				err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID: enrollCA.ID,
+					CAID:                      enrollCA.ID,
+					DeleteCertificatesCascade: false,
 				})
 				return (*x509.Certificate)(crt.Certificate), err
 			},
@@ -378,7 +379,8 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				}
 
 				err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID: importedCALvl1.ID,
+					CAID:                      importedCALvl1.ID,
+					DeleteCertificatesCascade: false,
 				})
 				return nil, err
 			},
@@ -417,7 +419,8 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				}
 
 				err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID: ca1.ID,
+					CAID:                      ca1.ID,
+					DeleteCertificatesCascade: false,
 				})
 				return nil, err
 			},
@@ -455,7 +458,8 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				}
 
 				err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID: ca1.ID,
+					CAID:                      ca1.ID,
+					DeleteCertificatesCascade: false,
 				})
 				return nil, err
 			},
@@ -3652,7 +3656,8 @@ func TestDeleteCA(t *testing.T) {
 			run: func(caSDK services.CAService) error {
 				//cas := []*models.CACertificate{}
 				err := caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID: "DefaulasdadtCAID",
+					CAID:                      "DefaulasdadtCAID",
+					DeleteCertificatesCascade: false,
 				})
 				return err
 			},
@@ -3686,7 +3691,8 @@ func TestDeleteCA(t *testing.T) {
 			run: func(caSDK services.CAService) error {
 				//cas := []*models.CACertificate{}
 				err := caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID: DefaultCAID,
+					CAID:                      DefaultCAID,
+					DeleteCertificatesCascade: false,
 				})
 				return err
 			},
@@ -3716,7 +3722,8 @@ func TestDeleteCA(t *testing.T) {
 			run: func(caSDK services.CAService) error {
 				//cas := []*models.CACertificate{}
 				err := caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID: DefaultCAID,
+					CAID:                      DefaultCAID,
+					DeleteCertificatesCascade: false,
 				})
 
 				return err
