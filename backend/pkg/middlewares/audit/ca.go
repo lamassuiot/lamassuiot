@@ -179,6 +179,14 @@ func (mw CAAuditEventPublisher) UpdateCertificateMetadata(ctx context.Context, i
 	return mw.next.UpdateCertificateMetadata(ctx, input)
 }
 
+func (mw CAAuditEventPublisher) DeleteCertificate(ctx context.Context, input services.DeleteCertificateInput) (err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventDeleteCertificateKey, input, err, nil)
+	}()
+
+	return mw.next.DeleteCertificate(ctx, input)
+}
+
 func (mw CAAuditEventPublisher) GetCARequestByID(ctx context.Context, input services.GetByIDInput) (*models.CACertificateRequest, error) {
 	return mw.next.GetCARequestByID(ctx, input)
 }

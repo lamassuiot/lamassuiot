@@ -20,6 +20,7 @@ type CertificatesRepo interface {
 	SelectExistsBySerialNumber(ctx context.Context, serialNumber string) (bool, *models.Certificate, error)
 	Update(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error)
 	Insert(ctx context.Context, certificate *models.Certificate) (*models.Certificate, error)
+	Delete(ctx context.Context, serialNumber string) error
 }
 
 type CACertificatesRepo interface {

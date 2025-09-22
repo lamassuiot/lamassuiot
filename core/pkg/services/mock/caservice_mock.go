@@ -26,6 +26,11 @@ func (m *MockCAService) UpdateCertificateMetadata(ctx context.Context, input ser
 	return args.Get(0).(*models.Certificate), args.Error(1)
 }
 
+func (m *MockCAService) DeleteCertificate(ctx context.Context, input services.DeleteCertificateInput) error {
+	args := m.Called(ctx, input)
+	return args.Error(0)
+}
+
 func (m *MockCAService) GetStats(ctx context.Context) (*models.CAStats, error) {
 	args := m.Called(ctx)
 	return args.Get(0).(*models.CAStats), args.Error(1)
