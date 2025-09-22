@@ -555,8 +555,14 @@ func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 		return
 	}
 
+	// Optionally parse a query or body param for cascade delete, default to false
+	deleteCascade := false
+	if v, ok := ctx.GetQuery("cascade_delete"); ok && (v == "true" || v == "1") {
+		deleteCascade = true
+	}
 	err := r.svc.DeleteCA(ctx, services.DeleteCAInput{
-		CAID: params.CAId,
+		CAID:          params.CAId,
+		CascadeDelete: deleteCascade,
 	})
 
 	if err != nil {
