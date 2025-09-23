@@ -52,7 +52,11 @@ func (m *mockCryptoEngine) ImportECDSAPrivateKey(ctx context.Context, key *ecdsa
 	return "", key, nil
 }
 
-func (m *mockCryptoEngine) DeleteKey(ctx context.Context, keyID string) error {
+func (m *mockCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", key, nil
+}
+
+func (m *mockCryptoEngine) DeleteKey(keyID string) error {
 	return nil
 }
 
