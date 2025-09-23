@@ -1,11 +1,15 @@
 package cryptoengines
 
 import (
+	"cloudflare/circl/sign/mldsa/mldsa44"
+	"cloudflare/circl/sign/mldsa/mldsa65"
+	"cloudflare/circl/sign/mldsa/mldsa87"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"errors"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -35,6 +39,22 @@ func (m *mockCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Sign
 
 func (m *mockCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string, crypto.Signer, error) {
 	key, err := ecdsa.GenerateKey(curve, rand.Reader)
+	return "", key, err
+}
+
+func (m *mockCryptoEngine) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
+	var key crypto.Signer
+	var err error
+	switch dimensions {
+	case 44:
+		_, key, err = mldsa44.GenerateKey(rand.Reader)
+	case 65:
+		_, key, err = mldsa65.GenerateKey(rand.Reader)
+	case 87:
+		_, key, err = mldsa87.GenerateKey(rand.Reader)
+	default:
+		err = errors.New("unsupported dimensions")
+	}
 	return "", key, err
 }
 

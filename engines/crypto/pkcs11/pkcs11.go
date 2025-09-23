@@ -257,6 +257,10 @@ func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(curve elliptic.Curv
 	return keyID, renamedSigner, nil
 }
 
+func (hsmContext *pkcs11EngineContext) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("pkcs11: unsupported key type (ML-DSA")
+}
+
 // define a constant for the key ID using ints and iota
 
 type PKCS11KeyID int

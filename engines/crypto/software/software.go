@@ -1,6 +1,9 @@
 package software
 
 import (
+	"cloudflare/circl/sign/mldsa/mldsa44"
+	"cloudflare/circl/sign/mldsa/mldsa65"
+	"cloudflare/circl/sign/mldsa/mldsa87"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -58,6 +61,37 @@ func (p *SoftwareCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (stri
 	}
 
 	encDigest, err := p.EncodePKIXPublicKeyDigest(&key.PublicKey)
+	if err != nil {
+		lFunc.Errorf("could not encode public key digest: %s", err)
+		return "", nil, err
+	}
+
+	return encDigest, key, nil
+}
+
+func (p *SoftwareCryptoEngine) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
+	lFunc := p.logger.WithField("func", "ML-DSA")
+	lFunc.Debugf("creating ML-DSA-%v key", dimensions)
+
+	var key crypto.Signer
+	var err error
+	switch dimensions {
+	case 44:
+		_, key, err = mldsa44.GenerateKey(rand.Reader)
+	case 65:
+		_, key, err = mldsa65.GenerateKey(rand.Reader)
+	case 87:
+		_, key, err = mldsa87.GenerateKey(rand.Reader)
+	default:
+		err = fmt.Errorf("invalid dimensions %v", dimensions)
+	}
+
+	if err != nil {
+		lFunc.Errorf("could not create MLDSA key: %s", err)
+		return "", nil, err
+	}
+
+	encDigest, err := p.EncodePKIXPublicKeyDigest(key.Public())
 	if err != nil {
 		lFunc.Errorf("could not encode public key digest: %s", err)
 		return "", nil, err
@@ -132,6 +166,12 @@ func (p *SoftwareCryptoEngine) ParsePrivateKey(pemBytes []byte) (crypto.Signer, 
 	case *rsa.PrivateKey:
 		return key, nil
 	case *ecdsa.PrivateKey:
+		return key, nil
+	case *mldsa44.PrivateKey:
+		return key, nil
+	case *mldsa65.PrivateKey:
+		return key, nil
+	case *mldsa87.PrivateKey:
 		return key, nil
 	default:
 		return nil, errors.New("unsupported key type")

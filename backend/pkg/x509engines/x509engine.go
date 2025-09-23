@@ -35,7 +35,67 @@ func NewX509Engine(logger *logrus.Entry, vaDomains []string, kmsSDK services.KMS
 		vaDomains:        vaDomains,
 		logger:           logger,
 		softCryptoEngine: software.NewSoftwareCryptoEngine(logger),
+<<<<<<< HEAD
 		kmsSDK:           kmsSDK,
+=======
+	}
+}
+
+func (engine X509Engine) GetEngineConfig() models.CryptoEngineInfo {
+	return engine.cryptoEngine.GetEngineConfig()
+}
+
+func (engine X509Engine) GenerateKeyPair(ctx context.Context, keyMetadata models.KeyMetadata) (string, crypto.Signer, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+
+	if models.KeyType(keyMetadata.Type) == models.KeyType(x509.RSA) {
+		lFunc.Debugf("requesting cryptoengine instance for RSA key generation")
+
+		keyID, signer, err := engine.cryptoEngine.CreateRSAPrivateKey(keyMetadata.Bits)
+		if err != nil {
+			lFunc.Errorf("cryptoengine instance failed while generating RSA key: %s", err)
+			return "", nil, err
+		}
+		lFunc.Debugf("cryptoengine successfully generated RSA key")
+		return keyID, signer, nil
+	} else if models.KeyType(keyMetadata.Type) == models.KeyType(x509.ECDSA) {
+		var curve elliptic.Curve
+		switch keyMetadata.Bits {
+		case 224:
+			curve = elliptic.P224()
+		case 256:
+			curve = elliptic.P256()
+		case 384:
+			curve = elliptic.P384()
+		case 521:
+			curve = elliptic.P521()
+		default:
+			return "", nil, errors.New("unsupported key size for ECDSA key")
+		}
+
+		lFunc.Debugf("requesting cryptoengine instance for ECDSA key generation")
+		keyID, signer, err := engine.cryptoEngine.CreateECDSAPrivateKey(curve)
+		if err != nil {
+			lFunc.Errorf("cryptoengine instance failed while generating ECDSA key: %s", err)
+			return "", nil, err
+		}
+
+		lFunc.Debugf("cryptoengine successfully generated ECDSA key")
+		return keyID, signer, nil
+	} else if models.KeyType(keyMetadata.Type) == models.KeyType(x509.MLDSA) {
+		lFunc.Debugf("requesting cryptoengine instance for MLDSA key generation")
+		keyID, signer, err := engine.cryptoEngine.CreateMLDSAPrivateKey(keyMetadata.Bits)
+		if err != nil {
+			lFunc.Errorf("cryptoengine instance failed while generating MLDSA key: %s", err)
+			return "", nil, err
+		}
+
+		lFunc.Debugf("cryptoengine successfully generated MLDSA key")
+		return keyID, signer, nil
+	} else {
+		lFunc.Errorf("unsupported key type requested: %s", keyMetadata.Type)
+		return "", nil, errors.New("unsupported key type requested")
+>>>>>>> 86cfc918 (CA: added support for the creation of pure PQC CA Roots using ML-DSA (44, 65 and 87))
 	}
 }
 

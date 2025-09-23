@@ -1,6 +1,7 @@
 package cryptoengines
 
 import (
+	"cloudflare/circl/sign/mldsa/mldsa44"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -23,6 +24,16 @@ func SharedTestCreateRSAPrivateKey(t *testing.T, engine CryptoEngine) {
 
 func SharedTestCreateECDSAPrivateKey(t *testing.T, engine CryptoEngine) {
 	keyID, signer, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+	assert.NoError(t, err)
+
+	signer2, err := engine.GetPrivateKeyByID(keyID)
+	assert.NoError(t, err)
+
+	assert.Equal(t, signer.Public(), signer2.Public())
+}
+
+func SharedTestCreateMLDSAPrivateKey(t *testing.T, engine CryptoEngine) {
+	keyID, signer, err := engine.CreateMLDSAPrivateKey(44)
 	assert.NoError(t, err)
 
 	signer2, err := engine.GetPrivateKeyByID(keyID)
@@ -162,6 +173,27 @@ func SharedTestECDSASignature(t *testing.T, engine CryptoEngine) {
 	assert.Equal(t, signer.Public(), signer2.Public())
 
 	res := ecdsa.VerifyASN1(signer2.Public().(*ecdsa.PublicKey), hashed, signature)
+	assert.True(t, res)
+}
+
+func SharedTestMLDSASignature(t *testing.T, engine CryptoEngine) {
+	keyID, signer, err := engine.CreateMLDSAPrivateKey(44)
+	assert.NoError(t, err)
+
+	h := sha256.New()
+	_, err = h.Write([]byte("aa"))
+	assert.NoError(t, err)
+	hashed := h.Sum(nil)
+
+	signature, err := signer.Sign(rand.Reader, hashed, crypto.Hash(0))
+	assert.NoError(t, err)
+
+	signer2, err := engine.GetPrivateKeyByID(keyID)
+	assert.NoError(t, err)
+
+	assert.Equal(t, signer.Public(), signer2.Public())
+
+	res := mldsa44.Verify(signer2.Public().(*mldsa44.PublicKey), hashed, nil, signature)
 	assert.True(t, res)
 }
 
