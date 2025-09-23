@@ -39,9 +39,11 @@ func TestVaultCryptoEngine(t *testing.T) {
 	}{
 		{"CreateECDSAPrivateKey", cryptoengines.SharedTestCreateECDSAPrivateKey},
 		{"CreateRSAPrivateKey", cryptoengines.SharedTestCreateRSAPrivateKey},
+		{"CreateMLDSA44PrivateKey", cryptoengines.SharedTestCreateMLDSAPrivateKey},
 		{"SignRSA_PSS", cryptoengines.SharedTestRSAPSSSignature},
 		{"SignRSA_PKCS1v1_5", cryptoengines.SharedTestRSAPKCS1v15Signature},
 		{"SignECDSA", cryptoengines.SharedTestECDSASignature},
+		{"SignMLDSA44", cryptoengines.SharedTestMLDSA44Signature},
 		{"DeleteKey", cryptoengines.SharedTestDeleteKey},
 		{"GetPrivateKeyByID", cryptoengines.SharedGetKey},
 		{"GetPrivateKeyByIDNotFound", cryptoengines.SharedGetKeyNotFound},

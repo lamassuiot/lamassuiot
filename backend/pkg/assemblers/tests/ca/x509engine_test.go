@@ -124,6 +124,137 @@ func checkCACertificate(cert *x509.Certificate, ca *x509.Certificate, tcSubject 
 	return nil
 }
 
+<<<<<<< HEAD:backend/pkg/assemblers/tests/ca/x509engine_test.go
+=======
+func TestGenerateKeyPair(t *testing.T) {
+	tempDir, _, x509Engine := setup(t)
+	defer teardown(tempDir)
+
+	checkOk := func(err error) error {
+		if err != nil {
+			return fmt.Errorf("unexpected error: %s", err)
+		}
+
+		return nil
+	}
+
+	checkFail := func(err error) error {
+		if err == nil {
+			return fmt.Errorf("expected error, got nil")
+		}
+		return nil
+	}
+
+	var testcases = []struct {
+		name        string
+		keyMetadata models.KeyMetadata
+		check       func(err error) error
+	}{
+		{
+			name: "OK/RSA_2048",
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.RSA),
+				Bits: 2048,
+			},
+			check: checkOk,
+		},
+		{
+			name: "FAIL/RSA_1",
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.RSA),
+				Bits: 1,
+			},
+			check: checkFail,
+		},
+		{
+			name: "OK/ECDSA_256",
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.ECDSA),
+				Bits: 256,
+			},
+			check: checkOk,
+		},
+		{
+			name: "OK/ECDSA_224",
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.ECDSA),
+				Bits: 224,
+			},
+			check: checkOk,
+		},
+		{
+			name: "OK/ECDSA_384",
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.ECDSA),
+				Bits: 384,
+			},
+			check: checkOk,
+		},
+		{
+			name: "OK/ECDSA_521",
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.ECDSA),
+				Bits: 521,
+			},
+			check: checkOk,
+		},
+		{
+			name: "FAIL/ECDSA_BAD_CURVE",
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.ECDSA),
+				Bits: 1024,
+			},
+			check: checkFail,
+		},
+		{
+			name: "OK/MLDSA_44",
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 44,
+			},
+			check: checkOk,
+		},
+		{
+			name: "OK/MLDSA_65",
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 65,
+			},
+			check: checkOk,
+		},
+		{
+			name: "OK/MLDSA_87",
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 87,
+			},
+			check: checkOk,
+		},
+		{
+			name: "FAIL/MLDSA_BAD_DIMENSIONS",
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 17,
+			},
+			check: checkFail,
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			_, _, err := x509Engine.GenerateKeyPair(ctx, tc.keyMetadata)
+			err = tc.check(err)
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+		})
+	}
+}
+
+>>>>>>> 86cfc918 (CA: added support for the creation of pure PQC CA Roots using ML-DSA (44, 65 and 87)):backend/pkg/x509engines/x509engine_test.go
 func TestCreateRootCA(t *testing.T) {
 	kms, x509Engine, err := setupX509TestSuite(t)
 	if err != nil {
@@ -175,6 +306,17 @@ func TestCreateRootCA(t *testing.T) {
 			keyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.ECDSA),
 				Bits: 256,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+		{
+			name:    "OK/MLDSA_44",
+			caId:    "rootCA-MLDSA_44",
+			subject: caSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 44,
 			},
 			expirationTime: expirationTime,
 			check:          checkOk,
