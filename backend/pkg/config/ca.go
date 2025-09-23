@@ -12,6 +12,7 @@ type CAConfig struct {
 	CryptoEngineConfig       CryptoEngines                  `mapstructure:"crypto_engines"`
 	CertificateMonitoringJob cconfig.MonitoringJob          `mapstructure:"certificate_monitoring_job"`
 	VAServerDomains          []string                       `mapstructure:"va_server_domains"`
+	AllowCascadeDelete       bool                           `mapstructure:"allow_cascade_delete"`
 }
 
 type CryptoEngines struct {
