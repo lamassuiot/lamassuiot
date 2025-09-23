@@ -54,6 +54,7 @@ type CAServiceBackend struct {
 	kmsStorage                  storage.KMSKeysRepo
 	issuanceProfilesStorage     storage.IssuanceProfileRepo
 	vaServerDomains             []string
+	allowCascadeDelete          bool
 	logger                      *logrus.Entry
 }
 
@@ -66,6 +67,7 @@ type CAServiceBuilder struct {
 	KMSStorage                  storage.KMSKeysRepo
 	IssuanceProfileStorage      storage.IssuanceProfileRepo
 	VAServerDomains             []string
+	AllowCascadeDelete          bool
 }
 
 func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
@@ -97,6 +99,7 @@ func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
 		kmsStorage:                  builder.KMSStorage,
 		issuanceProfilesStorage:     builder.IssuanceProfileStorage,
 		vaServerDomains:             builder.VAServerDomains,
+		allowCascadeDelete:          builder.AllowCascadeDelete,
 		logger:                      builder.Logger,
 	}
 
@@ -1248,9 +1251,14 @@ func (svc *CAServiceBackend) revokeCertificatesIssuedByCA(ctx context.Context, c
 
 // handleCascadeOperations handles the cascade deletion or revocation of child CAs and certificates
 func (svc *CAServiceBackend) handleCascadeOperations(ctx context.Context, ca *models.CACertificate, cascadeDelete bool, lFunc *logrus.Entry) error {
-
 	if cascadeDelete {
-		// TODO: Check if allowed at config level
+		// Check if cascade delete is allowed by configuration
+		if !svc.allowCascadeDelete {
+			lFunc.Errorf("cascade delete operation requested but not allowed by configuration for CA %s", ca.ID)
+			return errs.ErrCascadeDeleteNotAllowed
+		}
+
+		lFunc.Debugf("cascade delete is enabled and allowed, proceeding with child CA and certificate deletion")
 
 		// Delete child CAs recursively
 		if err := svc.deleteChildCAs(ctx, ca, lFunc); err != nil {
@@ -1260,6 +1268,8 @@ func (svc *CAServiceBackend) handleCascadeOperations(ctx context.Context, ca *mo
 		// Delete all certificates issued by the CA
 		return svc.deleteCertificatesIssuedByCA(ctx, ca, lFunc)
 	}
+
+	lFunc.Debugf("cascade delete is disabled, proceeding with child CA and certificate revocation")
 
 	// Revoke child CAs issued by the CA
 	if err := svc.revokeChildCAs(ctx, ca, lFunc); err != nil {

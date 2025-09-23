@@ -573,6 +573,8 @@ func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAStatus:
 			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrCascadeDeleteNotAllowed:
+			ctx.JSON(403, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
