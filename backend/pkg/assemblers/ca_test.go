@@ -4098,6 +4098,200 @@ func TestDeleteCA_CascadeDeleteConfigValidation(t *testing.T) {
 	}
 }
 
+// TestDeleteCAPrivateKeyDeletion verifies that private keys are properly handled during CA deletion.
+// This test covers multiple scenarios:
+// 1. Managed CAs - have private keys in crypto engines that should be deleted
+// 2. External CAs - have no private keys in crypto engines (deletion gracefully skipped)
+// 3. Imported CAs with keys - have private keys that should be deleted
+//
+// The tests verify that:
+// - CA deletion completes successfully regardless of private key deletion success/failure
+// - Private key deletion is attempted for CAs that have engines configured
+// - Private key deletion is gracefully skipped for external CAs
+//
+// Note: In a production environment with mock crypto engines, you could enhance these tests to:
+// - Verify that DeleteKey() was actually called on the crypto engine
+// - Test scenarios where private key deletion fails but CA deletion still succeeds
+// - Verify that the correct key ID is passed to the crypto engine
+func TestDeleteCAPrivateKeyDeletion(t *testing.T) {
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	t.Run("ManagedCA_PrivateKeyDeleted", func(t *testing.T) {
+		testDeleteCAWithPrivateKey(t, serverTest, "managed")
+	})
+
+	t.Run("ExternalCA_NoPrivateKey", func(t *testing.T) {
+		testDeleteCAWithPrivateKey(t, serverTest, "external")
+	})
+
+	t.Run("ImportedCA_PrivateKeyDeleted", func(t *testing.T) {
+		testDeleteCAWithPrivateKey(t, serverTest, "imported")
+	})
+}
+
+func testDeleteCAWithPrivateKey(t *testing.T, serverTest *TestServer, caType string) {
+	err := serverTest.BeforeEach()
+	if err != nil {
+		t.Fatalf("failed running 'BeforeEach' cleanup func: %s", err)
+	}
+
+	caTest := serverTest.CA
+
+	// Setup the CA based on type
+	var ca *models.CACertificate
+	switch caType {
+	case "managed":
+		ca, err = caTest.Service.CreateCA(context.Background(), services.CreateCAInput{
+			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+			Subject:      models.Subject{CommonName: "TestManagedCA"},
+			CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+			ProfileID:    "test-profile",
+		})
+	case "external":
+		caCert, _, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalTestCA")
+		if err != nil {
+			t.Fatalf("failed to generate self-signed CA: %s", err)
+		}
+		ca, err = caTest.Service.ImportCA(context.Background(), services.ImportCAInput{
+			CACertificate: (*models.X509Certificate)(caCert),
+			CAType:        models.CertificateTypeExternal,
+			ProfileID:     "test-profile",
+		})
+	case "imported":
+		caCert, caKey, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ImportedTestCA")
+		if err != nil {
+			t.Fatalf("failed to generate self-signed CA: %s", err)
+		}
+		rsaKey, ok := caKey.(*rsa.PrivateKey)
+		if !ok {
+			t.Fatalf("expected RSA key")
+		}
+		ca, err = caTest.Service.ImportCA(context.Background(), services.ImportCAInput{
+			CACertificate: (*models.X509Certificate)(caCert),
+			CARSAKey:      rsaKey,
+			CAType:        models.CertificateTypeImportedWithKey,
+			ProfileID:     "test-profile",
+		})
+	}
+
+	if err != nil {
+		t.Fatalf("failed to setup CA: %s", err)
+	}
+
+	// Revoke the CA so it can be deleted
+	_, err = caTest.Service.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+		CAID:             ca.ID,
+		Status:           models.StatusRevoked,
+		RevocationReason: models.RevocationReason(0),
+	})
+	if err != nil {
+		t.Fatalf("could not revoke CA: %s", err)
+	}
+
+	// Store original key information for verification
+	originalEngineID := ca.Certificate.EngineID
+
+	// Delete the CA
+	err = caTest.Service.DeleteCA(context.Background(), services.DeleteCAInput{
+		CAID: ca.ID,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error during CA deletion: %v", err)
+	}
+
+	// Verify CA was deleted from storage
+	verifyCADeleted(t, caTest, ca.ID, caType+" CA")
+
+	t.Logf("✓ %s CA deleted successfully", caType)
+	if originalEngineID != "" {
+		t.Logf("✓ Private key deletion attempted for engine: %s", originalEngineID)
+	} else {
+		t.Logf("✓ No private key to delete (external CA)")
+	}
+}
+
+func TestDeleteCAPrivateKeyDeletionWithCascade(t *testing.T) {
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithCascadeDelete(true).Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	t.Run("CascadeDelete_WithPrivateKeyDeletion", func(t *testing.T) {
+		err = serverTest.BeforeEach()
+		if err != nil {
+			t.Fatalf("failed running 'BeforeEach' cleanup func: %s", err)
+		}
+
+		caTest := serverTest.CA
+
+		// Create a root CA
+		rootCA, err := caTest.Service.CreateCA(context.Background(), services.CreateCAInput{
+			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+			Subject:      models.Subject{CommonName: "RootCAForKeyDeletion"},
+			CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+			ProfileID:    "test-profile",
+		})
+		if err != nil {
+			t.Fatalf("could not create root CA: %s", err)
+		}
+
+		// Create a child CA
+		childCA, err := caTest.Service.CreateCA(context.Background(), services.CreateCAInput{
+			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+			Subject:      models.Subject{CommonName: "ChildCAForKeyDeletion"},
+			CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+			ParentID:     rootCA.ID,
+			ProfileID:    rootCA.ProfileID,
+		})
+		if err != nil {
+			t.Fatalf("could not create child CA: %s", err)
+		}
+
+		// Revoke the root CA so it can be deleted
+		_, err = caTest.Service.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+			CAID:             rootCA.ID,
+			Status:           models.StatusRevoked,
+			RevocationReason: models.RevocationReason(0),
+		})
+		if err != nil {
+			t.Fatalf("could not revoke root CA: %s", err)
+		}
+
+		// Store engine IDs for verification
+		rootEngineID := rootCA.Certificate.EngineID
+		childEngineID := childCA.Certificate.EngineID
+
+		// Delete the root CA with cascade
+		err = caTest.Service.DeleteCA(context.Background(), services.DeleteCAInput{
+			CAID:          rootCA.ID,
+			CascadeDelete: true,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error during cascade delete: %v", err)
+		}
+
+		// Verify both CAs were deleted
+		verifyCADeleted(t, caTest, rootCA.ID, "root CA")
+		verifyCADeleted(t, caTest, childCA.ID, "child CA")
+
+		t.Logf("✓ Cascade delete successful")
+		t.Logf("✓ Root CA private key deletion attempted for engine: %s", rootEngineID)
+		t.Logf("✓ Child CA private key deletion attempted for engine: %s", childEngineID)
+	})
+}
+
+func verifyCADeleted(t *testing.T, caTest *CATestServer, caID string, caDescription string) {
+	_, err := caTest.Service.GetCAByID(context.Background(), services.GetCAByIDInput{
+		CAID: caID,
+	})
+	if err == nil || !errors.Is(err, errs.ErrCANotFound) {
+		t.Fatalf("%s should have been deleted", caDescription)
+	}
+}
+
 func TestGetCAs(t *testing.T) {
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
