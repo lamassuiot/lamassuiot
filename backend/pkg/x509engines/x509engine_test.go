@@ -277,6 +277,38 @@ func TestGenerateKeyPair(t *testing.T) {
 			},
 			check: checkFail,
 		},
+		{
+			name: "OK/MLDSA_44",
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 44,
+			},
+			check: checkOk,
+		},
+		{
+			name: "OK/MLDSA_65",
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 65,
+			},
+			check: checkOk,
+		},
+		{
+			name: "OK/MLDSA_87",
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 87,
+			},
+			check: checkOk,
+		},
+		{
+			name: "FAIL/MLDSA_BAD_DIMENSIONS",
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 17,
+			},
+			check: checkFail,
+		},
 	}
 
 	for _, tc := range testcases {
@@ -342,6 +374,17 @@ func TestCreateRootCA(t *testing.T) {
 			keyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.ECDSA),
 				Bits: 256,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+		{
+			name:    "OK/MLDSA_44",
+			caId:    "rootCA-MLDSA_44",
+			subject: caSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 44,
 			},
 			expirationTime: expirationTime,
 			check:          checkOk,

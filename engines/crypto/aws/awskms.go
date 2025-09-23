@@ -203,6 +203,10 @@ func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string
 	return p.createPrivateKey(keySpec)
 }
 
+func (p *AWSKMSCryptoEngine) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("awskms: unsupported key type (ML-DSA)")
+}
+
 func (p *AWSKMSCryptoEngine) createPrivateKey(keySpec types.KeySpec) (string, crypto.Signer, error) {
 	key, err := p.kmscli.CreateKey(context.Background(), &kms.CreateKeyInput{
 		KeyUsage: types.KeyUsageTypeSignVerify,

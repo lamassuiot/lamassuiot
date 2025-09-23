@@ -1323,7 +1323,7 @@ func checkSelectAll(t *testing.T, dmgr *DeviceManagerTestServer) {
 func TestDeleteDevice(t *testing.T) {
 	deviceID := "test-delete-device"
 	ctx := context.Background()
-	
+
 	testcases := []struct {
 		name        string
 		setup       func(dmgr *DeviceManagerTestServer)
@@ -1349,7 +1349,7 @@ func TestDeleteDevice(t *testing.T) {
 				if dev.Status != models.DeviceNoIdentity {
 					t.Fatalf("expected device status to be NO_IDENTITY, got %s", dev.Status)
 				}
-				
+
 				// Decommission the device
 				_, err = dmgr.HttpDeviceManagerSDK.UpdateDeviceStatus(ctx, services.UpdateDeviceStatusInput{
 					ID:        deviceID,
@@ -1363,7 +1363,7 @@ func TestDeleteDevice(t *testing.T) {
 				if err != nil {
 					t.Fatalf("could not delete device: %s", err)
 				}
-				
+
 				// Verify device no longer exists
 				_, err = dmgr.Service.GetDeviceByID(ctx, services.GetDeviceByIDInput{ID: deviceID})
 				if err == nil {
@@ -1399,7 +1399,7 @@ func TestDeleteDevice(t *testing.T) {
 				if !errors.Is(err, errs.ErrDeviceInvalidStatus) {
 					t.Fatalf("expected ErrDeviceInvalidStatus, got %s", err)
 				}
-				
+
 				// Verify device still exists
 				dev, err := dmgr.Service.GetDeviceByID(ctx, services.GetDeviceByIDInput{ID: deviceID})
 				if err != nil {

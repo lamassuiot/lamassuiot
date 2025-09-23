@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -154,6 +155,10 @@ func (engine *AWSSecretsManagerCryptoEngine) CreateECDSAPrivateKey(curve ellipti
 
 	engine.logger.Debugf("ECDSA key successfully generated")
 	return engine.importKey(key)
+}
+
+func (engine *AWSSecretsManagerCryptoEngine) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("aws/secretsmanager: unsupported key type (ML-DSA)")
 }
 
 func (engine *AWSSecretsManagerCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {

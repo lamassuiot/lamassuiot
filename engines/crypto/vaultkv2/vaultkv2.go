@@ -220,6 +220,10 @@ func (engine *VaultKV2Engine) CreateECDSAPrivateKey(c elliptic.Curve) (string, c
 	return engine.importKey(key)
 }
 
+func (engine *VaultKV2Engine) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("vaultvk2: unsupported key type (ML-DSA)")
+}
+
 func (engine *VaultKV2Engine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
 	engine.logger.Debugf("importing RSA private key")
 

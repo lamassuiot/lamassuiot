@@ -63,7 +63,7 @@ func (engine X509Engine) GenerateKeyPair(ctx context.Context, keyMetadata models
 		}
 		lFunc.Debugf("cryptoengine successfully generated RSA key")
 		return keyID, signer, nil
-	} else {
+	} else if models.KeyType(keyMetadata.Type) == models.KeyType(x509.ECDSA) {
 		var curve elliptic.Curve
 		switch keyMetadata.Bits {
 		case 224:
@@ -87,6 +87,19 @@ func (engine X509Engine) GenerateKeyPair(ctx context.Context, keyMetadata models
 
 		lFunc.Debugf("cryptoengine successfully generated ECDSA key")
 		return keyID, signer, nil
+	} else if models.KeyType(keyMetadata.Type) == models.KeyType(x509.MLDSA) {
+		lFunc.Debugf("requesting cryptoengine instance for MLDSA key generation")
+		keyID, signer, err := engine.cryptoEngine.CreateMLDSAPrivateKey(keyMetadata.Bits)
+		if err != nil {
+			lFunc.Errorf("cryptoengine instance failed while generating MLDSA key: %s", err)
+			return "", nil, err
+		}
+
+		lFunc.Debugf("cryptoengine successfully generated MLDSA key")
+		return keyID, signer, nil
+	} else {
+		lFunc.Errorf("unsupported key type requested: %s", keyMetadata.Type)
+		return "", nil, errors.New("unsupported key type requested")
 	}
 }
 

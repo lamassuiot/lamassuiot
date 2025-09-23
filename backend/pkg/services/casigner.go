@@ -34,7 +34,13 @@ func (s *caSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpt
 	signAlg := "RSASSA_PKCS1_V1_5_SHA_256"
 	caKeyAlg := s.ca.Certificate.Certificate.PublicKeyAlgorithm
 	caHashFunc := opts.HashFunc()
-	caHashSize := caHashFunc.Size() * 8
+
+	// Take into account that caHashFunc can be 0
+	var caHashSize int
+	if caHashFunc != 0 {
+		caHashSize = caHashFunc.Size() * 8
+	}
+
 	switch caKeyAlg {
 	case x509.ECDSA:
 		signAlg = fmt.Sprintf("ECDSA_SHA_%d", caHashSize)
