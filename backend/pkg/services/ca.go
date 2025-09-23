@@ -1280,6 +1280,34 @@ func (svc *CAServiceBackend) handleCascadeOperations(ctx context.Context, ca *mo
 	return svc.revokeCertificatesIssuedByCA(ctx, ca, lFunc)
 }
 
+// deleteCAPrivateKey deletes the private key associated with a CA from its crypto engine
+func (svc *CAServiceBackend) deleteCAPrivateKey(ca *models.CACertificate, lFunc *logrus.Entry) {
+	if ca.Certificate.EngineID == "" {
+		lFunc.Debugf("no engine ID specified for CA %s, skipping private key deletion", ca.ID)
+		return
+	}
+
+	engine, exists := svc.cryptoEngines[ca.Certificate.EngineID]
+	if !exists {
+		lFunc.Warnf("crypto engine %s not found for CA %s, skipping private key deletion", ca.Certificate.EngineID, ca.ID)
+		return
+	}
+
+	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
+	keyID, err := helpers.GetSubjectKeyID(lFunc, caCert)
+	if err != nil {
+		lFunc.Warnf("could not compute key ID for CA %s: %s", ca.ID, err)
+		return
+	}
+
+	err = (*engine).DeleteKey(keyID)
+	if err != nil {
+		lFunc.Warnf("could not delete private key for CA %s from crypto engine %s: %s", ca.ID, ca.Certificate.EngineID, err)
+	} else {
+		lFunc.Debugf("successfully deleted private key for CA %s from crypto engine %s", ca.ID, ca.Certificate.EngineID)
+	}
+}
+
 // Returned Error Codes:
 //   - ErrCANotFound
 //     The specified CA can not be found in the Database
@@ -1311,14 +1339,15 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.Delete
 		return err
 	}
 
-	// TODO: Delete the private key from the crypto engine?
-
-	// Finally, delete the CA
+	// Delete the CA
 	err = svc.caStorage.Delete(ctx, input.CAID)
 	if err != nil {
 		lFunc.Errorf("something went wrong while deleting the CA %s %s", input.CAID, err)
 		return err
 	}
+
+	// Finally, delete the private key from the crypto engine
+	svc.deleteCAPrivateKey(ca, lFunc)
 
 	return nil
 }
