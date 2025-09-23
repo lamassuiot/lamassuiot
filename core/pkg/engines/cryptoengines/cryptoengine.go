@@ -23,6 +23,7 @@ type CryptoEngine interface {
 
 	ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error)
 	ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error)
+	ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error)
 
 	DeleteKey(keyID string) error
 

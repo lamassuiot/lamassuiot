@@ -147,9 +147,18 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		ID:            requestBody.ID,
 		ProfileID:     requestBody.ProfileID,
 		CACertificate: requestBody.CACertificate,
+<<<<<<< HEAD
 		Key:           key,
 		EngineID:      requestBody.EngineID,
 		CARequestID:   requestBody.CARequestID,
+=======
+		KeyType:       keyType,
+		CARSAKey:      rsaKey,
+		CAECKey:       ecKey,
+
+		EngineID:    requestBody.EngineID,
+		CARequestID: requestBody.CARequestID,
+>>>>>>> 0841445c (Added more tests for MLDSA CA creation. Modified the CryptoEngine interface to add the ImportMLDSAPrivateKey operation and added the required changes in the different engines.)
 	})
 	if err != nil {
 		switch err {

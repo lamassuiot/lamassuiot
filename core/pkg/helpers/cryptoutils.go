@@ -1,6 +1,10 @@
 package helpers
 
 import (
+	"cloudflare/circl/sign/mldsa/mldsa44"
+	"cloudflare/circl/sign/mldsa/mldsa65"
+	"cloudflare/circl/sign/mldsa/mldsa87"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -12,6 +16,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"slices"
@@ -89,6 +94,13 @@ func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.D
 		}
 		key = eccKey
 		pubKey = &eccKey.PublicKey
+	case x509.MLDSA:
+		mldsaKey, err := GenerateMLDSAKey(65)
+		if err != nil {
+			return nil, nil, err
+		}
+		key = mldsaKey
+		pubKey = mldsaKey.Public()
 	}
 
 	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
@@ -294,6 +306,22 @@ func GenerateECDSAKey(curve elliptic.Curve) (*ecdsa.PrivateKey, error) {
 	}
 
 	return privkey, nil
+}
+
+func GenerateMLDSAKey(dimensions int) (crypto.Signer, error) {
+	var key crypto.Signer
+	var err error
+	switch dimensions {
+	case 44:
+		_, key, err = mldsa44.GenerateKey(rand.Reader)
+	case 65:
+		_, key, err = mldsa65.GenerateKey(rand.Reader)
+	case 87:
+		_, key, err = mldsa87.GenerateKey(rand.Reader)
+	default:
+		err = errors.New("unsupported dimensions")
+	}
+	return key, err
 }
 
 // EncryptWithPublicKey encrypts data with public key
