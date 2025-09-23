@@ -203,6 +203,7 @@ func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string
 	return p.createPrivateKey(keySpec)
 }
 
+// TODO -> Add implementation (if posible)
 func (p *AWSKMSCryptoEngine) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
 	return "", nil, errors.New("awskms: unsupported key type (ML-DSA)")
 }
@@ -280,6 +281,11 @@ func (p *AWSKMSCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (strin
 	}
 
 	return p.importKey(key, spec)
+}
+
+// TODO -> Add implementation (if posible)
+func (p *AWSKMSCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, errors.New("awskms: unsupported key type (ML-DSA)")
 }
 
 func (p *AWSKMSCryptoEngine) importKey(key crypto.Signer, spec types.KeySpec) (string, crypto.Signer, error) {

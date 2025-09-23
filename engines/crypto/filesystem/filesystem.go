@@ -198,6 +198,19 @@ func (engine *FilesystemCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKe
 	return keyID, signer, nil
 }
 
+func (engine *FilesystemCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	engine.logger.Debugf("importing MLDSA private key")
+
+	keyID, signer, err := engine.importKey(key)
+	if err != nil {
+		engine.logger.Errorf("could not import MLDSA key: %s", err)
+		return "", nil, err
+	}
+
+	engine.logger.Debugf("MLDSA key successfully imported")
+	return keyID, signer, nil
+}
+
 func (engine *FilesystemCryptoEngine) importKey(key interface{}) (string, crypto.Signer, error) {
 	pubKey := key.(crypto.Signer).Public()
 

@@ -220,6 +220,7 @@ func (engine *VaultKV2Engine) CreateECDSAPrivateKey(c elliptic.Curve) (string, c
 	return engine.importKey(key)
 }
 
+// TODO -> Add implementation (if posible)
 func (engine *VaultKV2Engine) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
 	return "", nil, errors.New("vaultvk2: unsupported key type (ML-DSA)")
 }
@@ -248,6 +249,11 @@ func (engine *VaultKV2Engine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (stri
 
 	engine.logger.Debugf("ECDSA key successfully imported")
 	return keyID, signer, nil
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *VaultKV2Engine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, errors.New("vaultvk2: unsupported key type (ML-DSA)")
 }
 
 func (engine *VaultKV2Engine) importKey(key any) (string, crypto.Signer, error) {
