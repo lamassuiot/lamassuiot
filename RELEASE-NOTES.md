@@ -1,35 +1,50 @@
 
-<a name="3.4.0"></a>
-## [3.4.0](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.3.0...3.4.0) (2025-06-03)
+<a name="3.5.0"></a>
+## [3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.4.0...3.5.0) (2025-09-23)
 
 ### Bug Fixes
 
-* Fix: CA:  fix filtering CAs by CN ([#265](https://github.com/lamassuiot/lamassuiot/issues/265))
-* Fix: CA: discard aws reserved kms aliases ([#266](https://github.com/lamassuiot/lamassuiot/issues/266))
-* Fix: DMS Manager: ReEnroll - Add a check to validate the presence of a CommonName in the CSR ([#251](https://github.com/lamassuiot/lamassuiot/issues/251))
-* Fix: DMS Manager: add a null check when decommissioning a device wihtout identity ([#250](https://github.com/lamassuiot/lamassuiot/issues/250))
-* Fix: monolithic ui port now being served correctly ([#240](https://github.com/lamassuiot/lamassuiot/issues/240))
-
-### Bump Versions
-
-* Bump: backend direct deps ([#264](https://github.com/lamassuiot/lamassuiot/issues/264))
-* Bump: go-jose to 4.0.5 ([#263](https://github.com/lamassuiot/lamassuiot/issues/263))
+* Fix: ca: SKI and AKI extracrted from certificates (if any) ([#295](https://github.com/lamassuiot/lamassuiot/issues/295))
+* Fix: add dlq to event bus after 3 retries ([#302](https://github.com/lamassuiot/lamassuiot/issues/302))
+* Fix: allow signing certs expiring after ca ([#299](https://github.com/lamassuiot/lamassuiot/issues/299))
+* Fix: middleware: missing DeleteDevice operation
+* Fix: ca: fix crl urls in generated certificates to include hex encoded with colons ([#279](https://github.com/lamassuiot/lamassuiot/issues/279))
+* Fix: no tmp_dir for fileblob persistence ([#277](https://github.com/lamassuiot/lamassuiot/issues/277))
+* Fix: CRL Initialization on event ([#273](https://github.com/lamassuiot/lamassuiot/issues/273))
+* Fix: update bookmark encoding to use URL-safe base64 encoding ([#272](https://github.com/lamassuiot/lamassuiot/issues/272))
 
 ### Chores
 
-* Chore: bump x/net to 0.38.0 ([#262](https://github.com/lamassuiot/lamassuiot/issues/262))
-* Chore: bump go-playground/validator to v10.26.0 ([#261](https://github.com/lamassuiot/lamassuiot/issues/261))
-* Chore: bump aws sdk 1.36.3 ([#260](https://github.com/lamassuiot/lamassuiot/issues/260))
-* Chore: bump ory/dockertest 3.12.0 ([#259](https://github.com/lamassuiot/lamassuiot/issues/259))
-* Chore: Bump golang-jwt to 4.5.2 ([#258](https://github.com/lamassuiot/lamassuiot/issues/258))
-* Chore: bumping go version 1.24 ([#255](https://github.com/lamassuiot/lamassuiot/issues/255))
-* Chore: adjust monolithic monitoring job ([#239](https://github.com/lamassuiot/lamassuiot/issues/239))
+* Chore: fix release notes in open-pr-release workflow
+* Chore: refactoring release process ([#304](https://github.com/lamassuiot/lamassuiot/issues/304))
+* Chore: update CONTRIBUTING.md to clarify setup instructions ([#296](https://github.com/lamassuiot/lamassuiot/issues/296))
+* Chore: fix linting and typo issues ([#287](https://github.com/lamassuiot/lamassuiot/issues/287))
+* Chore: monolithic: add labels and standard ports in docker containers ([#281](https://github.com/lamassuiot/lamassuiot/issues/281))
+* Chore: Bump dependencies ([#278](https://github.com/lamassuiot/lamassuiot/issues/278))
 
 ### Features
 
-* Feat: DMS Manager: add DMS delete operation ([#252](https://github.com/lamassuiot/lamassuiot/issues/252))
-* Feat: CA: implement AWS KMS import keys ([#245](https://github.com/lamassuiot/lamassuiot/issues/245))
-* Feat: CA: refactor crypto engine keys migration ([#246](https://github.com/lamassuiot/lamassuiot/issues/246))
-* Feat: VA: assemble service conditionally based on config ([#244](https://github.com/lamassuiot/lamassuiot/issues/244))
-* Feat: enhance event filters to use full event data for processing ([#242](https://github.com/lamassuiot/lamassuiot/issues/242))
+* Feat: add DELETE certificate endpoint for orphaned certificate cleanup with issuer CA validation ([#301](https://github.com/lamassuiot/lamassuiot/issues/301))
+* Feat: add support for filtering CAs based on profile_id ([#303](https://github.com/lamassuiot/lamassuiot/issues/303))
+* Feat: all: add audit events ([#291](https://github.com/lamassuiot/lamassuiot/issues/291))
+* Feat: va: add support for CRL certificate reactivation from hold  ([#297](https://github.com/lamassuiot/lamassuiot/issues/297))
+* Feat: add support for deleting devices in decommissioned state ([#294](https://github.com/lamassuiot/lamassuiot/issues/294))
+* Feat: ca: avoid redundancy on issuance profiles generation ([#292](https://github.com/lamassuiot/lamassuiot/issues/292))
+* Feat: ca: default issuance profiles for CAs and integrate in dms EST processes ([#290](https://github.com/lamassuiot/lamassuiot/issues/290))
+* Feat: CA: Add Full CRUD Support for Issuance Profiles in CA Service ([#286](https://github.com/lamassuiot/lamassuiot/issues/286))
+* Feat: add PATCH method to metadata endpoints ([#284](https://github.com/lamassuiot/lamassuiot/issues/284))
+* Feat: DMS: implement update metadata endpoint ([#283](https://github.com/lamassuiot/lamassuiot/issues/283))
+* Feat: va: Remove get roles ([#280](https://github.com/lamassuiot/lamassuiot/issues/280))
+* Feat: DMS: add certificate Issuance Profile support ([#276](https://github.com/lamassuiot/lamassuiot/issues/276))
+* Feat: refactor by adding InitCRLRole method to CRLService and its implementations ([#271](https://github.com/lamassuiot/lamassuiot/issues/271))
+* Feat: add case-insensitive filtering support ([#270](https://github.com/lamassuiot/lamassuiot/issues/270))
+* Feat: DMS Manager: add option to toggle CSR signature verification during Enrollment/Reenrollment ([#268](https://github.com/lamassuiot/lamassuiot/issues/268))
+
+### Refactor
+
+* Refactor: CA: homogenize certificate SN format ([#289](https://github.com/lamassuiot/lamassuiot/issues/289))
+
+### Tests
+
+* Test: middleware: add DeleteDevice case to event publisher ([#298](https://github.com/lamassuiot/lamassuiot/issues/298))
 
