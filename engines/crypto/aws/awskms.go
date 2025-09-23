@@ -259,6 +259,7 @@ func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve el
 	return p.createPrivateKey(ctx, keySpec)
 }
 
+// TODO -> Add implementation (if possible)
 func (p *AWSKMSCryptoEngine) CreateMLDSAPrivateKey(ctx context.Context, dimensions int) (string, crypto.Signer, error) {
 	return "", nil, errors.New("awskms: unsupported key type (ML-DSA)")
 }
@@ -341,9 +342,12 @@ func (p *AWSKMSCryptoEngine) ImportECDSAPrivateKey(ctx context.Context, key *ecd
 	return p.importKey(ctx, key, spec)
 }
 
-func (p *AWSKMSCryptoEngine) importKey(ctx context.Context, key crypto.Signer, spec types.KeySpec) (string, crypto.Signer, error) {
-	lFunc := corehelpers.ConfigureLogger(ctx, p.logger)
+// TODO -> Add implementation (if posible)
+func (p *AWSKMSCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, errors.New("awskms: unsupported key type (ML-DSA)")
+}
 
+func (p *AWSKMSCryptoEngine) importKey(key crypto.Signer, spec types.KeySpec) (string, crypto.Signer, error) {
 	// 1. Create KMS key
 	createKeyOut, err := p.kmscli.CreateKey(ctx, &kms.CreateKeyInput{
 		Origin:   types.OriginTypeExternal,

@@ -225,6 +225,7 @@ func (engine *VaultKV2Engine) CreateECDSAPrivateKey(ctx context.Context, c ellip
 	return engine.importKey(ctx, key)
 }
 
+// TODO -> Add implementation (if posible)
 func (engine *VaultKV2Engine) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
 	return "", nil, errors.New("vaultvk2: unsupported key type (ML-DSA)")
 }
@@ -256,8 +257,12 @@ func (engine *VaultKV2Engine) ImportECDSAPrivateKey(ctx context.Context, key *ec
 	return keyID, signer, nil
 }
 
-func (engine *VaultKV2Engine) importKey(ctx context.Context, key any) (string, crypto.Signer, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+// TODO -> Add implementation (if posible)
+func (engine *VaultKV2Engine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, errors.New("vaultvk2: unsupported key type (ML-DSA)")
+}
+
+func (engine *VaultKV2Engine) importKey(key any) (string, crypto.Signer, error) {
 	pubKey := key.(crypto.Signer).Public()
 
 	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(ctx, pubKey)
