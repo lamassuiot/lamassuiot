@@ -30,13 +30,13 @@ jobs:
           echo "Last commit: $msg"
           
           # Check if this is a release commit
-          if [[ "$msg" =~ ^chore:\ release:\ prepare\ release\ ([0-9]+\.[0-9]+\.[0-9]+.*)$ ]]; then
+          if [[ "$msg" =~ ^chore:\ release:\ prepare\ release\ ([0-9]+\.[0-9]+\.[0-9]+).*$ ]]; then
             version="${BASH_REMATCH[1]}"
             echo "is_release_commit=true" >> $GITHUB_OUTPUT
             echo "Found release version: $version"
             
             # Validate semver format
-            SEMVER_REGEX="^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(\\-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+            SEMVER_REGEX="^([0-9]+\.[0-9]+\.[0-9]+)$"
             if [[ "$version" =~ $SEMVER_REGEX ]]; then
               major=$(echo "$version" | cut -d. -f1)
               echo "release_version=$version" >> $GITHUB_OUTPUT
