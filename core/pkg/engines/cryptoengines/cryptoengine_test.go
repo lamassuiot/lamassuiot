@@ -7,6 +7,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"errors"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -39,7 +40,11 @@ func (m *mockCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve elli
 	return "", key, err
 }
 
-func (m *mockCryptoEngine) ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error) {
+func (m *mockCryptoEngine) CreateMLDSAPrivateKey(ctx context.Context, dimensions int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("mock: ML-DSA not implemented")
+}
+
+func (m *mockCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
 	return "", key, nil
 }
 

@@ -20,6 +20,7 @@ type CryptoEngine interface {
 
 	CreateRSAPrivateKey(ctx context.Context, keySize int) (string, crypto.Signer, error)
 	CreateECDSAPrivateKey(ctx context.Context, curve elliptic.Curve) (string, crypto.Signer, error)
+	CreateMLDSAPrivateKey(ctx context.Context, dimensions int) (string, crypto.Signer, error)
 
 	ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error)
 	ImportECDSAPrivateKey(ctx context.Context, key *ecdsa.PrivateKey) (string, crypto.Signer, error)

@@ -225,9 +225,12 @@ func (engine *VaultKV2Engine) CreateECDSAPrivateKey(ctx context.Context, c ellip
 	return engine.importKey(ctx, key)
 }
 
-func (engine *VaultKV2Engine) ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
-	lFunc.Debugf("importing RSA private key")
+func (engine *VaultKV2Engine) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("vaultvk2: unsupported key type (ML-DSA)")
+}
+
+func (engine *VaultKV2Engine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
+	engine.logger.Debugf("importing RSA private key")
 
 	keyID, signer, err := engine.importKey(ctx, key)
 	if err != nil {
