@@ -14,7 +14,6 @@ jobs:
   open_pr:
     name: "Open PR with release notes and changelog"
     runs-on: ubuntu-latest
-    needs: version_info
     container: quay.io/git-chglog/git-chglog:0.15.0
     steps:
       - name: Checkout

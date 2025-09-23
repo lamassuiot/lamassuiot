@@ -106,7 +106,7 @@ jobs:
  
   create_global_release:
     name: Create Global Tag & Release
-    needs: [change_logs, finalize]
+    needs: finalize
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
