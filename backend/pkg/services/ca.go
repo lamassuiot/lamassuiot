@@ -1117,6 +1117,159 @@ func (svc *CAServiceBackend) UpdateCAMetadata(ctx context.Context, input service
 	return svc.caStorage.Update(ctx, ca)
 }
 
+// validateCADeletionEligibility checks if a CA can be deleted based on its type and status
+func (svc *CAServiceBackend) validateCADeletionEligibility(ca *models.CACertificate, lFunc *logrus.Entry) error {
+
+	if ca.Certificate.Type == models.CertificateTypeExternal {
+		lFunc.Debugf("External CA can be deleted. Proceeding")
+		return nil
+	}
+
+	if ca.Certificate.Status == models.StatusExpired || ca.Certificate.Status == models.StatusRevoked {
+		lFunc.Debugf("Expired or revoked CA can be deleted. Proceeding")
+		return nil
+	}
+
+	lFunc.Errorf("CA %s can not be deleted while in status %s", ca.ID, ca.Certificate.Status)
+	return errs.ErrCAStatus
+}
+
+// deleteChildCAs recursively deletes all child CAs issued by the given CA
+func (svc *CAServiceBackend) deleteChildCAs(ctx context.Context, ca *models.CACertificate, lFunc *logrus.Entry) error {
+
+	deleteChildCAFunc := func(childCA models.CACertificate) {
+		lFunc.Infof("Deleting child CA %s (%s) issued by CA %s", childCA.ID, childCA.Certificate.Subject.CommonName, ca.ID)
+		err := svc.service.DeleteCA(ctx, services.DeleteCAInput{
+			CAID:          childCA.ID,
+			CascadeDelete: true,
+		})
+		if err != nil {
+			lFunc.Errorf("could not delete child CA %s issued by CA %s: %s", childCA.ID, childCA.Certificate.IssuerCAMetadata.ID, err)
+		}
+	}
+
+	_, err := svc.caStorage.SelectByParentCA(ctx, ca.ID, storage.StorageListRequest[models.CACertificate]{
+		ExhaustiveRun: true,
+		ApplyFunc:     deleteChildCAFunc,
+		QueryParams:   &resources.QueryParameters{},
+		ExtraOpts:     nil,
+	})
+	if err != nil {
+		lFunc.Errorf("could not select child CAs for deletion: %s", err)
+		return err
+	}
+
+	return nil
+}
+
+// revokeChildCAs revokes all child CAs issued by the given CA
+func (svc *CAServiceBackend) revokeChildCAs(ctx context.Context, ca *models.CACertificate, lFunc *logrus.Entry) error {
+
+	revokeChildCAFunc := func(childCA models.CACertificate) {
+		lFunc.Infof("Revoking child CA %s (%s) issued by CA %s", childCA.ID, childCA.Certificate.Subject.CommonName, ca.ID)
+		_, err := svc.service.UpdateCAStatus(ctx, services.UpdateCAStatusInput{
+			CAID:             childCA.ID,
+			Status:           models.StatusRevoked,
+			RevocationReason: ocsp.CessationOfOperation,
+		})
+		if err != nil {
+			lFunc.Errorf("could not revoke child CA %s issued by CA %s: %s", childCA.ID, childCA.Certificate.IssuerCAMetadata.ID, err)
+		}
+	}
+
+	_, err := svc.caStorage.SelectByParentCA(ctx, ca.ID, storage.StorageListRequest[models.CACertificate]{
+		ExhaustiveRun: true,
+		ApplyFunc:     revokeChildCAFunc,
+		QueryParams:   &resources.QueryParameters{},
+		ExtraOpts:     nil,
+	})
+	if err != nil {
+		lFunc.Errorf("could not select child CAs for revocation: %s", err)
+		return err
+	}
+
+	return nil
+}
+
+// deleteCertificatesIssuedByCA deletes all certificates issued by the given CA
+func (svc *CAServiceBackend) deleteCertificatesIssuedByCA(ctx context.Context, ca *models.CACertificate, lFunc *logrus.Entry) error {
+
+	ctr := 0
+	deleteCertFunc := func(c models.Certificate) {
+		lFunc.Infof("Deleting certificate %d - %s", ctr, c.SerialNumber)
+		ctr++
+		err := svc.service.DeleteCertificate(ctx, services.DeleteCertificateInput{
+			SerialNumber: c.SerialNumber,
+		})
+		if err != nil {
+			lFunc.Errorf("could not delete certificate %s issued by CA %s: %s", c.SerialNumber, c.IssuerCAMetadata.ID, err)
+		}
+	}
+
+	_, err := svc.certStorage.SelectByCA(ctx, ca.ID, storage.StorageListRequest[models.Certificate]{
+		ExhaustiveRun: true,
+		ApplyFunc:     deleteCertFunc,
+		QueryParams:   &resources.QueryParameters{},
+		ExtraOpts:     map[string]interface{}{},
+	})
+
+	return err
+}
+
+// revokeCertificatesIssuedByCA revokes all certificates issued by the given CA
+func (svc *CAServiceBackend) revokeCertificatesIssuedByCA(ctx context.Context, ca *models.CACertificate, lFunc *logrus.Entry) error {
+
+	ctr := 0
+	revokeCertFunc := func(c models.Certificate) {
+		lFunc.Infof("Revoking certificate %d - %s", ctr, c.SerialNumber)
+		ctr++
+		_, err := svc.service.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
+			SerialNumber:     c.SerialNumber,
+			NewStatus:        models.StatusRevoked,
+			RevocationReason: ocsp.CessationOfOperation,
+		})
+		if err != nil {
+			lFunc.Errorf("could not revoke certificate %s issued by CA %s: %s", c.SerialNumber, c.IssuerCAMetadata.ID, err)
+		}
+	}
+
+	_, err := svc.certStorage.SelectByCA(ctx, ca.ID, storage.StorageListRequest[models.Certificate]{
+		ExhaustiveRun: true,
+		ApplyFunc:     revokeCertFunc,
+		QueryParams:   &resources.QueryParameters{},
+		ExtraOpts:     map[string]interface{}{},
+	})
+	if err != nil {
+		lFunc.Errorf("could not revoke certificate %s issued by CA %s", ca.Certificate.SerialNumber, ca.Certificate.IssuerCAMetadata.ID)
+	}
+
+	return err
+}
+
+// handleCascadeOperations handles the cascade deletion or revocation of child CAs and certificates
+func (svc *CAServiceBackend) handleCascadeOperations(ctx context.Context, ca *models.CACertificate, cascadeDelete bool, lFunc *logrus.Entry) error {
+
+	if cascadeDelete {
+		// TODO: Check if allowed at config level
+
+		// Delete child CAs recursively
+		if err := svc.deleteChildCAs(ctx, ca, lFunc); err != nil {
+			return err
+		}
+
+		// Delete all certificates issued by the CA
+		return svc.deleteCertificatesIssuedByCA(ctx, ca, lFunc)
+	}
+
+	// Revoke child CAs issued by the CA
+	if err := svc.revokeChildCAs(ctx, ca, lFunc); err != nil {
+		return err
+	}
+
+	// Revoke all certificates issued by the CA
+	return svc.revokeCertificatesIssuedByCA(ctx, ca, lFunc)
+}
+
 // Returned Error Codes:
 //   - ErrCANotFound
 //     The specified CA can not be found in the Database
@@ -1138,110 +1291,12 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.Delete
 		return err
 	}
 
-	if ca.Certificate.Type == models.CertificateTypeExternal {
-		lFunc.Debugf("External CA can be deleted. Proceeding")
-	} else if ca.Certificate.Status == models.StatusExpired || ca.Certificate.Status == models.StatusRevoked {
-		lFunc.Debugf("Expired or revoked CA can be deleted. Proceeding")
-	} else {
-		lFunc.Errorf("CA %s can not be deleted while in status %s", input.CAID, ca.Certificate.Status)
-		return errs.ErrCAStatus
+	if err := svc.validateCADeletionEligibility(ca, lFunc); err != nil {
+		return err
 	}
 
-	ctr := 0
-	if input.CascadeDelete {
-
-		// TODO Check if allowed at config level
-
-		// Delete child CAs recursively
-		deleteChildCAFunc := func(childCA models.CACertificate) {
-			lFunc.Infof("Deleting child CA %s (%s) issued by CA %s", childCA.ID, childCA.Certificate.Subject.CommonName, ca.ID)
-			err := svc.service.DeleteCA(ctx, services.DeleteCAInput{
-				CAID:          childCA.ID,
-				CascadeDelete: true,
-			})
-			if err != nil {
-				lFunc.Errorf("could not delete child CA %s issued by CA %s: %s", childCA.ID, childCA.Certificate.IssuerCAMetadata.ID, err)
-			}
-		}
-
-		_, err := svc.caStorage.SelectByParentCA(ctx, ca.ID, storage.StorageListRequest[models.CACertificate]{
-			ExhaustiveRun: true,
-			ApplyFunc:     deleteChildCAFunc,
-			QueryParams:   &resources.QueryParameters{},
-			ExtraOpts:     nil,
-		})
-		if err != nil {
-			lFunc.Errorf("could not select child CAs for deletion: %s", err)
-			return err
-		}
-
-		// Delete all certificates issued by the CA
-		deleteCertFunc := func(c models.Certificate) {
-			lFunc.Infof("\n\n%d - %s (deleting)\n\n", ctr, c.SerialNumber)
-			ctr++
-			err := svc.service.DeleteCertificate(ctx, services.DeleteCertificateInput{
-				SerialNumber: c.SerialNumber,
-			})
-			if err != nil {
-				lFunc.Errorf("could not delete certificate %s issued by CA %s: %s", c.SerialNumber, c.IssuerCAMetadata.ID, err)
-			}
-		}
-		_, err = svc.certStorage.SelectByCA(ctx, ca.ID, storage.StorageListRequest[models.Certificate]{
-			ExhaustiveRun: true,
-			ApplyFunc:     deleteCertFunc,
-			QueryParams:   &resources.QueryParameters{},
-			ExtraOpts:     map[string]interface{}{},
-		})
-		if err != nil {
-			return err
-		}
-	} else {
-		// Revoke child CAs issued by the CA
-		revokeChildCAFunc := func(childCA models.CACertificate) {
-			lFunc.Infof("Revoking child CA %s (%s) issued by CA %s", childCA.ID, childCA.Certificate.Subject.CommonName, ca.ID)
-			_, err := svc.service.UpdateCAStatus(ctx, services.UpdateCAStatusInput{
-				CAID:             childCA.ID,
-				Status:           models.StatusRevoked,
-				RevocationReason: ocsp.CessationOfOperation,
-			})
-			if err != nil {
-				lFunc.Errorf("could not revoke child CA %s issued by CA %s: %s", childCA.ID, childCA.Certificate.IssuerCAMetadata.ID, err)
-			}
-		}
-
-		_, err := svc.caStorage.SelectByParentCA(ctx, ca.ID, storage.StorageListRequest[models.CACertificate]{
-			ExhaustiveRun: true,
-			ApplyFunc:     revokeChildCAFunc,
-			QueryParams:   &resources.QueryParameters{},
-			ExtraOpts:     nil,
-		})
-		if err != nil {
-			lFunc.Errorf("could not select child CAs for revocation: %s", err)
-			return err
-		}
-
-		// Revoke all certificates issued by the CA
-		revokeCertFunc := func(c models.Certificate) {
-			lFunc.Infof("\n\n%d - %s\n\n", ctr, c.SerialNumber)
-			ctr++
-			_, err := svc.service.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
-				SerialNumber:     c.SerialNumber,
-				NewStatus:        models.StatusRevoked,
-				RevocationReason: ocsp.CessationOfOperation,
-			})
-			if err != nil {
-				lFunc.Errorf("could not revoke certificate %s issued by CA %s: %s", c.SerialNumber, c.IssuerCAMetadata.ID, err)
-			}
-		}
-		_, err = svc.certStorage.SelectByCA(ctx, ca.ID, storage.StorageListRequest[models.Certificate]{
-			ExhaustiveRun: true,
-			ApplyFunc:     revokeCertFunc,
-			QueryParams:   &resources.QueryParameters{},
-			ExtraOpts:     map[string]interface{}{},
-		})
-		if err != nil {
-			lFunc.Errorf("could not revoke certificate %s issued by CA %s", ca.Certificate.SerialNumber, ca.Certificate.IssuerCAMetadata.ID)
-		}
+	if err := svc.handleCascadeOperations(ctx, ca, input.CascadeDelete, lFunc); err != nil {
+		return err
 	}
 
 	// TODO: Delete the private key from the crypto engine?
@@ -1253,7 +1308,7 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.Delete
 		return err
 	}
 
-	return err
+	return nil
 }
 
 func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services.SignCertificateInput) (*models.Certificate, error) {
