@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -162,9 +163,12 @@ func (engine *AWSSecretsManagerCryptoEngine) CreateECDSAPrivateKey(ctx context.C
 	return engine.importKey(ctx, key)
 }
 
-func (engine *AWSSecretsManagerCryptoEngine) ImportRSAPrivateKey(ctx context.Context, key *rsa.PrivateKey) (string, crypto.Signer, error) {
-	lFunc := corehelpers.ConfigureLogger(ctx, engine.logger)
-	lFunc.Debugf("importing RSA private key")
+func (engine *AWSSecretsManagerCryptoEngine) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
+	return "", nil, errors.New("aws/secretsmanager: unsupported key type (ML-DSA)")
+}
+
+func (engine *AWSSecretsManagerCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
+	engine.logger.Debugf("importing RSA private key")
 
 	keyID, signer, err := engine.importKey(ctx, key)
 	if err != nil {

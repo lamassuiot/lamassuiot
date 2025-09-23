@@ -324,9 +324,9 @@ func (db *DBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.Qu
 				return "", fmt.Errorf("not a valid bookmark")
 			}
 
-			splits := strings.SplitSeq(string(decodedBookmark), ";")
+			splits := strings.Split(string(decodedBookmark), ";")
 
-			for splitPart := range splits {
+			for _, splitPart := range splits {
 				queryPart := strings.Split(splitPart, ":")
 				switch queryPart[0] {
 				case "off":

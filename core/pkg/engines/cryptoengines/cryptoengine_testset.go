@@ -34,6 +34,16 @@ func SharedTestCreateECDSAPrivateKey(t *testing.T, engine CryptoEngine) {
 	assert.Equal(t, signer.Public(), signer2.Public())
 }
 
+func SharedTestCreateMLDSAPrivateKey(t *testing.T, engine CryptoEngine) {
+	keyID, signer, err := engine.CreateMLDSAPrivateKey(context.Background(), 44)
+	assert.NoError(t, err)
+
+	signer2, err := engine.GetPrivateKeyByID(keyID)
+	assert.NoError(t, err)
+
+	assert.Equal(t, signer.Public(), signer2.Public())
+}
+
 func SharedTestDeleteKey(t *testing.T, engine CryptoEngine) {
 	ctx := context.Background()
 	keyID, _, err := engine.CreateECDSAPrivateKey(ctx, elliptic.P256())
@@ -171,6 +181,24 @@ func SharedTestECDSASignature(t *testing.T, engine CryptoEngine) {
 
 	res := ecdsa.VerifyASN1(signer2.Public().(*ecdsa.PublicKey), hashed, signature)
 	assert.True(t, res)
+}
+
+func SharedTestMLDSASignature(t *testing.T, engine CryptoEngine) {
+	keyID, signer, err := engine.CreateMLDSAPrivateKey(context.Background(), 44)
+	assert.NoError(t, err)
+
+	h := sha256.New()
+	_, err = h.Write([]byte("aa"))
+	assert.NoError(t, err)
+	hashed := h.Sum(nil)
+
+	_, err = signer.Sign(rand.Reader, hashed, crypto.Hash(0))
+	assert.NoError(t, err)
+
+	signer2, err := engine.GetPrivateKeyByID(keyID)
+	assert.NoError(t, err)
+
+	assert.Equal(t, signer.Public(), signer2.Public())
 }
 
 func SharedTestImportRSAPrivateKey(t *testing.T, engine CryptoEngine) {
