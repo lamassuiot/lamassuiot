@@ -163,6 +163,7 @@ func (engine *AWSSecretsManagerCryptoEngine) CreateECDSAPrivateKey(ctx context.C
 	return engine.importKey(ctx, key)
 }
 
+// TODO -> Add implementation (if posible)
 func (engine *AWSSecretsManagerCryptoEngine) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
 	return "", nil, errors.New("aws/secretsmanager: unsupported key type (ML-DSA)")
 }
@@ -194,8 +195,12 @@ func (engine *AWSSecretsManagerCryptoEngine) ImportECDSAPrivateKey(ctx context.C
 	return keyID, signer, nil
 }
 
-func (engine *AWSSecretsManagerCryptoEngine) importKey(ctx context.Context, key crypto.Signer) (string, crypto.Signer, error) {
-	lFunc := corehelpers.ConfigureLogger(ctx, engine.logger)
+// TODO -> Add implementation (if posible)
+func (engine *AWSSecretsManagerCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, errors.New("aws/secretsmanager: unsupported key type (ML-DSA)")
+}
+
+func (engine *AWSSecretsManagerCryptoEngine) importKey(key crypto.Signer) (string, crypto.Signer, error) {
 	pubKey := key.Public()
 
 	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(ctx, pubKey)
