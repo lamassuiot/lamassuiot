@@ -49,12 +49,12 @@ jobs:
           else
             echo "is_release_commit=false" >> $GITHUB_OUTPUT
             echo "Not a release commit; skipping release process."
+            exit 1
           fi
 
   finalize:
     name: Setup Release Variables
     needs: extract_version
-    if: needs.extract_version.outputs.is_release_commit == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
