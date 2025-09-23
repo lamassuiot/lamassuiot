@@ -9,7 +9,6 @@ import (
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"os"
 
@@ -53,7 +52,7 @@ func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter
 	instance, err := crypto11.Configure(config)
 	if err != nil {
 		lPkcs11.Errorf("could not configure pkcs11 module: %s", err)
-		return nil, errors.New("could not configure driver")
+		return nil, fmt.Errorf("could not configure driver")
 	}
 
 	pkcs11ProviderContext := pkcs11.New(conf.Config.ModulePath)
@@ -257,8 +256,9 @@ func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(curve elliptic.Curv
 	return keyID, renamedSigner, nil
 }
 
+// TODO -> Add implementation (if posible)
 func (hsmContext *pkcs11EngineContext) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
-	return "", nil, errors.New("pkcs11: unsupported key type (ML-DSA")
+	return "", nil, fmt.Errorf("pkcs11: unsupported key type (ML-DSA")
 }
 
 // define a constant for the key ID using ints and iota
@@ -315,6 +315,11 @@ func (hsmContext *pkcs11EngineContext) ImportECDSAPrivateKey(key *ecdsa.PrivateK
 	return "", nil, fmt.Errorf("TODO")
 }
 
+// TODO -> Add implementation (if posible)
+func (hsmContext *pkcs11EngineContext) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("pkcs11: unsupported key type (ML-DSA")
+}
+
 func (hsmContext *pkcs11EngineContext) DeleteKey(keyID string) error {
 	return fmt.Errorf("TODO")
 }
@@ -339,5 +344,5 @@ func findKeyWithAttributes(ctx pkcs11.Ctx, sh pkcs11.SessionHandle, template []*
 		return &newhandles[0], nil
 	}
 
-	return nil, errors.New("object not found")
+	return nil, fmt.Errorf("object not found")
 }
