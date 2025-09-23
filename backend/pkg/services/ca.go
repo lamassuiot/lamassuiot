@@ -1287,6 +1287,8 @@ func (svc *CAServiceBackend) handleCascadeOperations(ctx context.Context, ca *mo
 //     The required variables of the data structure are not valid.
 //   - ErrCAStatus
 //     Cannot delete a CA that is not expired or revoked.
+//   - ErrCascadeDeleteNotAllowed
+//     Cascade delete not allowed by configuration.
 func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.DeleteCAInput) error {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 

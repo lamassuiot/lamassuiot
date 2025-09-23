@@ -21,12 +21,14 @@ import (
 )
 
 type TestServiceBuilder struct {
-	withEventBus bool
-	withVault    bool
-	withDatabase []string
-	withMonitor  bool
-	withService  []Service
-	withSmtp     *config.SMTPServer
+	withEventBus         bool
+	withVault            bool
+	withDatabase         []string
+	withMonitor          bool
+	withService          []Service
+	withSmtp             *config.SMTPServer
+	allowCascadeDelete   bool
+	cascadeDeleteExplSet bool
 }
 
 func (b TestServiceBuilder) WithEventBus() TestServiceBuilder {
@@ -54,8 +56,14 @@ func (b TestServiceBuilder) WithService(services ...Service) TestServiceBuilder 
 	return b
 }
 
-func (b TestServiceBuilder) WithSmtp(config *config.SMTPServer) TestServiceBuilder {
-	b.withSmtp = config
+func (b TestServiceBuilder) WithSmtp(smtp *config.SMTPServer) TestServiceBuilder {
+	b.withSmtp = smtp
+	return b
+}
+
+func (b TestServiceBuilder) WithCascadeDelete(allow bool) TestServiceBuilder {
+	b.allowCascadeDelete = allow
+	b.cascadeDeleteExplSet = true
 	return b
 }
 
@@ -89,7 +97,7 @@ func (b TestServiceBuilder) Build(t *testing.T) (*TestServer, error) {
 		b.withService = []Service{CA}
 	}
 
-	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, b.withSmtp, b.withService, b.withMonitor)
+	testServer, err := AssembleServices(storageConfig, eventBusConf, cryptoConfig, b.withSmtp, b.withService, b.withMonitor, b.allowCascadeDelete)
 	if err != nil {
 		t.Fatalf("could not assemble Server with HTTP server: %s", err)
 	}
@@ -289,7 +297,7 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	}
 }
 
-func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *TestCryptoEngineConfig, eventBus *TestEventBusConfig, monitor bool) (*CATestServer, error) {
+func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *TestCryptoEngineConfig, eventBus *TestEventBusConfig, monitor bool, allowCascadeDelete bool) (*CATestServer, error) {
 	storageEngine.config.LogLevel = cconfig.Trace
 
 	svc, scheduler, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
@@ -308,7 +316,8 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 			Enabled:   monitor,
 			Frequency: "1s",
 		},
-		VAServerDomains: []string{"dev.lamassu.test/api/va"},
+		VAServerDomains:    []string{"dev.lamassu.test/api/va"},
+		AllowCascadeDelete: allowCascadeDelete,
 	}, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
@@ -533,13 +542,13 @@ func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *Tes
 	}, nil
 }
 
-func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, cryptoEngines *TestCryptoEngineConfig, smtpConfig *config.SMTPServer, services []Service, monitor bool) (*TestServer, error) {
+func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, cryptoEngines *TestCryptoEngineConfig, smtpConfig *config.SMTPServer, services []Service, monitor bool, allowCascadeDelete bool) (*TestServer, error) {
 	servicesMap := make(map[Service]interface{})
 
 	beforeEachActions := []func() error{}
 	afterSuiteActions := []func(){}
 
-	caTestServer, err := BuildCATestServer(storageEngine, cryptoEngines, eventBus, monitor)
+	caTestServer, err := BuildCATestServer(storageEngine, cryptoEngines, eventBus, monitor, allowCascadeDelete)
 	servicesMap[CA] = caTestServer
 	if err != nil {
 		return nil, fmt.Errorf("could not build CATestServer: %s", err)

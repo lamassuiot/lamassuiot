@@ -328,8 +328,8 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				}
 
 				err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID:                      enrollCA.ID,
-					DeleteCertificatesCascade: false,
+					CAID:          enrollCA.ID,
+					CascadeDelete: false,
 				})
 				return (*x509.Certificate)(crt.Certificate), err
 			},
@@ -379,8 +379,8 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				}
 
 				err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID:                      importedCALvl1.ID,
-					DeleteCertificatesCascade: false,
+					CAID:          importedCALvl1.ID,
+					CascadeDelete: false,
 				})
 				return nil, err
 			},
@@ -419,8 +419,8 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				}
 
 				err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID:                      ca1.ID,
-					DeleteCertificatesCascade: false,
+					CAID:          ca1.ID,
+					CascadeDelete: false,
 				})
 				return nil, err
 			},
@@ -458,8 +458,8 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				}
 
 				err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID:                      ca1.ID,
-					DeleteCertificatesCascade: false,
+					CAID:          ca1.ID,
+					CascadeDelete: false,
 				})
 				return nil, err
 			},
@@ -3634,7 +3634,7 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 }
 
 func TestDeleteCA(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").WithCascadeDelete(true).Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -3656,8 +3656,8 @@ func TestDeleteCA(t *testing.T) {
 			run: func(caSDK services.CAService) error {
 				//cas := []*models.CACertificate{}
 				err := caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID:                      "DefaulasdadtCAID",
-					DeleteCertificatesCascade: false,
+					CAID:          "DefaulasdadtCAID",
+					CascadeDelete: false,
 				})
 				return err
 			},
@@ -3691,8 +3691,8 @@ func TestDeleteCA(t *testing.T) {
 			run: func(caSDK services.CAService) error {
 				//cas := []*models.CACertificate{}
 				err := caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID:                      DefaultCAID,
-					DeleteCertificatesCascade: false,
+					CAID:          DefaultCAID,
+					CascadeDelete: false,
 				})
 				return err
 			},
@@ -3722,8 +3722,8 @@ func TestDeleteCA(t *testing.T) {
 			run: func(caSDK services.CAService) error {
 				//cas := []*models.CACertificate{}
 				err := caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID:                      DefaultCAID,
-					DeleteCertificatesCascade: false,
+					CAID:          DefaultCAID,
+					CascadeDelete: false,
 				})
 
 				return err
@@ -3731,6 +3731,225 @@ func TestDeleteCA(t *testing.T) {
 			resultCheck: func(err error) error {
 				if !errors.Is(err, errs.ErrCAStatus) {
 					return fmt.Errorf("got unexpected error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/DeleteRootCAWithChildCAs_CascadeTrue",
+			before: func(svc services.CAService) error {
+
+				rootCA, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("failed retrieving default CA: %s", err)
+				}
+
+				// Create child CA
+				_, err = svc.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           "child-ca-test",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "Test Child CA"},
+					CAExpiration: models.Validity{Type: models.Time, Time: rootCA.Certificate.ValidTo},
+					ParentID:     rootCA.ID,
+					ProfileID:    rootCA.ProfileID,
+				})
+				if err != nil {
+					return fmt.Errorf("failed creating child CA: %s", err)
+				}
+
+				// Revoke root CA to allow deletion
+				_, err = svc.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+					CAID:             DefaultCAID,
+					Status:           models.StatusRevoked,
+					RevocationReason: models.RevocationReason(1),
+				})
+				if err != nil {
+					return fmt.Errorf("Error updating the CA status to revoked")
+				}
+
+				return nil
+			},
+			run: func(caSDK services.CAService) error {
+				return caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
+					CAID:          DefaultCAID,
+					CascadeDelete: true,
+				})
+			},
+			resultCheck: func(err error) error {
+				if err != nil {
+					return fmt.Errorf("unexpected error deleting root CA with cascade: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/DeleteRootCAWithChildCAs_CascadeFalse",
+			before: func(svc services.CAService) error {
+
+				rootCA, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("failed retrieving default CA: %s", err)
+				}
+
+				// Create child CA
+				_, err = svc.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           "child-ca-test-2",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "Test Child CA 2"},
+					CAExpiration: models.Validity{Type: models.Time, Time: rootCA.Certificate.ValidTo},
+					ParentID:     rootCA.ID,
+					ProfileID:    rootCA.ProfileID,
+				})
+				if err != nil {
+					return fmt.Errorf("failed creating child CA: %s", err)
+				}
+
+				// Revoke root CA to allow deletion
+				_, err = svc.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+					CAID:             rootCA.ID,
+					Status:           models.StatusRevoked,
+					RevocationReason: models.RevocationReason(1),
+				})
+				if err != nil {
+					return fmt.Errorf("failed revoking root CA: %s", err)
+				}
+
+				return nil
+			},
+			run: func(caSDK services.CAService) error {
+				return caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
+					CAID:          DefaultCAID,
+					CascadeDelete: false,
+				})
+			},
+			resultCheck: func(err error) error {
+				if err != nil {
+					return fmt.Errorf("unexpected error deleting root CA without cascade: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/DeleteMultiLevelHierarchy_CascadeTrue",
+			before: func(svc services.CAService) error {
+
+				rootCA, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("failed retrieving default CA: %s", err)
+				}
+
+				// Create intermediate CA
+				intermediateCA, err := svc.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           "intermediate-ca-hierarchy",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "Test Intermediate CA"},
+					CAExpiration: models.Validity{Type: models.Time, Time: rootCA.Certificate.ValidTo},
+					ParentID:     rootCA.ID,
+					ProfileID:    rootCA.ProfileID,
+				})
+				if err != nil {
+					return fmt.Errorf("failed creating intermediate CA: %s", err)
+				}
+
+				// Create leaf CA
+				_, err = svc.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           "leaf-ca-hierarchy",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "Test Leaf CA"},
+					CAExpiration: models.Validity{Type: models.Time, Time: intermediateCA.Certificate.ValidTo},
+					ParentID:     intermediateCA.ID,
+					ProfileID:    intermediateCA.ProfileID,
+				})
+				if err != nil {
+					return fmt.Errorf("failed creating leaf CA: %s", err)
+				}
+
+				// Revoke root CA to allow deletion
+				_, err = svc.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+					CAID:             rootCA.ID,
+					Status:           models.StatusRevoked,
+					RevocationReason: models.RevocationReason(1),
+				})
+				if err != nil {
+					return fmt.Errorf("failed revoking root CA: %s", err)
+				}
+
+				return nil
+			},
+			run: func(caSDK services.CAService) error {
+				return caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
+					CAID:          DefaultCAID,
+					CascadeDelete: true,
+				})
+			},
+			resultCheck: func(err error) error {
+				if err != nil {
+					return fmt.Errorf("unexpected error deleting multi-level hierarchy: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/VerifyChildCARevocationAfterParentDelete",
+			before: func(svc services.CAService) error {
+
+				rootCA, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("failed retrieving default CA: %s", err)
+				}
+
+				// Create child CA
+				_, err = svc.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           "child-ca-verify",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "Test Child CA Verify"},
+					CAExpiration: models.Validity{Type: models.Time, Time: rootCA.Certificate.ValidTo},
+					ParentID:     rootCA.ID,
+					ProfileID:    rootCA.ProfileID,
+				})
+				if err != nil {
+					return fmt.Errorf("failed creating child CA: %s", err)
+				}
+
+				// Revoke root CA to allow deletion
+				_, err = svc.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+					CAID:             rootCA.ID,
+					Status:           models.StatusRevoked,
+					RevocationReason: models.RevocationReason(1),
+				})
+				if err != nil {
+					return fmt.Errorf("failed revoking root CA: %s", err)
+				}
+
+				return nil
+			},
+			run: func(caSDK services.CAService) error {
+				// Delete root CA without cascade - should revoke child CAs
+				err := caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
+					CAID:          DefaultCAID,
+					CascadeDelete: false,
+				})
+				if err != nil {
+					return err
+				}
+
+				// Verify child CA is revoked
+				childCA, err := caSDK.GetCAByID(context.Background(), services.GetCAByIDInput{
+					CAID: "child-ca-verify",
+				})
+				if err != nil {
+					return fmt.Errorf("child CA should still exist after parent deletion without cascade: %s", err)
+				}
+
+				if childCA.Certificate.Status != models.StatusRevoked {
+					return fmt.Errorf("child CA should be revoked after parent deletion, got status: %s", childCA.Certificate.Status)
+				}
+
+				return nil
+			},
+			resultCheck: func(err error) error {
+				if err != nil {
+					return fmt.Errorf("verification failed: %s", err)
 				}
 				return nil
 			},
@@ -3761,6 +3980,119 @@ func TestDeleteCA(t *testing.T) {
 			err = tc.resultCheck(tc.run(caTest.HttpCASDK))
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
+			}
+		})
+	}
+}
+
+func TestDeleteCA_CascadeDeleteConfigValidation(t *testing.T) {
+	// Test with cascade delete disabled by configuration
+	serverTestDisabled, err := TestServiceBuilder{}.WithDatabase("ca").WithCascadeDelete(false).Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server with cascade delete disabled: %s", err)
+	}
+
+	// Test with cascade delete enabled by configuration
+	serverTestEnabled, err := TestServiceBuilder{}.WithDatabase("ca").WithCascadeDelete(true).Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server with cascade delete enabled: %s", err)
+	}
+
+	var testcases = []struct {
+		name        string
+		server      *TestServer
+		expectError bool
+		errorType   error
+	}{
+		{
+			name:        "Err/CascadeDeleteDisabledByConfig",
+			server:      serverTestDisabled,
+			expectError: true,
+		},
+		{
+			name:        "OK/CascadeDeleteEnabledByConfig",
+			server:      serverTestEnabled,
+			expectError: false,
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			err = tc.server.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
+			}
+
+			caTest := tc.server.CA
+
+			//Init CA Server with 1 CA
+			rootCA, err := initCA(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running initCA: %s", err)
+			}
+
+			// Create a child CA
+			childCA, err := caTest.Service.CreateCA(context.Background(), services.CreateCAInput{
+				KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+				Subject:      models.Subject{CommonName: "TestChildCA"},
+				CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+				ParentID:     rootCA.ID,
+				ProfileID:    rootCA.ProfileID,
+			})
+			if err != nil {
+				t.Fatalf("could not create child CA: %s", err)
+			}
+
+			// Revoke the root CA so it can be deleted
+			_, err = caTest.Service.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+				CAID:             rootCA.ID,
+				Status:           models.StatusRevoked,
+				RevocationReason: models.RevocationReason(0),
+			})
+			if err != nil {
+				t.Fatalf("could not revoke root CA: %s", err)
+			}
+
+			// Try to delete the root CA with cascade delete enabled
+			err = caTest.HttpCASDK.DeleteCA(context.Background(), services.DeleteCAInput{
+				CAID:          rootCA.ID,
+				CascadeDelete: true,
+			})
+
+			t.Logf("DeleteCA returned error: %v", err)
+
+			if tc.expectError {
+				if err == nil {
+					t.Fatalf("expected error about cascade delete not allowed, but got no error")
+				}
+				if !errors.Is(err, errs.ErrCascadeDeleteNotAllowed) {
+					t.Fatalf("expected error about cascade delete not allowed, but got: %v", err)
+				}
+
+				// Verify child CA still exists when cascade delete is disabled
+				_, err = caTest.Service.GetCAByID(context.Background(), services.GetCAByIDInput{
+					CAID: childCA.ID,
+				})
+				if err != nil {
+					t.Fatalf("child CA should still exist after failed cascade delete: %s", err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("expected no error, but got: %v", err)
+				}
+
+				// Verify child CA was deleted when cascade delete is enabled
+				_, err = caTest.Service.GetCAByID(context.Background(), services.GetCAByIDInput{
+					CAID: childCA.ID,
+				})
+				if err == nil {
+					t.Fatalf("child CA should have been deleted with cascade delete enabled")
+				}
+				if !errors.Is(err, errs.ErrCANotFound) {
+					t.Fatalf("expected ErrCANotFound, but got: %v", err)
+				}
 			}
 		})
 	}
