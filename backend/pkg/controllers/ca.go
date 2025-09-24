@@ -1,6 +1,13 @@
 package controllers
 
 import (
+<<<<<<< HEAD
+=======
+	circlSign "cloudflare/circl/sign"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/rsa"
+>>>>>>> b748cf05 (Added CA Sign and Verify support for MLDSA certificates. CRL generation and verification has been fixed)
 	"encoding/base64"
 
 	"github.com/gin-gonic/gin"
@@ -143,6 +150,23 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		}
 	}
 
+<<<<<<< HEAD
+=======
+	var keyType models.KeyType
+	var rsaKey *rsa.PrivateKey
+	var ecKey *ecdsa.PrivateKey
+	var mldsaKey crypto.Signer
+
+	switch key := key.(type) {
+	case *rsa.PrivateKey:
+		rsaKey = key
+	case *ecdsa.PrivateKey:
+		ecKey = key
+	case *circlSign.PrivateKey:
+		mldsaKey = *key
+	}
+
+>>>>>>> b748cf05 (Added CA Sign and Verify support for MLDSA certificates. CRL generation and verification has been fixed)
 	ca, err := r.svc.ImportCA(ctx, services.ImportCAInput{
 		ID:            requestBody.ID,
 		ProfileID:     requestBody.ProfileID,
@@ -155,6 +179,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		KeyType:       keyType,
 		CARSAKey:      rsaKey,
 		CAECKey:       ecKey,
+		CAMLDSAKey:    mldsaKey,
 
 		EngineID:    requestBody.EngineID,
 		CARequestID: requestBody.CARequestID,

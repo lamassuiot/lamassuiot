@@ -105,7 +105,7 @@ type ImportCAInput struct {
 =======
 	CARSAKey      *rsa.PrivateKey
 	CAECKey       *ecdsa.PrivateKey
-	CAMLDSAKey    *crypto.Signer
+	CAMLDSAKey    crypto.Signer
 	KeyType       models.KeyType
 >>>>>>> 0841445c (Added more tests for MLDSA CA creation. Modified the CryptoEngine interface to add the ImportMLDSAPrivateKey operation and added the required changes in the different engines.)
 	EngineID      string

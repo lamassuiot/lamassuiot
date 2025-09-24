@@ -202,6 +202,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			return nil, fmt.Errorf("could not import key: %w", err)
 		}
 
+<<<<<<< HEAD
 		if key.KeyID != skid {
 			key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
 				ID: key.KeyID,
@@ -214,6 +215,17 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 				lFunc.Errorf("could not rename imported key to match SKID %s: %s", skid, err)
 				return nil, fmt.Errorf("could not rename imported key: %w", err)
 			}
+=======
+		if input.CARSAKey != nil {
+			_, _, err = engine.ImportRSAPrivateKey(input.CARSAKey)
+		} else if input.CAECKey != nil {
+			_, _, err = engine.ImportECDSAPrivateKey(input.CAECKey)
+		} else if input.CAMLDSAKey != nil {
+			_, _, err = engine.ImportMLDSAPrivateKey(input.CAMLDSAKey)
+		} else {
+			lFunc.Errorf("key type %s not supported", input.KeyType)
+			return nil, fmt.Errorf("KeyType not supported")
+>>>>>>> b748cf05 (Added CA Sign and Verify support for MLDSA certificates. CRL generation and verification has been fixed)
 		}
 
 		if err != nil {
