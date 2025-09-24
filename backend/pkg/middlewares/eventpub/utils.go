@@ -48,6 +48,6 @@ func NewEventPublisherWithSourceMiddleware(publisher ICloudEventPublisher, sourc
 func (epws *EventPublisherWithSourceMiddleware) PublishCloudEvent(ctx context.Context, payload interface{}) {
 	if ctx.Value(core.LamassuContextKeySource) == nil {
 		ctx = context.WithValue(ctx, core.LamassuContextKeySource, epws.Source)
-		epws.Publisher.PublishCloudEvent(ctx, payload)
 	}
+	epws.Publisher.PublishCloudEvent(ctx, payload)
 }
