@@ -235,6 +235,8 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			_, _, err = engine.ImportRSAPrivateKey(input.CARSAKey)
 		} else if input.CAECKey != nil {
 			_, _, err = engine.ImportECDSAPrivateKey(input.CAECKey)
+		} else if input.CAMLDSAKey != nil {
+			_, _, err = engine.ImportMLDSAPrivateKey(input.CAMLDSAKey)
 		} else {
 			lFunc.Errorf("key type %s not supported", input.KeyType)
 			return nil, fmt.Errorf("KeyType not supported")

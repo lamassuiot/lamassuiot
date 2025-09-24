@@ -2,6 +2,7 @@ package x509engines
 
 import (
 	"context"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/sha512"
@@ -38,6 +39,9 @@ func generateAndImportCA(keyType x509.PublicKeyAlgorithm, engine cryptoengines.C
 
 		_, key, err := engine.ImportECDSAPrivateKey(ecdsaPrivateKey)
 		return caCertificate, key, err
+	case x509.MLDSA:
+		_, key, err := engine.ImportMLDSAPrivateKey(key.(crypto.Signer))
+		return caCertificate, key, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported key type")
 	}
@@ -66,7 +70,16 @@ func TestSignVerify(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to generate and import CA: %s", err)
 	}
+
 	caCertificateECDSA, _, err := generateAndImportCA(x509.ECDSA, engine)
+	if err != nil {
+		t.Fatalf("failed to generate and import CA: %s", err)
+	}
+
+	caCertificateMLDSA, _, err := generateAndImportCA(x509.MLDSA, engine)
+	if err != nil {
+		t.Fatalf("failed to generate and import CA: %s", err)
+	}
 
 	if err != nil {
 		t.Fatalf("failed to generate and import CA: %s", err)
@@ -151,6 +164,12 @@ func TestSignVerify(t *testing.T) {
 			msgType:          models.Raw,
 			signingAlgorithm: "ECDSA_SHA_512",
 			check:            checkValidSignature,
+		},
+		{
+			name:        "OK/MLDSA_PURE",
+			certificate: caCertificateMLDSA,
+			msgType:     models.Raw,
+			check:       checkValidSignature,
 		},
 		{
 			name:             "OK/DIGEST/RSASSA_PSS_SHA_512",

@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	circlSign "cloudflare/circl/sign"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/rsa"
 	"encoding/base64"
@@ -250,12 +252,15 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 	var keyType models.KeyType
 	var rsaKey *rsa.PrivateKey
 	var ecKey *ecdsa.PrivateKey
+	var mldsaKey crypto.Signer
 
 	switch key := key.(type) {
 	case *rsa.PrivateKey:
 		rsaKey = key
 	case *ecdsa.PrivateKey:
 		ecKey = key
+	case *circlSign.PrivateKey:
+		mldsaKey = *key
 	}
 
 	ca, err := r.svc.ImportCA(ctx, services.ImportCAInput{
@@ -266,6 +271,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		KeyType:       keyType,
 		CARSAKey:      rsaKey,
 		CAECKey:       ecKey,
+		CAMLDSAKey:    mldsaKey,
 
 		EngineID:    requestBody.EngineID,
 		CARequestID: requestBody.CARequestID,
