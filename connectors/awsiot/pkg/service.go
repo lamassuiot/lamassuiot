@@ -598,7 +598,7 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateDeviceShadow(ctx context.Conte
 	_, err = svc.DeviceSDK.UpdateDeviceMetadata(ctx, services.UpdateDeviceMetadataInput{
 		ID: input.DeviceID,
 		Patches: chelpers.NewPatchBuilder().
-			Add(chelpers.JSONPointerBuilder(AWSIoTMetadataKey(svc.ConnectorID), "Actions"), deviceMetaAWS.Actions).
+			Add(chelpers.JSONPointerBuilder(AWSIoTMetadataKey(svc.ConnectorID), "actions"), deviceMetaAWS.Actions).
 			Build(),
 	})
 	if err != nil {

@@ -1,7 +1,6 @@
 package headerextractors
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +19,7 @@ func updateContextWithRequestWithRequestID(ctx *gin.Context, headers http.Header
 func updateContextWithRequestWithSource(ctx *gin.Context, headers http.Header) {
 	sourceHeader := headers.Get(models.HttpSourceHeader)
 	if sourceHeader != "" {
-		ctx.Set(core.LamassuContextKeySource, fmt.Sprintf("http-%s", sourceHeader))
+		ctx.Set(core.LamassuContextKeySource, sourceHeader)
 	}
 }
 

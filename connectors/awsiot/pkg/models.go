@@ -99,7 +99,7 @@ type DeviceAWSMetadata struct {
 }
 
 func AWSIoTSource(id string) string {
-	return fmt.Sprintf("lrn://service/lamassuiot-awsiot/%s", id)
+	return fmt.Sprintf("source://lamassu.io/ctx/source/service/awsiot-connector/%s", id)
 }
 
 func AWSIoTMetadataKey(connectorID string) string {
