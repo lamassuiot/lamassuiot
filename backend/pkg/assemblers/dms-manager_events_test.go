@@ -528,6 +528,7 @@ func TestBindIDEvent(t *testing.T) {
 			resultChannel := make(chan *event.Event, 1)
 			newMessages := make(chan *message.Message)
 
+			defer router.Close()
 			defer close(resultChannel)
 			defer close(newMessages)
 

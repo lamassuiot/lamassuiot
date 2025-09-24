@@ -27,7 +27,7 @@ func TestUpdateContextWithRequest(t *testing.T) {
 
 	// Verify that the source is correctly set in the context
 	source := ctx.Value(core.LamassuContextKeySource)
-	if !strings.HasPrefix(source.(string), "http-test-source") {
+	if !strings.HasPrefix(source.(string), "test-source") {
 		t.Errorf("UpdateContextWithRequest did not set the correct source in the context. Expected: %s, Got: %v", "test-source", source)
 	}
 
