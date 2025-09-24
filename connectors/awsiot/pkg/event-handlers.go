@@ -206,7 +206,7 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCl
 		}
 	} else if dmsAwsAutomationConfig.RegistrationMode == AutomaticAWSIoTRegistrationMode {
 		policiesToRegisterOrUpdate := []AWSIoTPolicy{}
-		//check if polcies have changed
+		//check if policies have changed
 		if isUpdateEvent {
 			// check if previous version had AWS Key
 			considerOldConfig := false
