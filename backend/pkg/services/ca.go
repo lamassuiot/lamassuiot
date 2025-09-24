@@ -1662,6 +1662,10 @@ func importCAValidation(sl validator.StructLevel) {
 			sl.ReportError(ca.CARSAKey, "CARSAKey", "CARSAKey", "PrivateKeyAndCertificateNotMatch", "")
 			sl.ReportError(ca.CAECKey, "CAECKey", "CAECKey", "PrivateKeyAndCertificateNotMatch", "")
 		}
+
+		if ca.ProfileID == "" {
+			sl.ReportError(ca.ProfileID, "ProfileID", "ProfileID", "ProfileIDRequiredForImportedWithKey", "")
+		}
 	}
 }
 
