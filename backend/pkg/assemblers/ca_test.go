@@ -3114,28 +3114,17 @@ func TestImportCA(t *testing.T) {
 		resultCheck func(*models.CACertificate, error) error
 	}{
 		{
-			name:   "OK/ImportingExternalCA",
+			name:   "OK/ImportingCAWithoutKey",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				ca, _, err := generateSelfSignedCA(x509.RSA)
-				var duration time.Duration = 100
 				if err != nil {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)
-				}
-
-				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
-					Profile: models.IssuanceProfile{
-						Validity: models.Validity{Type: models.Duration, Duration: (models.TimeDuration)(duration)},
-					},
-				})
-				if err != nil {
-					t.Fatalf("failed creating issuance profile: %s", err)
 				}
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:            "id-1234",
 					CAType:        models.CertificateTypeExternal,
-					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
 				})
 
@@ -3150,7 +3139,7 @@ func TestImportCA(t *testing.T) {
 			},
 		},
 		{
-			name:   "OK/ImportingExternalCA",
+			name:   "OK/ImportingCAWithKey",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				ca, key, err := generateSelfSignedCA(x509.RSA)
