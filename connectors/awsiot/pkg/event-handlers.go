@@ -204,6 +204,49 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCl
 			logger.Error(err)
 			return err
 		}
+	} else if dmsAwsAutomationConfig.RegistrationMode == AutomaticAWSIoTRegistrationMode {
+		policiesToRegisterOrUpdate := []AWSIoTPolicy{}
+		//check if polcies have changed
+		if isUpdateEvent {
+			// check if previous version had AWS Key
+			considerOldConfig := false
+			var oldIoTConfig IotAWSDMSMetadata
+			hasKey, err := helpers.GetMetadataToStruct(updatedDMS.Previous.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &oldIoTConfig)
+			if hasKey && err == nil {
+				considerOldConfig = true
+			}
+
+			if considerOldConfig {
+				// only add or update policies that are new or have changed
+				for _, newPolicy := range dmsAwsAutomationConfig.Policies {
+					policyIdx := slices.IndexFunc(oldIoTConfig.Policies, func(p AWSIoTPolicy) bool {
+						return p.PolicyName == newPolicy.PolicyName
+					})
+					if policyIdx == -1 {
+						// we have not found the policy, so it's new
+						policiesToRegisterOrUpdate = append(policiesToRegisterOrUpdate, newPolicy)
+					} else {
+						// we have found the policy, check if it has changed
+						if newPolicy.PolicyDocument != oldIoTConfig.Policies[policyIdx].PolicyDocument {
+							policiesToRegisterOrUpdate = append(policiesToRegisterOrUpdate, newPolicy)
+						}
+					}
+				}
+			} else {
+				policiesToRegisterOrUpdate = dmsAwsAutomationConfig.Policies
+			}
+		} else {
+			policiesToRegisterOrUpdate = dmsAwsAutomationConfig.Policies
+		}
+
+		err = svc.RegisterUpdatePolicies(context.Background(), RegisterUpdatePoliciesInput{
+			Policies: policiesToRegisterOrUpdate,
+		})
+		if err != nil {
+			err = fmt.Errorf("something went wrong while registering policies for DMS %s: %s", dms.ID, err)
+			logger.Error(err)
+			return err
+		}
 	}
 
 	if isUpdateEvent {
