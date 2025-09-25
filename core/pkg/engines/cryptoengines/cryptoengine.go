@@ -2,6 +2,7 @@ package cryptoengines
 
 import (
 	"crypto"
+	"crypto/ed25519"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rsa"
@@ -25,6 +26,7 @@ type CryptoEngine interface {
 	ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error)
 	ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (string, crypto.Signer, error)
 	ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error)
+	ImportEd25519PrivateKey(key ed25519.PrivateKey) (string, crypto.Signer, error)
 
 	DeleteKey(keyID string) error
 

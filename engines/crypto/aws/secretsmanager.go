@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/x509"
@@ -196,6 +197,11 @@ func (engine *AWSSecretsManagerCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.Pr
 // TODO -> Add implementation (if posible)
 func (engine *AWSSecretsManagerCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
 	return "", nil, errors.New("aws/secretsmanager: unsupported key type (ML-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (engine *AWSSecretsManagerCryptoEngine) ImportEd25519PrivateKey(key ed25519.PrivateKey) (string, crypto.Signer, error) {
+	return "", nil, errors.New("aws/secretsmanager: unsupported key type (Ed25519)")
 }
 
 func (engine *AWSSecretsManagerCryptoEngine) importKey(key crypto.Signer) (string, crypto.Signer, error) {

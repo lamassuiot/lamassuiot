@@ -6,6 +6,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -291,6 +292,11 @@ func (p *AWSKMSCryptoEngine) ImportECDSAPrivateKey(key *ecdsa.PrivateKey) (strin
 // TODO -> Add implementation (if posible)
 func (p *AWSKMSCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
 	return "", nil, errors.New("awskms: unsupported key type (ML-DSA)")
+}
+
+// TODO -> Add implementation (if posible)
+func (p *AWSKMSCryptoEngine) ImportEd25519PrivateKey(key ed25519.PrivateKey) (string, crypto.Signer, error) {
+	return "", nil, errors.New("awskms: unsupported key type (Ed25519)")
 }
 
 func (p *AWSKMSCryptoEngine) importKey(key crypto.Signer, spec types.KeySpec) (string, crypto.Signer, error) {

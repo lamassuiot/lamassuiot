@@ -3,6 +3,7 @@ package filesystem
 import (
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/x509"
@@ -78,6 +79,8 @@ func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfig
 				},
 				{
 					Type: models.KeyType(x509.Ed25519),
+					Sizes: []int{
+					},
 				},
 			},
 		},
@@ -224,6 +227,19 @@ func (engine *FilesystemCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (
 	}
 
 	engine.logger.Debugf("MLDSA key successfully imported")
+	return keyID, signer, nil
+}
+
+func (engine *FilesystemCryptoEngine) ImportEd25519PrivateKey(key ed25519.PrivateKey) (string, crypto.Signer, error) {
+	engine.logger.Debugf("importing E25519 private key")
+
+	keyID, signer, err := engine.importKey(key)
+	if err != nil {
+		engine.logger.Errorf("could not import E25519 key: %s", err)
+		return "", nil, err
+	}
+
+	engine.logger.Debugf("E25519 key successfully imported")
 	return keyID, signer, nil
 }
 
