@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -42,6 +43,11 @@ func (m *mockCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve elli
 
 func (m *mockCryptoEngine) CreateMLDSAPrivateKey(ctx context.Context, dimensions int) (string, crypto.Signer, error) {
 	return "", nil, errors.New("mock: ML-DSA not implemented")
+}
+
+func (m *mockCryptoEngine) CreateEd25519PrivateKey() (string, crypto.Signer, error) {
+	_, key, err := ed25519.GenerateKey(rand.Reader)
+	return "", key, err
 }
 
 func (m *mockCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {

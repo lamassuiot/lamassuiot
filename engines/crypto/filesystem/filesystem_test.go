@@ -40,6 +40,7 @@ func TestVaultCryptoEngine(t *testing.T) {
 		{"CreateECDSAPrivateKey", cryptoengines.SharedTestCreateECDSAPrivateKey},
 		{"CreateRSAPrivateKey", cryptoengines.SharedTestCreateRSAPrivateKey},
 		{"CreateMLDSA44PrivateKey", cryptoengines.SharedTestCreateMLDSAPrivateKey},
+		{"CreateEd25519PrivateKey", cryptoengines.SharedTestCreateEd25519PrivateKey},
 		{"ImportRSAPrivateKey", cryptoengines.SharedTestImportRSAPrivateKey},
 		{"ImportECDSAPrivateKey", cryptoengines.SharedTestImportECDSAPrivateKey},
 		{"ImportMLDSAPrivateKey", cryptoengines.SharedTestImportMLDSAPrivateKey},
