@@ -679,7 +679,7 @@ func TestSignCertificate(t *testing.T) {
 				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:        caIDToSign,
 					CertRequest: (*models.X509CertificateRequest)(csr),
-					IssuanceProfile: models.IssuanceProfile{
+					IssuanceProfile: &models.IssuanceProfile{
 						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
@@ -739,7 +739,7 @@ func TestSignCertificate(t *testing.T) {
 				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:        caIDToSign,
 					CertRequest: (*models.X509CertificateRequest)(csr),
-					IssuanceProfile: models.IssuanceProfile{
+					IssuanceProfile: &models.IssuanceProfile{
 						Validity:     validity,
 						SignAsCA:     false,
 						HonorSubject: false,
@@ -802,7 +802,7 @@ func TestSignCertificate(t *testing.T) {
 				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:        caIDToSign,
 					CertRequest: (*models.X509CertificateRequest)(csr),
-					IssuanceProfile: models.IssuanceProfile{
+					IssuanceProfile: &models.IssuanceProfile{
 						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
@@ -873,7 +873,7 @@ func TestSignCertificate(t *testing.T) {
 				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:        caIDToSign,
 					CertRequest: (*models.X509CertificateRequest)(csr),
-					IssuanceProfile: models.IssuanceProfile{
+					IssuanceProfile: &models.IssuanceProfile{
 						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
@@ -929,7 +929,7 @@ func TestSignCertificate(t *testing.T) {
 				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:        caIDToSign,
 					CertRequest: (*models.X509CertificateRequest)(csr),
-					IssuanceProfile: models.IssuanceProfile{
+					IssuanceProfile: &models.IssuanceProfile{
 						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
@@ -1590,7 +1590,7 @@ func TestSignCertificate(t *testing.T) {
 				return caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:        "myCA",
 					CertRequest: (*models.X509CertificateRequest)(csr),
-					IssuanceProfile: models.IssuanceProfile{
+					IssuanceProfile: &models.IssuanceProfile{
 						Validity:        validity,
 						SignAsCA:        false,
 						HonorSubject:    true,
@@ -2288,7 +2288,7 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 				cert, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
 					CAID:        DefaultCAID,
 					CertRequest: (*models.X509CertificateRequest)(csr),
-					IssuanceProfile: models.IssuanceProfile{
+					IssuanceProfile: &models.IssuanceProfile{
 						SignAsCA:        false,
 						HonorSubject:    true,
 						HonorExtensions: true,

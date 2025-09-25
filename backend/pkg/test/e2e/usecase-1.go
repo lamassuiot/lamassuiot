@@ -257,7 +257,7 @@ func RunUseCase1(input UseCase1Input) error {
 	bootSigedCrt, err := caClient.SignCertificate(context.Background(), services.SignCertificateInput{
 		CAID:        ca2.ID,
 		CertRequest: (*models.X509CertificateRequest)(bootCsr),
-		IssuanceProfile: models.IssuanceProfile{
+		IssuanceProfile: &models.IssuanceProfile{
 			Validity: models.Validity{},
 			SignAsCA: false,
 			ExtendedKeyUsages: []models.X509ExtKeyUsage{

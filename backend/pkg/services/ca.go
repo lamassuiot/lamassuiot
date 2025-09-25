@@ -708,11 +708,12 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		}
 
 		skid = caCSR.KeyId
+		issuanceProfile := engine.GetDefaultCAIssuanceProfile(ctx, input.CAExpiration)
 
 		signedCA, err := svc.SignCertificate(ctx, services.SignCertificateInput{
 			CAID:            input.ParentID,
 			CertRequest:     &caCSR.CSR,
-			IssuanceProfile: engine.GetDefaultCAIssuanceProfile(ctx, input.CAExpiration),
+			IssuanceProfile: &issuanceProfile,
 		})
 		if err != nil {
 			lFunc.Errorf("could not sign CA %s certificate: %s", input.Subject.CommonName, err)
@@ -1195,14 +1196,26 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		return nil, err
 	}
 
-	profile := &input.IssuanceProfile
+	var profile *models.IssuanceProfile
 
-	if input.IssuanceProfileID != "" {
+	// Give preference to the embedded IssuanceProfile if it's present
+	if input.IssuanceProfile != nil {
+		profile = input.IssuanceProfile
+	} else if input.IssuanceProfileID != "" {
 		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
 			ProfileID: input.IssuanceProfileID,
 		})
 		if err != nil {
 			lFunc.Errorf("could not get issuance profile %s: %s", input.IssuanceProfileID, err)
+			return nil, err
+		}
+	} else {
+		// Use the CA default profile
+		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+			ProfileID: ca.ProfileID,
+		})
+		if err != nil {
+			lFunc.Errorf("could not get default ca issuance profile %s: %s", ca.ProfileID, err)
 			return nil, err
 		}
 	}
