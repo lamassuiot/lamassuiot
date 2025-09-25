@@ -186,7 +186,7 @@ type DeleteCAInput struct {
 type SignCertificateInput struct {
 	CAID              string                         `validate:"required"`
 	CertRequest       *models.X509CertificateRequest `validate:"required"`
-	IssuanceProfile   models.IssuanceProfile
+	IssuanceProfile   *models.IssuanceProfile
 	IssuanceProfileID string
 }
 

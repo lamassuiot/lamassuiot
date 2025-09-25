@@ -183,6 +183,65 @@ func TestDeleteCertificateService(t *testing.T) {
 	}
 }
 
+func TestSignCertificateWithDefaultProfile(t *testing.T) {
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	caTest := serverTest.CA
+
+	// Create CA
+	ca, _, err := createCAAndCertificate(caTest.HttpCASDK)
+	if err != nil {
+		t.Fatalf("failed to create CA and certificate: %s", err)
+	}
+	// Generate key and CSR for certificate
+	key, err := chelpers.GenerateRSAKey(2048)
+	if err != nil {
+		t.Fatalf("failed to generate RSA key: %s", err)
+	}
+
+	csr, err := chelpers.GenerateCertificateRequest(
+		models.Subject{
+			CommonName:       "test-cert",
+			Country:          "ES",
+			Organization:     "lamassu",
+			OrganizationUnit: "iot",
+			State:            "lamassu-world",
+			Locality:         "lamassu-city",
+		},
+		key,
+	)
+	if err != nil {
+		t.Fatalf("failed to generate CSR: %s", err)
+	}
+
+	cert, err := caTest.HttpCASDK.SignCertificate(context.Background(), services.SignCertificateInput{
+		CAID:        ca.ID,
+		CertRequest: (*models.X509CertificateRequest)(csr),
+	})
+	if err != nil {
+		t.Fatalf("failed to sign certificate: %s", err)
+	}
+
+	// Check certificate validity
+	if cert.Subject.CommonName != "test-cert" {
+		t.Errorf("expected CommonName 'test-cert', got '%s'", cert.Subject.CommonName)
+	}
+	if cert.Issuer.CommonName != "TestCA" {
+		t.Errorf("expected Issuer CommonName 'TestCA', got '%s'", cert.Issuer.CommonName)
+	}
+
+	// Default profile duration is 12 hours
+	expectedDuration := 12 * time.Hour
+	actualDuration := cert.Certificate.NotAfter.Sub(cert.Certificate.NotBefore)
+	if actualDuration != expectedDuration {
+		t.Errorf("expected certificate duration %s, got %s", expectedDuration, actualDuration)
+	}
+
+}
+
 // Helper function to create a CA and issue a certificate
 func createCAAndCertificate(caSDK services.CAService) (*models.CACertificate, *models.Certificate, error) {
 	caDur := models.TimeDuration(time.Hour * 24)
@@ -234,7 +293,7 @@ func createCAAndCertificate(caSDK services.CAService) (*models.CACertificate, *m
 	cert, err := caSDK.SignCertificate(context.Background(), services.SignCertificateInput{
 		CAID:        ca.ID,
 		CertRequest: (*models.X509CertificateRequest)(csr),
-		IssuanceProfile: models.IssuanceProfile{
+		IssuanceProfile: &models.IssuanceProfile{
 			Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
 		},
 	})
