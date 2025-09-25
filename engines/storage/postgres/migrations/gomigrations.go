@@ -2,6 +2,7 @@ package migrations
 
 import (
 	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/ca"
+	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/devicemanager"
 	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3/migrations/dmsmanager"
 )
 
@@ -13,6 +14,8 @@ func RegisterGoMigrations(dbname string) {
 		ca.Register20250226114600CaAddKids()
 		ca.Register20250908074250AddProfileId()
 		ca.Register20250915090500UpdateSkiAki()
+	case "devicemanager":
+		devicemanager.Register20250925120000RemoveSerialHyphens()
 	case "dmsmanager":
 		dmsmanager.Register20241230124809ServerkeygenRevokereenroll()
 		dmsmanager.Register20250612100530ESTVerifyCSRSignature()
