@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rsa"
 	"crypto/x509"
@@ -324,6 +325,11 @@ func (hsmContext *pkcs11EngineContext) ImportECDSAPrivateKey(key *ecdsa.PrivateK
 // TODO -> Add implementation (if posible)
 func (hsmContext *pkcs11EngineContext) ImportMLDSAPrivateKey(key crypto.Signer) (string, crypto.Signer, error) {
 	return "", nil, fmt.Errorf("pkcs11: unsupported key type (ML-DSA")
+}
+
+// TODO -> Add implementation (if posible)
+func (hsmContext *pkcs11EngineContext) ImportEd25519PrivateKey(key ed25519.PrivateKey) (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("pkcs11: unsupported key type (Ed25519)")
 }
 
 func (hsmContext *pkcs11EngineContext) DeleteKey(keyID string) error {
