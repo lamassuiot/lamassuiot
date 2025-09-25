@@ -6,6 +6,7 @@ import (
 	"cloudflare/circl/sign/mldsa/mldsa87"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -100,6 +101,25 @@ func (p *SoftwareCryptoEngine) CreateMLDSAPrivateKey(dimensions int) (string, cr
 	return encDigest, key, nil
 }
 
+func (p *SoftwareCryptoEngine) CreateEd25519PrivateKey() (string, crypto.Signer, error) {
+	lFunc := p.logger.WithField("func", "Ed25519")
+	lFunc.Debugf("creating Ed25519 key")
+
+	_, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		lFunc.Errorf("could not create Ed25519 key: %s", err)
+		return "", nil, err
+	}
+
+	encDigest, err := p.EncodePKIXPublicKeyDigest(key.Public())
+	if err != nil {
+		lFunc.Errorf("could not encode public key digest: %s", err)
+		return "", nil, err
+	}
+
+	return encDigest, key, nil
+}
+
 func (p *SoftwareCryptoEngine) MarshalAndEncodePKIXPrivateKey(key interface{}) (string, error) {
 	p.logger.Debugf("marshaling and encoding PKIX private key")
 
@@ -172,6 +192,8 @@ func (p *SoftwareCryptoEngine) ParsePrivateKey(pemBytes []byte) (crypto.Signer, 
 	case *mldsa65.PrivateKey:
 		return key, nil
 	case *mldsa87.PrivateKey:
+		return key, nil
+	case ed25519.PrivateKey:
 		return key, nil
 	default:
 		return nil, errors.New("unsupported key type")

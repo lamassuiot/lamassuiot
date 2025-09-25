@@ -261,6 +261,11 @@ func (hsmContext *pkcs11EngineContext) CreateMLDSAPrivateKey(dimensions int) (st
 	return "", nil, fmt.Errorf("pkcs11: unsupported key type (ML-DSA")
 }
 
+// TODO -> Add implementation (if posible)
+func (p *pkcs11EngineContext) CreateEd25519PrivateKey() (string, crypto.Signer, error) {
+	return "", nil, fmt.Errorf("awskms: unsupported key type (Ed25519)")
+}
+
 // define a constant for the key ID using ints and iota
 
 type PKCS11KeyID int

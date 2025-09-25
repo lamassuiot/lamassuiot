@@ -6,6 +6,7 @@ import (
 	"cloudflare/circl/sign/mldsa/mldsa87"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -55,6 +56,11 @@ func (m *mockCryptoEngine) CreateMLDSAPrivateKey(dimensions int) (string, crypto
 	default:
 		err = errors.New("unsupported dimensions")
 	}
+	return "", key, err
+}
+
+func (m *mockCryptoEngine) CreateEd25519PrivateKey() (string, crypto.Signer, error) {
+	_, key, err := ed25519.GenerateKey(rand.Reader)
 	return "", key, err
 }
 

@@ -225,6 +225,11 @@ func (engine *VaultKV2Engine) CreateMLDSAPrivateKey(dimensions int) (string, cry
 	return "", nil, errors.New("vaultvk2: unsupported key type (ML-DSA)")
 }
 
+// TODO -> Add implementation (if posible)
+func (engine *VaultKV2Engine) CreateEd25519PrivateKey() (string, crypto.Signer, error) {
+	return "", nil, errors.New("vaultvk2: unsupported key type (Ed25519)")
+}
+
 func (engine *VaultKV2Engine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
 	engine.logger.Debugf("importing RSA private key")
 
