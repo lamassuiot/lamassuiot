@@ -44,6 +44,7 @@ func TestVaultCryptoEngine(t *testing.T) {
 		{"ImportRSAPrivateKey", cryptoengines.SharedTestImportRSAPrivateKey},
 		{"ImportECDSAPrivateKey", cryptoengines.SharedTestImportECDSAPrivateKey},
 		{"ImportMLDSAPrivateKey", cryptoengines.SharedTestImportMLDSAPrivateKey},
+		{"ImportEd25519PrivateKey", cryptoengines.SharedTestImportEd25519PrivateKey},
 		{"SignRSA_PSS", cryptoengines.SharedTestRSAPSSSignature},
 		{"SignRSA_PKCS1v1_5", cryptoengines.SharedTestRSAPKCS1v15Signature},
 		{"SignECDSA", cryptoengines.SharedTestECDSASignature},

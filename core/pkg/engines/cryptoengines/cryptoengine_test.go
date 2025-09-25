@@ -76,6 +76,10 @@ func (m *mockCryptoEngine) ImportMLDSAPrivateKey(key crypto.Signer) (string, cry
 	return "", key, nil
 }
 
+func (m *mockCryptoEngine) ImportEd25519PrivateKey(key ed25519.PrivateKey) (string, crypto.Signer, error) {
+	return "", key, nil
+}
+
 func (m *mockCryptoEngine) DeleteKey(keyID string) error {
 	return nil
 }
