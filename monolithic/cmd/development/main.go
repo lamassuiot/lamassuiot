@@ -291,6 +291,9 @@ func main() {
 		}
 
 		eventBus = rabbitmqSubsystem.Config.(cconfig.EventBusEngine)
+		// make a copy for DLQ using deep copy
+		dlqEventBus = eventBus
+		maps.Copy(dlqEventBus.Config, eventBus.Config)
 
 		adminPort = (*rabbitmqSubsystem.Extra)["adminPort"].(int)
 		basicAuth := eventBus.Config["basic_auth"].(map[string]interface{})
