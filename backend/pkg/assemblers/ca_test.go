@@ -145,6 +145,46 @@ func TestCreateCA(t *testing.T) {
 			},
 		},
 		{
+			name:   "OK/KeyType-MLDSA",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    profile.ID,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/KeyType-Ed25519",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    profile.ID,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
 			name:   "OK/Expiration-Duration",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
