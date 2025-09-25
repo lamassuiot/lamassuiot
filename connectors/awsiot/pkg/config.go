@@ -6,8 +6,9 @@ import (
 )
 
 type ConnectorServiceConfig struct {
-	Logs               cconfig.Logging        `mapstructure:"logs"`
-	SubscriberEventBus cconfig.EventBusEngine `mapstructure:"subscriber_event_bus"`
+	Logs                  cconfig.Logging        `mapstructure:"logs"`
+	SubscriberEventBus    cconfig.EventBusEngine `mapstructure:"subscriber_event_bus"`
+	SubscriberDLQEventBus cconfig.EventBusEngine `mapstructure:"subscriber_dlq_event_bus"`
 
 	DMSManagerClient struct {
 		cconfig.HTTPClient `mapstructure:",squash"`

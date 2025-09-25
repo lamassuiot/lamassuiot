@@ -57,7 +57,7 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 	if conf.SubscriberEventBus.Enabled {
 		log.Infof("Event Bus is enabled")
 
-		dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberEventBus, "alerts", lMessaging)
+		dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberDLQEventBus, "alerts", lMessaging)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}

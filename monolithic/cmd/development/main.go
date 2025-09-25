@@ -281,6 +281,8 @@ func main() {
 		Config:   make(map[string]interface{}),
 	}
 
+	dlqEventBus := eventBus
+
 	if !*disableEventbus && !*useAwsEventbus {
 		fmt.Println(">> launching docker: RabbitMQ ...")
 		rabbitmqSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.RabbitMQ).Run(*standardDockerPorts)
@@ -292,6 +294,8 @@ func main() {
 
 		adminPort = (*rabbitmqSubsystem.Extra)["adminPort"].(int)
 		basicAuth := eventBus.Config["basic_auth"].(map[string]interface{})
+
+		dlqEventBus.Config["exchange"] = "lamassu-events-dlq"
 
 		fmt.Printf(" 	-- rabbitmq UI port: %d\n", adminPort)
 		fmt.Printf(" 	-- rabbitmq amqp port: %d\n", eventBus.Config["port"].(int))
@@ -399,16 +403,17 @@ func main() {
 	pluglableStorageConfig := &postgresStorageConfig
 
 	conf := pkg.MonolithicConfig{
-		Logs:               cconfig.Logging{Level: cconfig.Debug},
-		UIPort:             uiPort,
-		VAStorageDir:       "/tmp/lamassuiot/va",
-		SubscriberEventBus: eventBus,
-		PublisherEventBus:  eventBus,
-		Domains:            []string{"dev.lamassu.test", "localhost"},
-		GatewayPortHttps:   8443,
-		GatewayPortHttp:    8080,
-		AssemblyMode:       pkg.Http,
-		CryptoEngines:      cryptoEnginesConfig.CryptoEngines,
+		Logs:                  cconfig.Logging{Level: cconfig.Debug},
+		UIPort:                uiPort,
+		VAStorageDir:          "/tmp/lamassuiot/va",
+		SubscriberEventBus:    eventBus,
+		SubscriberDLQEventBus: dlqEventBus,
+		PublisherEventBus:     eventBus,
+		Domains:               []string{"dev.lamassu.test", "localhost"},
+		GatewayPortHttps:      8443,
+		GatewayPortHttp:       8080,
+		AssemblyMode:          pkg.Http,
+		CryptoEngines:         cryptoEnginesConfig.CryptoEngines,
 		Monitoring: cconfig.MonitoringJob{
 			Enabled:   !*disableMonitor,
 			Frequency: "2m",
