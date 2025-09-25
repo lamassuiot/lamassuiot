@@ -46,6 +46,16 @@ func SharedTestCreateMLDSAPrivateKey(t *testing.T, engine CryptoEngine) {
 	assert.Equal(t, signer.Public(), signer2.Public())
 }
 
+func SharedTestCreateEd25519PrivateKey(t *testing.T, engine CryptoEngine) {
+	keyID, signer, err := engine.CreateEd25519PrivateKey()
+	assert.NoError(t, err)
+
+	signer2, err := engine.GetPrivateKeyByID(keyID)
+	assert.NoError(t, err)
+
+	assert.Equal(t, signer.Public(), signer2.Public())
+}
+
 func SharedTestDeleteKey(t *testing.T, engine CryptoEngine) {
 	ctx := context.Background()
 	keyID, _, err := engine.CreateECDSAPrivateKey(ctx, elliptic.P256())
