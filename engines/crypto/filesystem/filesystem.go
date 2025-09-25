@@ -76,6 +76,9 @@ func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfig
 						87,
 					},
 				},
+				{
+					Type: models.KeyType(x509.Ed25519),
+				},
 			},
 		},
 	}, nil
@@ -165,6 +168,19 @@ func (engine *FilesystemCryptoEngine) CreateMLDSAPrivateKey(dimensions int) (str
 	}
 
 	engine.logger.Debugf("ML-DSA-%q key successfully generated", dimensions)
+	return engine.importKey(key)
+}
+
+func (engine *FilesystemCryptoEngine) CreateEd25519PrivateKey() (string, crypto.Signer, error) {
+	engine.logger.Debugf("creating Ed25519 private key")
+
+	_, key, err := engine.softCryptoEngine.CreateEd25519PrivateKey()
+	if err != nil {
+		engine.logger.Errorf("could not Ed25519 private key: %s", err)
+		return "", nil, err
+	}
+
+	engine.logger.Debugf("Ed25519 key successfully generated")
 	return engine.importKey(key)
 }
 

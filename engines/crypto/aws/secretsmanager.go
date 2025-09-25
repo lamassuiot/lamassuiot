@@ -162,6 +162,11 @@ func (engine *AWSSecretsManagerCryptoEngine) CreateMLDSAPrivateKey(dimensions in
 	return "", nil, errors.New("aws/secretsmanager: unsupported key type (ML-DSA)")
 }
 
+// TODO -> Add implementation (if posible)
+func (p *AWSSecretsManagerCryptoEngine) CreateEd25519PrivateKey() (string, crypto.Signer, error) {
+	return "", nil, errors.New("awskms: unsupported key type (Ed25519)")
+}
+
 func (engine *AWSSecretsManagerCryptoEngine) ImportRSAPrivateKey(key *rsa.PrivateKey) (string, crypto.Signer, error) {
 	engine.logger.Debugf("importing RSA private key")
 
