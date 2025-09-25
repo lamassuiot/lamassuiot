@@ -6,6 +6,7 @@ import (
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
 
 	"crypto"
+	"crypto/ed25519"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -326,6 +327,11 @@ func GenerateMLDSAKey(dimensions int) (crypto.Signer, error) {
 	default:
 		err = errors.New("unsupported dimensions")
 	}
+	return key, err
+}
+
+func GenerateEd25519Key() (crypto.Signer, error) {
+	_, key, err := ed25519.GenerateKey(rand.Reader)
 	return key, err
 }
 
