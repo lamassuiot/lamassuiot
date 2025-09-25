@@ -97,6 +97,16 @@ func (engine X509Engine) GenerateKeyPair(ctx context.Context, keyMetadata models
 
 		lFunc.Debugf("cryptoengine successfully generated MLDSA key")
 		return keyID, signer, nil
+	} else if models.KeyType(keyMetadata.Type) == models.KeyType(x509.Ed25519) {
+		lFunc.Debugf("requesting cryptoengine instance for Ed25519 key generation")
+		keyID, signer, err := engine.cryptoEngine.CreateEd25519PrivateKey()
+		if err != nil {
+			lFunc.Errorf("cryptoengine instance failed while generating Ed25519 key: %s", err)
+			return "", nil, err
+		}
+
+		lFunc.Debugf("cryptoengine successfully generated MLDSA key")
+		return keyID, signer, nil
 	} else {
 		lFunc.Errorf("unsupported key type requested: %s", keyMetadata.Type)
 		return "", nil, errors.New("unsupported key type requested")
