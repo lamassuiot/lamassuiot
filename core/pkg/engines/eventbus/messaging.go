@@ -37,7 +37,7 @@ func NewMessageRouter(logger *logrus.Entry, dlqPub message.Publisher) (*message.
 		middleware.CorrelationID,
 
 		// The handler function is retried if it returns an error.
-		// After MaxRetries, it's up to the PubSub to resend it, marck as ACK or NACK.
+		// After MaxRetries, it's up to the PubSub to resend it, mark as ACK or NACK.
 		middleware.Retry{
 			MaxRetries:      3,
 			InitialInterval: time.Second * 2,
