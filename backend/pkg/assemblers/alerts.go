@@ -54,10 +54,14 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 		SmtpServerConfig: conf.SMTPConfig,
 	})
 
-	if conf.SubscriberEventBus.Enabled {
+	if conf.SubscriberEventBus.Enabled && !conf.SubscriberDLQEventBus.Enabled {
+		lMessaging.Fatalf("Subscriber Event Bus is enabled but DLQ is not enabled. This is not supported. Exiting")
+	}
+
+	if conf.SubscriberEventBus.Enabled && conf.SubscriberDLQEventBus.Enabled {
 		log.Infof("Event Bus is enabled")
 
-		dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberEventBus, "alerts", lMessaging)
+		dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberDLQEventBus, "alerts", lMessaging)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
