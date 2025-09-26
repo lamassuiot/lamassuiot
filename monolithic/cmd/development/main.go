@@ -212,7 +212,7 @@ func main() {
 
 	fmt.Println(">> launching docker: Postgres ...")
 	posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
-	posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va"})
+	posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms"})
 	backend, err := posgresSubsystem.Run(*standardDockerPorts)
 	if err != nil {
 		log.Fatalf("could not launch Postgres: %s", err)

@@ -25,6 +25,7 @@ const (
 	DMS_DB_NAME    = "dmsmanager"
 	ALERTS_DB_NAME = "alerts"
 	VA_DB_NAME     = "va"
+	KMS_DB_NAME    = "kms"
 )
 
 type PostgresStorageEngine struct {
@@ -224,4 +225,23 @@ func (s *PostgresStorageEngine) initialiceSubscriptionsStorage() error {
 	}
 
 	return nil
+}
+
+func (s *PostgresStorageEngine) GetKMSStorage() (storage.KMSKeysRepo, error) {
+	if s.KMS == nil {
+		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, KMS_DB_NAME)
+		if err != nil {
+			return nil, fmt.Errorf("could not create postgres client: %s", err)
+		}
+
+		m := NewMigrator(s.logger, psqlCli)
+		m.MigrateToLatest()
+
+		kmsStore, err := NewKMSPostgresRepository(s.logger, psqlCli)
+		if err != nil {
+			return nil, fmt.Errorf("could not initialize postgres DMS client: %s", err)
+		}
+		s.KMS = kmsStore
+	}
+	return s.KMS, nil
 }

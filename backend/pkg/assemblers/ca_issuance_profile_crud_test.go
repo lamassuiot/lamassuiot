@@ -13,7 +13,7 @@ import (
 )
 
 func TestCAIssuanceProfiles(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	assert.NoError(t, err, "could not create CA test server")
 
 	caSvc := serverTest.CA.HttpCASDK
@@ -97,7 +97,7 @@ func TestCAIssuanceProfiles(t *testing.T) {
 }
 
 func TestFilterCAsByProfileID(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	assert.NoError(t, err, "could not create CA test server")
 
 	caSvc := serverTest.CA.HttpCASDK
