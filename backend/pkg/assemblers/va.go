@@ -125,29 +125,37 @@ func createPublisherEventBus(conf config.VAconfig, crl services.CRLService) (ser
 
 func createSubscriberEventBus(conf config.VAconfig, crlSvc *beService.CRLServiceBackend) error {
 	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "VA", "Event Bus")
-	lMessaging.Infof("Subscriber Event Bus is enabled")
 
-	dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberDLQEventBus, serviceID, lMessaging)
-	if err != nil {
-		return fmt.Errorf("could not create Event Bus publisher: %s", err)
+	if conf.SubscriberEventBus.Enabled && !conf.SubscriberDLQEventBus.Enabled {
+		lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Device Manager", "Event Bus")
+		lMessaging.Fatalf("Subscriber Event Bus is enabled but DLQ is not enabled. This is not supported. Exiting")
 	}
 
-	subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
-	if err != nil {
-		lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
-		return err
-	}
+	if conf.SubscriberEventBus.Enabled && conf.SubscriberDLQEventBus.Enabled {
+		lMessaging.Infof("Subscriber Event Bus is enabled")
 
-	eventHandlers := handlers.NewVAEventHandler(lMessaging, crlSvc)
-	subHandler, err := ceventbus.NewEventBusMessageHandler("VA-CA-DEFAULT", []string{"ca.#", "certificate.#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
-	if err != nil {
-		return fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
-	}
+		dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberDLQEventBus, serviceID, lMessaging)
+		if err != nil {
+			return fmt.Errorf("could not create Event Bus publisher: %s", err)
+		}
 
-	err = subHandler.RunAsync()
-	if err != nil {
-		lMessaging.Errorf("could not run Event Bus Subscription Handler: %s", err)
-		return err
+		subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
+		if err != nil {
+			lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
+			return err
+		}
+
+		eventHandlers := handlers.NewVAEventHandler(lMessaging, crlSvc)
+		subHandler, err := ceventbus.NewEventBusMessageHandler("VA-CA-DEFAULT", []string{"ca.#", "certificate.#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
+		if err != nil {
+			return fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
+		}
+
+		err = subHandler.RunAsync()
+		if err != nil {
+			lMessaging.Errorf("could not run Event Bus Subscription Handler: %s", err)
+			return err
+		}
 	}
 
 	return nil

@@ -4,6 +4,7 @@ import (
 	"crypto/elliptic"
 	"crypto/tls"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"slices"
@@ -344,9 +345,10 @@ func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig,
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},
-		PublisherEventBus:  eventBus.config,
-		SubscriberEventBus: eventBus.config,
-		Storage:            storageEngine.config,
+		PublisherEventBus:     eventBus.config,
+		SubscriberDLQEventBus: getDlqEventBusConfig(eventBus.config),
+		SubscriberEventBus:    eventBus.config,
+		Storage:               storageEngine.config,
 	}, caTestServer.HttpCASDK, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
@@ -449,9 +451,10 @@ func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},
-		SubscriberEventBus: eventBus.config,
-		PublisherEventBus:  eventBus.config,
-		CAClient:           config.CAClient{},
+		SubscriberEventBus:    eventBus.config,
+		SubscriberDLQEventBus: getDlqEventBusConfig(eventBus.config),
+		PublisherEventBus:     eventBus.config,
+		CAClient:              config.CAClient{},
 		CRLMonitoringJob: cconfig.MonitoringJob{
 			Enabled:   monitor,
 			Frequency: "1s",
@@ -499,9 +502,10 @@ func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *Tes
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},
-		SubscriberEventBus: eventBus.config,
-		Storage:            storageEngine.config,
-		SMTPConfig:         *smptConfig,
+		SubscriberEventBus:    eventBus.config,
+		SubscriberDLQEventBus: getDlqEventBusConfig(eventBus.config),
+		Storage:               storageEngine.config,
+		SMTPConfig:            *smptConfig,
 	}, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
@@ -681,4 +685,12 @@ func SleepRetry(retry int, sleep time.Duration, f func() error) error {
 	}
 
 	return fmt.Errorf("could not execute function after %d retries. Last error: %s", retry, err)
+}
+
+func getDlqEventBusConfig(conf cconfig.EventBusEngine) cconfig.EventBusEngine {
+	conf2 := conf
+
+	maps.Copy(conf2.Config, conf.Config)
+	conf2.Config["exchange"] = "lamassu-dlq"
+	return conf2
 }
