@@ -1,11 +1,14 @@
 
-<a name="3.5.1"></a>
-## [3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.5.0...3.5.1) (2025-09-24)
+<a name="3.5.2"></a>
+## [3.5.2](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.5.1...3.5.2) (2025-09-26)
 
 ### Bug Fixes
 
-* Fix: all: add correct source in cloud events ([#311](https://github.com/lamassuiot/lamassuiot/issues/311))
-* Fix: add missing engines to release finalization workflow ([#312](https://github.com/lamassuiot/lamassuiot/issues/312))
-* Fix: monolithic: deploy v4 ui in monolithic with correct port mapping ([#310](https://github.com/lamassuiot/lamassuiot/issues/310))
-* Fix: ca: import ca without key when profileid not supplied ([#309](https://github.com/lamassuiot/lamassuiot/issues/309))
+* Fix: fixed support for dedicated DLQ event bus configuration across services ([#319](https://github.com/lamassuiot/lamassuiot/issues/319))
+* Fix: ca: add migration for profile_id with null in validity_time column in ca_certificates table ([#316](https://github.com/lamassuiot/lamassuiot/issues/316))
+* Fix: devicemanager: normalize device certificate serial numbers ([#317](https://github.com/lamassuiot/lamassuiot/issues/317))
+
+### Features
+
+* Feat: make issuance profile optional at the certificate sign operation ([#318](https://github.com/lamassuiot/lamassuiot/issues/318))
 
