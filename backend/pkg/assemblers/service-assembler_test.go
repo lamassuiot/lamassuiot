@@ -688,8 +688,11 @@ func SleepRetry(retry int, sleep time.Duration, f func() error) error {
 
 func getDlqEventBusConfig(conf cconfig.EventBusEngine) cconfig.EventBusEngine {
 	dlqEventBus := conf
-	dlqEventBus.Config = deepCopy(conf.Config)
-	dlqEventBus.Config["exchange"] = "lamassu-dlq"
+	if conf.Config != nil {
+		dlqEventBus.Config = deepCopy(conf.Config)
+		dlqEventBus.Config["exchange"] = "lamassu-dlq"
+	}
+
 	return dlqEventBus
 }
 
