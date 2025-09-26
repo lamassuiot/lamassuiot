@@ -690,7 +690,10 @@ func SleepRetry(retry int, sleep time.Duration, f func() error) error {
 func getDlqEventBusConfig(conf cconfig.EventBusEngine) cconfig.EventBusEngine {
 	conf2 := conf
 
-	maps.Copy(conf2.Config, conf.Config)
-	conf2.Config["exchange"] = "lamassu-dlq"
+	if conf2.Config != nil {
+		maps.Copy(conf2.Config, conf.Config)
+		conf2.Config["exchange"] = "lamassu-dlq"
+	}
+
 	return conf2
 }
