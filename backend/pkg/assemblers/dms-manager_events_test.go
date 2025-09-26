@@ -499,8 +499,18 @@ func TestBindIDEvent(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
+			publisher, err := eventbus.NewEventBusPublisher(
+				testServers.EventBus.config,
+				uuid.NewString(),
+				chelpers.SetupLogger(cconfig.Trace, "Test Case", "pub"),
+			)
+			if err != nil {
+				t.Fatalf("could not create publisher: %s", err)
+			}
+
 			router, err := ceventbus.NewMessageRouter(
 				chelpers.SetupLogger(cconfig.Info, "Test Case", "router"),
+				publisher,
 			)
 			if err != nil {
 				t.Fatalf("could not instantiate a messaging router: %s", err)
@@ -518,6 +528,7 @@ func TestBindIDEvent(t *testing.T) {
 			resultChannel := make(chan *event.Event, 1)
 			newMessages := make(chan *message.Message)
 
+			defer router.Close()
 			defer close(resultChannel)
 			defer close(newMessages)
 

@@ -316,14 +316,14 @@ func main() {
 
 	cloudConnectors := "[]"
 	if *awsIoTManagerID != "" {
-		cloudConnectors = fmt.Sprintf("aws.%s", *awsIoTManagerID)
+		cloudConnectors = fmt.Sprintf("[\"aws.%s\"]", *awsIoTManagerID)
 	}
 
 	if !*disableUI {
 		containerCleanup, container, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
 			Repository: "ghcr.io/lamassuiot/lamassu-ui", // image
 			Tag:        "latest",                        // version
-			Env:        []string{"OIDC_ENABLED=false", "DOMAIN=localhost:8443", "COGNITO_ENABLED=false", "CLOUD_CONNECTORS=" + cloudConnectors},
+			Env:        []string{"OIDC_ENABLED=false", "UI_FOOTER_ENABLED=false", "LAMASSU_API=https://localhost:8443/api", "CLOUD_CONNECTORS=" + cloudConnectors},
 			Labels: map[string]string{
 				"group": "lamassuiot-monolithic",
 			},
@@ -331,7 +331,7 @@ func main() {
 			hc.AutoRemove = true
 		})
 
-		uiPort, _ = strconv.Atoi(container.GetPort("8080/tcp"))
+		uiPort, _ = strconv.Atoi(container.GetPort("80/tcp"))
 
 		if err != nil {
 			containerCleanup()

@@ -109,8 +109,8 @@ type IssueCACSROutput struct {
 
 type ImportCAInput struct {
 	ID            string
-	CAType        models.CertificateType    `validate:"required,ne=MANAGED"`
-	ProfileID     string                    `validate:"required"`
+	CAType        models.CertificateType `validate:"required,ne=MANAGED"`
+	ProfileID     string
 	CACertificate *models.X509Certificate   `validate:"required"`
 	CAChain       []*models.X509Certificate //Parent CAs. They MUST be sorted as follows. 0: Root-CA; 1: Subordinate CA from Root-CA; ...
 	CARSAKey      *rsa.PrivateKey
@@ -196,7 +196,7 @@ type DeleteCAInput struct {
 type SignCertificateInput struct {
 	CAID              string                         `validate:"required"`
 	CertRequest       *models.X509CertificateRequest `validate:"required"`
-	IssuanceProfile   models.IssuanceProfile
+	IssuanceProfile   *models.IssuanceProfile
 	IssuanceProfileID string
 }
 

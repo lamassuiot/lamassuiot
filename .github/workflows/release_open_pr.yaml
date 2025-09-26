@@ -1,0 +1,67 @@
+name: "Release Workflow - Open Pull Request with release notes"
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        type: string
+        description: release version when building docker containers (example; 2.0.0)
+
+run-name: >-
+  ${{ format('Open PR for release {0}', github.event.inputs.release_version) }}
+
+jobs:
+  open_pr:
+    name: "Open PR with release notes and changelog"
+    runs-on: ubuntu-latest
+    container: quay.io/git-chglog/git-chglog:0.15.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install main dependencies
+        run: |
+          apk add bash git grep yq
+          
+      - name: Generate charts changelog files
+        shell: bash
+        run: |
+          set -x
+
+          #
+          # Generate chart CHANGELOG.md file.
+          git-chglog                                                  \
+              --output "CHANGELOG.md"                                 \
+              --no-case                                               \
+              --next-tag "${{ github.event.inputs.release_version }}" 
+
+          #
+          # Generate RELEASE-NOTES.md file.
+          git-chglog                                                  \
+              --no-case                                               \
+              --output "RELEASE-NOTES.md"                             \
+              --next-tag "${{ github.event.inputs.release_version }}" \
+              "${{ github.event.inputs.release_version }}"
+
+      - name: Read generated files
+        id: read-files
+        run: |
+          echo "release-notes<<EOF" >> $GITHUB_OUTPUT
+          cat RELEASE-NOTES.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore: release: prepare release ${{ github.event.inputs.release_version }}"
+          branch: "release-${{ github.event.inputs.release_version }}"
+          title: "chore: release: prepare release ${{ github.event.inputs.release_version }}"
+          sign-commits: true
+          body: |
+            # Release ${{ github.event.inputs.release_version }}
+
+            ## Release Notes
+
+            ${{ steps.read-files.outputs.release-notes }}

@@ -83,7 +83,7 @@ type UpdateCAMetadataBody struct {
 
 type SignCertificateBody struct {
 	CertRequest *models.X509CertificateRequest `json:"csr"`
-	Profile     models.IssuanceProfile         `json:"profile"`
+	Profile     *models.IssuanceProfile        `json:"profile"`
 	ProfileID   string                         `json:"profile_id"`
 }
 

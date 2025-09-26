@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"errors"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -27,7 +28,6 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	"github.com/sirupsen/logrus"
 
 	"golang.org/x/crypto/ocsp"
@@ -226,6 +226,14 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	caCert := input.CACertificate
 	caCertSN := helpers.SerialNumberToHexString(caCert.SerialNumber)
 
+	caCertX509 := (*x509.Certificate)(input.CACertificate)
+
+	skid, err := helpers.GetSubjectKeyID(lFunc, caCertX509)
+	if err != nil {
+		lFunc.Errorf("could not get Subject Key Identifier for certificate: %s: %s", caCertX509.Subject.CommonName, err)
+		return nil, err
+	}
+
 	if input.CAType == models.CertificateTypeImportedWithKey {
 		lFunc.Debugf("importing CA %s - %s  private key. CA type: %s", caCertSN, caCert.Subject.CommonName, input.CAType)
 		var engine cryptoengines.CryptoEngine
@@ -243,10 +251,13 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			lFunc.Infof("importing CA %s - %s with %s crypto engine", caCertSN, caCert.Subject.CommonName, engine.GetEngineConfig().Provider)
 		}
 
+		var keyID string
 		if input.CARSAKey != nil {
-			_, _, err = engine.ImportRSAPrivateKey(input.CARSAKey)
+			keyID, _, err = engine.ImportRSAPrivateKey(input.CARSAKey)
+			engine.RenameKey(keyID, skid)
 		} else if input.CAECKey != nil {
-			_, _, err = engine.ImportECDSAPrivateKey(input.CAECKey)
+			keyID, _, err = engine.ImportECDSAPrivateKey(input.CAECKey)
+			engine.RenameKey(keyID, skid)
 		} else {
 			lFunc.Errorf("key type %s not supported", input.KeyType)
 			return nil, fmt.Errorf("KeyType not supported")
@@ -354,15 +365,8 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	}
 	level := 0
 
-	skid, err := software.NewSoftwareCryptoEngine(lFunc).EncodePKIXPublicKeyDigest(input.CACertificate.PublicKey)
-	if err != nil {
-		lFunc.Errorf("could not encode public key digest: %s", err)
-		return nil, fmt.Errorf("could not encode public key digest: %w", err)
-	}
+	akid := hex.EncodeToString(caCertX509.AuthorityKeyId)
 
-	var akid string
-
-	caCertX509 := (*x509.Certificate)(input.CACertificate)
 	isSelfSigned := false
 	if err := caCertX509.CheckSignatureFrom(caCertX509); err != nil {
 		isSelfSigned = false
@@ -443,7 +447,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 				}
 			} else {
 				lFunc.Warnf("no parent CA found with Issuer Subject %s in PKI.", input.CACertificate.Issuer.CommonName)
-				akid = helpers.FormatHexWithColons(input.CACertificate.AuthorityKeyId)
 				issuerMeta = models.IssuerCAMetadata{
 					ID:    "-",
 					SN:    caCertSN,
@@ -717,11 +720,12 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		}
 
 		skid = caCSR.KeyId
+		issuanceProfile := engine.GetDefaultCAIssuanceProfile(ctx, input.CAExpiration)
 
 		signedCA, err := svc.SignCertificate(ctx, services.SignCertificateInput{
 			CAID:            input.ParentID,
 			CertRequest:     &caCSR.CSR,
-			IssuanceProfile: engine.GetDefaultCAIssuanceProfile(ctx, input.CAExpiration),
+			IssuanceProfile: &issuanceProfile,
 		})
 		if err != nil {
 			lFunc.Errorf("could not sign CA %s certificate: %s", input.Subject.CommonName, err)
@@ -1204,14 +1208,26 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		return nil, err
 	}
 
-	profile := &input.IssuanceProfile
+	var profile *models.IssuanceProfile
 
-	if input.IssuanceProfileID != "" {
+	// Give preference to the embedded IssuanceProfile if it's present
+	if input.IssuanceProfile != nil {
+		profile = input.IssuanceProfile
+	} else if input.IssuanceProfileID != "" {
 		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
 			ProfileID: input.IssuanceProfileID,
 		})
 		if err != nil {
 			lFunc.Errorf("could not get issuance profile %s: %s", input.IssuanceProfileID, err)
+			return nil, err
+		}
+	} else {
+		// Use the CA default profile
+		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+			ProfileID: ca.ProfileID,
+		})
+		if err != nil {
+			lFunc.Errorf("could not get default ca issuance profile %s: %s", ca.ProfileID, err)
 			return nil, err
 		}
 	}
@@ -1223,15 +1239,15 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		return nil, err
 	}
 
-	ski, err := software.NewSoftwareCryptoEngine(lFunc).EncodePKIXPublicKeyDigest(x509Cert.PublicKey)
+	ski, err := helpers.GetSubjectKeyID(lFunc, x509Cert)
 	if err != nil {
-		lFunc.Errorf("could not encode public key digest for certificate %s: %s", x509Cert.Subject.CommonName, err)
+		lFunc.Errorf("could not get Subject Key Identifier for certificate: %s: %s", x509Cert.Subject.CommonName, err)
 		return nil, err
 	}
 
-	aki, err := software.NewSoftwareCryptoEngine(lFunc).EncodePKIXPublicKeyDigest(caCert.PublicKey)
+	aki, err := helpers.GetSubjectKeyID(lFunc, caCert)
 	if err != nil {
-		lFunc.Errorf("could not encode authority key identifier for CA %s: %s", caCert.Subject.CommonName, err)
+		lFunc.Errorf("could not get Authority Key Identifier for CA: %s: %s", caCert.Subject.CommonName, err)
 		return nil, err
 	}
 
@@ -1286,9 +1302,9 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 		status = models.StatusExpired
 	}
 
-	skid, err := software.NewSoftwareCryptoEngine(lFunc).EncodePKIXPublicKeyDigest(x509Cert.PublicKey)
+	skid, err := helpers.GetSubjectKeyID(lFunc, x509Cert)
 	if err != nil {
-		lFunc.Errorf("could not encode public key digest for certificate %s: %s", x509Cert.Subject.CommonName, err)
+		lFunc.Errorf("could not get Subject Key Identifier for certificate: %s: %s", x509Cert.Subject.CommonName, err)
 		return nil, err
 	}
 
@@ -1325,6 +1341,7 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 			ID:    parentCA.ID,
 			Level: parentCA.Level,
 		}
+		newCert.AuthorityKeyID = parentCA.Certificate.SubjectKeyID
 	} else {
 		newCert.IssuerCAMetadata = models.IssuerCAMetadata{
 			SN:    "-",
@@ -1669,6 +1686,10 @@ func importCAValidation(sl validator.StructLevel) {
 			// lFunc.Errorf("CA certificate and the private key provided are not compatible")
 			sl.ReportError(ca.CARSAKey, "CARSAKey", "CARSAKey", "PrivateKeyAndCertificateNotMatch", "")
 			sl.ReportError(ca.CAECKey, "CAECKey", "CAECKey", "PrivateKeyAndCertificateNotMatch", "")
+		}
+
+		if ca.ProfileID == "" {
+			sl.ReportError(ca.ProfileID, "ProfileID", "ProfileID", "ProfileIDRequiredForImportedWithKey", "")
 		}
 	}
 }

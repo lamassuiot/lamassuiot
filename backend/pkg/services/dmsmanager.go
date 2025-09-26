@@ -582,7 +582,7 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
 		CAID:            enrollSettings.EnrollmentCA,
 		CertRequest:     (*models.X509CertificateRequest)(csr),
-		IssuanceProfile: *issuanceProfile,
+		IssuanceProfile: issuanceProfile,
 	})
 	if err != nil {
 		lFunc.Errorf("could not issue certificate for device: %s", err)
@@ -872,7 +872,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{
 		CAID:            enrollSettings.EnrollmentCA,
 		CertRequest:     (*models.X509CertificateRequest)(csr),
-		IssuanceProfile: *issuanceProfile,
+		IssuanceProfile: issuanceProfile,
 	})
 	if err != nil {
 		lFunc.Errorf("could not issue certificate for device '%s': %s", csr.Subject.CommonName, err)

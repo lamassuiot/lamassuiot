@@ -1,8 +1,9 @@
 package assemblers
 
 import (
+	"context"
+	"encoding/hex"
 	"fmt"
-	"unicode"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cebuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/cryptoengines/builder"
@@ -50,6 +51,11 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 	lCryptoEng := helpers.SetupLogger(conf.CryptoEngineConfig.LogLevel, "CA", "CryptoEngine")
 	lMonitor := helpers.SetupLogger(conf.Logs.Level, "CA", "Crypto Monitoring")
 
+	caStorage, certStorage, caCertRequestStorage, issuerProfilesStorage, err := createCAStorageInstance(lStorage, conf.Storage)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not create CA storage instance: %s", err)
+	}
+
 	engines, err := createCryptoEngines(lCryptoEng, conf)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create crypto engines: %s", err)
@@ -61,18 +67,20 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 			logEntry = log.WithField("subsystem-provider", "DEFAULT ENGINE")
 
 		}
+
 		logEntry.Infof("loaded %s engine with id %s", engine.Service.GetEngineConfig().Type, engineID)
+
 		if conf.CryptoEngineConfig.MigrateKeysFormat {
 			err = migrateKeysToV2Format(lSvc, engine, engineID)
 			if err != nil {
 				return nil, nil, fmt.Errorf("could not migrate %s engine keys to v2 format: %s", engineID, err)
 			}
-		}
-	}
 
-	caStorage, certStorage, caCertRequestStorage, issuerProfilesStorage, err := createCAStorageInstance(lStorage, conf.Storage)
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not create CA storage instance: %s", err)
+			err = migrateKeysToV3Format(lSvc, caStorage, engine, engineID)
+			if err != nil {
+				return nil, nil, fmt.Errorf("could not migrate %s engine keys to v3 format: %s", engineID, err)
+			}
+		}
 	}
 
 	kmsStorage, err := createKMSStorageInstance(lStorage, conf.Storage)
@@ -205,30 +213,20 @@ func migrateKeysToV2Format(logger *log.Entry, engine *lservices.Engine, engineID
 	softCrypto := software.NewSoftwareCryptoEngine(keyMigLog)
 	keyMigLog.Infof("checking engine keys format")
 
+	// Iter over all keys and rename if not in sha256 hex format
 	for _, keyID := range keyIDs {
-		// check if they are in V1 format (serial number).
-		// V2 format is the hex encoded SHA256 of the public key, a string of 64 characters
-		containsNonHex := false
-		for _, char := range keyID {
-			if !unicode.IsLetter(char) && !unicode.IsDigit(char) {
-				// Not a hex character. Exit loop
-				containsNonHex = true
-				break
-			}
+		key, err := engine.Service.GetPrivateKeyByID(keyID)
+		if err != nil {
+			return fmt.Errorf("could not get key %s: %w", keyID, err)
 		}
 
-		if len(keyID) != 64 || containsNonHex {
-			// Transform to V2 format
-			key, err := engine.Service.GetPrivateKeyByID(keyID)
-			if err != nil {
-				return fmt.Errorf("could not get key %s: %w", keyID, err)
-			}
+		newKeyID, err := softCrypto.EncodePKIXPublicKeyDigest(key.Public())
+		if err != nil {
+			return fmt.Errorf("could not encode public key digest: %w", err)
+		}
 
-			newKeyID, err := softCrypto.EncodePKIXPublicKeyDigest(key.Public())
-			if err != nil {
-				return fmt.Errorf("could not encode public key digest: %w", err)
-			}
-
+		// only rename if different
+		if newKeyID != keyID {
 			keyMigLog.Debugf("renaming key %s to %s", keyID, newKeyID)
 			err = engine.Service.RenameKey(keyID, newKeyID)
 			if err != nil {
@@ -236,5 +234,62 @@ func migrateKeysToV2Format(logger *log.Entry, engine *lservices.Engine, engineID
 			}
 		}
 	}
+	return nil
+}
+
+func migrateKeysToV3Format(logger *log.Entry, caCertsRepo storage.CACertificatesRepo, engine *lservices.Engine, engineID string) error {
+	mapKeyIDToSha256Hex := map[string]string{}
+	keyIDs, err := engine.Service.ListPrivateKeyIDs()
+	if err != nil {
+		return nil
+	}
+
+	keyMigLog := logger.WithField("engine", engineID)
+	softCrypto := software.NewSoftwareCryptoEngine(keyMigLog)
+	keyMigLog.Infof("checking engine keys format")
+
+	for _, keyID := range keyIDs {
+		key, err := engine.Service.GetPrivateKeyByID(keyID)
+		if err != nil {
+			return fmt.Errorf("could not get key %s: %w", keyID, err)
+		}
+
+		shaInHex, err := softCrypto.EncodePKIXPublicKeyDigest(key.Public())
+		if err != nil {
+			return fmt.Errorf("could not encode public key digest: %w", err)
+		}
+
+		mapKeyIDToSha256Hex[shaInHex] = keyID
+	}
+
+	// Iterate over all CA certs of type IMPORTED and check if their SKI matches the keyID in the engine
+	// If not, rename the key in the engine to match the SKI
+	_, err = caCertsRepo.SelectByType(context.Background(), models.CertificateTypeImportedWithKey, storage.StorageListRequest[models.CACertificate]{
+		ExhaustiveRun: true,
+		ApplyFunc: func(ca models.CACertificate) {
+			certSN := ca.Certificate.SerialNumber
+			x509 := ca.Certificate.Certificate
+			certPubKeySha256Hex, err := softCrypto.EncodePKIXPublicKeyDigest(x509.PublicKey)
+			if err != nil {
+				keyMigLog.Errorf("could not encode public key digest for cert %s: %s", certSN, err)
+				return
+			}
+
+			certSkiInHex := hex.EncodeToString(x509.SubjectKeyId)
+
+			if oldKeyID, ok := mapKeyIDToSha256Hex[certPubKeySha256Hex]; ok && certSkiInHex != oldKeyID {
+				keyMigLog.Infof("migrating cert %s from keyID %s to %s", certSN, oldKeyID, certSkiInHex)
+				err = engine.Service.RenameKey(oldKeyID, certSkiInHex)
+				if err != nil {
+					keyMigLog.Errorf("could not rename key %s to %s: %s", oldKeyID, certSkiInHex, err)
+					return
+				}
+			}
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("could not select all certificates: %w", err)
+	}
+
 	return nil
 }

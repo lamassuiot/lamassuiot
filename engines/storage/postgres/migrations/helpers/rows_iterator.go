@@ -6,21 +6,21 @@ import (
 	"log"
 )
 
-func RowsToMap(rows *sql.Rows) ([]map[string]interface{}, error) {
+func RowsToMap(rows *sql.Rows) ([]map[string]any, error) {
 	// Fetch column names
 	columns, err := rows.Columns()
 	if err != nil {
 		log.Fatalf("Failed to fetch column names: %v", err)
 	}
 
-	result := make([]map[string]interface{}, 0)
+	result := make([]map[string]any, 0)
 
 	// Iterate over the rows
 	for rows.Next() {
 		// Create a slice of interface{} to hold values for each column
-		values := make([]interface{}, len(columns))
+		values := make([]any, len(columns))
 		// Create a slice of pointers to hold references to the values
-		valuePtrs := make([]interface{}, len(columns))
+		valuePtrs := make([]any, len(columns))
 		for i := range values {
 			valuePtrs[i] = &values[i]
 		}
@@ -31,7 +31,7 @@ func RowsToMap(rows *sql.Rows) ([]map[string]interface{}, error) {
 		}
 
 		// Create a map to store column name and value
-		rowMap := make(map[string]interface{})
+		rowMap := make(map[string]any)
 		for i, col := range columns {
 			val := values[i]
 

@@ -39,7 +39,12 @@ func upAddProfileId(ctx context.Context, tx *sql.Tx) error {
 		caID := row["id"].(string)
 		validityType := row["validity_type"].(string)
 		validityDurationStr := row["validity_duration"].(string)
-		validityTimeStr := row["validity_time"].(time.Time)
+		var validityTimeStr time.Time
+		if v, ok := row["validity_time"]; ok && v != nil {
+			if t, ok := v.(time.Time); ok {
+				validityTimeStr = t
+			}
+		}
 
 		// Check if a profile with the same characteristics already exists
 		profileRow := tx.QueryRowContext(ctx, `
