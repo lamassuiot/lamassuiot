@@ -1,6 +1,92 @@
 
-<a name="3.5.1"></a>
-## [3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.5.0...3.5.1) (2025-09-24)
+<a name="3.5.2"></a>
+## [3.5.2](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.5.1...3.5.2) (2025-09-26)
+
+### Bug Fixes
+
+* Fix: fixed support for dedicated DLQ event bus configuration across services ([#319](https://github.com/lamassuiot/lamassuiot/issues/319))
+* Fix: ca: add migration for profile_id with null in validity_time column in ca_certificates table ([#316](https://github.com/lamassuiot/lamassuiot/issues/316))
+* Fix: devicemanager: normalize device certificate serial numbers ([#317](https://github.com/lamassuiot/lamassuiot/issues/317))
+
+### Features
+
+* Feat: make issuance profile optional at the certificate sign operation ([#318](https://github.com/lamassuiot/lamassuiot/issues/318))
+
+
+<a name="engines/storage/postgres/v3.5.1"></a>
+## [engines/storage/postgres/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.5.1...engines/storage/postgres/v3.5.1) (2025-09-24)
+
+
+<a name="engines/crypto/aws/v3.5.1"></a>
+## [engines/crypto/aws/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/software/v3.5.1...engines/crypto/aws/v3.5.1) (2025-09-24)
+
+
+<a name="engines/crypto/software/v3.5.1"></a>
+## [engines/crypto/software/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.5.1...engines/crypto/software/v3.5.1) (2025-09-24)
+
+
+<a name="connectors/awsiot/v3.5.1"></a>
+## [connectors/awsiot/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.5.1...connectors/awsiot/v3.5.1) (2025-09-24)
+
+
+<a name="shared/aws/v3.5.1"></a>
+## [shared/aws/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.5.1...shared/aws/v3.5.1) (2025-09-24)
+
+
+<a name="engines/crypto/vaultkv2/v3.5.1"></a>
+## [engines/crypto/vaultkv2/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.5.1...engines/crypto/vaultkv2/v3.5.1) (2025-09-24)
+
+
+<a name="engines/eventbus/aws/v3.5.1"></a>
+## [engines/eventbus/aws/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/core/v3.5.1...engines/eventbus/aws/v3.5.1) (2025-09-24)
+
+
+<a name="core/v3.5.1"></a>
+## [core/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.5.1...core/v3.5.1) (2025-09-24)
+
+
+<a name="engines/crypto/filesystem/v3.5.1"></a>
+## [engines/crypto/filesystem/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.5.1...engines/crypto/filesystem/v3.5.1) (2025-09-24)
+
+
+<a name="engines/crypto/pkcs11/v3.5.1"></a>
+## [engines/crypto/pkcs11/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.5.1...engines/crypto/pkcs11/v3.5.1) (2025-09-24)
+
+
+<a name="engines/eventbus/amqp/v3.5.1"></a>
+## [engines/eventbus/amqp/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.5.1...engines/eventbus/amqp/v3.5.1) (2025-09-24)
+
+
+<a name="sdk/v3.5.1"></a>
+## [sdk/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.5.1...sdk/v3.5.1) (2025-09-24)
+
+
+<a name="backend/v3.5.1"></a>
+## [backend/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/fs-storage/localfs/v3.5.1...backend/v3.5.1) (2025-09-24)
+
+
+<a name="engines/fs-storage/localfs/v3.5.1"></a>
+## [engines/fs-storage/localfs/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.5.1...engines/fs-storage/localfs/v3.5.1) (2025-09-24)
+
+
+<a name="shared/subsystems/v3.5.1"></a>
+## [shared/subsystems/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.5.1...shared/subsystems/v3.5.1) (2025-09-24)
+
+
+<a name="monolithic/v3.5.1"></a>
+## [monolithic/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/fs-storage/s3/v3.5.1...monolithic/v3.5.1) (2025-09-24)
+
+
+<a name="engines/fs-storage/s3/v3.5.1"></a>
+## [engines/fs-storage/s3/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.5.1...engines/fs-storage/s3/v3.5.1) (2025-09-24)
+
+
+<a name="shared/http/v3.5.1"></a>
+## [shared/http/v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/v3.5.1...shared/http/v3.5.1) (2025-09-24)
+
+
+<a name="v3.5.1"></a>
+## [v3.5.1](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.5.0...v3.5.1) (2025-09-24)
 
 ### Bug Fixes
 
@@ -8,6 +94,10 @@
 * Fix: add missing engines to release finalization workflow ([#312](https://github.com/lamassuiot/lamassuiot/issues/312))
 * Fix: monolithic: deploy v4 ui in monolithic with correct port mapping ([#310](https://github.com/lamassuiot/lamassuiot/issues/310))
 * Fix: ca: import ca without key when profileid not supplied ([#309](https://github.com/lamassuiot/lamassuiot/issues/309))
+
+### Chores
+
+* Chore: release: prepare release 3.5.1 ([#313](https://github.com/lamassuiot/lamassuiot/issues/313))
 
 
 <a name="engines/eventbus/aws/v3.5.0"></a>
@@ -19,27 +109,27 @@
 
 
 <a name="shared/http/v3.5.0"></a>
-## [shared/http/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.5.0...shared/http/v3.5.0) (2025-09-23)
-
-
-<a name="engines/storage/couchdb/v3.5.0"></a>
-## [engines/storage/couchdb/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.5.0...engines/storage/couchdb/v3.5.0) (2025-09-23)
+## [shared/http/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.5.0...shared/http/v3.5.0) (2025-09-23)
 
 
 <a name="backend/v3.5.0"></a>
-## [backend/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.5.0...backend/v3.5.0) (2025-09-23)
+## [backend/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.5.0...backend/v3.5.0) (2025-09-23)
 
 
-<a name="shared/aws/v3.5.0"></a>
-## [shared/aws/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.5.0...shared/aws/v3.5.0) (2025-09-23)
-
-
-<a name="engines/crypto/filesystem/v3.5.0"></a>
-## [engines/crypto/filesystem/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.5.0...engines/crypto/filesystem/v3.5.0) (2025-09-23)
+<a name="engines/storage/couchdb/v3.5.0"></a>
+## [engines/storage/couchdb/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.5.0...engines/storage/couchdb/v3.5.0) (2025-09-23)
 
 
 <a name="shared/subsystems/v3.5.0"></a>
-## [shared/subsystems/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.5.0...shared/subsystems/v3.5.0) (2025-09-23)
+## [shared/subsystems/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.5.0...shared/subsystems/v3.5.0) (2025-09-23)
+
+
+<a name="engines/crypto/filesystem/v3.5.0"></a>
+## [engines/crypto/filesystem/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.5.0...engines/crypto/filesystem/v3.5.0) (2025-09-23)
+
+
+<a name="shared/aws/v3.5.0"></a>
+## [shared/aws/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.5.0...shared/aws/v3.5.0) (2025-09-23)
 
 
 <a name="sdk/v3.5.0"></a>
@@ -47,11 +137,7 @@
 
 
 <a name="engines/crypto/pkcs11/v3.5.0"></a>
-## [engines/crypto/pkcs11/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.5.0...engines/crypto/pkcs11/v3.5.0) (2025-09-23)
-
-
-<a name="engines/crypto/vaultkv2/v3.5.0"></a>
-## [engines/crypto/vaultkv2/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.5.0...engines/crypto/vaultkv2/v3.5.0) (2025-09-23)
+## [engines/crypto/pkcs11/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.5.0...engines/crypto/pkcs11/v3.5.0) (2025-09-23)
 
 
 <a name="monolithic/v3.5.0"></a>
@@ -59,23 +145,27 @@
 
 
 <a name="engines/crypto/aws/v3.5.0"></a>
-## [engines/crypto/aws/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.5.0...engines/crypto/aws/v3.5.0) (2025-09-23)
+## [engines/crypto/aws/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.5.0...engines/crypto/aws/v3.5.0) (2025-09-23)
+
+
+<a name="engines/crypto/vaultkv2/v3.5.0"></a>
+## [engines/crypto/vaultkv2/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.5.0...engines/crypto/vaultkv2/v3.5.0) (2025-09-23)
 
 
 <a name="engines/storage/postgres/v3.5.0"></a>
-## [engines/storage/postgres/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.5.0...engines/storage/postgres/v3.5.0) (2025-09-23)
-
-
-<a name="engines/eventbus/channel/v3.5.0"></a>
-## [engines/eventbus/channel/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.5.0...engines/eventbus/channel/v3.5.0) (2025-09-23)
-
-
-<a name="engines/eventbus/amqp/v3.5.0"></a>
-## [engines/eventbus/amqp/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.5.0...engines/eventbus/amqp/v3.5.0) (2025-09-23)
+## [engines/storage/postgres/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.5.0...engines/storage/postgres/v3.5.0) (2025-09-23)
 
 
 <a name="connectors/awsiot/v3.5.0"></a>
-## [connectors/awsiot/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/core/v3.5.0...connectors/awsiot/v3.5.0) (2025-09-23)
+## [connectors/awsiot/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.5.0...connectors/awsiot/v3.5.0) (2025-09-23)
+
+
+<a name="engines/eventbus/amqp/v3.5.0"></a>
+## [engines/eventbus/amqp/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.5.0...engines/eventbus/amqp/v3.5.0) (2025-09-23)
+
+
+<a name="engines/eventbus/channel/v3.5.0"></a>
+## [engines/eventbus/channel/v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/core/v3.5.0...engines/eventbus/channel/v3.5.0) (2025-09-23)
 
 
 <a name="core/v3.5.0"></a>
@@ -83,7 +173,7 @@
 
 
 <a name="v3.5.0"></a>
-## [v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.4.0...v3.5.0) (2025-09-23)
+## [v3.5.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.4.0...v3.5.0) (2025-09-23)
 
 ### Bug Fixes
 
@@ -133,12 +223,48 @@
 * Test: middleware: add DeleteDevice case to event publisher ([#298](https://github.com/lamassuiot/lamassuiot/issues/298))
 
 
-<a name="engines/crypto/vaultkv2/v3.4.0"></a>
-## [engines/crypto/vaultkv2/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.4.0...engines/crypto/vaultkv2/v3.4.0) (2025-06-04)
-
-
 <a name="engines/eventbus/aws/v3.4.0"></a>
-## [engines/eventbus/aws/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.4.0...engines/eventbus/aws/v3.4.0) (2025-06-04)
+## [engines/eventbus/aws/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.4.0...engines/eventbus/aws/v3.4.0) (2025-06-04)
+
+
+<a name="engines/crypto/vaultkv2/v3.4.0"></a>
+## [engines/crypto/vaultkv2/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.4.0...engines/crypto/vaultkv2/v3.4.0) (2025-06-04)
+
+
+<a name="engines/crypto/aws/v3.4.0"></a>
+## [engines/crypto/aws/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.4.0...engines/crypto/aws/v3.4.0) (2025-06-04)
+
+
+<a name="shared/aws/v3.4.0"></a>
+## [shared/aws/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.4.0...shared/aws/v3.4.0) (2025-06-04)
+
+
+<a name="engines/crypto/pkcs11/v3.4.0"></a>
+## [engines/crypto/pkcs11/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.4.0...engines/crypto/pkcs11/v3.4.0) (2025-06-04)
+
+
+<a name="backend/v3.4.0"></a>
+## [backend/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.4.0...backend/v3.4.0) (2025-06-04)
+
+
+<a name="engines/storage/couchdb/v3.4.0"></a>
+## [engines/storage/couchdb/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/sqlite/v3.4.0...engines/storage/couchdb/v3.4.0) (2025-06-04)
+
+
+<a name="engines/storage/sqlite/v3.4.0"></a>
+## [engines/storage/sqlite/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.4.0...engines/storage/sqlite/v3.4.0) (2025-06-04)
+
+
+<a name="connectors/awsiot/v3.4.0"></a>
+## [connectors/awsiot/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.4.0...connectors/awsiot/v3.4.0) (2025-06-04)
+
+
+<a name="shared/subsystems/v3.4.0"></a>
+## [shared/subsystems/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.4.0...shared/subsystems/v3.4.0) (2025-06-04)
+
+
+<a name="engines/crypto/filesystem/v3.4.0"></a>
+## [engines/crypto/filesystem/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.4.0...engines/crypto/filesystem/v3.4.0) (2025-06-04)
 
 
 <a name="monolithic/v3.4.0"></a>
@@ -146,51 +272,15 @@
 
 
 <a name="engines/storage/postgres/v3.4.0"></a>
-## [engines/storage/postgres/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.4.0...engines/storage/postgres/v3.4.0) (2025-06-04)
-
-
-<a name="backend/v3.4.0"></a>
-## [backend/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.4.0...backend/v3.4.0) (2025-06-04)
-
-
-<a name="engines/crypto/aws/v3.4.0"></a>
-## [engines/crypto/aws/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.4.0...engines/crypto/aws/v3.4.0) (2025-06-04)
-
-
-<a name="shared/subsystems/v3.4.0"></a>
-## [shared/subsystems/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.4.0...shared/subsystems/v3.4.0) (2025-06-04)
-
-
-<a name="shared/aws/v3.4.0"></a>
-## [shared/aws/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.4.0...shared/aws/v3.4.0) (2025-06-04)
-
-
-<a name="connectors/awsiot/v3.4.0"></a>
-## [connectors/awsiot/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/sqlite/v3.4.0...connectors/awsiot/v3.4.0) (2025-06-04)
-
-
-<a name="engines/storage/sqlite/v3.4.0"></a>
-## [engines/storage/sqlite/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.4.0...engines/storage/sqlite/v3.4.0) (2025-06-04)
-
-
-<a name="engines/crypto/pkcs11/v3.4.0"></a>
-## [engines/crypto/pkcs11/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.4.0...engines/crypto/pkcs11/v3.4.0) (2025-06-04)
-
-
-<a name="engines/crypto/filesystem/v3.4.0"></a>
-## [engines/crypto/filesystem/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.4.0...engines/crypto/filesystem/v3.4.0) (2025-06-04)
-
-
-<a name="engines/storage/couchdb/v3.4.0"></a>
-## [engines/storage/couchdb/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.4.0...engines/storage/couchdb/v3.4.0) (2025-06-04)
-
-
-<a name="shared/http/v3.4.0"></a>
-## [shared/http/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.4.0...shared/http/v3.4.0) (2025-06-04)
+## [engines/storage/postgres/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.4.0...engines/storage/postgres/v3.4.0) (2025-06-04)
 
 
 <a name="engines/eventbus/amqp/v3.4.0"></a>
-## [engines/eventbus/amqp/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/core/v3.4.0...engines/eventbus/amqp/v3.4.0) (2025-06-04)
+## [engines/eventbus/amqp/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.4.0...engines/eventbus/amqp/v3.4.0) (2025-06-04)
+
+
+<a name="shared/http/v3.4.0"></a>
+## [shared/http/v3.4.0](https://github.com/lamassuiot/lamassuiot/compare/core/v3.4.0...shared/http/v3.4.0) (2025-06-04)
 
 
 <a name="core/v3.4.0"></a>
@@ -249,11 +339,7 @@
 
 
 <a name="monolithic/v3.3.0"></a>
-## [monolithic/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.3.0...monolithic/v3.3.0) (2025-03-18)
-
-
-<a name="engines/crypto/aws/v3.3.0"></a>
-## [engines/crypto/aws/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.3.0...engines/crypto/aws/v3.3.0) (2025-03-18)
+## [monolithic/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.3.0...monolithic/v3.3.0) (2025-03-18)
 
 
 <a name="shared/aws/v3.3.0"></a>
@@ -261,35 +347,19 @@
 
 
 <a name="backend/v3.3.0"></a>
-## [backend/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.3.0...backend/v3.3.0) (2025-03-18)
+## [backend/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.3.0...backend/v3.3.0) (2025-03-18)
 
 
-<a name="shared/http/v3.3.0"></a>
-## [shared/http/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.3.0...shared/http/v3.3.0) (2025-03-18)
-
-
-<a name="engines/crypto/pkcs11/v3.3.0"></a>
-## [engines/crypto/pkcs11/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.3.0...engines/crypto/pkcs11/v3.3.0) (2025-03-18)
+<a name="engines/crypto/aws/v3.3.0"></a>
+## [engines/crypto/aws/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.3.0...engines/crypto/aws/v3.3.0) (2025-03-18)
 
 
 <a name="engines/eventbus/aws/v3.3.0"></a>
-## [engines/eventbus/aws/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/core/v3.3.0...engines/eventbus/aws/v3.3.0) (2025-03-18)
-
-
-<a name="core/v3.3.0"></a>
-## [core/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.3.0...core/v3.3.0) (2025-03-18)
+## [engines/eventbus/aws/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.3.0...engines/eventbus/aws/v3.3.0) (2025-03-18)
 
 
 <a name="engines/eventbus/channel/v3.3.0"></a>
-## [engines/eventbus/channel/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.3.0...engines/eventbus/channel/v3.3.0) (2025-03-18)
-
-
-<a name="engines/storage/couchdb/v3.3.0"></a>
-## [engines/storage/couchdb/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.3.0...engines/storage/couchdb/v3.3.0) (2025-03-18)
-
-
-<a name="sdk/v3.3.0"></a>
-## [sdk/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.3.0...sdk/v3.3.0) (2025-03-18)
+## [engines/eventbus/channel/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.3.0...engines/eventbus/channel/v3.3.0) (2025-03-18)
 
 
 <a name="engines/eventbus/amqp/v3.3.0"></a>
@@ -297,7 +367,27 @@
 
 
 <a name="engines/storage/postgres/v3.3.0"></a>
-## [engines/storage/postgres/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.3.0...engines/storage/postgres/v3.3.0) (2025-03-18)
+## [engines/storage/postgres/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.3.0...engines/storage/postgres/v3.3.0) (2025-03-18)
+
+
+<a name="sdk/v3.3.0"></a>
+## [sdk/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.3.0...sdk/v3.3.0) (2025-03-18)
+
+
+<a name="engines/crypto/pkcs11/v3.3.0"></a>
+## [engines/crypto/pkcs11/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/core/v3.3.0...engines/crypto/pkcs11/v3.3.0) (2025-03-18)
+
+
+<a name="core/v3.3.0"></a>
+## [core/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.3.0...core/v3.3.0) (2025-03-18)
+
+
+<a name="shared/http/v3.3.0"></a>
+## [shared/http/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.3.0...shared/http/v3.3.0) (2025-03-18)
+
+
+<a name="engines/storage/couchdb/v3.3.0"></a>
+## [engines/storage/couchdb/v3.3.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.3.0...engines/storage/couchdb/v3.3.0) (2025-03-18)
 
 
 <a name="engines/crypto/filesystem/v3.3.0"></a>
@@ -349,39 +439,35 @@
 
 
 <a name="engines/eventbus/aws/v3.2.2"></a>
-## [engines/eventbus/aws/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.2.2...engines/eventbus/aws/v3.2.2) (2025-01-25)
-
-
-<a name="engines/crypto/vaultkv2/v3.2.2"></a>
-## [engines/crypto/vaultkv2/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.2.2...engines/crypto/vaultkv2/v3.2.2) (2025-01-25)
-
-
-<a name="backend/v3.2.2"></a>
-## [backend/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.2.2...backend/v3.2.2) (2025-01-25)
-
-
-<a name="engines/storage/couchdb/v3.2.2"></a>
-## [engines/storage/couchdb/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.2.2...engines/storage/couchdb/v3.2.2) (2025-01-25)
-
-
-<a name="monolithic/v3.2.2"></a>
-## [monolithic/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.2.2...monolithic/v3.2.2) (2025-01-25)
-
-
-<a name="engines/crypto/filesystem/v3.2.2"></a>
-## [engines/crypto/filesystem/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.2.2...engines/crypto/filesystem/v3.2.2) (2025-01-25)
+## [engines/eventbus/aws/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.2.2...engines/eventbus/aws/v3.2.2) (2025-01-25)
 
 
 <a name="engines/eventbus/channel/v3.2.2"></a>
-## [engines/eventbus/channel/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/sqlite/v3.2.2...engines/eventbus/channel/v3.2.2) (2025-01-25)
+## [engines/eventbus/channel/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.2.2...engines/eventbus/channel/v3.2.2) (2025-01-25)
 
 
-<a name="engines/storage/sqlite/v3.2.2"></a>
-## [engines/storage/sqlite/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.2.2...engines/storage/sqlite/v3.2.2) (2025-01-25)
+<a name="engines/crypto/vaultkv2/v3.2.2"></a>
+## [engines/crypto/vaultkv2/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.2.2...engines/crypto/vaultkv2/v3.2.2) (2025-01-25)
 
 
-<a name="shared/aws/v3.2.2"></a>
-## [shared/aws/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.2.2...shared/aws/v3.2.2) (2025-01-25)
+<a name="monolithic/v3.2.2"></a>
+## [monolithic/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.2.2...monolithic/v3.2.2) (2025-01-25)
+
+
+<a name="backend/v3.2.2"></a>
+## [backend/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.2.2...backend/v3.2.2) (2025-01-25)
+
+
+<a name="engines/crypto/filesystem/v3.2.2"></a>
+## [engines/crypto/filesystem/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.2.2...engines/crypto/filesystem/v3.2.2) (2025-01-25)
+
+
+<a name="engines/storage/couchdb/v3.2.2"></a>
+## [engines/storage/couchdb/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.2.2...engines/storage/couchdb/v3.2.2) (2025-01-25)
+
+
+<a name="engines/eventbus/amqp/v3.2.2"></a>
+## [engines/eventbus/amqp/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.2.2...engines/eventbus/amqp/v3.2.2) (2025-01-25)
 
 
 <a name="shared/http/v3.2.2"></a>
@@ -393,15 +479,19 @@
 
 
 <a name="engines/crypto/pkcs11/v3.2.2"></a>
-## [engines/crypto/pkcs11/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.2.2...engines/crypto/pkcs11/v3.2.2) (2025-01-25)
+## [engines/crypto/pkcs11/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.2.2...engines/crypto/pkcs11/v3.2.2) (2025-01-25)
+
+
+<a name="shared/aws/v3.2.2"></a>
+## [shared/aws/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/sqlite/v3.2.2...shared/aws/v3.2.2) (2025-01-25)
+
+
+<a name="engines/storage/sqlite/v3.2.2"></a>
+## [engines/storage/sqlite/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.2.2...engines/storage/sqlite/v3.2.2) (2025-01-25)
 
 
 <a name="engines/storage/postgres/v3.2.2"></a>
-## [engines/storage/postgres/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.2.2...engines/storage/postgres/v3.2.2) (2025-01-25)
-
-
-<a name="engines/eventbus/amqp/v3.2.2"></a>
-## [engines/eventbus/amqp/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.2.2...engines/eventbus/amqp/v3.2.2) (2025-01-25)
+## [engines/storage/postgres/v3.2.2](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.2.2...engines/storage/postgres/v3.2.2) (2025-01-25)
 
 
 <a name="shared/subsystems/v3.2.2"></a>
@@ -425,11 +515,7 @@
 
 
 <a name="sdk/v3.2.1"></a>
-## [sdk/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/sqlite/v3.2.1...sdk/v3.2.1) (2025-01-24)
-
-
-<a name="engines/storage/sqlite/v3.2.1"></a>
-## [engines/storage/sqlite/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.2.1...engines/storage/sqlite/v3.2.1) (2025-01-24)
+## [sdk/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.2.1...sdk/v3.2.1) (2025-01-24)
 
 
 <a name="engines/storage/couchdb/v3.2.1"></a>
@@ -437,7 +523,15 @@
 
 
 <a name="engines/crypto/vaultkv2/v3.2.1"></a>
-## [engines/crypto/vaultkv2/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.2.1...engines/crypto/vaultkv2/v3.2.1) (2025-01-24)
+## [engines/crypto/vaultkv2/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/sqlite/v3.2.1...engines/crypto/vaultkv2/v3.2.1) (2025-01-24)
+
+
+<a name="engines/storage/sqlite/v3.2.1"></a>
+## [engines/storage/sqlite/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.2.1...engines/storage/sqlite/v3.2.1) (2025-01-24)
+
+
+<a name="engines/crypto/filesystem/v3.2.1"></a>
+## [engines/crypto/filesystem/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.2.1...engines/crypto/filesystem/v3.2.1) (2025-01-24)
 
 
 <a name="engines/storage/postgres/v3.2.1"></a>
@@ -449,11 +543,19 @@
 
 
 <a name="engines/eventbus/aws/v3.2.1"></a>
-## [engines/eventbus/aws/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.2.1...engines/eventbus/aws/v3.2.1) (2025-01-24)
+## [engines/eventbus/aws/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.2.1...engines/eventbus/aws/v3.2.1) (2025-01-24)
 
 
-<a name="engines/crypto/filesystem/v3.2.1"></a>
-## [engines/crypto/filesystem/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.2.1...engines/crypto/filesystem/v3.2.1) (2025-01-24)
+<a name="engines/crypto/aws/v3.2.1"></a>
+## [engines/crypto/aws/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.2.1...engines/crypto/aws/v3.2.1) (2025-01-24)
+
+
+<a name="engines/crypto/pkcs11/v3.2.1"></a>
+## [engines/crypto/pkcs11/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.2.1...engines/crypto/pkcs11/v3.2.1) (2025-01-24)
+
+
+<a name="engines/eventbus/channel/v3.2.1"></a>
+## [engines/eventbus/channel/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.2.1...engines/eventbus/channel/v3.2.1) (2025-01-24)
 
 
 <a name="shared/http/v3.2.1"></a>
@@ -461,35 +563,23 @@
 
 
 <a name="engines/eventbus/amqp/v3.2.1"></a>
-## [engines/eventbus/amqp/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.2.1...engines/eventbus/amqp/v3.2.1) (2025-01-24)
-
-
-<a name="engines/eventbus/channel/v3.2.1"></a>
-## [engines/eventbus/channel/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.2.1...engines/eventbus/channel/v3.2.1) (2025-01-24)
-
-
-<a name="engines/crypto/pkcs11/v3.2.1"></a>
-## [engines/crypto/pkcs11/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.2.1...engines/crypto/pkcs11/v3.2.1) (2025-01-24)
-
-
-<a name="engines/crypto/aws/v3.2.1"></a>
-## [engines/crypto/aws/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.2.1...engines/crypto/aws/v3.2.1) (2025-01-24)
+## [engines/eventbus/amqp/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.2.1...engines/eventbus/amqp/v3.2.1) (2025-01-24)
 
 
 <a name="shared/subsystems/v3.2.1"></a>
-## [shared/subsystems/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.2.1...shared/subsystems/v3.2.1) (2025-01-24)
-
-
-<a name="backend/v3.2.1"></a>
-## [backend/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.2.1...backend/v3.2.1) (2025-01-24)
-
-
-<a name="shared/aws/v3.2.1"></a>
-## [shared/aws/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/core/v3.2.1...shared/aws/v3.2.1) (2025-01-24)
+## [shared/subsystems/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/core/v3.2.1...shared/subsystems/v3.2.1) (2025-01-24)
 
 
 <a name="core/v3.2.1"></a>
-## [core/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.2.1...core/v3.2.1) (2025-01-24)
+## [core/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/shared/aws/v3.2.1...core/v3.2.1) (2025-01-24)
+
+
+<a name="shared/aws/v3.2.1"></a>
+## [shared/aws/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.2.1...shared/aws/v3.2.1) (2025-01-24)
+
+
+<a name="backend/v3.2.1"></a>
+## [backend/v3.2.1](https://github.com/lamassuiot/lamassuiot/compare/connectors/awsiot/v3.2.1...backend/v3.2.1) (2025-01-24)
 
 
 <a name="connectors/awsiot/v3.2.1"></a>
@@ -517,23 +607,15 @@
 
 
 <a name="engines/crypto/vaultkv2/v3.2.0"></a>
-## [engines/crypto/vaultkv2/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.2.0...engines/crypto/vaultkv2/v3.2.0) (2025-01-23)
-
-
-<a name="engines/storage/postgres/v3.2.0"></a>
-## [engines/storage/postgres/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.2.0...engines/storage/postgres/v3.2.0) (2025-01-23)
+## [engines/crypto/vaultkv2/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/monolithic/v3.2.0...engines/crypto/vaultkv2/v3.2.0) (2025-01-23)
 
 
 <a name="monolithic/v3.2.0"></a>
-## [monolithic/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.2.0...monolithic/v3.2.0) (2025-01-23)
+## [monolithic/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.2.0...monolithic/v3.2.0) (2025-01-23)
 
 
-<a name="shared/http/v3.2.0"></a>
-## [shared/http/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/sqlite/v3.2.0...shared/http/v3.2.0) (2025-01-23)
-
-
-<a name="engines/storage/sqlite/v3.2.0"></a>
-## [engines/storage/sqlite/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.2.0...engines/storage/sqlite/v3.2.0) (2025-01-23)
+<a name="engines/storage/postgres/v3.2.0"></a>
+## [engines/storage/postgres/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.2.0...engines/storage/postgres/v3.2.0) (2025-01-23)
 
 
 <a name="engines/storage/couchdb/v3.2.0"></a>
@@ -541,19 +623,39 @@
 
 
 <a name="engines/eventbus/channel/v3.2.0"></a>
-## [engines/eventbus/channel/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.2.0...engines/eventbus/channel/v3.2.0) (2025-01-23)
+## [engines/eventbus/channel/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.2.0...engines/eventbus/channel/v3.2.0) (2025-01-23)
+
+
+<a name="shared/http/v3.2.0"></a>
+## [shared/http/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.2.0...shared/http/v3.2.0) (2025-01-23)
 
 
 <a name="sdk/v3.2.0"></a>
-## [sdk/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.2.0...sdk/v3.2.0) (2025-01-23)
+## [sdk/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/sqlite/v3.2.0...sdk/v3.2.0) (2025-01-23)
 
 
-<a name="engines/crypto/filesystem/v3.2.0"></a>
-## [engines/crypto/filesystem/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.2.0...engines/crypto/filesystem/v3.2.0) (2025-01-23)
+<a name="engines/storage/sqlite/v3.2.0"></a>
+## [engines/storage/sqlite/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.2.0...engines/storage/sqlite/v3.2.0) (2025-01-23)
 
 
 <a name="engines/crypto/pkcs11/v3.2.0"></a>
-## [engines/crypto/pkcs11/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.2.0...engines/crypto/pkcs11/v3.2.0) (2025-01-23)
+## [engines/crypto/pkcs11/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/filesystem/v3.2.0...engines/crypto/pkcs11/v3.2.0) (2025-01-23)
+
+
+<a name="engines/crypto/filesystem/v3.2.0"></a>
+## [engines/crypto/filesystem/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.2.0...engines/crypto/filesystem/v3.2.0) (2025-01-23)
+
+
+<a name="engines/crypto/aws/v3.2.0"></a>
+## [engines/crypto/aws/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/core/v3.2.0...engines/crypto/aws/v3.2.0) (2025-01-23)
+
+
+<a name="core/v3.2.0"></a>
+## [core/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.2.0...core/v3.2.0) (2025-01-23)
+
+
+<a name="engines/eventbus/aws/v3.2.0"></a>
+## [engines/eventbus/aws/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/amqp/v3.2.0...engines/eventbus/aws/v3.2.0) (2025-01-23)
 
 
 <a name="engines/eventbus/amqp/v3.2.0"></a>
@@ -561,19 +663,7 @@
 
 
 <a name="connectors/awsiot/v3.2.0"></a>
-## [connectors/awsiot/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.2.0...connectors/awsiot/v3.2.0) (2025-01-23)
-
-
-<a name="engines/eventbus/aws/v3.2.0"></a>
-## [engines/eventbus/aws/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/core/v3.2.0...engines/eventbus/aws/v3.2.0) (2025-01-23)
-
-
-<a name="core/v3.2.0"></a>
-## [core/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.2.0...core/v3.2.0) (2025-01-23)
-
-
-<a name="engines/crypto/aws/v3.2.0"></a>
-## [engines/crypto/aws/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.2.0...engines/crypto/aws/v3.2.0) (2025-01-23)
+## [connectors/awsiot/v3.2.0](https://github.com/lamassuiot/lamassuiot/compare/backend/v3.2.0...connectors/awsiot/v3.2.0) (2025-01-23)
 
 
 <a name="backend/v3.2.0"></a>
@@ -623,35 +713,39 @@
 
 
 <a name="backend/v3.1.0"></a>
-## [backend/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.1.0...backend/v3.1.0) (2024-12-03)
-
-
-<a name="sdk/v3.1.0"></a>
-## [sdk/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.1.0...sdk/v3.1.0) (2024-12-03)
-
-
-<a name="engines/eventbus/channel/v3.1.0"></a>
-## [engines/eventbus/channel/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.1.0...engines/eventbus/channel/v3.1.0) (2024-12-03)
-
-
-<a name="engines/crypto/vaultkv2/v3.1.0"></a>
-## [engines/crypto/vaultkv2/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.1.0...engines/crypto/vaultkv2/v3.1.0) (2024-12-03)
+## [backend/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/couchdb/v3.1.0...backend/v3.1.0) (2024-12-03)
 
 
 <a name="engines/storage/couchdb/v3.1.0"></a>
-## [engines/storage/couchdb/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.1.0...engines/storage/couchdb/v3.1.0) (2024-12-03)
-
-
-<a name="engines/eventbus/aws/v3.1.0"></a>
-## [engines/eventbus/aws/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.1.0...engines/eventbus/aws/v3.1.0) (2024-12-03)
-
-
-<a name="engines/crypto/aws/v3.1.0"></a>
-## [engines/crypto/aws/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.1.0...engines/crypto/aws/v3.1.0) (2024-12-03)
+## [engines/storage/couchdb/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/storage/postgres/v3.1.0...engines/storage/couchdb/v3.1.0) (2024-12-03)
 
 
 <a name="engines/storage/postgres/v3.1.0"></a>
-## [engines/storage/postgres/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.1.0...engines/storage/postgres/v3.1.0) (2024-12-03)
+## [engines/storage/postgres/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/channel/v3.1.0...engines/storage/postgres/v3.1.0) (2024-12-03)
+
+
+<a name="engines/eventbus/channel/v3.1.0"></a>
+## [engines/eventbus/channel/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/sdk/v3.1.0...engines/eventbus/channel/v3.1.0) (2024-12-03)
+
+
+<a name="sdk/v3.1.0"></a>
+## [sdk/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/eventbus/aws/v3.1.0...sdk/v3.1.0) (2024-12-03)
+
+
+<a name="engines/eventbus/aws/v3.1.0"></a>
+## [engines/eventbus/aws/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/vaultkv2/v3.1.0...engines/eventbus/aws/v3.1.0) (2024-12-03)
+
+
+<a name="engines/crypto/vaultkv2/v3.1.0"></a>
+## [engines/crypto/vaultkv2/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/aws/v3.1.0...engines/crypto/vaultkv2/v3.1.0) (2024-12-03)
+
+
+<a name="engines/crypto/aws/v3.1.0"></a>
+## [engines/crypto/aws/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.1.0...engines/crypto/aws/v3.1.0) (2024-12-03)
+
+
+<a name="shared/subsystems/v3.1.0"></a>
+## [shared/subsystems/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/engines/crypto/pkcs11/v3.1.0...shared/subsystems/v3.1.0) (2024-12-03)
 
 
 <a name="engines/crypto/pkcs11/v3.1.0"></a>
@@ -663,11 +757,7 @@
 
 
 <a name="connectors/awsiot/v3.1.0"></a>
-## [connectors/awsiot/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/shared/subsystems/v3.1.0...connectors/awsiot/v3.1.0) (2024-12-03)
-
-
-<a name="shared/subsystems/v3.1.0"></a>
-## [shared/subsystems/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.1.0...shared/subsystems/v3.1.0) (2024-12-03)
+## [connectors/awsiot/v3.1.0](https://github.com/lamassuiot/lamassuiot/compare/shared/http/v3.1.0...connectors/awsiot/v3.1.0) (2024-12-03)
 
 
 <a name="shared/http/v3.1.0"></a>
