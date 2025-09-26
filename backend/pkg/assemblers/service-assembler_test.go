@@ -4,7 +4,6 @@ import (
 	"crypto/elliptic"
 	"crypto/tls"
 	"fmt"
-	"maps"
 	"net/http"
 	"os"
 	"slices"
@@ -688,12 +687,19 @@ func SleepRetry(retry int, sleep time.Duration, f func() error) error {
 }
 
 func getDlqEventBusConfig(conf cconfig.EventBusEngine) cconfig.EventBusEngine {
-	conf2 := conf
+	dlqEventBus := conf
+	dlqEventBus.Config = deepCopy(conf.Config)
+	dlqEventBus.Config["exchange"] = "lamassu-dlq"
+	return dlqEventBus
+}
 
-	if conf2.Config != nil {
-		maps.Copy(conf2.Config, conf.Config)
-		conf2.Config["exchange"] = "lamassu-dlq"
+func deepCopy(src map[string]interface{}) map[string]interface{} {
+	if src == nil {
+		return nil
 	}
-
-	return conf2
+	dst := make(map[string]interface{}, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
 }

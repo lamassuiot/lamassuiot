@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"maps"
 	"net/http"
 	"os"
 	"os/signal"
@@ -293,13 +292,13 @@ func main() {
 
 		eventBus = rabbitmqSubsystem.Config.(cconfig.EventBusEngine)
 		// make a copy for DLQ using deep copy
-		dlqEventBus = eventBus
-		maps.Copy(dlqEventBus.Config, eventBus.Config)
 
 		adminPort = (*rabbitmqSubsystem.Extra)["adminPort"].(int)
 		basicAuth := eventBus.Config["basic_auth"].(map[string]interface{})
 
-		dlqEventBus.Config["exchange"] = "lamassu-events-dlq"
+		dlqEventBus = eventBus
+		dlqEventBus.Config = deepCopy(eventBus.Config)
+		dlqEventBus.Config["exchange"] = "lamassu-dlq"
 
 		fmt.Printf(" 	-- rabbitmq UI port: %d\n", adminPort)
 		fmt.Printf(" 	-- rabbitmq amqp port: %d\n", eventBus.Config["port"].(int))
@@ -493,4 +492,15 @@ func printWColor(str string, fg, bg color.Attribute) {
 	color.Set(bg)
 	fmt.Println(str)
 	color.Unset()
+}
+
+func deepCopy(src map[string]interface{}) map[string]interface{} {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]interface{}, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
 }

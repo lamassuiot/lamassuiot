@@ -76,7 +76,6 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 	}
 
 	if conf.SubscriberEventBus.Enabled && !conf.SubscriberDLQEventBus.Enabled {
-		lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Device Manager", "Event Bus")
 		lMessaging.Fatalf("Subscriber Event Bus is enabled but DLQ is not enabled. This is not supported. Exiting")
 	}
 
