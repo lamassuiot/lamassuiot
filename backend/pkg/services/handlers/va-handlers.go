@@ -5,8 +5,7 @@ import (
 	"fmt"
 
 	"github.com/cloudevents/sdk-go/v2/event"
-	beService "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services/eventhandling"
@@ -15,18 +14,17 @@ import (
 )
 
 func NewVAEventHandler(l *logrus.Entry, svc services.CRLService) *eventhandling.CloudEventHandler {
-	crlSvc := svc.(*beService.CRLServiceBackend)
 	return &eventhandling.CloudEventHandler{
 		Logger: l,
 		DispatchMap: map[string]func(context.Context, *event.Event) error{
-			string(models.EventCreateCAKey):                func(ctx context.Context, m *event.Event) error { return createCAHandler(ctx, m, crlSvc, l) },
-			string(models.EventUpdateCertificateStatusKey): func(ctx context.Context, m *event.Event) error { return updateCertificateStatus(ctx, m, crlSvc, l) },
+			string(models.EventCreateCAKey):                func(ctx context.Context, m *event.Event) error { return createCAHandler(ctx, m, svc, l) },
+			string(models.EventUpdateCertificateStatusKey): func(ctx context.Context, m *event.Event) error { return updateCertificateStatus(ctx, m, svc, l) },
 		},
 	}
 }
 
-func createCAHandler(ctx context.Context, event *event.Event, crlSvc *beService.CRLServiceBackend, lMessaging *logrus.Entry) error {
-	ca, err := chelpers.GetEventBody[models.CACertificate](event)
+func createCAHandler(ctx context.Context, event *event.Event, crlSvc services.CRLService, lMessaging *logrus.Entry) error {
+	ca, err := helpers.GetEventBody[models.CACertificate](event)
 	if err != nil {
 		err = fmt.Errorf("could not decode cloud event: %s", err)
 		lMessaging.Error(err)
@@ -46,8 +44,8 @@ func createCAHandler(ctx context.Context, event *event.Event, crlSvc *beService.
 	return nil
 }
 
-func updateCertificateStatus(ctx context.Context, event *event.Event, crlSvc *beService.CRLServiceBackend, lMessaging *logrus.Entry) error {
-	cert, err := chelpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
+func updateCertificateStatus(ctx context.Context, event *event.Event, crlSvc services.CRLService, lMessaging *logrus.Entry) error {
+	cert, err := helpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
 	if err != nil {
 		err = fmt.Errorf("could not decode cloud event: %s", err)
 		lMessaging.Error(err)
