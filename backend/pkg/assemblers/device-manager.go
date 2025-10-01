@@ -72,38 +72,38 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 			Logger:    lMessaging,
 		})(svc)
 
+		//this utilizes the middlewares from within the DeviceManager service (if svc.service.func is used instead of regular svc.func)
 		deviceSvc.SetService(svc)
 	}
 
-	if conf.SubscriberEventBus.Enabled && !conf.SubscriberDLQEventBus.Enabled {
-		lMessaging.Fatalf("Subscriber Event Bus is enabled but DLQ is not enabled. This is not supported. Exiting")
-	}
+	if conf.SubscriberEventBus.Enabled {
+		if !conf.SubscriberDLQEventBus.Enabled {
+			lMessaging.Fatalf("Subscriber Event Bus is enabled but DLQ is not enabled. This is not supported. Exiting")
+		} else {
+			dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberDLQEventBus, serviceID, lMessaging)
+			if err != nil {
+				return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
+			}
 
-	if conf.SubscriberEventBus.Enabled && conf.SubscriberDLQEventBus.Enabled {
-		dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberDLQEventBus, serviceID, lMessaging)
-		if err != nil {
-			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
-		}
+			lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Device Manager", "Event Bus")
+			lMessaging.Infof("Subscriber Event Bus is enabled")
 
-		lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Device Manager", "Event Bus")
-		lMessaging.Infof("Subscriber Event Bus is enabled")
+			subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
+			if err != nil {
+				lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
+				return nil, err
+			}
 
-		subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
-		if err != nil {
-			lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
-			return nil, err
-		}
+			eventHandlers := handlers.NewDeviceEventHandler(lMessaging, svc)
+			subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManger-DEFAULT", []string{"certificate.#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
+			if err != nil {
+				return nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
+			}
 
-		eventHandlers := handlers.NewDeviceEventHandler(lMessaging, svc)
-		subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManger-DEFAULT", []string{"certificate.#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
-		if err != nil {
-			return nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
-		}
-
-		err = subHandler.RunAsync()
-		if err != nil {
-			lMessaging.Errorf("could not run Event Bus Subscription Handler: %s", err)
-			return nil, err
+			if err := subHandler.RunAsync(); err != nil {
+				lMessaging.Errorf("could not run Event Bus Subscription Handler: %s", err)
+				return nil, err
+			}
 		}
 	}
 

@@ -59,6 +59,8 @@ func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService 
 		logger:           builder.Logger,
 	}
 
+	svc.service = svc
+
 	return svc
 }
 

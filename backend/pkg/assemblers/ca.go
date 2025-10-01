@@ -119,6 +119,9 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 
 		svc = eventpub.NewCAEventBusPublisher(eventPublisher)(svc)
 		svc = auditpub.NewCAAuditEventBusPublisher(*auditpub.NewAuditPublisher(auditPublisher))(svc)
+
+		//this utilizes the middlewares from within the CA service (if svc.service.func is used instead of regular svc.func)
+		caSvc.SetService(svc)
 	}
 
 	var scheduler *jobs.JobScheduler
@@ -128,9 +131,6 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 		scheduler = jobs.NewJobScheduler(lMonitor, conf.CertificateMonitoringJob.Frequency, monitorJob)
 		scheduler.Start()
 	}
-
-	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
-	caSvc.SetService(svc)
 
 	return &svc, scheduler, nil
 }
