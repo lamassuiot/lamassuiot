@@ -84,9 +84,10 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService) (*ser
 		if err != nil {
 			return nil, nil, err
 		}
-	}
 
-	crlSvc.SetService(crl)
+		//this utilizes the middlewares from within the CRL service (if svc.service.func is used instead of regular svc.func)
+		crlSvc.SetService(crl)
+	}
 
 	if conf.SubscriberEventBus.Enabled {
 		err := createSubscriberEventBus(conf, crlSvc)
