@@ -67,7 +67,7 @@ There are 3 main repositories to consider when developing Lamassu
 
 ### Running services locally - Development
 
-Running all Lamassu Services all-in-one is as easy as running the following command. Bare in mind that `docker` is a requirement. The monolithic launcher runs and configures the required infrastructure (i.e. postgres, rabbitmq) as docker containers. To run it, exec the command:
+Running all Lamassu Services all-in-one is as easy as running the following command. Bear in mind that `docker` is a requirement. The monolithic launcher runs and configures the required infrastructure (i.e. postgres, rabbitmq) as docker containers. To run it, exec the command:
 
 ```bash
 go run ./monolithic/cmd/development/main.go
