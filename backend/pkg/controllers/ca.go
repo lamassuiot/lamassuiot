@@ -1438,8 +1438,24 @@ func (r *caHttpRoutes) ImportKey(ctx *gin.Context) {
 		return
 	}
 
+	decodedKey, err := base64.StdEncoding.DecodeString(requestBody.PrivateKey)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+	if len(decodedKey) > 0 {
+		ctx.JSON(400, gin.H{"err": "private key is required"})
+		return
+	}
+
+	privKey, err := helpers.ParsePrivateKey(decodedKey)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
 	key, err := r.svc.ImportKey(ctx, services.ImportKeyInput{
-		PrivateKey: requestBody.PrivateKey,
+		PrivateKey: privKey,
 		EngineID:   requestBody.EngineID,
 		Name:       requestBody.Name,
 	})

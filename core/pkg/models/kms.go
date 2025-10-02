@@ -13,6 +13,7 @@ type Key struct {
 	Status     CertificateStatus `json:"status"`
 	CreationTS time.Time         `json:"creation_ts"`
 	Name       string            `json:"name"`
+	Metadata   map[string]any    `json:"metadata,omitempty"`
 }
 
 type MessageSignature struct {

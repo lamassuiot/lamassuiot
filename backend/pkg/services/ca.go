@@ -9,9 +9,9 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -1723,48 +1723,6 @@ func buildPKCS11ID(engineID, keyID, keyType string) string {
 	return "pkcs11:token-id=" + engineID + ";id=" + keyID + ";type=" + keyType
 }
 
-// Helper to build KeyInfo from engine and keyID
-func buildKeyInfo(engineID, keyID, keyType string, signer crypto.Signer, lFunc *logrus.Entry) (*models.Key, error) {
-	publicKey := signer.Public()
-	var (
-		algorithm string
-		size      int
-		pubBytes  []byte
-		pemType   string
-		err       error
-	)
-
-	switch pk := publicKey.(type) {
-	case *rsa.PublicKey:
-		algorithm = "RSA"
-		size = pk.Size() * 8
-		pubBytes, err = x509.MarshalPKIXPublicKey(pk)
-		pemType = "PUBLIC KEY"
-	case *ecdsa.PublicKey:
-		algorithm = "ECDSA"
-		size = pk.Params().BitSize
-		pubBytes, err = x509.MarshalPKIXPublicKey(pk)
-		pemType = "PUBLIC KEY"
-	default:
-		lFunc.Errorf("GetKeys - Unsupported public key type for keyID: %s", keyID)
-		return nil, nil
-	}
-	if err != nil {
-		lFunc.Errorf("GetKeys - Marshal public key error: %s", err)
-		return nil, err
-	}
-
-	pemBlock := pem.EncodeToMemory(&pem.Block{Type: pemType, Bytes: pubBytes})
-	base64PEM := base64.StdEncoding.EncodeToString(pemBlock)
-
-	return &models.Key{
-		ID:        buildPKCS11ID(engineID, keyID, keyType),
-		Algorithm: algorithm,
-		Size:      size,
-		PublicKey: base64PEM,
-	}, nil
-}
-
 func parseAlgorithm(inputAlgorithm string) (hash crypto.Hash, isRSA, isPSS bool, err error) {
 	switch inputAlgorithm {
 	case "RSASSA_PKCS1_V1_5_SHA_256":
@@ -1885,16 +1843,19 @@ func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.Creat
 	}
 
 	var engine *cryptoengines.CryptoEngine
+	engineID := ""
 	var ok bool
 
 	if input.EngineID == "" {
 		engine, ok = svc.cryptoEngines[svc.defaultCryptoEngineID]
+		engineID = svc.defaultCryptoEngineID
 	} else {
 		engine, ok = svc.cryptoEngines[input.EngineID]
+		engineID = input.EngineID
 	}
 
 	if !ok {
-		lFunc.Errorf("CreateKey - Engine with id %s not found", input.EngineID)
+		lFunc.Errorf("CreateKey - Engine with id %s not found", engineID)
 		return nil, fmt.Errorf("crypto engine not found")
 	}
 
@@ -1954,13 +1915,14 @@ func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.Creat
 	base64PEM := base64.StdEncoding.EncodeToString(pemBlock)
 
 	kmsKey := models.Key{
-		ID:         buildPKCS11ID(svc.defaultCryptoEngineID, keyID, "private"),
+		ID:         buildPKCS11ID(engineID, keyID, "private"),
 		Algorithm:  input.Algorithm,
 		Size:       input.Size,
 		PublicKey:  base64PEM,
 		Status:     models.StatusActive,
 		CreationTS: time.Now(),
 		Name:       input.Name,
+		Metadata:   map[string]any{},
 	}
 
 	return svc.kmsStorage.Insert(ctx, &kmsKey)
@@ -2197,32 +2159,21 @@ func (svc *CAServiceBackend) ImportKey(ctx context.Context, input services.Impor
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	// Validate PEM format
-	pemBlock, _ := pem.Decode(input.PrivateKey)
-	if pemBlock == nil || !strings.Contains(string(input.PrivateKey), "-----END "+pemBlock.Type+"-----") {
-		lFunc.Errorf("ImportKey - invalid PEM format for private key")
-		return nil, errors.New("invalid PEM format for private key")
-	}
-
-	// Parse the private key from PEM
-	key, err := chelpers.ParsePrivateKey(input.PrivateKey)
-	if err != nil {
-		lFunc.Errorf("ImportKey - failed to parse private key: %s", err)
-		return nil, errors.New("failed to parse private key")
-	}
-
 	// Check if EngineID is provided, otherwise use default
 	var engine *cryptoengines.CryptoEngine
+	engineID := ""
 	var ok bool
 
 	if input.EngineID == "" {
 		engine, ok = svc.cryptoEngines[svc.defaultCryptoEngineID]
+		engineID = svc.defaultCryptoEngineID
 	} else {
 		engine, ok = svc.cryptoEngines[input.EngineID]
+		engineID = input.EngineID
 	}
 
 	if !ok {
-		lFunc.Errorf("CreateKey - Engine with id %s not found", input.EngineID)
+		lFunc.Errorf("CreateKey - Engine with id %s not found", engineID)
 		return nil, fmt.Errorf("crypto engine not found")
 	}
 
@@ -2235,7 +2186,7 @@ func (svc *CAServiceBackend) ImportKey(ctx context.Context, input services.Impor
 		size      int
 	)
 
-	switch k := key.(type) {
+	switch k := input.PrivateKey.(type) {
 	case *rsa.PrivateKey:
 		keyID, signer, err = engineInstance.ImportRSAPrivateKey(k)
 		algorithm = "RSA"
@@ -2264,17 +2215,17 @@ func (svc *CAServiceBackend) ImportKey(ctx context.Context, input services.Impor
 	base64PEM := base64.StdEncoding.EncodeToString(pemBlockPub)
 
 	kmsKey := models.Key{
-		ID:         buildPKCS11ID(svc.defaultCryptoEngineID, keyID, "private"),
+		ID:         buildPKCS11ID(engineID, keyID, "private"),
 		Algorithm:  algorithm,
 		Size:       size,
 		PublicKey:  base64PEM,
 		Status:     models.StatusActive,
 		CreationTS: time.Now(),
 		Name:       input.Name,
+		Metadata:   map[string]any{},
 	}
 
 	return svc.kmsStorage.Insert(ctx, &kmsKey)
-
 }
 
 func (svc *CAServiceBackend) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {

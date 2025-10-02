@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -553,8 +554,15 @@ func (cli *httpCAClient) VerifySignature(ctx context.Context, input services.Ver
 }
 
 func (cli *httpCAClient) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.Key, error) {
+	keyPem, err := helpers.PrivateKeyToPEM(input.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	keyB64 := base64.StdEncoding.EncodeToString([]byte(keyPem))
+
 	response, err := Post[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys/import", resources.ImportKeyBody{
-		PrivateKey: input.PrivateKey,
+		PrivateKey: keyB64,
 		EngineID:   input.EngineID,
 		Name:       input.Name,
 	}, map[int][]error{})

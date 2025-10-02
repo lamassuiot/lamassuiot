@@ -153,7 +153,7 @@ type VerifySignBody struct {
 }
 
 type ImportKeyBody struct {
-	PrivateKey []byte `json:"private_key"`
+	PrivateKey string `json:"private_key"`
 	EngineID   string `json:"engine_id"`
 	Name       string `json:"name"`
 }

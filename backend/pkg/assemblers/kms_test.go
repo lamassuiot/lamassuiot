@@ -11,6 +11,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -19,7 +20,7 @@ import (
 )
 
 func StartKMSServiceTestServer(t *testing.T, withEventBus bool) (*CATestServer, error) {
-	builder := TestServiceBuilder{}.WithDatabase("ca", "kms")
+	builder := TestServiceBuilder{}.WithDatabase("ca", "kms").WithVault()
 	testServer, err := builder.Build(t)
 
 	if err != nil {
@@ -47,6 +48,61 @@ func TestCreateKey(t *testing.T) {
 		resultCheck func(createdKey *models.Key, err error) error
 	}{
 		{
+			name:   "OK/KeyType-RSA-DefaultEngine",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.Key, error) {
+				return caSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Test RSA Key",
+					Algorithm: "RSA",
+					Size:      2048,
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				keyUriParts, err := parsePKCS11URI(createdKey.ID)
+				if err != nil {
+					return fmt.Errorf("failed to parse created key ID as PKCS#11 URI: %s", err)
+				}
+
+				if createdKey == nil || createdKey.Name != "Test RSA Key" || createdKey.Algorithm != "RSA" || createdKey.Size != 2048 || !strings.HasPrefix(createdKey.ID, "pkcs11:") || keyUriParts["token-id"] != "filesystem-1" {
+					return fmt.Errorf("unexpected key result for RSA DefaultEngine: %+v", createdKey)
+				}
+
+				if err != nil {
+					return fmt.Errorf("should've created KMS key without error, but got error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/KeyType-RSA-NonDefaultEngine",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.Key, error) {
+				return caSDK.CreateKey(context.Background(), services.CreateKeyInput{
+					Name:      "Test RSA Key Vault",
+					Algorithm: "RSA",
+					Size:      2048,
+					EngineID:  "vault-1",
+				})
+			},
+			resultCheck: func(createdKey *models.Key, err error) error {
+				keyUriParts, err := parsePKCS11URI(createdKey.ID)
+				if err != nil {
+					return fmt.Errorf("failed to parse created key ID as PKCS#11 URI: %s", err)
+				}
+
+				if createdKey == nil || createdKey.Name != "Test RSA Key Vault" || createdKey.Algorithm != "RSA" || createdKey.Size != 2048 || !strings.HasPrefix(createdKey.ID, "pkcs11:") || keyUriParts["token-id"] != "vault-1" {
+					return fmt.Errorf("unexpected key result for RSA NonDefaultEngine: %+v", createdKey)
+				}
+
+				if err != nil {
+					return fmt.Errorf("should've created KMS key without error, but got error: %s", err)
+				}
+
+				return nil
+			},
+		},
+		{
 			name:   "OK/KeyType-RSA",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.Key, error) {
@@ -59,8 +115,9 @@ func TestCreateKey(t *testing.T) {
 			},
 			resultCheck: func(createdKey *models.Key, err error) error {
 				if err != nil {
-					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+					return fmt.Errorf("should've created KMS key without error, but got error: %s", err)
 				}
+
 				return nil
 			},
 		},
@@ -1230,4 +1287,30 @@ func TestVerifySignature(t *testing.T) {
 			}
 		})
 	}
+}
+
+func parsePKCS11URI(uri string) (map[string]string, error) {
+	result := make(map[string]string)
+
+	// Strip the scheme ("pkcs11:") if present
+	if strings.HasPrefix(uri, "pkcs11:") {
+		uri = strings.TrimPrefix(uri, "pkcs11:")
+	}
+
+	// Split key=value pairs by ";"
+	parts := strings.Split(uri, ";")
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) != 2 {
+			return nil, fmt.Errorf("invalid part: %s", part)
+		}
+		key := kv[0]
+		val := kv[1]
+		result[key] = val
+	}
+
+	return result, nil
 }
