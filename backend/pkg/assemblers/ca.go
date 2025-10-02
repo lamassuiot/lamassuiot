@@ -91,6 +91,7 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 		CACertificateRequestStorage: caCertRequestStorage,
 		IssuanceProfileStorage:      issuerProfilesStorage,
 		VAServerDomains:             conf.VAServerDomains,
+		AllowCascadeDelete:          conf.AllowCascadeDelete,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create CA service: %v", err)

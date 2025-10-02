@@ -21,4 +21,6 @@ var (
 	ErrCertificateAlreadyRevoked             error = errors.New("certificate already revoked")
 	ErrCertificateStatusTransitionNotAllowed error = errors.New("new status transition not allowed for certificate")
 	ErrCertificateIssuerCAExists             error = errors.New("cannot delete certificate: issuer CA still exists")
+
+	ErrCascadeDeleteNotAllowed error = errors.New("cascade delete operations are not allowed by configuration")
 )
