@@ -222,10 +222,16 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			_, _, err = engine.ImportECDSAPrivateKey(input.CAECKey)
 		} else if input.CAMLDSAKey != nil {
 			_, _, err = engine.ImportMLDSAPrivateKey(input.CAMLDSAKey)
+		} else if input.CAEd25519Key != nil {
+			_, _, err = engine.ImportEd25519PrivateKey(input.CAEd25519Key)
 		} else {
+<<<<<<< HEAD
 			lFunc.Errorf("key type %s not supported", input.KeyType)
 			return nil, fmt.Errorf("KeyType not supported")
 >>>>>>> b748cf05 (Added CA Sign and Verify support for MLDSA certificates. CRL generation and verification has been fixed)
+=======
+	 		return nil, fmt.Errorf("KeyType not supported")
+>>>>>>> cecef1e3 (Added support for the Ed25519 CA creation and certificate issuing via CSR.)
 		}
 
 		if err != nil {

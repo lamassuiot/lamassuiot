@@ -6,6 +6,7 @@ import (
 =======
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/rsa"
 >>>>>>> 0841445c (Added more tests for MLDSA CA creation. Modified the CryptoEngine interface to add the ImportMLDSAPrivateKey operation and added the required changes in the different engines.)
 	"crypto/x509"
@@ -106,6 +107,7 @@ type ImportCAInput struct {
 	CARSAKey      *rsa.PrivateKey
 	CAECKey       *ecdsa.PrivateKey
 	CAMLDSAKey    crypto.Signer
+	CAEd25519Key  ed25519.PrivateKey
 	KeyType       models.KeyType
 >>>>>>> 0841445c (Added more tests for MLDSA CA creation. Modified the CryptoEngine interface to add the ImportMLDSAPrivateKey operation and added the required changes in the different engines.)
 	EngineID      string

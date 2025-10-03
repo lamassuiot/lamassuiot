@@ -6,6 +6,7 @@ import (
 	circlSign "cloudflare/circl/sign"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/rsa"
 >>>>>>> b748cf05 (Added CA Sign and Verify support for MLDSA certificates. CRL generation and verification has been fixed)
 	"encoding/base64"
@@ -156,6 +157,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 	var rsaKey *rsa.PrivateKey
 	var ecKey *ecdsa.PrivateKey
 	var mldsaKey crypto.Signer
+	var ed25519Key ed25519.PrivateKey
 
 	switch key := key.(type) {
 	case *rsa.PrivateKey:
@@ -164,6 +166,8 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		ecKey = key
 	case *circlSign.PrivateKey:
 		mldsaKey = *key
+	case ed25519.PrivateKey:
+		ed25519Key = key
 	}
 
 >>>>>>> b748cf05 (Added CA Sign and Verify support for MLDSA certificates. CRL generation and verification has been fixed)
@@ -180,6 +184,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		CARSAKey:      rsaKey,
 		CAECKey:       ecKey,
 		CAMLDSAKey:    mldsaKey,
+		CAEd25519Key:  ed25519Key,
 
 		EngineID:    requestBody.EngineID,
 		CARequestID: requestBody.CARequestID,
