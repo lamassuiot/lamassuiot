@@ -13,6 +13,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -1821,7 +1822,7 @@ func (svc *CAServiceBackend) GetKeyByID(ctx context.Context, input services.GetB
 	}
 
 	if !exists {
-		lFunc.Errorf("Key %s can not be found in storage engine", input.ID)
+		lFunc.Errorf("key %s can not be found in storage engine", input.ID)
 		return nil, errs.ErrKeyNotFound
 	}
 
@@ -1838,7 +1839,7 @@ func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.Creat
 	}
 
 	if input.Algorithm == "" || input.Size == 0 {
-		lFunc.Error("CreateKey - Algorithm and Size are required")
+		lFunc.Error("algorithm and size are required")
 		return nil, errs.ErrValidateBadRequest
 	}
 
@@ -1855,7 +1856,7 @@ func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.Creat
 	}
 
 	if !ok {
-		lFunc.Errorf("CreateKey - Engine with id %s not found", engineID)
+		lFunc.Errorf("engine with id %s not found", engineID)
 		return nil, fmt.Errorf("crypto engine not found")
 	}
 
@@ -1866,16 +1867,18 @@ func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.Creat
 		signer crypto.Signer
 	)
 
+	err = svc.checkKeySpecEngineCompliance(input.Algorithm, input.Size, engineInstance)
+	if err != nil {
+		lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+		return nil, err
+	}
+
 	switch input.Algorithm {
 	case "RSA":
 		bits := input.Size
-		if bits < 1024 {
-			lFunc.Error("CreateKey - Invalid RSA key size")
-			return nil, errors.New("invalid RSA key size, must be at least 1024 bits")
-		}
 		keyID, signer, err = engineInstance.CreateRSAPrivateKey(bits)
 		if err != nil {
-			lFunc.Errorf("CreateKey - CreateRSAPrivateKey error: %s", err)
+			lFunc.Errorf("error creating RSA private key: %s", err)
 			return nil, errors.New("failed to create RSA private key")
 		}
 	case "ECDSA":
@@ -1891,23 +1894,23 @@ func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.Creat
 		case 521:
 			curve = elliptic.P521()
 		default:
-			lFunc.Error("CreateKey - Invalid ECDSA key size")
+			lFunc.Error("invalid ECDSA key size")
 			return nil, errors.New("invalid ECDSA key size")
 		}
 		keyID, signer, err = engineInstance.CreateECDSAPrivateKey(curve)
 		if err != nil {
-			lFunc.Errorf("CreateKey - CreateECDSAPrivateKey error: %s", err)
+			lFunc.Errorf("error creating ECDSA private key: %s", err)
 			return nil, err
 		}
 	default:
-		lFunc.Errorf("CreateKey - Unsupported algorithm: %s", input.Algorithm)
+		lFunc.Errorf("unsupported algorithm: %s", input.Algorithm)
 		return nil, errors.New("unknown or unsupported algorithm")
 	}
 
 	publicKey := signer.Public()
 	pubBytes, err := x509.MarshalPKIXPublicKey(publicKey)
 	if err != nil {
-		lFunc.Errorf("CreateKey - Marshal public key error: %s", err)
+		lFunc.Errorf("marshal public key error: %s", err)
 		return nil, errors.New("failed to marshal public key")
 	}
 
@@ -1926,6 +1929,113 @@ func (svc *CAServiceBackend) CreateKey(ctx context.Context, input services.Creat
 	}
 
 	return svc.kmsStorage.Insert(ctx, &kmsKey)
+}
+
+func (svc *CAServiceBackend) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.Key, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := validate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("ImportKeyInput struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	// Check if EngineID is provided, otherwise use default
+	var engine *cryptoengines.CryptoEngine
+	engineID := ""
+	var ok bool
+
+	if input.EngineID == "" {
+		engine, ok = svc.cryptoEngines[svc.defaultCryptoEngineID]
+		engineID = svc.defaultCryptoEngineID
+	} else {
+		engine, ok = svc.cryptoEngines[input.EngineID]
+		engineID = input.EngineID
+	}
+
+	if !ok {
+		lFunc.Errorf("engine with id %s not found", engineID)
+		return nil, fmt.Errorf("crypto engine not found")
+	}
+
+	engineInstance := *engine
+
+	var (
+		keyID     string
+		signer    crypto.Signer
+		algorithm string
+		size      int
+	)
+
+	switch k := input.PrivateKey.(type) {
+	case *rsa.PrivateKey:
+		size = k.N.BitLen()
+		algorithm = "RSA"
+
+		err = svc.checkKeySpecEngineCompliance(algorithm, size, engineInstance)
+		if err != nil {
+			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+			return nil, err
+		}
+
+		keyID, signer, err = engineInstance.ImportRSAPrivateKey(k)
+	case *ecdsa.PrivateKey:
+		size = k.Params().BitSize
+		algorithm = "ECDSA"
+
+		err = svc.checkKeySpecEngineCompliance(algorithm, size, engineInstance)
+		if err != nil {
+			lFunc.Errorf("key spec (type and size) is not compliant with the selected engine: %s", err)
+			return nil, err
+		}
+
+		keyID, signer, err = engineInstance.ImportECDSAPrivateKey(k)
+	default:
+		lFunc.Errorf("unsupported private key type")
+		return nil, errors.New("unsupported private key type")
+	}
+	if err != nil {
+		lFunc.Errorf("failed to import private key: %s", err)
+		return nil, errors.New("failed to import private key")
+	}
+
+	publicKey := signer.Public()
+	pubBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	if err != nil {
+		lFunc.Errorf("failed to marshal public key: %s", err)
+		return nil, errors.New("failed to marshal public key")
+	}
+
+	pemBlockPub := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubBytes})
+	base64PEM := base64.StdEncoding.EncodeToString(pemBlockPub)
+
+	kmsKey := models.Key{
+		ID:         buildPKCS11ID(engineID, keyID, "private"),
+		Algorithm:  algorithm,
+		Size:       size,
+		PublicKey:  base64PEM,
+		Status:     models.StatusActive,
+		CreationTS: time.Now(),
+		Name:       input.Name,
+		Metadata:   map[string]any{},
+	}
+
+	return svc.kmsStorage.Insert(ctx, &kmsKey)
+}
+
+func (svc *CAServiceBackend) checkKeySpecEngineCompliance(keyType string, size int, engine cryptoengines.CryptoEngine) error {
+	engineConfig := engine.GetEngineConfig()
+	for _, spec := range engineConfig.SupportedKeyTypes {
+		if spec.Type.String() == keyType {
+			if slices.Contains(spec.Sizes, size) {
+				return nil
+			} else {
+				return fmt.Errorf("key size %d is not supported for key type %s in engine %s", size, keyType, engineConfig.Provider)
+			}
+		}
+	}
+
+	return fmt.Errorf("key type %s is not supported in engine %s", keyType, engineConfig.Provider)
 }
 
 func (svc *CAServiceBackend) DeleteKeyByID(tx context.Context, input services.GetByIDInput) error {
@@ -1950,24 +2060,24 @@ func (svc *CAServiceBackend) DeleteKeyByID(tx context.Context, input services.Ge
 
 	_, err = engineInstance.GetPrivateKeyByID(keyID)
 	if err != nil {
-		lFunc.Errorf("GetKey - DeleteKeyByID error: %s", err)
+		lFunc.Errorf("could not get key from engine: %s", err)
 		return fmt.Errorf("key not found")
 	}
 
 	err = engineInstance.DeleteKey(keyID)
 	if err != nil {
-		lFunc.Errorf("DeleteKeyByID - DeleteKey error: %s", err)
+		lFunc.Errorf("delete key error: %s", err)
 		return err
 	}
 
-	lFunc.Debugf("deleting Key %s from storage engine", input.ID)
+	lFunc.Debugf("deleting key %s from storage engine", input.ID)
 	err = svc.kmsStorage.Delete(tx, input.ID)
 	if err != nil {
-		lFunc.Errorf("DeleteKeyByID - DeleteByID error: %s", err)
+		lFunc.Errorf("delete by ID error: %s", err)
 		return fmt.Errorf("failed to delete key from storage: %w", err)
 	}
 
-	lFunc.Infof("Key %s deleted successfully", input.ID)
+	lFunc.Infof("key %s deleted successfully", input.ID)
 
 	return nil
 }
@@ -2029,13 +2139,13 @@ func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.Sig
 			opts := &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: hash}
 			signature, err = signer.Sign(rand.Reader, digest, opts)
 			if err != nil {
-				lFunc.Errorf("SignMessage - RSA-PSS Sign error: %s", err)
+				lFunc.Errorf("RSA-PSS Sign error: %s", err)
 				return nil, err
 			}
 		} else {
 			signature, err = signer.Sign(rand.Reader, digest, hash)
 			if err != nil {
-				lFunc.Errorf("SignMessage - RSA Sign error: %s", err)
+				lFunc.Errorf("RSA Sign error: %s", err)
 				return nil, err
 			}
 		}
@@ -2052,7 +2162,7 @@ func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.Sig
 		}
 		signature, err = signer.Sign(rand.Reader, digest, hash)
 		if err != nil {
-			lFunc.Errorf("SignMessage - ECDSA Sign error: %s", err)
+			lFunc.Errorf("ECDSA Sign error: %s", err)
 			return nil, err
 		}
 	}
@@ -2084,7 +2194,7 @@ func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services
 	}
 
 	if !exists {
-		lFunc.Errorf("Key %s can not be found in storage engine", input.KeyID)
+		lFunc.Errorf("key %s can not be found in storage engine", input.KeyID)
 		return nil, errs.ErrKeyNotFound
 	}
 
@@ -2114,7 +2224,7 @@ func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services
 			opts := &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: hash}
 			err = rsa.VerifyPSS(pub, hash, digest, input.Signature, opts)
 			if err != nil {
-				lFunc.Errorf("VerifySignature - RSA-PSS verify error: %s", err)
+				lFunc.Errorf("RSA-PSS verify error: %s", err)
 				return &models.MessageValidation{
 					Valid: false,
 				}, nil
@@ -2125,7 +2235,7 @@ func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services
 		} else {
 			err = rsa.VerifyPKCS1v15(pub, hash, digest, input.Signature)
 			if err != nil {
-				lFunc.Errorf("VerifySignature - RSA verify error: %s", err)
+				lFunc.Errorf("RSA verify error: %s", err)
 				return &models.MessageValidation{
 					Valid: false,
 				}, nil
@@ -2148,84 +2258,6 @@ func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services
 			Valid: true,
 		}, nil
 	}
-}
-
-func (svc *CAServiceBackend) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.Key, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-
-	err := validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("ImportKeyInput struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
-	}
-
-	// Check if EngineID is provided, otherwise use default
-	var engine *cryptoengines.CryptoEngine
-	engineID := ""
-	var ok bool
-
-	if input.EngineID == "" {
-		engine, ok = svc.cryptoEngines[svc.defaultCryptoEngineID]
-		engineID = svc.defaultCryptoEngineID
-	} else {
-		engine, ok = svc.cryptoEngines[input.EngineID]
-		engineID = input.EngineID
-	}
-
-	if !ok {
-		lFunc.Errorf("CreateKey - Engine with id %s not found", engineID)
-		return nil, fmt.Errorf("crypto engine not found")
-	}
-
-	engineInstance := *engine
-
-	var (
-		keyID     string
-		signer    crypto.Signer
-		algorithm string
-		size      int
-	)
-
-	switch k := input.PrivateKey.(type) {
-	case *rsa.PrivateKey:
-		keyID, signer, err = engineInstance.ImportRSAPrivateKey(k)
-		algorithm = "RSA"
-		size = k.N.BitLen()
-	case *ecdsa.PrivateKey:
-		keyID, signer, err = engineInstance.ImportECDSAPrivateKey(k)
-		algorithm = "ECDSA"
-		size = k.Params().BitSize
-	default:
-		lFunc.Errorf("ImportKey - unsupported private key type")
-		return nil, errors.New("unsupported private key type")
-	}
-	if err != nil {
-		lFunc.Errorf("ImportKey - failed to import private key: %s", err)
-		return nil, errors.New("failed to import private key")
-	}
-
-	publicKey := signer.Public()
-	pubBytes, err := x509.MarshalPKIXPublicKey(publicKey)
-	if err != nil {
-		lFunc.Errorf("ImportKey - failed to marshal public key: %s", err)
-		return nil, errors.New("failed to marshal public key")
-	}
-
-	pemBlockPub := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubBytes})
-	base64PEM := base64.StdEncoding.EncodeToString(pemBlockPub)
-
-	kmsKey := models.Key{
-		ID:         buildPKCS11ID(engineID, keyID, "private"),
-		Algorithm:  algorithm,
-		Size:       size,
-		PublicKey:  base64PEM,
-		Status:     models.StatusActive,
-		CreationTS: time.Now(),
-		Name:       input.Name,
-		Metadata:   map[string]any{},
-	}
-
-	return svc.kmsStorage.Insert(ctx, &kmsKey)
 }
 
 func (svc *CAServiceBackend) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {
