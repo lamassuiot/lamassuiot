@@ -30,7 +30,7 @@ func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.DeviceFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
 
 	devices := []models.Device{}
 	nextBookmark, err := r.svc.GetDevices(ctx, services.GetDevicesInput{
@@ -57,7 +57,7 @@ func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.DeviceFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
 	type uriParams struct {
 		DMSID string `uri:"id" binding:"required"`
 	}

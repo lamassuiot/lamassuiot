@@ -255,7 +255,6 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	})
 
 	if slices.Contains(engines, VAULT) {
-
 		backend, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.Vault).Run(false)
 		if err != nil {
 			panic(fmt.Sprintf("could not run Vault subsystem: %s", err))

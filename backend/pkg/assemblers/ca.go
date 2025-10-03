@@ -83,6 +83,11 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 		}
 	}
 
+	kmsStorage, err := createKMSStorageInstance(lStorage, conf.Storage)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not create KMS storage instance: %s", err)
+	}
+
 	svc, err := lservices.NewCAService(lservices.CAServiceBuilder{
 		Logger:                      lSvc,
 		CryptoEngines:               engines,
@@ -91,6 +96,7 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 		CACertificateRequestStorage: caCertRequestStorage,
 		IssuanceProfileStorage:      issuerProfilesStorage,
 		VAServerDomains:             conf.VAServerDomains,
+		KMSStorage:                  kmsStorage,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create CA service: %v", err)
@@ -162,6 +168,20 @@ func createCAStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEng
 	}
 
 	return caStorage, certStorage, caCertRequestStorage, issuanceProfileStorage, nil
+}
+
+func createKMSStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.KMSKeysRepo, error) {
+	engine, err := builder.BuildStorageEngine(logger, conf)
+	if err != nil {
+		return nil, fmt.Errorf("could not create storage engine: %s", err)
+	}
+
+	kmsStorage, err := engine.GetKMSStorage()
+	if err != nil {
+		return nil, fmt.Errorf("could not get KMS storage: %s", err)
+	}
+
+	return kmsStorage, nil
 }
 
 func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*lservices.Engine, error) {

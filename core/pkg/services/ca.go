@@ -51,6 +51,16 @@ type CAService interface {
 	DeleteCARequestByID(ctx context.Context, input GetByIDInput) error
 	GetCARequests(ctx context.Context, input GetItemsInput[models.CACertificateRequest]) (string, error)
 
+	// KMS
+	GetKeys(ctx context.Context, input GetKeysInput) (string, error)
+	GetKeyByID(ctx context.Context, input GetByIDInput) (*models.Key, error)
+	CreateKey(ctx context.Context, input CreateKeyInput) (*models.Key, error)
+	DeleteKeyByID(ctx context.Context, input GetByIDInput) error
+	SignMessage(ctx context.Context, input SignMessageInput) (*models.MessageSignature, error)
+	VerifySignature(ctx context.Context, input VerifySignInput) (*models.MessageValidation, error)
+	ImportKey(ctx context.Context, input ImportKeyInput) (*models.Key, error)
+
+	// Issuance Profiles
 	GetIssuanceProfiles(ctx context.Context, input GetIssuanceProfilesInput) (string, error)
 	GetIssuanceProfileByID(ctx context.Context, input GetIssuanceProfileByIDInput) (*models.IssuanceProfile, error)
 	CreateIssuanceProfile(ctx context.Context, input CreateIssuanceProfileInput) (*models.IssuanceProfile, error)
@@ -260,6 +270,40 @@ type DeleteCertificateInput struct {
 	SerialNumber string `validate:"required"`
 }
 
+// KMS
+type GetKeysInput struct {
+	resources.ListInput[models.Key]
+}
+
+type CreateKeyInput struct {
+	Algorithm string `validate:"required"`
+	Size      int    `validate:"required"`
+	EngineID  string
+	Name      string `validate:"required"`
+}
+
+type SignMessageInput struct {
+	KeyID       string                 `validate:"required"`
+	Algorithm   string                 `validate:"required"`
+	Message     []byte                 `validate:"required"`
+	MessageType models.SignMessageType `validate:"required"`
+}
+
+type VerifySignInput struct {
+	KeyID       string                 `validate:"required"`
+	Algorithm   string                 `validate:"required"`
+	Signature   []byte                 `validate:"required"`
+	Message     []byte                 `validate:"required"`
+	MessageType models.SignMessageType `validate:"required"`
+}
+
+type ImportKeyInput struct {
+	PrivateKey any `validate:"required"`
+	EngineID   string
+	Name       string `validate:"required"`
+}
+
+// Issuance Profiles
 type GetIssuanceProfilesInput struct {
 	QueryParameters *resources.QueryParameters
 	ExhaustiveRun   bool //wether to iter all elems
