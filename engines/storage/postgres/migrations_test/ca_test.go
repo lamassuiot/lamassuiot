@@ -487,6 +487,44 @@ func MigrationTest_CA_20250915090500_update_ski_aki(t *testing.T, logger *logrus
 	assert.Equal(t, expectedAKI, result["authority_key_id"])
 }
 
+func MigrationTest_CA_20251001120000_update_issuer_meta_serial_numbers(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Before applying migration, insert test data with hyphenated issuer_meta_serial_number
+	// 1. Insert certificate with hyphenated issuer_meta_serial_number
+	err := con.Exec("INSERT INTO certificates (serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, type, engine_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"test-cert-serial", "{}", "aa-bb-cc-dd-ee-ff-11-22-33-44-55-66-77-88-99-00", "test-issuer-id", 0, "ACTIVE", "test-certificate-data", "RSA", 4096, "HIGH", "Test Certificate", "", "", "", "", "", "2024-11-25 9:45:48.000", "2025-09-21 11:45:44.000", "0001-01-01 01:00:00.000", "Unspecified", "MANAGED", "test-engine").Error
+	if err != nil {
+		t.Fatalf("failed to insert test certificate: %v", err)
+	}
+
+	// 2. Insert ca_certificate_requests with hyphenated issuer_meta_serial_number
+	err = con.Exec("INSERT INTO ca_certificate_requests (id, key_id, engine_id, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, creation_ts, level, key_meta_type, key_meta_bits, key_meta_strength, status, fingerprint, csr) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"test-request-id", "test-key-id", "test-engine", "{}", "bb-cc-dd-ee-ff-11-22-33-44-55-66-77-88-99-00-aa", "test-issuer-id", 0, "Test Request", "", "", "", "", "", "2024-11-25 9:45:48.000", 0, "RSA", 4096, "HIGH", "PENDING", "test-fingerprint", "test-csr-data").Error
+	if err != nil {
+		t.Fatalf("failed to insert test certificate request: %v", err)
+	}
+
+	// Apply migration
+	ApplyMigration(t, logger, con, CADBName)
+
+	// 3. Check issuer_meta_serial_number updated correctly in certificates table
+	var certResult map[string]any
+	tx := con.Raw("SELECT issuer_meta_serial_number FROM certificates WHERE serial_number = ?", "test-cert-serial").Scan(&certResult)
+	if tx.RowsAffected != 1 {
+		t.Fatalf("expected 1 row in certificates, got %d", tx.RowsAffected)
+	}
+	// Should be updated from 'aa-bb-cc-dd-ee-ff-11-22-33-44-55-66-77-88-99-00' to 'aabbccddeeff11223344556677889900'
+	assert.Equal(t, "aabbccddeeff11223344556677889900", certResult["issuer_meta_serial_number"])
+
+	// 4. Check issuer_meta_serial_number updated correctly in ca_certificate_requests table
+	var requestResult map[string]any
+	tx = con.Raw("SELECT issuer_meta_serial_number FROM ca_certificate_requests WHERE id = ?", "test-request-id").Scan(&requestResult)
+	if tx.RowsAffected != 1 {
+		t.Fatalf("expected 1 row in ca_certificate_requests, got %d", tx.RowsAffected)
+	}
+	// Should be updated from 'bb-cc-dd-ee-ff-11-22-33-44-55-66-77-88-99-00-aa' to 'bbccddeeff11223344556677889900aa'
+	assert.Equal(t, "bbccddeeff11223344556677889900aa", requestResult["issuer_meta_serial_number"])
+}
+
 func TestMigrations(t *testing.T) {
 	logger := helpers.SetupLogger(config.Trace, "test", "test")
 	cleanup, con := RunDB(t, logger, CADBName)
@@ -563,5 +601,12 @@ func TestMigrations(t *testing.T) {
 	MigrationTest_CA_20250915090500_update_ski_aki(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20250915090500_update_ski_aki")
+	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_CA_20251001120000_update_issuer_meta_serial_numbers(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20251001120000_update_issuer_meta_serial_numbers")
 	}
 }

@@ -20,7 +20,7 @@ func NewEventBusSubscriber(conf cconfig.EventBusEngine, serviceID string, logger
 func NewEventBusPublisher(conf cconfig.EventBusEngine, serviceID string, logger *logrus.Entry) (message.Publisher, error) {
 	engine, err := builder.BuildEventBusEngine(string(conf.Provider), conf.Config, serviceID, logger)
 	if err != nil {
-		logger.Errorf("could not generate Event Bus Subscriber: %s", err)
+		logger.Errorf("could not generate Event Bus Publisher: %s", err)
 		return nil, err
 	}
 

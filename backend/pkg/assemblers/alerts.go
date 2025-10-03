@@ -55,29 +55,32 @@ func AssembleAlertsService(conf config.AlertsConfig) (*services.AlertsService, e
 	})
 
 	if conf.SubscriberEventBus.Enabled {
-		log.Infof("Event Bus is enabled")
+		if !conf.SubscriberDLQEventBus.Enabled {
+			lMessaging.Fatalf("Subscriber Event Bus is enabled but DLQ is not enabled. This is not supported. Exiting")
+		} else {
+			log.Infof("Event Bus is enabled")
 
-		dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberEventBus, "alerts", lMessaging)
-		if err != nil {
-			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
-		}
+			dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberDLQEventBus, "alerts", lMessaging)
+			if err != nil {
+				return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
+			}
 
-		subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, "alerts", lMessaging)
-		if err != nil {
-			lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
-			return nil, err
-		}
+			subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, "alerts", lMessaging)
+			if err != nil {
+				lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
+				return nil, err
+			}
 
-		eventHandlers := handlers.NewAlertsEventHandler(lMessaging, svc)
-		subHandler, err := ceventbus.NewEventBusMessageHandler(models.AlertManagerServiceName, []string{"#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
-		if err != nil {
-			return nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
-		}
+			eventHandlers := handlers.NewAlertsEventHandler(lMessaging, svc)
+			subHandler, err := ceventbus.NewEventBusMessageHandler(models.AlertManagerServiceName, []string{"#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
+			if err != nil {
+				return nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
+			}
 
-		err = subHandler.RunAsync()
-		if err != nil {
-			lMessaging.Errorf("could not run Event Bus Subscription Handler: %s", err)
-			return nil, err
+			if err := subHandler.RunAsync(); err != nil {
+				lMessaging.Errorf("could not run Event Bus Subscription Handler: %s", err)
+				return nil, err
+			}
 		}
 	}
 
