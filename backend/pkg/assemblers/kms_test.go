@@ -968,14 +968,13 @@ func TestSignMessage(t *testing.T) {
 
 	// Helper to import a key and return its ID and algorithm
 	importKey := func(name string, bits int) (string, string) {
-		pem := func(bits int) []byte {
+		b64Key := func(bits int) any {
 			priv, _ := rsa.GenerateKey(rand.Reader, bits)
-			pemBlock := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)}
-			return pem.EncodeToMemory(pemBlock)
+			return priv
 		}(bits)
 		key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
 			Name:       name,
-			PrivateKey: pem,
+			PrivateKey: b64Key,
 			EngineID:   "filesystem-1",
 		})
 		if err != nil {

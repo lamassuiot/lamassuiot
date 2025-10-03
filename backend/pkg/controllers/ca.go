@@ -1443,7 +1443,7 @@ func (r *caHttpRoutes) ImportKey(ctx *gin.Context) {
 		ctx.JSON(400, gin.H{"err": err.Error()})
 		return
 	}
-	if len(decodedKey) > 0 {
+	if len(decodedKey) == 0 {
 		ctx.JSON(400, gin.H{"err": "private key is required"})
 		return
 	}

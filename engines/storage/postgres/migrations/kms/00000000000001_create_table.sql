@@ -2,6 +2,7 @@
 -- +goose StatementBegin
 CREATE TABLE kms_keys (
 	id text NOT NULL,
+    metadata text NULL,
     name text NOT NULL,
     algorithm text NOT NULL,
     size int8 NOT NULL,
