@@ -445,6 +445,8 @@ func (engine X509Engine) Sign(ctx context.Context, certificate *x509.Certificate
 		}
 	} else if certificate.PublicKeyAlgorithm == x509.MLDSA {
 		return privkey.Sign(rand.Reader, message, crypto.Hash(0))
+	} else if certificate.PublicKeyAlgorithm == x509.Ed25519 {
+		return privkey.Sign(rand.Reader, message, crypto.Hash(0))
 	} else {
 		return nil, fmt.Errorf("certificate has unsupported public key algorithm: %s", certificate.PublicKeyAlgorithm)
 	}
@@ -520,13 +522,12 @@ func (engine X509Engine) Verify(ctx context.Context, caCertificate *x509.Certifi
 			}
 			return true, nil
 		}
-	} else if caCertificate.PublicKeyAlgorithm == x509.MLDSA {
+	} else if caCertificate.PublicKeyAlgorithm == x509.MLDSA || caCertificate.PublicKeyAlgorithm == x509.Ed25519 {
 		err := caCertificate.CheckSignature(caCertificate.SignatureAlgorithm, message, signature)
 		if err != nil {
 			return false, err
-		} else {
-			return true, nil
 		}
+		return true, nil
 	} else {
 		return false, fmt.Errorf("CA has unsupported public key algorithm: %s", caCertificate.PublicKeyAlgorithm)
 	}

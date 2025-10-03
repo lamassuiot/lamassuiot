@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/rsa"
 	"crypto/x509"
 	"time"
@@ -107,6 +108,7 @@ type ImportCAInput struct {
 	CARSAKey      *rsa.PrivateKey
 	CAECKey       *ecdsa.PrivateKey
 	CAMLDSAKey    crypto.Signer
+	CAEd25519Key  ed25519.PrivateKey
 	KeyType       models.KeyType
 	EngineID      string
 	CARequestID   string

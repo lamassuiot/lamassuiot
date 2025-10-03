@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/rsa"
 	"crypto/sha512"
 	"crypto/x509"
@@ -40,7 +41,20 @@ func generateAndImportCA(keyType x509.PublicKeyAlgorithm, engine cryptoengines.C
 		_, key, err := engine.ImportECDSAPrivateKey(ecdsaPrivateKey)
 		return caCertificate, key, err
 	case x509.MLDSA:
-		_, key, err := engine.ImportMLDSAPrivateKey(key.(crypto.Signer))
+		mldsaKey, ok := key.(crypto.Signer)
+		if !ok {
+			return nil, nil, fmt.Errorf("private key is not of type mldsaXX.PrivateKey")
+		}
+
+		_, key, err := engine.ImportMLDSAPrivateKey(mldsaKey)
+		return caCertificate, key, err
+	case x509.Ed25519:
+		ed25519Key, ok := key.(ed25519.PrivateKey)
+		if !ok {
+			return nil, nil, fmt.Errorf("private key is not of type ed25519.PrivateKey")
+		}
+
+		_, key, err := engine.ImportEd25519PrivateKey(ed25519Key)
 		return caCertificate, key, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported key type")
@@ -77,6 +91,11 @@ func TestSignVerify(t *testing.T) {
 	}
 
 	caCertificateMLDSA, _, err := generateAndImportCA(x509.MLDSA, engine)
+	if err != nil {
+		t.Fatalf("failed to generate and import CA: %s", err)
+	}
+
+	caCertificateEd25519, _, err := generateAndImportCA(x509.Ed25519, engine)
 	if err != nil {
 		t.Fatalf("failed to generate and import CA: %s", err)
 	}
@@ -168,6 +187,12 @@ func TestSignVerify(t *testing.T) {
 		{
 			name:        "OK/MLDSA_PURE",
 			certificate: caCertificateMLDSA,
+			msgType:     models.Raw,
+			check:       checkValidSignature,
+		},
+		{
+			name:        "OK/Ed25519_PURE",
+			certificate: caCertificateEd25519,
 			msgType:     models.Raw,
 			check:       checkValidSignature,
 		},

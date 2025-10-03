@@ -102,6 +102,13 @@ func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.D
 		}
 		key = mldsaKey
 		pubKey = mldsaKey.Public()
+	case x509.Ed25519:
+		ed25519Key, err := GenerateEd25519Key()
+		if err != nil {
+			return nil, nil, err
+		}
+		key = ed25519Key
+		pubKey = ed25519Key.Public()
 	}
 
 	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
