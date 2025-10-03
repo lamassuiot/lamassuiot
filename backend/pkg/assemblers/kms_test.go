@@ -6,7 +6,6 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
@@ -355,16 +354,14 @@ func TestImportKey(t *testing.T) {
 	}
 
 	// Helper functions for generating PEM-encoded private keys
-	generateRSAPEM := func(bits int) []byte {
+	generateRSA := func(bits int) any {
 		priv, _ := rsa.GenerateKey(rand.Reader, bits)
-		pemBlock := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)}
-		return pem.EncodeToMemory(pemBlock)
+		return priv
 	}
-	generateECDSAPEM := func(curve elliptic.Curve) []byte {
+
+	generateECDSA := func(curve elliptic.Curve) any {
 		priv, _ := ecdsa.GenerateKey(curve, rand.Reader)
-		b, _ := x509.MarshalECPrivateKey(priv)
-		pemBlock := &pem.Block{Type: "EC PRIVATE KEY", Bytes: b}
-		return pem.EncodeToMemory(pemBlock)
+		return priv
 	}
 
 	testcases := []struct {
@@ -379,7 +376,7 @@ func TestImportKey(t *testing.T) {
 			run: func() (*models.Key, error) {
 				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "RSA Key",
-					PrivateKey: generateRSAPEM(2048),
+					PrivateKey: generateRSA(2048),
 					EngineID:   "filesystem-1",
 				})
 			},
@@ -399,7 +396,7 @@ func TestImportKey(t *testing.T) {
 			run: func() (*models.Key, error) {
 				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "RSA 3072 Key",
-					PrivateKey: generateRSAPEM(3072),
+					PrivateKey: generateRSA(3072),
 					EngineID:   "filesystem-1",
 				})
 			},
@@ -419,7 +416,7 @@ func TestImportKey(t *testing.T) {
 			run: func() (*models.Key, error) {
 				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "RSA 4096 Key",
-					PrivateKey: generateRSAPEM(4096),
+					PrivateKey: generateRSA(4096),
 					EngineID:   "filesystem-1",
 				})
 			},
@@ -439,7 +436,7 @@ func TestImportKey(t *testing.T) {
 			run: func() (*models.Key, error) {
 				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "ECDSA Key",
-					PrivateKey: generateECDSAPEM(elliptic.P256()),
+					PrivateKey: generateECDSA(elliptic.P256()),
 					EngineID:   "filesystem-1",
 				})
 			},
@@ -459,7 +456,7 @@ func TestImportKey(t *testing.T) {
 			run: func() (*models.Key, error) {
 				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "ECDSA P224 Key",
-					PrivateKey: generateECDSAPEM(elliptic.P224()),
+					PrivateKey: generateECDSA(elliptic.P224()),
 					EngineID:   "filesystem-1",
 				})
 			},
@@ -479,7 +476,7 @@ func TestImportKey(t *testing.T) {
 			run: func() (*models.Key, error) {
 				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "ECDSA P384 Key",
-					PrivateKey: generateECDSAPEM(elliptic.P384()),
+					PrivateKey: generateECDSA(elliptic.P384()),
 					EngineID:   "filesystem-1",
 				})
 			},
@@ -499,7 +496,7 @@ func TestImportKey(t *testing.T) {
 			run: func() (*models.Key, error) {
 				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "ECDSA P521 Key",
-					PrivateKey: generateECDSAPEM(elliptic.P521()),
+					PrivateKey: generateECDSA(elliptic.P521()),
 					EngineID:   "filesystem-1",
 				})
 			},
@@ -553,7 +550,7 @@ func TestImportKey(t *testing.T) {
 			run: func() (*models.Key, error) {
 				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "No Engine",
-					PrivateKey: generateRSAPEM(2048),
+					PrivateKey: generateRSA(2048),
 					EngineID:   "nonexistent-engine",
 				})
 			},
@@ -587,10 +584,9 @@ func TestGetKeys(t *testing.T) {
 
 	// Helper to import a key for listing
 	importKey := func(name string, bits int) {
-		pem := func(bits int) []byte {
+		pem := func(bits int) any {
 			priv, _ := rsa.GenerateKey(rand.Reader, bits)
-			pemBlock := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)}
-			return pem.EncodeToMemory(pemBlock)
+			return priv
 		}(bits)
 		_, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
 			Name:       name,
@@ -786,10 +782,9 @@ func TestGetKeyByID(t *testing.T) {
 
 	// Helper to import a key and return its ID
 	importKey := func(name string, bits int) string {
-		pem := func(bits int) []byte {
+		pem := func(bits int) any {
 			priv, _ := rsa.GenerateKey(rand.Reader, bits)
-			pemBlock := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)}
-			return pem.EncodeToMemory(pemBlock)
+			return priv
 		}(bits)
 		key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
 			Name:       name,
@@ -876,10 +871,9 @@ func TestDeleteKeyByID(t *testing.T) {
 
 	// Helper to import a key and return its ID
 	importKey := func(name string, bits int) string {
-		pem := func(bits int) []byte {
+		pem := func(bits int) any {
 			priv, _ := rsa.GenerateKey(rand.Reader, bits)
-			pemBlock := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)}
-			return pem.EncodeToMemory(pemBlock)
+			return priv
 		}(bits)
 		key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
 			Name:       name,
@@ -1095,10 +1089,9 @@ func TestVerifySignature(t *testing.T) {
 
 	// Helper to import a key, sign a message, and return keyID, algorithm, message, signature ([]byte)
 	importAndSign := func(name string, bits int, alg string, msg []byte) (string, string, []byte, []byte) {
-		pem := func(bits int) []byte {
+		pem := func(bits int) any {
 			priv, _ := rsa.GenerateKey(rand.Reader, bits)
-			pemBlock := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)}
-			return pem.EncodeToMemory(pemBlock)
+			return priv
 		}(bits)
 		key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
 			Name:       name,
