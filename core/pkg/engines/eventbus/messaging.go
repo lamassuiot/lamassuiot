@@ -27,6 +27,7 @@ func NewMessageRouter(logger *logrus.Entry, dlqPub message.Publisher) (*message.
 
 	//mw are applied in order they are added. So the first one is the outermost one (recovery wraps all the others for example)
 	router.AddMiddleware(
+		// Recoverer handles panics from handlers.
 		middleware.Recoverer,
 
 		// Dead letter queue middleware will move messages that have been Nacked more than MaxRetries to a separate topic.
@@ -35,12 +36,8 @@ func NewMessageRouter(logger *logrus.Entry, dlqPub message.Publisher) (*message.
 		// CorrelationID will copy the correlation id from the incoming message's metadata to the produced messages
 		middleware.CorrelationID,
 
-		// Recoverer handles panics from handlers.
-		// In this case, it passes them as errors to the Retry middleware.
-		// deadLetterMw,
-
 		// The handler function is retried if it returns an error.
-		// After MaxRetries, the message is Nacked and it's up to the PubSub to resend it.
+		// After MaxRetries, it's up to the PubSub to resend it, mark as ACK or NACK.
 		middleware.Retry{
 			MaxRetries:      3,
 			InitialInterval: time.Second * 2,

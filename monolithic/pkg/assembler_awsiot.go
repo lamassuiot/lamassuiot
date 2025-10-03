@@ -14,9 +14,10 @@ func AssembleAWSIoT(conf MonolithicConfig, caSDKBuilder func(serviceID string, s
 		Logs: cconfig.Logging{
 			Level: conf.Logs.Level,
 		},
-		SubscriberEventBus: conf.SubscriberEventBus,
-		ConnectorID:        conf.AWSIoTManager.ConnectorID,
-		AWSSDKConfig:       conf.AWSIoTManager.AWSSDKConfig,
+		SubscriberEventBus:    conf.SubscriberEventBus,
+		SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
+		ConnectorID:           conf.AWSIoTManager.ConnectorID,
+		AWSSDKConfig:          conf.AWSIoTManager.AWSSDKConfig,
 	}, caSDKBuilder("AWS IoT Connector", awsiotconnector.AWSIoTSource(conf.AWSIoTManager.ConnectorID)),
 		dmsMngrSDKBuilder("AWS IoT Connector", awsiotconnector.AWSIoTSource(conf.AWSIoTManager.ConnectorID)),
 		deviceMngrSDKBuilder("AWS IoT Connector", awsiotconnector.AWSIoTSource(conf.AWSIoTManager.ConnectorID)))

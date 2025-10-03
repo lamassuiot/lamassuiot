@@ -87,7 +87,7 @@ func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
 		return nil, fmt.Errorf("could not find the default crypto engine")
 	}
 
-	svc := CAServiceBackend{
+	svc := &CAServiceBackend{
 		cryptoEngines:               engines,
 		defaultCryptoEngine:         defaultCryptoEngine,
 		defaultCryptoEngineID:       defaultCryptoEngineID,
@@ -100,9 +100,9 @@ func NewCAService(builder CAServiceBuilder) (services.CAService, error) {
 		logger:                      builder.Logger,
 	}
 
-	svc.service = &svc
+	svc.service = svc
 
-	return &svc, nil
+	return svc, nil
 }
 
 func (svc *CAServiceBackend) Close() {

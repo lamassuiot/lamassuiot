@@ -73,8 +73,10 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 			ServiceID: "dms-manager",
 			Logger:    lMessaging,
 		})(svc)
-	} //this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
-	dmsSvc.SetService(svc)
+
+		//this utilizes the middlewares from within the DMS service (if svc.service.func is used instead of regular svc.func)
+		dmsSvc.SetService(svc)
+	}
 
 	return &svc, nil
 }

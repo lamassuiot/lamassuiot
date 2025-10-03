@@ -112,11 +112,12 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 					"storage_directory": conf.VAStorageDir,
 				},
 			},
-			CRLMonitoringJob:   conf.Monitoring,
-			SubscriberEventBus: conf.SubscriberEventBus,
-			PublisherEventBus:  conf.PublisherEventBus,
-			Storage:            conf.Storage,
-			VADomains:          vaDomains,
+			CRLMonitoringJob:      conf.Monitoring,
+			SubscriberEventBus:    conf.SubscriberEventBus,
+			SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
+			PublisherEventBus:     conf.PublisherEventBus,
+			Storage:               conf.Storage,
+			VADomains:             vaDomains,
 		}, caSDKBuilder("VA", models.VASource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble VA Service: %s", err)
@@ -133,9 +134,10 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				Port:               0,
 				Protocol:           cconfig.HTTP,
 			},
-			PublisherEventBus:  conf.PublisherEventBus,
-			SubscriberEventBus: conf.SubscriberEventBus,
-			Storage:            conf.Storage,
+			PublisherEventBus:     conf.PublisherEventBus,
+			SubscriberEventBus:    conf.SubscriberEventBus,
+			SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
+			Storage:               conf.Storage,
 		}, caSDKBuilder("Device Manager", models.DeviceManagerSource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble Device Manager Service: %s", err)
@@ -207,8 +209,9 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				Port:               0,
 				Protocol:           cconfig.HTTP,
 			},
-			SubscriberEventBus: conf.SubscriberEventBus,
-			Storage:            conf.Storage,
+			SubscriberEventBus:    conf.SubscriberEventBus,
+			SubscriberDLQEventBus: conf.SubscriberDLQEventBus,
+			Storage:               conf.Storage,
 		}, apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble Alerts Service: %s", err)
