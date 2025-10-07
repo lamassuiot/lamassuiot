@@ -116,8 +116,54 @@ func (engine X509Engine) GenerateKeyPair(ctx context.Context, keyMetadata models
 func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer, keyID string, subject models.Subject, validity models.Validity) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
+	template, _ := engine.createRootCATemplate(lFunc, ctx, signer, keyID, subject, validity)
+
+	certificateBytes, err := x509.CreateCertificate(rand.Reader, template, template, signer.Public(), signer)
+	if err != nil {
+		lFunc.Errorf("could not sign certificate: %s", err)
+		return nil, err
+	}
+
+	certificate, err := x509.ParseCertificate(certificateBytes)
+	if err != nil {
+		lFunc.Errorf("could not parse signed certificate %s", err)
+		return nil, err
+	}
+
+	return certificate, nil
+}
+
+func (engine X509Engine) CreateChameleonRootCA(ctx context.Context, deltaSigner, baseSigner crypto.Signer, deltaKeyID, baseKeyID string, subject models.Subject, validity models.Validity) (*x509.Certificate, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+
+	// Create the certificate templates
+	deltaTemplate, _ := engine.createRootCATemplate(lFunc, ctx, deltaSigner, deltaKeyID, subject, validity)
+	baseTemplate, _ := engine.createRootCATemplate(lFunc, ctx, baseSigner, baseKeyID, subject, validity)
+
+	// Create the chameleon base certificate
+	certificateBytes, err := x509.CreateChameleonCertificate(rand.Reader, deltaTemplate, baseTemplate, deltaTemplate, baseTemplate, deltaSigner.Public(), baseSigner.Public(), deltaSigner, baseSigner)
+	if err != nil {
+		lFunc.Errorf("could not sign certificate: %s", err)
+		return nil, err
+	}
+
+	certificate, err := x509.ParseCertificate(certificateBytes)
+	if err != nil {
+		lFunc.Errorf("could not parse signed certificate %s", err)
+		return nil, err
+	}
+
+	return certificate, nil
+}
+
+// Private method to avoid code duplication when creating Root CAs (traditional and hybrid)
+func (engine X509Engine) createRootCATemplate(lFunc *logrus.Entry, ctx context.Context, signer crypto.Signer, keyID string, subject models.Subject, validity models.Validity) (*x509.Certificate, error) {
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
-	sn, _ := rand.Int(rand.Reader, serialNumberLimit)
+	sn, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		lFunc.Errorf("could not generate serial number: %v", err)
+		return nil, err
+	}
 
 	var caExpiration time.Time
 	if validity.Type == models.Duration {
@@ -153,19 +199,7 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 		template.CRLDistributionPoints = append(template.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, keyID))
 	}
 
-	certificateBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, signer.Public(), signer)
-	if err != nil {
-		lFunc.Errorf("could not sign certificate: %s", err)
-		return nil, err
-	}
-
-	certificate, err := x509.ParseCertificate(certificateBytes)
-	if err != nil {
-		lFunc.Errorf("could not parse signed certificate %s", err)
-		return nil, err
-	}
-
-	return certificate, nil
+	return &template, nil
 }
 
 func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {

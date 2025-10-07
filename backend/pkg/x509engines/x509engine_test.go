@@ -430,6 +430,121 @@ func TestCreateRootCA(t *testing.T) {
 	}
 }
 
+func TestCreateChameleonRootCA(t *testing.T) {
+	tempDir, _, x509Engine := setup(t)
+	defer teardown(tempDir)
+
+	expirationTime := time.Now().AddDate(1, 0, 0) // Set expiration time to 1 year from now
+
+	checkOk := func(cert *x509.Certificate, tcSubject models.Subject, tcDeltaKeyMetadata, tcBaseKeyMetadata models.KeyMetadata, tcExpirationTime time.Time, err error) error {
+		if err != nil {
+			return fmt.Errorf("unexpected error: %s", err)
+		}
+
+		// Check Root CA Certificate
+		err = checkCACertificate(cert, cert, tcSubject, tcBaseKeyMetadata, tcExpirationTime)	
+		if err != nil {
+			return fmt.Errorf("unexpected error: %s", err)
+		}
+
+		// Check Delta CA Certificate
+		deltaCert, err := x509.ReconstructDeltaCertificate(cert)
+		if err != nil {
+			return fmt.Errorf("unexpected error: %s", err)
+		}
+
+		return checkCACertificate(deltaCert, deltaCert, tcSubject, tcDeltaKeyMetadata, tcExpirationTime)
+	}
+
+	caSubject := models.Subject{
+		CommonName:       "Root CA",
+		Organization:     "Lamassu IoT",
+		OrganizationUnit: "CA",
+		Country:          "ES",
+		State:            "Gipuzkoa",
+		Locality:         "Arrasate",
+	}
+
+	var testcases = []struct {
+		name           string
+		caId           string
+		subject        models.Subject
+		baseKeyMetadata    models.KeyMetadata
+		deltaKeyMetadata    models.KeyMetadata
+		expirationTime time.Time
+		check          func(cert *x509.Certificate, tcSubject models.Subject, tcDeltaKeyMetadata, tcBaseKeyMetadata models.KeyMetadata, tcExpirationTime time.Time, err error) error
+	}{
+		{
+			name:    "OK/RSA_2048-MLDSA",
+			caId:    "rootCA-PQ-Chameleon-RSA2048-MLDSA",
+			subject: caSubject,
+			baseKeyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.RSA),
+				Bits: 2048,
+			},
+			deltaKeyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 65,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+		{
+			name:    "OK/Ed25519-MLDSA",
+			caId:    "rootCA-PQ-Chameleon-Ed25519-MLDSA",
+			subject: caSubject,
+			baseKeyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.Ed25519),
+				Bits: 2048,
+			},
+			deltaKeyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 65,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+		{
+			name:    "OK/ECDSA_256-MLDSA",
+			caId:    "rootCA-PQ-Chameleon-ECDSA_256-MLDSA",
+			subject: caSubject,
+			baseKeyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.ECDSA),
+				Bits: 256,
+			},
+			deltaKeyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.MLDSA),
+				Bits: 65,
+			},
+			expirationTime: expirationTime,
+			check:          checkOk,
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			deltaKeyID, deltaCaSigner, err := x509Engine.GenerateKeyPair(ctx, tc.deltaKeyMetadata)
+			baseKeyID, baseCaSigner, err := x509Engine.GenerateKeyPair(ctx, tc.baseKeyMetadata)
+
+			if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+
+			cert, err := x509Engine.CreateChameleonRootCA(ctx, deltaCaSigner, baseCaSigner, deltaKeyID, baseKeyID, tc.subject, models.Validity{
+				Type: models.Time,
+				Time: tc.expirationTime,
+			})
+			err = tc.check(cert, tc.subject, tc.deltaKeyMetadata, tc.baseKeyMetadata, tc.expirationTime, err)
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+		})
+	}
+}
+
 func TestCreateSubordinateCA(t *testing.T) {
 	// Setup
 	tempDir, _, x509Engine := setup(t)
