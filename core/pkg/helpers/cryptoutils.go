@@ -100,7 +100,7 @@ func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.D
 		}
 		key = eccKey
 		pubKey = &eccKey.PublicKey
-	case x509.MLDSA:
+	case cmodels.MLDSAPublicKeyAlgorithm:
 		mldsaKey, err := GenerateMLDSAKey(65)
 		if err != nil {
 			return nil, nil, err
