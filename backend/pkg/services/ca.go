@@ -1138,6 +1138,199 @@ func (svc *CAServiceBackend) deleteCAPrivateKey(ctx context.Context, ca *models.
 //     The specified CA can not be found in the Database
 //   - ErrValidateBadRequest
 //     The required variables of the data structure are not valid.
+//   - ErrCAAlreadyRevoked
+//     The CA is revoked and cannot be reissued
+//   - ErrCAExpired
+//     The CA is expired and cannot be reissued (reserved for future renewal feature)
+func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.ReissueCAInput) (*models.CACertificate, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := validate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("ReissueCAInput struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	// Get the existing CA
+	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate CA status - must be ACTIVE
+	if ca.Certificate.Status == models.StatusRevoked {
+		lFunc.Errorf("CA %s is revoked and cannot be reissued", input.CAID)
+		return nil, errs.ErrCAAlreadyRevoked
+	}
+
+	if ca.Certificate.Status == models.StatusExpired {
+		lFunc.Errorf("CA %s is expired and cannot be reissued. Use renewal feature instead", input.CAID)
+		return nil, errs.ErrCAExpired
+	}
+
+	lFunc.Debugf("reissuing CA certificate for %s", input.CAID)
+
+	// Get the crypto engine
+	engine := svc.cryptoEngines[ca.Certificate.EngineID]
+	if engine == nil {
+		lFunc.Errorf("crypto engine %s not found for CA %s", ca.Certificate.EngineID, input.CAID)
+		return nil, errs.ErrCryptoEngineNotFound
+	}
+
+	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomains)
+
+	// Get the existing key pair using the SubjectKeyID
+	signer, err := (*engine).GetPrivateKeyByID(ca.Certificate.SubjectKeyID)
+	if err != nil {
+		lFunc.Errorf("could not get private key for CA %s: %s", input.CAID, err)
+		return nil, err
+	}
+
+	// Calculate validity duration from current certificate
+	currentCert := (*x509.Certificate)(ca.Certificate.Certificate)
+	validityDuration := currentCert.NotAfter.Sub(currentCert.NotBefore)
+	validity := models.Validity{
+		Type:     models.Duration,
+		Duration: models.TimeDuration(validityDuration),
+	}
+
+	// Validate issuance profile exists
+	exists, _, err := svc.issuanceProfilesStorage.SelectByID(ctx, ca.ProfileID)
+	if err != nil {
+		lFunc.Errorf("could not get issuance profile %s: %s", ca.ProfileID, err)
+		return nil, err
+	}
+	if !exists {
+		lFunc.Errorf("issuance profile %s not found", ca.ProfileID)
+		return nil, fmt.Errorf("issuance profile not found")
+	}
+
+	var newCert *x509.Certificate
+	var newAKID, newSKID string
+
+	// Check if this is a root CA or subordinate CA
+	if ca.Certificate.SubjectKeyID == ca.Certificate.AuthorityKeyID {
+		// Root CA - reissue as self-signed
+		lFunc.Debugf("reissuing root CA %s", input.CAID)
+		newCert, err = x509Engine.CreateRootCA(ctx, signer, ca.Certificate.SubjectKeyID, ca.Certificate.Subject, validity)
+		if err != nil {
+			lFunc.Errorf("could not create reissued root CA certificate: %s", err)
+			return nil, err
+		}
+		newSKID = ca.Certificate.SubjectKeyID
+		newAKID = ca.Certificate.SubjectKeyID
+	} else {
+		// Subordinate CA - need to sign with parent CA
+		lFunc.Debugf("reissuing subordinate CA %s", input.CAID)
+
+		// Get parent CA
+		exists, parentCA, err := svc.caStorage.SelectExistsByID(ctx, ca.Certificate.IssuerCAMetadata.ID)
+		if err != nil {
+			lFunc.Errorf("could not get parent CA %s: %s", ca.Certificate.IssuerCAMetadata.ID, err)
+			return nil, err
+		}
+		if !exists {
+			lFunc.Errorf("parent CA %s not found", ca.Certificate.IssuerCAMetadata.ID)
+			return nil, errs.ErrCANotFound
+		}
+
+		// Create a CSR for the subordinate CA with the existing key
+		csr, err := x509Engine.GenerateCertificateRequest(ctx, signer, ca.Certificate.Subject)
+		if err != nil {
+			lFunc.Errorf("could not create CSR for reissued subordinate CA: %s", err)
+			return nil, err
+		}
+
+		// Sign the CSR with the parent CA
+		issuanceProfile := x509Engine.GetDefaultCAIssuanceProfile(ctx, validity)
+		signedCert, err := svc.SignCertificate(ctx, services.SignCertificateInput{
+			CAID:            parentCA.ID,
+			CertRequest:     (*models.X509CertificateRequest)(csr),
+			IssuanceProfile: &issuanceProfile,
+		})
+		if err != nil {
+			lFunc.Errorf("could not sign reissued subordinate CA certificate: %s", err)
+			return nil, err
+		}
+
+		newCert = (*x509.Certificate)(signedCert.Certificate)
+		newSKID = signedCert.SubjectKeyID
+		newAKID = signedCert.AuthorityKeyID
+	}
+
+	// Get old serial number for linking metadata
+	oldSerialNumber := ca.Certificate.SerialNumber
+
+	// Update old certificate metadata to link to new certificate
+	if ca.Certificate.Metadata == nil {
+		ca.Certificate.Metadata = map[string]interface{}{}
+	}
+	ca.Certificate.Metadata[models.CAMetadataReissuedAsKey] = helpers.SerialNumberToHexString(newCert.SerialNumber)
+	ca.Certificate.Metadata[models.CAMetadataReissuedAtKey] = time.Now().Format(time.RFC3339)
+
+	// Update the old certificate in storage
+	_, err = svc.certStorage.Update(ctx, &ca.Certificate)
+	if err != nil {
+		lFunc.Errorf("could not update old certificate metadata: %s", err)
+		return nil, err
+	}
+
+	// Create new certificate metadata with link to old certificate
+	newMetadata := map[string]interface{}{}
+	for k, v := range ca.Metadata {
+		newMetadata[k] = v
+	}
+	newMetadata[models.CAMetadataReissuedFromKey] = oldSerialNumber
+	newMetadata[models.CAMetadataReissueReasonKey] = "certificate-reissuance"
+
+	// Create the new certificate record
+	newCertificateRecord := models.Certificate{
+		SerialNumber:     helpers.SerialNumberToHexString(newCert.SerialNumber),
+		VersionSchema:    "1.0",
+		SubjectKeyID:     newSKID,
+		AuthorityKeyID:   newAKID,
+		Metadata:         newMetadata,
+		Status:           models.StatusActive,
+		Certificate:      (*models.X509Certificate)(newCert),
+		KeyMetadata:      ca.Certificate.KeyMetadata,
+		Subject:          ca.Certificate.Subject,
+		Issuer:           ca.Certificate.Issuer,
+		ValidFrom:        newCert.NotBefore,
+		ValidTo:          newCert.NotAfter,
+		IssuerCAMetadata: ca.Certificate.IssuerCAMetadata,
+		Type:             ca.Certificate.Type,
+		EngineID:         ca.Certificate.EngineID,
+		IsCA:             true,
+	}
+
+	// Insert the new certificate
+	_, err = svc.certStorage.Insert(ctx, &newCertificateRecord)
+	if err != nil {
+		lFunc.Errorf("could not insert new certificate: %s", err)
+		return nil, err
+	}
+
+	// Update the CA to point to the new certificate
+	ca.CertificateSerialNumber = newCertificateRecord.SerialNumber
+	ca.Certificate = newCertificateRecord // Update the Certificate field to point to new certificate
+	ca.Metadata = newMetadata
+
+	updatedCA, err := svc.caStorage.Update(ctx, ca)
+	if err != nil {
+		lFunc.Errorf("could not update CA with new certificate: %s", err)
+		return nil, err
+	}
+
+	lFunc.Debugf("successfully reissued CA %s. New serial number: %s", input.CAID, newCertificateRecord.SerialNumber)
+
+	return updatedCA, nil
+}
+
+// Returned Error Codes:
+//   - ErrCANotFound
+//     The specified CA can not be found in the Database
+//   - ErrValidateBadRequest
+//     The required variables of the data structure are not valid.
 //   - ErrCAStatus
 //     Cannot delete a CA that is not expired or revoked.
 //   - ErrCascadeDeleteNotAllowed

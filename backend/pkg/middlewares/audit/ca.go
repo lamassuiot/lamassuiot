@@ -86,6 +86,14 @@ func (mw CAAuditEventPublisher) UpdateCAMetadata(ctx context.Context, input serv
 	return mw.next.UpdateCAMetadata(ctx, input)
 }
 
+func (mw CAAuditEventPublisher) ReissueCA(ctx context.Context, input services.ReissueCAInput) (output *models.CACertificate, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventReissueCAKey, input, err, output)
+	}()
+
+	return mw.next.ReissueCA(ctx, input)
+}
+
 func (mw CAAuditEventPublisher) DeleteCA(ctx context.Context, input services.DeleteCAInput) (err error) {
 	defer func() {
 		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventDeleteCAKey, input, err, map[string]any{})

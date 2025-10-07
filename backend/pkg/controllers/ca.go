@@ -478,6 +478,51 @@ func (r *caHttpRoutes) UpdateCAProfile(ctx *gin.Context) {
 	ctx.JSON(200, ca)
 }
 
+// @Summary Reissue CA Certificate
+// @Description Reissues a CA certificate with the same configuration but new serial number and recomputed AKI/SKI. The old certificate remains active with linking metadata.
+// @Accept json
+// @Produce json
+// @Security OAuth2Password
+// @Success 200 {object} models.CACertificate
+// @Failure 400 {string} string "CA is revoked or validation error"
+// @Failure 404 {string} string "CA not found"
+// @Failure 500
+// @Router /cas/{id}/reissue [post]
+func (r *caHttpRoutes) ReissueCA(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	ca, err := r.svc.ReissueCA(ctx, services.ReissueCAInput{
+		CAID: params.ID,
+	})
+
+	if err != nil {
+		switch err {
+		case errs.ErrCANotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrCAAlreadyRevoked:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrCAExpired:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+
+		return
+	}
+
+	ctx.JSON(200, ca)
+}
+
 // @Summary Get Certificate by Serial Number
 // @Description Get Certificate by Serial Number
 // @Accept json

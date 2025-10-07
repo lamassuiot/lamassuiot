@@ -9,6 +9,7 @@ var (
 	ErrCAAlreadyExists        error = errors.New("CA already exists")
 	ErrCAStatus               error = errors.New("CA Status inconsistent")
 	ErrCAAlreadyRevoked       error = errors.New("CA already revoked")
+	ErrCAExpired              error = errors.New("CA is expired")
 	ErrCAIncompatibleHashFunc error = errors.New("incompatible hash function")
 	ErrCAIncompatibleValidity error = errors.New("incompatible expiration time ref")
 	ErrCAIssuanceExpiration   error = errors.New("issuance expiration greater than CA expiration")

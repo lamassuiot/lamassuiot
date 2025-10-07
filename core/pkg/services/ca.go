@@ -21,6 +21,7 @@ type CAService interface {
 	UpdateCAStatus(ctx context.Context, input UpdateCAStatusInput) (*models.CACertificate, error)
 	UpdateCAProfile(ctx context.Context, input UpdateCAProfileInput) (*models.CACertificate, error)
 	UpdateCAMetadata(ctx context.Context, input UpdateCAMetadataInput) (*models.CACertificate, error)
+	ReissueCA(ctx context.Context, input ReissueCAInput) (*models.CACertificate, error)
 	DeleteCA(ctx context.Context, input DeleteCAInput) error
 
 	SignatureSign(ctx context.Context, input SignatureSignInput) ([]byte, error)
@@ -170,6 +171,10 @@ type UpdateCAProfileInput struct {
 type UpdateCAMetadataInput struct {
 	CAID    string                  `validate:"required"`
 	Patches []models.PatchOperation `validate:"required"`
+}
+
+type ReissueCAInput struct {
+	CAID string `validate:"required"`
 }
 
 type DeleteCAInput struct {
