@@ -18,6 +18,7 @@ var CertificateFiltrableFields = map[string]FilterFieldType{
 	"type":                 EnumFilterFieldType,
 	"serial_number":        StringFilterFieldType,
 	"subject.common_name":  StringFilterFieldType,
+	"subject_key_id":       StringFilterFieldType,
 	"issuer_meta.id":       StringFilterFieldType,
 	"status":               EnumFilterFieldType,
 	"engine_id":            StringFilterFieldType,
