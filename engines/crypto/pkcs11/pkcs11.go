@@ -259,7 +259,7 @@ func (hsmContext *pkcs11EngineContext) CreateECDSAPrivateKey(ctx context.Context
 }
 
 // TODO -> Add implementation (if posible)
-func (hsmContext *pkcs11EngineContext) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
+func (hsmContext *pkcs11EngineContext) CreateMLDSAPrivateKey(ctx context.Context, dimensions int) (string, crypto.Signer, error) {
 	return "", nil, fmt.Errorf("pkcs11: unsupported key type (ML-DSA")
 }
 

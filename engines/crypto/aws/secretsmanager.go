@@ -161,7 +161,7 @@ func (engine *AWSSecretsManagerCryptoEngine) CreateECDSAPrivateKey(ctx context.C
 }
 
 // TODO -> Add implementation (if posible)
-func (engine *AWSSecretsManagerCryptoEngine) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
+func (engine *AWSSecretsManagerCryptoEngine) CreateMLDSAPrivateKey(ctx context.Context, dimensions int) (string, crypto.Signer, error) {
 	return "", nil, errors.New("aws/secretsmanager: unsupported key type (ML-DSA)")
 }
 

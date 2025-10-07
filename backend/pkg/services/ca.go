@@ -307,7 +307,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			return nil, fmt.Errorf("could not import key: %w", err)
 		}
 
-<<<<<<< HEAD
 		if key.KeyID != skid {
 			key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
 				ID: key.KeyID,
@@ -320,28 +319,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 				lFunc.Errorf("could not rename imported key to match SKID %s: %s", skid, err)
 				return nil, fmt.Errorf("could not rename imported key: %w", err)
 			}
-=======
-		if input.CARSAKey != nil {
-			_, _, err = engine.ImportRSAPrivateKey(input.CARSAKey)
-		} else if input.CAECKey != nil {
-			_, _, err = engine.ImportECDSAPrivateKey(input.CAECKey)
-		} else if input.CAMLDSAKey != nil {
-			_, _, err = engine.ImportMLDSAPrivateKey(input.CAMLDSAKey)
-		} else if input.CAEd25519Key != nil {
-			_, _, err = engine.ImportEd25519PrivateKey(input.CAEd25519Key)
-		} else {
-<<<<<<< HEAD
-			lFunc.Errorf("key type %s not supported", input.KeyType)
-			return nil, fmt.Errorf("KeyType not supported")
->>>>>>> b748cf05 (Added CA Sign and Verify support for MLDSA certificates. CRL generation and verification has been fixed)
-=======
-	 		return nil, fmt.Errorf("KeyType not supported")
->>>>>>> cecef1e3 (Added support for the Ed25519 CA creation and certificate issuing via CSR.)
-		}
-
-		if err != nil {
-			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
-			return nil, fmt.Errorf("could not import key: %w", err)
 		}
 	} else {
 		//search in KMS if key exists for the CA being imported

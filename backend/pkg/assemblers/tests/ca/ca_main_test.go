@@ -110,7 +110,7 @@ func TestCreateCA(t *testing.T) {
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					ID:           caID,
-					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
+					KeyMetadata:  models.KeyMetadata{Type: models.MLDSA, Bits: 65},
 					Subject:      models.Subject{CommonName: "TestCA"},
 					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 					ProfileID:    profile.ID,
@@ -3920,7 +3920,7 @@ func TestImportCA(t *testing.T) {
 			}
 			key = eccKey
 			pubKey = &eccKey.PublicKey
-		case x509.MLDSA:
+		case models.MLDSAPublicKeyAlgorithm:
 			mldsaKey, err := chelpers.GenerateMLDSAKey(65)
 			if err != nil {
 				return nil, nil, err
@@ -4112,7 +4112,7 @@ func TestImportCA(t *testing.T) {
 			name:   "OK/ImportingCAWithMLDSAKey",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
-				ca, key, err := generateSelfSignedCA(x509.MLDSA)
+				ca, key, err := generateSelfSignedCA(models.MLDSAPublicKeyAlgorithm)
 				var duration time.Duration = 100
 				if err != nil {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)
@@ -4133,7 +4133,7 @@ func TestImportCA(t *testing.T) {
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
 					CAECKey:       (key).(*ecdsa.PrivateKey),
-					KeyType:       models.KeyType(x509.MLDSA),
+					KeyType:       models.MLDSA,
 				})
 				return importedCA, err
 			},

@@ -73,7 +73,7 @@ func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfig
 					},
 				},
 				{
-					Type: models.KeyType(x509.MLDSA),
+					Type: models.MLDSA,
 					Sizes: []int{
 						44,
 						65,
@@ -164,10 +164,10 @@ func (engine *FilesystemCryptoEngine) CreateECDSAPrivateKey(ctx context.Context,
 	return engine.importKey(key)
 }
 
-func (engine *FilesystemCryptoEngine) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
+func (engine *FilesystemCryptoEngine) CreateMLDSAPrivateKey(ctx context.Context, dimensions int) (string, crypto.Signer, error) {
 	engine.logger.Debugf("creating ML-DSA-%v private key", dimensions)
 
-	_, key, err := engine.softCryptoEngine.CreateMLDSAPrivateKey(dimensions)
+	_, key, err := engine.softCryptoEngine.CreateMLDSAPrivateKey(ctx, dimensions)
 	if err != nil {
 		engine.logger.Errorf("could not create ML-DSA-%v private key: %s", dimensions, err)
 		return "", nil, err
