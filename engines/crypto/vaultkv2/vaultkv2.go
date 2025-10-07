@@ -223,7 +223,7 @@ func (engine *VaultKV2Engine) CreateECDSAPrivateKey(ctx context.Context, c ellip
 }
 
 // TODO -> Add implementation (if posible)
-func (engine *VaultKV2Engine) CreateMLDSAPrivateKey(dimensions int) (string, crypto.Signer, error) {
+func (engine *VaultKV2Engine) CreateMLDSAPrivateKey(ctx context.Context, dimensions int) (string, crypto.Signer, error) {
 	return "", nil, errors.New("vaultvk2: unsupported key type (ML-DSA)")
 }
 
