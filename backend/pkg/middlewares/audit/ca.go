@@ -32,6 +32,7 @@ func (mw CAAuditEventPublisher) GetCryptoEngineProvider(ctx context.Context) ([]
 func (mw CAAuditEventPublisher) GetStats(ctx context.Context) (*models.CAStats, error) {
 	return mw.next.GetStats(ctx)
 }
+
 func (mw CAAuditEventPublisher) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
 	return mw.next.GetStatsByCAID(ctx, input)
 }
@@ -197,6 +198,54 @@ func (mw CAAuditEventPublisher) DeleteCARequestByID(ctx context.Context, input s
 
 func (mw CAAuditEventPublisher) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
 	return mw.next.GetCARequests(ctx, input)
+}
+
+func (mw CAAuditEventPublisher) GetKeys(ctx context.Context, input services.GetKeysInput) (string, error) {
+	return mw.next.GetKeys(ctx, input)
+}
+
+func (mw CAAuditEventPublisher) GetKeyByID(ctx context.Context, input services.GetByIDInput) (*models.Key, error) {
+	return mw.next.GetKeyByID(ctx, input)
+}
+
+func (mw CAAuditEventPublisher) CreateKey(ctx context.Context, input services.CreateKeyInput) (output *models.Key, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventCreateKMSKey, input, err, output)
+	}()
+
+	return mw.next.CreateKey(ctx, input)
+}
+
+func (mw CAAuditEventPublisher) DeleteKeyByID(ctx context.Context, input services.GetByIDInput) (err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventDeleteKMSKey, input, err, nil)
+	}()
+
+	return mw.next.DeleteKeyByID(ctx, input)
+}
+
+func (mw CAAuditEventPublisher) SignMessage(ctx context.Context, input services.SignMessageInput) (output *models.MessageSignature, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventSignMessageKMSKey, input, err, output)
+	}()
+
+	return mw.next.SignMessage(ctx, input)
+}
+
+func (mw CAAuditEventPublisher) VerifySignature(ctx context.Context, input services.VerifySignInput) (output *models.MessageValidation, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventVerifySignatureKMSKey, input, err, output)
+	}()
+
+	return mw.next.VerifySignature(ctx, input)
+}
+
+func (mw CAAuditEventPublisher) ImportKey(ctx context.Context, input services.ImportKeyInput) (output *models.Key, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventImportKMSKey, input, err, output)
+	}()
+
+	return mw.next.ImportKey(ctx, input)
 }
 
 func (mw CAAuditEventPublisher) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {

@@ -1,12 +1,12 @@
 package resources
 
-var DMSFiltrableFields = map[string]FilterFieldType{
+var DMSFilterableFields = map[string]FilterFieldType{
 	"id":          StringFilterFieldType,
 	"name":        StringFilterFieldType,
 	"creation_ts": DateFilterFieldType,
 }
 
-var DeviceFiltrableFields = map[string]FilterFieldType{
+var DeviceFilterableFields = map[string]FilterFieldType{
 	"id":                 StringFilterFieldType,
 	"dms_owner":          StringFilterFieldType,
 	"creation_timestamp": DateFilterFieldType,
@@ -14,7 +14,7 @@ var DeviceFiltrableFields = map[string]FilterFieldType{
 	"tags":               StringArrayFilterFieldType,
 }
 
-var CertificateFiltrableFields = map[string]FilterFieldType{
+var CertificateFilterableFields = map[string]FilterFieldType{
 	"type":                 EnumFilterFieldType,
 	"serial_number":        StringFilterFieldType,
 	"subject.common_name":  StringFilterFieldType,

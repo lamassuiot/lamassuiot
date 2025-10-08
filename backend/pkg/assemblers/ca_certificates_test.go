@@ -15,7 +15,7 @@ import (
 )
 
 func TestDeleteCertificateSDK(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -133,7 +133,7 @@ func TestDeleteCertificateSDK(t *testing.T) {
 }
 
 func TestDeleteCertificateService(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -185,7 +185,7 @@ func TestDeleteCertificateService(t *testing.T) {
 }
 
 func TestSignCertificateWithDefaultProfile(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}

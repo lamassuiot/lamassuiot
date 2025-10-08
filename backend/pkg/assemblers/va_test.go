@@ -631,7 +631,7 @@ func generateCertificate(caSDK services.CAService) (*models.Certificate, error) 
 }
 
 func StartVAServiceTestServer(t *testing.T) (*TestServer, error) {
-	testServer, err := TestServiceBuilder{}.WithDatabase("ca", "va").WithService(CA, VA).WithMonitor().WithEventBus().Build(t)
+	testServer, err := TestServiceBuilder{}.WithDatabase("ca", "va", "kms").WithService(CA, VA).WithMonitor().WithEventBus().Build(t)
 	if err != nil {
 		return nil, fmt.Errorf("could not create Device Manager test server: %s", err)
 	}
