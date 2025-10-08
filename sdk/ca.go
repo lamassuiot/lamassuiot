@@ -251,12 +251,22 @@ func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.Up
 }
 
 func (cli *httpCAClient) DeleteCA(ctx context.Context, input services.DeleteCAInput) error {
-	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID, map[int][]error{
+	url := cli.baseUrl + "/v1/cas/" + input.CAID
+
+	// Add cascade_delete query parameter if needed
+	if input.CascadeDelete {
+		url += "?cascade_delete=true"
+	}
+
+	err := Delete(ctx, cli.httpClient, url, map[int][]error{
 		404: {
 			errs.ErrCANotFound,
 		},
 		400: {
 			errs.ErrCAStatus,
+		},
+		403: {
+			errs.ErrCascadeDeleteNotAllowed,
 		},
 	})
 	if err != nil {
