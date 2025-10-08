@@ -15,7 +15,7 @@ func TestFilterQuery_SubjectKeyID(t *testing.T) {
 	q.Add("filter", "subject_key_id[eq]ABC123")
 	req.URL.RawQuery = q.Encode()
 
-	qp := FilterQuery(req, resources.CertificateFiltrableFields)
+	qp := FilterQuery(req, resources.CertificateFilterableFields)
 	if qp == nil {
 		t.Fatalf("expected QueryParameters, got nil")
 	}
