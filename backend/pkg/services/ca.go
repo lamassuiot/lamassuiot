@@ -1769,6 +1769,65 @@ func (svc *CAServiceBackend) getEngineAndSigner(engineID, keyID string) (*crypto
 	return engine, signer, nil
 }
 
+// Common setup for KMS operations (SignMessage and VerifySignature)
+type kmsOperationSetup struct {
+	Hash   crypto.Hash
+	IsRSA  bool
+	IsPSS  bool
+	Signer crypto.Signer
+	Engine *cryptoengines.CryptoEngine
+}
+
+func (svc *CAServiceBackend) initKMSKeyOperation(ctx context.Context, keyID, algorithm string, operationName string, input interface{}) (*kmsOperationSetup, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	// Validate input struct
+	err := validate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("%s struct validation error: %s", operationName, err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	// Parse PKCS11 ID
+	engineID, keyIDParsed, _, err := parsePKCS11ID(keyID)
+	if err != nil {
+		return nil, errors.New("invalid key id format, expected pkcs11:token-id=<engineID>;id=<keyID>;type=<type>")
+	}
+
+	// Check if key exists
+	lFunc.Debugf("checking if Key '%s' exists", keyID)
+	exists, _, err := svc.kmsStorage.SelectExistsByID(ctx, keyID)
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", keyID, err)
+		return nil, err
+	}
+
+	if !exists {
+		lFunc.Errorf("Key %s can not be found in storage engine", keyID)
+		return nil, errs.ErrKeyNotFound
+	}
+
+	// Parse algorithm
+	hash, isRSA, isPSS, err := parseAlgorithm(algorithm)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get engine and signer
+	engine, signer, err := svc.getEngineAndSigner(engineID, keyIDParsed)
+	if err != nil {
+		return nil, err
+	}
+
+	return &kmsOperationSetup{
+		Hash:   hash,
+		IsRSA:  isRSA,
+		IsPSS:  isPSS,
+		Signer: signer,
+		Engine: engine,
+	}, nil
+}
+
 // Helper to calculate digest
 func calculateDigest(hash crypto.Hash, messageType models.SignMessageType, message []byte) []byte {
 	if messageType == models.Raw {
@@ -2076,47 +2135,17 @@ func (svc *CAServiceBackend) DeleteKeyByID(tx context.Context, input services.Ge
 func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.SignMessageInput) (*models.MessageSignature, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	err := validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("SignMessage struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
-	}
-
-	engineID, keyID, _, err := parsePKCS11ID(input.KeyID)
-	if err != nil {
-		return nil, errors.New("invalid key id format, expected pkcs11:token-id=<engineID>;id=<keyID>;type=<type>")
-	}
-
-	lFunc.Debugf("checking if Key '%s' exists", input.KeyID)
-	exists, _, err := svc.kmsStorage.SelectExistsByID(ctx, input.KeyID)
-	if err != nil {
-		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.KeyID, err)
-		return nil, err
-	}
-
-	if !exists {
-		lFunc.Errorf("Key %s can not be found in storage engine", input.KeyID)
-		return nil, errs.ErrKeyNotFound
-	}
-
-	var hash crypto.Hash
-	var isRSA, isPSS bool
-
-	hash, isRSA, isPSS, err = parseAlgorithm(input.Algorithm)
+	// Setup common KMS operation components
+	setup, err := svc.initKMSKeyOperation(ctx, input.KeyID, input.Algorithm, "SignMessage", input)
 	if err != nil {
 		return nil, err
 	}
 
-	_, signer, err := svc.getEngineAndSigner(engineID, keyID)
-	if err != nil {
-		return nil, err
-	}
-
-	digest := calculateDigest(hash, input.MessageType, input.Message)
+	digest := calculateDigest(setup.Hash, input.MessageType, input.Message)
 
 	var signature []byte
-	if isRSA {
-		rsaPriv, ok := signer.(*rsa.PrivateKey)
+	if setup.IsRSA {
+		rsaPriv, ok := setup.Signer.(*rsa.PrivateKey)
 		if !ok {
 			return nil, errors.New("key is not RSA key")
 		}
@@ -2126,22 +2155,22 @@ func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.Sig
 		if digest == nil {
 			return nil, errors.New("digest is nil")
 		}
-		if isPSS {
-			opts := &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: hash}
-			signature, err = signer.Sign(rand.Reader, digest, opts)
+		if setup.IsPSS {
+			opts := &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: setup.Hash}
+			signature, err = setup.Signer.Sign(rand.Reader, digest, opts)
 			if err != nil {
 				lFunc.Errorf("RSA-PSS Sign error: %s", err)
 				return nil, err
 			}
 		} else {
-			signature, err = signer.Sign(rand.Reader, digest, hash)
+			signature, err = setup.Signer.Sign(rand.Reader, digest, setup.Hash)
 			if err != nil {
 				lFunc.Errorf("RSA Sign error: %s", err)
 				return nil, err
 			}
 		}
 	} else {
-		ecdsaPriv, ok := signer.(*ecdsa.PrivateKey)
+		ecdsaPriv, ok := setup.Signer.(*ecdsa.PrivateKey)
 		if !ok {
 			return nil, errors.New("key is not ECDSA key")
 		}
@@ -2151,7 +2180,7 @@ func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.Sig
 		if digest == nil {
 			return nil, errors.New("digest is nil")
 		}
-		signature, err = signer.Sign(rand.Reader, digest, hash)
+		signature, err = setup.Signer.Sign(rand.Reader, digest, setup.Hash)
 		if err != nil {
 			lFunc.Errorf("ECDSA Sign error: %s", err)
 			return nil, err
@@ -2166,54 +2195,24 @@ func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.Sig
 func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services.VerifySignInput) (*models.MessageValidation, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	err := validate.Struct(input)
-	if err != nil {
-		lFunc.Errorf("VerifySignature struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
-	}
-
-	engineID, keyID, _, err := parsePKCS11ID(input.KeyID)
-	if err != nil {
-		return nil, errors.New("invalid key id format, expected pkcs11:token-id=<engineID>;id=<keyID>;type=<type>")
-	}
-
-	lFunc.Debugf("checking if Key '%s' exists", input.KeyID)
-	exists, _, err := svc.kmsStorage.SelectExistsByID(ctx, input.KeyID)
-	if err != nil {
-		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.KeyID, err)
-		return nil, err
-	}
-
-	if !exists {
-		lFunc.Errorf("key %s can not be found in storage engine", input.KeyID)
-		return nil, errs.ErrKeyNotFound
-	}
-
-	var hash crypto.Hash
-	var isRSA, isPSS bool
-
-	hash, isRSA, isPSS, err = parseAlgorithm(input.Algorithm)
+	// Setup common KMS operation components
+	setup, err := svc.initKMSKeyOperation(ctx, input.KeyID, input.Algorithm, "VerifySignature", input)
 	if err != nil {
 		return nil, err
 	}
 
-	_, signer, err := svc.getEngineAndSigner(engineID, keyID)
-	if err != nil {
-		return nil, err
-	}
+	publicKey := setup.Signer.Public()
 
-	publicKey := signer.Public()
+	digest := calculateDigest(setup.Hash, input.MessageType, input.Message)
 
-	digest := calculateDigest(hash, input.MessageType, input.Message)
-
-	if isRSA {
+	if setup.IsRSA {
 		pub, ok := publicKey.(*rsa.PublicKey)
 		if !ok {
 			return nil, errors.New("key is not RSA key")
 		}
-		if isPSS {
-			opts := &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: hash}
-			err = rsa.VerifyPSS(pub, hash, digest, input.Signature, opts)
+		if setup.IsPSS {
+			opts := &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: setup.Hash}
+			err = rsa.VerifyPSS(pub, setup.Hash, digest, input.Signature, opts)
 			if err != nil {
 				lFunc.Errorf("RSA-PSS verify error: %s", err)
 				return &models.MessageValidation{
@@ -2224,7 +2223,7 @@ func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services
 				Valid: true,
 			}, nil
 		} else {
-			err = rsa.VerifyPKCS1v15(pub, hash, digest, input.Signature)
+			err = rsa.VerifyPKCS1v15(pub, setup.Hash, digest, input.Signature)
 			if err != nil {
 				lFunc.Errorf("RSA verify error: %s", err)
 				return &models.MessageValidation{
