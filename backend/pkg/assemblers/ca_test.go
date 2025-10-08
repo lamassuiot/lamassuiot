@@ -3987,13 +3987,13 @@ func TestDeleteCA(t *testing.T) {
 
 func TestDeleteCA_CascadeDeleteConfigValidation(t *testing.T) {
 	// Test with cascade delete disabled by configuration
-	serverTestDisabled, err := TestServiceBuilder{}.WithDatabase("ca").WithCascadeDelete(false).Build(t)
+	serverTestDisabled, err := TestServiceBuilder{}.WithDatabase("ca", "kms").WithCascadeDelete(false).Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server with cascade delete disabled: %s", err)
 	}
 
 	// Test with cascade delete enabled by configuration
-	serverTestEnabled, err := TestServiceBuilder{}.WithDatabase("ca").WithCascadeDelete(true).Build(t)
+	serverTestEnabled, err := TestServiceBuilder{}.WithDatabase("ca", "kms").WithCascadeDelete(true).Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server with cascade delete enabled: %s", err)
 	}
@@ -4114,7 +4114,7 @@ func TestDeleteCA_CascadeDeleteConfigValidation(t *testing.T) {
 // - Test scenarios where private key deletion fails but CA deletion still succeeds
 // - Verify that the correct key ID is passed to the crypto engine
 func TestDeleteCAPrivateKeyDeletion(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -4214,7 +4214,7 @@ func testDeleteCAWithPrivateKey(t *testing.T, serverTest *TestServer, caType str
 }
 
 func TestDeleteCAPrivateKeyDeletionWithCascade(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithCascadeDelete(true).Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").WithCascadeDelete(true).Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
