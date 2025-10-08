@@ -1536,15 +1536,12 @@ func (svc *CAServiceBackend) UpdateCertificateStatus(ctx context.Context, input 
 	}
 
 	lFunc.Debugf("checking if certificate '%s' exists", input.SerialNumber)
-	exists, cert, err := svc.certStorage.SelectExistsBySerialNumber(ctx, input.SerialNumber)
+	cert, err := svc.service.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
+		SerialNumber: input.SerialNumber,
+	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while checking if certificate '%s' exists in storage engine: %s", input.SerialNumber, err)
 		return nil, err
-	}
-
-	if !exists {
-		lFunc.Errorf("certificate %s can not be found in storage engine", input.SerialNumber)
-		return nil, errs.ErrCertificateNotFound
 	}
 
 	if cert.Status == models.StatusExpired {
@@ -1588,15 +1585,12 @@ func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, inpu
 	}
 
 	lFunc.Debugf("checking if certificate '%s' exists", input.SerialNumber)
-	exists, cert, err := svc.certStorage.SelectExistsBySerialNumber(ctx, input.SerialNumber)
+	cert, err := svc.service.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
+		SerialNumber: input.SerialNumber,
+	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while checking if certificate '%s' exists in storage engine: %s", input.SerialNumber, err)
 		return nil, err
-	}
-
-	if !exists {
-		lFunc.Errorf("certificate %s can not be found in storage engine", input.SerialNumber)
-		return nil, errs.ErrCertificateNotFound
 	}
 
 	updatedMetadata, err := chelpers.ApplyPatches(cert.Metadata, input.Patches)
@@ -1628,15 +1622,12 @@ func (svc *CAServiceBackend) DeleteCertificate(ctx context.Context, input servic
 	}
 
 	lFunc.Debugf("checking if certificate '%s' exists", input.SerialNumber)
-	exists, cert, err := svc.certStorage.SelectExistsBySerialNumber(ctx, input.SerialNumber)
+	cert, err := svc.service.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
+		SerialNumber: input.SerialNumber,
+	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while checking if certificate '%s' exists in storage engine: %s", input.SerialNumber, err)
 		return err
-	}
-
-	if !exists {
-		lFunc.Errorf("certificate %s can not be found in storage engine", input.SerialNumber)
-		return errs.ErrCertificateNotFound
 	}
 
 	// Check if the issuer CA still exists in the system
