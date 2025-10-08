@@ -1067,6 +1067,302 @@ func TestSignMessage(t *testing.T) {
 				return nil
 			},
 		},
+		{
+			name: "Error/SignMessage-HashType-InvalidHashLength",
+			before: func() {
+				validKeyID, validAlgorithm = importKey("SignKey3", 2048)
+			},
+			run: func() (*models.MessageSignature, error) {
+				// Using SHA-256 algorithm but providing incorrect hash length
+				// SHA-256 expects 32 bytes, but we provide 16 bytes
+				invalidHashMessage := make([]byte, 16) // Wrong length for SHA-256
+				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
+					KeyID:       validKeyID,
+					Message:     invalidHashMessage,
+					Algorithm:   "RSASSA_PKCS1_V1_5_SHA_256", // SHA-256 expects 32 bytes
+					MessageType: models.Hashed,               // This should trigger hash length validation
+				})
+			},
+			resultCheck: func(sig *models.MessageSignature, err error) error {
+				if err == nil {
+					return fmt.Errorf("expected error for invalid hash length when MessageType is Hash, got nil")
+				}
+				expectedErrMsg := "invalid digest size"
+				if !strings.Contains(err.Error(), expectedErrMsg) {
+					return fmt.Errorf("expected error to contain '%s', but got: %s", expectedErrMsg, err.Error())
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/SignMessage-HashType-ValidHashLength",
+			before: func() {
+				validKeyID, validAlgorithm = importKey("SignKey4", 2048)
+			},
+			run: func() (*models.MessageSignature, error) {
+				// Using SHA-256 algorithm with correct hash length (32 bytes)
+				validHashMessage := make([]byte, 32) // Correct length for SHA-256
+				// Fill with some test data
+				for i := range validHashMessage {
+					validHashMessage[i] = byte(i % 256)
+				}
+				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
+					KeyID:       validKeyID,
+					Message:     validHashMessage,
+					Algorithm:   "RSASSA_PKCS1_V1_5_SHA_256", // SHA-256 expects 32 bytes
+					MessageType: models.Hashed,               // This should pass hash length validation
+				})
+			},
+			resultCheck: func(sig *models.MessageSignature, err error) error {
+				if err != nil {
+					return fmt.Errorf("should not error when providing correct hash length for MessageType Hash: %s", err)
+				}
+				if sig == nil || len(sig.Signature) == 0 {
+					return fmt.Errorf("expected signature, got nil or empty")
+				}
+				return nil
+			},
+		},
+		{
+			name: "Error/SignMessage-ECDSA256-WrongHashSize",
+			before: func() {
+				// Create ECDSA-256 key
+				pem := func() any {
+					priv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+					return priv
+				}()
+				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+					Name:       "ECDSA256-WrongHash",
+					PrivateKey: pem,
+					EngineID:   "filesystem-1",
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to import ECDSA-256 key: %s", err))
+				}
+				validKeyID = key.ID
+			},
+			run: func() (*models.MessageSignature, error) {
+				// Using ECDSA_SHA_256 but providing SHA-384 hash length (48 bytes instead of 32)
+				wrongHashMessage := make([]byte, 48) // Wrong length for ECDSA_SHA_256
+				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
+					KeyID:       validKeyID,
+					Message:     wrongHashMessage,
+					Algorithm:   "ECDSA_SHA_256", // SHA-256 expects 32 bytes, not 48
+					MessageType: models.Hashed,
+				})
+			},
+			resultCheck: func(sig *models.MessageSignature, err error) error {
+				if err == nil {
+					return fmt.Errorf("expected error for ECDSA-256 key with wrong hash size, got nil")
+				}
+				expectedErrMsg := "invalid digest size"
+				if !strings.Contains(err.Error(), expectedErrMsg) {
+					return fmt.Errorf("expected error to contain '%s', but got: %s", expectedErrMsg, err.Error())
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/SignMessage-ECDSA256-CorrectHashSize",
+			before: func() {
+				// Create ECDSA-256 key
+				pem := func() any {
+					priv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+					return priv
+				}()
+				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+					Name:       "ECDSA256-CorrectHash",
+					PrivateKey: pem,
+					EngineID:   "filesystem-1",
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to import ECDSA-256 key: %s", err))
+				}
+				validKeyID = key.ID
+			},
+			run: func() (*models.MessageSignature, error) {
+				// Using ECDSA_SHA_256 with correct hash length (32 bytes)
+				correctHashMessage := make([]byte, 32) // Correct length for ECDSA_SHA_256
+				for i := range correctHashMessage {
+					correctHashMessage[i] = byte(i % 256)
+				}
+				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
+					KeyID:       validKeyID,
+					Message:     correctHashMessage,
+					Algorithm:   "ECDSA_SHA_256", // SHA-256 expects 32 bytes
+					MessageType: models.Hashed,
+				})
+			},
+			resultCheck: func(sig *models.MessageSignature, err error) error {
+				if err != nil {
+					return fmt.Errorf("should not error for ECDSA-256 key with correct hash size: %s", err)
+				}
+				if sig == nil || len(sig.Signature) == 0 {
+					return fmt.Errorf("expected signature, got nil or empty")
+				}
+				return nil
+			},
+		},
+		{
+			name: "Error/SignMessage-ECDSA384-WrongHashSize",
+			before: func() {
+				// Create ECDSA-384 key
+				pem := func() any {
+					priv, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+					return priv
+				}()
+				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+					Name:       "ECDSA384-WrongHash",
+					PrivateKey: pem,
+					EngineID:   "filesystem-1",
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to import ECDSA-384 key: %s", err))
+				}
+				validKeyID = key.ID
+			},
+			run: func() (*models.MessageSignature, error) {
+				// Using ECDSA_SHA_384 but providing SHA-256 hash length (32 bytes instead of 48)
+				wrongHashMessage := make([]byte, 32) // Wrong length for ECDSA_SHA_384
+				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
+					KeyID:       validKeyID,
+					Message:     wrongHashMessage,
+					Algorithm:   "ECDSA_SHA_384", // SHA-384 expects 48 bytes, not 32
+					MessageType: models.Hashed,
+				})
+			},
+			resultCheck: func(sig *models.MessageSignature, err error) error {
+				if err == nil {
+					return fmt.Errorf("expected error for ECDSA-384 key with wrong hash size, got nil")
+				}
+				expectedErrMsg := "invalid digest size"
+				if !strings.Contains(err.Error(), expectedErrMsg) {
+					return fmt.Errorf("expected error to contain '%s', but got: %s", expectedErrMsg, err.Error())
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/SignMessage-ECDSA384-CorrectHashSize",
+			before: func() {
+				// Create ECDSA-384 key
+				pem := func() any {
+					priv, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+					return priv
+				}()
+				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+					Name:       "ECDSA384-CorrectHash",
+					PrivateKey: pem,
+					EngineID:   "filesystem-1",
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to import ECDSA-384 key: %s", err))
+				}
+				validKeyID = key.ID
+			},
+			run: func() (*models.MessageSignature, error) {
+				// Using ECDSA_SHA_384 with correct hash length (48 bytes)
+				correctHashMessage := make([]byte, 48) // Correct length for ECDSA_SHA_384
+				for i := range correctHashMessage {
+					correctHashMessage[i] = byte(i % 256)
+				}
+				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
+					KeyID:       validKeyID,
+					Message:     correctHashMessage,
+					Algorithm:   "ECDSA_SHA_384", // SHA-384 expects 48 bytes
+					MessageType: models.Hashed,
+				})
+			},
+			resultCheck: func(sig *models.MessageSignature, err error) error {
+				if err != nil {
+					return fmt.Errorf("should not error for ECDSA-384 key with correct hash size: %s", err)
+				}
+				if sig == nil || len(sig.Signature) == 0 {
+					return fmt.Errorf("expected signature, got nil or empty")
+				}
+				return nil
+			},
+		},
+		{
+			name: "Error/SignMessage-ECDSA521-WrongHashSize",
+			before: func() {
+				// Create ECDSA-521 key
+				pem := func() any {
+					priv, _ := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
+					return priv
+				}()
+				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+					Name:       "ECDSA521-WrongHash",
+					PrivateKey: pem,
+					EngineID:   "filesystem-1",
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to import ECDSA-521 key: %s", err))
+				}
+				validKeyID = key.ID
+			},
+			run: func() (*models.MessageSignature, error) {
+				// Using ECDSA_SHA_512 but providing SHA-384 hash length (48 bytes instead of 64)
+				wrongHashMessage := make([]byte, 48) // Wrong length for ECDSA_SHA_512
+				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
+					KeyID:       validKeyID,
+					Message:     wrongHashMessage,
+					Algorithm:   "ECDSA_SHA_512", // SHA-512 expects 64 bytes, not 48
+					MessageType: models.Hashed,
+				})
+			},
+			resultCheck: func(sig *models.MessageSignature, err error) error {
+				if err == nil {
+					return fmt.Errorf("expected error for ECDSA-521 key with wrong hash size, got nil")
+				}
+				expectedErrMsg := "invalid digest size"
+				if !strings.Contains(err.Error(), expectedErrMsg) {
+					return fmt.Errorf("expected error to contain '%s', but got: %s", expectedErrMsg, err.Error())
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/SignMessage-ECDSA521-CorrectHashSize",
+			before: func() {
+				// Create ECDSA-521 key
+				pem := func() any {
+					priv, _ := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
+					return priv
+				}()
+				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+					Name:       "ECDSA521-CorrectHash",
+					PrivateKey: pem,
+					EngineID:   "filesystem-1",
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to import ECDSA-521 key: %s", err))
+				}
+				validKeyID = key.ID
+			},
+			run: func() (*models.MessageSignature, error) {
+				// Using ECDSA_SHA_512 with correct hash length (64 bytes)
+				correctHashMessage := make([]byte, 64) // Correct length for ECDSA_SHA_512
+				for i := range correctHashMessage {
+					correctHashMessage[i] = byte(i % 256)
+				}
+				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
+					KeyID:       validKeyID,
+					Message:     correctHashMessage,
+					Algorithm:   "ECDSA_SHA_512", // SHA-512 expects 64 bytes
+					MessageType: models.Hashed,
+				})
+			},
+			resultCheck: func(sig *models.MessageSignature, err error) error {
+				if err != nil {
+					return fmt.Errorf("should not error for ECDSA-521 key with correct hash size: %s", err)
+				}
+				if sig == nil || len(sig.Signature) == 0 {
+					return fmt.Errorf("expected signature, got nil or empty")
+				}
+				return nil
+			},
+		},
 	}
 
 	for _, tc := range testcases {
@@ -1263,6 +1559,264 @@ func TestVerifySignature(t *testing.T) {
 				}
 				if ok.Valid == true {
 					return fmt.Errorf("expected false validation for algorithm mismatch, got true")
+				}
+				return nil
+			},
+		},
+		{
+			name: "Error/VerifySignature-HashType-InvalidHashLength",
+			before: func() {
+				validKeyID, validAlgorithm, _, validSignature = importAndSign("VerifyKey5", 2048, "RSASSA_PKCS1_V1_5_SHA_256", []byte("dummy message"))
+			},
+			run: func() (*models.MessageValidation, error) {
+				// Using SHA-256 algorithm but providing incorrect hash length
+				// SHA-256 expects 32 bytes, but we provide 20 bytes
+				invalidHashMessage := make([]byte, 20) // Wrong length for SHA-256
+				return caTest.HttpCASDK.VerifySignature(context.Background(), services.VerifySignInput{
+					KeyID:       validKeyID,
+					Message:     invalidHashMessage,
+					Algorithm:   "RSASSA_PKCS1_V1_5_SHA_256", // SHA-256 expects 32 bytes
+					MessageType: models.Hashed,               // This should trigger hash length validation
+					Signature:   validSignature,
+				})
+			},
+			resultCheck: func(ok *models.MessageValidation, err error) error {
+				if err == nil {
+					return fmt.Errorf("expected error for invalid hash length when MessageType is Hash in verification, got nil")
+				}
+				expectedErrMsg := "invalid digest size"
+				if !strings.Contains(err.Error(), expectedErrMsg) {
+					return fmt.Errorf("expected error to contain '%s', but got: %s", expectedErrMsg, err.Error())
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/VerifySignature-HashType-ValidHashLength",
+			before: func() {
+				// Create a key and sign a known hash for verification
+				pem := func(bits int) any {
+					priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+					return priv
+				}(2048)
+				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+					Name:       "VerifyKey6",
+					PrivateKey: pem,
+					EngineID:   "filesystem-1",
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to import key for test: %s", err))
+				}
+				validKeyID = key.ID
+				validAlgorithm = "RSASSA_PKCS1_V1_5_SHA_256"
+				// Create a valid SHA-256 hash (32 bytes)
+				validHashMessage := make([]byte, 32)
+				for i := range validHashMessage {
+					validHashMessage[i] = byte(i % 256)
+				}
+				// Sign the hash to get a valid signature
+				sig, err := caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
+					KeyID:       validKeyID,
+					Message:     validHashMessage,
+					Algorithm:   validAlgorithm,
+					MessageType: models.Hashed,
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to sign hash for test: %s", err))
+				}
+				validSignature, err = base64.StdEncoding.DecodeString(sig.Signature)
+				if err != nil {
+					panic(fmt.Sprintf("failed to decode signature: %s", err))
+				}
+				validMessage = validHashMessage
+			},
+			run: func() (*models.MessageValidation, error) {
+				return caTest.HttpCASDK.VerifySignature(context.Background(), services.VerifySignInput{
+					KeyID:       validKeyID,
+					Message:     validMessage,
+					Algorithm:   "RSASSA_PKCS1_V1_5_SHA_256", // SHA-256 expects 32 bytes
+					MessageType: models.Hashed,               // This should pass hash length validation
+					Signature:   validSignature,
+				})
+			},
+			resultCheck: func(ok *models.MessageValidation, err error) error {
+				if err != nil {
+					return fmt.Errorf("should not error when providing correct hash length for MessageType Hash in verification: %s", err)
+				}
+				if !ok.Valid {
+					return fmt.Errorf("expected successful verification with correct hash length, got false")
+				}
+				return nil
+			},
+		},
+		{
+			name: "Error/VerifySignature-ECDSA256-WrongHashSize",
+			before: func() {
+				// Create ECDSA-256 key and sign with correct hash
+				pem := func() any {
+					priv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+					return priv
+				}()
+				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+					Name:       "VerifyECDSA256-WrongHash",
+					PrivateKey: pem,
+					EngineID:   "filesystem-1",
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to import ECDSA-256 key for verification: %s", err))
+				}
+				validKeyID = key.ID
+				// Sign with correct hash to get a valid signature
+				correctHashMessage := make([]byte, 32) // Correct for SHA-256
+				for i := range correctHashMessage {
+					correctHashMessage[i] = byte(i % 256)
+				}
+				sig, err := caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
+					KeyID:       validKeyID,
+					Message:     correctHashMessage,
+					Algorithm:   "ECDSA_SHA_256",
+					MessageType: models.Hashed,
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to sign hash for ECDSA verification test: %s", err))
+				}
+				validSignature, err = base64.StdEncoding.DecodeString(sig.Signature)
+				if err != nil {
+					panic(fmt.Sprintf("failed to decode signature: %s", err))
+				}
+			},
+			run: func() (*models.MessageValidation, error) {
+				// Try to verify with wrong hash size (48 bytes instead of 32)
+				wrongHashMessage := make([]byte, 48) // Wrong length for ECDSA_SHA_256
+				return caTest.HttpCASDK.VerifySignature(context.Background(), services.VerifySignInput{
+					KeyID:       validKeyID,
+					Message:     wrongHashMessage,
+					Algorithm:   "ECDSA_SHA_256", // SHA-256 expects 32 bytes, not 48
+					MessageType: models.Hashed,
+					Signature:   validSignature,
+				})
+			},
+			resultCheck: func(ok *models.MessageValidation, err error) error {
+				if err == nil {
+					return fmt.Errorf("expected error for ECDSA-256 verification with wrong hash size, got nil")
+				}
+				expectedErrMsg := "invalid digest size"
+				if !strings.Contains(err.Error(), expectedErrMsg) {
+					return fmt.Errorf("expected error to contain '%s', but got: %s", expectedErrMsg, err.Error())
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/VerifySignature-ECDSA384-CorrectHashSize",
+			before: func() {
+				// Create ECDSA-384 key and sign with correct hash
+				pem := func() any {
+					priv, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+					return priv
+				}()
+				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+					Name:       "VerifyECDSA384-CorrectHash",
+					PrivateKey: pem,
+					EngineID:   "filesystem-1",
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to import ECDSA-384 key for verification: %s", err))
+				}
+				validKeyID = key.ID
+				// Sign with correct hash to get a valid signature
+				correctHashMessage := make([]byte, 48) // Correct for SHA-384
+				for i := range correctHashMessage {
+					correctHashMessage[i] = byte(i % 256)
+				}
+				validMessage = correctHashMessage
+				sig, err := caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
+					KeyID:       validKeyID,
+					Message:     correctHashMessage,
+					Algorithm:   "ECDSA_SHA_384",
+					MessageType: models.Hashed,
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to sign hash for ECDSA-384 verification test: %s", err))
+				}
+				validSignature, err = base64.StdEncoding.DecodeString(sig.Signature)
+				if err != nil {
+					panic(fmt.Sprintf("failed to decode signature: %s", err))
+				}
+			},
+			run: func() (*models.MessageValidation, error) {
+				return caTest.HttpCASDK.VerifySignature(context.Background(), services.VerifySignInput{
+					KeyID:       validKeyID,
+					Message:     validMessage,
+					Algorithm:   "ECDSA_SHA_384", // SHA-384 expects 48 bytes
+					MessageType: models.Hashed,
+					Signature:   validSignature,
+				})
+			},
+			resultCheck: func(ok *models.MessageValidation, err error) error {
+				if err != nil {
+					return fmt.Errorf("should not error for ECDSA-384 verification with correct hash size: %s", err)
+				}
+				if !ok.Valid {
+					return fmt.Errorf("expected successful ECDSA-384 verification with correct hash length, got false")
+				}
+				return nil
+			},
+		},
+		{
+			name: "Error/VerifySignature-ECDSA521-WrongHashSize",
+			before: func() {
+				// Create ECDSA-521 key and sign with correct hash
+				pem := func() any {
+					priv, _ := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
+					return priv
+				}()
+				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+					Name:       "VerifyECDSA521-WrongHash",
+					PrivateKey: pem,
+					EngineID:   "filesystem-1",
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to import ECDSA-521 key for verification: %s", err))
+				}
+				validKeyID = key.ID
+				// Sign with correct hash to get a valid signature
+				correctHashMessage := make([]byte, 64) // Correct for SHA-512
+				for i := range correctHashMessage {
+					correctHashMessage[i] = byte(i % 256)
+				}
+				sig, err := caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
+					KeyID:       validKeyID,
+					Message:     correctHashMessage,
+					Algorithm:   "ECDSA_SHA_512",
+					MessageType: models.Hashed,
+				})
+				if err != nil {
+					panic(fmt.Sprintf("failed to sign hash for ECDSA-521 verification test: %s", err))
+				}
+				validSignature, err = base64.StdEncoding.DecodeString(sig.Signature)
+				if err != nil {
+					panic(fmt.Sprintf("failed to decode signature: %s", err))
+				}
+			},
+			run: func() (*models.MessageValidation, error) {
+				// Try to verify with wrong hash size (32 bytes instead of 64)
+				wrongHashMessage := make([]byte, 32) // Wrong length for ECDSA_SHA_512
+				return caTest.HttpCASDK.VerifySignature(context.Background(), services.VerifySignInput{
+					KeyID:       validKeyID,
+					Message:     wrongHashMessage,
+					Algorithm:   "ECDSA_SHA_512", // SHA-512 expects 64 bytes, not 32
+					MessageType: models.Hashed,
+					Signature:   validSignature,
+				})
+			},
+			resultCheck: func(ok *models.MessageValidation, err error) error {
+				if err == nil {
+					return fmt.Errorf("expected error for ECDSA-521 verification with wrong hash size, got nil")
+				}
+				expectedErrMsg := "invalid digest size"
+				if !strings.Contains(err.Error(), expectedErrMsg) {
+					return fmt.Errorf("expected error to contain '%s', but got: %s", expectedErrMsg, err.Error())
 				}
 				return nil
 			},

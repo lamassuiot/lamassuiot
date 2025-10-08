@@ -1829,13 +1829,18 @@ func (svc *CAServiceBackend) initKMSKeyOperation(ctx context.Context, keyID, alg
 }
 
 // Helper to calculate digest
-func calculateDigest(hash crypto.Hash, messageType models.SignMessageType, message []byte) []byte {
+func calculateDigest(hash crypto.Hash, messageType models.SignMessageType, message []byte) ([]byte, error) {
 	if messageType == models.Raw {
 		hasher := hash.New()
 		hasher.Write(message)
-		return hasher.Sum(nil)
+		return hasher.Sum(nil), nil
+	} else {
+		if len(message) != hash.Size() {
+			return nil, errors.New("invalid digest size")
+		}
 	}
-	return message
+
+	return message, nil
 }
 
 func (svc *CAServiceBackend) GetKeys(ctx context.Context, input services.GetKeysInput) (string, error) {
@@ -2141,7 +2146,11 @@ func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.Sig
 		return nil, err
 	}
 
-	digest := calculateDigest(setup.Hash, input.MessageType, input.Message)
+	digest, err := calculateDigest(setup.Hash, input.MessageType, input.Message)
+	if err != nil {
+		lFunc.Errorf("calculate digest error: %s", err)
+		return nil, err
+	}
 
 	var signature []byte
 	if setup.IsRSA {
@@ -2203,7 +2212,11 @@ func (svc *CAServiceBackend) VerifySignature(ctx context.Context, input services
 
 	publicKey := setup.Signer.Public()
 
-	digest := calculateDigest(setup.Hash, input.MessageType, input.Message)
+	digest, err := calculateDigest(setup.Hash, input.MessageType, input.Message)
+	if err != nil {
+		lFunc.Errorf("calculate digest error: %s", err)
+		return nil, err
+	}
 
 	if setup.IsRSA {
 		pub, ok := publicKey.(*rsa.PublicKey)
