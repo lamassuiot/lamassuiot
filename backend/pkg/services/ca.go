@@ -2328,13 +2328,6 @@ func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.Sig
 
 	var signature []byte
 	if setup.IsRSA {
-		rsaPriv, ok := setup.Signer.(*rsa.PrivateKey)
-		if !ok {
-			return nil, errors.New("key is not RSA key")
-		}
-		if rsaPriv == nil {
-			return nil, errors.New("RSA key is nil")
-		}
 		if digest == nil {
 			return nil, errors.New("digest is nil")
 		}
@@ -2353,13 +2346,6 @@ func (svc *CAServiceBackend) SignMessage(ctx context.Context, input services.Sig
 			}
 		}
 	} else {
-		ecdsaPriv, ok := setup.Signer.(*ecdsa.PrivateKey)
-		if !ok {
-			return nil, errors.New("key is not ECDSA key")
-		}
-		if ecdsaPriv == nil {
-			return nil, errors.New("ECDSA key is nil")
-		}
 		if digest == nil {
 			return nil, errors.New("digest is nil")
 		}
