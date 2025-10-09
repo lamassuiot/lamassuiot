@@ -30,6 +30,9 @@ type CAService interface {
 	UpdateCAMetadata(ctx context.Context, input UpdateCAMetadataInput) (*models.CACertificate, error)
 	DeleteCA(ctx context.Context, input DeleteCAInput) error
 
+	// TODO -> revisit return values
+	CreateHybridCA(ctx context.Context, input CreateHybridCAInput) (*models.CACertificate, error)
+
 	SignatureSign(ctx context.Context, input SignatureSignInput) ([]byte, error)
 	SignatureVerify(ctx context.Context, input SignatureVerifyInput) (bool, error)
 
@@ -123,6 +126,12 @@ type CreateCAInput struct {
 	CAExpiration models.Validity    `validate:"required"`
 	EngineID     string
 	Metadata     map[string]any
+}
+
+type CreateHybridCAInput struct {
+	CreateCAInput       	CreateCAInput
+	InnerKeyMetadata  		models.KeyMetadata 			 	`validate:"required"`
+	HybridCertificateType  	models.HybridCertificateType  	`validate:"required"`
 }
 
 type RequestCAInput struct {

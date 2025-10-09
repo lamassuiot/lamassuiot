@@ -47,6 +47,18 @@ func (mw CAEventPublisher) CreateCA(ctx context.Context, input services.CreateCA
 	return mw.Next.CreateCA(ctx, input)
 }
 
+func (mw CAEventPublisher) CreateHybridCA(ctx context.Context, input services.CreateHybridCAInput) (output *models.CACertificate, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateHybridCAKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", input.CreateCAInput.ID))
+
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, output)
+		}
+	}()
+	return mw.Next.CreateHybridCA(ctx, input)
+}
+
 func (mw CAEventPublisher) RequestCACSR(ctx context.Context, input services.RequestCAInput) (output *models.CACertificateRequest, err error) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventRequestCAKey)
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca-csr/%s", input.ID))

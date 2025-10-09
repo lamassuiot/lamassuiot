@@ -16,6 +16,8 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) 
 	rv1.GET("/cas", routes.GetAllCAs)
 	rv1.POST("/cas", routes.CreateCA)
 
+	rv1.POST("/cas/pq", routes.CreateHybridCA)
+
 	rv1.POST("/cas/import", routes.ImportCA)
 	rv1.GET("/cas/:id", routes.GetCAByID)
 	rv1.GET("/cas/cn/:cn", routes.GetCAsByCommonName)

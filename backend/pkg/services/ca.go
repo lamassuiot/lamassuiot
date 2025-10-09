@@ -769,6 +769,147 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	return svc.caStorage.Insert(ctx, &caCert)
 }
 
+// TODO --> Implement method
+func (svc *CAServiceBackend) CreateHybridCA(ctx context.Context, input services.CreateHybridCAInput) (*models.CACertificate, error) {
+	var caCertificate *models.CACertificate
+	var err error
+
+	switch input.HybridCertificateType {
+	case models.HybridCertificateTypeChameleon:
+		caCertificate, err = svc.createChameleonCA(ctx, input)
+	default:
+		err = fmt.Errorf("Unknown Hybrid CA type: %v", input.HybridCertificateType)
+	}
+
+	return caCertificate, err
+}
+
+func (svc *CAServiceBackend) createChameleonCA(ctx context.Context, input services.CreateHybridCAInput) (*models.CACertificate, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if input.CreateCAInput.Metadata == nil {
+		input.CreateCAInput.Metadata = map[string]any{}
+	}
+
+	var err error
+	validate.RegisterStructValidation(createCAValidation, services.CreateCAInput{})
+	err = validate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("CreateCAInput struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	// Check if CA already exists
+	caID := input.CreateCAInput.ID
+	if caID == "" {
+		caID = goid.NewV4UUID().String()
+	}
+
+	exists, _, err := svc.caStorage.SelectExistsByID(ctx, caID)
+	if err != nil {
+		lFunc.Errorf("could not check if CA %s exists: %s", caID, err)
+		return nil, err
+	}
+
+	if exists {
+		lFunc.Errorf("cannot create duplicate CA. CA with ID '%s' already exists:", caID)
+		return nil, errs.ErrCAAlreadyExists
+	}
+
+	lFunc.Debugf("creating CA with common name: %s", input.CreateCAInput.Subject.CommonName)
+	engineID, engine, err := svc.getCryptoEngine(input.CreateCAInput.EngineID)
+	if err != nil {
+		lFunc.Errorf("could not get engine %s: %s", input.CreateCAInput.EngineID, err)
+	}
+
+	var ca *x509.Certificate
+	var caLevel int
+	var issuerCAMeta models.IssuerCAMetadata
+
+	var baseAkid, baseSkid string
+	var deltaAkid, deltaSkid string
+	// Check if CA is Root (self-signed) or Subordinate (signed by another CA). Non self-signed/root CAs require a parent CA
+	if input.CreateCAInput.ParentID == "" {
+		// Generate Key Pair to be used by the delta CA
+		deltaKeyID, deltaSigner, err := engine.GenerateKeyPair(ctx, input.InnerKeyMetadata)
+		if err != nil {
+			lFunc.Errorf("could not generate CA %s private key: %s", input.CreateCAInput.Subject.CommonName, err)
+			return nil, err
+		}
+
+		// Generate the Key Pair to be used by the base CA
+		baseKeyID, baseSigner, err := engine.GenerateKeyPair(ctx, input.CreateCAInput.KeyMetadata)
+		if err != nil {
+			lFunc.Errorf("could not generate CA %s private key: %s", input.CreateCAInput.Subject.CommonName, err)
+			return nil, err
+		}
+
+		deltaSkid = deltaKeyID
+		deltaAkid = deltaKeyID
+		baseSkid = baseKeyID
+		baseAkid = baseKeyID
+
+		// Create the root CA
+		ca, err = engine.CreateChameleonRootCA(ctx, deltaSigner, baseSigner, deltaKeyID, baseKeyID, input.CreateCAInput.Subject, input.CreateCAInput.CAExpiration)
+		if err != nil {
+			lFunc.Errorf("could not create CA %s certificate: %s", input.CreateCAInput.Subject.CommonName, err)
+			return nil, err
+		}
+
+		caLevel = 0
+		issuerCAMeta = models.IssuerCAMetadata{
+			SN:    helpers.SerialNumberToHexString(ca.SerialNumber),
+			ID:    caID,
+			Level: 0,
+		}
+	} else {
+		// TODO -> implemente chamaleon subordinate CA creation
+		err = fmt.Errorf("Error: Chameleon subordinate CAs are not yet supported")
+	}
+
+	if err != nil {
+		lFunc.Errorf("could not create CA %s certificate: %s", input.CreateCAInput.Subject.CommonName, err)
+		return nil, err
+	}
+
+	// Add deltaAkid and Skid as metadata
+	// TODO -> revisit key names
+	input.CreateCAInput.Metadata[""] = deltaSkid
+	input.CreateCAInput.Metadata[""] = deltaAkid
+
+	caCert := models.CACertificate{
+		ID:         caID,
+		Metadata:   input.CreateCAInput.Metadata,
+		ProfileID:  input.CreateCAInput.ProfileID,
+		CreationTS: time.Now(),
+		Level:      caLevel,
+		Certificate: models.Certificate{
+			VersionSchema:  "1.0",
+			SubjectKeyID:   baseSkid,
+			AuthorityKeyID: baseAkid,
+			Certificate:    (*models.X509Certificate)(ca),
+			Status:         models.StatusActive,
+			SerialNumber:   helpers.SerialNumberToHexString(ca.SerialNumber),
+			KeyMetadata: models.KeyStrengthMetadata{
+				Type:     input.CreateCAInput.KeyMetadata.Type,
+				Bits:     input.CreateCAInput.KeyMetadata.Bits,
+				Strength: models.KeyStrengthHigh,
+			},
+			Subject:             input.CreateCAInput.Subject,
+			ValidFrom:           ca.NotBefore,
+			ValidTo:             ca.NotAfter,
+			RevocationTimestamp: time.Time{},
+			IssuerCAMetadata:    issuerCAMeta,
+			Metadata:            map[string]interface{}{},
+			Type:                models.CertificateTypeManaged,
+			EngineID:            engineID,
+			IsCA:                true,
+		},
+	}
+
+	lFunc.Debugf("insert CA %s in storage engine", caID)
+	return svc.caStorage.Insert(ctx, &caCert)
+}
+
 func (svc *CAServiceBackend) getCryptoEngine(engineId string) (string, x509engines.X509Engine, error) {
 	availableEngineId := svc.defaultCryptoEngineID
 	if engineId != "" {

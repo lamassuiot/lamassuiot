@@ -87,6 +87,57 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 	ctx.JSON(201, ca)
 }
 
+// @Summary Create Hybrid CA
+// @Description Create Hybrid CA
+// @Accept json
+// @Produce json
+// @Security OAuth2Password
+// @Param message body resources.CreateHybridCABody true "CA Info"
+// @Success 201 {object} models.CACertificate
+// @Failure 400 {string} string "Struct Validation error || CA type inconsistent || Issuance expiration greater than CA expiration || Incompatible expiration time ref"
+// @Failure 500
+// @Router /cas [post]
+func (r *caHttpRoutes) CreateHybridCA(ctx *gin.Context) {
+	var requestBody resources.CreateHybridCABody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	ca, err := r.svc.CreateHybridCA(ctx, services.CreateHybridCAInput{
+		CreateCAInput: services.CreateCAInput{
+			ParentID:     requestBody.ParentID,
+			ID:           requestBody.ID,
+			KeyMetadata:  requestBody.OuterKeyMetadata,
+			Subject:      requestBody.Subject,
+			CAExpiration: requestBody.CAExpiration,
+			ProfileID:    requestBody.ProfileID,
+			EngineID:     requestBody.EngineID,
+			Metadata:     requestBody.Metadata,
+		},
+		InnerKeyMetadata: requestBody.InnerKeyMetadata,
+		HybridCertificateType: requestBody.HybridCertificateType,	
+	})
+	if err != nil {
+		switch err {
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrCAType:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrCAIssuanceExpiration:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrCAIncompatibleValidity:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrCAAlreadyExists:
+			ctx.JSON(409, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+	ctx.JSON(201, ca)
+}
+
 func (r *caHttpRoutes) GetStats(ctx *gin.Context) {
 	stats, err := r.svc.GetStats(ctx)
 	if err != nil {
