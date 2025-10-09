@@ -19,6 +19,19 @@ type CreateCABody struct {
 	CAIssuanceProfile   *models.IssuanceProfile `json:"ca_issuance_profile,omitempty"`
 }
 
+type CreateHybridCABody struct {
+	ID           string            	`json:"id"`
+	ParentID     string            	`json:"parent_id"`
+	Subject      models.Subject     `json:"subject"`
+	OuterKeyMetadata  models.KeyMetadata `json:"outer_key_metadata"`
+	InnerKeyMetadata  models.KeyMetadata `json:"inner_key_metadata"`
+	CAExpiration models.Validity   	`json:"ca_expiration"`
+	ProfileID    string            	`json:"profile_id"`
+	EngineID     string            	`json:"engine_id"`
+	Metadata     map[string]any     `json:"metadata"`
+	HybridCertificateType models.HybridCertificateType `json:"hybrid_certificate_type"`
+}
+
 type RequestCABody struct {
 	ID          string             `json:"id"`
 	Subject     models.Subject     `json:"subject"`
