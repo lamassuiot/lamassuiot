@@ -12,6 +12,13 @@ const (
 	CertificateTypeImportedWithoutKey CertificateType = "IMPORTED_WITHOUT_KEY"
 )
 
+type HybridCertificateType string
+
+const (
+	HybridCertificateTypeBound     	HybridCertificateType = "BOUND"
+	HybridCertificateTypeChameleon 	HybridCertificateType = "CHAMELEON"
+)
+
 type ValidityType string
 
 var (
