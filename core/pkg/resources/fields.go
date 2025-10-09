@@ -1,9 +1,9 @@
 package resources
 
 var DMSFilterableFields = map[string]FilterFieldType{
-	"id":          StringFilterFieldType,
-	"name":        StringFilterFieldType,
-	"creation_ts": DateFilterFieldType,
+	"id":            StringFilterFieldType,
+	"name":          StringFilterFieldType,
+	"creation_date": DateFilterFieldType,
 }
 
 var DeviceFilterableFields = map[string]FilterFieldType{
