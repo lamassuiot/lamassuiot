@@ -24,6 +24,9 @@ type CAService interface {
 	ReissueCA(ctx context.Context, input ReissueCAInput) (*models.CACertificate, error)
 	DeleteCA(ctx context.Context, input DeleteCAInput) error
 
+	// TODO -> revisit return values
+	CreateHybridCA(ctx context.Context, input CreateHybridCAInput) (*models.CACertificate, error)
+
 	SignatureSign(ctx context.Context, input SignatureSignInput) ([]byte, error)
 	SignatureVerify(ctx context.Context, input SignatureVerifyInput) (bool, error)
 
@@ -119,6 +122,12 @@ type CreateCAInput struct {
 	// (distinct from ProfileID which is the default profile for certificates issued BY this CA)
 	CAIssuanceProfileID string                  // Reference to an existing issuance profile
 	CAIssuanceProfile   *models.IssuanceProfile // Inline issuance profile definition
+}
+
+type CreateHybridCAInput struct {
+	CreateCAInput       	CreateCAInput
+	InnerKeyMetadata  		models.KeyMetadata 			 	`validate:"required"`
+	HybridCertificateType  	models.HybridCertificateType  	`validate:"required"`
 }
 
 type RequestCAInput struct {
