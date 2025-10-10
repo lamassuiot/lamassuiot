@@ -1,10 +1,9 @@
-package auditpub
+package eventpublisher
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	"github.com/lamassuiot/lamassuiot/core/v3"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
@@ -16,10 +15,10 @@ type AuditBody struct {
 }
 
 type AuditPublisher struct {
-	eventpub.ICloudEventPublisher
+	ICloudEventPublisher
 }
 
-func NewAuditPublisher(publisher eventpub.ICloudEventPublisher) *AuditPublisher {
+func NewAuditPublisher(publisher ICloudEventPublisher) *AuditPublisher {
 	return &AuditPublisher{
 		ICloudEventPublisher: publisher,
 	}

@@ -1,4 +1,4 @@
-package eventpub
+package eventpublisher
 
 import (
 	"context"

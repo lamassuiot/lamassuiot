@@ -11,6 +11,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/eventpublisher"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -68,7 +69,7 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
 
-		svc = eventpub.NewDMSEventPublisher(&eventpub.CloudEventPublisher{
+		svc = eventpub.NewDMSEventPublisher(&eventpublisher.CloudEventPublisher{
 			Publisher: pub,
 			ServiceID: "dms-manager",
 			Logger:    lMessaging,

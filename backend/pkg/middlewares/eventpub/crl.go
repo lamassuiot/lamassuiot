@@ -7,20 +7,21 @@ import (
 
 	beService "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/core/v3"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/eventpublisher"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
 type clrEventPublisher struct {
 	next       services.CRLService
-	eventMWPub ICloudEventPublisher
+	eventMWPub eventpublisher.ICloudEventPublisher
 }
 
-func NewCRLEventPublisher(eventMWPub ICloudEventPublisher) beService.CRLMiddleware {
+func NewCRLEventPublisher(eventMWPub eventpublisher.ICloudEventPublisher) beService.CRLMiddleware {
 	return func(next services.CRLService) services.CRLService {
 		return &clrEventPublisher{
 			next:       next,
-			eventMWPub: NewEventPublisherWithSourceMiddleware(eventMWPub, models.VASource),
+			eventMWPub: eventpublisher.NewEventPublisherWithSourceMiddleware(eventMWPub, models.VASource),
 		}
 	}
 }

@@ -28,12 +28,6 @@ const (
 	EventSignatureSignKey       EventType = "ca.sign.signature"
 	EventDeleteCAKey            EventType = "ca.delete"
 
-	EventCreateKMSKey          EventType = "kms.create"
-	EventImportKMSKey          EventType = "kms.import"
-	EventDeleteKMSKey          EventType = "kms.delete"
-	EventSignMessageKMSKey     EventType = "kms.sign"
-	EventVerifySignatureKMSKey EventType = "kms.verify"
-
 	EventCreateIssuanceProfileKey EventType = "profile.issuance.create"
 	EventUpdateIssuanceProfileKey EventType = "profile.issuance.update"
 	EventDeleteIssuanceProfileKey EventType = "profile.issuance.delete"

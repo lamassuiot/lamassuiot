@@ -21,4 +21,5 @@ use (
 	./shared/aws
 	./shared/http
 	./shared/subsystems
+	./v4/service/kms
 )

@@ -21,7 +21,3 @@ type SignResponse struct {
 type VerifyResponse struct {
 	Valid bool `json:"valid"`
 }
-
-type GetKeysResponse struct {
-	IterableList[models.Key]
-}

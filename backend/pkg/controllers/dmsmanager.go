@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
@@ -34,7 +35,7 @@ func (r *dmsManagerHttpRoutes) GetStats(ctx *gin.Context) {
 }
 
 func (r *dmsManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.DMSFilterableFields)
+	queryParams := controllers.FilterQuery(ctx.Request, resources.DMSFilterableFields)
 
 	dmss := []models.DMS{}
 	nextBookmark, err := r.svc.GetAll(ctx, services.GetAllInput{

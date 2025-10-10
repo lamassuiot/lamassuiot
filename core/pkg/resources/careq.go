@@ -88,16 +88,16 @@ type SignCertificateBody struct {
 }
 
 type SignatureSignBody struct {
-	Message          string                 `json:"message"`
-	MessageType      models.SignMessageType `json:"message_type"`
-	SigningAlgorithm string                 `json:"signature_algorithm"`
+	Message          string `json:"message"`
+	MessageType      string `json:"message_type"` //once CA is own service, change to kms.SignMessageType
+	SigningAlgorithm string `json:"signature_algorithm"`
 }
 
 type SignatureVerifyBody struct {
-	Signature        string                 `json:"signature"`
-	Message          string                 `json:"message"`
-	MessageType      models.SignMessageType `json:"message_type"`
-	SigningAlgorithm string                 `json:"signature_algorithm"`
+	Signature        string `json:"signature"`
+	Message          string `json:"message"`
+	MessageType      string `json:"message_type"` //once CA is own service, change to kms.SignMessageType
+	SigningAlgorithm string `json:"signature_algorithm"`
 }
 
 type UpdateCertificateStatusBody struct {
@@ -129,33 +129,6 @@ type GetCertificateStatus struct {
 type ImportCertificateBody struct {
 	Metadata    map[string]interface{}  `json:"metadata"`
 	Certificate *models.X509Certificate `json:"certificate"`
-}
-
-// KMS
-type CreateKeyBody struct {
-	Algorithm string `json:"algorithm"`
-	Size      int    `json:"size"`
-	EngineID  string `json:"engine_id"`
-	Name      string `json:"name"`
-}
-
-type SignMessageBody struct {
-	Algorithm   string                 `json:"algorithm"`
-	Message     []byte                 `json:"message"`
-	MessageType models.SignMessageType `json:"message_type"`
-}
-
-type VerifySignBody struct {
-	Algorithm   string                 `json:"algorithm"`
-	Message     []byte                 `json:"message"`
-	Signature   []byte                 `json:"signature"`
-	MessageType models.SignMessageType `json:"message_type"`
-}
-
-type ImportKeyBody struct {
-	PrivateKey string `json:"private_key"`
-	EngineID   string `json:"engine_id"`
-	Name       string `json:"name"`
 }
 
 type CreateUpdateIssuanceProfileBody struct {

@@ -16,6 +16,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/eventpublisher"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -112,20 +113,20 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 			return nil, nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
 
-		eventPublisher := &eventpub.CloudEventPublisher{
+		eventPublisher := &eventpublisher.CloudEventPublisher{
 			Publisher: pub,
 			ServiceID: "ca",
 			Logger:    lMessage,
 		}
 
-		auditPublisher := &eventpub.CloudEventPublisher{
+		auditPublisher := &eventpublisher.CloudEventPublisher{
 			Publisher: pub,
 			ServiceID: "ca",
 			Logger:    lAudit,
 		}
 
 		svc = eventpub.NewCAEventBusPublisher(eventPublisher)(svc)
-		svc = auditpub.NewCAAuditEventBusPublisher(*auditpub.NewAuditPublisher(auditPublisher))(svc)
+		svc = auditpub.NewCAAuditEventBusPublisher(*eventpublisher.NewAuditPublisher(auditPublisher))(svc)
 
 		//this utilizes the middlewares from within the CA service (if svc.service.func is used instead of regular svc.func)
 		caSvc.SetService(svc)
@@ -169,20 +170,6 @@ func createCAStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEng
 	}
 
 	return caStorage, certStorage, caCertRequestStorage, issuanceProfileStorage, nil
-}
-
-func createKMSStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.KMSKeysRepo, error) {
-	engine, err := builder.BuildStorageEngine(logger, conf)
-	if err != nil {
-		return nil, fmt.Errorf("could not create storage engine: %s", err)
-	}
-
-	kmsStorage, err := engine.GetKMSStorage()
-	if err != nil {
-		return nil, fmt.Errorf("could not get KMS storage: %s", err)
-	}
-
-	return kmsStorage, nil
 }
 
 func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*lservices.Engine, error) {

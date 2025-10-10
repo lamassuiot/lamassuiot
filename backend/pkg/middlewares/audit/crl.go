@@ -4,23 +4,23 @@ import (
 	"context"
 	"crypto/x509"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	beService "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/eventpublisher"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
 type CRLAuditEventPublisher struct {
 	next     services.CRLService
-	auditPub AuditPublisher
+	auditPub eventpublisher.AuditPublisher
 }
 
-func NewCRLAuditEventPublisher(audit AuditPublisher) beService.CRLMiddleware {
+func NewCRLAuditEventPublisher(audit eventpublisher.AuditPublisher) beService.CRLMiddleware {
 	return func(next services.CRLService) services.CRLService {
 		return &CRLAuditEventPublisher{
 			next: next,
-			auditPub: AuditPublisher{
-				ICloudEventPublisher: eventpub.NewEventPublisherWithSourceMiddleware(audit, models.VASource),
+			auditPub: eventpublisher.AuditPublisher{
+				ICloudEventPublisher: eventpublisher.NewEventPublisherWithSourceMiddleware(audit, models.VASource),
 			},
 		}
 	}

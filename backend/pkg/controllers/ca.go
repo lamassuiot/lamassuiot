@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -338,7 +339,7 @@ func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CAFilterableFields)
+	queryParams := controllers.FilterQuery(ctx.Request, resources.CAFilterableFields)
 
 	type uriParams struct {
 		CommonName string `uri:"cn" binding:"required"`
@@ -387,7 +388,7 @@ func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 // @Failure 500
 // @Router /cas [get]
 func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CAFilterableFields)
+	queryParams := controllers.FilterQuery(ctx.Request, resources.CAFilterableFields)
 
 	cas := []models.CACertificate{}
 
@@ -417,7 +418,7 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetAllRequests(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CARequestFilterableFields)
+	queryParams := controllers.FilterQuery(ctx.Request, resources.CARequestFilterableFields)
 
 	reqs := []models.CACertificateRequest{}
 
@@ -447,7 +448,7 @@ func (r *caHttpRoutes) GetAllRequests(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCARequests(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CARequestFilterableFields)
+	queryParams := controllers.FilterQuery(ctx.Request, resources.CARequestFilterableFields)
 
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
@@ -716,7 +717,7 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 // @Failure 500
 // @Router /certificates [get]
 func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
+	queryParams := controllers.FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 
 	certs := []models.Certificate{}
 
@@ -754,7 +755,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 		return
 	}
 
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
+	queryParams := controllers.FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 
 	certs := []models.Certificate{}
 
@@ -798,7 +799,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 // @Failure 500
 // @Router /cas/{id}/certificates [get]
 func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
+	queryParams := controllers.FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
@@ -993,7 +994,7 @@ func (r *caHttpRoutes) SignatureVerify(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
+	queryParams := controllers.FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 
 	type uriParams struct {
 		CAID   string `uri:"id" binding:"required"`
@@ -1044,7 +1045,7 @@ func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
+	queryParams := controllers.FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 
 	type uriParams struct {
 		Status string `uri:"status" binding:"required"`
@@ -1243,246 +1244,8 @@ func (r *caHttpRoutes) ImportCertificate(ctx *gin.Context) {
 	ctx.JSON(201, cert)
 }
 
-func (r *caHttpRoutes) GetKeys(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.KMSFilterableFields)
-
-	keys := []models.Key{}
-
-	nextBookmark, err := r.svc.GetKeys(ctx, services.GetKeysInput{
-		ListInput: resources.ListInput[models.Key]{
-			QueryParameters: queryParams,
-			ExhaustiveRun:   false,
-			ApplyFunc: func(key models.Key) {
-				keys = append(keys, key)
-			},
-		},
-	})
-	if err != nil {
-		switch err {
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
-		return
-	}
-
-	ctx.JSON(200, resources.GetKeysResponse{
-		IterableList: resources.IterableList[models.Key]{
-			NextBookmark: nextBookmark,
-			List:         keys,
-		},
-	})
-
-}
-
-func (r *caHttpRoutes) GetKeyByID(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
-	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	key, err := r.svc.GetKeyByID(ctx, services.GetByIDInput{
-		ID: params.ID,
-	})
-
-	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
-		return
-	}
-
-	ctx.JSON(200, key)
-}
-
-func (r *caHttpRoutes) CreateKey(ctx *gin.Context) {
-	var requestBody resources.CreateKeyBody
-	if err := ctx.BindJSON(&requestBody); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	key, err := r.svc.CreateKey(ctx, services.CreateKeyInput{
-		Algorithm: requestBody.Algorithm,
-		Size:      requestBody.Size,
-		EngineID:  requestBody.EngineID,
-		Name:      requestBody.Name,
-	})
-
-	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-		return
-	}
-
-	ctx.JSON(201, key)
-}
-
-func (r *caHttpRoutes) DeleteKeyByID(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
-	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	err := r.svc.DeleteKeyByID(ctx, services.GetByIDInput{
-		ID: params.ID,
-	})
-
-	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
-		return
-	}
-
-	ctx.JSON(200, gin.H{"status": "deleted"})
-}
-
-func (r *caHttpRoutes) SignMessage(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
-	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	var requestBody resources.SignMessageBody
-	if err := ctx.BindJSON(&requestBody); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	signature, err := r.svc.SignMessage(ctx, services.SignMessageInput{
-		KeyID:       params.ID,
-		Algorithm:   requestBody.Algorithm,
-		Message:     requestBody.Message,
-		MessageType: requestBody.MessageType,
-	})
-	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-		return
-	}
-	ctx.JSON(200, signature)
-}
-
-func (r *caHttpRoutes) VerifySignature(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
-	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	var requestBody resources.VerifySignBody
-	if err := ctx.BindJSON(&requestBody); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	valid, err := r.svc.VerifySignature(ctx, services.VerifySignInput{
-		KeyID:       params.ID,
-		Algorithm:   requestBody.Algorithm,
-		Signature:   requestBody.Signature,
-		Message:     requestBody.Message,
-		MessageType: requestBody.MessageType,
-	})
-	if err != nil {
-		switch err {
-		case errs.ErrKeyNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-		return
-	}
-	ctx.JSON(200, valid)
-}
-
-func (r *caHttpRoutes) ImportKey(ctx *gin.Context) {
-	var requestBody resources.ImportKeyBody
-	if err := ctx.BindJSON(&requestBody); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	decodedKey, err := base64.StdEncoding.DecodeString(requestBody.PrivateKey)
-	if err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-	if len(decodedKey) == 0 {
-		ctx.JSON(400, gin.H{"err": "private key is required"})
-		return
-	}
-
-	privKey, err := helpers.ParsePrivateKey(decodedKey)
-	if err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	key, err := r.svc.ImportKey(ctx, services.ImportKeyInput{
-		PrivateKey: privKey,
-		EngineID:   requestBody.EngineID,
-		Name:       requestBody.Name,
-	})
-
-	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-		return
-	}
-
-	ctx.JSON(201, key)
-}
-
 func (r *caHttpRoutes) GetIssuanceProfiles(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.IssuanceProfileFiltrableFields)
+	queryParams := controllers.FilterQuery(ctx.Request, resources.IssuanceProfileFiltrableFields)
 
 	items := []models.IssuanceProfile{}
 	nextBookmark, err := r.svc.GetIssuanceProfiles(ctx, services.GetIssuanceProfilesInput{

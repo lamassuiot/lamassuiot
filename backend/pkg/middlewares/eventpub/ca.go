@@ -6,20 +6,21 @@ import (
 
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/core/v3"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/eventpublisher"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
 type CAEventPublisher struct {
 	Next       services.CAService
-	eventMWPub ICloudEventPublisher
+	eventMWPub eventpublisher.ICloudEventPublisher
 }
 
-func NewCAEventBusPublisher(eventMWPub ICloudEventPublisher) lservices.CAMiddleware {
+func NewCAEventBusPublisher(eventMWPub eventpublisher.ICloudEventPublisher) lservices.CAMiddleware {
 	return func(next services.CAService) services.CAService {
 		return &CAEventPublisher{
 			Next:       next,
-			eventMWPub: NewEventPublisherWithSourceMiddleware(eventMWPub, models.CASource),
+			eventMWPub: eventpublisher.NewEventPublisherWithSourceMiddleware(eventMWPub, models.CASource),
 		}
 	}
 }
@@ -308,77 +309,6 @@ func (mw CAEventPublisher) DeleteCARequestByID(ctx context.Context, input servic
 
 func (mw CAEventPublisher) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
 	return mw.Next.GetCARequests(ctx, input)
-}
-
-func (mw CAEventPublisher) GetKeys(ctx context.Context, input services.GetKeysInput) (string, error) {
-	return mw.Next.GetKeys(ctx, input)
-}
-
-func (mw CAEventPublisher) GetKeyByID(ctx context.Context, input services.GetByIDInput) (*models.Key, error) {
-	return mw.Next.GetKeyByID(ctx, input)
-}
-
-func (mw CAEventPublisher) CreateKey(ctx context.Context, input services.CreateKeyInput) (output *models.Key, err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateKMSKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, "kms/unknown")
-
-	defer func() {
-		if err == nil {
-			ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("kms/%s", output.ID))
-			mw.eventMWPub.PublishCloudEvent(ctx, output)
-		}
-	}()
-
-	return mw.Next.CreateKey(ctx, input)
-}
-
-func (mw CAEventPublisher) DeleteKeyByID(ctx context.Context, input services.GetByIDInput) (err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventDeleteKMSKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("kms/%s", input.ID))
-
-	defer func() {
-		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, input)
-		}
-	}()
-	return mw.Next.DeleteKeyByID(ctx, input)
-}
-
-func (mw CAEventPublisher) SignMessage(ctx context.Context, input services.SignMessageInput) (output *models.MessageSignature, err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventSignMessageKMSKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("kms/%s", input.KeyID))
-
-	defer func() {
-		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, output)
-		}
-	}()
-	return mw.Next.SignMessage(ctx, input)
-}
-
-func (mw CAEventPublisher) VerifySignature(ctx context.Context, input services.VerifySignInput) (output *models.MessageValidation, err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventVerifySignatureKMSKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("kms/%s", input.KeyID))
-
-	defer func() {
-		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, output)
-		}
-	}()
-	return mw.Next.VerifySignature(ctx, input)
-}
-
-func (mw CAEventPublisher) ImportKey(ctx context.Context, input services.ImportKeyInput) (output *models.Key, err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventImportKMSKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, "kms/unknown")
-
-	defer func() {
-		if err == nil {
-			ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("kms/%s", output.ID))
-			mw.eventMWPub.PublishCloudEvent(ctx, output)
-		}
-	}()
-	return mw.Next.ImportKey(ctx, input)
 }
 
 func (mw CAEventPublisher) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {

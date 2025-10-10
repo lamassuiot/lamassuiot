@@ -3,23 +3,23 @@ package auditpub
 import (
 	"context"
 
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/eventpublisher"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
 type CAAuditEventPublisher struct {
 	next     services.CAService
-	auditPub AuditPublisher
+	auditPub eventpublisher.AuditPublisher
 }
 
-func NewCAAuditEventBusPublisher(audit AuditPublisher) lservices.CAMiddleware {
+func NewCAAuditEventBusPublisher(audit eventpublisher.AuditPublisher) lservices.CAMiddleware {
 	return func(next services.CAService) services.CAService {
 		return &CAAuditEventPublisher{
 			next: next,
-			auditPub: AuditPublisher{
-				ICloudEventPublisher: eventpub.NewEventPublisherWithSourceMiddleware(audit, models.CASource),
+			auditPub: eventpublisher.AuditPublisher{
+				ICloudEventPublisher: eventpublisher.NewEventPublisherWithSourceMiddleware(audit, models.CASource),
 			},
 		}
 	}
@@ -198,54 +198,6 @@ func (mw CAAuditEventPublisher) DeleteCARequestByID(ctx context.Context, input s
 
 func (mw CAAuditEventPublisher) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
 	return mw.next.GetCARequests(ctx, input)
-}
-
-func (mw CAAuditEventPublisher) GetKeys(ctx context.Context, input services.GetKeysInput) (string, error) {
-	return mw.next.GetKeys(ctx, input)
-}
-
-func (mw CAAuditEventPublisher) GetKeyByID(ctx context.Context, input services.GetByIDInput) (*models.Key, error) {
-	return mw.next.GetKeyByID(ctx, input)
-}
-
-func (mw CAAuditEventPublisher) CreateKey(ctx context.Context, input services.CreateKeyInput) (output *models.Key, err error) {
-	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventCreateKMSKey, input, err, output)
-	}()
-
-	return mw.next.CreateKey(ctx, input)
-}
-
-func (mw CAAuditEventPublisher) DeleteKeyByID(ctx context.Context, input services.GetByIDInput) (err error) {
-	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventDeleteKMSKey, input, err, nil)
-	}()
-
-	return mw.next.DeleteKeyByID(ctx, input)
-}
-
-func (mw CAAuditEventPublisher) SignMessage(ctx context.Context, input services.SignMessageInput) (output *models.MessageSignature, err error) {
-	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventSignMessageKMSKey, input, err, output)
-	}()
-
-	return mw.next.SignMessage(ctx, input)
-}
-
-func (mw CAAuditEventPublisher) VerifySignature(ctx context.Context, input services.VerifySignInput) (output *models.MessageValidation, err error) {
-	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventVerifySignatureKMSKey, input, err, output)
-	}()
-
-	return mw.next.VerifySignature(ctx, input)
-}
-
-func (mw CAAuditEventPublisher) ImportKey(ctx context.Context, input services.ImportKeyInput) (output *models.Key, err error) {
-	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventImportKMSKey, input, err, output)
-	}()
-
-	return mw.next.ImportKey(ctx, input)
 }
 
 func (mw CAAuditEventPublisher) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {

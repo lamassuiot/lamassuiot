@@ -13,6 +13,7 @@ import (
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	ceventbus "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/eventpublisher"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -66,7 +67,7 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
 
-		svc = eventpub.NewDeviceEventPublisher(&eventpub.CloudEventPublisher{
+		svc = eventpub.NewDeviceEventPublisher(&eventpublisher.CloudEventPublisher{
 			Publisher: pub,
 			ServiceID: serviceID,
 			Logger:    lMessaging,

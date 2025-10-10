@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
@@ -30,7 +31,7 @@ func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	queryParams := controllers.FilterQuery(ctx.Request, resources.DeviceFilterableFields)
 
 	devices := []models.Device{}
 	nextBookmark, err := r.svc.GetDevices(ctx, services.GetDevicesInput{
@@ -57,7 +58,7 @@ func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
 }
 
 func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
+	queryParams := controllers.FilterQuery(ctx.Request, resources.DeviceFilterableFields)
 	type uriParams struct {
 		DMSID string `uri:"id" binding:"required"`
 	}

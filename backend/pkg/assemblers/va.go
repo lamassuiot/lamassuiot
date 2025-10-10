@@ -13,6 +13,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/handlers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
 	ceventbus "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/eventpublisher"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -115,7 +116,7 @@ func createPublisherEventBus(conf config.VAconfig, crl services.CRLService) (ser
 		return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 	}
 
-	crl = eventpub.NewCRLEventPublisher(&eventpub.CloudEventPublisher{
+	crl = eventpub.NewCRLEventPublisher(&eventpublisher.CloudEventPublisher{
 		Publisher: pub,
 		ServiceID: serviceID,
 		Logger:    lMessaging,
