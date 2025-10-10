@@ -49,6 +49,13 @@ func (mw CAOTelTracer) CreateCA(ctx context.Context, input services.CreateCAInpu
 	return mw.next.CreateCA(ctx, input)
 }
 
+func (mw CAOTelTracer) CreateHybridCA(ctx context.Context, input services.CreateHybridCAInput) (output *models.CACertificate, err error) {
+	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
+	defer span.End()
+
+	return mw.next.CreateHybridCA(ctx, input)
+}
+
 func (mw CAOTelTracer) ImportCA(ctx context.Context, input services.ImportCAInput) (output *models.CACertificate, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()
