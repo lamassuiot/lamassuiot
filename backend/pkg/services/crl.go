@@ -218,7 +218,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 			ApplyFunc: func(cert models.Certificate) {
 				certList = append(certList, x509.RevocationListEntry{
 					SerialNumber:   cert.Certificate.SerialNumber,
-					RevocationTime: time.Now(),
+					RevocationTime: cert.RevocationTimestamp,
 					Extensions:     []pkix.Extension{},
 					ReasonCode:     int(cert.RevocationReason),
 				})
