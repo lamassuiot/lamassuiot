@@ -204,7 +204,26 @@ func (engine X509Engine) createRootCATemplate(lFunc *logrus.Entry, ctx context.C
 
 func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+	
+	certificateTemplate, err := engine.createCertificateTemplateFromCSR(lFunc, ctx, csr, ca, caSigner, profile)
 
+	// Sign the certificate
+	certificateBytes, err := x509.CreateCertificate(rand.Reader, certificateTemplate, ca, csr.PublicKey, caSigner)
+	if err != nil {
+		lFunc.Errorf("could not sign certificate: %s", err)
+		return nil, err
+	}
+
+	certificate, err := x509.ParseCertificate(certificateBytes)
+	if err != nil {
+		lFunc.Errorf("could not parse signed certificate %s", err)
+		return nil, err
+	}
+
+	return certificate, nil
+}
+
+func (engine X509Engine) createCertificateTemplateFromCSR(lFunc *logrus.Entry, ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {
 	// If crypto enforcement is enabled, check if the CSR public key algorithm is allowed
 	if profile.CryptoEnforcement.Enabled {
 		// Check CSR Public Key Algorithm
@@ -336,20 +355,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 		certificateTemplate.BasicConstraintsValid = true
 	}
 
-	// Sign the certificate
-	certificateBytes, err := x509.CreateCertificate(rand.Reader, &certificateTemplate, ca, csr.PublicKey, caSigner)
-	if err != nil {
-		lFunc.Errorf("could not sign certificate: %s", err)
-		return nil, err
-	}
-
-	certificate, err := x509.ParseCertificate(certificateBytes)
-	if err != nil {
-		lFunc.Errorf("could not parse signed certificate %s", err)
-		return nil, err
-	}
-
-	return certificate, nil
+	return &certificateTemplate, nil
 }
 
 func (engine X509Engine) GenerateCertificateRequest(ctx context.Context, csrSigner crypto.Signer, subject models.Subject) (*x509.CertificateRequest, error) {

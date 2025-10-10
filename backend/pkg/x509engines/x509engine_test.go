@@ -442,7 +442,7 @@ func TestCreateChameleonRootCA(t *testing.T) {
 		}
 
 		// Check Root CA Certificate
-		err = checkCACertificate(cert, cert, tcSubject, tcBaseKeyMetadata, tcExpirationTime)	
+		err = checkCACertificate(cert, cert, tcSubject, tcBaseKeyMetadata, tcExpirationTime)
 		if err != nil {
 			return fmt.Errorf("unexpected error: %s", err)
 		}
@@ -466,13 +466,13 @@ func TestCreateChameleonRootCA(t *testing.T) {
 	}
 
 	var testcases = []struct {
-		name           string
-		caId           string
-		subject        models.Subject
-		baseKeyMetadata    models.KeyMetadata
-		deltaKeyMetadata    models.KeyMetadata
-		expirationTime time.Time
-		check          func(cert *x509.Certificate, tcSubject models.Subject, tcDeltaKeyMetadata, tcBaseKeyMetadata models.KeyMetadata, tcExpirationTime time.Time, err error) error
+		name             string
+		caId             string
+		subject          models.Subject
+		baseKeyMetadata  models.KeyMetadata
+		deltaKeyMetadata models.KeyMetadata
+		expirationTime   time.Time
+		check            func(cert *x509.Certificate, tcSubject models.Subject, tcDeltaKeyMetadata, tcBaseKeyMetadata models.KeyMetadata, tcExpirationTime time.Time, err error) error
 	}{
 		{
 			name:    "OK/RSA_2048-MLDSA",
