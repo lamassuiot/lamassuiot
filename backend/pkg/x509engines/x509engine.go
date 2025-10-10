@@ -116,10 +116,52 @@ func (engine X509Engine) createRootCATemplate(lFunc *logrus.Entry, ctx context.C
 
 func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+	
+	certificateTemplate, err := engine.createCertificateTemplateFromCSR(lFunc, ctx, csr, ca, caSigner, profile)
 
-	// Validate CSR public key against crypto enforcement rules
-	if err := engine.validateCryptoEnforcement(ctx, csr.PublicKey, profile.CryptoEnforcement); err != nil {
+	// Sign the certificate
+	certificateBytes, err := x509.CreateCertificate(rand.Reader, certificateTemplate, ca, csr.PublicKey, caSigner)
+	if err != nil {
+		lFunc.Errorf("could not sign certificate: %s", err)
 		return nil, err
+	}
+
+	certificate, err := x509.ParseCertificate(certificateBytes)
+	if err != nil {
+		lFunc.Errorf("could not parse signed certificate %s", err)
+		return nil, err
+	}
+
+	return certificate, nil
+}
+
+func (engine X509Engine) createCertificateTemplateFromCSR(lFunc *logrus.Entry, ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {
+	// If crypto enforcement is enabled, check if the CSR public key algorithm is allowed
+	if profile.CryptoEnforcement.Enabled {
+		// Check CSR Public Key Algorithm
+		if rsa, ok := csr.PublicKey.(*rsa.PublicKey); ok {
+			if !profile.CryptoEnforcement.AllowRSAKeys {
+				lFunc.Errorf("CSR uses RSA public key, but issuance profile does not allow RSA keys")
+				return nil, fmt.Errorf("CSR uses RSA public key, but issuance profile does not allow RSA keys")
+			} else if profile.CryptoEnforcement.AllowedRSAKeySizes != nil {
+				if !slices.Contains(profile.CryptoEnforcement.AllowedRSAKeySizes, rsa.N.BitLen()) {
+					lFunc.Errorf("CSR uses RSA key with size %d, but issuance profile does not allow this key size", rsa.N.BitLen())
+					return nil, fmt.Errorf("CSR uses RSA key with size %d, but issuance profile does not allow this key size", rsa.N.BitLen())
+				}
+			}
+		}
+
+		if ecdsa, ok := csr.PublicKey.(*ecdsa.PublicKey); ok {
+			if !profile.CryptoEnforcement.AllowECDSAKeys {
+				lFunc.Errorf("CSR uses ECDSA public key, but issuance profile does not allow ECDSA keys")
+				return nil, fmt.Errorf("CSR uses ECDSA public key, but issuance profile does not allow ECDSA keys")
+			} else if profile.CryptoEnforcement.AllowedECDSAKeySizes != nil {
+				if !slices.Contains(profile.CryptoEnforcement.AllowedECDSAKeySizes, ecdsa.Params().BitSize) {
+					lFunc.Errorf("CSR uses ECDSA key with size %d, but issuance profile does not allow this key size", ecdsa.Params().BitSize)
+					return nil, fmt.Errorf("CSR uses ECDSA key with size %d, but issuance profile does not allow this key size", ecdsa.Params().BitSize)
+				}
+			}
+		}
 	}
 
 	now := time.Now()
@@ -184,22 +226,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 		return nil, err
 	}
 
-	entropy := software.NewLamassuEntropy(ctx)
-
-	// Sign the certificate
-	certificateBytes, err := x509.CreateCertificate(entropy, &certificateTemplate, ca, csr.PublicKey, caSigner)
-	if err != nil {
-		lFunc.Errorf("could not sign certificate: %s", err)
-		return nil, err
-	}
-
-	certificate, err := x509.ParseCertificate(certificateBytes)
-	if err != nil {
-		lFunc.Errorf("could not parse signed certificate %s", err)
-		return nil, err
-	}
-
-	return certificate, nil
+	return &certificateTemplate, nil
 }
 
 func (engine X509Engine) GenerateCertificateRequest(ctx context.Context, csrSigner crypto.Signer, subject models.Subject) (*x509.CertificateRequest, error) {
