@@ -13,7 +13,7 @@ const caRequestDBName = "ca_certificate_requests"
 
 type PostgresCACertificateRequestStore struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.CACertificateRequest]
+	querier *PostgresDBQuerier[models.CACertificateRequest]
 }
 
 func NewCACertRequestPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.CACertificateRequestRepo, error) {

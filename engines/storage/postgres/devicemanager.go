@@ -12,7 +12,7 @@ import (
 
 type PostgresDeviceManagerStore struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.Device]
+	querier *PostgresDBQuerier[models.Device]
 }
 
 func NewDeviceManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.DeviceManagerRepo, error) {

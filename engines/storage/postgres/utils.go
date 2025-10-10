@@ -42,7 +42,7 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 	return db, err
 }
 
-func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*postgresDBQuerier[E], error) {
+func TableQuery[E any](log *logrus.Entry, db *gorm.DB, tableName string, primaryKeyColumn string, model E) (*PostgresDBQuerier[E], error) {
 	schema.RegisterSerializer("text", TextSerializer{})
 	querier := newPostgresDBQuerier[E](db, tableName, primaryKeyColumn)
 	return &querier, nil
@@ -153,14 +153,14 @@ func (migrator *migrator) MigrateToLatest() {
 	migrator.logger.Infof("Migrated %d steps", len(r))
 }
 
-type postgresDBQuerier[E any] struct {
+type PostgresDBQuerier[E any] struct {
 	*gorm.DB
 	tableName        string
 	primaryKeyColumn string
 }
 
-func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn string) postgresDBQuerier[E] {
-	return postgresDBQuerier[E]{
+func newPostgresDBQuerier[E any](db *gorm.DB, tableName string, primaryKeyColumn string) PostgresDBQuerier[E] {
+	return PostgresDBQuerier[E]{
 		DB:               db,
 		tableName:        tableName,
 		primaryKeyColumn: primaryKeyColumn,
@@ -187,7 +187,7 @@ func applyExtraOpts(tx *gorm.DB, extraOpts []gormExtraOps) *gorm.DB {
 	return tx
 }
 
-func (db *postgresDBQuerier[E]) Count(ctx context.Context, extraOpts []gormExtraOps) (int, error) {
+func (db *PostgresDBQuerier[E]) Count(ctx context.Context, extraOpts []gormExtraOps) (int, error) {
 	var count int64
 	tx := db.Table(db.tableName).WithContext(ctx)
 
@@ -201,7 +201,7 @@ func (db *postgresDBQuerier[E]) Count(ctx context.Context, extraOpts []gormExtra
 	return int(count), nil
 }
 
-func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.QueryParameters, extraOpts []gormExtraOps, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
+func (db *PostgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *resources.QueryParameters, extraOpts []gormExtraOps, exhaustiveRun bool, applyFunc func(elem E)) (string, error) {
 	var elems []E
 	tx := db.Table(db.tableName)
 
@@ -364,7 +364,7 @@ func (db *postgresDBQuerier[E]) SelectAll(ctx context.Context, queryParams *reso
 
 // Selects first element from DB. if queryCol is empty or nil, the primary key column
 // defined in the creation process, is used.
-func (db *postgresDBQuerier[E]) SelectExists(ctx context.Context, queryID string, queryCol *string) (bool, *E, error) {
+func (db *PostgresDBQuerier[E]) SelectExists(ctx context.Context, queryID string, queryCol *string) (bool, *E, error) {
 	searchCol := db.primaryKeyColumn
 	if queryCol != nil && *queryCol != "" {
 		searchCol = *queryCol
@@ -383,7 +383,7 @@ func (db *postgresDBQuerier[E]) SelectExists(ctx context.Context, queryID string
 	return true, &elem, nil
 }
 
-func (db *postgresDBQuerier[E]) Insert(ctx context.Context, elem *E, elemID string) (*E, error) {
+func (db *PostgresDBQuerier[E]) Insert(ctx context.Context, elem *E, elemID string) (*E, error) {
 	tx := db.Table(db.tableName).WithContext(ctx).Create(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
@@ -392,7 +392,7 @@ func (db *postgresDBQuerier[E]) Insert(ctx context.Context, elem *E, elemID stri
 	return elem, nil
 }
 
-func (db *postgresDBQuerier[E]) Update(ctx context.Context, elem *E, elemID string) (*E, error) {
+func (db *PostgresDBQuerier[E]) Update(ctx context.Context, elem *E, elemID string) (*E, error) {
 	tx := db.Session(&gorm.Session{FullSaveAssociations: true}).Table(db.tableName).WithContext(ctx).Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID).Save(elem)
 	if err := tx.Error; err != nil {
 		return nil, err
@@ -405,7 +405,7 @@ func (db *postgresDBQuerier[E]) Update(ctx context.Context, elem *E, elemID stri
 	return elem, nil
 }
 
-func (db *postgresDBQuerier[E]) Delete(ctx context.Context, elemID string) error {
+func (db *PostgresDBQuerier[E]) Delete(ctx context.Context, elemID string) error {
 	tx := db.Table(db.tableName).WithContext(ctx).Delete(nil, db.Where(fmt.Sprintf("%s = ?", db.primaryKeyColumn), elemID))
 	if err := tx.Error; err != nil {
 		return err

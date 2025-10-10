@@ -12,7 +12,7 @@ import (
 
 type PostgresEventsStore struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.AlertLatestEvent]
+	querier *PostgresDBQuerier[models.AlertLatestEvent]
 }
 
 func NewEventsPostgresRepository(logger *logrus.Entry, db *gorm.DB) (storage.EventRepository, error) {
@@ -23,7 +23,7 @@ func NewEventsPostgresRepository(logger *logrus.Entry, db *gorm.DB) (storage.Eve
 
 	return &PostgresEventsStore{
 		db:      db,
-		querier: (*postgresDBQuerier[models.AlertLatestEvent])(querier),
+		querier: (*PostgresDBQuerier[models.AlertLatestEvent])(querier),
 	}, nil
 }
 

@@ -27,6 +27,7 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
+	"github.com/lamassuiot/lamassuiot/service/kms"
 	"github.com/sirupsen/logrus"
 )
 
@@ -336,7 +337,7 @@ func (engine X509Engine) GetDefaultCAIssuanceProfile(ctx context.Context, validi
 	}
 }
 
-func (engine X509Engine) Sign(ctx context.Context, certificate *x509.Certificate, message []byte, messageType models.SignMessageType, signingAlgorithm string) ([]byte, error) {
+func (engine X509Engine) Sign(ctx context.Context, certificate *x509.Certificate, message []byte, messageType kms.SignMessageType, signingAlgorithm string) ([]byte, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 	lFunc.Debugf("starting standard signing with certificate [%s]", certificate.Subject.CommonName)
 
@@ -368,7 +369,7 @@ func (engine X509Engine) Sign(ctx context.Context, certificate *x509.Certificate
 		} else {
 			return nil, errs.ErrEngineAlgNotSupported
 		}
-		if messageType == models.Raw {
+		if messageType == kms.SignMessageTypeRaw {
 			h.Write(message)
 			digest = h.Sum(nil)
 
@@ -396,7 +397,7 @@ func (engine X509Engine) Sign(ctx context.Context, certificate *x509.Certificate
 		} else {
 			return nil, errs.ErrEngineAlgNotSupported
 		}
-		if messageType == models.Raw {
+		if messageType == kms.SignMessageTypeRaw {
 			h.Write(message)
 			digest = h.Sum(nil)
 		} else {
@@ -425,7 +426,7 @@ func (engine X509Engine) Sign(ctx context.Context, certificate *x509.Certificate
 	}
 }
 
-func (engine X509Engine) Verify(ctx context.Context, caCertificate *x509.Certificate, signature []byte, message []byte, messageType models.SignMessageType, signingAlgorithm string) (bool, error) {
+func (engine X509Engine) Verify(ctx context.Context, caCertificate *x509.Certificate, signature []byte, message []byte, messageType kms.SignMessageType, signingAlgorithm string) (bool, error) {
 	var err error
 	if caCertificate.PublicKeyAlgorithm == x509.ECDSA {
 		var hasher []byte
@@ -440,7 +441,7 @@ func (engine X509Engine) Verify(ctx context.Context, caCertificate *x509.Certifi
 			return false, errs.ErrEngineAlgNotSupported
 		}
 
-		if messageType == models.Raw {
+		if messageType == kms.SignMessageTypeRaw {
 			h.Write(message)
 			hasher = h.Sum(nil)
 		} else {
@@ -468,7 +469,7 @@ func (engine X509Engine) Verify(ctx context.Context, caCertificate *x509.Certifi
 			return false, errs.ErrEngineAlgNotSupported
 		}
 
-		if messageType == models.Raw {
+		if messageType == kms.SignMessageTypeRaw {
 			h.Write(message)
 			hasher = h.Sum(nil)
 		} else {

@@ -147,7 +147,6 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 
 func (svc DMSManagerServiceBackend) UpdateDMSMetadata(ctx context.Context, input services.UpdateDMSMetadataInput) (*models.DMS, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-
 	err := deviceValidate.Struct(input)
 	if err != nil {
 		lFunc.Errorf("UpdateDMSMetadata struct validation error: %s", err)

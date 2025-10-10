@@ -4,24 +4,25 @@ import (
 	"context"
 	"crypto"
 	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"io"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/service/kms"
 	"github.com/sirupsen/logrus"
 )
 
 type caSignerImpl struct {
-	sdk services.CAService
+	sdk kms.KMSService
 	ca  *models.CACertificate
 	ctx context.Context
 }
 
-func NewCASigner(ctx context.Context, ca *models.CACertificate, caSDK services.CAService) crypto.Signer {
+func NewCASigner(ctx context.Context, ca *models.CACertificate, kmsSDK kms.KMSService) crypto.Signer {
 	return &caSignerImpl{
 		ctx: ctx,
-		sdk: caSDK,
+		sdk: kmsSDK,
 		ca:  ca,
 	}
 }
@@ -30,7 +31,7 @@ func (s *caSignerImpl) Public() crypto.PublicKey {
 	return s.ca.Certificate.Certificate.PublicKey
 }
 
-func (s *caSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
+func (s *caSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error) {
 	signAlg := "RSASSA_PKCS1_V1_5_SHA_256"
 	caKeyAlg := s.ca.Certificate.Certificate.PublicKeyAlgorithm
 	caHashFunc := opts.HashFunc()
@@ -44,10 +45,20 @@ func (s *caSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpt
 		logrus.Warnf("using default %s sign alg for client. '%s' no match", signAlg, caKeyAlg)
 	}
 
-	return s.sdk.SignatureSign(s.ctx, services.SignatureSignInput{
-		CAID:             s.ca.ID,
-		Message:          digest,
-		MessageType:      models.Hashed,
-		SigningAlgorithm: signAlg,
+	msg, err := s.sdk.SignMessage(s.ctx, kms.SignMessageInput{
+		KeyID:       s.ca.Certificate.SubjectKeyID,
+		Algorithm:   signAlg,
+		Message:     digest,
+		MessageType: kms.SignMessageTypeRaw,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	signature, err := base64.StdEncoding.DecodeString(msg.Signature)
+	if err != nil {
+		return nil, err
+	}
+
+	return signature, nil
 }

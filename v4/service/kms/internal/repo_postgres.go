@@ -1,4 +1,4 @@
-package postgres
+package internal
 
 import (
 	"context"
@@ -13,7 +13,7 @@ const kmsDBName = "kms_keys"
 
 type PostgresKMSStore struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.Key]
+	querier *PostgresDBQuerier[models.Key]
 }
 
 func NewKMSPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.KMSKeysRepo, error) {

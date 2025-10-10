@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/core/v3"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/eventpublisher"
 	"github.com/lamassuiot/lamassuiot/service/kms"
+	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/eventpublisher"
 )
 
 type KMSEventPublisher struct {
@@ -18,7 +18,7 @@ func NewKMSEventBusPublisher(eventMWPub eventpublisher.ICloudEventPublisher) kms
 	return func(next kms.KMSService) kms.KMSService {
 		return &KMSEventPublisher{
 			Next:       next,
-			eventMWPub: eventpublisher.NewEventPublisherWithSourceMiddleware(eventMWPub, kms.ServiceSource),
+			eventMWPub: eventpublisher.NewEventPublisherWithSourceMiddleware(eventMWPub, kms.SERVICE_SOURCE),
 		}
 	}
 }

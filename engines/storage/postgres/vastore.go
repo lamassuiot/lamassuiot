@@ -11,7 +11,7 @@ import (
 
 type PostgresVAStore struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.VARole]
+	querier *PostgresDBQuerier[models.VARole]
 }
 
 func NewVARepository(logger *logrus.Entry, db *gorm.DB) (storage.VARepo, error) {

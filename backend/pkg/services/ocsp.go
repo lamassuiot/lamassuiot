@@ -8,12 +8,14 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/service/kms"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )
 
 type ocspResponder struct {
 	caSDK  services.CAService
+	kmsSDK kms.KMSService
 	logger *logrus.Entry
 }
 
@@ -68,7 +70,7 @@ func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) ([]byte,
 	}
 
 	// make a response to return
-	rawResp, err := ocsp.CreateResponse((*x509.Certificate)(ca.Certificate.Certificate), (*x509.Certificate)(ca.Certificate.Certificate), rtemplate, NewCASigner(ctx, ca, svc.caSDK))
+	rawResp, err := ocsp.CreateResponse((*x509.Certificate)(ca.Certificate.Certificate), (*x509.Certificate)(ca.Certificate.Certificate), rtemplate, NewCASigner(ctx, ca, svc.kmsSDK))
 	if err != nil {
 		return nil, err
 	}

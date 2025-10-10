@@ -230,7 +230,7 @@ func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, keyID, al
 
 // Helper to calculate digest
 func calculateDigest(hash crypto.Hash, messageType kms.SignMessageType, message []byte) ([]byte, error) {
-	if messageType == kms.Raw {
+	if messageType == kms.SignMessageTypeRaw {
 		hasher := hash.New()
 		hasher.Write(message)
 		return hasher.Sum(nil), nil

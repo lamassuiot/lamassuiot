@@ -11,7 +11,7 @@ import (
 
 type PostgresIssuanceStorage struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.IssuanceProfile]
+	querier *PostgresDBQuerier[models.IssuanceProfile]
 }
 
 func NewIssuanceProfileRepository(logger *logrus.Entry, db *gorm.DB) (storage.IssuanceProfileRepo, error) {

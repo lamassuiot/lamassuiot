@@ -13,10 +13,11 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/handlers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
 	ceventbus "github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/eventbus"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/eventpublisher"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	commonRoutes "github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/routes"
+	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/eventpublisher"
 	log "github.com/sirupsen/logrus"
 	"gocloud.dev/blob"
 )
@@ -31,10 +32,10 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 
 	lHttp := helpers.SetupLogger(conf.Server.LogLevel, "VA", "HTTP Server")
 
-	httpEngine := routes.NewGinEngine(lHttp)
+	httpEngine := commonRoutes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
 	routes.NewValidationRoutes(lHttp, httpGrp, *ocsp, *crl)
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+	port, err := commonRoutes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not run VA http server: %s", err)
 	}

@@ -11,10 +11,11 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/storage"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/eventpublisher"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	commonRoutes "github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/routes"
+	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/eventpublisher"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -26,10 +27,10 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 
 	lHttp := chelpers.SetupLogger(conf.Server.LogLevel, "DMS Manager", "HTTP Server")
 
-	httpEngine := routes.NewGinEngine(lHttp)
+	httpEngine := commonRoutes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
 	routes.NewDMSManagerHTTPLayer(lHttp, httpGrp, *service)
-	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+	port, err := commonRoutes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run DMS Manager http server: %s", err)
 	}

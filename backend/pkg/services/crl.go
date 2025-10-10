@@ -18,6 +18,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/service/kms"
 	"github.com/sirupsen/logrus"
 	"gocloud.dev/blob"
 )
@@ -26,6 +27,7 @@ var crlValidate *validator.Validate
 
 type CRLServiceBackend struct {
 	caSDK     services.CAService
+	kmsSDK    kms.KMSService
 	logger    *logrus.Entry
 	vaRepo    storage.VARepo
 	service   services.CRLService
@@ -230,7 +232,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		return nil, err
 	}
 
-	crlSigner := NewCASigner(ctx, crlCA, svc.caSDK)
+	crlSigner := NewCASigner(ctx, crlCA, svc.kmsSDK)
 	caCert := (*x509.Certificate)(crlCA.Certificate.Certificate)
 
 	extensions := []pkix.Extension{}

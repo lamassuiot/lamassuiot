@@ -5,14 +5,14 @@ import (
 
 	cebuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/cryptoengines/builder"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
-	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/eventpublisher"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/service/kms"
 	"github.com/lamassuiot/lamassuiot/service/kms/internal/middlewares/eventpub"
+	"github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/routes"
+	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/eventpublisher"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -27,7 +27,7 @@ func AssembleKMSServiceWithHTTPServer(conf ServiceConfig, serviceInfo models.API
 	httpEngine := routes.NewGinEngine(lHttp)
 	httpGrp := httpEngine.Group("/")
 	NewKMSHTTPLayer(httpGrp, *service)
-	port, err := RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
+	port, err := routes.RunHttpRouter(lHttp, httpEngine, conf.Server, serviceInfo)
 	if err != nil {
 		return nil, -1, fmt.Errorf("could not run Service http server: %s", err)
 	}
@@ -35,13 +35,13 @@ func AssembleKMSServiceWithHTTPServer(conf ServiceConfig, serviceInfo models.API
 	return service, port, nil
 }
 
-func AssembleCAService(conf ServiceConfig) (*kms.KMSService, error) {
-	lSvc := helpers.SetupLogger(conf.Logs.Level, "CA", "Service")
-	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Event Bus")
-	lAudit := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Audit Bus")
+func AssembleKMSService(conf ServiceConfig) (*kms.KMSService, error) {
+	lSvc := helpers.SetupLogger(conf.Logs.Level, kms.SHORT_SERVICE_IDENTIFIER, "Service")
+	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, kms.SHORT_SERVICE_IDENTIFIER, "Event Bus")
+	lAudit := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, kms.SHORT_SERVICE_IDENTIFIER, "Audit Bus")
 
-	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "CA", "Storage")
-	lCryptoEng := helpers.SetupLogger(conf.CryptoEngineConfig.LogLevel, "CA", "CryptoEngine")
+	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, kms.SHORT_SERVICE_IDENTIFIER, "Storage")
+	lCryptoEng := helpers.SetupLogger(conf.CryptoEngineConfig.LogLevel, kms.SHORT_SERVICE_IDENTIFIER, "CryptoEngine")
 
 	engines, err := createCryptoEngines(lCryptoEng, conf)
 	if err != nil {

@@ -14,7 +14,7 @@ const caJoinCaCertificatesAndCertificates = "JOIN certificates ON ca_certificate
 
 type PostgresCAStore struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.CACertificate]
+	querier *PostgresDBQuerier[models.CACertificate]
 }
 
 func NewCAPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.CACertificatesRepo, error) {

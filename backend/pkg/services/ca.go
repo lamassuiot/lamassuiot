@@ -19,6 +19,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/service/kms"
 	"github.com/sirupsen/logrus"
 
 	"golang.org/x/crypto/ocsp"
@@ -1544,7 +1545,7 @@ func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input services.S
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
 	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomains)
 	lFunc.Debugf("sign signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
-	signature, err := x509Engine.Sign(ctx, (*x509.Certificate)(ca.Certificate.Certificate), input.Message, input.MessageType, input.SigningAlgorithm)
+	signature, err := x509Engine.Sign(ctx, (*x509.Certificate)(ca.Certificate.Certificate), input.Message, kms.SignMessageType(input.MessageType), input.SigningAlgorithm)
 	if err != nil {
 		return nil, err
 	}
@@ -1574,7 +1575,7 @@ func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input services
 	engine := svc.cryptoEngines[ca.Certificate.EngineID]
 	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomains)
 	lFunc.Debugf("verify signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
-	return x509Engine.Verify(ctx, (*x509.Certificate)(ca.Certificate.Certificate), input.Signature, input.Message, input.MessageType, input.SigningAlgorithm)
+	return x509Engine.Verify(ctx, (*x509.Certificate)(ca.Certificate.Certificate), input.Signature, input.Message, kms.SignMessageType(input.MessageType), input.SigningAlgorithm)
 }
 
 // Returned Error Codes:

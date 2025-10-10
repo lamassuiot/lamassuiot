@@ -4,11 +4,11 @@ import (
 	"encoding/base64"
 
 	"github.com/gin-gonic/gin"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/controllers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/service/kms"
+	"github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/controllers"
 )
 
 type kmsHttpRoutes struct {

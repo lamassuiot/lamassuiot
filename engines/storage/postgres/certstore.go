@@ -12,7 +12,7 @@ import (
 
 type PostgresCertificateStorage struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.Certificate]
+	querier *PostgresDBQuerier[models.Certificate]
 }
 
 func NewCertificateRepository(logger *logrus.Entry, db *gorm.DB) (storage.CertificatesRepo, error) {

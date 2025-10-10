@@ -24,8 +24,8 @@ type KMSService interface {
 type SignMessageType string
 
 const (
-	Raw    SignMessageType = "raw"
-	Hashed SignMessageType = "hash"
+	SignMessageTypeRaw    SignMessageType = "raw"
+	SignMessageTypeHashed SignMessageType = "hash"
 )
 
 type GetKeyByIDInput struct {

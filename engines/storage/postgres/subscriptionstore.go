@@ -12,7 +12,7 @@ import (
 
 type PostgresSubscriptionsStore struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.Subscription]
+	querier *PostgresDBQuerier[models.Subscription]
 }
 
 func NewSubscriptionsPostgresRepository(logger *logrus.Entry, db *gorm.DB) (storage.SubscriptionsRepository, error) {
@@ -23,7 +23,7 @@ func NewSubscriptionsPostgresRepository(logger *logrus.Entry, db *gorm.DB) (stor
 
 	return &PostgresSubscriptionsStore{
 		db:      db,
-		querier: (*postgresDBQuerier[models.Subscription])(querier),
+		querier: (*PostgresDBQuerier[models.Subscription])(querier),
 	}, nil
 }
 

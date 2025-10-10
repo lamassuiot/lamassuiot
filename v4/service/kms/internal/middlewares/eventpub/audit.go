@@ -3,8 +3,8 @@ package eventpub
 import (
 	"context"
 
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/eventpublisher"
 	"github.com/lamassuiot/lamassuiot/service/kms"
+	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/eventpublisher"
 )
 
 type KMSAuditEventPublisher struct {
@@ -17,7 +17,7 @@ func NewKMSAuditEventBusPublisher(audit eventpublisher.AuditPublisher) kms.KMSMi
 		return &KMSAuditEventPublisher{
 			next: next,
 			auditPub: eventpublisher.AuditPublisher{
-				ICloudEventPublisher: eventpublisher.NewEventPublisherWithSourceMiddleware(audit, kms.ServiceSource),
+				ICloudEventPublisher: eventpublisher.NewEventPublisherWithSourceMiddleware(audit, kms.SERVICE_SOURCE),
 			},
 		}
 	}

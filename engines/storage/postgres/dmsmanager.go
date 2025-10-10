@@ -12,7 +12,7 @@ import (
 
 type PostgresDMSManagerStore struct {
 	db      *gorm.DB
-	querier *postgresDBQuerier[models.DMS]
+	querier *PostgresDBQuerier[models.DMS]
 }
 
 func NewDMSManagerRepository(logger *logrus.Entry, db *gorm.DB) (storage.DMSRepo, error) {

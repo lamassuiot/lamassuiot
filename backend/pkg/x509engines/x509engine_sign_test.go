@@ -12,7 +12,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/service/kms"
 )
 
 func generateAndImportCA(keyType x509.PublicKeyAlgorithm, engine cryptoengines.CryptoEngine) (*x509.Certificate, any, error) {
@@ -83,7 +83,7 @@ func TestSignVerify(t *testing.T) {
 	var testcases = []struct {
 		name             string
 		certificate      *x509.Certificate
-		msgType          models.SignMessageType
+		msgType          kms.SignMessageType
 		signingAlgorithm string
 		verifyAlgorithm  string
 		value            func() ([]byte, error)
@@ -92,70 +92,70 @@ func TestSignVerify(t *testing.T) {
 		{
 			name:             "OK/RSASSA_PSS_SHA_256",
 			certificate:      caCertificateRSA,
-			msgType:          models.Raw,
+			msgType:          kms.SignMessageTypeRaw,
 			signingAlgorithm: "RSASSA_PSS_SHA_256",
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/RSASSA_PKCS1_V1_5_SHA_256",
 			certificate:      caCertificateRSA,
-			msgType:          models.Raw,
+			msgType:          kms.SignMessageTypeRaw,
 			signingAlgorithm: "RSASSA_PKCS1_V1_5_SHA_256",
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/RSASSA_PSS_SHA_384",
 			certificate:      caCertificateRSA,
-			msgType:          models.Raw,
+			msgType:          kms.SignMessageTypeRaw,
 			signingAlgorithm: "RSASSA_PSS_SHA_384",
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/RSASSA_PKCS1_V1_5_SHA_384",
 			certificate:      caCertificateRSA,
-			msgType:          models.Raw,
+			msgType:          kms.SignMessageTypeRaw,
 			signingAlgorithm: "RSASSA_PKCS1_V1_5_SHA_384",
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/RSASSA_PSS_SHA_512",
 			certificate:      caCertificateRSA,
-			msgType:          models.Raw,
+			msgType:          kms.SignMessageTypeRaw,
 			signingAlgorithm: "RSASSA_PSS_SHA_512",
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/RSASSA_PKCS1_V1_5_SHA_512",
 			certificate:      caCertificateRSA,
-			msgType:          models.Raw,
+			msgType:          kms.SignMessageTypeRaw,
 			signingAlgorithm: "RSASSA_PKCS1_V1_5_SHA_512",
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/ECDSA_SHA_256",
 			certificate:      caCertificateECDSA,
-			msgType:          models.Raw,
+			msgType:          kms.SignMessageTypeRaw,
 			signingAlgorithm: "ECDSA_SHA_256",
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/ECDSA_SHA_384",
 			certificate:      caCertificateECDSA,
-			msgType:          models.Raw,
+			msgType:          kms.SignMessageTypeRaw,
 			signingAlgorithm: "ECDSA_SHA_384",
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/ECDSA_SHA_512",
 			certificate:      caCertificateECDSA,
-			msgType:          models.Raw,
+			msgType:          kms.SignMessageTypeRaw,
 			signingAlgorithm: "ECDSA_SHA_512",
 			check:            checkValidSignature,
 		},
 		{
 			name:             "OK/DIGEST/RSASSA_PSS_SHA_512",
 			certificate:      caCertificateRSA,
-			msgType:          models.Hashed,
+			msgType:          kms.SignMessageTypeHashed,
 			signingAlgorithm: "RSASSA_PSS_SHA_512",
 			check:            checkValidSignature,
 			value: func() ([]byte, error) {
@@ -167,7 +167,7 @@ func TestSignVerify(t *testing.T) {
 		{
 			name:             "OK/DIGEST/ECDSA_SHA_512",
 			certificate:      caCertificateECDSA,
-			msgType:          models.Hashed,
+			msgType:          kms.SignMessageTypeHashed,
 			signingAlgorithm: "ECDSA_SHA_512",
 			check:            checkValidSignature,
 			value: func() ([]byte, error) {
@@ -179,7 +179,7 @@ func TestSignVerify(t *testing.T) {
 		{
 			name:             "FAIL/ECDSA_UNKNOWN",
 			certificate:      caCertificateECDSA,
-			msgType:          models.Raw,
+			msgType:          kms.SignMessageTypeRaw,
 			signingAlgorithm: "ECDSA_UNKNOWN",
 			check: func(validationResult bool, signatureError, validationError error) error {
 				if signatureError == nil {
@@ -194,7 +194,7 @@ func TestSignVerify(t *testing.T) {
 		{
 			name:             "FAIL/RSA_UNKNOWN",
 			certificate:      caCertificateRSA,
-			msgType:          models.Raw,
+			msgType:          kms.SignMessageTypeRaw,
 			signingAlgorithm: "RSA_UNKNOWN",
 			check: func(validationResult bool, signatureError, validationError error) error {
 				if signatureError == nil {
@@ -209,7 +209,7 @@ func TestSignVerify(t *testing.T) {
 		{
 			name:             "FAIL/RSA_WITH_ECDSA_CA",
 			certificate:      caCertificateECDSA,
-			msgType:          models.Raw,
+			msgType:          kms.SignMessageTypeRaw,
 			signingAlgorithm: "RSASSA_PSS_SHA_512",
 			check: func(validationResult bool, signatureError, validationError error) error {
 				if signatureError == nil {
@@ -224,7 +224,7 @@ func TestSignVerify(t *testing.T) {
 		{
 			name:             "FAIL/SIGN_AND_VERIFY_WITH_DIFFERENT_ALGORITHMS",
 			certificate:      caCertificateRSA,
-			msgType:          models.Raw,
+			msgType:          kms.SignMessageTypeRaw,
 			signingAlgorithm: "RSASSA_PSS_SHA_256",
 			verifyAlgorithm:  "RSASSA_PSS_SHA_384",
 			check: func(validationResult bool, signatureError, validationError error) error {
@@ -245,7 +245,7 @@ func TestSignVerify(t *testing.T) {
 		{
 			name:             "FAIL/UNKOWN_CA",
 			certificate:      caCertificateNotImported,
-			msgType:          models.Raw,
+			msgType:          kms.SignMessageTypeRaw,
 			signingAlgorithm: "RSASSA_PSS_SHA_256",
 			check: func(validationResult bool, signatureError, validationError error) error {
 				if signatureError == nil {

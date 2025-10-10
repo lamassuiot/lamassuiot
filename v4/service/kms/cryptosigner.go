@@ -35,6 +35,7 @@ func (s *kmsCryptoSigner) Sign(rand io.Reader, digest []byte, opts crypto.Signer
 	caHashSize := caHashFunc.Size() * 8
 
 	switch kmsKeyAlg {
+	//TODO: ECDSA SHA size should be determined by key size. Not applicable to RSA
 	case x509.ECDSA.String():
 		signAlg = fmt.Sprintf("ECDSA_SHA_%d", caHashSize)
 	case x509.RSA.String():
@@ -47,7 +48,7 @@ func (s *kmsCryptoSigner) Sign(rand io.Reader, digest []byte, opts crypto.Signer
 		KeyID:       s.key.ID,
 		Algorithm:   signAlg,
 		Message:     digest,
-		MessageType: Raw,
+		MessageType: SignMessageTypeRaw,
 	})
 	if err != nil {
 		return nil, err

@@ -4,9 +4,9 @@ import (
 	"context"
 
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/eventpublisher"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/shared/subsystems/v3/pkg/eventpublisher"
 )
 
 type DeviceAuditEventPublisher struct {
