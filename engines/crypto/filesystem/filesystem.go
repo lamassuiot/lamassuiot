@@ -78,9 +78,8 @@ func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfig
 					},
 				},
 				{
-					Type: models.KeyType(x509.Ed25519),
-					Sizes: []int{
-					},
+					Type:  models.KeyType(x509.Ed25519),
+					Sizes: []int{},
 				},
 			},
 		},

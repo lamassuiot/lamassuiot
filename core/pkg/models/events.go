@@ -29,7 +29,6 @@ const (
 	EventSignatureSignKey       EventType = "ca.sign.signature"
 	EventDeleteCAKey            EventType = "ca.delete"
 
-<<<<<<< HEAD
 	EventCreateKMSKey          EventType = "kms.create"
 	EventImportKMSKey          EventType = "kms.import"
 	EventUpdateKMSKeyMetadata  EventType = "kms.metadata.update"
@@ -39,9 +38,7 @@ const (
 	EventDeleteKMSKey          EventType = "kms.delete"
 	EventSignMessageKMSKey     EventType = "kms.sign"
 	EventVerifySignatureKMSKey EventType = "kms.verify"
-=======
-	EventCreateHybridCAKey            EventType = "ca.create.hybrid"
->>>>>>> 72943761 (Added support for Chameleon Root CA Creation)
+	EventCreateHybridCAKey EventType = "ca.create.hybrid"
 
 	EventCreateIssuanceProfileKey EventType = "profile.issuance.create"
 	EventUpdateIssuanceProfileKey EventType = "profile.issuance.update"
