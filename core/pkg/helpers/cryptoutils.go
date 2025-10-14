@@ -6,8 +6,8 @@ import (
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
 
 	"crypto"
-	"crypto/ed25519"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -81,9 +81,46 @@ var ekuOIDToExt = func() map[string]x509.ExtKeyUsage {
 //Cammbio de la función para definir la longevidad de la expiración de la CA.
 
 func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.Duration, commonName string) (*x509.Certificate, any, error) {
-	var err error
-	var key any
-	var pubKey any
+	key, pubKey, err := generateKey(keyType)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
+	template := x509.Certificate{
+		SerialNumber: sn,
+		Subject: pkix.Name{
+			CommonName: commonName,
+		},
+		NotBefore:             time.Now(),
+		NotAfter:              (time.Now().Add(expirationTime)),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsage(x509.ExtKeyUsageOCSPSigning),
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		SubjectKeyId:          []byte(uuid.NewString()),
+		IsCA:                  true,
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, pubKey, key)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	cert, err := x509.ParseCertificate(derBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return cert, key, nil
+}
+
+func GenerateSelfSignedChameleonCA(deltaKeyType, baseKeyType x509.PublicKeyAlgorithm, expirationTime time.Duration, commonName string) (*x509.Certificate, crypto.Signer, crypto.Signer, error) {
+	return nil, nil, nil, fmt.Errorf("x509.CreateChameleonCertificate: requires PQC-enabled Go build")
+}
+
+func generateKey(keyType x509.PublicKeyAlgorithm) (crypto.Signer, crypto.PublicKey, error) {
+	var key crypto.Signer
+	var pubKey crypto.PublicKey
 
 	switch keyType {
 	case x509.RSA:
@@ -116,32 +153,7 @@ func GenerateSelfSignedCA(keyType x509.PublicKeyAlgorithm, expirationTime time.D
 		pubKey = ed25519Key.Public()
 	}
 
-	sn, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 160))
-	template := x509.Certificate{
-		SerialNumber: sn,
-		Subject: pkix.Name{
-			CommonName: commonName,
-		},
-		NotBefore:             time.Now(),
-		NotAfter:              (time.Now().Add(expirationTime)),
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsage(x509.ExtKeyUsageOCSPSigning),
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-		SubjectKeyId:          []byte(uuid.NewString()),
-		IsCA:                  true,
-	}
-
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, pubKey, key)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	cert, err := x509.ParseCertificate(derBytes)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return cert, key, nil
+	return key, pubKey, nil
 }
 
 // defined to generate certificates with RSA and ECDSA keys
