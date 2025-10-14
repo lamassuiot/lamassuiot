@@ -115,8 +115,8 @@ func (r *caHttpRoutes) CreateHybridCA(ctx *gin.Context) {
 			EngineID:     requestBody.EngineID,
 			Metadata:     requestBody.Metadata,
 		},
-		InnerKeyMetadata: requestBody.InnerKeyMetadata,
-		HybridCertificateType: requestBody.HybridCertificateType,	
+		InnerKeyMetadata:      requestBody.InnerKeyMetadata,
+		HybridCertificateType: requestBody.HybridCertificateType,
 	})
 	if err != nil {
 		switch err {

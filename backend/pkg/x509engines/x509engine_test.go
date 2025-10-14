@@ -1418,6 +1418,438 @@ func TestSignCertificateRequest(t *testing.T) {
 	}
 }
 
+func TestChameleonCertificateRequest(t *testing.T) {
+	tempDir, _, x509Engine := setup(t)
+	defer teardown(tempDir)
+
+	// Create the signers
+
+	keyMetadata := models.KeyMetadata{
+		Type: models.KeyType(x509.RSA),
+		Bits: 2048,
+	}
+
+	ctx := context.Background()
+	rsaKeyID, caSignerRSA, err := x509Engine.GenerateKeyPair(ctx, keyMetadata)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	keyMetadata = models.KeyMetadata{
+		Type: models.KeyType(x509.ECDSA),
+		Bits: 256,
+	}
+
+	ecKeyID, caSignerEC, err := x509Engine.GenerateKeyPair(ctx, keyMetadata)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	keyMetadata = models.KeyMetadata{
+		Type: models.KeyType(x509.MLDSA),
+		Bits: 65,
+	}
+
+	mldsaKeyID, caSignerMLDSA, err := x509Engine.GenerateKeyPair(ctx, keyMetadata)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	keyMetadata = models.KeyMetadata{
+		Type: models.KeyType(x509.Ed25519),
+		Bits: 256,
+	}
+
+	ed25519KeyID, caSignerEd25519, err := x509Engine.GenerateKeyPair(ctx, keyMetadata)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+
+	// Create the Chameleon Root CAs
+
+	caExpirationTime := time.Now().AddDate(2, 0, 0) // Set expiration time to 2 year from now
+	expirationTime := time.Now().AddDate(1, 0, 0)   // Set expiration time to 1 year from now
+
+	subject := models.Subject{
+		CommonName: "Root CA",
+	}
+
+	validity := models.Validity{
+		Type: models.Time,
+		Time: caExpirationTime,
+	}
+
+	caCertificateRSAMLDSA, err := x509Engine.CreateChameleonRootCA(ctx, caSignerMLDSA, caSignerRSA, mldsaKeyID, rsaKeyID, subject, validity)
+	if err != nil {
+		t.Fatalf("unexpected result in test case: %s", err)
+	}
+
+	caCertificateECMLDSA, err := x509Engine.CreateChameleonRootCA(ctx, caSignerMLDSA, caSignerEC, mldsaKeyID, ecKeyID, subject, validity)
+	if err != nil {
+		t.Fatalf("unexpected result in test case: %s", err)
+	}
+
+	caCertificateEd25519MLDSA, err := x509Engine.CreateChameleonRootCA(ctx, caSignerMLDSA, caSignerEd25519, mldsaKeyID, ed25519KeyID, subject, validity)
+	if err != nil {
+		t.Fatalf("unexpected result in test case: %s", err)
+	}
+
+	caCertificateNotImported, notImportedDeltaKey, notImportedBaseKey, err := chelpers.GenerateSelfSignedChameleonCA(x509.MLDSA, x509.RSA, 365*24*time.Hour, "MyCA")
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+
+	csrSubject := models.Subject{
+		CommonName:       "Subordinate CA",
+		Organization:     "Lamassu IoT",
+		OrganizationUnit: "CA",
+		Country:          "ES",
+		State:            "Gipuzkoa",
+		Locality:         "Arrasate",
+	}
+
+	checkOk := func(baseCert *x509.Certificate, tcSubject models.Subject, deltaKeyType, baseKeyType models.KeyType, expirationTime time.Time, errDeltaCsr, errBaseCsr, errSign error) error {
+		if errDeltaCsr != nil {
+			return fmt.Errorf("unexpected error in delta csr gen: %s", errDeltaCsr)
+		}
+
+		if errBaseCsr != nil {
+			return fmt.Errorf("unexpected error in base csr gen: %s", errBaseCsr)
+		}
+
+		if errSign != nil {
+			return fmt.Errorf("unexpected error in signature: %s", errSign)
+		}
+
+		// Reconstruct and check the delta certificate
+		deltaCert, err := x509.ReconstructDeltaCertificate(baseCert)
+		err = checkCertificate(deltaCert, tcSubject, deltaKeyType, expirationTime)
+		if err != nil {
+			return err
+		}
+
+		// Check the base certificate
+		err = checkCertificate(baseCert, tcSubject, baseKeyType, expirationTime)
+		if err != nil {
+			return err
+		}
+
+		if baseCert.Subject.CommonName != tcSubject.CommonName {
+			return fmt.Errorf("unexpected result, got: %s, want: %s", baseCert.Subject.CommonName, tcSubject.CommonName)
+		}
+
+		return nil
+	}
+
+	checkFail := func(baseCert *x509.Certificate, tcSubject models.Subject, deltaKeyType, baseKeyType models.KeyType, expirationTime time.Time, errDeltaCsr, errBaseCsr, errSign error) error {
+		if errDeltaCsr != nil {
+			return fmt.Errorf("unexpected error in delta csr gen: %s", errDeltaCsr)
+		}
+
+		if errBaseCsr != nil {
+			return fmt.Errorf("unexpected error in base csr gen: %s", errBaseCsr)
+		}
+
+		if errSign != nil {
+			return fmt.Errorf("unexpected error in signature: %s", errSign)
+		}
+
+		return nil
+	}
+
+	certProfile := models.IssuanceProfile{
+		Validity: models.Validity{
+			Type: models.Time,
+			Time: expirationTime,
+		},
+		SignAsCA:     false,
+		HonorSubject: true,
+		KeyUsage:     models.X509KeyUsage(x509.KeyUsageKeyAgreement),
+		ExtendedKeyUsages: []models.X509ExtKeyUsage{
+			models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+		},
+		HonorExtensions: true,
+	}
+
+	var testcases = []struct {
+		name          string
+		caCertificate *x509.Certificate
+		deltaCaSigner crypto.Signer
+		baseCaSigner  crypto.Signer
+		profile       models.IssuanceProfile
+		subject       models.Subject
+		extensions    func() []pkix.Extension
+		deltaKeyType  models.KeyType
+		baseKeyType   models.KeyType
+		deltaKey      func() any
+		baseKey       func() any
+		check         func(baseCert *x509.Certificate, tcSubject models.Subject, deltaKeyType, baseKeyType models.KeyType, expirationTime time.Time, errDeltaCsr, errBaseCsr, errSign error) error
+	}{
+		{
+			name:          "OK/RSA-MLDSA_RSA-MLDSA",
+			caCertificate: caCertificateRSAMLDSA,
+			deltaCaSigner: caSignerMLDSA,
+			baseCaSigner:  caSignerRSA,
+			profile:       certProfile,
+			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
+			deltaKeyType:  models.KeyType(x509.MLDSA),
+			deltaKey: func() any {
+				key, _ := chelpers.GenerateMLDSAKey(65)
+				return key
+			},
+			baseKeyType: models.KeyType(x509.RSA),
+			baseKey: func() any {
+				key, _ := chelpers.GenerateRSAKey(2048)
+				return key
+			},
+			check: checkOk,
+		},
+		{
+			name:          "OK/EC-MLDSA_EC-MLDSA",
+			caCertificate: caCertificateECMLDSA,
+			deltaCaSigner: caSignerMLDSA,
+			baseCaSigner:  caSignerEC,
+			profile:       certProfile,
+			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
+			deltaKeyType:  models.KeyType(x509.MLDSA),
+			deltaKey: func() any {
+				key, _ := chelpers.GenerateMLDSAKey(65)
+				return key
+			},
+			baseKeyType: models.KeyType(x509.ECDSA),
+			baseKey: func() any {
+				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
+				return key
+			},
+			check: checkOk,
+		},
+		{
+			name:          "OK/Ed25519-MLDSA_Ed25519-MLDSA",
+			caCertificate: caCertificateEd25519MLDSA,
+			deltaCaSigner: caSignerMLDSA,
+			baseCaSigner:  caSignerEd25519,
+			profile:       certProfile,
+			subject:       csrSubject,
+			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
+			deltaKeyType:  models.KeyType(x509.MLDSA),
+			deltaKey: func() any {
+				key, _ := chelpers.GenerateMLDSAKey(65)
+				return key
+			},
+			baseKeyType: models.KeyType(x509.Ed25519),
+			baseKey: func() any {
+				key, _ := chelpers.GenerateEd25519Key()
+				return key
+			},
+			check: checkOk,
+		},
+		{
+			name:          "OK/EXT_SAN",
+			caCertificate: caCertificateRSAMLDSA,
+			deltaCaSigner: caSignerMLDSA,
+			baseCaSigner:  caSignerRSA,
+			profile:       certProfile,
+			subject:       csrSubject,
+			extensions: func() []pkix.Extension {
+				rawValues := []asn1.RawValue{}
+				// nameTypeEmail = 1
+				// nameTypeURI = 6
+				nameTypeDNS := 2 //RFC 5280 > Section 4.2.1.6 https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.6
+				nameTypeIP := 7
+
+				ip := net.IP{192, 168, 10, 1}
+				rawValues = append(rawValues, asn1.RawValue{Tag: nameTypeDNS, Class: 2, Bytes: []byte("dev.lamassu.io")})
+				rawValues = append(rawValues, asn1.RawValue{Tag: nameTypeIP, Class: 2, Bytes: ip.To4()})
+				val, _ := asn1.Marshal(rawValues)
+
+				return []pkix.Extension{{
+					Id:    asn1.ObjectIdentifier{2, 5, 29, 17}, // Subject Alternative Name OID
+					Value: val,
+				}}
+			},
+			deltaKeyType: models.KeyType(x509.MLDSA),
+			deltaKey: func() any {
+				key, _ := chelpers.GenerateMLDSAKey(65)
+				return key
+			},
+			baseKeyType: models.KeyType(x509.RSA),
+			baseKey: func() any {
+				key, _ := chelpers.GenerateRSAKey(2048)
+				return key
+			},
+			check: func(baseCert *x509.Certificate, tcSubject models.Subject, deltaKeyType, baseKeyType models.KeyType, expirationTime time.Time, errDeltaCsr, errBaseCsr, errSign error) error {
+				if err := checkOk(baseCert, tcSubject, deltaKeyType, baseKeyType, expirationTime, errDeltaCsr, errBaseCsr, errSign); err != nil {
+					return nil
+				}
+
+				if len(baseCert.IPAddresses) != 1 {
+					return fmt.Errorf("expected 1 SAN IP address, got %d", len(baseCert.IPAddresses))
+				}
+
+				expectedIP := net.IP{192, 168, 10, 1}
+				if !baseCert.IPAddresses[0].Equal(expectedIP) {
+					return fmt.Errorf("IP address mismatch. Expected %s, got %s", baseCert.IPAddresses[0].String(), expectedIP.String())
+				}
+
+				if len(baseCert.DNSNames) != 1 {
+					return fmt.Errorf("expected 1 SAN DNS name, got %d", len(baseCert.DNSNames))
+				}
+
+				if baseCert.DNSNames[0] != "dev.lamassu.io" {
+					return fmt.Errorf("DNS name mismatch. Expected dev.lamassu.io, got %s", baseCert.DNSNames[0])
+				}
+
+				return nil
+			},
+		},
+		{
+			name:          "OK/KEY_USAGE",
+			caCertificate: caCertificateRSAMLDSA,
+			deltaCaSigner: caSignerMLDSA,
+			baseCaSigner:  caSignerRSA,
+			profile: models.IssuanceProfile{
+				Validity: models.Validity{
+					Type: models.Time,
+					Time: expirationTime,
+				},
+				SignAsCA:        false,
+				KeyUsage:        models.X509KeyUsage(x509.KeyUsageDigitalSignature | x509.KeyUsageDataEncipherment | x509.KeyUsageContentCommitment),
+				HonorSubject:    true,
+				HonorExtensions: true,
+			},
+			subject:      csrSubject,
+			deltaKeyType: models.KeyType(x509.MLDSA),
+			deltaKey: func() any {
+				key, _ := chelpers.GenerateMLDSAKey(65)
+				return key
+			},
+			baseKeyType: models.KeyType(x509.RSA),
+			baseKey: func() any {
+				key, _ := chelpers.GenerateRSAKey(2048)
+				return key
+			},
+			extensions: func() []pkix.Extension { return []pkix.Extension{} },
+			check: func(baseCert *x509.Certificate, tcSubject models.Subject, deltaKeyType, baseKeyType models.KeyType, expirationTime time.Time, errDeltaCsr, errBaseCsr, errSign error) error {
+				err := checkOk(baseCert, tcSubject, deltaKeyType, baseKeyType, expirationTime, errDeltaCsr, errBaseCsr, errSign)
+				if err != nil {
+					return nil
+				}
+
+				if baseCert.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
+					return fmt.Errorf("missing key 'KeyUsageDigitalSignature' usage")
+				}
+
+				if baseCert.KeyUsage&x509.KeyUsageDataEncipherment == 0 {
+					return fmt.Errorf("missing key 'KeyUsageDataEncipherment' usage")
+				}
+
+				if baseCert.KeyUsage&x509.KeyUsageContentCommitment == 0 {
+					return fmt.Errorf("missing key 'KeyUsageContentCommitment' usage")
+				}
+
+				if baseCert.KeyUsage&x509.KeyUsageCRLSign != 0 {
+					return fmt.Errorf("unexpected key 'KeyUsageCRLSign' usage")
+				}
+
+				return nil
+			},
+		},
+		{
+			name:          "OK/EXT_KEY_USAGE",
+			caCertificate: caCertificateRSAMLDSA,
+			deltaCaSigner: caSignerMLDSA,
+			baseCaSigner:  caSignerRSA,
+			profile: models.IssuanceProfile{
+				Validity: models.Validity{
+					Type: models.Time,
+					Time: expirationTime,
+				},
+				SignAsCA: false,
+				ExtendedKeyUsages: []models.X509ExtKeyUsage{
+					models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
+					models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
+				},
+				HonorSubject:    true,
+				HonorExtensions: true,
+			},
+			subject:      csrSubject,
+			deltaKeyType: models.KeyType(x509.MLDSA),
+			deltaKey: func() any {
+				key, _ := chelpers.GenerateMLDSAKey(65)
+				return key
+			},
+			baseKeyType: models.KeyType(x509.RSA),
+			baseKey: func() any {
+				key, _ := chelpers.GenerateRSAKey(2048)
+				return key
+			},
+			extensions: func() []pkix.Extension { return []pkix.Extension{} },
+			check: func(baseCert *x509.Certificate, tcSubject models.Subject, deltaKeyType, baseKeyType models.KeyType, expirationTime time.Time, errDeltaCsr, errBaseCsr, errSign error) error {
+				if err := checkOk(baseCert, tcSubject, deltaKeyType, baseKeyType, expirationTime, errDeltaCsr, errBaseCsr, errSign); err != nil {
+					return nil
+				}
+
+				// Check base certificate key usages
+				expectedKeyUsages := []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}
+				for _, expectedKeyUsage := range expectedKeyUsages {
+					if contains := slices.Contains(baseCert.ExtKeyUsage, expectedKeyUsage); !contains {
+						return fmt.Errorf("missing key usage %d in signed cert", expectedKeyUsage)
+					}
+				}
+
+				// Check delta certificate key usages
+				deltaCert, err := x509.ReconstructDeltaCertificate(baseCert)
+				if err != nil {
+					return err
+				}
+				for _, expectedKeyUsage := range expectedKeyUsages {
+					if contains := slices.Contains(deltaCert.ExtKeyUsage, expectedKeyUsage); !contains {
+						return fmt.Errorf("missing key usage %d in signed cert", expectedKeyUsage)
+					}
+				}
+
+				return nil
+			},
+		},
+		{
+			name:          "FAIL/NOT_EXISTENT_CA",
+			caCertificate: caCertificateNotImported,
+			deltaCaSigner: notImportedDeltaKey,
+			baseCaSigner:  notImportedBaseKey,
+			profile:       certProfile,
+			subject:       csrSubject,
+			deltaKeyType:  models.KeyType(x509.MLDSA),
+			deltaKey: func() any {
+				key, _ := chelpers.GenerateMLDSAKey(65)
+				return key
+			},
+			baseKeyType: models.KeyType(x509.RSA),
+			baseKey: func() any {
+				key, _ := chelpers.GenerateRSAKey(2048)
+				return key
+			},
+			extensions: func() []pkix.Extension { return []pkix.Extension{} },
+			check:      checkFail,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			// Generate the CSR for both the traditional (base) and post-quantum (delta) certificates
+			deltaCsr, errDeltaCsr := chelpers.GenerateCertificateRequestWithExtensions(tc.subject, tc.extensions(), tc.deltaKey())
+			baseCsr, errBaseCsr := chelpers.GenerateCertificateRequestWithExtensions(tc.subject, tc.extensions(), tc.baseKey())
+			cert, errSign := x509Engine.SignChameleonCertificateRequest(ctx, deltaCsr, baseCsr, tc.caCertificate, tc.deltaCaSigner, tc.baseCaSigner, tc.profile)
+			err := tc.check(cert, tc.subject, tc.deltaKeyType, tc.baseKeyType, expirationTime, errDeltaCsr, errBaseCsr, errSign)
+			if err != nil {
+				t.Errorf("unexpected result in test case: %s", err)
+			}
+		})
+	}
+}
+
 func TestGetEngineConfig(t *testing.T) {
 	tempDir, engine, x509Engine := setup(t)
 	defer teardown(tempDir)

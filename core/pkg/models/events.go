@@ -28,7 +28,7 @@ const (
 	EventSignatureSignKey       EventType = "ca.sign.signature"
 	EventDeleteCAKey            EventType = "ca.delete"
 
-	EventCreateHybridCAKey            EventType = "ca.create.hybrid"
+	EventCreateHybridCAKey EventType = "ca.create.hybrid"
 
 	EventCreateIssuanceProfileKey EventType = "profile.issuance.create"
 	EventUpdateIssuanceProfileKey EventType = "profile.issuance.update"

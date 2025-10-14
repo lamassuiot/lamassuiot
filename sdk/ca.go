@@ -108,18 +108,17 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 	return response, nil
 }
 
-// TODO --> Add Implementation
 func (cli *httpCAClient) CreateHybridCA(ctx context.Context, input services.CreateHybridCAInput) (*models.CACertificate, error) {
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/pq", resources.CreateHybridCABody{
-		ID:           input.CreateCAInput.ID,
-		Subject:      input.CreateCAInput.Subject,
-		OuterKeyMetadata:  input.CreateCAInput.KeyMetadata,
-		InnerKeyMetadata:  input.InnerKeyMetadata,
-		ProfileID:    input.CreateCAInput.ProfileID,
-		CAExpiration: input.CreateCAInput.CAExpiration,
-		EngineID:     input.CreateCAInput.EngineID,
-		ParentID:     input.CreateCAInput.ParentID,
-		Metadata:     input.CreateCAInput.Metadata,
+		ID:                    input.CreateCAInput.ID,
+		Subject:               input.CreateCAInput.Subject,
+		OuterKeyMetadata:      input.CreateCAInput.KeyMetadata,
+		InnerKeyMetadata:      input.InnerKeyMetadata,
+		ProfileID:             input.CreateCAInput.ProfileID,
+		CAExpiration:          input.CreateCAInput.CAExpiration,
+		EngineID:              input.CreateCAInput.EngineID,
+		ParentID:              input.CreateCAInput.ParentID,
+		Metadata:              input.CreateCAInput.Metadata,
 		HybridCertificateType: input.HybridCertificateType,
 	}, map[int][]error{
 		400: {

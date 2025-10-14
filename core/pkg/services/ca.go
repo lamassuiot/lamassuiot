@@ -129,9 +129,9 @@ type CreateCAInput struct {
 }
 
 type CreateHybridCAInput struct {
-	CreateCAInput       	CreateCAInput
-	InnerKeyMetadata  		models.KeyMetadata 			 	`validate:"required"`
-	HybridCertificateType  	models.HybridCertificateType  	`validate:"required"`
+	CreateCAInput         CreateCAInput
+	InnerKeyMetadata      models.KeyMetadata           `validate:"required"`
+	HybridCertificateType models.HybridCertificateType `validate:"required"`
 }
 
 type RequestCAInput struct {
