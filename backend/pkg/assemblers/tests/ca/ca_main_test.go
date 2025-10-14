@@ -1122,6 +1122,22 @@ func TestCreateHybridCA(t *testing.T) {
 		t.Fatalf("failed creating issuance profile: %s", err)
 	}
 
+	// Parent CA for subordinate creation tests
+	parentCA, err := serverTest.CA.Service.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
+		CreateCAInput: services.CreateCAInput{
+			ID:           "1111-2222-3333",
+			KeyMetadata:  models.KeyMetadata{Type: models.MLDSA, Bits: 65},
+			Subject:      models.Subject{CommonName: "TestCA"},
+			CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+			ProfileID:    profile.ID,
+		},
+		InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+		HybridCertificateType: models.HybridCertificateTypeChameleon,
+	})
+	if err != nil {
+		t.Fatalf("failed creating parent CA: %s", err)
+	}
+
 	var testcases = []struct {
 		name        string
 		before      func(svc services.CAService) error
@@ -1165,7 +1181,7 @@ func TestCreateHybridCA(t *testing.T) {
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
 					},
-					InnerKeyMetadata: models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
 					HybridCertificateType: models.HybridCertificateTypeChameleon,
 				})
 			},
@@ -1201,7 +1217,7 @@ func TestCreateHybridCA(t *testing.T) {
 						CAExpiration: models.Validity{Type: models.Time, Time: tCA},
 						ProfileID:    profile2.ID,
 					},
-					InnerKeyMetadata: models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
 					HybridCertificateType: models.HybridCertificateTypeChameleon,
 				})
 			},
@@ -1228,7 +1244,7 @@ func TestCreateHybridCA(t *testing.T) {
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
 					},
-					InnerKeyMetadata: models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
 					HybridCertificateType: models.HybridCertificateTypeChameleon,
 				})
 				if err != nil {
@@ -1245,7 +1261,7 @@ func TestCreateHybridCA(t *testing.T) {
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
 					},
-					InnerKeyMetadata: models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
 					HybridCertificateType: models.HybridCertificateTypeChameleon,
 				})
 			},
@@ -1256,6 +1272,58 @@ func TestCreateHybridCA(t *testing.T) {
 
 				if !errors.Is(err, errs.ErrCAAlreadyExists) {
 					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrCAAlreadyExists, err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/SubordinateChameleonCA",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
+					CreateCAInput: services.CreateCAInput{
+						ID:           caID,
+						KeyMetadata:  models.KeyMetadata{Type: models.MLDSA, Bits: 65},
+						Subject:      models.Subject{CommonName: "TestCA"},
+						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+						ProfileID:    profile.ID,
+					},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+					HybridCertificateType: models.HybridCertificateTypeChameleon,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				// Reconstruct the delta certificate
+				baseCert := (*x509.Certificate)(createdCA.Certificate.Certificate)
+				var deltaCert *x509.Certificate
+				_ = baseCert
+				err = fmt.Errorf("ReconstructDeltaCertificate: requires PQC-enabled Go build")
+				if err != nil {
+					return fmt.Errorf("could not get raw delta ertificate")
+				}
+
+				// Reconstruct the parent certificates
+				baseParentCert := (*x509.Certificate)(parentCA.Certificate.Certificate)
+				var deltaParentCert *x509.Certificate
+				_ = baseParentCert
+				err = fmt.Errorf("ReconstructDeltaCertificate: requires PQC-enabled Go build")
+				if err != nil {
+					return fmt.Errorf("could not get raw delta ertificate")
+				}
+
+				// Validate the hybrid CA certificates
+				err = baseParentCert.CheckSignature(baseCert.SignatureAlgorithm, baseCert.RawTBSCertificate, baseCert.Signature)
+				if err != nil {
+					return fmt.Errorf("could not validate base certificate signature")
+				}
+				err = deltaParentCert.CheckSignature(deltaCert.SignatureAlgorithm, deltaCert.RawTBSCertificate, deltaCert.Signature)
+				if err != nil {
+					return fmt.Errorf("could not validate delta certificate signature")
 				}
 
 				return nil

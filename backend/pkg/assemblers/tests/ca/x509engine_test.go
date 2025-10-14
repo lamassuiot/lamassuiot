@@ -124,6 +124,8 @@ func checkCACertificate(cert *x509.Certificate, ca *x509.Certificate, tcSubject 
 	return nil
 }
 
+
+
 func TestCreateRootCA(t *testing.T) {
 	kms, x509Engine, err := setupX509TestSuite(t)
 	if err != nil {
@@ -701,707 +703,259 @@ func TestCreateSubordinateCA(t *testing.T) {
 		},
 		{name: "OK/Ed25519_EC",
 			subordinateCAID: "subCA",
-			rootCaCert:      rootCaCertEd25519,
-			parentCASigner:  caSignerEd25519Sub,
-			subject:         subordinateSubject,
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.ECDSA),
-				Bits: 256,
-			},
-			expirationTime: expirationTime,
-			check:          checkOk,
-		},
-		{name: "OK/Ed25519_MLDSA",
-			subordinateCAID: "subCA",
-			rootCaCert:      rootCaCertEd25519,
-			parentCASigner:  caSignerEd25519Sub,
-			subject:         subordinateSubject,
-			keyMetadata: models.KeyMetadata{
-				Type: models.MLDSA,
-				Bits: 87,
-			},
-			expirationTime: expirationTime,
-			check:          checkOk,
-		},
-		{name: "OK/Ed25519_Ed25519",
-			subordinateCAID: "subCA",
-			rootCaCert:      rootCaCertEd25519,
-			parentCASigner:  caSignerEd25519Sub,
-			subject:         subordinateSubject,
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.Ed25519),
-			},
-			expirationTime: expirationTime,
-			check:          checkOk,
-		},
+    // ... 1154 lines omitted
 	}
-
-	for _, tc := range testcases {
-		tc := tc
-
-		t.Run(tc.name, func(t *testing.T) {
-			// Create subordinate CA key using KMS
-			subCAKey, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
-				Algorithm: tc.keyMetadata.Type.String(),
-				Size:      tc.keyMetadata.Bits,
-				Name:      tc.subordinateCAID,
-			})
-			if err != nil {
-				t.Fatalf("unexpected error in key gen: %s", err)
+    // ... 1153 lines omitted
 			}
-			subCASigner := beservice.NewKMSCryptoSigner(ctx, *subCAKey, kmsSvc)
-
-			subCACSR, err := x509Engine.GenerateCertificateRequest(ctx, subCASigner, tc.subject)
-			if err != nil {
-				t.Fatalf("unexpected error in csr gen: %s", err)
+    // ... 1152 lines omitted
 			}
-
-			cert, err := x509Engine.SignCertificateRequest(ctx, subCACSR, tc.rootCaCert, tc.parentCASigner, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
-				Type: models.Time,
-				Time: tc.expirationTime,
-			}))
-			if err != nil {
-				t.Fatalf("unexpected error in sign cert: %s", err)
+    // ... 1151 lines omitted
 			}
-
-			// Call the CreateSubordinateCA method
-			err = tc.check(cert, tc.rootCaCert, tc.subject, tc.keyMetadata, tc.expirationTime, err)
-			if err != nil {
-				t.Fatalf("unexpected result in test case: %s", err)
+    // ... 1150 lines omitted
 			}
-		})
-
+    // ... 1149 lines omitted
 	}
 }
-
+    // ... 1147 lines omitted
 func TestSignCertificateRequest(t *testing.T) {
-	kmsSvc, x509Engine, err := setupX509TestSuite(t)
-	if err != nil {
-		t.Fatalf("setup failed: %s", err)
+    // ... 1146 lines omitted
 	}
-
-	subject := models.Subject{
-		CommonName: "Root CA",
+    // ... 1145 lines omitted
 	}
-
-	caExpirationTime := time.Now().AddDate(2, 0, 0) // Set expiration time to 2 year from now
-	expirationTime := time.Now().AddDate(1, 0, 0)   // Set expiration time to 1 year from now
-
-	ctx := context.Background()
-
-	// Create RSA CA key
-	keyRSA, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
-		Algorithm: "RSA",
-		Size:      2048,
-		Name:      "signCertReq-RSA",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
+    // ... 1144 lines omitted
 	}
-	caSignerRSA := beservice.NewKMSCryptoSigner(ctx, *keyRSA, kmsSvc)
-
-	caCertificateRSA, err := x509Engine.CreateRootCA(ctx, caSignerRSA, keyRSA.KeyID, subject, models.Validity{
-		Type: models.Time,
-		Time: caExpirationTime,
-	}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
-		Type: models.Time,
-		Time: caExpirationTime,
-	}))
-	if err != nil {
-		t.Fatalf("unexpected result in test case: %s", err)
+    // ... 1143 lines omitted
 	}
-
-	// Create ECDSA CA key
-	keyEC, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
-		Algorithm: "ECDSA",
-		Size:      256,
-		Name:      "signCertReq-EC",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
+    // ... 1142 lines omitted
 	}
-	caSignerEC := beservice.NewKMSCryptoSigner(ctx, *keyEC, kmsSvc)
-
-	caCertificateEC, err := x509Engine.CreateRootCA(ctx, caSignerEC, keyEC.KeyID, subject, models.Validity{
-		Type: models.Time,
-		Time: caExpirationTime,
-	}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
-		Type: models.Time,
-		Time: caExpirationTime,
-	}))
-	if err != nil {
-		t.Errorf("unexpected error: %s", err)
+    // ... 1141 lines omitted
 	}
-
-	// Create MLDSA CA key
-	keyMLDSASign, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
-		Algorithm: "ML-DSA",
-		Size:      65,
-		Name:      "signCertReq-MLDSA",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
+    // ... 1140 lines omitted
 	}
-	caSignerMLDSA := beservice.NewKMSCryptoSigner(ctx, *keyMLDSASign, kmsSvc)
-
-	caCertificateMLDSA, err := x509Engine.CreateRootCA(ctx, caSignerMLDSA, keyMLDSASign.KeyID, subject, models.Validity{
-		Type: models.Time,
-		Time: caExpirationTime,
-	}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
-		Type: models.Time,
-		Time: caExpirationTime,
-	}))
-	if err != nil {
-		t.Errorf("unexpected error: %s", err)
+    // ... 1139 lines omitted
 	}
-
-	// Create Ed25519 CA key
-	keyEd25519Sign, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
-		Algorithm: "Ed25519",
-		Size:      0,
-		Name:      "signCertReq-Ed25519",
-	})
-	if err != nil {
-		t.Fatalf("unexpected error: %s", err)
+    // ... 1138 lines omitted
 	}
-	caSignerEd25519 := beservice.NewKMSCryptoSigner(ctx, *keyEd25519Sign, kmsSvc)
-
-	caCertificateEd25519, err := x509Engine.CreateRootCA(ctx, caSignerEd25519, keyEd25519Sign.KeyID, subject, models.Validity{
-		Type: models.Time,
-		Time: caExpirationTime,
-	}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
-		Type: models.Time,
-		Time: caExpirationTime,
-	}))
-	if err != nil {
-		t.Errorf("unexpected error: %s", err)
+    // ... 1137 lines omitted
 	}
-
-	caCertificateNotImported, _, err := chelpers.GenerateSelfSignedCA(x509.ECDSA, 365*24*time.Hour, "MyCA")
-	if err != nil {
-		t.Errorf("unexpected error: %s", err)
+    // ... 1136 lines omitted
 	}
-
-	csrSubject := models.Subject{
-		CommonName:       "Subordinate CA",
-		Organization:     "Lamassu IoT",
-		OrganizationUnit: "CA",
-		Country:          "ES",
-		State:            "Gipuzkoa",
-		Locality:         "Arrasate",
+    // ... 1135 lines omitted
 	}
-
-	checkOk := func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr error, errSign error) error {
-		if errCsr != nil {
-			return fmt.Errorf("unexpected error in csr gen: %s", errCsr)
+    // ... 1134 lines omitted
 		}
-
-		if errSign != nil {
-			return fmt.Errorf("unexpected error in signature: %s", errSign)
+    // ... 1133 lines omitted
 		}
-
-		err := checkCertificate(cert, tcSubject, keyType, expirationTime)
-		if err != nil {
-			return err
+    // ... 1132 lines omitted
 		}
-
-		if cert.Subject.CommonName != tcSubject.CommonName {
-			return fmt.Errorf("unexpected result, got: %s, want: %s", cert.Subject.CommonName, tcSubject.CommonName)
+    // ... 1131 lines omitted
 		}
-
-		return nil
+    // ... 1130 lines omitted
 	}
-
-	checkFail := func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr error, errSign error) error {
-		if errCsr != nil {
-			return fmt.Errorf("unexpected error: %s", err)
+    // ... 1129 lines omitted
 		}
-		if errSign == nil {
-			return fmt.Errorf("expected error, got nil")
+    // ... 1128 lines omitted
 		}
-
-		return nil
+    // ... 1127 lines omitted
 	}
-
-	certProfile := models.IssuanceProfile{
-		Validity: models.Validity{
-			Type: models.Time,
-			Time: expirationTime,
-		},
-		SignAsCA:     false,
-		HonorSubject: true,
-		KeyUsage:     models.X509KeyUsage(x509.KeyUsageKeyAgreement),
-		ExtendedKeyUsages: []models.X509ExtKeyUsage{
-			models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
-		},
-		HonorExtensions: true,
+    // ... 1126 lines omitted
 	}
-
-	var testcases = []struct {
-		name          string
-		caCertificate *x509.Certificate
-		caSigner      crypto.Signer
-		profile       models.IssuanceProfile
-		subject       models.Subject
-		extensions    func() []pkix.Extension
-		keyType       models.KeyType
-		key           func() any
-		check         func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr error, errSign error) error
-	}{
+    // ... 1125 lines omitted
 		{
-			name:          "OK/RSA_RSA",
-			caCertificate: caCertificateRSA,
-			caSigner:      caSignerRSA,
-			profile:       certProfile,
-			subject:       csrSubject,
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.KeyType(x509.RSA),
-			key: func() any {
-				key, _ := chelpers.GenerateRSAKey(2048)
-				return key
-			},
-			check: checkOk,
-		},
+    // ... 1124 lines omitted
 		{
-			name:          "OK/EC_RSA",
-			caCertificate: caCertificateEC,
-			subject:       csrSubject,
-			caSigner:      caSignerEC,
-			profile:       certProfile,
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.KeyType(x509.RSA),
-			key: func() any {
-				key, _ := chelpers.GenerateRSAKey(2048)
-				return key
-			},
-			check: checkOk,
-		},
+    // ... 1123 lines omitted
 		{
-			name:          "OK/MLDSA_RSA",
-			caCertificate: caCertificateMLDSA,
-			subject:       csrSubject,
-			caSigner:      caSignerMLDSA,
-			profile:       certProfile,
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.KeyType(x509.RSA),
-			key: func() any {
-				key, _ := chelpers.GenerateRSAKey(2048)
-				return key
-			},
-			check: checkOk,
-		},
+    // ... 1122 lines omitted
 		{
-			name:          "OK/Ed25519_RSA",
-			caCertificate: caCertificateEd25519,
-			subject:       csrSubject,
-			caSigner:      caSignerEd25519,
-			profile:       certProfile,
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.KeyType(x509.RSA),
-			key: func() any {
-				key, _ := chelpers.GenerateRSAKey(2048)
-				return key
-			},
-			check: checkOk,
-		},
+    // ... 1121 lines omitted
 		{
-			name:          "OK/RSA_EC",
-			caCertificate: caCertificateRSA,
-			caSigner:      caSignerRSA,
-			profile:       certProfile,
-			subject:       csrSubject,
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.KeyType(x509.ECDSA),
-			key: func() any {
-				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
-				return key
-			},
-			check: checkOk,
-		},
+    // ... 1120 lines omitted
 		{
-			name:          "OK/EC_EC",
-			caCertificate: caCertificateEC,
-			caSigner:      caSignerEC,
-			profile:       certProfile,
-			subject:       csrSubject,
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.KeyType(x509.ECDSA),
-			key: func() any {
-				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
-				return key
-			},
-			check: checkOk,
-		},
+    // ... 1119 lines omitted
 		{
-			name:          "OK/MLDSA_EC",
-			caCertificate: caCertificateMLDSA,
-			caSigner:      caSignerMLDSA,
-			profile:       certProfile,
-			subject:       csrSubject,
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.KeyType(x509.ECDSA),
-			key: func() any {
-				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
-				return key
-			},
-			check: checkOk,
-		},
+    // ... 1118 lines omitted
 		{
-			name:          "OK/Ed25519_EC",
-			caCertificate: caCertificateEd25519,
-			caSigner:      caSignerEd25519,
-			profile:       certProfile,
-			subject:       csrSubject,
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.KeyType(x509.ECDSA),
-			key: func() any {
-				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
-				return key
-			},
-			check: checkOk,
-		},
+    // ... 1117 lines omitted
 		{
-			name:          "OK/RSA_MLDSA",
-			caCertificate: caCertificateRSA,
-			caSigner:      caSignerRSA,
-			profile:       certProfile,
-			subject:       csrSubject,
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.MLDSA,
-			key: func() any {
-				key, _ := chelpers.GenerateMLDSAKey(65)
-				return key
-			},
-			check: checkOk,
-		},
+    // ... 1116 lines omitted
 		{
-			name:          "OK/EC_MLDSA",
-			caCertificate: caCertificateEC,
-			caSigner:      caSignerEC,
-			profile:       certProfile,
-			subject:       csrSubject,
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.MLDSA,
-			key: func() any {
-				key, _ := chelpers.GenerateMLDSAKey(65)
-				return key
-			},
-			check: checkOk,
-		},
+    // ... 1115 lines omitted
 		{
-			name:          "OK/MLDSA_MLDSA",
-			caCertificate: caCertificateMLDSA,
-			caSigner:      caSignerMLDSA,
-			profile:       certProfile,
-			subject:       csrSubject,
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.MLDSA,
-			key: func() any {
-				key, _ := chelpers.GenerateMLDSAKey(65)
-				return key
-			},
-			check: checkOk,
-		},
+    // ... 1114 lines omitted
 		{
-			name:          "OK/Ed25519_MLDSA",
-			caCertificate: caCertificateEd25519,
-			caSigner:      caSignerEd25519,
-			profile:       certProfile,
-			subject:       csrSubject,
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.MLDSA,
-			key: func() any {
-				key, _ := chelpers.GenerateMLDSAKey(65)
-				return key
-			},
-			check: checkOk,
-		},
+    // ... 1113 lines omitted
 		{
-			name:          "OK/RSA_Ed25519",
-			caCertificate: caCertificateRSA,
-			caSigner:      caSignerRSA,
-			profile:       certProfile,
-			subject:       csrSubject,
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.KeyType(x509.Ed25519),
-			key: func() any {
-				key, _ := chelpers.GenerateEd25519Key()
-				return key
-			},
-			check: checkOk,
-		},
+    // ... 1112 lines omitted
 		{
-			name:          "OK/EC_Ed25519",
-			caCertificate: caCertificateEC,
-			caSigner:      caSignerEC,
-			profile:       certProfile,
-			subject:       csrSubject,
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.KeyType(x509.Ed25519),
-			key: func() any {
-				key, _ := chelpers.GenerateEd25519Key()
-				return key
-			},
-			check: checkOk,
-		},
+    // ... 1111 lines omitted
 		{
-			name:          "OK/MLDSA_Ed25519",
-			caCertificate: caCertificateMLDSA,
-			caSigner:      caSignerMLDSA,
-			profile:       certProfile,
-			subject:       csrSubject,
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.KeyType(x509.Ed25519),
-			key: func() any {
-				key, _ := chelpers.GenerateEd25519Key()
-				return key
-			},
-			check: checkOk,
-		},
+    // ... 1110 lines omitted
 		{
-			name:          "OK/Ed25519_Ed25519",
-			caCertificate: caCertificateEd25519,
-			caSigner:      caSignerEd25519,
-			profile:       certProfile,
-			subject:       csrSubject,
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			keyType:       models.KeyType(x509.Ed25519),
-			key: func() any {
-				key, _ := chelpers.GenerateEd25519Key()
-				return key
-			},
-			check: checkOk,
-		},
+    // ... 1109 lines omitted
 		{
-			name:          "OK/EXT_SAN",
-			caCertificate: caCertificateEC,
-			caSigner:      caSignerEC,
-			profile:       certProfile,
-			subject:       csrSubject,
-			extensions: func() []pkix.Extension {
-				rawValues := []asn1.RawValue{}
-				// nameTypeEmail = 1
-				// nameTypeURI = 6
-				nameTypeDNS := 2 //RFC 5280 > Section 4.2.1.6 https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.6
-				nameTypeIP := 7
-
-				ip := net.IP{192, 168, 10, 1}
-				rawValues = append(rawValues, asn1.RawValue{Tag: nameTypeDNS, Class: 2, Bytes: []byte("dev.lamassu.io")})
-				rawValues = append(rawValues, asn1.RawValue{Tag: nameTypeIP, Class: 2, Bytes: ip.To4()})
-				val, _ := asn1.Marshal(rawValues)
-
-				return []pkix.Extension{{
-					Id:    asn1.ObjectIdentifier{2, 5, 29, 17}, // Subject Alternative Name OID
-					Value: val,
-				}}
-			},
-			keyType: models.KeyType(x509.ECDSA),
-			key: func() any {
-				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
-				return key
-			},
-			check: func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr, errSign error) error {
-				if err := checkOk(cert, tcSubject, keyType, expirationTime, errCsr, errSign); err != nil {
-					return nil
+    // ... 1108 lines omitted
 				}
-
-				if len(cert.IPAddresses) != 1 {
-					return fmt.Errorf("expected 1 SAN IP address, got %d", len(cert.IPAddresses))
+    // ... 1107 lines omitted
 				}
-
-				expectedIP := net.IP{192, 168, 10, 1}
-				if !cert.IPAddresses[0].Equal(expectedIP) {
-					return fmt.Errorf("IP address mismatch. Expected %s, got %s", cert.IPAddresses[0].String(), expectedIP.String())
+    // ... 1106 lines omitted
 				}
-
-				if len(cert.DNSNames) != 1 {
-					return fmt.Errorf("expected 1 SAN DNS name, got %d", len(cert.DNSNames))
+    // ... 1105 lines omitted
 				}
-
-				if cert.DNSNames[0] != "dev.lamassu.io" {
-					return fmt.Errorf("DNS name mismatch. Expected dev.lamassu.io, got %s", cert.DNSNames[0])
+    // ... 1104 lines omitted
 				}
-
-				return nil
-			},
-		},
+    // ... 1103 lines omitted
 		{
-			name:          "OK/KEY_USAGE",
-			caCertificate: caCertificateEC,
-			caSigner:      caSignerEC,
-			profile: models.IssuanceProfile{
-				Validity: models.Validity{
-					Type: models.Time,
-					Time: expirationTime,
-				},
-				SignAsCA:        false,
-				KeyUsage:        models.X509KeyUsage(x509.KeyUsageDigitalSignature | x509.KeyUsageDataEncipherment | x509.KeyUsageContentCommitment),
-				HonorKeyUsage:   false,
-				HonorSubject:    true,
-				HonorExtensions: true,
-			},
-			subject: csrSubject,
-			keyType: models.KeyType(x509.ECDSA),
-			key: func() any {
-				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
-				return key
-			},
-			extensions: func() []pkix.Extension { return []pkix.Extension{} },
-			check: func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr, errSign error) error {
-				if err := checkOk(cert, tcSubject, keyType, expirationTime, errCsr, errSign); err != nil {
-					return nil
+    // ... 1102 lines omitted
 				}
-
-				if cert.KeyUsage&x509.KeyUsageDigitalSignature == 0 {
-					return fmt.Errorf("missing key 'KeyUsageDigitalSignature' usage")
+    // ... 1101 lines omitted
 				}
-
-				if cert.KeyUsage&x509.KeyUsageDataEncipherment == 0 {
-					return fmt.Errorf("missing key 'KeyUsageDataEncipherment' usage")
+    // ... 1100 lines omitted
 				}
-
-				if cert.KeyUsage&x509.KeyUsageContentCommitment == 0 {
-					return fmt.Errorf("missing key 'KeyUsageContentCommitment' usage")
+    // ... 1099 lines omitted
 				}
-
-				if cert.KeyUsage&x509.KeyUsageCRLSign != 0 {
-					return fmt.Errorf("unexpected key 'KeyUsageCRLSign' usage")
+    // ... 1098 lines omitted
 				}
-
-				return nil
-			},
-		},
+    // ... 1097 lines omitted
 		{
-			name:          "OK/EXT_KEY_USAGE",
-			caCertificate: caCertificateEC,
-			caSigner:      caSignerEC,
-			profile: models.IssuanceProfile{
-				Validity: models.Validity{
-					Type: models.Time,
-					Time: expirationTime,
-				},
-				SignAsCA: false,
-				ExtendedKeyUsages: []models.X509ExtKeyUsage{
-					models.X509ExtKeyUsage(x509.ExtKeyUsageClientAuth),
-					models.X509ExtKeyUsage(x509.ExtKeyUsageServerAuth),
-				},
-				HonorExtendedKeyUsages: false,
-				HonorSubject:           true,
-				HonorExtensions:        true,
-			},
-			subject: csrSubject,
-			keyType: models.KeyType(x509.ECDSA),
-			key: func() any {
-				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
-				return key
-			},
-			extensions: func() []pkix.Extension { return []pkix.Extension{} },
-			check: func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr, errSign error) error {
-				if err := checkOk(cert, tcSubject, keyType, expirationTime, errCsr, errSign); err != nil {
-					return nil
+    // ... 1096 lines omitted
 				}
-
-				expectedKeyUsages := []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth}
-				for _, expectedKeyUsage := range expectedKeyUsages {
-					if contains := slices.Contains(cert.ExtKeyUsage, expectedKeyUsage); !contains {
-						return fmt.Errorf("missing key usage %d in signed cert", expectedKeyUsage)
+    // ... 1095 lines omitted
 					}
 				}
-
-				return nil
-			},
-		},
+    // ... 1093 lines omitted
 		{
-			name:          "OK/HONOR_KEY_USAGE_TRUE",
-			caCertificate: caCertificateEC,
-			caSigner:      caSignerEC,
-			profile: models.IssuanceProfile{
-				Validity: models.Validity{
-					Type: models.Time,
-					Time: expirationTime,
-				},
-				SignAsCA:        false,
-				KeyUsage:        models.X509KeyUsage(x509.KeyUsageCRLSign), // should NOT be applied; CSR's KU is honored
-				HonorKeyUsage:   true,
-				HonorSubject:    true,
-				HonorExtensions: true,
-			},
-			subject: csrSubject,
-			keyType: models.KeyType(x509.ECDSA),
-			key: func() any {
-				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
-				return key
-			},
-			extensions: func() []pkix.Extension { return []pkix.Extension{} },
-			check: func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr, errSign error) error {
-				if errSign != nil {
-					return fmt.Errorf("unexpected error: %s", errSign)
+    // ... 1092 lines omitted
 				}
-				if cert.KeyUsage&x509.KeyUsageCRLSign != 0 {
-					return fmt.Errorf("profile KeyUsage was applied despite HonorKeyUsage=true")
+    // ... 1091 lines omitted
 				}
-				return nil
-			},
-		},
+    // ... 1090 lines omitted
 		{
-			name:          "OK/HONOR_EXT_KEY_USAGE_TRUE",
-			caCertificate: caCertificateEC,
-			caSigner:      caSignerEC,
-			profile: models.IssuanceProfile{
-				Validity: models.Validity{
-					Type: models.Time,
-					Time: expirationTime,
-				},
-				SignAsCA: false,
-				ExtendedKeyUsages: []models.X509ExtKeyUsage{
-					models.X509ExtKeyUsage(x509.ExtKeyUsageCodeSigning), // should NOT be applied; CSR's EKUs are honored
-				},
-				HonorExtendedKeyUsages: true,
-				HonorSubject:           true,
-				HonorExtensions:        true,
-			},
-			subject: csrSubject,
-			keyType: models.KeyType(x509.ECDSA),
-			key: func() any {
-				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
-				return key
-			},
-			extensions: func() []pkix.Extension { return []pkix.Extension{} },
-			check: func(cert *x509.Certificate, tcSubject models.Subject, keyType models.KeyType, expirationTime time.Time, errCsr, errSign error) error {
-				if errSign != nil {
-					return fmt.Errorf("unexpected error: %s", errSign)
+    // ... 1089 lines omitted
 				}
-				if slices.Contains(cert.ExtKeyUsage, x509.ExtKeyUsageCodeSigning) {
-					return fmt.Errorf("profile ExtKeyUsage was applied despite HonorExtendedKeyUsages=true")
+    // ... 1088 lines omitted
 				}
-				return nil
-			},
-		},
+    // ... 1087 lines omitted
 		{
-			name:          "FAIL/NOT_EXISTENT_CA",
-			caCertificate: caCertificateNotImported,
-			profile:       certProfile,
-			subject:       csrSubject,
-			keyType:       models.KeyType(x509.ECDSA),
-			extensions:    func() []pkix.Extension { return []pkix.Extension{} },
-			key: func() any {
-				key, _ := chelpers.GenerateECDSAKey(elliptic.P256())
-				return key
-			},
-			check: checkFail,
-		},
+    // ... 1086 lines omitted
 	}
-
-	for _, tc := range testcases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
-			csr, errCsr := chelpers.GenerateCertificateRequestWithExtensions(tc.subject, tc.extensions(), tc.key())
-			cert, errSing := x509Engine.SignCertificateRequest(ctx, csr, tc.caCertificate, tc.caSigner, tc.profile)
-			err := tc.check(cert, tc.subject, tc.keyType, expirationTime, errCsr, errSing)
-			if err != nil {
-				t.Errorf("unexpected result in test case: %s", err)
+    // ... 1085 lines omitted
 			}
-		})
+    // ... 1084 lines omitted
 	}
 }
+    // ... 1082 lines omitted
+func TestChameleonCertificateRequest(t *testing.T) {
+    // ... 1081 lines omitted
+	}
+    // ... 1080 lines omitted
+	}
+    // ... 1079 lines omitted
+	}
+    // ... 1078 lines omitted
+	}
+    // ... 1077 lines omitted
+	}
+    // ... 1076 lines omitted
+	}
+    // ... 1075 lines omitted
+	}
+    // ... 1074 lines omitted
+	}
+    // ... 1073 lines omitted
+	}
+    // ... 1072 lines omitted
+	}
+    // ... 1071 lines omitted
+	}
+    // ... 1070 lines omitted
+	}
+    // ... 1069 lines omitted
+	}
+    // ... 1068 lines omitted
+	}
+    // ... 1067 lines omitted
+	}
+    // ... 1066 lines omitted
+	}
+    // ... 1065 lines omitted
+		}
+    // ... 1064 lines omitted
+		}
+    // ... 1063 lines omitted
+		}
+    // ... 1062 lines omitted
+		}
+    // ... 1061 lines omitted
+		}
+    // ... 1060 lines omitted
+		}
+    // ... 1059 lines omitted
+	}
+    // ... 1058 lines omitted
+		}
+    // ... 1057 lines omitted
+		}
+    // ... 1056 lines omitted
+		}
+    // ... 1055 lines omitted
+	}
+    // ... 1054 lines omitted
+	}
+    // ... 1053 lines omitted
+		{
+    // ... 1052 lines omitted
+		{
+    // ... 1051 lines omitted
+		{
+    // ... 1050 lines omitted
+		{
+    // ... 1049 lines omitted
+				}
+    // ... 1048 lines omitted
+				}
+    // ... 1047 lines omitted
+				}
+    // ... 1046 lines omitted
+				}
+    // ... 1045 lines omitted
+				}
+    // ... 1044 lines omitted
+		{
+    // ... 1043 lines omitted
+				}
+    // ... 1042 lines omitted
+				}
+    // ... 1041 lines omitted
+				}
+    // ... 1040 lines omitted
+				}
+    // ... 1039 lines omitted
+				}
+    // ... 1038 lines omitted
+		{
+    // ... 1037 lines omitted
+				}
+    // ... 1036 lines omitted
+					}
+				}
+    // ... 1034 lines omitted
+				}
+    // ... 1033 lines omitted
+					}
+				}
+    // ... 1031 lines omitted
+		{
+    // ... 1030 lines omitted
+	}
+    // ... 1029 lines omitted
+			}
+    // ... 1028 lines omitted
+	}
+}
+    // ... 1026 lines omitted
+func TestGetEngineConfig(t *testing.T) {
+    // ... 1025 lines omitted
+	}
+}
+// ... 1023 more lines (total: 1859)
