@@ -3,8 +3,8 @@ package cryptoengines
 import (
 	"context"
 	"crypto"
-	"crypto/ed25519"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rsa"
 
