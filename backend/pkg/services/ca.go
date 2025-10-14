@@ -602,9 +602,6 @@ func (svc *CAServiceBackend) resolveCAIssuanceProfile(ctx context.Context, lFunc
 
 func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-	if input.Metadata == nil {
-		input.Metadata = map[string]any{}
-	}
 
 	var err error
 	caValidator.RegisterStructValidation(createCAValidation, services.CreateCAInput{})
@@ -818,7 +815,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	return svc.caStorage.Insert(ctx, &caCert)
 }
 
-// TODO --> Implement method
+// TODO --> Add Bound Certificate Support
 func (svc *CAServiceBackend) CreateHybridCA(ctx context.Context, input services.CreateHybridCAInput) (*models.CACertificate, error) {
 	var caCertificate *models.CACertificate
 	var err error
@@ -835,9 +832,6 @@ func (svc *CAServiceBackend) CreateHybridCA(ctx context.Context, input services.
 
 func (svc *CAServiceBackend) createChameleonCA(ctx context.Context, input services.CreateHybridCAInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-	if input.CreateCAInput.Metadata == nil {
-		input.CreateCAInput.Metadata = map[string]any{}
-	}
 
 	var err error
 	caValidator.RegisterStructValidation(createCAValidation, services.CreateCAInput{})
