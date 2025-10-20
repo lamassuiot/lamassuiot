@@ -182,6 +182,24 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 			Type:  "EC PRIVATE KEY",
 			Bytes: ecBytes,
 		}))
+	} else if input.KeyType == models.KeyType(x509.MLDSA) {
+		mldsaBytes, err := x509.MarshalPKCS8PrivateKey(input.CAMLDSAKey)
+		if err != nil {
+			return nil, err
+		}
+		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
+			Type:  "MLDSA PRIVATE KEY",
+			Bytes: mldsaBytes,
+		}))
+	} else if input.KeyType == models.KeyType(x509.Ed25519) {
+		ed25519Bytes, err := x509.MarshalPKCS8PrivateKey(input.CAEd25519Key)
+		if err != nil {
+			return nil, err
+		}
+		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
+			Type:  "Ed25519 PRIVATE KEY",
+			Bytes: ed25519Bytes,
+		}))
 	}
 
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/import", resources.ImportCABody{

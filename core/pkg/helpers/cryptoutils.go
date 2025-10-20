@@ -442,7 +442,7 @@ func LoadSystemCACertPoolWithExtraCAsFromFiles(casToAdd []string) *x509.CertPool
 	return certPool
 }
 
-func ValidateCertAndPrivKey(cert *x509.Certificate, rsaKey *rsa.PrivateKey, ecKey *ecdsa.PrivateKey) (bool, error) {
+func ValidateCertAndPrivKey(cert *x509.Certificate, rsaKey *rsa.PrivateKey, ecKey *ecdsa.PrivateKey, mldsaKey crypto.Signer, ed25519Key ed25519.PrivateKey) (bool, error) {
 	errs := []string{
 		"tls: private key type does not match public key type",
 		"tls: private key does not match public key",
@@ -471,6 +471,44 @@ func ValidateCertAndPrivKey(cert *x509.Certificate, rsaKey *rsa.PrivateKey, ecKe
 		}
 
 		_, err = tls.X509KeyPair(pemCert, pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyBytes}))
+		if err == nil {
+			return true, nil
+		}
+
+		contains := slices.Contains(errs, err.Error())
+		if contains {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	if mldsaKey != nil {
+		keyBytes, err := x509.MarshalPKCS8PrivateKey(mldsaKey)
+		if err != nil {
+			return false, err
+		}
+
+		_, err = tls.X509KeyPair(pemCert, pem.EncodeToMemory(&pem.Block{Type: "MLDSA PRIVATE KEY", Bytes: keyBytes}))
+		if err == nil {
+			return true, nil
+		}
+
+		contains := slices.Contains(errs, err.Error())
+		if contains {
+			return false, nil
+		}
+
+		return false, err
+	}
+
+	if ed25519Key != nil {
+		keyBytes, err := x509.MarshalPKCS8PrivateKey(ed25519Key)
+		if err != nil {
+			return false, err
+		}
+
+		_, err = tls.X509KeyPair(pemCert, pem.EncodeToMemory(&pem.Block{Type: "Ed25519 PRIVATE KEY", Bytes: keyBytes}))
 		if err == nil {
 			return true, nil
 		}

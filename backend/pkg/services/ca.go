@@ -616,6 +616,9 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	caID, engineID, engine, err := svc.validateCreateCAInputAndGetEngine(ctx, &input)
+	if err != nil {
+		return nil, err
+	}
 
 	var ca *x509.Certificate
 	var caLevel int
@@ -799,77 +802,70 @@ func (svc *CAServiceBackend) createChameleonCA(ctx context.Context, input servic
 		}
 	} else {
 		// Subordinate CA. Before creating a subordinate CA, it is required to check if the parent CA exists
-		// exists, baseParentCA, err := svc.caStorage.SelectExistsByID(ctx, input.CreateCAInput.ParentID)
-		// if err != nil {
-		// 	lFunc.Errorf("could not check if parent CA %s exists: %s", input.CreateCAInput.ParentID, err)
-		// 	return nil, err
-		// }
-		// if !exists {
-		// 	lFunc.Errorf("parent CA %s does not exist", input.CreateCAInput.ParentID)
-		// 	return nil, errs.ErrCANotFound
-		// }
-		//
-		// // Reconstruct the delta parent certificate
-		// baseParentCert := (*x509.Certificate)(baseParentCA.Certificate.Certificate)
-		// deltaParentCert, err := x509.ReconstructDeltaCertificate(baseParentCert)
-		// if err != nil {
-		// 	lFunc.Error("could not recover delta parent CA from base certificate")
-		// 	return nil, err
-		// }
-		//
-		// baseAkid = baseParentCA.Certificate.SubjectKeyID
-		// deltaAkid = baseParentCA.Metadata["delta_skid"].(string)
-		//
-		// // Generate a new KeyPair and CSR for the delta Certificate
-		// // NOTE -> It might be necessary to use a fake Id so that the Delta CSR is correctly created
-		// deltaCACSR, err := svc.RequestCACSR(ctx, services.RequestCAInput{
-		// 	ID:          input.CreateCAInput.ID,
-		// 	KeyMetadata: input.InnerKeyMetadata,
-		// 	Subject:     input.CreateCAInput.Subject,
-		// 	EngineID:    engineID,
-		// 	Metadata:    input.CreateCAInput.Metadata,
-		// })
-		// if err != nil {
-		// 	lFunc.Errorf("could not create Delta CA %s CSR: %s", input.CreateCAInput.Subject.CommonName, err)
-		// 	return nil, err
-		// }
-		//
-		// // Generate a new KeyPair and CSR for the base Certificate
-		// caCSR, err := svc.RequestCACSR(ctx, services.RequestCAInput{
-		// 	ID:          input.CreateCAInput.ID,
-		// 	KeyMetadata: input.CreateCAInput.KeyMetadata,
-		// 	Subject:     input.CreateCAInput.Subject,
-		// 	EngineID:    engineID,
-		// 	Metadata:    input.CreateCAInput.Metadata,
-		// })
-		// if err != nil {
-		// 	lFunc.Errorf("could not create Base CA %s CSR: %s", input.CreateCAInput.Subject.CommonName, err)
-		// 	return nil, err
-		// }
-		//
-		// deltaSkid = deltaCACSR.KeyId
-		// baseSkid = caCSR.KeyId
-		//
-		// // Sign the delta certificate
-		// signedDeltaCA, err := svc.SignCertificate(ctx, services.SignCertificateInput{
-		// 	CAID:            input.ParentID,
-		// 	CertRequest:     &caCSR.CSR,
-		// 	IssuanceProfile: engine.GetDefaultCAIssuanceProfile(ctx, input.CreateCAInput.CAExpiration),
-		// })
-		// if err != nil {
-		// 	lFunc.Errorf("could not sign CA %s certificate: %s", input.Subject.CommonName, err)
-		// 	return nil, err
-		// }
-		//
-		// ca = (*x509.Certificate)(signedCA.Certificate)
-		//
-		// // Update the CA level and issuer metadata
-		// caLevel = parentCA.Level + 1
-		// issuerCAMeta = models.IssuerCAMetadata{
-		// 	SN:    parentCA.Certificate.SerialNumber,
-		// 	ID:    parentCA.ID,
-		// 	Level: parentCA.Level,
-		// }
+		exists, baseParentCA, err := svc.caStorage.SelectExistsByID(ctx, input.CreateCAInput.ParentID)
+		if err != nil {
+			lFunc.Errorf("could not check if parent CA %s exists: %s", input.CreateCAInput.ParentID, err)
+			return nil, err
+		}
+		if !exists {
+			lFunc.Errorf("parent CA %s does not exist", input.CreateCAInput.ParentID)
+			return nil, errs.ErrCANotFound
+		}
+
+		baseAkid = baseParentCA.Certificate.SubjectKeyID
+		deltaAkid = baseParentCA.Metadata["delta_skid"].(string)
+
+		// Generate a new KeyPair and CSR for the delta Certificate
+		// NOTE -> maybe both Inner and Outer CA should have the same Id
+		deltaCACSR, err := svc.RequestCACSR(ctx, services.RequestCAInput{
+			ID:          "",
+			KeyMetadata: input.InnerKeyMetadata,
+			Subject:     input.CreateCAInput.Subject,
+			EngineID:    engineID,
+			Metadata:    input.CreateCAInput.Metadata,
+		})
+		if err != nil {
+			lFunc.Errorf("could not create Delta CA %s CSR: %s", input.CreateCAInput.Subject.CommonName, err)
+			return nil, err
+		}
+
+		// Generate a new KeyPair and CSR for the base Certificate
+		caCSR, err := svc.RequestCACSR(ctx, services.RequestCAInput{
+			ID:          input.CreateCAInput.ID,
+			KeyMetadata: input.CreateCAInput.KeyMetadata,
+			Subject:     input.CreateCAInput.Subject,
+			EngineID:    engineID,
+			Metadata:    input.CreateCAInput.Metadata,
+		})
+		if err != nil {
+			lFunc.Errorf("could not create Base CA %s CSR: %s", input.CreateCAInput.Subject.CommonName, err)
+			return nil, err
+		}
+
+		deltaSkid = deltaCACSR.KeyId
+		baseSkid = caCSR.KeyId
+
+		// Sign the certificate request
+		signedCA, err := svc.SignChameleonCertificate(ctx, services.SignChameleonCertificateInput{
+			CAID:             input.CreateCAInput.ParentID,
+			BaseCertRequest:  &caCSR.CSR,
+			DeltaCertRequest: &caCSR.CSR,
+			IssuanceProfile:  engine.GetDefaultCAIssuanceProfile(ctx, input.CreateCAInput.CAExpiration),
+		})
+		if err != nil {
+			lFunc.Errorf("could not sign CA %s certificate: %s", input.CreateCAInput.Subject.CommonName, err)
+			return nil, err
+		}
+
+		ca = (*x509.Certificate)(signedCA.Certificate)
+
+		// Update the CA level and issuer metadata
+		caLevel = baseParentCA.Level + 1
+		issuerCAMeta = models.IssuerCAMetadata{
+			SN:    baseParentCA.Certificate.SerialNumber,
+			ID:    baseParentCA.ID,
+			Level: baseParentCA.Level,
+		}
 	}
 
 	if err != nil {
@@ -1446,6 +1442,111 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	return &cert, nil
 }
 
+func (svc *CAServiceBackend) SignChameleonCertificate(ctx context.Context, input services.SignChameleonCertificateInput) (*models.Certificate, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := validate.Struct(input)
+	if err != nil {
+		lFunc.Errorf("SignCertificateInput struct validation error: %s", err)
+		return nil, errs.ErrCANotFound
+	}
+
+	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
+	if err != nil {
+		return nil, err
+	}
+
+	if ca.Certificate.Status != models.StatusActive {
+		lFunc.Errorf("%s CA is not active", ca.ID)
+		return nil, errs.ErrCAStatus
+	}
+
+	engine := svc.cryptoEngines[ca.Certificate.EngineID]
+	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomains)
+
+	baseCaCert := (*x509.Certificate)(ca.Certificate.Certificate)
+	baseCsr := (*x509.CertificateRequest)(input.BaseCertRequest)
+
+	deltaCaCert, err := x509.ReconstructDeltaCertificate(baseCaCert)
+	if err != nil {
+		return nil, err
+	}
+	deltaCsr := (*x509.CertificateRequest)(input.DeltaCertRequest)
+
+	baseCaCertSigner, err := x509Engine.GetCertificateSigner(ctx, baseCaCert)
+	if err != nil {
+		lFunc.Errorf("could not get CA %s signer: %s", baseCaCert.Subject.CommonName, err)
+		return nil, err
+	}
+	deltaCaCertSigner, err := x509Engine.GetCertificateSigner(ctx, deltaCaCert)
+	if err != nil {
+		lFunc.Errorf("could not get CA %s signer: %s", deltaCaCert.Subject.CommonName, err)
+		return nil, err
+	}
+
+	profile := &input.IssuanceProfile
+
+	if input.IssuanceProfileID != "" {
+		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+			ProfileID: input.IssuanceProfileID,
+		})
+		if err != nil {
+			lFunc.Errorf("could not get issuance profile %s: %s", input.IssuanceProfileID, err)
+			return nil, err
+		}
+	}
+
+	lFunc.Debugf("sign certificate request with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
+	x509Cert, err := x509Engine.SignChameleonCertificateRequest(ctx, deltaCsr, baseCsr, baseCaCert, deltaCaCertSigner, baseCaCertSigner, *profile)
+	if err != nil {
+		lFunc.Errorf("could not sign certificate request with %s CA", baseCaCert.Subject.CommonName)
+		return nil, err
+	}
+
+	ski, err := software.NewSoftwareCryptoEngine(lFunc).EncodePKIXPublicKeyDigest(x509Cert.PublicKey)
+	if err != nil {
+		lFunc.Errorf("could not encode public key digest for certificate %s: %s", x509Cert.Subject.CommonName, err)
+		return nil, err
+	}
+
+	aki, err := software.NewSoftwareCryptoEngine(lFunc).EncodePKIXPublicKeyDigest(baseCaCert.PublicKey)
+	if err != nil {
+		lFunc.Errorf("could not encode authority key identifier for CA %s: %s", baseCaCert.Subject.CommonName, err)
+		return nil, err
+	}
+
+	cert := models.Certificate{
+		VersionSchema: "1.0",
+		Metadata:      map[string]interface{}{},
+		Type:          models.CertificateTypeExternal,
+		Certificate:   (*models.X509Certificate)(x509Cert),
+		IssuerCAMetadata: models.IssuerCAMetadata{
+			SN: helpers.SerialNumberToHexString(baseCaCert.SerialNumber),
+			ID: ca.ID,
+		},
+		Status:              models.StatusActive,
+		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate(x509Cert),
+		Subject:             chelpers.PkixNameToSubject(x509Cert.Subject),
+		Issuer:              chelpers.PkixNameToSubject(x509Cert.Issuer),
+		SerialNumber:        helpers.SerialNumberToHexString(x509Cert.SerialNumber),
+		ValidFrom:           x509Cert.NotBefore,
+		ValidTo:             x509Cert.NotAfter,
+		RevocationTimestamp: time.Time{},
+		IsCA:                x509Cert.IsCA,
+		SubjectKeyID:        ski,
+		AuthorityKeyID:      aki,
+		EngineID:            "",
+	}
+
+	// CAs get inserted into the CA storage engine by the CreateCA method. Don't insert them here.
+	if !x509Cert.IsCA {
+		lFunc.Debugf("insert Certificate %s in storage engine", cert.SerialNumber)
+		return svc.certStorage.Insert(ctx, &cert)
+	}
+
+	return &cert, nil
+}
+
 // Generate a new Key Pair and Sign a CSR to create a new Certificate. The Keys are stored and can later be used to sign other material.
 func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (*models.Certificate, error) {
 	// Generate a new Key Pair
@@ -1838,16 +1939,12 @@ func importCAValidation(sl validator.StructLevel) {
 	caCert := ca.CACertificate
 
 	if ca.CAType == models.CertificateTypeImportedWithKey {
-		valid, err := chelpers.ValidateCertAndPrivKey((*x509.Certificate)(caCert), ca.CARSAKey, ca.CAECKey)
-		if err != nil {
+		valid, err := chelpers.ValidateCertAndPrivKey((*x509.Certificate)(caCert), ca.CARSAKey, ca.CAECKey, ca.CAMLDSAKey, ca.CAEd25519Key)
+		if err != nil || !valid {
 			sl.ReportError(ca.CARSAKey, "CARSAKey", "CARSAKey", "PrivateKeyAndCertificateNotMatch", "")
 			sl.ReportError(ca.CAECKey, "CAECKey", "CAECKey", "PrivateKeyAndCertificateNotMatch", "")
-		}
-
-		if !valid {
-			// lFunc.Errorf("CA certificate and the private key provided are not compatible")
-			sl.ReportError(ca.CARSAKey, "CARSAKey", "CARSAKey", "PrivateKeyAndCertificateNotMatch", "")
-			sl.ReportError(ca.CAECKey, "CAECKey", "CAECKey", "PrivateKeyAndCertificateNotMatch", "")
+			sl.ReportError(ca.CAMLDSAKey, "CAMLDSAKey", "CAMLDSAKey", "PrivateKeyAndCertificateNotMatch", "")
+			sl.ReportError(ca.CAEd25519Key, "CAEd25519Key", "CAEd25519Key", "PrivateKeyAndCertificateNotMatch", "")
 		}
 	}
 }

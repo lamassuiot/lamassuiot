@@ -1,7 +1,9 @@
 package controllers
 
 import (
-	circlSign "cloudflare/circl/sign"
+	"cloudflare/circl/sign/mldsa/mldsa44"
+	"cloudflare/circl/sign/mldsa/mldsa65"
+	"cloudflare/circl/sign/mldsa/mldsa87"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
@@ -312,8 +314,8 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		rsaKey = key
 	case *ecdsa.PrivateKey:
 		ecKey = key
-	case *circlSign.PrivateKey:
-		mldsaKey = *key
+	case *mldsa44.PrivateKey, *mldsa65.PrivateKey, *mldsa87.PrivateKey:
+		mldsaKey = (key).(crypto.Signer)
 	case ed25519.PrivateKey:
 		ed25519Key = key
 	}
@@ -328,9 +330,8 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		CAECKey:       ecKey,
 		CAMLDSAKey:    mldsaKey,
 		CAEd25519Key:  ed25519Key,
-
-		EngineID:    requestBody.EngineID,
-		CARequestID: requestBody.CARequestID,
+		EngineID:      requestBody.EngineID,
+		CARequestID:   requestBody.CARequestID,
 	})
 	if err != nil {
 		switch err {
