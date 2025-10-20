@@ -1278,14 +1278,35 @@ func TestCreateHybridCA(t *testing.T) {
 			},
 		},
 		{
-			name:   "OK/SubordinateChameleonCA",
-			before: func(svc services.CAService) error { return nil },
+			name: "OK/SubordinateChameleonCA",
+			before: func(svc services.CAService) error {
+				parentCA, err = svc.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
+					CreateCAInput: services.CreateCAInput{
+						ID:           "1111-2222-3333",
+						KeyMetadata:  models.KeyMetadata{Type: models.MLDSA, Bits: 65},
+						Subject:      models.Subject{CommonName: "Parent CA"},
+						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+						ProfileID:    profile.ID,
+					},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+					HybridCertificateType: models.HybridCertificateTypeChameleon,
+				})
+
+				return err
+			},
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				_, err := caSDK.GetCAByID(context.Background(), services.GetCAByIDInput{
+					CAID: parentCA.ID,
+				})
+				if err != nil {
+					fmt.Println(err)
+				}
 				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
 					CreateCAInput: services.CreateCAInput{
 						ID:           caID,
+						ParentID:     parentCA.ID,
 						KeyMetadata:  models.KeyMetadata{Type: models.MLDSA, Bits: 65},
-						Subject:      models.Subject{CommonName: "TestCA"},
+						Subject:      models.Subject{CommonName: "Subordinate CA"},
 						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
 						ProfileID:    profile.ID,
 					},
@@ -1313,15 +1334,15 @@ func TestCreateHybridCA(t *testing.T) {
 				_ = baseParentCert
 				err = fmt.Errorf("ReconstructDeltaCertificate: requires PQC-enabled Go build")
 				if err != nil {
-					return fmt.Errorf("could not get raw delta ertificate")
+					return fmt.Errorf("could not get raw delta certificate")
 				}
 
-				// Validate the hybrid CA certificates
-				err = baseParentCert.CheckSignature(baseCert.SignatureAlgorithm, baseCert.RawTBSCertificate, baseCert.Signature)
+				err = baseParentCert.CheckSignature(baseParentCert.SignatureAlgorithm, baseCert.RawTBSCertificate, baseCert.Signature)
 				if err != nil {
+					fmt.Println(err)
 					return fmt.Errorf("could not validate base certificate signature")
 				}
-				err = deltaParentCert.CheckSignature(deltaCert.SignatureAlgorithm, deltaCert.RawTBSCertificate, deltaCert.Signature)
+				err = deltaCert.CheckSignatureFrom(deltaParentCert)
 				if err != nil {
 					return fmt.Errorf("could not validate delta certificate signature")
 				}

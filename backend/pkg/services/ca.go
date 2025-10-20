@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -1756,6 +1757,10 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	return &cert, nil
 }
 
+func (svc *CAServiceBackend) SignChameleonCertificate(ctx context.Context, input services.SignChameleonCertificateInput) (*models.Certificate, error) {
+	return nil, fmt.Errorf("SignChameleonCertificate: requires PQC-enabled Go build")
+}
+
 func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -2169,6 +2174,26 @@ func createCAValidation(sl validator.StructLevel) {
 	if !helpers.ValidateValidity(ca.CAExpiration) {
 		// lFunc.Errorf("CA Expiration time ref is incompatible with the selected variable")
 		sl.ReportError(ca.CAExpiration, "CAExpiration", "CAExpiration", "InvalidCAExpiration", "")
+	}
+}
+
+func importCAValidation(sl validator.StructLevel) {
+	ca := sl.Current().Interface().(services.ImportCAInput)
+	caCert := ca.CACertificate
+
+	if ca.Key != nil {
+		var rsaKey *rsa.PrivateKey
+		var ecKey *ecdsa.PrivateKey
+		switch k := ca.Key.(type) {
+		case *rsa.PrivateKey:
+			rsaKey = k
+		case *ecdsa.PrivateKey:
+			ecKey = k
+		}
+		valid, err := chelpers.ValidateCertAndPrivKey((*x509.Certificate)(caCert), rsaKey, ecKey, nil, nil)
+		if err != nil || !valid {
+			sl.ReportError(ca.Key, "Key", "Key", "PrivateKeyAndCertificateNotMatch", "")
+		}
 	}
 }
 
