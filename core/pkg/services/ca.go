@@ -125,7 +125,7 @@ type CreateCAInput struct {
 }
 
 type CreateHybridCAInput struct {
-	CreateCAInput         CreateCAInput
+	CreateCAInput         CreateCAInput                `validate:"required"`
 	InnerKeyMetadata      models.KeyMetadata           `validate:"required"`
 	HybridCertificateType models.HybridCertificateType `validate:"required"`
 }
@@ -225,6 +225,14 @@ type CertificateKeySpec struct {
 	// KeyIdentifier references an existing KMS key by its PKCS11URI, Alias, or KeyID. A bare
 	// KeyID resolves only while a single engine holds the key.
 	KeyIdentifier string `json:"key_identifier"`
+}
+
+type SignChameleonCertificateInput struct {
+	CAID              string                         `validate:"required"`
+	DeltaCertRequest  *models.X509CertificateRequest `validate:"required"`
+	BaseCertRequest   *models.X509CertificateRequest `validate:"required"`
+	IssuanceProfile   models.IssuanceProfile
+	IssuanceProfileID string
 }
 
 type CreateCertificateInput struct {
