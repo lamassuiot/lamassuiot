@@ -20,6 +20,8 @@ The migration tool provides a standalone way to:
 
 ## Building
 
+### Local Binary
+
 From the root of the repository:
 
 ```bash
@@ -27,11 +29,23 @@ cd engines/storage/postgres/cmd/migrate-db
 go build -o migrate-db
 ```
 
-Or build from anywhere:
+### Docker Image
+
+**Important**: The Docker image must be built from the repository root to access all dependencies:
 
 ```bash
-go build -o migrate-db ./engines/storage/postgres/cmd/migrate-db
+## Docker
+
+### Build the Image
+
+The Docker image is built from the **repository root** using the Dockerfile in the `ci` folder:
+
+```bash
+cd /path/to/lamassuiot
+docker build -f ci/migrate-db.dockerfile -t lamassu/migrate-db:latest .
 ```
+
+### Run with Docker
 
 ## Usage
 
