@@ -1,14 +1,13 @@
 package controllers
 
 import (
-<<<<<<< HEAD
-=======
-	circlSign "cloudflare/circl/sign"
+	"cloudflare/circl/sign/mldsa/mldsa44"
+	"cloudflare/circl/sign/mldsa/mldsa65"
+	"cloudflare/circl/sign/mldsa/mldsa87"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
->>>>>>> b748cf05 (Added CA Sign and Verify support for MLDSA certificates. CRL generation and verification has been fixed)
 	"encoding/base64"
 
 	"github.com/gin-gonic/gin"
@@ -202,8 +201,6 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		}
 	}
 
-<<<<<<< HEAD
-=======
 	var keyType models.KeyType
 	var rsaKey *rsa.PrivateKey
 	var ecKey *ecdsa.PrivateKey
@@ -215,31 +212,23 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		rsaKey = key
 	case *ecdsa.PrivateKey:
 		ecKey = key
-	case *circlSign.PrivateKey:
-		mldsaKey = *key
+	case *mldsa44.PrivateKey, *mldsa65.PrivateKey, *mldsa87.PrivateKey:
+		mldsaKey = (key).(crypto.Signer)
 	case ed25519.PrivateKey:
 		ed25519Key = key
 	}
 
->>>>>>> b748cf05 (Added CA Sign and Verify support for MLDSA certificates. CRL generation and verification has been fixed)
 	ca, err := r.svc.ImportCA(ctx, services.ImportCAInput{
 		ID:            requestBody.ID,
 		ProfileID:     requestBody.ProfileID,
 		CACertificate: requestBody.CACertificate,
-<<<<<<< HEAD
-		Key:           key,
-		EngineID:      requestBody.EngineID,
-		CARequestID:   requestBody.CARequestID,
-=======
 		KeyType:       keyType,
 		CARSAKey:      rsaKey,
 		CAECKey:       ecKey,
 		CAMLDSAKey:    mldsaKey,
 		CAEd25519Key:  ed25519Key,
-
-		EngineID:    requestBody.EngineID,
-		CARequestID: requestBody.CARequestID,
->>>>>>> 0841445c (Added more tests for MLDSA CA creation. Modified the CryptoEngine interface to add the ImportMLDSAPrivateKey operation and added the required changes in the different engines.)
+		EngineID:      requestBody.EngineID,
+		CARequestID:   requestBody.CARequestID,
 	})
 	if err != nil {
 		switch err {

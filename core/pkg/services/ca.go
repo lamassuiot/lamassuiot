@@ -129,7 +129,7 @@ type CreateCAInput struct {
 }
 
 type CreateHybridCAInput struct {
-	CreateCAInput         CreateCAInput
+	CreateCAInput         CreateCAInput                `validate:"required"`
 	InnerKeyMetadata      models.KeyMetadata           `validate:"required"`
 	HybridCertificateType models.HybridCertificateType `validate:"required"`
 }
@@ -201,6 +201,14 @@ type SignCertificateInput struct {
 	CAID              string                         `validate:"required"`
 	CertRequest       *models.X509CertificateRequest `validate:"required"`
 	IssuanceProfile   *models.IssuanceProfile
+	IssuanceProfileID string
+}
+
+type SignChameleonCertificateInput struct {
+	CAID              string                         `validate:"required"`
+	DeltaCertRequest  *models.X509CertificateRequest `validate:"required"`
+	BaseCertRequest   *models.X509CertificateRequest `validate:"required"`
+	IssuanceProfile   models.IssuanceProfile
 	IssuanceProfileID string
 }
 

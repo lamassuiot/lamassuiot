@@ -3,6 +3,7 @@ package assemblers
 import (
 	"fmt"
 
+	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
@@ -59,21 +60,20 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 
 	lMessaging := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "Device Manager", "Event Bus")
 	lMessaging.Infof("Publisher Event Bus is enabled")
-<<<<<<< HEAD
 
 	if conf.PublisherEventBus.Enabled {
 		pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
 		if err != nil {
 			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
 		}
-=======
-	pub, err := eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
-	if err != nil {
-		return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
-	}
->>>>>>> e627fa83 (add event bus dlq)
 
+	var pub message.Publisher
 	if conf.PublisherEventBus.Enabled {
+		pub, err = eventbus.NewEventBusPublisher(conf.PublisherEventBus, serviceID, lMessaging)
+		if err != nil {
+			return nil, fmt.Errorf("could not create Event Bus publisher: %s", err)
+		}
+
 		svc = eventpub.NewDeviceEventPublisher(&eventpub.CloudEventPublisher{
 			Publisher: pub,
 			ServiceID: serviceID,
@@ -96,19 +96,11 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 			lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Device Manager", "Event Bus")
 			lMessaging.Infof("Subscriber Event Bus is enabled")
 
-<<<<<<< HEAD
 			subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
 			if err != nil {
 				lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
 				return nil, err
 			}
-=======
-		eventHandlers := handlers.NewDeviceEventHandler(lMessaging, svc)
-		subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManger-DEFAULT", []string{"certificate.#"}, pub, subscriber, lMessaging, *eventHandlers)
-		if err != nil {
-			return nil, fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
-		}
->>>>>>> e627fa83 (add event bus dlq)
 
 			eventHandlers := handlers.NewDeviceEventHandler(lMessaging, svc)
 			subHandler, err := ceventbus.NewEventBusMessageHandler("DeviceManger-DEFAULT", []string{"certificate.#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
