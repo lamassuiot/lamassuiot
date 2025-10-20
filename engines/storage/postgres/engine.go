@@ -26,6 +26,8 @@ const (
 	ALERTS_DB_NAME = "alerts"
 	VA_DB_NAME     = "va"
 	KMS_DB_NAME    = "kms"
+
+	skipMigrationsLogMsg = "Skipping automatic migrations (skip_migrations=true)"
 )
 
 type PostgresStorageEngine struct {
@@ -62,8 +64,12 @@ func (s *PostgresStorageEngine) initialiceCACertStorage() error {
 		return err
 	}
 
-	m := NewMigrator(s.logger, psqlCli)
-	m.MigrateToLatest()
+	if !s.Config.SkipMigrations {
+		m := NewMigrator(s.logger, psqlCli)
+		m.MigrateToLatest()
+	} else {
+		s.logger.Info(skipMigrationsLogMsg)
+	}
 
 	if s.CA == nil {
 		s.CA, err = NewCAPostgresRepository(s.logger, psqlCli)
@@ -135,8 +141,12 @@ func (s *PostgresStorageEngine) GetDeviceStorage() (storage.DeviceManagerRepo, e
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
 
-		m := NewMigrator(s.logger, psqlCli)
-		m.MigrateToLatest()
+		if !s.Config.SkipMigrations {
+			m := NewMigrator(s.logger, psqlCli)
+			m.MigrateToLatest()
+		} else {
+			s.logger.Info(skipMigrationsLogMsg)
+		}
 
 		deviceStore, err := NewDeviceManagerRepository(s.logger, psqlCli)
 		if err != nil {
@@ -155,8 +165,12 @@ func (s *PostgresStorageEngine) GetVARoleStorage() (storage.VARepo, error) {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
 
-		m := NewMigrator(s.logger, psqlCli)
-		m.MigrateToLatest()
+		if !s.Config.SkipMigrations {
+			m := NewMigrator(s.logger, psqlCli)
+			m.MigrateToLatest()
+		} else {
+			s.logger.Info(skipMigrationsLogMsg)
+		}
 
 		store, err := NewVARepository(s.logger, psqlCli)
 		if err != nil {
@@ -175,8 +189,12 @@ func (s *PostgresStorageEngine) GetDMSStorage() (storage.DMSRepo, error) {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
 
-		m := NewMigrator(s.logger, psqlCli)
-		m.MigrateToLatest()
+		if !s.Config.SkipMigrations {
+			m := NewMigrator(s.logger, psqlCli)
+			m.MigrateToLatest()
+		} else {
+			s.logger.Info(skipMigrationsLogMsg)
+		}
 
 		dmsStore, err := NewDMSManagerRepository(s.logger, psqlCli)
 		if err != nil {
@@ -207,8 +225,12 @@ func (s *PostgresStorageEngine) initialiceSubscriptionsStorage() error {
 		return err
 	}
 
-	m := NewMigrator(s.logger, psqlCli)
-	m.MigrateToLatest()
+	if !s.Config.SkipMigrations {
+		m := NewMigrator(s.logger, psqlCli)
+		m.MigrateToLatest()
+	} else {
+		s.logger.Info(skipMigrationsLogMsg)
+	}
 
 	if s.Subscriptions == nil {
 		s.Subscriptions, err = NewSubscriptionsPostgresRepository(s.logger, psqlCli)
@@ -234,8 +256,12 @@ func (s *PostgresStorageEngine) GetKMSStorage() (storage.KMSKeysRepo, error) {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
 
-		m := NewMigrator(s.logger, psqlCli)
-		m.MigrateToLatest()
+		if !s.Config.SkipMigrations {
+			m := NewMigrator(s.logger, psqlCli)
+			m.MigrateToLatest()
+		} else {
+			s.logger.Info(skipMigrationsLogMsg)
+		}
 
 		kmsStore, err := NewKMSPostgresRepository(s.logger, psqlCli)
 		if err != nil {
