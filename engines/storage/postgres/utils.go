@@ -29,6 +29,11 @@ import (
 //go:embed migrations/**
 var embedMigrations embed.FS
 
+// GetEmbeddedMigrations returns the embedded migrations filesystem
+func GetEmbeddedMigrations() embed.FS {
+	return embedMigrations
+}
+
 func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSEConfig, database string) (*gorm.DB, error) {
 	dbLogger := &GormLogger{
 		logger: logger,

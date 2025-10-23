@@ -21,7 +21,7 @@ RUN go work vendor
 
 ENV GOSUMDB=off
 RUN now=$(TZ=GMT date +"%Y-%m-%dT%H:%M:%SZ") && \
-    CGO_ENABLED=0 go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -mod vendor -o migrate-db engines/storage/postgres/cmd/migrate-db/main.go
+    CGO_ENABLED=0 go build -ldflags "-X main.version=$VERSION -X main.sha1ver=$SHA1VER -X main.buildTime=$now" -mod vendor -o goose-custom engines/storage/postgres/cmd/goose-custom/main.go
 
 # Use Alpine for minimal image
 FROM alpine:3.19
@@ -40,6 +40,6 @@ USER $USERNAME
 
 WORKDIR /home/$USERNAME
 
-COPY --from=builder /app/migrate-db ./migrate-db
+COPY --from=builder /app/goose-custom ./goose-custom
 
-ENTRYPOINT ["./migrate-db"]
+ENTRYPOINT ["./goose-custom"]
