@@ -533,6 +533,65 @@ func TestCreateHybridCA(t *testing.T) {
 				return nil
 			},
 		},
+		{
+			name:   "OK/Metadata",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				return caSDK.CreateHybridCA(context.Background(), services.CreateHybridCAInput{
+					CreateCAInput: services.CreateCAInput{
+						ID:           caID,
+						KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.MLDSA), Bits: 65},
+						Subject:      models.Subject{CommonName: "TestCA"},
+						CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+						ProfileID:    profile.ID,
+					},
+					InnerKeyMetadata:      models.KeyMetadata{Type: models.KeyType(x509.Ed25519)},
+					HybridCertificateType: models.HybridCertificateTypeChameleon,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				rawMetadata, ok := createdCA.Metadata["lamassu.io/certificate/chameleon"]
+				metadata := rawMetadata.(map[string]any)
+				if !ok {
+					t.Error("ca does not contain hybrid metadata")
+				}
+
+				// Helper function to reduce code duplication
+				checkMetadata := func(t *testing.T, metadata map[string]any, certificate *models.Certificate) {
+					if metadata["akid"] != certificate.AuthorityKeyID {
+						t.Errorf("hybrid ca metadata contains incorrect akid. Expected %v, got %v", certificate.AuthorityKeyID, metadata["akid"])
+					}
+
+					if metadata["skid"] != certificate.SubjectKeyID {
+						t.Errorf("hybrid ca metadata contains incorrect skid. Expected %v, got %v", certificate.SubjectKeyID, metadata["skid"])
+					}
+
+					if metadata["keyinfo"] != certificate.Certificate.PublicKeyAlgorithm.String() {
+						t.Errorf("hybrid ca metadata contains incorrect keyinfo. Expected %v, got %v", certificate.Certificate.PublicKeyAlgorithm.String(), metadata["keyinfo"])
+					}
+				}
+
+				// Check the base metadata
+				checkMetadata(t, metadata["base"].(map[string]any), &createdCA.Certificate)
+					
+				// Reconstruct the delta certificate and check the delta metadata.
+				// TODO -> find a way to test akid and skid
+				x509DeltaCert, err := x509.ReconstructDeltaCertificate((*x509.Certificate)(createdCA.Certificate.Certificate))
+				if err != nil {
+					t.Error(err)
+				}
+				deltaMetadata := metadata["delta"].(map[string]any)
+				if deltaMetadata["keyinfo"] != x509DeltaCert.PublicKeyAlgorithm.String() {
+					t.Errorf("hybrid ca metadata contains incorrect keyinfo. Expected %v, got %v", x509DeltaCert.PublicKeyAlgorithm.String(), metadata["keyinfo"])
+				}
+
+				return nil
+			},
+		},
 	}
 
 	for _, tc := range testcases {
