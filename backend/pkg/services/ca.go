@@ -784,8 +784,6 @@ func (svc *CAServiceBackend) createChameleonCA(ctx context.Context, input servic
 			"keyinfo": input.InnerKeyMetadata.Type.String(),
 		},
 	}
-	input.CreateCAInput.Metadata["delta_skid"] = deltaSkid
-	input.CreateCAInput.Metadata["delta_akid"] = deltaAkid
 
 	caCert := models.CACertificate{
 		ID:         caID,
