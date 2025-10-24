@@ -921,8 +921,20 @@ func (svc *CAServiceBackend) createChameleonCA(ctx context.Context, input servic
 	}
 
 	// TODO -> revisit key names
-	input.CreateCAInput.Metadata["delta-skid"] = deltaSkid
-	input.CreateCAInput.Metadata["delta-akid"] = deltaAkid
+	input.CreateCAInput.Metadata["lamassu.io/certificate/chameleon"] = map[string]map[string]string{
+		"base": {
+			"akid":    baseAkid,
+			"skid":    baseSkid,
+			"keyinfo": ca.PublicKeyAlgorithm.String(),
+		},
+		"delta": {
+			"akid":    deltaAkid,
+			"skid":    deltaSkid,
+			"keyinfo": input.InnerKeyMetadata.Type.String(),
+		},
+	}
+	input.CreateCAInput.Metadata["delta_skid"] = deltaSkid
+	input.CreateCAInput.Metadata["delta_akid"] = deltaAkid
 
 	caCert := models.CACertificate{
 		ID:         caID,
