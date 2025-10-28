@@ -1,4 +1,4 @@
-// This is custom goose-custom binary for Lamassu PostgreSQL databases.
+// This is custom goose-lamassu binary for Lamassu PostgreSQL databases.
 // Based on: https://github.com/pressly/goose/blob/main/examples/go-migrations/main.go
 
 package main
@@ -18,17 +18,17 @@ import (
 )
 
 var (
-	flags = flag.NewFlagSet("goose-custom", flag.ExitOnError)
+	flags = flag.NewFlagSet("goose-lamassu", flag.ExitOnError)
 )
 
 func init() {
 	flags.Usage = func() {
-		log.Println("Usage: goose-custom DBSTRING COMMAND [ARGS...]")
+		log.Println("Usage: goose-lamassu DBSTRING COMMAND [ARGS...]")
 		log.Println()
 		log.Println("Examples:")
-		log.Println(`  goose-custom "host=localhost user=postgres password=test dbname=ca port=5432 sslmode=disable" up`)
-		log.Println(`  goose-custom "host=localhost user=postgres password=test dbname=alerts port=5432 sslmode=disable" status`)
-		log.Println(`  goose-custom "host=localhost user=postgres password=test dbname=devicemanager port=5432 sslmode=disable" up-to 5`)
+		log.Println(`  goose-lamassu "host=localhost user=postgres password=test dbname=ca port=5432 sslmode=disable" up`)
+		log.Println(`  goose-lamassu "host=localhost user=postgres password=test dbname=alerts port=5432 sslmode=disable" status`)
+		log.Println(`  goose-lamassu "host=localhost user=postgres password=test dbname=devicemanager port=5432 sslmode=disable" up-to 5`)
 		log.Println()
 		log.Println("Valid databases: ca, devicemanager, dmsmanager, alerts, va, kms")
 		log.Println()
@@ -47,7 +47,7 @@ func init() {
 
 func main() {
 	if err := flags.Parse(os.Args[1:]); err != nil {
-		log.Fatalf("goose-custom: failed to parse flags: %v", err)
+		log.Fatalf("goose-lamassu: failed to parse flags: %v", err)
 	}
 	args := flags.Args()
 
@@ -56,31 +56,31 @@ func main() {
 		return
 	}
 
-	// Parse: goose-custom DBSTRING COMMAND [ARGS...]
-	// Example: goose-custom "host=localhost user=postgres password=test dbname=ca port=5432 sslmode=disable" up
+	// Parse: goose-lamassu DBSTRING COMMAND [ARGS...]
+	// Example: goose-lamassu "host=localhost user=postgres password=test dbname=ca port=5432 sslmode=disable" up
 	dbstring, command := args[0], args[1]
 
 	// Extract database name from connection string
 	dbName := extractDBName(dbstring)
 	if dbName == "" {
-		log.Fatalf("goose-custom: could not extract dbname from connection string")
+		log.Fatalf("goose-lamassu: could not extract dbname from connection string")
 	}
 
 	// Validate database name
 	validDatabases := []string{"ca", "devicemanager", "dmsmanager", "alerts", "va", "kms"}
 	if !contains(validDatabases, dbName) {
-		log.Fatalf("goose-custom: invalid database: %s. Must be one of: %s", dbName, strings.Join(validDatabases, ", "))
+		log.Fatalf("goose-lamassu: invalid database: %s. Must be one of: %s", dbName, strings.Join(validDatabases, ", "))
 	}
 
 	// Open database connection
 	db, err := goose.OpenDBWithDriver("postgres", dbstring)
 	if err != nil {
-		log.Fatalf("goose-custom: failed to open DB: %v", err)
+		log.Fatalf("goose-lamassu: failed to open DB: %v", err)
 	}
 
 	defer func() {
 		if err := db.Close(); err != nil {
-			log.Fatalf("goose-custom: failed to close DB: %v", err)
+			log.Fatalf("goose-lamassu: failed to close DB: %v", err)
 		}
 	}()
 
@@ -93,7 +93,7 @@ func main() {
 	migrationsDir := filepath.Join("migrations", dbName)
 	migrationsFS, err := fs.Sub(embeddedFS, migrationsDir)
 	if err != nil {
-		log.Fatalf("goose-custom: failed to get migrations subdirectory: %v", err)
+		log.Fatalf("goose-lamassu: failed to get migrations subdirectory: %v", err)
 	}
 
 	// Set the base FS for goose to use
@@ -108,7 +108,7 @@ func main() {
 
 	ctx := context.Background()
 	if err := goose.RunContext(ctx, command, db, ".", arguments...); err != nil {
-		log.Fatalf("goose-custom %v: %v", command, err)
+		log.Fatalf("goose-lamassu %v: %v", command, err)
 	}
 }
 

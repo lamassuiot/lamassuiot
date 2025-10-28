@@ -1,4 +1,4 @@
-# Lamassu PostgreSQL Migration Tool (goose-custom)
+# Lamassu PostgreSQL Migration Tool (goose-lamassu)
 
 This is a custom goose binary for managing Lamassu PostgreSQL database migrations independently, without needing to start the full services. It uses the [pressly/goose](https://github.com/pressly/goose) migration framework with embedded SQL and Go migrations.
 
@@ -6,7 +6,7 @@ This is a custom goose binary for managing Lamassu PostgreSQL database migration
 
 ## Overview
 
-The `goose-custom` tool provides direct access to goose's migration commands with Lamassu-specific embedded migrations. It:
+The `goose-lamassu` tool provides direct access to goose's migration commands with Lamassu-specific embedded migrations. It:
 - Uses the standard goose command-line interface
 - Supports all goose migration commands
 - Embeds SQL and Go migrations for all Lamassu databases
@@ -28,14 +28,14 @@ The `goose-custom` tool provides direct access to goose's migration commands wit
 From this directory:
 
 ```bash
-cd engines/storage/postgres/cmd/goose-custom
-go build -o goose-custom
+cd engines/storage/postgres/cmd/goose-lamassu
+go build -o goose-lamassu
 ```
 
 Or from the repository root:
 
 ```bash
-go build -o goose-custom ./engines/storage/postgres/cmd/goose-custom
+go build -o goose-lamassu ./engines/storage/postgres/cmd/goose-lamassu
 ```
 
 ## Usage
@@ -43,7 +43,7 @@ go build -o goose-custom ./engines/storage/postgres/cmd/goose-custom
 The tool follows the standard goose command-line pattern:
 
 ```bash
-goose-custom DBSTRING COMMAND [ARGS...]
+goose-lamassu DBSTRING COMMAND [ARGS...]
 ```
 
 Where:
@@ -68,7 +68,7 @@ Where:
 ### Migrate Up to Latest Version
 
 ```bash
-./goose-custom \
+./goose-lamassu \
   "host=localhost user=postgres password=test dbname=ca port=5432 sslmode=disable" \
   up
 ```
@@ -76,7 +76,7 @@ Where:
 ### Check Migration Status
 
 ```bash
-./goose-custom \
+./goose-lamassu \
   "host=localhost user=postgres password=test dbname=alerts port=5432 sslmode=disable" \
   status
 ```
@@ -84,7 +84,7 @@ Where:
 ### Migrate to Specific Version
 
 ```bash
-./goose-custom \
+./goose-lamassu \
   "host=localhost user=postgres password=test dbname=devicemanager port=5432 sslmode=disable" \
   up-to 5
 ```
@@ -92,7 +92,7 @@ Where:
 ### Roll Back One Migration
 
 ```bash
-./goose-custom \
+./goose-lamassu \
   "host=localhost user=postgres password=test dbname=va port=5432 sslmode=disable" \
   down
 ```
@@ -100,7 +100,7 @@ Where:
 ### Get Current Version
 
 ```bash
-./goose-custom \
+./goose-lamassu \
   "host=localhost user=postgres password=test dbname=dmsmanager port=5432 sslmode=disable" \
   version
 ```
@@ -113,7 +113,7 @@ export DB_USER=postgres
 export DB_PASS=test
 export DB_PORT=5432
 
-./goose-custom \
+./goose-lamassu \
   "host=$DB_HOST user=$DB_USER password=$DB_PASS dbname=ca port=$DB_PORT sslmode=disable" \
   up
 ```
@@ -126,14 +126,14 @@ The Docker image is built from the **repository root** using the Dockerfile in t
 
 ```bash
 cd /path/to/lamassuiot
-docker build -f ci/goose-custom.dockerfile -t lamassu/goose-custom:latest .
+docker build -f ci/goose-lamassu.dockerfile -t lamassu/goose-lamassu:latest .
 ```
 
 ### Run with Docker
 
 ```bash
 docker run --rm \
-  lamassu/goose-custom:latest \
+  lamassu/goose-lamassu:latest \
   "host=postgres-host user=postgres password=secret dbname=ca port=5432 sslmode=disable" \
   up
 ```
@@ -144,7 +144,7 @@ docker run --rm \
 version: '3.8'
 services:
   migrate:
-    image: lamassu/goose-custom:latest
+    image: lamassu/goose-lamassu:latest
     command: >
       "host=postgres user=postgres password=secret dbname=ca port=5432 sslmode=disable"
       up
@@ -163,7 +163,7 @@ migrate-ca:
   stage: deploy
   script:
     - |
-      ./goose-custom \
+      ./goose-lamassu \
         "host=$POSTGRES_HOST user=$POSTGRES_USER password=$POSTGRES_PASSWORD dbname=ca port=5432 sslmode=disable" \
         up
   only:
@@ -176,7 +176,7 @@ migrate-all:
       - DB: [ca, devicemanager, dmsmanager, alerts, va, kms]
   script:
     - |
-      ./goose-custom \
+      ./goose-lamassu \
         "host=$POSTGRES_HOST user=$POSTGRES_USER password=$POSTGRES_PASSWORD dbname=$DB port=5432 sslmode=disable" \
         up
   only:
@@ -188,7 +188,7 @@ migrate-all:
 ```yaml
 - name: Run Database Migrations
   run: |
-    ./goose-custom \
+    ./goose-lamassu \
       "host=${{ secrets.POSTGRES_HOST }} user=${{ secrets.POSTGRES_USER }} password=${{ secrets.POSTGRES_PASSWORD }} dbname=ca port=5432 sslmode=disable" \
       up
 ```
