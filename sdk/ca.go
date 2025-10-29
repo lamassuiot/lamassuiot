@@ -96,6 +96,8 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 			errs.ErrCAType,
 			errs.ErrCAIssuanceExpiration,
 			errs.ErrCAIncompatibleValidity,
+		},
+		404: {
 			errs.ErrIssuanceProfileNotFound,
 		},
 		409: {
@@ -166,6 +168,8 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 			errs.ErrCAIssuanceExpiration,
 			errs.ErrCAIncompatibleValidity,
 			errs.ErrCAValidCertAndPrivKey,
+		},
+		404: {
 			errs.ErrIssuanceProfileNotFound,
 		},
 	})
@@ -233,6 +237,7 @@ func (cli *httpCAClient) UpdateCAProfile(ctx context.Context, input services.Upd
 		},
 		404: {
 			errs.ErrCANotFound,
+			errs.ErrIssuanceProfileNotFound,
 		},
 	})
 	if err != nil {

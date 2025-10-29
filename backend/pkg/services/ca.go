@@ -1101,6 +1101,14 @@ func (svc *CAServiceBackend) UpdateCAProfile(ctx context.Context, input services
 		return nil, err
 	}
 
+	// Validate IssuanceProfileID exists
+	_, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+		ProfileID: input.ProfileID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	ca.ProfileID = input.ProfileID
 
 	lFunc.Debugf("updating %s CA profile to %s", input.CAID, input.ProfileID)
