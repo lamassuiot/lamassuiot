@@ -243,6 +243,30 @@ func TestCreateCA(t *testing.T) {
 				return nil
 			},
 		},
+		{
+			name:   "Error/InvalidIssuanceProfileID",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    "non-existent-profile-id",
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrIssuanceProfileNotFound) {
+					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrIssuanceProfileNotFound, err)
+				}
+
+				return nil
+			},
+		},
 	}
 
 	for _, tc := range testcases {
@@ -3606,6 +3630,68 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 					return fmt.Errorf("CA parent should be at level 1. Got %d", ca.Certificate.IssuerCAMetadata.Level)
 				}
 
+				return nil
+			},
+		},
+		{
+			name:   "Error/InvalidIssuanceProfileID-ImportedWithKey",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				ca, key, err := generateSelfSignedCA(x509.RSA)
+				if err != nil {
+					return nil, fmt.Errorf("Failed creating the certificate %s", err)
+				}
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:            "id-1234",
+					CAType:        models.CertificateTypeImportedWithKey,
+					ProfileID:     "non-existent-profile-id",
+					CACertificate: (*models.X509Certificate)(ca),
+					CARSAKey:      (key).(*rsa.PrivateKey),
+					KeyType:       models.KeyType(x509.RSA),
+				})
+
+				return importedCA, err
+			},
+			resultCheck: func(ca *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrIssuanceProfileNotFound) {
+					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrIssuanceProfileNotFound, err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "Error/MissingIssuanceProfileID-ImportedWithKey",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				ca, key, err := generateSelfSignedCA(x509.RSA)
+				if err != nil {
+					return nil, fmt.Errorf("Failed creating the certificate %s", err)
+				}
+
+				// ProfileID is required for ImportedWithKey type but not provided
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:            "id-1234",
+					CAType:        models.CertificateTypeImportedWithKey,
+					CACertificate: (*models.X509Certificate)(ca),
+					CARSAKey:      (key).(*rsa.PrivateKey),
+					KeyType:       models.KeyType(x509.RSA),
+				})
+
+				return importedCA, err
+			},
+			resultCheck: func(ca *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error. Got none")
+				}
+
+				// This should fail validation before reaching the profile check
+				// The error could be a validation error or profile not found error
 				return nil
 			},
 		},

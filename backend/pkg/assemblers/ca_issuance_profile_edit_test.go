@@ -246,6 +246,36 @@ func TestEditCAProfiles(t *testing.T) {
 				return nil
 			},
 		},
+		{
+			name: "Error/UpdateCAProfile-InvalidProfileID",
+			before: func(svc services.CAService) (string, string, error) {
+				// Create initial profile
+				initialProfile := createProfile(t, "InitialProfile", "Initial profile description", models.Validity{Type: models.Duration, Duration: issuanceDur})
+
+				// Create CA with initial profile
+				ca := createCA(t, "test-ca-invalid-profile", initialProfile.ID)
+
+				// Return a non-existent profile ID
+				return ca.ID, "non-existent-profile-id", nil
+			},
+			run: func(caSDK services.CAService, caID, newProfileID string) (*models.CACertificate, error) {
+				return caSDK.UpdateCAProfile(context.Background(), services.UpdateCAProfileInput{
+					CAID:      caID,
+					ProfileID: newProfileID,
+				})
+			},
+			resultCheck: func(originalCA *models.CACertificate, updatedCA *models.CACertificate, newProfileID string, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error for invalid profile ID. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrIssuanceProfileNotFound) {
+					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrIssuanceProfileNotFound, err)
+				}
+
+				return nil
+			},
+		},
 	}
 
 	for _, tc := range testcases {
