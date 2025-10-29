@@ -92,14 +92,14 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 		Metadata:     input.Metadata,
 	}, map[int][]error{
 		400: {
-			errs.ErrCAIncompatibleValidity,
+			errs.ErrValidateBadRequest,
+			errs.ErrCAType,
 			errs.ErrCAIssuanceExpiration,
+			errs.ErrCAIncompatibleValidity,
+			errs.ErrIssuanceProfileNotFound,
 		},
 		409: {
 			errs.ErrCAAlreadyExists,
-		},
-		500: {
-			errs.ErrCAIncompatibleValidity,
 		},
 	})
 	if err != nil {
@@ -123,9 +123,6 @@ func (cli *httpCAClient) RequestCACSR(ctx context.Context, input services.Reques
 		},
 		409: {
 			errs.ErrCAAlreadyExists,
-		},
-		500: {
-			errs.ErrCAIncompatibleValidity,
 		},
 	})
 	if err != nil {
@@ -162,7 +159,16 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 		CAChain:       input.CAChain,
 		CAPrivateKey:  privKey,
 		EngineID:      input.EngineID,
-	}, map[int][]error{})
+	}, map[int][]error{
+		400: {
+			errs.ErrValidateBadRequest,
+			errs.ErrCAType,
+			errs.ErrCAIssuanceExpiration,
+			errs.ErrCAIncompatibleValidity,
+			errs.ErrCAValidCertAndPrivKey,
+			errs.ErrIssuanceProfileNotFound,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}

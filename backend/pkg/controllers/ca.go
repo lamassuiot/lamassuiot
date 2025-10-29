@@ -74,6 +74,8 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAIncompatibleValidity:
 			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrIssuanceProfileNotFound:
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAAlreadyExists:
 			ctx.JSON(409, gin.H{"err": err.Error()})
 		default:
@@ -280,6 +282,8 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		case errs.ErrCAIncompatibleValidity:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAValidCertAndPrivKey:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrIssuanceProfileNotFound:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})
