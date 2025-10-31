@@ -746,25 +746,6 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterCA(ctx context.Context, inpu
 		return nil, err
 	}
 
-	defer func() {
-		if err != nil {
-			//report error in metadata
-			lFunc.Infof("updating CA %s metadata with error: %s", input.ID, err)
-			input.RegisterConfiguration.Registration.Status = IoTAWSCAMetadataRegistrationFailed
-			input.RegisterConfiguration.Registration.Error = err.Error()
-
-			_, err = svc.CaSDK.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
-				CAID: input.ID,
-				Patches: chelpers.NewPatchBuilder().
-					Add(chelpers.JSONPointerBuilder(AWSIoTMetadataKey(svc.ConnectorID)), input.RegisterConfiguration).
-					Build(),
-			})
-			if err != nil {
-				lFunc.Errorf("could not update CA metadata: %s", err)
-			}
-		}
-	}()
-
 	registerInput := &iot.RegisterCACertificateInput{
 		CaCertificate: aws.String(string(caCertBytes)),
 		Tags: []types.Tag{
