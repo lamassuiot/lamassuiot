@@ -216,6 +216,25 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			}
 		}
 
+		importedKey, err := svc.kmsService.ImportKey(ctx, services.ImportKeyInput{
+			PrivateKey: key,
+		})
+		if err != nil {
+			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
+			return nil, fmt.Errorf("could not import key: %w", err)
+		}
+
+		if importedKey.ID != skid {
+			importedKey, err = svc.kmsService.UpdateKeyID(ctx, services.UpdateKeyIDInput{
+				CurrentID: importedKey.ID,
+				NewID:     skid,
+			})
+			if err != nil {
+				lFunc.Errorf("could not rename imported key to match SKID %s: %s", skid, err)
+				return nil, fmt.Errorf("could not rename imported key: %w", err)
+			}
+		}
+
 		if err != nil {
 			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
 			return nil, fmt.Errorf("could not import key: %w", err)

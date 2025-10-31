@@ -793,7 +793,6 @@ func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.Si
 		if digest == nil {
 			return nil, errors.New("digest is nil")
 		}
-
 		signature, err = setup.Signer.Sign(rand.Reader, digest, setup.Hash)
 		if err != nil {
 			lFunc.Errorf("ECDSA Sign error: %s", err)
