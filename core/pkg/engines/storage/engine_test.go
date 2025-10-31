@@ -26,10 +26,6 @@ func (m *MockStorageEngine) GetIssuanceProfileStorage() (IssuanceProfileRepo, er
 	return nil, nil
 }
 
-func (m *MockStorageEngine) GetCACertificateRequestStorage() (CACertificateRequestRepo, error) {
-	return nil, nil
-}
-
 func (m *MockStorageEngine) GetDeviceStorage() (DeviceManagerRepo, error) {
 	return nil, nil
 }

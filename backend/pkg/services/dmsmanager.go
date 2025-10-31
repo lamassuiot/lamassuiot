@@ -885,7 +885,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	_, err = svc.caClient.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
 		SerialNumber: currentDeviceCertSN,
 		Patches: chelpers.NewPatchBuilder().
-			Remove(chelpers.JSONPointerBuilder(models.CAAttachedToDeviceKey)).
+			Remove(chelpers.JSONPointerBuilder(models.DMSAttachedToDeviceKey)).
 			Remove(chelpers.JSONPointerBuilder(models.CAMetadataMonitoringExpirationDeltasKey)).
 			Build(),
 	})
@@ -1138,7 +1138,7 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		SerialNumber: crt.SerialNumber,
 		Patches: chelpers.NewPatchBuilder().
 			Add(chelpers.JSONPointerBuilder(models.CAMetadataMonitoringExpirationDeltasKey), expirationDeltas).
-			Add(chelpers.JSONPointerBuilder(models.CAAttachedToDeviceKey), caAttachedToDevice).
+			Add(chelpers.JSONPointerBuilder(models.DMSAttachedToDeviceKey), caAttachedToDevice).
 			Build(),
 	})
 	if err != nil {
