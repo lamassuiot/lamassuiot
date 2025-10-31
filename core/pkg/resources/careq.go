@@ -22,23 +22,16 @@ var CAFilterableFields = map[string]FilterFieldType{
 	"profile_id":           StringFilterFieldType,
 }
 
-var CARequestFilterableFields = map[string]FilterFieldType{
-	"id":                  StringFilterFieldType,
-	"level":               NumberFilterFieldType,
-	"status":              EnumFilterFieldType,
-	"engine_id":           StringFilterFieldType,
-	"subject_common_name": StringFilterFieldType,
-	"issuer_metadata_id":  StringFilterFieldType,
-}
-
 var KMSFilterableFields = map[string]FilterFieldType{
-	"id":          StringFilterFieldType,
-	"algorithm":   StringFilterFieldType,
-	"size":        NumberFilterFieldType,
-	"public_key":  StringFilterFieldType,
-	"status":      StringFilterFieldType,
-	"creation_ts": DateFilterFieldType,
-	"name":        StringFilterFieldType,
+	"key_id":          StringFilterFieldType,
+	"engine_id":       StringFilterFieldType,
+	"has_private_key": EnumFilterFieldType,
+	"algorithm":       StringFilterFieldType,
+	"size":            NumberFilterFieldType,
+	"public_key":      StringFilterFieldType,
+	"status":          StringFilterFieldType,
+	"creation_ts":     DateFilterFieldType,
+	"name":            StringFilterFieldType,
 }
 
 var IssuanceProfileFiltrableFields = map[string]FilterFieldType{
@@ -137,6 +130,18 @@ type CreateKeyBody struct {
 	Size      int    `json:"size"`
 	EngineID  string `json:"engine_id"`
 	Name      string `json:"name"`
+}
+
+type UpdateKeyMetadataBody struct {
+	Patches []models.PatchOperation `json:"patches"`
+}
+
+type UpdateKeyAliasesBody struct {
+	Patches []models.PatchOperation `json:"patches"`
+}
+
+type UpdateKeyNameBody struct {
+	Name string `json:"name"`
 }
 
 type SignMessageBody struct {

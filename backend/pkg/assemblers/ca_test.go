@@ -30,52 +30,6 @@ import (
 const DefaultCAID = "111111-2222"
 const DefaultCACN = "MyCA"
 
-func TestCryptoEngines(t *testing.T) {
-	//serverTest, err := StartCAServiceTestServer(t, false)
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").WithVault().Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-	caTest := serverTest.CA
-
-	var testcases = []struct {
-		name        string
-		resultCheck func(engines []*models.CryptoEngineProvider, err error) error
-	}{
-		{
-			name: "OK/Got-2-Engines",
-			resultCheck: func(engines []*models.CryptoEngineProvider, err error) error {
-				if err != nil {
-					return fmt.Errorf("should've got no error, but got one: %s", err)
-				}
-
-				if len(engines) != 2 {
-					return fmt.Errorf("should've got two engines, but got %d", len(engines))
-				}
-
-				return nil
-			},
-		},
-	}
-
-	for _, tc := range testcases {
-		tc := tc
-
-		t.Run(tc.name, func(t *testing.T) {
-
-			err = serverTest.BeforeEach()
-			if err != nil {
-				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
-			}
-
-			err = tc.resultCheck(caTest.Service.GetCryptoEngineProvider(context.Background()))
-			if err != nil {
-				t.Fatalf("unexpected result in test case: %s", err)
-			}
-
-		})
-	}
-}
 func TestCreateCA(t *testing.T) {
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
@@ -3061,6 +3015,7 @@ func TestImportCA(t *testing.T) {
 	}
 
 	caTest := serverTest.CA
+	kmsTest := serverTest.KMS
 
 	generateSelfSignedCA := func(keyType x509.PublicKeyAlgorithm) (*x509.Certificate, any, error) {
 		var err error
@@ -3189,7 +3144,8 @@ func TestImportCA(t *testing.T) {
 				if err != nil {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
-				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
+
+				engines, _ := kmsTest.Service.GetCryptoEngineProvider(context.Background())
 				var engine *models.CryptoEngineProvider
 
 				if !engines[0].Default {
@@ -5025,6 +4981,7 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 	}
 
 	caTest := serverTest.CA
+	kmsTest := serverTest.KMS
 
 	var testcases = []struct {
 		name        string
@@ -5044,7 +5001,7 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 				caDurChild1 := models.TimeDuration(time.Hour * 24)
 
 				caIss := models.TimeDuration(time.Minute * 3)
-				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
+				engines, _ := kmsTest.Service.GetCryptoEngineProvider(context.Background())
 
 				// Create issuance profile for root CA
 				rootProfile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{

@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -180,6 +182,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		return nil, err
 	}
 
+	engineID := ""
 	if input.CAType == models.CertificateTypeImportedWithKey {
 		lFunc.Debugf("importing CA %s - %s  private key. CA type: %s", caCertSN, caCert.Subject.CommonName, input.CAType)
 
@@ -202,10 +205,12 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			return nil, fmt.Errorf("could not import key: %w", err)
 		}
 
-		if importedKey.ID != skid {
-			importedKey, err = svc.kmsService.UpdateKeyID(ctx, services.UpdateKeyIDInput{
-				CurrentID: importedKey.ID,
-				NewID:     skid,
+		engineID = importedKey.EngineID
+
+		if importedKey.KeyID != skid {
+			importedKey, err = svc.kmsService.UpdateKeyAliases(ctx, services.UpdateKeyAliasesInput{
+				ID:      importedKey.KeyID,
+				Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder("0"), skid).Build(), // Add skid at position 0
 			})
 			if err != nil {
 				lFunc.Errorf("could not rename imported key to match SKID %s: %s", skid, err)
@@ -449,30 +454,30 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	}
 
 	lFunc.Debugf("creating CA with common name: %s", input.Subject.CommonName)
-	engineID, engine, err := svc.getCryptoEngine(input.EngineID)
-	if err != nil {
-		lFunc.Errorf("could not get engine %s: %s", input.EngineID, err)
-	}
 
 	var ca *x509.Certificate
 	var caLevel int
 	var issuerCAMeta models.IssuerCAMetadata
 
+	key, err := svc.kmsService.CreateKey(ctx, services.CreateKeyInput{
+		Algorithm: input.KeyMetadata.Type.String(),
+		Size:      input.KeyMetadata.Bits,
+		EngineID:  input.EngineID,
+		Name:      fmt.Sprintf("Key For CA CN=%s", input.Subject.CommonName),
+	})
+
+	signer := NewKMSCryptoSigner(ctx, *key, svc.kmsService)
+	engine := x509engines.NewX509Engine(lFunc, svc.vaServerDomains, svc.kmsService)
+
 	var akid, skid string
+	skid = key.KeyID
 	// Check if CA is Root (self-signed) or Subordinate (signed by another CA). Non self-signed/root CAs require a parent CA
 	if input.ParentID == "" {
 		// Generate Key Pair to be used by the new CA
-		keyID, signer, err := engine.GenerateKeyPair(ctx, input.KeyMetadata)
-		if err != nil {
-			lFunc.Errorf("could not generate CA %s private key: %s", input.Subject.CommonName, err)
-			return nil, err
-		}
-
-		skid = keyID
-		akid = keyID
+		akid = key.KeyID
 
 		// Root CA. Root CAs can be generate directly
-		ca, err = engine.CreateRootCA(ctx, signer, keyID, input.Subject, input.CAExpiration)
+		ca, err = engine.CreateRootCA(ctx, signer, key.KeyID, input.Subject, input.CAExpiration)
 		if err != nil {
 			lFunc.Errorf("could not create CA %s certificate: %s", input.Subject.CommonName, err)
 			return nil, err
@@ -500,24 +505,28 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		akid = parentCA.Certificate.SubjectKeyID
 
 		// Generate a new Key Pair and a CSR for the CA
-		caCSR, err := svc.RequestCACSR(ctx, services.RequestCAInput{
-			ID:          input.ID,
-			KeyMetadata: input.KeyMetadata,
-			Subject:     input.Subject,
-			EngineID:    engineID,
-			Metadata:    input.Metadata,
-		})
+
+		csrDerBytes, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{
+			Subject: pkix.Name{
+				CommonName:         input.Subject.CommonName,
+				Country:            []string{input.Subject.Country},
+				Organization:       []string{input.Subject.Organization},
+				OrganizationalUnit: []string{input.Subject.OrganizationUnit},
+				Locality:           []string{input.Subject.Locality},
+				Province:           []string{input.Subject.State},
+			},
+		}, signer)
 		if err != nil {
-			lFunc.Errorf("could not create CA %s CSR: %s", input.Subject.CommonName, err)
+			lFunc.Errorf("could not create CSR for CA %s: %s", input.Subject.CommonName, err)
 			return nil, err
 		}
 
-		skid = caCSR.KeyId
+		csr, _ := x509.ParseCertificateRequest(csrDerBytes)
 		issuanceProfile := engine.GetDefaultCAIssuanceProfile(ctx, input.CAExpiration)
 
 		signedCA, err := svc.SignCertificate(ctx, services.SignCertificateInput{
 			CAID:            input.ParentID,
-			CertRequest:     &caCSR.CSR,
+			CertRequest:     (*models.X509CertificateRequest)(csr),
 			IssuanceProfile: &issuanceProfile,
 		})
 		if err != nil {
@@ -566,7 +575,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 			IssuerCAMetadata:    issuerCAMeta,
 			Metadata:            map[string]interface{}{},
 			Type:                models.CertificateTypeManaged,
-			EngineID:            engineID,
+			EngineID:            key.EngineID,
 			IsCA:                true,
 		},
 	}
@@ -811,13 +820,13 @@ func (svc *CAServiceBackend) UpdateCAMetadata(ctx context.Context, input service
 		return nil, err
 	}
 
-	updatedMetadata, err := chelpers.ApplyPatches(ca.Metadata, input.Patches)
+	updatedMetadata, err := chelpers.ApplyPatches[map[string]any](ca.Metadata, input.Patches)
 	if err != nil {
 		lFunc.Errorf("failed to apply patches to metadata for CA '%s': %v", input.CAID, err)
 		return nil, err
 	}
 
-	ca.Metadata = updatedMetadata
+	ca.Metadata = *updatedMetadata
 
 	lFunc.Debugf("updating %s CA metadata", input.CAID)
 	return svc.caStorage.Update(ctx, ca)
@@ -984,15 +993,9 @@ func (svc *CAServiceBackend) handleCascadeOperations(ctx context.Context, ca *mo
 }
 
 // deleteCAPrivateKey deletes the private key associated with a CA from its crypto engine
-func (svc *CAServiceBackend) deleteCAPrivateKey(ca *models.CACertificate, lFunc *logrus.Entry) {
+func (svc *CAServiceBackend) deleteCAPrivateKey(ctx context.Context, ca *models.CACertificate, lFunc *logrus.Entry) {
 	if ca.Certificate.EngineID == "" {
 		lFunc.Debugf("no engine ID specified for CA %s, skipping private key deletion", ca.ID)
-		return
-	}
-
-	engine, exists := svc.cryptoEngines[ca.Certificate.EngineID]
-	if !exists {
-		lFunc.Warnf("crypto engine %s not found for CA %s, skipping private key deletion", ca.Certificate.EngineID, ca.ID)
 		return
 	}
 
@@ -1003,7 +1006,9 @@ func (svc *CAServiceBackend) deleteCAPrivateKey(ca *models.CACertificate, lFunc 
 		return
 	}
 
-	err = (*engine).DeleteKey(keyID)
+	err = svc.kmsService.DeleteKeyByID(ctx, services.GetKeyInput{
+		Identifier: keyID,
+	})
 	if err != nil {
 		lFunc.Warnf("could not delete private key for CA %s from crypto engine %s: %s", ca.ID, ca.Certificate.EngineID, err)
 	} else {
@@ -1050,7 +1055,7 @@ func (svc *CAServiceBackend) DeleteCA(ctx context.Context, input services.Delete
 	}
 
 	// Finally, delete the private key from the crypto engine
-	svc.deleteCAPrivateKey(ca, lFunc)
+	svc.deleteCAPrivateKey(ctx, ca, lFunc)
 
 	return nil
 }
@@ -1074,12 +1079,12 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		return nil, errs.ErrCAStatus
 	}
 
-	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomains)
+	engine := x509engines.NewX509Engine(lFunc, svc.vaServerDomains, svc.kmsService)
 
 	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
 	csr := (*x509.CertificateRequest)(input.CertRequest)
 
-	caCertSigner, err := x509Engine.GetCertificateSigner(ctx, caCert)
+	caCertSigner := NewCertificateSigner(ctx, &ca.Certificate, svc.kmsService)
 	if err != nil {
 		lFunc.Errorf("could not get CA %s signer: %s", caCert.Subject.CommonName, err)
 		return nil, err
@@ -1109,8 +1114,8 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 		}
 	}
 
-	lFunc.Debugf("sign certificate request with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
-	x509Cert, err := x509Engine.SignCertificateRequest(ctx, csr, caCert, caCertSigner, *profile)
+	lFunc.Debugf("sign certificate request with %s CA", input.CAID)
+	x509Cert, err := engine.SignCertificateRequest(ctx, csr, caCert, caCertSigner, *profile)
 	if err != nil {
 		lFunc.Errorf("could not sign certificate request with %s CA", caCert.Subject.CommonName)
 		return nil, err
@@ -1256,10 +1261,10 @@ func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input services.S
 		return nil, errs.ErrCANotFound
 	}
 
-	engine := svc.cryptoEngines[ca.Certificate.EngineID]
-	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomains)
-	lFunc.Debugf("sign signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
-	signature, err := x509Engine.Sign(ctx, (*x509.Certificate)(ca.Certificate.Certificate), input.Message, input.MessageType, input.SigningAlgorithm)
+	certSigner := NewCertificateSigner(ctx, &ca.Certificate, svc.kmsService)
+
+	lFunc.Debugf("sign signature with %s Certificate", ca.Certificate.SerialNumber)
+	signature, err := certSigner.Sign(rand.Reader, input.Message, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1286,10 +1291,12 @@ func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input services
 		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
 		return false, errs.ErrCANotFound
 	}
-	engine := svc.cryptoEngines[ca.Certificate.EngineID]
-	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomains)
-	lFunc.Debugf("verify signature with %s CA and %s crypto engine", input.CAID, x509Engine.GetEngineConfig().Provider)
-	return x509Engine.Verify(ctx, (*x509.Certificate)(ca.Certificate.Certificate), input.Signature, input.Message, input.MessageType, input.SigningAlgorithm)
+
+	res, err := svc.kmsService.VerifySignature(ctx, services.VerifySignInput{
+		Identifier: ca.Certificate.SubjectKeyID,
+	})
+
+	return res.Valid, err
 }
 
 // Returned Error Codes:
@@ -1469,13 +1476,13 @@ func (svc *CAServiceBackend) UpdateCertificateMetadata(ctx context.Context, inpu
 		return nil, err
 	}
 
-	updatedMetadata, err := chelpers.ApplyPatches(cert.Metadata, input.Patches)
+	updatedMetadata, err := chelpers.ApplyPatches[map[string]any](cert.Metadata, input.Patches)
 	if err != nil {
 		lFunc.Errorf("failed to apply patches to metadata for Certificate '%s': %v", input.SerialNumber, err)
 		return nil, err
 	}
 
-	cert.Metadata = updatedMetadata
+	cert.Metadata = *updatedMetadata
 
 	lFunc.Debugf("updating %s certificate metadata", input.SerialNumber)
 	return svc.certStorage.Update(ctx, cert)

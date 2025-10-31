@@ -1,14 +1,11 @@
 package main
 
 import (
-	"fmt"
-
 	lamassu "github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
@@ -23,9 +20,9 @@ func main() {
 	log.SetFormatter(helpers.LogFormatter)
 	log.Infof("starting api: version=%s buildTime=%s sha1ver=%s", version, buildTime, sha1ver)
 
-	conf, err := cconfig.LoadConfig[config.VAconfig](nil)
+	conf, err := cconfig.LoadConfig[config.KMSConfig](nil)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("something went wrong while loading config. Exiting: %s", err)
 	}
 
 	globalLogLevel, err := log.ParseLevel(string(conf.Logs.Level))
@@ -46,35 +43,13 @@ func main() {
 	log.Debugf("%s", confBytes)
 	log.Debugf("===================================================")
 
-	lCAClient := helpers.SetupLogger(conf.CAClient.LogLevel, "VA", "LMS SDK - CA Client")
-	caHttpCli, err := sdk.BuildHTTPClient(conf.CAClient.HTTPClient, lCAClient)
-	if err != nil {
-		log.Fatalf("could not build HTTP CA Client: %s", err)
-	}
-
-	caSDK := sdk.NewHttpCAClient(
-		sdk.HttpClientWithSourceHeaderInjector(caHttpCli, models.VASource),
-		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
-	)
-
-	lKMSClient := helpers.SetupLogger(conf.KMSClient.LogLevel, "VA", "LMS SDK - KMS Client")
-	kmsHttpCli, err := sdk.BuildHTTPClient(conf.KMSClient.HTTPClient, lKMSClient)
-	if err != nil {
-		log.Fatalf("could not build HTTP KMS Client: %s", err)
-	}
-
-	kmsSDK := sdk.NewHttpKMSClient(
-		sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, models.VASource),
-		fmt.Sprintf("%s://%s:%d%s", conf.KMSClient.Protocol, conf.KMSClient.Hostname, conf.KMSClient.Port, conf.KMSClient.BasePath),
-	)
-
-	_, _, _, err = lamassu.AssembleVAServiceWithHTTPServer(*conf, caSDK, kmsSDK, models.APIServiceInfo{
+	_, _, err = lamassu.AssembleKMSServiceWithHTTPServer(*conf, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,
 	})
 	if err != nil {
-		log.Fatalf("could not run VA Server. Exiting: %s", err)
+		log.Fatalf("could not run KMS Server. Exiting: %s", err)
 	}
 
 	forever := make(chan struct{})

@@ -11,23 +11,24 @@ type KMSService interface {
 	GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error)
 
 	GetKeys(ctx context.Context, input GetKeysInput) (string, error)
-	GetKeyByID(ctx context.Context, input GetKeyByIDInput) (*models.Key, error)
+	GetKey(ctx context.Context, input GetKeyInput) (*models.Key, error)
 
 	CreateKey(ctx context.Context, input CreateKeyInput) (*models.Key, error)
 	ImportKey(ctx context.Context, input ImportKeyInput) (*models.Key, error)
 
 	UpdateKeyMetadata(ctx context.Context, input UpdateKeyMetadataInput) (*models.Key, error)
-	UpdateKeyAlias(ctx context.Context, input UpdateKeyAliasInput) (*models.Key, error)
-	UpdateKeyID(ctx context.Context, input UpdateKeyIDInput) (*models.Key, error)
+	UpdateKeyAliases(ctx context.Context, input UpdateKeyAliasesInput) (*models.Key, error)
+	UpdateKeyName(ctx context.Context, input UpdateKeyNameInput) (*models.Key, error)
 
-	DeleteKeyByID(ctx context.Context, input GetKeyByIDInput) error
+	DeleteKeyByID(ctx context.Context, input GetKeyInput) error
 
 	SignMessage(ctx context.Context, input SignMessageInput) (*models.MessageSignature, error)
 	VerifySignature(ctx context.Context, input VerifySignInput) (*models.MessageValidation, error)
 }
 
-type GetKeyByIDInput struct {
-	ID string `validate:"required"`
+// Identifier can be either KeyID, Alias, or PKCS11URI
+type GetKeyInput struct {
+	Identifier string `validate:"required"`
 }
 
 type GetKeysInput struct {
@@ -41,15 +42,16 @@ type CreateKeyInput struct {
 	Name      string `validate:"required"`
 }
 
+// Identifier can be either KeyID, Alias, or PKCS11URI
 type SignMessageInput struct {
-	KeyID       string                 `validate:"required"`
+	Identifier  string                 `validate:"required"`
 	Algorithm   string                 `validate:"required"`
 	Message     []byte                 `validate:"required"`
 	MessageType models.SignMessageType `validate:"required"`
 }
 
 type VerifySignInput struct {
-	KeyID       string                 `validate:"required"`
+	Identifier  string                 `validate:"required"`
 	Algorithm   string                 `validate:"required"`
 	Signature   []byte                 `validate:"required"`
 	Message     []byte                 `validate:"required"`
@@ -67,9 +69,14 @@ type UpdateKeyMetadataInput struct {
 	Patches []models.PatchOperation `validate:"required"`
 }
 
-type UpdateKeyAliasInput struct {
-	ID    string `validate:"required"`
-	Alias string `validate:"required"`
+type UpdateKeyAliasesInput struct {
+	ID      string                  `validate:"required"`
+	Patches []models.PatchOperation `validate:"required"`
+}
+
+type UpdateKeyNameInput struct {
+	ID   string `validate:"required"`
+	Name string `validate:"required"`
 }
 
 type UpdateKeyIDInput struct {

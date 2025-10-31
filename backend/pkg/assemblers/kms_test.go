@@ -18,8 +18,8 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
-func StartKMSServiceTestServer(t *testing.T, withEventBus bool) (*CATestServer, error) {
-	builder := TestServiceBuilder{}.WithDatabase("ca", "kms").WithVault()
+func StartKMSServiceTestServer(t *testing.T, withEventBus bool) (*KMSTestServer, error) {
+	builder := TestServiceBuilder{}.WithDatabase("kms").WithVault()
 	testServer, err := builder.Build(t)
 
 	if err != nil {
@@ -31,38 +31,83 @@ func StartKMSServiceTestServer(t *testing.T, withEventBus bool) (*CATestServer, 
 		t.Fatalf("could not run 'BeforeEach' cleanup func in test case: %s", err)
 	}
 
-	return testServer.CA, nil
+	return testServer.KMS, nil
 }
 
-func TestCreateKey(t *testing.T) {
-	caTest, err := StartKMSServiceTestServer(t, false)
+func TestCryptoEngines(t *testing.T) {
+	kmsTest, err := StartKMSServiceTestServer(t, false)
 	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
+		t.Fatalf("could not create KMS test server: %s", err)
 	}
 
 	var testcases = []struct {
 		name        string
-		before      func(svc services.CAService) error
-		run         func(caSDK services.CAService) (*models.Key, error)
+		resultCheck func(engines []*models.CryptoEngineProvider, err error) error
+	}{
+		{
+			name: "OK/Got-2-Engines",
+			resultCheck: func(engines []*models.CryptoEngineProvider, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've got no error, but got one: %s", err)
+				}
+
+				if len(engines) != 2 {
+					return fmt.Errorf("should've got two engines, but got %d", len(engines))
+				}
+
+				return nil
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+
+			err = kmsTest.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
+			}
+
+			err = tc.resultCheck(kmsTest.Service.GetCryptoEngineProvider(context.Background()))
+			if err != nil {
+				t.Fatalf("unexpected result in test case: %s", err)
+			}
+
+		})
+	}
+}
+
+func TestCreateKey(t *testing.T) {
+	kmsTest, err := StartKMSServiceTestServer(t, false)
+	if err != nil {
+		t.Fatalf("could not create KMS test server: %s", err)
+	}
+
+	var testcases = []struct {
+		name        string
+		before      func(svc services.KMSService) error
+		run         func(kmsSDK services.KMSService) (*models.Key, error)
 		resultCheck func(createdKey *models.Key, err error) error
 	}{
 		{
 			name:   "OK/KeyType-RSA-DefaultEngine",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.Key, error) {
-				return caSDK.CreateKey(context.Background(), services.CreateKeyInput{
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
 					Name:      "Test RSA Key",
 					Algorithm: "RSA",
 					Size:      2048,
 				})
 			},
 			resultCheck: func(createdKey *models.Key, err error) error {
-				keyUriParts, err := parsePKCS11URI(createdKey.ID)
+				keyUriParts, err := parsePKCS11URI(createdKey.PKCS11URI)
 				if err != nil {
 					return fmt.Errorf("failed to parse created key ID as PKCS#11 URI: %s", err)
 				}
 
-				if createdKey == nil || createdKey.Name != "Test RSA Key" || createdKey.Algorithm != "RSA" || createdKey.Size != 2048 || !strings.HasPrefix(createdKey.ID, "pkcs11:") || keyUriParts["token-id"] != "filesystem-1" {
+				if createdKey == nil || createdKey.Name != "Test RSA Key" || createdKey.Algorithm != "RSA" || createdKey.Size != 2048 || !strings.HasPrefix(createdKey.PKCS11URI, "pkcs11:") || keyUriParts["token-id"] != "filesystem-1" {
 					return fmt.Errorf("unexpected key result for RSA DefaultEngine: %+v", createdKey)
 				}
 
@@ -75,9 +120,9 @@ func TestCreateKey(t *testing.T) {
 		},
 		{
 			name:   "OK/KeyType-RSA-NonDefaultEngine",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.Key, error) {
-				return caSDK.CreateKey(context.Background(), services.CreateKeyInput{
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
 					Name:      "Test RSA Key Vault",
 					Algorithm: "RSA",
 					Size:      2048,
@@ -85,12 +130,12 @@ func TestCreateKey(t *testing.T) {
 				})
 			},
 			resultCheck: func(createdKey *models.Key, err error) error {
-				keyUriParts, err := parsePKCS11URI(createdKey.ID)
+				keyUriParts, err := parsePKCS11URI(createdKey.PKCS11URI)
 				if err != nil {
 					return fmt.Errorf("failed to parse created key ID as PKCS#11 URI: %s", err)
 				}
 
-				if createdKey == nil || createdKey.Name != "Test RSA Key Vault" || createdKey.Algorithm != "RSA" || createdKey.Size != 2048 || !strings.HasPrefix(createdKey.ID, "pkcs11:") || keyUriParts["token-id"] != "vault-1" {
+				if createdKey == nil || createdKey.Name != "Test RSA Key Vault" || createdKey.Algorithm != "RSA" || createdKey.Size != 2048 || !strings.HasPrefix(createdKey.PKCS11URI, "pkcs11:") || keyUriParts["token-id"] != "vault-1" {
 					return fmt.Errorf("unexpected key result for RSA NonDefaultEngine: %+v", createdKey)
 				}
 
@@ -103,9 +148,9 @@ func TestCreateKey(t *testing.T) {
 		},
 		{
 			name:   "OK/KeyType-RSA",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.Key, error) {
-				return caSDK.CreateKey(context.Background(), services.CreateKeyInput{
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
 					Name:      "Test RSA Key",
 					Algorithm: "RSA",
 					Size:      2048,
@@ -122,9 +167,9 @@ func TestCreateKey(t *testing.T) {
 		},
 		{
 			name:   "OK/KeyType-RSA-3072",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.Key, error) {
-				return caSDK.CreateKey(context.Background(), services.CreateKeyInput{
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
 					Name:      "Test RSA 3072 Key",
 					Algorithm: "RSA",
 					Size:      3072,
@@ -143,9 +188,9 @@ func TestCreateKey(t *testing.T) {
 		},
 		{
 			name:   "OK/KeyType-RSA-4096",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.Key, error) {
-				return caSDK.CreateKey(context.Background(), services.CreateKeyInput{
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
 					Name:      "Test RSA 4096 Key",
 					Algorithm: "RSA",
 					Size:      4096,
@@ -164,9 +209,9 @@ func TestCreateKey(t *testing.T) {
 		},
 		{
 			name:   "OK/KeyType-ECDSA-256",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.Key, error) {
-				return caSDK.CreateKey(context.Background(), services.CreateKeyInput{
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
 					Name:      "Test ECDSA 256 Key",
 					Algorithm: "ECDSA",
 					Size:      256,
@@ -185,9 +230,9 @@ func TestCreateKey(t *testing.T) {
 		},
 		{
 			name:   "OK/KeyType-ECDSA-384",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.Key, error) {
-				return caSDK.CreateKey(context.Background(), services.CreateKeyInput{
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
 					Name:      "Test ECDSA 384 Key",
 					Algorithm: "ECDSA",
 					Size:      384,
@@ -206,9 +251,9 @@ func TestCreateKey(t *testing.T) {
 		},
 		{
 			name:   "OK/KeyType-ECDSA-521",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.Key, error) {
-				return caSDK.CreateKey(context.Background(), services.CreateKeyInput{
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
 					Name:      "Test ECDSA 521 Key",
 					Algorithm: "ECDSA",
 					Size:      521,
@@ -227,9 +272,9 @@ func TestCreateKey(t *testing.T) {
 		},
 		{
 			name:   "Error/MissingAlgorithm",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.Key, error) {
-				return caSDK.CreateKey(context.Background(), services.CreateKeyInput{
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
 					Name:      "No Algorithm",
 					Algorithm: "",
 					Size:      2048,
@@ -244,9 +289,9 @@ func TestCreateKey(t *testing.T) {
 		},
 		{
 			name:   "Error/MissingSize",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.Key, error) {
-				return caSDK.CreateKey(context.Background(), services.CreateKeyInput{
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
 					Name:      "No Size",
 					Algorithm: "RSA",
 					Size:      0,
@@ -261,9 +306,9 @@ func TestCreateKey(t *testing.T) {
 		},
 		{
 			name:   "Error/EngineNotFound",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.Key, error) {
-				return caSDK.CreateKey(context.Background(), services.CreateKeyInput{
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
 					Name:      "Bad Engine",
 					Algorithm: "RSA",
 					Size:      2048,
@@ -279,9 +324,9 @@ func TestCreateKey(t *testing.T) {
 		},
 		{
 			name:   "Error/InvalidRSAKeySize",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.Key, error) {
-				return caSDK.CreateKey(context.Background(), services.CreateKeyInput{
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
 					Name:      "Small RSA Key",
 					Algorithm: "RSA",
 					Size:      512,
@@ -297,9 +342,9 @@ func TestCreateKey(t *testing.T) {
 		},
 		{
 			name:   "Error/InvalidECDSAKeySize",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.Key, error) {
-				return caSDK.CreateKey(context.Background(), services.CreateKeyInput{
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
 					Name:      "Bad ECDSA Size",
 					Algorithm: "ECDSA",
 					Size:      123,
@@ -315,9 +360,9 @@ func TestCreateKey(t *testing.T) {
 		},
 		{
 			name:   "Error/UnsupportedAlgorithm",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (*models.Key, error) {
-				return caSDK.CreateKey(context.Background(), services.CreateKeyInput{
+			before: func(svc services.KMSService) error { return nil },
+			run: func(kmsSDK services.KMSService) (*models.Key, error) {
+				return kmsSDK.CreateKey(context.Background(), services.CreateKeyInput{
 					Name:      "Unknown Algo",
 					Algorithm: "FOO",
 					Size:      2048,
@@ -335,10 +380,9 @@ func TestCreateKey(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
+			err = tc.before(kmsTest.Service)
 
-			err = tc.before(caTest.Service)
-
-			err = tc.resultCheck(tc.run(caTest.HttpCASDK))
+			err = tc.resultCheck(tc.run(kmsTest.HttpKMSSDK))
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
 			}
@@ -348,7 +392,7 @@ func TestCreateKey(t *testing.T) {
 }
 
 func TestImportKey(t *testing.T) {
-	caTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -374,7 +418,7 @@ func TestImportKey(t *testing.T) {
 			name:   "OK/Import-RSA",
 			before: func() {},
 			run: func() (*models.Key, error) {
-				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				return kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "RSA Key",
 					PrivateKey: generateRSA(2048),
 					EngineID:   "filesystem-1",
@@ -394,7 +438,7 @@ func TestImportKey(t *testing.T) {
 			name:   "OK/Import-RSA-3072",
 			before: func() {},
 			run: func() (*models.Key, error) {
-				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				return kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "RSA 3072 Key",
 					PrivateKey: generateRSA(3072),
 					EngineID:   "filesystem-1",
@@ -414,7 +458,7 @@ func TestImportKey(t *testing.T) {
 			name:   "OK/Import-RSA-4096",
 			before: func() {},
 			run: func() (*models.Key, error) {
-				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				return kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "RSA 4096 Key",
 					PrivateKey: generateRSA(4096),
 					EngineID:   "filesystem-1",
@@ -434,7 +478,7 @@ func TestImportKey(t *testing.T) {
 			name:   "OK/Import-ECDSA",
 			before: func() {},
 			run: func() (*models.Key, error) {
-				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				return kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "ECDSA Key",
 					PrivateKey: generateECDSA(elliptic.P256()),
 					EngineID:   "filesystem-1",
@@ -454,7 +498,7 @@ func TestImportKey(t *testing.T) {
 			name:   "OK/Import-ECDSA-P224",
 			before: func() {},
 			run: func() (*models.Key, error) {
-				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				return kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "ECDSA P224 Key",
 					PrivateKey: generateECDSA(elliptic.P224()),
 					EngineID:   "filesystem-1",
@@ -474,7 +518,7 @@ func TestImportKey(t *testing.T) {
 			name:   "OK/Import-ECDSA-P384",
 			before: func() {},
 			run: func() (*models.Key, error) {
-				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				return kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "ECDSA P384 Key",
 					PrivateKey: generateECDSA(elliptic.P384()),
 					EngineID:   "filesystem-1",
@@ -494,7 +538,7 @@ func TestImportKey(t *testing.T) {
 			name:   "OK/Import-ECDSA-P521",
 			before: func() {},
 			run: func() (*models.Key, error) {
-				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				return kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "ECDSA P521 Key",
 					PrivateKey: generateECDSA(elliptic.P521()),
 					EngineID:   "filesystem-1",
@@ -514,7 +558,7 @@ func TestImportKey(t *testing.T) {
 			name:   "Error/InvalidPEM",
 			before: func() {},
 			run: func() (*models.Key, error) {
-				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				return kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "Invalid PEM",
 					PrivateKey: []byte("not a pem block"),
 					EngineID:   "filesystem-1",
@@ -531,7 +575,7 @@ func TestImportKey(t *testing.T) {
 			name:   "Error/UnsupportedKeyType",
 			before: func() {},
 			run: func() (*models.Key, error) {
-				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				return kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "Unsupported Key",
 					PrivateKey: pem.EncodeToMemory(&pem.Block{Type: "DSA PRIVATE KEY", Bytes: []byte("dummy")}),
 					EngineID:   "filesystem-1",
@@ -548,7 +592,7 @@ func TestImportKey(t *testing.T) {
 			name:   "Error/EngineNotFound",
 			before: func() {},
 			run: func() (*models.Key, error) {
-				return caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				return kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "No Engine",
 					PrivateKey: generateRSA(2048),
 					EngineID:   "nonexistent-engine",
@@ -577,7 +621,7 @@ func TestImportKey(t *testing.T) {
 
 func TestGetKeys(t *testing.T) {
 	keysIds := [3]string{"ListKey1", "ListKey2", "ListKey3"}
-	caTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -588,7 +632,7 @@ func TestGetKeys(t *testing.T) {
 			priv, _ := rsa.GenerateKey(rand.Reader, bits)
 			return priv
 		}(bits)
-		_, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+		_, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 			Name:       name,
 			PrivateKey: pem,
 			EngineID:   "filesystem-1",
@@ -628,7 +672,7 @@ func TestGetKeys(t *testing.T) {
 						},
 					},
 				}
-				_, err := caTest.HttpCASDK.GetKeys(context.Background(), request)
+				_, err := kmsTest.HttpKMSSDK.GetKeys(context.Background(), request)
 				return keys, err
 			},
 			resultCheck: func(keys []models.Key, err error) {
@@ -665,7 +709,7 @@ func TestGetKeys(t *testing.T) {
 						},
 					},
 				}
-				_, err := caTest.HttpCASDK.GetKeys(context.Background(), request)
+				_, err := kmsTest.HttpKMSSDK.GetKeys(context.Background(), request)
 				return keys, err
 			},
 			resultCheck: func(keys []models.Key, err error) {
@@ -693,7 +737,7 @@ func TestGetKeys(t *testing.T) {
 						},
 					},
 				}
-				_, err := caTest.HttpCASDK.GetKeys(context.Background(), request)
+				_, err := kmsTest.HttpKMSSDK.GetKeys(context.Background(), request)
 				return keys, err
 			},
 			resultCheck: func(keys []models.Key, err error) {
@@ -719,7 +763,7 @@ func TestGetKeys(t *testing.T) {
 						},
 					},
 				}
-				_, err := caTest.HttpCASDK.GetKeys(nil, request)
+				_, err := kmsTest.HttpKMSSDK.GetKeys(nil, request)
 				return keys, err
 			},
 			resultCheck: func(keys []models.Key, err error) {
@@ -748,7 +792,7 @@ func TestGetKeys(t *testing.T) {
 						},
 					},
 				}
-				_, err := caTest.HttpCASDK.GetKeys(context.Background(), request)
+				_, err := kmsTest.HttpKMSSDK.GetKeys(context.Background(), request)
 				return keys, err
 			},
 			resultCheck: func(keys []models.Key, err error) {
@@ -774,8 +818,8 @@ func TestGetKeys(t *testing.T) {
 	}
 }
 
-func TestGetKeyByID(t *testing.T) {
-	caTest, err := StartKMSServiceTestServer(t, false)
+func TestGetKey(t *testing.T) {
+	kmsTest, err := StartKMSServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -786,15 +830,15 @@ func TestGetKeyByID(t *testing.T) {
 			priv, _ := rsa.GenerateKey(rand.Reader, bits)
 			return priv
 		}(bits)
-		key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+		key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 			Name:       name,
 			PrivateKey: pem,
 			EngineID:   "filesystem-1",
 		})
 		if err != nil {
-			t.Fatalf("failed to import key for GetKeyByID test: %s", err)
+			t.Fatalf("failed to import key for GetKey test: %s", err)
 		}
-		return key.ID
+		return key.PKCS11URI
 	}
 
 	var validKeyID string
@@ -806,28 +850,28 @@ func TestGetKeyByID(t *testing.T) {
 		resultCheck func(key *models.Key, err error) error
 	}{
 		{
-			name: "OK/GetKeyByID-Valid",
+			name: "OK/GetKey-Valid",
 			before: func() {
 				validKeyID = importKey("KeyByID", 2048)
 			},
 			run: func() (*models.Key, error) {
-				return caTest.HttpCASDK.GetKeyByID(context.Background(), services.GetByIDInput{ID: validKeyID})
+				return kmsTest.HttpKMSSDK.GetKey(context.Background(), services.GetKeyInput{Identifier: validKeyID})
 			},
 			resultCheck: func(key *models.Key, err error) error {
 				if err != nil {
-					return fmt.Errorf("should not error on GetKeyByID: %s", err)
+					return fmt.Errorf("should not error on GetKey: %s", err)
 				}
-				if key == nil || key.ID != validKeyID {
-					return fmt.Errorf("unexpected key result for GetKeyByID: %+v", key)
+				if key == nil || key.PKCS11URI != validKeyID {
+					return fmt.Errorf("unexpected key result for GetKey: %+v", key)
 				}
 				return nil
 			},
 		},
 		{
-			name:   "Error/GetKeyByID-NotFound",
+			name:   "Error/GetKey-NotFound",
 			before: func() {},
 			run: func() (*models.Key, error) {
-				return caTest.HttpCASDK.GetKeyByID(context.Background(), services.GetByIDInput{ID: "nonexistent-key-id"})
+				return kmsTest.HttpKMSSDK.GetKey(context.Background(), services.GetKeyInput{Identifier: "nonexistent-key-id"})
 			},
 			resultCheck: func(key *models.Key, err error) error {
 				if err == nil {
@@ -837,10 +881,10 @@ func TestGetKeyByID(t *testing.T) {
 			},
 		},
 		{
-			name:   "Error/GetKeyByID-InvalidContext",
+			name:   "Error/GetKey-InvalidContext",
 			before: func() {},
 			run: func() (*models.Key, error) {
-				return caTest.HttpCASDK.GetKeyByID(nil, services.GetByIDInput{ID: "any-id"})
+				return kmsTest.HttpKMSSDK.GetKey(nil, services.GetKeyInput{Identifier: "any-id"})
 			},
 			resultCheck: func(key *models.Key, err error) error {
 				if err == nil {
@@ -864,7 +908,7 @@ func TestGetKeyByID(t *testing.T) {
 }
 
 func TestDeleteKeyByID(t *testing.T) {
-	caTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -875,7 +919,7 @@ func TestDeleteKeyByID(t *testing.T) {
 			priv, _ := rsa.GenerateKey(rand.Reader, bits)
 			return priv
 		}(bits)
-		key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+		key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 			Name:       name,
 			PrivateKey: pem,
 			EngineID:   "filesystem-1",
@@ -883,7 +927,7 @@ func TestDeleteKeyByID(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to import key for DeleteKeyByID test: %s", err)
 		}
-		return key.ID
+		return key.PKCS11URI
 	}
 
 	var validKeyID string
@@ -900,14 +944,14 @@ func TestDeleteKeyByID(t *testing.T) {
 				validKeyID = importKey("KeyToDelete", 2048)
 			},
 			run: func() error {
-				return caTest.HttpCASDK.DeleteKeyByID(context.Background(), services.GetByIDInput{ID: validKeyID})
+				return kmsTest.HttpKMSSDK.DeleteKeyByID(context.Background(), services.GetKeyInput{Identifier: validKeyID})
 			},
 			resultCheck: func(err error) error {
 				if err != nil {
-					return fmt.Errorf("should not error on DeleteKeyByID: %s", err)
+					return fmt.Errorf("should not error on DeleteKeyByIdentifier:%s", err)
 				}
 				// Try to get the key, should not be found
-				_, getErr := caTest.HttpCASDK.GetKeyByID(context.Background(), services.GetByIDInput{ID: validKeyID})
+				_, getErr := kmsTest.HttpKMSSDK.GetKey(context.Background(), services.GetKeyInput{Identifier: validKeyID})
 				if getErr == nil {
 					return fmt.Errorf("expected error when getting deleted key, got nil")
 				}
@@ -918,7 +962,7 @@ func TestDeleteKeyByID(t *testing.T) {
 			name:   "Error/DeleteKeyByID-NotFound",
 			before: func() {},
 			run: func() error {
-				return caTest.HttpCASDK.DeleteKeyByID(context.Background(), services.GetByIDInput{ID: "nonexistent-key-id"})
+				return kmsTest.HttpKMSSDK.DeleteKeyByID(context.Background(), services.GetKeyInput{Identifier: "nonexistent-key-id"})
 			},
 			resultCheck: func(err error) error {
 				if err == nil {
@@ -931,7 +975,7 @@ func TestDeleteKeyByID(t *testing.T) {
 			name:   "Error/DeleteKeyByID-InvalidContext",
 			before: func() {},
 			run: func() error {
-				return caTest.HttpCASDK.DeleteKeyByID(nil, services.GetByIDInput{ID: "any-id"})
+				return kmsTest.HttpKMSSDK.DeleteKeyByID(nil, services.GetKeyInput{Identifier: "any-id"})
 			},
 			resultCheck: func(err error) error {
 				if err == nil {
@@ -955,7 +999,7 @@ func TestDeleteKeyByID(t *testing.T) {
 }
 
 func TestSignMessage(t *testing.T) {
-	caTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -966,7 +1010,7 @@ func TestSignMessage(t *testing.T) {
 			priv, _ := rsa.GenerateKey(rand.Reader, bits)
 			return priv
 		}(bits)
-		key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+		key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 			Name:       name,
 			PrivateKey: b64Key,
 			EngineID:   "filesystem-1",
@@ -974,7 +1018,7 @@ func TestSignMessage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to import key for SignMessage test: %s", err)
 		}
-		return key.ID, key.Algorithm
+		return key.PKCS11URI, key.Algorithm
 	}
 
 	var validKeyID string
@@ -994,8 +1038,8 @@ func TestSignMessage(t *testing.T) {
 			},
 			run: func() (*models.MessageSignature, error) {
 				fmt.Println("Signing message with key ID:", validKeyID, "and algorithm:", validAlgorithm)
-				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
 					Message:     message,
 					Algorithm:   "RSASSA_PKCS1_V1_5_SHA_512",
 					MessageType: models.Raw,
@@ -1015,8 +1059,8 @@ func TestSignMessage(t *testing.T) {
 			name:   "Error/SignMessage-KeyNotFound",
 			before: func() {},
 			run: func() (*models.MessageSignature, error) {
-				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
-					KeyID:       "nonexistent-key-id",
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  "nonexistent-key-id",
 					Message:     message,
 					Algorithm:   "RSA",
 					MessageType: models.Raw,
@@ -1033,8 +1077,8 @@ func TestSignMessage(t *testing.T) {
 			name:   "Error/SignMessage-InvalidContext",
 			before: func() {},
 			run: func() (*models.MessageSignature, error) {
-				return caTest.HttpCASDK.SignMessage(nil, services.SignMessageInput{
-					KeyID:       "any-id",
+				return kmsTest.HttpKMSSDK.SignMessage(nil, services.SignMessageInput{
+					Identifier:  "any-id",
 					Message:     message,
 					Algorithm:   "RSA",
 					MessageType: models.Raw,
@@ -1053,8 +1097,8 @@ func TestSignMessage(t *testing.T) {
 				validKeyID, validAlgorithm = importKey("SignKey2", 2048)
 			},
 			run: func() (*models.MessageSignature, error) {
-				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
 					Message:     []byte{},
 					Algorithm:   validAlgorithm,
 					MessageType: models.Raw,
@@ -1076,8 +1120,8 @@ func TestSignMessage(t *testing.T) {
 				// Using SHA-256 algorithm but providing incorrect hash length
 				// SHA-256 expects 32 bytes, but we provide 16 bytes
 				invalidHashMessage := make([]byte, 16) // Wrong length for SHA-256
-				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
 					Message:     invalidHashMessage,
 					Algorithm:   "RSASSA_PKCS1_V1_5_SHA_256", // SHA-256 expects 32 bytes
 					MessageType: models.Hashed,               // This should trigger hash length validation
@@ -1106,8 +1150,8 @@ func TestSignMessage(t *testing.T) {
 				for i := range validHashMessage {
 					validHashMessage[i] = byte(i % 256)
 				}
-				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
 					Message:     validHashMessage,
 					Algorithm:   "RSASSA_PKCS1_V1_5_SHA_256", // SHA-256 expects 32 bytes
 					MessageType: models.Hashed,               // This should pass hash length validation
@@ -1131,7 +1175,7 @@ func TestSignMessage(t *testing.T) {
 					priv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 					return priv
 				}()
-				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "ECDSA256-WrongHash",
 					PrivateKey: pem,
 					EngineID:   "filesystem-1",
@@ -1139,13 +1183,13 @@ func TestSignMessage(t *testing.T) {
 				if err != nil {
 					panic(fmt.Sprintf("failed to import ECDSA-256 key: %s", err))
 				}
-				validKeyID = key.ID
+				validKeyID = key.PKCS11URI
 			},
 			run: func() (*models.MessageSignature, error) {
 				// Using ECDSA_SHA_256 but providing SHA-384 hash length (48 bytes instead of 32)
 				wrongHashMessage := make([]byte, 48) // Wrong length for ECDSA_SHA_256
-				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
 					Message:     wrongHashMessage,
 					Algorithm:   "ECDSA_SHA_256", // SHA-256 expects 32 bytes, not 48
 					MessageType: models.Hashed,
@@ -1170,7 +1214,7 @@ func TestSignMessage(t *testing.T) {
 					priv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 					return priv
 				}()
-				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "ECDSA256-CorrectHash",
 					PrivateKey: pem,
 					EngineID:   "filesystem-1",
@@ -1178,7 +1222,7 @@ func TestSignMessage(t *testing.T) {
 				if err != nil {
 					panic(fmt.Sprintf("failed to import ECDSA-256 key: %s", err))
 				}
-				validKeyID = key.ID
+				validKeyID = key.PKCS11URI
 			},
 			run: func() (*models.MessageSignature, error) {
 				// Using ECDSA_SHA_256 with correct hash length (32 bytes)
@@ -1186,8 +1230,8 @@ func TestSignMessage(t *testing.T) {
 				for i := range correctHashMessage {
 					correctHashMessage[i] = byte(i % 256)
 				}
-				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
 					Message:     correctHashMessage,
 					Algorithm:   "ECDSA_SHA_256", // SHA-256 expects 32 bytes
 					MessageType: models.Hashed,
@@ -1211,7 +1255,7 @@ func TestSignMessage(t *testing.T) {
 					priv, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 					return priv
 				}()
-				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "ECDSA384-WrongHash",
 					PrivateKey: pem,
 					EngineID:   "filesystem-1",
@@ -1219,13 +1263,13 @@ func TestSignMessage(t *testing.T) {
 				if err != nil {
 					panic(fmt.Sprintf("failed to import ECDSA-384 key: %s", err))
 				}
-				validKeyID = key.ID
+				validKeyID = key.PKCS11URI
 			},
 			run: func() (*models.MessageSignature, error) {
 				// Using ECDSA_SHA_384 but providing SHA-256 hash length (32 bytes instead of 48)
 				wrongHashMessage := make([]byte, 32) // Wrong length for ECDSA_SHA_384
-				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
 					Message:     wrongHashMessage,
 					Algorithm:   "ECDSA_SHA_384", // SHA-384 expects 48 bytes, not 32
 					MessageType: models.Hashed,
@@ -1250,7 +1294,7 @@ func TestSignMessage(t *testing.T) {
 					priv, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 					return priv
 				}()
-				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "ECDSA384-CorrectHash",
 					PrivateKey: pem,
 					EngineID:   "filesystem-1",
@@ -1258,7 +1302,7 @@ func TestSignMessage(t *testing.T) {
 				if err != nil {
 					panic(fmt.Sprintf("failed to import ECDSA-384 key: %s", err))
 				}
-				validKeyID = key.ID
+				validKeyID = key.PKCS11URI
 			},
 			run: func() (*models.MessageSignature, error) {
 				// Using ECDSA_SHA_384 with correct hash length (48 bytes)
@@ -1266,8 +1310,8 @@ func TestSignMessage(t *testing.T) {
 				for i := range correctHashMessage {
 					correctHashMessage[i] = byte(i % 256)
 				}
-				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
 					Message:     correctHashMessage,
 					Algorithm:   "ECDSA_SHA_384", // SHA-384 expects 48 bytes
 					MessageType: models.Hashed,
@@ -1291,7 +1335,7 @@ func TestSignMessage(t *testing.T) {
 					priv, _ := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
 					return priv
 				}()
-				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "ECDSA521-WrongHash",
 					PrivateKey: pem,
 					EngineID:   "filesystem-1",
@@ -1299,13 +1343,13 @@ func TestSignMessage(t *testing.T) {
 				if err != nil {
 					panic(fmt.Sprintf("failed to import ECDSA-521 key: %s", err))
 				}
-				validKeyID = key.ID
+				validKeyID = key.PKCS11URI
 			},
 			run: func() (*models.MessageSignature, error) {
 				// Using ECDSA_SHA_512 but providing SHA-384 hash length (48 bytes instead of 64)
 				wrongHashMessage := make([]byte, 48) // Wrong length for ECDSA_SHA_512
-				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
 					Message:     wrongHashMessage,
 					Algorithm:   "ECDSA_SHA_512", // SHA-512 expects 64 bytes, not 48
 					MessageType: models.Hashed,
@@ -1330,7 +1374,7 @@ func TestSignMessage(t *testing.T) {
 					priv, _ := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
 					return priv
 				}()
-				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "ECDSA521-CorrectHash",
 					PrivateKey: pem,
 					EngineID:   "filesystem-1",
@@ -1338,7 +1382,7 @@ func TestSignMessage(t *testing.T) {
 				if err != nil {
 					panic(fmt.Sprintf("failed to import ECDSA-521 key: %s", err))
 				}
-				validKeyID = key.ID
+				validKeyID = key.PKCS11URI
 			},
 			run: func() (*models.MessageSignature, error) {
 				// Using ECDSA_SHA_512 with correct hash length (64 bytes)
@@ -1346,8 +1390,8 @@ func TestSignMessage(t *testing.T) {
 				for i := range correctHashMessage {
 					correctHashMessage[i] = byte(i % 256)
 				}
-				return caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
 					Message:     correctHashMessage,
 					Algorithm:   "ECDSA_SHA_512", // SHA-512 expects 64 bytes
 					MessageType: models.Hashed,
@@ -1378,7 +1422,7 @@ func TestSignMessage(t *testing.T) {
 }
 
 func TestVerifySignature(t *testing.T) {
-	caTest, err := StartKMSServiceTestServer(t, false)
+	kmsTest, err := StartKMSServiceTestServer(t, false)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1389,7 +1433,7 @@ func TestVerifySignature(t *testing.T) {
 			priv, _ := rsa.GenerateKey(rand.Reader, bits)
 			return priv
 		}(bits)
-		key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+		key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 			Name:       name,
 			PrivateKey: pem,
 			EngineID:   "filesystem-1",
@@ -1397,8 +1441,8 @@ func TestVerifySignature(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to import key for VerifySignature test: %s", err)
 		}
-		sig, err := caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
-			KeyID:       key.ID,
+		sig, err := kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+			Identifier:  key.PKCS11URI,
 			Message:     msg,
 			Algorithm:   alg,
 			MessageType: models.Raw,
@@ -1411,7 +1455,7 @@ func TestVerifySignature(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to decode signature: %s", err)
 		}
-		return key.ID, alg, msg, sigBytes
+		return key.PKCS11URI, alg, msg, sigBytes
 	}
 
 	var validKeyID string
@@ -1432,8 +1476,8 @@ func TestVerifySignature(t *testing.T) {
 				validKeyID, validAlgorithm, _, validSignature = importAndSign("VerifyKey", 2048, "RSASSA_PKCS1_V1_5_SHA_512", validMessage)
 			},
 			run: func() (*models.MessageValidation, error) {
-				return caTest.HttpCASDK.VerifySignature(context.Background(), services.VerifySignInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
+					Identifier:  validKeyID,
 					Message:     validMessage,
 					Algorithm:   "RSASSA_PKCS1_V1_5_SHA_512",
 					MessageType: models.Raw,
@@ -1454,8 +1498,8 @@ func TestVerifySignature(t *testing.T) {
 			name:   "Error/VerifySignature-KeyNotFound",
 			before: func() {},
 			run: func() (*models.MessageValidation, error) {
-				return caTest.HttpCASDK.VerifySignature(context.Background(), services.VerifySignInput{
-					KeyID:       "nonexistent-key-id",
+				return kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
+					Identifier:  "nonexistent-key-id",
 					Message:     []byte("msg"),
 					Algorithm:   "RSASSA_PKCS1_V1_5_SHA_512",
 					MessageType: models.Raw,
@@ -1473,8 +1517,8 @@ func TestVerifySignature(t *testing.T) {
 			name:   "Error/VerifySignature-InvalidContext",
 			before: func() {},
 			run: func() (*models.MessageValidation, error) {
-				return caTest.HttpCASDK.VerifySignature(nil, services.VerifySignInput{
-					KeyID:       "any-id",
+				return kmsTest.HttpKMSSDK.VerifySignature(nil, services.VerifySignInput{
+					Identifier:  "any-id",
 					Message:     []byte("msg"),
 					Algorithm:   "RSASSA_PKCS1_V1_5_SHA_512",
 					MessageType: models.Raw,
@@ -1495,8 +1539,8 @@ func TestVerifySignature(t *testing.T) {
 				validKeyID, validAlgorithm, _, validSignature = importAndSign("VerifyKey2", 2048, "RSASSA_PKCS1_V1_5_SHA_512", []byte("nonempty"))
 			},
 			run: func() (*models.MessageValidation, error) {
-				return caTest.HttpCASDK.VerifySignature(context.Background(), services.VerifySignInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
+					Identifier:  validKeyID,
 					Message:     []byte{},
 					Algorithm:   validAlgorithm,
 					MessageType: models.Raw,
@@ -1520,8 +1564,8 @@ func TestVerifySignature(t *testing.T) {
 				validKeyID, validAlgorithm, _, _ = importAndSign("VerifyKey3", 2048, "RSASSA_PKCS1_V1_5_SHA_512", validMessage)
 			},
 			run: func() (*models.MessageValidation, error) {
-				return caTest.HttpCASDK.VerifySignature(context.Background(), services.VerifySignInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
+					Identifier:  validKeyID,
 					Message:     validMessage,
 					Algorithm:   validAlgorithm,
 					MessageType: models.Raw,
@@ -1545,8 +1589,8 @@ func TestVerifySignature(t *testing.T) {
 				validKeyID, validAlgorithm, _, validSignature = importAndSign("VerifyKey4", 2048, "RSASSA_PKCS1_V1_5_SHA_512", validMessage)
 			},
 			run: func() (*models.MessageValidation, error) {
-				return caTest.HttpCASDK.VerifySignature(context.Background(), services.VerifySignInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
+					Identifier:  validKeyID,
 					Message:     validMessage,
 					Algorithm:   "RSASSA_PKCS1_V1_5_SHA_256", // mismatch
 					MessageType: models.Raw,
@@ -1572,8 +1616,8 @@ func TestVerifySignature(t *testing.T) {
 				// Using SHA-256 algorithm but providing incorrect hash length
 				// SHA-256 expects 32 bytes, but we provide 20 bytes
 				invalidHashMessage := make([]byte, 20) // Wrong length for SHA-256
-				return caTest.HttpCASDK.VerifySignature(context.Background(), services.VerifySignInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
+					Identifier:  validKeyID,
 					Message:     invalidHashMessage,
 					Algorithm:   "RSASSA_PKCS1_V1_5_SHA_256", // SHA-256 expects 32 bytes
 					MessageType: models.Hashed,               // This should trigger hash length validation
@@ -1599,7 +1643,7 @@ func TestVerifySignature(t *testing.T) {
 					priv, _ := rsa.GenerateKey(rand.Reader, 2048)
 					return priv
 				}(2048)
-				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "VerifyKey6",
 					PrivateKey: pem,
 					EngineID:   "filesystem-1",
@@ -1607,7 +1651,7 @@ func TestVerifySignature(t *testing.T) {
 				if err != nil {
 					panic(fmt.Sprintf("failed to import key for test: %s", err))
 				}
-				validKeyID = key.ID
+				validKeyID = key.PKCS11URI
 				validAlgorithm = "RSASSA_PKCS1_V1_5_SHA_256"
 				// Create a valid SHA-256 hash (32 bytes)
 				validHashMessage := make([]byte, 32)
@@ -1615,8 +1659,8 @@ func TestVerifySignature(t *testing.T) {
 					validHashMessage[i] = byte(i % 256)
 				}
 				// Sign the hash to get a valid signature
-				sig, err := caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
-					KeyID:       validKeyID,
+				sig, err := kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
 					Message:     validHashMessage,
 					Algorithm:   validAlgorithm,
 					MessageType: models.Hashed,
@@ -1631,8 +1675,8 @@ func TestVerifySignature(t *testing.T) {
 				validMessage = validHashMessage
 			},
 			run: func() (*models.MessageValidation, error) {
-				return caTest.HttpCASDK.VerifySignature(context.Background(), services.VerifySignInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
+					Identifier:  validKeyID,
 					Message:     validMessage,
 					Algorithm:   "RSASSA_PKCS1_V1_5_SHA_256", // SHA-256 expects 32 bytes
 					MessageType: models.Hashed,               // This should pass hash length validation
@@ -1657,7 +1701,7 @@ func TestVerifySignature(t *testing.T) {
 					priv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 					return priv
 				}()
-				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "VerifyECDSA256-WrongHash",
 					PrivateKey: pem,
 					EngineID:   "filesystem-1",
@@ -1665,14 +1709,14 @@ func TestVerifySignature(t *testing.T) {
 				if err != nil {
 					panic(fmt.Sprintf("failed to import ECDSA-256 key for verification: %s", err))
 				}
-				validKeyID = key.ID
+				validKeyID = key.PKCS11URI
 				// Sign with correct hash to get a valid signature
 				correctHashMessage := make([]byte, 32) // Correct for SHA-256
 				for i := range correctHashMessage {
 					correctHashMessage[i] = byte(i % 256)
 				}
-				sig, err := caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
-					KeyID:       validKeyID,
+				sig, err := kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
 					Message:     correctHashMessage,
 					Algorithm:   "ECDSA_SHA_256",
 					MessageType: models.Hashed,
@@ -1688,8 +1732,8 @@ func TestVerifySignature(t *testing.T) {
 			run: func() (*models.MessageValidation, error) {
 				// Try to verify with wrong hash size (48 bytes instead of 32)
 				wrongHashMessage := make([]byte, 48) // Wrong length for ECDSA_SHA_256
-				return caTest.HttpCASDK.VerifySignature(context.Background(), services.VerifySignInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
+					Identifier:  validKeyID,
 					Message:     wrongHashMessage,
 					Algorithm:   "ECDSA_SHA_256", // SHA-256 expects 32 bytes, not 48
 					MessageType: models.Hashed,
@@ -1715,7 +1759,7 @@ func TestVerifySignature(t *testing.T) {
 					priv, _ := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 					return priv
 				}()
-				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "VerifyECDSA384-CorrectHash",
 					PrivateKey: pem,
 					EngineID:   "filesystem-1",
@@ -1723,15 +1767,15 @@ func TestVerifySignature(t *testing.T) {
 				if err != nil {
 					panic(fmt.Sprintf("failed to import ECDSA-384 key for verification: %s", err))
 				}
-				validKeyID = key.ID
+				validKeyID = key.PKCS11URI
 				// Sign with correct hash to get a valid signature
 				correctHashMessage := make([]byte, 48) // Correct for SHA-384
 				for i := range correctHashMessage {
 					correctHashMessage[i] = byte(i % 256)
 				}
 				validMessage = correctHashMessage
-				sig, err := caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
-					KeyID:       validKeyID,
+				sig, err := kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
 					Message:     correctHashMessage,
 					Algorithm:   "ECDSA_SHA_384",
 					MessageType: models.Hashed,
@@ -1745,8 +1789,8 @@ func TestVerifySignature(t *testing.T) {
 				}
 			},
 			run: func() (*models.MessageValidation, error) {
-				return caTest.HttpCASDK.VerifySignature(context.Background(), services.VerifySignInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
+					Identifier:  validKeyID,
 					Message:     validMessage,
 					Algorithm:   "ECDSA_SHA_384", // SHA-384 expects 48 bytes
 					MessageType: models.Hashed,
@@ -1771,7 +1815,7 @@ func TestVerifySignature(t *testing.T) {
 					priv, _ := ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
 					return priv
 				}()
-				key, err := caTest.HttpCASDK.ImportKey(context.Background(), services.ImportKeyInput{
+				key, err := kmsTest.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{
 					Name:       "VerifyECDSA521-WrongHash",
 					PrivateKey: pem,
 					EngineID:   "filesystem-1",
@@ -1779,14 +1823,14 @@ func TestVerifySignature(t *testing.T) {
 				if err != nil {
 					panic(fmt.Sprintf("failed to import ECDSA-521 key for verification: %s", err))
 				}
-				validKeyID = key.ID
+				validKeyID = key.PKCS11URI
 				// Sign with correct hash to get a valid signature
 				correctHashMessage := make([]byte, 64) // Correct for SHA-512
 				for i := range correctHashMessage {
 					correctHashMessage[i] = byte(i % 256)
 				}
-				sig, err := caTest.HttpCASDK.SignMessage(context.Background(), services.SignMessageInput{
-					KeyID:       validKeyID,
+				sig, err := kmsTest.HttpKMSSDK.SignMessage(context.Background(), services.SignMessageInput{
+					Identifier:  validKeyID,
 					Message:     correctHashMessage,
 					Algorithm:   "ECDSA_SHA_512",
 					MessageType: models.Hashed,
@@ -1802,8 +1846,8 @@ func TestVerifySignature(t *testing.T) {
 			run: func() (*models.MessageValidation, error) {
 				// Try to verify with wrong hash size (32 bytes instead of 64)
 				wrongHashMessage := make([]byte, 32) // Wrong length for ECDSA_SHA_512
-				return caTest.HttpCASDK.VerifySignature(context.Background(), services.VerifySignInput{
-					KeyID:       validKeyID,
+				return kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
+					Identifier:  validKeyID,
 					Message:     wrongHashMessage,
 					Algorithm:   "ECDSA_SHA_512", // SHA-512 expects 64 bytes, not 32
 					MessageType: models.Hashed,

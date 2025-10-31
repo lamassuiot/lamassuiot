@@ -86,13 +86,6 @@ func (s *PostgresStorageEngine) initialiceCACertStorage() error {
 		}
 	}
 
-	if s.CACertificateRequest == nil {
-		s.CACertificateRequest, err = NewCACertRequestPostgresRepository(s.logger, psqlCli)
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
@@ -116,16 +109,6 @@ func (s *PostgresStorageEngine) GetIssuanceProfileStorage() (storage.IssuancePro
 	}
 
 	return s.IssuanceProfile, nil
-}
-
-func (s *PostgresStorageEngine) GetCACertificateRequestStorage() (storage.CACertificateRequestRepo, error) {
-	if s.CACertificateRequest == nil {
-		err := s.initialiceCACertStorage()
-		if err != nil {
-			return nil, fmt.Errorf("could not initialize postgres CA request client: %s", err)
-		}
-	}
-	return s.CACertificateRequest, nil
 }
 
 func (s *PostgresStorageEngine) GetDeviceStorage() (storage.DeviceManagerRepo, error) {

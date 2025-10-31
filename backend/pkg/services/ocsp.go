@@ -13,19 +13,22 @@ import (
 )
 
 type ocspResponder struct {
-	caSDK  services.CAService
-	logger *logrus.Entry
+	caSDK      services.CAService
+	kmsService services.KMSService
+	logger     *logrus.Entry
 }
 
 type OCSPServiceBuilder struct {
-	Logger   *logrus.Entry
-	CAClient services.CAService
+	Logger    *logrus.Entry
+	CAClient  services.CAService
+	KMSClient services.KMSService
 }
 
 func NewOCSPService(builder OCSPServiceBuilder) services.OCSPService {
 	return &ocspResponder{
-		caSDK:  builder.CAClient,
-		logger: builder.Logger,
+		caSDK:      builder.CAClient,
+		kmsService: builder.KMSClient,
+		logger:     builder.Logger,
 	}
 }
 
@@ -68,7 +71,7 @@ func (svc ocspResponder) Verify(ctx context.Context, req *ocsp.Request) ([]byte,
 	}
 
 	// make a response to return
-	rawResp, err := ocsp.CreateResponse((*x509.Certificate)(ca.Certificate.Certificate), (*x509.Certificate)(ca.Certificate.Certificate), rtemplate, NewCASigner(ctx, ca, svc.caSDK))
+	rawResp, err := ocsp.CreateResponse((*x509.Certificate)(ca.Certificate.Certificate), (*x509.Certificate)(ca.Certificate.Certificate), rtemplate, NewCertificateSigner(ctx, &ca.Certificate, svc.kmsService))
 	if err != nil {
 		return nil, err
 	}

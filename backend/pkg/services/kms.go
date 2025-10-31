@@ -26,6 +26,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type KMSMiddleware func(services.KMSService) services.KMSService
+
 type Engine struct {
 	Default bool
 	Service cryptoengines.CryptoEngine
@@ -103,6 +105,9 @@ func (svc *KMSServiceBackend) GetCryptoEngineProvider(ctx context.Context) ([]*m
 	return info, nil
 }
 
+// parse URIs such as
+// pkcs11:token-id=<engineID>;id=<keyID>;type=<keyType>
+// pkcs11:token-id=<engineID>;label=<alias>;type=<keyType>
 func parsePKCS11ID(id string) (engineID, keyID, keyType string, err error) {
 	if !strings.HasPrefix(id, "pkcs11:") {
 		return "", "", "", errors.New("invalid id format: missing pkcs11 prefix")
@@ -193,7 +198,7 @@ type kmsOperationSetup struct {
 	Engine *cryptoengines.CryptoEngine
 }
 
-func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, keyID, algorithm string, operationName string, input interface{}) (*kmsOperationSetup, error) {
+func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, identifier, algorithm string, operationName string, input interface{}) (*kmsOperationSetup, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	// Validate input struct
@@ -203,23 +208,11 @@ func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, keyID, al
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	// Parse PKCS11 ID
-	engineID, keyIDParsed, _, err := parsePKCS11ID(keyID)
+	key, err := svc.GetKey(ctx, services.GetKeyInput{
+		Identifier: identifier,
+	})
 	if err != nil {
-		return nil, errors.New("invalid key id format, expected pkcs11:token-id=<engineID>;id=<keyID>;type=<type>")
-	}
-
-	// Check if key exists
-	lFunc.Debugf("checking if Key '%s' exists", keyID)
-	exists, _, err := svc.kmsStorage.SelectExistsByID(ctx, keyID)
-	if err != nil {
-		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", keyID, err)
 		return nil, err
-	}
-
-	if !exists {
-		lFunc.Errorf("Key %s can not be found in storage engine", keyID)
-		return nil, errs.ErrKeyNotFound
 	}
 
 	// Parse algorithm
@@ -229,7 +222,7 @@ func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, keyID, al
 	}
 
 	// Get engine and signer
-	engine, signer, err := svc.getEngineAndSigner(engineID, keyIDParsed)
+	engine, signer, err := svc.getEngineAndSigner(key.EngineID, key.KeyID)
 	if err != nil {
 		return nil, err
 	}
@@ -275,28 +268,62 @@ func (svc *KMSServiceBackend) GetKeys(ctx context.Context, input services.GetKey
 	return nextBookmark, nil
 }
 
-func (svc *KMSServiceBackend) GetKeyByID(ctx context.Context, input services.GetKeyByIDInput) (*models.Key, error) {
+func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyInput) (*models.Key, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := caValidator.Struct(input)
 	if err != nil {
-		lFunc.Errorf("GetKeyByIDInput struct validation error: %s", err)
+		lFunc.Errorf("GetKeyInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	lFunc.Debugf("checking if Key '%s' exists", input.ID)
-	exists, key, err := svc.kmsStorage.SelectExistsByID(ctx, input.ID)
-	if err != nil {
-		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.ID, err)
-		return nil, err
-	}
+	if strings.HasPrefix(input.Identifier, "pkcs11:") {
+		lFunc.Debugf("checking if Key '%s' exists via PKCS11URI", input.Identifier)
+		_, keyID, _, err := parsePKCS11ID(input.Identifier)
+		if err != nil {
+			lFunc.Errorf("failed to parse PKCS11 ID: %s", err)
+			return nil, err
+		}
 
-	if !exists {
-		lFunc.Errorf("key %s can not be found in storage engine", input.ID)
-		return nil, errs.ErrKeyNotFound
-	}
+		lFunc.Debugf("checking if Key '%s' exists via KeyID", keyID)
+		exists, key, err := svc.kmsStorage.SelectExistsByKeyID(ctx, keyID)
+		if err != nil {
+			lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", keyID, err)
+			return nil, err
+		}
 
-	return key, nil
+		if !exists {
+			lFunc.Infof("key %s can not be found in storage engine via keyID", keyID)
+			return nil, fmt.Errorf("key not found")
+		}
+
+		return key, nil
+	} else {
+
+		lFunc.Debugf("checking if Key '%s' exists via KeyID", input.Identifier)
+		exists, key, err := svc.kmsStorage.SelectExistsByKeyID(ctx, input.Identifier)
+		if err != nil {
+			lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.Identifier, err)
+			return nil, err
+		}
+
+		if !exists {
+			lFunc.Infof("key %s can not be found in storage engine via keyID", input.Identifier)
+			lFunc.Debugf("checking if Key '%s' exists via Alias", input.Identifier)
+			exists, key, err = svc.kmsStorage.SelectExistsByAlias(ctx, input.Identifier)
+			if err != nil {
+				lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.Identifier, err)
+				return nil, err
+			}
+
+			if !exists {
+				lFunc.Infof("key %s can not be found in storage engine via alias", input.Identifier)
+				return nil, fmt.Errorf("key not found")
+			}
+		}
+
+		return key, nil
+	}
 }
 
 func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.Key, error) {
@@ -387,14 +414,17 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 	base64PEM := base64.StdEncoding.EncodeToString(pemBlock)
 
 	kmsKey := models.Key{
-		ID:         buildPKCS11ID(engineID, keyID, "private"),
-		Algorithm:  input.Algorithm,
-		Size:       input.Size,
-		PublicKey:  base64PEM,
-		Status:     models.StatusActive,
-		CreationTS: time.Now(),
-		Name:       input.Name,
-		Metadata:   map[string]any{},
+		PKCS11URI:     buildPKCS11ID(engineID, keyID, "private"),
+		KeyID:         keyID,
+		EngineID:      engineID,
+		Name:          input.Name,
+		Aliases:       []string{},
+		HasPrivateKey: true,
+		Algorithm:     input.Algorithm,
+		Size:          input.Size,
+		PublicKey:     base64PEM,
+		CreationTS:    time.Now(),
+		Metadata:      map[string]any{},
 	}
 
 	return svc.kmsStorage.Insert(ctx, &kmsKey)
@@ -479,14 +509,17 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 	base64PEM := base64.StdEncoding.EncodeToString(pemBlockPub)
 
 	kmsKey := models.Key{
-		ID:         buildPKCS11ID(engineID, keyID, "private"),
-		Algorithm:  algorithm,
-		Size:       size,
-		PublicKey:  base64PEM,
-		Status:     models.StatusActive,
-		CreationTS: time.Now(),
-		Name:       input.Name,
-		Metadata:   map[string]any{},
+		PKCS11URI:     buildPKCS11ID(engineID, keyID, "private"),
+		KeyID:         keyID,
+		EngineID:      engineID,
+		Name:          input.Name,
+		Aliases:       []string{},
+		HasPrivateKey: true,
+		Algorithm:     algorithm,
+		Size:          size,
+		PublicKey:     base64PEM,
+		CreationTS:    time.Now(),
+		Metadata:      map[string]any{},
 	}
 
 	return svc.kmsStorage.Insert(ctx, &kmsKey)
@@ -516,24 +549,21 @@ func (svc *KMSServiceBackend) UpdateKeyMetadata(ctx context.Context, input servi
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	exists, key, err := svc.kmsStorage.SelectExistsByID(ctx, input.ID)
+	key, err := svc.GetKey(ctx, services.GetKeyInput{
+		Identifier: input.ID,
+	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.ID, err)
 		return nil, err
 	}
 
-	if !exists {
-		lFunc.Errorf("key %s can not be found in storage engine", input.ID)
-		return nil, errs.ErrKeyNotFound
-	}
-
-	updatedMetadata, err := chelpers.ApplyPatches(key.Metadata, input.Patches)
+	updatedMetadata, err := chelpers.ApplyPatches[map[string]any](key.Metadata, input.Patches)
 	if err != nil {
 		lFunc.Errorf("failed to apply patches to metadata for key '%s': %v", input.ID, err)
 		return nil, err
 	}
 
-	key.Metadata = updatedMetadata
+	key.Metadata = *updatedMetadata
 
 	updatedKey, err := svc.kmsStorage.Update(ctx, key)
 	if err != nil {
@@ -544,68 +574,69 @@ func (svc *KMSServiceBackend) UpdateKeyMetadata(ctx context.Context, input servi
 	return updatedKey, nil
 }
 
-func (svc *KMSServiceBackend) UpdateKeyAlias(ctx context.Context, input services.UpdateKeyAliasInput) (*models.Key, error) {
+func (svc *KMSServiceBackend) UpdateKeyAliases(ctx context.Context, input services.UpdateKeyAliasesInput) (*models.Key, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := caValidator.Struct(input)
 	if err != nil {
-		lFunc.Errorf("UpdateKeyAliasInput struct validation error: %s", err)
+		lFunc.Errorf("UpdateKeyAliasesInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	exists, key, err := svc.kmsStorage.SelectExistsByID(ctx, input.ID)
+	key, err := svc.GetKey(ctx, services.GetKeyInput{
+		Identifier: input.ID,
+	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.ID, err)
 		return nil, err
 	}
 
-	if !exists {
-		lFunc.Errorf("key %s can not be found in storage engine", input.ID)
-		return nil, errs.ErrKeyNotFound
+	updatedAliases, err := chelpers.ApplyPatches[[]string](key.Aliases, input.Patches)
+	if err != nil {
+		lFunc.Errorf("failed to apply patches to aliases for key '%s': %v", input.ID, err)
+		return nil, err
 	}
 
-	key.Name = input.Alias
+	key.Aliases = *updatedAliases
+
 	updatedKey, err := svc.kmsStorage.Update(ctx, key)
 	if err != nil {
-		lFunc.Errorf("failed to update key alias: %s", err)
+		lFunc.Errorf("failed to update key metadata: %s", err)
 		return nil, err
 	}
 
 	return updatedKey, nil
 }
 
-func (svc *KMSServiceBackend) UpdateKeyID(ctx context.Context, input services.UpdateKeyIDInput) (*models.Key, error) {
+func (svc *KMSServiceBackend) UpdateKeyName(ctx context.Context, input services.UpdateKeyNameInput) (*models.Key, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := caValidator.Struct(input)
 	if err != nil {
-		lFunc.Errorf("UpdateKeyIDInput struct validation error: %s", err)
+		lFunc.Errorf("UpdateKeyNameInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	exists, key, err := svc.kmsStorage.SelectExistsByID(ctx, input.CurrentID)
+	key, err := svc.GetKey(ctx, services.GetKeyInput{
+		Identifier: input.ID,
+	})
 	if err != nil {
-		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.CurrentID, err)
+		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.ID, err)
 		return nil, err
 	}
 
-	if !exists {
-		lFunc.Errorf("key %s can not be found in storage engine", input.CurrentID)
-		return nil, errs.ErrKeyNotFound
-	}
-
-	key.ID = input.NewID
+	key.Name = input.Name
 	updatedKey, err := svc.kmsStorage.Update(ctx, key)
 	if err != nil {
-		lFunc.Errorf("failed to update key ID: %s", err)
+		lFunc.Errorf("failed to update key name: %s", err)
 		return nil, err
 	}
 
 	return updatedKey, nil
 }
 
-func (svc *KMSServiceBackend) DeleteKeyByID(tx context.Context, input services.GetKeyByIDInput) error {
-	lFunc := chelpers.ConfigureLogger(tx, svc.logger)
+func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.GetKeyInput) error {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := caValidator.Struct(input)
 	if err != nil {
@@ -613,37 +644,40 @@ func (svc *KMSServiceBackend) DeleteKeyByID(tx context.Context, input services.G
 		return errs.ErrValidateBadRequest
 	}
 
-	engineID, keyID, _, err := parsePKCS11ID(input.ID)
+	key, err := svc.GetKey(ctx, services.GetKeyInput{
+		Identifier: input.Identifier,
+	})
 	if err != nil {
-		return fmt.Errorf("invalid key id format: %w", err)
+		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.Identifier, err)
+		return err
 	}
 
-	engine, ok := svc.cryptoEngines[engineID]
+	engine, ok := svc.cryptoEngines[key.EngineID]
 	if !ok {
-		return fmt.Errorf("engine with id %s not found", engineID)
+		return fmt.Errorf("engine with id %s not found", key.EngineID)
 	}
 	engineInstance := *engine
 
-	_, err = engineInstance.GetPrivateKeyByID(keyID)
+	_, err = engineInstance.GetPrivateKeyByID(key.KeyID)
 	if err != nil {
 		lFunc.Errorf("could not get key from engine: %s", err)
 		return fmt.Errorf("key not found")
 	}
 
-	err = engineInstance.DeleteKey(keyID)
+	err = engineInstance.DeleteKey(key.KeyID)
 	if err != nil {
 		lFunc.Errorf("delete key error: %s", err)
 		return err
 	}
 
-	lFunc.Debugf("deleting key %s from storage engine", input.ID)
-	err = svc.kmsStorage.Delete(tx, input.ID)
+	lFunc.Debugf("deleting key %s from storage engine", input.Identifier)
+	err = svc.kmsStorage.Delete(ctx, input.Identifier)
 	if err != nil {
 		lFunc.Errorf("delete by ID error: %s", err)
 		return fmt.Errorf("failed to delete key from storage: %w", err)
 	}
 
-	lFunc.Infof("key %s deleted successfully", input.ID)
+	lFunc.Infof("key %s deleted successfully", input.Identifier)
 
 	return nil
 }
@@ -652,7 +686,7 @@ func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.Si
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	// Setup common KMS operation components
-	setup, err := svc.initKMSKeyOperation(ctx, input.KeyID, input.Algorithm, "SignMessage", input)
+	setup, err := svc.initKMSKeyOperation(ctx, input.Identifier, input.Algorithm, "SignMessage", input)
 	if err != nil {
 		return nil, err
 	}
@@ -702,7 +736,7 @@ func (svc *KMSServiceBackend) VerifySignature(ctx context.Context, input service
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	// Setup common KMS operation components
-	setup, err := svc.initKMSKeyOperation(ctx, input.KeyID, input.Algorithm, "VerifySignature", input)
+	setup, err := svc.initKMSKeyOperation(ctx, input.Identifier, input.Algorithm, "VerifySignature", input)
 	if err != nil {
 		return nil, err
 	}
