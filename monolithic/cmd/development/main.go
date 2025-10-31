@@ -451,8 +451,8 @@ func main() {
 	}
 
 	time.Sleep(3 * time.Second)
-	caCli := sdk.NewHttpCAClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/ca", conf.GatewayPortHttps))
-	engines, err := caCli.GetCryptoEngineProvider(context.Background())
+	kmsSDK := sdk.NewHttpKMSClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/kms", conf.GatewayPortHttps))
+	engines, err := kmsSDK.GetCryptoEngineProvider(context.Background())
 	if err != nil {
 		panic(err)
 	}

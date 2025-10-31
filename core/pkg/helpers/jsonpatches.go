@@ -70,7 +70,7 @@ func (pb *PatchBuilder) Build() []models.PatchOperation {
 /* ------------------------ Patch Application ------------------------ */
 
 // ApplyPatches applies patches to the provided metadata and returns the updated metadata or an error
-func ApplyPatches(metadata map[string]interface{}, patches []models.PatchOperation) (map[string]interface{}, error) {
+func ApplyPatches[rt any](metadata any, patches []models.PatchOperation) (*rt, error) {
 	opts := jsonpatch.NewApplyOptions()
 	opts.AllowMissingPathOnRemove = true
 	opts.EnsurePathExistsOnAdd = true
@@ -100,11 +100,11 @@ func ApplyPatches(metadata map[string]interface{}, patches []models.PatchOperati
 	}
 
 	// Unmarshal the result back into a map
-	var updatedMetadata map[string]interface{}
+	var updatedMetadata rt
 	err = json.Unmarshal(res, &updatedMetadata)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal updated metadata: %v", err)
 	}
 
-	return updatedMetadata, nil
+	return &updatedMetadata, nil
 }
