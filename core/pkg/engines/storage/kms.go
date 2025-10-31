@@ -12,5 +12,6 @@ type KMSKeysRepo interface {
 	SelectExistsByID(ctx context.Context, id string) (bool, *models.Key, error)
 
 	Insert(ctx context.Context, key *models.Key) (*models.Key, error)
+	Update(ctx context.Context, key *models.Key) (*models.Key, error)
 	Delete(ctx context.Context, id string) error
 }

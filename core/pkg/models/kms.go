@@ -6,6 +6,7 @@ import (
 
 // KMS
 type Key struct {
+	PKCS11URI  string            `json:"pkcs11_uri"`
 	ID         string            `json:"id"`
 	Algorithm  string            `json:"algorithm"`
 	Size       int               `json:"size"`

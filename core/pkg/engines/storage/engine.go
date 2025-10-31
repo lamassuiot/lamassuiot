@@ -6,16 +6,15 @@ import (
 )
 
 type CommonStorageEngine struct {
-	CA                   CACertificatesRepo
-	CACertificateRequest CACertificateRequestRepo
-	Cert                 CertificatesRepo
-	IssuanceProfile      IssuanceProfileRepo
-	Device               DeviceManagerRepo
-	DMS                  DMSRepo
-	VA                   VARepo
-	Events               EventRepository
-	Subscriptions        SubscriptionsRepository
-	KMS                  KMSKeysRepo
+	CA              CACertificatesRepo
+	Cert            CertificatesRepo
+	IssuanceProfile IssuanceProfileRepo
+	Device          DeviceManagerRepo
+	DMS             DMSRepo
+	VA              VARepo
+	Events          EventRepository
+	Subscriptions   SubscriptionsRepository
+	KMS             KMSKeysRepo
 }
 
 type StorageEngine interface {
@@ -23,7 +22,6 @@ type StorageEngine interface {
 	GetCAStorage() (CACertificatesRepo, error)
 	GetCertStorage() (CertificatesRepo, error)
 	GetIssuanceProfileStorage() (IssuanceProfileRepo, error)
-	GetCACertificateRequestStorage() (CACertificateRequestRepo, error)
 	GetDeviceStorage() (DeviceManagerRepo, error)
 	GetVARoleStorage() (VARepo, error)
 	GetDMSStorage() (DMSRepo, error)

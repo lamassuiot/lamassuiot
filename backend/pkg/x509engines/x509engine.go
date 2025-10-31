@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -13,7 +12,6 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"hash"
 	"math/big"
@@ -22,71 +20,27 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	"github.com/sirupsen/logrus"
 )
 
 type X509Engine struct {
 	logger           *logrus.Entry
-	cryptoEngine     cryptoengines.CryptoEngine
 	vaDomains        []string
 	softCryptoEngine *software.SoftwareCryptoEngine
+	kmsSDK           services.KMSService
 }
 
-func NewX509Engine(logger *logrus.Entry, cryptoEngine *cryptoengines.CryptoEngine, vaDomains []string) X509Engine {
+func NewX509Engine(logger *logrus.Entry, vaDomains []string, kmsSDK services.KMSService) X509Engine {
 	return X509Engine{
-		cryptoEngine:     *cryptoEngine,
 		vaDomains:        vaDomains,
 		logger:           logger,
 		softCryptoEngine: software.NewSoftwareCryptoEngine(logger),
-	}
-}
-
-func (engine X509Engine) GetEngineConfig() models.CryptoEngineInfo {
-	return engine.cryptoEngine.GetEngineConfig()
-}
-
-func (engine X509Engine) GenerateKeyPair(ctx context.Context, keyMetadata models.KeyMetadata) (string, crypto.Signer, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
-
-	if models.KeyType(keyMetadata.Type) == models.KeyType(x509.RSA) {
-		lFunc.Debugf("requesting cryptoengine instance for RSA key generation")
-
-		keyID, signer, err := engine.cryptoEngine.CreateRSAPrivateKey(keyMetadata.Bits)
-		if err != nil {
-			lFunc.Errorf("cryptoengine instance failed while generating RSA key: %s", err)
-			return "", nil, err
-		}
-		lFunc.Debugf("cryptoengine successfully generated RSA key")
-		return keyID, signer, nil
-	} else {
-		var curve elliptic.Curve
-		switch keyMetadata.Bits {
-		case 224:
-			curve = elliptic.P224()
-		case 256:
-			curve = elliptic.P256()
-		case 384:
-			curve = elliptic.P384()
-		case 521:
-			curve = elliptic.P521()
-		default:
-			return "", nil, errors.New("unsupported key size for ECDSA key")
-		}
-
-		lFunc.Debugf("requesting cryptoengine instance for ECDSA key generation")
-		keyID, signer, err := engine.cryptoEngine.CreateECDSAPrivateKey(curve)
-		if err != nil {
-			lFunc.Errorf("cryptoengine instance failed while generating ECDSA key: %s", err)
-			return "", nil, err
-		}
-
-		lFunc.Debugf("cryptoengine successfully generated ECDSA key")
-		return keyID, signer, nil
+		kmsSDK:           kmsSDK,
 	}
 }
 
@@ -316,15 +270,6 @@ func (engine X509Engine) GenerateCertificateRequest(ctx context.Context, csrSign
 	return csr, nil
 }
 
-func (engine X509Engine) GetCertificateSigner(ctx context.Context, caCertificate *x509.Certificate) (crypto.Signer, error) {
-	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(caCertificate.PublicKey)
-	if err != nil {
-		return nil, err
-	}
-
-	return engine.cryptoEngine.GetPrivateKeyByID(keyID)
-}
-
 func (engine X509Engine) GetDefaultCAIssuanceProfile(ctx context.Context, validity models.Validity) models.IssuanceProfile {
 	return models.IssuanceProfile{
 		Validity:          validity,
@@ -340,17 +285,13 @@ func (engine X509Engine) Sign(ctx context.Context, certificate *x509.Certificate
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 	lFunc.Debugf("starting standard signing with certificate [%s]", certificate.Subject.CommonName)
 
-	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(certificate.PublicKey)
+	privkey, err := engine.kmsSDK.GetKeyByID(ctx, services.GetKeyByIDInput{
+		ID: hex.EncodeToString(certificate.SubjectKeyId),
+	})
 	if err != nil {
+		lFunc.Errorf("could not get private key from KMS: %s", err)
 		return nil, err
 	}
-
-	lFunc.Debugf("requesting signer object to crypto engine instance")
-	privkey, err := engine.cryptoEngine.GetPrivateKeyByID(keyID)
-	if err != nil {
-		return nil, err
-	}
-	lFunc.Debugf("successfully retrieved certificate signer object")
 
 	if certificate.PublicKeyAlgorithm == x509.ECDSA {
 		var digest []byte
