@@ -335,15 +335,15 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 	})
 
 	var attachedBy models.CAAttachedToDevice
-	hasKey, err = helpers.GetMetadataToStruct(certUpdate.Updated.Metadata, models.CAAttachedToDeviceKey, &attachedBy)
+	hasKey, err = helpers.GetMetadataToStruct(certUpdate.Updated.Metadata, models.DMSAttachedToDeviceKey, &attachedBy)
 	if err != nil {
-		err = fmt.Errorf(errDecodeMetadataKeyFmt, models.CAAttachedToDeviceKey, err)
+		err = fmt.Errorf("could not decode metadata with key %s: %s", models.DMSAttachedToDeviceKey, err)
 		logger.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		logrus.Warnf(warnSkippingEventCertificateNoKeyFmt, event.Type(), models.CAAttachedToDeviceKey)
+		logrus.Warnf("skipping event %s, Certificate doesn't have %s key", event.Type(), models.DMSAttachedToDeviceKey)
 		return nil
 	}
 
