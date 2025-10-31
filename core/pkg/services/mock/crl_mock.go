@@ -13,11 +13,6 @@ type MockVAService struct {
 	mock.Mock
 }
 
-func (m *MockVAService) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
-	args := m.Called(ctx, input)
-	return args.String(0), args.Error(1)
-}
-
 func (m *MockVAService) CalculateCRL(ctx context.Context, input services.CalculateCRLInput) (*x509.RevocationList, error) {
 	args := m.Called(ctx, input)
 	return args.Get(0).(*x509.RevocationList), args.Error(1)

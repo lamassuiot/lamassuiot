@@ -46,11 +46,11 @@ func (s *kmsCryptoSigner) Sign(rand io.Reader, digest []byte, opts crypto.Signer
 		logrus.Warnf("using default %s sign alg for client. '%s' no match", signAlg, kmsKeyAlg)
 	}
 
-	response, err := s.sdk.SignMessage(s.ctx, SignMessageInput{
-		KeyID:       s.key.ID,
+	response, err := s.sdk.SignMessage(s.ctx, services.SignMessageInput{
+		Identifier:  s.key.KeyID,
 		Algorithm:   signAlg,
 		Message:     digest,
-		MessageType: SignMessageTypeRaw,
+		MessageType: models.Raw,
 	})
 	if err != nil {
 		return nil, err

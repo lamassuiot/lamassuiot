@@ -166,13 +166,13 @@ func (svc DMSManagerServiceBackend) UpdateDMSMetadata(ctx context.Context, input
 		return nil, errs.ErrDMSNotFound
 	}
 
-	updatedMetadata, err := chelpers.ApplyPatches(dms.Metadata, input.Patches)
+	updatedMetadata, err := chelpers.ApplyPatches[map[string]any](dms.Metadata, input.Patches)
 	if err != nil {
 		lFunc.Errorf("failed to apply patches to metadata for DMS '%s': %v", input.ID, err)
 		return nil, err
 	}
 
-	dms.Metadata = updatedMetadata
+	dms.Metadata = *updatedMetadata
 
 	lFunc.Debugf("updating %s DMS metadata", input.ID)
 	return svc.dmsStorage.Update(ctx, dms)

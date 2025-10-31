@@ -9,7 +9,8 @@ import (
 type KMSKeysRepo interface {
 	Count(ctx context.Context) (int, error)
 	SelectAll(ctx context.Context, req StorageListRequest[models.Key]) (string, error)
-	SelectExistsByID(ctx context.Context, id string) (bool, *models.Key, error)
+	SelectExistsByKeyID(ctx context.Context, id string) (bool, *models.Key, error)
+	SelectExistsByAlias(ctx context.Context, alias string) (bool, *models.Key, error)
 
 	Insert(ctx context.Context, key *models.Key) (*models.Key, error)
 	Update(ctx context.Context, key *models.Key) (*models.Key, error)

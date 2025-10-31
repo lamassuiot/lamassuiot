@@ -24,10 +24,6 @@ func NewCAEventBusPublisher(eventMWPub ICloudEventPublisher) lservices.CAMiddlew
 	}
 }
 
-func (mw CAEventPublisher) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
-	return mw.Next.GetCryptoEngineProvider(ctx)
-}
-
 func (mw CAEventPublisher) GetStats(ctx context.Context) (*models.CAStats, error) {
 	return mw.Next.GetStats(ctx)
 }
@@ -45,18 +41,6 @@ func (mw CAEventPublisher) CreateCA(ctx context.Context, input services.CreateCA
 		}
 	}()
 	return mw.Next.CreateCA(ctx, input)
-}
-
-func (mw CAEventPublisher) RequestCACSR(ctx context.Context, input services.RequestCAInput) (output *models.CACertificateRequest, err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventRequestCAKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca-csr/%s", input.ID))
-
-	defer func() {
-		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, output)
-		}
-	}()
-	return mw.Next.RequestCACSR(ctx, input)
 }
 
 func (mw CAEventPublisher) ImportCA(ctx context.Context, input services.ImportCAInput) (output *models.CACertificate, err error) {
@@ -296,89 +280,6 @@ func (mw CAEventPublisher) DeleteCertificate(ctx context.Context, input services
 		}
 	}()
 	return mw.Next.DeleteCertificate(ctx, input)
-}
-
-func (mw CAEventPublisher) GetCARequestByID(ctx context.Context, input services.GetByIDInput) (*models.CACertificateRequest, error) {
-	return mw.Next.GetCARequestByID(ctx, input)
-}
-
-func (mw CAEventPublisher) DeleteCARequestByID(ctx context.Context, input services.GetByIDInput) error {
-	return mw.Next.DeleteCARequestByID(ctx, input)
-}
-
-func (mw CAEventPublisher) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
-	return mw.Next.GetCARequests(ctx, input)
-}
-
-func (mw CAEventPublisher) GetKeys(ctx context.Context, input services.GetKeysInput) (string, error) {
-	return mw.Next.GetKeys(ctx, input)
-}
-
-func (mw CAEventPublisher) GetKeyByID(ctx context.Context, input services.GetByIDInput) (*models.Key, error) {
-	return mw.Next.GetKeyByID(ctx, input)
-}
-
-func (mw CAEventPublisher) CreateKey(ctx context.Context, input services.CreateKeyInput) (output *models.Key, err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventCreateKMSKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, "kms/unknown")
-
-	defer func() {
-		if err == nil {
-			ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("kms/%s", output.ID))
-			mw.eventMWPub.PublishCloudEvent(ctx, output)
-		}
-	}()
-
-	return mw.Next.CreateKey(ctx, input)
-}
-
-func (mw CAEventPublisher) DeleteKeyByID(ctx context.Context, input services.GetByIDInput) (err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventDeleteKMSKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("kms/%s", input.ID))
-
-	defer func() {
-		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, input)
-		}
-	}()
-	return mw.Next.DeleteKeyByID(ctx, input)
-}
-
-func (mw CAEventPublisher) SignMessage(ctx context.Context, input services.SignMessageInput) (output *models.MessageSignature, err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventSignMessageKMSKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("kms/%s", input.KeyID))
-
-	defer func() {
-		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, output)
-		}
-	}()
-	return mw.Next.SignMessage(ctx, input)
-}
-
-func (mw CAEventPublisher) VerifySignature(ctx context.Context, input services.VerifySignInput) (output *models.MessageValidation, err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventVerifySignatureKMSKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("kms/%s", input.KeyID))
-
-	defer func() {
-		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, output)
-		}
-	}()
-	return mw.Next.VerifySignature(ctx, input)
-}
-
-func (mw CAEventPublisher) ImportKey(ctx context.Context, input services.ImportKeyInput) (output *models.Key, err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventImportKMSKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, "kms/unknown")
-
-	defer func() {
-		if err == nil {
-			ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("kms/%s", output.ID))
-			mw.eventMWPub.PublishCloudEvent(ctx, output)
-		}
-	}()
-	return mw.Next.ImportKey(ctx, input)
 }
 
 func (mw CAEventPublisher) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {
