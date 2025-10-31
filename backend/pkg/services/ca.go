@@ -224,10 +224,12 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			return nil, fmt.Errorf("could not import key: %w", err)
 		}
 
-		if importedKey.ID != skid {
-			importedKey, err = svc.kmsService.UpdateKeyID(ctx, services.UpdateKeyIDInput{
-				CurrentID: importedKey.ID,
-				NewID:     skid,
+		engineID = importedKey.EngineID
+
+		if importedKey.KeyID != skid {
+			importedKey, err = svc.kmsService.UpdateKeyAliases(ctx, services.UpdateKeyAliasesInput{
+				ID:      importedKey.KeyID,
+				Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder("0"), skid).Build(), // Add skid at position 0
 			})
 			if err != nil {
 				lFunc.Errorf("could not rename imported key to match SKID %s: %s", skid, err)
