@@ -1,8 +1,6 @@
 package controllers
 
 import (
-	"crypto/ecdsa"
-	"crypto/rsa"
 	"encoding/base64"
 
 	"github.com/gin-gonic/gin"
@@ -145,24 +143,11 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		}
 	}
 
-	var keyType models.KeyType
-	var rsaKey *rsa.PrivateKey
-	var ecKey *ecdsa.PrivateKey
-
-	switch key := key.(type) {
-	case *rsa.PrivateKey:
-		rsaKey = key
-	case *ecdsa.PrivateKey:
-		ecKey = key
-	}
-
 	ca, err := r.svc.ImportCA(ctx, services.ImportCAInput{
 		ID:            requestBody.ID,
 		ProfileID:     requestBody.ProfileID,
 		CACertificate: requestBody.CACertificate,
-		KeyType:       keyType,
-		CARSAKey:      rsaKey,
-		CAECKey:       ecKey,
+		Key:           key,
 		EngineID:      requestBody.EngineID,
 		CARequestID:   requestBody.CARequestID,
 	})

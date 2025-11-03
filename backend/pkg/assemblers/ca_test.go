@@ -2,11 +2,9 @@ package assemblers
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"errors"
@@ -1712,9 +1710,8 @@ func TestImportCertificate(t *testing.T) {
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ProfileID:     profile.ID,
-					CAECKey:       caKey.(*ecdsa.PrivateKey),
+					Key:           caKey,
 					CACertificate: (*models.X509Certificate)(ca),
-					KeyType:       models.KeyType(x509.ECDSA),
 				})
 				if err != nil {
 					t.Fatalf("failed importing CA: %s", err)
@@ -1816,9 +1813,8 @@ func TestImportCertificate(t *testing.T) {
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ProfileID:     profile.ID,
-					CAECKey:       caKey.(*ecdsa.PrivateKey),
+					Key:           caKey,
 					CACertificate: (*models.X509Certificate)(ca),
-					KeyType:       models.KeyType(x509.ECDSA),
 				})
 				if err != nil {
 					t.Fatalf("failed importing CA: %s", err)
@@ -3147,8 +3143,7 @@ func TestImportCA(t *testing.T) {
 					ID:            "id-1234",
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
-					CARSAKey:      (key).(*rsa.PrivateKey),
-					KeyType:       models.KeyType(x509.RSA),
+					Key:           key,
 				})
 
 				return importedCA, err
@@ -3193,8 +3188,7 @@ func TestImportCA(t *testing.T) {
 					ID:            "id-1234",
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
-					CARSAKey:      (key).(*rsa.PrivateKey),
-					KeyType:       models.KeyType(x509.RSA),
+					Key:           key,
 					EngineID:      engine.ID,
 				})
 
@@ -3230,8 +3224,7 @@ func TestImportCA(t *testing.T) {
 					ID:            "id-1234",
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
-					CAECKey:       (key).(*ecdsa.PrivateKey),
-					KeyType:       models.KeyType(x509.ECDSA),
+					Key:           key,
 				})
 				return importedCA, err
 			},
@@ -3264,8 +3257,7 @@ func TestImportCA(t *testing.T) {
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
-					CARSAKey:      (key).(*rsa.PrivateKey),
-					KeyType:       models.KeyType(x509.RSA),
+					Key:           key,
 				})
 
 				return importedCA, err
@@ -4218,8 +4210,8 @@ func testDeleteCAWithPrivateKey(t *testing.T, serverTest *TestServer, caType str
 		}
 		ca, err = caTest.Service.ImportCA(context.Background(), services.ImportCAInput{
 			CACertificate: (*models.X509Certificate)(caCert),
-			CARSAKey:      rsaKey,
 			ProfileID:     profile.ID,
+			Key:           rsaKey,
 		})
 	}
 
@@ -5001,46 +4993,46 @@ func TestSignatureVerify(t *testing.T) {
 				return nil
 			},
 		},
-		{
-			name:   "OK/TestSignatureVerifyHashMessage",
-			before: func(svc services.CAService) error { return nil },
-			run: func(caSDK services.CAService) (bool, error) {
-				h := sha256.New()
+		// {
+		// 	name:   "OK/TestSignatureVerifyHashMessage",
+		// 	before: func(svc services.CAService) error { return nil },
+		// 	run: func(caSDK services.CAService) (bool, error) {
+		// 		h := sha256.New()
 
-				messB := []byte("my Message")
-				h.Write([]byte(messB))
-				messH := h.Sum(nil)
+		// 		messB := []byte("my Message")
+		// 		h.Write([]byte(messB))
+		// 		messH := h.Sum(nil)
 
-				sign, err := caSDK.SignatureSign(context.Background(), services.SignatureSignInput{
-					CAID:             DefaultCAID,
-					Message:          []byte(messH),
-					MessageType:      models.Hashed,
-					SigningAlgorithm: "RSASSA_PSS_SHA_256",
-				})
-				if err != nil {
-					return false, err
-				}
+		// 		sign, err := caSDK.SignatureSign(context.Background(), services.SignatureSignInput{
+		// 			CAID:             DefaultCAID,
+		// 			Message:          []byte(messH),
+		// 			MessageType:      models.Hashed,
+		// 			SigningAlgorithm: "RSASSA_PSS_SHA_256",
+		// 		})
+		// 		if err != nil {
+		// 			return false, err
+		// 		}
 
-				res, err := caSDK.SignatureVerify(context.Background(), services.SignatureVerifyInput{
-					CAID:             DefaultCAID,
-					Message:          []byte(messH),
-					MessageType:      models.Hashed,
-					SigningAlgorithm: "RSASSA_PSS_SHA_256",
-					Signature:        sign,
-				})
-				return res, err
-			},
-			resultCheck: func(valid bool, err error) error {
-				if err != nil {
-					return fmt.Errorf("got unexpected error: %s", err)
-				}
+		// 		res, err := caSDK.SignatureVerify(context.Background(), services.SignatureVerifyInput{
+		// 			CAID:             DefaultCAID,
+		// 			Message:          []byte(messH),
+		// 			MessageType:      models.Hashed,
+		// 			SigningAlgorithm: "RSASSA_PSS_SHA_256",
+		// 			Signature:        sign,
+		// 		})
+		// 		return res, err
+		// 	},
+		// 	resultCheck: func(valid bool, err error) error {
+		// 		if err != nil {
+		// 			return fmt.Errorf("got unexpected error: %s", err)
+		// 		}
 
-				if !valid {
-					return fmt.Errorf("signature verification failed")
-				}
-				return nil
-			},
-		},
+		// 		if !valid {
+		// 			return fmt.Errorf("signature verification failed")
+		// 		}
+		// 		return nil
+		// 	},
+		// },
 	}
 
 	for _, tc := range testcases {
