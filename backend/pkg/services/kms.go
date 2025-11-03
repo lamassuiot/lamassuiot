@@ -202,7 +202,7 @@ func (svc *KMSServiceBackend) initKMSKeyOperation(ctx context.Context, identifie
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	// Validate input struct
-	err := caValidator.Struct(input)
+	err := kmsValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("%s struct validation error: %s", operationName, err)
 		return nil, errs.ErrValidateBadRequest
@@ -271,7 +271,7 @@ func (svc *KMSServiceBackend) GetKeys(ctx context.Context, input services.GetKey
 func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyInput) (*models.Key, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	err := caValidator.Struct(input)
+	err := kmsValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("GetKeyInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
@@ -329,7 +329,7 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.Key, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	err := caValidator.Struct(input)
+	err := kmsValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("CreateKeyInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
@@ -433,7 +433,7 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.Key, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	err := caValidator.Struct(input)
+	err := kmsValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("ImportKeyInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
@@ -543,7 +543,7 @@ func (svc *KMSServiceBackend) checkKeySpecEngineCompliance(keyType string, size 
 func (svc *KMSServiceBackend) UpdateKeyMetadata(ctx context.Context, input services.UpdateKeyMetadataInput) (*models.Key, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	err := caValidator.Struct(input)
+	err := kmsValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("UpdateKeyMetadataInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
@@ -577,7 +577,7 @@ func (svc *KMSServiceBackend) UpdateKeyMetadata(ctx context.Context, input servi
 func (svc *KMSServiceBackend) UpdateKeyAliases(ctx context.Context, input services.UpdateKeyAliasesInput) (*models.Key, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	err := caValidator.Struct(input)
+	err := kmsValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("UpdateKeyAliasesInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
@@ -633,7 +633,7 @@ func (svc *KMSServiceBackend) UpdateKeyAliases(ctx context.Context, input servic
 func (svc *KMSServiceBackend) UpdateKeyName(ctx context.Context, input services.UpdateKeyNameInput) (*models.Key, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	err := caValidator.Struct(input)
+	err := kmsValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("UpdateKeyNameInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
@@ -660,7 +660,7 @@ func (svc *KMSServiceBackend) UpdateKeyName(ctx context.Context, input services.
 func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.GetKeyInput) error {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	err := caValidator.Struct(input)
+	err := kmsValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("DeleteKeyByID struct validation error: %s", err)
 		return errs.ErrValidateBadRequest
@@ -692,14 +692,14 @@ func (svc *KMSServiceBackend) DeleteKeyByID(ctx context.Context, input services.
 		return err
 	}
 
-	lFunc.Debugf("deleting key %s from storage engine", input.Identifier)
-	err = svc.kmsStorage.Delete(ctx, input.Identifier)
+	lFunc.Debugf("deleting key %s from storage engine", key.KeyID)
+	err = svc.kmsStorage.Delete(ctx, key.KeyID)
 	if err != nil {
 		lFunc.Errorf("delete by ID error: %s", err)
 		return fmt.Errorf("failed to delete key from storage: %w", err)
 	}
 
-	lFunc.Infof("key %s deleted successfully", input.Identifier)
+	lFunc.Infof("key %s deleted successfully", key.KeyID)
 
 	return nil
 }

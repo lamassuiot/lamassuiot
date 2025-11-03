@@ -2,8 +2,6 @@ package services
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/rsa"
 	"crypto/x509"
 	"time"
 
@@ -96,9 +94,7 @@ type ImportCAInput struct {
 	ProfileID     string
 	CACertificate *models.X509Certificate   `validate:"required"`
 	CAChain       []*models.X509Certificate //Parent CAs. They MUST be sorted as follows. 0: Root-CA; 1: Subordinate CA from Root-CA; ...
-	CARSAKey      *rsa.PrivateKey
-	CAECKey       *ecdsa.PrivateKey
-	KeyType       models.KeyType
+	Key           any
 	EngineID      string
 	CARequestID   string
 }

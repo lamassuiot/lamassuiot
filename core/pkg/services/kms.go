@@ -61,7 +61,7 @@ type VerifySignInput struct {
 type ImportKeyInput struct {
 	PrivateKey any `validate:"required"`
 	EngineID   string
-	Name       string `validate:"required"`
+	Name       string
 }
 
 type UpdateKeyMetadataInput struct {

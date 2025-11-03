@@ -2,6 +2,8 @@ package sdk
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
@@ -106,26 +108,25 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 
 func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
 	var privKey string
-	if input.KeyType == models.KeyType(x509.RSA) {
-		rsaBytes := x509.MarshalPKCS1PrivateKey(input.CARSAKey)
-		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
-			Type:  "RSA PRIVATE KEY",
-			Bytes: rsaBytes,
-		}))
-	} else if input.KeyType == models.KeyType(x509.ECDSA) {
-		ecBytes, err := x509.MarshalECPrivateKey(input.CAECKey)
-		if err != nil {
-			return nil, err
+	if input.Key != nil {
+		switch input.Key.(type) {
+		case *rsa.PrivateKey, *ecdsa.PrivateKey:
+			bytes, err := x509.MarshalPKCS8PrivateKey(input.Key)
+			privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
+				Type:  "EC PRIVATE KEY",
+				Bytes: bytes,
+			}))
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal private key: %w", err)
+			}
+
+		default:
+			return nil, fmt.Errorf("unsupported private key type: %T", input.Key)
 		}
-		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
-			Type:  "EC PRIVATE KEY",
-			Bytes: ecBytes,
-		}))
 	}
 
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/import", resources.ImportCABody{
 		ID:            input.ID,
-		CAType:        models.CertificateType(input.CAType),
 		ProfileID:     input.ProfileID,
 		CACertificate: input.CACertificate,
 		CAChain:       input.CAChain,

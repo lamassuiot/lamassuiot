@@ -2,11 +2,14 @@ package services
 
 import (
 	"context"
+	"crypto"
 	"crypto/rand"
+	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -176,23 +179,12 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 	var importType models.CertificateType
 	var key *models.Key
 
-	if input.CARSAKey != nil || input.CAECKey != nil {
+	if input.Key != nil {
 		importType = models.CertificateTypeImportedWithKey
 		lFunc.Debugf("importing CA %s - %s  private key. CA type: %s", caCertSN, caCert.Subject.CommonName, importType)
 
-		var privkey any
-		switch input.KeyType {
-		case models.KeyType(x509.RSA):
-			privkey = input.CARSAKey
-		case models.KeyType(x509.ECDSA):
-			privkey = input.CAECKey
-		default:
-			lFunc.Errorf("key type %s not supported", input.KeyType)
-			return nil, fmt.Errorf("KeyType not supported")
-		}
-
 		key, err = svc.kmsService.ImportKey(ctx, services.ImportKeyInput{
-			PrivateKey: privkey,
+			PrivateKey: input.Key,
 		})
 		if err != nil {
 			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
@@ -200,9 +192,12 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		}
 
 		if key.KeyID != skid {
-			key, err = svc.kmsService.UpdateKeyAliases(ctx, services.UpdateKeyAliasesInput{
-				ID:      key.KeyID,
-				Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder("0"), skid).Build(), // Add skid at position 0
+			key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
+				ID: key.KeyID,
+				Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
+					ResourceType: "certificate",
+					ResourceID:   helpers.SerialNumberToHexString(caCert.SerialNumber),
+				}).Build(),
 			})
 			if err != nil {
 				lFunc.Errorf("could not rename imported key to match SKID %s: %s", skid, err)
@@ -1296,6 +1291,7 @@ func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input services.S
 		lFunc.Errorf("ImportCertificate struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
+
 	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
 	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
 	if err != nil {
@@ -1311,7 +1307,41 @@ func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input services.S
 	certSigner := NewCertificateSigner(ctx, &ca.Certificate, svc.kmsService)
 
 	lFunc.Debugf("sign signature with %s Certificate", ca.Certificate.SerialNumber)
-	signature, err := certSigner.Sign(rand.Reader, input.Message, nil)
+
+	var opts crypto.SignerOpts
+	hash := crypto.SHA256
+
+	algo := strings.ToUpper(input.SigningAlgorithm)
+	switch {
+	case strings.Contains(algo, "SHA_256"):
+		hash = crypto.SHA256
+	case strings.Contains(algo, "SHA_384"):
+		hash = crypto.SHA384
+	case strings.Contains(algo, "SHA_512"):
+		hash = crypto.SHA512
+	}
+
+	if input.MessageType == models.Raw {
+		hashFunc := hash.New()
+		_, err = hashFunc.Write(input.Message)
+		if err != nil {
+			return nil, err
+		}
+		hashed := hashFunc.Sum(nil)
+
+		input.Message = hashed
+	}
+
+	if strings.HasPrefix(input.SigningAlgorithm, "RSASSA_PSS") {
+		opts = &rsa.PSSOptions{
+			SaltLength: rsa.PSSSaltLengthEqualsHash,
+			Hash:       hash,
+		}
+	} else {
+		opts = hash
+	}
+
+	signature, err := certSigner.Sign(rand.Reader, input.Message, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -1340,10 +1370,18 @@ func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input services
 	}
 
 	res, err := svc.kmsService.VerifySignature(ctx, services.VerifySignInput{
-		Identifier: ca.Certificate.SubjectKeyID,
+		Identifier:  ca.Certificate.SubjectKeyID,
+		Algorithm:   input.SigningAlgorithm,
+		Message:     input.Message,
+		Signature:   input.Signature,
+		MessageType: input.MessageType,
 	})
+	if err != nil {
+		lFunc.Errorf("could not verify signature with CA %s: %s", ca.Certificate.SerialNumber, err)
+		return false, err
+	}
 
-	return res.Valid, err
+	return res.Valid, nil
 }
 
 // Returned Error Codes:
