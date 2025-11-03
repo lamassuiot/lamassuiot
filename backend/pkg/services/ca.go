@@ -161,15 +161,7 @@ func (svc *CAServiceBackend) GetStatsByCAID(ctx context.Context, input services.
 
 func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-
-	caValidator.RegisterStructValidation(importCAValidation, services.ImportCAInput{})
-	err := caValidator.Struct(input)
-	if err != nil {
-		lFunc.Errorf("ImportCA struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
-	} else {
-		lFunc.Tracef("ImportCA struct validation success")
-	}
+	var err error
 
 	// Validate IssuanceProfileID exists if provided (required for ImportedWithKey type)
 	if input.ProfileID != "" {
@@ -181,7 +173,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		}
 	}
 
-	var engineID string
 	caCert := input.CACertificate
 	caCertSN := helpers.SerialNumberToHexString(caCert.SerialNumber)
 
@@ -193,34 +184,35 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		return nil, err
 	}
 
-	engineID := ""
-	if input.CAType == models.CertificateTypeImportedWithKey {
-		lFunc.Debugf("importing CA %s - %s  private key. CA type: %s", caCertSN, caCert.Subject.CommonName, input.CAType)
+	var importType models.CertificateType
+	var key *models.Key
 
-		var key any
+	if input.CARSAKey != nil || input.CAECKey != nil {
+		importType = models.CertificateTypeImportedWithKey
+		lFunc.Debugf("importing CA %s - %s  private key. CA type: %s", caCertSN, caCert.Subject.CommonName, importType)
+
+		var privkey any
 		switch input.KeyType {
 		case models.KeyType(x509.RSA):
-			key = input.CARSAKey
+			privkey = input.CARSAKey
 		case models.KeyType(x509.ECDSA):
-			key = input.CAECKey
+			privkey = input.CAECKey
 		default:
 			lFunc.Errorf("key type %s not supported", input.KeyType)
 			return nil, fmt.Errorf("KeyType not supported")
 		}
 
-		importedKey, err := svc.kmsService.ImportKey(ctx, services.ImportKeyInput{
-			PrivateKey: key,
+		key, err = svc.kmsService.ImportKey(ctx, services.ImportKeyInput{
+			PrivateKey: privkey,
 		})
 		if err != nil {
 			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
 			return nil, fmt.Errorf("could not import key: %w", err)
 		}
 
-		engineID = importedKey.EngineID
-
-		if importedKey.KeyID != skid {
-			importedKey, err = svc.kmsService.UpdateKeyAliases(ctx, services.UpdateKeyAliasesInput{
-				ID:      importedKey.KeyID,
+		if key.KeyID != skid {
+			key, err = svc.kmsService.UpdateKeyAliases(ctx, services.UpdateKeyAliasesInput{
+				ID:      key.KeyID,
 				Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder("0"), skid).Build(), // Add skid at position 0
 			})
 			if err != nil {
@@ -232,6 +224,18 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		if err != nil {
 			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
 			return nil, fmt.Errorf("could not import key: %w", err)
+		}
+	} else {
+		//search in KMS if key exists for the CA being imported
+		key, err = svc.kmsService.GetKey(ctx, services.GetKeyInput{
+			Identifier: skid,
+		})
+		if err != nil {
+			lFunc.Info("could not find key with SKID %s for CA %s: %s. Assuming key does not exist", skid, caCertSN, err)
+			importType = models.CertificateTypeImportedWithoutKey
+		} else {
+			lFunc.Infof("found key with SKID %s for CA %s in KMS", skid, caCertSN)
+			importType = models.CertificateTypeManaged
 		}
 	}
 
@@ -348,6 +352,22 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		}
 	}
 
+	engineID := ""
+	if key != nil {
+		engineID = key.EngineID
+		key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
+			ID: key.KeyID,
+			Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
+				ResourceType: "certificate",
+				ResourceID:   helpers.SerialNumberToHexString(caCert.SerialNumber),
+			}).Build(),
+		})
+		if err != nil {
+			lFunc.Errorf("could not bind CA %s to key %s: %s", caCert.Subject.CommonName, key.KeyID, err)
+			return nil, err
+		}
+	}
+
 	ca := &models.CACertificate{
 		ID:         caID,
 		Metadata:   map[string]interface{}{},
@@ -368,7 +388,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			ValidTo:             caCert.NotAfter,
 			RevocationTimestamp: time.Time{},
 			Metadata:            map[string]interface{}{},
-			Type:                input.CAType,
+			Type:                importType,
 			IssuerCAMetadata:    issuerMeta,
 			EngineID:            engineID,
 			IsCA:                true,
@@ -478,12 +498,28 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	var caLevel int
 	var issuerCAMeta models.IssuerCAMetadata
 
-	key, err := svc.kmsService.CreateKey(ctx, services.CreateKeyInput{
-		Algorithm: input.KeyMetadata.Type.String(),
-		Size:      input.KeyMetadata.Bits,
-		EngineID:  input.EngineID,
-		Name:      fmt.Sprintf("Key For CA CN=%s", input.Subject.CommonName),
-	})
+	var key *models.Key
+
+	if input.KeyMetadata.KeyID == "" {
+		key, err = svc.kmsService.CreateKey(ctx, services.CreateKeyInput{
+			Algorithm: input.KeyMetadata.Type.String(),
+			Size:      input.KeyMetadata.Bits,
+			EngineID:  input.EngineID,
+			Name:      fmt.Sprintf("Key For CA CN=%s", input.Subject.CommonName),
+		})
+		if err != nil {
+			lFunc.Errorf("could not create key for CA %s: %s", input.Subject.CommonName, err)
+			return nil, err
+		}
+	} else {
+		key, err = svc.kmsService.GetKey(ctx, services.GetKeyInput{
+			Identifier: input.KeyMetadata.KeyID,
+		})
+		if err != nil {
+			lFunc.Errorf("could not get key for CA %s: %s", input.Subject.CommonName, err)
+			return nil, err
+		}
+	}
 
 	signer := NewKMSCryptoSigner(ctx, *key, svc.kmsService)
 	engine := x509engines.NewX509Engine(lFunc, svc.vaServerDomains, svc.kmsService)
@@ -566,6 +602,18 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 
 	if err != nil {
 		lFunc.Errorf("could not create CA %s certificate: %s", input.Subject.CommonName, err)
+		return nil, err
+	}
+
+	key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
+		ID: key.KeyID,
+		Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
+			ResourceType: "certificate",
+			ResourceID:   helpers.SerialNumberToHexString(ca.SerialNumber),
+		}).Build(),
+	})
+	if err != nil {
+		lFunc.Errorf("could not bind CA %s to key %s: %s", input.Subject.CommonName, key.KeyID, err)
 		return nil, err
 	}
 
@@ -861,9 +909,8 @@ func (svc *CAServiceBackend) UpdateCAMetadata(ctx context.Context, input service
 
 // caValidatorCADeletionEligibility checks if a CA can be deleted based on its type and status
 func (svc *CAServiceBackend) caValidatorCADeletionEligibility(ca *models.CACertificate, lFunc *logrus.Entry) error {
-
-	if ca.Certificate.Type == models.CertificateTypeExternal {
-		lFunc.Debugf("External CA can be deleted. Proceeding")
+	if ca.Certificate.Type == models.CertificateTypeImportedWithoutKey {
+		lFunc.Debugf("ImportedWithoutKey CA can be deleted. Proceeding")
 		return nil
 	}
 
@@ -1163,7 +1210,7 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	cert := models.Certificate{
 		VersionSchema: "1.0",
 		Metadata:      map[string]interface{}{},
-		Type:          models.CertificateTypeExternal,
+		Type:          models.CertificateTypeImportedWithoutKey,
 		Certificate:   (*models.X509Certificate)(x509Cert),
 		IssuerCAMetadata: models.IssuerCAMetadata{
 			SN: helpers.SerialNumberToHexString(caCert.SerialNumber),
@@ -1220,7 +1267,7 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 	newCert := models.Certificate{
 		VersionSchema:       "unknown",
 		Metadata:            input.Metadata,
-		Type:                models.CertificateTypeExternal,
+		Type:                models.CertificateTypeImportedWithoutKey,
 		Certificate:         (*models.X509Certificate)(input.Certificate),
 		Status:              status,
 		KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate(x509Cert),
@@ -1570,29 +1617,6 @@ func createCAValidation(sl validator.StructLevel) {
 	if !helpers.ValidateValidity(ca.CAExpiration) {
 		// lFunc.Errorf("CA Expiration time ref is incompatible with the selected variable")
 		sl.ReportError(ca.CAExpiration, "CAExpiration", "CAExpiration", "InvalidCAExpiration", "")
-	}
-}
-
-func importCAValidation(sl validator.StructLevel) {
-	ca := sl.Current().Interface().(services.ImportCAInput)
-	caCert := ca.CACertificate
-
-	if ca.CAType == models.CertificateTypeImportedWithKey {
-		valid, err := chelpers.ValidateCertAndPrivKey((*x509.Certificate)(caCert), ca.CARSAKey, ca.CAECKey)
-		if err != nil {
-			sl.ReportError(ca.CARSAKey, "CARSAKey", "CARSAKey", "PrivateKeyAndCertificateNotMatch", "")
-			sl.ReportError(ca.CAECKey, "CAECKey", "CAECKey", "PrivateKeyAndCertificateNotMatch", "")
-		}
-
-		if !valid {
-			// lFunc.Errorf("CA certificate and the private key provided are not compatible")
-			sl.ReportError(ca.CARSAKey, "CARSAKey", "CARSAKey", "PrivateKeyAndCertificateNotMatch", "")
-			sl.ReportError(ca.CAECKey, "CAECKey", "CAECKey", "PrivateKeyAndCertificateNotMatch", "")
-		}
-
-		if ca.ProfileID == "" {
-			sl.ReportError(ca.ProfileID, "ProfileID", "ProfileID", "ProfileIDRequiredForImportedWithKey", "")
-		}
 	}
 }
 

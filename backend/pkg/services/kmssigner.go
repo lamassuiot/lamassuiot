@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto"
 	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
 	"fmt"
 	"io"
 
@@ -27,7 +29,22 @@ func NewKMSCryptoSigner(ctx context.Context, kms models.Key, kmsSDK services.KMS
 }
 
 func (s *kmsCryptoSigner) Public() crypto.PublicKey {
-	return s.key.PublicKey
+	b, err := base64.StdEncoding.DecodeString(s.key.PublicKey)
+	if err != nil {
+		return nil
+	}
+
+	block, _ := pem.Decode(b)
+	if block == nil {
+		return nil
+	}
+
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil
+	}
+
+	return pub
 }
 
 func (s *kmsCryptoSigner) Sign(rand io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
@@ -50,7 +67,7 @@ func (s *kmsCryptoSigner) Sign(rand io.Reader, digest []byte, opts crypto.Signer
 		Identifier:  s.key.KeyID,
 		Algorithm:   signAlg,
 		Message:     digest,
-		MessageType: models.Raw,
+		MessageType: models.Hashed,
 	})
 	if err != nil {
 		return nil, err

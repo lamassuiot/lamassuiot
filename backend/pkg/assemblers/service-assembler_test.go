@@ -317,8 +317,9 @@ func BuildKMSTestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *T
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},
-		PublisherEventBus: eventBus.config,
-		Storage:           storageEngine.config,
+		CryptoEngineConfig: cryptoEngines.config,
+		PublisherEventBus:  eventBus.config,
+		Storage:            storageEngine.config,
 	}, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
@@ -326,7 +327,7 @@ func BuildKMSTestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *T
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("could not assemble CA with HTTP server")
+		return nil, fmt.Errorf("could not assemble KMS with HTTP server: %s", err)
 	}
 
 	return &KMSTestServer{
@@ -339,7 +340,7 @@ func BuildKMSTestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *T
 	}, nil
 }
 
-func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *TestCryptoEngineConfig, eventBus *TestEventBusConfig, monitor bool, allowCascadeDelete bool, kmsTestServer KMSTestServer) (*CATestServer, error) {
+func BuildCATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, monitor bool, allowCascadeDelete bool, kmsTestServer KMSTestServer) (*CATestServer, error) {
 	storageEngine.config.LogLevel = cconfig.Trace
 
 	svc, scheduler, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
@@ -366,7 +367,7 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *Te
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("could not assemble CA with HTTP server")
+		return nil, fmt.Errorf("could not assemble CA with HTTP server: %s", err)
 	}
 
 	return &CATestServer{
@@ -598,7 +599,7 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 	beforeEachActions = append(beforeEachActions, kmsTestServer.BeforeEach)
 	afterSuiteActions = append(afterSuiteActions, kmsTestServer.AfterSuite)
 
-	caTestServer, err := BuildCATestServer(storageEngine, cryptoEngines, eventBus, monitor, allowCascadeDelete, *kmsTestServer)
+	caTestServer, err := BuildCATestServer(storageEngine, eventBus, monitor, allowCascadeDelete, *kmsTestServer)
 	servicesMap[CA] = caTestServer
 	if err != nil {
 		return nil, fmt.Errorf("could not build CATestServer: %s", err)
@@ -700,6 +701,7 @@ func AssembleServices(storageEngine *TestStorageEngineConfig, eventBus *TestEven
 
 	return &TestServer{
 		EventBus: eventBus,
+		KMS:      kmsTestServer,
 		CA:       caTestServer,
 		DeviceManager: func() *DeviceManagerTestServer {
 			if servicesMap[DEVICE_MANAGER] != nil {
