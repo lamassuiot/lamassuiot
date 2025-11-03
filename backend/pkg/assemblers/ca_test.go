@@ -88,13 +88,16 @@ func TestCreateCA(t *testing.T) {
 	caDUr := models.TimeDuration(time.Hour * 24)
 	issuanceDur := models.TimeDuration(time.Hour * 12)
 
-	profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
-		Profile: models.IssuanceProfile{
-			Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
-		},
-	})
-	if err != nil {
-		t.Fatalf("failed creating issuance profile: %s", err)
+	createProfile := func(t *testing.T) *models.IssuanceProfile {
+		profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+			Profile: models.IssuanceProfile{
+				Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+			},
+		})
+		if err != nil {
+			t.Fatalf("failed creating issuance profile: %s", err)
+		}
+		return profile
 	}
 
 	var testcases = []struct {
@@ -107,7 +110,7 @@ func TestCreateCA(t *testing.T) {
 			name:   "OK/KeyType-RSA",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
-
+				profile := createProfile(t)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
@@ -128,6 +131,7 @@ func TestCreateCA(t *testing.T) {
 			name:   "OK/KeyType-ECC",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
@@ -148,6 +152,7 @@ func TestCreateCA(t *testing.T) {
 			name:   "OK/Expiration-Duration",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
@@ -203,6 +208,7 @@ func TestCreateCA(t *testing.T) {
 		{
 			name: "Error/Duplicate-CA-ID",
 			before: func(svc services.CAService) error {
+				profile := createProfile(t)
 				_, err := svc.CreateCA(context.Background(), services.CreateCAInput{
 					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
@@ -216,6 +222,7 @@ func TestCreateCA(t *testing.T) {
 				return nil
 			},
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
@@ -231,6 +238,30 @@ func TestCreateCA(t *testing.T) {
 
 				if !errors.Is(err, errs.ErrCAAlreadyExists) {
 					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrCAAlreadyExists, err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "Error/InvalidIssuanceProfileID",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    "non-existent-profile-id",
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrIssuanceProfileNotFound) {
+					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrIssuanceProfileNotFound, err)
 				}
 
 				return nil
@@ -3602,6 +3633,68 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 				return nil
 			},
 		},
+		{
+			name:   "Error/InvalidIssuanceProfileID-ImportedWithKey",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				ca, key, err := generateSelfSignedCA(x509.RSA)
+				if err != nil {
+					return nil, fmt.Errorf("Failed creating the certificate %s", err)
+				}
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:            "id-1234",
+					CAType:        models.CertificateTypeImportedWithKey,
+					ProfileID:     "non-existent-profile-id",
+					CACertificate: (*models.X509Certificate)(ca),
+					CARSAKey:      (key).(*rsa.PrivateKey),
+					KeyType:       models.KeyType(x509.RSA),
+				})
+
+				return importedCA, err
+			},
+			resultCheck: func(ca *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrIssuanceProfileNotFound) {
+					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrIssuanceProfileNotFound, err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "Error/MissingIssuanceProfileID-ImportedWithKey",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				ca, key, err := generateSelfSignedCA(x509.RSA)
+				if err != nil {
+					return nil, fmt.Errorf("Failed creating the certificate %s", err)
+				}
+
+				// ProfileID is required for ImportedWithKey type but not provided
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:            "id-1234",
+					CAType:        models.CertificateTypeImportedWithKey,
+					CACertificate: (*models.X509Certificate)(ca),
+					CARSAKey:      (key).(*rsa.PrivateKey),
+					KeyType:       models.KeyType(x509.RSA),
+				})
+
+				return importedCA, err
+			},
+			resultCheck: func(ca *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error. Got none")
+				}
+
+				// This should fail validation before reaching the profile check
+				// The error could be a validation error or profile not found error
+				return nil
+			},
+		},
 	}
 
 	for _, tc := range testcases {
@@ -4140,6 +4233,16 @@ func testDeleteCAWithPrivateKey(t *testing.T, serverTest *TestServer, caType str
 
 	caTest := serverTest.CA
 
+	// Create a valid issuance profile first
+	profile, err := caTest.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed creating issuance profile: %s", err)
+	}
+
 	// Setup the CA based on type
 	var ca *models.CACertificate
 	switch caType {
@@ -4148,7 +4251,7 @@ func testDeleteCAWithPrivateKey(t *testing.T, serverTest *TestServer, caType str
 			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 			Subject:      models.Subject{CommonName: "TestManagedCA"},
 			CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
-			ProfileID:    "test-profile",
+			ProfileID:    profile.ID,
 		})
 	case "external":
 		caCert, _, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalTestCA")
@@ -4158,7 +4261,7 @@ func testDeleteCAWithPrivateKey(t *testing.T, serverTest *TestServer, caType str
 		ca, err = caTest.Service.ImportCA(context.Background(), services.ImportCAInput{
 			CACertificate: (*models.X509Certificate)(caCert),
 			CAType:        models.CertificateTypeExternal,
-			ProfileID:     "test-profile",
+			ProfileID:     profile.ID,
 		})
 	case "imported":
 		caCert, caKey, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ImportedTestCA")
@@ -4173,7 +4276,7 @@ func testDeleteCAWithPrivateKey(t *testing.T, serverTest *TestServer, caType str
 			CACertificate: (*models.X509Certificate)(caCert),
 			CARSAKey:      rsaKey,
 			CAType:        models.CertificateTypeImportedWithKey,
-			ProfileID:     "test-profile",
+			ProfileID:     profile.ID,
 		})
 	}
 
@@ -4227,12 +4330,22 @@ func TestDeleteCAPrivateKeyDeletionWithCascade(t *testing.T) {
 
 		caTest := serverTest.CA
 
+		// Create a valid issuance profile first
+		profile, err := caTest.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+			Profile: models.IssuanceProfile{
+				Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+			},
+		})
+		if err != nil {
+			t.Fatalf("failed creating issuance profile: %s", err)
+		}
+
 		// Create a root CA
 		rootCA, err := caTest.Service.CreateCA(context.Background(), services.CreateCAInput{
 			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
 			Subject:      models.Subject{CommonName: "RootCAForKeyDeletion"},
 			CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
-			ProfileID:    "test-profile",
+			ProfileID:    profile.ID,
 		})
 		if err != nil {
 			t.Fatalf("could not create root CA: %s", err)

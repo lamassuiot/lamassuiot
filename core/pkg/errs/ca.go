@@ -24,6 +24,8 @@ var (
 
 	ErrCascadeDeleteNotAllowed error = errors.New("cascade delete operations are not allowed by configuration")
 
+	ErrIssuanceProfileNotFound error = errors.New("issuance profile not found")
+
 	//KMS
 	ErrKeyNotFound error = errors.New("key not found")
 )

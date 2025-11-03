@@ -226,6 +226,16 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		lFunc.Tracef("ImportCA struct validation success")
 	}
 
+	// Validate IssuanceProfileID exists if provided (required for ImportedWithKey type)
+	if input.ProfileID != "" {
+		_, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+			ProfileID: input.ProfileID,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	var engineID string
 	caCert := input.CACertificate
 	caCertSN := helpers.SerialNumberToHexString(caCert.SerialNumber)
@@ -640,6 +650,14 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 	if err != nil {
 		lFunc.Errorf("CreateCAInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
+	}
+
+	// Validate IssuanceProfileID exists
+	_, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+		ProfileID: input.ProfileID,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	// Check if CA already exists
@@ -1079,6 +1097,14 @@ func (svc *CAServiceBackend) UpdateCAProfile(ctx context.Context, input services
 	}
 
 	ca, err := svc.getCACertificateIfExists(ctx, input.CAID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate IssuanceProfileID exists
+	_, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+		ProfileID: input.ProfileID,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -2433,13 +2459,16 @@ func (svc *CAServiceBackend) GetIssuanceProfiles(ctx context.Context, input serv
 }
 
 func (svc *CAServiceBackend) GetIssuanceProfileByID(ctx context.Context, input services.GetIssuanceProfileByIDInput) (*models.IssuanceProfile, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
 	exists, profile, err := svc.issuanceProfilesStorage.SelectByID(ctx, input.ProfileID)
 	if err != nil {
 		return nil, err
 	}
 
 	if !exists {
-		return nil, fmt.Errorf("issuance profile '%s' not found", input.ProfileID)
+		lFunc.Errorf("issuance profile '%s' does not exist", input.ProfileID)
+		return nil, errs.ErrIssuanceProfileNotFound
 	}
 
 	return profile, nil

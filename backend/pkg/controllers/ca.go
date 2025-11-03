@@ -74,6 +74,8 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAIncompatibleValidity:
 			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrIssuanceProfileNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrCAAlreadyExists:
 			ctx.JSON(409, gin.H{"err": err.Error()})
 		default:
@@ -281,6 +283,8 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAValidCertAndPrivKey:
 			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrIssuanceProfileNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
@@ -653,6 +657,8 @@ func (r *caHttpRoutes) UpdateCAProfile(ctx *gin.Context) {
 	if err != nil {
 		switch err {
 		case errs.ErrCANotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrIssuanceProfileNotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
