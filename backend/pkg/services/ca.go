@@ -216,19 +216,17 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			}
 		}
 
-		importedKey, err := svc.kmsService.ImportKey(ctx, services.ImportKeyInput{
-			PrivateKey: key,
+		key, err = svc.kmsService.ImportKey(ctx, services.ImportKeyInput{
+			PrivateKey: privkey,
 		})
 		if err != nil {
 			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
 			return nil, fmt.Errorf("could not import key: %w", err)
 		}
 
-		engineID = importedKey.EngineID
-
-		if importedKey.KeyID != skid {
-			importedKey, err = svc.kmsService.UpdateKeyAliases(ctx, services.UpdateKeyAliasesInput{
-				ID:      importedKey.KeyID,
+		if key.KeyID != skid {
+			key, err = svc.kmsService.UpdateKeyAliases(ctx, services.UpdateKeyAliasesInput{
+				ID:      key.KeyID,
 				Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder("0"), skid).Build(), // Add skid at position 0
 			})
 			if err != nil {
