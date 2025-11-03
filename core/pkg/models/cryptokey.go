@@ -16,8 +16,9 @@ const (
 type KeyType x509.PublicKeyAlgorithm
 
 type KeyMetadata struct {
-	Type KeyType `json:"type" gorm:"serializer:text"`
-	Bits int     `json:"bits"`
+	KeyID string  `json:"key_id"`
+	Type  KeyType `json:"type" gorm:"serializer:text"`
+	Bits  int     `json:"bits"`
 }
 
 type KeyStrengthMetadata struct {

@@ -1506,7 +1506,7 @@ func TestESTEnroll(t *testing.T) {
 
 		// 		importedBootstrapCA, err := testServers.CA.Service.ImportCA(context.Background(), services.ImportCAInput{
 		// 			ID:                 fmt.Sprintf("my-external-CA-%s", uuid.NewString()),
-		// 			CAType:             models.CertificateTypeExternal,
+		// 			CAType:             models.CertificateTypeImportedWithoutKey,
 		// 			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
 		// 			CACertificate:      bootstrapCA.Certificate.Certificate,
 		// 		})

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -32,8 +33,24 @@ func (k *Key) AfterFind(tx *gorm.DB) (err error) {
 	return nil
 }
 
+type Signature []byte
+
+func (c *Signature) String() string {
+	return base64.StdEncoding.EncodeToString(*c)
+}
+
+func (c *Signature) UnmarshalText(text []byte) error {
+	decoded, err := base64.StdEncoding.DecodeString(string(text))
+	if err != nil {
+		return err
+	}
+
+	*c = Signature(decoded)
+	return nil
+}
+
 type MessageSignature struct {
-	Signature string `json:"signature"`
+	Signature Signature `json:"signature"`
 }
 
 type MessageValidation struct {

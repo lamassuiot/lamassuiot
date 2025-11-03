@@ -6,7 +6,6 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
-	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"slices"
@@ -19,7 +18,7 @@ import (
 )
 
 func StartKMSServiceTestServer(t *testing.T, withEventBus bool) (*KMSTestServer, error) {
-	builder := TestServiceBuilder{}.WithDatabase("kms").WithVault()
+	builder := TestServiceBuilder{}.WithDatabase("kms", "ca").WithVault()
 	testServer, err := builder.Build(t)
 
 	if err != nil {
@@ -61,8 +60,6 @@ func TestCryptoEngines(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
 
 			err = kmsTest.BeforeEach()
@@ -1450,12 +1447,7 @@ func TestVerifySignature(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to sign message for VerifySignature test: %s", err)
 		}
-		// sig.Signature is base64 string, decode to []byte
-		sigBytes, err := base64.StdEncoding.DecodeString(sig.Signature)
-		if err != nil {
-			t.Fatalf("failed to decode signature: %s", err)
-		}
-		return key.PKCS11URI, alg, msg, sigBytes
+		return key.PKCS11URI, alg, msg, sig.Signature
 	}
 
 	var validKeyID string
@@ -1668,10 +1660,8 @@ func TestVerifySignature(t *testing.T) {
 				if err != nil {
 					panic(fmt.Sprintf("failed to sign hash for test: %s", err))
 				}
-				validSignature, err = base64.StdEncoding.DecodeString(sig.Signature)
-				if err != nil {
-					panic(fmt.Sprintf("failed to decode signature: %s", err))
-				}
+
+				validSignature = sig.Signature
 				validMessage = validHashMessage
 			},
 			run: func() (*models.MessageValidation, error) {
@@ -1724,10 +1714,8 @@ func TestVerifySignature(t *testing.T) {
 				if err != nil {
 					panic(fmt.Sprintf("failed to sign hash for ECDSA verification test: %s", err))
 				}
-				validSignature, err = base64.StdEncoding.DecodeString(sig.Signature)
-				if err != nil {
-					panic(fmt.Sprintf("failed to decode signature: %s", err))
-				}
+
+				validSignature = sig.Signature
 			},
 			run: func() (*models.MessageValidation, error) {
 				// Try to verify with wrong hash size (48 bytes instead of 32)
@@ -1783,10 +1771,7 @@ func TestVerifySignature(t *testing.T) {
 				if err != nil {
 					panic(fmt.Sprintf("failed to sign hash for ECDSA-384 verification test: %s", err))
 				}
-				validSignature, err = base64.StdEncoding.DecodeString(sig.Signature)
-				if err != nil {
-					panic(fmt.Sprintf("failed to decode signature: %s", err))
-				}
+				validSignature = sig.Signature
 			},
 			run: func() (*models.MessageValidation, error) {
 				return kmsTest.HttpKMSSDK.VerifySignature(context.Background(), services.VerifySignInput{
@@ -1838,10 +1823,7 @@ func TestVerifySignature(t *testing.T) {
 				if err != nil {
 					panic(fmt.Sprintf("failed to sign hash for ECDSA-521 verification test: %s", err))
 				}
-				validSignature, err = base64.StdEncoding.DecodeString(sig.Signature)
-				if err != nil {
-					panic(fmt.Sprintf("failed to decode signature: %s", err))
-				}
+				validSignature = sig.Signature
 			},
 			run: func() (*models.MessageValidation, error) {
 				// Try to verify with wrong hash size (32 bytes instead of 64)

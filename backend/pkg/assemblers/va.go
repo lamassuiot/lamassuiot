@@ -74,8 +74,9 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService, kmsSe
 	}
 
 	ocsp := beService.NewOCSPService(beService.OCSPServiceBuilder{
-		Logger:   lSvc,
-		CAClient: caService,
+		Logger:    lSvc,
+		CAClient:  caService,
+		KMSClient: kmsService,
 	})
 
 	crlSvc := crl.(*beService.CRLServiceBackend)
