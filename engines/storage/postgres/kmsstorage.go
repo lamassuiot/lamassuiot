@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-const kmsDBName = "kms_keys"
+const kmsTableName = "kms_keys"
 
 type PostgresKMSStore struct {
 	db      *gorm.DB
@@ -18,7 +18,7 @@ type PostgresKMSStore struct {
 }
 
 func NewKMSPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.KMSKeysRepo, error) {
-	querier, err := TableQuery(log, db, kmsDBName, "key_id  ", models.Key{})
+	querier, err := TableQuery(log, db, kmsTableName, "key_id  ", models.Key{})
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,17 @@ func (db *PostgresKMSStore) SelectExistsByName(ctx context.Context, name string)
 }
 
 func (db *PostgresKMSStore) SelectExistsByAlias(ctx context.Context, alias string) (bool, *models.Key, error) {
-	return false, nil, fmt.Errorf("TODO")
+	var elem models.Key
+	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("aliases @> ?::jsonb", fmt.Sprintf(`["%s"]`, alias)).Limit(1).Find(&elem)
+	if tx.Error != nil {
+		return false, nil, tx.Error
+	}
+
+	if tx.RowsAffected == 0 {
+		return false, nil, nil // No record found, but no error
+	}
+
+	return true, &elem, nil
 }
 
 func (db *PostgresKMSStore) Insert(ctx context.Context, kmsKey *models.Key) (*models.Key, error) {

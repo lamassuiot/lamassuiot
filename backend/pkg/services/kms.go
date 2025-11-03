@@ -591,6 +591,28 @@ func (svc *KMSServiceBackend) UpdateKeyAliases(ctx context.Context, input servic
 		return nil, err
 	}
 
+	for _, patch := range input.Patches {
+		if patch.Op == models.PatchAdd || patch.Op == models.PatchReplace {
+			alias, ok := patch.Value.(string)
+			if !ok {
+				lFunc.Errorf("invalid alias value type for key '%s'", input.ID)
+				return nil, fmt.Errorf("invalid alias value type")
+			}
+
+			// Check for duplicate aliases
+			exist, _, err := svc.kmsStorage.SelectExistsByAlias(ctx, alias)
+			if err != nil {
+				lFunc.Errorf("failed to check if alias exists for key '%s': %v", input.ID, err)
+				return nil, err
+			}
+
+			if exist {
+				lFunc.Errorf("duplicate alias '%s' found for key '%s'", alias, input.ID)
+				return nil, fmt.Errorf("duplicate alias found")
+			}
+		}
+	}
+
 	updatedAliases, err := chelpers.ApplyPatches[[]string](key.Aliases, input.Patches)
 	if err != nil {
 		lFunc.Errorf("failed to apply patches to aliases for key '%s': %v", input.ID, err)
@@ -720,6 +742,7 @@ func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.Si
 		if digest == nil {
 			return nil, errors.New("digest is nil")
 		}
+
 		signature, err = setup.Signer.Sign(rand.Reader, digest, setup.Hash)
 		if err != nil {
 			lFunc.Errorf("ECDSA Sign error: %s", err)
@@ -728,7 +751,7 @@ func (svc *KMSServiceBackend) SignMessage(ctx context.Context, input services.Si
 	}
 
 	return &models.MessageSignature{
-		Signature: base64.StdEncoding.EncodeToString(signature),
+		Signature: signature,
 	}, nil
 }
 

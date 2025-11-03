@@ -159,7 +159,6 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 	ca, err := r.svc.ImportCA(ctx, services.ImportCAInput{
 		ID:            requestBody.ID,
 		ProfileID:     requestBody.ProfileID,
-		CAType:        requestBody.CAType,
 		CACertificate: requestBody.CACertificate,
 		KeyType:       keyType,
 		CARSAKey:      rsaKey,

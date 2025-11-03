@@ -20,7 +20,7 @@ import (
 )
 
 func AssembleCAServiceWithHTTPServer(conf config.CAConfig, kmsSDK services.KMSService, serviceInfo models.APIServiceInfo) (*services.CAService, *jobs.JobScheduler, int, error) {
-	caService, scheduler, err := AssembleCAService(conf)
+	caService, scheduler, err := AssembleCAService(conf, kmsSDK)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not assemble CA Service. Exiting: %s", err)
 	}
@@ -38,7 +38,7 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, kmsSDK services.KMSSe
 	return caService, scheduler, port, nil
 }
 
-func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobScheduler, error) {
+func AssembleCAService(conf config.CAConfig, kmsSDK services.KMSService) (*services.CAService, *jobs.JobScheduler, error) {
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "CA", "Service")
 	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Event Bus")
 	lAudit := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Audit Bus")
@@ -53,6 +53,7 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 
 	svc, err := lservices.NewCAService(lservices.CAServiceBuilder{
 		Logger:                 lSvc,
+		KMSService:             kmsSDK,
 		CAStorage:              caStorage,
 		CertificateStorage:     certStorage,
 		IssuanceProfileStorage: issuerProfilesStorage,

@@ -7,10 +7,9 @@ import (
 type CertificateType string
 
 const (
-	CertificateTypeManaged         CertificateType = "MANAGED"
-	CertificateTypeRequested       CertificateType = "REQUESTED"
-	CertificateTypeImportedWithKey CertificateType = "IMPORTED"
-	CertificateTypeExternal        CertificateType = "EXTERNAL"
+	CertificateTypeManaged            CertificateType = "MANAGED"
+	CertificateTypeImportedWithKey    CertificateType = "IMPORTED_WITH_KEY"
+	CertificateTypeImportedWithoutKey CertificateType = "IMPORTED_WITHOUT_KEY"
 )
 
 type ValidityType string
