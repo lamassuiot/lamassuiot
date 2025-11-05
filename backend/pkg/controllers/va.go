@@ -7,6 +7,7 @@ import (
 	"io"
 	"math/big"
 	"net/url"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -141,8 +142,19 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 		CASubjectKeyID: params.CASubjectKeyID,
 	})
 	if err != nil {
-		r.logger.Errorf("something went wrong while getting crl list: %s", err)
-		ctx.AbortWithError(500, err)
+		// Check if this is a client error (400) or server error (500)
+		errMsg := err.Error()
+		switch {
+		case errors.Is(err, errs.ErrValidateBadRequest):
+			r.logger.Warnf("validation error in CRL request: %s", err)
+			ctx.AbortWithError(400, err)
+		case strings.Contains(errMsg, "does not exist") || strings.Contains(errMsg, "not found"):
+			r.logger.Warnf("CA or VA role not found for CRL request: %s", err)
+			ctx.AbortWithError(400, err)
+		default:
+			r.logger.Errorf("something went wrong while getting crl list: %s", err)
+			ctx.AbortWithError(500, err)
+		}
 		return
 	}
 
@@ -164,8 +176,16 @@ func (r *vaHttpRoutes) GetRoleByID(ctx *gin.Context) {
 		CASubjectKeyID: params.CASubjectKeyID,
 	})
 	if err != nil {
-		r.logger.Errorf("something went wrong while getting va role: %s", err)
-		ctx.AbortWithError(500, err)
+		// Check if this is a client error (400) or server error (500)
+		errMsg := err.Error()
+		switch {
+		case strings.Contains(errMsg, "does not exist") || strings.Contains(errMsg, "not found"):
+			r.logger.Warnf("VA role not found: %s", err)
+			ctx.AbortWithError(400, err)
+		default:
+			r.logger.Errorf("something went wrong while getting va role: %s", err)
+			ctx.AbortWithError(500, err)
+		}
 		return
 	}
 
@@ -194,12 +214,16 @@ func (r *vaHttpRoutes) UpdateRole(ctx *gin.Context) {
 		CRLRole:        requestBody.VACRLRole,
 	})
 	if err != nil {
-		r.logger.Errorf("something went wrong while updating va role: %s", err)
-		switch err {
+		// Check if this is a client error (400) or server error (500)
+		errMsg := err.Error()
+		switch {
+		case strings.Contains(errMsg, "does not exist") || strings.Contains(errMsg, "not found"):
+			r.logger.Warnf("VA role not found for update: %s", err)
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
+			r.logger.Errorf("something went wrong while updating va role: %s", err)
 			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
-
 		return
 	}
 
