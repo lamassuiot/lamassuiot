@@ -2,12 +2,14 @@ package controllers
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
 	"net/url"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -102,8 +104,21 @@ func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 
 	response, err := r.ocsp.Verify(ctx, ocsp)
 	if err != nil {
-		r.logger.Errorf("something went wrong while verifying ocsp request: %s", err)
-		ctx.AbortWithError(500, err)
+		// Check if this is a client error (400) or server error (500)
+		switch {
+		case errors.Is(err, errs.ErrCertificateNotFound):
+			r.logger.Warnf("certificate not found for ocsp request: %s", err)
+			ctx.AbortWithError(400, err)
+		case errors.Is(err, errs.ErrCANotFound):
+			r.logger.Warnf("CA not found for ocsp request: %s", err)
+			ctx.AbortWithError(400, err)
+		case errors.Is(err, errs.ErrValidateBadRequest):
+			r.logger.Warnf("validation error in ocsp request: %s", err)
+			ctx.AbortWithError(400, err)
+		default:
+			r.logger.Errorf("something went wrong while verifying ocsp request: %s", err)
+			ctx.AbortWithError(500, err)
+		}
 		return
 	}
 
