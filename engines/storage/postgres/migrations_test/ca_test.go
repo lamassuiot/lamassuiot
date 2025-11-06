@@ -578,10 +578,10 @@ func TestMigrations(t *testing.T) {
 		t.Fatalf("failed while running migration v20250107164937_add_is_ca")
 	}
 
-	// MigrationTest_CA_20250115095852_create_requests_table(t, logger, con)
-	// if t.Failed() {
-	// 	t.Fatalf("failed while running migration v20250115095852_create_requests_table")
-	// }
+	MigrationTest_CA_20250115095852_create_requests_table(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250115095852_create_requests_table")
+	}
 
 	CleanAllTables(t, logger, con)
 
