@@ -159,18 +159,6 @@ type UpdateKeyTagsBody struct {
 	Tags []string `json:"tags"`
 }
 
-type UpdateKeyMetadataBody struct {
-	Patches []models.PatchOperation `json:"patches"`
-}
-
-type UpdateKeyAliasesBody struct {
-	Patches []models.PatchOperation `json:"patches"`
-}
-
-type UpdateKeyNameBody struct {
-	Name string `json:"name"`
-}
-
 type SignMessageBody struct {
 	Algorithm   string                 `json:"algorithm"`
 	Message     []byte                 `json:"message"`
