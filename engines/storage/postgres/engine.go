@@ -62,9 +62,6 @@ func (s *PostgresStorageEngine) initialiceCACertStorage() error {
 		return err
 	}
 
-	m := NewMigrator(s.logger, psqlCli)
-	m.MigrateToLatest()
-
 	if s.CA == nil {
 		s.CA, err = NewCAPostgresRepository(s.logger, psqlCli)
 		if err != nil {
@@ -135,9 +132,6 @@ func (s *PostgresStorageEngine) GetDeviceStorage() (storage.DeviceManagerRepo, e
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
 
-		m := NewMigrator(s.logger, psqlCli)
-		m.MigrateToLatest()
-
 		deviceStore, err := NewDeviceManagerRepository(s.logger, psqlCli)
 		if err != nil {
 			return nil, fmt.Errorf("could not initialize postgres Device client: %s", err)
@@ -155,9 +149,6 @@ func (s *PostgresStorageEngine) GetVARoleStorage() (storage.VARepo, error) {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
 
-		m := NewMigrator(s.logger, psqlCli)
-		m.MigrateToLatest()
-
 		store, err := NewVARepository(s.logger, psqlCli)
 		if err != nil {
 			return nil, fmt.Errorf("could not initialize postgres Device client: %s", err)
@@ -174,9 +165,6 @@ func (s *PostgresStorageEngine) GetDMSStorage() (storage.DMSRepo, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
-
-		m := NewMigrator(s.logger, psqlCli)
-		m.MigrateToLatest()
 
 		dmsStore, err := NewDMSManagerRepository(s.logger, psqlCli)
 		if err != nil {
@@ -207,9 +195,6 @@ func (s *PostgresStorageEngine) initialiceSubscriptionsStorage() error {
 		return err
 	}
 
-	m := NewMigrator(s.logger, psqlCli)
-	m.MigrateToLatest()
-
 	if s.Subscriptions == nil {
 		s.Subscriptions, err = NewSubscriptionsPostgresRepository(s.logger, psqlCli)
 		if err != nil {
@@ -233,9 +218,6 @@ func (s *PostgresStorageEngine) GetKMSStorage() (storage.KMSKeysRepo, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
-
-		m := NewMigrator(s.logger, psqlCli)
-		m.MigrateToLatest()
 
 		kmsStore, err := NewKMSPostgresRepository(s.logger, psqlCli)
 		if err != nil {
