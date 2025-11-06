@@ -21,6 +21,7 @@ func NewKMSHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.KMSService
 	rv1.POST("/keys/import", routes.ImportKey)
 	rv1.PUT("/keys/:id/alias", routes.UpdateKeyAliases)
 	rv1.PUT("/keys/:id/name", routes.UpdateKeyName)
+	rv1.PUT("/keys/:id/tags", routes.UpdateKeyTags)
 	rv1.PUT("/keys/:id/metadata", routes.UpdateKeyMetadata)
 	rv1.DELETE("/keys/:id", routes.DeleteKeyByID)
 	rv1.POST("/keys/:id/sign", routes.SignMessage)

@@ -110,6 +110,8 @@ func (r *kmsHttpRoutes) CreateKey(ctx *gin.Context) {
 		Size:      requestBody.Size,
 		EngineID:  requestBody.EngineID,
 		Name:      requestBody.Name,
+		Tags:      requestBody.Tags,
+		Metadata:  requestBody.Metadata,
 	})
 
 	if err != nil {
@@ -152,6 +154,8 @@ func (r *kmsHttpRoutes) ImportKey(ctx *gin.Context) {
 		PrivateKey: privKey,
 		EngineID:   requestBody.EngineID,
 		Name:       requestBody.Name,
+		Tags:       requestBody.Tags,
+		Metadata:   requestBody.Metadata,
 	})
 
 	if err != nil {
@@ -262,6 +266,43 @@ func (r *kmsHttpRoutes) UpdateKeyName(ctx *gin.Context) {
 		ID:   params.ID,
 		Name: requestBody.Name,
 	})
+	if err != nil {
+		switch err {
+		case errs.ErrKeyNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ctx.JSON(200, key)
+}
+
+func (r *kmsHttpRoutes) UpdateKeyTags(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	var requestBody resources.UpdateKeyTagsBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
+	key, err := r.svc.UpdateKeyTags(ctx, services.UpdateKeyTagsInput{
+		ID:   params.ID,
+		Tags: requestBody.Tags,
+	})
+
 	if err != nil {
 		switch err {
 		case errs.ErrKeyNotFound:

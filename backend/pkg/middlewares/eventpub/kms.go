@@ -129,6 +129,28 @@ func (mw KMSEventPublisher) UpdateKeyName(ctx context.Context, input services.Up
 	return mw.Next.UpdateKeyName(ctx, input)
 }
 
+func (mw KMSEventPublisher) UpdateKeyTags(ctx context.Context, input services.UpdateKeyTagsInput) (output *models.Key, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateKMSKeyTags)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("kms/%s", input.ID))
+
+	prev, err := mw.GetKey(ctx, services.GetKeyInput{
+		Identifier: input.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("mw error: could not get Key %s: %w", input.ID, err)
+	}
+
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.Key]{
+				Updated:  *output,
+				Previous: *prev,
+			})
+		}
+	}()
+	return mw.Next.UpdateKeyTags(ctx, input)
+}
+
 func (mw KMSEventPublisher) DeleteKeyByID(ctx context.Context, input services.GetKeyInput) (err error) {
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventDeleteKMSKey)
 	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("kms/%s", input.Identifier))

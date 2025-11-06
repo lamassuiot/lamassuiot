@@ -537,15 +537,28 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 
 		// Generate a new Key Pair and a CSR for the CA
 
+		subject := pkix.Name{
+			CommonName: input.Subject.CommonName,
+		}
+
+		if input.Subject.Country != "" {
+			subject.Country = []string{input.Subject.Country}
+		}
+		if input.Subject.Organization != "" {
+			subject.Organization = []string{input.Subject.Organization}
+		}
+		if input.Subject.OrganizationUnit != "" {
+			subject.OrganizationalUnit = []string{input.Subject.OrganizationUnit}
+		}
+		if input.Subject.Locality != "" {
+			subject.Locality = []string{input.Subject.Locality}
+		}
+		if input.Subject.State != "" {
+			subject.Province = []string{input.Subject.State}
+		}
+
 		csrDerBytes, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{
-			Subject: pkix.Name{
-				CommonName:         input.Subject.CommonName,
-				Country:            []string{input.Subject.Country},
-				Organization:       []string{input.Subject.Organization},
-				OrganizationalUnit: []string{input.Subject.OrganizationUnit},
-				Locality:           []string{input.Subject.Locality},
-				Province:           []string{input.Subject.State},
-			},
+			Subject: subject,
 		}, signer)
 		if err != nil {
 			lFunc.Errorf("could not create CSR for CA %s: %s", input.Subject.CommonName, err)

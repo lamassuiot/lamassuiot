@@ -20,6 +20,7 @@ type Key struct {
 	Size          int            `json:"size"`
 	PublicKey     string         `json:"public_key"`
 	CreationTS    time.Time      `json:"creation_ts"`
+	Tags          []string       `json:"tags" gorm:"serializer:json"`
 	Metadata      map[string]any `json:"metadata" gorm:"serializer:json"`
 }
 
