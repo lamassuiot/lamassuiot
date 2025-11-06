@@ -32,6 +32,7 @@ var KMSFilterableFields = map[string]FilterFieldType{
 	"status":          StringFilterFieldType,
 	"creation_ts":     DateFilterFieldType,
 	"name":            StringFilterFieldType,
+	"tags":            StringArrayFilterFieldType,
 }
 
 var IssuanceProfileFiltrableFields = map[string]FilterFieldType{
@@ -126,10 +127,12 @@ type ImportCertificateBody struct {
 
 // KMS
 type CreateKeyBody struct {
-	Algorithm string `json:"algorithm"`
-	Size      int    `json:"size"`
-	EngineID  string `json:"engine_id"`
-	Name      string `json:"name"`
+	Algorithm string         `json:"algorithm"`
+	Size      int            `json:"size"`
+	EngineID  string         `json:"engine_id"`
+	Name      string         `json:"name"`
+	Tags      []string       `json:"tags"`
+	Metadata  map[string]any `json:"metadata"`
 }
 
 type UpdateKeyMetadataBody struct {
@@ -142,6 +145,10 @@ type UpdateKeyAliasesBody struct {
 
 type UpdateKeyNameBody struct {
 	Name string `json:"name"`
+}
+
+type UpdateKeyTagsBody struct {
+	Tags []string `json:"tags"`
 }
 
 type SignMessageBody struct {
@@ -158,9 +165,11 @@ type VerifySignBody struct {
 }
 
 type ImportKeyBody struct {
-	PrivateKey string `json:"private_key"`
-	EngineID   string `json:"engine_id"`
-	Name       string `json:"name"`
+	PrivateKey string         `json:"private_key"`
+	EngineID   string         `json:"engine_id"`
+	Name       string         `json:"name"`
+	Tags       []string       `json:"tags"`
+	Metadata   map[string]any `json:"metadata"`
 }
 
 type CreateUpdateIssuanceProfileBody struct {

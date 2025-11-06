@@ -69,6 +69,14 @@ func (mw KMSAuditEventPublisher) UpdateKeyName(ctx context.Context, input servic
 	return mw.next.UpdateKeyName(ctx, input)
 }
 
+func (mw KMSAuditEventPublisher) UpdateKeyTags(ctx context.Context, input services.UpdateKeyTagsInput) (output *models.Key, err error) {
+	defer func() {
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventUpdateKMSKeyTags, input, err, output)
+	}()
+
+	return mw.next.UpdateKeyTags(ctx, input)
+}
+
 func (mw KMSAuditEventPublisher) DeleteKeyByID(ctx context.Context, input services.GetKeyInput) (err error) {
 	defer func() {
 		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventDeleteKMSKey, input, err, nil)

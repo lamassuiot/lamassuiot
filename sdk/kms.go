@@ -55,6 +55,8 @@ func (cli *httpKMSClient) CreateKey(ctx context.Context, input services.CreateKe
 		Size:      input.Size,
 		EngineID:  input.EngineID,
 		Name:      input.Name,
+		Tags:      input.Tags,
+		Metadata:  input.Metadata,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err
@@ -75,6 +77,8 @@ func (cli *httpKMSClient) ImportKey(ctx context.Context, input services.ImportKe
 		PrivateKey: keyB64,
 		EngineID:   input.EngineID,
 		Name:       input.Name,
+		Tags:       input.Tags,
+		Metadata:   input.Metadata,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err
@@ -108,6 +112,17 @@ func (cli *httpKMSClient) UpdateKeyAliases(ctx context.Context, input services.U
 func (cli *httpKMSClient) UpdateKeyName(ctx context.Context, input services.UpdateKeyNameInput) (*models.Key, error) {
 	response, err := Put[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/"+input.ID+"/name", resources.UpdateKeyNameBody{
 		Name: input.Name,
+	}, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (cli *httpKMSClient) UpdateKeyTags(ctx context.Context, input services.UpdateKeyTagsInput) (*models.Key, error) {
+	response, err := Put[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/keys/"+input.ID+"/tags", resources.UpdateKeyTagsBody{
+		Tags: input.Tags,
 	}, map[int][]error{})
 	if err != nil {
 		return nil, err

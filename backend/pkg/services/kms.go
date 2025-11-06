@@ -413,6 +413,17 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 	pemBlock := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubBytes})
 	base64PEM := base64.StdEncoding.EncodeToString(pemBlock)
 
+	// Initialize tags and metadata with defaults if not provided
+	tags := input.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+
+	metadata := input.Metadata
+	if metadata == nil {
+		metadata = map[string]any{}
+	}
+
 	kmsKey := models.Key{
 		PKCS11URI:     buildPKCS11ID(engineID, keyID, "private"),
 		KeyID:         keyID,
@@ -424,7 +435,8 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 		Size:          input.Size,
 		PublicKey:     base64PEM,
 		CreationTS:    time.Now(),
-		Metadata:      map[string]any{},
+		Tags:          tags,
+		Metadata:      metadata,
 	}
 
 	return svc.kmsStorage.Insert(ctx, &kmsKey)
@@ -508,6 +520,17 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 	pemBlockPub := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubBytes})
 	base64PEM := base64.StdEncoding.EncodeToString(pemBlockPub)
 
+	// Initialize tags and metadata with defaults if not provided
+	tags := input.Tags
+	if tags == nil {
+		tags = []string{}
+	}
+
+	metadata := input.Metadata
+	if metadata == nil {
+		metadata = map[string]any{}
+	}
+
 	kmsKey := models.Key{
 		PKCS11URI:     buildPKCS11ID(engineID, keyID, "private"),
 		KeyID:         keyID,
@@ -519,7 +542,8 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 		Size:          size,
 		PublicKey:     base64PEM,
 		CreationTS:    time.Now(),
-		Metadata:      map[string]any{},
+		Tags:          tags,
+		Metadata:      metadata,
 	}
 
 	return svc.kmsStorage.Insert(ctx, &kmsKey)
@@ -651,6 +675,33 @@ func (svc *KMSServiceBackend) UpdateKeyName(ctx context.Context, input services.
 	updatedKey, err := svc.kmsStorage.Update(ctx, key)
 	if err != nil {
 		lFunc.Errorf("failed to update key name: %s", err)
+		return nil, err
+	}
+
+	return updatedKey, nil
+}
+
+func (svc *KMSServiceBackend) UpdateKeyTags(ctx context.Context, input services.UpdateKeyTagsInput) (*models.Key, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	err := kmsValidator.Struct(input)
+	if err != nil {
+		lFunc.Errorf("UpdateKeyTagsInput struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	key, err := svc.GetKey(ctx, services.GetKeyInput{
+		Identifier: input.ID,
+	})
+	if err != nil {
+		lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.ID, err)
+		return nil, err
+	}
+
+	key.Tags = input.Tags
+	updatedKey, err := svc.kmsStorage.Update(ctx, key)
+	if err != nil {
+		lFunc.Errorf("failed to update key tags: %s", err)
 		return nil, err
 	}
 

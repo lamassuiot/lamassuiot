@@ -19,6 +19,7 @@ type KMSService interface {
 	UpdateKeyMetadata(ctx context.Context, input UpdateKeyMetadataInput) (*models.Key, error)
 	UpdateKeyAliases(ctx context.Context, input UpdateKeyAliasesInput) (*models.Key, error)
 	UpdateKeyName(ctx context.Context, input UpdateKeyNameInput) (*models.Key, error)
+	UpdateKeyTags(ctx context.Context, input UpdateKeyTagsInput) (*models.Key, error)
 
 	DeleteKeyByID(ctx context.Context, input GetKeyInput) error
 
@@ -40,6 +41,8 @@ type CreateKeyInput struct {
 	Size      int    `validate:"required"`
 	EngineID  string
 	Name      string `validate:"required"`
+	Tags      []string
+	Metadata  map[string]any
 }
 
 // Identifier can be either KeyID, Alias, or PKCS11URI
@@ -62,6 +65,8 @@ type ImportKeyInput struct {
 	PrivateKey any `validate:"required"`
 	EngineID   string
 	Name       string
+	Tags       []string
+	Metadata   map[string]any
 }
 
 type UpdateKeyMetadataInput struct {
@@ -77,6 +82,11 @@ type UpdateKeyAliasesInput struct {
 type UpdateKeyNameInput struct {
 	ID   string `validate:"required"`
 	Name string `validate:"required"`
+}
+
+type UpdateKeyTagsInput struct {
+	ID   string   `validate:"required"`
+	Tags []string `validate:"required"`
 }
 
 type UpdateKeyIDInput struct {

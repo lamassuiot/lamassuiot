@@ -34,6 +34,7 @@ const (
 	EventUpdateKMSKeyMetadata  EventType = "kms.metadata.update"
 	EventUpdateKMSKeyAliases   EventType = "kms.aliases.update"
 	EventUpdateKMSKeyName      EventType = "kms.name.update"
+	EventUpdateKMSKeyTags      EventType = "kms.tags.update"
 	EventDeleteKMSKey          EventType = "kms.delete"
 	EventSignMessageKMSKey     EventType = "kms.sign"
 	EventVerifySignatureKMSKey EventType = "kms.verify"
