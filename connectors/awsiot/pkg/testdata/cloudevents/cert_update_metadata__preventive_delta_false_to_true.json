@@ -9,7 +9,7 @@
         "previous": {
             "serial_number": "a2-37-bc-aa-c1-f2-ab-25-ae-24-6e-f3-1b-99-e1-6c",
             "metadata": {
-                "lamassu.io/ca/attached-to": {
+                "lamassu.io/ra/attached-to": {
                     "authorized_by": {
                         "ra_id": "test"
                     },
@@ -58,7 +58,7 @@
         "updated": {
             "serial_number": "a2-37-bc-aa-c1-f2-ab-25-ae-24-6e-f3-1b-99-e1-6c",
             "metadata": {
-                "lamassu.io/ca/attached-to": {
+                "lamassu.io/ra/attached-to": {
                     "authorized_by": {
                         "ra_id": "test"
                     },
