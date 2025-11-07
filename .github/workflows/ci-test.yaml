@@ -17,6 +17,8 @@ jobs:
       max-parallel: 5
       matrix:
         module: 
+          - path: backend
+            tag: backend
           - path: core
             tag: core
           - path: sdk
