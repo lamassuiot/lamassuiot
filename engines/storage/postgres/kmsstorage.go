@@ -18,7 +18,7 @@ type PostgresKMSStore struct {
 }
 
 func NewKMSPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.KMSKeysRepo, error) {
-	querier, err := TableQuery(log, db, kmsTableName, "key_id  ", models.Key{})
+	querier, err := TableQuery(log, db, kmsTableName, "key_id", models.Key{})
 	if err != nil {
 		return nil, err
 	}

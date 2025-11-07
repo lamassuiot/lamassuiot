@@ -114,13 +114,14 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 		switch input.Key.(type) {
 		case *rsa.PrivateKey, *ecdsa.PrivateKey:
 			bytes, err := x509.MarshalPKCS8PrivateKey(input.Key)
-			privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
-				Type:  "EC PRIVATE KEY",
-				Bytes: bytes,
-			}))
 			if err != nil {
 				return nil, fmt.Errorf("failed to marshal private key: %w", err)
 			}
+
+			privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
+				Type:  "PRIVATE KEY",
+				Bytes: bytes,
+			}))
 
 		default:
 			return nil, fmt.Errorf("unsupported private key type: %T", input.Key)
