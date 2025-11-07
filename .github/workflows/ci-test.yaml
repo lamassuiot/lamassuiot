@@ -14,6 +14,8 @@ jobs:
       max-parallel: 5
       matrix:
         module: 
+          - path: backend
+            tag: backend
           - path: core
             tag: core
           - path: sdk
@@ -36,8 +38,6 @@ jobs:
             tag: eventbus-aws
           - path: engines/storage/postgres
             tag: storage-postgres
-          - path: backend
-            tag: backend
           - path: connectors/awsiot
             tag: connector-awsiot
           - path: monolithic
