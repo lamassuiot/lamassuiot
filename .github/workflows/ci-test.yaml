@@ -36,8 +36,6 @@ jobs:
             tag: eventbus-aws
           - path: engines/storage/postgres
             tag: storage-postgres
-          - path: backend
-            tag: backend
           - path: connectors/awsiot
             tag: connector-awsiot
           - path: monolithic
@@ -65,7 +63,7 @@ jobs:
         id: run
         working-directory: ${{ matrix.module.path }}
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5.1.2
@@ -119,3 +117,96 @@ jobs:
           fail_ci_if_error: true
           verbose: true
           flags: crypto-pkcs11
+
+  setup-backend-assemblers:
+    name: Setup Backend Assemblers Matrix
+    runs-on: ubuntu-latest
+    outputs:
+      tests: ${{ steps.set-matrix.outputs.tests }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
+      
+      - name: Set Matrix
+        id: set-matrix
+        run: |
+          tests=$(find backend/pkg/assemblers -maxdepth 1 -type f -name '*_test.go' | while read file; do
+            basename "$file" .go
+          done | jq -R -s -c 'split("\n")[:-1] | map({file: ., tag: ("backend-assemblers-" + .)})')
+          echo "tests=$tests" >> $GITHUB_OUTPUT
+
+  test-backend-assemblers:
+    needs: setup-backend-assemblers
+    strategy:
+      max-parallel: 5
+      matrix:
+        test: ${{ fromJson(needs.setup-backend-assemblers.outputs.tests) }}
+    name: backend/pkg/assemblers/${{ matrix.test.file }} - Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
+ 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.24.3'
+          cache-dependency-path: "**/*.sum"
+ 
+      - name: Install Dependencies
+        working-directory: backend
+        run: go work sync
+
+      - name: Run Golang Tests with coverage
+        id: run
+        working-directory: backend/pkg/assemblers
+        run: |
+          go run gotest.tools/gotestsum@latest --format github-actions -run '' ${{ matrix.test.file }}.go -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5.1.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          commit_parent: ${{ github.event.pull_request.base.sha }}
+          fail_ci_if_error: true
+          verbose: true
+          flags: ${{ matrix.test.tag }}
+
+  test-backend-rest:
+    name: backend (excluding assemblers) - Tests
+    runs-on: ubuntu-latest
+    needs: test-backend-assemblers
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
+ 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.24.3'
+          cache-dependency-path: "**/*.sum"
+ 
+      - name: Install Dependencies
+        working-directory: backend
+        run: go work sync
+
+      - name: Run Golang Tests with coverage
+        id: run
+        working-directory: backend
+        run: |
+          go run gotest.tools/gotestsum@latest --format github-actions $(go list ./... | grep -v '/pkg/assemblers/') -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5.1.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          commit_parent: ${{ github.event.pull_request.base.sha }}
+          fail_ci_if_error: true
+          verbose: true
+          flags: backend-rest
