@@ -3581,11 +3581,9 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:            "id-1234",
-					CAType:        models.CertificateTypeImportedWithKey,
 					ProfileID:     "non-existent-profile-id",
 					CACertificate: (*models.X509Certificate)(ca),
-					CARSAKey:      (key).(*rsa.PrivateKey),
-					KeyType:       models.KeyType(x509.RSA),
+					Key:           key,
 				})
 
 				return importedCA, err
@@ -3614,10 +3612,9 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 				// ProfileID is required for ImportedWithKey type but not provided
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:            "id-1234",
-					CAType:        models.CertificateTypeImportedWithKey,
 					CACertificate: (*models.X509Certificate)(ca),
-					CARSAKey:      (key).(*rsa.PrivateKey),
-					KeyType:       models.KeyType(x509.RSA),
+					Key:           key,
+					ProfileID:     "non-existent-profile-id",
 				})
 
 				return importedCA, err
@@ -4195,7 +4192,7 @@ func testDeleteCAWithPrivateKey(t *testing.T, serverTest *TestServer, caType str
 		if err != nil {
 			t.Fatalf("failed to generate self-signed CA: %s", err)
 		}
-		ca, err = caTest.Service.ImportCA(context.Background(), services.ImportCAInput{
+		ca, _ = caTest.Service.ImportCA(context.Background(), services.ImportCAInput{
 			CACertificate: (*models.X509Certificate)(caCert),
 			ProfileID:     profile.ID,
 		})
@@ -4208,7 +4205,7 @@ func testDeleteCAWithPrivateKey(t *testing.T, serverTest *TestServer, caType str
 		if !ok {
 			t.Fatalf("expected RSA key")
 		}
-		ca, err = caTest.Service.ImportCA(context.Background(), services.ImportCAInput{
+		ca, _ = caTest.Service.ImportCA(context.Background(), services.ImportCAInput{
 			CACertificate: (*models.X509Certificate)(caCert),
 			ProfileID:     profile.ID,
 			Key:           rsaKey,

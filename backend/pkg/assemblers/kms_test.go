@@ -99,6 +99,10 @@ func TestCreateKey(t *testing.T) {
 				})
 			},
 			resultCheck: func(createdKey *models.Key, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created KMS key without error, but got error: %s", err)
+				}
+
 				keyUriParts, err := parsePKCS11URI(createdKey.PKCS11URI)
 				if err != nil {
 					return fmt.Errorf("failed to parse created key ID as PKCS#11 URI: %s", err)
@@ -106,10 +110,6 @@ func TestCreateKey(t *testing.T) {
 
 				if createdKey == nil || createdKey.Name != "Test RSA Key" || createdKey.Algorithm != "RSA" || createdKey.Size != 2048 || !strings.HasPrefix(createdKey.PKCS11URI, "pkcs11:") || keyUriParts["token-id"] != "filesystem-1" {
 					return fmt.Errorf("unexpected key result for RSA DefaultEngine: %+v", createdKey)
-				}
-
-				if err != nil {
-					return fmt.Errorf("should've created KMS key without error, but got error: %s", err)
 				}
 
 				return nil
@@ -127,6 +127,10 @@ func TestCreateKey(t *testing.T) {
 				})
 			},
 			resultCheck: func(createdKey *models.Key, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created KMS key without error, but got error: %s", err)
+				}
+
 				keyUriParts, err := parsePKCS11URI(createdKey.PKCS11URI)
 				if err != nil {
 					return fmt.Errorf("failed to parse created key ID as PKCS#11 URI: %s", err)
@@ -134,10 +138,6 @@ func TestCreateKey(t *testing.T) {
 
 				if createdKey == nil || createdKey.Name != "Test RSA Key Vault" || createdKey.Algorithm != "RSA" || createdKey.Size != 2048 || !strings.HasPrefix(createdKey.PKCS11URI, "pkcs11:") || keyUriParts["token-id"] != "vault-1" {
 					return fmt.Errorf("unexpected key result for RSA NonDefaultEngine: %+v", createdKey)
-				}
-
-				if err != nil {
-					return fmt.Errorf("should've created KMS key without error, but got error: %s", err)
 				}
 
 				return nil
@@ -1865,9 +1865,7 @@ func parsePKCS11URI(uri string) (map[string]string, error) {
 	result := make(map[string]string)
 
 	// Strip the scheme ("pkcs11:") if present
-	if strings.HasPrefix(uri, "pkcs11:") {
-		uri = strings.TrimPrefix(uri, "pkcs11:")
-	}
+	uri = strings.TrimPrefix(uri, "pkcs11:")
 
 	// Split key=value pairs by ";"
 	parts := strings.Split(uri, ";")
