@@ -1,127 +1,39 @@
 package eventpub
 
 import (
-	"context"
-	"errors"
-	"reflect"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	svcmock "github.com/lamassuiot/lamassuiot/core/v3/pkg/services/mock"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-type CloudEventPublisherMock struct {
-	mock.Mock
+// CA test configuration
+var caTestConfig = EventTestConfig[services.CAService, *svcmock.MockCAService]{
+	NewPublisher: func(pub *CloudEventPublisherMock) func(services.CAService) services.CAService {
+		return NewCAEventBusPublisher(pub)
+	},
+	CreateMockService: func() *svcmock.MockCAService {
+		return new(svcmock.MockCAService)
+	},
 }
 
-func (m *CloudEventPublisherMock) PublishCloudEvent(ctx context.Context, payload interface{}) {
-	m.Called(ctx, payload)
+// Convenience wrappers for CA testing
+func caWithoutErrors[E any, O any](t *testing.T, method string, input E, event models.EventType, expectedOutput O, extra ...func(*svcmock.MockCAService)) {
+	WithoutErrors(t, caTestConfig, method, input, event, expectedOutput, extra...)
 }
 
-func eventChecker(event models.EventType, expectations []func(*svcmock.MockCAService), operation func(services.CAService), assertions func(*CloudEventPublisherMock, *svcmock.MockCAService)) {
-	mockCAService := new(svcmock.MockCAService)
-	mockEventMWPub := new(CloudEventPublisherMock)
-	caEventPublisherMw := NewCAEventBusPublisher(mockEventMWPub)
-	caEventPublisher := caEventPublisherMw(mockCAService)
-
-	for _, expectation := range expectations {
-		expectation(mockCAService)
-	}
-
-	mockEventMWPub.On("PublishCloudEvent", mock.Anything, mock.Anything)
-	operation(caEventPublisher)
-
-	assertions(mockEventMWPub, mockCAService)
+func caWithErrors[E any, O any](t *testing.T, method string, input E, event models.EventType, expectedOutput O, extra ...func(*svcmock.MockCAService)) {
+	WithErrors(t, caTestConfig, method, input, event, expectedOutput, extra...)
 }
 
-func withoutErrors[E any, O any](t *testing.T, method string, input E, event models.EventType, expectedOutput O, extra ...func(*svcmock.MockCAService)) {
-	expectations := []func(*svcmock.MockCAService){
-		func(mockCAService *svcmock.MockCAService) {
-			mockCAService.On(method, mock.Anything, mock.Anything).Return(expectedOutput, nil)
-		},
-	}
-	expectations = append(expectations, extra...)
-
-	operation := func(caMiddleware services.CAService) {
-		m := reflect.ValueOf(caMiddleware).MethodByName(method)
-		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
-		assert.Nil(t, r[1].Interface())
-	}
-
-	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockCAService) {
-		mockCAService.AssertExpectations(t)
-		mockEventMWPub.AssertExpectations(t)
-	}
-
-	eventChecker(event, expectations, operation, assertions)
-}
-func withErrors[E any, O any](t *testing.T, method string, input E, event models.EventType, expectedOutput O, extra ...func(*svcmock.MockCAService)) {
-	expectations := []func(*svcmock.MockCAService){
-		func(mockCAService *svcmock.MockCAService) {
-			mockCAService.On(method, mock.Anything, mock.Anything).Return(expectedOutput, errors.New("some error"))
-		},
-	}
-	expectations = append(expectations, extra...)
-
-	operation := func(caMiddleware services.CAService) {
-		m := reflect.ValueOf(caMiddleware).MethodByName(method)
-		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
-		assert.NotNil(t, r[1].Interface())
-	}
-
-	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockCAService) {
-		mockCAService.AssertExpectations(t)
-		mockEventMWPub.AssertNotCalled(t, "PublishCloudEvent")
-	}
-
-	eventChecker(event, expectations, operation, assertions)
+func caWithoutErrorsSingleResult[E any](t *testing.T, method string, input E, event models.EventType, extra ...func(*svcmock.MockCAService)) {
+	WithoutErrorsSingleResult(t, caTestConfig, method, input, event, extra...)
 }
 
-func withoutErrorsSingleResult[E any](t *testing.T, method string, input E, event models.EventType, extra ...func(*svcmock.MockCAService)) {
-	expectations := []func(*svcmock.MockCAService){
-		func(mockCAService *svcmock.MockCAService) {
-			mockCAService.On(method, mock.Anything, mock.Anything).Return(nil)
-		},
-	}
-	expectations = append(expectations, extra...)
-
-	operation := func(caMiddleware services.CAService) {
-		m := reflect.ValueOf(caMiddleware).MethodByName(method)
-		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
-		assert.Nil(t, r[0].Interface())
-	}
-
-	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockCAService) {
-		mockCAService.AssertExpectations(t)
-		mockEventMWPub.AssertExpectations(t)
-	}
-
-	eventChecker(event, expectations, operation, assertions)
-}
-
-func withErrorsSingleResult[E any](t *testing.T, method string, input E, event models.EventType, extra ...func(*svcmock.MockCAService)) {
-	expectations := []func(*svcmock.MockCAService){
-		func(mockCAService *svcmock.MockCAService) {
-			mockCAService.On(method, mock.Anything, mock.Anything).Return(errors.New("some error"))
-		},
-	}
-	expectations = append(expectations, extra...)
-
-	operation := func(caMiddleware services.CAService) {
-		m := reflect.ValueOf(caMiddleware).MethodByName(method)
-		r := m.Call([]reflect.Value{reflect.ValueOf(context.Background()), reflect.ValueOf(input)})
-		assert.NotNil(t, r[0].Interface())
-	}
-
-	assertions := func(mockEventMWPub *CloudEventPublisherMock, mockCAService *svcmock.MockCAService) {
-		mockCAService.AssertExpectations(t)
-		mockEventMWPub.AssertNotCalled(t, "PublishCloudEvent")
-	}
-
-	eventChecker(event, expectations, operation, assertions)
+func caWithErrorsSingleResult[E any](t *testing.T, method string, input E, event models.EventType, extra ...func(*svcmock.MockCAService)) {
+	WithErrorsSingleResult(t, caTestConfig, method, input, event, extra...)
 }
 
 func TestCAEventPublisher(t *testing.T) {
@@ -132,79 +44,79 @@ func TestCAEventPublisher(t *testing.T) {
 		{
 			name: "ImportCA with errors - Not fire event",
 			test: func(t *testing.T) {
-				withErrors(t, "ImportCA", services.ImportCAInput{}, models.EventImportCAKey, &models.CACertificate{})
+				caWithErrors(t, "ImportCA", services.ImportCAInput{}, models.EventImportCAKey, &models.CACertificate{})
 			},
 		},
 		{
 			name: "ImportCA without errors - fire event",
 			test: func(t *testing.T) {
-				withoutErrors(t, "ImportCA", services.ImportCAInput{}, models.EventImportCAKey, &models.CACertificate{})
+				caWithoutErrors(t, "ImportCA", services.ImportCAInput{}, models.EventImportCAKey, &models.CACertificate{})
 			},
 		},
 		{
 			name: "CreateCA with errors - Not fire event",
 			test: func(t *testing.T) {
-				withErrors(t, "CreateCA", services.CreateCAInput{}, models.EventCreateCAKey, &models.CACertificate{})
+				caWithErrors(t, "CreateCA", services.CreateCAInput{}, models.EventCreateCAKey, &models.CACertificate{})
 			},
 		},
 		{
 			name: "CreateCA without errors - fire event",
 			test: func(t *testing.T) {
-				withoutErrors(t, "CreateCA", services.CreateCAInput{}, models.EventCreateCAKey, &models.CACertificate{})
+				caWithoutErrors(t, "CreateCA", services.CreateCAInput{}, models.EventCreateCAKey, &models.CACertificate{})
 			},
 		},
 		{
 			name: "SingCertificate with errors - Not fire event",
 			test: func(t *testing.T) {
-				withErrors(t, "SignCertificate", services.SignCertificateInput{}, models.EventSignCertificateKey, &models.Certificate{})
+				caWithErrors(t, "SignCertificate", services.SignCertificateInput{}, models.EventSignCertificateKey, &models.Certificate{})
 			},
 		},
 		{
 			name: "SingCertificate without errors - fire event",
 			test: func(t *testing.T) {
-				withoutErrors(t, "SignCertificate", services.SignCertificateInput{}, models.EventSignCertificateKey, &models.Certificate{})
+				caWithoutErrors(t, "SignCertificate", services.SignCertificateInput{}, models.EventSignCertificateKey, &models.Certificate{})
 			},
 		},
 		{
 			name: "CreateCertificate with errors - Not fire event",
 			test: func(t *testing.T) {
-				withErrors(t, "CreateCertificate", services.CreateCertificateInput{}, models.EventCreateCertificateKey, &models.Certificate{})
+				caWithErrors(t, "CreateCertificate", services.CreateCertificateInput{}, models.EventCreateCertificateKey, &models.Certificate{})
 			},
 		},
 		{
 			name: "CreateCertificate without errors - fire event",
 			test: func(t *testing.T) {
-				withoutErrors(t, "CreateCertificate", services.CreateCertificateInput{}, models.EventCreateCertificateKey, &models.Certificate{})
+				caWithoutErrors(t, "CreateCertificate", services.CreateCertificateInput{}, models.EventCreateCertificateKey, &models.Certificate{})
 			},
 		},
 		{
 			name: "ImportCertificate with errors - Not fire event",
 			test: func(t *testing.T) {
-				withErrors(t, "ImportCertificate", services.ImportCertificateInput{}, models.EventImportCACertificateKey, &models.Certificate{})
+				caWithErrors(t, "ImportCertificate", services.ImportCertificateInput{}, models.EventImportCACertificateKey, &models.Certificate{})
 			},
 		},
 		{
 			name: "ImportCertificate without errors - fire event",
 			test: func(t *testing.T) {
-				withoutErrors(t, "ImportCertificate", services.ImportCertificateInput{}, "ca.certificate.import", &models.Certificate{})
+				caWithoutErrors(t, "ImportCertificate", services.ImportCertificateInput{}, "ca.certificate.import", &models.Certificate{})
 			},
 		},
 		{
 			name: "SignatureSign with errors - Not fire event",
 			test: func(t *testing.T) {
-				withErrors(t, "SignatureSign", services.SignatureSignInput{}, models.EventSignatureSignKey, new([]byte))
+				caWithErrors(t, "SignatureSign", services.SignatureSignInput{}, models.EventSignatureSignKey, new([]byte))
 			},
 		},
 		{
 			name: "SignatureSign without errors - fire event",
 			test: func(t *testing.T) {
-				withoutErrors(t, "SignatureSign", services.SignatureSignInput{}, models.EventSignatureSignKey, new([]byte))
+				caWithoutErrors(t, "SignatureSign", services.SignatureSignInput{}, models.EventSignatureSignKey, new([]byte))
 			},
 		},
 		{
 			name: "UpdateCAStatus with errors - Not fire event",
 			test: func(t *testing.T) {
-				withErrors(t, "UpdateCAStatus", services.UpdateCAStatusInput{}, models.EventUpdateCAStatusKey, &models.CACertificate{},
+				caWithErrors(t, "UpdateCAStatus", services.UpdateCAStatusInput{}, models.EventUpdateCAStatusKey, &models.CACertificate{},
 					func(mockCAService *svcmock.MockCAService) {
 						mockCAService.On("GetCAByID", mock.Anything, mock.Anything).Return(&models.CACertificate{}, nil)
 					})
@@ -213,7 +125,7 @@ func TestCAEventPublisher(t *testing.T) {
 		{
 			name: "UpdateCAStatus without errors - fire event",
 			test: func(t *testing.T) {
-				withoutErrors(t, "UpdateCAStatus", services.UpdateCAStatusInput{}, models.EventUpdateCAStatusKey, &models.CACertificate{},
+				caWithoutErrors(t, "UpdateCAStatus", services.UpdateCAStatusInput{}, models.EventUpdateCAStatusKey, &models.CACertificate{},
 					func(mockCAService *svcmock.MockCAService) {
 						mockCAService.On("GetCAByID", mock.Anything, mock.Anything).Return(&models.CACertificate{}, nil)
 					})
@@ -222,7 +134,7 @@ func TestCAEventPublisher(t *testing.T) {
 		{
 			name: "UpdateCAMetadata with errors - Not fire event",
 			test: func(t *testing.T) {
-				withErrors(t, "UpdateCAMetadata", services.UpdateCAMetadataInput{}, models.EventUpdateCAMetadataKey, &models.CACertificate{},
+				caWithErrors(t, "UpdateCAMetadata", services.UpdateCAMetadataInput{}, models.EventUpdateCAMetadataKey, &models.CACertificate{},
 					func(mockCAService *svcmock.MockCAService) {
 						mockCAService.On("GetCAByID", mock.Anything, mock.Anything).Return(&models.CACertificate{}, nil)
 					})
@@ -231,7 +143,7 @@ func TestCAEventPublisher(t *testing.T) {
 		{
 			name: "UpdateCAMetadata without errors - fire event",
 			test: func(t *testing.T) {
-				withoutErrors(t, "UpdateCAMetadata", services.UpdateCAMetadataInput{}, models.EventUpdateCAMetadataKey, &models.CACertificate{},
+				caWithoutErrors(t, "UpdateCAMetadata", services.UpdateCAMetadataInput{}, models.EventUpdateCAMetadataKey, &models.CACertificate{},
 					func(mockCAService *svcmock.MockCAService) {
 						mockCAService.On("GetCAByID", mock.Anything, mock.Anything).Return(&models.CACertificate{}, nil)
 					})
@@ -240,7 +152,7 @@ func TestCAEventPublisher(t *testing.T) {
 		{
 			name: "UpdateCertificateStatus with errors - Not fire event",
 			test: func(t *testing.T) {
-				withErrors(t, "UpdateCertificateStatus", services.UpdateCertificateStatusInput{}, models.EventUpdateCertificateStatusKey, &models.Certificate{},
+				caWithErrors(t, "UpdateCertificateStatus", services.UpdateCertificateStatusInput{}, models.EventUpdateCertificateStatusKey, &models.Certificate{},
 					func(mockCAService *svcmock.MockCAService) {
 						mockCAService.On("GetCertificateBySerialNumber", mock.Anything, mock.Anything).Return(&models.Certificate{}, nil)
 					})
@@ -249,7 +161,7 @@ func TestCAEventPublisher(t *testing.T) {
 		{
 			name: "UpdateCertificateStatus without errors - fire event",
 			test: func(t *testing.T) {
-				withoutErrors(t, "UpdateCertificateStatus", services.UpdateCertificateStatusInput{}, models.EventUpdateCertificateStatusKey, &models.Certificate{},
+				caWithoutErrors(t, "UpdateCertificateStatus", services.UpdateCertificateStatusInput{}, models.EventUpdateCertificateStatusKey, &models.Certificate{},
 					func(mockCAService *svcmock.MockCAService) {
 						mockCAService.On("GetCertificateBySerialNumber", mock.Anything, mock.Anything).Return(&models.Certificate{}, nil)
 					})
@@ -258,7 +170,7 @@ func TestCAEventPublisher(t *testing.T) {
 		{
 			name: "UpdateCertificateMetadata with errors - Not fire event",
 			test: func(t *testing.T) {
-				withErrors(t, "UpdateCertificateMetadata", services.UpdateCertificateMetadataInput{}, models.EventUpdateCertificateMetadataKey, &models.Certificate{},
+				caWithErrors(t, "UpdateCertificateMetadata", services.UpdateCertificateMetadataInput{}, models.EventUpdateCertificateMetadataKey, &models.Certificate{},
 					func(mockCAService *svcmock.MockCAService) {
 						mockCAService.On("GetCertificateBySerialNumber", mock.Anything, mock.Anything).Return(&models.Certificate{}, nil)
 					})
@@ -267,7 +179,7 @@ func TestCAEventPublisher(t *testing.T) {
 		{
 			name: "UpdateCertificateMetadata without errors - fire event",
 			test: func(t *testing.T) {
-				withoutErrors(t, "UpdateCertificateMetadata", services.UpdateCertificateMetadataInput{}, models.EventUpdateCertificateMetadataKey, &models.Certificate{},
+				caWithoutErrors(t, "UpdateCertificateMetadata", services.UpdateCertificateMetadataInput{}, models.EventUpdateCertificateMetadataKey, &models.Certificate{},
 					func(mockCAService *svcmock.MockCAService) {
 						mockCAService.On("GetCertificateBySerialNumber", mock.Anything, mock.Anything).Return(&models.Certificate{}, nil)
 					})
@@ -276,31 +188,31 @@ func TestCAEventPublisher(t *testing.T) {
 		{
 			name: "DeleteCA with errors - Not fire event",
 			test: func(t *testing.T) {
-				withErrorsSingleResult(t, "DeleteCA", services.DeleteCAInput{}, models.EventDeleteCAKey)
+				caWithErrorsSingleResult(t, "DeleteCA", services.DeleteCAInput{}, models.EventDeleteCAKey)
 			},
 		},
 		{
 			name: "DeleteCA without errors - fire event",
 			test: func(t *testing.T) {
-				withoutErrorsSingleResult(t, "DeleteCA", services.DeleteCAInput{}, models.EventDeleteCAKey)
+				caWithoutErrorsSingleResult(t, "DeleteCA", services.DeleteCAInput{}, models.EventDeleteCAKey)
 			},
 		},
 		{
 			name: "DeleteCertificate with errors - Not fire event",
 			test: func(t *testing.T) {
-				withErrorsSingleResult(t, "DeleteCertificate", services.DeleteCertificateInput{}, models.EventDeleteCertificateKey)
+				caWithErrorsSingleResult(t, "DeleteCertificate", services.DeleteCertificateInput{}, models.EventDeleteCertificateKey)
 			},
 		},
 		{
 			name: "DeleteCertificate without errors - fire event",
 			test: func(t *testing.T) {
-				withoutErrorsSingleResult(t, "DeleteCertificate", services.DeleteCertificateInput{}, models.EventDeleteCertificateKey)
+				caWithoutErrorsSingleResult(t, "DeleteCertificate", services.DeleteCertificateInput{}, models.EventDeleteCertificateKey)
 			},
 		},
 		{
 			name: "UpdateCAProfile with errors - Not fire event",
 			test: func(t *testing.T) {
-				withErrors(t, "UpdateCAProfile", services.UpdateCAProfileInput{}, models.EventUpdateCAProfileKey, &models.CACertificate{},
+				caWithErrors(t, "UpdateCAProfile", services.UpdateCAProfileInput{}, models.EventUpdateCAProfileKey, &models.CACertificate{},
 					func(mockCAService *svcmock.MockCAService) {
 						mockCAService.On("GetCAByID", mock.Anything, mock.Anything).Return(&models.CACertificate{}, nil)
 					})
@@ -309,70 +221,10 @@ func TestCAEventPublisher(t *testing.T) {
 		{
 			name: "UpdateCAProfile without errors - fire event",
 			test: func(t *testing.T) {
-				withoutErrors(t, "UpdateCAProfile", services.UpdateCAProfileInput{}, models.EventUpdateCAProfileKey, &models.CACertificate{},
+				caWithoutErrors(t, "UpdateCAProfile", services.UpdateCAProfileInput{}, models.EventUpdateCAProfileKey, &models.CACertificate{},
 					func(mockCAService *svcmock.MockCAService) {
 						mockCAService.On("GetCAByID", mock.Anything, mock.Anything).Return(&models.CACertificate{}, nil)
 					})
-			},
-		},
-		{
-			name: "CreateKey with errors - Not fire event",
-			test: func(t *testing.T) {
-				withErrors(t, "CreateKey", services.CreateKeyInput{}, models.EventCreateKMSKey, &models.Key{})
-			},
-		},
-		{
-			name: "CreateKey without errors - fire event",
-			test: func(t *testing.T) {
-				withoutErrors(t, "CreateKey", services.CreateKeyInput{}, models.EventCreateKMSKey, &models.Key{})
-			},
-		},
-		{
-			name: "DeleteKeyByID with errors - Not fire event",
-			test: func(t *testing.T) {
-				withErrorsSingleResult(t, "DeleteKeyByID", services.GetByIDInput{}, models.EventDeleteKMSKey)
-			},
-		},
-		{
-			name: "DeleteKeyByID without errors - fire event",
-			test: func(t *testing.T) {
-				withoutErrorsSingleResult(t, "DeleteKeyByID", services.GetByIDInput{}, models.EventDeleteKMSKey)
-			},
-		},
-		{
-			name: "SignMessage with errors - Not fire event",
-			test: func(t *testing.T) {
-				withErrors(t, "SignMessage", services.SignMessageInput{}, models.EventSignMessageKMSKey, &models.MessageSignature{})
-			},
-		},
-		{
-			name: "SignMessage without errors - fire event",
-			test: func(t *testing.T) {
-				withoutErrors(t, "SignMessage", services.SignMessageInput{}, models.EventSignMessageKMSKey, &models.MessageSignature{})
-			},
-		},
-		{
-			name: "VerifySignature with errors - Not fire event",
-			test: func(t *testing.T) {
-				withErrors(t, "VerifySignature", services.VerifySignInput{}, models.EventVerifySignatureKMSKey, &models.MessageValidation{})
-			},
-		},
-		{
-			name: "VerifySignature without errors - fire event",
-			test: func(t *testing.T) {
-				withoutErrors(t, "VerifySignature", services.VerifySignInput{}, models.EventVerifySignatureKMSKey, &models.MessageValidation{})
-			},
-		},
-		{
-			name: "ImportKey with errors - Not fire event",
-			test: func(t *testing.T) {
-				withErrors(t, "ImportKey", services.ImportKeyInput{}, models.EventImportKMSKey, &models.Key{})
-			},
-		},
-		{
-			name: "ImportKey without errors - fire event",
-			test: func(t *testing.T) {
-				withoutErrors(t, "ImportKey", services.ImportKeyInput{}, models.EventImportKMSKey, &models.Key{})
 			},
 		},
 	}
