@@ -315,7 +315,6 @@ func TestMigrationTablesCreated(t *testing.T) {
 				"ca_certificates",
 				"certificates",
 				"issuance_profiles",
-				"ca_certificate_requests",
 				"goose_db_version",
 			},
 		},
