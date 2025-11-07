@@ -1167,10 +1167,6 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	csr := (*x509.CertificateRequest)(input.CertRequest)
 
 	caCertSigner := NewCertificateSigner(ctx, &ca.Certificate, svc.kmsService)
-	if err != nil {
-		lFunc.Errorf("could not get CA %s signer: %s", caCert.Subject.CommonName, err)
-		return nil, err
-	}
 
 	var profile *models.IssuanceProfile
 

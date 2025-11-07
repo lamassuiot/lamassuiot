@@ -152,7 +152,7 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*mo
 		return nil, err
 	}
 
-	_, err = svc.CalculateCRL(ctx, services.CalculateCRLInput{
+	_, err = svc.service.CalculateCRL(ctx, services.CalculateCRLInput{
 		CASubjectKeyID: caSki,
 	})
 	if err != nil {
