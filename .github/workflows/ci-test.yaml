@@ -134,7 +134,9 @@ jobs:
         run: |
           tests=$(find backend/pkg/assemblers -maxdepth 1 -type f -name '*_test.go' | while read file; do
             filename=$(basename "$file" .go)
-            echo "{\"file\":\"$filename\",\"tag\":\"backend-assemblers-$filename\"}"
+            # Extract all test function names from the file and join with |
+            pattern=$(grep -o 'func Test[A-Za-z0-9_]*' "$file" | sed 's/func //' | paste -sd '|')
+            echo "{\"file\":\"$filename\",\"pattern\":\"^($pattern)\$\",\"tag\":\"backend-assemblers-$filename\"}"
           done | jq -s -c '.')
           echo "tests=$tests" >> $GITHUB_OUTPUT
 
@@ -166,7 +168,7 @@ jobs:
         id: run
         working-directory: backend/pkg/assemblers
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions -- -run '^' ${{ matrix.test.file }}.go -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions -- . -run '${{ matrix.test.pattern }}' -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5.1.2
