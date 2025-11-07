@@ -42,9 +42,9 @@ WHERE metadata::jsonb ? 'lamassu.io/ra/attached-to';
 -- Rollback certificates table
 UPDATE certificates
 SET metadata = jsonb_set(
-    (metadata::jsonb - 'lamassu.io/ca/attached-to'),
+    (metadata::jsonb - 'lamassu.io/ra/attached-to'),
     '{lamassu.io/ca/attached-to}',
-    (metadata::jsonb -> 'lamassu.io/ca/attached-to'),
+    (metadata::jsonb -> 'lamassu.io/ra/attached-to'),
     true
 )::text
 WHERE metadata::jsonb ? 'lamassu.io/ra/attached-to';
