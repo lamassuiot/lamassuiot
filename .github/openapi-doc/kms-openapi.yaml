@@ -1,0 +1,833 @@
+openapi: 3.0.3
+info:
+  title: Lamassu KMS API
+  version: 1.0.0
+  description: |
+    Key Management Service (KMS) API for Lamassu IoT Platform.
+    This API provides cryptographic key lifecycle management including key creation, 
+    import, update, deletion, signing, and signature verification operations.
+  contact:
+    name: Lamassu IoT
+    url: https://github.com/lamassuiot/lamassuiot
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: /api/kms/v1
+    description: KMS API v1
+
+tags:
+  - name: Engines
+    description: Crypto engine management operations
+  - name: Keys
+    description: Key lifecycle management operations
+  - name: Cryptographic Operations
+    description: Sign and verify operations
+
+paths:
+  /engines:
+    get:
+      tags:
+        - Engines
+      summary: Get crypto engine provider information
+      description: Retrieves information about the configured crypto engine provider
+      operationId: getCryptoEngineProvider
+      responses:
+        '200':
+          description: Crypto engine provider information
+          content:
+            application/json:
+              schema:
+                type: object
+                description: Crypto engine provider details
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /keys:
+    get:
+      tags:
+        - Keys
+      summary: List all keys
+      description: Retrieves a paginated list of all keys with optional filtering
+      operationId: getKeys
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of keys to return
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          description: Number of keys to skip
+          schema:
+            type: integer
+            default: 0
+        - name: bookmark
+          in: query
+          description: Bookmark for pagination
+          schema:
+            type: string
+        - name: filter
+          in: query
+          description: Filter expression for keys
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of keys
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetKeysResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    post:
+      tags:
+        - Keys
+      summary: Create a new key
+      description: Creates a new cryptographic key with specified algorithm and size
+      operationId: createKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateKeyBody'
+      responses:
+        '201':
+          description: Key created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+        '400':
+          description: Bad request - invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /keys/import:
+    post:
+      tags:
+        - Keys
+      summary: Import an existing key
+      description: Imports an existing private key into the KMS
+      operationId: importKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportKeyBody'
+      responses:
+        '201':
+          description: Key imported successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+        '400':
+          description: Bad request - invalid input or key format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /keys/{id}:
+    get:
+      tags:
+        - Keys
+      summary: Get key by ID
+      description: Retrieves detailed information about a specific key
+      operationId: getKeyById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Key identifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Key details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+        '400':
+          description: Bad request - invalid key ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    delete:
+      tags:
+        - Keys
+      summary: Delete a key
+      description: Deletes a key from the KMS
+      operationId: deleteKeyById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Key identifier
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Key deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: deleted
+        '400':
+          description: Bad request - invalid key ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /keys/{id}/alias:
+    put:
+      tags:
+        - Keys
+      summary: Update key aliases
+      description: Updates the aliases for a key using JSON Patch operations
+      operationId: updateKeyAliases
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Key identifier
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateKeyMetadataBody'
+      responses:
+        '200':
+          description: Key aliases updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+        '400':
+          description: Bad request - invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /keys/{id}/name:
+    put:
+      tags:
+        - Keys
+      summary: Update key name
+      description: Updates the name of a key
+      operationId: updateKeyName
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Key identifier
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateKeyNameBody'
+      responses:
+        '200':
+          description: Key name updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+        '400':
+          description: Bad request - invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /keys/{id}/tags:
+    put:
+      tags:
+        - Keys
+      summary: Update key tags
+      description: Updates the tags associated with a key
+      operationId: updateKeyTags
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Key identifier
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateKeyTagsBody'
+      responses:
+        '200':
+          description: Key tags updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+        '400':
+          description: Bad request - invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /keys/{id}/metadata:
+    put:
+      tags:
+        - Keys
+      summary: Update key metadata
+      description: Updates the metadata of a key using JSON Patch operations
+      operationId: updateKeyMetadata
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Key identifier
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateKeyMetadataBody'
+      responses:
+        '200':
+          description: Key metadata updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Key'
+        '400':
+          description: Bad request - invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /keys/{id}/sign:
+    post:
+      tags:
+        - Cryptographic Operations
+      summary: Sign a message
+      description: Signs a message using the specified key
+      operationId: signMessage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Key identifier
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignMessageBody'
+      responses:
+        '200':
+          description: Message signed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageSignature'
+        '400':
+          description: Bad request - invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /keys/{id}/verify:
+    post:
+      tags:
+        - Cryptographic Operations
+      summary: Verify a signature
+      description: Verifies a signature against a message using the specified key
+      operationId: verifySignature
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Key identifier
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifySignBody'
+      responses:
+        '200':
+          description: Signature verification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageValidation'
+        '400':
+          description: Bad request - invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Key not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Key:
+      type: object
+      description: Cryptographic key representation
+      properties:
+        pkcs11_uri:
+          type: string
+          description: PKCS#11 URI for the key
+          example: "pkcs11:token-id=engine1;id=key123;type=private"
+        key_id:
+          type: string
+          description: Unique identifier for the key
+          example: "key-123e4567-e89b-12d3-a456-426614174000"
+        name:
+          type: string
+          description: Human-readable name for the key
+          example: "my-signing-key"
+        aliases:
+          type: array
+          description: Alternative names for the key
+          items:
+            type: string
+          example: ["prod-key", "primary-key"]
+        engine_id:
+          type: string
+          description: ID of the crypto engine managing this key
+          example: "engine-1"
+        has_private_key:
+          type: boolean
+          description: Indicates if the private key is available
+          example: true
+        algorithm:
+          type: string
+          description: Cryptographic algorithm
+          example: "RSA"
+          enum:
+            - RSA
+            - ECDSA
+            - Ed25519
+        size:
+          type: integer
+          description: Key size in bits
+          example: 2048
+        public_key:
+          type: string
+          description: Base64 encoded public key
+          example: "LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0..."
+        creation_ts:
+          type: string
+          format: date-time
+          description: Timestamp when the key was created
+          example: "2025-11-07T10:00:00Z"
+        tags:
+          type: array
+          description: Tags for categorization and filtering
+          items:
+            type: string
+          example: ["production", "signing"]
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Additional metadata as key-value pairs
+          example:
+            department: "security"
+            owner: "admin"
+
+    CreateKeyBody:
+      type: object
+      required:
+        - algorithm
+        - size
+        - engine_id
+      properties:
+        algorithm:
+          type: string
+          description: Cryptographic algorithm to use
+          example: "RSA"
+          enum:
+            - RSA
+            - ECDSA
+            - Ed25519
+        size:
+          type: integer
+          description: Key size in bits (e.g., 2048, 4096 for RSA; 256, 384, 521 for ECDSA)
+          example: 2048
+        engine_id:
+          type: string
+          description: ID of the crypto engine to create the key in
+          example: "engine-1"
+        name:
+          type: string
+          description: Human-readable name for the key
+          example: "my-new-key"
+        tags:
+          type: array
+          description: Tags for categorization
+          items:
+            type: string
+          example: ["production", "encryption"]
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Additional metadata
+          example:
+            purpose: "data-encryption"
+            owner: "admin"
+
+    ImportKeyBody:
+      type: object
+      required:
+        - private_key
+        - engine_id
+      properties:
+        private_key:
+          type: string
+          format: byte
+          description: Base64 encoded private key in PEM or DER format
+          example: "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0t..."
+        engine_id:
+          type: string
+          description: ID of the crypto engine to import the key into
+          example: "engine-1"
+        name:
+          type: string
+          description: Human-readable name for the key
+          example: "imported-key"
+        tags:
+          type: array
+          description: Tags for categorization
+          items:
+            type: string
+          example: ["imported", "legacy"]
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Additional metadata
+          example:
+            source: "legacy-system"
+            imported_date: "2025-11-07"
+
+    UpdateKeyMetadataBody:
+      type: object
+      required:
+        - patches
+      properties:
+        patches:
+          type: array
+          description: JSON Patch operations to apply
+          items:
+            $ref: '#/components/schemas/PatchOperation'
+
+    UpdateKeyNameBody:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: New name for the key
+          example: "updated-key-name"
+
+    UpdateKeyTagsBody:
+      type: object
+      required:
+        - tags
+      properties:
+        tags:
+          type: array
+          description: New set of tags for the key
+          items:
+            type: string
+          example: ["production", "updated", "v2"]
+
+    SignMessageBody:
+      type: object
+      required:
+        - algorithm
+        - message
+        - message_type
+      properties:
+        algorithm:
+          type: string
+          description: Signature algorithm to use
+          example: "SHA256WithRSA"
+        message:
+          type: string
+          format: byte
+          description: Message to sign (base64 encoded)
+          example: "SGVsbG8gV29ybGQ="
+        message_type:
+          type: string
+          description: Type of message being signed
+          example: "RAW"
+          enum:
+            - RAW
+            - DIGEST
+
+    VerifySignBody:
+      type: object
+      required:
+        - algorithm
+        - message
+        - signature
+        - message_type
+      properties:
+        algorithm:
+          type: string
+          description: Signature algorithm used
+          example: "SHA256WithRSA"
+        message:
+          type: string
+          format: byte
+          description: Original message (base64 encoded)
+          example: "SGVsbG8gV29ybGQ="
+        signature:
+          type: string
+          format: byte
+          description: Signature to verify (base64 encoded)
+          example: "c2lnbmF0dXJl..."
+        message_type:
+          type: string
+          description: Type of message
+          example: "RAW"
+          enum:
+            - RAW
+            - DIGEST
+
+    MessageSignature:
+      type: object
+      properties:
+        signature:
+          type: string
+          format: byte
+          description: Base64 encoded signature
+          example: "c2lnbmF0dXJl..."
+
+    MessageValidation:
+      type: object
+      properties:
+        valid:
+          type: boolean
+          description: Whether the signature is valid
+          example: true
+        error:
+          type: string
+          description: Error message if validation failed
+          example: ""
+
+    GetKeysResponse:
+      type: object
+      properties:
+        next_bookmark:
+          type: string
+          description: Bookmark for retrieving the next page of results
+          example: "eyJrZXlfaWQiOiJrZXktMTIzIn0="
+        list:
+          type: array
+          description: List of keys
+          items:
+            $ref: '#/components/schemas/Key'
+
+    PatchOperation:
+      type: object
+      description: JSON Patch operation (RFC 6902)
+      required:
+        - op
+        - path
+      properties:
+        op:
+          type: string
+          description: Operation type
+          enum:
+            - add
+            - remove
+            - replace
+            - move
+            - copy
+            - test
+          example: "add"
+        path:
+          type: string
+          description: JSON Pointer path
+          example: "/metadata/new-field"
+        value:
+          description: Value for the operation
+          example: "new-value"
+        from:
+          type: string
+          description: Source path for move/copy operations
+          example: "/metadata/old-field"
+
+    Error:
+      type: object
+      properties:
+        err:
+          type: string
+          description: Error message
+          example: "Key not found"
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token authentication
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key authentication
+
+security:
+  - BearerAuth: []
+  - ApiKeyAuth: []
