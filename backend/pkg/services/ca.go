@@ -226,7 +226,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			Identifier: skid,
 		})
 		if err != nil {
-			lFunc.Info("could not find key with SKID %s for CA %s: %s. Assuming key does not exist", skid, caCertSN, err)
+			lFunc.Infof("could not find key with SKID %s for CA %s: %s. Assuming key does not exist", skid, caCertSN, err)
 			importType = models.CertificateTypeImportedWithoutKey
 		} else {
 			lFunc.Infof("found key with SKID %s for CA %s in KMS", skid, caCertSN)
