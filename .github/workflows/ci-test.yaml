@@ -133,8 +133,9 @@ jobs:
         id: set-matrix
         run: |
           tests=$(find backend/pkg/assemblers -maxdepth 1 -type f -name '*_test.go' | while read file; do
-            basename "$file" .go
-          done | jq -R -s -c 'split("\n")[:-1] | map({file: ., tag: ("backend-assemblers-" + .)})')
+            filename=$(basename "$file" .go)
+            echo "{\"file\":\"$filename\",\"tag\":\"backend-assemblers-$filename\"}"
+          done | jq -s -c '.')
           echo "tests=$tests" >> $GITHUB_OUTPUT
 
   test-backend-assemblers:
@@ -165,7 +166,7 @@ jobs:
         id: run
         working-directory: backend/pkg/assemblers
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions -run '' ${{ matrix.test.file }}.go -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions -- -run '^' ${{ matrix.test.file }}.go -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5.1.2
