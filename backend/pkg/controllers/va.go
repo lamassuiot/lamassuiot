@@ -29,6 +29,17 @@ func NewVAHttpRoutes(logger *logrus.Entry, ocsp services.OCSPService, crl servic
 	}
 }
 
+func (r *vaHttpRoutes) handleError(ctx *gin.Context, err error) {
+	switch err {
+	case errs.ErrVARoleNotFound:
+		ctx.JSON(404, gin.H{"err": err.Error()})
+	case errs.ErrValidateBadRequest:
+		ctx.JSON(400, gin.H{"err": err.Error()})
+	default:
+		ctx.JSON(500, gin.H{"err": err.Error()})
+	}
+}
+
 func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 	if ctx.Request.Header.Get("Content-Type") != "application/ocsp-request" {
 		r.logger.Warnf("request did not include 'application/ocsp-request' as the content-type")
@@ -128,14 +139,7 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 	})
 	if err != nil {
 		r.logger.Errorf("something went wrong while getting crl list: %s", err)
-		switch err {
-		case errs.ErrVARoleNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 
@@ -158,14 +162,7 @@ func (r *vaHttpRoutes) GetRoleByID(ctx *gin.Context) {
 	})
 	if err != nil {
 		r.logger.Errorf("something went wrong while getting va role: %s", err)
-		switch err {
-		case errs.ErrVARoleNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
+		r.handleError(ctx, err)
 		return
 	}
 
@@ -195,15 +192,7 @@ func (r *vaHttpRoutes) UpdateRole(ctx *gin.Context) {
 	})
 	if err != nil {
 		r.logger.Errorf("something went wrong while updating va role: %s", err)
-		switch err {
-		case errs.ErrVARoleNotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		r.handleError(ctx, err)
 		return
 	}
 
