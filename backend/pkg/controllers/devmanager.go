@@ -1,6 +1,10 @@
 package controllers
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
+
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -260,4 +264,71 @@ func (r *devManagerHttpRoutes) DeleteDevice(ctx *gin.Context) {
 	}
 
 	ctx.Status(204) // No Content for successful deletion
+}
+
+func (r *devManagerHttpRoutes) UpdateDeviceEvent(ctx *gin.Context) {
+	type uriParams struct {
+		ID string `uri:"id" binding:"required"`
+	}
+
+	var params uriParams
+	if err := ctx.ShouldBindUri(&params); err != nil {
+		ctx.JSON(400, gin.H{"err": "invalid device id: " + err.Error()})
+		return
+	}
+
+	// Read the raw request body
+	rawBody, err := io.ReadAll(ctx.Request.Body)
+	if err != nil {
+		ctx.JSON(400, gin.H{"err": "could not read request body"})
+		return
+	}
+
+	var bodyMap map[string]interface{}
+	if err := json.Unmarshal(rawBody, &bodyMap); err != nil {
+		ctx.JSON(400, gin.H{"err": "invalid JSON: " + err.Error()})
+		return
+	}
+
+	// ✅ Check that "type" exists
+	eventTypeRaw, exists := bodyMap["type"]
+	if !exists {
+		ctx.JSON(400, gin.H{"err": "missing required key 'type'"})
+		return
+	}
+
+	eventType := fmt.Sprintf("%v", eventTypeRaw)
+	delete(bodyMap, "type")
+
+	// ✅ Wrap event data
+
+	eventDataJSON, err := json.Marshal(bodyMap)
+
+
+	if err != nil {
+		ctx.JSON(500, gin.H{"err": "could not encode final event JSON"})
+		return
+	}
+
+	
+	input := services.UpdateEventInput{
+		ID:        params.ID,
+		EventType: eventType,
+		EventData: string(eventDataJSON), 
+	}
+
+	device, err := r.svc.DeviceEventUpdate(ctx, input)
+	if err != nil {
+		switch err {
+		case errs.ErrDeviceNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
+		return
+	}
+
+	ctx.JSON(200, device)
 }

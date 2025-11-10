@@ -1,7 +1,10 @@
 package sdk
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
@@ -107,6 +110,45 @@ func (cli *deviceManagerClient) UpdateDeviceMetadata(ctx context.Context, input 
 	return response, nil
 }
 
+func (cli *deviceManagerClient) DeviceEventUpdate(ctx context.Context, input services.UpdateEventInput) (*models.Device, error) {
+	var eventData map[string]interface{}
+
+	
+	if err := json.Unmarshal([]byte(input.EventData), &eventData); err != nil {
+		return nil, fmt.Errorf("invalid event data: %w", err)
+	}
+
+	eventData["type"] = input.EventType
+
+	bodyBytes, err := json.Marshal(eventData)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		"POST",
+		fmt.Sprintf("%s/v1/devices/%s/events", cli.baseUrl, input.ID),
+		bytes.NewReader(bodyBytes),
+	)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := cli.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var device models.Device
+	if err := json.NewDecoder(resp.Body).Decode(&device); err != nil {
+		return nil, err
+	}
+
+	return &device, nil
+}
 func (cli *deviceManagerClient) DeleteDevice(ctx context.Context, input services.DeleteDeviceInput) error {
 	return Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID, map[int][]error{
 		404: {errs.ErrDeviceNotFound},

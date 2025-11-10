@@ -128,3 +128,27 @@ func (mw *deviceEventPublisher) DeleteDevice(ctx context.Context, input services
 	}()
 	return mw.next.DeleteDevice(ctx, input)
 }
+
+func (mw *deviceEventPublisher) DeviceEventUpdate(ctx context.Context, input services.UpdateEventInput) (output *models.Device, err error) {
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventUpdateDeviceEventsKey)
+	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("device/%s", input.ID))
+
+	prev, err := mw.GetDeviceByID(ctx, services.GetDeviceByIDInput{
+		ID: input.ID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("mw error: could not get Device %s: %w", input.ID, err)
+	}
+
+	defer func() {
+		if err == nil {
+			mw.eventMWPub.PublishCloudEvent(ctx, models.UpdateModel[models.Device]{
+				Updated:  *output,
+				Previous: *prev,
+			},
+			)
+		}
+	}()
+
+	return mw.next.DeviceEventUpdate(ctx, input)
+}

@@ -17,6 +17,7 @@ type DeviceManagerService interface {
 	UpdateDeviceIdentitySlot(ctx context.Context, input UpdateDeviceIdentitySlotInput) (*models.Device, error)
 	UpdateDeviceMetadata(ctx context.Context, input UpdateDeviceMetadataInput) (*models.Device, error)
 	DeleteDevice(ctx context.Context, input DeleteDeviceInput) error
+	DeviceEventUpdate(ctx context.Context, input UpdateEventInput) (*models.Device, error)
 }
 
 type GetDevicesStatsInput struct {
@@ -67,4 +68,9 @@ type UpdateDeviceIdentitySlotInput struct {
 
 type DeleteDeviceInput struct {
 	ID string `validate:"required"`
+}
+type UpdateEventInput struct {
+	ID        string `validate:"required"`
+	EventType string `validate:"required"`
+	EventData string `validate:"required,json"`
 }
