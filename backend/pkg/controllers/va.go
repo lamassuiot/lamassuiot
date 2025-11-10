@@ -8,6 +8,7 @@ import (
 	"net/url"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -127,7 +128,14 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 	})
 	if err != nil {
 		r.logger.Errorf("something went wrong while getting crl list: %s", err)
-		ctx.AbortWithError(500, err)
+		switch err {
+		case errs.ErrVARoleNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
 		return
 	}
 
@@ -150,7 +158,14 @@ func (r *vaHttpRoutes) GetRoleByID(ctx *gin.Context) {
 	})
 	if err != nil {
 		r.logger.Errorf("something went wrong while getting va role: %s", err)
-		ctx.AbortWithError(500, err)
+		switch err {
+		case errs.ErrVARoleNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
+		default:
+			ctx.JSON(500, gin.H{"err": err.Error()})
+		}
 		return
 	}
 
@@ -181,6 +196,10 @@ func (r *vaHttpRoutes) UpdateRole(ctx *gin.Context) {
 	if err != nil {
 		r.logger.Errorf("something went wrong while updating va role: %s", err)
 		switch err {
+		case errs.ErrVARoleNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrValidateBadRequest:
+			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
