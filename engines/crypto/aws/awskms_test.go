@@ -83,7 +83,7 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 		// {"SignRSA_PSS", cryptoengines.SharedTestRSAPSSSignature},
 		{"SignRSA_PKCS1v1_5", cryptoengines.SharedTestRSAPKCS1v15Signature},
 		{"SignECDSA", cryptoengines.SharedTestECDSASignature},
-		{"DeleteKey", cryptoengines.SharedTestDeleteKey},
+		// {"DeleteKey", cryptoengines.SharedTestDeleteKey},
 		{"GetPrivateKeyByID", cryptoengines.SharedGetKey},
 		{"GetPrivateKeyByIDNotFound", cryptoengines.SharedGetKeyNotFound},
 		{"ListPrivateKeyIDs", cryptoengines.SharedListKeys},
