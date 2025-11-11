@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"net/http"
 	"net/url"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -28,6 +30,17 @@ func NewVAHttpRoutes(logger *logrus.Entry, ocsp services.OCSPService, crl servic
 	}
 }
 
+func (r *vaHttpRoutes) handleError(ctx *gin.Context, err error) {
+	switch err {
+	case errs.ErrVARoleNotFound, errs.ErrCANotFound:
+		ctx.JSON(http.StatusNotFound, gin.H{"err": err.Error()})
+	case errs.ErrValidateBadRequest:
+		ctx.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
+	default:
+		ctx.JSON(http.StatusInternalServerError, gin.H{"err": err.Error()})
+	}
+}
+
 func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 	if ctx.Request.Header.Get("Content-Type") != "application/ocsp-request" {
 		r.logger.Warnf("request did not include 'application/ocsp-request' as the content-type")
@@ -43,14 +56,14 @@ func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 
 		var params uriParams
 		if err := ctx.ShouldBindUri(&params); err != nil {
-			ctx.JSON(400, gin.H{"err": err.Error()})
+			ctx.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 			return
 		}
 
 		base64Request, err := url.QueryUnescape(params.OCSPRequest)
 		if err != nil {
 			r.logger.Errorf("could not parse and unescape url: %s", err)
-			ctx.AbortWithError(400, err)
+			ctx.AbortWithError(http.StatusBadRequest, err)
 			return
 		}
 		// url.QueryUnescape not only unescapes %2B escaping, but it additionally
@@ -74,7 +87,7 @@ func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 		ocspReqBytes, err := base64.StdEncoding.DecodeString(string(base64RequestBytes))
 		if err != nil {
 			r.logger.Errorf("could not decode b64 ocsp request: %s", err)
-			ctx.AbortWithError(400, err)
+			ctx.AbortWithError(http.StatusBadRequest, err)
 			return
 		}
 
@@ -83,31 +96,31 @@ func (r *vaHttpRoutes) Verify(ctx *gin.Context) {
 		ocspReqBytes, err := io.ReadAll(ctx.Request.Body)
 		if err != nil {
 			r.logger.Errorf("could not read body: %s", err)
-			ctx.AbortWithError(400, err)
+			ctx.AbortWithError(http.StatusBadRequest, err)
 			return
 		}
 		ocspReqString = string(ocspReqBytes)
 	default:
 		r.logger.Errorf("method not supported: %s", ctx.Request.Method)
-		ctx.AbortWithError(400, fmt.Errorf("method not supported"))
+		ctx.AbortWithError(http.StatusBadRequest, fmt.Errorf("method not supported"))
 		return
 	}
 
 	ocsp, err := ocsp.ParseRequest([]byte(ocspReqString))
 	if err != nil {
 		r.logger.Errorf("could not parse ocsp request: %s", err)
-		ctx.AbortWithError(400, err)
+		ctx.AbortWithError(http.StatusBadRequest, err)
 		return
 	}
 
 	response, err := r.ocsp.Verify(ctx, ocsp)
 	if err != nil {
 		r.logger.Errorf("something went wrong while verifying ocsp request: %s", err)
-		ctx.AbortWithError(500, err)
+		ctx.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
-	ctx.Data(200, "application/ocsp-response", response)
+	ctx.Data(http.StatusOK, "application/ocsp-response", response)
 }
 
 func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
@@ -117,7 +130,7 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
+		ctx.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -127,11 +140,11 @@ func (r *vaHttpRoutes) CRL(ctx *gin.Context) {
 	})
 	if err != nil {
 		r.logger.Errorf("something went wrong while getting crl list: %s", err)
-		ctx.AbortWithError(500, err)
+		r.handleError(ctx, err)
 		return
 	}
 
-	ctx.Data(200, "application/pkix-crl", crl.Raw)
+	ctx.Data(http.StatusOK, "application/pkix-crl", crl.Raw)
 }
 
 func (r *vaHttpRoutes) GetRoleByID(ctx *gin.Context) {
@@ -141,7 +154,7 @@ func (r *vaHttpRoutes) GetRoleByID(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
+		ctx.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -150,11 +163,11 @@ func (r *vaHttpRoutes) GetRoleByID(ctx *gin.Context) {
 	})
 	if err != nil {
 		r.logger.Errorf("something went wrong while getting va role: %s", err)
-		ctx.AbortWithError(500, err)
+		r.handleError(ctx, err)
 		return
 	}
 
-	ctx.JSON(200, role)
+	ctx.JSON(http.StatusOK, role)
 }
 
 func (r *vaHttpRoutes) UpdateRole(ctx *gin.Context) {
@@ -164,13 +177,13 @@ func (r *vaHttpRoutes) UpdateRole(ctx *gin.Context) {
 
 	var params uriParams
 	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
+		ctx.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
 
 	var requestBody resources.VARoleUpdate
 	if err := ctx.BindJSON(&requestBody); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
+		ctx.JSON(http.StatusBadRequest, gin.H{"err": err.Error()})
 		return
 	}
 
@@ -180,13 +193,9 @@ func (r *vaHttpRoutes) UpdateRole(ctx *gin.Context) {
 	})
 	if err != nil {
 		r.logger.Errorf("something went wrong while updating va role: %s", err)
-		switch err {
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
+		r.handleError(ctx, err)
 		return
 	}
 
-	ctx.JSON(200, role)
+	ctx.JSON(http.StatusOK, role)
 }
