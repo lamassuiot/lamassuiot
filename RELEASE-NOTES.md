@@ -4,6 +4,7 @@
 
 ### Bug Fixes
 
+* Fix: VA: service returns 500 HTTP code for unknown SKIs ([#352](https://github.com/lamassuiot/lamassuiot/issues/352))
 * Fix: fixing keysize for aws-based cryptoengines([#353](https://github.com/lamassuiot/lamassuiot/issues/353))
 * Fix: AWS Connector: incorrect IoT metadata key in error messages ([#340](https://github.com/lamassuiot/lamassuiot/issues/340))
 * Fix: CA: add issuance profile validation for CA operations ([#339](https://github.com/lamassuiot/lamassuiot/issues/339))
@@ -12,6 +13,7 @@
 
 ### Chores
 
+* Chore: release: prepare release 3.6.2 ([#354](https://github.com/lamassuiot/lamassuiot/issues/354))
 * Chore: Adjust test timeout in CI workflow ([#348](https://github.com/lamassuiot/lamassuiot/issues/348))
 
 ### Features
