@@ -40,7 +40,6 @@ func TestNewAWSKMSEngine(t *testing.T) {
 			{
 				Type: models.KeyType(x509.RSA),
 				Sizes: []int{
-					1024,
 					2048,
 					3072,
 					4096,
@@ -59,6 +58,7 @@ func TestNewAWSKMSEngine(t *testing.T) {
 
 	assert.Equal(t, expectedConfig, engine.GetEngineConfig())
 }
+
 func testDeleteKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
 	awsengine := engine.(*AWSKMSCryptoEngine)
 	err := awsengine.DeleteKey("test-key")
