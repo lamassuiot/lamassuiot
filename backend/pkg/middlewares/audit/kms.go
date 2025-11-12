@@ -45,6 +45,15 @@ func (mw KMSAuditEventPublisher) CreateKey(ctx context.Context, input services.C
 	return mw.next.CreateKey(ctx, input)
 }
 
+func (mw KMSAuditEventPublisher) ImportKey(ctx context.Context, input services.ImportKeyInput) (output *models.Key, err error) {
+	defer func() {
+		input.PrivateKey = nil // Remove private key from audit logs
+		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventImportKMSKey, input, err, output)
+	}()
+
+	return mw.next.ImportKey(ctx, input)
+}
+
 func (mw KMSAuditEventPublisher) UpdateKeyMetadata(ctx context.Context, input services.UpdateKeyMetadataInput) (output *models.Key, err error) {
 	defer func() {
 		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventUpdateKMSKeyMetadata, input, err, output)
@@ -99,12 +108,4 @@ func (mw KMSAuditEventPublisher) VerifySignature(ctx context.Context, input serv
 	}()
 
 	return mw.next.VerifySignature(ctx, input)
-}
-
-func (mw KMSAuditEventPublisher) ImportKey(ctx context.Context, input services.ImportKeyInput) (output *models.Key, err error) {
-	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventImportKMSKey, input, err, output)
-	}()
-
-	return mw.next.ImportKey(ctx, input)
 }
