@@ -55,6 +55,8 @@ func (mw CAAuditEventPublisher) RequestCACSR(ctx context.Context, input services
 
 func (mw CAAuditEventPublisher) ImportCA(ctx context.Context, input services.ImportCAInput) (output *models.CACertificate, err error) {
 	defer func() {
+		input.CARSAKey = nil // Remove private key from audit logs
+		input.CAECKey = nil  // Remove private key from audit logs
 		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventImportCAKey, input, err, output)
 	}()
 
@@ -242,6 +244,7 @@ func (mw CAAuditEventPublisher) VerifySignature(ctx context.Context, input servi
 
 func (mw CAAuditEventPublisher) ImportKey(ctx context.Context, input services.ImportKeyInput) (output *models.Key, err error) {
 	defer func() {
+		input.PrivateKey = nil // Remove private key from audit logs
 		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventImportKMSKey, input, err, output)
 	}()
 
