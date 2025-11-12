@@ -43,8 +43,7 @@ func (mw CAAuditEventPublisher) CreateCA(ctx context.Context, input services.Cre
 
 func (mw CAAuditEventPublisher) ImportCA(ctx context.Context, input services.ImportCAInput) (output *models.CACertificate, err error) {
 	defer func() {
-		input.CARSAKey = nil // Remove private key from audit logs
-		input.CAECKey = nil  // Remove private key from audit logs
+		input.Key = nil // Remove private key from audit logs
 		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventImportCAKey, input, err, output)
 	}()
 
