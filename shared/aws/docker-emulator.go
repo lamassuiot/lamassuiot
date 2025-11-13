@@ -16,7 +16,7 @@ import (
 func RunAWSEmulationLocalStackDocker(exposeAsStandardPort bool) (func() error, func() error, *AWSSDKConfig, error) {
 	containerCleanup, container, dockerHost, err := dockerrunner.RunDocker(dockertest.RunOptions{
 		Repository: "localstack/localstack", // image
-		Tag:        "4.1",                   // version
+		Tag:        "4.10",                  // version
 	}, func(hc *docker.HostConfig) {
 		if exposeAsStandardPort {
 			hc.PortBindings = map[docker.Port][]docker.PortBinding{

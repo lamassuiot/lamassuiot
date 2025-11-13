@@ -90,8 +90,8 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 		{"RenameKey", cryptoengines.SharedRenameKey},
 		//TODO: LocalStack Has some open issues regarding KMS Import keys. Follow issues:
 		// - https://github.com/localstack/localstack/issues/10921
-		// {"ImportRSAPrivateKey", cryptoengines.SharedTestImportRSAPrivateKey},
-		// {"ImportECDSAPrivateKey", cryptoengines.SharedTestImportECDSAPrivateKey},
+		{"ImportRSAPrivateKey", cryptoengines.SharedTestImportRSAPrivateKey},
+		{"ImportECDSAPrivateKey", cryptoengines.SharedTestImportECDSAPrivateKey},
 	}
 
 	for _, tt := range table {
