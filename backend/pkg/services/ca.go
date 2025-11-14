@@ -1194,15 +1194,30 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		Duration: models.TimeDuration(validityDuration),
 	}
 
-	// Validate issuance profile exists
-	exists, _, err := svc.issuanceProfilesStorage.SelectByID(ctx, ca.ProfileID)
-	if err != nil {
-		lFunc.Errorf("could not get issuance profile %s: %s", ca.ProfileID, err)
-		return nil, err
-	}
-	if !exists {
-		lFunc.Errorf("issuance profile %s not found", ca.ProfileID)
-		return nil, fmt.Errorf("issuance profile not found")
+	// Resolve issuance profile with priority: inline -> by ID -> CA default
+	var profile *models.IssuanceProfile
+
+	if input.IssuanceProfile != nil {
+		// Priority 1: Embedded IssuanceProfile (highest priority)
+		profile = input.IssuanceProfile
+	} else if input.IssuanceProfileID != "" {
+		// Priority 2: Fetch by ProfileID
+		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+			ProfileID: input.IssuanceProfileID,
+		})
+		if err != nil {
+			lFunc.Errorf("could not get issuance profile %s: %s", input.IssuanceProfileID, err)
+			return nil, err
+		}
+	} else {
+		// Priority 3: Use CA's default profile
+		profile, err = svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+			ProfileID: ca.ProfileID,
+		})
+		if err != nil {
+			lFunc.Errorf("could not get default ca issuance profile %s: %s", ca.ProfileID, err)
+			return nil, err
+		}
 	}
 
 	var newCert *x509.Certificate
@@ -1241,12 +1256,11 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 			return nil, err
 		}
 
-		// Sign the CSR with the parent CA
-		issuanceProfile := x509Engine.GetDefaultCAIssuanceProfile(ctx, validity)
+		// Sign the CSR with the parent CA, using the resolved issuance profile
 		signedCert, err := svc.SignCertificate(ctx, services.SignCertificateInput{
 			CAID:            parentCA.ID,
 			CertRequest:     (*models.X509CertificateRequest)(csr),
-			IssuanceProfile: &issuanceProfile,
+			IssuanceProfile: profile,
 		})
 		if err != nil {
 			lFunc.Errorf("could not sign reissued subordinate CA certificate: %s", err)

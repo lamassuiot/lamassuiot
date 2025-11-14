@@ -499,8 +499,16 @@ func (r *caHttpRoutes) ReissueCA(ctx *gin.Context) {
 		return
 	}
 
+	var requestBody resources.ReissueCACertificateBody
+	if err := ctx.BindJSON(&requestBody); err != nil {
+		ctx.JSON(400, gin.H{"err": err.Error()})
+		return
+	}
+
 	ca, err := r.svc.ReissueCA(ctx, services.ReissueCAInput{
-		CAID: params.ID,
+		CAID:              params.ID,
+		IssuanceProfile:   requestBody.Profile,
+		IssuanceProfileID: requestBody.ProfileID,
 	})
 
 	if err != nil {

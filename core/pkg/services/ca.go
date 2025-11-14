@@ -174,7 +174,9 @@ type UpdateCAMetadataInput struct {
 }
 
 type ReissueCAInput struct {
-	CAID string `validate:"required"`
+	CAID              string `validate:"required"`
+	IssuanceProfile   *models.IssuanceProfile
+	IssuanceProfileID string
 }
 
 type DeleteCAInput struct {

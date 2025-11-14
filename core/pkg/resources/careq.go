@@ -83,6 +83,11 @@ type SignCertificateBody struct {
 	ProfileID   string                         `json:"profile_id"`
 }
 
+type ReissueCACertificateBody struct {
+	Profile   *models.IssuanceProfile `json:"profile"`
+	ProfileID string                  `json:"profile_id"`
+}
+
 type SignatureSignBody struct {
 	Message          string                 `json:"message"`
 	MessageType      models.SignMessageType `json:"message_type"`

@@ -13,7 +13,7 @@ import (
 )
 
 func TestReissueCAService(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -375,6 +375,102 @@ func TestReissueCAService(t *testing.T) {
 				if len(origCert.OCSPServer) != len(reissuedCert.OCSPServer) {
 					return fmt.Errorf("OCSP server count changed: expected %d, got %d",
 						len(origCert.OCSPServer), len(reissuedCert.OCSPServer))
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/ReissueRootCA_WithInlineProfile",
+			before: func(caSDK services.CAService) (string, error) {
+				// Create a root CA
+				ca, err := createTestCA(caSDK, "RootCA-InlineProfile")
+				if err != nil {
+					return "", err
+				}
+				return ca.ID, nil
+			},
+			run: func(caSDK services.CAService, caID string) (*models.CACertificate, error) {
+				// Use inline profile for reissuance
+				inlineProfile := &models.IssuanceProfile{
+					Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 24 * 365)},
+					SignAsCA: true,
+				}
+				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
+					CAID:            caID,
+					IssuanceProfile: inlineProfile,
+				})
+			},
+			resultCheck: func(caSDK services.CAService, originalCA *models.CACertificate, reissuedCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("unexpected error: %s", err)
+				}
+
+				// Verify CA ID remains the same
+				if originalCA.ID != reissuedCA.ID {
+					return fmt.Errorf("CA ID changed: expected %s, got %s", originalCA.ID, reissuedCA.ID)
+				}
+
+				// Verify serial number changed
+				if originalCA.Certificate.SerialNumber == reissuedCA.Certificate.SerialNumber {
+					return fmt.Errorf("serial number should have changed but didn't")
+				}
+
+				// Verify reissuance metadata is present
+				if reissuedCA.Metadata[models.CAMetadataReissuedFromKey] == nil {
+					return fmt.Errorf("reissuance metadata not found")
+				}
+
+				return nil
+			},
+		},
+		{
+			name: "OK/ReissueRootCA_WithProfileID",
+			before: func(caSDK services.CAService) (string, error) {
+				// Create a root CA
+				ca, err := createTestCA(caSDK, "RootCA-ProfileID")
+				if err != nil {
+					return "", err
+				}
+				return ca.ID, nil
+			},
+			run: func(caSDK services.CAService, caID string) (*models.CACertificate, error) {
+				// Create a custom issuance profile
+				profile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:     "CustomProfileForReissuance",
+						Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 24 * 365)},
+						SignAsCA: true,
+					},
+				})
+				if err != nil {
+					return nil, fmt.Errorf("could not create issuance profile: %s", err)
+				}
+
+				// Reissue with profile reference
+				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
+					CAID:              caID,
+					IssuanceProfileID: profile.ID,
+				})
+			},
+			resultCheck: func(caSDK services.CAService, originalCA *models.CACertificate, reissuedCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("unexpected error: %s", err)
+				}
+
+				// Verify CA ID remains the same
+				if originalCA.ID != reissuedCA.ID {
+					return fmt.Errorf("CA ID changed: expected %s, got %s", originalCA.ID, reissuedCA.ID)
+				}
+
+				// Verify serial number changed
+				if originalCA.Certificate.SerialNumber == reissuedCA.Certificate.SerialNumber {
+					return fmt.Errorf("serial number should have changed but didn't")
+				}
+
+				// Verify reissuance metadata is present
+				if reissuedCA.Metadata[models.CAMetadataReissuedFromKey] == nil {
+					return fmt.Errorf("reissuance metadata not found")
 				}
 
 				return nil
