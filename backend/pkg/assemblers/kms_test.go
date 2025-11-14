@@ -20,7 +20,6 @@ import (
 func StartKMSServiceTestServer(t *testing.T, withEventBus bool) (*KMSTestServer, error) {
 	builder := TestServiceBuilder{}.WithDatabase("kms", "ca").WithVault()
 	testServer, err := builder.Build(t)
-
 	if err != nil {
 		return nil, fmt.Errorf("could not create Device Manager test server: %s", err)
 	}

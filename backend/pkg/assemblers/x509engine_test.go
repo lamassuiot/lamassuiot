@@ -1,118 +1,44 @@
-package x509engines
+package assemblers
 
 // import (
 // 	"context"
 // 	"crypto"
 // 	"crypto/elliptic"
-// 	"crypto/rsa"
 // 	"crypto/x509"
 // 	"crypto/x509/pkix"
 // 	"encoding/asn1"
 // 	"encoding/hex"
 // 	"fmt"
 // 	"net"
-// 	"os"
-// 	"reflect"
 // 	"slices"
 // 	"testing"
 // 	"time"
 
+// 	beservice "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+// 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/x509engines"
 // 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-// 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 // 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 // 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-// 	"github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3"
+// 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 // )
 
-// func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
-// 	filesystem.Register()
+// func setup(t *testing.T) (services.KMSService, *x509engines.X509Engine, error) {
+// 	builder := TestServiceBuilder{}.WithDatabase("kms", "ca")
+// 	testServer, err := builder.Build(t)
+// 	if err != nil {
+// 		return nil, nil, fmt.Errorf("could not create Device Manager test server: %s", err)
+// 	}
 
-// 	// Create a temporary directory for testing
-// 	tempDir := t.TempDir()
+// 	err = testServer.BeforeEach()
+// 	if err != nil {
+// 		t.Fatalf("could not run 'BeforeEach' cleanup func in test case: %s", err)
+// 	}
 
 // 	// Create a new instance of GoCryptoEngine
 // 	log := chelpers.SetupLogger(config.Info, "Test Case", "Golang Engine")
-// 	conf := config.CryptoEngineConfig{
-// 		ID:       "test-engine",
-// 		Type:     config.FilesystemProvider,
-// 		Metadata: map[string]interface{}{},
-// 		Config: map[string]interface{}{
-// 			"storage_directory": tempDir,
-// 		},
-// 	}
 
-// 	builder := cryptoengines.GetEngineBuilder(config.FilesystemProvider)
-
-// 	engine, _ := builder(log, conf)
-
-// 	x509Engine := NewX509Engine(log, &engine, []string{"ocsp.lamassu.io", "va.lamassu.io"})
-
-// 	return tempDir, engine, x509Engine
-// }
-
-// func teardown(tempDir string) {
-// 	// Remove the temporary directory
-// 	os.RemoveAll(tempDir)
-// }
-
-// func TestGetCertificateSigner(t *testing.T) {
-// 	tempDir, engine, x509Engine := setup(t)
-// 	defer teardown(tempDir)
-// 	caCertificate, key, err := chelpers.GenerateSelfSignedCA(x509.RSA, 365*24*time.Hour, "MyCA")
-// 	if err != nil {
-// 		t.Fatalf("failed to generate self signed CA: %s", err)
-// 	}
-
-// 	rsaPrivateKey, ok := key.(*rsa.PrivateKey)
-// 	if !ok {
-// 		t.Fatal("private key is not of type rsa.PrivateKey")
-// 	}
-
-// 	_, importedSigner, err := engine.ImportRSAPrivateKey(rsaPrivateKey)
-// 	if err != nil {
-// 		t.Fatalf("failed to import private key: %s", err)
-// 	}
-
-// 	ctx := context.Background()
-
-// 	// Call the GetCertificateSigner method
-// 	signer, err := x509Engine.GetCertificateSigner(ctx, caCertificate)
-
-// 	// Verify the result
-// 	if err != nil {
-// 		t.Errorf("unexpected error: %s", err)
-// 	}
-
-// 	if !reflect.DeepEqual(signer.Public(), caCertificate.PublicKey) {
-// 		t.Error("Public key does not match to the certificates public key")
-// 	}
-
-// 	if !reflect.DeepEqual(signer.Public(), importedSigner.Public()) {
-// 		t.Error("Public key does not match to the imported signer public key")
-// 	}
-// }
-
-// func TestGetCACryptoSignerNonExistentKey(t *testing.T) {
-// 	tempDir, _, x509Engine := setup(t)
-// 	defer teardown(tempDir)
-// 	caCertificate, _, err := chelpers.GenerateSelfSignedCA(x509.RSA, 365*24*time.Hour, "MyCA")
-// 	if err != nil {
-// 		t.Fatalf("failed to generate self signed CA: %s", err)
-// 	}
-
-// 	ctx := context.Background()
-
-// 	// Call the GetCertificateSigner method
-// 	signer, err := x509Engine.GetCertificateSigner(ctx, caCertificate)
-
-// 	// Verify the result
-// 	if err == nil {
-// 		t.Error("expected an error, but got nil")
-// 	}
-
-// 	if signer != nil {
-// 		t.Error("expected signer to be nil, but got non-nil value")
-// 	}
+// 	x509Engine := x509engines.NewX509Engine(log, []string{"ocsp.lamassu.io", "va.lamassu.io"}, testServer.KMS.HttpKMSSDK)
+// 	return testServer.KMS.HttpKMSSDK, &x509Engine, nil
 // }
 
 // func checkCertificate(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyType, tcExpirationTime time.Time) error {
@@ -198,8 +124,10 @@ package x509engines
 // }
 
 // func TestCreateRootCA(t *testing.T) {
-// 	tempDir, _, x509Engine := setup(t)
-// 	defer teardown(tempDir)
+// 	kms, x509Engine, err := setup(t)
+// 	if err != nil {
+// 		t.Fatalf("setup failed: %s", err)
+// 	}
 
 // 	expirationTime := time.Now().AddDate(1, 0, 0) // Set expiration time to 1 year from now
 
@@ -257,12 +185,18 @@ package x509engines
 
 // 		t.Run(tc.name, func(t *testing.T) {
 // 			ctx := context.Background()
-// 			keyID, caSigner, err := x509Engine.GenerateKeyPair(ctx, tc.keyMetadata)
+// 			key, err := kms.CreateKey(ctx, services.CreateKeyInput{
+// 				Algorithm: tc.keyMetadata.Type.String(),
+// 				Size:      tc.keyMetadata.Bits,
+// 				Name:      tc.caId,
+// 			})
 // 			if err != nil {
 // 				t.Fatalf("unexpected error: %s", err)
 // 			}
 
-// 			cert, err := x509Engine.CreateRootCA(ctx, caSigner, keyID, tc.subject, models.Validity{
+// 			caSigner := beservice.NewKMSCryptoSigner(ctx, *key, kms)
+
+// 			cert, err := x509Engine.CreateRootCA(ctx, caSigner, key.KeyID, tc.subject, models.Validity{
 // 				Type: models.Time,
 // 				Time: tc.expirationTime,
 // 			})
@@ -776,19 +710,5 @@ package x509engines
 // 				t.Errorf("unexpected result in test case: %s", err)
 // 			}
 // 		})
-// 	}
-// }
-
-// func TestGetEngineConfig(t *testing.T) {
-// 	tempDir, engine, x509Engine := setup(t)
-// 	defer teardown(tempDir)
-
-// 	// Call the GetEngineConfig method
-// 	config := x509Engine.GetEngineConfig()
-
-// 	// Verify the result
-// 	expected := engine.GetEngineConfig()
-// 	if !reflect.DeepEqual(config, expected) {
-// 		t.Errorf("unexpected result, got: %v, want: %v", config, expected)
 // 	}
 // }
