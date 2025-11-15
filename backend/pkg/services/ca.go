@@ -1220,20 +1220,41 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		}
 	}
 
+	// Ensure the profile enforces isCA flag for CA reissuance
+	profile.SignAsCA = true
+	// Override validity to preserve the original CA's validity duration
+	profile.Validity = validity
+	lFunc.Debugf("enforcing SignAsCA=true for CA reissuance with preserved validity duration")
+
 	var newCert *x509.Certificate
 	var newAKID, newSKID string
 
 	// Check if this is a root CA or subordinate CA
 	if ca.Certificate.SubjectKeyID == ca.Certificate.AuthorityKeyID {
-		// Root CA - reissue as self-signed
+		// Root CA - reissue as self-signed using CSR approach for consistency
 		lFunc.Debugf("reissuing root CA %s", input.CAID)
-		newCert, err = x509Engine.CreateRootCA(ctx, signer, ca.Certificate.SubjectKeyID, ca.Certificate.Subject, validity)
+
+		// Create a CSR for the root CA with the existing key using the certificate as template
+		csr, err := x509Engine.GenerateCertificateRequestFromCertificate(ctx, signer, currentCert)
 		if err != nil {
-			lFunc.Errorf("could not create reissued root CA certificate: %s", err)
+			lFunc.Errorf("could not create CSR for reissued root CA: %s", err)
 			return nil, err
 		}
-		newSKID = ca.Certificate.SubjectKeyID
-		newAKID = ca.Certificate.SubjectKeyID
+
+		// Sign the CSR with itself (self-signed)
+		signedCert, err := svc.SignCertificate(ctx, services.SignCertificateInput{
+			CAID:            input.CAID,
+			CertRequest:     (*models.X509CertificateRequest)(csr),
+			IssuanceProfile: profile,
+		})
+		if err != nil {
+			lFunc.Errorf("could not sign reissued root CA certificate: %s", err)
+			return nil, err
+		}
+
+		newCert = (*x509.Certificate)(signedCert.Certificate)
+		newSKID = signedCert.SubjectKeyID
+		newAKID = signedCert.AuthorityKeyID
 	} else {
 		// Subordinate CA - need to sign with parent CA
 		lFunc.Debugf("reissuing subordinate CA %s", input.CAID)
@@ -1250,7 +1271,7 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		}
 
 		// Create a CSR for the subordinate CA with the existing key
-		csr, err := x509Engine.GenerateCertificateRequest(ctx, signer, ca.Certificate.Subject)
+		csr, err := x509Engine.GenerateCertificateRequestFromCertificate(ctx, signer, currentCert)
 		if err != nil {
 			lFunc.Errorf("could not create CSR for reissued subordinate CA: %s", err)
 			return nil, err
