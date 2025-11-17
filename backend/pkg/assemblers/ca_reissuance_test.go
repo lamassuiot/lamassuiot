@@ -465,6 +465,88 @@ func TestReissueCAService(t *testing.T) {
 				return nil
 			},
 		},
+		{
+			name: "OK/ReissueCA_WithSANs",
+			before: func(caSDK services.CAService) (string, error) {
+				// Create a root CA
+				ca, err := createTestCA(caSDK, "RootCA-WithSANs")
+				if err != nil {
+					return "", err
+				}
+				return ca.ID, nil
+			},
+			run: func(caSDK services.CAService, caID string) (*models.CACertificate, error) {
+				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
+					CAID: caID,
+				})
+			},
+			resultCheck: func(caSDK services.CAService, originalCA *models.CACertificate, reissuedCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("unexpected error: %s", err)
+				}
+
+				// Parse the X.509 certificates
+				origCert := (*x509.Certificate)(originalCA.Certificate.Certificate)
+				reissuedCert := (*x509.Certificate)(reissuedCA.Certificate.Certificate)
+
+				// Verify DNSNames are preserved
+				if len(origCert.DNSNames) != len(reissuedCert.DNSNames) {
+					return fmt.Errorf("DNS names count changed: expected %d, got %d",
+						len(origCert.DNSNames), len(reissuedCert.DNSNames))
+				}
+
+				// Verify DNS names match
+				for i, origDNS := range origCert.DNSNames {
+					if i >= len(reissuedCert.DNSNames) || origDNS != reissuedCert.DNSNames[i] {
+						return fmt.Errorf("DNS name %d changed: expected %s, got %s",
+							i, origDNS, reissuedCert.DNSNames[i])
+					}
+				}
+
+				// Verify IP addresses are preserved
+				if len(origCert.IPAddresses) != len(reissuedCert.IPAddresses) {
+					return fmt.Errorf("IP addresses count changed: expected %d, got %d",
+						len(origCert.IPAddresses), len(reissuedCert.IPAddresses))
+				}
+
+				// Verify IP addresses match
+				for i, origIP := range origCert.IPAddresses {
+					if i >= len(reissuedCert.IPAddresses) || origIP.String() != reissuedCert.IPAddresses[i].String() {
+						return fmt.Errorf("IP address %d changed: expected %s, got %s",
+							i, origIP.String(), reissuedCert.IPAddresses[i].String())
+					}
+				}
+
+				// Verify CA ID remains the same
+				if originalCA.ID != reissuedCA.ID {
+					return fmt.Errorf("CA ID changed: expected %s, got %s", originalCA.ID, reissuedCA.ID)
+				}
+
+				// Verify serial number changed
+				if originalCA.Certificate.SerialNumber == reissuedCA.Certificate.SerialNumber {
+					return fmt.Errorf("serial number should have changed but didn't")
+				}
+
+				// Verify subject is preserved
+				if originalCA.Certificate.Subject.CommonName != reissuedCA.Certificate.Subject.CommonName {
+					return fmt.Errorf("subject changed: expected %s, got %s",
+						originalCA.Certificate.Subject.CommonName,
+						reissuedCA.Certificate.Subject.CommonName)
+				}
+
+				// Verify it's still a root CA
+				if reissuedCA.Certificate.SubjectKeyID != reissuedCA.Certificate.AuthorityKeyID {
+					return fmt.Errorf("reissued CA is not a root CA")
+				}
+
+				// Verify status is ACTIVE
+				if reissuedCA.Certificate.Status != models.StatusActive {
+					return fmt.Errorf("reissued CA status is not ACTIVE: %s", reissuedCA.Certificate.Status)
+				}
+
+				return nil
+			},
+		},
 	}
 
 	for _, tc := range testcases {
