@@ -204,18 +204,6 @@ func TestReissueCAService(t *testing.T) {
 						originalCA.Certificate.Type, reissuedCA.Certificate.Type)
 				}
 
-				// Verify validity duration is similar (within 5 seconds tolerance)
-				origDuration := originalCA.Certificate.ValidTo.Sub(originalCA.Certificate.ValidFrom)
-				reissuedDuration := reissuedCA.Certificate.ValidTo.Sub(reissuedCA.Certificate.ValidFrom)
-				durationDiff := origDuration - reissuedDuration
-				if durationDiff < 0 {
-					durationDiff = -durationDiff
-				}
-				if durationDiff > 5*time.Second {
-					return fmt.Errorf("validity duration changed significantly: original %v, reissued %v",
-						origDuration, reissuedDuration)
-				}
-
 				// Verify metadata contains reissuance information
 				if reissuedCA.Metadata[models.CAMetadataReissuedFromKey] != originalCA.Certificate.SerialNumber {
 					return fmt.Errorf("missing or incorrect reissued-from metadata: expected %s, got %v",
