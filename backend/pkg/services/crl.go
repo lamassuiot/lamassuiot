@@ -85,7 +85,7 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 
 		if !exists {
 			lFunc.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
-			return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+			return nil, errs.ErrVARoleNotFound
 		}
 
 		versionStr = role.LatestCRL.Version.String()
@@ -131,7 +131,8 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*mo
 	}
 
 	if ca == nil {
-		return nil, fmt.Errorf("CA %s not found", caSki)
+		lFunc.Errorf("CA %s not found", caSki)
+		return nil, errs.ErrCANotFound
 	}
 
 	role, err := svc.vaRepo.Insert(ctx, &models.VARole{
@@ -179,7 +180,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 
 	if !exists {
 		lFunc.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
-		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+		return nil, errs.ErrVARoleNotFound
 	}
 
 	var crlCA *models.CACertificate
@@ -205,7 +206,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 
 	if crlCA == nil {
 		lFunc.Errorf("CA %s not found", input.CASubjectKeyID)
-		return nil, fmt.Errorf("CA %s not found", input.CASubjectKeyID)
+		return nil, errs.ErrCANotFound
 	}
 
 	certList := []x509.RevocationListEntry{}
@@ -298,7 +299,7 @@ func (svc CRLServiceBackend) GetVARole(ctx context.Context, input services.GetVA
 	}
 
 	if !exists {
-		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+		return nil, errs.ErrVARoleNotFound
 	}
 
 	return role, nil
@@ -318,7 +319,7 @@ func (svc CRLServiceBackend) GetVARoles(ctx context.Context, input services.GetV
 func (svc CRLServiceBackend) UpdateVARole(ctx context.Context, input services.UpdateVARoleInput) (*models.VARole, error) {
 	exists, role, err := svc.vaRepo.Get(ctx, input.CASubjectKeyID)
 	if !exists {
-		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+		return nil, errs.ErrVARoleNotFound
 	}
 
 	if err != nil {

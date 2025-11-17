@@ -40,7 +40,6 @@ func TestNewAWSKMSEngine(t *testing.T) {
 			{
 				Type: models.KeyType(x509.RSA),
 				Sizes: []int{
-					1024,
 					2048,
 					3072,
 					4096,
@@ -59,6 +58,7 @@ func TestNewAWSKMSEngine(t *testing.T) {
 
 	assert.Equal(t, expectedConfig, engine.GetEngineConfig())
 }
+
 func testDeleteKeyOnKMS(t *testing.T, engine cryptoengines.CryptoEngine) {
 	awsengine := engine.(*AWSKMSCryptoEngine)
 	err := awsengine.DeleteKey("test-key")
@@ -90,8 +90,8 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 		{"RenameKey", cryptoengines.SharedRenameKey},
 		//TODO: LocalStack Has some open issues regarding KMS Import keys. Follow issues:
 		// - https://github.com/localstack/localstack/issues/10921
-		// {"ImportRSAPrivateKey", cryptoengines.SharedTestImportRSAPrivateKey},
-		// {"ImportECDSAPrivateKey", cryptoengines.SharedTestImportECDSAPrivateKey},
+		{"ImportRSAPrivateKey", cryptoengines.SharedTestImportRSAPrivateKey},
+		{"ImportECDSAPrivateKey", cryptoengines.SharedTestImportECDSAPrivateKey},
 	}
 
 	for _, tt := range table {
