@@ -38,8 +38,8 @@ func getOCSPResponse(method string, ocspServerURL string, certificate *x509.Cert
 	case http.MethodPost:
 		httpRequest, err = http.NewRequest(http.MethodPost, ocspServerURL, bytes.NewBuffer(buffer))
 	case http.MethodGet:
-		encOCSPReq := url.QueryEscape(base64.StdEncoding.EncodeToString(buffer))
-		httpRequest, err = http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", ocspServerURL, encOCSPReq), bytes.NewBuffer(buffer))
+		encOCSPReq := base64.URLEncoding.EncodeToString(buffer)
+		httpRequest, err = http.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", ocspServerURL, encOCSPReq), nil)
 	default:
 		return nil, fmt.Errorf("unsupported HTTP OCSP request method: %s", method)
 	}

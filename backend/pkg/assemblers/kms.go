@@ -73,12 +73,6 @@ func AssembleKMSService(conf config.KMSConfig) (*services.KMSService, error) {
 			if err != nil {
 				return nil, fmt.Errorf("could not migrate %s engine keys to v2 format: %s", engineID, err)
 			}
-
-			//TODO: Comentar con el resto del equipo.
-			// err = migrateKeysToV3Format(lSvc, caStorage, engine, engineID)
-			// if err != nil {
-			// 	return nil, nil, fmt.Errorf("could not migrate %s engine keys to v3 format: %s", engineID, err)
-			// }
 		}
 	}
 

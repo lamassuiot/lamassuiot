@@ -350,7 +350,6 @@ func TestPostOCSP(t *testing.T) {
 	}
 }
 func TestGetOCSP(t *testing.T) {
-	t.Skip("Skipping test for now")
 	serverTest, err := StartVAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create VA test server")
