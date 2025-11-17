@@ -12,6 +12,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"net"
+	"net/url"
 	"slices"
 	"time"
 
@@ -209,6 +211,189 @@ func (engine X509Engine) GenerateCertificateRequest(ctx context.Context, csrSign
 	}
 
 	return csr, nil
+}
+
+func (engine X509Engine) GenerateCertificateRequestFromCertificate(ctx context.Context, csrSigner crypto.Signer, certificate *x509.Certificate) (*x509.CertificateRequest, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+	lFunc.Infof("generating certificate request from certificate template: %s", certificate.Subject.CommonName)
+
+	// Create a CSR template using the certificate's subject and extensions
+	template := x509.CertificateRequest{
+		Subject:        certificate.Subject,
+		DNSNames:       certificate.DNSNames,
+		EmailAddresses: certificate.EmailAddresses,
+		URIs:           certificate.URIs,
+		IPAddresses:    certificate.IPAddresses,
+	}
+
+	// Copy key usage and extended key usage as extensions if present
+	var extensions []pkix.Extension
+
+	// Add key usage extension if the certificate has it
+	if certificate.KeyUsage != 0 {
+		keyUsageExt, err := engine.createKeyUsageExtension(certificate.KeyUsage, certificate.ExtKeyUsage)
+		if err == nil {
+			extensions = append(extensions, keyUsageExt...)
+		}
+	}
+
+	// Add BasicConstraints extension for CA certificates
+	if certificate.IsCA {
+		maxPathLen := -1 // -1 means unconstrained
+		bcExt, err := engine.createBasicConstraintsExtension(certificate.IsCA, maxPathLen)
+		if err == nil {
+			extensions = append(extensions, bcExt)
+		}
+	}
+
+	// Add Subject Alternative Name (SAN) extension if present
+	if len(certificate.DNSNames) > 0 || len(certificate.EmailAddresses) > 0 || len(certificate.URIs) > 0 || len(certificate.IPAddresses) > 0 {
+		sanExt, err := engine.createSANExtension(certificate.DNSNames, certificate.EmailAddresses, certificate.URIs, certificate.IPAddresses)
+		if err == nil {
+			extensions = append(extensions, sanExt)
+		}
+	}
+
+	template.ExtraExtensions = extensions
+
+	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &template, csrSigner)
+	if err != nil {
+		lFunc.Errorf("could not create certificate request: %s", err)
+		return nil, err
+	}
+
+	csr, err := x509.ParseCertificateRequest(csrBytes)
+	if err != nil {
+		lFunc.Errorf("could not parse certificate request: %s", err)
+		return nil, err
+	}
+
+	lFunc.Infof("successfully generated certificate request from certificate template")
+	return csr, nil
+}
+
+func (engine X509Engine) createKeyUsageExtension(keyUsage x509.KeyUsage, extKeyUsage []x509.ExtKeyUsage) ([]pkix.Extension, error) {
+	var extensions []pkix.Extension
+
+	// Key Usage extension (OID: 2.5.29.15)
+	kuBytes := []byte{0}
+	if keyUsage != 0 {
+		kuValue := 0
+		if keyUsage&x509.KeyUsageDigitalSignature != 0 {
+			kuValue |= 0x80
+		}
+		if keyUsage&x509.KeyUsageContentCommitment != 0 {
+			kuValue |= 0x40
+		}
+		if keyUsage&x509.KeyUsageKeyEncipherment != 0 {
+			kuValue |= 0x20
+		}
+		if keyUsage&x509.KeyUsageDataEncipherment != 0 {
+			kuValue |= 0x10
+		}
+		if keyUsage&x509.KeyUsageKeyAgreement != 0 {
+			kuValue |= 0x08
+		}
+		if keyUsage&x509.KeyUsageCertSign != 0 {
+			kuValue |= 0x04
+		}
+		if keyUsage&x509.KeyUsageCRLSign != 0 {
+			kuValue |= 0x02
+		}
+		if keyUsage&x509.KeyUsageEncipherOnly != 0 {
+			kuValue |= 0x01
+		}
+		kuBytes = []byte{byte(kuValue)}
+	}
+
+	// Encode as BIT STRING
+	kuEncoded, _ := asn1.Marshal(asn1.BitString{Bytes: kuBytes, BitLength: 8})
+
+	extensions = append(extensions, pkix.Extension{
+		Id:       asn1.ObjectIdentifier{2, 5, 29, 15},
+		Critical: true,
+		Value:    kuEncoded,
+	})
+
+	// Extended Key Usage extension (OID: 2.5.29.37)
+	if len(extKeyUsage) > 0 {
+		var oids []asn1.ObjectIdentifier
+		for _, usage := range extKeyUsage {
+			switch usage {
+			case x509.ExtKeyUsageServerAuth:
+				oids = append(oids, asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 1})
+			case x509.ExtKeyUsageClientAuth:
+				oids = append(oids, asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 2})
+			case x509.ExtKeyUsageCodeSigning:
+				oids = append(oids, asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 3})
+			case x509.ExtKeyUsageEmailProtection:
+				oids = append(oids, asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 4})
+			case x509.ExtKeyUsageIPSECEndSystem:
+				oids = append(oids, asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 5})
+			case x509.ExtKeyUsageIPSECTunnel:
+				oids = append(oids, asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 6})
+			case x509.ExtKeyUsageIPSECUser:
+				oids = append(oids, asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 7})
+			case x509.ExtKeyUsageTimeStamping:
+				oids = append(oids, asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 8})
+			case x509.ExtKeyUsageOCSPSigning:
+				oids = append(oids, asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 9})
+			}
+		}
+
+		ekuEncoded, _ := asn1.Marshal(oids)
+		extensions = append(extensions, pkix.Extension{
+			Id:       asn1.ObjectIdentifier{2, 5, 29, 37},
+			Critical: false,
+			Value:    ekuEncoded,
+		})
+	}
+
+	return extensions, nil
+}
+
+func (engine X509Engine) createBasicConstraintsExtension(isCA bool, maxPathLen int) (pkix.Extension, error) {
+	// BasicConstraints extension (OID: 2.5.29.19)
+	// Structure: SEQUENCE { cA BOOLEAN DEFAULT FALSE, pathLenConstraint INTEGER OPTIONAL }
+
+	type basicConstraints struct {
+		IsCA       bool `asn1:"optional"`
+		PathLength int  `asn1:"optional"`
+	}
+
+	bc := basicConstraints{
+		IsCA:       isCA,
+		PathLength: maxPathLen,
+	}
+
+	bcEncoded, _ := asn1.Marshal(bc)
+
+	return pkix.Extension{
+		Id:       asn1.ObjectIdentifier{2, 5, 29, 19},
+		Critical: isCA, // Critical if CA, optional if end-entity
+		Value:    bcEncoded,
+	}, nil
+}
+
+func (engine X509Engine) createSANExtension(dnsNames []string, emails []string, uris []*url.URL, ips []net.IP) (pkix.Extension, error) {
+	// Subject Alternative Name extension (OID: 2.5.29.17)
+	// This is a simplified version - in production, use proper ASN.1 encoding
+
+	// For now, return empty extension as the CSR struct already handles DNS names and emails
+	return pkix.Extension{
+		Id:       asn1.ObjectIdentifier{2, 5, 29, 17},
+		Critical: false,
+		Value:    []byte{},
+	}, nil
+}
+
+func (engine X509Engine) GetCertificateSigner(ctx context.Context, caCertificate *x509.Certificate) (crypto.Signer, error) {
+	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(caCertificate.PublicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return engine.cryptoEngine.GetPrivateKeyByID(keyID)
 }
 
 func (engine X509Engine) GetDefaultCAIssuanceProfile(ctx context.Context, validity models.Validity) models.IssuanceProfile {

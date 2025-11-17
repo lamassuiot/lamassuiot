@@ -269,7 +269,8 @@ func TestReissueCAService(t *testing.T) {
 			},
 			run: func(caSDK services.CAService, caID string) (*models.CACertificate, error) {
 				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
-					CAID: caID,
+					CAID:            caID,
+					IssuanceProfile: &models.IssuanceProfile{SignAsCA: true},
 				})
 			},
 			resultCheck: func(caSDK services.CAService, originalCA *models.CACertificate, reissuedCA *models.CACertificate, err error) error {
@@ -532,7 +533,7 @@ func TestReissueCAService(t *testing.T) {
 }
 
 func TestReissueCASDK(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}

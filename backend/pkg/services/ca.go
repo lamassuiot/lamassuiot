@@ -1222,8 +1222,10 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 
 	// Ensure the profile enforces isCA flag for CA reissuance
 	profile.SignAsCA = true
-	// Override validity to preserve the original CA's validity duration
-	profile.Validity = validity
+	// Override validity to preserve the original CA's validity duration only if not set
+	if profile.Validity.Type == "" {
+		profile.Validity = validity
+	}
 	lFunc.Debugf("enforcing SignAsCA=true for CA reissuance with preserved validity duration")
 
 	var newCert *x509.Certificate
