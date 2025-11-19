@@ -1,6 +1,7 @@
 package helpers
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -14,6 +15,8 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net"
+	"net/url"
 	"slices"
 	"time"
 
@@ -25,39 +28,40 @@ import (
 // Map x509.ExtKeyUsage to their corresponding OIDs (this is a copy of the internal mapping in crypto/x509, but we need the OIDs here.
 // So we replicate it here since it's not exposed)
 
-var oidExtKeyUsage = asn1.ObjectIdentifier{2, 5, 29, 15}
-var oidExtExtendedKeyUsage = asn1.ObjectIdentifier{2, 5, 29, 37}
-var OidExtSubjectAltName = asn1.ObjectIdentifier{2, 5, 29, 17}
+var OidExtensionKeyUsage = asn1.ObjectIdentifier{2, 5, 29, 15}
+var OidExtensionExtendedKeyUsage = asn1.ObjectIdentifier{2, 5, 29, 37}
+var OidExtensionSubjectAltName = asn1.ObjectIdentifier{2, 5, 29, 17}
+var OidExtensionBasicConstraints = asn1.ObjectIdentifier{2, 5, 29, 19}
 
-var oidExtKeyUsageAny = asn1.ObjectIdentifier{2, 5, 29, 37, 0}
-var oidExtKeyUsageServerAuth = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 1}
-var oidExtKeyUsageClientAuth = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 2}
-var oidExtKeyUsageCodeSigning = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 3}
-var oidExtKeyUsageEmailProtection = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 4}
-var oidExtKeyUsageIPSECEndSystem = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 5}
-var oidExtKeyUsageIPSECTunnel = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 6}
-var oidExtKeyUsageIPSECUser = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 7}
-var oidExtKeyUsageTimeStamping = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 8}
-var oidExtKeyUsageOCSPSigning = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 9}
-var oidExtKeyUsageMicrosoftServerGatedCrypto = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 311, 10, 3, 3}
-var oidExtKeyUsageNetscapeServerGatedCrypto = asn1.ObjectIdentifier{2, 16, 840, 1, 113730, 4, 1}
-var oidExtKeyUsageMicrosoftCommercialCodeSigning = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 311, 2, 1, 22}
-var oidExtKeyUsageMicrosoftKernelCodeSigning = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 311, 61, 1, 1}
+var OidExtKeyUsageAny = asn1.ObjectIdentifier{2, 5, 29, 37, 0}
+var OidExtKeyUsageServerAuth = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 1}
+var OidExtKeyUsageClientAuth = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 2}
+var OidExtKeyUsageCodeSigning = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 3}
+var OidExtKeyUsageEmailProtection = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 4}
+var OidExtKeyUsageIPSECEndSystem = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 5}
+var OidExtKeyUsageIPSECTunnel = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 6}
+var OidExtKeyUsageIPSECUser = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 7}
+var OidExtKeyUsageTimeStamping = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 8}
+var OidExtKeyUsageOCSPSigning = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 3, 9}
+var OidExtKeyUsageMicrosoftServerGatedCrypto = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 311, 10, 3, 3}
+var OidExtKeyUsageNetscapeServerGatedCrypto = asn1.ObjectIdentifier{2, 16, 840, 1, 113730, 4, 1}
+var OidExtKeyUsageMicrosoftCommercialCodeSigning = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 311, 2, 1, 22}
+var OidExtKeyUsageMicrosoftKernelCodeSigning = asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 311, 61, 1, 1}
 var extKeyUsageOIDs = map[x509.ExtKeyUsage]asn1.ObjectIdentifier{
-	x509.ExtKeyUsageAny:                            oidExtKeyUsageAny,
-	x509.ExtKeyUsageServerAuth:                     oidExtKeyUsageServerAuth,
-	x509.ExtKeyUsageClientAuth:                     oidExtKeyUsageClientAuth,
-	x509.ExtKeyUsageCodeSigning:                    oidExtKeyUsageCodeSigning,
-	x509.ExtKeyUsageEmailProtection:                oidExtKeyUsageEmailProtection,
-	x509.ExtKeyUsageIPSECEndSystem:                 oidExtKeyUsageIPSECEndSystem,
-	x509.ExtKeyUsageIPSECTunnel:                    oidExtKeyUsageIPSECTunnel,
-	x509.ExtKeyUsageIPSECUser:                      oidExtKeyUsageIPSECUser,
-	x509.ExtKeyUsageTimeStamping:                   oidExtKeyUsageTimeStamping,
-	x509.ExtKeyUsageOCSPSigning:                    oidExtKeyUsageOCSPSigning,
-	x509.ExtKeyUsageMicrosoftServerGatedCrypto:     oidExtKeyUsageMicrosoftServerGatedCrypto,
-	x509.ExtKeyUsageNetscapeServerGatedCrypto:      oidExtKeyUsageNetscapeServerGatedCrypto,
-	x509.ExtKeyUsageMicrosoftCommercialCodeSigning: oidExtKeyUsageMicrosoftCommercialCodeSigning,
-	x509.ExtKeyUsageMicrosoftKernelCodeSigning:     oidExtKeyUsageMicrosoftKernelCodeSigning,
+	x509.ExtKeyUsageAny:                            OidExtKeyUsageAny,
+	x509.ExtKeyUsageServerAuth:                     OidExtKeyUsageServerAuth,
+	x509.ExtKeyUsageClientAuth:                     OidExtKeyUsageClientAuth,
+	x509.ExtKeyUsageCodeSigning:                    OidExtKeyUsageCodeSigning,
+	x509.ExtKeyUsageEmailProtection:                OidExtKeyUsageEmailProtection,
+	x509.ExtKeyUsageIPSECEndSystem:                 OidExtKeyUsageIPSECEndSystem,
+	x509.ExtKeyUsageIPSECTunnel:                    OidExtKeyUsageIPSECTunnel,
+	x509.ExtKeyUsageIPSECUser:                      OidExtKeyUsageIPSECUser,
+	x509.ExtKeyUsageTimeStamping:                   OidExtKeyUsageTimeStamping,
+	x509.ExtKeyUsageOCSPSigning:                    OidExtKeyUsageOCSPSigning,
+	x509.ExtKeyUsageMicrosoftServerGatedCrypto:     OidExtKeyUsageMicrosoftServerGatedCrypto,
+	x509.ExtKeyUsageNetscapeServerGatedCrypto:      OidExtKeyUsageNetscapeServerGatedCrypto,
+	x509.ExtKeyUsageMicrosoftCommercialCodeSigning: OidExtKeyUsageMicrosoftCommercialCodeSigning,
+	x509.ExtKeyUsageMicrosoftKernelCodeSigning:     OidExtKeyUsageMicrosoftKernelCodeSigning,
 }
 
 var ekuOIDToExt = func() map[string]x509.ExtKeyUsage {
@@ -185,14 +189,14 @@ func ExtractKeyUsageFromCSR(csr *x509.CertificateRequest) (x509.KeyUsage, []x509
 
 	for _, e := range all {
 		switch {
-		case e.Id.Equal(oidExtKeyUsage):
+		case e.Id.Equal(OidExtensionKeyUsage):
 			var bs asn1.BitString
 			if _, err := asn1.Unmarshal(e.Value, &bs); err != nil {
 				return 0, nil, fmt.Errorf("unmarshal KeyUsage: %w", err)
 			}
 			kuMask = bitStringToKeyUsage(bs)
 
-		case e.Id.Equal(oidExtExtendedKeyUsage):
+		case e.Id.Equal(OidExtensionExtendedKeyUsage):
 			var oids []asn1.ObjectIdentifier
 			if _, err := asn1.Unmarshal(e.Value, &oids); err != nil {
 				return 0, nil, fmt.Errorf("unmarshal ExtendedKeyUsage: %w", err)
@@ -251,7 +255,7 @@ func GenerateKeyUsagePKIExtension(keyUsage x509.KeyUsage) (pkix.Extension, error
 	}
 
 	return pkix.Extension{
-		Id:       asn1.ObjectIdentifier{2, 5, 29, 15}, // keyUsage
+		Id:       OidExtensionKeyUsage, // keyUsage
 		Critical: true,
 		Value:    der,
 	}, nil
@@ -272,7 +276,7 @@ func GenerateExtendedKeyUsagePKIExtension(extKeyUsages []x509.ExtKeyUsage) (pkix
 	}
 
 	return pkix.Extension{
-		Id:       asn1.ObjectIdentifier{2, 5, 29, 37}, // Extended Key Usage OID
+		Id:       OidExtensionExtendedKeyUsage, // Extended Key Usage OID
 		Critical: false,
 		Value:    extKeyUsageASN1,
 	}, nil
@@ -480,4 +484,115 @@ func PublicKeyFingerprint(pubKey any) string {
 		return ""
 	}
 	return fmt.Sprintf("%x", sha256.Sum256(pk))
+}
+
+func generateBasicConstraintsExtension(isCA bool, maxPathLen int) (pkix.Extension, error) {
+	// BasicConstraints extension (OID: 2.5.29.19)
+	// Structure: SEQUENCE { cA BOOLEAN DEFAULT FALSE, pathLenConstraint INTEGER OPTIONAL }
+
+	type basicConstraints struct {
+		IsCA       bool `asn1:"optional"`
+		PathLength int  `asn1:"optional"`
+	}
+
+	bc := basicConstraints{
+		IsCA:       isCA,
+		PathLength: maxPathLen,
+	}
+
+	bcEncoded, _ := asn1.Marshal(bc)
+
+	return pkix.Extension{
+		Id:       OidExtensionBasicConstraints,
+		Critical: isCA, // Critical if CA, optional if end-entity
+		Value:    bcEncoded,
+	}, nil
+}
+
+func generateSANExtension(dnsNames []string, emails []string, uris []*url.URL, ips []net.IP) (pkix.Extension, error) {
+	var rawValues []asn1.RawValue
+	for _, name := range dnsNames {
+		rawValues = append(rawValues, asn1.RawValue{Tag: 2, Class: asn1.ClassContextSpecific, Bytes: []byte(name)})
+	}
+	for _, email := range emails {
+		rawValues = append(rawValues, asn1.RawValue{Tag: 1, Class: asn1.ClassContextSpecific, Bytes: []byte(email)})
+	}
+	for _, uri := range uris {
+		rawValues = append(rawValues, asn1.RawValue{Tag: 6, Class: asn1.ClassContextSpecific, Bytes: []byte(uri.String())})
+	}
+	for _, ip := range ips {
+		rawValues = append(rawValues, asn1.RawValue{Tag: 7, Class: asn1.ClassContextSpecific, Bytes: ip})
+	}
+
+	sanBytes, err := asn1.Marshal(rawValues)
+	if err != nil {
+		return pkix.Extension{}, err
+	}
+
+	return pkix.Extension{
+		Id:       OidExtensionSubjectAltName,
+		Critical: false,
+		Value:    sanBytes,
+	}, nil
+}
+
+func GenerateCertificateRequestFromCertificate(csrSigner crypto.Signer, certificate *x509.Certificate) (*x509.CertificateRequest, error) {
+	// Create a CSR template using the certificate's subject and extensions
+	template := x509.CertificateRequest{
+		Subject:        certificate.Subject,
+		DNSNames:       certificate.DNSNames,
+		EmailAddresses: certificate.EmailAddresses,
+		URIs:           certificate.URIs,
+		IPAddresses:    certificate.IPAddresses,
+	}
+
+	// Copy key usage and extended key usage as extensions if present
+	var extensions []pkix.Extension
+
+	// Add key usage extension if the certificate has it
+	if certificate.KeyUsage != 0 {
+		keyUsageExt, err := GenerateKeyUsagePKIExtension(certificate.KeyUsage)
+		if err == nil {
+			extensions = append(extensions, keyUsageExt)
+		}
+	}
+
+	// Add Extended Key Usage extension if the certificate has it
+	if len(certificate.ExtKeyUsage) > 0 {
+		extKeyUsageExt, err := GenerateExtendedKeyUsagePKIExtension(certificate.ExtKeyUsage)
+		if err == nil {
+			extensions = append(extensions, extKeyUsageExt)
+		}
+	}
+
+	// Add BasicConstraints extension for CA certificates
+	if certificate.IsCA {
+		maxPathLen := -1 // -1 means unconstrained
+		bcExt, err := generateBasicConstraintsExtension(certificate.IsCA, maxPathLen)
+		if err == nil {
+			extensions = append(extensions, bcExt)
+		}
+	}
+
+	// Add Subject Alternative Name (SAN) extension if present
+	if len(certificate.DNSNames) > 0 || len(certificate.EmailAddresses) > 0 || len(certificate.URIs) > 0 || len(certificate.IPAddresses) > 0 {
+		sanExt, err := generateSANExtension(certificate.DNSNames, certificate.EmailAddresses, certificate.URIs, certificate.IPAddresses)
+		if err == nil {
+			extensions = append(extensions, sanExt)
+		}
+	}
+
+	template.ExtraExtensions = extensions
+
+	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &template, csrSigner)
+	if err != nil {
+		return nil, err
+	}
+
+	csr, err := x509.ParseCertificateRequest(csrBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	return csr, nil
 }

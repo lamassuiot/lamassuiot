@@ -1177,8 +1177,6 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		return nil, errs.ErrCryptoEngineNotFound
 	}
 
-	x509Engine := x509engines.NewX509Engine(lFunc, engine, svc.vaServerDomains)
-
 	// Get the existing key pair using the SubjectKeyID
 	signer, err := (*engine).GetPrivateKeyByID(ca.Certificate.SubjectKeyID)
 	if err != nil {
@@ -1237,7 +1235,7 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		lFunc.Debugf("reissuing root CA %s", input.CAID)
 
 		// Create a CSR for the root CA with the existing key using the certificate as template
-		csr, err := x509Engine.GenerateCertificateRequestFromCertificate(ctx, signer, currentCert)
+		csr, err := chelpers.GenerateCertificateRequestFromCertificate(signer, currentCert)
 		if err != nil {
 			lFunc.Errorf("could not create CSR for reissued root CA: %s", err)
 			return nil, err
@@ -1273,7 +1271,7 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		}
 
 		// Create a CSR for the subordinate CA with the existing key
-		csr, err := x509Engine.GenerateCertificateRequestFromCertificate(ctx, signer, currentCert)
+		csr, err := chelpers.GenerateCertificateRequestFromCertificate(signer, currentCert)
 		if err != nil {
 			lFunc.Errorf("could not create CSR for reissued subordinate CA: %s", err)
 			return nil, err
