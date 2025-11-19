@@ -1218,6 +1218,9 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		}
 	}
 
+	profileCopy := *profile
+	profile = &profileCopy
+
 	// Ensure the profile enforces isCA flag for CA reissuance
 	profile.SignAsCA = true
 	// Override validity to preserve the original CA's validity duration only if not set
@@ -1312,9 +1315,6 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 
 	// Create new certificate metadata with link to old certificate
 	newMetadata := map[string]interface{}{}
-	for k, v := range ca.Metadata {
-		newMetadata[k] = v
-	}
 	newMetadata[models.CAMetadataReissuedFromKey] = oldSerialNumber
 	newMetadata[models.CAMetadataReissueReasonKey] = "certificate-reissuance"
 
