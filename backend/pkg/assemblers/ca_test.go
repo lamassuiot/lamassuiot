@@ -5036,7 +5036,6 @@ func TestSignatureVerify(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			//
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
