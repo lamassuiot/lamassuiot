@@ -1,6 +1,7 @@
 package cryptoengines
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -28,12 +29,12 @@ func (m *mockCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
 	return nil, nil
 }
 
-func (m *mockCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
+func (m *mockCryptoEngine) CreateRSAPrivateKey(ctx context.Context, keySize int) (string, crypto.Signer, error) {
 	key, err := rsa.GenerateKey(rand.Reader, keySize)
 	return "", key, err
 }
 
-func (m *mockCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string, crypto.Signer, error) {
+func (m *mockCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve elliptic.Curve) (string, crypto.Signer, error) {
 	key, err := ecdsa.GenerateKey(curve, rand.Reader)
 	return "", key, err
 }

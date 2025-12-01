@@ -212,7 +212,7 @@ func (p *AWSKMSCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
 	return keyIDs, nil
 }
 
-func (p *AWSKMSCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
+func (p *AWSKMSCryptoEngine) CreateRSAPrivateKey(ctx context.Context, keySize int) (string, crypto.Signer, error) {
 	lAWSKMS.Debugf("Creating RSA key with size %d", keySize)
 
 	var keySpec types.KeySpec
@@ -230,10 +230,10 @@ func (p *AWSKMSCryptoEngine) CreateRSAPrivateKey(keySize int) (string, crypto.Si
 		return "", nil, err
 	}
 
-	return p.createPrivateKey(keySpec)
+	return p.createPrivateKey(ctx, keySpec)
 }
 
-func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string, crypto.Signer, error) {
+func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve elliptic.Curve) (string, crypto.Signer, error) {
 	lAWSKMS.Debugf("Creating ECDSA key with curve %s", curve.Params().Name)
 
 	var keySpec types.KeySpec
@@ -251,11 +251,11 @@ func (p *AWSKMSCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string
 		return "", nil, err
 	}
 
-	return p.createPrivateKey(keySpec)
+	return p.createPrivateKey(ctx, keySpec)
 }
 
-func (p *AWSKMSCryptoEngine) createPrivateKey(keySpec types.KeySpec) (string, crypto.Signer, error) {
-	key, err := p.kmscli.CreateKey(context.Background(), &kms.CreateKeyInput{
+func (p *AWSKMSCryptoEngine) createPrivateKey(ctx context.Context, keySpec types.KeySpec) (string, crypto.Signer, error) {
+	key, err := p.kmscli.CreateKey(ctx, &kms.CreateKeyInput{
 		KeyUsage: types.KeyUsageTypeSignVerify,
 		KeySpec:  keySpec,
 	})
@@ -278,7 +278,7 @@ func (p *AWSKMSCryptoEngine) createPrivateKey(keySpec types.KeySpec) (string, cr
 		return "", nil, err
 	}
 
-	_, err = p.kmscli.CreateAlias(context.Background(), &kms.CreateAliasInput{
+	_, err = p.kmscli.CreateAlias(ctx, &kms.CreateAliasInput{
 		AliasName:   aws.String(fmt.Sprintf(aliasFormat, keyID)),
 		TargetKeyId: key.KeyMetadata.Arn,
 	})
