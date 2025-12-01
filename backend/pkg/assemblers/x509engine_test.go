@@ -22,7 +22,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
-func setup(t *testing.T) (services.KMSService, *x509engines.X509Engine, error) {
+func setupX509TestSuite(t *testing.T) (services.KMSService, *x509engines.X509Engine, error) {
 	builder := TestServiceBuilder{}.WithDatabase("kms", "ca")
 	testServer, err := builder.Build(t)
 	if err != nil {
@@ -124,7 +124,7 @@ func checkCACertificate(cert *x509.Certificate, ca *x509.Certificate, tcSubject 
 }
 
 func TestCreateRootCA(t *testing.T) {
-	kms, x509Engine, err := setup(t)
+	kms, x509Engine, err := setupX509TestSuite(t)
 	if err != nil {
 		t.Fatalf("setup failed: %s", err)
 	}
@@ -210,7 +210,7 @@ func TestCreateRootCA(t *testing.T) {
 
 func TestCreateSubordinateCA(t *testing.T) {
 	// Setup
-	kmsSvc, x509Engine, err := setup(t)
+	kmsSvc, x509Engine, err := setupX509TestSuite(t)
 	if err != nil {
 		t.Fatalf("setup failed: %s", err)
 	}
