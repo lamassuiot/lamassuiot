@@ -7,20 +7,35 @@ import (
 	"log"
 	"runtime"
 	"strings"
+	"sync"
 
+	"go.opentelemetry.io/contrib/instrumentation/host"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
+var (
+	otelInitOnce     sync.Once
+	otelShutdownFunc func(context.Context) error
+	otelInitErr      error
+)
+
 func InitOtelSDK(ctx context.Context, svcName string) (func(context.Context) error, error) {
+	otelInitOnce.Do(func() {
+		otelShutdownFunc, otelInitErr = initOtelSDKInternal(ctx, svcName)
+	})
+	return otelShutdownFunc, otelInitErr
+}
+
+func initOtelSDKInternal(ctx context.Context, svcName string) (func(context.Context) error, error) {
 	var shutdownFuncs []func(context.Context) error
 	var err error
 
@@ -112,6 +127,12 @@ func setupMeterProvider(ctx context.Context, resources *resource.Resource) error
 
 	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter)))
 
+	log.Print("Starting host instrumentation:")
+	err = host.Start(host.WithMeterProvider(mp))
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	otel.SetMeterProvider(mp)
 
 	return nil
@@ -144,7 +165,6 @@ func NewMetrics(serviceName string) (*Metrics, error) {
 	if err != nil {
 		return nil, err
 	}
-		
 
 	return &m, nil
 }

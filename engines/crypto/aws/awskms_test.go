@@ -143,7 +143,7 @@ func TestAWSKMSPaginationSupport(t *testing.T) {
 
 		// Create test keys
 		for range numKeys {
-			keyID, _, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+			keyID, _, err := engine.CreateECDSAPrivateKey(context.Background(), elliptic.P256())
 			assert.NoError(t, err)
 			createdKeyIDs = append(createdKeyIDs, keyID)
 		}
@@ -167,7 +167,7 @@ func TestAWSKMSPaginationSupport(t *testing.T) {
 		createdKeys := make(map[string]crypto.Signer)
 
 		for range numKeys {
-			keyID, signer, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+			keyID, signer, err := engine.CreateECDSAPrivateKey(context.Background(), elliptic.P256())
 			assert.NoError(t, err)
 			createdKeys[keyID] = signer
 		}
@@ -185,11 +185,13 @@ func TestAWSKMSPaginationSupport(t *testing.T) {
 	t.Run("PaginationWithRenamedKeys", func(t *testing.T) {
 		defer cleanupBeforeTest()
 
+		ctx := context.Background()
+
 		// Create keys and rename them
-		keyID1, _, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+		keyID1, _, err := engine.CreateECDSAPrivateKey(ctx, elliptic.P256())
 		assert.NoError(t, err)
 
-		keyID2, _, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+		keyID2, _, err := engine.CreateECDSAPrivateKey(ctx, elliptic.P256())
 		assert.NoError(t, err)
 
 		newKeyID1 := "renamed-key-1"
@@ -231,10 +233,10 @@ func TestAWSKMSHelperFunctions(t *testing.T) {
 
 	t.Run("getAllKMSKeys", func(t *testing.T) {
 		// Create a few keys
-		_, _, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+		_, _, err := engine.CreateECDSAPrivateKey(context.Background(), elliptic.P256())
 		assert.NoError(t, err)
 
-		_, _, err = engine.CreateECDSAPrivateKey(elliptic.P256())
+		_, _, err = engine.CreateECDSAPrivateKey(context.Background(), elliptic.P256())
 		assert.NoError(t, err)
 
 		// Test getAllKMSKeys helper
@@ -247,7 +249,7 @@ func TestAWSKMSHelperFunctions(t *testing.T) {
 		defer cleanupBeforeTest()
 
 		// Create a key
-		keyID, _, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+		keyID, _, err := engine.CreateECDSAPrivateKey(context.Background(), elliptic.P256())
 		assert.NoError(t, err)
 
 		// Get all keys to find the key ID
@@ -286,7 +288,7 @@ func TestAWSKMSHelperFunctions(t *testing.T) {
 		defer cleanupBeforeTest()
 
 		// Create a key
-		keyID, _, err := engine.CreateECDSAPrivateKey(elliptic.P256())
+		keyID, _, err := engine.CreateECDSAPrivateKey(context.Background(), elliptic.P256())
 		assert.NoError(t, err)
 
 		// Test findKeyArnByAlias helper

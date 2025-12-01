@@ -373,7 +373,7 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 	switch input.Algorithm {
 	case "RSA":
 		bits := input.Size
-		keyID, signer, err = engineInstance.CreateRSAPrivateKey(bits)
+		keyID, signer, err = engineInstance.CreateRSAPrivateKey(ctx, bits)
 		if err != nil {
 			lFunc.Errorf("error creating RSA private key: %s", err)
 			return nil, errors.New("failed to create RSA private key")
@@ -393,7 +393,7 @@ func (svc *KMSServiceBackend) CreateKey(ctx context.Context, input services.Crea
 			lFunc.Error("invalid ECDSA key size")
 			return nil, errors.New("invalid ECDSA key size")
 		}
-		keyID, signer, err = engineInstance.CreateECDSAPrivateKey(curve)
+		keyID, signer, err = engineInstance.CreateECDSAPrivateKey(ctx, curve)
 		if err != nil {
 			lFunc.Errorf("error creating ECDSA private key: %s", err)
 			return nil, err

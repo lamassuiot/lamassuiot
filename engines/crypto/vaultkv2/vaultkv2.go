@@ -194,10 +194,10 @@ func (engine *VaultKV2Engine) ListPrivateKeyIDs() ([]string, error) {
 	return keys, nil
 }
 
-func (engine *VaultKV2Engine) CreateRSAPrivateKey(keySize int) (string, crypto.Signer, error) {
+func (engine *VaultKV2Engine) CreateRSAPrivateKey(ctx context.Context, keySize int) (string, crypto.Signer, error) {
 	engine.logger.Debugf("creating RSA private key")
 
-	_, key, err := engine.softCryptoEngine.CreateRSAPrivateKey(keySize)
+	_, key, err := engine.softCryptoEngine.CreateRSAPrivateKey(ctx, keySize)
 	if err != nil {
 		engine.logger.Errorf("could not create RSA private key: %s", err)
 		return "", nil, err
@@ -207,10 +207,10 @@ func (engine *VaultKV2Engine) CreateRSAPrivateKey(keySize int) (string, crypto.S
 	return engine.importKey(key)
 }
 
-func (engine *VaultKV2Engine) CreateECDSAPrivateKey(c elliptic.Curve) (string, crypto.Signer, error) {
+func (engine *VaultKV2Engine) CreateECDSAPrivateKey(ctx context.Context, c elliptic.Curve) (string, crypto.Signer, error) {
 	engine.logger.Debugf("creating ECDSA private key")
 
-	_, key, err := engine.softCryptoEngine.CreateECDSAPrivateKey(c)
+	_, key, err := engine.softCryptoEngine.CreateECDSAPrivateKey(ctx, c)
 	if err != nil {
 		engine.logger.Errorf("could not create ECDSA private key: %s", err)
 		return "", nil, err
