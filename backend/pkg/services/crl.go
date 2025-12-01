@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -18,6 +17,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	"github.com/sirupsen/logrus"
 	"gocloud.dev/blob"
 )
@@ -252,7 +252,10 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 
 	crlVersion := big.NewInt(0)
 	crlVersion.Add(vaRole.LatestCRL.Version.Int, big.NewInt(1))
-	crlDer, err := x509.CreateRevocationList(rand.Reader, &x509.RevocationList{
+
+	entropy := software.NewLamassuEntropy(ctx)
+
+	crlDer, err := x509.CreateRevocationList(entropy, &x509.RevocationList{
 		RevokedCertificateEntries: certList,
 		Number:                    crlVersion,
 		ThisUpdate:                now,

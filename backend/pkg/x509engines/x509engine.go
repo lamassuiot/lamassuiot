@@ -89,7 +89,9 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 		return nil, err
 	}
 
-	certificateBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, signer.Public(), signer)
+	entropy := software.NewLamassuEntropy(ctx)
+
+	certificateBytes, err := x509.CreateCertificate(entropy, &template, &template, signer.Public(), signer)
 	if err != nil {
 		lFunc.Errorf("could not sign certificate: %s", err)
 		return nil, err
@@ -174,8 +176,10 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 		return nil, err
 	}
 
+	entropy := software.NewLamassuEntropy(ctx)
+
 	// Sign the certificate
-	certificateBytes, err := x509.CreateCertificate(rand.Reader, &certificateTemplate, ca, csr.PublicKey, caSigner)
+	certificateBytes, err := x509.CreateCertificate(entropy, &certificateTemplate, ca, csr.PublicKey, caSigner)
 	if err != nil {
 		lFunc.Errorf("could not sign certificate: %s", err)
 		return nil, err
@@ -198,7 +202,9 @@ func (engine X509Engine) GenerateCertificateRequest(ctx context.Context, csrSign
 		Subject: chelpers.SubjectToPkixName(subject),
 	}
 
-	csrBytes, err := x509.CreateCertificateRequest(rand.Reader, &template, csrSigner)
+	entropy := software.NewLamassuEntropy(ctx)
+
+	csrBytes, err := x509.CreateCertificateRequest(entropy, &template, csrSigner)
 	if err != nil {
 		return nil, err
 	}
