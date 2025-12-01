@@ -1,6 +1,7 @@
 package assemblers
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
@@ -8,6 +9,7 @@ import (
 	fssBuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/fs-storage/builder"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
+	otel "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/otel"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	beService "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/services/handlers"
@@ -16,6 +18,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	sdk "github.com/lamassuiot/lamassuiot/sdk/v3"
 	log "github.com/sirupsen/logrus"
 	"gocloud.dev/blob"
 )
@@ -42,6 +45,7 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 }
 
 func AssembleVAService(conf config.VAconfig, caService services.CAService, kmsService services.KMSService) (*services.CRLService, *services.OCSPService, error) {
+	sdk.InitOtelSDK(context.Background(), "VA Service")
 
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "VA", "Storage")
@@ -80,6 +84,10 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService, kmsSe
 	})
 
 	crlSvc := crl.(*beService.CRLServiceBackend)
+
+	// Add OTel Middleware
+	crl = otel.NewCRLOTelTracer()(crl)
+	crlSvc.SetService(crl)
 
 	if conf.PublisherEventBus.Enabled {
 		crl, err = createPublisherEventBus(conf, crl)

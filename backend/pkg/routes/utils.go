@@ -24,6 +24,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/utils/gindump"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 func NewGinEngine(logger *logrus.Entry) *gin.Engine {
@@ -39,6 +40,7 @@ func NewGinEngine(logger *logrus.Entry) *gin.Engine {
 	router := gin.New()
 	router.Use(
 		cors.New(corsConfig),
+		otelgin.Middleware("gin-server"),
 		headerextractors.RequestMetadataToContextMiddleware(logger),
 		identityextractors.RequestMetadataToContextMiddleware(logger),
 		basiclogger.UseLogger(logger),
