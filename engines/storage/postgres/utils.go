@@ -24,6 +24,7 @@ import (
 	"gorm.io/gorm/clause"
 	gormlogger "gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
+	"gorm.io/plugin/opentelemetry/tracing"
 )
 
 //go:embed migrations/**
@@ -43,6 +44,13 @@ func CreatePostgresDBConnection(logger *logrus.Entry, cfg lconfig.PostgresPSECon
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: dbLogger,
 	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Add OTel Tracing
+	err = db.Use(tracing.NewPlugin())
 
 	return db, err
 }

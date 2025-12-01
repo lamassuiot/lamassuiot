@@ -59,6 +59,7 @@ func (cli *httpCAClient) GetStatsByCAID(ctx context.Context, input services.GetS
 }
 
 func (cli *httpCAClient) GetCAs(ctx context.Context, input services.GetCAsInput) (string, error) {
+
 	url := cli.baseUrl + "/v1/cas"
 	return IterGet[models.CACertificate, *resources.GetCAsResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }

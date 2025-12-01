@@ -10,6 +10,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	auditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/eventpub"
+	otel "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/otel"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes"
 	lservices "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/storage/builder"
@@ -19,6 +20,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
+	sdk "github.com/lamassuiot/lamassuiot/sdk/v3"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -42,6 +44,8 @@ func AssembleKMSServiceWithHTTPServer(conf config.KMSConfig, serviceInfo models.
 }
 
 func AssembleKMSService(conf config.KMSConfig) (*services.KMSService, error) {
+	sdk.InitOtelSDK(context.Background(), "KMS Service")
+
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "KMS", "Service")
 	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "KMS", "Event Bus")
 	lAudit := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "KMS", "Audit Bus")
@@ -86,6 +90,10 @@ func AssembleKMSService(conf config.KMSConfig) (*services.KMSService, error) {
 	}
 
 	kmsSvc := svc.(*lservices.KMSServiceBackend)
+
+	// Add OTel Middleware
+	svc = otel.NewKMSOTelTracer()(svc)
+	kmsSvc.SetService(svc)
 
 	if conf.PublisherEventBus.Enabled {
 		log.Infof("Event Bus is enabled")

@@ -1,0 +1,18 @@
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:1.51 # At least 1.35 if you want to have enabled collector
+    container_name: jaeger
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+      - COLLECTOR_OTLP_ENABLED=true
+    ports: # Some ports are optional or deprecated, but we still let them be here as it's a general snippet
+      - "5775:5775/udp" # agent accept zipkin.thrift over compact thrift protocol (deprecated, used by legacy clients only)
+      - "6831:6831/udp" # agent accept jaeger.thrift over compact thrift protocol
+      - "6832:6832/udp" # agent accept jaeger.thrift over binary thrift protocol
+      - "5778:5778" # agent serve configs
+      - "16686:16686" # query serve frontend (Jaeger UI)
+      - "14268:14268" # collector accept jaeger.thrift directly from clients
+      - "14250:14250" # collector accept model.proto
+      - "9411:9411" # collector Zipkin compatible endpoint (optional)
+      - "4317:4317" # OTLP collector grpc
+      - "4318:4318" # OTLP collector http
