@@ -23,7 +23,7 @@ func NewDMSManagerHttpRoutes(svc services.DMSManagerService) *dmsManagerHttpRout
 }
 
 func (r *dmsManagerHttpRoutes) GetStats(ctx *gin.Context) {
-	stats, err := r.svc.GetDMSStats(ctx, services.GetDMSStatsInput{})
+	stats, err := r.svc.GetDMSStats(ctx.Request.Context(), services.GetDMSStatsInput{})
 
 	if err != nil {
 		ctx.JSON(500, err)
@@ -37,7 +37,7 @@ func (r *dmsManagerHttpRoutes) GetAllDMSs(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, resources.DMSFilterableFields)
 
 	dmss := []models.DMS{}
-	nextBookmark, err := r.svc.GetAll(ctx, services.GetAllInput{
+	nextBookmark, err := r.svc.GetAll(ctx.Request.Context(), services.GetAllInput{
 		ListInput: resources.ListInput[models.DMS]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
@@ -68,7 +68,7 @@ func (r *dmsManagerHttpRoutes) GetDMSByID(ctx *gin.Context) {
 		return
 	}
 
-	dms, err := r.svc.GetDMSByID(ctx, services.GetDMSByIDInput{
+	dms, err := r.svc.GetDMSByID(ctx.Request.Context(), services.GetDMSByIDInput{
 		ID: params.ID,
 	})
 	if err != nil {
@@ -93,7 +93,7 @@ func (r *dmsManagerHttpRoutes) CreateDMS(ctx *gin.Context) {
 		Settings: requestBody.Settings,
 	}
 
-	dms, err := r.svc.CreateDMS(ctx, input)
+	dms, err := r.svc.CreateDMS(ctx.Request.Context(), input)
 	if err != nil {
 		ctx.AbortWithStatusJSON(500, gin.H{"err": err.Error()})
 		return
@@ -116,7 +116,7 @@ func (r *dmsManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
 		return
 	}
 
-	ca, err := r.svc.UpdateDMS(ctx, services.UpdateDMSInput{
+	ca, err := r.svc.UpdateDMS(ctx.Request.Context(), services.UpdateDMSInput{
 		DMS: requestBody,
 	})
 	if err != nil {
@@ -140,7 +140,7 @@ func (r *dmsManagerHttpRoutes) UpdateDMSMetadata(ctx *gin.Context) {
 		return
 	}
 
-	output, err := r.svc.UpdateDMSMetadata(ctx, services.UpdateDMSMetadataInput{
+	output, err := r.svc.UpdateDMSMetadata(ctx.Request.Context(), services.UpdateDMSMetadataInput{
 		ID:      params.ID,
 		Patches: requestBody.Patches,
 	})
@@ -160,7 +160,7 @@ func (r *dmsManagerHttpRoutes) DeleteDMS(ctx *gin.Context) {
 		return
 	}
 
-	err := r.svc.DeleteDMS(ctx, services.DeleteDMSInput{
+	err := r.svc.DeleteDMS(ctx.Request.Context(), services.DeleteDMSInput{
 		ID: params.ID,
 	})
 
@@ -187,7 +187,7 @@ func (r *dmsManagerHttpRoutes) BindIdentityToDevice(ctx *gin.Context) {
 		return
 	}
 
-	bind, err := r.svc.BindIdentityToDevice(ctx, services.BindIdentityToDeviceInput{
+	bind, err := r.svc.BindIdentityToDevice(ctx.Request.Context(), services.BindIdentityToDeviceInput{
 		DeviceID:                requestBody.DeviceID,
 		CertificateSerialNumber: requestBody.CertificateSerialNumber,
 		BindMode:                models.DeviceEventType(requestBody.BindMode),

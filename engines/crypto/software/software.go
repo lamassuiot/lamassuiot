@@ -27,12 +27,12 @@ type LamassuEntropy struct {
 	ctx context.Context
 }
 
-func newLamassuEntropy(ctx context.Context) io.Reader {
+func NewLamassuEntropy(ctx context.Context) io.Reader {
 	return &LamassuEntropy{ctx: ctx}
 }
 
 func (le *LamassuEntropy) Read(b []byte) (n int, err error) {
-	_, span := otel.GetTracerProvider().Tracer("Entropy Read").Start(le.ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName("Lamassu-Monolithic")))
+	_, span := otel.GetTracerProvider().Tracer("ca-svc").Start(le.ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName("Lamassu-Monolithic")))
 	defer span.End()
 
 	return rand.Read(b)
@@ -53,7 +53,7 @@ func (p *SoftwareCryptoEngine) CreateRSAPrivateKey(ctx context.Context, keySize 
 	ctx, span := otel.GetTracerProvider().Tracer(fmt.Sprintf("RSA Key generation - %d", keySize)).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName("Lamassu-Monolithic")))
 	defer span.End()
 
-	entropy := newLamassuEntropy(ctx)
+	entropy := NewLamassuEntropy(ctx)
 
 	lFunc := p.logger.WithField("func", "RSA")
 	lFunc.Debugf("creating RSA %d bit key", keySize)
@@ -77,7 +77,7 @@ func (p *SoftwareCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve 
 	ctx, span := otel.GetTracerProvider().Tracer(fmt.Sprintf("ECDSA Key generation - %s", curve.Params().Name)).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName("Lamassu-Monolithic")))
 	defer span.End()
 
-	entropy := newLamassuEntropy(ctx)
+	entropy := NewLamassuEntropy(ctx)
 
 	lFunc := p.logger.WithField("func", "ECDSA")
 	lFunc.Debugf("creating ECDSA %s key", curve.Params().Name)
