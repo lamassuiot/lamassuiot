@@ -18,6 +18,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	hhelpers "github.com/lamassuiot/lamassuiot/shared/http/v3/pkg/helpers"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 )
@@ -35,6 +36,9 @@ func HttpClientWithCustomHeaders(cli *http.Client, header string, value string) 
 	if cli.Transport != nil {
 		transport = cli.Transport
 	}
+
+	// Add OTel Tracing
+	transport = otelhttp.NewTransport(transport)
 
 	cli.Transport = customHeaderRoundTripper{
 		transport: transport,
