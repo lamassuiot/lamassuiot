@@ -10,25 +10,20 @@ import (
 	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.opentelemetry.io/otel/trace"
-	"go.opentelemetry.io/otel/metric"
 )
 
 type KMSOTelTracer struct {
 	next        services.KMSService
 	tracerName  string
 	serviceName string
-	metrics     *sdk.Metrics
 }
 
 func NewKMSOTelTracer() lservices.KMSMiddleware {
 	return func(next services.KMSService) services.KMSService {
-		metrics, _ := sdk.NewMetrics("KMS")
-
 		return &KMSOTelTracer{
 			next:        next,
 			tracerName:  "kms-svc",
 			serviceName: "KMS",
-			metrics:     metrics,
 		}
 	}
 }
@@ -57,16 +52,6 @@ func (mw KMSOTelTracer) GetKey(ctx context.Context, input services.GetKeyInput) 
 func (mw KMSOTelTracer) CreateKey(ctx context.Context, input services.CreateKeyInput) (output *models.Key, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()
-
-	mw.metrics.MemoryUsage.Record(
-		ctx,
-		int64(sdk.GetMemoryUsage()),
-		metric.WithAttributes(
-			semconv.ServiceName(mw.serviceName),
-			semconv.CodeFunction(sdk.GetCallerFunctionName()),
-		),
-	)
-
 
 	return mw.next.CreateKey(ctx, input)
 }

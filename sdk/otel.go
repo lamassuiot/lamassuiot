@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/host"
 	"go.opentelemetry.io/otel"
@@ -15,9 +16,8 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
-	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
@@ -125,7 +125,9 @@ func setupMeterProvider(ctx context.Context, resources *resource.Resource) error
 		return err
 	}
 
-	mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exporter)))
+	// Register the exporter with an SDK via a periodic reader.
+
+	mp := metric.NewMeterProvider(metric.WithReader(metric.NewPeriodicReader(exporter, metric.WithInterval(100*time.Millisecond))), metric.WithResource(resources))
 
 	log.Print("Starting host instrumentation:")
 	err = host.Start(host.WithMeterProvider(mp))
@@ -145,34 +147,4 @@ func GetCallerFunctionName() string {
 	split := strings.Split(fullName, ".")
 
 	return split[len(split)-1]
-}
-
-type Metrics struct {
-	MemoryUsage metric.Int64Gauge
-}
-
-func NewMetrics(serviceName string) (*Metrics, error) {
-	var m Metrics
-	var err error
-	meter := otel.GetMeterProvider().Meter(serviceName)
-
-	// Record memory usage
-	m.MemoryUsage, err = meter.Int64Gauge(
-		"system_memory_usage",
-		metric.WithDescription("RAM usage"),
-		metric.WithUnit("bytes"),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &m, nil
-}
-
-func GetMemoryUsage() uint64 {
-	var memStats runtime.MemStats
-	runtime.ReadMemStats(&memStats)
-
-	currentMemoryUsage := memStats.HeapAlloc
-	return currentMemoryUsage
 }
