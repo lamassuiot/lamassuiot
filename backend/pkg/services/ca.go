@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -23,6 +22,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	"github.com/sirupsen/logrus"
 
 	"golang.org/x/crypto/ocsp"
@@ -656,7 +656,9 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 			subject.Province = []string{input.Subject.State}
 		}
 
-		csrDerBytes, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{
+		entropy := software.NewLamassuEntropy(ctx)
+
+		csrDerBytes, err := x509.CreateCertificateRequest(entropy, &x509.CertificateRequest{
 			Subject: subject,
 		}, signer)
 		if err != nil {
@@ -1642,7 +1644,9 @@ func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input services.S
 		opts = hash
 	}
 
-	signature, err := certSigner.Sign(rand.Reader, input.Message, opts)
+	entropy := software.NewLamassuEntropy(ctx)
+
+	signature, err := certSigner.Sign(entropy, input.Message, opts)
 	if err != nil {
 		return nil, err
 	}

@@ -27,7 +27,7 @@ func (r *alertsHttpRoutes) GetUserSubscriptions(ctx *gin.Context) {
 		return
 	}
 
-	response, err := r.svc.GetUserSubscriptions(ctx, &services.GetUserSubscriptionsInput{
+	response, err := r.svc.GetUserSubscriptions(ctx.Request.Context(), &services.GetUserSubscriptionsInput{
 		UserID: params.UserID,
 	})
 
@@ -44,7 +44,7 @@ func (r *alertsHttpRoutes) GetUserSubscriptions(ctx *gin.Context) {
 }
 
 func (r *alertsHttpRoutes) GetLatestEventsPerEventType(ctx *gin.Context) {
-	response, err := r.svc.GetLatestEventsPerEventType(ctx, &services.GetLatestEventsPerEventTypeInput{})
+	response, err := r.svc.GetLatestEventsPerEventType(ctx.Request.Context(), &services.GetLatestEventsPerEventTypeInput{})
 
 	if err != nil {
 		switch err {
@@ -75,7 +75,7 @@ func (r *alertsHttpRoutes) Subscribe(ctx *gin.Context) {
 		return
 	}
 
-	response, err := r.svc.Subscribe(ctx, &services.SubscribeInput{
+	response, err := r.svc.Subscribe(ctx.Request.Context(), &services.SubscribeInput{
 		UserID:     params.UserID,
 		EventType:  requestBody.EventType,
 		Conditions: requestBody.Conditions,
@@ -106,7 +106,7 @@ func (r *alertsHttpRoutes) Unsubscribe(ctx *gin.Context) {
 		return
 	}
 
-	response, err := r.svc.Unsubscribe(ctx, &services.UnsubscribeInput{
+	response, err := r.svc.Unsubscribe(ctx.Request.Context(), &services.UnsubscribeInput{
 		UserID:         params.UserID,
 		SubscriptionID: params.SubscriptionID,
 	})

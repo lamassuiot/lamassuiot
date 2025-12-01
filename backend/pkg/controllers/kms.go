@@ -22,7 +22,7 @@ func NewKMSHttpRoutes(svc services.KMSService) *kmsHttpRoutes {
 }
 
 func (r *kmsHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
-	engine, err := r.svc.GetCryptoEngineProvider(ctx)
+	engine, err := r.svc.GetCryptoEngineProvider(ctx.Request.Context())
 	if err != nil {
 		switch err {
 		default:
@@ -40,7 +40,7 @@ func (r *kmsHttpRoutes) GetKeys(ctx *gin.Context) {
 
 	keys := []models.Key{}
 
-	nextBookmark, err := r.svc.GetKeys(ctx, services.GetKeysInput{
+	nextBookmark, err := r.svc.GetKeys(ctx.Request.Context(), services.GetKeysInput{
 		ListInput: resources.ListInput[models.Key]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
@@ -78,7 +78,7 @@ func (r *kmsHttpRoutes) GetKeyByID(ctx *gin.Context) {
 		return
 	}
 
-	key, err := r.svc.GetKey(ctx, services.GetKeyInput{
+	key, err := r.svc.GetKey(ctx.Request.Context(), services.GetKeyInput{
 		Identifier: params.ID,
 	})
 
@@ -105,7 +105,7 @@ func (r *kmsHttpRoutes) CreateKey(ctx *gin.Context) {
 		return
 	}
 
-	key, err := r.svc.CreateKey(ctx, services.CreateKeyInput{
+	key, err := r.svc.CreateKey(ctx.Request.Context(), services.CreateKeyInput{
 		Algorithm: requestBody.Algorithm,
 		Size:      requestBody.Size,
 		EngineID:  requestBody.EngineID,
@@ -150,7 +150,7 @@ func (r *kmsHttpRoutes) ImportKey(ctx *gin.Context) {
 		return
 	}
 
-	key, err := r.svc.ImportKey(ctx, services.ImportKeyInput{
+	key, err := r.svc.ImportKey(ctx.Request.Context(), services.ImportKeyInput{
 		PrivateKey: privKey,
 		EngineID:   requestBody.EngineID,
 		Name:       requestBody.Name,
@@ -188,7 +188,7 @@ func (r *kmsHttpRoutes) UpdateKeyAliases(ctx *gin.Context) {
 		return
 	}
 
-	key, err := r.svc.UpdateKeyAliases(ctx, services.UpdateKeyAliasesInput{
+	key, err := r.svc.UpdateKeyAliases(ctx.Request.Context(), services.UpdateKeyAliasesInput{
 		ID:      params.ID,
 		Patches: requestBody.Patches,
 	})
@@ -225,7 +225,7 @@ func (r *kmsHttpRoutes) UpdateKeyMetadata(ctx *gin.Context) {
 		return
 	}
 
-	key, err := r.svc.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
+	key, err := r.svc.UpdateKeyMetadata(ctx.Request.Context(), services.UpdateKeyMetadataInput{
 		ID:      params.ID,
 		Patches: requestBody.Patches,
 	})
@@ -262,7 +262,7 @@ func (r *kmsHttpRoutes) UpdateKeyName(ctx *gin.Context) {
 		return
 	}
 
-	key, err := r.svc.UpdateKeyName(ctx, services.UpdateKeyNameInput{
+	key, err := r.svc.UpdateKeyName(ctx.Request.Context(), services.UpdateKeyNameInput{
 		ID:   params.ID,
 		Name: requestBody.Name,
 	})
@@ -298,7 +298,7 @@ func (r *kmsHttpRoutes) UpdateKeyTags(ctx *gin.Context) {
 		return
 	}
 
-	key, err := r.svc.UpdateKeyTags(ctx, services.UpdateKeyTagsInput{
+	key, err := r.svc.UpdateKeyTags(ctx.Request.Context(), services.UpdateKeyTagsInput{
 		ID:   params.ID,
 		Tags: requestBody.Tags,
 	})
@@ -329,7 +329,7 @@ func (r *kmsHttpRoutes) DeleteKeyByID(ctx *gin.Context) {
 		return
 	}
 
-	err := r.svc.DeleteKeyByID(ctx, services.GetKeyInput{
+	err := r.svc.DeleteKeyByID(ctx.Request.Context(), services.GetKeyInput{
 		Identifier: params.ID,
 	})
 
@@ -366,7 +366,7 @@ func (r *kmsHttpRoutes) SignMessage(ctx *gin.Context) {
 		return
 	}
 
-	signature, err := r.svc.SignMessage(ctx, services.SignMessageInput{
+	signature, err := r.svc.SignMessage(ctx.Request.Context(), services.SignMessageInput{
 		Identifier:  params.ID,
 		Algorithm:   requestBody.Algorithm,
 		Message:     requestBody.Message,
@@ -403,7 +403,7 @@ func (r *kmsHttpRoutes) VerifySignature(ctx *gin.Context) {
 		return
 	}
 
-	valid, err := r.svc.VerifySignature(ctx, services.VerifySignInput{
+	valid, err := r.svc.VerifySignature(ctx.Request.Context(), services.VerifySignInput{
 		Identifier:  params.ID,
 		Algorithm:   requestBody.Algorithm,
 		Signature:   requestBody.Signature,
