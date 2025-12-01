@@ -39,7 +39,7 @@ func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfig
 		return nil, err
 	}
 
-	meta := helpers.MergeMaps[interface{}](&defaultMeta, &conf.Metadata)
+	meta := helpers.MergeMaps(&defaultMeta, &conf.Metadata)
 	return &FilesystemCryptoEngine{
 		logger:           lGo,
 		softCryptoEngine: software.NewSoftwareCryptoEngine(lGo),
@@ -58,6 +58,8 @@ func NewFilesystemPEMEngine(logger *logrus.Entry, conf config.CryptoEngineConfig
 						2048,
 						3072,
 						4096,
+						7680,
+						15360,
 					},
 				},
 				{

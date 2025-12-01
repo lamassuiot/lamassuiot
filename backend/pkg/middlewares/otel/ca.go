@@ -10,25 +10,20 @@ import (
 	"go.opentelemetry.io/otel"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	"go.opentelemetry.io/otel/trace"
-	"go.opentelemetry.io/otel/metric"
 )
 
 type CAOTelTracer struct {
 	next        services.CAService
 	tracerName  string
 	serviceName string
-	metrics     *sdk.Metrics
 }
 
 func NewCAOTelTracer() lservices.CAMiddleware {
 	return func(next services.CAService) services.CAService {
-		metrics, _ := sdk.NewMetrics("KMS")
-
 		return &CAOTelTracer{
 			next:        next,
 			tracerName:  "ca-svc",
 			serviceName: "CA",
-			metrics:     metrics,
 		}
 	}
 }
@@ -50,15 +45,6 @@ func (mw CAOTelTracer) GetStatsByCAID(ctx context.Context, input services.GetSta
 func (mw CAOTelTracer) CreateCA(ctx context.Context, input services.CreateCAInput) (output *models.CACertificate, err error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()
-
-	mw.metrics.MemoryUsage.Record(
-		ctx,
-		int64(sdk.GetMemoryUsage()),
-		metric.WithAttributes(
-			semconv.ServiceName(mw.serviceName),
-			semconv.CodeFunction(sdk.GetCallerFunctionName()),
-		),
-	)
 
 	return mw.next.CreateCA(ctx, input)
 }
