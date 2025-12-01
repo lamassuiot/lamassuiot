@@ -382,7 +382,7 @@ func TestCreateSubordinateCA(t *testing.T) {
 }
 
 func TestSignCertificateRequest(t *testing.T) {
-	kmsSvc, x509Engine, err := setup(t)
+	kmsSvc, x509Engine, err := setupX509TestSuite(t)
 	if err != nil {
 		t.Fatalf("setup failed: %s", err)
 	}
