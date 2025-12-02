@@ -41,7 +41,7 @@ jobs:
           - path: monolithic
             tag: monolithic
           
-    name: ${{ matrix.module.path }} - Tests
+    name: ${{ matrix.module.path }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -74,7 +74,7 @@ jobs:
           verbose: true
           flags: ${{ matrix.module.tag }}
   test-pkcs11:
-    name: engines/crypto/pkcs11 - Tests
+    name: engines/crypto/pkcs11
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -123,19 +123,25 @@ jobs:
       max-parallel: 5
       matrix:
         module:
-          - path: backend/pkg/assemblers/tests/alerts
-            tag: backend-assemblers-alerts
           - path: backend/pkg/assemblers/tests/ca
             tag: backend-assemblers-ca
-          - path: backend/pkg/assemblers/tests/device-manager
-            tag: backend-assemblers-device-manager
-          - path: backend/pkg/assemblers/tests/dms-manager
-            tag: backend-assemblers-dms-manager
+            name: CA
           - path: backend/pkg/assemblers/tests/kms
             tag: backend-assemblers-kms
+            name: KMS
           - path: backend/pkg/assemblers/tests/va
             tag: backend-assemblers-va
-    name: ${{ matrix.module.path }} - Tests
+            name: VA
+          - path: backend/pkg/assemblers/tests/device-manager
+            tag: backend-assemblers-device-manager
+            name: Device Manager
+          - path: backend/pkg/assemblers/tests/dms-manager
+            tag: backend-assemblers-dms-manager
+            name: DMS Manager
+          - path: backend/pkg/assemblers/tests/alerts
+            tag: backend-assemblers-alerts
+            name: Alerts
+    name: ${{ matrix.module.name }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -169,7 +175,7 @@ jobs:
           flags: ${{ matrix.module.tag }}
 
   test-backend-rest:
-    name: backend (excluding assemblers/tests) - Tests
+    name: backend (excluding assemblers/tests)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
