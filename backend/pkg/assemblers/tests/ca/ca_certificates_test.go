@@ -1,4 +1,4 @@
-package assemblers
+package ca
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -15,7 +16,7 @@ import (
 )
 
 func TestDeleteCertificateSDK(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -133,7 +134,7 @@ func TestDeleteCertificateSDK(t *testing.T) {
 }
 
 func TestDeleteCertificateService(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -185,7 +186,7 @@ func TestDeleteCertificateService(t *testing.T) {
 }
 
 func TestSignCertificateWithDefaultProfile(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -306,7 +307,7 @@ func createCAAndCertificate(caSDK services.CAService) (*models.CACertificate, *m
 }
 
 func TestGetCertificatesFilterBySubjectKeyID(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}

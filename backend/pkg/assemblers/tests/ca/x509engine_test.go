@@ -1,4 +1,4 @@
-package assemblers
+package ca
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	beservice "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/x509engines"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -23,7 +24,7 @@ import (
 )
 
 func setupX509TestSuite(t *testing.T) (services.KMSService, *x509engines.X509Engine, error) {
-	builder := TestServiceBuilder{}.WithDatabase("kms", "ca")
+	builder := tests.TestServiceBuilder{}.WithDatabase("kms", "ca")
 	testServer, err := builder.Build(t)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create Device Manager test server: %s", err)

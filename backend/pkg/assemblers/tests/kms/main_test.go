@@ -1,4 +1,4 @@
-package assemblers
+package kms
 
 import (
 	"context"
@@ -12,13 +12,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
-func StartKMSServiceTestServer(t *testing.T, withEventBus bool) (*KMSTestServer, error) {
-	builder := TestServiceBuilder{}.WithDatabase("kms", "ca").WithVault()
+func StartKMSServiceTestServer(t *testing.T, withEventBus bool) (*tests.KMSTestServer, error) {
+	builder := tests.TestServiceBuilder{}.WithDatabase("kms", "ca").WithVault()
 	testServer, err := builder.Build(t)
 	if err != nil {
 		return nil, fmt.Errorf("could not create Device Manager test server: %s", err)
