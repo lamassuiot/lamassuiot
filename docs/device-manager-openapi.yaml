@@ -1,0 +1,394 @@
+openapi: 3.0.3
+info:
+  title: Lamassu Device Manager API
+  version: 1.0.0
+  description: |
+    Device inventory API providing lifecycle operations for devices managed by Lamassu IoT.
+  contact:
+    name: Lamassu IoT
+    url: https://github.com/lamassuiot/lamassuiot
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: /api/device-manager/v1
+    description: Device Manager API v1
+
+tags:
+  - name: Devices
+    description: Device lifecycle operations
+  - name: Stats
+    description: Device statistics
+
+paths:
+  /stats:
+    get:
+      tags: [Stats]
+      summary: Get device statistics
+      operationId: getDeviceStats
+      responses:
+        '200':
+          description: Device statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DevicesStats'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /devices:
+    get:
+      tags: [Devices]
+      summary: List devices
+      operationId: getDevices
+      parameters:
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: Devices list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetDevicesResponse'
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Devices]
+      summary: Create device
+      operationId: createDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDeviceBody'
+      responses:
+        '201':
+          description: Created device
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /devices/{id}:
+    get:
+      tags: [Devices]
+      summary: Get device by ID
+      operationId: getDeviceById
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '200':
+          description: Device information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      tags: [Devices]
+      summary: Delete device
+      operationId: deleteDevice
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '204': { description: Device deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /devices/{id}/idslot:
+    put:
+      tags: [Devices]
+      summary: Update identity slot
+      operationId: updateDeviceIdentitySlot
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDeviceIdentitySlotBody'
+      responses:
+        '200':
+          description: Updated device
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /devices/{id}/metadata:
+    put:
+      tags: [Devices]
+      summary: Update device metadata
+      operationId: updateDeviceMetadata
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDeviceMetadataBody'
+      responses:
+        '200':
+          description: Updated device
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      tags: [Devices]
+      summary: Patch device metadata
+      operationId: patchDeviceMetadata
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDeviceMetadataBody'
+      responses:
+        '200':
+          description: Updated device
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /devices/{id}/decommission:
+    delete:
+      tags: [Devices]
+      summary: Decommission device
+      operationId: decommissionDevice
+      parameters:
+        - $ref: '#/components/parameters/DeviceId'
+      responses:
+        '204': { description: Device decommissioned }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /devices/dms/{id}:
+    get:
+      tags: [Devices]
+      summary: List devices managed by a DMS
+      operationId: getDevicesByDMS
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: DMS identifier
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: Devices for the DMS
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetDevicesResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+components:
+  parameters:
+    DeviceId:
+      name: id
+      in: path
+      required: true
+      description: Device identifier
+      schema:
+        type: string
+    PageSize:
+      name: page_size
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 25
+    Bookmark:
+      name: bookmark
+      in: query
+      required: false
+      schema:
+        type: string
+    SortBy:
+      name: sort_by
+      in: query
+      required: false
+      schema:
+        type: string
+    SortMode:
+      name: sort_mode
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [asc, desc]
+    Filter:
+      name: filter
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Filter expression for device search
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    CreateDeviceBody:
+      type: object
+      properties:
+        id:
+          type: string
+        alias:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        dms_id:
+          type: string
+        icon:
+          type: string
+        icon_color:
+          type: string
+
+    UpdateDeviceIdentitySlotBody:
+      type: object
+      properties:
+        status:
+          type: string
+        active_version:
+          type: integer
+        type:
+          type: string
+        versions:
+          type: object
+          additionalProperties: true
+
+    UpdateDeviceMetadataBody:
+      type: object
+      properties:
+        patches:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatchOperation'
+
+    GetDevicesResponse:
+      type: object
+      properties:
+        next:
+          type: string
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/Device'
+
+    Device:
+      type: object
+      properties:
+        id:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+        icon:
+          type: string
+        icon_color:
+          type: string
+        creation_timestamp:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          additionalProperties: true
+        dms_owner:
+          type: string
+        identity:
+          type: object
+          description: Active identity slot
+        slots:
+          type: object
+          additionalProperties: true
+        events:
+          type: object
+          additionalProperties: true
+
+    DevicesStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        status_distribution:
+          type: object
+          additionalProperties:
+            type: integer
+
+    PatchOperation:
+      type: object
+      properties:
+        op:
+          type: string
+        path:
+          type: string
+        value:
+          description: Operation value
+        from:
+          type: string
+
+    Error:
+      type: object
+      properties:
+        err:
+          type: string

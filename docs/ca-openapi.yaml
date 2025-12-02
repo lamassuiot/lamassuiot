@@ -1,0 +1,1304 @@
+openapi: 3.0.3
+info:
+  title: Lamassu CA API
+  version: 1.0.0
+  description: |
+    Certificate Authority (CA) service API for Lamassu IoT Platform.
+    Manages CAs, certificates, signing requests, issuance profiles, and related
+    metadata.
+  contact:
+    name: Lamassu IoT
+    url: https://github.com/lamassuiot/lamassuiot
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: /api/ca/v1
+    description: CA API v1
+
+tags:
+  - name: Certificate Authorities
+    description: CA lifecycle operations
+  - name: Certificates
+    description: Certificate issuance and management
+  - name: Stats
+    description: Metrics and statistics
+  - name: Issuance Profiles
+    description: Manage issuance profile templates
+
+paths:
+  /cas:
+    get:
+      tags: [Certificate Authorities]
+      summary: List certificate authorities
+      operationId: getCAs
+      parameters:
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: List of certificate authorities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetCAsResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags: [Certificate Authorities]
+      summary: Create a new certificate authority
+      operationId: createCA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCABody'
+      responses:
+        '201':
+          description: CA created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CACertificate'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: CA already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /cas/import:
+    post:
+      tags: [Certificate Authorities]
+      summary: Import an existing certificate authority
+      operationId: importCA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportCABody'
+      responses:
+        '201':
+          description: CA imported
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CACertificate'
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Issuance profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /cas/{id}:
+    get:
+      tags: [Certificate Authorities]
+      summary: Get CA by identifier
+      operationId: getCAById
+      parameters:
+        - $ref: '#/components/parameters/CAId'
+      responses:
+        '200':
+          description: Certificate authority
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CACertificate'
+        '400':
+          description: Invalid identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: CA not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Certificate Authorities]
+      summary: Delete CA by identifier
+      operationId: deleteCA
+      parameters:
+        - $ref: '#/components/parameters/CAId'
+      responses:
+        '204':
+          description: CA deleted
+        '400':
+          description: Invalid identifier
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: CA not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /cas/cn/{cn}:
+    get:
+      tags: [Certificate Authorities]
+      summary: Get CAs by common name
+      operationId: getCAsByCommonName
+      parameters:
+        - name: cn
+          in: path
+          required: true
+          description: Common name
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: Matching certificate authorities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetCAsResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /cas/{id}/metadata:
+    put:
+      tags: [Certificate Authorities]
+      summary: Update CA metadata
+      operationId: updateCAMetadata
+      parameters:
+        - $ref: '#/components/parameters/CAId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCAMetadataBody'
+      responses:
+        '200':
+          description: Updated certificate authority
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CACertificate'
+        '400':
+          description: Invalid payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: CA not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      tags: [Certificate Authorities]
+      summary: Patch CA metadata
+      operationId: patchCAMetadata
+      parameters:
+        - $ref: '#/components/parameters/CAId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCAMetadataBody'
+      responses:
+        '200':
+          description: Updated certificate authority
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CACertificate'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /cas/{id}/status:
+    post:
+      tags: [Certificate Authorities]
+      summary: Update CA status
+      operationId: updateCAStatus
+      parameters:
+        - $ref: '#/components/parameters/CAId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCertificateStatusBody'
+      responses:
+        '200':
+          description: Updated certificate authority
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CACertificate'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /cas/{id}/profile:
+    post:
+      tags: [Certificate Authorities]
+      summary: Update CA issuance profile
+      operationId: updateCAProfile
+      parameters:
+        - $ref: '#/components/parameters/CAId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCAProfileBody'
+      responses:
+        '200':
+          description: Updated certificate authority
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CACertificate'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /cas/{id}/certificates:
+    get:
+      tags: [Certificates]
+      summary: List certificates issued by a CA
+      operationId: getCertificatesByCA
+      parameters:
+        - $ref: '#/components/parameters/CAId'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: Certificates issued by the CA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetCertificatesResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /cas/{id}/certificates/status/{status}:
+    get:
+      tags: [Certificates]
+      summary: List certificates issued by a CA filtered by status
+      operationId: getCertificatesByCAAndStatus
+      parameters:
+        - $ref: '#/components/parameters/CAId'
+        - name: status
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/CertificateStatus'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: Certificates filtered by status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetCertificatesResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /cas/{id}/certificates/sign:
+    post:
+      tags: [Certificates]
+      summary: Sign a CSR with a CA
+      operationId: signCertificate
+      parameters:
+        - $ref: '#/components/parameters/CAId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignCertificateBody'
+      responses:
+        '201':
+          description: Issued certificate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /cas/{id}/signature/sign:
+    post:
+      tags: [Certificates]
+      summary: Sign arbitrary message with CA private key
+      operationId: caSignatureSign
+      parameters:
+        - $ref: '#/components/parameters/CAId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignatureSignBody'
+      responses:
+        '200':
+          description: Signed payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /cas/{id}/signature/verify:
+    post:
+      tags: [Certificates]
+      summary: Verify signature using CA public key
+      operationId: caSignatureVerify
+      parameters:
+        - $ref: '#/components/parameters/CAId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignatureVerifyBody'
+      responses:
+        '200':
+          description: Verification result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /cas/{id}/certificates/{sn}:
+    get:
+      tags: [Certificates]
+      summary: Get certificate by serial number for a CA
+      operationId: getCertificateBySerial
+      parameters:
+        - $ref: '#/components/parameters/CAId'
+        - $ref: '#/components/parameters/SerialNumber'
+      responses:
+        '200':
+          description: Certificate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /certificates:
+    get:
+      tags: [Certificates]
+      summary: List all certificates
+      operationId: getCertificates
+      parameters:
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: Certificates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetCertificatesResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /certificates/status/{status}:
+    get:
+      tags: [Certificates]
+      summary: List certificates filtered by status
+      operationId: getCertificatesByStatus
+      parameters:
+        - name: status
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/CertificateStatus'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: Certificates filtered by status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetCertificatesResponse'
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /certificates/expiration:
+    get:
+      tags: [Certificates]
+      summary: List certificates by expiration window
+      operationId: getCertificatesByExpiration
+      parameters:
+        - name: expires_after
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: expires_before
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: Certificates expiring within the given window
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetCertificatesResponse'
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /certificates/{sn}:
+    get:
+      tags: [Certificates]
+      summary: Get certificate by serial number
+      operationId: getCertificate
+      parameters:
+        - $ref: '#/components/parameters/SerialNumber'
+      responses:
+        '200':
+          description: Certificate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      tags: [Certificates]
+      summary: Delete certificate by serial number
+      operationId: deleteCertificate
+      parameters:
+        - $ref: '#/components/parameters/SerialNumber'
+      responses:
+        '204': { description: Certificate deleted }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /certificates/{sn}/status:
+    put:
+      tags: [Certificates]
+      summary: Update certificate status
+      operationId: updateCertificateStatus
+      parameters:
+        - $ref: '#/components/parameters/SerialNumber'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCertificateStatusBody'
+      responses:
+        '200':
+          description: Updated certificate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /certificates/{sn}/metadata:
+    put:
+      tags: [Certificates]
+      summary: Update certificate metadata
+      operationId: updateCertificateMetadata
+      parameters:
+        - $ref: '#/components/parameters/SerialNumber'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCertificateMetadataBody'
+      responses:
+        '200':
+          description: Updated certificate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      tags: [Certificates]
+      summary: Patch certificate metadata
+      operationId: patchCertificateMetadata
+      parameters:
+        - $ref: '#/components/parameters/SerialNumber'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCertificateMetadataBody'
+      responses:
+        '200':
+          description: Updated certificate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /certificates/import:
+    post:
+      tags: [Certificates]
+      summary: Import an existing certificate
+      operationId: importCertificate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportCertificateBody'
+      responses:
+        '201':
+          description: Imported certificate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /stats:
+    get:
+      tags: [Stats]
+      summary: Get CA and certificate statistics
+      operationId: getStats
+      responses:
+        '200':
+          description: CA statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CAStats'
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /stats/{id}:
+    get:
+      tags: [Stats]
+      summary: Get statistics for a CA
+      operationId: getStatsByCA
+      parameters:
+        - $ref: '#/components/parameters/CAId'
+      responses:
+        '200':
+          description: Statistics for the CA
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CAStats'
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /profiles:
+    get:
+      tags: [Issuance Profiles]
+      summary: List issuance profiles
+      operationId: getIssuanceProfiles
+      parameters:
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: Issuance profiles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetIssuanceProfilesResponse'
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [Issuance Profiles]
+      summary: Create issuance profile
+      operationId: createIssuanceProfile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUpdateIssuanceProfileBody'
+      responses:
+        '201':
+          description: Created issuance profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuanceProfile'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /profiles/{id}:
+    get:
+      tags: [Issuance Profiles]
+      summary: Get issuance profile
+      operationId: getIssuanceProfile
+      parameters:
+        - $ref: '#/components/parameters/ProfileId'
+      responses:
+        '200':
+          description: Issuance profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuanceProfile'
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    put:
+      tags: [Issuance Profiles]
+      summary: Update issuance profile
+      operationId: updateIssuanceProfile
+      parameters:
+        - $ref: '#/components/parameters/ProfileId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUpdateIssuanceProfileBody'
+      responses:
+        '200':
+          description: Updated issuance profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IssuanceProfile'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      tags: [Issuance Profiles]
+      summary: Delete issuance profile
+      operationId: deleteIssuanceProfile
+      parameters:
+        - $ref: '#/components/parameters/ProfileId'
+      responses:
+        '204': { description: Issuance profile deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+components:
+  parameters:
+    CAId:
+      name: id
+      in: path
+      required: true
+      description: Certificate authority identifier
+      schema:
+        type: string
+    SerialNumber:
+      name: sn
+      in: path
+      required: true
+      description: Certificate serial number
+      schema:
+        type: string
+    ProfileId:
+      name: id
+      in: path
+      required: true
+      description: Issuance profile identifier
+      schema:
+        type: string
+    PageSize:
+      name: page_size
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 25
+    Bookmark:
+      name: bookmark
+      in: query
+      required: false
+      schema:
+        type: string
+    SortBy:
+      name: sort_by
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Field to sort by
+    SortMode:
+      name: sort_mode
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [asc, desc]
+      description: Sort order
+    Filter:
+      name: filter
+      in: query
+      required: false
+      schema:
+        type: string
+      description: "Filter expression using field[operand]value, e.g. status[eq]=ACTIVE"
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    CreateCABody:
+      type: object
+      properties:
+        id:
+          type: string
+        parent_id:
+          type: string
+        subject:
+          $ref: '#/components/schemas/Subject'
+        key_metadata:
+          $ref: '#/components/schemas/KeyMetadata'
+        ca_expiration:
+          $ref: '#/components/schemas/Validity'
+        profile_id:
+          type: string
+        engine_id:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+
+    ImportCABody:
+      type: object
+      properties:
+        id:
+          type: string
+        engine_id:
+          type: string
+        parent_id:
+          type: string
+        ca_request_id:
+          type: string
+        private_key:
+          type: string
+          description: Base64 encoded PEM private key
+        ca:
+          $ref: '#/components/schemas/X509Certificate'
+        ca_chain:
+          type: array
+          items:
+            $ref: '#/components/schemas/X509Certificate'
+        ca_type:
+          $ref: '#/components/schemas/CertificateType'
+        profile_id:
+          type: string
+
+    UpdateCAMetadataBody:
+      type: object
+      properties:
+        patches:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatchOperation'
+
+    SignCertificateBody:
+      type: object
+      properties:
+        csr:
+          $ref: '#/components/schemas/X509CertificateRequest'
+        profile:
+          $ref: '#/components/schemas/IssuanceProfile'
+        profile_id:
+          type: string
+
+    SignatureSignBody:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Base64 encoded message
+        message_type:
+          type: string
+        signature_algorithm:
+          type: string
+
+    SignatureVerifyBody:
+      type: object
+      properties:
+        signature:
+          type: string
+          description: Base64 encoded signature
+        message:
+          type: string
+        message_type:
+          type: string
+        signature_algorithm:
+          type: string
+
+    UpdateCertificateStatusBody:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/CertificateStatus'
+        revocation_reason:
+          $ref: '#/components/schemas/RevocationReason'
+
+    UpdateCAProfileBody:
+      type: object
+      required: [profile_id]
+      properties:
+        profile_id:
+          type: string
+
+    UpdateCertificateMetadataBody:
+      type: object
+      properties:
+        patches:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatchOperation'
+
+    ImportCertificateBody:
+      type: object
+      properties:
+        metadata:
+          type: object
+          additionalProperties: true
+        certificate:
+          $ref: '#/components/schemas/X509Certificate'
+
+    GetCAsResponse:
+      allOf:
+        - $ref: '#/components/schemas/IterableListCACertificate'
+
+    GetCertificatesResponse:
+      allOf:
+        - $ref: '#/components/schemas/IterableListCertificate'
+
+    GetIssuanceProfilesResponse:
+      allOf:
+        - $ref: '#/components/schemas/IterableListIssuanceProfile'
+
+    IterableListCACertificate:
+      type: object
+      properties:
+        next:
+          type: string
+          description: Pagination bookmark
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/CACertificate'
+
+    IterableListCertificate:
+      type: object
+      properties:
+        next:
+          type: string
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/Certificate'
+
+    IterableListIssuanceProfile:
+      type: object
+      properties:
+        next:
+          type: string
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/IssuanceProfile'
+
+    CACertificate:
+      type: object
+      properties:
+        id:
+          type: string
+        certificate:
+          $ref: '#/components/schemas/Certificate'
+        serial_number:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        creation_ts:
+          type: string
+          format: date-time
+        level:
+          type: integer
+        profile_id:
+          type: string
+
+    Certificate:
+      type: object
+      properties:
+        serial_number:
+          type: string
+        version_schema:
+          type: string
+        subject_key_id:
+          type: string
+        authority_key_id:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        status:
+          $ref: '#/components/schemas/CertificateStatus'
+        certificate:
+          $ref: '#/components/schemas/X509Certificate'
+        key_metadata:
+          $ref: '#/components/schemas/KeyStrengthMetadata'
+        subject:
+          $ref: '#/components/schemas/Subject'
+        issuer:
+          $ref: '#/components/schemas/Subject'
+        valid_from:
+          type: string
+          format: date-time
+        issuer_metadata:
+          $ref: '#/components/schemas/IssuerCAMetadata'
+        valid_to:
+          type: string
+          format: date-time
+        revocation_timestamp:
+          type: string
+          format: date-time
+        revocation_reason:
+          $ref: '#/components/schemas/RevocationReason'
+        type:
+          $ref: '#/components/schemas/CertificateType'
+        engine_id:
+          type: string
+        is_ca:
+          type: boolean
+
+    IssuerCAMetadata:
+      type: object
+      properties:
+        serial_number:
+          type: string
+        id:
+          type: string
+        level:
+          type: integer
+
+    Subject:
+      type: object
+      properties:
+        common_name:
+          type: string
+        organization:
+          type: string
+        organization_unit:
+          type: string
+        country:
+          type: string
+        state:
+          type: string
+        locality:
+          type: string
+
+    KeyMetadata:
+      type: object
+      properties:
+        key_id:
+          type: string
+        type:
+          type: string
+        bits:
+          type: integer
+
+    KeyStrengthMetadata:
+      type: object
+      properties:
+        type:
+          type: string
+        bits:
+          type: integer
+        strength:
+          type: string
+
+    Validity:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [Duration, Time]
+        duration:
+          type: string
+          description: Human readable duration
+        time:
+          type: string
+          format: date-time
+
+    IssuanceProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        validity:
+          $ref: '#/components/schemas/Validity'
+        sign_as_ca:
+          type: boolean
+        honor_key_usage:
+          type: boolean
+        key_usage:
+          $ref: '#/components/schemas/X509KeyUsage'
+        honor_extended_key_usages:
+          type: boolean
+        extended_key_usages:
+          type: array
+          items:
+            type: string
+        honor_subject:
+          type: boolean
+        subject:
+          $ref: '#/components/schemas/Subject'
+        honor_extensions:
+          type: boolean
+        crypto_enforcement:
+          $ref: '#/components/schemas/CreateIssuanceProfileCryptoEnforcementBody'
+
+    CreateUpdateIssuanceProfileBody:
+      allOf:
+        - $ref: '#/components/schemas/IssuanceProfile'
+
+    CreateIssuanceProfileCryptoEnforcementBody:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        allow_rsa_keys:
+          type: boolean
+        allowed_rsa_key_sizes:
+          type: array
+          items:
+            type: integer
+        allow_ecdsa_keys:
+          type: boolean
+        allowed_ecdsa_key_sizes:
+          type: array
+          items:
+            type: integer
+
+    CAStats:
+      type: object
+      properties:
+        cas:
+          $ref: '#/components/schemas/CACertificatesStats'
+        certificates:
+          $ref: '#/components/schemas/CertificatesStats'
+
+    CACertificatesStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        engine_distribution:
+          type: object
+          additionalProperties:
+            type: integer
+        status_distribution:
+          type: object
+          additionalProperties:
+            type: integer
+
+    CertificatesStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        ca_distribution:
+          type: object
+          additionalProperties:
+            type: integer
+        status_distribution:
+          type: object
+          additionalProperties:
+            type: integer
+
+    X509KeyUsage:
+      type: object
+      additionalProperties: true
+      description: X509 key usage bitmask representation
+
+    X509Certificate:
+      type: object
+      description: Parsed X509 certificate representation
+      additionalProperties: true
+
+    X509CertificateRequest:
+      type: object
+      description: Parsed X509 certificate signing request
+      additionalProperties: true
+
+    PatchOperation:
+      type: object
+      properties:
+        op:
+          type: string
+          enum: [add, remove, replace, move, copy, test]
+        path:
+          type: string
+        value:
+          description: Operation value
+        from:
+          type: string
+          description: Source path for move/copy
+
+    CertificateStatus:
+      type: string
+      enum: [ACTIVE, EXPIRED, REVOKED, INACTIVE]
+
+    CertificateType:
+      type: string
+      enum: [MANAGED, IMPORTED_WITH_KEY, IMPORTED_WITHOUT_KEY]
+
+    RevocationReason:
+      type: string
+      description: Reason for certificate revocation
+
+    SignResponse:
+      type: object
+      properties:
+        signed_data:
+          type: string
+
+    VerifyResponse:
+      type: object
+      properties:
+        valid:
+          type: boolean
+
+    Error:
+      type: object
+      properties:
+        err:
+          type: string

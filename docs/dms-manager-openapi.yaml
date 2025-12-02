@@ -1,0 +1,645 @@
+openapi: 3.0.3
+info:
+  title: Lamassu DMS Manager API
+  version: 1.0.0
+  description: |
+    Device Management Service (DMS) API for managing registration authorities and EST enrollment flows.
+  contact:
+    name: Lamassu IoT
+    url: https://github.com/lamassuiot/lamassuiot
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: /api/dms-manager
+    description: DMS Manager API
+
+tags:
+  - name: DMS
+    description: DMS lifecycle operations
+  - name: EST
+    description: Enrollment over Secure Transport (RFC 7030)
+
+paths:
+  /v1/stats:
+    get:
+      tags: [DMS]
+      summary: Get DMS statistics
+      operationId: getDmsStats
+      responses:
+        '200':
+          description: Statistics for DMS fleet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DMSStats'
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/dms:
+    get:
+      tags: [DMS]
+      summary: List DMS instances
+      operationId: getDmsList
+      parameters:
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/Bookmark'
+        - $ref: '#/components/parameters/SortBy'
+        - $ref: '#/components/parameters/SortMode'
+        - $ref: '#/components/parameters/Filter'
+      responses:
+        '200':
+          description: DMS list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetDMSsResponse'
+        '500': { $ref: '#/components/responses/InternalError' }
+    post:
+      tags: [DMS]
+      summary: Create DMS
+      operationId: createDms
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDMSBody'
+      responses:
+        '201':
+          description: Created DMS
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DMS'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/dms/{id}:
+    get:
+      tags: [DMS]
+      summary: Get DMS by ID
+      operationId: getDmsById
+      parameters:
+        - $ref: '#/components/parameters/DmsId'
+      responses:
+        '200':
+          description: DMS details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DMS'
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    put:
+      tags: [DMS]
+      summary: Update DMS
+      operationId: updateDms
+      parameters:
+        - $ref: '#/components/parameters/DmsId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDMSBody'
+      responses:
+        '200':
+          description: Updated DMS
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DMS'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    delete:
+      tags: [DMS]
+      summary: Delete DMS
+      operationId: deleteDms
+      parameters:
+        - $ref: '#/components/parameters/DmsId'
+      responses:
+        '204': { description: DMS deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/dms/{id}/metadata:
+    put:
+      tags: [DMS]
+      summary: Update DMS metadata
+      operationId: updateDmsMetadata
+      parameters:
+        - $ref: '#/components/parameters/DmsId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDMSMetadataBody'
+      responses:
+        '200':
+          description: Updated DMS
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DMS'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+    patch:
+      tags: [DMS]
+      summary: Patch DMS metadata
+      operationId: patchDmsMetadata
+      parameters:
+        - $ref: '#/components/parameters/DmsId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDMSMetadataBody'
+      responses:
+        '200':
+          description: Updated DMS
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DMS'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /v1/dms/bind-identity:
+    post:
+      tags: [DMS]
+      summary: Bind an identity certificate to a device
+      operationId: bindIdentityToDevice
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BindIdentityToDeviceBody'
+      responses:
+        '200':
+          description: Binding result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BindIdentityToDeviceOutput'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /.well-known/est/cacerts:
+    get:
+      tags: [EST]
+      summary: Retrieve CA certificates for EST enrollment
+      operationId: estCacerts
+      responses:
+        '200':
+          description: CA certificates bundle
+          content:
+            application/pkcs7-mime:
+              schema:
+                type: string
+                format: byte
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /.well-known/est/{aps}/cacerts:
+    get:
+      tags: [EST]
+      summary: Retrieve CA certificates for a specific EST authentication profile
+      operationId: estApsCacerts
+      parameters:
+        - $ref: '#/components/parameters/Aps'
+      responses:
+        '200':
+          description: CA certificates bundle
+          content:
+            application/pkcs7-mime:
+              schema:
+                type: string
+                format: byte
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /.well-known/est/simpleenroll:
+    post:
+      tags: [EST]
+      summary: EST simple enroll
+      operationId: estSimpleEnroll
+      requestBody:
+        required: true
+        content:
+          application/pkcs10:
+            schema:
+              type: string
+              format: byte
+      responses:
+        '200':
+          description: Issued certificate
+          content:
+            application/pkcs7-mime:
+              schema:
+                type: string
+                format: byte
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /.well-known/est/{aps}/simpleenroll:
+    post:
+      tags: [EST]
+      summary: EST simple enroll for authentication profile
+      operationId: estApsSimpleEnroll
+      parameters:
+        - $ref: '#/components/parameters/Aps'
+      requestBody:
+        required: true
+        content:
+          application/pkcs10:
+            schema:
+              type: string
+              format: byte
+      responses:
+        '200':
+          description: Issued certificate
+          content:
+            application/pkcs7-mime:
+              schema:
+                type: string
+                format: byte
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /.well-known/est/simplereenroll:
+    post:
+      tags: [EST]
+      summary: EST simple reenroll
+      operationId: estSimpleReenroll
+      requestBody:
+        required: true
+        content:
+          application/pkcs10:
+            schema:
+              type: string
+              format: byte
+      responses:
+        '200':
+          description: Renewed certificate
+          content:
+            application/pkcs7-mime:
+              schema:
+                type: string
+                format: byte
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /.well-known/est/{aps}/simplereenroll:
+    post:
+      tags: [EST]
+      summary: EST simple reenroll for authentication profile
+      operationId: estApsSimpleReenroll
+      parameters:
+        - $ref: '#/components/parameters/Aps'
+      requestBody:
+        required: true
+        content:
+          application/pkcs10:
+            schema:
+              type: string
+              format: byte
+      responses:
+        '200':
+          description: Renewed certificate
+          content:
+            application/pkcs7-mime:
+              schema:
+                type: string
+                format: byte
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /.well-known/est/serverkeygen:
+    post:
+      tags: [EST]
+      summary: EST server key generation enrollment
+      operationId: estServerKeyGen
+      requestBody:
+        required: true
+        content:
+          application/pkcs10:
+            schema:
+              type: string
+              format: byte
+      responses:
+        '200':
+          description: Server generated keypair and certificate
+          content:
+            application/pkcs7-mime:
+              schema:
+                type: string
+                format: byte
+        '500': { $ref: '#/components/responses/InternalError' }
+
+  /.well-known/est/{aps}/serverkeygen:
+    post:
+      tags: [EST]
+      summary: EST server key generation for authentication profile
+      operationId: estApsServerKeyGen
+      parameters:
+        - $ref: '#/components/parameters/Aps'
+      requestBody:
+        required: true
+        content:
+          application/pkcs10:
+            schema:
+              type: string
+              format: byte
+      responses:
+        '200':
+          description: Server generated keypair and certificate
+          content:
+            application/pkcs7-mime:
+              schema:
+                type: string
+                format: byte
+        '500': { $ref: '#/components/responses/InternalError' }
+
+components:
+  parameters:
+    DmsId:
+      name: id
+      in: path
+      required: true
+      description: DMS identifier
+      schema:
+        type: string
+    Aps:
+      name: aps
+      in: path
+      required: true
+      description: EST authentication profile selector
+      schema:
+        type: string
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        default: 25
+    Bookmark:
+      name: bookmark
+      in: query
+      schema:
+        type: string
+    SortBy:
+      name: sort_by
+      in: query
+      schema:
+        type: string
+    SortMode:
+      name: sort_mode
+      in: query
+      schema:
+        type: string
+        enum: [asc, desc]
+    Filter:
+      name: filter
+      in: query
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    CreateDMSBody:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        settings:
+          $ref: '#/components/schemas/DMSSettings'
+
+    UpdateDMSMetadataBody:
+      type: object
+      properties:
+        patches:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatchOperation'
+
+    BindIdentityToDeviceBody:
+      type: object
+      properties:
+        bind_mode:
+          type: string
+        device_id:
+          type: string
+        certificate_serial_number:
+          type: string
+
+    GetDMSsResponse:
+      type: object
+      properties:
+        next:
+          type: string
+        list:
+          type: array
+          items:
+            $ref: '#/components/schemas/DMS'
+
+    DMS:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        creation_ts:
+          type: string
+          format: date-time
+        settings:
+          $ref: '#/components/schemas/DMSSettings'
+
+    DMSSettings:
+      type: object
+      properties:
+        server_keygen_settings:
+          $ref: '#/components/schemas/ServerKeyGenSettings'
+        enrollment_settings:
+          $ref: '#/components/schemas/EnrollmentSettings'
+        reenrollment_settings:
+          $ref: '#/components/schemas/ReEnrollmentSettings'
+        ca_distribution_settings:
+          $ref: '#/components/schemas/CADistributionSettings'
+        issuance_profile_id:
+          type: string
+        issuance_profile:
+          $ref: '#/components/schemas/IssuanceProfile'
+
+    ServerKeyGenSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        key:
+          $ref: '#/components/schemas/ServerKeyGenKey'
+
+    ServerKeyGenKey:
+      type: object
+      properties:
+        type:
+          type: string
+        bits:
+          type: integer
+
+    EnrollmentSettings:
+      type: object
+      properties:
+        protocol:
+          type: string
+          enum: [EST_RFC7030]
+        est_rfc7030_settings:
+          $ref: '#/components/schemas/EnrollmentOptionsESTRFC7030'
+        device_provisioning_profile:
+          $ref: '#/components/schemas/DeviceProvisionProfile'
+        enrollment_ca:
+          type: string
+        enable_replaceable_enrollment:
+          type: boolean
+        registration_mode:
+          type: string
+          enum: [JITP, PRE_REGISTRATION]
+        verify_csr_signature:
+          type: boolean
+
+    EnrollmentOptionsESTRFC7030:
+      type: object
+      properties:
+        auth_mode:
+          type: string
+        client_certificate_settings:
+          $ref: '#/components/schemas/AuthOptionsClientCertificate'
+        external_webhook:
+          type: object
+          additionalProperties: true
+
+    AuthOptionsClientCertificate:
+      type: object
+      properties:
+        validation_cas:
+          type: array
+          items:
+            type: string
+        chain_level_validation:
+          type: integer
+        allow_expired:
+          type: boolean
+
+    DeviceProvisionProfile:
+      type: object
+      properties:
+        icon:
+          type: string
+        icon_color:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        tags:
+          type: array
+          items:
+            type: string
+
+    ReEnrollmentSettings:
+      type: object
+      properties:
+        additional_validation_cas:
+          type: array
+          items:
+            type: string
+        revoke_on_reenrollment:
+          type: boolean
+        reenrollment_delta:
+          type: string
+        enable_expired_renewal:
+          type: boolean
+        preventive_delta:
+          type: string
+        critical_delta:
+          type: string
+
+    CADistributionSettings:
+      type: object
+      properties:
+        include_system_ca:
+          type: boolean
+        include_enrollment_ca:
+          type: boolean
+        managed_cas:
+          type: array
+          items:
+            type: string
+
+    IssuanceProfile:
+      type: object
+      additionalProperties: true
+      description: Embedded issuance profile reference
+
+    BindIdentityToDeviceOutput:
+      type: object
+      properties:
+        certificate:
+          type: object
+          additionalProperties: true
+        dms:
+          $ref: '#/components/schemas/DMS'
+        device:
+          type: object
+          additionalProperties: true
+
+    DMSStats:
+      type: object
+      properties:
+        total:
+          type: integer
+
+    PatchOperation:
+      type: object
+      properties:
+        op:
+          type: string
+        path:
+          type: string
+        value:
+          description: Operation value
+        from:
+          type: string
+
+    Error:
+      type: object
+      properties:
+        err:
+          type: string

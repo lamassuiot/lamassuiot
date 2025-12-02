@@ -139,10 +139,41 @@
   <!-- Initialize the Scalar API Reference -->
   <script>
     Scalar.createApiReference('#app', {
-      // The URL of the OpenAPI/Swagger document
-      url: './kms-openapi.yaml',
       // Avoid CORS issues
       proxyUrl: 'https://proxy.scalar.com',
+      theme: 'default',
+      sources: [
+        {
+          title: 'KMS API',
+          slug: 'kms',
+          url: './kms-openapi.yaml',
+        },
+        {
+          title: 'CA API',
+          slug: 'ca',
+          url: './ca-openapi.yaml',
+        },
+        {
+          title: 'VA API',
+          slug: 'va',
+          url: './va-openapi.yaml',
+        },
+        {
+          title: 'Device Manager API',
+          slug: 'devmanager',
+          url: './device-manager-openapi.yaml',
+        },
+        {
+          title: 'DMS Manager API',
+          slug: 'dmsmanager',
+          url: './dms-manager-openapi.yaml',
+        },
+        {
+          title: 'Alerts API',
+          slug: 'alerts',
+          url: './alerts-openapi.yaml',
+        },
+      ],
     })
   </script>
 </body>
