@@ -242,10 +242,10 @@ func calculateDigest(hash crypto.Hash, messageType models.SignMessageType, messa
 		hasher := hash.New()
 		hasher.Write(message)
 		return hasher.Sum(nil), nil
-	} else {
-		if len(message) != hash.Size() {
-			return nil, errors.New("invalid digest size")
-		}
+	}
+
+	if len(message) != hash.Size() {
+		return nil, errors.New("invalid digest size")
 	}
 
 	return message, nil
