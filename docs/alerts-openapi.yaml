@@ -240,7 +240,7 @@ components:
     AlertLatestEvent:
       type: object
       properties:
-        event_types:
+        event_type:
           $ref: '#/components/schemas/EventType'
         event:
           type: object
