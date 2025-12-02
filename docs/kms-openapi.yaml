@@ -10,8 +10,8 @@ info:
     name: Lamassu IoT
     url: https://github.com/lamassuiot/lamassuiot
   license:
-    name: Apache 2.0
-    url: https://www.apache.org/licenses/LICENSE-2.0.html
+    name: Mozilla Public License 2.0
+    url: https://github.com/lamassuiot/lamassuiot?tab=MPL-2.0-1-ov-file#readme
 
 servers:
   - url: /api/kms/v1
