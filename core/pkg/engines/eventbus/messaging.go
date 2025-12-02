@@ -8,6 +8,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/ThreeDotsLabs/watermill/message/router/plugin"
 	"github.com/sirupsen/logrus"
+	wotel "github.com/voi-oss/watermill-opentelemetry/pkg/opentelemetry"
 )
 
 func NewMessageRouter(logger *logrus.Entry, dlqPub message.Publisher) (*message.Router, error) {
@@ -36,6 +37,7 @@ func NewMessageRouter(logger *logrus.Entry, dlqPub message.Publisher) (*message.
 		// CorrelationID will copy the correlation id from the incoming message's metadata to the produced messages
 		middleware.CorrelationID,
 
+		wotel.Trace(),
 		// The handler function is retried if it returns an error.
 		// After MaxRetries, it's up to the PubSub to resend it, mark as ACK or NACK.
 		middleware.Retry{
