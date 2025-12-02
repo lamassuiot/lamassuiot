@@ -239,7 +239,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 
 	extensions := []pkix.Extension{}
 
-	idp, err := svc.getDistributionPointExtension(string(crlCA.Certificate.Certificate.SubjectKeyId))
+	idp, err := svc.getDistributionPointExtension(string(crlCA.Certificate.SubjectKeyID))
 	if err != nil {
 		lFunc.Errorf("something went wrong while creating Issuing Distribution Point extension: %s", err)
 		return nil, err
