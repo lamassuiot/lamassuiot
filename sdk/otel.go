@@ -126,7 +126,6 @@ func setupMeterProvider(ctx context.Context, resources *resource.Resource) error
 	}
 
 	// Register the exporter with an SDK via a periodic reader.
-
 	mp := metric.NewMeterProvider(metric.WithReader(metric.NewPeriodicReader(exporter, metric.WithInterval(100*time.Millisecond))), metric.WithResource(resources))
 
 	log.Print("Starting host instrumentation:")

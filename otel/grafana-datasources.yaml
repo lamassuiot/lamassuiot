@@ -10,9 +10,10 @@ datasources:
   basicAuth: false
   isDefault: false
   version: 1
-  editable: false
+  editable: true
   jsonData:
     httpMethod: GET
+  timeInterval: 1s
 # - name: Tempo
 #   type: tempo
 #   access: proxy
