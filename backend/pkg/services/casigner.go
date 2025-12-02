@@ -36,7 +36,10 @@ func (s *certSignerImpl) Sign(rand io.Reader, digest []byte, opts crypto.SignerO
 	l := logrus.New()
 	l.SetOutput(io.Discard)
 
-	ski, _ := helpers.GetSubjectKeyID(logrus.NewEntry(l), s.cert)
+	ski, err := helpers.GetSubjectKeyID(logrus.NewEntry(l), s.cert)
+	if err != nil {
+		return nil, err
+	}
 
 	key, err := s.sdk.GetKey(s.ctx, services.GetKeyInput{
 		Identifier: ski,
