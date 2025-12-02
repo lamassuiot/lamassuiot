@@ -80,7 +80,6 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 		//TODO: LocalStack does not support RSA_PSS with fixed salt length. AWS KMS DOES support it. Follow issues:
 		// - https://github.com/localstack/localstack/pull/11649
 		// - https://github.com/localstack/localstack/issues/9602
-		// {"SignRSA_PSS", cryptoengines.SharedTestRSAPSSSignature},
 		{"SignRSA_PKCS1v1_5", cryptoengines.SharedTestRSAPKCS1v15Signature},
 		{"SignECDSA", cryptoengines.SharedTestECDSASignature},
 		// {"DeleteKey", cryptoengines.SharedTestDeleteKey},
@@ -88,10 +87,8 @@ func TestAWSKMSCryptoEngine(t *testing.T) {
 		{"GetPrivateKeyByIDNotFound", cryptoengines.SharedGetKeyNotFound},
 		{"ListPrivateKeyIDs", cryptoengines.SharedListKeys},
 		{"RenameKey", cryptoengines.SharedRenameKey},
-		//TODO: LocalStack Has some open issues regarding KMS Import keys. Follow issues:
-		// - https://github.com/localstack/localstack/issues/10921
-		// {"ImportRSAPrivateKey", cryptoengines.SharedTestImportRSAPrivateKey},
-		// {"ImportECDSAPrivateKey", cryptoengines.SharedTestImportECDSAPrivateKey},
+		{"ImportRSAPrivateKey", cryptoengines.SharedTestImportRSAPrivateKey},
+		{"ImportECDSAPrivateKey", cryptoengines.SharedTestImportECDSAPrivateKey},
 	}
 
 	for _, tt := range table {

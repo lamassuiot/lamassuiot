@@ -14,6 +14,8 @@ jobs:
       max-parallel: 5
       matrix:
         module: 
+          - path: backend
+            tag: backend
           - path: core
             tag: core
           - path: sdk
@@ -36,8 +38,6 @@ jobs:
             tag: eventbus-aws
           - path: engines/storage/postgres
             tag: storage-postgres
-          - path: backend
-            tag: backend
           - path: connectors/awsiot
             tag: connector-awsiot
           - path: monolithic
@@ -109,7 +109,7 @@ jobs:
         env:
           PKCS11_MODULE_PATH: /usr/local/lib/libpkcs11-proxy.so
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4.2.0

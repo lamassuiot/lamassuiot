@@ -1,118 +1,44 @@
-package x509engines
+package assemblers
 
 import (
 	"context"
 	"crypto"
 	"crypto/elliptic"
-	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/hex"
 	"fmt"
 	"net"
-	"os"
-	"reflect"
 	"slices"
 	"testing"
 	"time"
 
+	beservice "github.com/lamassuiot/lamassuiot/backend/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/x509engines"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/filesystem/v3"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
-func setup(t *testing.T) (string, cryptoengines.CryptoEngine, X509Engine) {
-	filesystem.Register()
+func setupX509TestSuite(t *testing.T) (services.KMSService, *x509engines.X509Engine, error) {
+	builder := TestServiceBuilder{}.WithDatabase("kms", "ca")
+	testServer, err := builder.Build(t)
+	if err != nil {
+		return nil, nil, fmt.Errorf("could not create Device Manager test server: %s", err)
+	}
 
-	// Create a temporary directory for testing
-	tempDir := t.TempDir()
+	err = testServer.BeforeEach()
+	if err != nil {
+		t.Fatalf("could not run 'BeforeEach' cleanup func in test case: %s", err)
+	}
 
 	// Create a new instance of GoCryptoEngine
 	log := chelpers.SetupLogger(config.Info, "Test Case", "Golang Engine")
-	conf := config.CryptoEngineConfig{
-		ID:       "test-engine",
-		Type:     config.FilesystemProvider,
-		Metadata: map[string]interface{}{},
-		Config: map[string]interface{}{
-			"storage_directory": tempDir,
-		},
-	}
 
-	builder := cryptoengines.GetEngineBuilder(config.FilesystemProvider)
-
-	engine, _ := builder(log, conf)
-
-	x509Engine := NewX509Engine(log, &engine, []string{"ocsp.lamassu.io", "va.lamassu.io"})
-
-	return tempDir, engine, x509Engine
-}
-
-func teardown(tempDir string) {
-	// Remove the temporary directory
-	os.RemoveAll(tempDir)
-}
-
-func TestGetCertificateSigner(t *testing.T) {
-	tempDir, engine, x509Engine := setup(t)
-	defer teardown(tempDir)
-	caCertificate, key, err := chelpers.GenerateSelfSignedCA(x509.RSA, 365*24*time.Hour, "MyCA")
-	if err != nil {
-		t.Fatalf("failed to generate self signed CA: %s", err)
-	}
-
-	rsaPrivateKey, ok := key.(*rsa.PrivateKey)
-	if !ok {
-		t.Fatal("private key is not of type rsa.PrivateKey")
-	}
-
-	_, importedSigner, err := engine.ImportRSAPrivateKey(rsaPrivateKey)
-	if err != nil {
-		t.Fatalf("failed to import private key: %s", err)
-	}
-
-	ctx := context.Background()
-
-	// Call the GetCertificateSigner method
-	signer, err := x509Engine.GetCertificateSigner(ctx, caCertificate)
-
-	// Verify the result
-	if err != nil {
-		t.Errorf("unexpected error: %s", err)
-	}
-
-	if !reflect.DeepEqual(signer.Public(), caCertificate.PublicKey) {
-		t.Error("Public key does not match to the certificates public key")
-	}
-
-	if !reflect.DeepEqual(signer.Public(), importedSigner.Public()) {
-		t.Error("Public key does not match to the imported signer public key")
-	}
-}
-
-func TestGetCACryptoSignerNonExistentKey(t *testing.T) {
-	tempDir, _, x509Engine := setup(t)
-	defer teardown(tempDir)
-	caCertificate, _, err := chelpers.GenerateSelfSignedCA(x509.RSA, 365*24*time.Hour, "MyCA")
-	if err != nil {
-		t.Fatalf("failed to generate self signed CA: %s", err)
-	}
-
-	ctx := context.Background()
-
-	// Call the GetCertificateSigner method
-	signer, err := x509Engine.GetCertificateSigner(ctx, caCertificate)
-
-	// Verify the result
-	if err == nil {
-		t.Error("expected an error, but got nil")
-	}
-
-	if signer != nil {
-		t.Error("expected signer to be nil, but got non-nil value")
-	}
+	x509Engine := x509engines.NewX509Engine(log, []string{"ocsp.lamassu.io", "va.lamassu.io"}, testServer.KMS.HttpKMSSDK)
+	return testServer.KMS.HttpKMSSDK, &x509Engine, nil
 }
 
 func checkCertificate(cert *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyType, tcExpirationTime time.Time) error {
@@ -197,105 +123,11 @@ func checkCACertificate(cert *x509.Certificate, ca *x509.Certificate, tcSubject 
 	return nil
 }
 
-func TestGenerateKeyPair(t *testing.T) {
-	tempDir, _, x509Engine := setup(t)
-	defer teardown(tempDir)
-
-	checkOk := func(err error) error {
-		if err != nil {
-			return fmt.Errorf("unexpected error: %s", err)
-		}
-
-		return nil
-	}
-
-	checkFail := func(err error) error {
-		if err == nil {
-			return fmt.Errorf("expected error, got nil")
-		}
-		return nil
-	}
-
-	var testcases = []struct {
-		name        string
-		keyMetadata models.KeyMetadata
-		check       func(err error) error
-	}{
-		{
-			name: "OK/RSA_2048",
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.RSA),
-				Bits: 2048,
-			},
-			check: checkOk,
-		},
-		{
-			name: "FAIL/RSA_1",
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.RSA),
-				Bits: 1,
-			},
-			check: checkFail,
-		},
-		{
-			name: "OK/ECDSA_256",
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.ECDSA),
-				Bits: 256,
-			},
-			check: checkOk,
-		},
-		{
-			name: "OK/ECDSA_224",
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.ECDSA),
-				Bits: 224,
-			},
-			check: checkOk,
-		},
-		{
-			name: "OK/ECDSA_384",
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.ECDSA),
-				Bits: 384,
-			},
-			check: checkOk,
-		},
-		{
-			name: "OK/ECDSA_521",
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.ECDSA),
-				Bits: 521,
-			},
-			check: checkOk,
-		},
-		{
-			name: "FAIL/ECDSA_BAD_CURVE",
-			keyMetadata: models.KeyMetadata{
-				Type: models.KeyType(x509.ECDSA),
-				Bits: 1024,
-			},
-			check: checkFail,
-		},
-	}
-
-	for _, tc := range testcases {
-		tc := tc
-
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
-			_, _, err := x509Engine.GenerateKeyPair(ctx, tc.keyMetadata)
-			err = tc.check(err)
-			if err != nil {
-				t.Fatalf("unexpected result in test case: %s", err)
-			}
-		})
-	}
-}
-
 func TestCreateRootCA(t *testing.T) {
-	tempDir, _, x509Engine := setup(t)
-	defer teardown(tempDir)
+	kms, x509Engine, err := setupX509TestSuite(t)
+	if err != nil {
+		t.Fatalf("setup failed: %s", err)
+	}
 
 	expirationTime := time.Now().AddDate(1, 0, 0) // Set expiration time to 1 year from now
 
@@ -353,12 +185,18 @@ func TestCreateRootCA(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			keyID, caSigner, err := x509Engine.GenerateKeyPair(ctx, tc.keyMetadata)
+			key, err := kms.CreateKey(ctx, services.CreateKeyInput{
+				Algorithm: tc.keyMetadata.Type.String(),
+				Size:      tc.keyMetadata.Bits,
+				Name:      tc.caId,
+			})
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
 			}
 
-			cert, err := x509Engine.CreateRootCA(ctx, caSigner, keyID, tc.subject, models.Validity{
+			caSigner := beservice.NewKMSCryptoSigner(ctx, *key, kms)
+
+			cert, err := x509Engine.CreateRootCA(ctx, caSigner, key.KeyID, tc.subject, models.Validity{
 				Type: models.Time,
 				Time: tc.expirationTime,
 			})
@@ -372,12 +210,9 @@ func TestCreateRootCA(t *testing.T) {
 
 func TestCreateSubordinateCA(t *testing.T) {
 	// Setup
-	tempDir, _, x509Engine := setup(t)
-	defer teardown(tempDir)
-
-	keyMetadata := models.KeyMetadata{
-		Type: models.KeyType(x509.RSA),
-		Bits: 2048,
+	kmsSvc, x509Engine, err := setupX509TestSuite(t)
+	if err != nil {
+		t.Fatalf("setup failed: %s", err)
 	}
 
 	subject := models.Subject{
@@ -389,16 +224,22 @@ func TestCreateSubordinateCA(t *testing.T) {
 		Locality:         "Arrasate",
 	}
 
-	caExpirationTime := time.Now().AddDate(2, 0, 0) // Set expiration time to 1 year from now
+	caExpirationTime := time.Now().AddDate(2, 0, 0) // Set expiration time to 2 years from now
 	expirationTime := time.Now().AddDate(1, 0, 0)   // Set expiration time to 1 year from now
 
 	ctx := context.Background()
-	keyID, caSigner, err := x509Engine.GenerateKeyPair(ctx, keyMetadata)
+
+	// Create RSA Root CA
+	keyRSA, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
+		Algorithm: "RSA",
+		Size:      2048,
+		Name:      "rootCA-RSA",
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
-
-	rootCaCertRSA, err := x509Engine.CreateRootCA(ctx, caSigner, keyID, subject, models.Validity{
+	caSignerRSA := beservice.NewKMSCryptoSigner(ctx, *keyRSA, kmsSvc)
+	rootCaCertRSA, err := x509Engine.CreateRootCA(ctx, caSignerRSA, keyRSA.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
 	})
@@ -406,17 +247,17 @@ func TestCreateSubordinateCA(t *testing.T) {
 		t.Fatalf("unexpected result in test case: %s", err)
 	}
 
-	keyMetadata = models.KeyMetadata{
-		Type: models.KeyType(x509.ECDSA),
-		Bits: 256,
-	}
-
-	keyID, caSigner, err = x509Engine.GenerateKeyPair(ctx, keyMetadata)
+	// Create ECDSA Root CA
+	keyEC, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
+		Algorithm: "ECDSA",
+		Size:      256,
+		Name:      "rootCA-EC",
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
-
-	rootCaCertEC, err := x509Engine.CreateRootCA(ctx, caSigner, keyID, subject, models.Validity{
+	caSignerEC := beservice.NewKMSCryptoSigner(ctx, *keyEC, kmsSvc)
+	rootCaCertEC, err := x509Engine.CreateRootCA(ctx, caSignerEC, keyEC.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
 	})
@@ -446,14 +287,16 @@ func TestCreateSubordinateCA(t *testing.T) {
 		name            string
 		subordinateCAID string
 		rootCaCert      *x509.Certificate
+		parentCASigner  crypto.Signer
 		subject         models.Subject
 		keyMetadata     models.KeyMetadata
 		expirationTime  time.Time
 		check           func(cert *x509.Certificate, ca *x509.Certificate, tcSubject models.Subject, tcKeyMetadata models.KeyMetadata, tcExpirationTime time.Time, err error) error
 	}{
 		{name: "OK/RSA_RSA",
-			subordinateCAID: "subCA",
+			subordinateCAID: "subCA-RSA-RSA",
 			rootCaCert:      rootCaCertRSA,
+			parentCASigner:  caSignerRSA,
 			subject:         subordinateSubject,
 			keyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.RSA),
@@ -463,8 +306,9 @@ func TestCreateSubordinateCA(t *testing.T) {
 			check:          checkOk,
 		},
 		{name: "OK/RSA_EC",
-			subordinateCAID: "subCA",
+			subordinateCAID: "subCA-RSA-EC",
 			rootCaCert:      rootCaCertRSA,
+			parentCASigner:  caSignerRSA,
 			subject:         subordinateSubject,
 			keyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.ECDSA),
@@ -474,8 +318,9 @@ func TestCreateSubordinateCA(t *testing.T) {
 			check:          checkOk,
 		},
 		{name: "OK/EC_RSA",
-			subordinateCAID: "subCA",
+			subordinateCAID: "subCA-EC-RSA",
 			rootCaCert:      rootCaCertEC,
+			parentCASigner:  caSignerEC,
 			subject:         subordinateSubject,
 			keyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.RSA),
@@ -485,8 +330,9 @@ func TestCreateSubordinateCA(t *testing.T) {
 			check:          checkOk,
 		},
 		{name: "OK/EC_EC",
-			subordinateCAID: "subCA",
+			subordinateCAID: "subCA-EC-EC",
 			rootCaCert:      rootCaCertEC,
+			parentCASigner:  caSignerEC,
 			subject:         subordinateSubject,
 			keyMetadata: models.KeyMetadata{
 				Type: models.KeyType(x509.ECDSA),
@@ -501,22 +347,23 @@ func TestCreateSubordinateCA(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			_, subCASigner, err := x509Engine.GenerateKeyPair(ctx, tc.keyMetadata)
+			// Create subordinate CA key using KMS
+			subCAKey, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
+				Algorithm: tc.keyMetadata.Type.String(),
+				Size:      tc.keyMetadata.Bits,
+				Name:      tc.subordinateCAID,
+			})
 			if err != nil {
 				t.Fatalf("unexpected error in key gen: %s", err)
 			}
+			subCASigner := beservice.NewKMSCryptoSigner(ctx, *subCAKey, kmsSvc)
 
 			subCACSR, err := x509Engine.GenerateCertificateRequest(ctx, subCASigner, tc.subject)
 			if err != nil {
 				t.Fatalf("unexpected error in csr gen: %s", err)
 			}
 
-			parentCAsigner, err := x509Engine.GetCertificateSigner(ctx, tc.rootCaCert)
-			if err != nil {
-				t.Fatalf("unexpected error in get ca signer: %s", err)
-			}
-
-			cert, err := x509Engine.SignCertificateRequest(ctx, subCACSR, tc.rootCaCert, parentCAsigner, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
+			cert, err := x509Engine.SignCertificateRequest(ctx, subCACSR, tc.rootCaCert, tc.parentCASigner, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
 				Type: models.Time,
 				Time: tc.expirationTime,
 			}))
@@ -535,12 +382,9 @@ func TestCreateSubordinateCA(t *testing.T) {
 }
 
 func TestSignCertificateRequest(t *testing.T) {
-	tempDir, _, x509Engine := setup(t)
-	defer teardown(tempDir)
-
-	keyMetadata := models.KeyMetadata{
-		Type: models.KeyType(x509.RSA),
-		Bits: 2048,
+	kmsSvc, x509Engine, err := setupX509TestSuite(t)
+	if err != nil {
+		t.Fatalf("setup failed: %s", err)
 	}
 
 	subject := models.Subject{
@@ -551,12 +395,19 @@ func TestSignCertificateRequest(t *testing.T) {
 	expirationTime := time.Now().AddDate(1, 0, 0)   // Set expiration time to 1 year from now
 
 	ctx := context.Background()
-	keyID, caSignerRSA, err := x509Engine.GenerateKeyPair(ctx, keyMetadata)
+
+	// Create RSA CA key
+	keyRSA, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
+		Algorithm: "RSA",
+		Size:      2048,
+		Name:      "signCertReq-RSA",
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
+	caSignerRSA := beservice.NewKMSCryptoSigner(ctx, *keyRSA, kmsSvc)
 
-	caCertificateRSA, err := x509Engine.CreateRootCA(ctx, caSignerRSA, keyID, subject, models.Validity{
+	caCertificateRSA, err := x509Engine.CreateRootCA(ctx, caSignerRSA, keyRSA.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
 	})
@@ -564,17 +415,18 @@ func TestSignCertificateRequest(t *testing.T) {
 		t.Fatalf("unexpected result in test case: %s", err)
 	}
 
-	keyMetadata = models.KeyMetadata{
-		Type: models.KeyType(x509.ECDSA),
-		Bits: 256,
-	}
-
-	keyID, caSignerEC, err := x509Engine.GenerateKeyPair(ctx, keyMetadata)
+	// Create ECDSA CA key
+	keyEC, err := kmsSvc.CreateKey(context.Background(), services.CreateKeyInput{
+		Algorithm: "ECDSA",
+		Size:      256,
+		Name:      "signCertReq-EC",
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
+	caSignerEC := beservice.NewKMSCryptoSigner(ctx, *keyEC, kmsSvc)
 
-	caCertificateEC, err := x509Engine.CreateRootCA(ctx, caSignerEC, keyID, subject, models.Validity{
+	caCertificateEC, err := x509Engine.CreateRootCA(ctx, caSignerEC, keyEC.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
 	})
@@ -872,19 +724,5 @@ func TestSignCertificateRequest(t *testing.T) {
 				t.Errorf("unexpected result in test case: %s", err)
 			}
 		})
-	}
-}
-
-func TestGetEngineConfig(t *testing.T) {
-	tempDir, engine, x509Engine := setup(t)
-	defer teardown(tempDir)
-
-	// Call the GetEngineConfig method
-	config := x509Engine.GetEngineConfig()
-
-	// Verify the result
-	expected := engine.GetEngineConfig()
-	if !reflect.DeepEqual(config, expected) {
-		t.Errorf("unexpected result, got: %v, want: %v", config, expected)
 	}
 }

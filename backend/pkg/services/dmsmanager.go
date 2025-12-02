@@ -166,13 +166,13 @@ func (svc DMSManagerServiceBackend) UpdateDMSMetadata(ctx context.Context, input
 		return nil, errs.ErrDMSNotFound
 	}
 
-	updatedMetadata, err := chelpers.ApplyPatches(dms.Metadata, input.Patches)
+	updatedMetadata, err := chelpers.ApplyPatches[map[string]any](dms.Metadata, input.Patches)
 	if err != nil {
 		lFunc.Errorf("failed to apply patches to metadata for DMS '%s': %v", input.ID, err)
 		return nil, err
 	}
 
-	dms.Metadata = updatedMetadata
+	dms.Metadata = *updatedMetadata
 
 	lFunc.Debugf("updating %s DMS metadata", input.ID)
 	return svc.dmsStorage.Update(ctx, dms)
@@ -885,7 +885,7 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 	_, err = svc.caClient.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
 		SerialNumber: currentDeviceCertSN,
 		Patches: chelpers.NewPatchBuilder().
-			Remove(chelpers.JSONPointerBuilder(models.CAAttachedToDeviceKey)).
+			Remove(chelpers.JSONPointerBuilder(models.DMSAttachedToDeviceKey)).
 			Remove(chelpers.JSONPointerBuilder(models.CAMetadataMonitoringExpirationDeltasKey)).
 			Build(),
 	})
@@ -1138,7 +1138,7 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		SerialNumber: crt.SerialNumber,
 		Patches: chelpers.NewPatchBuilder().
 			Add(chelpers.JSONPointerBuilder(models.CAMetadataMonitoringExpirationDeltasKey), expirationDeltas).
-			Add(chelpers.JSONPointerBuilder(models.CAAttachedToDeviceKey), caAttachedToDevice).
+			Add(chelpers.JSONPointerBuilder(models.DMSAttachedToDeviceKey), caAttachedToDevice).
 			Build(),
 	})
 	if err != nil {

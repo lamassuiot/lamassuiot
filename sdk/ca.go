@@ -2,6 +2,8 @@ package sdk
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
@@ -28,11 +30,6 @@ func NewHttpCAClient(client *http.Client, url string) services.CAService {
 		httpClient: client,
 		baseUrl:    baseURL,
 	}
-}
-
-func (cli *httpCAClient) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
-	url := cli.baseUrl + "/v1/cas/requests"
-	return IterGet[models.CACertificateRequest, *resources.GetItemsResponse[models.CACertificateRequest]](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 
 func (cli *httpCAClient) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
@@ -111,51 +108,28 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 	return response, nil
 }
 
-func (cli *httpCAClient) RequestCACSR(ctx context.Context, input services.RequestCAInput) (*models.CACertificateRequest, error) {
-	response, err := Post[*models.CACertificateRequest](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/request", resources.CreateCABody{
-		ID:          input.ID,
-		Subject:     input.Subject,
-		KeyMetadata: input.KeyMetadata,
-		EngineID:    input.EngineID,
-		Metadata:    input.Metadata,
-	}, map[int][]error{
-		400: {
-			errs.ErrCAIncompatibleValidity,
-			errs.ErrCAIssuanceExpiration,
-		},
-		409: {
-			errs.ErrCAAlreadyExists,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
-}
-
 func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
 	var privKey string
-	if input.KeyType == models.KeyType(x509.RSA) {
-		rsaBytes := x509.MarshalPKCS1PrivateKey(input.CARSAKey)
-		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
-			Type:  "RSA PRIVATE KEY",
-			Bytes: rsaBytes,
-		}))
-	} else if input.KeyType == models.KeyType(x509.ECDSA) {
-		ecBytes, err := x509.MarshalECPrivateKey(input.CAECKey)
-		if err != nil {
-			return nil, err
+	if input.Key != nil {
+		switch input.Key.(type) {
+		case *rsa.PrivateKey, *ecdsa.PrivateKey:
+			bytes, err := x509.MarshalPKCS8PrivateKey(input.Key)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal private key: %w", err)
+			}
+
+			privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
+				Type:  "PRIVATE KEY",
+				Bytes: bytes,
+			}))
+
+		default:
+			return nil, fmt.Errorf("unsupported private key type: %T", input.Key)
 		}
-		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
-			Type:  "EC PRIVATE KEY",
-			Bytes: ecBytes,
-		}))
 	}
 
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/import", resources.ImportCABody{
 		ID:            input.ID,
-		CAType:        models.CertificateType(input.CAType),
 		ProfileID:     input.ProfileID,
 		CACertificate: input.CACertificate,
 		CAChain:       input.CAChain,
@@ -404,39 +378,6 @@ func (cli *httpCAClient) DeleteCertificate(ctx context.Context, input services.D
 	return nil
 }
 
-func (cli *httpCAClient) GetCARequestByID(ctx context.Context, input services.GetByIDInput) (*models.CACertificateRequest, error) {
-	response, err := Get[models.CACertificateRequest](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/requests/"+input.ID, nil, map[int][]error{})
-	if err != nil {
-		return nil, err
-	}
-
-	return &response, nil
-}
-
-func (cli *httpCAClient) DeleteCARequestByID(ctx context.Context, input services.GetByIDInput) error {
-	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/cas/requests/"+input.ID, map[int][]error{})
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// KMS
-func (cli *httpCAClient) GetKeys(ctx context.Context, input services.GetKeysInput) (string, error) {
-	url := cli.baseUrl + "/v1/kms/keys"
-	return IterGet[models.Key, *resources.GetKeysResponse](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
-}
-
-func (cli *httpCAClient) GetKeyByID(ctx context.Context, input services.GetByIDInput) (*models.Key, error) {
-	response, err := Get[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys/"+input.ID, nil, map[int][]error{})
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
-}
-
 func (cli *httpCAClient) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {
 	url := cli.baseUrl + "/v1/profiles"
 	return IterGet[models.IssuanceProfile, resources.IterableList[models.IssuanceProfile]](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
@@ -483,20 +424,6 @@ func (cli *httpCAClient) CreateIssuanceProfile(ctx context.Context, input servic
 	return response, nil
 }
 
-func (cli *httpCAClient) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.Key, error) {
-	response, err := Post[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys", resources.CreateKeyBody{
-		Algorithm: input.Algorithm,
-		Size:      input.Size,
-		EngineID:  input.EngineID,
-		Name:      input.Name,
-	}, map[int][]error{})
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
-}
-
 func (cli *httpCAClient) UpdateIssuanceProfile(ctx context.Context, input services.UpdateIssuanceProfileInput) (*models.IssuanceProfile, error) {
 	response, err := Put[*models.IssuanceProfile](ctx, cli.httpClient, cli.baseUrl+"/v1/profiles/"+input.Profile.ID, resources.CreateUpdateIssuanceProfileBody{
 		Name:                   input.Profile.Name,
@@ -529,15 +456,6 @@ func (cli *httpCAClient) UpdateIssuanceProfile(ctx context.Context, input servic
 	return response, nil
 }
 
-func (cli *httpCAClient) DeleteKeyByID(ctx context.Context, input services.GetByIDInput) error {
-	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys/"+input.ID, map[int][]error{})
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (cli *httpCAClient) DeleteIssuanceProfile(ctx context.Context, input services.DeleteIssuanceProfileInput) error {
 	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/profiles/"+input.ProfileID, map[int][]error{})
 	if err != nil {
@@ -545,33 +463,6 @@ func (cli *httpCAClient) DeleteIssuanceProfile(ctx context.Context, input servic
 	}
 
 	return nil
-}
-
-func (cli *httpCAClient) SignMessage(ctx context.Context, input services.SignMessageInput) (*models.MessageSignature, error) {
-	response, err := Post[*models.MessageSignature](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys/"+input.KeyID+"/sign", resources.SignMessageBody{
-		Algorithm:   input.Algorithm,
-		Message:     input.Message,
-		MessageType: input.MessageType,
-	}, map[int][]error{})
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
-}
-
-func (cli *httpCAClient) VerifySignature(ctx context.Context, input services.VerifySignInput) (*models.MessageValidation, error) {
-	response, err := Post[*models.MessageValidation](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys/"+input.KeyID+"/verify", resources.VerifySignBody{
-		Algorithm:   input.Algorithm,
-		Message:     input.Message,
-		Signature:   input.Signature,
-		MessageType: input.MessageType,
-	}, map[int][]error{})
-	if err != nil {
-		return nil, err
-	}
-
-	return response, nil
 }
 
 func (cli *httpCAClient) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.Key, error) {

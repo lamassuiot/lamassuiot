@@ -25,18 +25,20 @@ import (
 var crlValidate *validator.Validate
 
 type CRLServiceBackend struct {
-	caSDK     services.CAService
-	logger    *logrus.Entry
-	vaRepo    storage.VARepo
-	service   services.CRLService
-	bucket    *blob.Bucket
-	vaDomains []string
+	caSDK      services.CAService
+	kmsService services.KMSService
+	logger     *logrus.Entry
+	vaRepo     storage.VARepo
+	service    services.CRLService
+	bucket     *blob.Bucket
+	vaDomains  []string
 }
 
 type CRLServiceBuilder struct {
 	VARepo    storage.VARepo
 	Logger    *logrus.Entry
 	CAClient  services.CAService
+	KMSClient services.KMSService
 	Bucket    *blob.Bucket
 	VADomains []string
 }
@@ -47,11 +49,12 @@ func NewCRLService(builder CRLServiceBuilder) (services.CRLService, error) {
 	crlValidate = validator.New()
 
 	svc := &CRLServiceBackend{
-		caSDK:     builder.CAClient,
-		logger:    builder.Logger,
-		vaRepo:    builder.VARepo,
-		bucket:    builder.Bucket,
-		vaDomains: builder.VADomains,
+		caSDK:      builder.CAClient,
+		kmsService: builder.KMSClient,
+		logger:     builder.Logger,
+		vaRepo:     builder.VARepo,
+		bucket:     builder.Bucket,
+		vaDomains:  builder.VADomains,
 	}
 
 	svc.service = svc
@@ -149,7 +152,7 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*mo
 		return nil, err
 	}
 
-	_, err = svc.CalculateCRL(ctx, services.CalculateCRLInput{
+	_, err = svc.service.CalculateCRL(ctx, services.CalculateCRLInput{
 		CASubjectKeyID: caSki,
 	})
 	if err != nil {
@@ -231,7 +234,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		return nil, err
 	}
 
-	crlSigner := NewCASigner(ctx, crlCA, svc.caSDK)
+	crlSigner := NewCertificateSigner(ctx, &crlCA.Certificate, svc.kmsService)
 	caCert := (*x509.Certificate)(crlCA.Certificate.Certificate)
 
 	extensions := []pkix.Extension{}

@@ -1,0 +1,150 @@
+<!doctype html>
+<html>
+
+<head>
+  <title>Lamassu IoT - KMS API Reference</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+
+    .custom-header {
+      background: linear-gradient(135deg, #1c3b91 0%, #764ba2 100%);
+      padding: 0.75rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    .custom-header .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .custom-header img {
+      height: 32px;
+      width: auto;
+      filter: brightness(0) invert(1);
+      transition: transform 0.3s ease;
+    }
+
+    .custom-header img:hover {
+      transform: scale(1.05);
+    }
+
+    .custom-header .title-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+
+    .custom-header h1 {
+      color: #ffffff;
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+    }
+
+    .custom-header .subtitle {
+      color: rgba(255, 255, 255, 0.85);
+      font-size: 0.75rem;
+      font-weight: 400;
+    }
+
+    .custom-header nav {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .custom-header nav a {
+      color: #ffffff;
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      padding: 0.4rem 1rem;
+      border-radius: 5px;
+      transition: all 0.2s ease;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+    }
+
+    .custom-header nav a:hover {
+      background: rgba(255, 255, 255, 0.2);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    @media (max-width: 768px) {
+      .custom-header {
+        padding: 1rem 1.5rem;
+        flex-direction: column;
+        gap: 1rem;
+      }
+
+      .custom-header h1 {
+        font-size: 1.25rem;
+      }
+
+      .custom-header .subtitle {
+        font-size: 0.75rem;
+      }
+
+      .custom-header nav {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .custom-header nav a {
+        font-size: 0.875rem;
+        padding: 0.4rem 1rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <header class="custom-header">
+    <div class="logo-container">
+      <img src="https://www.lamassu.io/assets/brand/lamassu-brand.png" alt="Lamassu IoT" title="Lamassu IoT Platform" />
+      <div class="title-section">
+        <h1>Key Management Service API</h1>
+        <span class="subtitle">Secure Cryptographic Key Lifecycle Management</span>
+      </div>
+    </div>
+    <nav>
+      <a href="https://github.com/lamassuiot/lamassuiot" target="_blank">GitHub</a>
+      <a href="https://lamassu.io/docs" target="_blank">Documentation</a>
+    </nav>
+  </header>
+
+  <div id="app"></div>
+
+  <!-- Load the Script -->
+  <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+
+  <!-- Initialize the Scalar API Reference -->
+  <script>
+    Scalar.createApiReference('#app', {
+      // The URL of the OpenAPI/Swagger document
+      url: './kms-openapi.yaml',
+      // Avoid CORS issues
+      proxyUrl: 'https://proxy.scalar.com',
+    })
+  </script>
+</body>
+
+</html>

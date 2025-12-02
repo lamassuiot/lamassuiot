@@ -2,7 +2,6 @@ package assemblers
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -30,52 +29,6 @@ import (
 const DefaultCAID = "111111-2222"
 const DefaultCACN = "MyCA"
 
-func TestCryptoEngines(t *testing.T) {
-	//serverTest, err := StartCAServiceTestServer(t, false)
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").WithVault().Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-	caTest := serverTest.CA
-
-	var testcases = []struct {
-		name        string
-		resultCheck func(engines []*models.CryptoEngineProvider, err error) error
-	}{
-		{
-			name: "OK/Got-2-Engines",
-			resultCheck: func(engines []*models.CryptoEngineProvider, err error) error {
-				if err != nil {
-					return fmt.Errorf("should've got no error, but got one: %s", err)
-				}
-
-				if len(engines) != 2 {
-					return fmt.Errorf("should've got two engines, but got %d", len(engines))
-				}
-
-				return nil
-			},
-		},
-	}
-
-	for _, tc := range testcases {
-		tc := tc
-
-		t.Run(tc.name, func(t *testing.T) {
-
-			err = serverTest.BeforeEach()
-			if err != nil {
-				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
-			}
-
-			err = tc.resultCheck(caTest.Service.GetCryptoEngineProvider(context.Background()))
-			if err != nil {
-				t.Fatalf("unexpected result in test case: %s", err)
-			}
-
-		})
-	}
-}
 func TestCreateCA(t *testing.T) {
 	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
@@ -400,7 +353,6 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				}
 
 				importedCALvl1, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType:        models.CertificateTypeExternal,
 					ProfileID:     profile2.ID,
 					CACertificate: (*models.X509Certificate)(ca),
 				})
@@ -1758,11 +1710,9 @@ func TestImportCertificate(t *testing.T) {
 				}
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType:        models.CertificateTypeImportedWithKey,
 					ProfileID:     profile.ID,
-					CAECKey:       caKey.(*ecdsa.PrivateKey),
+					Key:           caKey,
 					CACertificate: (*models.X509Certificate)(ca),
-					KeyType:       models.KeyType(x509.ECDSA),
 				})
 				if err != nil {
 					t.Fatalf("failed importing CA: %s", err)
@@ -1863,11 +1813,9 @@ func TestImportCertificate(t *testing.T) {
 				}
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType:        models.CertificateTypeImportedWithKey,
 					ProfileID:     profile.ID,
-					CAECKey:       caKey.(*ecdsa.PrivateKey),
+					Key:           caKey,
 					CACertificate: (*models.X509Certificate)(ca),
-					KeyType:       models.KeyType(x509.ECDSA),
 				})
 				if err != nil {
 					t.Fatalf("failed importing CA: %s", err)
@@ -3092,6 +3040,7 @@ func TestImportCA(t *testing.T) {
 	}
 
 	caTest := serverTest.CA
+	kmsTest := serverTest.KMS
 
 	generateSelfSignedCA := func(keyType x509.PublicKeyAlgorithm) (*x509.Certificate, any, error) {
 		var err error
@@ -3159,7 +3108,6 @@ func TestImportCA(t *testing.T) {
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:            "id-1234",
-					CAType:        models.CertificateTypeExternal,
 					CACertificate: (*models.X509Certificate)(ca),
 				})
 
@@ -3194,11 +3142,9 @@ func TestImportCA(t *testing.T) {
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:            "id-1234",
-					CAType:        models.CertificateTypeImportedWithKey,
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
-					CARSAKey:      (key).(*rsa.PrivateKey),
-					KeyType:       models.KeyType(x509.RSA),
+					Key:           key,
 				})
 
 				return importedCA, err
@@ -3220,7 +3166,8 @@ func TestImportCA(t *testing.T) {
 				if err != nil {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
-				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
+
+				engines, _ := kmsTest.Service.GetCryptoEngineProvider(context.Background())
 				var engine *models.CryptoEngineProvider
 
 				if !engines[0].Default {
@@ -3240,11 +3187,9 @@ func TestImportCA(t *testing.T) {
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:            "id-1234",
-					CAType:        models.CertificateTypeImportedWithKey,
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
-					CARSAKey:      (key).(*rsa.PrivateKey),
-					KeyType:       models.KeyType(x509.RSA),
+					Key:           key,
 					EngineID:      engine.ID,
 				})
 
@@ -3278,11 +3223,9 @@ func TestImportCA(t *testing.T) {
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:            "id-1234",
-					CAType:        models.CertificateTypeImportedWithKey,
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
-					CAECKey:       (key).(*ecdsa.PrivateKey),
-					KeyType:       models.KeyType(x509.ECDSA),
+					Key:           key,
 				})
 				return importedCA, err
 			},
@@ -3313,11 +3256,9 @@ func TestImportCA(t *testing.T) {
 				}
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType:        models.CertificateTypeImportedWithKey,
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
-					CARSAKey:      (key).(*rsa.PrivateKey),
-					KeyType:       models.KeyType(x509.RSA),
+					Key:           key,
 				})
 
 				return importedCA, err
@@ -3424,7 +3365,7 @@ func TestImportCA(t *testing.T) {
 		// 				duration, _ := models.ParseDuration("100d")
 
 		// 				importedCALvl2, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-		// 					CAType: models.CertificateTypeExternal,
+		// 					CAType: models.CertificateTypeImportedWithoutKey,
 		// 					IssuanceExpiration: models.Validity{
 		// 						Type:     models.Duration,
 		// 						Duration: (models.TimeDuration)(duration),
@@ -3436,7 +3377,7 @@ func TestImportCA(t *testing.T) {
 		// 				}
 
 		// 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
-		// 					CAType: models.CertificateTypeExternal,
+		// 					CAType: models.CertificateTypeImportedWithoutKey,
 		// 					IssuanceExpiration: models.Validity{
 		// 						Type:     models.Duration,
 		// 						Duration: (models.TimeDuration)(duration),
@@ -3448,7 +3389,7 @@ func TestImportCA(t *testing.T) {
 		// 				}
 
 		// 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
-		// 					CAType: models.CertificateTypeExternal,
+		// 					CAType: models.CertificateTypeImportedWithoutKey,
 		// 					IssuanceExpiration: models.Validity{
 		// 						Type:     models.Duration,
 		// 						Duration: (models.TimeDuration)(duration),
@@ -3588,7 +3529,6 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 				}
 
 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType:        models.CertificateTypeExternal,
 					CACertificate: (*models.X509Certificate)(cert0),
 					ProfileID:     profile.ID,
 				})
@@ -3597,7 +3537,6 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 				}
 
 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType:        models.CertificateTypeExternal,
 					CACertificate: (*models.X509Certificate)(cert1),
 					ProfileID:     profile.ID,
 				})
@@ -3606,7 +3545,6 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 				}
 
 				importedCALvl2, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType:        models.CertificateTypeExternal,
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(cert2),
 				})
@@ -3644,11 +3582,9 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:            "id-1234",
-					CAType:        models.CertificateTypeImportedWithKey,
 					ProfileID:     "non-existent-profile-id",
 					CACertificate: (*models.X509Certificate)(ca),
-					CARSAKey:      (key).(*rsa.PrivateKey),
-					KeyType:       models.KeyType(x509.RSA),
+					Key:           key,
 				})
 
 				return importedCA, err
@@ -3677,10 +3613,9 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 				// ProfileID is required for ImportedWithKey type but not provided
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:            "id-1234",
-					CAType:        models.CertificateTypeImportedWithKey,
 					CACertificate: (*models.X509Certificate)(ca),
-					CARSAKey:      (key).(*rsa.PrivateKey),
-					KeyType:       models.KeyType(x509.RSA),
+					Key:           key,
+					ProfileID:     "non-existent-profile-id",
 				})
 
 				return importedCA, err
@@ -4216,12 +4151,12 @@ func TestDeleteCAPrivateKeyDeletion(t *testing.T) {
 		testDeleteCAWithPrivateKey(t, serverTest, "managed")
 	})
 
-	t.Run("ExternalCA_NoPrivateKey", func(t *testing.T) {
-		testDeleteCAWithPrivateKey(t, serverTest, "external")
+	t.Run("ImportedWithoutCA_NoPrivateKey", func(t *testing.T) {
+		testDeleteCAWithPrivateKey(t, serverTest, "import_without_key")
 	})
 
-	t.Run("ImportedCA_PrivateKeyDeleted", func(t *testing.T) {
-		testDeleteCAWithPrivateKey(t, serverTest, "imported")
+	t.Run("ImportedWithCA_PrivateKeyDeleted", func(t *testing.T) {
+		testDeleteCAWithPrivateKey(t, serverTest, "import_with_key")
 	})
 }
 
@@ -4253,18 +4188,17 @@ func testDeleteCAWithPrivateKey(t *testing.T, serverTest *TestServer, caType str
 			CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
 			ProfileID:    profile.ID,
 		})
-	case "external":
-		caCert, _, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ExternalTestCA")
+	case "import_without_key":
+		caCert, _, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ImportWithoutKeyTestCA")
 		if err != nil {
 			t.Fatalf("failed to generate self-signed CA: %s", err)
 		}
-		ca, err = caTest.Service.ImportCA(context.Background(), services.ImportCAInput{
+		ca, _ = caTest.Service.ImportCA(context.Background(), services.ImportCAInput{
 			CACertificate: (*models.X509Certificate)(caCert),
-			CAType:        models.CertificateTypeExternal,
 			ProfileID:     profile.ID,
 		})
-	case "imported":
-		caCert, caKey, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ImportedTestCA")
+	case "import_with_key":
+		caCert, caKey, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ImportWithKeyTestCA")
 		if err != nil {
 			t.Fatalf("failed to generate self-signed CA: %s", err)
 		}
@@ -4272,11 +4206,10 @@ func testDeleteCAWithPrivateKey(t *testing.T, serverTest *TestServer, caType str
 		if !ok {
 			t.Fatalf("expected RSA key")
 		}
-		ca, err = caTest.Service.ImportCA(context.Background(), services.ImportCAInput{
+		ca, _ = caTest.Service.ImportCA(context.Background(), services.ImportCAInput{
 			CACertificate: (*models.X509Certificate)(caCert),
-			CARSAKey:      rsaKey,
-			CAType:        models.CertificateTypeImportedWithKey,
 			ProfileID:     profile.ID,
+			Key:           rsaKey,
 		})
 	}
 
@@ -5104,7 +5037,6 @@ func TestSignatureVerify(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			//
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
@@ -5138,6 +5070,7 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 	}
 
 	caTest := serverTest.CA
+	kmsTest := serverTest.KMS
 
 	var testcases = []struct {
 		name        string
@@ -5157,7 +5090,7 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 				caDurChild1 := models.TimeDuration(time.Hour * 24)
 
 				caIss := models.TimeDuration(time.Minute * 3)
-				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
+				engines, _ := kmsTest.Service.GetCryptoEngineProvider(context.Background())
 
 				// Create issuance profile for root CA
 				rootProfile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{

@@ -2,8 +2,6 @@ package services
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/rsa"
 	"crypto/x509"
 	"time"
 
@@ -15,10 +13,7 @@ type CAService interface {
 	GetStats(ctx context.Context) (*models.CAStats, error)
 	GetStatsByCAID(ctx context.Context, input GetStatsByCAIDInput) (map[models.CertificateStatus]int, error)
 
-	GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error)
-
 	CreateCA(ctx context.Context, input CreateCAInput) (*models.CACertificate, error)
-	RequestCACSR(ctx context.Context, input RequestCAInput) (*models.CACertificateRequest, error)
 	ImportCA(ctx context.Context, input ImportCAInput) (*models.CACertificate, error)
 	GetCAByID(ctx context.Context, input GetCAByIDInput) (*models.CACertificate, error)
 	GetCAs(ctx context.Context, input GetCAsInput) (string, error)
@@ -46,19 +41,6 @@ type CAService interface {
 	UpdateCertificateStatus(ctx context.Context, input UpdateCertificateStatusInput) (*models.Certificate, error)
 	UpdateCertificateMetadata(ctx context.Context, input UpdateCertificateMetadataInput) (*models.Certificate, error)
 	DeleteCertificate(ctx context.Context, input DeleteCertificateInput) error
-
-	GetCARequestByID(ctx context.Context, input GetByIDInput) (*models.CACertificateRequest, error)
-	DeleteCARequestByID(ctx context.Context, input GetByIDInput) error
-	GetCARequests(ctx context.Context, input GetItemsInput[models.CACertificateRequest]) (string, error)
-
-	// KMS
-	GetKeys(ctx context.Context, input GetKeysInput) (string, error)
-	GetKeyByID(ctx context.Context, input GetByIDInput) (*models.Key, error)
-	CreateKey(ctx context.Context, input CreateKeyInput) (*models.Key, error)
-	DeleteKeyByID(ctx context.Context, input GetByIDInput) error
-	SignMessage(ctx context.Context, input SignMessageInput) (*models.MessageSignature, error)
-	VerifySignature(ctx context.Context, input VerifySignInput) (*models.MessageValidation, error)
-	ImportKey(ctx context.Context, input ImportKeyInput) (*models.Key, error)
 
 	// Issuance Profiles
 	GetIssuanceProfiles(ctx context.Context, input GetIssuanceProfilesInput) (string, error)
@@ -109,13 +91,10 @@ type IssueCACSROutput struct {
 
 type ImportCAInput struct {
 	ID            string
-	CAType        models.CertificateType `validate:"required,ne=MANAGED"`
 	ProfileID     string
 	CACertificate *models.X509Certificate   `validate:"required"`
 	CAChain       []*models.X509Certificate //Parent CAs. They MUST be sorted as follows. 0: Root-CA; 1: Subordinate CA from Root-CA; ...
-	CARSAKey      *rsa.PrivateKey
-	CAECKey       *ecdsa.PrivateKey
-	KeyType       models.KeyType
+	Key           any
 	EngineID      string
 	CARequestID   string
 }
@@ -269,39 +248,6 @@ type UpdateCertificateMetadataInput struct {
 
 type DeleteCertificateInput struct {
 	SerialNumber string `validate:"required"`
-}
-
-// KMS
-type GetKeysInput struct {
-	resources.ListInput[models.Key]
-}
-
-type CreateKeyInput struct {
-	Algorithm string `validate:"required"`
-	Size      int    `validate:"required"`
-	EngineID  string
-	Name      string `validate:"required"`
-}
-
-type SignMessageInput struct {
-	KeyID       string                 `validate:"required"`
-	Algorithm   string                 `validate:"required"`
-	Message     []byte                 `validate:"required"`
-	MessageType models.SignMessageType `validate:"required"`
-}
-
-type VerifySignInput struct {
-	KeyID       string                 `validate:"required"`
-	Algorithm   string                 `validate:"required"`
-	Signature   []byte                 `validate:"required"`
-	Message     []byte                 `validate:"required"`
-	MessageType models.SignMessageType `validate:"required"`
-}
-
-type ImportKeyInput struct {
-	PrivateKey any `validate:"required"`
-	EngineID   string
-	Name       string `validate:"required"`
 }
 
 // Issuance Profiles
