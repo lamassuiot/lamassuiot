@@ -380,13 +380,20 @@ components:
       properties:
         op:
           type: string
+          enum:
+            - add
+            - remove
+            - replace
+            - move
+            - copy
+            - test
         path:
           type: string
         value:
           description: Operation value
         from:
           type: string
-
+          description: Used only with 'move' and 'copy' operations to indicate the source path.
     Error:
       type: object
       properties:
