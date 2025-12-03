@@ -1,4 +1,4 @@
-package assemblers
+package dmsmanager
 
 import (
 	"bytes"
@@ -11,11 +11,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"log"
-	"net"
 	"net/http"
 	"reflect"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -24,6 +21,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/globalsign/est"
 	"github.com/google/uuid"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	identityextractors "github.com/lamassuiot/lamassuiot/backend/v3/pkg/routes/middlewares/identity-extractors"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
@@ -36,8 +34,8 @@ import (
 	"golang.org/x/crypto/ocsp"
 )
 
-func StartDMSManagerServiceTestServer(t *testing.T, withEventBus bool) (*DMSManagerTestServer, *TestServer, error) {
-	builder := TestServiceBuilder{}.WithDatabase("ca", "devicemanager", "dmsmanager").WithService(CA, DEVICE_MANAGER, DMS_MANAGER)
+func StartDMSManagerServiceTestServer(t *testing.T, withEventBus bool) (*tests.DMSManagerTestServer, *tests.TestServer, error) {
+	builder := tests.TestServiceBuilder{}.WithDatabase("ca", "devicemanager", "dmsmanager", "kms").WithService(tests.CA, tests.DEVICE_MANAGER, tests.DMS_MANAGER)
 	if withEventBus {
 		builder = builder.WithEventBus()
 	}
@@ -180,12 +178,12 @@ func TestDeleteDMS(t *testing.T) {
 
 	testcases := []struct {
 		name        string
-		setup       func(dmsMgr *DMSManagerTestServer)
-		resultCheck func(dmsMgr *DMSManagerTestServer, err error)
+		setup       func(dmsMgr *tests.DMSManagerTestServer)
+		resultCheck func(dmsMgr *tests.DMSManagerTestServer, err error)
 	}{
 		{
 			name: "OK",
-			setup: func(dmsMgr *DMSManagerTestServer) {
+			setup: func(dmsMgr *tests.DMSManagerTestServer) {
 				dmsSample := services.CreateDMSInput{
 					ID:   dmsID,
 					Name: "MyIotFleet",
@@ -196,7 +194,7 @@ func TestDeleteDMS(t *testing.T) {
 				}
 				assert.Equal(t, dms.Name, dmsSample.Name)
 			},
-			resultCheck: func(dmsMgr *DMSManagerTestServer, err error) {
+			resultCheck: func(dmsMgr *tests.DMSManagerTestServer, err error) {
 				if err != nil {
 					t.Fatalf("could not delete DMS: %s", err)
 				}
@@ -211,8 +209,8 @@ func TestDeleteDMS(t *testing.T) {
 		},
 		{
 			name:  "Error - DMS not found",
-			setup: func(dmsMgr *DMSManagerTestServer) {},
-			resultCheck: func(dmsMgr *DMSManagerTestServer, err error) {
+			setup: func(dmsMgr *tests.DMSManagerTestServer) {},
+			resultCheck: func(dmsMgr *tests.DMSManagerTestServer, err error) {
 				if err == nil {
 					t.Fatalf("Delete DMS should fail")
 				}
@@ -1248,7 +1246,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
-				router, url, cleanup, err := startWebhookServer()
+				router, url, cleanup, err := tests.StartWebhookServer()
 				if err != nil {
 					t.Fatalf("could not start webhook server: %s", err)
 				}
@@ -1343,7 +1341,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
-				router, url, cleanup, err := startWebhookServer()
+				router, url, cleanup, err := tests.StartWebhookServer()
 				if err != nil {
 					t.Fatalf("could not start webhook server: %s", err)
 				}
@@ -1404,7 +1402,7 @@ func TestESTEnroll(t *testing.T) {
 					t.Fatalf("could not create Enrollment CA: %s", err)
 				}
 
-				router, url, cleanup, err := startWebhookServer()
+				router, url, cleanup, err := tests.StartWebhookServer()
 				if err != nil {
 					t.Fatalf("could not start webhook server: %s", err)
 				}
@@ -1506,7 +1504,7 @@ func TestESTEnroll(t *testing.T) {
 
 		// 		importedBootstrapCA, err := testServers.CA.Service.ImportCA(context.Background(), services.ImportCAInput{
 		// 			ID:                 fmt.Sprintf("my-external-CA-%s", uuid.NewString()),
-		// 			CAType:             models.CertificateTypeExternal,
+		// 			CAType:             models.CertificateTypeImportedWithoutKey,
 		// 			IssuanceExpiration: models.Validity{Type: models.Duration, Duration: (*models.TimeDuration)(&issuanceCABootDur)},
 		// 			CACertificate:      bootstrapCA.Certificate.Certificate,
 		// 		})
@@ -3460,47 +3458,6 @@ func (c *pemESTClient) commonEnrollPEM(r *x509.CertificateRequest, renew bool) (
 	}
 
 	return cert, nil
-}
-
-func startWebhookServer() (*gin.Engine, string, func(), error) {
-	// Create a custom HTTP handler
-	router := gin.Default()
-
-	// Listen on a random free port
-	listener, err := net.Listen("tcp", ":0") // :0 to choose a random port
-	if err != nil {
-		return nil, "", nil, fmt.Errorf("failed to listen on a random port: %w", err)
-	}
-
-	addr := listener.Addr().String()
-	re := regexp.MustCompile(`:(\d+)$`)
-	match := re.FindStringSubmatch(addr)
-	var port string
-	if len(match) > 1 {
-		port = ":" + match[1] // Capture group 1
-	}
-
-	url := fmt.Sprintf("http://localhost%s", port)
-
-	// Create an HTTP server
-	server := &http.Server{
-		Handler: router,
-	}
-
-	go func() {
-		if err := server.Serve(listener); err != nil {
-			log.Printf("Server error: %v", err)
-		}
-	}()
-
-	shutdown := func() {
-		log.Println("Shutting down the server...")
-		if err := server.Shutdown(context.Background()); err != nil {
-			log.Printf("Server forced to shutdown: %v", err)
-		}
-	}
-
-	return router, url, shutdown, nil
 }
 
 func corruptCSR(csr *x509.CertificateRequest) (*x509.CertificateRequest, error) {

@@ -51,6 +51,47 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			vaDomains = append(vaDomains, fmt.Sprintf("%s:%d/api/va", domain, conf.GatewayPortHttp))
 		}
 
+		_, kmsPort, err := lamassu.AssembleKMSServiceWithHTTPServer(config.KMSConfig{
+			Logs: cconfig.Logging{
+				Level: conf.Logs.Level,
+			},
+			Server: cconfig.HttpServer{
+				LogLevel:           conf.Logs.Level,
+				HealthCheckLogging: true,
+				ListenAddress:      "0.0.0.0",
+				Port:               0,
+				Protocol:           cconfig.HTTP,
+			},
+			CryptoEngineConfig: config.CryptoEngines{
+				LogLevel:      cconfig.Info,
+				DefaultEngine: conf.CryptoEngines[0].ID,
+				CryptoEngines: conf.CryptoEngines,
+			},
+			PublisherEventBus: conf.PublisherEventBus,
+			Storage:           conf.Storage,
+		}, apiInfo)
+		if err != nil {
+			return -1, -1, fmt.Errorf("could not assemble KMS Service: %s", err)
+		}
+
+		kmsConnection := cconfig.HTTPConnection{BasicConnection: cconfig.BasicConnection{Hostname: "127.0.0.1", Port: kmsPort}, Protocol: cconfig.HTTP, BasePath: ""}
+		kmsSDKBuilder := func(serviceID, src string) services.KMSService {
+			lKMSClient := chelpers.SetupLogger(cconfig.Info, serviceID, "LMS SDK - KMS Client")
+			kmsHttpCli, err := sdk.BuildHTTPClient(cconfig.HTTPClient{
+				LogLevel:       cconfig.Info,
+				AuthMode:       cconfig.NoAuth,
+				HTTPConnection: kmsConnection,
+			}, lKMSClient)
+			if err != nil {
+				log.Fatalf("could not build HTTP KMS Client: %s", err)
+			}
+
+			return sdk.NewHttpKMSClient(
+				sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, src),
+				fmt.Sprintf("%s://%s%s:%d", kmsConnection.Protocol, kmsConnection.Hostname, kmsConnection.BasePath, kmsConnection.Port),
+			)
+		}
+
 		_, _, caPort, err := lamassu.AssembleCAServiceWithHTTPServer(config.CAConfig{
 			Logs: cconfig.Logging{
 				Level: conf.Logs.Level,
@@ -62,16 +103,11 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 				Port:               0,
 				Protocol:           cconfig.HTTP,
 			},
-			PublisherEventBus: conf.PublisherEventBus,
-			Storage:           conf.Storage,
-			CryptoEngineConfig: config.CryptoEngines{
-				LogLevel:      cconfig.Info,
-				DefaultEngine: conf.CryptoEngines[0].ID,
-				CryptoEngines: conf.CryptoEngines,
-			},
+			PublisherEventBus:        conf.PublisherEventBus,
+			Storage:                  conf.Storage,
 			CertificateMonitoringJob: conf.Monitoring,
 			VAServerDomains:          vaDomains,
-		}, apiInfo)
+		}, kmsSDKBuilder("KMS", models.KMSSource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble CA Service: %s", err)
 		}
@@ -118,7 +154,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			PublisherEventBus:     conf.PublisherEventBus,
 			Storage:               conf.Storage,
 			VADomains:             vaDomains,
-		}, caSDKBuilder("VA", models.VASource), apiInfo)
+		}, caSDKBuilder("VA", models.VASource), kmsSDKBuilder("VA", models.VASource), apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble VA Service: %s", err)
 		}
@@ -284,6 +320,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			proxy.ServeHTTP(c.Writer, c.Request)
 		}
 
+		addRouteMap("KMS", "/api/kms/", kmsPort)
 		addRouteMap("CA", "/api/ca/", caPort)
 		addRouteMap("Dev Manager", "/api/devmanager/", devPort)
 		addRouteMap("DMS Manager", "/api/dmsmanager/", dmsPort)

@@ -12,9 +12,14 @@ type VAconfig struct {
 	FilesystemStorage     cconfig.FSStorageConfig        `mapstructure:"filesystem_storage"`
 	CRLMonitoringJob      cconfig.MonitoringJob          `mapstructure:"crl_monitoring_job"`
 	CAClient              CAClient                       `mapstructure:"ca_client"`
+	KMSClient             KMSClient                      `mapstructure:"kms_client"`
 	VADomains             []string                       `mapstructure:"va_domains"`
 }
 
 type CAClient struct {
+	cconfig.HTTPClient `mapstructure:",squash"`
+}
+
+type KMSClient struct {
 	cconfig.HTTPClient `mapstructure:",squash"`
 }

@@ -25,18 +25,20 @@ import (
 var crlValidate *validator.Validate
 
 type CRLServiceBackend struct {
-	caSDK     services.CAService
-	logger    *logrus.Entry
-	vaRepo    storage.VARepo
-	service   services.CRLService
-	bucket    *blob.Bucket
-	vaDomains []string
+	caSDK      services.CAService
+	kmsService services.KMSService
+	logger     *logrus.Entry
+	vaRepo     storage.VARepo
+	service    services.CRLService
+	bucket     *blob.Bucket
+	vaDomains  []string
 }
 
 type CRLServiceBuilder struct {
 	VARepo    storage.VARepo
 	Logger    *logrus.Entry
 	CAClient  services.CAService
+	KMSClient services.KMSService
 	Bucket    *blob.Bucket
 	VADomains []string
 }
@@ -47,11 +49,12 @@ func NewCRLService(builder CRLServiceBuilder) (services.CRLService, error) {
 	crlValidate = validator.New()
 
 	svc := &CRLServiceBackend{
-		caSDK:     builder.CAClient,
-		logger:    builder.Logger,
-		vaRepo:    builder.VARepo,
-		bucket:    builder.Bucket,
-		vaDomains: builder.VADomains,
+		caSDK:      builder.CAClient,
+		kmsService: builder.KMSClient,
+		logger:     builder.Logger,
+		vaRepo:     builder.VARepo,
+		bucket:     builder.Bucket,
+		vaDomains:  builder.VADomains,
 	}
 
 	svc.service = svc
@@ -82,7 +85,7 @@ func (svc CRLServiceBackend) GetCRL(ctx context.Context, input services.GetCRLIn
 
 		if !exists {
 			lFunc.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
-			return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+			return nil, errs.ErrVARoleNotFound
 		}
 
 		versionStr = role.LatestCRL.Version.String()
@@ -128,7 +131,8 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*mo
 	}
 
 	if ca == nil {
-		return nil, fmt.Errorf("CA %s not found", caSki)
+		lFunc.Errorf("CA %s not found", caSki)
+		return nil, errs.ErrCANotFound
 	}
 
 	role, err := svc.vaRepo.Insert(ctx, &models.VARole{
@@ -148,7 +152,7 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*mo
 		return nil, err
 	}
 
-	_, err = svc.CalculateCRL(ctx, services.CalculateCRLInput{
+	_, err = svc.service.CalculateCRL(ctx, services.CalculateCRLInput{
 		CASubjectKeyID: caSki,
 	})
 	if err != nil {
@@ -176,7 +180,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 
 	if !exists {
 		lFunc.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
-		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+		return nil, errs.ErrVARoleNotFound
 	}
 
 	var crlCA *models.CACertificate
@@ -202,7 +206,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 
 	if crlCA == nil {
 		lFunc.Errorf("CA %s not found", input.CASubjectKeyID)
-		return nil, fmt.Errorf("CA %s not found", input.CASubjectKeyID)
+		return nil, errs.ErrCANotFound
 	}
 
 	certList := []x509.RevocationListEntry{}
@@ -218,7 +222,7 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 			ApplyFunc: func(cert models.Certificate) {
 				certList = append(certList, x509.RevocationListEntry{
 					SerialNumber:   cert.Certificate.SerialNumber,
-					RevocationTime: time.Now(),
+					RevocationTime: cert.RevocationTimestamp,
 					Extensions:     []pkix.Extension{},
 					ReasonCode:     int(cert.RevocationReason),
 				})
@@ -230,12 +234,12 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 		return nil, err
 	}
 
-	crlSigner := NewCASigner(ctx, crlCA, svc.caSDK)
+	crlSigner := NewCertificateSigner(ctx, &crlCA.Certificate, svc.kmsService)
 	caCert := (*x509.Certificate)(crlCA.Certificate.Certificate)
 
 	extensions := []pkix.Extension{}
 
-	idp, err := svc.getDistributionPointExtension(string(crlCA.Certificate.Certificate.SubjectKeyId))
+	idp, err := svc.getDistributionPointExtension(string(crlCA.Certificate.SubjectKeyID))
 	if err != nil {
 		lFunc.Errorf("something went wrong while creating Issuing Distribution Point extension: %s", err)
 		return nil, err
@@ -295,7 +299,7 @@ func (svc CRLServiceBackend) GetVARole(ctx context.Context, input services.GetVA
 	}
 
 	if !exists {
-		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+		return nil, errs.ErrVARoleNotFound
 	}
 
 	return role, nil
@@ -315,7 +319,7 @@ func (svc CRLServiceBackend) GetVARoles(ctx context.Context, input services.GetV
 func (svc CRLServiceBackend) UpdateVARole(ctx context.Context, input services.UpdateVARoleInput) (*models.VARole, error) {
 	exists, role, err := svc.vaRepo.Get(ctx, input.CASubjectKeyID)
 	if !exists {
-		return nil, fmt.Errorf("VA role for CA %s does not exist", input.CASubjectKeyID)
+		return nil, errs.ErrVARoleNotFound
 	}
 
 	if err != nil {

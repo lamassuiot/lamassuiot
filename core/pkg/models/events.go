@@ -3,6 +3,7 @@ package models
 const HttpSourceHeader = "x-lms-source"
 const HttpRequestIDHeader = "x-request-id"
 
+const KMSSource = "service/kms"
 const CASource = "service/ca"
 const DMSManagerSource = "service/ra"
 const DeviceManagerSource = "service/devmanager"
@@ -27,6 +28,16 @@ const (
 	EventSignCertificateKey     EventType = "ca.sign.certificate"
 	EventSignatureSignKey       EventType = "ca.sign.signature"
 	EventDeleteCAKey            EventType = "ca.delete"
+
+	EventCreateKMSKey          EventType = "kms.create"
+	EventImportKMSKey          EventType = "kms.import"
+	EventUpdateKMSKeyMetadata  EventType = "kms.metadata.update"
+	EventUpdateKMSKeyAliases   EventType = "kms.aliases.update"
+	EventUpdateKMSKeyName      EventType = "kms.name.update"
+	EventUpdateKMSKeyTags      EventType = "kms.tags.update"
+	EventDeleteKMSKey          EventType = "kms.delete"
+	EventSignMessageKMSKey     EventType = "kms.sign"
+	EventVerifySignatureKMSKey EventType = "kms.verify"
 
 	EventCreateIssuanceProfileKey EventType = "profile.issuance.create"
 	EventUpdateIssuanceProfileKey EventType = "profile.issuance.update"

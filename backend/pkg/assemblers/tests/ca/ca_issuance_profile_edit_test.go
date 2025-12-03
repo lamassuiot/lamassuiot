@@ -1,4 +1,4 @@
-package assemblers
+package ca
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -15,7 +16,7 @@ import (
 )
 
 func TestEditCAProfiles(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -246,6 +247,36 @@ func TestEditCAProfiles(t *testing.T) {
 				return nil
 			},
 		},
+		{
+			name: "Error/UpdateCAProfile-InvalidProfileID",
+			before: func(svc services.CAService) (string, string, error) {
+				// Create initial profile
+				initialProfile := createProfile(t, "InitialProfile", "Initial profile description", models.Validity{Type: models.Duration, Duration: issuanceDur})
+
+				// Create CA with initial profile
+				ca := createCA(t, "test-ca-invalid-profile", initialProfile.ID)
+
+				// Return a non-existent profile ID
+				return ca.ID, "non-existent-profile-id", nil
+			},
+			run: func(caSDK services.CAService, caID, newProfileID string) (*models.CACertificate, error) {
+				return caSDK.UpdateCAProfile(context.Background(), services.UpdateCAProfileInput{
+					CAID:      caID,
+					ProfileID: newProfileID,
+				})
+			},
+			resultCheck: func(originalCA *models.CACertificate, updatedCA *models.CACertificate, newProfileID string, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error for invalid profile ID. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrIssuanceProfileNotFound) {
+					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrIssuanceProfileNotFound, err)
+				}
+
+				return nil
+			},
+		},
 	}
 
 	for _, tc := range testcases {
@@ -282,7 +313,7 @@ func TestEditCAProfiles(t *testing.T) {
 }
 
 func TestEditIssuanceProfilesIntegration(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -634,7 +665,7 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 }
 
 func TestEditCAProfilesWithCertificateImpacts(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}

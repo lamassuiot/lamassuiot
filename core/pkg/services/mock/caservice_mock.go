@@ -12,11 +12,6 @@ type MockCAService struct {
 	mock.Mock
 }
 
-func (m *MockCAService) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
-	args := m.Called(ctx, input)
-	return args.String(0), args.Error(1)
-}
-
 func (m *MockCAService) UpdateCertificateStatus(ctx context.Context, input services.UpdateCertificateStatusInput) (*models.Certificate, error) {
 	args := m.Called(ctx, input)
 	return args.Get(0).(*models.Certificate), args.Error(1)
@@ -49,11 +44,6 @@ func (m *MockCAService) GetCryptoEngineProvider(ctx context.Context) ([]*models.
 func (m *MockCAService) CreateCA(ctx context.Context, input services.CreateCAInput) (*models.CACertificate, error) {
 	args := m.Called(ctx, input)
 	return args.Get(0).(*models.CACertificate), args.Error(1)
-}
-
-func (m *MockCAService) RequestCACSR(ctx context.Context, input services.RequestCAInput) (*models.CACertificateRequest, error) {
-	args := m.Called(ctx, input)
-	return args.Get(0).(*models.CACertificateRequest), args.Error(1)
 }
 
 func (m *MockCAService) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
@@ -144,16 +134,47 @@ func (m *MockCAService) GetCertificatesByStatus(ctx context.Context, input servi
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockCAService) GetCARequestByID(ctx context.Context, input services.GetByIDInput) (*models.CACertificateRequest, error) {
-	args := m.Called(ctx, input)
-	return args.Get(0).(*models.CACertificateRequest), args.Error(1)
-}
-
 func (m *MockCAService) DeleteCARequestByID(ctx context.Context, input services.GetByIDInput) error {
 	args := m.Called(ctx, input)
 	return args.Error(0)
 }
 
+// KMS
+func (m *MockCAService) GetKeys(ctx context.Context, input services.GetKeysInput) (string, error) {
+	args := m.Called(ctx, input)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockCAService) GetKeyByID(ctx context.Context, input services.GetByIDInput) (*models.Key, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.Key), args.Error(1)
+}
+
+func (m *MockCAService) CreateKey(ctx context.Context, input services.CreateKeyInput) (*models.Key, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.Key), args.Error(1)
+}
+
+func (m *MockCAService) DeleteKeyByID(ctx context.Context, input services.GetByIDInput) error {
+	args := m.Called(ctx, input)
+	return args.Error(0)
+}
+func (m *MockCAService) SignMessage(ctx context.Context, input services.SignMessageInput) (*models.MessageSignature, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.MessageSignature), args.Error(1)
+}
+
+func (m *MockCAService) VerifySignature(ctx context.Context, input services.VerifySignInput) (*models.MessageValidation, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.MessageValidation), args.Error(1)
+}
+
+func (m *MockCAService) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.Key, error) {
+	args := m.Called(ctx, input)
+	return args.Get(0).(*models.Key), args.Error(1)
+}
+
+// Issuance Profiles
 func (m *MockCAService) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {
 	args := m.Called(ctx, input)
 	return args.String(0), args.Error(1)

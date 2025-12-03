@@ -7,10 +7,9 @@ import (
 type CertificateType string
 
 const (
-	CertificateTypeManaged         CertificateType = "MANAGED"
-	CertificateTypeRequested       CertificateType = "REQUESTED"
-	CertificateTypeImportedWithKey CertificateType = "IMPORTED"
-	CertificateTypeExternal        CertificateType = "EXTERNAL"
+	CertificateTypeManaged            CertificateType = "MANAGED"
+	CertificateTypeImportedWithKey    CertificateType = "IMPORTED_WITH_KEY"
+	CertificateTypeImportedWithoutKey CertificateType = "IMPORTED_WITHOUT_KEY"
 )
 
 type ValidityType string
@@ -72,27 +71,6 @@ type CACertificate struct {
 	ProfileID               string                 `json:"profile_id"`
 }
 
-type CertificateRequestStatus string
-
-const (
-	StatusRequestIssued  CertificateRequestStatus = "ISSUED"
-	StatusRequestRevoked CertificateRequestStatus = "REVOKED"
-	StatusRequestPending CertificateRequestStatus = "PENDING"
-)
-
-type CACertificateRequest struct {
-	ID          string                   `json:"id"`
-	KeyId       string                   `json:"key_id"`
-	Metadata    map[string]interface{}   `json:"metadata" gorm:"serializer:json"`
-	Subject     Subject                  `json:"subject" gorm:"embedded;embeddedPrefix:subject_"`
-	CreationTS  time.Time                `json:"creation_ts"`
-	EngineID    string                   `json:"engine_id"`
-	KeyMetadata KeyStrengthMetadata      `json:"key_metadata" gorm:"embedded;embeddedPrefix:key_meta_"`
-	Status      CertificateRequestStatus `json:"status"`
-	Fingerprint string                   `json:"fingerprint"`
-	CSR         X509CertificateRequest   `json:"csr"`
-}
-
 type CAStats struct {
 	CACertificatesStats CACertificatesStats `json:"cas"`
 	CertificatesStats   CertificatesStats   `json:"certificates"`
@@ -121,7 +99,7 @@ const (
 type CAMetadataMonitoringExpirationDeltas []MonitoringExpirationDelta
 
 const (
-	CAAttachedToDeviceKey = "lamassu.io/ca/attached-to"
+	DMSAttachedToDeviceKey = "lamassu.io/ra/attached-to"
 )
 
 type CAAttachedToDevice struct {
@@ -129,4 +107,13 @@ type CAAttachedToDevice struct {
 		RAID string `json:"ra_id"`
 	} `json:"authorized_by"`
 	DeviceID string `json:"device_id"`
+}
+
+const (
+	KMSBindResourceKey = "lamassu.io/kms/binded-resources"
+)
+
+type KMSBindResource struct {
+	ResourceType string `json:"resource_type"`
+	ResourceID   string `json:"resource_id"`
 }

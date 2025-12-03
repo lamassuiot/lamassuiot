@@ -22,8 +22,8 @@ import (
 
 var serviceID = "va"
 
-func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CAService, serviceInfo models.APIServiceInfo) (*services.CRLService, *services.OCSPService, int, error) {
-	crl, ocsp, err := AssembleVAService(conf, caService)
+func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CAService, kmsService services.KMSService, serviceInfo models.APIServiceInfo) (*services.CRLService, *services.OCSPService, int, error) {
+	crl, ocsp, err := AssembleVAService(conf, caService, kmsService)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not assemble VA Service. Exiting: %s", err)
 	}
@@ -41,7 +41,7 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 	return crl, ocsp, port, nil
 }
 
-func AssembleVAService(conf config.VAconfig, caService services.CAService) (*services.CRLService, *services.OCSPService, error) {
+func AssembleVAService(conf config.VAconfig, caService services.CAService, kmsService services.KMSService) (*services.CRLService, *services.OCSPService, error) {
 
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "VA", "Storage")
@@ -64,6 +64,7 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService) (*ser
 	crl, err := beService.NewCRLService(beService.CRLServiceBuilder{
 		Logger:    lSvc,
 		CAClient:  caService,
+		KMSClient: kmsService,
 		VARepo:    vaRoleRepo,
 		VADomains: conf.VADomains,
 		Bucket:    (*blob.Bucket)(bucket),
@@ -73,8 +74,9 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService) (*ser
 	}
 
 	ocsp := beService.NewOCSPService(beService.OCSPServiceBuilder{
-		Logger:   lSvc,
-		CAClient: caService,
+		Logger:    lSvc,
+		CAClient:  caService,
+		KMSClient: kmsService,
 	})
 
 	crlSvc := crl.(*beService.CRLServiceBackend)

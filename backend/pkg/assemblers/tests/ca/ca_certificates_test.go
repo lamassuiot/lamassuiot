@@ -1,4 +1,4 @@
-package assemblers
+package ca
 
 import (
 	"context"
@@ -7,14 +7,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
 func TestDeleteCertificateSDK(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -132,7 +134,7 @@ func TestDeleteCertificateSDK(t *testing.T) {
 }
 
 func TestDeleteCertificateService(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -184,7 +186,7 @@ func TestDeleteCertificateService(t *testing.T) {
 }
 
 func TestSignCertificateWithDefaultProfile(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -302,4 +304,78 @@ func createCAAndCertificate(caSDK services.CAService) (*models.CACertificate, *m
 	}
 
 	return ca, cert, nil
+}
+
+func TestGetCertificatesFilterBySubjectKeyID(t *testing.T) {
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	caTest := serverTest.CA
+
+	// Ensure clean DB and init CA
+	if err := serverTest.BeforeEach(); err != nil {
+		t.Fatalf("failed running BeforeEach: %s", err)
+	}
+	_, err = initCA(caTest.Service)
+	if err != nil {
+		t.Fatalf("failed to init CA: %s", err)
+	}
+
+	// Create two CAs and issue a certificate each (ensure SKIs differ)
+	_, cert1, err := createCAAndCertificate(caTest.Service)
+	if err != nil {
+		t.Fatalf("failed to create first CA and certificate: %s", err)
+	}
+
+	_, cert2, err := createCAAndCertificate(caTest.Service)
+	if err != nil {
+		t.Fatalf("failed to create second CA and certificate: %s", err)
+	}
+
+	if cert1.SubjectKeyID == cert2.SubjectKeyID {
+		t.Fatalf("expected different SKIs for the two test certificates, got equal: %s", cert1.SubjectKeyID)
+	}
+	if err != nil {
+		t.Fatalf("failed to create CA and certificate: %s", err)
+	}
+
+	// Query certificates filtering by subject_key_id
+	found := []*models.Certificate{}
+	qp := &resources.QueryParameters{
+		PageSize: 25,
+		Filters: []resources.FilterOption{
+			{
+				Field:           "subject_key_id",
+				Value:           cert1.SubjectKeyID,
+				FilterOperation: resources.StringEqual,
+			},
+		},
+	}
+
+	_, err = caTest.HttpCASDK.GetCertificates(context.Background(), services.GetCertificatesInput{
+		ListInput: resources.ListInput[models.Certificate]{
+			QueryParameters: qp,
+			ExhaustiveRun:   true,
+			ApplyFunc: func(elem models.Certificate) {
+				found = append(found, &elem)
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("GetCertificates returned error: %s", err)
+	}
+
+	if len(found) != 1 {
+		t.Fatalf("expected 1 certificate filtered by subject_key_id, got %d", len(found))
+	}
+
+	if found[0].SerialNumber != cert1.SerialNumber {
+		t.Fatalf("expected certificate serial %s, got %s", cert1.SerialNumber, found[0].SerialNumber)
+	}
+
+	if found[0].SubjectKeyID != cert1.SubjectKeyID {
+		t.Fatalf("expected subject_key_id %s, got %s", cert1.SubjectKeyID, found[0].SubjectKeyID)
+	}
 }

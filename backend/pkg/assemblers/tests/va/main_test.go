@@ -1,4 +1,4 @@
-package assemblers
+package va
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -18,6 +19,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/ocsp"
 )
+
+const DefaultCAID = "111"
 
 func TestBaseCRL(t *testing.T) {
 	serverTest, err := StartVAServiceTestServer(t)
@@ -119,7 +122,7 @@ func TestBaseCRL(t *testing.T) {
 			}
 
 			var crl *x509.RevocationList
-			err = SleepRetry(5, 5*time.Second, func() error {
+			err = tests.SleepRetry(5, 5*time.Second, func() error {
 				crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
 					CASubjectKeyID: issuerCA.Certificate.AuthorityKeyID,
 					Issuer:         (*x509.Certificate)(issuerCA.Certificate.Certificate),
@@ -166,7 +169,7 @@ func TestCRLCertificateRevocation(t *testing.T) {
 
 	var crl *x509.RevocationList
 	// Sleep to ensure that the CRL is generated (CRL is generated when the CA is created via event bus)
-	err = SleepRetry(5, 3*time.Second, func() error {
+	err = tests.SleepRetry(5, 3*time.Second, func() error {
 		// By Default, a VARole is created for the CA automatically setting the CRL to be regenerated on revoke
 		// First get v1 CRL and check that it has 0 entries
 		crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
@@ -208,7 +211,7 @@ func TestCRLCertificateRevocation(t *testing.T) {
 	assert.NoError(t, err, "could not revoke certificate: %s", err)
 
 	// Sleep to ensure that the CRL is regenerated. Since the CRL is generated on revoke via event bus, it may take some time.
-	err = SleepRetry(5, 3*time.Second, func() error {
+	err = tests.SleepRetry(5, 3*time.Second, func() error {
 		// Get v2 CRL and check that it has 1 entry
 		crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
 			CASubjectKeyID: oneCrt.AuthorityKeyID,
@@ -350,7 +353,6 @@ func TestPostOCSP(t *testing.T) {
 	}
 }
 func TestGetOCSP(t *testing.T) {
-	t.Skip("Skipping test for now")
 	serverTest, err := StartVAServiceTestServer(t)
 	if err != nil {
 		t.Fatalf("could not create VA test server")
@@ -463,7 +465,7 @@ func TestVARole(t *testing.T) {
 	}
 
 	var role *models.VARole
-	err = SleepRetry(5, 3*time.Second, func() error {
+	err = tests.SleepRetry(5, 3*time.Second, func() error {
 		role, err = serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
 			CASubjectKeyID: hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId),
 		})
@@ -519,7 +521,7 @@ func TestVARole(t *testing.T) {
 
 	//Now get all roles
 	ctr := 0
-	SleepRetry(10, 3*time.Second, func() error {
+	tests.SleepRetry(10, 3*time.Second, func() error {
 		ctr = 0
 		_, err = serverTest.VA.CRLService.GetVARoles(context.Background(), services.GetVARolesInput{
 			ExhaustiveRun:   true,
@@ -563,7 +565,7 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("could not create new CA: %s", err)
 	}
 
-	err = SleepRetry(10, 3*time.Second, func() error {
+	err = tests.SleepRetry(10, 3*time.Second, func() error {
 		role, err = serverTest.VA.CRLService.GetVARole(context.Background(), services.GetVARoleInput{
 			CASubjectKeyID: hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId),
 		})
@@ -578,7 +580,7 @@ func TestVARole(t *testing.T) {
 		t.Fatalf("role CASubjectKeyID should be %s, got %s", hex.EncodeToString(ca.Certificate.Certificate.SubjectKeyId), role.CASubjectKeyID)
 	}
 
-	SleepRetry(10, 3*time.Second, func() error {
+	tests.SleepRetry(10, 3*time.Second, func() error {
 		ctr = 0
 		_, err = serverTest.VA.CRLService.GetVARoles(context.Background(), services.GetVARolesInput{
 			ExhaustiveRun:   true,
@@ -630,15 +632,15 @@ func generateCertificate(caSDK services.CAService) (*models.Certificate, error) 
 	return crt, nil
 }
 
-func StartVAServiceTestServer(t *testing.T) (*TestServer, error) {
-	testServer, err := TestServiceBuilder{}.WithDatabase("ca", "va").WithService(CA, VA).WithMonitor().WithEventBus().Build(t)
+func StartVAServiceTestServer(t *testing.T) (*tests.TestServer, error) {
+	testServer, err := tests.TestServiceBuilder{}.WithDatabase("ca", "va", "kms").WithService(tests.CA, tests.VA).WithMonitor().WithEventBus().Build(t)
 	if err != nil {
 		return nil, fmt.Errorf("could not create Device Manager test server: %s", err)
 	}
 	return testServer, nil
 }
 
-func initCAForVA(testServer *TestServer) (*models.CACertificate, error) {
+func initCAForVA(testServer *tests.TestServer) (*models.CACertificate, error) {
 	//Init CA Server with 1 CA
 	caDUr := models.TimeDuration(time.Hour * 24)
 	issuanceDur := models.TimeDuration(time.Hour * 12)
@@ -688,7 +690,7 @@ func TestCRLCertificateReactivationFromHold(t *testing.T) {
 
 	// Sleep to ensure that the CRL is generated (CRL is generated when the CA is created via event bus)
 	var crl *x509.RevocationList
-	err = SleepRetry(5, 3*time.Second, func() error {
+	err = tests.SleepRetry(5, 3*time.Second, func() error {
 		// First get v1 CRL and check that it has 0 entries
 		crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
 			CASubjectKeyID: oneCrt.AuthorityKeyID,
@@ -728,7 +730,7 @@ func TestCRLCertificateReactivationFromHold(t *testing.T) {
 	assert.NoError(t, err, "could not revoke certificate with CertificateHold: %s", err)
 
 	// Sleep to ensure that the CRL is regenerated after revocation
-	err = SleepRetry(5, 3*time.Second, func() error {
+	err = tests.SleepRetry(5, 3*time.Second, func() error {
 		// Get v2 CRL and check that it has 1 entry
 		crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
 			CASubjectKeyID: oneCrt.AuthorityKeyID,
@@ -777,7 +779,7 @@ func TestCRLCertificateReactivationFromHold(t *testing.T) {
 	assert.NoError(t, err, "could not reactivate certificate from CertificateHold: %s", err)
 
 	// Sleep to ensure that the CRL is regenerated after reactivation
-	err = SleepRetry(5, 3*time.Second, func() error {
+	err = tests.SleepRetry(5, 3*time.Second, func() error {
 		// Get v3 CRL and check that it has 0 entries (certificate should be removed)
 		crl, err = serverTest.VA.HttpVASDK.GetCRL(context.Background(), services.GetCRLResponseInput{
 			CASubjectKeyID: oneCrt.AuthorityKeyID,

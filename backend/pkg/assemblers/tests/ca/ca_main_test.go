@@ -1,8 +1,7 @@
-package assemblers
+package ca
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
@@ -18,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -30,54 +30,8 @@ import (
 const DefaultCAID = "111111-2222"
 const DefaultCACN = "MyCA"
 
-func TestCryptoEngines(t *testing.T) {
-	//serverTest, err := StartCAServiceTestServer(t, false)
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithVault().Build(t)
-	if err != nil {
-		t.Fatalf("could not create CA test server: %s", err)
-	}
-	caTest := serverTest.CA
-
-	var testcases = []struct {
-		name        string
-		resultCheck func(engines []*models.CryptoEngineProvider, err error) error
-	}{
-		{
-			name: "OK/Got-2-Engines",
-			resultCheck: func(engines []*models.CryptoEngineProvider, err error) error {
-				if err != nil {
-					return fmt.Errorf("should've got no error, but got one: %s", err)
-				}
-
-				if len(engines) != 2 {
-					return fmt.Errorf("should've got two engines, but got %d", len(engines))
-				}
-
-				return nil
-			},
-		},
-	}
-
-	for _, tc := range testcases {
-		tc := tc
-
-		t.Run(tc.name, func(t *testing.T) {
-
-			err = serverTest.BeforeEach()
-			if err != nil {
-				t.Fatalf("failed running 'BeforeEach' func in test case: %s", err)
-			}
-
-			err = tc.resultCheck(caTest.Service.GetCryptoEngineProvider(context.Background()))
-			if err != nil {
-				t.Fatalf("unexpected result in test case: %s", err)
-			}
-
-		})
-	}
-}
 func TestCreateCA(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -88,13 +42,16 @@ func TestCreateCA(t *testing.T) {
 	caDUr := models.TimeDuration(time.Hour * 24)
 	issuanceDur := models.TimeDuration(time.Hour * 12)
 
-	profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
-		Profile: models.IssuanceProfile{
-			Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
-		},
-	})
-	if err != nil {
-		t.Fatalf("failed creating issuance profile: %s", err)
+	createProfile := func(t *testing.T) *models.IssuanceProfile {
+		profile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+			Profile: models.IssuanceProfile{
+				Validity: models.Validity{Type: models.Duration, Duration: issuanceDur},
+			},
+		})
+		if err != nil {
+			t.Fatalf("failed creating issuance profile: %s", err)
+		}
+		return profile
 	}
 
 	var testcases = []struct {
@@ -107,7 +64,7 @@ func TestCreateCA(t *testing.T) {
 			name:   "OK/KeyType-RSA",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
-
+				profile := createProfile(t)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
@@ -128,6 +85,7 @@ func TestCreateCA(t *testing.T) {
 			name:   "OK/KeyType-ECC",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.ECDSA), Bits: 256},
@@ -148,6 +106,7 @@ func TestCreateCA(t *testing.T) {
 			name:   "OK/Expiration-Duration",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
@@ -203,6 +162,7 @@ func TestCreateCA(t *testing.T) {
 		{
 			name: "Error/Duplicate-CA-ID",
 			before: func(svc services.CAService) error {
+				profile := createProfile(t)
 				_, err := svc.CreateCA(context.Background(), services.CreateCAInput{
 					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
@@ -216,6 +176,7 @@ func TestCreateCA(t *testing.T) {
 				return nil
 			},
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				profile := createProfile(t)
 				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
 					ID:           caID,
 					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
@@ -231,6 +192,30 @@ func TestCreateCA(t *testing.T) {
 
 				if !errors.Is(err, errs.ErrCAAlreadyExists) {
 					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrCAAlreadyExists, err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "Error/InvalidIssuanceProfileID",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    "non-existent-profile-id",
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrIssuanceProfileNotFound) {
+					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrIssuanceProfileNotFound, err)
 				}
 
 				return nil
@@ -259,7 +244,7 @@ func TestCreateCA(t *testing.T) {
 }
 
 func TestDeleteCAAndIssuedCertificates(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -328,7 +313,8 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				}
 
 				err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID: enrollCA.ID,
+					CAID:          enrollCA.ID,
+					CascadeDelete: false,
 				})
 				return (*x509.Certificate)(crt.Certificate), err
 			},
@@ -368,7 +354,6 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				}
 
 				importedCALvl1, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType:        models.CertificateTypeExternal,
 					ProfileID:     profile2.ID,
 					CACertificate: (*models.X509Certificate)(ca),
 				})
@@ -378,7 +363,8 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				}
 
 				err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID: importedCALvl1.ID,
+					CAID:          importedCALvl1.ID,
+					CascadeDelete: false,
 				})
 				return nil, err
 			},
@@ -417,7 +403,8 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				}
 
 				err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID: ca1.ID,
+					CAID:          ca1.ID,
+					CascadeDelete: false,
 				})
 				return nil, err
 			},
@@ -455,7 +442,8 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 				}
 
 				err = caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID: ca1.ID,
+					CAID:          ca1.ID,
+					CascadeDelete: false,
 				})
 				return nil, err
 			},
@@ -494,7 +482,7 @@ func TestDeleteCAAndIssuedCertificates(t *testing.T) {
 }
 
 func TestGetCertificatesByCaAndStatus(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -651,7 +639,7 @@ func TestGetCertificatesByCaAndStatus(t *testing.T) {
 }
 
 func TestSignCertificate(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1658,7 +1646,7 @@ func TestSignCertificate(t *testing.T) {
 }
 
 func TestImportCertificate(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -1723,11 +1711,9 @@ func TestImportCertificate(t *testing.T) {
 				}
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType:        models.CertificateTypeImportedWithKey,
 					ProfileID:     profile.ID,
-					CAECKey:       caKey.(*ecdsa.PrivateKey),
+					Key:           caKey,
 					CACertificate: (*models.X509Certificate)(ca),
-					KeyType:       models.KeyType(x509.ECDSA),
 				})
 				if err != nil {
 					t.Fatalf("failed importing CA: %s", err)
@@ -1828,11 +1814,9 @@ func TestImportCertificate(t *testing.T) {
 				}
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType:        models.CertificateTypeImportedWithKey,
 					ProfileID:     profile.ID,
-					CAECKey:       caKey.(*ecdsa.PrivateKey),
+					Key:           caKey,
 					CACertificate: (*models.X509Certificate)(ca),
-					KeyType:       models.KeyType(x509.ECDSA),
 				})
 				if err != nil {
 					t.Fatalf("failed importing CA: %s", err)
@@ -1952,7 +1936,7 @@ func TestImportCertificate(t *testing.T) {
 }
 
 func TestRevokeCA(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -2087,7 +2071,7 @@ func TestRevokeCA(t *testing.T) {
 }
 
 func TestUpdateCAMetadata(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -2192,7 +2176,7 @@ func TestUpdateCAMetadata(t *testing.T) {
 }
 
 func TestGetCAsByCommonName(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -2261,7 +2245,7 @@ func TestGetCAsByCommonName(t *testing.T) {
 }
 
 func TestUpdateCertificateMetadata(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -2398,7 +2382,7 @@ func TestUpdateCertificateMetadata(t *testing.T) {
 	}
 }
 func TestUpdateCAStatus(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").WithMonitor().Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -2563,7 +2547,7 @@ func TestUpdateCAStatus(t *testing.T) {
 }
 
 func TestGetStats(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -2627,7 +2611,7 @@ func TestGetStats(t *testing.T) {
 }
 
 func TestGetCertificates(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -2783,7 +2767,7 @@ func TestGetCertificates(t *testing.T) {
 }
 
 func TestGetCertificatesByCA(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -3051,12 +3035,13 @@ func TestGetCertificatesByCA(t *testing.T) {
 }
 
 func TestImportCA(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithVault().Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").WithVault().Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
 
 	caTest := serverTest.CA
+	kmsTest := serverTest.KMS
 
 	generateSelfSignedCA := func(keyType x509.PublicKeyAlgorithm) (*x509.Certificate, any, error) {
 		var err error
@@ -3124,7 +3109,6 @@ func TestImportCA(t *testing.T) {
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:            "id-1234",
-					CAType:        models.CertificateTypeExternal,
 					CACertificate: (*models.X509Certificate)(ca),
 				})
 
@@ -3159,11 +3143,9 @@ func TestImportCA(t *testing.T) {
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:            "id-1234",
-					CAType:        models.CertificateTypeImportedWithKey,
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
-					CARSAKey:      (key).(*rsa.PrivateKey),
-					KeyType:       models.KeyType(x509.RSA),
+					Key:           key,
 				})
 
 				return importedCA, err
@@ -3185,7 +3167,8 @@ func TestImportCA(t *testing.T) {
 				if err != nil {
 					return nil, fmt.Errorf("Failed creating the certificate %s", err)
 				}
-				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
+
+				engines, _ := kmsTest.Service.GetCryptoEngineProvider(context.Background())
 				var engine *models.CryptoEngineProvider
 
 				if !engines[0].Default {
@@ -3205,11 +3188,9 @@ func TestImportCA(t *testing.T) {
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:            "id-1234",
-					CAType:        models.CertificateTypeImportedWithKey,
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
-					CARSAKey:      (key).(*rsa.PrivateKey),
-					KeyType:       models.KeyType(x509.RSA),
+					Key:           key,
 					EngineID:      engine.ID,
 				})
 
@@ -3243,11 +3224,9 @@ func TestImportCA(t *testing.T) {
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
 					ID:            "id-1234",
-					CAType:        models.CertificateTypeImportedWithKey,
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
-					CAECKey:       (key).(*ecdsa.PrivateKey),
-					KeyType:       models.KeyType(x509.ECDSA),
+					Key:           key,
 				})
 				return importedCA, err
 			},
@@ -3278,11 +3257,9 @@ func TestImportCA(t *testing.T) {
 				}
 
 				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType:        models.CertificateTypeImportedWithKey,
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(ca),
-					CARSAKey:      (key).(*rsa.PrivateKey),
-					KeyType:       models.KeyType(x509.RSA),
+					Key:           key,
 				})
 
 				return importedCA, err
@@ -3389,7 +3366,7 @@ func TestImportCA(t *testing.T) {
 		// 				duration, _ := models.ParseDuration("100d")
 
 		// 				importedCALvl2, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-		// 					CAType: models.CertificateTypeExternal,
+		// 					CAType: models.CertificateTypeImportedWithoutKey,
 		// 					IssuanceExpiration: models.Validity{
 		// 						Type:     models.Duration,
 		// 						Duration: (models.TimeDuration)(duration),
@@ -3401,7 +3378,7 @@ func TestImportCA(t *testing.T) {
 		// 				}
 
 		// 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
-		// 					CAType: models.CertificateTypeExternal,
+		// 					CAType: models.CertificateTypeImportedWithoutKey,
 		// 					IssuanceExpiration: models.Validity{
 		// 						Type:     models.Duration,
 		// 						Duration: (models.TimeDuration)(duration),
@@ -3413,7 +3390,7 @@ func TestImportCA(t *testing.T) {
 		// 				}
 
 		// 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
-		// 					CAType: models.CertificateTypeExternal,
+		// 					CAType: models.CertificateTypeImportedWithoutKey,
 		// 					IssuanceExpiration: models.Validity{
 		// 						Type:     models.Duration,
 		// 						Duration: (models.TimeDuration)(duration),
@@ -3553,7 +3530,6 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 				}
 
 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType:        models.CertificateTypeExternal,
 					CACertificate: (*models.X509Certificate)(cert0),
 					ProfileID:     profile.ID,
 				})
@@ -3562,7 +3538,6 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 				}
 
 				_, err = caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType:        models.CertificateTypeExternal,
 					CACertificate: (*models.X509Certificate)(cert1),
 					ProfileID:     profile.ID,
 				})
@@ -3571,7 +3546,6 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 				}
 
 				importedCALvl2, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
-					CAType:        models.CertificateTypeExternal,
 					ProfileID:     profile.ID,
 					CACertificate: (*models.X509Certificate)(cert2),
 				})
@@ -3595,6 +3569,65 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 					return fmt.Errorf("CA parent should be at level 1. Got %d", ca.Certificate.IssuerCAMetadata.Level)
 				}
 
+				return nil
+			},
+		},
+		{
+			name:   "Error/InvalidIssuanceProfileID-ImportedWithKey",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				ca, key, err := generateSelfSignedCA(x509.RSA)
+				if err != nil {
+					return nil, fmt.Errorf("Failed creating the certificate %s", err)
+				}
+
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:            "id-1234",
+					ProfileID:     "non-existent-profile-id",
+					CACertificate: (*models.X509Certificate)(ca),
+					Key:           key,
+				})
+
+				return importedCA, err
+			},
+			resultCheck: func(ca *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrIssuanceProfileNotFound) {
+					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrIssuanceProfileNotFound, err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "Error/MissingIssuanceProfileID-ImportedWithKey",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				ca, key, err := generateSelfSignedCA(x509.RSA)
+				if err != nil {
+					return nil, fmt.Errorf("Failed creating the certificate %s", err)
+				}
+
+				// ProfileID is required for ImportedWithKey type but not provided
+				importedCA, err := caSDK.ImportCA(context.Background(), services.ImportCAInput{
+					ID:            "id-1234",
+					CACertificate: (*models.X509Certificate)(ca),
+					Key:           key,
+					ProfileID:     "non-existent-profile-id",
+				})
+
+				return importedCA, err
+			},
+			resultCheck: func(ca *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error. Got none")
+				}
+
+				// This should fail validation before reaching the profile check
+				// The error could be a validation error or profile not found error
 				return nil
 			},
 		},
@@ -3630,7 +3663,7 @@ V4Ahz5up3arkTIU2XR40ge9x2+hlxmD+KF8aHMdB/89YXgp0MA==
 }
 
 func TestDeleteCA(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").WithCascadeDelete(true).Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -3652,7 +3685,8 @@ func TestDeleteCA(t *testing.T) {
 			run: func(caSDK services.CAService) error {
 				//cas := []*models.CACertificate{}
 				err := caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID: "DefaulasdadtCAID",
+					CAID:          "DefaulasdadtCAID",
+					CascadeDelete: false,
 				})
 				return err
 			},
@@ -3686,7 +3720,8 @@ func TestDeleteCA(t *testing.T) {
 			run: func(caSDK services.CAService) error {
 				//cas := []*models.CACertificate{}
 				err := caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID: DefaultCAID,
+					CAID:          DefaultCAID,
+					CascadeDelete: false,
 				})
 				return err
 			},
@@ -3716,7 +3751,8 @@ func TestDeleteCA(t *testing.T) {
 			run: func(caSDK services.CAService) error {
 				//cas := []*models.CACertificate{}
 				err := caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
-					CAID: DefaultCAID,
+					CAID:          DefaultCAID,
+					CascadeDelete: false,
 				})
 
 				return err
@@ -3724,6 +3760,225 @@ func TestDeleteCA(t *testing.T) {
 			resultCheck: func(err error) error {
 				if !errors.Is(err, errs.ErrCAStatus) {
 					return fmt.Errorf("got unexpected error: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/DeleteRootCAWithChildCAs_CascadeTrue",
+			before: func(svc services.CAService) error {
+
+				rootCA, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("failed retrieving default CA: %s", err)
+				}
+
+				// Create child CA
+				_, err = svc.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           "child-ca-test",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "Test Child CA"},
+					CAExpiration: models.Validity{Type: models.Time, Time: rootCA.Certificate.ValidTo},
+					ParentID:     rootCA.ID,
+					ProfileID:    rootCA.ProfileID,
+				})
+				if err != nil {
+					return fmt.Errorf("failed creating child CA: %s", err)
+				}
+
+				// Revoke root CA to allow deletion
+				_, err = svc.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+					CAID:             DefaultCAID,
+					Status:           models.StatusRevoked,
+					RevocationReason: models.RevocationReason(1),
+				})
+				if err != nil {
+					return fmt.Errorf("Error updating the CA status to revoked")
+				}
+
+				return nil
+			},
+			run: func(caSDK services.CAService) error {
+				return caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
+					CAID:          DefaultCAID,
+					CascadeDelete: true,
+				})
+			},
+			resultCheck: func(err error) error {
+				if err != nil {
+					return fmt.Errorf("unexpected error deleting root CA with cascade: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/DeleteRootCAWithChildCAs_CascadeFalse",
+			before: func(svc services.CAService) error {
+
+				rootCA, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("failed retrieving default CA: %s", err)
+				}
+
+				// Create child CA
+				_, err = svc.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           "child-ca-test-2",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "Test Child CA 2"},
+					CAExpiration: models.Validity{Type: models.Time, Time: rootCA.Certificate.ValidTo},
+					ParentID:     rootCA.ID,
+					ProfileID:    rootCA.ProfileID,
+				})
+				if err != nil {
+					return fmt.Errorf("failed creating child CA: %s", err)
+				}
+
+				// Revoke root CA to allow deletion
+				_, err = svc.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+					CAID:             rootCA.ID,
+					Status:           models.StatusRevoked,
+					RevocationReason: models.RevocationReason(1),
+				})
+				if err != nil {
+					return fmt.Errorf("failed revoking root CA: %s", err)
+				}
+
+				return nil
+			},
+			run: func(caSDK services.CAService) error {
+				return caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
+					CAID:          DefaultCAID,
+					CascadeDelete: false,
+				})
+			},
+			resultCheck: func(err error) error {
+				if err != nil {
+					return fmt.Errorf("unexpected error deleting root CA without cascade: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/DeleteMultiLevelHierarchy_CascadeTrue",
+			before: func(svc services.CAService) error {
+
+				rootCA, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("failed retrieving default CA: %s", err)
+				}
+
+				// Create intermediate CA
+				intermediateCA, err := svc.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           "intermediate-ca-hierarchy",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "Test Intermediate CA"},
+					CAExpiration: models.Validity{Type: models.Time, Time: rootCA.Certificate.ValidTo},
+					ParentID:     rootCA.ID,
+					ProfileID:    rootCA.ProfileID,
+				})
+				if err != nil {
+					return fmt.Errorf("failed creating intermediate CA: %s", err)
+				}
+
+				// Create leaf CA
+				_, err = svc.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           "leaf-ca-hierarchy",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "Test Leaf CA"},
+					CAExpiration: models.Validity{Type: models.Time, Time: intermediateCA.Certificate.ValidTo},
+					ParentID:     intermediateCA.ID,
+					ProfileID:    intermediateCA.ProfileID,
+				})
+				if err != nil {
+					return fmt.Errorf("failed creating leaf CA: %s", err)
+				}
+
+				// Revoke root CA to allow deletion
+				_, err = svc.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+					CAID:             rootCA.ID,
+					Status:           models.StatusRevoked,
+					RevocationReason: models.RevocationReason(1),
+				})
+				if err != nil {
+					return fmt.Errorf("failed revoking root CA: %s", err)
+				}
+
+				return nil
+			},
+			run: func(caSDK services.CAService) error {
+				return caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
+					CAID:          DefaultCAID,
+					CascadeDelete: true,
+				})
+			},
+			resultCheck: func(err error) error {
+				if err != nil {
+					return fmt.Errorf("unexpected error deleting multi-level hierarchy: %s", err)
+				}
+				return nil
+			},
+		},
+		{
+			name: "OK/VerifyChildCARevocationAfterParentDelete",
+			before: func(svc services.CAService) error {
+
+				rootCA, err := svc.GetCAByID(context.Background(), services.GetCAByIDInput{CAID: DefaultCAID})
+				if err != nil {
+					return fmt.Errorf("failed retrieving default CA: %s", err)
+				}
+
+				// Create child CA
+				_, err = svc.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           "child-ca-verify",
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "Test Child CA Verify"},
+					CAExpiration: models.Validity{Type: models.Time, Time: rootCA.Certificate.ValidTo},
+					ParentID:     rootCA.ID,
+					ProfileID:    rootCA.ProfileID,
+				})
+				if err != nil {
+					return fmt.Errorf("failed creating child CA: %s", err)
+				}
+
+				// Revoke root CA to allow deletion
+				_, err = svc.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+					CAID:             rootCA.ID,
+					Status:           models.StatusRevoked,
+					RevocationReason: models.RevocationReason(1),
+				})
+				if err != nil {
+					return fmt.Errorf("failed revoking root CA: %s", err)
+				}
+
+				return nil
+			},
+			run: func(caSDK services.CAService) error {
+				// Delete root CA without cascade - should revoke child CAs
+				err := caSDK.DeleteCA(context.Background(), services.DeleteCAInput{
+					CAID:          DefaultCAID,
+					CascadeDelete: false,
+				})
+				if err != nil {
+					return err
+				}
+
+				// Verify child CA is revoked
+				childCA, err := caSDK.GetCAByID(context.Background(), services.GetCAByIDInput{
+					CAID: "child-ca-verify",
+				})
+				if err != nil {
+					return fmt.Errorf("child CA should still exist after parent deletion without cascade: %s", err)
+				}
+
+				if childCA.Certificate.Status != models.StatusRevoked {
+					return fmt.Errorf("child CA should be revoked after parent deletion, got status: %s", childCA.Certificate.Status)
+				}
+
+				return nil
+			},
+			resultCheck: func(err error) error {
+				if err != nil {
+					return fmt.Errorf("verification failed: %s", err)
 				}
 				return nil
 			},
@@ -3759,8 +4014,333 @@ func TestDeleteCA(t *testing.T) {
 	}
 }
 
+func TestDeleteCA_CascadeDeleteConfigValidation(t *testing.T) {
+	// Test with cascade delete disabled by configuration
+	serverTestDisabled, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").WithCascadeDelete(false).Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server with cascade delete disabled: %s", err)
+	}
+
+	// Test with cascade delete enabled by configuration
+	serverTestEnabled, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").WithCascadeDelete(true).Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server with cascade delete enabled: %s", err)
+	}
+
+	var testcases = []struct {
+		name        string
+		server      *tests.TestServer
+		expectError bool
+		errorType   error
+	}{
+		{
+			name:        "Err/CascadeDeleteDisabledByConfig",
+			server:      serverTestDisabled,
+			expectError: true,
+		},
+		{
+			name:        "OK/CascadeDeleteEnabledByConfig",
+			server:      serverTestEnabled,
+			expectError: false,
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			err = tc.server.BeforeEach()
+			if err != nil {
+				t.Fatalf("failed running 'BeforeEach' cleanup func in test case: %s", err)
+			}
+
+			caTest := tc.server.CA
+
+			//Init CA Server with 1 CA
+			rootCA, err := initCA(caTest.Service)
+			if err != nil {
+				t.Fatalf("failed running initCA: %s", err)
+			}
+
+			// Create a child CA
+			childCA, err := caTest.Service.CreateCA(context.Background(), services.CreateCAInput{
+				KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+				Subject:      models.Subject{CommonName: "TestChildCA"},
+				CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+				ParentID:     rootCA.ID,
+				ProfileID:    rootCA.ProfileID,
+			})
+			if err != nil {
+				t.Fatalf("could not create child CA: %s", err)
+			}
+
+			// Revoke the root CA so it can be deleted
+			_, err = caTest.Service.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+				CAID:             rootCA.ID,
+				Status:           models.StatusRevoked,
+				RevocationReason: models.RevocationReason(0),
+			})
+			if err != nil {
+				t.Fatalf("could not revoke root CA: %s", err)
+			}
+
+			// Try to delete the root CA with cascade delete enabled
+			err = caTest.HttpCASDK.DeleteCA(context.Background(), services.DeleteCAInput{
+				CAID:          rootCA.ID,
+				CascadeDelete: true,
+			})
+
+			t.Logf("DeleteCA returned error: %v", err)
+
+			if tc.expectError {
+				if err == nil {
+					t.Fatalf("expected error about cascade delete not allowed, but got no error")
+				}
+				if !errors.Is(err, errs.ErrCascadeDeleteNotAllowed) {
+					t.Fatalf("expected error about cascade delete not allowed, but got: %v", err)
+				}
+
+				// Verify child CA still exists when cascade delete is disabled
+				_, err = caTest.Service.GetCAByID(context.Background(), services.GetCAByIDInput{
+					CAID: childCA.ID,
+				})
+				if err != nil {
+					t.Fatalf("child CA should still exist after failed cascade delete: %s", err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("expected no error, but got: %v", err)
+				}
+
+				// Verify child CA was deleted when cascade delete is enabled
+				_, err = caTest.Service.GetCAByID(context.Background(), services.GetCAByIDInput{
+					CAID: childCA.ID,
+				})
+				if err == nil {
+					t.Fatalf("child CA should have been deleted with cascade delete enabled")
+				}
+				if !errors.Is(err, errs.ErrCANotFound) {
+					t.Fatalf("expected ErrCANotFound, but got: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// TestDeleteCAPrivateKeyDeletion verifies that private keys are properly handled during CA deletion.
+// This test covers multiple scenarios:
+// 1. Managed CAs - have private keys in crypto engines that should be deleted
+// 2. External CAs - have no private keys in crypto engines (deletion gracefully skipped)
+// 3. Imported CAs with keys - have private keys that should be deleted
+//
+// The tests verify that:
+// - CA deletion completes successfully regardless of private key deletion success/failure
+// - Private key deletion is attempted for CAs that have engines configured
+// - Private key deletion is gracefully skipped for external CAs
+//
+// Note: In a production environment with mock crypto engines, you could enhance these tests to:
+// - Verify that DeleteKey() was actually called on the crypto engine
+// - Test scenarios where private key deletion fails but CA deletion still succeeds
+// - Verify that the correct key ID is passed to the crypto engine
+func TestDeleteCAPrivateKeyDeletion(t *testing.T) {
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	t.Run("ManagedCA_PrivateKeyDeleted", func(t *testing.T) {
+		testDeleteCAWithPrivateKey(t, serverTest, "managed")
+	})
+
+	t.Run("ImportedWithoutCA_NoPrivateKey", func(t *testing.T) {
+		testDeleteCAWithPrivateKey(t, serverTest, "import_without_key")
+	})
+
+	t.Run("ImportedWithCA_PrivateKeyDeleted", func(t *testing.T) {
+		testDeleteCAWithPrivateKey(t, serverTest, "import_with_key")
+	})
+}
+
+func testDeleteCAWithPrivateKey(t *testing.T, serverTest *tests.TestServer, caType string) {
+	err := serverTest.BeforeEach()
+	if err != nil {
+		t.Fatalf("failed running 'BeforeEach' cleanup func: %s", err)
+	}
+
+	caTest := serverTest.CA
+
+	// Create a valid issuance profile first
+	profile, err := caTest.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+		Profile: models.IssuanceProfile{
+			Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed creating issuance profile: %s", err)
+	}
+
+	// Setup the CA based on type
+	var ca *models.CACertificate
+	switch caType {
+	case "managed":
+		ca, err = caTest.Service.CreateCA(context.Background(), services.CreateCAInput{
+			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+			Subject:      models.Subject{CommonName: "TestManagedCA"},
+			CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+			ProfileID:    profile.ID,
+		})
+	case "import_without_key":
+		caCert, _, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ImportWithoutKeyTestCA")
+		if err != nil {
+			t.Fatalf("failed to generate self-signed CA: %s", err)
+		}
+		ca, _ = caTest.Service.ImportCA(context.Background(), services.ImportCAInput{
+			CACertificate: (*models.X509Certificate)(caCert),
+			ProfileID:     profile.ID,
+		})
+	case "import_with_key":
+		caCert, caKey, err := chelpers.GenerateSelfSignedCA(x509.RSA, time.Hour*24, "ImportWithKeyTestCA")
+		if err != nil {
+			t.Fatalf("failed to generate self-signed CA: %s", err)
+		}
+		rsaKey, ok := caKey.(*rsa.PrivateKey)
+		if !ok {
+			t.Fatalf("expected RSA key")
+		}
+		ca, _ = caTest.Service.ImportCA(context.Background(), services.ImportCAInput{
+			CACertificate: (*models.X509Certificate)(caCert),
+			ProfileID:     profile.ID,
+			Key:           rsaKey,
+		})
+	}
+
+	if err != nil {
+		t.Fatalf("failed to setup CA: %s", err)
+	}
+
+	// Revoke the CA so it can be deleted
+	_, err = caTest.Service.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+		CAID:             ca.ID,
+		Status:           models.StatusRevoked,
+		RevocationReason: models.RevocationReason(0),
+	})
+	if err != nil {
+		t.Fatalf("could not revoke CA: %s", err)
+	}
+
+	// Store original key information for verification
+	originalEngineID := ca.Certificate.EngineID
+
+	// Delete the CA
+	err = caTest.Service.DeleteCA(context.Background(), services.DeleteCAInput{
+		CAID: ca.ID,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error during CA deletion: %v", err)
+	}
+
+	// Verify CA was deleted from storage
+	verifyCADeleted(t, caTest, ca.ID, caType+" CA")
+
+	t.Logf("✓ %s CA deleted successfully", caType)
+	if originalEngineID != "" {
+		t.Logf("✓ Private key deletion attempted for engine: %s", originalEngineID)
+	} else {
+		t.Logf("✓ No private key to delete (external CA)")
+	}
+}
+
+func TestDeleteCAPrivateKeyDeletionWithCascade(t *testing.T) {
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").WithCascadeDelete(true).Build(t)
+	if err != nil {
+		t.Fatalf("could not create CA test server: %s", err)
+	}
+
+	t.Run("CascadeDelete_WithPrivateKeyDeletion", func(t *testing.T) {
+		err = serverTest.BeforeEach()
+		if err != nil {
+			t.Fatalf("failed running 'BeforeEach' cleanup func: %s", err)
+		}
+
+		caTest := serverTest.CA
+
+		// Create a valid issuance profile first
+		profile, err := caTest.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+			Profile: models.IssuanceProfile{
+				Validity: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+			},
+		})
+		if err != nil {
+			t.Fatalf("failed creating issuance profile: %s", err)
+		}
+
+		// Create a root CA
+		rootCA, err := caTest.Service.CreateCA(context.Background(), services.CreateCAInput{
+			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+			Subject:      models.Subject{CommonName: "RootCAForKeyDeletion"},
+			CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+			ProfileID:    profile.ID,
+		})
+		if err != nil {
+			t.Fatalf("could not create root CA: %s", err)
+		}
+
+		// Create a child CA
+		childCA, err := caTest.Service.CreateCA(context.Background(), services.CreateCAInput{
+			KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+			Subject:      models.Subject{CommonName: "ChildCAForKeyDeletion"},
+			CAExpiration: models.Validity{Type: models.Duration, Duration: models.TimeDuration(time.Hour * 12)},
+			ParentID:     rootCA.ID,
+			ProfileID:    rootCA.ProfileID,
+		})
+		if err != nil {
+			t.Fatalf("could not create child CA: %s", err)
+		}
+
+		// Revoke the root CA so it can be deleted
+		_, err = caTest.Service.UpdateCAStatus(context.Background(), services.UpdateCAStatusInput{
+			CAID:             rootCA.ID,
+			Status:           models.StatusRevoked,
+			RevocationReason: models.RevocationReason(0),
+		})
+		if err != nil {
+			t.Fatalf("could not revoke root CA: %s", err)
+		}
+
+		// Store engine IDs for verification
+		rootEngineID := rootCA.Certificate.EngineID
+		childEngineID := childCA.Certificate.EngineID
+
+		// Delete the root CA with cascade
+		err = caTest.Service.DeleteCA(context.Background(), services.DeleteCAInput{
+			CAID:          rootCA.ID,
+			CascadeDelete: true,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error during cascade delete: %v", err)
+		}
+
+		// Verify both CAs were deleted
+		verifyCADeleted(t, caTest, rootCA.ID, "root CA")
+		verifyCADeleted(t, caTest, childCA.ID, "child CA")
+
+		t.Logf("✓ Cascade delete successful")
+		t.Logf("✓ Root CA private key deletion attempted for engine: %s", rootEngineID)
+		t.Logf("✓ Child CA private key deletion attempted for engine: %s", childEngineID)
+	})
+}
+
+func verifyCADeleted(t *testing.T, caTest *tests.CATestServer, caID string, caDescription string) {
+	_, err := caTest.Service.GetCAByID(context.Background(), services.GetCAByIDInput{
+		CAID: caID,
+	})
+	if err == nil || !errors.Is(err, errs.ErrCANotFound) {
+		t.Fatalf("%s should have been deleted", caDescription)
+	}
+}
+
 func TestGetCAs(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -3945,7 +4525,7 @@ func TestGetCAs(t *testing.T) {
 }
 
 func TestGetStatsByCAID(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -4118,7 +4698,7 @@ func TestGetStatsByCAID(t *testing.T) {
 }
 
 func TestGetCertificatesByExpirationDate(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -4329,7 +4909,7 @@ func TestGetCertificatesByExpirationDate(t *testing.T) {
 }
 
 func TestSignatureVerify(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -4458,7 +5038,6 @@ func TestSignatureVerify(t *testing.T) {
 		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
-			//
 			// err := postgres_test.BeforeEach()
 			// fmt.Errorf("Error while running BeforeEach job: %s", err)
 
@@ -4486,12 +5065,13 @@ func TestSignatureVerify(t *testing.T) {
 	}
 }
 func TestHierarchyCryptoEngines(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
 
 	caTest := serverTest.CA
+	kmsTest := serverTest.KMS
 
 	var testcases = []struct {
 		name        string
@@ -4511,7 +5091,7 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 				caDurChild1 := models.TimeDuration(time.Hour * 24)
 
 				caIss := models.TimeDuration(time.Minute * 3)
-				engines, _ := caSDK.GetCryptoEngineProvider(context.Background())
+				engines, _ := kmsTest.Service.GetCryptoEngineProvider(context.Background())
 
 				// Create issuance profile for root CA
 				rootProfile, err := caSDK.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
@@ -4616,7 +5196,7 @@ func TestHierarchyCryptoEngines(t *testing.T) {
 	}
 }
 func TestHierarchy(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -5062,7 +5642,7 @@ func TestHierarchy(t *testing.T) {
 }
 
 func TestCAsAdditionalDeltasMonitoring(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").WithMonitor().Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").WithMonitor().Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}

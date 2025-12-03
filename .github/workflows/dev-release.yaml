@@ -7,7 +7,7 @@ jobs:
   build_docker_image:
     strategy:
       matrix:
-        service: [ca, devmanager, dmsmanager, va, alerts, aws-connector]
+        service: [kms, ca, devmanager, dmsmanager, va, alerts, aws-connector, goose-lamassu]
     name: ${{ matrix.service }} - Release docker images
     runs-on: ubuntu-latest
     environment: release

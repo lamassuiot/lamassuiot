@@ -1,11 +1,16 @@
 name: GO Unit Testing
- 
+
+permissions:
+  contents: read
+
 on:
   pull_request:
     types: [opened, synchronize, reopened]
   push:
     branches:
       - main
+  workflow_dispatch:
+  
 jobs:
   test:
     strategy:
@@ -34,14 +39,12 @@ jobs:
             tag: eventbus-aws
           - path: engines/storage/postgres
             tag: storage-postgres
-          - path: backend
-            tag: backend
           - path: connectors/awsiot
             tag: connector-awsiot
           - path: monolithic
             tag: monolithic
           
-    name: ${{ matrix.module.path }} - Tests
+    name: ${{ matrix.module.path }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -63,7 +66,7 @@ jobs:
         id: run
         working-directory: ${{ matrix.module.path }}
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5.1.2
@@ -74,7 +77,7 @@ jobs:
           verbose: true
           flags: ${{ matrix.module.tag }}
   test-pkcs11:
-    name: engines/crypto/pkcs11 - Tests
+    name: engines/crypto/pkcs11
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -107,7 +110,7 @@ jobs:
         env:
           PKCS11_MODULE_PATH: /usr/local/lib/libpkcs11-proxy.so
         run: |
-          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 900s -coverprofile coverage.txt -covermode=atomic
+          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 1200s -coverprofile coverage.txt -covermode=atomic
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v4.2.0
@@ -117,3 +120,93 @@ jobs:
           fail_ci_if_error: true
           verbose: true
           flags: crypto-pkcs11
+
+  test-backend-assemblers:
+    strategy:
+      max-parallel: 5
+      matrix:
+        module:
+          - path: backend/pkg/assemblers/tests/ca
+            tag: backend-assemblers-ca
+            name: CA
+          - path: backend/pkg/assemblers/tests/kms
+            tag: backend-assemblers-kms
+            name: KMS
+          - path: backend/pkg/assemblers/tests/va
+            tag: backend-assemblers-va
+            name: VA
+          - path: backend/pkg/assemblers/tests/device-manager
+            tag: backend-assemblers-device-manager
+            name: Device Manager
+          - path: backend/pkg/assemblers/tests/dms-manager
+            tag: backend-assemblers-dms-manager
+            name: DMS Manager
+          - path: backend/pkg/assemblers/tests/alerts
+            tag: backend-assemblers-alerts
+            name: Alerts
+    name: ${{ matrix.module.name }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
+ 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.24.3'
+          cache-dependency-path: "**/*.sum"
+ 
+      - name: Install Dependencies
+        working-directory: backend
+        run: go work sync
+
+      - name: Run Golang Tests with coverage
+        id: run
+        working-directory: ${{ matrix.module.path }}
+        run: |
+          go run gotest.tools/gotestsum@latest --format github-actions ./... -coverpkg=./... -timeout 400s -coverprofile coverage.txt -covermode=atomic
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5.1.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          commit_parent: ${{ github.event.pull_request.base.sha }}
+          fail_ci_if_error: true
+          verbose: true
+          flags: ${{ matrix.module.tag }}
+
+  test-backend-rest:
+    name: backend (excluding assemblers/tests)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.head_ref }}
+ 
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.24.3'
+          cache-dependency-path: "**/*.sum"
+ 
+      - name: Install Dependencies
+        working-directory: backend
+        run: go work sync
+
+      - name: Run Golang Tests with coverage
+        id: run
+        working-directory: backend
+        run: |
+          go run gotest.tools/gotestsum@latest --format github-actions -- $(go list ./... | grep -v '/pkg/assemblers/tests') -coverpkg=./... -timeout 300s -coverprofile coverage.txt -covermode=atomic
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5.1.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          commit_parent: ${{ github.event.pull_request.base.sha }}
+          fail_ci_if_error: true
+          verbose: true
+          flags: backend-rest

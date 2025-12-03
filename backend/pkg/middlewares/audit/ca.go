@@ -25,13 +25,10 @@ func NewCAAuditEventBusPublisher(audit AuditPublisher) lservices.CAMiddleware {
 	}
 }
 
-func (mw CAAuditEventPublisher) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
-	return mw.next.GetCryptoEngineProvider(ctx)
-}
-
 func (mw CAAuditEventPublisher) GetStats(ctx context.Context) (*models.CAStats, error) {
 	return mw.next.GetStats(ctx)
 }
+
 func (mw CAAuditEventPublisher) GetStatsByCAID(ctx context.Context, input services.GetStatsByCAIDInput) (map[models.CertificateStatus]int, error) {
 	return mw.next.GetStatsByCAID(ctx, input)
 }
@@ -44,16 +41,9 @@ func (mw CAAuditEventPublisher) CreateCA(ctx context.Context, input services.Cre
 	return mw.next.CreateCA(ctx, input)
 }
 
-func (mw CAAuditEventPublisher) RequestCACSR(ctx context.Context, input services.RequestCAInput) (output *models.CACertificateRequest, err error) {
-	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventRequestCAKey, input, err, output)
-	}()
-
-	return mw.next.RequestCACSR(ctx, input)
-}
-
 func (mw CAAuditEventPublisher) ImportCA(ctx context.Context, input services.ImportCAInput) (output *models.CACertificate, err error) {
 	defer func() {
+		input.Key = nil // Remove private key from audit logs
 		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventImportCAKey, input, err, output)
 	}()
 
@@ -185,18 +175,6 @@ func (mw CAAuditEventPublisher) DeleteCertificate(ctx context.Context, input ser
 	}()
 
 	return mw.next.DeleteCertificate(ctx, input)
-}
-
-func (mw CAAuditEventPublisher) GetCARequestByID(ctx context.Context, input services.GetByIDInput) (*models.CACertificateRequest, error) {
-	return mw.next.GetCARequestByID(ctx, input)
-}
-
-func (mw CAAuditEventPublisher) DeleteCARequestByID(ctx context.Context, input services.GetByIDInput) error {
-	return mw.next.DeleteCARequestByID(ctx, input)
-}
-
-func (mw CAAuditEventPublisher) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
-	return mw.next.GetCARequests(ctx, input)
 }
 
 func (mw CAAuditEventPublisher) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {

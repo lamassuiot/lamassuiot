@@ -1,4 +1,4 @@
-package assemblers
+package dmsmanager
 
 import (
 	"context"
@@ -500,7 +500,7 @@ func TestBindIDEvent(t *testing.T) {
 
 		t.Run(tc.name, func(t *testing.T) {
 			publisher, err := eventbus.NewEventBusPublisher(
-				testServers.EventBus.config,
+				testServers.EventBus.Config,
 				uuid.NewString(),
 				chelpers.SetupLogger(cconfig.Trace, "Test Case", "pub"),
 			)
@@ -517,7 +517,7 @@ func TestBindIDEvent(t *testing.T) {
 			}
 
 			subscriber, err := eventbus.NewEventBusSubscriber(
-				testServers.EventBus.config,
+				testServers.EventBus.Config,
 				uuid.NewString(),
 				chelpers.SetupLogger(cconfig.Trace, "Test Case", "sub"),
 			)

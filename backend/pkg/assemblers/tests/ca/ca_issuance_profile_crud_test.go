@@ -1,4 +1,4 @@
-package assemblers
+package ca
 
 import (
 	"context"
@@ -7,13 +7,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 )
 
 func TestCAIssuanceProfiles(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	assert.NoError(t, err, "could not create CA test server")
 
 	caSvc := serverTest.CA.HttpCASDK
@@ -97,7 +98,7 @@ func TestCAIssuanceProfiles(t *testing.T) {
 }
 
 func TestFilterCAsByProfileID(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	assert.NoError(t, err, "could not create CA test server")
 
 	caSvc := serverTest.CA.HttpCASDK

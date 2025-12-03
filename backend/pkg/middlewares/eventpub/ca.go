@@ -24,10 +24,6 @@ func NewCAEventBusPublisher(eventMWPub ICloudEventPublisher) lservices.CAMiddlew
 	}
 }
 
-func (mw CAEventPublisher) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
-	return mw.Next.GetCryptoEngineProvider(ctx)
-}
-
 func (mw CAEventPublisher) GetStats(ctx context.Context) (*models.CAStats, error) {
 	return mw.Next.GetStats(ctx)
 }
@@ -45,18 +41,6 @@ func (mw CAEventPublisher) CreateCA(ctx context.Context, input services.CreateCA
 		}
 	}()
 	return mw.Next.CreateCA(ctx, input)
-}
-
-func (mw CAEventPublisher) RequestCACSR(ctx context.Context, input services.RequestCAInput) (output *models.CACertificateRequest, err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventRequestCAKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca-csr/%s", input.ID))
-
-	defer func() {
-		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, output)
-		}
-	}()
-	return mw.Next.RequestCACSR(ctx, input)
 }
 
 func (mw CAEventPublisher) ImportCA(ctx context.Context, input services.ImportCAInput) (output *models.CACertificate, err error) {
@@ -296,18 +280,6 @@ func (mw CAEventPublisher) DeleteCertificate(ctx context.Context, input services
 		}
 	}()
 	return mw.Next.DeleteCertificate(ctx, input)
-}
-
-func (mw CAEventPublisher) GetCARequestByID(ctx context.Context, input services.GetByIDInput) (*models.CACertificateRequest, error) {
-	return mw.Next.GetCARequestByID(ctx, input)
-}
-
-func (mw CAEventPublisher) DeleteCARequestByID(ctx context.Context, input services.GetByIDInput) error {
-	return mw.Next.DeleteCARequestByID(ctx, input)
-}
-
-func (mw CAEventPublisher) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
-	return mw.Next.GetCARequests(ctx, input)
 }
 
 func (mw CAEventPublisher) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {

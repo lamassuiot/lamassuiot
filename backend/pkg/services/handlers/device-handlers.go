@@ -43,15 +43,15 @@ func updateCertStatusHandler(ctx context.Context, event *event.Event, svc servic
 	}
 
 	var attachedBy models.CAAttachedToDevice
-	hasKey, err := helpers.GetMetadataToStruct(cert.Updated.Metadata, models.CAAttachedToDeviceKey, &attachedBy)
+	hasKey, err := helpers.GetMetadataToStruct(cert.Updated.Metadata, models.DMSAttachedToDeviceKey, &attachedBy)
 	if err != nil {
-		err = fmt.Errorf("could not decode metadata with key %s: %s", models.CAAttachedToDeviceKey, err)
+		err = fmt.Errorf("could not decode metadata with key %s: %s", models.DMSAttachedToDeviceKey, err)
 		lMessaging.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		lMessaging.Tracef("skipping event %s, Certificate doesn't have %s key", event.Type(), models.CAAttachedToDeviceKey)
+		lMessaging.Tracef("skipping event %s, Certificate doesn't have %s key", event.Type(), models.DMSAttachedToDeviceKey)
 		return nil
 	}
 

@@ -1,11 +1,14 @@
 package main
 
 import (
+	"fmt"
+
 	lamassu "github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
@@ -43,7 +46,18 @@ func main() {
 	log.Debugf("%s", confBytes)
 	log.Debugf("===================================================")
 
-	_, _, _, err = lamassu.AssembleCAServiceWithHTTPServer(*conf, models.APIServiceInfo{
+	lKMSClient := helpers.SetupLogger(conf.KMSClient.LogLevel, "Device Manager", "LMS SDK - KMS Client")
+	kmsHttpCli, err := sdk.BuildHTTPClient(conf.KMSClient.HTTPClient, lKMSClient)
+	if err != nil {
+		log.Fatalf("could not build HTTP KMS Client: %s", err)
+	}
+
+	kmsSDK := sdk.NewHttpKMSClient(
+		sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, models.DeviceManagerSource),
+		fmt.Sprintf("%s://%s:%d%s", conf.KMSClient.Protocol, conf.KMSClient.Hostname, conf.KMSClient.Port, conf.KMSClient.BasePath),
+	)
+
+	_, _, _, err = lamassu.AssembleCAServiceWithHTTPServer(*conf, kmsSDK, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,

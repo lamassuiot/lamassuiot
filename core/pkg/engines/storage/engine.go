@@ -6,15 +6,15 @@ import (
 )
 
 type CommonStorageEngine struct {
-	CA                   CACertificatesRepo
-	CACertificateRequest CACertificateRequestRepo
-	Cert                 CertificatesRepo
-	IssuanceProfile      IssuanceProfileRepo
-	Device               DeviceManagerRepo
-	DMS                  DMSRepo
-	VA                   VARepo
-	Events               EventRepository
-	Subscriptions        SubscriptionsRepository
+	CA              CACertificatesRepo
+	Cert            CertificatesRepo
+	IssuanceProfile IssuanceProfileRepo
+	Device          DeviceManagerRepo
+	DMS             DMSRepo
+	VA              VARepo
+	Events          EventRepository
+	Subscriptions   SubscriptionsRepository
+	KMS             KMSKeysRepo
 }
 
 type StorageEngine interface {
@@ -22,12 +22,12 @@ type StorageEngine interface {
 	GetCAStorage() (CACertificatesRepo, error)
 	GetCertStorage() (CertificatesRepo, error)
 	GetIssuanceProfileStorage() (IssuanceProfileRepo, error)
-	GetCACertificateRequestStorage() (CACertificateRequestRepo, error)
 	GetDeviceStorage() (DeviceManagerRepo, error)
 	GetVARoleStorage() (VARepo, error)
 	GetDMSStorage() (DMSRepo, error)
 	GetEnventsStorage() (EventRepository, error)
 	GetSubscriptionsStorage() (SubscriptionsRepository, error)
+	GetKMSStorage() (KMSKeysRepo, error)
 }
 
 // map of available storage engines with config.StorageProvider as key and function to build the storage engine as value
