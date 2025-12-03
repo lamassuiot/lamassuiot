@@ -110,6 +110,24 @@ func (cli *deviceManagerClient) UpdateDeviceMetadata(ctx context.Context, input 
 	return response, nil
 }
 
+func (cli *deviceManagerClient) UpdateWFXStatus(ctx context.Context, input services.UpdateWFXStatusInput) (*models.Device, error) {
+	response, err := Put[*models.Device](ctx, cli.httpClient, cli.baseUrl+"/v1/devices/"+input.ID+"/wfxstatus", resources.UpdateWFXStatusBody{
+		WFXStatus: input.WFXStatus,
+	}, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+	}, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func (cli *deviceManagerClient) DeviceEventUpdate(ctx context.Context, input services.UpdateEventInput) (*models.Device, error) {
 	var eventData map[string]interface{}
 

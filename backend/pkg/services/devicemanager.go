@@ -273,7 +273,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context,
 		return nil, err
 	}
 
-	device.Metadata = *updatedMetadata
+		device.Metadata = *updatedMetadata
 
 	lFunc.Debugf("updating %s device metadata", input.ID)
 	return svc.devicesStorage.Update(ctx, device)
@@ -366,7 +366,6 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 
 	return device, nil
 }
-
 func (svc DeviceManagerServiceBackend) DeleteDevice(ctx context.Context, input services.DeleteDeviceInput) error {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -423,15 +422,14 @@ func (svc DeviceManagerServiceBackend) DeviceEventUpdate(ctx context.Context, in
 		lFunc.Warnf("device %s not found", input.ID)
 		return nil, errs.ErrDeviceNotFound
 	}
-
 	if device.Status == models.DeviceDecommissioned {
 		lFunc.Warnf("device %s is decommissioned", input.ID)
 		return device, nil
 	}
 	if device.Status != models.DeviceActive {
-		lFunc.Warnf("device %s is not active, WFX status update", input.ID)
+		lFunc.Warnf("device %s is not active, event update", input.ID)
 	}
-	
+
 
 	now := time.Now()
 	device.Events[now] = models.DeviceEvent{
@@ -439,8 +437,59 @@ func (svc DeviceManagerServiceBackend) DeviceEventUpdate(ctx context.Context, in
 		EventDescriptions: input.EventData, // keep the JSON string
 	}
 
-	lFunc.Debugf("updating device %s event with data: %s", input.ID, input.EventData)
+	 // Summarize large payloads to avoid printing big JSON blobs in logs
+	 summary := input.EventData
+	 if len(summary) > 256 {
+		 summary = summary[:256] + "..."
+	 }
+	 lFunc.Debugf("updating device %s event with data: %s", input.ID, summary)
+
+	// Persist
+	 return svc.devicesStorage.Update(ctx, device)
+}
+
+func (svc DeviceManagerServiceBackend) UpdateWFXStatus(
+	ctx context.Context,
+	input services.UpdateWFXStatusInput,
+) (*models.Device, error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+
+	// Validate input
+	if err := deviceValidate.Struct(input); err != nil {
+		lFunc.Errorf("struct validation error: %s", err)
+		return nil, errs.ErrValidateBadRequest
+	}
+
+	// Check device existence
+	lFunc.Debugf("checking if device '%s' exists", input.ID)
+	exists, device, err := svc.devicesStorage.SelectExists(ctx, input.ID)
+	if err != nil {
+		lFunc.Errorf("error checking if device '%s' exists: %s", input.ID, err)
+		return nil, err
+	}
+	if !exists {
+		lFunc.Warnf("device %s not found", input.ID)
+		return nil, errs.ErrDeviceNotFound
+	}
+
+	if device.Status == models.DeviceDecommissioned {
+		lFunc.Warnf("device %s is decommissioned", input.ID)
+		return device, nil
+	}
+	if device.Status != models.DeviceActive {
+		lFunc.Warnf("device %s is not active, skipping WFX status update", input.ID)
+		return device, nil
+	}
+
+	// store WFXStatus in metadata as a fallback location
+	if device.Metadata == nil {
+		device.Metadata = map[string]any{}
+	}
+	device.Metadata["wfx_status"] = input.WFXStatus
+
+	lFunc.Debugf("updating device %s WFX status to %s", input.ID, input.WFXStatus)
 
 	// Persist
 	return svc.devicesStorage.Update(ctx, device)
 }
+ 
