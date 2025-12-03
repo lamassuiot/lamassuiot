@@ -1,16 +1,22 @@
-package assemblers
+package tests
 
 import (
+	"context"
 	"crypto/elliptic"
 	"crypto/tls"
 	"fmt"
+	"log"
+	"net"
 	"net/http"
 	"os"
+	"regexp"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
@@ -70,7 +76,7 @@ func (b TestServiceBuilder) WithCascadeDelete(allow bool) TestServiceBuilder {
 func (b TestServiceBuilder) Build(t *testing.T) (*TestServer, error) {
 	var err error
 	eventBusConf := &TestEventBusConfig{
-		config: cconfig.EventBusEngine{
+		Config: cconfig.EventBusEngine{
 			Enabled: false,
 		},
 	}
@@ -130,19 +136,19 @@ const (
 )
 
 type TestEventBusConfig struct {
-	config     cconfig.EventBusEngine
+	Config     cconfig.EventBusEngine
 	BeforeEach func() error
 	AfterSuite func()
 }
 
 type TestStorageEngineConfig struct {
-	config     cconfig.PluggableStorageEngine
+	Config     cconfig.PluggableStorageEngine
 	BeforeEach func() error
 	AfterSuite func()
 }
 
 type TestCryptoEngineConfig struct {
-	config     config.CryptoEngines
+	Config     config.CryptoEngines
 	BeforeEach func() error
 	AfterSuite func()
 }
@@ -215,7 +221,7 @@ func PrepareRabbitMQForTest() (*TestEventBusConfig, error) {
 	}
 
 	return &TestEventBusConfig{
-		config:     backend.Config.(cconfig.EventBusEngine),
+		Config:     backend.Config.(cconfig.EventBusEngine),
 		AfterSuite: backend.AfterSuite,
 		BeforeEach: backend.BeforeEach,
 	}, nil
@@ -232,7 +238,7 @@ func PreparePostgresForTest(dbs []string) (*TestStorageEngineConfig, error) {
 	}
 
 	return &TestStorageEngineConfig{
-		config:     backend.Config.(cconfig.PluggableStorageEngine),
+		Config:     backend.Config.(cconfig.PluggableStorageEngine),
 		BeforeEach: backend.BeforeEach,
 		AfterSuite: backend.AfterSuite,
 	}, nil
@@ -299,16 +305,16 @@ func PrepareCryptoEnginesForTest(engines []CryptoEngine) *TestCryptoEngineConfig
 	}
 
 	return &TestCryptoEngineConfig{
-		config:     cryptoEngineConf,
+		Config:     cryptoEngineConf,
 		BeforeEach: beforeEach,
 		AfterSuite: afterSuite,
 	}
 }
 
 func BuildKMSTestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *TestCryptoEngineConfig, eventBus *TestEventBusConfig, monitor bool, allowCascadeDelete bool) (*KMSTestServer, error) {
-	storageEngine.config.LogLevel = cconfig.Trace
+	storageEngine.Config.LogLevel = cconfig.Trace
 
-	svc, port, err := AssembleKMSServiceWithHTTPServer(config.KMSConfig{
+	svc, port, err := assemblers.AssembleKMSServiceWithHTTPServer(config.KMSConfig{
 		Logs: cconfig.Logging{
 			Level: cconfig.Debug,
 		},
@@ -317,9 +323,9 @@ func BuildKMSTestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *T
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},
-		CryptoEngineConfig: cryptoEngines.config,
-		PublisherEventBus:  eventBus.config,
-		Storage:            storageEngine.config,
+		CryptoEngineConfig: cryptoEngines.Config,
+		PublisherEventBus:  eventBus.Config,
+		Storage:            storageEngine.Config,
 	}, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
@@ -341,9 +347,9 @@ func BuildKMSTestServer(storageEngine *TestStorageEngineConfig, cryptoEngines *T
 }
 
 func BuildCATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, monitor bool, allowCascadeDelete bool, kmsTestServer KMSTestServer) (*CATestServer, error) {
-	storageEngine.config.LogLevel = cconfig.Trace
+	storageEngine.Config.LogLevel = cconfig.Trace
 
-	svc, scheduler, port, err := AssembleCAServiceWithHTTPServer(config.CAConfig{
+	svc, scheduler, port, err := assemblers.AssembleCAServiceWithHTTPServer(config.CAConfig{
 		Logs: cconfig.Logging{
 			Level: cconfig.Debug,
 		},
@@ -352,8 +358,8 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},
-		PublisherEventBus: eventBus.config,
-		Storage:           storageEngine.config,
+		PublisherEventBus: eventBus.Config,
+		Storage:           storageEngine.Config,
 		CertificateMonitoringJob: cconfig.MonitoringJob{
 			Enabled:   monitor,
 			Frequency: "1s",
@@ -385,7 +391,7 @@ func BuildCATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEve
 }
 
 func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer) (*DeviceManagerTestServer, error) {
-	svc, port, err := AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
+	svc, port, err := assemblers.AssembleDeviceManagerServiceWithHTTPServer(config.DeviceManagerConfig{
 		Logs: cconfig.Logging{
 			Level: cconfig.Info,
 		},
@@ -394,10 +400,10 @@ func BuildDeviceManagerServiceTestServer(storageEngine *TestStorageEngineConfig,
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},
-		PublisherEventBus:     eventBus.config,
-		SubscriberDLQEventBus: getDlqEventBusConfig(eventBus.config),
-		SubscriberEventBus:    eventBus.config,
-		Storage:               storageEngine.config,
+		PublisherEventBus:     eventBus.Config,
+		SubscriberDLQEventBus: getDlqEventBusConfig(eventBus.Config),
+		SubscriberEventBus:    eventBus.Config,
+		Storage:               storageEngine.Config,
 	}, caTestServer.HttpCASDK, models.APIServiceInfo{
 		Version:   "test",
 		BuildSHA:  "-",
@@ -438,7 +444,7 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 		return nil, fmt.Errorf("could not save downstream cert. Exiting: %s", err)
 	}
 
-	svc, port, err := AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
+	svc, port, err := assemblers.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
 		Logs: cconfig.Logging{
 			Level: cconfig.Info,
 		},
@@ -455,8 +461,8 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 				},
 			},
 		},
-		PublisherEventBus:         eventBus.config,
-		Storage:                   storageEngine.config,
+		PublisherEventBus:         eventBus.Config,
+		Storage:                   storageEngine.Config,
 		DownstreamCertificateFile: downstreamCertPath,
 	},
 		caTestServer.HttpCASDK,
@@ -490,19 +496,19 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 }
 
 func BuildVATestServer(storageEngine *TestStorageEngineConfig, eventBus *TestEventBusConfig, caTestServer *CATestServer, kmsTestServer *KMSTestServer, monitor bool) (*VATestServer, error) {
-	crlSvc, _, port, err := AssembleVAServiceWithHTTPServer(config.VAconfig{
+	crlSvc, _, port, err := assemblers.AssembleVAServiceWithHTTPServer(config.VAconfig{
 		Logs: cconfig.Logging{
 			Level: cconfig.Info,
 		},
-		Storage: storageEngine.config,
+		Storage: storageEngine.Config,
 		Server: cconfig.HttpServer{
 			LogLevel:           cconfig.Debug,
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},
-		SubscriberEventBus:    eventBus.config,
-		SubscriberDLQEventBus: getDlqEventBusConfig(eventBus.config),
-		PublisherEventBus:     eventBus.config,
+		SubscriberEventBus:    eventBus.Config,
+		SubscriberDLQEventBus: getDlqEventBusConfig(eventBus.Config),
+		PublisherEventBus:     eventBus.Config,
 		CAClient:              config.CAClient{},
 		CRLMonitoringJob: cconfig.MonitoringJob{
 			Enabled:   monitor,
@@ -542,7 +548,7 @@ func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *Tes
 	if smptConfig == nil {
 		smptConfig = &config.SMTPServer{}
 	}
-	svc, port, err := AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
+	svc, port, err := assemblers.AssembleAlertsServiceWithHTTPServer(config.AlertsConfig{
 		Logs: cconfig.Logging{
 			Level: cconfig.Info,
 		},
@@ -551,9 +557,9 @@ func BuildAlertsTestServer(storageEngine *TestStorageEngineConfig, eventBus *Tes
 			HealthCheckLogging: false,
 			Protocol:           cconfig.HTTP,
 		},
-		SubscriberEventBus:    eventBus.config,
-		SubscriberDLQEventBus: getDlqEventBusConfig(eventBus.config),
-		Storage:               storageEngine.config,
+		SubscriberEventBus:    eventBus.Config,
+		SubscriberDLQEventBus: getDlqEventBusConfig(eventBus.Config),
+		Storage:               storageEngine.Config,
 		SMTPConfig:            *smptConfig,
 	}, models.APIServiceInfo{
 		Version:   "test",
@@ -765,4 +771,45 @@ func deepCopy(src map[string]interface{}) map[string]interface{} {
 		dst[k] = v
 	}
 	return dst
+}
+
+func StartWebhookServer() (*gin.Engine, string, func(), error) {
+	// Create a custom HTTP handler
+	router := gin.Default()
+
+	// Listen on a random free port
+	listener, err := net.Listen("tcp", ":0") // :0 to choose a random port
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("failed to listen on a random port: %w", err)
+	}
+
+	addr := listener.Addr().String()
+	re := regexp.MustCompile(`:(\d+)$`)
+	match := re.FindStringSubmatch(addr)
+	var port string
+	if len(match) > 1 {
+		port = ":" + match[1] // Capture group 1
+	}
+
+	url := fmt.Sprintf("http://localhost%s", port)
+
+	// Create an HTTP server
+	server := &http.Server{
+		Handler: router,
+	}
+
+	go func() {
+		if err := server.Serve(listener); err != nil {
+			log.Printf("Server error: %v", err)
+		}
+	}()
+
+	shutdown := func() {
+		log.Println("Shutting down the server...")
+		if err := server.Shutdown(context.Background()); err != nil {
+			log.Printf("Server forced to shutdown: %v", err)
+		}
+	}
+
+	return router, url, shutdown, nil
 }

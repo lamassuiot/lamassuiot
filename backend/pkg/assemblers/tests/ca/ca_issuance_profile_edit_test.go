@@ -1,4 +1,4 @@
-package assemblers
+package ca
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/assemblers/tests"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
@@ -15,7 +16,7 @@ import (
 )
 
 func TestEditCAProfiles(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -312,7 +313,7 @@ func TestEditCAProfiles(t *testing.T) {
 }
 
 func TestEditIssuanceProfilesIntegration(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
@@ -664,7 +665,7 @@ func TestEditIssuanceProfilesIntegration(t *testing.T) {
 }
 
 func TestEditCAProfilesWithCertificateImpacts(t *testing.T) {
-	serverTest, err := TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
+	serverTest, err := tests.TestServiceBuilder{}.WithDatabase("ca", "kms").Build(t)
 	if err != nil {
 		t.Fatalf("could not create CA test server: %s", err)
 	}
