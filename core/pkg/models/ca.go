@@ -102,6 +102,13 @@ const (
 	DMSAttachedToDeviceKey = "lamassu.io/ra/attached-to"
 )
 
+const (
+	CAMetadataReissuedAsKey    = "lamassu.io/ca/reissued-as"
+	CAMetadataReissuedAtKey    = "lamassu.io/ca/reissued-at"
+	CAMetadataReissuedFromKey  = "lamassu.io/ca/reissued-from"
+	CAMetadataReissueReasonKey = "lamassu.io/ca/reissue-reason"
+)
+
 type CAAttachedToDevice struct {
 	AuthorizedBy struct {
 		RAID string `json:"ra_id"`

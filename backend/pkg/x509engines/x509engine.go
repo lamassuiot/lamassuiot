@@ -166,7 +166,7 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 	if profile.HonorExtensions {
 		exts := []pkix.Extension{}
 		allowedExtOIDs := []asn1.ObjectIdentifier{
-			{2, 5, 29, 17}, //SAN OID
+			chelpers.OidExtensionSubjectAltName, //SAN OID
 		}
 
 		for _, csrExt := range csr.Extensions {
@@ -264,6 +264,17 @@ func (engine X509Engine) GenerateCertificateRequest(ctx context.Context, csrSign
 
 	return csr, nil
 }
+
+/*
+func (engine X509Engine) GetCertificateSigner(ctx context.Context, caCertificate *x509.Certificate) (crypto.Signer, error) {
+	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(caCertificate.PublicKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return engine.cryptoEngine.GetPrivateKeyByID(keyID)
+}
+*/
 
 func (engine X509Engine) GetDefaultCAIssuanceProfile(ctx context.Context, validity models.Validity) models.IssuanceProfile {
 	return models.IssuanceProfile{

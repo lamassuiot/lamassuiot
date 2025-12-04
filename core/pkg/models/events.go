@@ -25,6 +25,7 @@ const (
 	EventUpdateCAProfileKey     EventType = "ca.profile.update"
 	EventUpdateCAStatusKey      EventType = "ca.status.update"
 	EventUpdateCAMetadataKey    EventType = "ca.metadata.update"
+	EventReissueCAKey           EventType = "ca.reissue"
 	EventSignCertificateKey     EventType = "ca.sign.certificate"
 	EventSignatureSignKey       EventType = "ca.sign.signature"
 	EventDeleteCAKey            EventType = "ca.delete"
