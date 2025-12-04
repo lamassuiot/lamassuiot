@@ -245,8 +245,6 @@ func TestCAEventPublisher(t *testing.T) {
 					})
 			},
 		},
-
-
 	}
 
 	for _, tc := range testcases {
