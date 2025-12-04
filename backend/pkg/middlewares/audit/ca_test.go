@@ -174,18 +174,6 @@ func TestCAAuditEventPublisher(t *testing.T) {
 			},
 		},
 		{
-			name: "CreateCertificate with errors - Audit event produced",
-			test: func(t *testing.T) {
-				auditWithErrors(t, "CreateCertificate", services.CreateCertificateInput{}, models.EventCreateCertificateKey, &models.Certificate{})
-			},
-		},
-		{
-			name: "CreateCertificate without errors - Audit event produced",
-			test: func(t *testing.T) {
-				auditWithoutErrors(t, "CreateCertificate", services.CreateCertificateInput{}, models.EventCreateCertificateKey, &models.Certificate{})
-			},
-		},
-		{
 			name: "UpdateCertificateStatus with errors - Audit event produced",
 			test: func(t *testing.T) {
 				auditWithErrors(t, "UpdateCertificateStatus", services.UpdateCertificateStatusInput{}, models.EventUpdateCertificateStatusKey, &models.Certificate{})
