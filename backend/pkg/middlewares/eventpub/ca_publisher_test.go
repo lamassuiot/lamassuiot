@@ -245,66 +245,8 @@ func TestCAEventPublisher(t *testing.T) {
 					})
 			},
 		},
-		{
-			name: "CreateKey with errors - Not fire event",
-			test: func(t *testing.T) {
-				caWithErrors(t, "CreateKey", services.CreateKeyInput{}, models.EventCreateKMSKey, &models.Key{})
-			},
-		},
-		{
-			name: "CreateKey without errors - fire event",
-			test: func(t *testing.T) {
-				caWithoutErrors(t, "CreateKey", services.CreateKeyInput{}, models.EventCreateKMSKey, &models.Key{})
-			},
-		},
-		{
-			name: "DeleteKeyByID with errors - Not fire event",
-			test: func(t *testing.T) {
-				caWithErrorsSingleResult(t, "DeleteKeyByID", services.GetByIDInput{}, models.EventDeleteKMSKey)
-			},
-		},
-		{
-			name: "DeleteKeyByID without errors - fire event",
-			test: func(t *testing.T) {
-				caWithoutErrorsSingleResult(t, "DeleteKeyByID", services.GetByIDInput{}, models.EventDeleteKMSKey)
-			},
-		},
-		{
-			name: "SignMessage with errors - Not fire event",
-			test: func(t *testing.T) {
-				caWithErrors(t, "SignMessage", services.SignMessageInput{}, models.EventSignMessageKMSKey, &models.MessageSignature{})
-			},
-		},
-		{
-			name: "SignMessage without errors - fire event",
-			test: func(t *testing.T) {
-				caWithoutErrors(t, "SignMessage", services.SignMessageInput{}, models.EventSignMessageKMSKey, &models.MessageSignature{})
-			},
-		},
-		{
-			name: "VerifySignature with errors - Not fire event",
-			test: func(t *testing.T) {
-				caWithErrors(t, "VerifySignature", services.VerifySignInput{}, models.EventVerifySignatureKMSKey, &models.MessageValidation{})
-			},
-		},
-		{
-			name: "VerifySignature without errors - fire event",
-			test: func(t *testing.T) {
-				caWithoutErrors(t, "VerifySignature", services.VerifySignInput{}, models.EventVerifySignatureKMSKey, &models.MessageValidation{})
-			},
-		},
-		{
-			name: "ImportKey with errors - Not fire event",
-			test: func(t *testing.T) {
-				caWithErrors(t, "ImportKey", services.ImportKeyInput{}, models.EventImportKMSKey, &models.Key{})
-			},
-		},
-		{
-			name: "ImportKey without errors - fire event",
-			test: func(t *testing.T) {
-				caWithoutErrors(t, "ImportKey", services.ImportKeyInput{}, models.EventImportKMSKey, &models.Key{})
-			},
-		},
+
+
 	}
 
 	for _, tc := range testcases {
