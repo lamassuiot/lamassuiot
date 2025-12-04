@@ -1145,7 +1145,7 @@ func (svc *CAServiceBackend) deleteCAPrivateKey(ctx context.Context, ca *models.
 func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.ReissueCAInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
-	err := validate.Struct(input)
+	err := caValidator.Struct(input)
 	if err != nil {
 		lFunc.Errorf("ReissueCAInput struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
@@ -1170,19 +1170,8 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 
 	lFunc.Debugf("reissuing CA certificate for %s", input.CAID)
 
-	// Get the crypto engine
-	engine := svc.cryptoEngines[ca.Certificate.EngineID]
-	if engine == nil {
-		lFunc.Errorf("crypto engine %s not found for CA %s", ca.Certificate.EngineID, input.CAID)
-		return nil, errs.ErrCryptoEngineNotFound
-	}
-
-	// Get the existing key pair using the SubjectKeyID
-	signer, err := (*engine).GetPrivateKeyByID(ca.Certificate.SubjectKeyID)
-	if err != nil {
-		lFunc.Errorf("could not get private key for CA %s: %s", input.CAID, err)
-		return nil, err
-	}
+	//Create a Certificate Signer for the existing CA
+	signer := NewCertificateSigner(ctx, &ca.Certificate, svc.kmsService)
 
 	// Calculate validity duration from current certificate
 	currentCert := (*x509.Certificate)(ca.Certificate.Certificate)
