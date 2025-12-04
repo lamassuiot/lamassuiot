@@ -1495,16 +1495,6 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	return &cert, nil
 }
 
-// Generate a new Key Pair and Sign a CSR to create a new Certificate. The Keys are stored and can later be used to sign other material.
-func (svc *CAServiceBackend) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (*models.Certificate, error) {
-	// Generate a new Key Pair
-
-	// use svc.SignCertificate to sign the
-
-	//update the certificate with the KeyID and EngineID
-	return nil, fmt.Errorf("TODO")
-}
-
 func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (*models.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 

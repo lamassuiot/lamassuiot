@@ -28,7 +28,6 @@ type CAService interface {
 	SignatureVerify(ctx context.Context, input SignatureVerifyInput) (bool, error)
 
 	SignCertificate(ctx context.Context, input SignCertificateInput) (*models.Certificate, error)
-	CreateCertificate(ctx context.Context, input CreateCertificateInput) (*models.Certificate, error)
 	ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error)
 
 	GetCertificateBySerialNumber(ctx context.Context, input GetCertificatesBySerialNumberInput) (*models.Certificate, error)
