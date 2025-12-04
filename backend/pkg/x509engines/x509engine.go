@@ -265,6 +265,7 @@ func (engine X509Engine) GenerateCertificateRequest(ctx context.Context, csrSign
 	return csr, nil
 }
 
+/*
 func (engine X509Engine) GetCertificateSigner(ctx context.Context, caCertificate *x509.Certificate) (crypto.Signer, error) {
 	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(caCertificate.PublicKey)
 	if err != nil {
@@ -273,6 +274,7 @@ func (engine X509Engine) GetCertificateSigner(ctx context.Context, caCertificate
 
 	return engine.cryptoEngine.GetPrivateKeyByID(keyID)
 }
+*/
 
 func (engine X509Engine) GetDefaultCAIssuanceProfile(ctx context.Context, validity models.Validity) models.IssuanceProfile {
 	return models.IssuanceProfile{

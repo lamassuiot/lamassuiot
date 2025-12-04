@@ -15,8 +15,6 @@ import (
 )
 
 func TestGenerateCertificateRequestFromCertificate_SAN(t *testing.T) {
-	tempDir, _, _ := setup(t)
-	defer teardown(tempDir)
 
 	// Create a certificate with SANs
 	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
