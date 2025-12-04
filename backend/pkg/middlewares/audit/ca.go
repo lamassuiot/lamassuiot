@@ -109,14 +109,6 @@ func (mw CAAuditEventPublisher) SignCertificate(ctx context.Context, input servi
 	return mw.next.SignCertificate(ctx, input)
 }
 
-func (mw CAAuditEventPublisher) CreateCertificate(ctx context.Context, input services.CreateCertificateInput) (output *models.Certificate, err error) {
-	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventCreateCertificateKey, input, err, output)
-	}()
-
-	return mw.next.CreateCertificate(ctx, input)
-}
-
 func (mw CAAuditEventPublisher) ImportCertificate(ctx context.Context, input services.ImportCertificateInput) (output *models.Certificate, err error) {
 	defer func() {
 		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventImportCACertificateKey, input, err, output)
