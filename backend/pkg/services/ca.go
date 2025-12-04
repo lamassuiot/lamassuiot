@@ -1157,15 +1157,13 @@ func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.Reiss
 		return nil, err
 	}
 
-	// Validate CA status - must be ACTIVE
+	// Validate CA status
 	if ca.Certificate.Status == models.StatusRevoked {
-		lFunc.Errorf("CA %s is revoked and cannot be reissued", input.CAID)
-		return nil, errs.ErrCAAlreadyRevoked
-	}
-
-	if ca.Certificate.Status == models.StatusExpired {
-		lFunc.Errorf("CA %s is expired and cannot be reissued. Use renewal feature instead", input.CAID)
-		return nil, errs.ErrCAExpired
+		if int(ca.Certificate.RevocationReason) != ocsp.KeyCompromise && int(ca.Certificate.RevocationReason) != ocsp.CACompromise {
+			lFunc.Errorf("CA %s is revoked with reason %s and cannot be reissued", input.CAID, ca.Certificate.RevocationReason.String())
+			return nil, errs.ErrCAAlreadyRevoked
+		}
+		lFunc.Warnf("CA %s is revoked with reason %s and reissued is allowed", input.CAID, ca.Certificate.RevocationReason.String())
 	}
 
 	lFunc.Debugf("reissuing CA certificate for %s", input.CAID)

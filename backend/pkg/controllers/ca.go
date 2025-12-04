@@ -478,18 +478,6 @@ func (r *caHttpRoutes) UpdateCAProfile(ctx *gin.Context) {
 	ctx.JSON(200, ca)
 }
 
-// @Summary Reissue CA Certificate
-// @Description Reissues a CA certificate with the same configuration but new serial number and recomputed AKI/SKI. The old certificate remains active with linking metadata.
-// @Accept json
-// @Produce json
-// @Security OAuth2Password
-// @Param id path string true "CA ID"
-// @Param body body resources.ReissueCACertificateBody false "Reissuance configuration (optional profile)"
-// @Success 200 {object} models.CACertificate
-// @Failure 400 {string} string "CA is revoked or validation error"
-// @Failure 404 {string} string "CA not found"
-// @Failure 500
-// @Router /cas/{id}/reissue [post]
 func (r *caHttpRoutes) ReissueCA(ctx *gin.Context) {
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
