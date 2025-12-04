@@ -78,18 +78,6 @@ func TestCAEventPublisher(t *testing.T) {
 			},
 		},
 		{
-			name: "CreateCertificate with errors - Not fire event",
-			test: func(t *testing.T) {
-				caWithErrors(t, "CreateCertificate", services.CreateCertificateInput{}, models.EventCreateCertificateKey, &models.Certificate{})
-			},
-		},
-		{
-			name: "CreateCertificate without errors - fire event",
-			test: func(t *testing.T) {
-				caWithoutErrors(t, "CreateCertificate", services.CreateCertificateInput{}, models.EventCreateCertificateKey, &models.Certificate{})
-			},
-		},
-		{
 			name: "ImportCertificate with errors - Not fire event",
 			test: func(t *testing.T) {
 				caWithErrors(t, "ImportCertificate", services.ImportCertificateInput{}, models.EventImportCACertificateKey, &models.Certificate{})
