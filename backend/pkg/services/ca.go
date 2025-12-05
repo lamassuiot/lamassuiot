@@ -216,28 +216,6 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			}
 		}
 
-		key, err = svc.kmsService.ImportKey(ctx, services.ImportKeyInput{
-			PrivateKey: input.Key,
-		})
-		if err != nil {
-			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
-			return nil, fmt.Errorf("could not import key: %w", err)
-		}
-
-		if key.KeyID != skid {
-			key, err = svc.kmsService.UpdateKeyMetadata(ctx, services.UpdateKeyMetadataInput{
-				ID: key.KeyID,
-				Patches: chelpers.NewPatchBuilder().Add(chelpers.JSONPointerBuilder(models.KMSBindResourceKey, "-"), models.KMSBindResource{
-					ResourceType: "certificate",
-					ResourceID:   helpers.SerialNumberToHexString(caCert.SerialNumber),
-				}).Build(),
-			})
-			if err != nil {
-				lFunc.Errorf("could not rename imported key to match SKID %s: %s", skid, err)
-				return nil, fmt.Errorf("could not rename imported key: %w", err)
-			}
-		}
-
 		if err != nil {
 			lFunc.Errorf("could not import CA %s private key: %s", caCertSN, err)
 			return nil, fmt.Errorf("could not import key: %w", err)
