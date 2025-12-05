@@ -38,7 +38,7 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 		return
 	}
 
-	ca, err := r.svc.CreateCA(ctx, services.CreateCAInput{
+	ca, err := r.svc.CreateCA(ctx.Request.Context(), services.CreateCAInput{
 		ParentID:     requestBody.ParentID,
 		ID:           requestBody.ID,
 		KeyMetadata:  requestBody.KeyMetadata,
@@ -71,7 +71,7 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetStats(ctx *gin.Context) {
-	stats, err := r.svc.GetStats(ctx)
+	stats, err := r.svc.GetStats(ctx.Request.Context())
 	if err != nil {
 		switch err {
 		default:
@@ -95,7 +95,7 @@ func (r *caHttpRoutes) GetStatsByCAID(ctx *gin.Context) {
 		return
 	}
 
-	stats, err := r.svc.GetStatsByCAID(ctx, services.GetStatsByCAIDInput{
+	stats, err := r.svc.GetStatsByCAID(ctx.Request.Context(), services.GetStatsByCAIDInput{
 		CAID: params.ID,
 	})
 
@@ -143,7 +143,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		}
 	}
 
-	ca, err := r.svc.ImportCA(ctx, services.ImportCAInput{
+	ca, err := r.svc.ImportCA(ctx.Request.Context(), services.ImportCAInput{
 		ID:            requestBody.ID,
 		ProfileID:     requestBody.ProfileID,
 		CACertificate: requestBody.CACertificate,
@@ -202,7 +202,7 @@ func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 		return
 	}
 
-	ca, err := r.svc.UpdateCAMetadata(ctx, services.UpdateCAMetadataInput{
+	ca, err := r.svc.UpdateCAMetadata(ctx.Request.Context(), services.UpdateCAMetadataInput{
 		CAID:    params.ID,
 		Patches: requestBody.Patches,
 	})
@@ -236,7 +236,7 @@ func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 
 	cas := []models.CACertificate{}
 
-	nextBookmark, err := r.svc.GetCAsByCommonName(ctx, services.GetCAsByCommonNameInput{
+	nextBookmark, err := r.svc.GetCAsByCommonName(ctx.Request.Context(), services.GetCAsByCommonNameInput{
 		CommonName:      params.CommonName,
 		QueryParameters: queryParams,
 		ExhaustiveRun:   false,
@@ -275,7 +275,7 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 
 	cas := []models.CACertificate{}
 
-	nextBookmark, err := r.svc.GetCAs(ctx, services.GetCAsInput{
+	nextBookmark, err := r.svc.GetCAs(ctx.Request.Context(), services.GetCAsInput{
 		QueryParameters: queryParams,
 		ExhaustiveRun:   false,
 		ApplyFunc: func(ca models.CACertificate) {
@@ -321,7 +321,7 @@ func (r *caHttpRoutes) GetCAByID(ctx *gin.Context) {
 		return
 	}
 
-	ca, err := r.svc.GetCAByID(ctx, services.GetCAByIDInput{
+	ca, err := r.svc.GetCAByID(ctx.Request.Context(), services.GetCAByIDInput{
 		CAID: params.ID,
 	})
 
@@ -368,7 +368,7 @@ func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 	if v, ok := ctx.GetQuery("cascade_delete"); ok && (v == "true" || v == "1") {
 		deleteCascade = true
 	}
-	err := r.svc.DeleteCA(ctx, services.DeleteCAInput{
+	err := r.svc.DeleteCA(ctx.Request.Context(), services.DeleteCAInput{
 		CAID:          params.CAId,
 		CascadeDelete: deleteCascade,
 	})
@@ -410,7 +410,7 @@ func (r *caHttpRoutes) UpdateCAStatus(ctx *gin.Context) {
 		return
 	}
 
-	ca, err := r.svc.UpdateCAStatus(ctx, services.UpdateCAStatusInput{
+	ca, err := r.svc.UpdateCAStatus(ctx.Request.Context(), services.UpdateCAStatusInput{
 		CAID:             params.ID,
 		Status:           requestBody.NewStatus,
 		RevocationReason: requestBody.RevocationReason,
@@ -453,7 +453,7 @@ func (r *caHttpRoutes) UpdateCAProfile(ctx *gin.Context) {
 		return
 	}
 
-	ca, err := r.svc.UpdateCAProfile(ctx, services.UpdateCAProfileInput{
+	ca, err := r.svc.UpdateCAProfile(ctx.Request.Context(), services.UpdateCAProfileInput{
 		CAID:      params.ID,
 		ProfileID: requestBody.ProfileID,
 	})
@@ -497,7 +497,7 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 		return
 	}
 
-	cert, err := r.svc.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
+	cert, err := r.svc.GetCertificateBySerialNumber(ctx.Request.Context(), services.GetCertificatesBySerialNumberInput{
 		SerialNumber: params.SerialNumber,
 	})
 
@@ -530,7 +530,7 @@ func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
 
 	certs := []models.Certificate{}
 
-	nextBookmark, err := r.svc.GetCertificates(ctx, services.GetCertificatesInput{
+	nextBookmark, err := r.svc.GetCertificates(ctx.Request.Context(), services.GetCertificatesInput{
 		ListInput: resources.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
@@ -568,7 +568,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 
 	certs := []models.Certificate{}
 
-	nextBookmark, err := r.svc.GetCertificatesByExpirationDate(ctx, services.GetCertificatesByExpirationDateInput{
+	nextBookmark, err := r.svc.GetCertificatesByExpirationDate(ctx.Request.Context(), services.GetCertificatesByExpirationDateInput{
 		ExpiresAfter:  expirationQueryParams.ExpiresAfter,
 		ExpiresBefore: expirationQueryParams.ExpiresBefore,
 		ListInput: resources.ListInput[models.Certificate]{
@@ -622,7 +622,7 @@ func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
 
 	certs := []models.Certificate{}
 
-	nextBookmark, err := r.svc.GetCertificatesByCA(ctx, services.GetCertificatesByCAInput{
+	nextBookmark, err := r.svc.GetCertificatesByCA(ctx.Request.Context(), services.GetCertificatesByCAInput{
 		CAID: params.ID,
 		ListInput: resources.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
@@ -681,7 +681,7 @@ func (r *caHttpRoutes) SignCertificate(ctx *gin.Context) {
 		return
 	}
 
-	ca, err := r.svc.SignCertificate(ctx, services.SignCertificateInput{
+	ca, err := r.svc.SignCertificate(ctx.Request.Context(), services.SignCertificateInput{
 		CAID:              params.ID,
 		CertRequest:       requestBody.CertRequest,
 		IssuanceProfile:   requestBody.Profile,
@@ -728,7 +728,7 @@ func (r *caHttpRoutes) SignatureSign(ctx *gin.Context) {
 		return
 	}
 
-	signature, err := r.svc.SignatureSign(ctx, services.SignatureSignInput{
+	signature, err := r.svc.SignatureSign(ctx.Request.Context(), services.SignatureSignInput{
 		CAID:             params.ID,
 		Message:          msgDecoded,
 		MessageType:      requestBody.MessageType,
@@ -779,7 +779,7 @@ func (r *caHttpRoutes) SignatureVerify(ctx *gin.Context) {
 		return
 	}
 
-	valid, err := r.svc.SignatureVerify(ctx, services.SignatureVerifyInput{
+	valid, err := r.svc.SignatureVerify(ctx.Request.Context(), services.SignatureVerifyInput{
 		Signature:        signDecoded,
 		CAID:             params.ID,
 		Message:          msgDecoded,
@@ -818,7 +818,7 @@ func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 
 	certs := []models.Certificate{}
 
-	nextBookmark, err := r.svc.GetCertificatesByCaAndStatus(ctx, services.GetCertificatesByCaAndStatusInput{
+	nextBookmark, err := r.svc.GetCertificatesByCaAndStatus(ctx.Request.Context(), services.GetCertificatesByCaAndStatusInput{
 		CAID:   params.CAID,
 		Status: models.CertificateStatus(params.Status),
 		ListInput: resources.ListInput[models.Certificate]{
@@ -868,7 +868,7 @@ func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
 
 	certs := []models.Certificate{}
 
-	nextBookmark, err := r.svc.GetCertificatesByStatus(ctx, services.GetCertificatesByStatusInput{
+	nextBookmark, err := r.svc.GetCertificatesByStatus(ctx.Request.Context(), services.GetCertificatesByStatusInput{
 		Status: models.CertificateStatus(params.Status),
 		ListInput: resources.ListInput[models.Certificate]{
 			QueryParameters: queryParams,
@@ -926,7 +926,7 @@ func (r *caHttpRoutes) UpdateCertificateStatus(ctx *gin.Context) {
 		return
 	}
 
-	cert, err := r.svc.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
+	cert, err := r.svc.UpdateCertificateStatus(ctx.Request.Context(), services.UpdateCertificateStatusInput{
 		SerialNumber:     params.SerialNumber,
 		NewStatus:        requestBody.NewStatus,
 		RevocationReason: requestBody.RevocationReason,
@@ -966,7 +966,7 @@ func (r *caHttpRoutes) UpdateCertificateMetadata(ctx *gin.Context) {
 		return
 	}
 
-	cert, err := r.svc.UpdateCertificateMetadata(ctx, services.UpdateCertificateMetadataInput{
+	cert, err := r.svc.UpdateCertificateMetadata(ctx.Request.Context(), services.UpdateCertificateMetadataInput{
 		SerialNumber: params.SerialNumber,
 		Patches:      requestBody.Patches,
 	})
@@ -1008,7 +1008,7 @@ func (r *caHttpRoutes) DeleteCertificate(ctx *gin.Context) {
 		return
 	}
 
-	err := r.svc.DeleteCertificate(ctx, services.DeleteCertificateInput{
+	err := r.svc.DeleteCertificate(ctx.Request.Context(), services.DeleteCertificateInput{
 		SerialNumber: params.SerialNumber,
 	})
 
@@ -1037,7 +1037,7 @@ func (r *caHttpRoutes) ImportCertificate(ctx *gin.Context) {
 		return
 	}
 
-	cert, err := r.svc.ImportCertificate(ctx, services.ImportCertificateInput{
+	cert, err := r.svc.ImportCertificate(ctx.Request.Context(), services.ImportCertificateInput{
 		Metadata:    requestBody.Metadata,
 		Certificate: requestBody.Certificate,
 	})
@@ -1057,7 +1057,7 @@ func (r *caHttpRoutes) GetIssuanceProfiles(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, resources.IssuanceProfileFiltrableFields)
 
 	items := []models.IssuanceProfile{}
-	nextBookmark, err := r.svc.GetIssuanceProfiles(ctx, services.GetIssuanceProfilesInput{
+	nextBookmark, err := r.svc.GetIssuanceProfiles(ctx.Request.Context(), services.GetIssuanceProfilesInput{
 		QueryParameters: queryParams,
 		ExhaustiveRun:   false,
 		ApplyFunc: func(item models.IssuanceProfile) {
@@ -1093,7 +1093,7 @@ func (r *caHttpRoutes) GetIssuanceProfileByID(ctx *gin.Context) {
 		return
 	}
 
-	profile, err := r.svc.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+	profile, err := r.svc.GetIssuanceProfileByID(ctx.Request.Context(), services.GetIssuanceProfileByIDInput{
 		ProfileID: params.ID,
 	})
 
@@ -1116,7 +1116,7 @@ func (r *caHttpRoutes) CreateIssuanceProfile(ctx *gin.Context) {
 		return
 	}
 
-	profile, err := r.svc.CreateIssuanceProfile(ctx, services.CreateIssuanceProfileInput{
+	profile, err := r.svc.CreateIssuanceProfile(ctx.Request.Context(), services.CreateIssuanceProfileInput{
 		Profile: models.IssuanceProfile{
 			Name:                   requestBody.Name,
 			Description:            requestBody.Description,
@@ -1168,7 +1168,7 @@ func (r *caHttpRoutes) UpdateIssuanceProfile(ctx *gin.Context) {
 		return
 	}
 
-	profile, err := r.svc.UpdateIssuanceProfile(ctx, services.UpdateIssuanceProfileInput{
+	profile, err := r.svc.UpdateIssuanceProfile(ctx.Request.Context(), services.UpdateIssuanceProfileInput{
 		Profile: models.IssuanceProfile{
 			ID: params.ID,
 
@@ -1216,7 +1216,7 @@ func (r *caHttpRoutes) DeleteIssuanceProfile(ctx *gin.Context) {
 		return
 	}
 
-	err := r.svc.DeleteIssuanceProfile(ctx, services.DeleteIssuanceProfileInput{
+	err := r.svc.DeleteIssuanceProfile(ctx.Request.Context(), services.DeleteIssuanceProfileInput{
 		ProfileID: params.ID,
 	})
 

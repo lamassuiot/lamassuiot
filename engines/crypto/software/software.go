@@ -1,6 +1,7 @@
 package software
 
 import (
+	"context"
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -13,9 +14,29 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 
+	"github.com/lamassuiot/lamassuiot/sdk/v3"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	"go.opentelemetry.io/otel/trace"
 )
+
+type LamassuEntropy struct {
+	ctx context.Context
+}
+
+func NewLamassuEntropy(ctx context.Context) io.Reader {
+	return &LamassuEntropy{ctx: ctx}
+}
+
+func (le *LamassuEntropy) Read(b []byte) (n int, err error) {
+	_, span := otel.GetTracerProvider().Tracer("ca-svc").Start(le.ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName("Lamassu-Monolithic")))
+	defer span.End()
+
+	return rand.Read(b)
+}
 
 type SoftwareCryptoEngine struct {
 	logger *logrus.Entry
@@ -28,10 +49,15 @@ func NewSoftwareCryptoEngine(logger *logrus.Entry) *SoftwareCryptoEngine {
 }
 
 // CreateRSAPrivateKey creates a RSA private key with the specified key size
-func (p *SoftwareCryptoEngine) CreateRSAPrivateKey(keySize int) (string, *rsa.PrivateKey, error) {
+func (p *SoftwareCryptoEngine) CreateRSAPrivateKey(ctx context.Context, keySize int) (string, *rsa.PrivateKey, error) {
+	ctx, span := otel.GetTracerProvider().Tracer(fmt.Sprintf("RSA Key generation - %d", keySize)).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName("Lamassu-Monolithic")))
+	defer span.End()
+
+	entropy := NewLamassuEntropy(ctx)
+
 	lFunc := p.logger.WithField("func", "RSA")
 	lFunc.Debugf("creating RSA %d bit key", keySize)
-	key, err := rsa.GenerateKey(rand.Reader, keySize)
+	key, err := rsa.GenerateKey(entropy, keySize)
 
 	if err != nil {
 		lFunc.Errorf("could not create RSA key: %s", err)
@@ -47,10 +73,15 @@ func (p *SoftwareCryptoEngine) CreateRSAPrivateKey(keySize int) (string, *rsa.Pr
 	return encDigest, key, nil
 }
 
-func (p *SoftwareCryptoEngine) CreateECDSAPrivateKey(curve elliptic.Curve) (string, *ecdsa.PrivateKey, error) {
+func (p *SoftwareCryptoEngine) CreateECDSAPrivateKey(ctx context.Context, curve elliptic.Curve) (string, *ecdsa.PrivateKey, error) {
+	ctx, span := otel.GetTracerProvider().Tracer(fmt.Sprintf("ECDSA Key generation - %s", curve.Params().Name)).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName("Lamassu-Monolithic")))
+	defer span.End()
+
+	entropy := NewLamassuEntropy(ctx)
+
 	lFunc := p.logger.WithField("func", "ECDSA")
 	lFunc.Debugf("creating ECDSA %s key", curve.Params().Name)
-	key, err := ecdsa.GenerateKey(curve, rand.Reader)
+	key, err := ecdsa.GenerateKey(curve, entropy)
 
 	if err != nil {
 		lFunc.Errorf("could not create ECDSA key: %s", err)

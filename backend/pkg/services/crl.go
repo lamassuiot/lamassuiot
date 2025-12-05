@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
@@ -18,8 +17,15 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	"github.com/sirupsen/logrus"
 	"gocloud.dev/blob"
+
+
+	"github.com/lamassuiot/lamassuiot/sdk/v3"
+	"go.opentelemetry.io/otel"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var crlValidate *validator.Validate
@@ -164,6 +170,9 @@ func (svc CRLServiceBackend) InitCRLRole(ctx context.Context, caSki string) (*mo
 }
 
 func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.CalculateCRLInput) (*x509.RevocationList, error) {
+	ctx, span := otel.GetTracerProvider().Tracer("VA Service").Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName("Lamassu-Monolithic")))
+	defer span.End()
+
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
 	err := crlValidate.Struct(input)
@@ -252,7 +261,10 @@ func (svc CRLServiceBackend) CalculateCRL(ctx context.Context, input services.Ca
 
 	crlVersion := big.NewInt(0)
 	crlVersion.Add(vaRole.LatestCRL.Version.Int, big.NewInt(1))
-	crlDer, err := x509.CreateRevocationList(rand.Reader, &x509.RevocationList{
+
+	entropy := software.NewLamassuEntropy(ctx)
+
+	crlDer, err := x509.CreateRevocationList(entropy, &x509.RevocationList{
 		RevokedCertificateEntries: certList,
 		Number:                    crlVersion,
 		ThisUpdate:                now,

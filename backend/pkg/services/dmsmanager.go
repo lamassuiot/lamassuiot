@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -24,6 +23,7 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
+	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	external_clients "github.com/lamassuiot/lamassuiot/sdk/v3/external"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
@@ -962,7 +962,9 @@ func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.
 
 	switch x509.PublicKeyAlgorithm(keyType) {
 	case x509.RSA:
-		privKey, err = rsa.GenerateKey(rand.Reader, keySize)
+		entropy := software.NewLamassuEntropy(ctx)
+
+		privKey, err = rsa.GenerateKey(entropy, keySize)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -982,7 +984,9 @@ func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.
 			curve = elliptic.P256()
 		}
 
-		privKey, err = ecdsa.GenerateKey(curve, rand.Reader)
+		entropy := software.NewLamassuEntropy(ctx)
+
+		privKey, err = ecdsa.GenerateKey(curve, entropy)
 		if err != nil {
 			lFunc.Errorf("could not generate ecdsa key: %s", err)
 			return nil, nil, err
@@ -991,7 +995,9 @@ func (svc DMSManagerServiceBackend) ServerKeyGen(ctx context.Context, csr *x509.
 		return nil, nil, fmt.Errorf("unsupported key type %s", keyType)
 	}
 
-	newCsrBytes, err := x509.CreateCertificateRequest(rand.Reader, csr, privKey)
+	entropy := software.NewLamassuEntropy(ctx)
+
+	newCsrBytes, err := x509.CreateCertificateRequest(entropy, csr, privKey)
 	if err != nil {
 		lFunc.Errorf("could not generate new csr: %s", err)
 		return nil, nil, err

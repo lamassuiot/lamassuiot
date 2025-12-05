@@ -19,7 +19,7 @@ func NewDeviceManagerHttpRoutes(svc services.DeviceManagerService) *devManagerHt
 }
 
 func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
-	stats, err := r.svc.GetDevicesStats(ctx, services.GetDevicesStatsInput{})
+	stats, err := r.svc.GetDevicesStats(ctx.Request.Context(), services.GetDevicesStatsInput{})
 
 	if err != nil {
 		ctx.JSON(500, err)
@@ -33,7 +33,7 @@ func (r *devManagerHttpRoutes) GetAllDevices(ctx *gin.Context) {
 	queryParams := FilterQuery(ctx.Request, resources.DeviceFilterableFields)
 
 	devices := []models.Device{}
-	nextBookmark, err := r.svc.GetDevices(ctx, services.GetDevicesInput{
+	nextBookmark, err := r.svc.GetDevices(ctx.Request.Context(), services.GetDevicesInput{
 		ListInput: resources.ListInput[models.Device]{
 			QueryParameters: queryParams,
 			ExhaustiveRun:   false,
@@ -69,7 +69,7 @@ func (r *devManagerHttpRoutes) GetDevicesByDMS(ctx *gin.Context) {
 	}
 
 	devices := []models.Device{}
-	nextBookmark, err := r.svc.GetDeviceByDMS(ctx, services.GetDevicesByDMSInput{
+	nextBookmark, err := r.svc.GetDeviceByDMS(ctx.Request.Context(), services.GetDevicesByDMSInput{
 		DMSID: params.DMSID,
 		ListInput: resources.ListInput[models.Device]{
 			QueryParameters: queryParams,
@@ -104,7 +104,7 @@ func (r *devManagerHttpRoutes) GetDeviceByID(ctx *gin.Context) {
 		return
 	}
 
-	dms, err := r.svc.GetDeviceByID(ctx, services.GetDeviceByIDInput{
+	dms, err := r.svc.GetDeviceByID(ctx.Request.Context(), services.GetDeviceByIDInput{
 		ID: params.ID,
 	})
 	if err != nil {
@@ -128,7 +128,7 @@ func (r *devManagerHttpRoutes) CreateDevice(ctx *gin.Context) {
 		return
 	}
 
-	dev, err := r.svc.CreateDevice(ctx, services.CreateDeviceInput{
+	dev, err := r.svc.CreateDevice(ctx.Request.Context(), services.CreateDeviceInput{
 		ID:        requestBody.ID,
 		Alias:     requestBody.Alias,
 		Tags:      requestBody.Tags,
@@ -163,7 +163,7 @@ func (r *devManagerHttpRoutes) UpdateDeviceIdentitySlot(ctx *gin.Context) {
 		return
 	}
 
-	dev, err := r.svc.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
+	dev, err := r.svc.UpdateDeviceIdentitySlot(ctx.Request.Context(), services.UpdateDeviceIdentitySlotInput{
 		ID:   params.ID,
 		Slot: requestBody.Slot,
 	})
@@ -193,7 +193,7 @@ func (r *devManagerHttpRoutes) UpdateDeviceMetadata(ctx *gin.Context) {
 		return
 	}
 
-	dev, err := r.svc.UpdateDeviceMetadata(ctx, services.UpdateDeviceMetadataInput{
+	dev, err := r.svc.UpdateDeviceMetadata(ctx.Request.Context(), services.UpdateDeviceMetadataInput{
 		ID:      params.ID,
 		Patches: requestBody.Patches,
 	})
@@ -217,7 +217,7 @@ func (r *devManagerHttpRoutes) DecommissionDevice(ctx *gin.Context) {
 		return
 	}
 
-	dev, err := r.svc.UpdateDeviceStatus(ctx, services.UpdateDeviceStatusInput{
+	dev, err := r.svc.UpdateDeviceStatus(ctx.Request.Context(), services.UpdateDeviceStatusInput{
 		ID:        params.ID,
 		NewStatus: models.DeviceDecommissioned,
 	})
@@ -241,7 +241,7 @@ func (r *devManagerHttpRoutes) DeleteDevice(ctx *gin.Context) {
 		return
 	}
 
-	err := r.svc.DeleteDevice(ctx, services.DeleteDeviceInput{
+	err := r.svc.DeleteDevice(ctx.Request.Context(), services.DeleteDeviceInput{
 		ID: params.ID,
 	})
 
