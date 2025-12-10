@@ -125,6 +125,12 @@ func TestReissueCAService(t *testing.T) {
 			run: func(caSDK services.CAService, caID string) (*models.CACertificate, error) {
 				return caSDK.ReissueCA(context.Background(), services.ReissueCAInput{
 					CAID: caID,
+					IssuanceProfile: &models.IssuanceProfile{
+						Validity: models.Validity{
+							Type:     models.Duration,
+							Duration: models.TimeDuration(time.Hour * 24 * 365),
+						},
+					},
 				})
 			},
 			resultCheck: func(caSDK services.CAService, originalCA *models.CACertificate, reissuedCA *models.CACertificate, err error) error {
@@ -551,7 +557,6 @@ func TestReissueCAService(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 
 		t.Run(tc.name, func(t *testing.T) {
 			err = serverTest.BeforeEach()
