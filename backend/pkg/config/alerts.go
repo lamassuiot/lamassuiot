@@ -3,11 +3,12 @@ package config
 import cconfig "github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 
 type AlertsConfig struct {
-	Logs               cconfig.Logging                `mapstructure:"logs"`
-	Server             cconfig.HttpServer             `mapstructure:"server"`
-	SubscriberEventBus cconfig.EventBusEngine         `mapstructure:"subscriber_event_bus"`
-	Storage            cconfig.PluggableStorageEngine `mapstructure:"storage"`
-	SMTPConfig         SMTPServer                     `mapstructure:"smtp_server"`
+	Logs                  cconfig.Logging                `mapstructure:"logs"`
+	Server                cconfig.HttpServer             `mapstructure:"server"`
+	SubscriberEventBus    cconfig.EventBusEngine         `mapstructure:"subscriber_event_bus"`
+	SubscriberDLQEventBus cconfig.EventBusEngine         `mapstructure:"subscriber_dlq_event_bus"`
+	Storage               cconfig.PluggableStorageEngine `mapstructure:"storage"`
+	SMTPConfig            SMTPServer                     `mapstructure:"smtp_server"`
 }
 
 type SMTPServer struct {

@@ -22,8 +22,8 @@ import (
 
 var serviceID = "va"
 
-func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CAService, serviceInfo models.APIServiceInfo) (*services.CRLService, *services.OCSPService, int, error) {
-	crl, ocsp, err := AssembleVAService(conf, caService)
+func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CAService, kmsService services.KMSService, serviceInfo models.APIServiceInfo) (*services.CRLService, *services.OCSPService, int, error) {
+	crl, ocsp, err := AssembleVAService(conf, caService, kmsService)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not assemble VA Service. Exiting: %s", err)
 	}
@@ -41,7 +41,7 @@ func AssembleVAServiceWithHTTPServer(conf config.VAconfig, caService services.CA
 	return crl, ocsp, port, nil
 }
 
-func AssembleVAService(conf config.VAconfig, caService services.CAService) (*services.CRLService, *services.OCSPService, error) {
+func AssembleVAService(conf config.VAconfig, caService services.CAService, kmsService services.KMSService) (*services.CRLService, *services.OCSPService, error) {
 
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "VA", "Service")
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "VA", "Storage")
@@ -64,6 +64,7 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService) (*ser
 	crl, err := beService.NewCRLService(beService.CRLServiceBuilder{
 		Logger:    lSvc,
 		CAClient:  caService,
+		KMSClient: kmsService,
 		VARepo:    vaRoleRepo,
 		VADomains: conf.VADomains,
 		Bucket:    (*blob.Bucket)(bucket),
@@ -73,8 +74,9 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService) (*ser
 	}
 
 	ocsp := beService.NewOCSPService(beService.OCSPServiceBuilder{
-		Logger:   lSvc,
-		CAClient: caService,
+		Logger:    lSvc,
+		CAClient:  caService,
+		KMSClient: kmsService,
 	})
 
 	crlSvc := crl.(*beService.CRLServiceBackend)
@@ -84,9 +86,10 @@ func AssembleVAService(conf config.VAconfig, caService services.CAService) (*ser
 		if err != nil {
 			return nil, nil, err
 		}
-	}
 
-	crlSvc.SetService(crl)
+		//this utilizes the middlewares from within the CRL service (if svc.service.func is used instead of regular svc.func)
+		crlSvc.SetService(crl)
+	}
 
 	if conf.SubscriberEventBus.Enabled {
 		err := createSubscriberEventBus(conf, crlSvc)
@@ -125,8 +128,8 @@ func createPublisherEventBus(conf config.VAconfig, crl services.CRLService) (ser
 
 func createSubscriberEventBus(conf config.VAconfig, crlSvc *beService.CRLServiceBackend) error {
 	lMessaging := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "VA", "Event Bus")
-	lMessaging.Infof("Subscriber Event Bus is enabled")
 
+<<<<<<< HEAD
 	publisher, err := eventbus.NewEventBusPublisher(conf.SubscriberEventBus, serviceID, lMessaging)
 	if err != nil {
 		return fmt.Errorf("could not create Event Bus publisher: %s", err)
@@ -143,11 +146,37 @@ func createSubscriberEventBus(conf config.VAconfig, crlSvc *beService.CRLService
 	if err != nil {
 		return fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
 	}
+=======
+	if conf.SubscriberEventBus.Enabled && !conf.SubscriberDLQEventBus.Enabled {
+		lMessaging.Fatalf("Subscriber Event Bus is enabled but DLQ is not enabled. This is not supported. Exiting")
+	}
 
-	err = subHandler.RunAsync()
-	if err != nil {
-		lMessaging.Errorf("could not run Event Bus Subscription Handler: %s", err)
-		return err
+	if conf.SubscriberEventBus.Enabled && conf.SubscriberDLQEventBus.Enabled {
+		lMessaging.Infof("Subscriber Event Bus is enabled")
+>>>>>>> main
+
+		dlqPublisher, err := eventbus.NewEventBusPublisher(conf.SubscriberDLQEventBus, serviceID, lMessaging)
+		if err != nil {
+			return fmt.Errorf("could not create Event Bus publisher: %s", err)
+		}
+
+		subscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, serviceID, lMessaging)
+		if err != nil {
+			lMessaging.Errorf("could not generate Event Bus Subscriber: %s", err)
+			return err
+		}
+
+		eventHandlers := handlers.NewVAEventHandler(lMessaging, crlSvc)
+		subHandler, err := ceventbus.NewEventBusMessageHandler("VA-CA-DEFAULT", []string{"ca.#", "certificate.#"}, dlqPublisher, subscriber, lMessaging, *eventHandlers)
+		if err != nil {
+			return fmt.Errorf("could not create Event Bus Subscription Handler: %s", err)
+		}
+
+		err = subHandler.RunAsync()
+		if err != nil {
+			lMessaging.Errorf("could not run Event Bus Subscription Handler: %s", err)
+			return err
+		}
 	}
 
 	return nil

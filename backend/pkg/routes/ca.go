@@ -33,12 +33,6 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) 
 	rv1.POST("/cas/:id/signature/verify", routes.SignatureVerify)
 	rv1.GET("/cas/:id/certificates/:sn", routes.GetCertificateBySerialNumber)
 	rv1.DELETE("/cas/:id", routes.DeleteCA)
-	rv1.GET("/cas/:id/requests", routes.GetCARequests)
-
-	rv1.POST("/cas/requests", routes.RequestCA)
-	rv1.GET("/cas/requests", routes.GetAllRequests)
-	rv1.GET("/cas/requests/:id", routes.GetCARequestByID)
-	rv1.DELETE("/cas/requests/:id", routes.DeleteCARequestByID)
 
 	rv1.GET("/certificates", routes.GetCertificates)
 	rv1.GET("/certificates/status/:status", routes.GetCertificatesByStatus)
@@ -50,7 +44,6 @@ func NewCAHTTPLayer(parentRouterGroup *gin.RouterGroup, svc services.CAService) 
 	rv1.DELETE("/certificates/:sn", routes.DeleteCertificate)
 	rv1.POST("/certificates/import", routes.ImportCertificate)
 
-	rv1.GET("/engines", routes.GetCryptoEngineProvider)
 	rv1.GET("/stats", routes.GetStats)
 	rv1.GET("/stats/:id", routes.GetStatsByCAID)
 

@@ -212,7 +212,7 @@ func main() {
 
 	fmt.Println(">> launching docker: Postgres ...")
 	posgresSubsystem := subsystems.GetSubsystemBuilder[subsystems.StorageSubsystem](subsystems.Postgres)
-	posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va"})
+	posgresSubsystem.Prepare([]string{"ca", "alerts", "dmsmanager", "devicemanager", "va", "kms"})
 	backend, err := posgresSubsystem.Run(*standardDockerPorts)
 	if err != nil {
 		log.Fatalf("could not launch Postgres: %s", err)
@@ -281,6 +281,8 @@ func main() {
 		Config:   make(map[string]interface{}),
 	}
 
+	dlqEventBus := eventBus
+
 	if !*disableEventbus && !*useAwsEventbus {
 		fmt.Println(">> launching docker: RabbitMQ ...")
 		rabbitmqSubsystem, err := subsystems.GetSubsystemBuilder[subsystems.Subsystem](subsystems.RabbitMQ).Run(*standardDockerPorts)
@@ -289,9 +291,14 @@ func main() {
 		}
 
 		eventBus = rabbitmqSubsystem.Config.(cconfig.EventBusEngine)
+		// make a copy for DLQ using deep copy
 
 		adminPort = (*rabbitmqSubsystem.Extra)["adminPort"].(int)
 		basicAuth := eventBus.Config["basic_auth"].(map[string]interface{})
+
+		dlqEventBus = eventBus
+		dlqEventBus.Config = deepCopy(eventBus.Config)
+		dlqEventBus.Config["exchange"] = "lamassu-dlq"
 
 		fmt.Printf(" 	-- rabbitmq UI port: %d\n", adminPort)
 		fmt.Printf(" 	-- rabbitmq amqp port: %d\n", eventBus.Config["port"].(int))
@@ -316,14 +323,14 @@ func main() {
 
 	cloudConnectors := "[]"
 	if *awsIoTManagerID != "" {
-		cloudConnectors = fmt.Sprintf("aws.%s", *awsIoTManagerID)
+		cloudConnectors = fmt.Sprintf("[\"aws.%s\"]", *awsIoTManagerID)
 	}
 
 	if !*disableUI {
 		containerCleanup, container, _, err := dockerrunner.RunDocker(dockertest.RunOptions{
 			Repository: "ghcr.io/lamassuiot/lamassu-ui", // image
 			Tag:        "latest",                        // version
-			Env:        []string{"OIDC_ENABLED=false", "DOMAIN=localhost:8443", "COGNITO_ENABLED=false", "CLOUD_CONNECTORS=" + cloudConnectors},
+			Env:        []string{"OIDC_ENABLED=false", "UI_FOOTER_ENABLED=false", "LAMASSU_API=https://localhost:8443/api", "CLOUD_CONNECTORS=" + cloudConnectors},
 			Labels: map[string]string{
 				"group": "lamassuiot-monolithic",
 			},
@@ -331,7 +338,7 @@ func main() {
 			hc.AutoRemove = true
 		})
 
-		uiPort, _ = strconv.Atoi(container.GetPort("8080/tcp"))
+		uiPort, _ = strconv.Atoi(container.GetPort("80/tcp"))
 
 		if err != nil {
 			containerCleanup()
@@ -399,16 +406,17 @@ func main() {
 	pluglableStorageConfig := &postgresStorageConfig
 
 	conf := pkg.MonolithicConfig{
-		Logs:               cconfig.Logging{Level: cconfig.Debug},
-		UIPort:             uiPort,
-		VAStorageDir:       "/tmp/lamassuiot/va",
-		SubscriberEventBus: eventBus,
-		PublisherEventBus:  eventBus,
-		Domains:            []string{"dev.lamassu.test", "localhost"},
-		GatewayPortHttps:   8443,
-		GatewayPortHttp:    8080,
-		AssemblyMode:       pkg.Http,
-		CryptoEngines:      cryptoEnginesConfig.CryptoEngines,
+		Logs:                  cconfig.Logging{Level: cconfig.Debug},
+		UIPort:                uiPort,
+		VAStorageDir:          "/tmp/lamassuiot/va",
+		SubscriberEventBus:    eventBus,
+		SubscriberDLQEventBus: dlqEventBus,
+		PublisherEventBus:     eventBus,
+		Domains:               []string{"dev.lamassu.test", "localhost"},
+		GatewayPortHttps:      8443,
+		GatewayPortHttp:       8080,
+		AssemblyMode:          pkg.Http,
+		CryptoEngines:         cryptoEnginesConfig.CryptoEngines,
 		Monitoring: cconfig.MonitoringJob{
 			Enabled:   !*disableMonitor,
 			Frequency: "2m",
@@ -443,8 +451,8 @@ func main() {
 	}
 
 	time.Sleep(3 * time.Second)
-	caCli := sdk.NewHttpCAClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/ca", conf.GatewayPortHttps))
-	engines, err := caCli.GetCryptoEngineProvider(context.Background())
+	kmsSDK := sdk.NewHttpKMSClient(http.DefaultClient, fmt.Sprintf("https://127.0.0.1:%d/api/kms", conf.GatewayPortHttps))
+	engines, err := kmsSDK.GetCryptoEngineProvider(context.Background())
 	if err != nil {
 		panic(err)
 	}
@@ -484,4 +492,15 @@ func printWColor(str string, fg, bg color.Attribute) {
 	color.Set(bg)
 	fmt.Println(str)
 	color.Unset()
+}
+
+func deepCopy(src map[string]interface{}) map[string]interface{} {
+	if src == nil {
+		return nil
+	}
+	dst := make(map[string]interface{}, len(src))
+	for k, v := range src {
+		dst[k] = v
+	}
+	return dst
 }

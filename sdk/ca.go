@@ -2,6 +2,8 @@ package sdk
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
@@ -9,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
@@ -27,11 +30,6 @@ func NewHttpCAClient(client *http.Client, url string) services.CAService {
 		httpClient: client,
 		baseUrl:    baseURL,
 	}
-}
-
-func (cli *httpCAClient) GetCARequests(ctx context.Context, input services.GetItemsInput[models.CACertificateRequest]) (string, error) {
-	url := cli.baseUrl + "/v1/cas/requests"
-	return IterGet[models.CACertificateRequest, *resources.GetItemsResponse[models.CACertificateRequest]](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
 }
 
 func (cli *httpCAClient) GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error) {
@@ -91,12 +89,18 @@ func (cli *httpCAClient) CreateCA(ctx context.Context, input services.CreateCAIn
 		Metadata:     input.Metadata,
 	}, map[int][]error{
 		400: {
-			errs.ErrCAIncompatibleValidity,
+			errs.ErrValidateBadRequest,
+			errs.ErrCAType,
 			errs.ErrCAIssuanceExpiration,
+			errs.ErrCAIncompatibleValidity,
+		},
+		404: {
+			errs.ErrIssuanceProfileNotFound,
 		},
 		409: {
 			errs.ErrCAAlreadyExists,
 		},
+<<<<<<< HEAD
 		500: {
 			errs.ErrCAIncompatibleValidity,
 		},
@@ -157,6 +161,8 @@ func (cli *httpCAClient) RequestCACSR(ctx context.Context, input services.Reques
 		500: {
 			errs.ErrCAIncompatibleValidity,
 		},
+=======
+>>>>>>> main
 	})
 	if err != nil {
 		return nil, err
@@ -167,17 +173,23 @@ func (cli *httpCAClient) RequestCACSR(ctx context.Context, input services.Reques
 
 func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAInput) (*models.CACertificate, error) {
 	var privKey string
-	if input.KeyType == models.KeyType(x509.RSA) {
-		rsaBytes := x509.MarshalPKCS1PrivateKey(input.CARSAKey)
-		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
-			Type:  "RSA PRIVATE KEY",
-			Bytes: rsaBytes,
-		}))
-	} else if input.KeyType == models.KeyType(x509.ECDSA) {
-		ecBytes, err := x509.MarshalECPrivateKey(input.CAECKey)
-		if err != nil {
-			return nil, err
+	if input.Key != nil {
+		switch input.Key.(type) {
+		case *rsa.PrivateKey, *ecdsa.PrivateKey:
+			bytes, err := x509.MarshalPKCS8PrivateKey(input.Key)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal private key: %w", err)
+			}
+
+			privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
+				Type:  "PRIVATE KEY",
+				Bytes: bytes,
+			}))
+
+		default:
+			return nil, fmt.Errorf("unsupported private key type: %T", input.Key)
 		}
+<<<<<<< HEAD
 		privKey = base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{
 			Type:  "EC PRIVATE KEY",
 			Bytes: ecBytes,
@@ -200,17 +212,29 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 			Type:  "Ed25519 PRIVATE KEY",
 			Bytes: ed25519Bytes,
 		}))
+=======
+>>>>>>> main
 	}
 
 	response, err := Post[*models.CACertificate](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/import", resources.ImportCABody{
 		ID:            input.ID,
-		CAType:        models.CertificateType(input.CAType),
 		ProfileID:     input.ProfileID,
 		CACertificate: input.CACertificate,
 		CAChain:       input.CAChain,
 		CAPrivateKey:  privKey,
 		EngineID:      input.EngineID,
-	}, map[int][]error{})
+	}, map[int][]error{
+		400: {
+			errs.ErrValidateBadRequest,
+			errs.ErrCAType,
+			errs.ErrCAIssuanceExpiration,
+			errs.ErrCAIncompatibleValidity,
+			errs.ErrCAValidCertAndPrivKey,
+		},
+		404: {
+			errs.ErrIssuanceProfileNotFound,
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -275,6 +299,7 @@ func (cli *httpCAClient) UpdateCAProfile(ctx context.Context, input services.Upd
 		},
 		404: {
 			errs.ErrCANotFound,
+			errs.ErrIssuanceProfileNotFound,
 		},
 	})
 	if err != nil {
@@ -299,12 +324,22 @@ func (cli *httpCAClient) UpdateCAMetadata(ctx context.Context, input services.Up
 }
 
 func (cli *httpCAClient) DeleteCA(ctx context.Context, input services.DeleteCAInput) error {
-	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/cas/"+input.CAID, map[int][]error{
+	url := cli.baseUrl + "/v1/cas/" + input.CAID
+
+	// Add cascade_delete query parameter if needed
+	if input.CascadeDelete {
+		url += "?cascade_delete=true"
+	}
+
+	err := Delete(ctx, cli.httpClient, url, map[int][]error{
 		404: {
 			errs.ErrCANotFound,
 		},
 		400: {
 			errs.ErrCAStatus,
+		},
+		403: {
+			errs.ErrCascadeDeleteNotAllowed,
 		},
 	})
 	if err != nil {
@@ -431,24 +466,6 @@ func (cli *httpCAClient) DeleteCertificate(ctx context.Context, input services.D
 	return nil
 }
 
-func (cli *httpCAClient) GetCARequestByID(ctx context.Context, input services.GetByIDInput) (*models.CACertificateRequest, error) {
-	response, err := Get[models.CACertificateRequest](ctx, cli.httpClient, cli.baseUrl+"/v1/cas/requests/"+input.ID, nil, map[int][]error{})
-	if err != nil {
-		return nil, err
-	}
-
-	return &response, nil
-}
-
-func (cli *httpCAClient) DeleteCARequestByID(ctx context.Context, input services.GetByIDInput) error {
-	err := Delete(ctx, cli.httpClient, cli.baseUrl+"/v1/cas/requests/"+input.ID, map[int][]error{})
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (cli *httpCAClient) GetIssuanceProfiles(ctx context.Context, input services.GetIssuanceProfilesInput) (string, error) {
 	url := cli.baseUrl + "/v1/profiles"
 	return IterGet[models.IssuanceProfile, resources.IterableList[models.IssuanceProfile]](ctx, cli.httpClient, url, input.ExhaustiveRun, input.QueryParameters, input.ApplyFunc, map[int][]error{})
@@ -534,4 +551,24 @@ func (cli *httpCAClient) DeleteIssuanceProfile(ctx context.Context, input servic
 	}
 
 	return nil
+}
+
+func (cli *httpCAClient) ImportKey(ctx context.Context, input services.ImportKeyInput) (*models.Key, error) {
+	keyPem, err := helpers.PrivateKeyToPEM(input.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+
+	keyB64 := base64.StdEncoding.EncodeToString([]byte(keyPem))
+
+	response, err := Post[*models.Key](ctx, cli.httpClient, cli.baseUrl+"/v1/kms/keys/import", resources.ImportKeyBody{
+		PrivateKey: keyB64,
+		EngineID:   input.EngineID,
+		Name:       input.Name,
+	}, map[int][]error{})
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
 }

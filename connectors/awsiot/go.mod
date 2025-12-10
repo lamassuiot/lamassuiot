@@ -27,6 +27,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/iotdataplane v1.26.5
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.38.3
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.17
+<<<<<<< HEAD
 	github.com/cloudevents/sdk-go/v2 v2.14.0
 	github.com/eclipse/paho.mqtt.golang v1.5.0
 	github.com/lamassuiot/lamassuiot/backend/v3 v3.0.0-00010101000000-000000000000
@@ -37,6 +38,18 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/crypto v0.33.0
+=======
+	github.com/cloudevents/sdk-go/v2 v2.16.1
+	github.com/eclipse/paho.mqtt.golang v1.5.1
+	github.com/lamassuiot/lamassuiot/backend/v3 v3.6.3
+	github.com/lamassuiot/lamassuiot/core/v3 v3.6.3
+	github.com/lamassuiot/lamassuiot/sdk/v3 v3.6.3
+	github.com/lamassuiot/lamassuiot/shared/aws/v3 v3.6.3
+	github.com/lamassuiot/lamassuiot/shared/http/v3 v3.6.3
+	github.com/sirupsen/logrus v1.9.3
+	github.com/stretchr/testify v1.10.0
+	golang.org/x/crypto v0.42.0
+>>>>>>> main
 	gopkg.in/yaml.v2 v2.4.0
 )
 
@@ -57,9 +70,15 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
+<<<<<<< HEAD
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sync v0.11.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
+=======
+	golang.org/x/net v0.44.0 // indirect
+	golang.org/x/sync v0.17.0 // indirect
+	golang.org/x/sys v0.36.0 // indirect
+>>>>>>> main
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
@@ -105,9 +124,16 @@ require (
 	github.com/hashicorp/hcl v1.0.1-vault-5 // indirect
 	github.com/jakehl/goid v1.1.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
+<<<<<<< HEAD
 	github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3 v3.0.0-00010101000000-000000000000 // indirect
 	github.com/lamassuiot/lamassuiot/engines/eventbus/aws/v3 v3.0.0-00010101000000-000000000000 // indirect
 	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.0.0-00010101000000-000000000000 // indirect
+=======
+	github.com/lamassuiot/lamassuiot/engines/crypto/software/v3 v3.6.3 // indirect
+	github.com/lamassuiot/lamassuiot/engines/eventbus/amqp/v3 v3.6.3 // indirect
+	github.com/lamassuiot/lamassuiot/engines/eventbus/aws/v3 v3.6.3 // indirect
+	github.com/lamassuiot/lamassuiot/shared/subsystems/v3 v3.6.3 // indirect
+>>>>>>> main
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -137,10 +163,17 @@ require (
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
+<<<<<<< HEAD
 	golang.org/x/arch v0.14.0 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/oauth2 v0.26.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
+=======
+	golang.org/x/arch v0.15.0 // indirect
+	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
+	golang.org/x/oauth2 v0.30.0 // indirect
+	golang.org/x/text v0.29.0 // indirect
+>>>>>>> main
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 )

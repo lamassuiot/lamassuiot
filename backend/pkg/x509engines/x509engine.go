@@ -4,45 +4,38 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
-	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
-	"crypto/sha512"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/hex"
-	"errors"
 	"fmt"
-	"hash"
 	"math/big"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/engines/cryptoengines"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
+	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
 	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	"github.com/sirupsen/logrus"
 )
 
 type X509Engine struct {
 	logger           *logrus.Entry
-	cryptoEngine     cryptoengines.CryptoEngine
 	vaDomains        []string
 	softCryptoEngine *software.SoftwareCryptoEngine
+	kmsSDK           services.KMSService
 }
 
-func NewX509Engine(logger *logrus.Entry, cryptoEngine *cryptoengines.CryptoEngine, vaDomains []string) X509Engine {
+func NewX509Engine(logger *logrus.Entry, vaDomains []string, kmsSDK services.KMSService) X509Engine {
 	return X509Engine{
-		cryptoEngine:     *cryptoEngine,
 		vaDomains:        vaDomains,
 		logger:           logger,
 		softCryptoEngine: software.NewSoftwareCryptoEngine(logger),
+<<<<<<< HEAD
 	}
 }
 
@@ -110,6 +103,9 @@ func (engine X509Engine) GenerateKeyPair(ctx context.Context, keyMetadata models
 	} else {
 		lFunc.Errorf("unsupported key type requested: %s", keyMetadata.Type)
 		return "", nil, errors.New("unsupported key type requested")
+=======
+		kmsSDK:           kmsSDK,
+>>>>>>> main
 	}
 }
 
@@ -417,15 +413,6 @@ func (engine X509Engine) GenerateCertificateRequest(ctx context.Context, csrSign
 	return csr, nil
 }
 
-func (engine X509Engine) GetCertificateSigner(ctx context.Context, caCertificate *x509.Certificate) (crypto.Signer, error) {
-	keyID, err := engine.softCryptoEngine.EncodePKIXPublicKeyDigest(caCertificate.PublicKey)
-	if err != nil {
-		return nil, err
-	}
-
-	return engine.cryptoEngine.GetPrivateKeyByID(keyID)
-}
-
 func (engine X509Engine) GetDefaultCAIssuanceProfile(ctx context.Context, validity models.Validity) models.IssuanceProfile {
 	return models.IssuanceProfile{
 		Validity:          validity,
@@ -436,6 +423,7 @@ func (engine X509Engine) GetDefaultCAIssuanceProfile(ctx context.Context, validi
 		ExtendedKeyUsages: []models.X509ExtKeyUsage{},
 	}
 }
+<<<<<<< HEAD
 
 func (engine X509Engine) Sign(ctx context.Context, certificate *x509.Certificate, message []byte, messageType models.SignMessageType, signingAlgorithm string) ([]byte, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
@@ -610,3 +598,5 @@ func (engine X509Engine) Verify(ctx context.Context, caCertificate *x509.Certifi
 		return false, fmt.Errorf("CA has unsupported public key algorithm: %s", caCertificate.PublicKeyAlgorithm)
 	}
 }
+=======
+>>>>>>> main

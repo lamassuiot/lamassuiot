@@ -2,10 +2,13 @@ package services
 
 import (
 	"context"
+<<<<<<< HEAD
 	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
+=======
+>>>>>>> main
 	"crypto/x509"
 	"time"
 
@@ -17,10 +20,7 @@ type CAService interface {
 	GetStats(ctx context.Context) (*models.CAStats, error)
 	GetStatsByCAID(ctx context.Context, input GetStatsByCAIDInput) (map[models.CertificateStatus]int, error)
 
-	GetCryptoEngineProvider(ctx context.Context) ([]*models.CryptoEngineProvider, error)
-
 	CreateCA(ctx context.Context, input CreateCAInput) (*models.CACertificate, error)
-	RequestCACSR(ctx context.Context, input RequestCAInput) (*models.CACertificateRequest, error)
 	ImportCA(ctx context.Context, input ImportCAInput) (*models.CACertificate, error)
 	GetCAByID(ctx context.Context, input GetCAByIDInput) (*models.CACertificate, error)
 	GetCAs(ctx context.Context, input GetCAsInput) (string, error)
@@ -52,10 +52,7 @@ type CAService interface {
 	UpdateCertificateMetadata(ctx context.Context, input UpdateCertificateMetadataInput) (*models.Certificate, error)
 	DeleteCertificate(ctx context.Context, input DeleteCertificateInput) error
 
-	GetCARequestByID(ctx context.Context, input GetByIDInput) (*models.CACertificateRequest, error)
-	DeleteCARequestByID(ctx context.Context, input GetByIDInput) error
-	GetCARequests(ctx context.Context, input GetItemsInput[models.CACertificateRequest]) (string, error)
-
+	// Issuance Profiles
 	GetIssuanceProfiles(ctx context.Context, input GetIssuanceProfilesInput) (string, error)
 	GetIssuanceProfileByID(ctx context.Context, input GetIssuanceProfileByIDInput) (*models.IssuanceProfile, error)
 	CreateIssuanceProfile(ctx context.Context, input CreateIssuanceProfileInput) (*models.IssuanceProfile, error)
@@ -104,15 +101,18 @@ type IssueCACSROutput struct {
 
 type ImportCAInput struct {
 	ID            string
-	CAType        models.CertificateType    `validate:"required,ne=MANAGED"`
-	ProfileID     string                    `validate:"required"`
+	ProfileID     string
 	CACertificate *models.X509Certificate   `validate:"required"`
 	CAChain       []*models.X509Certificate //Parent CAs. They MUST be sorted as follows. 0: Root-CA; 1: Subordinate CA from Root-CA; ...
+<<<<<<< HEAD
 	CARSAKey      *rsa.PrivateKey
 	CAECKey       *ecdsa.PrivateKey
 	CAMLDSAKey    crypto.Signer
 	CAEd25519Key  ed25519.PrivateKey
 	KeyType       models.KeyType
+=======
+	Key           any
+>>>>>>> main
 	EngineID      string
 	CARequestID   string
 }
@@ -193,13 +193,14 @@ type UpdateCAMetadataInput struct {
 }
 
 type DeleteCAInput struct {
-	CAID string `validate:"required"`
+	CAID          string `validate:"required"`
+	CascadeDelete bool
 }
 
 type SignCertificateInput struct {
 	CAID              string                         `validate:"required"`
 	CertRequest       *models.X509CertificateRequest `validate:"required"`
-	IssuanceProfile   models.IssuanceProfile
+	IssuanceProfile   *models.IssuanceProfile
 	IssuanceProfileID string
 }
 
@@ -281,6 +282,7 @@ type DeleteCertificateInput struct {
 	SerialNumber string `validate:"required"`
 }
 
+// Issuance Profiles
 type GetIssuanceProfilesInput struct {
 	QueryParameters *resources.QueryParameters
 	ExhaustiveRun   bool //wether to iter all elems

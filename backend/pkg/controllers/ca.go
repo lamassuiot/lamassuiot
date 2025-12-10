@@ -1,6 +1,7 @@
 package controllers
 
 import (
+<<<<<<< HEAD
 	"cloudflare/circl/sign/mldsa/mldsa44"
 	"cloudflare/circl/sign/mldsa/mldsa65"
 	"cloudflare/circl/sign/mldsa/mldsa87"
@@ -8,6 +9,8 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
+=======
+>>>>>>> main
 	"encoding/base64"
 
 	"github.com/gin-gonic/gin"
@@ -26,20 +29,6 @@ func NewCAHttpRoutes(svc services.CAService) *caHttpRoutes {
 	return &caHttpRoutes{
 		svc: svc,
 	}
-}
-
-func (r *caHttpRoutes) GetCryptoEngineProvider(ctx *gin.Context) {
-	engine, err := r.svc.GetCryptoEngineProvider(ctx)
-	if err != nil {
-		switch err {
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
-		return
-	}
-
-	ctx.JSON(200, engine)
 }
 
 // @Summary Create CA
@@ -79,6 +68,8 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAIncompatibleValidity:
 			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrIssuanceProfileNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrCAAlreadyExists:
 			ctx.JSON(409, gin.H{"err": err.Error()})
 		default:
@@ -181,96 +172,6 @@ func (r *caHttpRoutes) GetStatsByCAID(ctx *gin.Context) {
 	ctx.JSON(200, stats)
 }
 
-func (r *caHttpRoutes) GetCARequestByID(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
-	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	ca, err := r.svc.GetCARequestByID(ctx, services.GetByIDInput{
-		ID: params.ID,
-	})
-
-	if err != nil {
-		switch err {
-		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
-		return
-	}
-
-	ctx.JSON(200, ca)
-}
-
-func (r *caHttpRoutes) DeleteCARequestByID(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
-	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	err := r.svc.DeleteCARequestByID(ctx, services.GetByIDInput{
-		ID: params.ID,
-	})
-
-	if err != nil {
-		switch err {
-		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
-		return
-	}
-
-	ctx.JSON(200, gin.H{})
-}
-
-func (r *caHttpRoutes) RequestCA(ctx *gin.Context) {
-	var requestBody resources.RequestCABody
-	if err := ctx.BindJSON(&requestBody); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	caRequest, err := r.svc.RequestCACSR(ctx, services.RequestCAInput{
-		ID:          requestBody.ID,
-		KeyMetadata: requestBody.KeyMetadata,
-		Subject:     requestBody.Subject,
-		EngineID:    requestBody.EngineID,
-		Metadata:    requestBody.Metadata,
-	})
-	if err != nil {
-		switch err {
-		case errs.ErrValidateBadRequest:
-			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAAlreadyExists:
-			ctx.JSON(409, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-		return
-	}
-	ctx.JSON(201, caRequest)
-}
-
 // @Summary Import CA
 // @Description Import CA
 // @Accept json
@@ -303,6 +204,7 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		}
 	}
 
+<<<<<<< HEAD
 	var keyType models.KeyType
 	var rsaKey *rsa.PrivateKey
 	var ecKey *ecdsa.PrivateKey
@@ -320,16 +222,21 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 		ed25519Key = key
 	}
 
+=======
+>>>>>>> main
 	ca, err := r.svc.ImportCA(ctx, services.ImportCAInput{
 		ID:            requestBody.ID,
 		ProfileID:     requestBody.ProfileID,
-		CAType:        requestBody.CAType,
 		CACertificate: requestBody.CACertificate,
+<<<<<<< HEAD
 		KeyType:       keyType,
 		CARSAKey:      rsaKey,
 		CAECKey:       ecKey,
 		CAMLDSAKey:    mldsaKey,
 		CAEd25519Key:  ed25519Key,
+=======
+		Key:           key,
+>>>>>>> main
 		EngineID:      requestBody.EngineID,
 		CARequestID:   requestBody.CARequestID,
 	})
@@ -345,6 +252,8 @@ func (r *caHttpRoutes) ImportCA(ctx *gin.Context) {
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAValidCertAndPrivKey:
 			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrIssuanceProfileNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
@@ -402,7 +311,7 @@ func (r *caHttpRoutes) UpdateCAMetadata(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CAFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.CAFilterableFields)
 
 	type uriParams struct {
 		CommonName string `uri:"cn" binding:"required"`
@@ -451,7 +360,7 @@ func (r *caHttpRoutes) GetCAsByCommonName(ctx *gin.Context) {
 // @Failure 500
 // @Router /cas [get]
 func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CAFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.CAFilterableFields)
 
 	cas := []models.CACertificate{}
 
@@ -476,82 +385,6 @@ func (r *caHttpRoutes) GetAllCAs(ctx *gin.Context) {
 		IterableList: resources.IterableList[models.CACertificate]{
 			NextBookmark: nextBookmark,
 			List:         cas,
-		},
-	})
-}
-
-func (r *caHttpRoutes) GetAllRequests(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CARequestFiltrableFields)
-
-	reqs := []models.CACertificateRequest{}
-
-	nextBookmark, err := r.svc.GetCARequests(ctx, services.GetItemsInput[models.CACertificateRequest]{
-		QueryParameters: queryParams,
-		ExhaustiveRun:   false,
-		ApplyFunc: func(req models.CACertificateRequest) {
-			reqs = append(reqs, req)
-		},
-	})
-
-	if err != nil {
-		switch err {
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
-		return
-	}
-
-	ctx.JSON(200, resources.GetItemsResponse[models.CACertificateRequest]{
-		IterableList: resources.IterableList[models.CACertificateRequest]{
-			NextBookmark: nextBookmark,
-			List:         reqs,
-		},
-	})
-}
-
-func (r *caHttpRoutes) GetCARequests(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CARequestFiltrableFields)
-
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
-	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	queryParams.Filters = append(queryParams.Filters, resources.FilterOption{
-		Field:           "issuer_meta_id",
-		FilterOperation: resources.StringEqual,
-		Value:           params.ID,
-	})
-
-	reqs := []models.CACertificateRequest{}
-
-	nextBookmark, err := r.svc.GetCARequests(ctx, services.GetItemsInput[models.CACertificateRequest]{
-		QueryParameters: queryParams,
-		ExhaustiveRun:   false,
-		ApplyFunc: func(req models.CACertificateRequest) {
-			reqs = append(reqs, req)
-		},
-	})
-
-	if err != nil {
-		switch err {
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
-		return
-	}
-
-	ctx.JSON(200, resources.GetItemsResponse[models.CACertificateRequest]{
-		IterableList: resources.IterableList[models.CACertificateRequest]{
-			NextBookmark: nextBookmark,
-			List:         reqs,
 		},
 	})
 }
@@ -619,8 +452,14 @@ func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 		return
 	}
 
+	// Optionally parse a query or body param for cascade delete, default to false
+	deleteCascade := false
+	if v, ok := ctx.GetQuery("cascade_delete"); ok && (v == "true" || v == "1") {
+		deleteCascade = true
+	}
 	err := r.svc.DeleteCA(ctx, services.DeleteCAInput{
-		CAID: params.CAId,
+		CAID:          params.CAId,
+		CascadeDelete: deleteCascade,
 	})
 
 	if err != nil {
@@ -631,6 +470,8 @@ func (r *caHttpRoutes) DeleteCA(ctx *gin.Context) {
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrCAStatus:
 			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errs.ErrCascadeDeleteNotAllowed:
+			ctx.JSON(403, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})
 		}
@@ -710,6 +551,8 @@ func (r *caHttpRoutes) UpdateCAProfile(ctx *gin.Context) {
 		switch err {
 		case errs.ErrCANotFound:
 			ctx.JSON(404, gin.H{"err": err.Error()})
+		case errs.ErrIssuanceProfileNotFound:
+			ctx.JSON(404, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
@@ -772,7 +615,7 @@ func (r *caHttpRoutes) GetCertificateBySerialNumber(ctx *gin.Context) {
 // @Failure 500
 // @Router /certificates [get]
 func (r *caHttpRoutes) GetCertificates(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 
 	certs := []models.Certificate{}
 
@@ -810,7 +653,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 		return
 	}
 
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 
 	certs := []models.Certificate{}
 
@@ -854,7 +697,7 @@ func (r *caHttpRoutes) GetCertificatesByExpirationDate(ctx *gin.Context) {
 // @Failure 500
 // @Router /cas/{id}/certificates [get]
 func (r *caHttpRoutes) GetCertificatesByCA(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 
 	type uriParams struct {
 		ID string `uri:"id" binding:"required"`
@@ -1049,7 +892,7 @@ func (r *caHttpRoutes) SignatureVerify(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 
 	type uriParams struct {
 		CAID   string `uri:"id" binding:"required"`
@@ -1100,7 +943,7 @@ func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {
 }
 
 func (r *caHttpRoutes) GetCertificatesByStatus(ctx *gin.Context) {
-	queryParams := FilterQuery(ctx.Request, resources.CertificateFiltrableFields)
+	queryParams := FilterQuery(ctx.Request, resources.CertificateFilterableFields)
 
 	type uriParams struct {
 		Status string `uri:"status" binding:"required"`

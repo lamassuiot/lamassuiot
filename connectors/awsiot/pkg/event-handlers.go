@@ -16,6 +16,13 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const (
+	errDecodeMetadataKeyFmt              = "could not decode metadata with key %s: %s"
+	errUpdateDeviceShadowFmt             = "something went wrong while updating %s Thing Shadow: %s"
+	warnSkippingEventDMSNoKeyFmt         = "skipping event %s, DMS doesn't have %s key"
+	warnSkippingEventCertificateNoKeyFmt = "skipping event %s, Certificate doesn't have %s key"
+)
+
 func NewAWSIoTEventHandler(l *logrus.Entry, svc AWSCloudConnectorService) *eventhandling.CloudEventHandler {
 	return &eventhandling.CloudEventHandler{
 		Logger: l,
@@ -71,6 +78,8 @@ func logDecodeError(logger *logrus.Entry, eventID string, eventType string, mode
 }
 
 func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error {
+	metadataKey := AWSIoTMetadataKey(svc.GetConnectorID())
+
 	var ca *models.CACertificate
 	var err error
 	switch event.Type() {
@@ -91,15 +100,15 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc AWSClo
 	}
 
 	var awsIoTCoreCACfg IoTAWSCAMetadata
-	hasKey, err := helpers.GetMetadataToStruct(ca.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &awsIoTCoreCACfg)
+	hasKey, err := helpers.GetMetadataToStruct(ca.Metadata, metadataKey, &awsIoTCoreCACfg)
 	if err != nil {
-		err = fmt.Errorf("error while getting %s key: %s", AWSIoTMetadataKey(svc.GetConnectorID()), err)
+		err = fmt.Errorf("error while getting %s key: %s", metadataKey, err)
 		logger.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, CA doesn't have %s key", event.Type(), AWSIoTMetadataKey(svc.GetConnectorID()))
+		logrus.Warnf("skipping event %s, CA doesn't have %s key", event.Type(), metadataKey)
 		return nil
 	}
 
@@ -121,6 +130,8 @@ func createOrUpdateCAHandler(ctx context.Context, event *event.Event, svc AWSClo
 }
 
 func updateCertificateStatusHandler(ctx context.Context, event *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error {
+	metadataKey := AWSIoTMetadataKey(svc.GetConnectorID())
+
 	var cert *models.Certificate
 	var err error
 	updatedCert, err := chelpers.GetEventBody[models.UpdateModel[models.Certificate]](event)
@@ -132,15 +143,15 @@ func updateCertificateStatusHandler(ctx context.Context, event *event.Event, svc
 	cert = &updatedCert.Updated
 
 	var certIoTCoreMeta IoTAWSCertificateMetadata
-	hasKey, err := helpers.GetMetadataToStruct(cert.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &certIoTCoreMeta)
+	hasKey, err := helpers.GetMetadataToStruct(cert.Metadata, metadataKey, &certIoTCoreMeta)
 	if err != nil {
-		err = fmt.Errorf("error while getting %s key: %s", AWSIoTMetadataKey(svc.GetConnectorID()), err)
+		err = fmt.Errorf("error while getting %s key: %s", metadataKey, err)
 		logger.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, CA doesn't have %s key", event.Type(), AWSIoTMetadataKey(svc.GetConnectorID()))
+		logrus.Warnf("skipping event %s, CA doesn't have %s key", event.Type(), metadataKey)
 		return nil
 	}
 
@@ -181,26 +192,71 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCl
 		dms = &updatedDMS.Updated
 	}
 
+	metadataKey := AWSIoTMetadataKey(svc.GetConnectorID())
 	var dmsAwsAutomationConfig IotAWSDMSMetadata
-	hasKey, err := helpers.GetMetadataToStruct(dms.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &dmsAwsAutomationConfig)
+	hasKey, err := helpers.GetMetadataToStruct(dms.Metadata, metadataKey, &dmsAwsAutomationConfig)
 	if err != nil {
-		err = fmt.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
+		err = fmt.Errorf(errDecodeMetadataKeyFmt, metadataKey, err)
 		logger.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), AWSIoTMetadataKey(svc.GetConnectorID()))
+		logrus.Warnf(warnSkippingEventDMSNoKeyFmt, event.Type(), metadataKey)
 		return nil
 	}
 
-	if dmsAwsAutomationConfig.RegistrationMode == JitpAWSIoTRegistrationMode {
+	switch dmsAwsAutomationConfig.RegistrationMode {
+	case JitpAWSIoTRegistrationMode:
 		err = svc.RegisterUpdateJITPProvisioner(context.Background(), RegisterUpdateJITPProvisionerInput{
 			DMS:           dms,
 			AwsJITPConfig: dmsAwsAutomationConfig,
 		})
 		if err != nil {
 			err = fmt.Errorf("something went wrong while registering JITP template for DMS %s: %s", dms.ID, err)
+			logger.Error(err)
+			return err
+		}
+	case AutomaticAWSIoTRegistrationMode:
+		policiesToRegisterOrUpdate := []AWSIoTPolicy{}
+		//check if policies have changed
+		if isUpdateEvent {
+			// check if previous version had AWS Key
+			considerOldConfig := false
+			var oldIoTConfig IotAWSDMSMetadata
+			hasKey, err := helpers.GetMetadataToStruct(updatedDMS.Previous.Metadata, metadataKey, &oldIoTConfig)
+			if hasKey && err == nil {
+				considerOldConfig = true
+			}
+
+			if considerOldConfig {
+				// only add or update policies that are new or have changed
+				for _, newPolicy := range dmsAwsAutomationConfig.Policies {
+					policyIdx := slices.IndexFunc(oldIoTConfig.Policies, func(p AWSIoTPolicy) bool {
+						return p.PolicyName == newPolicy.PolicyName
+					})
+					if policyIdx == -1 {
+						// we have not found the policy, so it's new
+						policiesToRegisterOrUpdate = append(policiesToRegisterOrUpdate, newPolicy)
+					} else {
+						// we have found the policy, check if it has changed
+						if newPolicy.PolicyDocument != oldIoTConfig.Policies[policyIdx].PolicyDocument {
+							policiesToRegisterOrUpdate = append(policiesToRegisterOrUpdate, newPolicy)
+						}
+					}
+				}
+			} else {
+				policiesToRegisterOrUpdate = dmsAwsAutomationConfig.Policies
+			}
+		} else {
+			policiesToRegisterOrUpdate = dmsAwsAutomationConfig.Policies
+		}
+
+		err = svc.RegisterUpdatePolicies(context.Background(), RegisterUpdatePoliciesInput{
+			Policies: policiesToRegisterOrUpdate,
+		})
+		if err != nil {
+			err = fmt.Errorf("something went wrong while registering policies for DMS %s: %s", dms.ID, err)
 			logger.Error(err)
 			return err
 		}
@@ -220,7 +276,7 @@ func createOrUpdateDMSHandler(ctx context.Context, event *event.Event, svc AWSCl
 							DMSIoTAutomationConfig: dmsAwsAutomationConfig,
 						})
 						if err != nil {
-							logger.Errorf("something went wrong while updating %s Thing Shadow: %s", device.ID, err)
+							logger.Errorf(errUpdateDeviceShadowFmt, device.ID, err)
 							return
 						}
 					},
@@ -248,25 +304,25 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 	var certPreviousExpirationDeltas models.CAMetadataMonitoringExpirationDeltas
 	hasKey, err := helpers.GetMetadataToStruct(certUpdate.Updated.Metadata, models.CAMetadataMonitoringExpirationDeltasKey, &certUpdatedExpirationDeltas)
 	if err != nil {
-		err = fmt.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
+		err = fmt.Errorf(errDecodeMetadataKeyFmt, models.CAMetadataMonitoringExpirationDeltasKey, err)
 		logger.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, Certificate doesn't have %s key", event.Type(), models.CAMetadataMonitoringExpirationDeltasKey)
+		logrus.Warnf(warnSkippingEventCertificateNoKeyFmt, event.Type(), models.CAMetadataMonitoringExpirationDeltasKey)
 		return nil
 	}
 
 	hasKey, err = helpers.GetMetadataToStruct(certUpdate.Previous.Metadata, models.CAMetadataMonitoringExpirationDeltasKey, &certPreviousExpirationDeltas)
 	if err != nil {
-		err = fmt.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
+		err = fmt.Errorf(errDecodeMetadataKeyFmt, models.CAMetadataMonitoringExpirationDeltasKey, err)
 		logger.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, Certificate doesn't have %s key", event.Type(), models.CAMetadataMonitoringExpirationDeltasKey)
+		logrus.Warnf(warnSkippingEventCertificateNoKeyFmt, event.Type(), models.CAMetadataMonitoringExpirationDeltasKey)
 		return nil
 	}
 
@@ -279,15 +335,15 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 	})
 
 	var attachedBy models.CAAttachedToDevice
-	hasKey, err = helpers.GetMetadataToStruct(certUpdate.Updated.Metadata, models.CAAttachedToDeviceKey, &attachedBy)
+	hasKey, err = helpers.GetMetadataToStruct(certUpdate.Updated.Metadata, models.DMSAttachedToDeviceKey, &attachedBy)
 	if err != nil {
-		err = fmt.Errorf("could not decode metadata with key %s: %s", models.CAAttachedToDeviceKey, err)
+		err = fmt.Errorf("could not decode metadata with key %s: %s", models.DMSAttachedToDeviceKey, err)
 		logger.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, Certificate doesn't have %s key", event.Type(), models.CAAttachedToDeviceKey)
+		logrus.Warnf("skipping event %s, Certificate doesn't have %s key", event.Type(), models.DMSAttachedToDeviceKey)
 		return nil
 	}
 
@@ -300,16 +356,17 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 		return err
 	}
 
+	metadataKey := AWSIoTMetadataKey(svc.GetConnectorID())
 	var dmsAWSConf IotAWSDMSMetadata
-	hasKey, err = helpers.GetMetadataToStruct(dms.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &dmsAWSConf)
+	hasKey, err = helpers.GetMetadataToStruct(dms.Metadata, metadataKey, &dmsAWSConf)
 	if err != nil {
-		err = fmt.Errorf("could not decode metadata with key %s: %s", AWSIoTMetadataKey(svc.GetConnectorID()), err)
+		err = fmt.Errorf(errDecodeMetadataKeyFmt, metadataKey, err)
 		logger.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), AWSIoTMetadataKey(svc.GetConnectorID()))
+		logrus.Warnf(warnSkippingEventDMSNoKeyFmt, event.Type(), metadataKey)
 		return nil
 	}
 
@@ -322,7 +379,7 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 				DMSIoTAutomationConfig: dmsAWSConf,
 			})
 			if err != nil {
-				err = fmt.Errorf("something went wrong while updating %s Thing Shadow: %s", attachedBy.DeviceID, err)
+				err = fmt.Errorf(errUpdateDeviceShadowFmt, attachedBy.DeviceID, err)
 				logger.Error(err)
 				return err
 			}
@@ -333,6 +390,8 @@ func updateCertificateMetadataHandler(ctx context.Context, event *event.Event, s
 }
 
 func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error {
+	metadataKey := AWSIoTMetadataKey(svc.GetConnectorID())
+
 	deviceUpdate, err := chelpers.GetEventBody[models.UpdateModel[models.Device]](event)
 	if err != nil {
 		logDecodeError(logger, event.ID(), event.Type(), "Device", err)
@@ -341,15 +400,15 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc AW
 
 	device := deviceUpdate.Updated
 	var deviceMetaAWS DeviceAWSMetadata
-	hasKey, err := helpers.GetMetadataToStruct(device.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &deviceMetaAWS)
+	hasKey, err := helpers.GetMetadataToStruct(device.Metadata, metadataKey, &deviceMetaAWS)
 	if err != nil {
-		err = fmt.Errorf("could not decode metadata with key %s: %s", AWSIoTMetadataKey(svc.GetConnectorID()), err)
+		err = fmt.Errorf(errDecodeMetadataKeyFmt, metadataKey, err)
 		logger.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, Device doesn't have %s key", event.Type(), AWSIoTMetadataKey(svc.GetConnectorID()))
+		logrus.Warnf("skipping event %s, Device doesn't have %s key", event.Type(), metadataKey)
 		return nil
 	}
 
@@ -363,15 +422,15 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc AW
 	}
 
 	var dmsAWSConf IotAWSDMSMetadata
-	hasKey, err = helpers.GetMetadataToStruct(dms.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &dmsAWSConf)
+	hasKey, err = helpers.GetMetadataToStruct(dms.Metadata, metadataKey, &dmsAWSConf)
 	if err != nil {
-		err = fmt.Errorf("could not decode metadata with key %s: %s", AWSIoTMetadataKey(svc.GetConnectorID()), err)
+		err = fmt.Errorf(errDecodeMetadataKeyFmt, metadataKey, err)
 		logger.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), AWSIoTMetadataKey(svc.GetConnectorID()))
+		logrus.Warnf(warnSkippingEventDMSNoKeyFmt, event.Type(), metadataKey)
 		return nil
 	}
 
@@ -382,7 +441,7 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc AW
 			DMSIoTAutomationConfig: dmsAWSConf,
 		})
 		if err != nil {
-			err = fmt.Errorf("something went wrong while updating %s Thing Shadow: %s", device.ID, err)
+			err = fmt.Errorf(errUpdateDeviceShadowFmt, device.ID, err)
 			logger.Error(err)
 			return err
 		}
@@ -392,6 +451,8 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc AW
 }
 
 func bindDeviceIdentityHandler(ctx context.Context, event *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error {
+	metadataKey := AWSIoTMetadataKey(svc.GetConnectorID())
+
 	bindEvent, err := chelpers.GetEventBody[models.BindIdentityToDeviceOutput](event)
 	if err != nil {
 		logDecodeError(logger, event.ID(), event.Type(), "Certificate", err)
@@ -401,15 +462,15 @@ func bindDeviceIdentityHandler(ctx context.Context, event *event.Event, svc AWSC
 	dms := bindEvent.DMS
 
 	var dmsAwsAutomationConfig IotAWSDMSMetadata
-	hasKey, err := helpers.GetMetadataToStruct(dms.Metadata, AWSIoTMetadataKey(svc.GetConnectorID()), &dmsAwsAutomationConfig)
+	hasKey, err := helpers.GetMetadataToStruct(dms.Metadata, metadataKey, &dmsAwsAutomationConfig)
 	if err != nil {
-		err = fmt.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
+		err = fmt.Errorf(errDecodeMetadataKeyFmt, metadataKey, err)
 		logger.Error(err)
 		return err
 	}
 
 	if !hasKey {
-		logrus.Warnf("skipping event %s, DMS doesn't have %s key", event.Type(), AWSIoTMetadataKey(svc.GetConnectorID()))
+		logrus.Warnf(warnSkippingEventDMSNoKeyFmt, event.Type(), metadataKey)
 		return nil
 	}
 

@@ -56,7 +56,19 @@ func main() {
 		sdk.HttpClientWithSourceHeaderInjector(caHttpCli, models.VASource),
 		fmt.Sprintf("%s://%s:%d%s", conf.CAClient.Protocol, conf.CAClient.Hostname, conf.CAClient.Port, conf.CAClient.BasePath),
 	)
-	_, _, _, err = lamassu.AssembleVAServiceWithHTTPServer(*conf, caSDK, models.APIServiceInfo{
+
+	lKMSClient := helpers.SetupLogger(conf.KMSClient.LogLevel, "VA", "LMS SDK - KMS Client")
+	kmsHttpCli, err := sdk.BuildHTTPClient(conf.KMSClient.HTTPClient, lKMSClient)
+	if err != nil {
+		log.Fatalf("could not build HTTP KMS Client: %s", err)
+	}
+
+	kmsSDK := sdk.NewHttpKMSClient(
+		sdk.HttpClientWithSourceHeaderInjector(kmsHttpCli, models.VASource),
+		fmt.Sprintf("%s://%s:%d%s", conf.KMSClient.Protocol, conf.KMSClient.Hostname, conf.KMSClient.Port, conf.KMSClient.BasePath),
+	)
+
+	_, _, _, err = lamassu.AssembleVAServiceWithHTTPServer(*conf, caSDK, kmsSDK, models.APIServiceInfo{
 		Version:   version,
 		BuildSHA:  sha1ver,
 		BuildTime: buildTime,

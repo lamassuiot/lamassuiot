@@ -6,7 +6,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 )
 
-var CAFiltrableFields = map[string]FilterFieldType{
+var CAFilterableFields = map[string]FilterFieldType{
 	"id":                   StringFilterFieldType,
 	"level":                NumberFilterFieldType,
 	"type":                 EnumFilterFieldType,
@@ -22,13 +22,17 @@ var CAFiltrableFields = map[string]FilterFieldType{
 	"profile_id":           StringFilterFieldType,
 }
 
-var CARequestFiltrableFields = map[string]FilterFieldType{
-	"id":                  StringFilterFieldType,
-	"level":               NumberFilterFieldType,
-	"status":              EnumFilterFieldType,
-	"engine_id":           StringFilterFieldType,
-	"subject_common_name": StringFilterFieldType,
-	"issuer_metadata_id":  StringFilterFieldType,
+var KMSFilterableFields = map[string]FilterFieldType{
+	"key_id":          StringFilterFieldType,
+	"engine_id":       StringFilterFieldType,
+	"has_private_key": EnumFilterFieldType,
+	"algorithm":       StringFilterFieldType,
+	"size":            NumberFilterFieldType,
+	"public_key":      StringFilterFieldType,
+	"status":          StringFilterFieldType,
+	"creation_ts":     DateFilterFieldType,
+	"name":            StringFilterFieldType,
+	"tags":            StringArrayFilterFieldType,
 }
 
 var IssuanceProfileFiltrableFields = map[string]FilterFieldType{
@@ -86,7 +90,7 @@ type UpdateCAMetadataBody struct {
 
 type SignCertificateBody struct {
 	CertRequest *models.X509CertificateRequest `json:"csr"`
-	Profile     models.IssuanceProfile         `json:"profile"`
+	Profile     *models.IssuanceProfile        `json:"profile"`
 	ProfileID   string                         `json:"profile_id"`
 }
 
@@ -132,6 +136,53 @@ type GetCertificateStatus struct {
 type ImportCertificateBody struct {
 	Metadata    map[string]interface{}  `json:"metadata"`
 	Certificate *models.X509Certificate `json:"certificate"`
+}
+
+// KMS
+type CreateKeyBody struct {
+	Algorithm string         `json:"algorithm"`
+	Size      int            `json:"size"`
+	EngineID  string         `json:"engine_id"`
+	Name      string         `json:"name"`
+	Tags      []string       `json:"tags"`
+	Metadata  map[string]any `json:"metadata"`
+}
+
+type UpdateKeyMetadataBody struct {
+	Patches []models.PatchOperation `json:"patches"`
+}
+
+type UpdateKeyAliasesBody struct {
+	Patches []models.PatchOperation `json:"patches"`
+}
+
+type UpdateKeyNameBody struct {
+	Name string `json:"name"`
+}
+
+type UpdateKeyTagsBody struct {
+	Tags []string `json:"tags"`
+}
+
+type SignMessageBody struct {
+	Algorithm   string                 `json:"algorithm"`
+	Message     []byte                 `json:"message"`
+	MessageType models.SignMessageType `json:"message_type"`
+}
+
+type VerifySignBody struct {
+	Algorithm   string                 `json:"algorithm"`
+	Message     []byte                 `json:"message"`
+	Signature   []byte                 `json:"signature"`
+	MessageType models.SignMessageType `json:"message_type"`
+}
+
+type ImportKeyBody struct {
+	PrivateKey string         `json:"private_key"`
+	EngineID   string         `json:"engine_id"`
+	Name       string         `json:"name"`
+	Tags       []string       `json:"tags"`
+	Metadata   map[string]any `json:"metadata"`
 }
 
 type CreateUpdateIssuanceProfileBody struct {

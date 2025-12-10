@@ -15,8 +15,14 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
+<<<<<<< HEAD
 	gocloud.dev v0.40.0
 	golang.org/x/crypto v0.33.0
+=======
+	gocloud.dev v0.42.0
+	golang.org/x/crypto v0.39.0
+	gorm.io/gorm v1.25.12
+>>>>>>> main
 )
 
 require (
@@ -30,6 +36,8 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-5 // indirect
+	github.com/jinzhu/inflection v1.0.0 // indirect
+	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect

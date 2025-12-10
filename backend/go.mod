@@ -32,9 +32,14 @@ replace github.com/lamassuiot/lamassuiot/shared/subsystems/v3 => ../shared/subsy
 
 require (
 	github.com/ThreeDotsLabs/watermill v1.4.6
+<<<<<<< HEAD
 	github.com/cloudevents/sdk-go/v2 v2.14.0
 	github.com/eclipse/paho.mqtt.golang v1.5.0
 	github.com/gin-contrib/cors v1.6.0
+=======
+	github.com/cloudevents/sdk-go/v2 v2.16.1
+	github.com/gin-contrib/cors v1.7.5
+>>>>>>> main
 	github.com/gin-gonic/gin v1.10.1
 	github.com/globalsign/est v1.0.6
 	github.com/go-playground/validator/v10 v10.26.0
@@ -65,7 +70,6 @@ require (
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/goccy/go-yaml v1.17.1 // indirect
 	github.com/google/go-tpm v0.3.2 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/gotnospirit/makeplural v0.0.0-20180622080156-a5f48d94d976 // indirect
 	github.com/gotnospirit/messageformat v0.0.0-20221001023931-dfe49f1eb092 // indirect
 	github.com/kaptinlin/go-i18n v0.1.3 // indirect
@@ -79,8 +83,12 @@ require (
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
+<<<<<<< HEAD
 	golang.org/x/arch v0.14.0 // indirect
 	golang.org/x/sync v0.11.0 // indirect
+=======
+	golang.org/x/arch v0.15.0 // indirect
+>>>>>>> main
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect

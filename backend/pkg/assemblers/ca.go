@@ -2,10 +2,8 @@ package assemblers
 
 import (
 	"fmt"
-	"unicode"
 
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/config"
-	cebuilder "github.com/lamassuiot/lamassuiot/backend/v3/pkg/cryptoengines/builder"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/eventbus"
 	"github.com/lamassuiot/lamassuiot/backend/v3/pkg/jobs"
 	auditpub "github.com/lamassuiot/lamassuiot/backend/v3/pkg/middlewares/audit"
@@ -18,12 +16,11 @@ import (
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/services"
-	"github.com/lamassuiot/lamassuiot/engines/crypto/software/v3"
 	log "github.com/sirupsen/logrus"
 )
 
-func AssembleCAServiceWithHTTPServer(conf config.CAConfig, serviceInfo models.APIServiceInfo) (*services.CAService, *jobs.JobScheduler, int, error) {
-	caService, scheduler, err := AssembleCAService(conf)
+func AssembleCAServiceWithHTTPServer(conf config.CAConfig, kmsSDK services.KMSService, serviceInfo models.APIServiceInfo) (*services.CAService, *jobs.JobScheduler, int, error) {
+	caService, scheduler, err := AssembleCAService(conf, kmsSDK)
 	if err != nil {
 		return nil, nil, -1, fmt.Errorf("could not assemble CA Service. Exiting: %s", err)
 	}
@@ -41,48 +38,27 @@ func AssembleCAServiceWithHTTPServer(conf config.CAConfig, serviceInfo models.AP
 	return caService, scheduler, port, nil
 }
 
-func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobScheduler, error) {
+func AssembleCAService(conf config.CAConfig, kmsSDK services.KMSService) (*services.CAService, *jobs.JobScheduler, error) {
 	lSvc := helpers.SetupLogger(conf.Logs.Level, "CA", "Service")
 	lMessage := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Event Bus")
 	lAudit := helpers.SetupLogger(conf.PublisherEventBus.LogLevel, "CA", "Audit Bus")
 
 	lStorage := helpers.SetupLogger(conf.Storage.LogLevel, "CA", "Storage")
-	lCryptoEng := helpers.SetupLogger(conf.CryptoEngineConfig.LogLevel, "CA", "CryptoEngine")
 	lMonitor := helpers.SetupLogger(conf.Logs.Level, "CA", "Crypto Monitoring")
 
-	engines, err := createCryptoEngines(lCryptoEng, conf)
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not create crypto engines: %s", err)
-	}
-
-	for engineID, engine := range engines {
-		logEntry := log.NewEntry(log.StandardLogger())
-		if engine.Default {
-			logEntry = log.WithField("subsystem-provider", "DEFAULT ENGINE")
-
-		}
-		logEntry.Infof("loaded %s engine with id %s", engine.Service.GetEngineConfig().Type, engineID)
-		if conf.CryptoEngineConfig.MigrateKeysFormat {
-			err = migrateKeysToV2Format(lSvc, engine, engineID)
-			if err != nil {
-				return nil, nil, fmt.Errorf("could not migrate %s engine keys to v2 format: %s", engineID, err)
-			}
-		}
-	}
-
-	caStorage, certStorage, caCertRequestStorage, issuerProfilesStorage, err := createCAStorageInstance(lStorage, conf.Storage)
+	caStorage, certStorage, issuerProfilesStorage, err := createCAStorageInstance(lStorage, conf.Storage)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create CA storage instance: %s", err)
 	}
 
 	svc, err := lservices.NewCAService(lservices.CAServiceBuilder{
-		Logger:                      lSvc,
-		CryptoEngines:               engines,
-		CAStorage:                   caStorage,
-		CertificateStorage:          certStorage,
-		CACertificateRequestStorage: caCertRequestStorage,
-		IssuanceProfileStorage:      issuerProfilesStorage,
-		VAServerDomains:             conf.VAServerDomains,
+		Logger:                 lSvc,
+		KMSService:             kmsSDK,
+		CAStorage:              caStorage,
+		CertificateStorage:     certStorage,
+		IssuanceProfileStorage: issuerProfilesStorage,
+		VAServerDomains:        conf.VAServerDomains,
+		AllowCascadeDelete:     conf.AllowCascadeDelete,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not create CA service: %v", err)
@@ -111,6 +87,9 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 
 		svc = eventpub.NewCAEventBusPublisher(eventPublisher)(svc)
 		svc = auditpub.NewCAAuditEventBusPublisher(*auditpub.NewAuditPublisher(auditPublisher))(svc)
+
+		//this utilizes the middlewares from within the CA service (if svc.service.func is used instead of regular svc.func)
+		caSvc.SetService(svc)
 	}
 
 	var scheduler *jobs.JobScheduler
@@ -121,100 +100,29 @@ func AssembleCAService(conf config.CAConfig) (*services.CAService, *jobs.JobSche
 		scheduler.Start()
 	}
 
-	//this utilizes the middlewares from within the CA service (if svc.Service.func is uses instead of regular svc.func)
-	caSvc.SetService(svc)
-
 	return &svc, scheduler, nil
 }
 
-func createCAStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.CACertificatesRepo, storage.CertificatesRepo, storage.CACertificateRequestRepo, storage.IssuanceProfileRepo, error) {
+func createCAStorageInstance(logger *log.Entry, conf cconfig.PluggableStorageEngine) (storage.CACertificatesRepo, storage.CertificatesRepo, storage.IssuanceProfileRepo, error) {
 	engine, err := builder.BuildStorageEngine(logger, conf)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("could not create storage engine: %s", err)
+		return nil, nil, nil, fmt.Errorf("could not create storage engine: %s", err)
 	}
 
 	caStorage, err := engine.GetCAStorage()
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("could not get CA storage: %s", err)
+		return nil, nil, nil, fmt.Errorf("could not get CA storage: %s", err)
 	}
 
 	certStorage, err := engine.GetCertStorage()
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("could not get Cert storage: %s", err)
+		return nil, nil, nil, fmt.Errorf("could not get Cert storage: %s", err)
 	}
 
 	issuanceProfileStorage, err := engine.GetIssuanceProfileStorage()
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("could not get Issuance Profile storage: %s", err)
+		return nil, nil, nil, fmt.Errorf("could not get Issuance Profile storage: %s", err)
 	}
 
-	caCertRequestStorage, err := engine.GetCACertificateRequestStorage()
-	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("could not get CA Certificate Request storage: %s", err)
-	}
-
-	return caStorage, certStorage, caCertRequestStorage, issuanceProfileStorage, nil
-}
-
-func createCryptoEngines(logger *log.Entry, conf config.CAConfig) (map[string]*lservices.Engine, error) {
-	engines := map[string]*lservices.Engine{}
-
-	for _, cfg := range conf.CryptoEngineConfig.CryptoEngines {
-		engine, err := cebuilder.BuildCryptoEngine(logger, cfg)
-
-		if err != nil {
-			log.Warnf("skipping engine with id %s of type %s. Can not create engine: %s", cfg.ID, cfg.Type, err)
-		} else {
-			engines[cfg.ID] = &lservices.Engine{
-				Default: cfg.ID == conf.CryptoEngineConfig.DefaultEngine,
-				Service: engine,
-			}
-		}
-	}
-
-	return engines, nil
-}
-
-func migrateKeysToV2Format(logger *log.Entry, engine *lservices.Engine, engineID string) error {
-	// Check if engine keys should be renamed
-	keyIDs, err := engine.Service.ListPrivateKeyIDs()
-	if err != nil {
-		return nil
-	}
-	keyMigLog := logger.WithField("engine", engineID)
-	softCrypto := software.NewSoftwareCryptoEngine(keyMigLog)
-	keyMigLog.Infof("checking engine keys format")
-
-	for _, keyID := range keyIDs {
-		// check if they are in V1 format (serial number).
-		// V2 format is the hex encoded SHA256 of the public key, a string of 64 characters
-		containsNonHex := false
-		for _, char := range keyID {
-			if !unicode.IsLetter(char) && !unicode.IsDigit(char) {
-				// Not a hex character. Exit loop
-				containsNonHex = true
-				break
-			}
-		}
-
-		if len(keyID) != 64 || containsNonHex {
-			// Transform to V2 format
-			key, err := engine.Service.GetPrivateKeyByID(keyID)
-			if err != nil {
-				return fmt.Errorf("could not get key %s: %w", keyID, err)
-			}
-
-			newKeyID, err := softCrypto.EncodePKIXPublicKeyDigest(key.Public())
-			if err != nil {
-				return fmt.Errorf("could not encode public key digest: %w", err)
-			}
-
-			keyMigLog.Debugf("renaming key %s to %s", keyID, newKeyID)
-			err = engine.Service.RenameKey(keyID, newKeyID)
-			if err != nil {
-				return fmt.Errorf("could not rename key %s: %w", keyID, err)
-			}
-		}
-	}
-	return nil
+	return caStorage, certStorage, issuanceProfileStorage, nil
 }

@@ -25,6 +25,7 @@ const (
 	DMS_DB_NAME    = "dmsmanager"
 	ALERTS_DB_NAME = "alerts"
 	VA_DB_NAME     = "va"
+	KMS_DB_NAME    = "kms"
 )
 
 type PostgresStorageEngine struct {
@@ -61,9 +62,6 @@ func (s *PostgresStorageEngine) initialiceCACertStorage() error {
 		return err
 	}
 
-	m := NewMigrator(s.logger, psqlCli)
-	m.MigrateToLatest()
-
 	if s.CA == nil {
 		s.CA, err = NewCAPostgresRepository(s.logger, psqlCli)
 		if err != nil {
@@ -80,13 +78,6 @@ func (s *PostgresStorageEngine) initialiceCACertStorage() error {
 
 	if s.IssuanceProfile == nil {
 		s.IssuanceProfile, err = NewIssuanceProfileRepository(s.logger, psqlCli)
-		if err != nil {
-			return err
-		}
-	}
-
-	if s.CACertificateRequest == nil {
-		s.CACertificateRequest, err = NewCACertRequestPostgresRepository(s.logger, psqlCli)
 		if err != nil {
 			return err
 		}
@@ -117,25 +108,12 @@ func (s *PostgresStorageEngine) GetIssuanceProfileStorage() (storage.IssuancePro
 	return s.IssuanceProfile, nil
 }
 
-func (s *PostgresStorageEngine) GetCACertificateRequestStorage() (storage.CACertificateRequestRepo, error) {
-	if s.CACertificateRequest == nil {
-		err := s.initialiceCACertStorage()
-		if err != nil {
-			return nil, fmt.Errorf("could not initialize postgres CA request client: %s", err)
-		}
-	}
-	return s.CACertificateRequest, nil
-}
-
 func (s *PostgresStorageEngine) GetDeviceStorage() (storage.DeviceManagerRepo, error) {
 	if s.Device == nil {
 		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, DEVICE_DB_NAME)
 		if err != nil {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
-
-		m := NewMigrator(s.logger, psqlCli)
-		m.MigrateToLatest()
 
 		deviceStore, err := NewDeviceManagerRepository(s.logger, psqlCli)
 		if err != nil {
@@ -154,9 +132,6 @@ func (s *PostgresStorageEngine) GetVARoleStorage() (storage.VARepo, error) {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
 
-		m := NewMigrator(s.logger, psqlCli)
-		m.MigrateToLatest()
-
 		store, err := NewVARepository(s.logger, psqlCli)
 		if err != nil {
 			return nil, fmt.Errorf("could not initialize postgres Device client: %s", err)
@@ -173,9 +148,6 @@ func (s *PostgresStorageEngine) GetDMSStorage() (storage.DMSRepo, error) {
 		if err != nil {
 			return nil, fmt.Errorf("could not create postgres client: %s", err)
 		}
-
-		m := NewMigrator(s.logger, psqlCli)
-		m.MigrateToLatest()
 
 		dmsStore, err := NewDMSManagerRepository(s.logger, psqlCli)
 		if err != nil {
@@ -206,9 +178,6 @@ func (s *PostgresStorageEngine) initialiceSubscriptionsStorage() error {
 		return err
 	}
 
-	m := NewMigrator(s.logger, psqlCli)
-	m.MigrateToLatest()
-
 	if s.Subscriptions == nil {
 		s.Subscriptions, err = NewSubscriptionsPostgresRepository(s.logger, psqlCli)
 		if err != nil {
@@ -224,4 +193,20 @@ func (s *PostgresStorageEngine) initialiceSubscriptionsStorage() error {
 	}
 
 	return nil
+}
+
+func (s *PostgresStorageEngine) GetKMSStorage() (storage.KMSKeysRepo, error) {
+	if s.KMS == nil {
+		psqlCli, err := CreatePostgresDBConnection(s.logger, s.Config, KMS_DB_NAME)
+		if err != nil {
+			return nil, fmt.Errorf("could not create postgres client: %s", err)
+		}
+
+		kmsStore, err := NewKMSPostgresRepository(s.logger, psqlCli)
+		if err != nil {
+			return nil, fmt.Errorf("could not initialize postgres DMS client: %s", err)
+		}
+		s.KMS = kmsStore
+	}
+	return s.KMS, nil
 }

@@ -53,11 +53,6 @@ func (p *PostgresSubsystem) Run(exposeAsStandardPort bool) (*subsystems.Subsyste
 					return fmt.Errorf("could not run reinitialize Certificates tables: %s", err)
 				}
 
-				_, err = postgres.NewCACertRequestPostgresRepository(logger, postgresEngine.DB[dbName])
-				if err != nil {
-					return fmt.Errorf("could not run reinitialize CA Certificate Request tables: %s", err)
-				}
-
 			case "devicemanager":
 				_, err := postgres.NewDeviceManagerRepository(logger, postgresEngine.DB[dbName])
 				if err != nil {
@@ -72,6 +67,11 @@ func (p *PostgresSubsystem) Run(exposeAsStandardPort bool) (*subsystems.Subsyste
 				_, err := postgres.NewVARepository(logger, postgresEngine.DB[dbName])
 				if err != nil {
 					return fmt.Errorf("could not run reinitialize VA tables: %s", err)
+				}
+			case "kms":
+				_, err := postgres.NewKMSPostgresRepository(logger, postgresEngine.DB[dbName])
+				if err != nil {
+					return fmt.Errorf("could not run reinitialize KMS tables: %s", err)
 				}
 			default:
 				return fmt.Errorf("unknown db name: %s", dbName)

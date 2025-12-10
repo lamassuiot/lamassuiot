@@ -31,6 +31,8 @@ import (
 
 var lAWSKMS *logrus.Entry
 
+const aliasFormat = "alias/%s"
+
 type AWSKMSCryptoEngine struct {
 	softCryptoEngine *software.SoftwareCryptoEngine
 	config           models.CryptoEngineInfo
@@ -63,7 +65,6 @@ func NewAWSKMSEngine(logger *logrus.Entry, awsConf aws.Config, metadata map[stri
 				{
 					Type: models.KeyType(x509.RSA),
 					Sizes: []int{
-						1024,
 						2048,
 						3072,
 						4096,
@@ -86,77 +87,127 @@ func (p *AWSKMSCryptoEngine) GetEngineConfig() models.CryptoEngineInfo {
 	return p.config
 }
 
-func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, error) {
-	lAWSKMS.Debugf("Getting the private key with Alias: %s", keyAlias)
-	var keyID = ""
-	keys, err := p.kmscli.ListKeys(context.Background(), &kms.ListKeysInput{
-		Limit: aws.Int32(100),
-	})
+// getAllKMSKeys retrieves all KMS keys with pagination support
+func (p *AWSKMSCryptoEngine) getAllKMSKeys(ctx context.Context) ([]types.KeyListEntry, error) {
+	var allKeys []types.KeyListEntry
+	var marker *string
 
-	if err != nil {
-		lAWSKMS.Errorf("could not get key list: %s", err)
-		return nil, err
-	}
-
-	for _, key := range keys.Keys {
-		aliases, err := p.kmscli.ListAliases(context.Background(), &kms.ListAliasesInput{
-			KeyId: key.KeyId,
+	for {
+		output, err := p.kmscli.ListKeys(ctx, &kms.ListKeysInput{
+			Limit:  aws.Int32(100),
+			Marker: marker,
 		})
 		if err != nil {
-			lAWSKMS.Errorf("could not get aliases list: %s", err)
+			return nil, err
+		}
+
+		allKeys = append(allKeys, output.Keys...)
+
+		if output.NextMarker == nil || *output.NextMarker == "" {
+			break
+		}
+		marker = output.NextMarker
+	}
+
+	return allKeys, nil
+}
+
+// getAliasesForKey retrieves all aliases for a specific key with pagination support
+func (p *AWSKMSCryptoEngine) getAliasesForKey(ctx context.Context, keyID *string) ([]types.AliasListEntry, error) {
+	var allAliases []types.AliasListEntry
+	var marker *string
+
+	for {
+		output, err := p.kmscli.ListAliases(ctx, &kms.ListAliasesInput{
+			KeyId:  keyID,
+			Limit:  aws.Int32(100),
+			Marker: marker,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		allAliases = append(allAliases, output.Aliases...)
+
+		if output.NextMarker == nil || *output.NextMarker == "" {
+			break
+		}
+		marker = output.NextMarker
+	}
+
+	return allAliases, nil
+}
+
+// findKeyArnByAlias searches for a key ARN matching the given alias name
+func (p *AWSKMSCryptoEngine) findKeyArnByAlias(ctx context.Context, keyAlias string) (string, error) {
+	keys, err := p.getAllKMSKeys(ctx)
+	if err != nil {
+		lAWSKMS.Errorf("could not get key list: %s", err)
+		return "", err
+	}
+
+	for _, key := range keys {
+		aliases, err := p.getAliasesForKey(ctx, key.KeyId)
+		if err != nil {
+			lAWSKMS.Errorf("could not get aliases list for key %s: %s", *key.KeyId, err)
 			continue
 		}
 
-		for _, alias := range aliases.Aliases {
-			aliasName := strings.Replace(*alias.AliasName, "alias/", "", -1)
+		for _, alias := range aliases {
+			aliasName := strings.ReplaceAll(*alias.AliasName, "alias/", "")
 			if aliasName == keyAlias {
-				keyID = *key.KeyArn
-				break
+				return *key.KeyArn, nil
 			}
 		}
-
-		if keyID == keyAlias {
-			break
-		}
 	}
 
-	if keyID == "" {
+	return "", errors.New("kms key not found")
+}
+
+func (p *AWSKMSCryptoEngine) GetPrivateKeyByID(keyAlias string) (crypto.Signer, error) {
+	lAWSKMS.Debugf("Getting the private key with Alias: %s", keyAlias)
+
+	keyArn, err := p.findKeyArnByAlias(context.Background(), keyAlias)
+	if err != nil {
 		lAWSKMS.Errorf("kms key not found")
-		return nil, errors.New("kms key not found")
+		return nil, err
 	}
 
-	signer, err := newKmsKeyCryptoSignerWrapper(p.kmscli, keyID)
-
+	signer, err := newKmsKeyCryptoSignerWrapper(p.kmscli, keyArn)
 	return signer, err
 }
 
-func (p *AWSKMSCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
-	keys, err := p.kmscli.ListKeys(context.Background(), &kms.ListKeysInput{
-		Limit: aws.Int32(100),
-	})
+// collectUserAliasNames extracts user-managed alias names (excluding AWS-managed aliases)
+func (p *AWSKMSCryptoEngine) collectUserAliasNames(aliases []types.AliasListEntry) []string {
+	var aliasNames []string
+	for _, alias := range aliases {
+		if strings.HasPrefix(*alias.AliasName, "alias/aws/") {
+			continue
+		}
+		aliasName := strings.ReplaceAll(*alias.AliasName, "alias/", "")
+		aliasNames = append(aliasNames, aliasName)
+	}
+	return aliasNames
+}
 
+func (p *AWSKMSCryptoEngine) ListPrivateKeyIDs() ([]string, error) {
+	var keyIDs []string
+
+	keys, err := p.getAllKMSKeys(context.Background())
 	if err != nil {
 		lAWSKMS.Errorf("could not get key list: %s", err)
 		return nil, err
 	}
 
-	var keyIDs []string
-	for _, key := range keys.Keys {
-		aliases, err := p.kmscli.ListAliases(context.Background(), &kms.ListAliasesInput{
-			KeyId: key.KeyId,
-		})
+	for _, key := range keys {
+		aliases, err := p.getAliasesForKey(context.Background(), key.KeyId)
 		if err != nil {
-			lAWSKMS.Errorf("could not get aliases list: %s", err)
+			lAWSKMS.Errorf("could not get aliases list for key %s: %s", *key.KeyId, err)
 			continue
 		}
 
-		for _, alias := range aliases.Aliases {
-			if strings.HasPrefix(*alias.AliasName, "alias/aws/") {
-				continue
-			}
-			aliasName := strings.Replace(*alias.AliasName, "alias/", "", -1)
-			keyIDs = append(keyIDs, aliasName)
-		}
+		userAliases := p.collectUserAliasNames(aliases)
+		keyIDs = append(keyIDs, userAliases...)
 	}
 
 	return keyIDs, nil
@@ -239,7 +290,7 @@ func (p *AWSKMSCryptoEngine) createPrivateKey(keySpec types.KeySpec) (string, cr
 	}
 
 	_, err = p.kmscli.CreateAlias(context.Background(), &kms.CreateAliasInput{
-		AliasName:   aws.String(fmt.Sprintf("alias/%s", keyID)),
+		AliasName:   aws.String(fmt.Sprintf(aliasFormat, keyID)),
 		TargetKeyId: key.KeyMetadata.Arn,
 	})
 
@@ -320,7 +371,7 @@ func (p *AWSKMSCryptoEngine) importKey(key crypto.Signer, spec types.KeySpec) (s
 
 	// 3. Create alias (non-fatal)
 	_, err = p.kmscli.CreateAlias(context.Background(), &kms.CreateAliasInput{
-		AliasName:   aws.String(fmt.Sprintf("alias/%s", keyID)),
+		AliasName:   aws.String(fmt.Sprintf(aliasFormat, keyID)),
 		TargetKeyId: createKeyOut.KeyMetadata.Arn,
 	})
 	if err != nil {
@@ -404,7 +455,7 @@ func (p *AWSKMSCryptoEngine) importPrivateKeyDer(der []byte, arn string) error {
 
 func (p *AWSKMSCryptoEngine) RenameKey(oldID, newID string) error {
 	desc, err := p.kmscli.DescribeKey(context.Background(), &kms.DescribeKeyInput{
-		KeyId: aws.String(fmt.Sprintf("alias/%s", oldID)),
+		KeyId: aws.String(fmt.Sprintf(aliasFormat, oldID)),
 	})
 	if err != nil {
 		lAWSKMS.Errorf("could not get key description: %s", err)
@@ -412,7 +463,7 @@ func (p *AWSKMSCryptoEngine) RenameKey(oldID, newID string) error {
 	}
 
 	_, err = p.kmscli.CreateAlias(context.Background(), &kms.CreateAliasInput{
-		AliasName:   aws.String(fmt.Sprintf("alias/%s", newID)),
+		AliasName:   aws.String(fmt.Sprintf(aliasFormat, newID)),
 		TargetKeyId: desc.KeyMetadata.Arn,
 	})
 	if err != nil {
@@ -421,7 +472,7 @@ func (p *AWSKMSCryptoEngine) RenameKey(oldID, newID string) error {
 	}
 
 	_, err = p.kmscli.DeleteAlias(context.Background(), &kms.DeleteAliasInput{
-		AliasName: aws.String(fmt.Sprintf("alias/%s", oldID)),
+		AliasName: aws.String(fmt.Sprintf(aliasFormat, oldID)),
 	})
 	if err != nil {
 		lAWSKMS.Errorf("could not delete key: %s", err)

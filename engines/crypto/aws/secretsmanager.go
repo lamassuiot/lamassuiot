@@ -56,6 +56,7 @@ func NewAWSSecretManagerEngine(logger *logrus.Entry, awsConf aws.Config, metadat
 				{
 					Type: models.KeyType(x509.RSA),
 					Sizes: []int{
+						1024,
 						2048,
 						3072,
 						4096,

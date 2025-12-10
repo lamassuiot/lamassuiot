@@ -1,0 +1,237 @@
+# .github/workflows/release_finalize.yml
+name: Finalize Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'CHANGELOG.md'   # optional: run only when CHANGELOG.md changed
+      - 'RELEASE-NOTES.md'   # optional: run only when RELEASE-NOTES.md changed
+
+env:
+  RELEASE_VERSION: ""  # Global variable to be set by extract_version job
+
+jobs:
+  extract_version:
+    name: Extract Version from Commit Message
+    runs-on: ubuntu-latest
+    outputs:
+      release_version: ${{ steps.extract.outputs.release_version }}
+      major_version: ${{ steps.extract.outputs.major_version }}
+      release_version_with_v: ${{ steps.extract.outputs.release_version_with_v }}
+      is_release_commit: ${{ steps.extract.outputs.is_release_commit }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from commit message
+        id: extract
+        run: |
+          msg="$(git log -1 --pretty=%s)"
+          echo "Last commit: $msg"
+          
+          # Check if this is a release commit
+          if [[ "$msg" =~ ^chore:\ release:\ prepare\ release\ ([0-9]+\.[0-9]+\.[0-9]+).*$ ]]; then
+            version="${BASH_REMATCH[1]}"
+            echo "is_release_commit=true" >> $GITHUB_OUTPUT
+            echo "Found release version: $version"
+            
+            # Validate semver format
+            SEMVER_REGEX="^([0-9]+\.[0-9]+\.[0-9]+)$"
+            if [[ "$version" =~ $SEMVER_REGEX ]]; then
+              major=$(echo "$version" | cut -d. -f1)
+              echo "release_version=$version" >> $GITHUB_OUTPUT
+              echo "major_version=$major" >> $GITHUB_OUTPUT
+              echo "release_version_with_v=v$version" >> $GITHUB_OUTPUT
+            else
+              echo "Invalid semver format: $version"
+              exit 1
+            fi
+          else
+            echo "is_release_commit=false" >> $GITHUB_OUTPUT
+            echo "Not a release commit; skipping release process."
+            exit 1
+          fi
+
+  finalize:
+    name: Setup Release Variables
+    needs: extract_version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Modules Matrix
+        id: matrix
+        run: |
+          # Define MODULES as an array
+          MODULES=(
+            "core"
+            "sdk"
+            "shared/aws"
+            "shared/subsystems"
+            "shared/http"
+            "engines/crypto/aws"
+            "engines/crypto/filesystem"
+            "engines/crypto/software"
+            "engines/crypto/pkcs11"
+            "engines/crypto/vaultkv2"
+            "engines/eventbus/amqp"
+            "engines/eventbus/aws"
+            "engines/storage/postgres"
+            "engines/fs-storage/localfs"
+            "engines/fs-storage/s3"
+            "backend"
+            "connectors/awsiot"
+            "monolithic"
+          )
+
+          # Convert the array into a JSON array
+          json_modules=$(printf '%s\n' "${MODULES[@]}" | jq -R -c . | jq -s -c .)
+          echo "json_modules=$json_modules"
+
+          # Set the JSON array as an output
+          echo "json_modules=$json_modules" >> $GITHUB_OUTPUT
+
+      - name: Print Release Info
+        run: |
+          echo "MAJOR_VERSION          = ${{ needs.extract_version.outputs.major_version }}"
+          echo "RELEASE_VERSION        = ${{ needs.extract_version.outputs.release_version }}"
+          echo "RELEASE_VERSION_WITH_V = ${{ needs.extract_version.outputs.release_version_with_v }}"
+          echo "JSON_MODULES           = ${{ steps.matrix.outputs.json_modules }}"
+
+    outputs:
+      major_version: ${{ needs.extract_version.outputs.major_version }}
+      release_version: ${{ needs.extract_version.outputs.release_version }}
+      release_version_with_v: ${{ needs.extract_version.outputs.release_version_with_v }}
+      json_modules: ${{ steps.matrix.outputs.json_modules }}
+ 
+  create_global_release:
+    name: Create Global Tag & Release
+    needs: finalize
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      
+      - name: Create Tag
+        run: |
+          git config user.name "Lamassu IoT Bot"
+          git config user.email "lamassuiot@lamassu.io"
+          git tag ${{ needs.finalize.outputs.release_version_with_v }} -m "Release ${{ needs.finalize.outputs.release_version_with_v }}"
+          git push origin ${{ needs.finalize.outputs.release_version_with_v }}
+
+      - name: Checkout code to tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.finalize.outputs.release_version_with_v }}
+
+      - name: Create Github Release
+        uses: actions/create-release@v1
+        id: create_release
+        with:
+          draft: false
+          prerelease: false
+          release_name: ${{ needs.finalize.outputs.release_version_with_v }}
+          tag_name: ${{ needs.finalize.outputs.release_version_with_v }}
+          body_path: RELEASE-NOTES.md
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '^1.24.3' # The Go version to download (if necessary) and use.
+      - name: Build release assets # This would actually build your project, using zip for an example artifact
+        run: |
+          go work vendor
+          zip -r vendor.zip vendor
+      - name: Upload vendor dependencies
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./vendor.zip
+          asset_name: vendor.zip
+          asset_content_type: application/zip
+
+  create_module_release:
+    name: "Create Module release"
+    needs: [create_global_release, finalize]
+    runs-on: ubuntu-latest
+    environment: release
+    strategy:
+      matrix:
+        module: ${{ fromJson(needs.finalize.outputs.json_modules) }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Create Tag
+        run: |
+          git config user.name "Lamassu IoT Bot"
+          git config user.email "lamassuiot@lamassu.io"
+          git tag ${{ matrix.module }}/${{ needs.finalize.outputs.release_version_with_v }} -m "Release ${{ matrix.module }}/${{ needs.finalize.outputs.release_version_with_v }}"
+          git push origin ${{ matrix.module }}/${{ needs.finalize.outputs.release_version_with_v }}
+
+      - name: Checkout code to tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.module }}/${{ needs.finalize.outputs.release_version_with_v }}
+
+  create_gopkg_release:
+    name: "Create Go package release"
+    needs: [create_module_release, finalize]
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.finalize.outputs.major_version }}
+          token: ${{ secrets.PAT_RELEASER }}
+          fetch-tags: true
+      - run: |
+          git config user.name "Lamassu IoT Bot"
+          git config user.email "lamassuiot@lamassu.io"
+          git fetch --unshallow
+          git merge origin/main -m "publishing ${{ needs.finalize.outputs.release_version_with_v }} version"
+          git push
+
+  build_docker_image:
+    needs: [create_module_release, finalize]
+    strategy:
+      matrix:
+        service: [kms, ca, devmanager, dmsmanager, va, alerts, aws-connector, goose-lamassu]
+    name: ${{ matrix.service }} - Release docker images
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.finalize.outputs.release_version_with_v }}
+          fetch-tags: true
+      - run: |
+          echo "SHA1VER=$(git rev-parse HEAD)" >> $GITHUB_ENV
+      - name: Login to Github Registry
+        uses: docker/login-action@v3 
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build ${{ matrix.service }} DEV docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ci/${{ matrix.service }}.dockerfile
+          build-args: |
+            BASE_IMAGE=alpine:3.14
+            SHA1VER=${{ env.SHA1VER }}
+            VERSION=${{ needs.finalize.outputs.release_version }}
+          tags: |
+            ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:${{ needs.finalize.outputs.release_version }}
+            ghcr.io/lamassuiot/lamassu-${{ matrix.service }}:latest
+          push: true

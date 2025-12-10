@@ -2,15 +2,12 @@ package migrationstest
 
 import (
 	"context"
-	"crypto/x509"
-	"encoding/base64"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/config"
 	"github.com/lamassuiot/lamassuiot/core/v3/pkg/helpers"
-	"github.com/lamassuiot/lamassuiot/core/v3/pkg/models"
 	"github.com/lamassuiot/lamassuiot/engines/storage/postgres/v3"
 
 	"github.com/sirupsen/logrus"
@@ -213,58 +210,6 @@ func MigrationTest_CA_20250107164937_add_is_ca(t *testing.T, logger *logrus.Entr
 
 func MigrationTest_CA_20250115095852_create_requests_table(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
 	ApplyMigration(t, logger, con, CADBName)
-
-	reqRepo, err := postgres.NewCACertRequestPostgresRepository(logger, con)
-	if err != nil {
-		t.Fatalf("could not create certificate repository: %s", err)
-	}
-
-	csrStr := "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJQ1hUQ0NBVVVDQVFBd0dERVdNQlFHQTFVRUF4TU5UWGxTWlhGMVpYTjBaV1JEUVRDQ0FTSXdEUVlKS29aSQpodmNOQVFFQkJRQURnZ0VQQURDQ0FRb0NnZ0VCQUx4VmcxT2RrUjVScjAyMUJWQzB1SzdMMDhjUG9MTDlCd1lxCmNjaGJxOWtIYTZQS0NmZldRZ2ZhaHNSMy9oT2U4cXdmRFhjZnFXMS9rWnRHRnVjQkMwNVpnNG9ZaXVockwvb2EKa05DWGIvNlZRdjk3b2VqcXBFOHdwbzc3UlArN0RQYU51TXA5UGlrclRuYmVWdVhLTnBPUTcvZlpWQmpuMGxqcApSa3BMN1gwdE9QU1FRNzEyeHY3elhoVCtJL2hCODJ2ZkRWRFRmRzdOaHlycW1nSEsvWXFNUGVEcUIvNjQvb29xCm43anJabjFWbVpQRzVXcUkrVTltYmtHUGpQbjUxTGdheTE0NGFPajE2aW9Uak56Z05BRnhoRUVlcVB1bXRmSWcKS2kxTnZXMTI0dWJSOGpNandoMmF2RDYxYVhOTHlQaERiUm9VdG9OU29VQzlyS3pxRTRFQ0F3RUFBYUFBTUEwRwpDU3FHU0liM0RRRUJDd1VBQTRJQkFRQmJZUlZVZk44TG9nNisySlNPTTBSNTVINHZ3OGxPOWRNeFZOc01ibG5VCnBTR0FoM3k0WHFDTm0zTllORUJ4TFQ4eDdON0xlSWJZZTJiUGZXbWduc0crb0dKelBaeU5hUmNMd1d1N3R0VlMKbml2Y2t4Ums4MGV0ZGkxcUlyM2JBVmRjcHZkWWJ5N2FySjl1Z2ZUNlQ4N3p5Rk1Ka2RvZWV4b2J0dlJ6dnZEMQp3WW1aVzQwRE1HbHBlMllIZFd3dXBaejFTSENtODBmdGxUV3M5aG1jUW1GU2hOVHViRzllQjgxL3pTdXVLbTl0Cnl2ekM5MFd6LysvSjFicW1XejZwcU1xSXJkVGVNeFRST0hibG1WMWFIdWtzT2FESFljNStPVkV3YUQ0clF3ZEoKS3MxeGFWT2lIcjIvVDBadUYrdzJHNGFNQ1k3TUp0QW16QmVsbTAvVHJwUmUKLS0tLS1FTkQgQ0VSVElGSUNBVEUgUkVRVUVTVC0tLS0tCg=="
-	crtBytes, err := base64.StdEncoding.DecodeString(csrStr)
-	if err != nil {
-		t.Fatalf("could not decode certificate: %s", err)
-	}
-
-	csr, err := helpers.ParseCertificateRequest(string(crtBytes))
-	if err != nil {
-		t.Fatalf("could not parse certificate: %s", err)
-	}
-
-	_, err = reqRepo.Insert(context.Background(), &models.CACertificateRequest{
-		ID:       "1111-2222-3333-4444",
-		KeyId:    "1111-2222-3333-4444",
-		EngineID: "filesystem-1",
-		Status:   models.StatusRequestPending,
-		Subject: models.Subject{
-			CommonName:       "test",
-			Organization:     "test",
-			OrganizationUnit: "test",
-			Country:          "test",
-			Locality:         "test",
-			State:            "test",
-		},
-		KeyMetadata: models.KeyStrengthMetadata{
-			Type:     models.KeyType(x509.RSA),
-			Bits:     4096,
-			Strength: models.KeyStrengthHigh,
-		},
-		CSR:        models.X509CertificateRequest(*csr),
-		Metadata:   map[string]any{},
-		CreationTS: time.Date(2024, time.November, 25, 9, 45, 48, 0, time.UTC),
-	})
-
-	if err != nil {
-		t.Fatalf("could not insert certificate request: %s", err)
-	}
-
-	exists, _, err := reqRepo.SelectExistsByID(context.Background(), "1111-2222-3333-4444")
-	if err != nil {
-		t.Fatalf("could not check if certificate request exists: %s", err)
-	}
-
-	if !exists {
-		t.Fatalf("certificate request does not exist")
-	}
 }
 
 func MigrationTest_CA_20250123125500_ca_aws_metadata(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
@@ -328,6 +273,15 @@ func MigrationTest_CA_20250704101200_add_version_schema(t *testing.T, logger *lo
 }
 
 func MigrationTest_CA_20250908074250_add_profile_id(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Insert CA certificate with validity_time as NULL (should be handled gracefully by migration)
+	con.Exec(`INSERT INTO public.certificates 
+		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, type, engine_id, subject_key_id, is_ca) 
+		VALUES ('00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00', '{}', '37-65-cd-86-f0-bf-c5-c8-1b-7f-10-f8-15-4e-4e-35-81-4c-d8-79', '8b600c60-9eb3-4251-b6ce-c92d1beccc63', 0, 'ACTIVE', 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURsRENDQW55Z0F3SUJBZ0lVTjJYTmh2Qy94Y2diZnhENEZVNU9OWUZNMkhrd0RRWUpLb1pJaHZjTkFRRUwKQlFBd1hERUxNQWtHQTFVRUJoTUNWVk14RlRBVEJnTlZCQWdNREVWNFlXMXdiR1ZUZEdGMFpURVVNQklHQTFVRQpCd3dMUlhoaGJYQnNaVU5wZEhreER6QU5CZ05WQkFvTUJsSnZiM1JEUVRFUU1BNEdBMVVFQXd3SFVtOXZkQ0JEClFUQWVGdzB5TlRBeU1qVXhNelUwTVRoYUZ3MHpOVEF5TWpNeE16VTBNVGhhTUVZeEN6QUpCZ05WQkFZVEFsVlQKTVJVd0V3WURWUVFJREF4RmVHRnRjR3hsVTNSaGRHVXhEekFOQmdOVkJBb01CbEp2YjNSRFFURVBNQTBHQTFVRQpBd3dHVTNWaUlFTkJNSUlCSWpBTkJna3Foa2lHOXcwQkFRRUZBQU9DQVE4QU1JSUJDZ0tDQVFFQTJIay91Ri9VClJNdHAzengyYmltUllvSEFxMXJ6OUgyL1F3S2d0RTRkTkk1R01ISUh4ZWVJZk9sYnh4T2hyMVBhTUtTb3hJdjEKM1NqMWFycEloUUVGc2V0NDJ0WU9FS2dUTzB4NUtRSFFSbnNYOUY1dXVjNURyajZFNFUxcUF2MGtxQlMvN2NobQpqc3pwc1oyK1ExOWordjNHM0NNa2twT09ZWmFUQW8wWlBFdFJCYU5HM3hYMlg0akdidmlNMWFDeDZ2MmNDM0s4CnJmYXVoNzR4T3lLaldNME1PVm5kS2N0VUFzNW9VckZjTkM2c3BwOGtqQk1XcFhjQ3RjWStZTm5ISDVhRDcvTEIKakdaSmxaTkROS0NDdFIwR050d2xxUHZiQ3pUYnV2UHZqVkY2aFdQaEIwZFdYUDVqRTFuc05BUkxnWW51RTJXTQpoQWx5cU92bWdlaGZVUUlEQVFBQm8yTXdZVEFQQmdOVkhSTUJBZjhFQlRBREFRSC9NQTRHQTFVZER3RUIvd1FFCkF3SUJCakFkQmdOVkhRNEVGZ1FVSHV1UElDL2tVWVA2MHlzSGlMMTl2NTFyMUtFd0h3WURWUjBqQkJnd0ZvQVUKNUZpMVFQOFc5KzRSaS8wdFZFNENhaVg1cHY0d0RRWUpLb1pJaHZjTkFRRUxCUUFEZ2dFQkFJdTFsQVp0ZVUrbgorNmwvd3VFb2V2K0FkOEQzVHZIREVqeHlIbll0RTRNZitITGsyU2d1WXZYSkpSRkZjOXVzRzNGbW1CMGhUUG14CktEck1rOVFPYmdIc1pIY05hZ3doQjZVcm4rRUtyai9ZVW5JSkUyVHJYL2JsRllvTUJQYXhiV3J3cm1GQWpLc2wKOHV1Sm9OWTY0RzZzT016SEJwZUVMaGRaVS94Z0Rzck5rK2RHeVZ0WUFqbWZrc1FMT1NnRjE0WFpuWEw5K3dQYwpqU200bjhXNVlRMHpzS0FaNVRtQjBWcFRDa3ZWUy9nR0RIb1pmZE8zOENTcnk0ejhuTTNXNHpka212bzc2RzhVCjJmdkMxMUZTWHh6UlZRcmJ4ZmFPTUVjZHpUMHUxd2NzUVF6TTQrdjBOanQzdlZ5K2dSbGptK0dtdDBEYzkvTGIKTzN2MkFmbWhQaVU9Ci0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K', 'RSA', 2048, 'MEDIUM', 'Sub CA', 'RootCA', '', 'US', 'ExampleState', '', '2025-02-25 13:54:18+00', '2035-02-23 13:54:18+00', '0001-01-01 00:00:00+00', 'Unspecified', 'EXTERNAL', '', '1E:EB:8F:20:2F:E4:51:83:FA:D3:2B:07:88:BD:7D:BF:9D:6B:D4:A1', true);
+	`)
+	con.Exec(`INSERT INTO ca_certificates
+	       (serial_number, metadata, id, creation_ts, "level", validity_type, validity_time, validity_duration)
+	       VALUES('00-00-00-00-00-00-00-00-00-00-00-00-00-00-00-00', '{}', 'ca-nil-validity-time', '2025-01-07 15:53:00.000', 2, 'Duration', NULL, '14w2d');
+       `)
 	// Insert first CA certificate
 	con.Exec(`INSERT INTO public.certificates 
 		(serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, type, engine_id, subject_key_id, is_ca) 
@@ -371,6 +325,14 @@ func MigrationTest_CA_20250908074250_add_profile_id(t *testing.T, logger *logrus
 	// Verify both profile IDs are assigned
 	assert.NotEmpty(t, ca1ProfileID, "First CA should have a profile ID assigned")
 	assert.NotEmpty(t, ca2ProfileID, "Second CA should have a profile ID assigned")
+
+	// Check that the CA with nil validity_time still gets a profile_id assigned (should not panic)
+	var caNilProfileID string
+	tx = con.Raw("SELECT profile_id FROM ca_certificates WHERE id = ?", "ca-nil-validity-time").Scan(&caNilProfileID)
+	if tx.Error != nil {
+		t.Fatalf("failed to get profile ID for CA with nil validity_time: %v", tx.Error)
+	}
+	assert.NotEmpty(t, caNilProfileID, "CA with nil validity_time should have a profile ID assigned (or at least not panic)")
 
 	// Both CAs should share the same profile since they have identical validity settings
 	assert.Equal(t, ca1ProfileID, ca2ProfileID, "Both CAs should reference the same profile ID since they have identical validity settings")
@@ -436,6 +398,76 @@ func MigrationTest_CA_20250904183000_update_serial_numbers(t *testing.T, logger 
 		t.Fatalf("failed to select updated ca_certificate serial_number: %v", tx.Error)
 	}
 	assert.Equal(t, expected, caCertSerial)
+}
+
+func MigrationTest_CA_20250915090500_update_ski_aki(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+
+	const expectedSKI = "62333562383861653665633935376463656463343234643666373933346338646265326265663364326262356334303066663333636135653266613030626236"
+	const expectedAKI = "62333562383861653665633935376463656463343234643666373933346338646265326265663364326262356334303066663333636135653266613030626236"
+
+	serial := "3765cd86f0bfc5c81b7f10f8154e4e35814cd879"
+
+	// 1. Insert certificate
+	con.Exec(`INSERT INTO certificates
+        (serial_number, is_ca, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, type, engine_id)
+        VALUES (?, true, '{}', ?, 'test-id', 0, 'ACTIVE', 'LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUM4ekNDQW5tZ0F3SUJBZ0lSQUxnNEt3VGxKSUdIYXl0cnBWeUIvQ2N3Q2dZSUtvWkl6ajBFQXdNd0R6RU4KTUFzR0ExVUVBeE1FZEdWemREQWVGdzB5TlRBMk1qWXdPRFE0TkRsYUZ3MHlOakEwTWpJd09EUTRORGxhTUE4eApEVEFMQmdOVkJBTVRCSFJsYzNRd2RqQVFCZ2NxaGtqT1BRSUJCZ1VyZ1FRQUlnTmlBQVQvK0hXZTBLRWl2cGFhCmc2NDRyUmZuOGRwU0c1U1RiS3ZCWWdWQ1FYSmQ3VWE3eWc2T3BUL2Y0dVJnemFvd2tjbVVvOW5ON3QxclRKK0kKcTh6ME5oMkJXRnlDSE5PSkc5MlI0cXlNdE90V2FZRWFvVXF1STFKMk5hMVo1akd4ZzcyamdnR1hNSUlCa3pBTwpCZ05WSFE4QkFmOEVCQU1DQVlZd0V3WURWUjBsQkF3d0NnWUlLd1lCQlFVSEF3a3dEd1lEVlIwVEFRSC9CQVV3CkF3RUIvekJKQmdOVkhRNEVRZ1JBWWpNMVlqZzRZV1UyWldNNU5UZGtZMlZrWXpReU5HUTJaamM1TXpSak9HUmkKWlRKaVpXWXpaREppWWpWak5EQXdabVl6TTJOaE5XVXlabUV3TUdKaU5qQkxCZ05WSFNNRVJEQkNnRUJpTXpWaQpPRGhoWlRabFl6azFOMlJqWldSak5ESTBaRFptTnprek5HTTRaR0psTW1KbFpqTmtNbUppTldNME1EQm1aak16ClkyRTFaVEptWVRBd1ltSTJNRVlHQ0NzR0FRVUZCd0VCQkRvd09EQTJCZ2dyQmdFRkJRY3dBWVlxYUhSMGNEb3YKTDJSbGJXOHRZWEJwTG14aGJXRnpjM1V1WTJ4dmRXUXZjSEp2WkM5MllTOXZZM053TUhzR0ExVWRId1IwTUhJdwpjS0J1b0d5R2FtaDBkSEE2THk5a1pXMXZMV0Z3YVM1c1lXMWhjM04xTG1Oc2IzVmtMM0J5YjJRdmRtRXZZM0pzCkwySXpOV0k0T0dGbE5tVmpPVFUzWkdObFpHTTBNalJrTm1ZM09UTTBZemhrWW1VeVltVm1NMlF5WW1JMVl6UXcKTUdabU16TmpZVFZsTW1aaE1EQmlZall3Q2dZSUtvWkl6ajBFQXdNRGFBQXdaUUl4QVBJSkNMUCs5MW8yUSswLwowK2gwM1FzYWRSbkg3eThqK0M1RWpwUGY2UkgzcGVYUW9xR3hSNkF1R1p4M3lxdkVjd0l3T2dndXY4QmM1bHVOCkNaZEl4SzZFV2xCOUtMTUJjaXBDUzloMDV2SUF3SzU3Ui9sdGJoNm82ZnN0MHhvTDh1WGgKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=', 'RSA', 2048, 'MEDIUM', 'TestCN', 'TestOrg', '', 'US', '', '', '2025-01-01 00:00:00', '2026-01-01 00:00:00', '0001-01-01 01:00:00.000', 'Unspecified', 'EXTERNAL', 'test-engine');`,
+		serial, serial)
+
+	// 2. Insert ca_certificates referencing the certificate
+	con.Exec(`INSERT INTO ca_certificates
+		(serial_number, metadata, id, creation_ts, "level")
+		VALUES(?, '{}', '8b600c60-9eb3-4251-b6ce-c92d1beccc63', '2025-01-07 15:51:59.774', 0);
+	`, serial)
+
+	// Apply migration
+	ApplyMigration(t, logger, con, CADBName)
+
+	// Check SKI and AKI updated correctly in certificates
+	var result map[string]any
+	tx := con.Raw("SELECT subject_key_id, authority_key_id FROM certificates WHERE serial_number = ?", serial).Scan(&result)
+	if tx.Error != nil {
+		t.Fatalf("failed to select updated certificate SKI/AKI: %v", tx.Error)
+	}
+	assert.Equal(t, expectedSKI, result["subject_key_id"])
+	assert.Equal(t, expectedAKI, result["authority_key_id"])
+}
+
+func MigrationTest_CA_20251001120000_update_issuer_meta_serial_numbers(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// Before applying migration, insert test data with hyphenated issuer_meta_serial_number
+	// 1. Insert certificate with hyphenated issuer_meta_serial_number
+	err := con.Exec("INSERT INTO certificates (serial_number, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, status, certificate, key_meta_type, key_meta_bits, key_meta_strength, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, valid_from, valid_to, revocation_timestamp, revocation_reason, type, engine_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"test-cert-serial", "{}", "aa-bb-cc-dd-ee-ff-11-22-33-44-55-66-77-88-99-00", "test-issuer-id", 0, "ACTIVE", "test-certificate-data", "RSA", 4096, "HIGH", "Test Certificate", "", "", "", "", "", "2024-11-25 9:45:48.000", "2025-09-21 11:45:44.000", "0001-01-01 01:00:00.000", "Unspecified", "MANAGED", "test-engine").Error
+	if err != nil {
+		t.Fatalf("failed to insert test certificate: %v", err)
+	}
+
+	// 2. Insert ca_certificate_requests with hyphenated issuer_meta_serial_number
+	err = con.Exec("INSERT INTO ca_certificate_requests (id, key_id, engine_id, metadata, issuer_meta_serial_number, issuer_meta_id, issuer_meta_level, subject_common_name, subject_organization, subject_organization_unit, subject_country, subject_state, subject_locality, creation_ts, level, key_meta_type, key_meta_bits, key_meta_strength, status, fingerprint, csr) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"test-request-id", "test-key-id", "test-engine", "{}", "bb-cc-dd-ee-ff-11-22-33-44-55-66-77-88-99-00-aa", "test-issuer-id", 0, "Test Request", "", "", "", "", "", "2024-11-25 9:45:48.000", 0, "RSA", 4096, "HIGH", "PENDING", "test-fingerprint", "test-csr-data").Error
+	if err != nil {
+		t.Fatalf("failed to insert test certificate request: %v", err)
+	}
+
+	// Apply migration
+	ApplyMigration(t, logger, con, CADBName)
+
+	// 3. Check issuer_meta_serial_number updated correctly in certificates table
+	var certResult map[string]any
+	tx := con.Raw("SELECT issuer_meta_serial_number FROM certificates WHERE serial_number = ?", "test-cert-serial").Scan(&certResult)
+	if tx.RowsAffected != 1 {
+		t.Fatalf("expected 1 row in certificates, got %d", tx.RowsAffected)
+	}
+	// Should be updated from 'aa-bb-cc-dd-ee-ff-11-22-33-44-55-66-77-88-99-00' to 'aabbccddeeff11223344556677889900'
+	assert.Equal(t, "aabbccddeeff11223344556677889900", certResult["issuer_meta_serial_number"])
+
+	// 4. Check issuer_meta_serial_number updated correctly in ca_certificate_requests table
+	var requestResult map[string]any
+	tx = con.Raw("SELECT issuer_meta_serial_number FROM ca_certificate_requests WHERE id = ?", "test-request-id").Scan(&requestResult)
+	if tx.RowsAffected != 1 {
+		t.Fatalf("expected 1 row in ca_certificate_requests, got %d", tx.RowsAffected)
+	}
+	// Should be updated from 'bb-cc-dd-ee-ff-11-22-33-44-55-66-77-88-99-00-aa' to 'bbccddeeff11223344556677889900aa'
+	assert.Equal(t, "bbccddeeff11223344556677889900aa", requestResult["issuer_meta_serial_number"])
 }
 
 func TestMigrations(t *testing.T) {
@@ -507,5 +539,19 @@ func TestMigrations(t *testing.T) {
 	MigrationTest_CA_20250904183000_update_serial_numbers(t, logger, con)
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20250904183000_update_serial_numbers")
+	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_CA_20250915090500_update_ski_aki(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20250915090500_update_ski_aki")
+	}
+
+	CleanAllTables(t, logger, con)
+
+	MigrationTest_CA_20251001120000_update_issuer_meta_serial_numbers(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20251001120000_update_issuer_meta_serial_numbers")
 	}
 }
