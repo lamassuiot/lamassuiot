@@ -470,6 +470,42 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		return nil, err
 	}
 
+	// Resolve CA Issuance Profile (for the CA certificate itself)
+	var caIssuanceProfile models.IssuanceProfile
+	if input.CAIssuanceProfile != nil {
+		// Priority 1: Use inline profile if provided
+		caIssuanceProfile = *input.CAIssuanceProfile
+		lFunc.Debugf("using inline CA issuance profile for CA certificate creation")
+
+		// Validate that profile is suitable for CA creation
+		if !caIssuanceProfile.SignAsCA {
+			lFunc.Errorf("CA issuance profile must have SignAsCA=true")
+			return nil, errs.ErrValidateBadRequest
+		}
+	} else if input.CAIssuanceProfileID != "" {
+		// Priority 2: Resolve profile by reference ID
+		profile, err := svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
+			ProfileID: input.CAIssuanceProfileID,
+		})
+		if err != nil {
+			lFunc.Errorf("could not get CA issuance profile %s: %s", input.CAIssuanceProfileID, err)
+			return nil, err
+		}
+		caIssuanceProfile = *profile
+		lFunc.Debugf("using referenced CA issuance profile %s for CA certificate creation", input.CAIssuanceProfileID)
+
+		// Validate that profile is suitable for CA creation
+		if !caIssuanceProfile.SignAsCA {
+			lFunc.Errorf("CA issuance profile %s must have SignAsCA=true", input.CAIssuanceProfileID)
+			return nil, errs.ErrValidateBadRequest
+		}
+	} else {
+		// Priority 3: Use hard-coded default
+		engine := x509engines.NewX509Engine(lFunc, svc.vaServerDomains, svc.kmsService)
+		caIssuanceProfile = engine.GetDefaultCAIssuanceProfile(ctx, input.CAExpiration)
+		lFunc.Debugf("using default CA issuance profile for CA certificate creation")
+	}
+
 	// Check if CA already exists
 	caID := input.ID
 	if caID == "" {
@@ -527,7 +563,7 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		akid = key.KeyID
 
 		// Root CA. Root CAs can be generate directly
-		ca, err = engine.CreateRootCA(ctx, signer, key.KeyID, input.Subject, input.CAExpiration)
+		ca, err = engine.CreateRootCA(ctx, signer, key.KeyID, input.Subject, input.CAExpiration, caIssuanceProfile)
 		if err != nil {
 			lFunc.Errorf("could not create CA %s certificate: %s", input.Subject.CommonName, err)
 			return nil, err
@@ -585,12 +621,11 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		}
 
 		csr, _ := x509.ParseCertificateRequest(csrDerBytes)
-		issuanceProfile := engine.GetDefaultCAIssuanceProfile(ctx, input.CAExpiration)
 
 		signedCA, err := svc.SignCertificate(ctx, services.SignCertificateInput{
 			CAID:            input.ParentID,
 			CertRequest:     (*models.X509CertificateRequest)(csr),
-			IssuanceProfile: &issuanceProfile,
+			IssuanceProfile: &caIssuanceProfile,
 		})
 		if err != nil {
 			lFunc.Errorf("could not sign CA %s certificate: %s", input.Subject.CommonName, err)

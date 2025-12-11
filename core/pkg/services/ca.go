@@ -108,6 +108,10 @@ type CreateCAInput struct {
 	CAExpiration models.Validity    `validate:"required"`
 	EngineID     string
 	Metadata     map[string]any
+	// CA Issuance Profile - optional profile to apply when creating the CA certificate itself
+	// (distinct from ProfileID which is the default profile for certificates issued BY this CA)
+	CAIssuanceProfileID string                  // Reference to an existing issuance profile
+	CAIssuanceProfile   *models.IssuanceProfile // Inline issuance profile definition
 }
 
 type RequestCAInput struct {

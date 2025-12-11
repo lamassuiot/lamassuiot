@@ -39,7 +39,7 @@ func NewX509Engine(logger *logrus.Entry, vaDomains []string, kmsSDK services.KMS
 	}
 }
 
-func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer, keyID string, subject models.Subject, validity models.Validity) (*x509.Certificate, error) {
+func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer, keyID string, subject models.Subject, validity models.Validity, profile models.IssuanceProfile) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
@@ -59,19 +59,31 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 
 	rawHex, _ := hex.DecodeString(keyID)
 
+	// Apply subject from profile if HonorSubject is false
+	finalSubject := subject
+	if !profile.HonorSubject {
+		finalSubject = profile.Subject
+		finalSubject.CommonName = subject.CommonName
+	}
+
 	template := x509.Certificate{
 		SerialNumber:          sn,
-		Subject:               chelpers.SubjectToPkixName(subject),
+		Subject:               chelpers.SubjectToPkixName(finalSubject),
 		AuthorityKeyId:        rawHex,
 		SubjectKeyId:          rawHex,
 		OCSPServer:            []string{},
 		CRLDistributionPoints: []string{},
 		NotBefore:             time.Now(),
 		NotAfter:              caExpiration,
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageOCSPSigning},
+		KeyUsage:              x509.KeyUsage(profile.KeyUsage),
+		ExtKeyUsage:           []x509.ExtKeyUsage{},
 		BasicConstraintsValid: true,
 		IsCA:                  true,
+	}
+
+	// Apply extended key usages from profile
+	for _, eku := range profile.ExtendedKeyUsages {
+		template.ExtKeyUsage = append(template.ExtKeyUsage, x509.ExtKeyUsage(eku))
 	}
 
 	for _, domain := range engine.vaDomains {

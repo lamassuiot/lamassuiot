@@ -221,6 +221,245 @@ func TestCreateCA(t *testing.T) {
 				return nil
 			},
 		},
+		{
+			name:   "OK/CAIssuanceProfile-Inline",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				defaultProfile := createProfile(t)
+
+				// Create CA with inline CA issuance profile
+				caIssuanceProfile := models.IssuanceProfile{
+					Validity:          models.Validity{Type: models.Duration, Duration: caDUr},
+					SignAsCA:          true,
+					HonorSubject:      true,
+					KeyUsage:          models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature),
+					ExtendedKeyUsages: []models.X509ExtKeyUsage{},
+				}
+
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                caID,
+					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:           models.Subject{CommonName: "TestCA-Inline-Profile"},
+					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:         defaultProfile.ID,
+					CAIssuanceProfile: &caIssuanceProfile,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				// Verify the CA certificate has the expected key usage
+				cert := (*x509.Certificate)(createdCA.Certificate.Certificate)
+				expectedKeyUsage := x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature
+				if cert.KeyUsage != expectedKeyUsage {
+					return fmt.Errorf("expected KeyUsage %d, got %d", expectedKeyUsage, cert.KeyUsage)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/CAIssuanceProfile-ByReference",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				defaultProfile := createProfile(t)
+
+				// Create a specific CA issuance profile
+				caIssuanceProfile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:              "CA-Specific-Profile",
+						Validity:          models.Validity{Type: models.Duration, Duration: caDUr},
+						SignAsCA:          true,
+						HonorSubject:      true,
+						KeyUsage:          models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign),
+						ExtendedKeyUsages: []models.X509ExtKeyUsage{models.X509ExtKeyUsage(x509.ExtKeyUsageOCSPSigning)},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating CA issuance profile: %s", err)
+				}
+
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                  caID,
+					KeyMetadata:         models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:             models.Subject{CommonName: "TestCA-Profile-Ref"},
+					CAExpiration:        models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:           defaultProfile.ID,
+					CAIssuanceProfileID: caIssuanceProfile.ID,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				// Verify the CA certificate has the expected key usage
+				cert := (*x509.Certificate)(createdCA.Certificate.Certificate)
+				expectedKeyUsage := x509.KeyUsageCertSign | x509.KeyUsageCRLSign
+				if cert.KeyUsage != expectedKeyUsage {
+					return fmt.Errorf("expected KeyUsage %d, got %d", expectedKeyUsage, cert.KeyUsage)
+				}
+
+				// Verify extended key usage
+				if len(cert.ExtKeyUsage) != 1 || cert.ExtKeyUsage[0] != x509.ExtKeyUsageOCSPSigning {
+					return fmt.Errorf("expected ExtKeyUsage OCSPSigning, got %v", cert.ExtKeyUsage)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/CAIssuanceProfile-Default",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				defaultProfile := createProfile(t)
+
+				// Create CA without specifying CA issuance profile - should use default
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA-Default-Profile"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    defaultProfile.ID,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				// Verify the CA certificate has default key usage
+				cert := (*x509.Certificate)(createdCA.Certificate.Certificate)
+				expectedKeyUsage := x509.KeyUsageCertSign | x509.KeyUsageCRLSign
+				if cert.KeyUsage != expectedKeyUsage {
+					return fmt.Errorf("expected default KeyUsage %d, got %d", expectedKeyUsage, cert.KeyUsage)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "Error/CAIssuanceProfile-NotSignAsCA",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				defaultProfile := createProfile(t)
+
+				// Create CA with inline profile that has SignAsCA=false
+				invalidCAProfile := models.IssuanceProfile{
+					Validity:          models.Validity{Type: models.Duration, Duration: caDUr},
+					SignAsCA:          false, // Invalid for CA creation
+					HonorSubject:      true,
+					KeyUsage:          models.X509KeyUsage(x509.KeyUsageDigitalSignature),
+					ExtendedKeyUsages: []models.X509ExtKeyUsage{},
+				}
+
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                caID,
+					KeyMetadata:       models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:           models.Subject{CommonName: "TestCA-Invalid"},
+					CAExpiration:      models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:         defaultProfile.ID,
+					CAIssuanceProfile: &invalidCAProfile,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error for SignAsCA=false. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrValidateBadRequest) {
+					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrValidateBadRequest, err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "Error/CAIssuanceProfile-InvalidReference",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				defaultProfile := createProfile(t)
+
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                  caID,
+					KeyMetadata:         models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:             models.Subject{CommonName: "TestCA-Invalid-Ref"},
+					CAExpiration:        models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:           defaultProfile.ID,
+					CAIssuanceProfileID: "non-existent-ca-profile-id",
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err == nil {
+					return fmt.Errorf("should've got error for invalid profile reference. Got none")
+				}
+
+				if !errors.Is(err, errs.ErrIssuanceProfileNotFound) {
+					return fmt.Errorf("should've got error %s. Got: %s", errs.ErrIssuanceProfileNotFound, err)
+				}
+
+				return nil
+			},
+		},
+		{
+			name:   "OK/CAIssuanceProfile-InlinePriorityOverReference",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				defaultProfile := createProfile(t)
+
+				// Create a referenced profile
+				refProfile, err := serverTest.CA.Service.CreateIssuanceProfile(context.Background(), services.CreateIssuanceProfileInput{
+					Profile: models.IssuanceProfile{
+						Name:              "Reference-Profile",
+						Validity:          models.Validity{Type: models.Duration, Duration: caDUr},
+						SignAsCA:          true,
+						HonorSubject:      true,
+						KeyUsage:          models.X509KeyUsage(x509.KeyUsageCertSign),
+						ExtendedKeyUsages: []models.X509ExtKeyUsage{},
+					},
+				})
+				if err != nil {
+					t.Fatalf("failed creating reference profile: %s", err)
+				}
+
+				// Create inline profile with different key usage
+				inlineProfile := models.IssuanceProfile{
+					Validity:          models.Validity{Type: models.Duration, Duration: caDUr},
+					SignAsCA:          true,
+					HonorSubject:      true,
+					KeyUsage:          models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature),
+					ExtendedKeyUsages: []models.X509ExtKeyUsage{},
+				}
+
+				// Provide both - inline should take priority
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:                  caID,
+					KeyMetadata:         models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:             models.Subject{CommonName: "TestCA-Priority"},
+					CAExpiration:        models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:           defaultProfile.ID,
+					CAIssuanceProfileID: refProfile.ID,
+					CAIssuanceProfile:   &inlineProfile,
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error, but got error: %s", err)
+				}
+
+				// Verify inline profile was used (has DigitalSignature)
+				cert := (*x509.Certificate)(createdCA.Certificate.Certificate)
+				expectedKeyUsage := x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature
+				if cert.KeyUsage != expectedKeyUsage {
+					return fmt.Errorf("expected inline profile KeyUsage %d, got %d (reference profile would have been %d)",
+						expectedKeyUsage, cert.KeyUsage, x509.KeyUsageCertSign)
+				}
+
+				return nil
+			},
+		},
 	}
 
 	for _, tc := range testcases {

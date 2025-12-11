@@ -39,14 +39,16 @@ func (r *caHttpRoutes) CreateCA(ctx *gin.Context) {
 	}
 
 	ca, err := r.svc.CreateCA(ctx, services.CreateCAInput{
-		ParentID:     requestBody.ParentID,
-		ID:           requestBody.ID,
-		KeyMetadata:  requestBody.KeyMetadata,
-		Subject:      requestBody.Subject,
-		CAExpiration: requestBody.CAExpiration,
-		ProfileID:    requestBody.ProfileID,
-		EngineID:     requestBody.EngineID,
-		Metadata:     requestBody.Metadata,
+		ParentID:            requestBody.ParentID,
+		ID:                  requestBody.ID,
+		KeyMetadata:         requestBody.KeyMetadata,
+		Subject:             requestBody.Subject,
+		CAExpiration:        requestBody.CAExpiration,
+		ProfileID:           requestBody.ProfileID,
+		EngineID:            requestBody.EngineID,
+		Metadata:            requestBody.Metadata,
+		CAIssuanceProfileID: requestBody.CAIssuanceProfileID,
+		CAIssuanceProfile:   requestBody.CAIssuanceProfile,
 	})
 	if err != nil {
 		switch err {

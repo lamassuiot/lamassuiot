@@ -200,7 +200,10 @@ func TestCreateRootCA(t *testing.T) {
 			cert, err := x509Engine.CreateRootCA(ctx, caSigner, key.KeyID, tc.subject, models.Validity{
 				Type: models.Time,
 				Time: tc.expirationTime,
-			})
+			}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
+				Type: models.Time,
+				Time: tc.expirationTime,
+			}))
 			err = tc.check(cert, tc.subject, tc.keyMetadata, tc.expirationTime, err)
 			if err != nil {
 				t.Fatalf("unexpected result in test case: %s", err)
@@ -348,7 +351,10 @@ func TestCreateSubordinateCA(t *testing.T) {
 	rootCaCertRSA, err := x509Engine.CreateRootCA(ctx, caSignerRSA, keyRSA.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	})
+	}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
+		Type: models.Time,
+		Time: caExpirationTime,
+	}))
 	if err != nil {
 		t.Fatalf("unexpected result in test case: %s", err)
 	}
@@ -366,7 +372,10 @@ func TestCreateSubordinateCA(t *testing.T) {
 	rootCaCertEC, err := x509Engine.CreateRootCA(ctx, caSignerEC, keyEC.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	})
+	}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
+		Type: models.Time,
+		Time: caExpirationTime,
+	}))
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
@@ -516,7 +525,10 @@ func TestSignCertificateRequest(t *testing.T) {
 	caCertificateRSA, err := x509Engine.CreateRootCA(ctx, caSignerRSA, keyRSA.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	})
+	}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
+		Type: models.Time,
+		Time: caExpirationTime,
+	}))
 	if err != nil {
 		t.Fatalf("unexpected result in test case: %s", err)
 	}
@@ -535,7 +547,10 @@ func TestSignCertificateRequest(t *testing.T) {
 	caCertificateEC, err := x509Engine.CreateRootCA(ctx, caSignerEC, keyEC.KeyID, subject, models.Validity{
 		Type: models.Time,
 		Time: caExpirationTime,
-	})
+	}, x509Engine.GetDefaultCAIssuanceProfile(ctx, models.Validity{
+		Type: models.Time,
+		Time: caExpirationTime,
+	}))
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
