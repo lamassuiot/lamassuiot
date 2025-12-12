@@ -59,36 +59,33 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 
 	rawHex, _ := hex.DecodeString(keyID)
 
-	// Apply subject from profile if HonorSubject is false
-	finalSubject := subject
-	if !profile.HonorSubject {
-		finalSubject = profile.Subject
-		finalSubject.CommonName = subject.CommonName
-	}
-
+	// Build certificate template pre-populated with base CA values
 	template := x509.Certificate{
 		SerialNumber:          sn,
-		Subject:               chelpers.SubjectToPkixName(finalSubject),
+		Subject:               chelpers.SubjectToPkixName(subject),
 		AuthorityKeyId:        rawHex,
 		SubjectKeyId:          rawHex,
 		OCSPServer:            []string{},
 		CRLDistributionPoints: []string{},
-		NotBefore:             time.Now(),
-		NotAfter:              caExpiration,
 		KeyUsage:              x509.KeyUsage(profile.KeyUsage),
 		ExtKeyUsage:           []x509.ExtKeyUsage{},
 		BasicConstraintsValid: true,
 		IsCA:                  true,
 	}
 
-	// Apply extended key usages from profile
+	// Pre-populate extended key usages from profile
 	for _, eku := range profile.ExtendedKeyUsages {
 		template.ExtKeyUsage = append(template.ExtKeyUsage, x509.ExtKeyUsage(eku))
 	}
 
-	for _, domain := range engine.vaDomains {
-		template.OCSPServer = append(template.OCSPServer, fmt.Sprintf("http://%s/ocsp", domain))
-		template.CRLDistributionPoints = append(template.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, keyID))
+	// Add OCSP and CRL distribution points
+	engine.addDistributionPoints(&template, rawHex)
+
+	// Apply issuance profile to template
+	err := engine.applyIssuanceProfileToTemplate(ctx, &template, profile, time.Now())
+	if err != nil {
+		lFunc.Errorf("could not apply issuance profile to CA template: %s", err)
+		return nil, err
 	}
 
 	certificateBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, signer.Public(), signer)
@@ -141,13 +138,6 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	sn, _ := rand.Int(rand.Reader, serialNumberLimit)
 
-	var certExpiration time.Time
-	if profile.Validity.Type == models.Duration {
-		certExpiration = now.Add(time.Duration(profile.Validity.Duration))
-	} else {
-		certExpiration = profile.Validity.Time
-	}
-
 	skid, err := software.NewSoftwareCryptoEngine(engine.logger).EncodePKIXPublicKeyDigest(csr.PublicKey)
 	if err != nil {
 		lFunc.Errorf("could not encode public key digest: %s", err)
@@ -156,6 +146,14 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 
 	rawHex, _ := hex.DecodeString(skid)
 
+	// Extract key usage and extended key usage from CSR
+	ku, extKu, err := chelpers.ExtractKeyUsageFromCSR(csr)
+	if err != nil {
+		lFunc.Errorf("could not extract key usage and extended key usage from CSR: %s", err)
+		return nil, err
+	}
+
+	// Build certificate template pre-populated with CSR data
 	certificateTemplate := x509.Certificate{
 		PublicKeyAlgorithm:    csr.PublicKeyAlgorithm,
 		PublicKey:             csr.PublicKey,
@@ -163,81 +161,39 @@ func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.C
 		AuthorityKeyId:        ca.SubjectKeyId,
 		SerialNumber:          sn,
 		Issuer:                ca.Subject,
-		NotBefore:             now,
-		NotAfter:              certExpiration,
+		Subject:               csr.Subject,
+		KeyUsage:              ku,
+		ExtKeyUsage:           extKu,
 		OCSPServer:            []string{},
 		CRLDistributionPoints: []string{},
 	}
 
-	for _, domain := range engine.vaDomains {
-		certificateTemplate.OCSPServer = append(certificateTemplate.OCSPServer, fmt.Sprintf("http://%s/ocsp", domain))
-		certificateTemplate.CRLDistributionPoints = append(certificateTemplate.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, hex.EncodeToString(ca.SubjectKeyId)))
+	// Pre-populate allowed extensions from CSR
+	allowedExtOIDs := []asn1.ObjectIdentifier{
+		chelpers.OidExtSubjectAltName,
 	}
 
-	// Define certificate extra extensions
-	if profile.HonorExtensions {
-		exts := []pkix.Extension{}
-		allowedExtOIDs := []asn1.ObjectIdentifier{
-			{2, 5, 29, 17}, //SAN OID
-		}
-
-		for _, csrExt := range csr.Extensions {
-			if slices.ContainsFunc(allowedExtOIDs, func(id asn1.ObjectIdentifier) bool {
-				for _, allowedExt := range allowedExtOIDs {
-					if allowedExt.Equal(csrExt.Id) {
-						return true
-					}
-				}
-
-				return false
-			}) {
-				exts = append(exts, csrExt)
+	for _, csrExt := range csr.Extensions {
+		isAllowed := false
+		for _, allowedOID := range allowedExtOIDs {
+			if allowedOID.Equal(csrExt.Id) {
+				isAllowed = true
+				break
 			}
 		}
-
-		certificateTemplate.ExtraExtensions = exts
-	}
-
-	ku, extKu, err := chelpers.ExtractKeyUsageFromCSR(csr)
-	if err != nil {
-		lFunc.Errorf("could not extract key usage and extended key usage from CSR: %s", err)
-		return nil, err
-	}
-
-	if !profile.HonorKeyUsage {
-		// Use profile key usage
-		certificateTemplate.KeyUsage = x509.KeyUsage(profile.KeyUsage)
-	} else {
-		// Use CSR key usage
-		certificateTemplate.KeyUsage = ku
-	}
-
-	// Define certificate extended key usage
-	var extKeyUsage []x509.ExtKeyUsage
-	if !profile.HonorExtendedKeyUsages {
-		// Use profile extended key usage
-		for _, usage := range profile.ExtendedKeyUsages {
-			extKeyUsage = append(extKeyUsage, x509.ExtKeyUsage(usage))
+		if isAllowed {
+			certificateTemplate.ExtraExtensions = append(certificateTemplate.ExtraExtensions, csrExt)
 		}
-	} else {
-		extKeyUsage = extKu
 	}
 
-	certificateTemplate.ExtKeyUsage = extKeyUsage
+	// Add OCSP and CRL distribution points
+	engine.addDistributionPoints(&certificateTemplate, ca.SubjectKeyId)
 
-	// Define certificate subject
-	if profile.HonorSubject {
-		certificateTemplate.Subject = csr.Subject
-	} else {
-		subject := profile.Subject
-		subject.CommonName = csr.Subject.CommonName
-		certificateTemplate.Subject = chelpers.SubjectToPkixName(subject)
-	}
-
-	// Check if the certificate is a CA
-	if profile.SignAsCA {
-		certificateTemplate.IsCA = true
-		certificateTemplate.BasicConstraintsValid = true
+	// Apply issuance profile to template
+	err = engine.applyIssuanceProfileToTemplate(ctx, &certificateTemplate, profile, now)
+	if err != nil {
+		lFunc.Errorf("could not apply issuance profile to certificate template: %s", err)
+		return nil, err
 	}
 
 	// Sign the certificate
@@ -286,4 +242,108 @@ func (engine X509Engine) GetDefaultCAIssuanceProfile(ctx context.Context, validi
 		KeyUsage:          models.X509KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign),
 		ExtendedKeyUsages: []models.X509ExtKeyUsage{},
 	}
+}
+
+// addDistributionPoints adds OCSP and CRL distribution points to the certificate template.
+// This should be called on the initial template before applying the issuance profile.
+//
+// Parameters:
+//   - template: x509.Certificate template to modify in-place
+//   - crlKeyID: key ID for CRL distribution point URLs
+func (engine X509Engine) addDistributionPoints(template *x509.Certificate, crlKeyID []byte) {
+	for _, domain := range engine.vaDomains {
+		template.OCSPServer = append(template.OCSPServer, fmt.Sprintf("http://%s/ocsp", domain))
+		template.CRLDistributionPoints = append(template.CRLDistributionPoints, fmt.Sprintf("http://%s/crl/%s", domain, hex.EncodeToString(crlKeyID)))
+	}
+}
+
+// applyIssuanceProfileToTemplate applies an issuance profile to a pre-populated certificate template.
+// The template should already contain base values (subject, key usages, extensions) which will be
+// overridden based on the profile's Honor* flags.
+//
+// Parameters:
+//   - template: pre-populated x509.Certificate template to modify in-place
+//   - profile: the issuance profile containing all enforcement rules
+//   - crlKeyID: key ID for CRL distribution point URLs
+//   - now: timestamp for NotBefore
+//
+// Returns detailed validation errors for misconfigured profiles.
+func (engine X509Engine) applyIssuanceProfileToTemplate(
+	ctx context.Context,
+	template *x509.Certificate,
+	profile models.IssuanceProfile,
+	now time.Time,
+) error {
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+
+	// Apply validity period
+	template.NotBefore = now
+	if profile.Validity.Type == models.Duration {
+		template.NotAfter = now.Add(time.Duration(profile.Validity.Duration))
+	} else {
+		template.NotAfter = profile.Validity.Time
+	}
+
+	// Apply subject - profile overrides if HonorSubject is false
+	if !profile.HonorSubject {
+		// Profile overrides subject but preserves CommonName from template
+		originalCN := template.Subject.CommonName
+		overriddenSubject := profile.Subject
+		overriddenSubject.CommonName = originalCN
+		template.Subject = chelpers.SubjectToPkixName(overriddenSubject)
+		lFunc.Debugf("subject overridden by profile (preserving CN=%s)", originalCN)
+	}
+
+	// Apply key usage - profile overrides if HonorKeyUsage is false
+	if !profile.HonorKeyUsage {
+		template.KeyUsage = x509.KeyUsage(profile.KeyUsage)
+		lFunc.Debugf("key usage overridden by profile: %v", template.KeyUsage)
+	}
+
+	// Apply extended key usage - profile overrides if HonorExtendedKeyUsages is false
+	if !profile.HonorExtendedKeyUsages {
+		var finalExtKeyUsage []x509.ExtKeyUsage
+		for _, usage := range profile.ExtendedKeyUsages {
+			finalExtKeyUsage = append(finalExtKeyUsage, x509.ExtKeyUsage(usage))
+		}
+		template.ExtKeyUsage = finalExtKeyUsage
+		lFunc.Debugf("extended key usage overridden by profile: %v", template.ExtKeyUsage)
+	}
+
+	// Apply extensions - only keep allowed extensions if HonorExtensions is true
+	if profile.HonorExtensions {
+		// Filter to only allowed extensions
+		allowedExtOIDs := []asn1.ObjectIdentifier{
+			chelpers.OidExtSubjectAltName,
+		}
+
+		filteredExts := []pkix.Extension{}
+		for _, ext := range template.ExtraExtensions {
+			isAllowed := false
+			for _, allowedOID := range allowedExtOIDs {
+				if allowedOID.Equal(ext.Id) {
+					isAllowed = true
+					break
+				}
+			}
+			if isAllowed {
+				filteredExts = append(filteredExts, ext)
+			}
+		}
+		template.ExtraExtensions = filteredExts
+		lFunc.Debugf("extensions filtered to allowed OIDs, kept %d extensions", len(filteredExts))
+	} else {
+		// Don't honor extensions - clear them
+		template.ExtraExtensions = nil
+		lFunc.Debugf("extensions cleared (HonorExtensions=false)")
+	}
+
+	// Apply CA constraints
+	if profile.SignAsCA {
+		template.IsCA = true
+		template.BasicConstraintsValid = true
+		lFunc.Debugf("CA constraints applied (IsCA=true)")
+	}
+
+	return nil
 }
