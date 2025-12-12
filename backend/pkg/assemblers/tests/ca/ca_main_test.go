@@ -504,6 +504,53 @@ func TestCreateCA(t *testing.T) {
 			},
 		},
 		{
+			name:   "OK/BackwardCompatibility-NoProfileProvided",
+			before: func(svc services.CAService) error { return nil },
+			run: func(caSDK services.CAService) (*models.CACertificate, error) {
+				defaultProfile := createProfile(t)
+
+				// Create CA without any CAIssuanceProfile information (backward compatibility)
+				// This simulates older API calls that don't include CA-specific profile information
+				// Only the default ProfileID is provided, no CAIssuanceProfile or CAIssuanceProfileID
+				return caSDK.CreateCA(context.Background(), services.CreateCAInput{
+					ID:           caID,
+					KeyMetadata:  models.KeyMetadata{Type: models.KeyType(x509.RSA), Bits: 2048},
+					Subject:      models.Subject{CommonName: "TestCA-NoProfile"},
+					CAExpiration: models.Validity{Type: models.Duration, Duration: caDUr},
+					ProfileID:    defaultProfile.ID,
+					// No CAIssuanceProfileID or CAIssuanceProfile fields provided
+				})
+			},
+			resultCheck: func(createdCA *models.CACertificate, err error) error {
+				if err != nil {
+					return fmt.Errorf("should've created CA without error for backward compatibility, but got error: %s", err)
+				}
+
+				// Verify CA was created successfully
+				if createdCA == nil {
+					return fmt.Errorf("created CA should not be nil")
+				}
+
+				cert := (*x509.Certificate)(createdCA.Certificate.Certificate)
+
+				if cert.Subject.CommonName != "TestCA-NoProfile" {
+					return fmt.Errorf("expected CommonName 'TestCA-NoProfile', got '%s'", cert.Subject.CommonName)
+				}
+
+				// Verify default CA behavior is applied (IsCA should be true)
+				if !cert.IsCA {
+					return fmt.Errorf("certificate should have IsCA=true")
+				}
+
+				// Verify CA has appropriate key usage for a CA (at minimum CertSign)
+				if cert.KeyUsage&x509.KeyUsageCertSign == 0 {
+					return fmt.Errorf("certificate should have KeyUsageCertSign, got KeyUsage: %d", cert.KeyUsage)
+				}
+
+				return nil
+			},
+		},
+		{
 			name:   "Error/RootCA-CryptoEnforcement-RSANotAllowed",
 			before: func(svc services.CAService) error { return nil },
 			run: func(caSDK services.CAService) (*models.CACertificate, error) {
