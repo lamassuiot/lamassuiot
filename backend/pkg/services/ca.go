@@ -477,11 +477,9 @@ func (svc *CAServiceBackend) CreateCA(ctx context.Context, input services.Create
 		caIssuanceProfile = *input.CAIssuanceProfile
 		lFunc.Debugf("using inline CA issuance profile for CA certificate creation")
 
-		// Validate that profile is suitable for CA creation
-		if !caIssuanceProfile.SignAsCA {
-			lFunc.Errorf("CA issuance profile must have SignAsCA=true")
-			return nil, errs.ErrValidateBadRequest
-		}
+		// Force SignAsCA=true for inline profiles
+		caIssuanceProfile.SignAsCA = true
+		lFunc.Debugf("forcing SignAsCA=true for inline CA issuance profile")
 	} else if input.CAIssuanceProfileID != "" {
 		// Priority 2: Resolve profile by reference ID
 		profile, err := svc.service.GetIssuanceProfileByID(ctx, services.GetIssuanceProfileByIDInput{
