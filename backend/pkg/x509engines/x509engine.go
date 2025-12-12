@@ -42,6 +42,11 @@ func NewX509Engine(logger *logrus.Entry, vaDomains []string, kmsSDK services.KMS
 func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer, keyID string, subject models.Subject, validity models.Validity, profile models.IssuanceProfile) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
+	if err := engine.validateCryptoEnforcement(ctx, signer.Public(), profile.CryptoEnforcement); err != nil {
+		lFunc.Errorf("public key does not comply with crypto enforcement rules: %s", err)
+		return nil, err
+	}
+
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	sn, _ := rand.Int(rand.Reader, serialNumberLimit)
 
@@ -67,15 +72,10 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 		SubjectKeyId:          rawHex,
 		OCSPServer:            []string{},
 		CRLDistributionPoints: []string{},
-		KeyUsage:              x509.KeyUsage(profile.KeyUsage),
+		KeyUsage:              x509.KeyUsage(x509.KeyUsageCertSign | x509.KeyUsageCRLSign),
 		ExtKeyUsage:           []x509.ExtKeyUsage{},
 		BasicConstraintsValid: true,
 		IsCA:                  true,
-	}
-
-	// Pre-populate extended key usages from profile
-	for _, eku := range profile.ExtendedKeyUsages {
-		template.ExtKeyUsage = append(template.ExtKeyUsage, x509.ExtKeyUsage(eku))
 	}
 
 	// Add OCSP and CRL distribution points
@@ -106,32 +106,9 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 func (engine X509Engine) SignCertificateRequest(ctx context.Context, csr *x509.CertificateRequest, ca *x509.Certificate, caSigner crypto.Signer, profile models.IssuanceProfile) (*x509.Certificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
 
-	// If crypto enforcement is enabled, check if the CSR public key algorithm is allowed
-	if profile.CryptoEnforcement.Enabled {
-		// Check CSR Public Key Algorithm
-		if rsa, ok := csr.PublicKey.(*rsa.PublicKey); ok {
-			if !profile.CryptoEnforcement.AllowRSAKeys {
-				lFunc.Errorf("CSR uses RSA public key, but issuance profile does not allow RSA keys")
-				return nil, fmt.Errorf("CSR uses RSA public key, but issuance profile does not allow RSA keys")
-			} else if profile.CryptoEnforcement.AllowedRSAKeySizes != nil {
-				if !slices.Contains(profile.CryptoEnforcement.AllowedRSAKeySizes, rsa.N.BitLen()) {
-					lFunc.Errorf("CSR uses RSA key with size %d, but issuance profile does not allow this key size", rsa.N.BitLen())
-					return nil, fmt.Errorf("CSR uses RSA key with size %d, but issuance profile does not allow this key size", rsa.N.BitLen())
-				}
-			}
-		}
-
-		if ecdsa, ok := csr.PublicKey.(*ecdsa.PublicKey); ok {
-			if !profile.CryptoEnforcement.AllowECDSAKeys {
-				lFunc.Errorf("CSR uses ECDSA public key, but issuance profile does not allow ECDSA keys")
-				return nil, fmt.Errorf("CSR uses ECDSA public key, but issuance profile does not allow ECDSA keys")
-			} else if profile.CryptoEnforcement.AllowedECDSAKeySizes != nil {
-				if !slices.Contains(profile.CryptoEnforcement.AllowedECDSAKeySizes, ecdsa.Params().BitSize) {
-					lFunc.Errorf("CSR uses ECDSA key with size %d, but issuance profile does not allow this key size", ecdsa.Params().BitSize)
-					return nil, fmt.Errorf("CSR uses ECDSA key with size %d, but issuance profile does not allow this key size", ecdsa.Params().BitSize)
-				}
-			}
-		}
+	// Validate CSR public key against crypto enforcement rules
+	if err := engine.validateCryptoEnforcement(ctx, csr.PublicKey, profile.CryptoEnforcement); err != nil {
+		return nil, err
 	}
 
 	now := time.Now()
@@ -257,6 +234,57 @@ func (engine X509Engine) addDistributionPoints(template *x509.Certificate, crlKe
 	}
 }
 
+// validateCryptoEnforcement validates that the public key algorithm and size comply with
+// the issuance profile's crypto enforcement rules.
+//
+// Parameters:
+//   - ctx: context for logging
+//   - publicKey: the public key to validate
+//   - enforcement: the crypto enforcement rules from the issuance profile
+//
+// Returns an error if the public key does not meet the enforcement requirements.
+func (engine X509Engine) validateCryptoEnforcement(
+	ctx context.Context,
+	publicKey crypto.PublicKey,
+	enforcement models.IssuanceProfileCryptoEnforcement,
+) error {
+	if !enforcement.Enabled {
+		return nil
+	}
+
+	lFunc := chelpers.ConfigureLogger(ctx, engine.logger)
+
+	// Check RSA keys
+	if rsa, ok := publicKey.(*rsa.PublicKey); ok {
+		if !enforcement.AllowRSAKeys {
+			lFunc.Errorf("public key is RSA, but issuance profile does not allow RSA keys")
+			return fmt.Errorf("public key is RSA, but issuance profile does not allow RSA keys")
+		}
+		if enforcement.AllowedRSAKeySizes != nil {
+			if !slices.Contains(enforcement.AllowedRSAKeySizes, rsa.N.BitLen()) {
+				lFunc.Errorf("public key uses RSA key with size %d, but issuance profile does not allow this key size", rsa.N.BitLen())
+				return fmt.Errorf("public key uses RSA key with size %d, but issuance profile does not allow this key size", rsa.N.BitLen())
+			}
+		}
+	}
+
+	// Check ECDSA keys
+	if ecdsa, ok := publicKey.(*ecdsa.PublicKey); ok {
+		if !enforcement.AllowECDSAKeys {
+			lFunc.Errorf("public key is ECDSA, but issuance profile does not allow ECDSA keys")
+			return fmt.Errorf("public key is ECDSA, but issuance profile does not allow ECDSA keys")
+		}
+		if enforcement.AllowedECDSAKeySizes != nil {
+			if !slices.Contains(enforcement.AllowedECDSAKeySizes, ecdsa.Params().BitSize) {
+				lFunc.Errorf("public key uses ECDSA key with size %d, but issuance profile does not allow this key size", ecdsa.Params().BitSize)
+				return fmt.Errorf("public key uses ECDSA key with size %d, but issuance profile does not allow this key size", ecdsa.Params().BitSize)
+			}
+		}
+	}
+
+	return nil
+}
+
 // applyIssuanceProfileToTemplate applies an issuance profile to a pre-populated certificate template.
 // The template should already contain base values (subject, key usages, extensions) which will be
 // overridden based on the profile's Honor* flags.
@@ -264,7 +292,6 @@ func (engine X509Engine) addDistributionPoints(template *x509.Certificate, crlKe
 // Parameters:
 //   - template: pre-populated x509.Certificate template to modify in-place
 //   - profile: the issuance profile containing all enforcement rules
-//   - crlKeyID: key ID for CRL distribution point URLs
 //   - now: timestamp for NotBefore
 //
 // Returns detailed validation errors for misconfigured profiles.
