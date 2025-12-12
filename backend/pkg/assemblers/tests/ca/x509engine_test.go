@@ -209,6 +209,111 @@ func TestCreateRootCA(t *testing.T) {
 	}
 }
 
+func TestRootCAExtendedKeyUsage(t *testing.T) {
+	kms, x509Engine, err := setupX509TestSuite(t)
+	if err != nil {
+		t.Fatalf("setup failed: %s", err)
+	}
+
+	caSubject := models.Subject{
+		CommonName:       "Root CA EKU Test",
+		Organization:     "Lamassu IoT",
+		OrganizationUnit: "CA",
+		Country:          "ES",
+		State:            "Gipuzkoa",
+		Locality:         "Arrasate",
+	}
+
+	expirationTime := time.Now().AddDate(1, 0, 0)
+
+	var testcases = []struct {
+		name           string
+		caId           string
+		subject        models.Subject
+		keyMetadata    models.KeyMetadata
+		expirationTime time.Time
+		expectedEKUs   []x509.ExtKeyUsage
+	}{
+		{
+			name:    "RootCA_RSA_2048_EKU",
+			caId:    "rootCA-EKU-RSA2048",
+			subject: caSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.RSA),
+				Bits: 2048,
+			},
+			expirationTime: expirationTime,
+			expectedEKUs:   []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageOCSPSigning},
+		},
+		{
+			name:    "RootCA_ECDSA_256_EKU",
+			caId:    "rootCA-EKU-ECDSA256",
+			subject: caSubject,
+			keyMetadata: models.KeyMetadata{
+				Type: models.KeyType(x509.ECDSA),
+				Bits: 256,
+			},
+			expirationTime: expirationTime,
+			expectedEKUs:   []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageOCSPSigning},
+		},
+	}
+
+	for _, tc := range testcases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			key, err := kms.CreateKey(ctx, services.CreateKeyInput{
+				Algorithm: tc.keyMetadata.Type.String(),
+				Size:      tc.keyMetadata.Bits,
+				Name:      tc.caId,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error creating key: %s", err)
+			}
+
+			caSigner := beservice.NewKMSCryptoSigner(ctx, *key, kms)
+
+			cert, err := x509Engine.CreateRootCA(ctx, caSigner, key.KeyID, tc.subject, models.Validity{
+				Type: models.Time,
+				Time: tc.expirationTime,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error creating root CA: %s", err)
+			}
+
+			// Verify certificate is a CA
+			if !cert.IsCA {
+				t.Errorf("certificate is not marked as CA")
+			}
+
+			// Verify Extended Key Usage
+			if len(cert.ExtKeyUsage) != len(tc.expectedEKUs) {
+				t.Errorf("ExtKeyUsage count mismatch: got %d, want %d", len(cert.ExtKeyUsage), len(tc.expectedEKUs))
+			}
+
+			for _, expectedEKU := range tc.expectedEKUs {
+				if !slices.Contains(cert.ExtKeyUsage, expectedEKU) {
+					t.Errorf("Missing expected EKU: %v. Certificate has EKUs: %v", expectedEKU, cert.ExtKeyUsage)
+				}
+			}
+
+			// Verify each EKU in the certificate is expected
+			for _, certEKU := range cert.ExtKeyUsage {
+				if !slices.Contains(tc.expectedEKUs, certEKU) {
+					t.Errorf("Unexpected EKU in certificate: %v. Expected EKUs: %v", certEKU, tc.expectedEKUs)
+				}
+			}
+
+			// Verify Key Usage includes CertSign for CA
+			expectedKeyUsage := x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign
+			if cert.KeyUsage != expectedKeyUsage {
+				t.Errorf("KeyUsage mismatch: got %d, want %d", cert.KeyUsage, expectedKeyUsage)
+			}
+		})
+	}
+}
+
 func TestCreateSubordinateCA(t *testing.T) {
 	// Setup
 	kmsSvc, x509Engine, err := setupX509TestSuite(t)

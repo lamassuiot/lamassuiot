@@ -69,7 +69,7 @@ func (engine X509Engine) CreateRootCA(ctx context.Context, signer crypto.Signer,
 		NotBefore:             time.Now(),
 		NotAfter:              caExpiration,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth | x509.ExtKeyUsageOCSPSigning},
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageOCSPSigning},
 		BasicConstraintsValid: true,
 		IsCA:                  true,
 	}
