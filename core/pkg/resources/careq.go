@@ -41,14 +41,16 @@ var IssuanceProfileFiltrableFields = map[string]FilterFieldType{
 }
 
 type CreateCABody struct {
-	ID           string             `json:"id"`
-	ParentID     string             `json:"parent_id"`
-	Subject      models.Subject     `json:"subject"`
-	KeyMetadata  models.KeyMetadata `json:"key_metadata"`
-	CAExpiration models.Validity    `json:"ca_expiration"`
-	ProfileID    string             `json:"profile_id"`
-	EngineID     string             `json:"engine_id"`
-	Metadata     map[string]any     `json:"metadata"`
+	ID                  string                  `json:"id"`
+	ParentID            string                  `json:"parent_id"`
+	Subject             models.Subject          `json:"subject"`
+	KeyMetadata         models.KeyMetadata      `json:"key_metadata"`
+	CAExpiration        models.Validity         `json:"ca_expiration"`
+	ProfileID           string                  `json:"profile_id"`
+	EngineID            string                  `json:"engine_id"`
+	Metadata            map[string]any          `json:"metadata"`
+	CAIssuanceProfileID string                  `json:"ca_issuance_profile_id,omitempty"`
+	CAIssuanceProfile   *models.IssuanceProfile `json:"ca_issuance_profile,omitempty"`
 }
 
 type RequestCABody struct {
