@@ -888,6 +888,13 @@ components:
         metadata:
           type: object
           additionalProperties: true
+        ca_issuance_profile_id:
+          type: string
+          description: Optional CA issuance profile identifier
+        ca_issuance_profile:
+          allOf:
+            - $ref: '#/components/schemas/IssuanceProfile'
+          description: Optional inline CA issuance profile
 
     ImportCABody:
       type: object
